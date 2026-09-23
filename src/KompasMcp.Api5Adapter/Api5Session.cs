@@ -769,9 +769,9 @@ public sealed partial class Api5Session : IDisposable
             // a stale area must not be reused as the expected volume of a later feature. The same
             // reasoning covers what a target-body check reads: the drawn profile's extent and the
             // plane it was drawn on.
-            foreach (var orphan in _profileAreaMm2.Keys.Where(key => !References.TryGet(key, out _)).ToArray())
+            foreach (var orphan in _sketchProfiles.Keys.Where(key => !References.TryGet(key, out _)).ToArray())
             {
-                _profileAreaMm2.Remove(orphan);
+                _sketchProfiles.Remove(orphan);
             }
 
             foreach (var orphan in _sketchProfileBox.Keys.Where(key => !References.TryGet(key, out _)).ToArray())

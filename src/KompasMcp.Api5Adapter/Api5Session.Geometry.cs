@@ -67,6 +67,7 @@ public sealed partial class Api5Session
         // point registry and is refused instead of quietly appending.
         _sketchProbePoints[reference.Id] = new List<double[]>();
         _sketchProfileBox.Remove(reference.Id);
+        _sketchProfiles.Remove(reference.Id);
         if (command.Plane.Base is PlaneBase basePlane)
         {
             _sketchPlaneBase[reference.Id] = basePlane;
@@ -137,11 +138,19 @@ public sealed partial class Api5Session
             : $"{plane.Base?.ToString().ToUpperInvariant() ?? "plane"}{(Math.Abs(plane.OffsetMm) > 1e-9 ? $" +{plane.OffsetMm:0.###} mm" : string.Empty)}";
 
     /// <summary>
-    /// Analytic profile area per sketch reference, in mm². Filled when the server itself drew the
+    /// The contours this server drew into each sketch, in mm. Filled when the server itself drew the
     /// primitives, and read by <see cref="Extrude"/> as the expected volume target: without it the
     /// extrusion could only report "КОМПАС said yes", which spec 1.11 explicitly forbids as proof.
     /// </summary>
-    private readonly Dictionary<string, double> _profileAreaMm2 = new(StringComparer.Ordinal);
+    /// <remarks>
+    /// The contour list is kept rather than the area, because the area of a profile is not the sum of
+    /// its primitives: a contour inside another one is a hole in it. Measured 24.09.2026 — while the
+    /// entry was a running sum, a sketch built by appending a circle inside another gave
+    /// π·125 = 392.699081699 against the annulus' π·75 = 235.619449019, and the extrusion of a
+    /// correct ring was reported as an unconfirmed geometry change. One number cannot carry nesting,
+    /// so the number is derived from the contours instead of accumulated next to them.
+    /// </remarks>
+    private readonly Dictionary<string, SketchProfile> _sketchProfiles = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Points lying on the primitives this server drew into each sketch. API5 gives no way to
@@ -158,7 +167,7 @@ public sealed partial class Api5Session
     /// sketch where its profile lies, and a contradiction it swallows without an error.
     /// </summary>
     /// <remarks>
-    /// Kept alongside <see cref="_profileAreaMm2"/> for the same reason and with the same rule: an
+    /// Kept alongside <see cref="_sketchProfiles"/> for the same reason and with the same rule: an
     /// unknown shape or an incompletely cleared sketch drops the entry rather than leaving a stale
     /// extent behind, because a box that is wrong is worse than no box — it would refuse, or allow,
     /// a mutation on a figure the server never drew.
@@ -262,7 +271,7 @@ public sealed partial class Api5Session
             }
 
             BumpRevision(document, "sketch.delete");
-            _profileAreaMm2.Remove(command.SketchRef);
+            _sketchProfiles.Remove(command.SketchRef);
 
             // Emptying a sketch removes the profile the dependent feature was built on, so the same
             // vanishing-body question applies here as on replace.
@@ -327,26 +336,45 @@ public sealed partial class Api5Session
             GuardDependentBodySurvived(document, command, bodiesBefore);
         }
 
-        // The remembered area is analytic and only for the primitives actually drawn here: an
-        // unknown shape clears it, so a later extrusion reports "unverified" instead of comparing a
+        // The remembered profile is the LIST of contours drawn so far, and its area is derived from
+        // them — not a running sum, which cannot express that one contour is a hole in another
+        // (measured 24.09.2026: summing gave π·125 = 392.699081699 for a ring whose region is
+        // π·75 = 235.619449019, and a correct extrusion was then reported as unconfirmed). An unknown
+        // shape clears the entry, so a later extrusion reports "unverified" instead of comparing a
         // measurement against a stale figure. A replacement that did not fully clear also clears the
-        // area on purpose: the profile then holds leftovers, and claiming an analytic area for it
-        // would make the extrusion check pass against a wrong expectation.
+        // profile on purpose: it then holds leftovers, and claiming an analytic area for it would make
+        // the extrusion check pass against a wrong expectation.
         var analytic = ProfileArea.Of(command.Entities);
         var freshPoints = ProbePointsOf(command.Entities);
         var partialClear = command.Mode == SketchEditMode.Replace && !cleared;
         if (analytic is null || partialClear)
         {
-            _profileAreaMm2.Remove(command.SketchRef);
-        }
-        else if (command.Mode == SketchEditMode.Replace)
-        {
-            _profileAreaMm2[command.SketchRef] = analytic.Value;
+            _sketchProfiles.Remove(command.SketchRef);
         }
         else
         {
-            _profileAreaMm2[command.SketchRef] =
-                _profileAreaMm2.TryGetValue(command.SketchRef, out var previous) ? previous + analytic.Value : analytic.Value;
+            if (!_sketchProfiles.TryGetValue(command.SketchRef, out var profile))
+            {
+                profile = new SketchProfile();
+                _sketchProfiles[command.SketchRef] = profile;
+            }
+
+            if (command.Mode == SketchEditMode.Replace)
+            {
+                profile.Replace(command.Entities);
+            }
+            else
+            {
+                profile.Append(command.Entities);
+            }
+        }
+
+        // What the caller is told is the area of the PROFILE, not of this call's batch: it is the
+        // figure the extrusion will use as its expectation, and for a second append the two differ.
+        double? profileAreaMm2 = null;
+        if (!partialClear && _sketchProfiles.TryGetValue(command.SketchRef, out var drawnProfile))
+        {
+            profileAreaMm2 = drawnProfile.AreaMm2;
         }
 
         // The same bookkeeping for the profile's extent, with the same rule about a partial clear:
@@ -384,7 +412,7 @@ public sealed partial class Api5Session
 
         return new EditSketchResult(kinds.Count, kinds,
             EditClosedOut: ended,
-            ProfileAreaMm2: partialClear ? null : analytic,
+            ProfileAreaMm2: profileAreaMm2,
             DeletedEntities: deleted,
             ExpectedDeleted: deleteAttempts,
             ProbePointsFromModel: derivedFrom is not null);
@@ -1214,12 +1242,16 @@ public sealed partial class Api5Session
             }
         }
 
-        // Expected change = the analytic profile area the server itself drew × depth. When the
-        // area is not analytically known (arcs, free polylines, a profile drawn outside this
+        // Expected change = the analytic area of the profile the server itself drew × depth. The area
+        // is the region the contours enclose (a contour inside another is a hole), recomputed from the
+        // whole profile rather than remembered as a number. When the region is not analytically known
+        // (arcs, free polylines, touching or overlapping contours, a profile drawn outside this
         // session), the answer says so rather than comparing a measurement with nothing.
         double? expected = null;
         string expectedBasis = "not_computable";
-        if (_profileAreaMm2.TryGetValue(command.SketchRef, out var profileAreaMm2) && profileAreaMm2 > 0d)
+        if (_sketchProfiles.TryGetValue(command.SketchRef, out var profile)
+            && profile.AreaMm2 is double profileAreaMm2
+            && profileAreaMm2 > 0d)
         {
             if (command.EndCondition == ExtrudeEndCondition.Through)
             {

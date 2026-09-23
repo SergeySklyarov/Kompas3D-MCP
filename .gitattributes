@@ -1,0 +1,26 @@
+# Normalise stored line endings and stop git rewriting them on every checkout on Windows.
+* text=auto eol=lf
+
+*.cs        text eol=crlf
+*.csproj    text eol=crlf
+*.props     text eol=crlf
+*.targets   text eol=crlf
+*.sln       text eol=crlf
+*.config    text eol=crlf
+*.json      text eol=crlf
+*.md        text eol=crlf
+*.ps1       text eol=crlf
+*.py        text eol=lf
+
+*.dll          binary
+*.exe          binary
+*.m3d          binary
+*.a3d          binary
+*.step         text
+*.stp          text
+*.scr          binary
+*.spl           binary
+*.drw          binary
+*.cd3          binary
+*.png          binary
+*.dxf          text

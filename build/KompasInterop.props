@@ -1,0 +1,40 @@
+<Project>
+
+  <!--
+    Shared wiring for the vendor КОМПАС interop, imported by every project that needs COM types
+    (currently Api5Adapter and the P0 probe). Referencing at build time only: Private=false means
+    the DLLs are never copied into the output or into this repository, so the delivery does not
+    redistribute ASCON binaries and the build still needs a real v24 installation.
+  -->
+  <ItemGroup>
+    <Reference Include="Kompas6API5">
+      <HintPath>$(KompasInteropDir)\Interop.Kompas6API5.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Kompas6Constants">
+      <HintPath>$(KompasInteropDir)\Interop.Kompas6Constants.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Kompas6Constants3D">
+      <HintPath>$(KompasInteropDir)\Interop.Kompas6Constants3D.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!--
+      API7 подключается точечно и только там, где режим физически недоступен из API5
+      (ADR-004 §3): фаска «расстояние + угол» — первый такой случай. Ссылка общая, потому что
+      разрешение interop'а одно на оба API: второй Resolver запрещён ADR-004 §4.
+    -->
+    <Reference Include="KompasAPI7" Condition="'$(KompasApi7Interop)' == 'true'">
+      <HintPath>$(KompasInteropDir)\Interop.KompasAPI7.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Target Name="ThrowWhenKompasInteropMissing" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(KompasInteropDir)\Interop.Kompas6API5.dll')"
+           Text="Не найден Interop.Kompas6API5.dll в '$(KompasInteropDir)'. Укажите корень установки: dotnet build -p:KompasRoot=D:\Programs\KOMPAS-3Dv24 (см. docs/operator-guide/build.md). COM-слой не собирается в заглушку: молча неработающий адаптер хуже отсутствующего." />
+    <Error Condition="'$(KompasApi7Interop)' == 'true' and !Exists('$(KompasInteropDir)\Interop.KompasAPI7.dll')"
+           Text="Запрошен API7-маршрут, а Interop.KompasAPI7.dll не найден в '$(KompasInteropDir)'. Сборка с молча недоступным API7 дала бы адаптер, который отказывает уже в рантайме, — поэтому проверка стоит здесь." />
+  </Target>
+
+</Project>

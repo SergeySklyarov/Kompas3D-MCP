@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The only assembly in the tree that is allowed to touch КОМПАС types. Everything it exposes
+    is a Contracts DTO: no __ComObject, no IntPtr, no ksEntity crosses this boundary.
+    COM references are created, used and released inside a single STA owned by the Worker.
+  -->
+  <PropertyGroup>
+    <RootNamespace>KompasMcp.Api5Adapter</RootNamespace>
+    <AssemblyName>KompasMcp.Api5Adapter</AssemblyName>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <!--
+      The vendor interop is a strong-named, IL-only PIAs set produced by tlbimp (verified with
+      scripts/inspect_pe_clr.py: machine 0x14c, ILOnly|StrongNameSigned, no 32BITREQUIRED), so
+      an x64 .NET process can load it. Referencing it is build-time only: nothing from the
+      КОМПАС installation is copied into this repository.
+    -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+    <!--
+      API7-часть маршрутов (ADR-004 §3): режимы, которых в API5 нет физически. Включено ровно
+      одному проекту — этому; Host и Contracts COM-типов не видят по-прежнему.
+    -->
+    <KompasApi7Interop>true</KompasApi7Interop>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\KompasMcp.Domain\KompasMcp.Domain.csproj" />
+  </ItemGroup>
+
+  <Import Project="..\..\build\KompasInterop.props" />
+
+</Project>

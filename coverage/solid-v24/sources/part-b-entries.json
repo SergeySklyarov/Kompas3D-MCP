@@ -1,0 +1,1119 @@
+{
+  "meta": {
+    "artifact": "scratch/inventory/part-b/entries.json",
+    "stage": "P6.0",
+    "kind": "research",
+    "schema_version": "1.0",
+    "part": "B",
+    "generated_utc": "2026-09-11T23:55:00Z",
+    "slice_of_spec": "docs/05_SOLID_MODELING_FULL_COVERAGE.md §5, строки SM-18…SM-29 (12 семейств)",
+    "target_environment": {
+      "product": "КОМПАС-3D v24",
+      "build": "24.0.0.2799",
+      "bitness": "x64",
+      "path": "D:\\Programs\\KOMPAS-3Dv24",
+      "type_libraries": {
+        "API5": "Bin\\kAPI5.tlb (sha256 a1b6bebbe5de7805…, 566 typeinfo / 287 interfaces)",
+        "API7": "Bin\\kAPI7.tlb (2025-04-21, sha256 68b7730ef13bde7d…, 1498 typeinfo / 836 interfaces)",
+        "constants3D": "Bin\\ksConstants3D.tlb (перечисления o3d_*/ks*Enum)",
+        "constants": "Bin\\ksConstants.tlb (ProcessTypeEnum pr*, KompasAPIObjectTypeEnum ksObject*)"
+      },
+      "evidence": "docs/acceptance/api7/env-passport.md"
+    },
+    "levels": {
+      "documented": "найдено в пользовательской справке или документации SDK",
+      "metadata_found": "найдено в библиотеке типов установленного приложения или в interop",
+      "runtime_verified": "конкретный сценарий выполнен в КОМПАС и подтверждён измерением",
+      "mcp_implemented": "существует маршрут MCP в основном коде",
+      "mcp_verified": "маршрут MCP прошёл сквозную проверку с числами"
+    },
+    "classification": {
+      "solid": "операция твердотельного моделирования",
+      "required_auxiliary": "необходимое вспомогательное средство (эскиз, плоскость, ось, точка, кривая, поверхность как опора)",
+      "outside_scope": "вне области P6, с указанием почему и на каком основании"
+    },
+    "this_part_ceiling": {
+      "level": "metadata_found",
+      "why": "этот проход не запускал КОМПАС и не выполнял ни одну COM-пробу (tools/KompasMcp.P0Probe, tools/KompasMcp.Api7Probe, scripts/mcp-smoke.py не исполнялись). Ни одна запись не может стоять выше metadata_found; runtime_verified/mcp_* для part-B запрещены этим проходом.",
+      "mcp_support_source": "src/KompasMcp.Host/Catalog/ToolCatalog.cs — перечитан, это факт, а не прогноз"
+    },
+    "metadata_artifacts_used": {
+      "api7_installed_tlb": "scratch/api7-index.txt (дамп Bin\\kAPI7.tlb, 838 записей INTERFACE) — авторитет по API7 установленного приложения",
+      "api5_reflection": "docs/compatibility/kompas-api5-metadata.json (рефлексия Libs\\PolynomLib\\Bin\\Client\\Interop.Kompas6API5.dll, type_count=1007)",
+      "api7_wrapper_vendor": "Libs\\PolynomLib\\Bin\\Client\\Interop.KompasAPI7.dll (types=2298, snapshot 2025-03-03) — неполнота не есть отсутствие (docs/05 §3.1)",
+      "enums_installed": "scratch/tlgen/*.py (comtypes-обёртки установленных TLB): ksObj3dTypeEnum (339), KompasAPIObjectTypeEnum, ProcessTypeEnum, ksLinearPatternBuildingTypeEnum, ksCircularPatternBuildingTypeEnum, ksCopyGeometryBuildingTypeEnum, ksPatternExemplarsOrientationTypeEnum, ksPatternBasePointTypeEnum, ksSurfaceOperationResultEnum, ksPointsArrOnCurveTypeEnum",
+      "enum_dumps_local": "scratch/inventory/part-b/enum-dumps.txt, pattern-enums.txt",
+      "manual_installed": "D:\\Programs\\KOMPAS-3Dv24\\Help\\KOMPAS_ru-RU.zip (только чтение; извлечено в scratch/inventory/part-b/help/), совпадает по сборке с целевым продуктом",
+      "sdk_online": "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ (imodelcontainer_props, ifeaturepatterns_add, copytype, obj3dtype, ifeaturepattern_props, ilinearpattern_props, imodelcontainer_featurepatterns)",
+      "user_docs_online_note": "страницы help.ascon.ru/KOMPAS/24/ru-RU/ рендерятся JavaScript и web_fetch отдаёт только «Please enable JavaScript to view this site.»; вместо них использован установленный локальный пакет справки той же сборки (Help\\KOMPAS_ru-RU.zip) — это усиление, а не замена источника"
+    },
+    "naming_note": "o3d_* — значения ksObj3dTypeEnum из Bin\\ksConstants3D.tlb; они же аргумент IFeaturePatterns.Add(ksObj3dTypeEnum Type) (SDK ifeaturepatterns_add.html). UI-названия семейств массивов взяты дословно из установленной справки (glava_48_obzhie_svedeniy).",
+    "unit_policy": "длины мм, углы градусы (docs/05 §4.1); для каждого параметра указано, в каких единицах он документирован и где единицы НЕ подтверждены (например IMoldCavity.Scale — проценты или доля — открытый вопрос OQ-B-14)",
+    "container_acquisition": {
+      "IModelContainer": "QueryInterface на IPart7 (измерено основным сеансом: docs/acceptance/api7/api7-attribution.md, qi_imodelcontainer=true, top_part=Part7Class)",
+      "ISurfaceContainer": "по SDK isurfacecontainer.html «Как получить»: дополнительный интерфейс компонента, получается через IUnknown::QueryInterface у IPart7; IID из kAPI7.tlb = {2FE3B199-A6B2-4644-9950-F9905250FF0D}. В kAPI7.tlb НЕТ ни одного члена другого интерфейса, возвращающего ISurfaceContainer (проверено по дампу), поэтому QI — единственный документированный путь. Он же источник маршрутов SM-24.*, SM-25.remove_body_surface, SM-27.sew_surfaces, SM-24.restore_faces",
+      "note": "ни одна запись part-B не опирается на prebuilt Interop.KompasAPI7 как на доказательство наличия; там, где обёртка упоминается, это отмечено отдельным артефактом"
+    },
+    "key_findings_for_merge": [
+      "Массивов в v24 СЕМЬ (glava_48_obzhie_svedeniy): по сетке, по концентрической сетке, вдоль кривой, по точкам, по таблице, зеркальный, по образцу. docs/05 §5 называет пять: «по таблице» и «зеркальный как тип массива» добавлены в каталог (docs/05 §2.2).",
+      "«Что копируется» кодируется ОТДЕЛЬНЫМ o3d-типом, а не флагом: суффиксы …Copy (операции) / …PartArray (компоненты) / Aux… (вспомогательная геометрия) / Bodies… (тела) / …AnyCopy (произвольные объекты). У IFeaturePattern есть только один связанный флаг — GeometryPattern (геометрический массив).",
+      "Ловушка именования: o3d_LinearPattern / o3d_CircularPattern / o3d_PathPattern / o3d_DerivedPattern / o3d_MirrorPattern в установленном ksObj3dTypeEnum ОТСУТСТВУЮТ — для них используются 35/36/37, 38/39/40/41, 48/49/509. Ожидание «o3d_LinearPattern» дало бы ложный blocked_api для SM-18.",
+      "Прямое редактирование тела и удаление тела/поверхности физически живут в ISurfaceContainer (FaceMovers, FaceRemovers, BodySurfaceRemovers, RestoredSurfaces, SurfaceSewers), а НЕ в IModelContainer: «поверхностный модуль» нельзя исключить как основание (docs/05 §2.3); получается QueryInterface на IPart7 (SDK isurfacecontainer.html).",
+      "Замена граней и изменение размера грани: тип объекта и id команды есть (o3d_FaceReplacer=659, o3d_FaceResizer=660, prFaceResizer=20248), именованного COM-интерфейса нет ни в kAPI7.tlb, ни в дампе API5 → кандидаты blocked_api по docs/05 §2.4.",
+      "PM-перенос: IFillet в установленном kAPI7.tlb содержит весь переменный радиус и «продолжение скругления» (VariableRadius*, StopFilletOn*, SmoothCorner, RoundCorners, Coefficient, Chord) — 4 из modes_unverified SM-09 в coverage/solid-v24/catalog.json объясняются бедностью API5, а не отсутствием возможности (OQ-B-30).",
+      "Деформация компонентов в сборке (SM-29) полностью документирована (объект «Деформация», правила владения, «Сохранить с учетом деформации»), но не имеет ни одного совпадения по имени Deform ни в kAPI7.tlb, ни в дампе API5; pr*Deformation в ksConstants.tlb — это 2D-команды черчения (OQ-B-26).",
+      "Ни одна запись part-B не поднималась выше metadata_found; SM-24.replace_faces, SM-24.resize_face, SM-24.change_face_position, SM-24.change_fillet, SM-25.decompose_array, SM-26.save_body_as_detail и все три записи SM-29 остаются documented."
+    ]
+  },
+  "families": [
+    {
+      "id": "SM-18",
+      "title": "Массив по сетке (и по таблице)",
+      "classification": "solid",
+      "level": "metadata_found",
+      "operations": ["SM-18.grid", "SM-18.table"],
+      "note": "«Массив по таблице» — отдельная команда v24 (glava_53_massiv_po_tablice) и отдельный интерфейс ITablePattern; в docs/05 §5 она не названа, включена в обязательную матрицу на основании docs/05 §2.2."
+    },
+    {
+      "id": "SM-19",
+      "title": "Массив по концентрической сетке",
+      "classification": "solid",
+      "level": "metadata_found",
+      "operations": ["SM-19.circular"]
+    },
+    {
+      "id": "SM-20",
+      "title": "Массив вдоль кривой",
+      "classification": "solid",
+      "level": "metadata_found",
+      "operations": ["SM-20.path"]
+    },
+    {
+      "id": "SM-21",
+      "title": "Массив по точкам",
+      "classification": "solid",
+      "level": "metadata_found",
+      "operations": ["SM-21.points"]
+    },
+    {
+      "id": "SM-22",
+      "title": "Массив по образцу (производный)",
+      "classification": "solid",
+      "level": "metadata_found",
+      "operations": ["SM-22.derived"]
+    },
+    {
+      "id": "SM-23",
+      "title": "Зеркальное отражение",
+      "classification": "solid",
+      "level": "metadata_found",
+      "operations": ["SM-23.mirror_array", "SM-23.mirror_all", "SM-23.mirror_part", "SM-23.mirror_component_placement"]
+    },
+    {
+      "id": "SM-24",
+      "title": "Прямое изменение тела (Прямое моделирование)",
+      "classification": "solid",
+      "level": "metadata_found",
+      "operations": ["SM-24.move_faces", "SM-24.delete_faces", "SM-24.replace_faces", "SM-24.resize_face", "SM-24.change_face_position", "SM-24.restore_faces", "SM-24.change_fillet", "SM-24.split_solid_ref"]
+    },
+    {
+      "id": "SM-25",
+      "title": "Удаление тел",
+      "classification": "solid",
+      "level": "metadata_found",
+      "operations": ["SM-25.remove_body_surface", "SM-25.delete_object_generic", "SM-25.decompose_array", "SM-25.retarget_links"]
+    },
+    {
+      "id": "SM-26",
+      "title": "Заготовки и копии геометрии",
+      "classification": "solid",
+      "level": "metadata_found",
+      "operations": ["SM-26.copy_geometry", "SM-26.collection_geometry", "SM-26.billet_obsolete", "SM-26.billet_flag", "SM-26.save_body_as_detail"]
+    },
+    {
+      "id": "SM-27",
+      "title": "Получение тела из поверхностей",
+      "classification": "solid",
+      "level": "metadata_found",
+      "operations": ["SM-27.thicken_faces", "SM-27.sew_surfaces", "SM-27.aux_surface_ops"]
+    },
+    {
+      "id": "SM-28",
+      "title": "Твердотельные операции над компонентами",
+      "classification": "solid",
+      "level": "metadata_found",
+      "operations": ["SM-28.union_components", "SM-28.cut_components", "SM-28.edit_in_place_context"]
+    },
+    {
+      "id": "SM-29",
+      "title": "Деформация компонентов в сборке",
+      "classification": "solid",
+      "level": "documented",
+      "operations": ["SM-29.deform_component", "SM-29.deformation_object", "SM-29.save_component_with_deformation"]
+    }
+  ],
+  "operations": [
+    {
+      "id": "SM-18.grid",
+      "family": "SM-18",
+      "engineering_name": "Массив по сетке (экземпляры в узлах параллелограммной сетки)",
+      "classification": "solid",
+      "level": "metadata_found",
+      "doc_source": [
+        "KOMPAS_ru-RU.zip!glava_49_massiv_po_setke.html",
+        "KOMPAS_ru-RU.zip!49_1_1_bazovay_tochka_ekzemplyra.html",
+        "KOMPAS_ru-RU.zip!49_3_1_napravlenie_pervoy_osi.html",
+        "KOMPAS_ru-RU.zip!49_3_2_shag_setki_vdol_pervoy_osi.html",
+        "KOMPAS_ru-RU.zip!49_5_izmenenie_polozheniy_ekzemplyron.html",
+        "KOMPAS_ru-RU.zip!49_6_razmezhenie_kopiy_vnutri_setki.html",
+        "https://help.ascon.ru/KOMPAS/24/ru-RU/glava_49_massiv_po_setke.html (JS-gated, заголовок подтверждён поиском)"
+      ],
+      "sdk_source": [
+        "SDK: ifeaturepatterns.html / ifeaturepatterns_add.html (Add(ksObj3dTypeEnum Type))",
+        "SDK: copytype.html — таблица o3d_* → ILinearPattern",
+        "SDK: ilinearpattern_props.html (Angle1/2, Axis1/2, Vector1/2, Direction1/2, Step1/2, Count1/2, BoundaryInstancesStepFactor1/2, BuildingType)"
+      ],
+      "interfaces": [
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "ILinearPattern : IFeaturePattern", "iid": "{FAA408C7-1A43-499C-B2E2-06F29B48BCBB}", "members_declared": 30},
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IFeaturePattern : IModelObject", "iid": "{C020E994-FB7F-449A-A3D9-2181135F4200}", "members_declared": 17},
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IFeaturePatterns : IModelObjects (Add(ksObj3dTypeEnum))", "owner": "IModelContainer.FeaturePatterns (порядковый 4)"},
+        {"artifact": "docs/compatibility/kompas-api5-metadata.json", "name": "ksMeshPartArrayDefinition", "iid": "e6e78d61-c0fa-11d6-8734-00c0262cdd2c", "members_declared": 35},
+        {"artifact": "docs/compatibility/kompas-api5-metadata.json", "name": "ksMeshCopyDefinition", "iid": "0307bb8d-c193-11d6-8734-00c0262cdd2c", "members_declared": 38},
+        {"artifact": "Libs\\PolynomLib\\Bin\\Client\\Interop.KompasAPI7.dll (2298 типов)", "name": "KompasAPI7.ILinearPattern", "note": "присутствует; расхождений по этому типу с kAPI7.tlb не измерялось (в отличие от ElementaryBodies/PipeElements)"}
+      ],
+      "object_types": {"operations": "o3d_meshCopy=35", "components": "o3d_meshPartArray=39", "auxiliary": "o3d_AuxMeshCopy=504", "bodies": "o3d_BodiesMeshCopy=528", "arbitrary": "o3d_MeshPatternAnyCopy=591"},
+      "contexts": ["part", "part.multibody", "assembly.component", "embodiment (не проверялось)"],
+      "parameters": [
+        {"api": "Axis1/Axis2", "type": "IModelObject*", "meaning": "ось (направление) сетки", "required": "одна из пар Axis/Vector на направление", "units": "—"},
+        {"api": "Vector1/Vector2", "type": "IVector3D (в kAPI7.tlb только get_)", "meaning": "вектор направления", "units": "—", "note": "set_ отсутствует в kAPI7.tlb → вектор задаётся объектом IVector3D или через Axis; открытый вопрос OQ-B-03"},
+        {"api": "Angle1/Angle2", "type": "double", "meaning": "угол наклона первой/второй оси сетки", "units": "градусы по docs/05 §4.1; документированная единица API НЕ подтверждена"},
+        {"api": "Step1/Step2", "type": "double", "meaning": "шаг копирования по оси", "units": "мм (предположение; калибровка не выполнялась)"},
+        {"api": "Count1/Count2", "type": "long", "meaning": "число экземпляров по оси"},
+        {"api": "Direction1/Direction2", "type": "VARIANT_BOOL", "meaning": "направление копирования вдоль оси"},
+        {"api": "BoundaryInstancesStepFactor1/2", "type": "VARIANT_BOOL", "meaning": "интерпретация значения шага вдоль оси (граничные экземпляры)"},
+        {"api": "BuildingType", "type": "long → ksLinearPatternBuildingTypeEnum", "enum": {"ksLPSaveAll": 0, "ksLPSaveAlongPerimeter": 1, "ksLPSaveAlongAxially": 2, "ksLPChessOrderByAxis1": 3, "ksLPChessOrderByAxis2": 4}, "enum_artifact": "Bin\\ksConstants3D.tlb (через scratch/tlgen/Kompas6Constants3D.py)"},
+        {"api": "IFeaturePattern.InitialObjects", "type": "VARIANT (массив IModelObject)", "meaning": "исходные объекты массива"},
+        {"api": "IFeaturePattern.GeometryPattern", "type": "VARIANT_BOOL", "meaning": "признак использования геометрического копирования (SDK ifeaturepattern_geometrypattern.html)"},
+        {"api": "IFeaturePattern.InstanceDeletedIndexes", "type": "VARIANT (индексы)", "meaning": "список удалённых экземпляров массива"},
+        {"api": "IFeaturePattern.BasePointType/BasePoint", "type": "long → ksPatternBasePointTypeEnum {ksCRAuto=0, ksCRManual=1, ksCRFirstObject=2}", "meaning": "способ задания базовой точки"},
+        {"api": "IFeaturePattern.GetExemplarsCounts / Exemplar(Index1,Index2)", "type": "long / IModelObject", "meaning": "число и доступ к экземплярам"}
+      ],
+      "copy_variants": [
+        {"mode_id": "SM-18.grid.operations", "ui_type": "Операции", "o3d": "o3d_meshCopy=35", "copied": "грани и рёбра копируемых операций либо сами операции с параметрами (зависит от GeometryPattern)", "associativity": "копии наследуют область применения исходной операции; новые тела не появляются (48_2_osobennoiti_postroeniy_massiviv_v_mnogotelnoy_detali)", "level": "metadata_found"},
+        {"mode_id": "SM-18.grid.operations.geometry", "ui_type": "Операции + Геометрический массив", "api": "IFeaturePattern.GeometryPattern=true; API5 ksMeshCopyDefinition.geomArray", "copied": "только грани и рёбра, параметры операций НЕ копируются; копии сшиваются с телом в новое тело", "restrictions_documented": "замкнутость поверхности; экземпляры не должны пересекаться; все копируемые операции одного типа (добавляют ИЛИ удаляют); в многотельной модели приклейка только к тому же телу; требует одинаковой формы/размеров (48_3_3_geometricheskiy_massiv)", "level": "documented", "next_step": "проба: геометрический массив на эталонной пластине, сверка V и числа тел"},
+        {"mode_id": "SM-18.grid.bodies", "ui_type": "Тела или поверхности", "o3d": "o3d_BodiesMeshCopy=528", "copied": "тела (копии тел), МЦХ по умолчанию как у исходника", "level": "metadata_found"},
+        {"mode_id": "SM-18.grid.auxiliary", "ui_type": "Кривые, точки, вспомогательная геометрия", "o3d": "o3d_AuxMeshCopy=504", "copied": "вспомогательные плоскости/оси/кривые/точки", "level": "metadata_found"},
+        {"mode_id": "SM-18.grid.components", "ui_type": "Компоненты", "o3d": "o3d_meshPartArray=39 (SDK: «…для сборки»)", "copied": "компоненты сборки (позиционирование, не геометрия)", "level": "metadata_found"},
+        {"mode_id": "SM-18.grid.arbitrary", "ui_type": "Произвольный", "o3d": "o3d_MeshPatternAnyCopy=591", "copied": "смешанный набор объектов; запрет на тела/компоненты/ранее созданные массивы и некоторые операции (ребро жёсткости, оболочка, листовое тело, придать толщину) — 271012_589_sistemi_koordinat", "level": "documented"}
+      ],
+      "modes": [
+        {"mode_id": "SM-18.grid.build_perimeter", "enum": "ksLPSaveAlongPerimeter=1"},
+        {"mode_id": "SM-18.grid.build_axial", "enum": "ksLPSaveAlongAxially=2"},
+        {"mode_id": "SM-18.grid.build_chess_axis1", "enum": "ksLPChessOrderByAxis1=3"},
+        {"mode_id": "SM-18.grid.build_chess_axis2", "enum": "ksLPChessOrderByAxis2=4"},
+        {"mode_id": "SM-18.grid.deleted_instances", "api": "InstanceDeletedIndexes; API5 DeletedCollection(): ksDeletedCopyCollection{Add(i1,i2), DetachByBody(i1,i2), FindIt, Clear, refresh}", "documented_rule": "экземпляр удаляется только целиком; восстановление при создании/редактировании (48_3_4)"},
+        {"mode_id": "SM-18.grid.dimensions_on_copies", "doc": "опция «С размерами», 49_6_razmezhenie_kopiy_vnutri_setki", "classification": "required_auxiliary", "note": "размеры внутри массива = чертёжно-оформленческий слой; в матрицу попадает как режим, а не как отдельная команда"},
+        {"mode_id": "SM-18.grid.variables_table", "doc": "50_1_3_566_peremennie_massivov, array_variables, idd_array_vars_table", "note": "изменение формы/размеров экземпляров через переменные; для сетки доступно, для зеркального и по образцу — нет"}
+      ],
+      "orientation": {"documented": "для сетки ориентация экземпляров задаётся углами осей (параллелограммная сетка); отдельной группы «Ориентация» страница glava_49 не содержит", "api": "SaveInitialOrientation ОТСУТСТВУЕТ в ILinearPattern (есть у ICircularPattern/IPathPattern/ITablePattern/IPointDrivenPattern)", "api_enums": "ksPatternExemplarsOrientationTypeEnum {ksOrientationSave=0, ksOrientationByNormal=1, ksOrientationByObject=2} — применим к table/points (OrientationType), не к grid"},
+      "skipped_instances": "InstanceDeletedIndexes (API7) / ksDeletedCopyCollection (API5); недоступно для зеркального массива и массива по образцу (glava_48_obzhie_svedeniy)",
+      "source_edit_updates_copies": "документировано: массив — единый объект, экземпляры являются копиями исходных объектов (glava_48); редактирование исходной операции через «Массив: особенности редактирования» (653_51_3_8) и array_edit_features; фактическое поведение при правке источника не проверялось (OQ-B-01)",
+      "actions": {
+        "create": {"status": "research", "route": "API7 IModelContainer.FeaturePatterns.Add(o3d_meshCopy) → ILinearPattern → InitialObjects/Axis*/Step*/Count* → Update() → Part.RebuildModel() + Document.RebuildDocument()"},
+        "read": {"status": "research", "route": "перечитать Axis1/Step1/Count1/BuildingType/InstanceDeletedIndexes/GeometryPattern; IModelObject.Owner → IFeature7 {Name, UpdateStamp, Valid, ObjectError, State, OrderNumber}"},
+        "edit": {"status": "research", "route": "set_ того же объекта + Update(); edit существующего признака, созданного человеком, обязателен к проверке (docs/05 §4.3)"},
+        "rebuild": {"status": "research", "note": "IFeature7.SubFeatures / ResultBodies — чем перечислять зависимости"},
+        "save_reopen": {"status": "not_started"},
+        "suppress_restore": {"status": "not_started", "note": "IFeature7.Excluded существует (SM-30 в catalog.json); применимость к массиву не проверялась"},
+        "delete_with_dependencies": {"status": "research", "route": "IFeaturePattern.Destroy() либо IFeature7.Delete(); предупреждающий диалог со списком связанных объектов документирован (833_2_14_3_8_udal_obj)"},
+        "negative_tests": {"status": "not_started"},
+        "geometry_validation": {"status": "not_started", "reference": "эталон SOL-PATTERN (docs/05 §9.2): число и расположение экземпляров, суммарный объём, обновление копий при изменении исходника"}
+      },
+      "native_or_composition": "родная операция; композиция (N независимых выдавливаний) не закрывает семейство: теряются редактируемость массива, пропуски экземпляров, ориентация, разрушение и связь с исходником",
+      "mcp_support": {"level": "none", "notes": "в src/KompasMcp.Host/Catalog/ToolCatalog.cs нет инструмента массивов; kompas_get_feature/kompas_update_feature поддерживают только семейство выдачиваний"},
+      "next_step": "проба (единственный следующий шаг): создать ILinearPattern.Add(o3d_meshCopy) на бруске 100×80×10 с одним вырезом, Count1=3/Step1=20, и сверить число тел и ΔV с аналитикой 3×250π; заодно измерить, в каких единицах Step1"
+    },
+    {
+      "id": "SM-18.table",
+      "family": "SM-18",
+      "engineering_name": "Массив по таблице (координаты экземпляров из таблицы/файла)",
+      "classification": "solid",
+      "level": "metadata_found",
+      "status_note": "НЕ назван в docs/05 §5; найден в установленной справке v24 и в kAPI7.tlb → включается в обязательную матрицу (docs/05 §2.2: выявленные дополнительные операции внутри предметной области включаются до фиксации матрицы)",
+      "doc_source": ["KOMPAS_ru-RU.zip!glava_53_massiv_po_tablice.html", "KOMPAS_ru-RU.zip!56_2_zadanie_poziciy_ekzemplyrov.html", "KOMPAS_ru-RU.zip!56_2_1_chtenie_koordinat_iz_fayla.html", "KOMPAS_ru-RU.zip!53_3_opientaciy_ekzemplyrov_massiva.html"],
+      "sdk_source": ["SDK copytype.html: o3d_TablePattern=522 → ITablePattern «Массив операций по таблице из файла»", "SDK imodelcontainer_featurepatterns.html"],
+      "interfaces": [
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "ITablePattern : IFeaturePattern", "iid": "{EFE5B123-174F-4CB0-AE85-7F291FA8AE1B}", "members_declared": 10, "members": ["FileName(BSTR)", "PointsType(long)", "SaveInitialOrientation(bool)", "OrientationType(long)", "OrientationObject(IModelObject)"]},
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IPointsArrFromFile : IModelObject", "note": "источник точек из файла: PointsType, FileName, Symbol, Destroy()"},
+        {"artifact": "docs/compatibility/kompas-api5-metadata.json", "name": "определение отсутствует", "note": "в дампе API5 НЕТ ни ksTablePatternDefinition, ни *ArrayDefinition для таблицы; в API5 массив по таблице не представлен (открытый вопрос OQ-B-05)"}
+      ],
+      "object_types": {"operations": "o3d_TablePattern=522", "components": "o3d_PartsTablePattern=523", "auxiliary": "o3d_AuxTablePattern=524", "bodies": "o3d_BodiesTablePattern=525", "arbitrary": "o3d_TablePatternAnyCopy=596"},
+      "enums": {"OrientationType": "ksPatternExemplarsOrientationTypeEnum {ksOrientationSave=0, ksOrientationByNormal=1, ksOrientationByObject=2}", "PointsType": "значение-перечисление НЕ найдено в установленном ksConstants3D.tlb (ksPointsArrFromFileTypeEnum отсутствует) → OQ-B-06"},
+      "contexts": ["part", "part.multibody", "assembly.component"],
+      "copy_variants": [
+        {"mode_id": "SM-18.table.operations", "o3d": "522"},
+        {"mode_id": "SM-18.table.bodies", "o3d": "525"},
+        {"mode_id": "SM-18.table.auxiliary", "o3d": "524"},
+        {"mode_id": "SM-18.table.components", "o3d": "523"},
+        {"mode_id": "SM-18.table.arbitrary", "o3d": "596"}
+      ],
+      "actions": {"create": "research", "read": "research", "edit": "research", "rebuild": "research", "save_reopen": "not_started", "suppress_restore": "not_started", "delete_with_dependencies": "research", "negative_tests": "not_started", "geometry_validation": "not_started"},
+      "native_or_composition": "родная операция",
+      "mcp_support": {"level": "none"},
+      "next_step": "проба: ITablePattern с FileName на простой CSV-подобный файл точек; проверить, какая кодировка/разделитель принимаются и читается ли PointsType обратно"
+    },
+    {
+      "id": "SM-19.circular",
+      "family": "SM-19",
+      "engineering_name": "Массив по концентрической сетке",
+      "classification": "solid",
+      "level": "metadata_found",
+      "doc_source": ["KOMPAS_ru-RU.zip!glava_50_massiv_po_koncentr_setke.html", "KOMPAS_ru-RU.zip!50_1_shema_obrazovaniy_koncentr_setki.html", "KOMPAS_ru-RU.zip!50_3_parametri_setki_v_kolcevom_napravleniy.html", "KOMPAS_ru-RU.zip!50_4_parametri_setki_v_radialnom_napravleniy.html", "KOMPAS_ru-RU.zip!50_5_orientaciy_ekzemplyrov_massiva.html", "KOMPAS_ru-RU.zip!50_6_izmenenie_polozheniy_ekzemplyrov.html"],
+      "sdk_source": ["SDK copytype.html", "SDK icircularpattern_props.html"],
+      "interfaces": [
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "ICircularPattern : IFeaturePattern", "iid": "{B1ED4CA8-0835-4465-925D-C137559A32E0}", "members_declared": 24, "members": ["Axis(IModelObject)", "Step1(double)", "Count1(long)", "Step2(double)", "Count2(long)", "BoundaryInstancesStepFactor1/2(bool)", "SaveInitialOrientation(bool)", "ReverseDirection(bool)", "SetBaseExemplarPlacement(i1,i2)", "GetBaseExemplarPlacement(out i1,out i2)", "BuildingType(long)", "StepByAxis(double)"]},
+        {"artifact": "docs/compatibility/kompas-api5-metadata.json", "name": "ksCircularPartArrayDefinition", "iid": "ddd05143-c180-11d6-8734-00c0262cdd2c", "members_declared": 30, "note": "состав: count1/step1/factor1, count2/step2/factor2, inverce (sic — опечатка вендора), keepAngle, GetAxis/SetAxis, GetCopyParamAlongDir/SetCopyParamAlongDir, PartArray(), DeletedCollection()"},
+        {"artifact": "docs/compatibility/kompas-api5-metadata.json", "name": "ksCircularCopyDefinition", "members_declared": 30, "note": "то же + geomArray вместо inverce/keepAngle"}
+      ],
+      "object_types": {"operations": "o3d_circularCopy=36", "components": "o3d_circPartArray=38", "auxiliary": "o3d_AuxCircularCopy=505", "bodies": "o3d_BodiesCircularCopy=529", "arbitrary": "o3d_CircularPatternAnyCopy=592"},
+      "enums": {"BuildingType": "ksCircularPatternBuildingTypeEnum {ksCPSaveAll=0, ksCPChessOrderByAxis1=1, ksCPChessOrderByAxis2=2}", "SaveInitialOrientation": "bool ↔ группа «Ориентация»: «Доворачивать» / «Сохранять исходную» (50_5)"},
+      "parameters_units_question": "Step1 — angular step по кольцу (градусы?), Step2 — radial step (мм?), StepByAxis — смещение вдоль оси (мм): соотнесение «какое поле какой из двух направлений концентрической сетки» НЕ подтверждено ни справкой, ни метаданными → OQ-B-02",
+      "full_turn_boundary": "границы полного оборота (360°) в метаданных не выражены: ни признака «полный оборот», ни проверки периметра. См. BoundaryInstancesStepFactor1/2 — интерпретация шага на границе; требует пробы",
+      "contexts": ["part", "part.multibody", "assembly.component"],
+      "copy_variants": [
+        {"mode_id": "SM-19.circular.operations", "o3d": "36", "note": "+ режим GeometryPattern (геометрический массив) — API5 ksCircularCopyDefinition.geomArray"},
+        {"mode_id": "SM-19.circular.bodies", "o3d": "529"},
+        {"mode_id": "SM-19.circular.auxiliary", "o3d": "505"},
+        {"mode_id": "SM-19.circular.components", "o3d": "38"},
+        {"mode_id": "SM-19.circular.arbitrary", "o3d": "592"}
+      ],
+      "modes": [
+        {"mode_id": "SM-19.circular.build_chess_ring", "enum": "ksCPChessOrderByAxis1=1"},
+        {"mode_id": "SM-19.circular.build_chess_ray", "enum": "ksCPChessOrderByAxis2=2"},
+        {"mode_id": "SM-19.circular.orientation_keep", "api": "SaveInitialOrientation=false"},
+        {"mode_id": "SM-19.circular.orientation_rotate", "api": "SaveInitialOrientation=true"},
+        {"mode_id": "SM-19.circular.reverse", "api": "ReverseDirection"},
+        {"mode_id": "SM-19.circular.base_exemplar", "api": "SetBaseExemplarPlacement/GetBaseExemplarPlacement + BasePointType/BasePoint"},
+        {"mode_id": "SM-19.circular.deleted_instances", "api": "InstanceDeletedIndexes / API5 DeletedCollection()"}
+      ],
+      "actions": {"create": "research", "read": "research", "edit": "research", "rebuild": "research", "save_reopen": "not_started", "suppress_restore": "not_started", "delete_with_dependencies": "research", "negative_tests": "not_started", "geometry_validation": "not_started", "reference": "SOL-PATTERN"},
+      "native_or_composition": "родная операция",
+      "mcp_support": {"level": "none"},
+      "next_step": "проба: круговой массив отверстия (4×90°) на эталонной пластине 100×80×10; измерить ΔV = 4·250π и заодно определить единицы Step1 (градусы против радиан даст 5,7-кратное расхождение)"
+    },
+    {
+      "id": "SM-20.path",
+      "family": "SM-20",
+      "engineering_name": "Массив вдоль кривой",
+      "classification": "solid",
+      "level": "metadata_found",
+      "doc_source": ["KOMPAS_ru-RU.zip!glava_51_massiv_vdol_krivoy.html", "KOMPAS_ru-RU.zip!51_1_575_obshie_svedenija.html", "KOMPAS_ru-RU.zip!51_2_nachalnay_tochka_krivoy.html", "KOMPAS_ru-RU.zip!51_3_shag_kopirovaniy.html", "KOMPAS_ru-RU.zip!51_4_napravlenie_kopirovaniy.html", "KOMPAS_ru-RU.zip!51_5_orientaciy_ekzemrlyrov.html", "KOMPAS_ru-RU.zip!653_51_3_8_osobennosti_redaktirovaniy_massiva.html", "KOMPAS_ru-RU.zip!654_51_4_tablica_parametrov_massiva.html"],
+      "sdk_source": ["SDK copytype.html: o3d_curveCopy=37 → IPathPattern"],
+      "interfaces": [
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IPathPattern : IFeaturePattern", "iid": "{B05FC37D-7D60-4291-BE81-E4A9E23D4740}", "members_declared": 16, "members": ["Curves(VARIANT массив IModelObject)", "Count(long)", "StartingPoint(IModelObject)", "ByStep(bool)", "Step(double)", "BoundaryInstancesStepFactor(bool)", "SaveInitialOrientation(bool)", "ReverseDirection(bool)"]},
+        {"artifact": "docs/compatibility/kompas-api5-metadata.json", "name": "ksCurvePartArrayDefinition", "iid": "ddd05146-c180-11d6-8734-00c0262cdd2c", "members_declared": 21, "note": "count/step/factor/keepAngle/fullCurve/sence (sic — опечатка вендора), PartArray(), CurveArray(), DeletedCollection()"},
+        {"artifact": "docs/compatibility/kompas-api5-metadata.json", "name": "ksCurveCopyDefinition", "members_declared": 24, "note": "то же + geomArray, OperationArray()"}
+      ],
+      "object_types": {"operations": "o3d_curveCopy=37", "components": "o3d_curvePartArray=40", "auxiliary": "o3d_AuxCurveCopy=506", "bodies": "o3d_BodiesCurveCopy=530", "arbitrary": "o3d_CurvePatternAnyCopy=593"},
+      "multiple_branches": "Curves — VARIANT (массив): несколько кривых-траекторий допустимы на уровне метаданных; поведение при разорванной траектории и при нескольких ветвях — только проба (docs/05 §9.3)",
+      "parameters_units_question": "Step — шаг вдоль кривой (мм?) при ByStep=true; при ByStep=false — равномерное распределение Count экземпляров; API5 fullCurve/sence — назначение флагов НЕ документировано в справке → OQ-B-04",
+      "contexts": ["part", "part.multibody", "assembly.component"],
+      "copy_variants": [
+        {"mode_id": "SM-20.path.operations", "o3d": "37", "note": "+ GeometryPattern (API5 geomArray)"},
+        {"mode_id": "SM-20.path.bodies", "o3d": "530"},
+        {"mode_id": "SM-20.path.auxiliary", "o3d": "506"},
+        {"mode_id": "SM-20.path.components", "o3d": "40"},
+        {"mode_id": "SM-20.path.arbitrary", "o3d": "593"}
+      ],
+      "modes": [
+        {"mode_id": "SM-20.path.by_step", "api": "ByStep=true, Step"},
+        {"mode_id": "SM-20.path.distributed", "api": "ByStep=false, Count"},
+        {"mode_id": "SM-20.path.starting_point", "api": "StartingPoint"},
+        {"mode_id": "SM-20.path.reverse", "api": "ReverseDirection"},
+        {"mode_id": "SM-20.path.orientation_keep", "api": "SaveInitialOrientation"},
+        {"mode_id": "SM-20.path.deleted_instances", "api": "InstanceDeletedIndexes / API5 DeletedCollection()"}
+      ],
+      "orientation": "SaveInitialOrientation(bool) — есть; отдельного OrientationType у IPathPattern нет (OrientationType есть только у ITablePattern/IPointDrivenPattern)",
+      "actions": {"create": "research", "read": "research", "edit": "research", "rebuild": "research", "save_reopen": "not_started", "suppress_restore": "not_started", "delete_with_dependencies": "research", "negative_tests": "not_started", "geometry_validation": "not_started"},
+      "native_or_composition": "родная операция",
+      "mcp_support": {"level": "none"},
+      "next_step": "проба: массив вдоль окружности R50, Count=6 против ByStep=true/Step=20; зафиксировать, как ведёт себя разомкнутая траектория (ошибка КОМПАС + код ObjectError)"
+    },
+    {
+      "id": "SM-21.points",
+      "family": "SM-21",
+      "engineering_name": "Массив по точкам",
+      "classification": "solid",
+      "level": "metadata_found",
+      "doc_source": ["KOMPAS_ru-RU.zip!glava_52_massiv_po_tockam.html", "KOMPAS_ru-RU.zip!52_2_1_upravlenie_ploskosty_raspolozcheniy_ekzemplyrov_massiva.html", "KOMPAS_ru-RU.zip!52_9_sposobi_zadaniy_bazovoy_tochki.html", "KOMPAS_ru-RU.zip!54_3_orientaciy_ekzemplyrov_massiva.html", "KOMPAS_ru-RU.zip!idp_array_point_bad_orientation.html"],
+      "sdk_source": ["SDK copytype.html: o3d_PointDrivenPattern=507 → IPointDrivenPattern"],
+      "interfaces": [
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IPointDrivenPattern : IFeaturePattern", "iid": "{4CF250AC-878E-4E7B-94DE-F834CD13543F}", "members_declared": 12, "members": ["DrivenObjects(VARIANT)", "IsSuitableDrivenObject(obj)", "ClearDrivenObjects()", "ProjectionPoints(bool)", "SaveInitialOrientation(bool)", "OrientationType(long)", "OrientationObject(IModelObject)"]},
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "источники точек: IPointsArrOnCurve{Curve,BuildingType,Count,Step,ByStep,ReverseDirection,OnOffsets,OffsetType,Offset,OffsetDirection,Symbol,Destroy}", "members_declared": 23},
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IPointsArrOnSurface : IModelObject", "members_declared": 17},
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IPointsArrFromFile : IModelObject", "members_declared": 7}
+      ],
+      "object_types": {"operations": "o3d_PointDrivenPattern=507", "components": "o3d_PartsPointDrivenPattern=508", "auxiliary": "o3d_AuxPointDrivenPattern=520", "bodies": "o3d_BodiesPointDrivenPattern=521", "arbitrary": "o3d_PointDrivenPatternAnyCopy=595"},
+      "point_source_enum": {"PointsArrOnCurve.BuildingType": "ksPointsArrOnCurveTypeEnum {ksPAOCByPointsCount=0, ksPAOCByStep=1, ksPAOCByParametricStep=2}", "PointsArrOnSurface.BuildingType": "ksPointsArrOnSurfaceTypeEnum {ksPAOSByPointsUVCount=-1, ksPAOSByLinearDeflection=0, ksPAOSByAngularDeflection=1, ksPAOSByMeshAroundPoint=2}"},
+      "orientation": {"api": "OrientationType → ksPatternExemplarsOrientationTypeEnum {ksOrientationSave=0, ksOrientationByNormal=1, ksOrientationByObject=2}", "diagnostic_documented": "idp_array_point_bad_orientation — отказ ориентации по объекту"},
+      "contexts": ["part", "part.multibody", "assembly.component"],
+      "copy_variants": [
+        {"mode_id": "SM-21.points.operations", "o3d": "507"},
+        {"mode_id": "SM-21.points.bodies", "o3d": "521"},
+        {"mode_id": "SM-21.points.auxiliary", "o3d": "520"},
+        {"mode_id": "SM-21.points.components", "o3d": "508"},
+        {"mode_id": "SM-21.points.arbitrary", "o3d": "595"}
+      ],
+      "modes": [
+        {"mode_id": "SM-21.points.source.sketch_points", "api": "DrivenObjects = эскизные/модельные точки (IModelContainer.Points3D)"},
+        {"mode_id": "SM-21.points.source.on_curve", "api": "IPointsArrOnCurve (o3d_PointsArrOnCurve=546)"},
+        {"mode_id": "SM-21.points.source.on_surface", "api": "IPointsArrOnSurface (o3d_PointsArrOnSurface=548)"},
+        {"mode_id": "SM-21.points.source.from_file", "api": "IPointsArrFromFile (o3d_PointsArrFromFile=547)"},
+        {"mode_id": "SM-21.points.projection", "api": "ProjectionPoints(bool)"}
+      ],
+      "source_update": "требует пробы: при изменении источника точек (PointsArr* или эскиза) массив обязан актуализироваться; порядок обхода точек (порядок в DrivenObjects vs порядок на кривой) в справке не формализован → OQ-B-07",
+      "actions": {"create": "research", "read": "research", "edit": "research", "rebuild": "research", "save_reopen": "not_started", "suppress_restore": "not_started", "delete_with_dependencies": "research", "negative_tests": "not_started", "geometry_validation": "not_started"},
+      "native_or_composition": "родная операция",
+      "mcp_support": {"level": "none"},
+      "next_step": "проба: IPointDrivenPattern по 4 эскизным точкам с OrientationType=ksOrientationByNormal и без неё; измерить V и ориентацию (нормаль экземпляра)"
+    },
+    {
+      "id": "SM-22.derived",
+      "family": "SM-22",
+      "engineering_name": "Массив по образцу (производный массив)",
+      "classification": "solid",
+      "level": "metadata_found",
+      "doc_source": ["KOMPAS_ru-RU.zip!glava_56_massiv_po_obrazcu.html", "KOMPAS_ru-RU.zip!2710_593_massiv_proizv_obj.html", "KOMPAS_ru-RU.zip!27102_obl_primen_proizv_massiva.html", "KOMPAS_ru-RU.zip!56_2_razmezchenie_ekzemplyrov_massiva.html"],
+      "sdk_source": ["SDK copytype.html: o3d_derivPartArray=41 → IDerivedPattern «Операция массив по образцу для сборки»"],
+      "interfaces": [
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IDerivedPattern : IFeaturePattern", "iid": "{575D30E2-EFA3-40B5-9CA1-02A63E0D50D9}", "members_declared": 10, "members": ["MasterPattern(IModelObject)", "OrientBySample(bool)", "SampleExemplar(IModelObject)", "AllowNesting(bool)", "AllowDeleted(bool)"]}
+      ],
+      "object_types": {"components": "o3d_derivPartArray=41"},
+      "doc_vs_metadata_discrepancy": "справка (48_3_1_vibor_kopiruemih_obtktov): «При построении массива по образцу группа Тип содержит только кнопку Компоненты» — то есть единственный копируемый тип = компоненты; метаданные дают только o3d_derivPartArray=41 (сборочный), других вариантов нет. Противоречия нет, но область применения = только сборка → требует документирования контекста в каталоге.",
+      "associativity": "связь с исходным массивом = MasterPattern; правила перестроения: при разрушении исходного массива производный разрушается тоже, при разрушении производного исходный не меняется (48_3_5_razrushenie_massivov); пропуски экземпляров и переменные экземпляров для этого типа НЕдоступны (glava_48_obzhie_svedeniy), при этом у метаданных есть AllowDeleted/AllowNesting → что именно они разрешают, не документировано → OQ-B-08",
+      "contexts": ["assembly.component"],
+      "copy_variants": [{"mode_id": "SM-22.derived.components", "o3d": "41", "level": "metadata_found"}],
+      "modes": [
+        {"mode_id": "SM-22.derived.orient_by_sample", "api": "OrientBySample"},
+        {"mode_id": "SM-22.derived.nesting_allowed", "api": "AllowNesting"},
+        {"mode_id": "SM-22.derived.deleted_inherited", "api": "AllowDeleted"}
+      ],
+      "actions": {"create": "research", "read": "research", "edit": "research", "rebuild": "research (связь с мастер-массивом — обязательная проверка)", "save_reopen": "not_started", "suppress_restore": "not_applicable_no_evidence", "delete_with_dependencies": "research", "negative_tests": "not_started", "geometry_validation": "not_started"},
+      "native_or_composition": "родная операция",
+      "mcp_support": {"level": "none"},
+      "next_step": "проба: создать компонентный сеточный массив, затем IDerivedPattern c MasterPattern=он; отредактировать шаг мастера и проверить, обновятся ли копии (этот же шаг закрывает docs/05 §5 «связь с исходным массивом и перестроение при его редактировании»)"
+    },
+    {
+      "id": "SM-23.mirror_array",
+      "family": "SM-23",
+      "engineering_name": "Зеркальный массив (экземпляр = зеркальное отражение исходных объектов)",
+      "classification": "solid",
+      "level": "metadata_found",
+      "doc_source": ["KOMPAS_ru-RU.zip!glava_55_zerkalniy_massiv.html", "KOMPAS_ru-RU.zip!55_2_1_rezulqtat_zerkalqnog.html"],
+      "sdk_source": ["SDK copytype.html: o3d_mirrorOperation=48 → IMirrorPattern «Операция „зеркальный массив“»"],
+      "interfaces": [
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IMirrorPattern : IFeaturePattern", "iid": "{47C76E89-23C0-4A82-8DFC-F770F9F380C8}", "members_declared": 4, "members": ["Plane(IModelObject)", "SaveInitialObjects(bool)"]},
+        {"artifact": "docs/compatibility/kompas-api5-metadata.json", "name": "ksMirrorCopyDefinition", "iid": "0307bb96-c193-11d6-8734-00c0262cdd2c", "members_declared": 3, "members": ["GetOperationArray()", "GetPlane()", "SetPlane(plane)"]}
+      ],
+      "object_types": {"operations": "o3d_mirrorOperation=48", "auxiliary": "o3d_AuxMirrorOperation=509"},
+      "documented_rules": ["кроме компонентов (glava_55)", "нет пропусков экземпляров и нет переменных экземпляров (glava_48_obzhie_svedeniy)", "SaveInitialObjects ↔ «сохранять исходные объекты»"],
+      "copy_variants": [
+        {"mode_id": "SM-23.mirror_array.operations", "o3d": "48"},
+        {"mode_id": "SM-23.mirror_array.auxiliary", "o3d": "509"}
+      ],
+      "modes": [
+        {"mode_id": "SM-23.mirror_array.keep_initial_objects", "api": "SaveInitialObjects=true"},
+        {"mode_id": "SM-23.mirror_array.discard_initial_objects", "api": "SaveInitialObjects=false"},
+        {"mode_id": "SM-23.mirror_array.faces_type", "note": "тип «Грани» из 48_3_1_vibor_kopiruemih_obtktov не имеет собственного o3d-значения в установленном ksObj3dTypeEnum → OQ-B-09"}
+      ],
+      "contexts": ["part", "part.multibody"],
+      "actions": {"create": "research", "read": "research", "edit": "research", "rebuild": "research", "save_reopen": "not_started", "suppress_restore": "not_started", "delete_with_dependencies": "research", "negative_tests": "not_started", "geometry_validation": "not_started"},
+      "native_or_composition": "родная операция",
+      "mcp_support": {"level": "none"},
+      "next_step": "проба: зеркальный массив выдавленного элемента относительно XOZ; проверить V (2× исходного минус исходник), ориентацию и признак SaveInitialObjects после перечитывания"
+    },
+    {
+      "id": "SM-23.mirror_all",
+      "family": "SM-23",
+      "engineering_name": "Зеркально отразить все (все тела/операции относительно плоскости)",
+      "classification": "solid",
+      "level": "metadata_found",
+      "doc_source": ["пока не найдена отдельная страница: в установленной справке команда упоминается как «зеркально отразить все» только в SDK copytype.html → OQ-B-10"],
+      "sdk_source": ["SDK copytype.html: o3d_mirrorAllOperation=49 → IMirrorPattern, «Дополнительно имеет интерфейс выбора тел IChooseBodies7»"],
+      "interfaces": [
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IMirrorPattern (тот же интерфейс, другой o3d-тип)", "note": "IChooseBodies7{ChooseBodiesType(long), Bodies(VARIANT)} присутствует в kAPI7.tlb"},
+        {"artifact": "docs/compatibility/kompas-api5-metadata.json", "name": "ksMirrorCopyAllDefinition", "iid": "0307bb99-c193-11d6-8734-00c0262cdd2c", "members": ["GetPlane()", "SetPlane(plane)", "ChooseBodies()"]}
+      ],
+      "object_types": {"all": "o3d_mirrorAllOperation=49"},
+      "contexts": ["part.multibody"],
+      "copy_variants": [{"mode_id": "SM-23.mirror_all.bodies_selection", "api": "IChooseBodies7.Bodies / API5 ChooseBodies()", "copied": "тела (chooseType как в SM-02 P2.6)"}],
+      "actions": {"create": "research", "read": "research", "edit": "research", "rebuild": "research", "save_reopen": "not_started", "suppress_restore": "not_applicable_no_evidence", "delete_with_dependencies": "research", "negative_tests": "not_started", "geometry_validation": "not_started"},
+      "native_or_composition": "родная операция; отличается от SM-23.mirror_array множеством копируемого (всё тело/все операции против выбранных объектов)",
+      "mcp_support": {"level": "none"},
+      "next_step": "проба: NewEntity(o3d_mirrorAllOperation) через API5 на многотельной детали; проверить, какие тела отражаются и как выбираются (ChooseBodies)"
+    },
+    {
+      "id": "SM-23.mirror_part",
+      "family": "SM-23",
+      "engineering_name": "Зеркальная деталь (o3d_MirrorPart / левая система координат)",
+      "classification": "solid",
+      "level": "metadata_found",
+      "doc_source": ["KOMPAS_ru-RU.zip!2134_803_zerkaln_ispoln_mod.html (зеркальное исполнение модели)", "KOMPAS_ru-RU.zip!213431_826_izmen_param_otrag.html", "KOMPAS_ru-RU.zip!2113_714_dobavl_zerkal_i_simmetr_comp.html"],
+      "sdk_source": ["SDK obj3dtype.html: o3d_MirrorPart=532 → IBilletObsolete (так в таблице SDK; требует проверки)"],
+      "interfaces": [
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IBilletObsolete : IModelObject", "members": ["FileName(BSTR)"]},
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IPart7.LeftHandedCS(bool)", "note": "правая/левая система координат компонента"},
+        {"artifact": "docs/compatibility/kompas-api5-metadata.json", "name": "отдельного определения зеркальной детали не найдено"}
+      ],
+      "object_types": {"mirror_part": "o3d_MirrorPart=532"},
+      "contexts": ["part", "configuration.embodiment (зеркальное исполнение)"],
+      "copy_variants": [{"mode_id": "SM-23.mirror_part.from_file", "api": "IBilletsObsoletes.Add(FileName, Mirror) — флаг Mirror=источник «зазеркаленной» заготовки"}],
+      "doc_vs_metadata_discrepancy": "SDK obj3dtype.html относит o3d_MirrorPart=532 к IBilletObsolete (устаревший тип), а справочник IModelContainer описывает BilletsObsoletes как «коллекция деталей заготовок и зеркальных деталей». То есть зеркальная деталь в v24 представлена в API только устаревшим контейнером → классификация и маршрут требуют решения (OQ-B-11)",
+      "actions": {"create": "research", "read": "research", "edit": "not_started", "rebuild": "not_started", "save_reopen": "not_started", "suppress_restore": "not_applicable_no_evidence", "delete_with_dependencies": "not_started", "negative_tests": "not_started", "geometry_validation": "not_started"},
+      "native_or_composition": "родная операция (не зеркальный массив)",
+      "mcp_support": {"level": "none"},
+      "next_step": "проба: построить деталь в КОМПАС вручную как зеркальную, затем перечислить IBilletsObsoletes/IPart7.LeftHandedCS и o3d-типы объектов — понять, чем она представлена в истории"
+    },
+    {
+      "id": "SM-23.mirror_component_placement",
+      "family": "SM-23",
+      "engineering_name": "Зеркальное отображение (размещение) компонента в сборке",
+      "classification": "solid",
+      "level": "metadata_found",
+      "doc_source": ["KOMPAS_ru-RU.zip!cm_components_mirroring.html"],
+      "sdk_source": ["SDK: IPart7.MirroringPlacement"],
+      "interfaces": [
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IPart7.MirroringPlacement(Axis: long) → bool", "note": "плюс IPart7.LeftHandedCS, IPart7.Placement(IPlacement3D), IPart7.UpdatePlacement(Redraw)"}
+      ],
+      "object_types": {},
+      "contexts": ["assembly.component"],
+      "copy_variants": [{"mode_id": "SM-23.mirror_component_placement.by_axis", "api": "MirroringPlacement(Axis=1..3?)", "note": "какие значения принимает Axis — не подтверждено → OQ-B-12"}],
+      "source_file_impact": "изменение размещения компонента в сборке не меняет файл компонента; нужно проверить, отмечается ли компонент как изменённый (docs/05 §5 SM-28/SM-29 про влияние на исходный файл)",
+      "actions": {"create": "research", "read": "research", "edit": "research", "rebuild": "research", "save_reopen": "not_started", "suppress_restore": "not_applicable_no_evidence", "delete_with_dependencies": "not_started", "negative_tests": "not_started", "geometry_validation": "not_started"},
+      "native_or_composition": "родная операция",
+      "mcp_support": {"level": "none"},
+      "next_step": "проба: MirroringPlacement на компоненте сборки, перечитать Placement/LeftHandedCS и проверить, изменился ли файл компонента на диске (hash)"
+    },
+    {
+      "id": "SM-24.move_faces",
+      "family": "SM-24",
+      "engineering_name": "Переместить грани (прямое моделирование)",
+      "classification": "solid",
+      "level": "metadata_found",
+      "doc_source": ["KOMPAS_ru-RU.zip!cm_make_move_faces.html", "KOMPAS_ru-RU.zip!550_glava49_redaktirovanie_poverkhnostei.html"],
+      "sdk_source": ["SDK: ISurfaceContainer.FaceMovers → IFaceMover"],
+      "interfaces": [
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IFaceMover : IModelObject", "iid": "{CA8A3896-61A1-4976-84AF-AD5BA857ADC5}", "members_declared": 6, "members": ["Faces(VARIANT)", "SetFaces(Faces, TangentFaces)", "Offset(double)", "Direction(bool)"]},
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IFaceMovers : IModelObjects{FaceMover(Index), Add()}", "owner": "ISurfaceContainer.FaceMovers (порядковый 18)"},
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "ISurfaceContainer : IDispatch (22 члена), IID {2FE3B199-A6B2-4644-9950-F9905250FF0D}", "how_to_obtain": "IUnknown::QueryInterface у IPart7 (SDK isurfacecontainer.html «Как получить»; в kAPI7.tlb нет ни одного свойства, возвращающего ISurfaceContainer)", "note": "ВАЖНО: контейнер, который кажется «поверхностным», содержит IFaceMovers/IFaceRemovers/IBodySurfaceRemovers/IRestoredSurfaces — то есть прямое редактирование тела физически живёт в «поверхностях» (docs/05 §2.3: исключать нельзя)"}
+      ],
+      "object_types": {"face_mover": "o3d_FaceMover=632", "command": "prMakeFaceMover=20226 (ProcessTypeEnum, Bin\\ksConstants.tlb)"},
+      "parameters": [
+        {"api": "Faces", "type": "VARIANT(IModelObject[])", "required": true},
+        {"api": "SetFaces(Faces, TangentFaces)", "type": "bool", "doc": "«Выбирать касательные грани» — группа смежных гладко состыкованных граней"},
+        {"api": "Offset", "type": "double", "units": "мм — предположение по docs/05 §4.1; единицу API никто не подтверждал (OQ-B-27)", "doc": "поле «Расстояние»"},
+        {"api": "Direction", "type": "VARIANT_BOOL", "doc": "«Сменить направление»"}
+      ],
+      "validity_rule_documented": "команда не выполняется, если перемещённые грани вместе с остальными не образуют замкнутую поверхность (cm_make_move_faces) — это эталон проверки «валидность замкнутого тела» из docs/05 §5 SM-24",
+      "contexts": ["part", "part.multibody"],
+      "copy_variants": [{"mode_id": "SM-24.move_faces.tangent_group", "api": "SetFaces(..., TangentFaces=true)"}],
+      "actions": {"create": "research", "read": "research", "edit": "research", "rebuild": "research", "save_reopen": "not_started", "suppress_restore": "not_started", "delete_with_dependencies": "research", "negative_tests": "not_started (ожидается отказ на незамкнутом результате)", "geometry_validation": "not_started (ожидается измеримый ΔV)"},
+      "native_or_composition": "родная операция; композиция «вырезание+приклеивание» не даёт прямого редактирования без эскиза и не копирует режим касательных граней",
+      "mcp_support": {"level": "none", "notes": "компоненты чтения топологии есть (kompas_read_topology, kompas_resolve_selection) — они дают корректные ссылки на грани, но инструмента правки нет"},
+      "next_step": "проба: ISurfaceContainer.FaceMovers.Add(), Faces=[плоская верхняя грань бруска], Offset=5, Update(); ожидать V 80000→84000 и замкнутость; затем контрольный Offset, дающий незамкнутый результат, и записать код ObjectError"
+    },
+    {
+      "id": "SM-24.delete_faces",
+      "family": "SM-24",
+      "engineering_name": "Удалить грани (прямое моделирование)",
+      "classification": "solid",
+      "level": "metadata_found",
+      "doc_source": ["KOMPAS_ru-RU.zip!cm_make_face_remover.html", "KOMPAS_ru-RU.zip!1085_114_12_narushenie_tzelostnosti.html"],
+      "sdk_source": ["SDK: ISurfaceContainer.FaceRemovers → IFaceRemover"],
+      "interfaces": [
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IFaceRemover : IModelObject", "iid": "{4CAE21E3-4183-47A6-94B8-8AD14D5775EE}", "members_declared": 4, "members": ["Faces(VARIANT)", "SaveBody(bool)"]},
+        {"artifact": "docs/compatibility/kompas-api5-metadata.json", "name": "определение для FaceRemover НЕ найдено (есть только o3d_FaceRemover=95)", "note": "API5-маршрут не подтверждён → только API7"}
+      ],
+      "object_types": {"face_remover": "o3d_FaceRemover=95", "command": "prMakeFaceRemover=20096 (ProcessTypeEnum, Bin\\ksConstants.tlb)"},
+      "parameters": [
+        {"api": "Faces", "required": true},
+        {"api": "SaveBody", "type": "VARIANT_BOOL", "doc": "«Сохранить целостность»; при выключенной опции модель отмечается как ошибочная из-за нарушения целостности тел (cm_make_face_remover) ↔ IModelObject.Valid / IFeature7.ObjectError"}
+      ],
+      "contexts": ["part", "part.multibody"],
+      "copy_variants": [{"mode_id": "SM-24.delete_faces.keep_body", "api": "SaveBody=true"}, {"mode_id": "SM-24.delete_faces.open_shell", "api": "SaveBody=false", "note": "результат — тело с нарушенной топологией; «открытая оболочка не считается телом» (docs/05 §5 SM-27) → обязана возвращаться диагностика, а не успех"}],
+      "actions": {"create": "research", "read": "research", "edit": "research", "rebuild": "research", "save_reopen": "not_started", "suppress_restore": "not_started", "delete_with_dependencies": "research", "negative_tests": "not_started", "geometry_validation": "not_started"},
+      "native_or_composition": "родная операция",
+      "mcp_support": {"level": "none"},
+      "next_step": "проба: удалить верхнюю грань бруска с SaveBody=true и с SaveBody=false; в обоих случаях зафиксировать V, число граней, Valid и текст ObjectError"
+    },
+    {
+      "id": "SM-24.replace_faces",
+      "family": "SM-24",
+      "engineering_name": "Заменить грани (прямое моделирование)",
+      "classification": "solid",
+      "level": "documented",
+      "doc_source": ["KOMPAS_ru-RU.zip!cm_make_replace_faces.html (Замена граней; Параметры: Базовые объекты, Заменяющие объекты, Предыдущее/Следующее решение, Смещение + До объекта/За объект, Свойства, Допуск)"],
+      "sdk_source": ["SDK obj3dtype.html: o3d_FaceReplacer=659 «Replace faces operation»"],
+      "interfaces": [
+        {"artifact": "Bin\\ksConstants3D.tlb (перечисление)", "name": "o3d_FaceReplacer=659", "confirmed": true},
+        {"artifact": "Bin\\kAPI7.tlb (дамп 838 INTERFACE)", "name": "IFaceReplacer — НЕ найден", "confirmed": false},
+        {"artifact": "docs/compatibility/kompas-api5-metadata.json", "name": "ksFaceReplacerDefinition — НЕ найден", "confirmed": false}
+      ],
+      "status": "documented (команда в UI и константа типа есть; именованного COM-интерфейса в установленной библиотеке типов не обнаружено)",
+      "candidate_route": "IPart7/IModelContainer.AddObject(o3d_FaceReplacer) → IModelObject + позднее связывание (AddObject объявлен в kAPI7.tlb как AddObject(ksObj3dTypeEnum)→IModelObject); это гипотеза, не доказанный маршрут",
+      "multi_solution_mode": "несколько вариантов результата («Предыдущее/Следующее решение») — в метаданных не выражено ни одним полем; обязательный аспект каталога (docs/05 §4.1: запрещённые/необязательные поля) → OQ-B-13",
+      "contexts": ["part", "part.multibody"],
+      "copy_variants": [{"mode_id": "SM-24.replace_faces.offset", "doc": "Смещение + направление До объекта/За объект"}],
+      "actions": {"create": "research (маршрут не подтверждён)", "read": "not_started", "edit": "not_started", "rebuild": "not_started", "save_reopen": "not_started", "suppress_restore": "not_started", "delete_with_dependencies": "not_started", "negative_tests": "not_started", "geometry_validation": "not_started"},
+      "native_or_composition": "родная операция; если API не даст — требуется статус blocked_api с минимальным воспроизведением (docs/05 §2.4), композиционная замена (построить поверхность + сшить) обязана быть помечена как alternative_of",
+      "mcp_support": {"level": "none"},
+      "next_step": "проба: AddObject(o3d_FaceReplacer) → какой dispinterface реально отвечает (IDispatch::GetIDsOfNames по именам Faces/ReplaceFaces/Offset) и создаётся ли признак; результат фиксируется как metadata→runtime только в основном сеансе"
+    },
+    {
+      "id": "SM-24.resize_face",
+      "family": "SM-24",
+      "engineering_name": "Изменить размер грани (прямое моделирование)",
+      "classification": "solid",
+      "level": "documented",
+      "doc_source": ["KOMPAS_ru-RU.zip!cm_make_face_resizer.html", "KOMPAS_ru-RU.zip!face_resize.html", "KOMPAS_ru-RU.zip!view_face_resize.html"],
+      "sdk_source": ["SDK obj3dtype.html: o3d_FaceResizer=660"],
+      "interfaces": [
+        {"artifact": "Bin\\ksConstants3D.tlb", "name": "o3d_FaceResizer=660", "confirmed": true},
+        {"artifact": "Bin\\ksConstants.tlb", "name": "prFaceResizer=20248 (ProcessTypeEnum → команда существует в продукте)", "confirmed": true},
+        {"artifact": "Bin\\kAPI7.tlb", "name": "IFaceResizer — НЕ найден", "confirmed": false},
+        {"artifact": "docs/compatibility/kompas-api5-metadata.json", "name": "определение НЕ найдено", "confirmed": false}
+      ],
+      "status": "documented",
+      "candidate_route": "IPart7.RunCreateObjectProcess(prFaceResizer) либо VisualCreateObject(660) — оба объявлены в kAPI7.tlb, но их семантика (нужен ли UI-цикл) не проверялась; docs/05 §2.4 запрещает считать произвольную автоматизацию кликов покрытием",
+      "contexts": ["part", "part.multibody"],
+      "copy_variants": [],
+      "actions": {"create": "research (маршрут не подтверждён)", "read": "not_started", "edit": "not_started", "rebuild": "not_started", "save_reopen": "not_started", "suppress_restore": "not_applicable_no_evidence", "delete_with_dependencies": "not_started", "negative_tests": "not_started", "geometry_validation": "not_started"},
+      "native_or_composition": "родная операция",
+      "mcp_support": {"level": "none"},
+      "next_step": "проба: VisualCreateObject(660)/RunCreateObjectProcess(20248) и перечислить, появляется ли o3d_FaceResizer в истории; если доступна только интерактивная команда — оформлять blocked_api по docs/05 §2.4"
+    },
+    {
+      "id": "SM-24.change_face_position",
+      "family": "SM-24",
+      "engineering_name": "Изменить положение грани",
+      "classification": "solid",
+      "level": "documented",
+      "doc_source": ["KOMPAS_ru-RU.zip!cm_make_change_face_position.html (7133 символа текста — самый объёмный раздел прямого моделирования)", "KOMPAS_ru-RU.zip!face_position.html", "KOMPAS_ru-RU.zip!view_face_position.html"],
+      "sdk_source": ["не найдено отдельного интерфейса; предположительно тот же IFaceMover/IFaceResizer (не подтверждать без метаданных)"],
+      "interfaces": [],
+      "status": "documented",
+      "open_question": "чем отличается от SM-24.move_faces на уровне параметров (строка «Положение грани» vs «Расстояние») и есть ли собственный признак → OQ-B-15",
+      "contexts": ["part", "part.multibody"],
+      "copy_variants": [],
+      "actions": {"create": "not_started", "read": "not_started", "edit": "not_started", "rebuild": "not_started", "save_reopen": "not_started", "suppress_restore": "not_applicable_no_evidence", "delete_with_dependencies": "not_started", "negative_tests": "not_started", "geometry_validation": "not_started"},
+      "native_or_composition": "уточнить: возможно, режим IFaceMover, а не отдельная операция",
+      "mcp_support": {"level": "none"},
+      "next_step": "чтение: дословно разобрать cm_make_change_face_position.html на состав секций панели параметров и сопоставить с членами IFaceMover; результат — либо слияние в SM-24.move_faces, либо отдельная запись"
+    },
+    {
+      "id": "SM-24.restore_faces",
+      "family": "SM-24",
+      "engineering_name": "Восстановление граней/поверхностей соседних объектов",
+      "classification": "solid",
+      "level": "metadata_found",
+      "doc_source": ["KOMPAS_ru-RU.zip!1085_114_12_narushenie_tzelostnosti.html (нарушение целостности: усечение поверхности, сшивка с Создавать тело)", "KOMPAS_ru-RU.zip!550_glava49_redaktirovanie_poverkhnostei.html"],
+      "sdk_source": ["SDK: ISurfaceContainer.RestoredSurfaces"],
+      "interfaces": [
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IRestoredSurface : IModelObject", "iid": "{EC25AF95-4117-4FB6-A952-1FC72BE32E60}", "members": ["Face(IModelObject)"]},
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IRestoredSurfaces : IModelObjects{RestoredSurface(Index), Add()}", "owner": "ISurfaceContainer.RestoredSurfaces (порядковый 17)"}
+      ],
+      "object_types": {"restored_surface": "o3d_RestoredSurface=620"},
+      "why_included": "docs/05 §5 SM-24 требует «восстановление соседних поверхностей»; интерфейс существует и это НЕ «поверхностный модуль» в смысле исключения — docs/05 §2.3 явно запрещает исключать средства, нужные телам",
+      "contexts": ["part", "part.multibody"],
+      "copy_variants": [{"mode_id": "SM-24.restore_faces.by_face", "api": "IRestoredSurface.Face"}],
+      "actions": {"create": "research", "read": "research", "edit": "not_started", "rebuild": "not_started", "save_reopen": "not_started", "suppress_restore": "not_applicable_no_evidence", "delete_with_dependencies": "not_started", "negative_tests": "not_started", "geometry_validation": "not_started"},
+      "native_or_composition": "родная операция",
+      "mcp_support": {"level": "none"},
+      "next_step": "проба: после IFaceRemover(SaveBody=false) построить IRestoredSurface на грани-соседе и проверить, возвращается ли замкнутость (IsValid + V)"
+    },
+    {
+      "id": "SM-24.change_fillet",
+      "family": "SM-24",
+      "engineering_name": "Изменить скругление (прямое моделирование)",
+      "classification": "solid",
+      "level": "documented",
+      "doc_source": ["KOMPAS_ru-RU.zip!cm_make_fillet_changer.html", "KOMPAS_ru-RU.zip!rounding_change.html", "KOMPAS_ru-RU.zip!view_rounding_change.html"],
+      "sdk_source": ["не найдено: отдельного интерфейса нет"],
+      "interfaces": [
+        {"artifact": "Bin\\ksConstants3D.tlb", "name": "o3d_FilletChanger=648", "confirmed": true},
+        {"artifact": "Bin\\ksConstants.tlb", "name": "prFilletChanger=20246 (ProcessTypeEnum)", "confirmed": true},
+        {"artifact": "Bin\\kAPI7.tlb (дамп 838 INTERFACE)", "name": "IFilletChanger — НЕ найден (есть только IFillet/IFillets, IFullFillet/IFullFillets, IFilletCurve/IFilletCurves)", "confirmed": false},
+        {"artifact": "docs/compatibility/kompas-api5-metadata.json", "name": "определение — НЕ найдено", "confirmed": false}
+      ],
+      "object_types": {"fillet_changer": "o3d_FilletChanger=648", "command": "prFilletChanger=20246"},
+      "status": "documented",
+      "relation": "граница с SM-09 (скругление с переменным радиусом, modes_unverified в coverage/solid-v24/catalog.json) — прямое изменение радиуса существующего скругления это отдельная возможность, её нельзя записывать как «правка SM-09» без доказательств → OQ-B-16",
+      "contexts": ["part"],
+      "copy_variants": [],
+      "actions": {"create": "not_started", "read": "not_started", "edit": "not_started", "rebuild": "not_started", "save_reopen": "not_started", "suppress_restore": "not_applicable_no_evidence", "delete_with_dependencies": "not_started", "negative_tests": "not_started", "geometry_validation": "not_started"},
+      "native_or_composition": "родная операция (не kompas_update_feature radius)",
+      "mcp_support": {"level": "none", "notes": "kompas_update_feature поддерживает только depth_mm/end_condition выдачивания — радиус скругления не правится"},
+      "next_step": "метаданные: найти признак-изменение скругления в kAPI7.tlb (поискаByName по «FilletChange», «Rounding») и в ksObj3dTypeEnum; если нет — blocked_api"
+    },
+    {
+      "id": "SM-24.split_solid_ref",
+      "family": "SM-24",
+      "engineering_name": "Разрезать тело (перекрёстная ссылка на SM-16)",
+      "classification": "solid",
+      "level": "metadata_found",
+      "cross_reference": "SM-16 (Сечения и разрезание) — строка part-A/основного сеанса; здесь записана только потому, что ISplitSolid входит в «прямое» семейство и часто ошибочно исключается",
+      "doc_source": ["KOMPAS_ru-RU.zip (команда «Разрезать») — см. prSplitSolid=20227, o3d_SplitSolid=633"],
+      "sdk_source": ["SDK imodelcontainer_props.html: SplitSolids — «Коллекция операций Разрезать»"],
+      "interfaces": [
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "ISplitSolid : IModelObject (2 члена) / ISplitSolids : IModelObjects", "owner": "IModelContainer.SplitSolids (порядковый 29)"}
+      ],
+      "object_types": {"split_solid": "o3d_SplitSolid=633"},
+      "contexts": ["part", "part.multibody"],
+      "copy_variants": [],
+      "actions": {"create": "not_started", "read": "not_started", "edit": "not_started", "rebuild": "not_started", "save_reopen": "not_started", "suppress_restore": "not_applicable_no_evidence", "delete_with_dependencies": "not_started", "negative_tests": "not_started", "geometry_validation": "not_started", "owner": "основной сеанс/Part A (SM-16)"},
+      "native_or_composition": "родная операция",
+      "mcp_support": {"level": "none"},
+      "next_step": "не дублировать: добавить ссылку в строку SM-16 при фиксации catalog.json"
+    },
+    {
+      "id": "SM-25.remove_body_surface",
+      "family": "SM-25",
+      "engineering_name": "Удалить тело/поверхность (команда)",
+      "classification": "solid",
+      "level": "metadata_found",
+      "doc_source": ["KOMPAS_ru-RU.zip!remove_body.html", "KOMPAS_ru-RU.zip!review_remove.html", "KOMPAS_ru-RU.zip!236_gl_24_obshchie_sved_o_telah.html"],
+      "sdk_source": ["SDK imodelcontainer_props.html не содержит; коллекция доступна через ISurfaceContainer.BodySurfaceRemovers"],
+      "interfaces": [
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IBodySurfaceRemover : IModelObject", "iid": "{852D67AA-F05C-49DC-8500-9EB7EAB936DD}", "members": ["DeletingObjects(VARIANT)"]},
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IBodySurfaceRemovers : IModelObjects{BodySurfaceRemover(Index), Add()}", "owner": "ISurfaceContainer.BodySurfaceRemovers (порядковый 20)"}
+      ],
+      "object_types": {"body_surface_remover": "o3d_BodySurfaceRemover=646", "pr_command": "prBodySurfaceRemover=20237"},
+      "documented_rules": [
+        "кроме «обычных» приёмов удаления объектов модели (review_remove)",
+        "при работе с импортированными компонентами удаляет тела/поверхности БЕЗ сохранения файла-источника компонента в формате КОМПАС-3D → правило влияния на исходный файл",
+        "связанные с удаляемым телом объекты остаются доступными для редактирования → зависимости НЕ каскадируются автоматически"
+      ],
+      "not_component_deletion": "docs/05 §5: не путать с удалением компонента сборки; выбор конкретных тел — IPart7.GetBodyById(BodyId) / FindBody(UniqueMetaObjectKey), IBody7.BodyId/BeginBodyId/FinalBodyId/OwnerBodyId (kAPI7.tlb)",
+      "contexts": ["part", "part.multibody", "assembly.component (импортированный компонент)"],
+      "copy_variants": [{"mode_id": "SM-25.remove_body_surface.by_body", "api": "DeletingObjects = IModelObject[] тел"}, {"mode_id": "SM-25.remove_body_surface.by_surface", "api": "DeletingObjects = поверхности"}],
+      "actions": {"create": "research", "read": "research (kompas_list_bodies уже перечитывает тела)", "edit": "not_applicable_no_evidence", "rebuild": "research", "save_reopen": "not_started", "suppress_restore": "not_started", "delete_with_dependencies": "research — показать зависимости до удаления и требовать явный параметр каскада (docs/05 §4.4)", "negative_tests": "not_started", "geometry_validation": "not_started (ожидается: число тел -1, неизменность объёмов остальных)"},
+      "native_or_composition": "родная операция; композиция «удалить признак-владельца» ≠ удаление только тела, импортированного без истории",
+      "mcp_support": {"level": "none", "notes": "kompas_list_bodies/kompas_measure существуют (чтение), мутации удаления нет"},
+      "next_step": "проба: удалить второе тело многотельной детали (уже есть в P2.6 как контрольный объект) и проверить, что незаданное тело не изменилось (ΔV=0), плюс save→reopen"
+    },
+    {
+      "id": "SM-25.delete_object_generic",
+      "family": "SM-25",
+      "engineering_name": "Удаление объекта модели (<Delete> / Правка → Удалить) с диалогом зависимостей",
+      "classification": "required_auxiliary",
+      "level": "metadata_found",
+      "doc_source": ["KOMPAS_ru-RU.zip!833_2_14_3_8_udal_obj.html"],
+      "sdk_source": ["SDK: IFeature7.Delete, IFeaturePattern.Destroy, IModelContainer.AddObject"],
+      "interfaces": [
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IFeature7.Delete() → bool; IFeature7.SubFeatures(TreeType, Through, LibObject); IFeature7.ResultBodies; IFeature7.OwnerFeature; IFeature7.OrderNumber; IFeature7.Excluded"},
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IFeaturePattern.Destroy() → bool (массивы)", "note": "у IModelObject/IBody7 метода Delete нет — удаление идёт через владельца-признак"}
+      ],
+      "documented_rules": ["иерархический диалог: модель/исполнение → удаляемые объекты → связанные объекты (включая сопряжения); связанные удаляются вместе с исходными", "нельзя удалить объекты внутри автоматически созданного библиотекой макроэлемента", "команды удаления не выполняются при включённой Панели слоёв"],
+      "contexts": ["part", "part.multibody", "assembly.component", "configuration.embodiment"],
+      "copy_variants": [{"mode_id": "SM-25.delete_object_generic.cascade", "api": "предварительный перечёнт SubFeatures + FindSimilarObject/ChangeObjectLinks"}],
+      "actions": {"create": "not_applicable_no_evidence", "read": "research (SubFeatures — источник перечня зависимостей)", "edit": "not_applicable_no_evidence", "rebuild": "research", "save_reopen": "not_started", "suppress_restore": "research (IFeature7.Excluded)", "delete_with_dependencies": "research", "negative_tests": "not_started", "geometry_validation": "not_started"},
+      "native_or_composition": "родное действие истории (SM-30)",
+      "mcp_support": {"level": "none", "notes": "нет kompas_delete_feature/kompas_suppress_feature в ToolCatalog.cs; docs/05 §7 предлагает их добавить"},
+      "next_step": "проба: IFeature7.Delete() на признаке с одним зависимым и сверить дерево и V; затем тот же объект через Excluded=true/false (подавление)"
+    },
+    {
+      "id": "SM-25.decompose_array",
+      "family": "SM-25",
+      "engineering_name": "Разрушить массив (разрушение объектов модели)",
+      "classification": "solid",
+      "level": "documented",
+      "doc_source": ["KOMPAS_ru-RU.zip!48_3_5_razrushenie_massivov.html (правила и таблица типов результата)", "KOMPAS_ru-RU.zip!dlg_3d_array_decompose.html", "KOMPAS_ru-RU.zip!cm_3d_array_decompose.html"],
+      "sdk_source": ["не найдено: в kAPI7.tlb нет Decompose/Explode у IFeaturePattern (есть только Destroy)"],
+      "interfaces": [
+        {"artifact": "Bin\\kAPI7.tlb", "name": "IFeaturePattern.Decompose — НЕ найден", "confirmed": false},
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IPart7.VisualEditObject / RunCreateObjectProcess", "note": "гипотетический путь к интерактивному процессу, не доказан"}
+      ],
+      "status": "documented",
+      "documented_rules": ["разрушение доступно для всех массивов, кроме массива операций и граней", "разрушенный массив перестаёт быть единым объектом: экземпляры становятся самостоятельными объектами (тело → «тело без истории», поверхность → «поверхность без истории», вспомогательная плоскость → «перпендикулярная плоскость» и т.д. — таблица в 48_3_5)", "объекты удалённых экземпляров не добавляются", "разрушение мастер-массива разрушает производный (связь SM-22)", "компоненты фиксируются в том положении, в котором были в массиве"],
+      "why_it_matters": "это единственный документированный способ «потерять ассоциативность» и он меняет ТИП объектов → обязан быть в матрице как отдельная операция с проверкой типов после разрушения",
+      "contexts": ["part", "part.multibody", "assembly.component"],
+      "copy_variants": [],
+      "actions": {"create": "research (маршрут не подтверждён)", "read": "not_started", "edit": "not_applicable_no_evidence", "rebuild": "not_started", "save_reopen": "not_started", "suppress_restore": "not_applicable_no_evidence", "delete_with_dependencies": "research", "negative_tests": "not_started", "geometry_validation": "not_started"},
+      "native_or_composition": "родная операция",
+      "mcp_support": {"level": "none"},
+      "next_step": "метаданные+проба: опросить живой IFeaturePattern через IDispatch (GetIDsOfNames по «Decompose», «Explode», «Destroy») — это единственный способ отличить отсутствие метода от неполноты обёртки; вывод — Decompose-маршрут либо blocked_api (OQ-B-17)"
+    },
+    {
+      "id": "SM-25.retarget_links",
+      "family": "SM-25",
+      "engineering_name": "Переназначение связей (замена исходного объекта при удалении)",
+      "classification": "required_auxiliary",
+      "level": "metadata_found",
+      "doc_source": ["KOMPAS_ru-RU.zip!cm_change_ref_object_3d.html (10044 символа — «Замена связанного объекта»)", "KOMPAS_ru-RU.zip!833_2_14_3_8_udal_obj.html"],
+      "sdk_source": ["SDK: IPart7.ChangeObjectLinks"],
+      "interfaces": [
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IPart7.ChangeObjectLinks(SourceObjs, DestObjs, RebuildAll) → bool"},
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IPart7.FindObjectsByPoint*/FindSimilarObject/GetSimilarInstances, IPart7.TransferObjects(Objects, Lcs, HoldPosition)"}
+      ],
+      "why_included": "docs/05 §5 SM-26 требует «обновление ссылок», §4.4 — stale_reference; без ChangeObjectLinks удаление с зависимостями невозможно выполнить проверяемо",
+      "contexts": ["part", "assembly.component"],
+      "copy_variants": [{"mode_id": "SM-25.retarget_links.rebuild_all", "api": "RebuildAll=true|false — влияет ли на все исполнения? не проверено (docs/05 §4.5 «не менять все исполнения вместо выбранного») → OQ-B-18"}],
+      "actions": {"create": "research", "read": "research", "edit": "research", "rebuild": "research", "save_reopen": "not_started", "suppress_restore": "not_applicable_no_evidence", "delete_with_dependencies": "research", "negative_tests": "not_started", "geometry_validation": "not_started"},
+      "native_or_composition": "родное средство обслуживания ссылок",
+      "mcp_support": {"level": "none", "notes": "sme-ссылки в MCP сейчас непрозрачные (resolve_selection/read_topology mint handles); ChangeObjectLinks в коде не вызывается"},
+      "next_step": "проба: удалить эскиз-источник, предварительно перевязав признак на другой эскиз через ChangeObjectLinks; ожидать валидный признак и неизменный V"
+    },
+    {
+      "id": "SM-26.copy_geometry",
+      "family": "SM-26",
+      "engineering_name": "Копирование геометрии (внешний ссылочный объект)",
+      "classification": "solid",
+      "level": "metadata_found",
+      "doc_source": ["KOMPAS_ru-RU.zip!cm_save_body_as_detail.html", "KOMPAS_ru-RU.zip!1631_pril_oboznach_v_dereve_modeli.html («Деталь-заготовка … в виде ссылки на свой файл»)", "KOMPAS_ru-RU.zip!1184_135_6_1_nastrojki_obwekta_.html («Объект-заготовка»)", "KOMPAS_ru-RU.zip!changing_download_type_component.html (тип загрузки компонента)"],
+      "sdk_source": ["SDK imodelcontainer_props.html: CopiesGeometry — «Коллекция операций копирования геометрии»"],
+      "interfaces": [
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "ICopyGeometry : IModelObject", "iid": "{63E5636B-0661-4635-A902-6E8727E75D93}", "members_declared": 31, "members": ["InitialObjects", "Destroy()", "IsInitialObject()", "AddInitialObjects()", "AddInitialObjectsFromExternalDocument(ExternalDocument, ExternalLocalCS, Objects)", "Clear()", "IsSuitableObject()", "ContextObjects(bool)", "DocumentFileName(BSTR get)", "OpenDocument(Visible, ReadOnly) → IKompasDocument3D", "LocalCS(ILocalCoordinateSystem)", "ExternalLocalCS(ILocalCoordinateSystem)", "ByCollectionGeometry(bool)", "CollectionGeometry(ICollectionGeometry)", "MirrorCopy(bool)", "BuildingType(long)", "AutoUpdate(bool)", "WatchForSourceChange(bool)", "Synhronise() (sic — опечатка вендора в имени метода)", "GetExternalInitialObjects(ExternalDocument3D)", "GetExternalLocalCooordinateSystem(ExternalDocument3D) (sic)"]},
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "ICopiesGeometry : IModelObjects{CopyGeometry(Index), Add(ICopyGeometry)}", "owner": "IModelContainer.CopiesGeometry (порядковый 9)"},
+        {"artifact": "docs/compatibility/kompas-api5-metadata.json", "name": "определение копирования геометрии НЕ найдено (есть только o3d_CopyGeometry=589)", "note": "API5-маршрут не подтверждён"}
+      ],
+      "object_types": {"copy_geometry": "o3d_CopyGeometry=589", "collection_geometry": "o3d_CollectionGeometry=590"},
+      "enums": {"BuildingType": "ksCopyGeometryBuildingTypeEnum {ksCGBTWithoutGrouping=0, ksCGBTBodyFaceGrouping=1} (Bin\\ksConstants3D.tlb)"},
+      "associativity": {
+        "mechanism": "AutoUpdate + WatchForSourceChange + Synhronise() + DocumentFileName + OpenDocument(ReadOnly)",
+        "documented_gap": "что именно делает Synhronise при закрытом/недоступном исходном файле — не документировано; поведение устаревшей ссылки (stale link) описано только для компонентов (changing_download_type_component) → OQ-B-19",
+        "external_file_rules": "docs/05 §9.4 требует проверки недоступного внешнего файла; ICopyGeometry.OpenDocument(Visible=false, ReadOnly=true) — единственный найденный явный режим чтения источника"
+      },
+      "transform": "LocalCS/ExternalLocalCS (преобразование положения копии) + MirrorCopy (зеркальная копия)",
+      "body_selection": "InitialObjects/AddInitialObjects — выбор конкретных тел источника; ContextObjects — брать ли объекты текущего контекста (не разобрано → OQ-B-20)",
+      "contexts": ["part", "part.multibody", "assembly.component"],
+      "copy_variants": [
+        {"mode_id": "SM-26.copy_geometry.internal", "api": "AddInitialObjects(объекты текущей модели)"},
+        {"mode_id": "SM-26.copy_geometry.external_document", "api": "AddInitialObjectsFromExternalDocument(IKompasDocument3D, ExternalLocalCS, Objects)"},
+        {"mode_id": "SM-26.copy_geometry.grouped", "api": "BuildingType=ksCGBTBodyFaceGrouping"},
+        {"mode_id": "SM-26.copy_geometry.mirror", "api": "MirrorCopy=true"},
+        {"mode_id": "SM-26.copy_geometry.by_collection", "api": "ByCollectionGeometry=true + CollectionGeometry"}
+      ],
+      "actions": {"create": "research", "read": "research", "edit": "research", "rebuild": "research (AutoUpdate/WatchForSourceChange/Synhronise)", "save_reopen": "not_started — обязательно с закрытым и с переименованным файлом-источником", "suppress_restore": "not_started", "delete_with_dependencies": "research", "negative_tests": "not_started (источник недоступен)", "geometry_validation": "not_started"},
+      "native_or_composition": "родная операция (не композиция «импорт STEP»)",
+      "mcp_support": {"level": "none", "notes": "kompas_import_step создаёт отдельный документ, а не ассоциативную копию геометрии; это alternative_of, а не покрытие SM-26"},
+      "next_step": "проба: ICopyGeometry c AddInitialObjectsFromExternalDocument на пару связанных деталей; проверить три вещи — (1) читается ли DocumentFileName, (2) обновляется ли копия после правки источника при AutoUpdate=true/WatchForSourceChange=false, (3) что возвращает Synhronise при закрытом источнике"
+    },
+    {
+      "id": "SM-26.collection_geometry",
+      "family": "SM-26",
+      "engineering_name": "Набор геометрии (CollectionGeometry)",
+      "classification": "required_auxiliary",
+      "level": "metadata_found",
+      "doc_source": ["отдельной страницы в установленной справке не найдено → OQ-B-21"],
+      "sdk_source": ["SDK imodelcontainer_props.html: CollectionsGeometry — «Коллекции геометрии»"],
+      "interfaces": [
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "ICollectionGeometry : IModelObject", "iid": "{CC78F834-4A97-4F69-9207-215308F0ABB0}", "members": ["Geometry(VARIANT)"]},
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "ICollectionsGeometry : IModelObjects{CollectionGeometry(Index), Add(ICollectionGeometry)}", "owner": "IModelContainer.CollectionsGeometry (порядковый 10)"}
+      ],
+      "object_types": {"collection_geometry": "o3d_CollectionGeometry=590"},
+      "contexts": ["part", "part.multibody"],
+      "copy_variants": [],
+      "actions": {"create": "research", "read": "research", "edit": "not_started", "rebuild": "not_started", "save_reopen": "not_started", "suppress_restore": "not_applicable_no_evidence", "delete_with_dependencies": "not_started", "negative_tests": "not_started", "geometry_validation": "not_started"},
+      "native_or_composition": "родной вспомогательный объект (вход для SM-26/массивов произвольных объектов)",
+      "mcp_support": {"level": "none"},
+      "next_step": "проба: создать ICollectionGeometry и проверить, принимается ли он как InitialObjects массива/копии геометрии (тогда это «источник набора», иначе — изолированный объект)"
+    },
+    {
+      "id": "SM-26.billet_obsolete",
+      "family": "SM-26",
+      "engineering_name": "Заготовка / зеркальная деталь (устаревший тип BilletsObsoletes)",
+      "classification": "solid",
+      "level": "metadata_found",
+      "doc_source": ["KOMPAS_ru-RU.zip!cm_spc_insert_billet.html", "KOMPAS_ru-RU.zip!cm_product_tree_add_billet.html", "KOMPAS_ru-RU.zip!cm_convert_to_billet.html", "KOMPAS_ru-RU.zip!1631_pril_oboznach_v_dereve_modeli.html"],
+      "sdk_source": ["SDK imodelcontainer_props.html: BilletsObsoletes — «Коллекция деталей заготовок и зеркальных деталей» (именно так, с «Obsolete» в имени)"],
+      "interfaces": [
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IBilletObsolete : IModelObject", "iid": "{5F754BA9-1FB7-4AAE-A3F2-F36D7CF938BF}", "members": ["FileName(BSTR)"]},
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IBilletsObsoletes : IModelObjects{BilletObsolete(Index), Add(FileName, Mirror)}", "owner": "IModelContainer.BilletsObsoletes (порядковый 8)"}
+      ],
+      "object_types": {"billet": "o3d_Billet=571", "mirror_part": "o3d_MirrorPart=532", "ksObject": "ksObjectBilletObsolete=11234 / ksObjectBilletsObsoletes=11235", "commands": "prCopyBilletPart=20068, prAddBilletPartFromFile=20189"},
+      "obsolete_handling": "docs/05 §5 SM-26 требует отдельно «устаревшие типы существующих моделей»: метаданные подтверждают — единственный API-тип для заготовки помечен Obsolete, а интерфейс несёт только FileName (ни Mirror-флага на объекте, ни выбора тел) → при чтении такой модели MCP обязан вернуть метаданные и явное ограничение, а не уничтожить объект (docs/05 §4.3)",
+      "contexts": ["part", "part.multibody", "assembly.component"],
+      "copy_variants": [{"mode_id": "SM-26.billet_obsolete.from_file", "api": "IBilletsObsoletes.Add(FileName, Mirror=true|false)"}],
+      "actions": {"create": "research", "read": "research (FileName, IsBillet — см. SM-26.billet_flag)", "edit": "not_applicable_no_evidence", "rebuild": "not_started", "save_reopen": "not_started", "suppress_restore": "not_started", "delete_with_dependencies": "not_started", "negative_tests": "not_started (файл-заготовка отсутствует)", "geometry_validation": "not_started"},
+      "native_or_composition": "родной (устаревший) объект",
+      "mcp_support": {"level": "none"},
+      "next_step": "проба на эталонной модели, созданной ВРУЧНУЮ с заготовкой: перечислить BilletsObsoletes, o3d-тип, IPart7.IsBillet и поведение при недоступном файле; затем решить, поддерживаем ли запись или только чтение с явным ограничением"
+    },
+    {
+      "id": "SM-26.billet_flag",
+      "family": "SM-26",
+      "engineering_name": "Признаки детали: IsBillet / IsLayoutGeometry / ReadOnly / IsLocal",
+      "classification": "required_auxiliary",
+      "level": "metadata_found",
+      "doc_source": ["KOMPAS_ru-RU.zip!cm_convert_to_billet.html", "KOMPAS_ru-RU.zip!objects_lsk.html (локальные/ссылочные/заимствованные компоненты)"],
+      "sdk_source": ["SDK: IPart7"],
+      "interfaces": [
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IPart7.IsBillet(bool), IsLayoutGeometry(bool), ReadOnly(long), IsLocal(bool), Load(Full)/Unload(Full)/LoadState, UseDummy/DummyFileName/DummyEmbodimentIndex, GetOpenDocumentParam/BeginEdit/EndEdit(Rebuild)"}
+      ],
+      "object_types": {},
+      "why_included": "контекст операции (свой/локальный/ссылочный компонент, разгруженный компонент) меняет доступность любой твердотельной операции внутри компонента — docs/05 §5 SM-28/§4.5",
+      "contexts": ["part", "assembly.component"],
+      "copy_variants": [{"mode_id": "SM-26.billet_flag.unloaded_component", "api": "LoadState/Load(Full) — обязательное условие перед любой правкой тела в компоненте"}],
+      "actions": {"create": "not_applicable_no_evidence", "read": "research", "edit": "research", "rebuild": "research", "save_reopen": "research", "suppress_restore": "not_applicable_no_evidence", "delete_with_dependencies": "not_applicable_no_evidence", "negative_tests": "not_started (операция над разгруженным/readonly компонентом)", "geometry_validation": "not_applicable_no_evidence"},
+      "native_or_composition": "родные свойства",
+      "mcp_support": {"level": "none", "notes": "kompas_get_context не возвращает ни IsBillet, ни LoadState, ни IsLocal"},
+      "next_step": "чтение: добавить перечисление этих флагов в kompas_get_context (единственный следующий шаг — только чтение, без мутаций) и сверить на сборке с заимствованным компонентом"
+    },
+    {
+      "id": "SM-26.save_body_as_detail",
+      "family": "SM-26",
+      "engineering_name": "Сохранить тело как деталь (влияние на исходные файлы)",
+      "classification": "solid",
+      "level": "documented",
+      "doc_source": ["KOMPAS_ru-RU.zip!cm_save_body_as_detail.html"],
+      "sdk_source": ["SDK: IPart7.SaveAs(PathName)"],
+      "interfaces": [
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IPart7.SaveAs(PathName: BSTR) → bool"}
+      ],
+      "object_types": {},
+      "source_file_impact": "правило docs/05 §5 SM-28/SM-29 «исходные файлы менять только в заданной области действия»: команда создаёт НОВЫЙ файл; при автоматизации обязана явная проверка пути из разрешённого корня (docs/05 §4.1) и последующее сравнение SHA-256 исходника",
+      "contexts": ["part", "part.multibody", "assembly.component"],
+      "copy_variants": [],
+      "actions": {"create": "research", "read": "not_started", "edit": "not_applicable_no_evidence", "rebuild": "not_started", "save_reopen": "research", "suppress_restore": "not_applicable_no_evidence", "delete_with_dependencies": "not_applicable_no_evidence", "negative_tests": "not_started (путь вне разрешённого корня)", "geometry_validation": "not_started (объём новой детали = объём тела)"},
+      "native_or_composition": "родная команда; соответствие IPart7.SaveAs НЕ доказано → OQ-B-22",
+      "mcp_support": {"level": "none", "notes": "kompas_save_document сохраняет текущий документ; отдельного «сохранить тело как деталь» нет"},
+      "next_step": "проба: IPart7.SaveAs на теле многотельной детали и проверить, что в новом документе ровно это тело и что исходный файл не изменился (hash)"
+    },
+    {
+      "id": "SM-27.thicken_faces",
+      "family": "SM-27",
+      "engineering_name": "Придать толщину (слой материала к граням тела/поверхности)",
+      "classification": "solid",
+      "level": "metadata_found",
+      "doc_source": ["KOMPAS_ru-RU.zip!cm_surface_to_body.html (заголовок «Придание толщины»; Navigation: Тела > Придание толщины граням тела или поверхности)", "KOMPAS_ru-RU.zip!847_90_4_pridan_tol_pov.html", "KOMPAS_ru-RU.zip!idp_stch_stitcherror.html", "KOMPAS_ru-RU.zip!idp_warning_no_closed_solid.html"],
+      "sdk_source": ["SDK imodelcontainer_props.html: SurfaceThickenings — «коллекция операций придания толщины»"],
+      "interfaces": [
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "ISurfaceThickening : IModelObject", "iid": "{984F7DD6-A7FB-4693-862F-459CC8630B11}", "members_declared": 2, "members": ["Faces(VARIANT)"]},
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "ISurfaceThickenings : IModelObjects{SurfaceThickening(Index), Add()}", "owner": "IModelContainer.SurfaceThickenings (порядковый 5)"},
+        {"artifact": "Libs\\PolynomLib\\Bin\\Client\\Interop.KompasAPI7.dll", "name": "KompasAPI7.ISurfaceThickening", "note": "в обёртке тоже только Faces — расхождения обёртки и TLB по этому типу нет"}
+      ],
+      "object_types": {"surface_thickening": "o3d_SurfaceThickening=518"},
+      "doc_vs_metadata_discrepancy": "Крупнейшее расхождение part-B: панель «Придать толщину» документирована с группами Результат (Объединение | Новое тело), Толщина (переключатель «Симметричная толщина», толщины по сторонам слоя), Свойства; в kAPI7.tlb у ISurfaceThickenings всего 2 члена и ни одного из этих параметров. Есть ksSurfaceOperationResultEnum {ksSurfaceUnion=0, ksNewSurface=1}, но ни одно свойство ISurfaceThickening его не использует → либо параметры на другом (не найденном здесь) интерфейсе, либо режим недоступен из API → OQ-B-23 (главный вопрос part-B)",
+      "documented_refusals": ["слой с нарушенной топологией (разрывы, вырождения)", "самопересечение слоя", "неоднозначная линия пересечения эквидистант нескольких граней"],
+      "contexts": ["part", "part.multibody"],
+      "copy_variants": [
+        {"mode_id": "SM-27.thicken_faces.union_with_owner", "doc": "Результат=Объединение (+ настраиваемая Область применения)"},
+        {"mode_id": "SM-27.thicken_faces.new_body", "doc": "Результат=Новое тело"},
+        {"mode_id": "SM-27.thicken_faces.symmetric", "doc": "Симметричная толщина вкл — суммарная толщина слоя"},
+        {"mode_id": "SM-27.thicken_faces.two_sided", "doc": "выкл — толщина для каждой стороны слоя"},
+        {"mode_id": "SM-27.thicken_faces.all_faces_of_body", "doc": "указание тела/поверхности в Дереве = все грани"}
+      ],
+      "open_questions": ["ISurfaceThickening не имеет свойства Result → как задать «Новое тело»? (OQ-B-23)", "где значение толщины? (OQ-B-23)"],
+      "actions": {"create": "research (маршрут неполон)", "read": "research (только Faces)", "edit": "not_started", "rebuild": "not_started", "save_reopen": "not_started", "suppress_restore": "not_started", "delete_with_dependencies": "not_started", "negative_tests": "not_started (три документированных отказа)", "geometry_validation": "not_started (эталон: тонкостенный слой на плоской грани — V = S·t аналитически)"},
+      "native_or_composition": "родная операция; композиция «выдавливание грани» невозможна без эскиза и не даёт режима «Новое тело/Объединение»",
+      "mcp_support": {"level": "none"},
+      "next_step": "проба: ISurfaceThickenings.Add() → установить Faces и Update(); если без толщины построение невозможно — опросить живую псевдоколлекцию через IDispatch (GetIDsOfNames по «Thickness», «Result», «Side», «Symmetric»), чтобы отличить отсутствие от неполноты дампа"
+    },
+    {
+      "id": "SM-27.sew_surfaces",
+      "family": "SM-27",
+      "engineering_name": "Сшивка поверхностей (с образованием тела)",
+      "classification": "solid",
+      "level": "metadata_found",
+      "doc_source": ["KOMPAS_ru-RU.zip!cm_sew_surface.html", "KOMPAS_ru-RU.zip!idp_noedgewasstitched.html", "KOMPAS_ru-RU.zip!idp_stch_stitcherror.html", "KOMPAS_ru-RU.zip!236_gl_24_obshchie_sved_o_telah.html («сшивки поверхностей — образуется тело, ограниченное указанными поверхностями»)"],
+      "sdk_source": ["SDK: ISurfaceContainer.SurfaceSewers → ISurfaceSewer"],
+      "interfaces": [
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "ISurfaceSewer : IModelObject", "iid": "{031FD1C7-9CB6-4E49-A27D-73B8D0B648D4}", "members_declared": 6, "members": ["Shells(VARIANT)", "Precision(double)", "CreateBody(bool)"]},
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "ISurfaceSewers : IModelObjects{SurfaceSewer(Index), Add()}", "owner": "ISurfaceContainer.SurfaceSewers (порядковый 2)"}
+      ],
+      "object_types": {"surface_sewer": "o3d_SurfaceSewer=96", "command": "prSewSurface=20095"},
+      "parameters": [
+        {"api": "Shells", "type": "VARIANT", "doc": "сшиваемые оболочки/поверхности", "note": "имя «Shells» при документе «сшиваемые поверхности» → что именно принимается (ISurface*, IFace*, оболочки) — проверить (OQ-B-24)"},
+        {"api": "Precision", "type": "double", "units": "не документировано (допуск сшивки, вероятно мм)"},
+        {"api": "CreateBody", "type": "VARIANT_BOOL", "doc": "Создавать тело; docs/05 §5 SM-27: «открытая оболочка не считается телом»"}
+      ],
+      "documented_refusals": ["несохранение замкнутости → предупреждение idp_warning_no_closed_solid", "не сшитые рёбра → idp_noedgewasstitched"],
+      "contexts": ["part", "part.multibody"],
+      "copy_variants": [
+        {"mode_id": "SM-27.sew_surfaces.surface_only", "api": "CreateBody=false"},
+        {"mode_id": "SM-27.sew_surfaces.make_body", "api": "CreateBody=true"}
+      ],
+      "actions": {"create": "research", "read": "research", "edit": "research", "rebuild": "research", "save_reopen": "not_started", "suppress_restore": "not_started", "delete_with_dependencies": "not_started", "negative_tests": "not_started (2 документированных отказа)", "geometry_validation": "not_started (замкнутое тело из 6 плоских граней → V=габарит, IsValid=true)"},
+      "native_or_composition": "родная операция",
+      "mcp_support": {"level": "none"},
+      "next_step": "проба: 6 IExtensionSurface/плоских граней-поверхностей → ISurfaceSewer(CreateBody=true, Precision=0.01); ожидать замкнутое тело с аналитическим объёмом и перечитать CreateBody"
+    },
+    {
+      "id": "SM-27.aux_surface_ops",
+      "family": "SM-27",
+      "engineering_name": "Поверхностные операции, необходимые телам (эквидистанта, усечение, достройка, стык, средняя, восстановленная, импортированная поверхность)",
+      "classification": "required_auxiliary",
+      "level": "metadata_found",
+      "doc_source": ["KOMPAS_ru-RU.zip!550_glava49_redaktirovanie_poverkhnostei.html", "KOMPAS_ru-RU.zip!1085_114_12_narushenie_tzelostnosti.html", "KOMPAS_ru-RU.zip!41_glava2_import_obedinenie_import_poverhnostey.html"],
+      "sdk_source": ["SDK: ISurfaceContainer (22 коллекции)"],
+      "interfaces": [
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IEquidistantSurface{BaseSurface(VARIANT), Direction(bool), Distance(double)}", "iid": "{F665724F-7177-4B93-B51A-063BAF70CED4}"},
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IExtensionSurface, ITrimmedSurface, IJointSurface, IMiddleSurface, IRestoredSurface, IImportedSurface, ISurfacePatch, INurbsSurface, IRuledSurface, IConicSurface"},
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IModelContainer.WireFrames3D / IModelContainer.Evolutions / IModelContainer.Lofts (поверхностные варианты формообразования)"}
+      ],
+      "object_types": {"equidistant": "o3d_EquidistantSurface=514", "extension": "o3d_ExtensionSurface=517", "trimmed": "o3d_TrimmedSurface=516", "joint": "o3d_JointSurface=555", "imported": "o3d_importedSurface=57", "surface_patch": "o3d_SurfacePatch=94"},
+      "classification_reason": "docs/05 §2.3 + §6.4: полный модуль поверхностей не требуется, но эти конкретные операции — входы SM-24/SM-27 и их нельзя исключать как «surface module»; исключение всего остального поверхностного дизайна — отдельное решение заказчика с обоснованием, а не факт отсутствия реализации",
+      "contexts": ["part", "part.multibody"],
+      "copy_variants": [],
+      "actions": {"create": "research", "read": "research", "edit": "not_started", "rebuild": "not_started", "save_reopen": "not_started", "suppress_restore": "not_applicable_no_evidence", "delete_with_dependencies": "not_started", "negative_tests": "not_started", "geometry_validation": "not_applicable_no_evidence"},
+      "native_or_composition": "родные вспомогательные операции",
+      "mcp_support": {"level": "none", "notes": "поверхности как входы сегодня недоступны ни в одном инструменте"},
+      "next_step": "классификация: для каждой из 22 коллекций ISurfaceContainer записать solid/required_auxiliary/outside_scope с обоснованием и источником до фиксации матрицы (это условие docs/05 §3.2)"
+    },
+    {
+      "id": "SM-28.union_components",
+      "family": "SM-28",
+      "engineering_name": "Объединить компоненты (булева операция над деталями сборки)",
+      "classification": "solid",
+      "level": "metadata_found",
+      "doc_source": ["KOMPAS_ru-RU.zip!cm_make_union_comps.html", "KOMPAS_ru-RU.zip!908_107_3_bulevy_operacii_nad_d.html (обзор булевых операций над деталями)", "KOMPAS_ru-RU.zip!892_glava104_dobavlenie_kompone.html"],
+      "sdk_source": ["SDK imodelcontainer_props.html: UnionsComponents — «Коллекция операций объединения компонентов»"],
+      "interfaces": [
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IUnionComponents : IModelObject", "iid": "{2DCDD394-C325-4D41-A5FD-9E8CC7B8EC5C}", "members": ["Parts(VARIANT)"]},
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IUnionsComponents : IModelObjects{UnionComponents(Index), Add()}", "owner": "IModelContainer.UnionsComponents (порядковый 22)"},
+        {"artifact": "docs/compatibility/kompas-api5-metadata.json", "name": "ksUnionComponentsDefinition", "iid": "99797f89-fba4-4582-812f-226afb50ed7d", "members": ["PartArray()"], "note": "тонкое определение: только PartArray(); выбор тел/флагов отсутствует"}
+      ],
+      "object_types": {"union_components": "o3d_UnionComponents=64", "ksObject": "ksObjectUnionComponents=11285 / ksObjectUnionsComponents=11284", "command": "prMakeUnionComps=20070"},
+      "documented_preconditions": [
+        "объединяемые детали должны пересекаться или иметь совпадающие грани",
+        "объединение возможно, только если каждая деталь содержит ОДНО тело; многотельные детали объединить нельзя",
+        "команда доступна только в режиме редактирования «на месте» новой детали, созданной «Создать деталь» или «Создать локальную деталь»"
+      ],
+      "editing_context": "обязательный контекст: IPart7.BeginEdit(IOpenDocumentParam)/EndEdit(Rebuild) + IPart7.IsLocal + IOpenDocumentParam{Visible, ReadOnly, ApplyingIndex(исполнение), Password}; без перехода в edit-in-place операция недоступна",
+      "source_file_impact": "новое тело принадлежит НОВОЙ детали (её файлу); исходные файлы компонентов не меняются, но детали-источники можно скрыть или «исключить из расчёта» → правило области действия для MCP (docs/05 §5 SM-28, §9.4 «внешнее редактирование документа»)",
+      "contexts": ["assembly.component", "part.edit_in_place"],
+      "copy_variants": [{"mode_id": "SM-28.union_components.two_and_more", "api": "Parts(VARIANT) = ≥2 детали"}],
+      "actions": {"create": "research", "read": "research (Parts → IParts7)", "edit": "research", "rebuild": "research", "save_reopen": "not_started (обязательно: проверка, что файлы компонентов не тронуты)", "suppress_restore": "not_started", "delete_with_dependencies": "not_started", "negative_tests": "not_started (многотельная деталь → отказ)", "geometry_validation": "not_started (эталон SOL-BOOLEAN: два пересекающихся параллелепипеда → V=1500 мм³ после объединения)"},
+      "native_or_composition": "родная операция сборки; булево «объединение тел» в детали (SM-15) её не заменяет: другой контекст и другая история",
+      "mcp_support": {"level": "none"},
+      "next_step": "проба: две пересекающиеся одно-тельные детали в сборке → BeginEdit новой детали → IUnionsComponents.Add() с Parts; измерить V=1500 и сверить хеши исходных файлов"
+    },
+    {
+      "id": "SM-28.cut_components",
+      "family": "SM-28",
+      "engineering_name": "Вычесть компоненты (полость в редактируемой детали)",
+      "classification": "solid",
+      "level": "metadata_found",
+      "doc_source": ["KOMPAS_ru-RU.zip!cm_make_mold_cavity.html (включая раздел «Управление размерами полости»)"],
+      "sdk_source": ["SDK imodelcontainer_props.html: MoldCavities — «Коллекция операций вычитания компонентов»"],
+      "interfaces": [
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IMoldCavity : IModelObject", "iid": "{C4B6D128-8013-4AF4-B4D5-40E25F2CDBD0}", "members_declared": 6, "members": ["Parts(VARIANT)", "Scale(double)", "ScaleCentre(IModelObject)"]},
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IMoldCavities : IModelObjects{MoldCavity(Index), Add()}", "owner": "IModelContainer.MoldCavities (порядковый 23)"},
+        {"artifact": "docs/compatibility/kompas-api5-metadata.json", "name": "ksMoldCavityDefinition", "iid": "be5f10f5-b198-49d9-9140-b2b91e060533", "members": ["PartArray()"], "note": "в API5 нет Scale/ScaleCentre"}
+      ],
+      "object_types": {"mold_cavity": "o3d_MoldCavity=65", "command": "prMakeMoldCavity=20069 (ProcessTypeEnum, Bin\\ksConstants.tlb)"},
+      "documented_preconditions": [
+        "обе детали должны быть вставлены в одну сборку; операция доступна в режиме редактирования «на месте» той детали, где делается полость",
+        "одно-тельные детали; многотельные — невозможно",
+        "если результат состоит из нескольких частей — запускается процесс изменения набора частей («Выбор частей, которые следует оставить»)"
+      ],
+      "parameters": [
+        {"api": "Parts", "required": true, "meaning": "вычитаемые детали"},
+        {"api": "Scale", "type": "double", "doc": "UI: «Коэффициент масштабирования» в ПРОЦЕНТАХ линейного расширения; полость увеличивается в (1 + k/100) раз", "units_conflict": "UI проценты против double-значения API (доля или процент?) → OQ-B-14; обязательная калибровка по docs/05 §4.1"},
+        {"api": "ScaleCentre", "type": "IModelObject", "doc": "точечный объект — центр масштабирования; по умолчанию центр габаритного параллелепипеда вычитаемой детали"}
+      ],
+      "multi_body_result": "обязательная проверка docs/05 §4.5: результат может быть из нескольких частей, и «результат „несколько тел“ нельзя скрывать возвратом только первого тела»",
+      "contexts": ["assembly.component", "part.edit_in_place"],
+      "copy_variants": [{"mode_id": "SM-28.cut_components.scaled", "api": "Scale + ScaleCentre"}, {"mode_id": "SM-28.cut_components.keep_parts_selection", "api": "НЕ найдено в kAPI7.tlb — чем задаются «оставляемые части»? → OQ-B-25"}],
+      "actions": {"create": "research", "read": "research", "edit": "research", "rebuild": "research", "save_reopen": "not_started", "suppress_restore": "not_started", "delete_with_dependencies": "not_started", "negative_tests": "not_started (многотельная деталь; Scale, дающий пересечение с окружением)", "geometry_validation": "not_started (эталон SOL-BOOLEAN разность 500 мм³; отдельно Scale=±10% → ожидаемое (1+k/100)³ по объёму)"},
+      "native_or_composition": "родная операция; не путать с SM-15 (разность тел в детали)",
+      "mcp_support": {"level": "none"},
+      "next_step": "проба: брусок 100×80×10 минус куб 10×10×10 через IMoldCavity (Scale=0); получить ΔV=1000 мм³ и заодно измерить единицы Scale на значении 10 (10% против 10×)"
+    },
+    {
+      "id": "SM-28.edit_in_place_context",
+      "family": "SM-28",
+      "engineering_name": "Контекст редактирования компонента (на месте / локальная деталь / разгрузка)",
+      "classification": "required_auxiliary",
+      "level": "metadata_found",
+      "doc_source": ["KOMPAS_ru-RU.zip!cm_3d_edit_component_out_place.html", "KOMPAS_ru-RU.zip!local_detail_work_features.html", "KOMPAS_ru-RU.zip!edit_local_detail.html", "KOMPAS_ru-RU.zip!changing_download_type_component.html", "KOMPAS_ru-RU.zip!objects_lsk.html", "KOMPAS_ru-RU.zip!83_3_9_790_ispolnenija_modeli.html (исполнения)"],
+      "sdk_source": ["SDK: IPart7.BeginEdit/EndEdit/GetOpenDocumentParam, IAssemblyDocument.DismantleMode, IPart7.PartsEx(PartCollectionType)"],
+      "interfaces": [
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IPart7.GetOpenDocumentParam() → IOpenDocumentParam; BeginEdit(Param) → IKompasDocument3D; EndEdit(Rebuild) → bool"},
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IOpenDocumentParam{Visible(bool, default False), ReadOnly(bool default False), ApplyingIndex(long), Password(BSTR)}"},
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IAssemblyDocument : IKompasDocument3D {DismantleMode(bool)}"},
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IPart7.IsLocal(bool), Load(Full)/Unload(Full), LoadState, ReadOnly(long)"}
+      ],
+      "why_included": "docs/05 §5 SM-28 требует «контекст редактирования и зависимости»; без явного входа/выхода из edit-in-place ни одна компонентная твердотельная операция не выполнима, а без EndEdit(Rebuild) состояние документа неопределённо (docs/05 §4.2 outcome_unknown)",
+      "contexts": ["assembly.component", "part.edit_in_place", "configuration.embodiment (ApplyingIndex)"],
+      "copy_variants": [{"mode_id": "SM-28.edit_in_place_context.read_only", "api": "IOpenDocumentParam.ReadOnly=true"}, {"mode_id": "SM-28.edit_in_place_context.embodiment", "api": "IOpenDocumentParam.ApplyingIndex (исполнение) — единственный найденный способ указать исполнение для редактирования"}],
+      "actions": {"create": "research", "read": "research", "edit": "research", "rebuild": "research (EndEdit(Rebuild))", "save_reopen": "research (проверка, тронут ли файл компонента)", "suppress_restore": "not_applicable_no_evidence", "delete_with_dependencies": "not_started", "negative_tests": "not_started (edit-in-place в ReadOnly/разгруженном компоненте)", "geometry_validation": "not_applicable_no_evidence"},
+      "native_or_composition": "родный контекст",
+      "mcp_support": {"level": "none", "notes": " ToolCatalog.cs имеет kompas_open_document(access=read_only|edit) только на уровне документа; иерархии «компонент → редактирование на месте» нет"},
+      "next_step": "проба (только чтение+контекст): открыть сборку, BeginEdit на компоненте с ApplyingIndex=1, EndEdit(false) и сравнить хеши файлов всех компонентов — основа для правила «исходные файлы менять только в заданной области действия»"
+    },
+    {
+      "id": "SM-29.deform_component",
+      "family": "SM-29",
+      "engineering_name": "Деформировать компонент в сборке (геометрическая правка определений операций в контексте сборки)",
+      "classification": "solid",
+      "level": "documented",
+      "doc_source": ["KOMPAS_ru-RU.zip!cm_make_deformation_component.html", "KOMPAS_ru-RU.zip!334_34_1_vybor_obwektov_dlja_de.html", "KOMPAS_ru-RU.zip!cm_make_deformation_list.html (список рекомендованных объектов)", "KOMPAS_ru-RU.zip!deformation_features.html", "KOMPAS_ru-RU.zip!334_glava34_deformacija.html"],
+      "sdk_source": ["НЕ НАЙДЕНО в Bin\\kAPI7.tlb (838 INTERFACE — ни одного имени Deform), НЕ НАЙДЕНО в docs/compatibility/kompas-api5-metadata.json (1007 типов); в Bin\\ksConstants.tlb есть только prMoveDeformation=10132 / prRotateDeformation=10133 / prScaleDeformation=10134 — и это команды 2D-черчения (make_deformation.html относится к «3. Черчение»)"],
+      "interfaces": [
+        {"artifact": "Bin\\kAPI7.tlb", "name": "интерфейс деформации — НЕ найден", "confirmed": false},
+        {"artifact": "docs/compatibility/kompas-api5-metadata.json", "name": "определение деформации — НЕ найдено", "confirmed": false},
+        {"artifact": "Bin\\ksConstants3D.tlb", "name": "ksDeformedSurface=24 в ksMathSurface3DTypeEnum (тип математической поверхности)", "confirmed": true, "note": "не доказано, что относится к «Деформации компонентов в сборке»"}
+      ],
+      "is_not_strength_calc": "docs/05 §5: это геометрическая операция, не расчёт прочности; APM/прочностные приложения остаются вне P6 (docs/05 §2.3) — подтверждается тем, что «Деформация» живёт в разделе «Компоненты > Действия с компонентами сборки. Редактирование компонентов»",
+      "documented_semantics": [
+        "вызывается из контекстного меню компонента в Дереве сборки; поле «Компонент» показывает имя компонента и все подсборки вложенных уровней",
+        "таблица «Объекты деформации»: Рекомендованные | Все доступные объекты; для каждого объекта — опция «Деформировать»",
+        "редактирование объекта выполняется в контексте сборки: объектами «обстановки» можно задавать сечение, направляющий объект, точку привязки → изменённая геометрия КОНТЕКСТНО связана с объектами сборки",
+        "изменяемый набор параметров зависит от типа объекта (пример в справке: для выдавливания — набор объектов сечения, направление, объект «до которого»)",
+        "изменения сохраняются в сборке (в объекте Деформация), а НЕ в файле компонента",
+        "строка компонента и закладка документа помечаются оранжевым; при редактировании внутри объекта остальные объекты компонента скрываются"
+      ],
+      "candidate_route": "нет доказанного API-маршрута. Гипотезы, требующие проверки (не выдавать за факт): (а) IPart7.BeginEdit/EndEdit на деформированной детали, (б) IPart7.RunCreateObjectProcess/VisualCreateObject с ProcessType, которого нет в найденных перечислениях, (в) признак доступен как изменённое определение операции внутри специального объекта «Деформация» → OQ-B-26",
+      "contexts": ["assembly.component", "assembly.subassembly.nested", "part.edit_in_place"],
+      "copy_variants": [{"mode_id": "SM-29.deform_component.recommended_list", "api": "нет", "doc": "список рекомендованных объектов создаётся в модели компонента (cm_make_deformation_list)"}, {"mode_id": "SM-29.deform_component.all_available", "api": "нет"}],
+      "actions": {"create": "not_started (route=blocked_api_candidate)", "read": "not_started", "edit": "not_started", "rebuild": "not_started", "save_reopen": "not_started (обязательная проверка: файл компонента не меняется, сборка меняется)", "suppress_restore": "not_started", "delete_with_dependencies": "not_started", "negative_tests": "not_started", "geometry_validation": "not_started"},
+      "native_or_composition": "родная операция; композиция «редактировать деталь в её собственном файле» меняет семантику (нет контекста сборки, теряется обратимость и отметка «Деформировано») и не может считывать покрытие",
+      "status_flag": "кандидат blocked_api: по docs/05 §2.4 требуется минимальный воспроизводимый пример + проверка API5/API7 (выполнена в этом проходе: ни в дампе API5, ни в kAPI7.tlb имени Deform нет) — окончательное слово за живым IDispatch-опросом",
+      "mcp_support": {"level": "none"},
+      "next_step": "проба на подготовленной ВРУЧНУЮ сборке с выполненной деформацией: перечислить IPart7.Parts/PartsEx и все o3d-типы объектов сборки (IModelContainer.Objects), найти «Деформация» как объект и узнать его ModelObjectType и интерфейс через QueryInterface/IDispatch — единственный способ понять, есть ли маршрутизация в API"
+    },
+    {
+      "id": "SM-29.deformation_object",
+      "family": "SM-29",
+      "engineering_name": "Объект «Деформация» в сборке (носитель изменённых операций)",
+      "classification": "solid",
+      "level": "documented",
+      "doc_source": ["KOMPAS_ru-RU.zip!object_deformation.html"],
+      "sdk_source": ["не найдено"],
+      "interfaces": [],
+      "documented_rules": [
+        "на каждый деформируемый компонент создаётся ровно ОДИН объект Деформация; наименование «Деформация (<имя компонента>):N» изменить нельзя",
+        "объект создаётся в ТЕКУЩЕЙ сборке независимо от уровня вложенности компонента и размещается на первом уровне Дерева (раздел «Деформации» в древовидном представлении структуры; в конце Дерева в виде истории построения)",
+        "перемещение объекта по Дереву управляет геометрией компонента → порядок истории значим (docs/05 §4.4 «допустимое изменение порядка»)",
+        "удаление объекта Деформация возвращает компоненту исходную геометрию; удаление компонента из сборки удаляет и объект Деформация",
+        "операции, изменённые в рамках деформации, отмечаются значком и используют объекты сборки; при сохранении они передаются в файл без контекстной связи"
+      ],
+      "contexts": ["assembly.component"],
+      "copy_variants": [],
+      "actions": {"create": "not_started", "read": "not_started (единственный реально доступный шаг — чтение)", "edit": "not_started", "rebuild": "not_started", "save_reopen": "not_started", "suppress_restore": "not_started (документировано как «отключить деформацию»)", "delete_with_dependencies": "not_started (документировано: удаление возвращает исходную геометрию)", "negative_tests": "not_started", "geometry_validation": "not_started"},
+      "native_or_composition": "родной объект",
+      "mcp_support": {"level": "none"},
+      "next_step": "чтение: kompas_list_features обязан показать этот объект и его OrderNumber без искажения истории — начать с перечисления IFeature7 {Name, FeatureType, OrderNumber, Excluded} на эталонной деформированной сборке"
+    },
+    {
+      "id": "SM-29.save_component_with_deformation",
+      "family": "SM-29",
+      "engineering_name": "Сохранить с учетом деформации",
+      "classification": "solid",
+      "level": "documented",
+      "doc_source": ["KOMPAS_ru-RU.zip!cm_deformation_componen_saveas.html"],
+      "sdk_source": ["не найдено"],
+      "interfaces": [
+        {"artifact": "Bin\\kAPI7.tlb (дамп)", "name": "IPart7.SaveAs(PathName) — гипотеза о том, что команда опирается на этот метод", "confirmed": false}
+      ],
+      "source_file_impact": "правило для каталога: создаётся НОВЫЙ файл; «Объекты Деформация в файл не записываются»; изменённые операции получают значок использования объектов сборки; использованные объекты ПЕРЕДАЮТСЯ в созданный файл и отображаются в графической области; контекстная связь со сборкой НЕ сохраняется → после такой записи деталь перестаёт быть ассоциативной с компонентным массивом/сборкой",
+      "contexts": ["assembly.component"],
+      "copy_variants": [{"mode_id": "SM-29.save_component_with_deformation.as_new_file", "api": "нет"}],
+      "actions": {"create": "not_started", "read": "not_started", "edit": "not_applicable_no_evidence", "rebuild": "not_started", "save_reopen": "not_started (обязательно: перечитать параметры перенесённых операций в новом файле)", "suppress_restore": "not_applicable_no_evidence", "delete_with_dependencies": "not_applicable_no_evidence", "negative_tests": "not_started (путь вне разрешённого корня)", "geometry_validation": "not_started (V в новом файле = V деформированного компонента в сборке)"},
+      "native_or_composition": "родная команда",
+      "mcp_support": {"level": "none"},
+      "next_step": "метаданные+проба: найти, какая COM-сущность выполняет «Сохранить с учетом деформации» (опросить контекстное меню-процесс через IPart7.RunCreateObjectProcess со значениями ProcessTypeEnum из ksConstants.tlb); если маршрута нет — blocked_api с примером"
+    }
+  ]
+}

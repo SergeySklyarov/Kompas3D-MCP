@@ -1,0 +1,77 @@
+<Project>
+
+  <!--
+    Single place where the target framework and bitness are pinned.
+    ADR-001 records why x64 is mandatory (KOMPAS.exe is x64, machine is x64) and why
+    net10.0-windows is the baseline. Overridable per-build with -p:TargetFramework=...
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!--
+      x64 only. AnyCPU was declared here historically, but the solution defines no AnyCPU
+      configuration, so that platform was never reachable through the solution — while still
+      permitting a stray `-p:Platform=AnyCPU` build to write to a second output folder
+      (bin/Debug/... instead of bin/x64/Debug/...). Those orphaned folders are what caused the
+      September 2026 stale-binary incident: the delivery copy silently kept serving a days-old
+      Worker. Removing AnyCPU makes the mistake a build error rather than a silent divergence.
+    -->
+    <Platforms>x64</Platforms>
+    <!-- КОМПАС-3D v24 is an x64 out-of-process server; a 32-bit or AnyCPU-prefer-32 host
+         would produce CLASS_E_NOAGGREGATION / EATL_E_* style failures that are impossible
+         to diagnose from a COM error alone. Force x64 everywhere. -->
+    <PlatformTarget>x64</PlatformTarget>
+    <!--
+      No global RuntimeIdentifier: it breaks `dotnet test`/`dotnet pack` transitive project
+      graphs on some SDKs. Bitness is already fixed by PlatformTarget above; the publish
+      scripts pass -r win-x64 explicitly.
+    -->
+    <!--
+      RuntimeIdentifiers (PLURAL) is a different property and does not contradict the note
+      above: it declares which RIDs the project may restore for, it does NOT force a
+      RID-specific build. It is declared because without it the restore graph has no RID
+      while the per-project packages.lock.json carries one — those lock files were written
+      by `dotnet publish -r win-x64`, which the note above says is how the RID is supplied.
+
+      Measured 23.09.2026: with the mismatch, a plain `dotnet restore` silently REWROTE five
+      lock files, and with CI=true — where RestoreLockedMode below turns on — restore
+      REFUSED outright: five projects failed with NU1004 "The project's runtime identifiers
+      have changed from. Project's runtime identifiers: , lock file's runtime identifiers
+      win-x64". The published set therefore could not be built on any CI machine. Declaring
+      the RID here makes both modes agree instead of picking one to break.
+    -->
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <UseWPF>false</UseWPF>
+    <UseWindowsForms>false</UseWindowsForms>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <Deterministic>true</Deterministic>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <RestorePackagesPath Condition="'$(RestorePackagesPath)' == ''">$(MSBuildThisFileDirectory).nuget\packages</RestorePackagesPath>
+    <NuGetAudit>true</NuGetAudit>
+    <!-- Per-project packages.lock.json: a restore that would resolve to something other than
+         the audited graph fails instead of silently drifting. -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestoreLockedMode Condition="'$(RestoreLockedMode)' == '' and '$(CI)' == 'true'">true</RestoreLockedMode>
+  </PropertyGroup>
+
+  <!--
+    Where the vendor interop assemblies live. Default is the path observed on the
+    customer machine; override with -p:KompasRoot=... or a Directory.Build.props.local.
+    We reference vendor interop at build time only — nothing is copied out of the
+    КОМПАС installation into this repository.
+  -->
+  <PropertyGroup>
+    <KompasRoot Condition="'$(KompasRoot)' == ''">D:\Programs\KOMPAS-3Dv24</KompasRoot>
+    <KompasInteropDir Condition="'$(KompasInteropDir)' == ''">$(KompasRoot)\Libs\PolynomLib\Bin\Client</KompasInteropDir>
+    <KompasTlbDir Condition="'$(KompasTlbDir)' == ''">$(KompasRoot)\Bin</KompasTlbDir>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+</Project>

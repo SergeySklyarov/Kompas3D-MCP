@@ -1,0 +1,69 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    ADR-003 isolated research probe: does a NATIVE КОМПАС «Отверстие» exist through API7 on this
+    installation, measured end-to-end. Research only.
+
+    Boundary (ADR-003 §1): nothing in src/ references this project and this project references
+    nothing in src/ — no ProjectReference at all. It therefore cannot reach the production Worker,
+    cannot appear in an MCP contract, and cannot be part of the delivery. The STA pump and the
+    interop resolution are copies of the LOGIC from src/KompasMcp.Api5Adapter (Sta/StaExecutor.cs,
+    KompasInteropResolver.cs), not dependencies on it: ADR-003 §2 lets the probe own its apartment
+    while it is the only controlling client of the session.
+
+    The project is deliberately NOT in KompasMcp.sln: a solution build must not pick up a research
+    probe. Command line: docs/acceptance/api7/api7-findings.md §8.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>KompasMcp.Api7Probe</RootNamespace>
+    <AssemblyName>KompasMcp.Api7Probe</AssemblyName>
+    <StartupObject>KompasMcp.Api7Probe.Program</StartupObject>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <!--
+    Vendor interop: referenced, never copied (ADR-001 §2 / build/KompasInterop.props convention).
+    Private=false keeps ASCON binaries out of the output and out of the repository; the runtime
+    resolver (InteropResolver) loads them from the installation instead. API7 is added here on top
+    of the API5 set the shipping adapter already uses, because the probe is the only thing allowed
+    to look at API7.
+  -->
+  <ItemGroup>
+    <Reference Include="Kompas6API5">
+      <HintPath>$(KompasInteropDir)\Interop.Kompas6API5.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Kompas6Constants">
+      <HintPath>$(KompasInteropDir)\Interop.Kompas6Constants.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Kompas6Constants3D">
+      <HintPath>$(KompasInteropDir)\Interop.Kompas6Constants3D.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="KompasAPI7">
+      <HintPath>$(KompasInteropDir)\Interop.KompasAPI7.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Target Name="ThrowWhenApi7InteropMissing" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(KompasInteropDir)\Interop.KompasAPI7.dll')"
+           Text="Не найден Interop.KompasAPI7.dll в '$(KompasInteropDir)'. Укажите корень установки: dotnet build -p:KompasRoot=D:\Programs\KOMPAS-3Dv24. Зонд, который молча не находит API7, измеряет не API7." />
+  </Target>
+
+  <!--
+    The installation root, handed to the probe as an assembly attribute.
+
+    R.20 surveys the models the installation ships, and it must find them by asking rather than by
+    assuming: the first version of that step hard-coded three paths under one folder, drew a
+    population conclusion from a three-file sample, and was wrong. The root is already a build
+    property (<c>Directory.Build.props</c>), so it is baked in here and read back with
+    <c>AssemblyMetadata</c> instead of being re-derived at runtime from a working directory.
+  -->
+  <ItemGroup>
+    <AssemblyMetadata Include="KompasRoot" Value="$(KompasRoot)" />
+  </ItemGroup>
+
+</Project>

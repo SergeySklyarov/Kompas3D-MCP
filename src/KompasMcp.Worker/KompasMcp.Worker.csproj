@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Worker: separate Windows process owning one STA thread + message pump and all COM pointers.
+    It accepts only DTOs over a named pipe. Losing this process never cancels a command КОМПАС
+    already started, which is why the Host journals before dispatching.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>KompasMcp.Worker</RootNamespace>
+    <AssemblyName>KompasMcp.Worker</AssemblyName>
+    <!-- The process must start on an STA thread; see StaMessagePump and Program. -->
+    <StartupObject>KompasMcp.Worker.Program</StartupObject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\KompasMcp.Api5Adapter\KompasMcp.Api5Adapter.csproj" />
+    <ProjectReference Include="..\KompasMcp.Domain\KompasMcp.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

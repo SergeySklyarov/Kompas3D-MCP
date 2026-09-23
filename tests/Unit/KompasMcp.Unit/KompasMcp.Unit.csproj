@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Deterministic tests: no КОМПАС, no file system outside a temp dir. These cover the logic
+       the CAD lane cannot substitute for — validation, transforms, journal, queue, path policy. -->
+  <PropertyGroup>
+    <RootNamespace>KompasMcp.Unit</RootNamespace>
+    <AssemblyName>KompasMcp.Unit</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="coverlet.collector" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\KompasMcp.Domain\KompasMcp.Domain.csproj" />
+    <ProjectReference Include="..\..\..\src\KompasMcp.Contracts\KompasMcp.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\src\KompasMcp.Host\KompasMcp.Host.csproj" />
+  </ItemGroup>
+
+</Project>

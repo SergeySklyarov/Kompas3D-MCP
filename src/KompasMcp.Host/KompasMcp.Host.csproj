@@ -1,0 +1,107 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Host: the only process that speaks MCP to the client. Owns validation, the durable
+    operation journal, the bounded command queue, the document/reference registry and the
+    path policy. It never touches COM. Its stdout carries MCP frames only — diagnostics go to
+    stderr and to the JSONL log file.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>KompasMcp.Host</RootNamespace>
+    <AssemblyName>KompasMcp.Host</AssemblyName>
+    <StartupObject>KompasMcp.Host.Program</StartupObject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ModelContextProtocol" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\KompasMcp.Domain\KompasMcp.Domain.csproj" />
+    <ProjectReference Include="..\KompasMcp.Contracts\KompasMcp.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The Worker is a sibling process, not a library: it is not referenced as an assembly, but
+         a local build must place its output next to the Host so kompas_health can start it. The
+         packaging scripts produce the same layout for a real delivery. -->
+    <ProjectReference Include="..\KompasMcp.Worker\KompasMcp.Worker.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+  </ItemGroup>
+
+  <!--
+    Copies the Worker next to the Host, because the Host launches it from its own directory
+    (WorkerSupervisor: Path.Combine(AppContext.BaseDirectory, "KompasMcp.Worker.exe")) and does not
+    reference it as an assembly.
+
+    The path MUST carry $(Platform). Without it the glob pointed at
+    KompasMcp.Worker\bin\Debug\net10.0-windows — an AnyCPU folder that no build of this solution
+    writes to, since KompasMcp.sln defines only the x64 platform. That stale folder was frozen on
+    11.09.2026, and this task kept copying it next to the Host on every build:
+    SkipUnchangedFiles="true" then reported success because the copy genuinely had not changed.
+    The result was a current Host running a five-day-old Worker, with the mismatch visible only as
+    wrong tool responses. Cost three separate debugging sessions before the path was found.
+
+    The WorkerOutput glob is also existence-checked so a wrong path fails loudly instead of
+    silently copying nothing.
+  -->
+  <!--
+    Deliberately NO Inputs/Outputs incremental check on this target. It used to compare only
+    KompasMcp.Worker.exe: when the Worker's managed assembly changed but its apphost stub did not,
+    MSBuild skipped the whole target and the Host kept the previous DLL. Worse, once the DLL was
+    absent from $(OutDir) nothing ever put it back, because the stub was still "up to date".
+
+    Measured 18.09.2026 on the dev tree: src\KompasMcp.Host\bin\x64\Release\net10.0-windows held
+    KompasMcp.Worker.exe with no KompasMcp.Worker.dll beside it. The apphost cannot start without
+    its assembly, so the Worker died instantly, kompas_health answered status=failed and
+    kompas_connect failed with VERIFICATION_FAILED — a symptom pointing nowhere near the cause.
+    The delivery folder was unaffected because publish resolves the whole graph, which is exactly
+    why this trap only fires on a local build. Copy has SkipUnchangedFiles, so dropping the
+    incremental check costs nothing and cannot silently skip again.
+  -->
+  <Target Name="CopyWorkerNextToHost" AfterTargets="Build">
+    <ItemGroup>
+      <!--
+        Top-level files ONLY — deliberately no `**`. The recursive glob also matched
+        KompasMcp.Worker\bin\x64\Release\net10.0-windows\win-x64\, a RID-specific publish left
+        behind by `dotnet publish -r win-x64`, and MSBuild's Copy writes the later items last, so
+        those stale binaries OVERWROTE the freshly built ones in the Host folder.
+
+        Measured 18.09.2026, dev tree, after a clean build of the solution:
+          Worker\...\KompasMcp.Api5Adapter.dll      330752  sha 83f337b6…
+          Worker\...\win-x64\KompasMcp.Api5Adapter.dll  331264  sha bfa932dc…  ← copied last, won
+        The Host then ran a Worker assembly from 12:20 and an adapter from 12:35 while the solution
+        had just produced 13:25 binaries — the same class of silent staleness as the AnyCPU folder
+        incident recorded in Directory.Build.props. A local build must mirror what `dotnet build`
+        produced, not what an earlier RID publish happened to leave in a subfolder.
+      -->
+      <WorkerOutput Include="$(MSBuildThisFileDirectory)..\KompasMcp.Worker\bin\$(Platform)\$(Configuration)\$(TargetFramework)\*.*" />
+    </ItemGroup>
+
+    <Error Condition="@(WorkerOutput) == ''"
+           Text="KompasMcp.Worker output not found at bin\$(Platform)\$(Configuration)\$(TargetFramework). The Host would otherwise ship without a Worker and fail at kompas_health. Build KompasMcp.Worker with the same -p:Platform first." />
+
+    <!--
+      SkipUnchangedFiles is deliberately OFF. Measured 18.09.2026 on the dev tree: the Host folder
+      kept KompasMcp.Api5Adapter.dll 331264 bytes / 12:35 while the Worker folder and the adapter
+      project both held 330752 bytes / 13:25. The Host was therefore measuring a different adapter
+      than the one that had just been built, and the smoke header's adapter_sha256 disagreed with
+      the file sitting next to the Host. The Worker's output is a couple of dozen small files;
+      mirroring it unconditionally is cheaper than another stale-binary hunt (ADR-001).
+    -->
+    <Copy SourceFiles="@(WorkerOutput)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="false" />
+
+    <!-- The apphost is useless without its assembly; fail here rather than at connect time. -->
+    <Error Condition="!Exists('$(OutDir)KompasMcp.Worker.dll')"
+           Text="KompasMcp.Worker.dll did not land in '$(OutDir)'. The apphost KompasMcp.Worker.exe cannot run without it, and the failure surfaces much later as an unexplained VERIFICATION_FAILED on kompas_connect." />
+  </Target>
+
+  <ItemGroup>
+    <!-- Tool JSON Schema, shipped next to the binary so schemas/ and the runtime agree. -->
+    <None Include="..\..\schemas\**\*.json" LinkBase="schemas" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

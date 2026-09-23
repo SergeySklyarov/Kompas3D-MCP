@@ -1,0 +1,41 @@
+MIT License
+
+Copyright (c) 2026 KompasMCP contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+Лицензия покрывает только код и документацию ЭТОГО репозитория.
+
+КОМПАС-3D, его SDK и сборки interop (Interop.Kompas6API5.dll и другие) —
+собственность АО «АСКОН» и под эту лицензию не подпадают. В репозитории они не
+распространяются: сборка берёт их из установленного приложения, а не из копии в
+дереве. Для сборки и работы нужна собственная лицензия на КОМПАС-3D v24.
+
+Тексты справки КОМПАС, приведённые в документации как цитаты, принадлежат их
+правообладателю.
+
+Репозиторий содержит `docs/compatibility/kompas-api5-metadata.json` — фактический
+перечень поверхности интерфейса, снятый с установленного продукта: имена типов и
+членов, сигнатуры, значения перечислений. Текстов справки и иной документации
+вендора в нём нет, и это измерено, а не предположено: из 81 469 строк файла
+кириллических — 0, строк с двумя и более границами предложений — 0. Это
+справочный факт об интерфейсе, а не произведение вендора; права на сам продукт
+и его интерфейс остаются у АО «АСКОН».

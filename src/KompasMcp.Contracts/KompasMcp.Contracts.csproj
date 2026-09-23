@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Public contract: envelopes, DTOs, error catalogue, IPC frames. No COM, no КОМПАС types.
+       Anything referencing this must be able to serialize its content to a client. -->
+  <PropertyGroup>
+    <RootNamespace>KompasMcp.Contracts</RootNamespace>
+    <AssemblyName>KompasMcp.Contracts</AssemblyName>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    P0 technical investigation (spec 3.1 "P0", DEVELOPER_HANDOFF first-actions item 2).
+    Not a mock and not a substitute for the MCP tools: it drives real COM on a real STA thread
+    against the installed КОМПАС-3D v24 and writes a machine-readable evidence report.
+    Every runtime claim in docs/adr/ADR-001 must point at a line of this program's output.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>KompasMcp.P0Probe</RootNamespace>
+    <AssemblyName>KompasMcp.P0Probe</AssemblyName>
+    <StartupObject>KompasMcp.P0Probe.Program</StartupObject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\KompasMcp.Api5Adapter\KompasMcp.Api5Adapter.csproj" />
+    <ProjectReference Include="..\..\src\KompasMcp.Domain\KompasMcp.Domain.csproj" />
+    <ProjectReference Include="..\..\src\KompasMcp.Contracts\KompasMcp.Contracts.csproj" />
+  </ItemGroup>
+
+  <Import Project="..\..\build\KompasInterop.props" />
+
+</Project>

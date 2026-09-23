@@ -1,0 +1,39 @@
+{
+  "_comment": [
+    "Шаблон конфигурации KompasMcp.Host. Скопируйте файл под своё имя и задайте пути этой машины.",
+    "Корни файлов — единственная граница между сервером и диском: read_only_roots доступны",
+    "только на чтение, запись в них отклоняется с PATH_NOT_ALLOWED до обращения в КОМПАС.",
+    "",
+    "Пути ниже — ЗАГЛУШКИ, они не указывают на конкретную машину и не существуют сами по себе.",
+    "Замените их на существующие каталоги своего пользователя. Сервер не создаёт корни за вас.",
+    "",
+    "Ключ _comment сервер игнорирует: HostOptions.Load читает только перечисленные ниже ключи.",
+    "Поэтому шаблон обязан оставаться корректным JSON — файл с комментариями '#' Host отвергает",
+    "на старте с кодом возврата 64, ещё до подключения к КОМПАС."
+  ],
+
+  "read_only_roots": [
+    "C:\\kompas-mcp\\read-only-models"
+  ],
+  "writable_roots": [
+    "C:\\kompas-mcp\\sandbox"
+  ],
+  "export_roots": [
+    "C:\\kompas-mcp\\export"
+  ],
+  "allow_unc_paths": false,
+  "require_read_only_model_roots": true,
+
+  "worker_path": null,
+  "worker_log_path": "C:\\kompas-mcp\\logs\\worker.jsonl",
+  "log_path": "C:\\kompas-mcp\\logs\\host.jsonl",
+  "journal_path": "C:\\kompas-mcp\\journal\\operations.jsonl",
+  "artifact_directory": "C:\\kompas-mcp\\artifacts",
+
+  "queue_capacity": 64,
+  "sync_budget_ms": 10000,
+  "operation_budget_ms": 120000,
+  "max_response_bytes": 16384,
+  "default_page_limit": 100,
+  "max_page_limit": 500
+}

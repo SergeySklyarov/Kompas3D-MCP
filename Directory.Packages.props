@@ -1,0 +1,29 @@
+<Project>
+
+  <!--
+    Central Package Management: every PackageReference in the tree gets its version here and
+    nowhere else. Combined with RestorePackagesWithLockFile (Directory.Build.props) this is the
+    "зафиксировать проверенные версии в lock-файлах, не брать плавающий latest" requirement
+    from spec 1.5. Verified on this machine 2026-09-10 against the .NET 10.0.401 SDK.
+  -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- MCP transport: official C# SDK, Apache-2.0. Only version used for the MCP surface;
+         the project never hand-rolls JSON-RPC framing. -->
+    <PackageVersion Include="ModelContextProtocol" Version="2.2.0" />
+
+    <!-- Runtime hosting for the Host process. -->
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.12" />
+
+    <!-- Tests. -->
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.0" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
+    <PackageVersion Include="coverlet.collector" Version="10.0.1" />
+  </ItemGroup>
+
+</Project>

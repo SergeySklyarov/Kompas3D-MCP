@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Deterministic, COM-free logic: schema validation, transform math, unit normalisation,
+       path policy, journal, queue, BOM grouping, AABB prefilter. Unit-testable without КОМПАС. -->
+  <PropertyGroup>
+    <RootNamespace>KompasMcp.Domain</RootNamespace>
+    <AssemblyName>KompasMcp.Domain</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\KompasMcp.Contracts\KompasMcp.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

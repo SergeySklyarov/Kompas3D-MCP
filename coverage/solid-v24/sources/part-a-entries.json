@@ -1,0 +1,757 @@
+{
+  "meta": {
+    "artifact": "scratch/inventory/part-a/entries.json",
+    "stage": "P6.0",
+    "kind": "research_slice",
+    "schema_version": "1.0",
+    "generated_utc": "2026-09-11T23:59:00Z",
+    "owner_slice": ["SM-04", "SM-05", "SM-06", "SM-10", "SM-11", "SM-12", "SM-13", "SM-14", "SM-15", "SM-16", "SM-17"],
+    "target_environment": {
+      "product": "КОМПАС-3D v24",
+      "build": "24.0.0.2799",
+      "bitness": "x64",
+      "path": "D:\\Programs\\KOMPAS-3Dv24",
+      "type_libraries": {
+        "API5": "Bin\\kApi5.tlb (sha256 a1b6bebbe5de7805…, 2025-04-03)",
+        "API7": "Bin\\kAPI7.tlb (sha256 68b7730ef13bde7d…, 2025-04-21)",
+        "constants3D": "Bin\\ksConstants3D.tlb"
+      },
+      "evidence": "docs/acceptance/api7/env-passport.md"
+    },
+    "metadata_artifacts": {
+      "api5_installed": "scratch/api5-index.txt + scratch/tlgen/_0422828C_…py (comtypes from D:\\Programs\\KOMPAS-3Dv24\\Bin\\kApi5.tlb); member docs re-extracted in scratch/inventory/part-a/api5_tlb_docs_full.txt (offline LoadTypeLibEx REGKIND_NONE)",
+      "api7_installed": "scratch/api7-index.txt + scratch/inventory/part-a/api7_tlb_docs_full.txt (offline LoadTypeLibEx REGKIND_NONE from Bin\\kAPI7.tlb)",
+      "constants_installed": "scratch/tlgen/_2CAF168C_…py (comtypes from Bin\\ksConstants3D.tlb); grouped enum values in scratch/inventory/part-a/enum_values.txt",
+      "api5_prebuilt_interop": "docs/compatibility/kompas-api5-metadata.json (Interop.Kompas6API5, 1007 types) — used as secondary; absence here is NOT proof of absence in product",
+      "api7_prebuilt_interop": "Libs\\PolynomLib\\Bin\\Client\\Interop.KompasAPI7.dll (2298 types, 2025-03-03) — older than installed kAPI7.tlb; ElementaryBodies/PipeElements absent in wrapper but declared in TLB (measured in env-passport)"
+    },
+    "levels": {
+      "documented": "найдено в пользовательской справке или документации SDK",
+      "metadata_found": "найдено в библиотеке типов установленного приложения или в interop",
+      "runtime_verified": "не присваивалось этим срезом — пробы запрещены",
+      "mcp_implemented": "существует маршрут MCP в основном коде",
+      "mcp_verified": "маршрут MCP прошёл сквозную проверку"
+    },
+    "rules_obeyed": [
+      "Ни одна запись не помечена runtime_verified или mcp_implemented/mcp_verified: срез делался только по документации и метаданным.",
+      "Отсутствие в prebuilt-обёртке не трактуется как отсутствие в продукте; авторитет — Bin\\kApi5.tlb, Bin\\kAPI7.tlb, Bin\\ksConstants3D.tlb установленного приложения.",
+      "Каждый неразрешённый вопрос имеет запись в open-questions.md со следующим шагом-пробой."
+    ],
+    "units_convention": "линейные параметры — мм, угловые — градусы (docs/05 §4.1); фактические единицы каждого API-поля подтверждаются пробой (пример: IHole3D.Diameter измерен в мм в пробе API7)",
+    "mcp_baseline": "src/KompasMcp.Host/Catalog/ToolCatalog.cs: зарегистрированные инструменты v1 — health, capabilities, connect, disconnect, create/open/list/save/close document, list_features, list_bodies, measure, create/edit/finish sketch, extrude, fillet, get/update_feature, rebuild, export/import step, probe_units, read_topology, resolve_selection. Ни один инструмент не покрывает семейства этого среза; kompas_get_feature/kompas_list_features читают состояние произвольного признака обобщённо, без типизированных параметров этих семейств."
+  },
+  "families": [
+    {
+      "id": "SM-04",
+      "title": "Кинематическая операция (в UI v24 — «Элемент по траектории» / «Вырезать по траектории»)",
+      "classification": "solid",
+      "level": "metadata_found",
+      "api_terminology_note": "В API5/API7 семейство называется Evolution (o3d_baseEvolution=45 «Кинематическая операция», kApi5.tlb/ksConstants3D.tlb). В пользовательской справке v24 команда называется «Элемент по траектории» (261_gl_27_oper_kin.html). Это одно семейство, не два.",
+      "evidence": {
+        "user_docs": "help.ascon.ru/KOMPAS/24/ru-RU/261_gl_27_oper_kin.html + aw2209427.html + aw2263191.html + aw2303904.html + section_shape_changes.html + aw2207083.html",
+        "sdk_docs": "help.ascon.ru/KOMPAS_SDK/24/ru-RU/ievolutions.html (v18), ievolution_propers.html, ievolutions_add.html, imodelcontainer_evolutions.html",
+        "metadata_api5": "kApi5.tlb: ksBaseEvolutionDefinition/ksBossEvolutionDefinition/ksCutEvolutionDefinition (iid DEEFEFF9/FFC/FFF) + o3d_baseEvolution=45/bossEvolution=46/cutEvolution=47 (ksConstants3D.tlb); дамп api5_tlb_docs_full.txt",
+        "metadata_api7": "kAPI7.tlb: IEvolution (iid 9AE8A34A)/IEvolutions; IModelContainer.Evolutions (env-passport.md: живые dispids подтверждены только для 6 свойств контейнера; Evolutions объявлен в TLB)",
+        "runtime": "не проверялось исполнением (запрещено для этого среза)"
+      },
+      "route": "API5: ksPart.NewEntity(o3d_baseEvolution|bossEvolution|cutEvolution)+GetDefinition; API7: IModelContainer.Evolutions.Add(o3d_bossEvolution|o3d_cutEvolution) — базовый тип в SDK-странице Add не перечислен (см. OQ-A1)",
+      "mcp_support": "none",
+      "next_step": "проба A7: создать bossEvolution эскиз-контур + прямолинейная траектория, эталон V = S_профиля × L_траектории; проверить применимость Add(o3d_baseEvolution) и поведение flip/auto-полей",
+      "operations": [
+        {
+          "id": "SM-04.base",
+          "name": "Базовая кинематическая операция (первое тело)",
+          "level": "metadata_found",
+          "level_note": "API5-маршрут NewEntity(o3d_baseEvolution)+ksBaseEvolutionDefinition подтверждён в kApi5.tlb; создание базового типа через API7 IEvolutions.Add документально не подтверждён (OQ-A1)",
+          "source_user_docs": "261_gl_27_oper_kin.html → cm_base_evolution_solid.html",
+          "source_sdk": "ievolutions_add.html перечисляет только o3d_bossEvolution/o3d_cutEvolution/o3d_EvolutionSurface; API5-определение ksBaseEvolutionDefinition существует",
+          "api5": {"found_in": "Bin\\kApi5.tlb (scratch/api5-index.txt)", "interfaces": ["ksBaseEvolutionDefinition"], "members": ["sketchShiftType", "SetSketch/GetSketch", "PathPartArray", "Get/SetThinParam", "ThinParam", "GetPathLength(bitVector ST_MIX_*)"], "object_type": "o3d_baseEvolution=45"},
+          "api7": {"found_in": "Bin\\kAPI7.tlb", "interfaces": ["IEvolution via IEvolutions"], "container_property": "IModelContainer.Evolutions", "members": ["OperationResult", "Sketch", "Edges (SAFEARRAY кривых траектории)", "SketchShiftType", "GetPathLength", "BySurfaceNormal", "EvolutionVersion"], "gap": "Add() документально не принимает базовый тип — маршрут создания базовой операции не подтверждён (OQ-A1)"},
+          "parameters": [
+            {"name": "Sketch", "type": "IModelObject(эскиз)/ksSketch", "units": "—", "notes": "контур сечения: эскиз (несколько контуров/область), плоская кривая, ребро плоской грани, плоская грань; пространственные сегменты запрещены (aw2209427.html)"},
+            {"name": "Edges/Trajectory / PathPartArray", "type": "SAFEARRAY кривых / ksPathPartArray", "units": "—", "notes": "пространственная кривая, линия эскиза, ребро или цепочка в любом сочетании (aw2263191.html); порядок задания = порядок соединения"},
+            {"name": "SketchShiftType", "type": "enum ksEvolutionShiftSketchTypeEnum", "units": "—", "enum": {"ksEvShiftParallel": 0, "ksEvShiftKeepAngle": 1, "ksEvShiftOrtogonal": 2}},
+            {"name": "OperationResult", "type": "enum ksOperationResultEnum", "units": "—", "enum": {"ksOperationUnion": 0, "ksOperationNewBody": 1, "ksOperationCut": 2, "ksOperationIntersect": 3}, "notes": "для базовой операции ожидаемо NewBody; применимость остальных значений не подтверждена"},
+            {"name": "ThinParam", "type": "(thin:bool, thinType:int, normalThickness:mm, reverseThickness:mm)", "units": "мм", "notes": "тонкостенный вариант; разомкнутый контур => тонкая стенка по справке UI"},
+            {"name": "GetPathLength(bitVector)", "type": "double", "units": "ST_MIX_MM..ST_MIX_M (заявлено в helpstring TLB)", "notes": "единицы калибруются пробой"}
+          ],
+          "modes": [
+            {"id": "SM-04.base.mode_parallel", "name": "движение сечения параллельно самому себе", "level": "metadata_found", "enum": "ksEvShiftParallel=0", "doc": "aw2303904.html; запрет: касательная траектории не должна быть параллельна плоскости сечения"},
+            {"id": "SM-04.base.mode_keep_angle", "name": "сохранять угол наклона к траектории", "level": "metadata_found", "enum": "ksEvShiftKeepAngle=1", "doc": "aw2303904.html"},
+            {"id": "SM-04.base.mode_orthogonal", "name": "ортогонально траектории", "level": "metadata_found", "enum": "ksEvShiftOrtogonal=2", "doc": "aw2303904.html; только для объекта-сечения, недоступно при вырезании телом"},
+            {"id": "SM-04.base.mode_surface_normal", "name": "согласованно с нормалью поверхности", "level": "metadata_found", "field": "IEvolution.BySurfaceNormal (VARIANT_BOOL)", "doc": "aw2303904.html (кривые на поверхности)"},
+            {"id": "SM-04.base.mode_version", "name": "версия оптимизации 1/2", "level": "metadata_found", "field": "IEvolution.EvolutionVersion {ksEvolutionVersion1=1, ksEvolutionVersion2=2}", "doc": "смысл различий в справке не раскрыт (OQ-A5)"},
+            {"id": "SM-04.base.mode_thin_wall", "name": "тонкостенный элемент (SetThinParam)", "level": "metadata_found", "field": "API5 ksBaseEvolutionDefinition.SetThinParam; в IEvolution тонкостенных членов нет (OQ-A4)"},
+            {"id": "SM-04.base.mode_shape_laws", "name": "изменение формы сечения: по законам / по значениям в точках траектории (+разбиение на грани)", "level": "documented", "field": "не найдено ни в kApi5.tlb, ни в kAPI7.tlb, ни в SDK-страницах IEvolution (OQ-A3, влияет на полноту семейства)"}
+          ],
+          "contexts": {"single_body": "да (API5 base)", "multibody": "boss/cut: chooseType/ChooseBodies (API5), OperationResult (API7) — базовое создание многотельно не доказано", "assembly_component": "ChooseParts (API5 boss/cut) — в API7 IEvolution член ChooseParts не объявлен (TLB)", "configuration": "не исследовано (docs/05 §4.5)"},
+          "lifecycle": {"create": "маршрут API5 идентифицирован (NewEntity+GetDefinition); чтение параметров доступно через существующий kompas_get_feature обобщённо; edit/rebuild/save_reopen/suppress_restore/delete_dependencies — применимы как для признаков API5 вообще, но не проверялись; negative/geometry — не начинались", "verified_actions": []},
+          "composition_vs_native": "sweep через выдавливание/массив не эквивалентен: теряются ориентация сечения по траектории, Laws-режим и тонкая стенка; семейство требует родного маршрута",
+          "mcp_support": "none",
+          "next_step": "OQ-A1 проба: Add(o3d_baseEvolution) в API7 против NewEntity(45) в API5"
+        },
+        {
+          "id": "SM-04.boss",
+          "name": "Приклеить кинематически",
+          "level": "metadata_found",
+          "source_user_docs": "aw2207083.html (параметры операции элемента по траектории)",
+          "source_sdk": "ievolutions_add.html (o3d_bossEvolution)",
+          "api5": {"found_in": "Bin\\kApi5.tlb", "interfaces": ["ksBossEvolutionDefinition"], "extra_members": ["chooseType", "ChooseBodies", "ChooseParts"], "object_type": "o3d_bossEvolution=46"},
+          "api7": {"found_in": "Bin\\kAPI7.tlb", "interfaces": ["IEvolution"], "members_as_base": true},
+          "parameters": "те же, что SM-04.base + chooseType (ksChooseType: 1=Компоненты и тела, 2=Компоненты, 3=Все компоненты/тела) и ChooseBodies/ChooseParts — правило выбора целевых тел как в выдавливании (измерено в P2.6 для extrude)",
+          "modes": [
+            {"id": "SM-04.boss.mode_result_union", "name": "объединение с целевым телом", "level": "metadata_found", "enum": "ksOperationUnion=0 (API7 OperationResult)"}
+          ],
+          "contexts": {"single_body": "да", "multibody": "да (chooseType)", "assembly_component": "да в API5 (ChooseParts)", "configuration": "не исследовано"},
+          "lifecycle": {"create": "маршрут идентифицирован", "read": "через обобщённое чтение kompas_get_feature, типизации нет", "edit": "Update() у IEvolution / Set-пары API5 — неприменимость не заявляется; не проверялось", "verified_actions": []},
+          "composition_vs_native": "н/д — требование docs/05 §5 SM-04 раскрывает создание/добавление/вырезание как отдельные признаки",
+          "mcp_support": "none",
+          "next_step": "проба V-дельта при приклеивании к параллелепипду"
+        },
+        {
+          "id": "SM-04.cut",
+          "name": "Вырезать кинематически",
+          "level": "metadata_found",
+          "source_user_docs": "aw2207083.html + aw2209427.html («тело как инструмент вырезания»)",
+          "source_sdk": "ievolutions_add.html (o3d_cutEvolution)",
+          "api5": {"found_in": "Bin\\kApi5.tlb", "interfaces": ["ksCutEvolutionDefinition"], "extra_members": ["cut (Результат операции)", "chooseType", "ChooseBodies", "ChooseParts"], "object_type": "o3d_cutEvolution=47"},
+          "api7": {"found_in": "Bin\\kAPI7.tlb", "interfaces": ["IEvolution"], "members_as_base": true},
+          "parameters": "те же + cut/OperationResult=ksOperationCut=2",
+          "modes": [
+            {"id": "SM-04.cut.mode_toolbody", "name": "использование другого тела как инструмента вырезания по траектории", "level": "documented", "doc": "aw2209427.html: только при результате Вычитание/Пересечение, только сплошные элементы, ортогональный тип движения недоступен", "metadata_gap": "ни в ksCutEvolutionDefinition, ни в IEvolution явного поля «тело-инструмент» не объявлено (OQ-A2)"}
+          ],
+          "contexts": {"single_body": "да", "multibody": "да", "assembly_component": "да в API5", "configuration": "не исследовано"},
+          "lifecycle": {"create": "маршрут идентифицирован", "verified_actions": []},
+          "composition_vs_native": "вырезание sweep-эскизом не закрывает: отсутствует родная винтовая/ортогональная ориентация и редактируемость",
+          "mcp_support": "none",
+          "next_step": "OQ-A2 проба: как задать тело-инструмент через API (Edges содержит кривые — не тело)"
+        },
+        {
+          "id": "SM-04.surface",
+          "name": "Кинематическая поверхность",
+          "classification": "outside_scope",
+          "classification_reason": "docs/05 §2.3: весь модуль поверхностного дизайна вне P6; включена как запись, потому что метаданные её показывают и она служит входом SM-27 (придание толщины). Интерфейсы: ksEvolutionSurfaceDefinition (kApi5.tlb), o3d_EvolutionSurface=59, ISurfaceContainer.EvolutionSurfaces (SDK ievolutions.html).",
+          "level": "metadata_found",
+          "api5": {"found_in": "Bin\\kApi5.tlb", "interfaces": ["ksEvolutionSurfaceDefinition"], "members": ["sketchShiftType", "closedShell", "SetSketch/GetSketch", "PathPartArray", "GetPathLength"]},
+          "modes": [],
+          "mcp_support": "none",
+          "next_step": "классификация подтверждена; при закрытии SM-27 вернуться"
+        }
+      ]
+    },
+    {
+      "id": "SM-05",
+      "title": "По сечениям (Элемент по сечениям / Вырезать по сечениям)",
+      "classification": "solid",
+      "level": "metadata_found",
+      "evidence": {
+        "user_docs": "266_gl_28_oper_po_sech.html; secheniya_elementa.html; 268_28_4_osev_lin_elem_po_sech.html; 704_84_4_2_sposob_postroenija_t.html; 705_84_4_3_traektorija_soedinen.html; cm_create_loft_coupling_take.html; direction_curves.html",
+        "sdk_docs": "imodelcontainer_lofts.html («Коллекция операций По сечениям»); iloft_propers.html",
+        "metadata_api5": "kApi5.tlb: ksBaseLoftDefinition/ksBossLoftDefinition/ksCutLoftDefinition (iid DEEFEFEA/EFED/EFF0); o3d_baseLoft=30/bossLoft=31/cutLoft=32",
+        "metadata_api7": "kAPI7.tlb: ILoft (iid DDB04ECF, 21 членов), ILofts, ICoupling (FB39791B); IModelContainer.Lofts",
+        "runtime": "не проверялось"
+      },
+      "route": "API7: IModelContainer.Lofts.Add(LoftType=о3d_*) — значения типа Add-параметра по образцу Evolutions (ksObj3dTypeEnum); API5: NewEntity(30/31/32)+GetDefinition. Дублирование маршрутов даёт покрытие расхождений (см. ниже)",
+      "mcp_support": "none",
+      "next_step": "проба: два квадратных сечения со смещением, эталон V усечённой пирамиды; затем купол/нормаль/объект на концах",
+      "operations": [
+        {
+          "id": "SM-05.base",
+          "name": "Базовый элемент по сечениям",
+          "level": "metadata_found",
+          "source_user_docs": "266_28_1_elem_po_sech.html / cm_base_loft_solid.html",
+          "source_sdk": "iloft_propers.html",
+          "api5": {"found_in": "Bin\\kApi5.tlb", "interfaces": ["ksBaseLoftDefinition"], "members": ["Get/SetLoftParam(closed,flipVertex,autoPath)", "Sketchs[]", "Get/SetThinParam", "ThinParam"], "object_type": "o3d_baseLoft=30"},
+          "api7": {"found_in": "Bin\\kAPI7.tlb", "interfaces": ["ILoft", "ILofts", "ICoupling"], "members": ["OperationResult", "Sketchs (эскизы, контуры, пространственные кривые, грани)", "AxisLine", "Closed", "BuildingType(BeginSection)", "BuildingObject(BeginSection)", "DirectionalLines", "AddCoupling/CouplingsCount/Coupling/DeleteCoupling/ClearCouplings", "BuildingFactor(BeginSection)"]},
+          "parameters": [
+            {"name": "Sketchs", "type": "SAFEARRAY", "units": "—", "notes": "все сечения плоские; все замкнуты ИЛИ все разомкнуты (secheniya_elementa.html); первое/последнее сечение может быть точкой эскиза при замкнутых остальных"},
+            {"name": "BuildingType", "type": "enum ksLoftBuildingType (парный индекс BeginSection=true/false для крайних сечений)", "enum": {"ksLoftAuto": 0, "ksLoftByNormal": 1, "ksLoftByObject": 2, "ksLoftCupola": 3}, "units": "—"},
+            {"name": "BuildingFactor", "type": "double ×2 (Коэффициент 1/Коэффициент 2)", "units": "безразмерный множитель производной (704_84_4_2)", "applies_to": "ksLoftCupola"},
+            {"name": "BuildingObject", "type": "IModelObject", "applies_to": "ksLoftByObject", "units": "—"},
+            {"name": "AxisLine", "type": "IModelObject (ребро, кривая или эскиз с кривой)", "units": "—", "notes": "«Ориентирующая линия»; не сочетается с направляющими кривыми — у них приоритет (268_28_4)"},
+            {"name": "DirectionalLines", "type": "SAFEARRAY кривых (API7) / одна линия SetDirectionalLine(эскиз) (API5)", "units": "—", "notes": "ограничения UI: непрерывная цепочка, один контур в эскизе, пересечение всех сечений в одном порядке (direction_curves.html)"},
+            {"name": "Coupling/ICoupling", "type": "цепочка соответствия", "units": "Position — % длины контура; PositionOffset — мм; SetPoint/GetPoint — мм", "notes": "AddCoupling → заполнение Sketch/PositionObject/Position по индексам пары"}
+          ],
+          "modes": [
+            {"id": "SM-05.base.mode_end_auto", "name": "крайние сечения: автоматически", "level": "metadata_found", "enum": "ksLoftAuto=0"},
+            {"id": "SM-05.base.mode_end_normal", "name": "по нормали (+коэффициент?)", "level": "metadata_found", "enum": "ksLoftByNormal=1"},
+            {"id": "SM-05.base.mode_end_object", "name": "по объекту (направляющий объект)", "level": "metadata_found", "enum": "ksLoftByObject=2", "field": "BuildingObject"},
+            {"id": "SM-05.base.mode_end_cupola", "name": "купол (Коэффициент 1/2)", "level": "metadata_found", "enum": "ksLoftCupola=3", "field": "BuildingFactor"},
+            {"id": "SM-05.base.mode_couplings", "name": "цепочки соответствия сечений", "level": "metadata_found", "field": "ILoft.AddCoupling/ICoupling (API7 только; в API5 нет — расхождение D3)"}
+            ,
+            {"id": "SM-05.base.mode_closed", "name": "замкнуть траекторию (циклический лофт)", "level": "metadata_found", "field": "ILoft.Closed / ksLoftDefinition.SetLoftParam(closed,…)"},
+            {"id": "SM-05.base.mode_axis", "name": "ориентирующая линия", "level": "metadata_found", "field": "ILoft.AxisLine"},
+            {"id": "SM-05.base.mode_guides", "name": "направляющие кривые", "level": "metadata_found", "field": "ILoft.DirectionalLines; API5 — одна (Get/SetDirectionalLine) — асимметрия (OQ-A6)"},
+            {"id": "SM-05.base.mode_open_sections", "name": "разомкнутые сечения (поверхностный/тонкий результат)", "level": "documented", "doc": "secheniya_elementa.html; API-поведение не проверялось"}
+          ],
+          "contexts": {"single_body": "да (base)", "multibody": "не применимо к базовому", "assembly_component": "не применимо к базовому", "configuration": "не исследовано"},
+          "lifecycle": {"create": "маршрут идентифицирован", "read": "частично обобщённо", "verified_actions": []},
+          "composition_vs_native": "выдавливание/эволюция между двумя сечениями не даёт couplings/концевые условия/купол — родной маршрут обязателен",
+          "mcp_support": "none",
+          "next_step": "проба эталонной усечённой пирамиды + сценарий с точечным крайним сечением"
+        },
+        {
+          "id": "SM-05.boss",
+          "name": "Приклеивание по сечениям",
+          "level": "metadata_found",
+          "source_user_docs": "cm_base_loft_solid.html (раздел «Результат»)",
+          "source_sdk": "iloft_propers.html (OperationResult)",
+          "api5": {"found_in": "Bin\\kApi5.tlb", "interfaces": ["ksBossLoftDefinition"], "extra_members": ["chooseType", "ChooseBodies", "ChooseParts", "Get/SetDirectionalLine"], "object_type": "o3d_bossLoft=31"},
+          "api7": {"found_in": "Bin\\kAPI7.tlb", "interfaces": ["ILoft"], "field": "OperationResult=ksOperationUnion"},
+          "modes": [],
+          "contexts": {"single_body": "да", "multibody": "да (API5 chooseType)", "assembly_component": "да (API5 ChooseParts)", "configuration": "не исследовано"},
+          "lifecycle": {"create": "маршрут идентифицирован", "verified_actions": []},
+          "mcp_support": "none",
+          "next_step": "проба дельты объёма"
+        },
+        {
+          "id": "SM-05.cut",
+          "name": "Вырезание по сечениям",
+          "level": "metadata_found",
+          "source_user_docs": "cm_base_loft_solid.html",
+          "source_sdk": "iloft_propers.html",
+          "api5": {"found_in": "Bin\\kApi5.tlb", "interfaces": ["ksCutLoftDefinition"], "extra_members": ["cut", "chooseType", "ChooseBodies", "ChooseParts", "Get/SetDirectionalLine"], "object_type": "o3d_cutLoft=32"},
+          "api7": {"found_in": "Bin\\kAPI7.tlb", "interfaces": ["ILoft"], "field": "OperationResult=ksOperationCut"},
+          "modes": [],
+          "contexts": {"single_body": "да", "multibody": "да", "assembly_component": "да (API5)", "configuration": "не исследовано"},
+          "lifecycle": {"create": "маршрут идентифицирован", "verified_actions": []},
+          "mcp_support": "none",
+          "next_step": "проба дельты объёма"
+        },
+        {
+          "id": "SM-05.surface",
+          "name": "Поверхность по сечениям",
+          "classification": "outside_scope",
+          "classification_reason": "docs/05 §2.3 (поверхностный модуль), оставлена видимой: ksLoftSurfaceDefinition в kApi5.tlb, o3d_LoftSurface=62; вход для SM-27",
+          "level": "metadata_found",
+          "api5": {"found_in": "Bin\\kApi5.tlb", "interfaces": ["ksLoftSurfaceDefinition"], "members": ["Get/SetLoftParam", "Sketchs", "Get/SetDirectionalLine", "closedShell"]},
+          "mcp_support": "none",
+          "next_step": "вернуться при SM-27"
+        }
+      ]
+    },
+    {
+      "id": "SM-06",
+      "title": "Трубчатый элемент / Вырезать трубчатым элементом",
+      "classification": "solid",
+      "level": "metadata_found",
+      "evidence": {
+        "user_docs": "pipe_element.html + pipe_param.html + pipe_path.html + pipe_thickness.html + cm_base_pipe_solid.html («Результат: Объединение/Новое тело/Вычитание/Пересечение»)",
+        "sdk_docs": "ipipeelement.html («КOMPAS v24» — новый интерфейс), imodelcontainer_pipeelements.html",
+        "metadata_api7": "Bin\\kAPI7.tlb: IPipeElement (iid 9EE80BE7, 17 членов), IPipeElements, IModelContainer.PipeElements dispid=10033 (объявление в TLB + live-подтверждение диспидов в env-passport.md)",
+        "wrapper_gap": "в prebuilt Libs\\PolynomLib\\Bin\\Client\\Interop.KompasAPI7.dll свойство PipeElements НЕ объявлено (измерено в env-passport A7.0). По правилам ADR-003 §4 это НЕ доказательство отсутствия в продукте: авторитетен установленный kAPI7.tlb. Дозволенный путь — tlbimp-генерация interop из установленного TLB (пример уже есть: scratch/apigen/Interop.KompasAPI7.tlbimp.dll, 2442 типа).",
+        "metadata_api5": "интерфейсов трубчатого элемента в kApi5.tlb не найдено (grep scratch/api5-index.txt); тип объекта o3d_PipeElement=673 присутствует в ksConstants3D.tlb",
+        "runtime": "не проверялось"
+      },
+      "route": "API7: IModelContainer.PipeElements.Add() → IPipeElement; вариант создания через API5 NewEntity(o3d_PipeElement) + TransferInterface — не доказан (OQ-A7)",
+      "mcp_support": "none",
+      "next_step": "проба A7: труба Ø10 по прямолинейной траектории 100 мм в новое тело, эталон V=π·25·100; режимы Диаметр/Диаметр2/Толщина",
+      "operations": [
+        {
+          "id": "SM-06.element",
+          "name": "Трубчатый элемент (родной)",
+          "level": "metadata_found",
+          "source_user_docs": "cm_base_pipe_solid.html",
+          "source_sdk": "ipipeelement.html",
+          "api5": {"found_in": "нет интерфейса в Bin\\kApi5.tlb; тип o3d_PipeElement=673 в ksConstants3D.tlb", "interfaces": []},
+          "api7": {"found_in": "Bin\\kAPI7.tlb", "interfaces": ["IPipeElement", "IPipeElements"], "container_property": "IModelContainer.PipeElements"},
+          "parameters": [
+            {"name": "Trajectory", "type": "SAFEARRAY кривых", "units": "—", "notes": "пространственная кривая (или сегмент), линия эскиза, ребро, цепочка в любом сочетании; замкнутая/разомкнутая; «Выбирать части кривых», «Выбирать касательные объекты» (pipe_path.html)"},
+            {"name": "OperationResult", "type": "enum ksOperationResultEnum", "enum": {"ksOperationUnion": 0, "ksOperationNewBody": 1, "ksOperationCut": 2, "ksOperationIntersect": 3}, "notes": "соответствует двум UI-командам (элемент/вырезать)"},
+            {"name": "BuildingType", "type": "enum ksPipeBuildingTypeEnum", "enum": {"ksPipeWithTwoDiameters": 0, "ksPipeWithWallThickness": 1}, "units": "—"},
+            {"name": "Diameter / Diameter2", "type": "double", "units": "мм (ожидаемо; проверить как Ø отверстия в API7-пробе)"},
+            {"name": "DiameterBaseObject", "type": "IModelObject", "units": "—", "notes": "«Диаметр по объекту» (cm_base_pipe_solid.html)"},
+            {"name": "WallDirection", "type": "enum ksPipeWallDirectionEnum", "enum": {"ksPipeWallInside": 0, "ksPipeWallOutside": 1}},
+            {"name": "WallThickness", "type": "double", "units": "мм"},
+            {"name": "GetPathLength(Unit)", "type": "double", "units": "ST_MIX_*"}
+          ],
+          "modes": [
+            {"id": "SM-06.element.mode_two_diameters", "name": "два диаметра (труба)", "level": "metadata_found", "enum": "ksPipeWithTwoDiameters=0"},
+            {"id": "SM-06.element.mode_diameter_wall", "name": "диаметр + толщина стенки", "level": "metadata_found", "enum": "ksPipeWithWallThickness=1"},
+            {"id": "SM-06.element.mode_wall_in_out", "name": "стенка внутрь/наружу", "level": "metadata_found", "enum": "ksPipeWallInside/Outside"},
+            {"id": "SM-06.element.mode_diameter_by_object", "name": "диаметр по объекту", "level": "metadata_found", "field": "DiameterBaseObject"},
+            {"id": "SM-06.element.mode_cut", "name": "вырезать трубчатым элементом (result=Cut)", "level": "metadata_found", "enum": "ksOperationCut=2"},
+            {"id": "SM-06.element.mode_intersect", "name": "пересечение (result=Intersect)", "level": "documented", "doc": "cm_base_pipe_solid.html перечисляет; применимость к трубе не проверялась"},
+            {"id": "SM-06.element.mode_closed_path", "name": "замкнутая траектория", "level": "documented", "doc": "pipe_path.html; API-флаг замыкания отдельно не объявлен (входит в probe-чеклист)"}
+          ],
+          "contexts": {"single_body": "да (NewBody)", "multibody": "Union/Cut — каталог UI «Область применения: Тела/Компоненты/…»; метаданные IPipeElement области применения не объявляют (OQ-A8)"},
+          "lifecycle": {"create": "маршрут идентифицирован (API7)", "verified_actions": []},
+          "composition_vs_native": "sweep круга по траектории (IEvolution) НЕ закрывает семейство: нет родного признака трубы, режимов диаметра по объекту/двух диаметров и редактируемости (требование docs/05 §5 SM-06). Любая композиция маркируется alternative_of=SM-06.element",
+          "mcp_support": "none",
+          "next_step": "OQ-A7: подтверждение работоспособности PipeElements.Add на живом объекте (TLB-объявление ≠ гарантированный отклик; окончательное слово — IDispatch-проба)"
+        }
+      ]
+    },
+    {
+      "id": "SM-10",
+      "title": "Полное скругление",
+      "classification": "solid",
+      "level": "metadata_found",
+      "evidence": {
+        "user_docs": "cm_3d_full_fillet.html (три группы граней: Боковые грани 1/2, Центральные; авто-распределение по смежности; «По касательным граням»; все грани одного тела или сшитой поверхности)",
+        "sdk_docs": "imodelcontainer_fullfillets.html",
+        "metadata_api7": "kAPI7.tlb: IFullFillet (iid 7FEA11B5: Side1Faces, Side2Faces, CenterFaces, Tangent), IFullFillets; IModelContainer.FullFillets",
+        "metadata_api5": "ksFullFilletDefinition в kApi5.tlb НЕ найден; тип o3d_FullFillet=618 в ksConstants3D.tlb",
+        "runtime": "не проверялось"
+      },
+      "route": "API7: IModelContainer.FullFillets.Add() (маршрут API5 не идентифицирован — OQ-A9)",
+      "mcp_support": "none",
+      "next_step": "проба: U-канал из трёх граней, контроль исчезновения центральной грани и радиусной поверхности; редактирование опор → перечитать и перестроить (требование docs/05 SM-10)",
+      "operations": [
+        {
+          "id": "SM-10.full_fillet",
+          "name": "Полное скругление",
+          "level": "metadata_found",
+          "source_user_docs": "cm_3d_full_fillet.html",
+          "source_sdk": "imodelcontainer_fullfillets.html",
+          "api5": {"found_in": "Bin\\kApi5.tlb", "interfaces": [], "gap": "определение отсутствует; NewEntity(o3d_FullFillet)+GetDefinition не проверялся (OQ-A9)"},
+          "api7": {"found_in": "Bin\\kAPI7.tlb", "interfaces": ["IFullFillet", "IFullFillets"]},
+          "parameters": [
+            {"name": "Side1Faces/Side2Faces/CenterFaces", "type": "SAFEARRAY граней (группы)", "units": "—", "notes": "боковые не смежны между собой; центральная смежна каждой боковой (cm_3d_full_fillet.html)"},
+            {"name": "Tangent", "type": "VARIANT_BOOL", "units": "—", "notes": "продолжение по касательным граням"}
+          ],
+          "modes": [
+            {"id": "SM-10.full_fillet.mode_tangent_continue", "name": "по касательным граням", "level": "metadata_found", "field": "IFullFillet.Tangent"},
+            {"id": "SM-10.full_fillet.mode_face_sets", "name": "совокупности граней в каждой группе", "level": "documented", "doc": "cm_3d_full_fillet.html («совокупности граней»); множественность в SAFEARRAY допустима по сигнатуре, поведение не проверялось"},
+            {"id": "SM-10.full_fillet.mode_recheck_after_edit", "name": "проверка результата после правки опор", "level": "documented", "doc": "требование docs/05 §5 SM-10; опирается на lifecycle-пробу"}
+          ],
+          "contexts": {"single_body": "да (грани одного тела/сшитой поверхности)", "multibody": "не заявлено в справке", "assembly_component": "не исследовано", "configuration": "не исследовано"},
+          "lifecycle": {"create": "маршрут идентифицирован (API7)", "verified_actions": []},
+          "composition_vs_native": "обычное скругление с большим радиусом неэквивалентно (строит поверхность по трём граням, центральная исчезает) — родной признак обязателен",
+          "mcp_support": "none",
+          "next_step": "OQ-A9: существует ли API5-маршрут (иначе семейство становится API7-only, как SM-06/SM-15/SM-16/SM-17)"
+        }
+      ]
+    },
+    {
+      "id": "SM-11",
+      "title": "Фаски",
+      "classification": "solid",
+      "level": "metadata_found",
+      "evidence": {
+        "user_docs": "cm_make_chamfer.html (По стороне и углу / По двум сторонам, Длина 1/2, Угол, Сменить направление, По касательным ребрам (порог 8,1°), «Допуск» на параметры); angle_shape.html (Обработка углов: Срезать/Не срезать); stop_chamfer_filets.html (остановки: В % от длины кривой / По длине сегмента / По центральному углу дуги; вершина/точка/плоскость; усечение по объекту)",
+        "sdk_docs": "imodelcontainer_chamfers.html",
+        "metadata_api5": "kApi5.tlb: ksChamferDefinition{Get/SetChamferParam(transfer,d1,d2), tangent, array()}; o3d_chamfer=33",
+        "metadata_api7": "kAPI7.tlb: IChamfer (iid 59C6927B, 30 членов) — BuildingType, BaseObjects, Distance1/2, Angle, Direction, Tangent, StopChamfer{On,OffsetMode,Offset,CutObject,CutByObject,CutPointIndex,Direction}×(First/Second), CornerForm; IModelContainer.Chamfers",
+        "runtime": "не проверялось"
+      },
+      "route": "API5 NewEntity(o3d_chamfer) — только режим двух расстояний и без точек останова; полный режим — API7 IChamfers.Add",
+      "mcp_support": "none",
+      "next_step": "проба: фаска 2×2 мм на ребре куба (V-дельта аналитическая), затем угол-режим и точка останова в %",
+      "operations": [
+        {
+          "id": "SM-11.chamfer",
+          "name": "Фаска",
+          "level": "metadata_found",
+          "source_user_docs": "cm_make_chamfer.html",
+          "source_sdk": "imodelcontainer_chamfers.html",
+          "api5": {"found_in": "Bin\\kApi5.tlb", "interfaces": ["ksChamferDefinition"], "members": ["SetChamferParam(transfer:bool, distance1:double, distance2:double)", "tangent", "array()"], "note": "члена «угол» и точек останова в API5-определении нет (расхождение D4)"},
+          "api7": {"found_in": "Bin\\kAPI7.tlb", "interfaces": ["IChamfer", "IChamfers"]},
+          "parameters": [
+            {"name": "BaseObjects", "type": "SAFEARRAY рёбер и граней", "units": "—", "notes": "«Массив ребер и граней, на которых строится фаска» (TLB); для гладко-сопряжённых рёбер команда не выполняется (UI)"},
+            {"name": "BuildingType", "type": "enum ksChamferBuildingTypeEnum", "enum": {"ksChamferSideAngle": 0, "ksChamferTwoSides": 1}, "units": "—"},
+            {"name": "Distance1/Distance2", "type": "double", "units": "мм (проверить пробой)"},
+            {"name": "Angle", "type": "double", "units": "градусы (предположение; конвенцию подтвердить пробой)"},
+            {"name": "Direction", "type": "VARIANT_BOOL", "notes": "TRUE — первое направление / FALSE — второе (TLB)"},
+            {"name": "StopChamferOffsetMode", "type": "enum (для скругления в ksConstants3D.tlb объявлен ksFilletOffsetModeEnum{ByPersent,ByLength,ByAngle}; собственного chamfer-перечисления не найдено — вероятно общий)", "units": "зависит от способа: % / мм / градусы (UI stop_chamfer_filets.html)", "status": "OQ-A10"},
+            {"name": "CornerForm", "type": "enum ksCornerFormEnum", "enum": {"ksCornerFormUnknown(не срезать)": 0, "ksCornerFormUniform(срезать)": 2}, "units": "—"}
+          ],
+          "modes": [
+            {"id": "SM-11.chamfer.mode_two_distances", "name": "по двум сторонам", "level": "metadata_found", "enum": "ksChamferTwoSides=1", "api5": true},
+            {"id": "SM-11.chamfer.mode_distance_angle", "name": "по стороне и углу", "level": "metadata_found", "enum": "ksChamferSideAngle=0", "api5": false, "note": "только API7 (Angle есть в IChamfer, в API5-определении нет)"},
+            {"id": "SM-11.chamfer.mode_direction", "name": "смена направления (первая/вторая сторона)", "level": "metadata_found", "field": "IChamfer.Direction"},
+            {"id": "SM-11.chamfer.mode_tangent_chain", "name": "по касательным рёбрам", "level": "metadata_found", "field": "Tangent (API5 tangent, API7 Tangent)", "doc": "порог продолжения 8,1° (cm_make_chamfer.html)"},
+            {"id": "SM-11.chamfer.mode_stop_points", "name": "точки останова 1-й и 2-й цепочки", "level": "metadata_found", "field": "StopChamfer* (API7)", "doc": "stop_chamfer_filets.html"},
+            {"id": "SM-11.chamfer.mode_stop_offset_pct", "name": "остановка: в % от длины кривой", "level": "documented", "doc": "stop_chamfer_filets.html; маппинг в StopChamferOffsetMode подтвердить пробой (OQ-A10)"},
+            {"id": "SM-11.chamfer.mode_stop_offset_len", "name": "остановка: по длине сегмента", "level": "documented", "doc": "то же"},
+            {"id": "SM-11.chamfer.mode_stop_offset_angle", "name": "остановка: по центральному углу дуги (окружность/эллипс)", "level": "documented", "doc": "то же"},
+            {"id": "SM-11.chamfer.mode_stop_cut_object", "name": "усечение по секущему объекту (плоскость)", "level": "metadata_found", "field": "StopChamferCutObject + StopChamferCutByObject + StopChamferCutPointIndex + StopChamferDirection"},
+            {"id": "SM-11.chamfer.mode_corner_form", "name": "обработка углов стыковки (срезать/не срезать)", "level": "metadata_found", "field": "CornerForm", "doc": "angle_shape.html"},
+            {"id": "SM-11.chamfer.mode_group_apply", "name": "групповое применение (несколько рёбер одним признаком)", "level": "metadata_found", "field": "BaseObjects массив / API5 array().Add"}
+          ],
+          "contexts": {"single_body": "да", "multibody": "через выбор рёбер конкретного тела (ссылки topology-ref)", "assembly_component": "не исследовано", "configuration": "не исследовано"},
+          "lifecycle": {"create": "да, оба API", "read/edit": "IChamfer Update/prop-get + API5 Get/SetChamferParam; полное чтение см. матрицу", "verified_actions": []},
+          "composition_vs_native": "н/д",
+          "mcp_support": "none",
+          "next_step": "калибровка единиц Distance/Angle пробой"
+        }
+      ]
+    },
+    {
+      "id": "SM-12",
+      "title": "Уклоны (от основания и от базовой линии)",
+      "classification": "solid",
+      "level": "metadata_found",
+      "evidence": {
+        "user_docs": "cm_make_draft.html («Уклон от основания»: Основание, Грани, Угол, Сменить направление) + cm_draft_from_edges.html («Уклон от базовой линии»: Базовая линия, Базовое направление/Построить вектор, Сторона, Угол, Сменить направление) + fy1465242.html/fy1191643.html",
+        "sdk_docs": "imodelcontainer_inclines.html, imodelcontainer_draftsfromedges.html, idraftfromedges.html (v22)",
+        "metadata_api5": "kApi5.tlb: ksInclineDefinition{angle, direction, FaceArray, Get/SetPlane}; o3d_incline=42 «Операция 'уклон'»; для «от базовой линии» интерфейсов в kApi5.tlb нет",
+        "metadata_api7": "kAPI7.tlb: IIncline/IInclines; IDraftFromEdges (iid 485C8D37: DirectionObject, Vector3D, BaseLine, SideFace, Angle, Reverse)/IDraftsFromEdges; o3d_DraftFromEdges=644",
+        "runtime": "не проверялось"
+      },
+      "route": "от основания — API5 NewEntity(42) или API7 Inclines.Add; от базовой линии — API7 DraftsFromEdges.Add (API5-маршрут неизвестен, OQ-A9 расширенно)",
+      "mcp_support": "none",
+      "next_step": "проба: уклон боковой грани бруска 10° — контрольный объём трапеции; отдельная проба draft-from-edge на ребре-базе",
+      "operations": [
+        {
+          "id": "SM-12.incline",
+          "name": "Уклон от основания",
+          "level": "metadata_found",
+          "source_user_docs": "cm_make_draft.html",
+          "source_sdk": "imodelcontainer_inclines.html",
+          "api5": {"found_in": "Bin\\kApi5.tlb", "interfaces": ["ksInclineDefinition"], "object_type": "o3d_incline=42"},
+          "api7": {"found_in": "Bin\\kAPI7.tlb", "interfaces": ["IIncline", "IInclines"], "members": ["Faces", "Angle", "Direction", "Plane(Основание уклона)"]},
+          "parameters": [
+            {"name": "Faces", "type": "SAFEARRAY граней (группы)", "units": "—"},
+            {"name": "Angle", "type": "double", "units": "градусы (предположение, подтвердить)"},
+            {"name": "Direction", "type": "VARIANT_BOOL", "notes": "направление уклона/смена"},
+            {"name": "Plane", "type": "IModelObject (плоскость или грань как «Основание»)", "units": "—"}
+          ],
+          "modes": [
+            {"id": "SM-12.incline.mode_faces_group", "name": "группы уклоняемых граней", "level": "metadata_found", "field": "Faces/SetFaces-массив"},
+            {"id": "SM-12.incline.mode_base_face_or_plane", "name": "основание — плоскость или грань", "level": "documented", "doc": "cm_make_draft.html «Основание»; в TLB поле называется Plane — совместимость грани как основания проверяется (OQ-A11)"},
+            {"id": "SM-12.incline.mode_direction", "name": "смена направления (стороны)", "level": "metadata_found", "field": "Direction"}
+          ],
+          "contexts": {"single_body": "да", "multibody": "через выбор граней тела", "assembly_component": "не исследовано", "configuration": "не исследовано"},
+          "lifecycle": {"create": "да оба маршрута", "verified_actions": []},
+          "composition_vs_native": "уклон внутри выдавливания (draft angle у SM-02) — другое семейство с другой ассоциативностью; не смешивать",
+          "mcp_support": "none",
+          "next_step": "проба единиц Angle"
+        },
+        {
+          "id": "SM-12.draft_from_edges",
+          "name": "Уклон от базовой линии",
+          "level": "metadata_found",
+          "source_user_docs": "cm_draft_from_edges.html",
+          "source_sdk": "idraftfromedges.html (v22)",
+          "api5": {"found_in": "Bin\\kApi5.tlb", "interfaces": [], "object_type": "o3d_DraftFromEdges=644 (тип объявлен, определения нет)", "gap": "OQ-A9"},
+          "api7": {"found_in": "Bin\\kAPI7.tlb", "interfaces": ["IDraftFromEdges", "IDraftsFromEdges"]},
+          "parameters": [
+            {"name": "BaseLine", "type": "IModelObject (ребро/кривая)", "units": "—"},
+            {"name": "DirectionObject | Vector3D", "type": "IModelObject | параметры вектора", "units": "направление"},
+            {"name": "SideFace", "type": "IModelObject (грани)", "units": "—"},
+            {"name": "Angle", "type": "double", "units": "градусы (подтвердить)"},
+            {"name": "Reverse", "type": "VARIANT_BOOL", "units": "—"}
+          ],
+          "modes": [
+            {"id": "SM-12.draft_from_edges.mode_dir_by_object", "name": "базовое направление по объекту", "level": "metadata_found", "field": "DirectionObject"},
+            {"id": "SM-12.draft_from_edges.mode_dir_by_vector", "name": "базовое направление вектором («Построить вектор»)", "level": "metadata_found", "field": "Vector3D"},
+            {"id": "SM-12.draft_from_edges.mode_side", "name": "сторона уклона", "level": "metadata_found", "field": "SideFace + Reverse"}
+          ],
+          "contexts": {"single_body": "да (грань-сторона)", "multibody": "не исследовано", "assembly_component": "не исследовано", "configuration": "не исследовано"},
+          "lifecycle": {"create": "маршрут идентифицирован (API7 v22)", "verified_actions": []},
+          "composition_vs_native": "docs/05 SM-12 требует держать отдельно от «уклона от основания» — отдельные признаки и коллекции",
+          "mcp_support": "none",
+          "next_step": "проба: наклон стенки по базовому ребру + эталонный объём"
+        }
+      ]
+    },
+    {
+      "id": "SM-13",
+      "title": "Оболочка",
+      "classification": "solid",
+      "level": "metadata_found",
+      "evidence": {
+        "user_docs": "cm_make_shell.html (Удаляемые грани; Выбирать касательные грани; Направление: Наружу/Внутрь; Толщина; Переменная толщина) + fy1436893.html (Задание индивидуальной толщины для грани: таблица Грани/Толщина, наборы «Произвольные толщины», Набор 1..N)",
+        "sdk_docs": "imodelcontainer_shells.html",
+        "metadata_api5": "kApi5.tlb: ksShellDefinition{thickness, thinType(bool «Направление оболочки»), FaceArray}; o3d_shellOperation=43",
+        "metadata_api7": "kAPI7.tlb: IShell{DeletedFaces(SAFEARRAY), ThinType(long), Thickness(double), SetFaces(Faces, TangentFaces)}; IModelContainer.Shells",
+        "runtime": "не проверялось"
+      },
+      "route": "API5 NewEntity(43) или API7 Shells.Add",
+      "mcp_support": "none",
+      "next_step": "проба по эталону SOL-SHELL: короб 100×80×10 без верхней грани, t=2 → V=V_внешн−V_внутр; отдельно направление Наружу/Внутрь",
+      "operations": [
+        {
+          "id": "SM-13.shell",
+          "name": "Оболочка (тонкостенный элемент)",
+          "level": "metadata_found",
+          "source_user_docs": "cm_make_shell.html",
+          "source_sdk": "imodelcontainer_shells.html",
+          "api5": {"found_in": "Bin\\kApi5.tlb", "interfaces": ["ksShellDefinition"], "object_type": "o3d_shellOperation=43"},
+          "api7": {"found_in": "Bin\\kAPI7.tlb", "interfaces": ["IShell", "IShells"]},
+          "parameters": [
+            {"name": "DeletedFaces / SetFaces(Faces,TangentFaces)", "type": "SAFEARRAY граней + флаг касательных", "units": "—", "notes": "пустой список = замкнутая оболочка без удалённых граней (проверить)"},
+            {"name": "Thickness", "type": "double", "units": "мм"},
+            {"name": "ThinType (API7 long) / thinType (API5 bool)", "type": "enum", "units": "—", "notes": "Направление формирования стенки Наружу/Внутрь; точные значения перечисления в installed constants не локализованы (OQ-A12)"}
+          ],
+          "modes": [
+            {"id": "SM-13.shell.mode_remove_faces", "name": "удаление граней (открытая оболочка)", "level": "metadata_found", "field": "DeletedFaces"},
+            {"id": "SM-13.shell.mode_tangent_faces", "name": "выбор касательных граней группой", "level": "metadata_found", "field": "IShell.SetFaces(Faces, TangentFaces)"},
+            {"id": "SM-13.shell.mode_direction", "name": "направление наружу/внутрь", "level": "metadata_found", "field": "ThinType/thinType; значения — OQ-A12"},
+            {"id": "SM-13.shell.mode_variable_thickness", "name": "переменная толщина по граням и наборам (Произвольные толщины, Набор 1..N)", "level": "metadata_found", "doc": "fy1436893.html", "metadata": "kAPI7.tlb: IMultiThicknessGroupsManager (iid 4FB26621): MultiThick, AddMultiThicknessGroup, MultiThicknessGroupsCount/Objects/Thickness(Type,Index), Delete/Destroy/Exclude/Clear + ksMultiThicknessGroupTypeEnum{ksArbitraryThicknesses=0, ksSetsThicknesses=1} — точно соответствует UI. Ни IShell, ни ksShellDefinition толщин не объявляют: как получить экземпляр менеджера (QI от объекта shell? свойство_part?) — OQ-A13"}
+          ],
+          "contexts": {"single_body": "да", "multibody": "грани принадлежат одному телу; многотельный контекст не исследован", "assembly_component": "не исследовано", "configuration": "не исследовано"},
+          "lifecycle": {"create": "да оба маршрута", "verified_actions": []},
+          "composition_vs_native": "вырезание внутреннего параллелепипеда — булева композиция, не оболочка: нет редактируемого признака оболочки и поведения на сложных сопряжениях (docs/05 SM-13)",
+          "mcp_support": "none",
+          "next_step": "OQ-A12/A13"
+        }
+      ]
+    },
+    {
+      "id": "SM-14",
+      "title": "Рёбра жёсткости",
+      "classification": "solid",
+      "level": "metadata_found",
+      "evidence": {
+        "user_docs": "738_88_4_rebro_zhestkosti.html; cm_make_rib.html (эскиз разомкнутый одной цепочкой; продолжение до ближайшей грани; Положение: параллельно/перпендикулярно плоскости эскиза; Толщина + Симметричная толщина; Уклон граней; Направление формирования + Сменить направление); 740_88_4_3_polozhenie_rebra.html; fy1142545.html",
+        "sdk_docs": "imodelcontainer_ribs.html",
+        "metadata_api5": "kApi5.tlb: ksRibDefinition{index(«Сегмент задающий направление уклона»), angle, side, Get/SetSketch, Get/SetThinParam(thinType,normalThickness,reverseThickness)}; o3d_ribOperation=44 (helpstring ошибочно «Параметры операции уклон» — расхождение D6)",
+        "metadata_api7": "kAPI7.tlb: IRib{Sketch, Side(ksRibSideEnum), Angle, SegmentIndex, Body}/IRibs; ksRibSideEnum: Left=0 Right=1 Up=2 Down=3 (с описаниями направлений в TLB)",
+        "runtime": "не проверялось"
+      },
+      "route": "API5 NewEntity(44) или API7 Ribs.Add",
+      "mcp_support": "none",
+      "next_step": "проба: ребро треугольного профиля на стенке, V-эталон; проверить сочетания Side и симметричной толщины",
+      "operations": [
+        {
+          "id": "SM-14.rib",
+          "name": "Ребро жесткости",
+          "level": "metadata_found",
+          "source_user_docs": "cm_make_rib.html",
+          "source_sdk": "imodelcontainer_ribs.html",
+          "api5": {"found_in": "Bin\\kApi5.tlb", "interfaces": ["ksRibDefinition"], "object_type": "o3d_ribOperation=44"},
+          "api7": {"found_in": "Bin\\kAPI7.tlb", "interfaces": ["IRib", "IRibs"]},
+          "parameters": [
+            {"name": "Sketch", "type": "ISketch/ksSketch", "units": "мм", "notes": "требование UI: разомкнутая цепочка; может не доходить до тела — достраивается до ближайшей грани"},
+            {"name": "Side", "type": "enum ksRibSideEnum", "enum": {"ksRibSideLeft": 0, "ksRibSideRight": 1, "ksRibSideUp": 2, "ksRibSideDown": 3}},
+            {"name": "Angle", "type": "double", "units": "градусы (уклон граней ребра; подтвердить)"},
+            {"name": "SegmentIndex/index", "type": "int", "units": "—", "notes": "направляющий сегмент для уклона"},
+            {"name": "Body", "type": "IModelObject (API7) / отсутствие явного поля в API5 (целевое тело?)", "units": "—", "notes": "OQ-A14"},
+            {"name": "ThinParam (API5)", "type": "(thinType, normalThickness, reverseThickness)", "units": "мм", "notes": "соответствует «Толщина»/«Симметричная толщина» UI"}
+          ],
+          "modes": [
+            {"id": "SM-14.rib.mode_side_positions", "name": "4 положения ребра (влево/вправо/вдоль нормали/против)", "level": "metadata_found", "enum": "ksRibSideEnum"},
+            {"id": "SM-14.rib.mode_symmetric_thickness", "name": "симметричная толщина (I=суммарно / 0=на сторону)", "level": "documented", "doc": "cm_make_rib.html; маппинг в thinType проверить (OQ-A14)"},
+            {"id": "SM-14.rib.mode_face_draft", "name": "уклон граней ребра (Angle + направляющий сегмент)", "level": "metadata_found", "field": "Angle+SegmentIndex"},
+            {"id": "SM-14.rib.mode_extend_to_face", "name": "достройка контура до ближайшей грани", "level": "documented", "doc": "cm_make_rib.html; автоматическое поведение, параметра нет"}
+          ],
+          "contexts": {"single_body": "да (Body в API7; в API5 цель не выражена явно)", "multibody": "OQ-A14", "assembly_component": "не исследовано", "configuration": "не исследовано"},
+          "lifecycle": {"create": "да оба маршрута", "verified_actions": []},
+          "composition_vs_native": "выдавливание разомкнутого контура «на себя» не даёт уклон граней/симметричную толщину/достройку до грани",
+          "mcp_support": "none",
+          "next_step": "проба Side×thinType матрицей"
+        }
+      ]
+    },
+    {
+      "id": "SM-15",
+      "title": "Булевы операции",
+      "classification": "solid",
+      "level": "metadata_found",
+      "evidence": {
+        "user_docs": "730_87_5_buleva_operacija.html + cm_aggregate_oper.html (Объединение/Вычитание/Пересечение; Базовый объект; Модифицирующие объекты; Сохранить копию базового объекта; Сохранить копию модифицирующих объектов)",
+        "sdk_docs": "imodelcontainer_booleans.html; iboolean.html (v18)",
+        "metadata_api5": "kApi5.tlb: ksAggregateDefinition{BooleanType «Тип операции над телами», BodyCollection «Получить массив тел»}; o3d_aggregate=69 «Булева операция» (ksConstants3D.tlb). Это УТОЧНЯЕТ предварительную запись coverage/solid-v24/catalog.json SM-15 (там API5-маршрут был не подтверждён)",
+        "metadata_api7": "kAPI7.tlb: IBoolean (iid 1FE29BDF: BooleanType, Bodies, BaseObject, SaveCopyBaseObject, ModifyObjects, SaveCopyModifyObjects)/IBooleans; IModelContainer.Booleans",
+        "runtime": "не проверялось"
+      },
+      "route": "API7 Booleans.Add() или API5 NewEntity(o3d_aggregate)+GetDefinition(ksAggregateDefinition)",
+      "mcp_support": "none — только композиционные замены (см. composition)",
+      "next_step": "проба по эталону SOL-BOOLEAN (два куба 10 со сдвигом 5: ∩=500, ∪=1500, разность=500 мм³); отдельно — сохранение инструментов и несвязные результаты",
+      "operations": [
+        {
+          "id": "SM-15.union",
+          "name": "Объединение тел",
+          "level": "metadata_found",
+          "source_user_docs": "cm_aggregate_oper.html",
+          "source_sdk": "iboolean.html",
+          "api5": {"found_in": "Bin\\kApi5.tlb", "interfaces": ["ksAggregateDefinition"], "object_type": "o3d_aggregate=69"},
+          "api7": {"found_in": "Bin\\kAPI7.tlb", "interfaces": ["IBoolean", "IBooleans"]},
+          "parameters": [
+            {"name": "BooleanType", "type": "enum ksOperationResultEnum", "enum": {"union": "ksOperationUnion=0", "newBody": "ksOperationNewBody=1 (UI-назначение уточнить: OQ-A15)", "cut": "ksOperationCut=2", "intersect": "ksOperationIntersect=3"}},
+            {"name": "BaseObject / Bodies (API5 BodyCollection)", "type": "IKompasAPIObject / SAFEARRAY", "units": "—"},
+            {"name": "ModifyObjects", "type": "SAFEARRAY тел-инструментов", "units": "—", "notes": "несколько инструментов поддерживаются сигнатурой"},
+            {"name": "SaveCopyBaseObject / SaveCopyModifyObjects", "type": "VARIANT_BOOL", "units": "—", "notes": "сохранение инструментов и базового тела"}
+          ],
+          "modes": [
+            {"id": "SM-15.union.mode_save_tools", "name": "сохранить копии модифицирующих объектов", "level": "metadata_found", "field": "SaveCopyModifyObjects"},
+            {"id": "SM-15.union.mode_save_base_copy", "name": "сохранить копию базового объекта", "level": "metadata_found", "field": "SaveCopyBaseObject"},
+            {"id": "SM-15.union.mode_multi_tools", "name": "несколько тел-инструментов одним признаком", "level": "metadata_found", "field": "ModifyObjects SAFEARRAY"}
+          ],
+          "contexts": {"single_body": "да", "multibody": "да — основное применение", "assembly_component": "не применимо (объединение компонентов = SM-28, отдельные o3d_UnionComponents=64/IUnionsComponents)", "configuration": "не исследовано"},
+          "lifecycle": {"create": "да оба маршрута", "verified_actions": []},
+          "composition_vs_native": "boss/cut-выдавливание частично режет материал, но не является булевым признаком: нет базового/модифицирующего выбора, сохранения инструментов, результата «новое тело». Композиция помечается alternative_of",
+          "mcp_support": "none",
+          "next_step": "проба эталонов SOL-BOOLEAN"
+        },
+        {
+          "id": "SM-15.subtract",
+          "name": "Вычитание тел",
+          "level": "metadata_found",
+          "source_user_docs": "cm_aggregate_oper.html",
+          "api5": {"interfaces": ["ksAggregateDefinition"], "enum_value": "ksOperationCut=2"},
+          "api7": {"interfaces": ["IBoolean"], "enum_value": "ksOperationCut=2"},
+          "modes": [],
+          "mcp_support": "none",
+          "next_step": "вместе с SM-15.union"
+        },
+        {
+          "id": "SM-15.intersect",
+          "name": "Пересечение тел",
+          "level": "metadata_found",
+          "source_user_docs": "cm_aggregate_oper.html",
+          "api5": {"interfaces": ["ksAggregateDefinition"], "enum_value": "ksOperationIntersect=3"},
+          "api7": {"interfaces": ["IBoolean"], "enum_value": "ksOperationIntersect=3"},
+          "modes": [],
+          "mcp_support": "none",
+          "next_step": "вместе с SM-15.union; уточнить смысл ksOperationNewBody=1 (OQ-A15)"
+        }
+      ]
+    },
+    {
+      "id": "SM-16",
+      "title": "Сечения и разрезание",
+      "classification": "solid",
+      "level": "metadata_found",
+      "evidence": {
+        "user_docs": "748_glava89_otsechenie_chasti_d.html (команда «Сечение»: секущие объекты — плоскость/поверхность/грань/набор граней/тело/эскиз; Способ Контуром/Плоскостью; Сменить направление; Область применения; результат по таблице rezultat_oper_v_zavisimosti_ot_s_o.html) + fy1438316.html/cm_3d_split_solid.html (команда «Разрезание тела»: Секущие объекты, сохранение частей «Изменение набора тел», Область применения) + cm_choice_of_bodies.html",
+        "sdk_docs": "imodelcontainer_cuts.html, imodelcontainer_splitsolids.html",
+        "metadata_api5": "kApi5.tlb: ksCutByPlaneDefinition («сечение поверхностью», o3d_cutByPlane=50) и ksCutBySketchDefinition («сечение эскизом», o3d_cutBySketch=51); обе — direction/chooseType/ChooseBodies/ChooseParts",
+        "metadata_api7": "kAPI7.tlb: ICut/ICuts (CutObject или CutObjects, BuildingType ksCutBuildingTypeEnum{Контуром=0, Плоскостью=1}, Direction, ChooseType/ChoosePartsType/ChooseBodies/ChooseParts, InitCutObjects(TangentObjects)); ISplitSolid/ISplitSolids (только CutObjects) v20, o3d_SplitSolid=633",
+        "runtime": "не проверялось"
+      },
+      "route": "Сечение: API5 (50/51) или API7 Cuts.Add; Разрезание: API7 SplitSolids.Add (API5-маршрута нет)",
+      "mcp_support": "none",
+      "next_step": "проба по эталону SOL-SPLIT: сумма объёмов сохранённых частей = исходный объём; отдельно — «Сечение» с удалением стороны",
+      "operations": [
+        {
+          "id": "SM-16.cut_by_plane",
+          "name": "Сечение плоскостью/поверхностью (отсечение части модели)",
+          "level": "metadata_found",
+          "source_user_docs": "cm_make_cut_oper.html",
+          "api5": {"found_in": "Bin\\kApi5.tlb", "interfaces": ["ksCutByPlaneDefinition"], "object_type": "o3d_cutByPlane=50 (helpstring TLB: «сечение ПОВЕРХНОСТЬЮ» — расхождение D7) ", "members": ["Get/SetPlane", "direction", "chooseType", "ChooseBodies", "ChooseParts"]},
+          "api7": {"found_in": "Bin\\kAPI7.tlb", "interfaces": ["ICut", "ICuts"], "members": ["CutObject/CutObjects (эскиз или поверхность)", "BuildingType", "Direction", "ChooseType", "ChoosePartsType", "InitCutObjects(…ТangentObjects)"]},
+          "parameters": [
+            {"name": "секущий объект", "type": "плоскость (координатная/вспомогательная), поверхность, грань/набор граней, тело, эскиз", "units": "—", "notes": "UI допускает тело и поверхность; API5-пара плоскость/эскиз уже — покрытие полным не является (OQ-A17)"},
+            {"name": "Direction", "type": "bool", "notes": "сторона удаления"},
+            {"name": "ChooseType/ChooseBodies/ChooseParts/ChoosePartsType", "type": "enums ksChooseType/ksChoosePartsType + массивы объектов", "units": "—"}
+          ],
+          "modes": [
+            {"id": "SM-16.cut_by_plane.mode_side_removed", "name": "удаление части по одну сторону", "level": "metadata_found", "field": "Direction"},
+            {"id": "SM-16.cut_by_plane.mode_tangent_sets", "name": "выбор касательных граней/объектов", "level": "metadata_found", "field": "ICut.InitCutObjects(TangentObjects)", "doc": "cm_make_cut_oper.html «Выбирать касательные грани»"},
+            {"id": "SM-16.cut_by_plane.mode_scope", "name": "область применения (тела/компоненты/оба; авто/все/кроме библиотечных/выбранные)", "level": "metadata_found", "enum": "ksChooseType + ksChoosePartsType", "doc": "cm_make_cut_oper.html, cm_3d_split_solid.html"}
+          ],
+          "contexts": {"single_body": "да", "multibody": "да", "assembly_component": "да (ChooseParts)", "configuration": "не исследовано"},
+          "lifecycle": {"create": "да", "verified_actions": []},
+          "composition_vs_native": "вырезание полупространством через extrude-cut — не родное сечение: нет выбора сторон на сложной геометрии и поведенческой таблицы rezultat_oper…",
+          "mcp_support": "none",
+          "next_step": "OQ-A17"
+        },
+        {
+          "id": "SM-16.cut_by_sketch",
+          "name": "Сечение эскизом (контуром или плоскостью эскиза)",
+          "level": "metadata_found",
+          "source_user_docs": "cm_make_cut_oper.html (Способ: Контуром / Плоскостью; требования: одна цепочка, полное пересечение проекции)",
+          "api5": {"found_in": "Bin\\kApi5.tlb", "interfaces": ["ksCutBySketchDefinition"], "object_type": "o3d_cutBySketch=51"},
+          "api7": {"found_in": "Bin\\kAPI7.tlb", "interfaces": ["ICut"], "field": "BuildingType ksCutByContour=0/ksCutByPlane=1"},
+          "modes": [
+            {"id": "SM-16.cut_by_sketch.mode_contour", "name": "сечение контуром (выдавленная поверхность)", "level": "metadata_found", "enum": "ksCutByContour=0"},
+            {"id": "SM-16.cut_by_sketch.mode_sketch_plane", "name": "сечение плоскостью эскиза", "level": "metadata_found", "enum": "ksCutByPlane=1"}
+          ],
+          "mcp_support": "none",
+          "next_step": "проба обоих способов"
+        },
+        {
+          "id": "SM-16.split",
+          "name": "Разрезать тело (деление на отдельные тела)",
+          "level": "metadata_found",
+          "source_user_docs": "cm_3d_split_solid.html + cm_choice_of_bodies.html (сохраняемые части выбираются диалогом «Изменение набора тел»; исключённые тела скрываются, но остаются в файле)",
+          "api5": {"found_in": "нет определения в kApi5.tlb; тип o3d_SplitSolid=633 в ksConstants3D.tlb"},
+          "api7": {"found_in": "Bin\\kAPI7.tlb", "interfaces": ["ISplitSolid", "ISplitSolids"], "members": ["CutObjects (эскизы или поверхности)"], "version": "SDK: Компас v20"},
+          "modes": [
+            {"id": "SM-16.split.mode_keep_parts", "name": "сохранение/исключение частей из результата", "level": "documented", "doc": "cm_choice_of_bodies.html; API-член для набора сохраняемых тел у ISplitSolid ОТСУТСТВУЕТ (только CutObjects) — путь управления составом не найден (OQ-A18, критичен для всей операции)"}
+          ],
+          "parameters": [{"name": "CutObjects", "type": "SAFEARRAY (эскизы или поверхности)", "units": "—", "notes": "тело/грань как в UI-сечении здесь документацией SDK не описаны"}],
+          "contexts": {"single_body": "да", "multibody": "результат — несколько тел (IModelObject1.MultiBodyParts/BodyParts наблюдаются в kAPI7.tlb)", "assembly_component": "Область применения UI-диалога есть; в ISplitSolid метаданно не отражена (OQ-A18)", "configuration": "не исследовано"},
+          "lifecycle": {"create": "маршрут идентифицирован (API7)", "verified_actions": []},
+          "composition_vs_native": "разрез = булевых двух вычитаний не заменяет: части должны остаться редактируемыми телами в истории",
+          "mcp_support": "none",
+          "next_step": "OQ-A18 проба: как читать/задавать набор сохраняемых тел (через IModelObjects/Excluded свойства parts?)"
+        }
+      ]
+    },
+    {
+      "id": "SM-17",
+      "title": "Преобразование тел (масштабирование, изменение положения/перепозиционирование)",
+      "classification": "solid",
+      "level": "metadata_found",
+      "evidence": {
+        "user_docs": "783_glava88_masshtabirovanie.html + cm_ranging.html (Равномерно / По осям СК; центр: Координаты/Точка привязки/Построить точку; Сохранить копии тел и поверхностей; Скрыть исходные кривые) + 299_32_9_izmen_polozh_tela.html + cm_body_reposition_main.html (Способ: Относительно СК / По объекту; Объекты; Сохранить копии; Скрыть исходные кривые)",
+        "sdk_docs": "imodelcontainer_scalings3d.html, imodelcontainer_bodyrepositions.html",
+        "metadata_api5": "интерфейсов масштабирования/перепозиционирования в kApi5.tlb нет; типы o3d_Scaling3D=531, o3d_BodyReposition=569 в ksConstants3D.tlb",
+        "metadata_api7": "kAPI7.tlb: IScaling3D (iid A37EE5F1, 24 члена)/IScalings3D; IBodyReposition (iid 621E42C8: RepositionBody, RepositionCentre, CopyBoby[sic], Position:ILocalCoordinateSystem, RepositionObjects)/IBodyRepositions; IModelContainer.Scalings3D и .BodyRepositions",
+        "runtime": "не проверялось"
+      },
+      "route": "API7 только (OQ-A9 о применении к переносу/повороту тел)",
+      "mcp_support": "none",
+      "next_step": "пробы по эталонам SOL-SCALE (k=2: V×8, S×4, опорная точка неподвижна) и SOL-MOVE (жёсткое перемещение сохраняет V/S)",
+      "operations": [
+        {
+          "id": "SM-17.scaling",
+          "name": "Масштабирование тела/поверхности",
+          "level": "metadata_found",
+          "source_user_docs": "cm_ranging.html",
+          "api5": {"found_in": "нет интерфейса (kApi5.tlb)", "object_type": "o3d_Scaling3D=531"},
+          "api7": {"found_in": "Bin\\kAPI7.tlb", "interfaces": ["IScaling3D", "IScalings3D"]},
+          "parameters": [
+            {"name": "Shell", "type": "IModelObject (тело или поверхность)", "units": "—"},
+            {"name": "ScalingObjects", "type": "SAFEARRAY", "units": "—", "notes": "множественные объекты масштабирования"},
+            {"name": "ScalingType", "type": "enum ksScalingTypeEnum", "enum": {"ksScalingByCoefficient(Равномерно)": 0, "ksScalingByAxis(По осям СК)": 1}},
+            {"name": "Scale / ScaleX,Y,Z", "type": "double", "units": "безразмерный коэффициент"},
+            {"name": "BasePoint / Get-SetCentrePoint / CentrePointBuildingType / CentrePointParameters", "type": "IModelObject | координаты мм | enum+параметры", "units": "мм", "notes": "три UI-способа задания центра: Координаты / Точка привязки / Построить точку"},
+            {"name": "CopySolids", "type": "VARIANT_BOOL", "notes": "Сохранить копии тел и поверхностей"},
+            {"name": "HideCurves", "type": "VARIANT_BOOL", "notes": "Скрыть исходные кривые"}
+          ],
+          "modes": [
+            {"id": "SM-17.scaling.mode_uniform", "name": "равномерно (коэффициент)", "level": "metadata_found", "enum": "ksScalingByCoefficient=0"},
+            {"id": "SM-17.scaling.mode_axes", "name": "по осям СК (X/Y/Z)", "level": "metadata_found", "enum": "ksScalingByAxis=1"},
+            {"id": "SM-17.scaling.mode_keep_copies", "name": "сохранить копии", "level": "metadata_found", "field": "CopySolids"},
+            {"id": "SM-17.scaling.mode_center_modes", "name": "центр: объект / координаты / постройка точки", "level": "metadata_found", "field": "BasePoint|CentrePoint(+BuildingType)"}
+          ],
+          "contexts": {"single_body": "да", "multibody": "да (ScalingObjects)", "assembly_component": "не исследовано", "configuration": "не исследовано"},
+          "lifecycle": {"create": "маршрут идентифицирован (API7)", "read/edit": "prop-get/set", "verified_actions": []},
+          "composition_vs_native": "«изменить размер» через исходный эскиз — правка истории, а не преобразование готового тела; не эквивалентно",
+          "mcp_support": "none",
+          "next_step": "проба SOL-SCALE"
+        },
+        {
+          "id": "SM-17.reposition",
+          "name": "Изменение положения тела/поверхности (перенос, поворот, перепозиционирование)",
+          "level": "metadata_found",
+          "source_user_docs": "cm_body_reposition_main.html",
+          "api5": {"found_in": "нет интерфейса (kApi5.tlb)", "object_type": "o3d_BodyReposition=569"},
+          "api7": {"found_in": "Bin\\kAPI7.tlb", "interfaces": ["IBodyReposition", "IBodyRepositions"]},
+          "parameters": [
+            {"name": "RepositionBody", "type": "IModelObject (тело или поверхность)", "units": "—"},
+            {"name": "RepositionObjects", "type": "SAFEARRAY (тела, поверхности, кривые, точки)", "units": "—"},
+            {"name": "RepositionCentre", "type": "IModelObject (точка — центр смещения)", "units": "—"},
+            {"name": "Position", "type": "ILocalCoordinateSystem (только propget в TLB!)", "units": "мм/градусы", "notes": "смещение и поворот задаются локальной СК; set-метода нет — способ записи не идентифицирован (OQ-A19)"},
+            {"name": "CopyBoby [sic]", "type": "VARIANT_BOOL", "notes": "Сохранить копии тел и поверхностей"}
+          ],
+          "modes": [
+            {"id": "SM-17.reposition.mode_relative_cs", "name": "относительно системы координат", "level": "documented", "doc": "cm_body_reposition_main.html «Способ: Относительно СК»; в метаданных переключатель не виден — вероятно, форма записи Position (OQ-A19)"},
+            {"id": "SM-17.reposition.mode_by_object", "name": "по объекту (совмещение СК объекта)", "level": "documented", "doc": "«Способ: По объекту» — API-поле не найдено (OQ-A19)"},
+            {"id": "SM-17.reposition.mode_keep_copies", "name": "сохранить копии тел", "level": "metadata_found", "field": "CopyBoby"}
+          ],
+          "contexts": {"single_body": "да", "multibody": "да (RepositionObjects)", "assembly_component": "для компонентов сборки есть отдельный механизм (kscomponentPositioner/o3d_componentPositioner=153) — вне SM-17", "configuration": "не исследовано"},
+          "lifecycle": {"create": "маршрут идентифицирован частично (запись Position не найдена)", "verified_actions": []},
+          "composition_vs_native": "перемещение тел без родного признака ломает историю; docs/05 SM-17 требует опоры и связь с историей",
+          "mcp_support": "none",
+          "next_step": "OQ-A19"
+        }
+      ]
+    }
+  ],
+  "cross_family_findings": {
+    "D1_scope": "Все 11 семейств имеют нативные признаки в установленном kAPI7.tlb (коллекции IModelContainer: Chamfers, Inclines, Ribs, Shells, Booleans, Cuts, Lofts, Evolutions, FullFillets, DraftsFromEdges, SplitSolids, Scalings3D, BodyRepositions, PipeElements — 14 коллекций этого среза).",
+    "D2_api5_gaps": "В kApi5.tlb НЕТ определений: FullFillet, DraftFromEdges, Boolean (есть Aggregate), SplitSolid, Scaling3D, BodyReposition, PipeElement. Для них SM-10/12b/16.split/17 — API7-only маршруты, кроме SM-15 где найден ksAggregateDefinition.",
+    "D3_api5_vs_api7_features": "Loft: couplings/building-type/axis — только API7; thin wall/flipVertex/autoPath — только API5. Evolution: thin wall — только API5. Chamfer: угол/остановки/углы стыка — только API7; API5 — две дистанции + tangent.",
+    "D4_ui_only": "Режимы, найденные только в пользовательской справке: изменение формы сечения по законам/точкам (SM-04), набор сохраняемых тел при разрезании (SM-16.split), способ «По объекту» перепозиционирования (SM-17). Для переменной толщины оболочки интерфейс найден (D8). Для остальных членов в TLB покрытие не найдено — кандидаты blocked_api, статус определяется только адресной пробой (запрещена в этом срезе).",
+    "D5_wrapper_versions": "PolynomLib Interop.KompasAPI7.dll (2025-03-03) беднее установленного kAPI7.tlb (2025-04-21): PipeElements/ElementaryBodies отсутствуют в обёртке, объявлены в TLB (замер env-passport). Каталог строится по TLB.",
+    "D6_tlb_helpstring_typos": "ksRibDefinition helpstring = «Параметры операции уклон» (ошибочный copy-paste вендора; реальное семейство — ребро жёсткости); o3d_bossEvolution = «Приклеинть кинематически» [sic]. Цитировать метаданные аккуратно.",
+    "D7_naming": "o3d_cutByPlane helpstring = «Операция 'сечение поверхностью'» — API5-пара «плоскость/эскиз» не покрывает секущие поверхность/тело/грань из UI; ICut (API7) — CutObjects массив «эскизы и поверхности». Полнота входных типов — проверять пробой.",
+    "D8_hidden_managers": "В kAPI7.tlb есть интерфейсы-менеджеры без очевидного владельца в IModelContainer (например IMultiThicknessGroupsManager iid 4FB26621 + ksMultiThicknessGroupTypeEnum): UI-режимы с «переменными» параметрами могут иметь API-покрытие через QI/вложенные объекты. Инвентаризация таких интерфейсов — отдельный шаг P6.0 (каталог владельца) — OQ-A13."
+  }
+}

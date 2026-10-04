@@ -2,6 +2,16 @@
   "type": "object",
   "title": "\u041E\u0441\u0432\u043E\u0431\u043E\u0434\u0438\u0442\u044C \u0441\u0435\u0430\u043D\u0441",
   "properties": {
+    "operation_id": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/operation_id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "timeout_ms": {
       "anyOf": [
         {

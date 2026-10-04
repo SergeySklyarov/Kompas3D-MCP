@@ -917,10 +917,15 @@ def main() -> int:
     #     по схемам, ВСТРОЕННЫМ в ToolCatalog, и потому расходится с папкой молча. Читатель
     #     публичного репозитория берёт контракт из `schemas/` и получил бы контракт на 44
     #     инструмента при работающих 50.
-    #     Имена берутся ПО ПРИЗНАКУ ФОРМЫ регистрации (`Mutation("kompas_…"` / `ReadOnly("kompas_…"`),
-    #     а не по списку имён: измерено — ровно 50 вызовов, 50 различных имён, и других форм
-    #     регистрации в файле нет. Если форма появится ещё одна, проверка об этом скажет
-    #     расхождением, а не промолчит.
+    #     Имена берутся ПО ПРИЗНАКУ ФОРМЫ регистрации, а НЕ по перечню фабрик. Прежний образец
+    #     называл две фабрики (`Mutation(` / `ReadOnly(`) и на третьей (`Control(`, заведённой
+    #     04.10.2026 для инструментов управления сеансом) объявил три схемы «без регистрации» —
+    #     то есть перечень имён устарел ровно так, как и должен: молча он этого не сделал, и это
+    #     его заслуга. Но лечится это признаком, а не третьим именем в списке: здесь берётся
+    #     ЛЮБАЯ фабрика в позиции регистрации (строка списка `tools`, отступ 12, первый аргумент —
+    #     литерал `kompas_…`). Слепоты это не создаёт: регистрация, не попавшая под образец,
+    #     немедленно всплывает как «схема без регистрации в реестре», то есть отказом.
+    #     Найденные формы называются в отчёте — чтобы четвёртая форма была ВИДНА, а не выведена.
     catalog_rel = "src/KompasMcp.Host/Catalog/ToolCatalog.cs"
     schema_issues: list[str] = []
     catalog_text = content(catalog_rel)
@@ -929,15 +934,17 @@ def main() -> int:
             f"{catalog_rel}  ← реестра инструментов нет в наборе: сравнивать схемы не с чем"
         )
     else:
-        registered = set(
-            re.findall(r'(?:Mutation|ReadOnly)\("(kompas_[a-z_]+)"', catalog_text)
+        registrations = re.findall(
+            r'^\s{12}([A-Za-z_]\w*)\("(kompas_[a-z_]+)"', catalog_text, re.MULTILINE
         )
+        registered = {name for _, name in registrations}
+        registration_forms = sorted({factory for factory, _ in registrations})
         on_disk = {f[len("schemas/"):-len(".json")] for f in files
                    if f.startswith("schemas/") and f.endswith(".json")}
         if not registered:
             schema_issues.append(
-                f"{catalog_rel}  ← не найдено ни одной регистрации вида "
-                f'`Mutation("kompas_…"` / `ReadOnly("kompas_…"`: образец разошёлся с исходником'
+                f"{catalog_rel}  ← не найдено ни одной регистрации инструмента: образец разошёлся "
+                f"с исходником (ожидалась фабрика в позиции регистрации с литералом `kompas_…`)"
             )
         missing = sorted(registered - on_disk)
         extra = sorted(on_disk - registered)
@@ -954,6 +961,9 @@ def main() -> int:
                 + " — инструмент удалён или переименован, а выгрузка осталась"
             )
     fail += schema_issues
+    if catalog_text is not None and registered:
+        print(f"         · форм регистрации найдено: {len(registration_forms)} — "
+              + ", ".join(f"`{form}(`" for form in registration_forms))
     report("13. Схемы инструментов против реестра Host", "FAIL", schema_issues,
            "`schemas/` — ВЫГРУЗКА, а не вход: Host проверяет аргументы по схемам, встроенным "
            "в ToolCatalog, поэтому расхождение папки с реестром ни сборка, ни тесты, ни приёмка "

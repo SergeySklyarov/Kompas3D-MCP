@@ -248,10 +248,16 @@ public static class WorkerCommands
     public const string ImportStep = "import.step";
     public const string ExportImage = "export.image";
     public const string UnitProbe = "probe.units";
+
+    // Домен сборок (наряд C1). Команды названы по режимам профиля assemblies-minimal-v1:
+    // asm.list_components → ASM-03, asm.insert_component → ASM-02, asm.set_placement → ASM-04,
+    // asm.replace_component → ASM-05, asm.check_links → ASM-06. ASM-01/ASM-07 переиспользуют общий
+    // жизненный цикл (doc.create/doc.open/doc.save/doc.close), а не заводят второй.
     public const string ListComponents = "asm.list_components";
     public const string InsertComponent = "asm.insert_component";
-    public const string SetComponentTransform = "asm.set_transform";
-    public const string CheckIntersections = "asm.check_intersections";
+    public const string SetComponentPlacement = "asm.set_placement";
+    public const string ReplaceComponent = "asm.replace_component";
+    public const string CheckComponentLinks = "asm.check_links";
     public const string Shutdown = "sys.shutdown";
 
     /// <summary>
@@ -3202,73 +3208,12 @@ public sealed record UnitProbeResult
     public required IReadOnlyList<string> UnverifiedAspects { get; init; }
 }
 
-public sealed record ListComponentsCommand
-{
-    public required string DocumentId { get; init; }
-
-    public bool Recursive { get; init; }
-
-    public bool IncludeSuppressed { get; init; }
-
-    public bool IncludeHidden { get; init; }
-}
-
-public sealed record InsertComponentCommand
-{
-    public required string DocumentId { get; init; }
-
-    public required string FilePath { get; init; }
-
-    public required TransformDto Transform { get; init; }
-
-    public bool Fixed { get; init; } = true;
-}
-
-public sealed record SetComponentTransformCommand
-{
-    public required string InstanceRef { get; init; }
-
-    public required TransformDto Transform { get; init; }
-
-    public required CoordinateSpace CoordinateSpace { get; init; }
-}
-
-public sealed record CheckIntersectionsCommand
-{
-    public required string DocumentId { get; init; }
-
-    public required IReadOnlyList<string> InstanceRefs { get; init; }
-
-    /// <summary>none | include_contact</summary>
-    public required string ContactPolicy { get; init; }
-
-    public required double ToleranceMm { get; init; }
-
-    public int Limit { get; init; } = 200;
-}
-
-/// <summary>Component instance row returned to the Host.</summary>
-public sealed record ComponentInstanceDto
-{
-    public required string InstanceRef { get; init; }
-
-    public string? ParentRef { get; init; }
-
-    public required string Name { get; init; }
-
-    public string? Marking { get; init; }
-
-    public string? SourcePath { get; init; }
-
-    public required TransformDto Transform { get; init; }
-
-    public required bool Fixed { get; init; }
-
-    public required BoundingBoxDto Bbox { get; init; }
-
-    public required int BodyCount { get; init; }
-}
-
+// Контракты домена сборок вынесены в AssemblyCommands.cs (наряд C1). Прежние заготовки
+// (ListComponentsCommand с IncludeSuppressed/IncludeHidden, SetComponentTransformCommand с
+// CoordinateSpace, CheckIntersectionsCommand) были объявлены от первоначальной спеки и ни одним
+// инструментом не использовались: их поля не совпадают с составом блока C1 (подавления компонентов
+// и контроля пересечений в нём нет). Они удалены как нереализованная заготовка, а не как требование:
+// знаменатель профиля от этого не меняется, счётчик закрытого не растёт.
 /// <summary>Feature row returned to the Host (spec 2.5).</summary>
 public sealed record FeatureRowDto
 {

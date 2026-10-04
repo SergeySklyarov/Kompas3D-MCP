@@ -3620,3 +3620,65 @@ R10/r5/r2, глубина 5: `boss` дал `81240.9290981680` (приращен�
 
 **Разбор и числа приёмки** — `docs/acceptance/NESTED_CONTOURS_ACCEPTANCE.md`; дефект «вложенный контур =
 ответствие», закрытый 24.09.2026, — §4.31.
+
+## §4.32. Маршрут сборки (наряд C1) — измерено по проводу и метаданным 04.10.2026
+
+**Документация — 48 страниц по проводу, все HTTP 200; отрицательный контроль `ipart7_instancenumber`
+→ 404** (страницы с таким именем нет; правильная — `ipart7_instancecount`). Артефакт —
+`scratch/docs-wire-20261004/wire-report.json`.
+
+**Объёмы поставленных обёрток (сканер `tools/KompasMcp.InteropScan`):** `Interop.Kompas6API5.dll`
+**1018** типов, `Interop.Kompas6Constants.dll` **216**, `Interop.Kompas6Constants3D.dll` **169**,
+`Interop.KompasAPI7.dll` **2298**. Члены: `ksPart` **84**, `ksComponentPositioner` **10**,
+`IAssemblyDocument` **112**, `IPart7` **154**, `IComponentPositioner7` **18**, `IKompasDocument3D1`
+**47**, `ProcessTypeEnum` **483**, `Positioner_Type` **13**. Артефакт — `scratch/interop-20261004/`.
+
+**Маршрут вставки — два документированных, выбор не измерен живьём.**
+`ksDocument3D.CreatePartInAssembly(BSTR fileName, LPDISPATCH plane)` **возвращает указатель на
+созданный компонент** (`ksdocument3d_createpartinassembly.html`); второй аргумент — обязательная
+плоскость приклейки. `IKompasDocument3D1.ExecuteProcessOfInsertComponentFromFile(String,
+ProcessTypeEnum)` → BOOL (`…insertcomponentfromfile.html`) — адреса созданного компонента **не
+отдаёт** и назван «Запустить **процесс** вставки». Выбран API5 как основной (единственный, кто
+отдаёт адрес); живое сравнение обеих постановок — открытое измерение.
+
+**Перечисления — в ДРУГИХ сборках, чем интерфейс** (ловушка подтверждена): `ProcessTypeEnum` в
+`Interop.Kompas6Constants.dll` (`prAddPartFromFile = 20071`), `Positioner_Type` в
+`Interop.Kompas6Constants3D.dll` (`pnMove = 0`, `pnRotate = 1`).
+
+**Что опровергнуто измерением.**
+
+- `ExecuteProcessOfInsertComponentsFromFiles` (множественная вставка) **документирована, но в
+  поставленной обёртке ОТСУТСТВУЕТ**: `Interop.KompasAPI7.dll` датирован 2025-03-03, `kAPI7.tlb` —
+  2025-04-21, то есть обёртка **старше** библиотеки типов. Класс «обёртка старше TLB».
+- `ksPart.GetObject(long index)` и `ksPart.GetCountObj()` — по справке это **объекты макро**
+  («вспомогательная информация, визуально не отображается»), а **не** компоненты сборки. Перечисление
+  структуры — `IPart7.PartsEx(ObjType)` (тип из `ksPart7CollectionTypeEnum`: `ksAllParts = 0`,
+  `ksUniqueParts = 1`, `ksExcludedAndUnloadParts = 2`), возвращает SAFEARRAY `VT_DISPATCH` (или один
+  `VT_DISPATCH`).
+- `IAssemblyDocument.TopPart` — в метаданных объявлен (`prop Part7 TopPart`), но **документирован** на
+  родителе `IKompasDocument3D` (`ikompasdocument3d_toppart.html`). Наследование делает оба верными, но
+  адрес страницы — на родителе.
+- `ksPart.PutStorage`: справка — `BOOL PutStorage(BSTR, BOOL type, BOOL mirror)`, interop —
+  `Boolean PutStorage(String, Int32 type, Boolean mirror)`. Расхождение тип/документ **названо**.
+- `IPart7.InstanceCount` в interop — **индексированное** свойство `get_InstanceCount(Part7)`;
+  какая форма даёт кратность, **не измерено**.
+
+**Размещение — запись через API5.** `ksPlacement` объявляет `SetOrigin`, `SetAxes`, `SetAxis`,
+`SetVector`, `SetPlacement`, `InitByMatrix3D(VARIANT)` (16 элементов 4×4), `GetMatrix3D(out VARIANT)`,
+`GetOrigin`, `GetAxis`. Абсолютная запись размещения компонента — `part.GetPlacement()` →
+`InitByMatrix3D` → `part.SetPlacement(placement)` → `part.UpdatePlacement()` (документировано:
+«вступает в силу после UpdatePlacement»). **Порядок элементов матрицы 4×4 (строка/столбец) НЕ измерен** —
+в коде выбран построчный с переносом в последнем столбце, и это названо непроверенным аспектом.
+
+**Размещение — чтение через API7 и API5.** `IPart7.GetSummMatrix(Part7)` → VARIANT 16 элементов
+(4×4); `ksPlacement.GetMatrix3D(out VARIANT)` — тот же формат. Обе формы читают одно и то же
+размещение, но тождество их раскладок не измерено.
+
+**Мост номеров.** `IPart7.Reference` (Int32) и `ksPart.GetPart(Int16 type)` (тип из `part_type`:
+`pTop_Part = -1` и далее; «тип равен номеру компонента в документе») — предполагаемый мост для
+записи размещения. **Тождество этих нумераций НЕ измерено** и названо непроверенным.
+
+**Битые ссылки.** `IPart7.LoadState` → `ksLoadStateEnum` (`ksLUnknown = -1`, `ksLCompletely = 0`,
+`ksLUnload = 1`, `ksLTriangles = 2`, `ksLPartially = 3`, `ksLGabarit = 4`) — кандидат на признак
+битой ссылки; поведение при отсутствующем файле-источнике **не измерено** (`ipart7_loadstate.html`,
+`ksloadstateenum.html` — обе 200).

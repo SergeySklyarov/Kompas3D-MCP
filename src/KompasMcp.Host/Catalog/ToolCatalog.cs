@@ -288,6 +288,72 @@ public static class ToolCatalog
                 requiresDocument: true,
                 requiresOperationId: false),
 
+            // ===== домен сборок (наряд C1, профиль assemblies-minimal-v1) =====
+            //
+            // Маршрут измерен по справке (по проводу) и по метаданным поставленных обёрток, но
+            // живого прогона по сборке не было. Инструменты зарегистрированы, потому что реализованы
+            // сквозным маршрутом (Host → Worker → COM → чтение обратно), а не заглушкой: уровень
+            // возможности — mcp_implemented, а не mcp_verified, и это сказано в описании.
+            ReadOnly("kompas_list_components", "Компоненты сборки",
+                "Структура сборки: экземпляры компонентов с именами/марками, признаком «деталь/сборка», "
+                + "кратностью, состоянием фиксации/загрузки и ссылкой на экземпляр. Читается через "
+                + "IAssemblyDocument.TopPart → IPart7.PartsEx. ВНИМАНИЕ: живой приёмки по сборке не "
+                + "было — маршрут измерен по справке и метаданным, но не подтверждён прогоном.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("recursive", Sch.Nullable(Sch.Bool("Обходить вложенные подсборки.", false)))),
+                WorkerCommands.ListComponents,
+                requiresDocument: true,
+                requiresOperationId: false),
+
+            Mutation("kompas_insert_component", "Вставить компонент",
+                "Вставляет компонент из файла-источника в сборку. Ровно один экземпляр на вызов; "
+                + "повтор с тем же operation_id второго не создаёт. Размещение необязательно: без него "
+                + "компонент встаёт по умолчанию КОМПАСа. ВНИМАНИЕ: живой приёмки не было.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("source_path", Sch.Str("Абсолютный путь к файлу детали внутри разрешённого корня.")),
+                    ("transform", Sch.Nullable(Sch.Ref("#/$defs/transform"))),
+                    ("fixed", Sch.Nullable(Sch.Bool("Зафиксировать компонент после вставки.", true)))),
+                WorkerCommands.InsertComponent,
+                requiresDocument: true,
+                requiresRevision: true),
+
+            Mutation("kompas_set_component_placement", "Задать размещение компонента",
+                "Задаёт размещение компонента жёстким преобразованием (начало и две оси) и перечитывает "
+                + "его. ВНИМАНИЕ: живой приёмки не было; порядок элементов матрицы 4×4 не измерен.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("component_ref", Sch.Str("Ссылка на экземпляр из kompas_list_components.")),
+                    ("transform", Sch.Ref("#/$defs/transform"))),
+                WorkerCommands.SetComponentPlacement,
+                requiresDocument: true,
+                requiresRevision: true),
+
+            Mutation("kompas_replace_component", "Заменить компонент",
+                "Заменяет файл-источник компонента с сохранением размещения. Кратность не должна "
+                + "меняться. ВНИМАНИЕ: живой приёмки не было.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("component_ref", Sch.Str("Ссылка на экземпляр из kompas_list_components.")),
+                    ("source_path", Sch.Str("Абсолютный путь к новому файлу-источнику внутри разрешённого корня."))),
+                WorkerCommands.ReplaceComponent,
+                requiresDocument: true,
+                requiresRevision: true),
+
+            ReadOnly("kompas_check_component_links", "Проверить ссылки компонентов",
+                "Проверяет ссылки компонентов на файлы-источники: отсутствующий источник НАЗЫВАЕТСЯ, "
+                + "а не выдаётся за исправный. ВНИМАНИЕ: живой приёмки по сборке не было, и чем именно "
+                + "выглядит битая ссылка в этой версии (LoadState, отказ Load или пустой FileName) "
+                + "тоже не измерено — вердикт опирается на наличие файла по пути.",
+                Sch.Props(("document_id", Sch.Ref("#/$defs/document_id"))),
+                WorkerCommands.CheckComponentLinks,
+                requiresDocument: true,
+                requiresOperationId: false),
+
             ReadOnly("kompas_measure", "Измерить",
                 "Габарит, объём, площадь, центр масс. Масса считается только при переданной плотности: сервер её не угадывает.",
                 Sch.Props(

@@ -1,4 +1,4 @@
-{
+﻿{
  "meta": {
   "artifact": "coverage/solid-v24/matrix.json",
   "schema_version": "1.1",
@@ -5130,6 +5130,538 @@
     "форматы, названные справкой и схемой не публикуемые: GIF, TGA, PCX, EMF; WMF справка объявляет неподдерживаемым («файл запишется в EMF») — WMF не публикуется намеренно",
     "приёмка image-блоков КЛИЕНТОМ (propagation коннектором WorkBuddy) — часть клиентской приёмки и этим нарядом не исполняется; штатный фолбэк — save_path и чтение файла средствами клиента"
    ]
+  },
+  {
+   "operation_id": "ASM-01.document.create_open",
+   "context": "assembly",
+   "catalog_ref": "ASM",
+   "parameters_schema": null,
+   "adapter_route": null,
+   "actions": {
+    "discover": "not_started",
+    "create": "implemented",
+    "read": "implemented",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "implemented",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "tests": [],
+   "evidence": [
+    "scratch/docs-wire-20261004/wire-report.json",
+    "scratch/interop-20261004/"
+   ],
+   "limitations": [
+    "Маршрут измерен по справке (по проводу) и по метаданным поставленных обёрток; живого прогона по сборке не было. Статус not_started честен: это «не начато», а не «неприменимо».",
+    "Код маршрута написан и собирается (Host → Worker → COM), но ЖИВОГО ПРОГОНА по сборке не было: статус implemented означает «маршрут есть», а не «работает». Подтверждение требует прогона на v24.0.0.2799 и потому не заявлено."
+   ],
+   "profile": "assemblies-minimal-v1",
+   "priority": "practical_required",
+   "queue": "C1",
+   "depends_on": [
+    "dep.assembly.document_lifecycle"
+   ],
+   "catalog_level": "metadata_found",
+   "kind": "profile_mode"
+  },
+  {
+   "operation_id": "ASM-02.component.insert",
+   "context": "assembly",
+   "catalog_ref": "ASM",
+   "parameters_schema": null,
+   "adapter_route": null,
+   "actions": {
+    "discover": "not_started",
+    "create": "implemented",
+    "read": "implemented",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "tests": [],
+   "evidence": [
+    "scratch/docs-wire-20261004/wire-report.json",
+    "scratch/interop-20261004/"
+   ],
+   "limitations": [
+    "Маршрут измерен по справке (по проводу) и по метаданным поставленных обёрток; живого прогона по сборке не было. Статус not_started честен: это «не начато», а не «неприменимо».",
+    "Код маршрута написан и собирается (Host → Worker → COM), но ЖИВОГО ПРОГОНА по сборке не было: статус implemented означает «маршрут есть», а не «работает». Подтверждение требует прогона на v24.0.0.2799 и потому не заявлено."
+   ],
+   "profile": "assemblies-minimal-v1",
+   "priority": "practical_required",
+   "queue": "C1",
+   "depends_on": [
+    "dep.assembly.document_lifecycle",
+    "dep.assembly.source_file",
+    "dep.assembly.component_address",
+    "dep.assembly.revisions",
+    "dep.assembly.idempotency"
+   ],
+   "catalog_level": "metadata_found",
+   "kind": "profile_mode"
+  },
+  {
+   "operation_id": "ASM-03.structure.read",
+   "context": "assembly",
+   "catalog_ref": "ASM",
+   "parameters_schema": null,
+   "adapter_route": null,
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "implemented",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "tests": [],
+   "evidence": [
+    "scratch/docs-wire-20261004/wire-report.json",
+    "scratch/interop-20261004/"
+   ],
+   "limitations": [
+    "Маршрут измерен по справке (по проводу) и по метаданным поставленных обёрток; живого прогона по сборке не было. Статус not_started честен: это «не начато», а не «неприменимо».",
+    "Код маршрута написан и собирается (Host → Worker → COM), но ЖИВОГО ПРОГОНА по сборке не было: статус implemented означает «маршрут есть», а не «работает». Подтверждение требует прогона на v24.0.0.2799 и потому не заявлено."
+   ],
+   "profile": "assemblies-minimal-v1",
+   "priority": "practical_required",
+   "queue": "C1",
+   "depends_on": [
+    "dep.assembly.document_lifecycle",
+    "dep.assembly.component_address"
+   ],
+   "catalog_level": "metadata_found",
+   "kind": "profile_mode"
+  },
+  {
+   "operation_id": "ASM-04.placement.set_read",
+   "context": "assembly",
+   "catalog_ref": "ASM",
+   "parameters_schema": null,
+   "adapter_route": null,
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "implemented",
+    "edit": "implemented",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "tests": [],
+   "evidence": [
+    "scratch/docs-wire-20261004/wire-report.json",
+    "scratch/interop-20261004/"
+   ],
+   "limitations": [
+    "Маршрут измерен по справке (по проводу) и по метаданным поставленных обёрток; живого прогона по сборке не было. Статус not_started честен: это «не начато», а не «неприменимо».",
+    "Код маршрута написан и собирается (Host → Worker → COM), но ЖИВОГО ПРОГОНА по сборке не было: статус implemented означает «маршрут есть», а не «работает». Подтверждение требует прогона на v24.0.0.2799 и потому не заявлено."
+   ],
+   "profile": "assemblies-minimal-v1",
+   "priority": "practical_required",
+   "queue": "C1",
+   "depends_on": [
+    "dep.assembly.document_lifecycle",
+    "dep.assembly.component_address",
+    "dep.assembly.revisions"
+   ],
+   "catalog_level": "metadata_found",
+   "kind": "profile_mode"
+  },
+  {
+   "operation_id": "ASM-05.component.replace",
+   "context": "assembly",
+   "catalog_ref": "ASM",
+   "parameters_schema": null,
+   "adapter_route": null,
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "implemented",
+    "edit": "implemented",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "tests": [],
+   "evidence": [
+    "scratch/docs-wire-20261004/wire-report.json",
+    "scratch/interop-20261004/"
+   ],
+   "limitations": [
+    "Маршрут измерен по справке (по проводу) и по метаданным поставленных обёрток; живого прогона по сборке не было. Статус not_started честен: это «не начато», а не «неприменимо».",
+    "Код маршрута написан и собирается (Host → Worker → COM), но ЖИВОГО ПРОГОНА по сборке не было: статус implemented означает «маршрут есть», а не «работает». Подтверждение требует прогона на v24.0.0.2799 и потому не заявлено."
+   ],
+   "profile": "assemblies-minimal-v1",
+   "priority": "practical_required",
+   "queue": "C1",
+   "depends_on": [
+    "dep.assembly.document_lifecycle",
+    "dep.assembly.source_file",
+    "dep.assembly.component_address",
+    "dep.assembly.revisions"
+   ],
+   "catalog_level": "metadata_found",
+   "kind": "profile_mode"
+  },
+  {
+   "operation_id": "ASM-06.links.check",
+   "context": "assembly",
+   "catalog_ref": "ASM",
+   "parameters_schema": null,
+   "adapter_route": null,
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "implemented",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "tests": [],
+   "evidence": [
+    "scratch/docs-wire-20261004/wire-report.json",
+    "scratch/interop-20261004/"
+   ],
+   "limitations": [
+    "Маршрут измерен по справке (по проводу) и по метаданным поставленных обёрток; живого прогона по сборке не было. Статус not_started честен: это «не начато», а не «неприменимо».",
+    "Код маршрута написан и собирается (Host → Worker → COM), но ЖИВОГО ПРОГОНА по сборке не было: статус implemented означает «маршрут есть», а не «работает». Подтверждение требует прогона на v24.0.0.2799 и потому не заявлено."
+   ],
+   "profile": "assemblies-minimal-v1",
+   "priority": "practical_required",
+   "queue": "C1",
+   "depends_on": [
+    "dep.assembly.document_lifecycle",
+    "dep.assembly.source_file",
+    "dep.assembly.component_address"
+   ],
+   "catalog_level": "metadata_found",
+   "kind": "profile_mode"
+  },
+  {
+   "operation_id": "ASM-07.save_reopen",
+   "context": "assembly",
+   "catalog_ref": "ASM",
+   "parameters_schema": null,
+   "adapter_route": null,
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "implemented",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "implemented",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "tests": [],
+   "evidence": [
+    "scratch/docs-wire-20261004/wire-report.json",
+    "scratch/interop-20261004/"
+   ],
+   "limitations": [
+    "Маршрут измерен по справке (по проводу) и по метаданным поставленных обёрток; живого прогона по сборке не было. Статус not_started честен: это «не начато», а не «неприменимо».",
+    "Код маршрута написан и собирается (Host → Worker → COM), но ЖИВОГО ПРОГОНА по сборке не было: статус implemented означает «маршрут есть», а не «работает». Подтверждение требует прогона на v24.0.0.2799 и потому не заявлено."
+   ],
+   "profile": "assemblies-minimal-v1",
+   "priority": "practical_required",
+   "queue": "C1",
+   "depends_on": [
+    "dep.assembly.document_lifecycle",
+    "dep.assembly.component_address",
+    "dep.assembly.revisions"
+   ],
+   "catalog_level": "metadata_found",
+   "kind": "profile_mode"
+  },
+  {
+   "operation_id": "dep.assembly.document_lifecycle",
+   "kind": "common_dependency",
+   "profile": "assemblies-minimal-v1",
+   "priority": "dependency_of",
+   "queue": null,
+   "context": "assembly",
+   "catalog_ref": null,
+   "catalog_refs": [
+    "ASM"
+   ],
+   "title": "Общий жизненный цикл документа для сборки (создать/открыть/сохранить/закрыть)",
+   "parameters_schema": null,
+   "adapter_route": null,
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "not_started",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "required_actions": [
+    "discover",
+    "create",
+    "read",
+    "save_reopen",
+    "negative_tests"
+   ],
+   "tests": [],
+   "evidence": [
+    "scratch/docs-wire-20261004/wire-report.json"
+   ],
+   "limitations": [
+    "Зависимость закрывается своими доказательствами, а не «попутно»: живого прогона по сборке не было, поэтому все действия not_started."
+   ],
+   "acceptance": [
+    "жизненный цикл переиспользуется как есть: новый домен не заводит второго владельца сеанса и второго жизненного цикла",
+    "документ-сборка регистрируется с читаемой ревизией; reopen возвращает тот же документ"
+   ],
+   "required_of": [
+    "ASM-01.document.create_open",
+    "ASM-02.component.insert",
+    "ASM-03.structure.read",
+    "ASM-04.placement.set_read",
+    "ASM-05.component.replace",
+    "ASM-06.links.check",
+    "ASM-07.save_reopen"
+   ],
+   "partial_note": "Потребители объявляют зависимость сами в своём depends_on; required_of выведен из него.",
+   "blocked_reasons": {},
+   "read_route": null
+  },
+  {
+   "operation_id": "dep.assembly.source_file",
+   "kind": "common_dependency",
+   "profile": "assemblies-minimal-v1",
+   "priority": "dependency_of",
+   "queue": null,
+   "context": "assembly",
+   "catalog_ref": null,
+   "catalog_refs": [
+    "ASM"
+   ],
+   "title": "Выбор файла-источника внутри writable_roots",
+   "parameters_schema": null,
+   "adapter_route": null,
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "not_started",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "required_actions": [
+    "create",
+    "read",
+    "negative_tests"
+   ],
+   "tests": [],
+   "evidence": [
+    "scratch/docs-wire-20261004/wire-report.json"
+   ],
+   "limitations": [
+    "Зависимость закрывается своими доказательствами, а не «попутно»: живого прогона по сборке не было, поэтому все действия not_started."
+   ],
+   "acceptance": [
+    "путь источника — внутри разрешённого корня; выход за корень отказывает до COM",
+    "отсутствующий файл называется, а не выдаётся за исправный"
+   ],
+   "required_of": [
+    "ASM-02.component.insert",
+    "ASM-05.component.replace",
+    "ASM-06.links.check"
+   ],
+   "partial_note": "Потребители объявляют зависимость сами в своём depends_on; required_of выведен из него.",
+   "blocked_reasons": {},
+   "read_route": null
+  },
+  {
+   "operation_id": "dep.assembly.component_address",
+   "kind": "common_dependency",
+   "profile": "assemblies-minimal-v1",
+   "priority": "dependency_of",
+   "queue": null,
+   "context": "assembly",
+   "catalog_ref": null,
+   "catalog_refs": [
+    "ASM"
+   ],
+   "title": "Устойчивая адресация компонента в структуре",
+   "parameters_schema": null,
+   "adapter_route": null,
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "not_started",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "required_actions": [
+    "discover",
+    "read",
+    "negative_tests"
+   ],
+   "tests": [],
+   "evidence": [
+    "scratch/docs-wire-20261004/wire-report.json"
+   ],
+   "limitations": [
+    "Зависимость закрывается своими доказательствами, а не «попутно»: живого прогона по сборке не было, поэтому все действия not_started."
+   ],
+   "acceptance": [
+    "ссылка на компонент устойчива в пределах ревизии и отвергается после перестроения (по образцу feature:/face:)",
+    "неоднозначность возвращает кандидатов, а не первый попавшийся"
+   ],
+   "required_of": [
+    "ASM-01.document.create_open",
+    "ASM-02.component.insert",
+    "ASM-03.structure.read",
+    "ASM-04.placement.set_read",
+    "ASM-05.component.replace",
+    "ASM-06.links.check",
+    "ASM-07.save_reopen"
+   ],
+   "partial_note": "Потребители объявляют зависимость сами в своём depends_on; required_of выведен из него.",
+   "blocked_reasons": {},
+   "read_route": null
+  },
+  {
+   "operation_id": "dep.assembly.revisions",
+   "kind": "common_dependency",
+   "profile": "assemblies-minimal-v1",
+   "priority": "dependency_of",
+   "queue": null,
+   "context": "assembly",
+   "catalog_ref": null,
+   "catalog_refs": [
+    "ASM"
+   ],
+   "title": "Ревизии и конкурентность сборки",
+   "parameters_schema": null,
+   "adapter_route": null,
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "not_started",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "required_actions": [
+    "edit",
+    "read",
+    "negative_tests"
+   ],
+   "tests": [],
+   "evidence": [
+    "scratch/docs-wire-20261004/wire-report.json"
+   ],
+   "limitations": [
+    "Зависимость закрывается своими доказательствами, а не «попутно»: живого прогона по сборке не было, поэтому все действия not_started."
+   ],
+   "acceptance": [
+    "правка структуры поднимает ревизию; expected_revision соблюдается",
+    "ссылки предыдущей ревизии отвергаются STALE_REFERENCE"
+   ],
+   "required_of": [
+    "ASM-02.component.insert",
+    "ASM-04.placement.set_read",
+    "ASM-05.component.replace",
+    "ASM-07.save_reopen"
+   ],
+   "partial_note": "Потребители объявляют зависимость сами в своём depends_on; required_of выведен из него.",
+   "blocked_reasons": {},
+   "read_route": null
+  },
+  {
+   "operation_id": "dep.assembly.idempotency",
+   "kind": "common_dependency",
+   "profile": "assemblies-minimal-v1",
+   "priority": "dependency_of",
+   "queue": null,
+   "context": "assembly",
+   "catalog_ref": null,
+   "catalog_refs": [
+    "ASM"
+   ],
+   "title": "Идемпотентность мутаций сборки по operation_id",
+   "parameters_schema": null,
+   "adapter_route": null,
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "not_started",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "required_actions": [
+    "create",
+    "read",
+    "negative_tests"
+   ],
+   "tests": [],
+   "evidence": [
+    "scratch/docs-wire-20261004/wire-report.json"
+   ],
+   "limitations": [
+    "Зависимость закрывается своими доказательствами, а не «попутно»: живого прогона по сборке не было, поэтому все действия not_started."
+   ],
+   "acceptance": [
+    "повтор operation_id не добавляет второй компонент",
+    "тот же id с другими аргументами даёт OPERATION_ID_CONFLICT"
+   ],
+   "required_of": [
+    "ASM-02.component.insert",
+    "ASM-04.placement.set_read",
+    "ASM-05.component.replace"
+   ],
+   "partial_note": "Потребители объявляют зависимость сами в своём depends_on; required_of выведен из него.",
+   "blocked_reasons": {},
+   "read_route": null
   }
  ],
  "pending_families": [

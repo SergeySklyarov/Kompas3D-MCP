@@ -8,7 +8,16 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const out = path.join(root, 'docs', 'progress');
 const source = 'coverage/solid-v24/';
-const inputPaths = [source+'matrix.json', source+'catalog.json', source+'release-profiles/mechanical-core-v1.json'];
+// Профилей теперь два (наряд C1): mechanical-core-v1 (практический выпуск) и
+// assemblies-minimal-v1 (минимальные сборки). Знаменатели считаются РАЗДЕЛЬНО: сводка верхнего
+// уровня остаётся у mechanical-core-v1 и не пересчитывается блоком сборок, а каждый профиль
+// получает свою строку в `blocks`. Прежняя правка каталога, добавлявшая профиль к единственному
+// inputPaths, сделала бы пересчёт чужого знаменателя незаметным.
+const profileDir = 'coverage/solid-v24/release-profiles';
+const profilePaths = fs.readdirSync(path.join(root, profileDir)).filter(f=>f.endsWith('.json')).sort()
+  .map(f=>profileDir+'/'+f);
+const primaryProfileId = 'mechanical-core-v1';
+const inputPaths = [source+'matrix.json', source+'catalog.json', ...profilePaths];
 const actionsLabel = {discover:'Обнаружение',create:'Создание',read:'Чтение',edit:'Изменение',rebuild:'Перестроение',save_reopen:'Повторное открытие',suppress_restore:'Подавление',delete_dependencies:'Удаление и связи',negative_tests:'Отказы',geometry_validation:'Геометрия'};
 const names = {'SM-02':['Выдавливание','Основание, добавление, вырез'],'SM-03':['Вращение','Основание, бобышка, вырез'],'SM-04':['По траектории','Профиль вдоль плоской кривой'],'SM-05':['По сечениям','Переход между профилями'],'SM-07':['Отверстия','Глухие, сквозные, цековка'],'SM-09':['Скругления','Радиус и выбранные рёбра'],'SM-11':['Фаски','Катеты, расстояние и угол'],'SM-13':['Оболочка','Толщина и удаление граней'],'SM-15':['Булевы операции','Объединение, разность, пересечение'],'SM-16':['Разделение','Плоскость и сторона отсечения'],'SM-17':['Перемещение','Перенос и поворот тела'],'SM-18':['Линейный массив','Ряды и прямоугольная сетка'],'SM-19':['Круговой массив','Ось, угол и экземпляры'],'SM-23':['Зеркало','Отражение операций и тел']};
 const read = rel => JSON.parse(fs.readFileSync(path.join(root,rel),'utf8').replace(/^\uFEFF/,''));
@@ -20,7 +29,8 @@ function state(values) {
   return 'pending';
 }
 function build() {
-  const [matrix,catalog,profile] = inputPaths.map(read);
+  const [matrix,catalog,...profiles] = inputPaths.map(read);
+  const profile = profiles.find(p=>p.meta.profile_id===primaryProfileId) || profiles[0];
   const actions = matrix.meta.actions;
   const byId = new Map();
   for (const row of matrix.rows) {
@@ -72,9 +82,27 @@ function build() {
   const files=[...inputPaths,...passports.slice(0,1)];
   const updated=new Date(Math.max(...files.map(p=>fs.statSync(path.join(root,p)).mtimeMs))).toISOString();
   const done=closed(modes)+closed(dependencies),total=modes.length+dependencies.length;
+  // Сводка по КАЖДОМУ профилю отдельно. Верхнеуровневые поля остаются у primaryProfileId, поэтому
+  // блок сборок не может незаметно изменить знаменатель практического выпуска: он виден своей
+  // строкой и только ею.
+  const rowClosed=r=>r&&Object.values(r.actions).every(v=>['verified','not_applicable'].includes(v));
+  const blocks=profiles.map(p=>{
+    const req=p.modes.filter(m=>m.priority==='practical_required');
+    const deps=p.common_dependencies||[];
+    const mc=req.filter(m=>rowClosed(byId.get(m.ref))).length;
+    const dc=deps.filter(d=>{
+      const r=byId.get(d.id); if(!r) return false;
+      const need=d.required_actions?.length?d.required_actions:actions;
+      return need.every(a=>['verified','not_applicable'].includes(r.actions[a]));
+    }).length;
+    const t=req.length+deps.length,dn=mc+dc;
+    return {id:p.meta.profile_id,title:p.meta.title,queue:Object.keys(p.meta.queue||{})[0]||null,
+      modeClosed:mc,modeTotal:req.length,dependencyClosed:dc,dependencyTotal:deps.length,
+      percent:t?Math.round(dn/t*1000)/10:0,closed:dn,total:t};
+  });
   const data={schemaVersion:1,generatedAt:new Date().toISOString(),updatedAt:updated,profile:profile.meta.title,
     build:matrix.meta.target_build,modeClosed:closed(modes),modeTotal:modes.length,dependencyClosed:closed(dependencies),dependencyTotal:dependencies.length,
-    percent:total?Math.round(done/total*1000)/10:0,done,total,groups,queues,dependencies,delivery,sources:files};
+    percent:total?Math.round(done/total*1000)/10:0,done,total,groups,queues,dependencies,delivery,blocks,sources:files};
   const dataText=JSON.stringify(data).replace(/</g,'\\u003c');
   const template=fs.readFileSync(path.join(out,'dashboard.template.html'),'utf8');
   if(!template.includes('/*__PROJECT_DATA__*/')) throw Error('Шаблон не содержит точки вставки данных');

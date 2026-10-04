@@ -62,8 +62,8 @@
    "level": "отсутствие уровня у записи означает «не описано», а не «не поддержано» и не «verified»"
   },
   "counters": {
-   "families": 32,
-   "operations": 75,
+   "families": 33,
+   "operations": 82,
    "operations_as_bare_strings": 0,
    "modes_and_variants": 206,
    "operations_without_level": 0,
@@ -6158,6 +6158,199 @@
       "картинка — вспомогательный канал, а не приёмочное доказательство: проверка, которая не различает, не подтверждает"
      ],
      "modes": []
+    }
+   ]
+  },
+  {
+   "id": "ASM",
+   "title": "Минимальные сборки",
+   "classification": "solid",
+   "level": "mcp_implemented",
+   "evidence": {
+    "documentation": "Проводная проверка справки SDK 24 (help.ascon.ru/KOMPAS_SDK/24/ru-RU), 04.10.2026: 48 страниц HTTP 200, отрицательный контроль ipart7_instancenumber → 404. Артефакт: scratch/docs-wire-20261004/wire-report.json",
+    "metadata": "Сканер tools/KompasMcp.InteropScan по поставленным обёрткам 24.0.0.2799, 04.10.2026: Interop.Kompas6API5.dll 1018 типов, Interop.Kompas6Constants.dll 216, Interop.Kompas6Constants3D.dll 169, Interop.KompasAPI7.dll 2298. Артефакт: scratch/interop-20261004/",
+    "runtime": "не проверялось исполнением"
+   },
+   "route": "API5 ksDocument3D.CreatePartInAssembly / ksComponentPositioner / ksPart.GetPlacement; API7 IAssemblyDocument.TopPart → IPart7.PartsEx / IComponentPositioner7 (мост ksGetApplication7 в том же сеансе). Основной маршрут вставки — OQ-C1-1.",
+   "mcp_support": "kompas_create_document(kind=assembly) / kompas_open_document / kompas_save_document / kompas_close_document (жизненный цикл) + kompas_list_components / kompas_insert_component / kompas_set_component_placement / kompas_replace_component / kompas_check_component_links",
+   "next_step": "Живой прогон на v24.0.0.2799: вставка компонента, чтение структуры, размещение, замена, проверка ссылок, save→close→reopen. Только он переводит implemented → verified.",
+   "operations": [
+    {
+     "id": "ASM-01.document.create_open",
+     "name": "Документ-сборка: создание и открытие",
+     "level": "mcp_implemented",
+     "doc_source": [
+      "iassemblydocument",
+      "iassemblydocument_props",
+      "ikompasdocument3d_toppart"
+     ],
+     "interfaces": {
+      "api5": [
+       "ksDocument3D.Create(invisible, isDetail=false)",
+       "ksPart.GetPart(-1)"
+      ],
+      "api7": [
+       "IAssemblyDocument (112 членов)",
+       "IKompasDocument3D.TopPart → IPart7"
+      ]
+     },
+     "modes": [],
+     "mcp_support": "kompas_create_document (kind=assembly) / kompas_open_document / kompas_save_document / kompas_close_document — общий жизненный цикл, нового жизненного цикла домен не заводит",
+     "next_step": "Живой прогон: создать сборку, прочитать ревизию, переоткрыть."
+    },
+    {
+     "id": "ASM-02.component.insert",
+     "name": "Вставка компонента из файла",
+     "level": "mcp_implemented",
+     "doc_source": [
+      "ikompasdocument3d1_executeprocessofinsertcomponentfromfile",
+      "ksdocument3d_createpartinassembly",
+      "processtypeenum"
+     ],
+     "interfaces": {
+      "api5": [
+       "ksDocument3D.CreatePartInAssembly(BSTR fileName, LPDISPATCH plane) → указатель на созданный компонент (ksPart/IPart)",
+       "ksPart.PutStorage(fileName, type, mirror)"
+      ],
+      "api7": [
+       "IKompasDocument3D1.ExecuteProcessOfInsertComponentFromFile(String FileName, ProcessTypeEnum ProcessType) → Boolean",
+       "ProcessTypeEnum.prAddPartFromFile = 20071"
+      ]
+     },
+     "modes": [],
+     "mcp_support": "none",
+     "next_step": "Выбор основного маршрута (OQ-C1-1): API5 CreatePartInAssembly требует плоскость приклейки; API7 ExecuteProcessOfInsertComponentFromFile «запускает процесс» и, возможно, интерактивен. Проба обеих постановок."
+    },
+    {
+     "id": "ASM-03.structure.read",
+     "name": "Чтение структуры сборки",
+     "level": "mcp_implemented",
+     "doc_source": [
+      "ipart7_partsex",
+      "ipart7_instancecount",
+      "ipart7_fixed",
+      "ipart7_marking",
+      "ipart7_filename",
+      "ipart7_loadstate",
+      "kspart7collectiontypeenum",
+      "kspart_isdetail",
+      "ipart7_getsummmatrix",
+      "kspart_getplacement",
+      "ksplacement_getorigin",
+      "ksplacement_getmatrix"
+     ],
+     "interfaces": {
+      "api5": [
+       "ksPart.GetPart(Int16 type) — тип из part_type (-5…-1 либо номер компонента)",
+       "ksPart.IsDetail(), ksPart.GetPlacement()"
+      ],
+      "api7": [
+       "IPart7.PartsEx(ObjType) → SAFEARRAY (ksPart7CollectionTypeEnum)",
+       "IPart7.InstanceCount, Fixed, Marking, FileName, LoadState",
+       "IPart7.GetSummMatrix(Part7) → 16-элементный SafeArray 4×4"
+      ]
+     },
+     "modes": [],
+     "mcp_support": "none",
+     "next_step": "Проба: сборка с двумя экземплярами одной детали → InstanceCount = 2, уникальных деталей 1 (OQ-C1-3); PartsEx — дети узла или вся ветка (OQ-C1-4)."
+    },
+    {
+     "id": "ASM-04.placement.set_read",
+     "name": "Размещение компонента: задать и перечитать",
+     "level": "mcp_implemented",
+     "doc_source": [
+      "icomponentpositioner7",
+      "icomponentpositioner7_prepare",
+      "icomponentpositioner7_movecomponent",
+      "icomponentpositioner7_rotatecomponent",
+      "icomponentpositioner7_finish",
+      "kscomponentpositioner_prepare",
+      "kscomponentpositioner_movecomponent",
+      "kscomponentpositioner_rotatecomponent",
+      "kscomponentpositioner_finish",
+      "kspart_setplacement",
+      "kspart_updateplacement",
+      "kspart_getplacement",
+      "positioner_type"
+     ],
+     "interfaces": {
+      "api5": [
+       "ksDocument3D.ComponentPositioner() → ksComponentPositioner",
+       "ksComponentPositioner.Prepare(part, Positioner_Type) → Int32; SetAxis/SetPlane/SetDragPoint; MoveComponent(x,y,z); RotateComponent(angl); Finish()",
+       "ksPart.SetPlacement(placement) + ksPart.UpdatePlacement()"
+      ],
+      "api7": [
+       "IKompasDocument3D1.ComponentPositioner → ComponentPositioner7",
+       "IComponentPositioner7.Prepare(Part7, Positioner_Type) → Int32; InitPlane*/InitAxis*; SetDragPoint; MoveComponent; RotateComponent; Finish"
+      ],
+      "enums": [
+       "Positioner_Type.pnMove = 0, pnRotate = 1"
+      ]
+     },
+     "modes": [],
+     "mcp_support": "none",
+     "next_step": "Калибровка: брусок 100×80×10, перенос на известный вектор, перечитанная матрица (GetSummMatrix) сверяется с заданной в допуске length_mm."
+    },
+    {
+     "id": "ASM-05.component.replace",
+     "name": "Замена компонента с сохранением размещения",
+     "level": "mcp_implemented",
+     "doc_source": [
+      "ipart7_filename",
+      "ipart7_changeobjectlinks",
+      "ipart7_load",
+      "ipart7_getopendocumentparam"
+     ],
+     "interfaces": {
+      "api5": [
+       "ksPart.PutStorage(fileName, type, mirror)"
+      ],
+      "api7": [
+       "IPart7.FileName (set) + IPart7.ChangeObjectLinks(SourceObjs, DestObjs, RebuildAll)",
+       "IPart7.Load(Boolean Full)"
+      ]
+     },
+     "modes": [],
+     "mcp_support": "none",
+     "next_step": "Проба A06: размещение до и после совпадает; ссылка новая; кратность не меняется (OQ-C1-5)."
+    },
+    {
+     "id": "ASM-06.links.check",
+     "name": "Проверка ссылок компонентов",
+     "level": "mcp_implemented",
+     "doc_source": [
+      "ipart7_loadstate",
+      "ksloadstateenum",
+      "ipart7_load",
+      "ipart7_filename"
+     ],
+     "interfaces": {
+      "api7": [
+       "IPart7.LoadState → ksLoadStateEnum (ksLCompletely=0, ksLUnload=1, ksLTriangles=2, ksLPartially=3, ksLGabarit=4)",
+       "IPart7.Load(Boolean Full) → Boolean"
+      ]
+     },
+     "modes": [],
+     "mcp_support": "none",
+     "next_step": "Проба: переместить/удалить деталь-источник, открыть сборку, прочитать LoadState/FileName — назвать, чем выглядит битая ссылка (OQ-C1-6)."
+    },
+    {
+     "id": "ASM-07.save_reopen",
+     "name": "Сохранение и переоткрытие сборки",
+     "level": "mcp_implemented",
+     "doc_source": [
+      "iassemblydocument",
+      "ikompasdocument3d_toppart"
+     ],
+     "interfaces": {
+      "api5": [
+       "ksDocument3D.Save/SaveAs",
+       "ksPart.PutStorage"
+      ]
+     },
+     "modes": [],
+     "mcp_support": "kompas_save_document / kompas_open_document (общий жизненный цикл)",
+     "next_step": "Проба: структура и размещения после reopen совпадают с состоянием до сохранения."
     }
    ]
   }

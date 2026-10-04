@@ -154,6 +154,12 @@ public sealed class CommandDispatcher
         // геометрии, а не у́же — измеренная ступень применения (`sketch.Update()`) входит в него.
         WorkerCommands.SetSketchPlane => 240_000,
         WorkerCommands.ListSketchEntities or WorkerCommands.EditSketchEntity => 240_000,
+        // Сборка: вставка компонента читает файл с диска и перестраивает документ, а перечисление
+        // структуры делает вызов COM на каждый компонент — бюджет выше умолчания по той же причине,
+        // что у вспомогательной геометрии.
+        WorkerCommands.InsertComponent or WorkerCommands.ReplaceComponent => 240_000,
+        WorkerCommands.ListComponents or WorkerCommands.SetComponentPlacement
+            or WorkerCommands.CheckComponentLinks => 240_000,
         _ => 120_000,
     };
 
@@ -232,6 +238,11 @@ public sealed class CommandDispatcher
             WorkerCommands.UpdatePlane => _sta.Run(() => UpdatePlane(request), "aux.update_plane", cancellationToken),
             WorkerCommands.ListSketchEntities => _sta.Run(() => ListSketchEntities(request), "sketch.entities", cancellationToken),
             WorkerCommands.EditSketchEntity => _sta.Run(() => EditSketchEntity(request), "sketch.entity_edit", cancellationToken),
+            WorkerCommands.ListComponents => _sta.Run(() => ListComponents(request), "asm.list_components", cancellationToken),
+            WorkerCommands.InsertComponent => _sta.Run(() => InsertComponent(request), "asm.insert_component", cancellationToken),
+            WorkerCommands.SetComponentPlacement => _sta.Run(() => SetComponentPlacement(request), "asm.set_placement", cancellationToken),
+            WorkerCommands.ReplaceComponent => _sta.Run(() => ReplaceComponent(request), "asm.replace_component", cancellationToken),
+            WorkerCommands.CheckComponentLinks => _sta.Run(() => CheckComponentLinks(request), "asm.check_links", cancellationToken),
             WorkerCommands.Shutdown => _sta.Run(ShutdownPayload, "shutdown", cancellationToken),
             _ => throw new KompasContractException(
                 ErrorCodes.CapabilityUnavailable,
@@ -816,6 +827,21 @@ public sealed class CommandDispatcher
     private object? Features(IpcFrame request) => _session.ListFeatures(Argument<ListFeaturesCommand>(request));
 
     private object? Bodies(IpcFrame request) => _session.ListBodies(Argument<ListBodiesCommand>(request));
+
+    private object? ListComponents(IpcFrame request) =>
+        _session.ListComponents(Argument<ListComponentsCommand>(request));
+
+    private object? InsertComponent(IpcFrame request) =>
+        _session.InsertComponent(Argument<InsertComponentCommand>(request));
+
+    private object? SetComponentPlacement(IpcFrame request) =>
+        _session.SetComponentPlacement(Argument<SetComponentPlacementCommand>(request));
+
+    private object? ReplaceComponent(IpcFrame request) =>
+        _session.ReplaceComponent(Argument<ReplaceComponentCommand>(request));
+
+    private object? CheckComponentLinks(IpcFrame request) =>
+        _session.CheckComponentLinks(Argument<CheckComponentLinksCommand>(request));
 
     private object? Measure(IpcFrame request) => _session.Measure(Argument<MeasureCommand>(request));
 

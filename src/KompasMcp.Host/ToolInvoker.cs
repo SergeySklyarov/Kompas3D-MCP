@@ -36,7 +36,10 @@ public sealed class ToolInvoker : IAsyncDisposable
     // обязана судить его так же строго: измерено (проба P4 наряда), что ЯДРО путь не проверяет —
     // на запрещённых символах оно записало усечённый пустой файл, а несуществующий каталог
     // создало само. Единственная защита от такого пути — отказ ХОСТА до COM.
-    private static readonly string[] PathFields = { "path", "output_path", "target_path", "input_path", "save_path" };
+    // source_path — файл-источник компонента сборки (наряд C1): тот же класс, что input_path, то
+    // есть ЧТЕНИЕ, а не запись. Назван здесь, потому что политика путей судит поле по ИМЕНИ, и без
+    // этой строки путь вставки/замены компонента уходил бы за разрешённый корень без отказа.
+    private static readonly string[] PathFields = { "path", "output_path", "target_path", "input_path", "save_path", "source_path" };
 
     private readonly HostOptions _options;
     private readonly WorkerSupervisor _worker;

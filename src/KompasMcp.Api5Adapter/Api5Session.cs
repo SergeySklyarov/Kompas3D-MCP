@@ -1,6 +1,7 @@
 ﻿using System.Reflection;
 using System.Runtime.InteropServices;
 using Kompas6API5;
+using KompasAPI7;
 using KompasMcp.Api5Adapter.Com;
 using KompasMcp.Contracts;
 using KompasMcp.Contracts.Ipc;
@@ -772,16 +773,53 @@ public sealed partial class Api5Session : IDisposable
         }
     }
 
+    /// <summary>
+    /// Число компонентов сборки — по СТРУКТУРЕ (<c>IPart7.PartsEx</c>), а не по коллекции API5.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>ИЗМЕРЕНО 04.10.2026 живым прогоном и опровергло прежний маршрут.</b> Коллекция API5
+    /// <c>EntityCollection(o3d_part = 104)</c> на сборке с ОДНИМ вставленным компонентом отдала
+    /// <b>7</b> — это не число компонентов. Число компонентов даёт структура API7:
+    /// <c>IAssemblyDocument.TopPart</c> → <c>IPart7.PartsEx(ksAllParts)</c>, рекурсивно по
+    /// подсборкам. Ошибка была видна только на живой сборке: до неё инструментов сборки не было.
+    /// </para>
+    /// <para>
+    /// Обход ограничен глубиной: циклическая ссылка подсборок на себя (если она возможна) не должна
+    /// зациклить сервер. Ограничение названо числом, а не «разумным» — 64 уровня.
+    /// </para>
+    /// </remarks>
     public int CountComponents(DocumentEntry document)
     {
-        try
-        {
-            var collection = (ksEntityCollection)document.PartNow().EntityCollection(KompasObjectTypes.Of(KompasObjectTypes.Part));
-            return collection.GetCount();
-        }
-        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        var notes = new List<string>();
+        var top = TopPart7(document, notes);
+        if (top is null)
         {
             return 0;
+        }
+
+        var count = 0;
+        CountComponentsInto(top, ref count, depth: 0, notes);
+        return count;
+    }
+
+    private const int MaxComponentDepth = 64;
+
+    private void CountComponentsInto(IPart7 node, ref int count, int depth, List<string> notes)
+    {
+        if (depth >= MaxComponentDepth)
+        {
+            notes.Add($"component_depth_limit — обход структуры остановлен на глубине {MaxComponentDepth}");
+            return;
+        }
+
+        foreach (var child in ChildrenOf(node, notes))
+        {
+            count++;
+            if (Safe(() => child.Detail) == false)
+            {
+                CountComponentsInto(child, ref count, depth + 1, notes);
+            }
         }
     }
 

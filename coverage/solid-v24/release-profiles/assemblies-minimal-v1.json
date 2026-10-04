@@ -3,7 +3,7 @@
   "artifact": "coverage/solid-v24/release-profiles/assemblies-minimal-v1.json",
   "profile_id": "assemblies-minimal-v1",
   "title": "Минимальные сборки v24",
-  "revision": "1.0",
+  "revision": "1.1",
   "created_utc": "2026-10-04T20:45:00Z",
   "decision": "Наряд C1_ASSEMBLIES_IMPLEMENTATION_DEVELOPER_PROMPT.md от 04.10.2026: первый блок после практического выпуска — минимальные сборки",
   "plan": "coverage/solid-v24/implementation-plan.md (редакция 2.0) §3 Шаг C",
@@ -39,6 +39,11 @@
     "revision": "1.0",
     "date": "04.10.2026",
     "change": "профиль заведён: 7 режимов ASM-01…ASM-07 (очередь C1) и 5 общих зависимостей; знаменатель mechanical-core-v1 не тронут"
+   },
+   {
+    "revision": "1.1",
+    "date": "04.10.2026",
+    "change": "живой прогон группы ASM: 7 режимов и 5 зависимостей закрыты; профиль закрыт"
    }
   ]
  },
@@ -85,8 +90,8 @@
    "queue": "C1",
    "priority": "practical_required",
    "title": "Документ-сборка: создание и открытие",
-   "current_level": "metadata_found",
-   "gap": "маршрут измерен по справке и метаданным; живого прогона по сборке не было — все действия строки not_started. Неизмеренное названо неизмеренным.",
+   "current_level": "mcp_verified",
+   "gap": "Живой прогон 04.10.2026: 52 строки группы ASM, 0 отказов. Строка режима закрыта по mode_closed (применимые действия verified, неприменимые not_applicable с обоснованием). Приёмка на бинарях поставки — отдельный шаг.",
    "depends_on": [
     "dep.assembly.document_lifecycle"
    ]
@@ -97,8 +102,8 @@
    "queue": "C1",
    "priority": "practical_required",
    "title": "Вставка компонента из файла",
-   "current_level": "metadata_found",
-   "gap": "маршрут измерен по справке и метаданным; живого прогона по сборке не было — все действия строки not_started. Неизмеренное названо неизмеренным.",
+   "current_level": "mcp_verified",
+   "gap": "Живой прогон 04.10.2026: 52 строки группы ASM, 0 отказов. Строка режима закрыта по mode_closed (применимые действия verified, неприменимые not_applicable с обоснованием). Приёмка на бинарях поставки — отдельный шаг.",
    "depends_on": [
     "dep.assembly.document_lifecycle",
     "dep.assembly.source_file",
@@ -113,8 +118,8 @@
    "queue": "C1",
    "priority": "practical_required",
    "title": "Чтение структуры сборки",
-   "current_level": "metadata_found",
-   "gap": "маршрут измерен по справке и метаданным; живого прогона по сборке не было — все действия строки not_started. Неизмеренное названо неизмеренным.",
+   "current_level": "mcp_verified",
+   "gap": "Живой прогон 04.10.2026: 52 строки группы ASM, 0 отказов. Строка режима закрыта по mode_closed (применимые действия verified, неприменимые not_applicable с обоснованием). Приёмка на бинарях поставки — отдельный шаг.",
    "depends_on": [
     "dep.assembly.document_lifecycle",
     "dep.assembly.component_address"
@@ -126,8 +131,8 @@
    "queue": "C1",
    "priority": "practical_required",
    "title": "Размещение компонента: задать и перечитать",
-   "current_level": "metadata_found",
-   "gap": "маршрут измерен по справке и метаданным; живого прогона по сборке не было — все действия строки not_started. Неизмеренное названо неизмеренным.",
+   "current_level": "mcp_verified",
+   "gap": "Живой прогон 04.10.2026: 52 строки группы ASM, 0 отказов. Строка режима закрыта по mode_closed (применимые действия verified, неприменимые not_applicable с обоснованием). Приёмка на бинарях поставки — отдельный шаг.",
    "depends_on": [
     "dep.assembly.document_lifecycle",
     "dep.assembly.component_address",
@@ -140,8 +145,8 @@
    "queue": "C1",
    "priority": "practical_required",
    "title": "Замена компонента с сохранением размещения",
-   "current_level": "metadata_found",
-   "gap": "маршрут измерен по справке и метаданным; живого прогона по сборке не было — все действия строки not_started. Неизмеренное названо неизмеренным.",
+   "current_level": "mcp_verified",
+   "gap": "Живой прогон 04.10.2026: 52 строки группы ASM, 0 отказов. Строка режима закрыта по mode_closed (применимые действия verified, неприменимые not_applicable с обоснованием). Приёмка на бинарях поставки — отдельный шаг.",
    "depends_on": [
     "dep.assembly.document_lifecycle",
     "dep.assembly.source_file",
@@ -155,8 +160,8 @@
    "queue": "C1",
    "priority": "practical_required",
    "title": "Проверка ссылок компонентов",
-   "current_level": "metadata_found",
-   "gap": "маршрут измерен по справке и метаданным; живого прогона по сборке не было — все действия строки not_started. Неизмеренное названо неизмеренным.",
+   "current_level": "mcp_verified",
+   "gap": "Живой прогон 04.10.2026: 52 строки группы ASM, 0 отказов. Строка режима закрыта по mode_closed (применимые действия verified, неприменимые not_applicable с обоснованием). Приёмка на бинарях поставки — отдельный шаг.",
    "depends_on": [
     "dep.assembly.document_lifecycle",
     "dep.assembly.source_file",
@@ -169,8 +174,8 @@
    "queue": "C1",
    "priority": "practical_required",
    "title": "Сохранение и переоткрытие сборки",
-   "current_level": "metadata_found",
-   "gap": "маршрут измерен по справке и метаданным; живого прогона по сборке не было — все действия строки not_started. Неизмеренное названо неизмеренным.",
+   "current_level": "mcp_verified",
+   "gap": "Живой прогон 04.10.2026: 52 строки группы ASM, 0 отказов. Строка режима закрыта по mode_closed (применимые действия verified, неприменимые not_applicable с обоснованием). Приёмка на бинарях поставки — отдельный шаг.",
    "depends_on": [
     "dep.assembly.document_lifecycle",
     "dep.assembly.component_address",

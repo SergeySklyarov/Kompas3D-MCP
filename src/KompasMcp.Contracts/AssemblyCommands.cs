@@ -105,6 +105,13 @@ public sealed record ComponentRowDto
     /// <summary>Кратность: число вставок этой детали (<c>IPart7.InstanceCount</c>).</summary>
     public int? InstanceCount { get; init; }
 
+    /// <summary>
+    /// Номер компонента в документе (<c>IPart7.Reference</c>) — он же аргумент
+    /// <c>ksPart.GetPart</c>. Назван наружу, потому что адресация компонента держится на нём, и
+    /// «ссылка есть, а номера нет» — это ровно то, что делает адрес непроверяемым.
+    /// </summary>
+    public int? ReferenceNumber { get; init; }
+
     /// <summary>Состояние фиксации (<c>IPart7.Fixed</c>).</summary>
     public bool? Fixed { get; init; }
 

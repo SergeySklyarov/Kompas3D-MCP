@@ -3682,3 +3682,36 @@ ProcessTypeEnum)` → BOOL (`…insertcomponentfromfile.html`) — адреса 
 `ksLUnload = 1`, `ksLTriangles = 2`, `ksLPartially = 3`, `ksLGabarit = 4`) — кандидат на признак
 битой ссылки; поведение при отсутствующем файле-источнике **не измерено** (`ipart7_loadstate.html`,
 `ksloadstateenum.html` — обе 200).
+
+### §4.32.1. ЖИВОЙ прогон 04.10.2026 — что опровергнуто (52 строки группы ASM, 0 отказов)
+
+Измерено на КОМПАС-3D v24.0.0.2799 через MCP (`scripts/mcp-smoke.py --assembly-only`):
+
+- **`CreatePartInAssembly(fileName, null)` → `GEOMETRY_FAILED`.** Плоскость приклейки обязательна;
+  документированный способ её получить — `ksPart.GetDefaultEntity(o3d_planeXOY = 1)`
+  (`kspart_getdefaultentity.html`).
+- **Повторная `CreatePartInAssembly` ТОГО ЖЕ файла возвращает null**, тогда как вставка ДРУГОГО файла
+  проходит. Второй экземпляр одной детали создаётся `ksDocument3D.CopyPart(sourcePart, newPlacement)`
+  (`ksdocument3d_copypart.html`: «Если не задано положение копии, она создаётся в начале координат»).
+- **`ksDocument3D.SetPartFromFile` / `SetPartFromFileEx` — маршрут ВСТАВКИ, а не замены.** Документация
+  говорит «part — указатель на интерфейс компонента, который будет вставлен»; измерено: вызов
+  добавил ТРЕТИЙ компонент вместо замены первого.
+- **`IPart7.Reference` — не номер компонента.** Измерено `1073741857` (0x40000001); `ksPart.GetPart`
+  по нему не даёт `ksPart`. Адрес компонента — порядковый номер в `ksDocument3D.PartCollection(true)`
+  (`ksdocument3d_partcollection.html`, `ksPartCollection.GetCount/GetByIndex`), сопряжённый с порядком
+  `IPart7.PartsEx`. Сопряжение проверено различающим контролем: размещение одного экземпляра не
+  меняет другой (первый `origin.x = 30`, второй `0`).
+- **Число компонентов по API5-коллекции `EntityCollection(o3d_part = 104)` неверно**: на сборке с
+  ОДНИМ компонентом она отдала **7**. Верное число даёт рекурсивный обход `IPart7.PartsEx`.
+- **Кратность читается С РОДИТЕЛЯ**: `parent.InstanceCount[child]` (индексированное свойство).
+  Чтение со САМОГО компонента даёт `0` — «счётчик не с той стороны» виден числом.
+- **Матрица 4×4 для `ksPlacement.InitByMatrix3D` — ПОСТОЛБЦОВАЯ, перенос в ПОСЛЕДНЕЙ СТРОКЕ**
+  (индексы 12, 13, 14), что совпадает с измеренной `RepositionMatrix` (Domain/Geometry, проба RP.2).
+  Первая редакция писала построчно с переносом в 3/7/11 — запись размещения НЕ бралась: перечитанное
+  начало координат оставалось нулевым.
+- **Замена источника не переживала `save→close→reopen`** при записи только `IPart7.FileName`;
+  переживает при записи ОБОИХ представлений (`ksPart.fileName` + `IPart7.FileName` + `RebuildModel`).
+- **У документа-сборки СВОИХ тел нет**: `kompas_list_bodies` на сборке даёт 0 — тела принадлежат
+  документам-компонентам. Геометрия поэтому проверяется в документе-источнике.
+- **`CreatePartFromFile` документирован в interop, но страницы справки нет**
+  (`ksdocument3d_createpartfromfile.html` → 404).

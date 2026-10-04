@@ -418,6 +418,418 @@ def argument(name, default=None):
     return default
 
 
+def assembly_checks(client, rep, app_id, workdir):
+    """ASM.* — минимальные сборки через MCP (наряд C1, профиль `assemblies-minimal-v1`).
+
+    ЗАЧЕМ ЭТА ГРУППА. Домен сборок заведён и код написан 04.10.2026, но ЖИВОГО ПРОГОНА не было ни
+    разу: все семь режимов стояли `implemented` (маршрут написан, подтверждения нет). Группа — это
+    и есть подтверждение: инструменты вызываются через настоящий MCP на бинарях поставки, а не
+    «маршрут написан».
+
+    ЧТО ЗДЕСЬ ДОКАЗАТЕЛЬСТВО. Число и структура, а не «status=succeeded»: две вставки одной детали
+    обязаны дать кратность 2 при ОДНОЙ уникальной детали (содержательный критерий блока, отделяющий
+    сборку от композиции тел), размещение обязано перечитаться равным заданному, замена — сохранить
+    размещение и кратность, а битая ссылка — быть НАЗВАННОЙ, а не выданной за исправную.
+
+    ЧЕГО ЗДЕСЬ НЕТ. Клиентская приёмка (это шаг заказчика) и Trust не трогаются вовсе.
+    """
+    import os
+
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def rev_of(env, fallback=1):
+        return (env or {}).get("revision_after") or fallback
+
+    def level(env):
+        return ((env or {}).get("verification") or {}).get("level")
+
+    def near(a, b, tol=0.01):
+        return a is not None and b is not None and abs(a - b) <= max(tol, 1e-6 * abs(b))
+
+    def current_rev(doc):
+        """Ревизия читается из КОНТЕКСТА перед каждой мутацией, а не ведётся переменной: `revision_after`
+        из конверта может отставать, и тогда следующая мутация отвергается REVISION_CONFLICT (измерено
+        04.10.2026 первым прогоном этой группы — три строки упали именно так)."""
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return ((env or {}).get("result") or {}).get("revision") or 1
+
+    def doc_id(env):
+        r = result(env)
+        return r.get("document_id") or r.get("id") or (env or {}).get("document_id")
+
+    def emsg(env):
+        err = (env or {}).get("error") or {}
+        return err.get("message") if isinstance(err, dict) else None
+
+    def edet(env):
+        err = (env or {}).get("error") or {}
+        return err.get("details") if isinstance(err, dict) else None
+
+    src_dir = os.path.join(workdir, "assembly-src")
+    os.makedirs(src_dir, exist_ok=True)
+
+    # ========= ASM.01: документ-сборка создаётся и читается =========
+    env, code = call("kompas_create_document", {"application_id": app_id, "kind": "assembly",
+                                                "name": "ASM-01"})
+    asm = doc_id(env)
+    rev = rev_of(env)
+    kind = result(env).get("kind")
+    rep.add("ASM.01.create", "документ-сборка создаётся (kind=assembly, ревизия читается)",
+            "PASS" if (asm and not code and (kind in (None, "assembly", "Assembly"))) else "FAIL",
+            f"document_id={asm} kind={kind} revision={rev} error={code}")
+    if not asm:
+        rep.add("ASM.01.read", "контекст сборки читается", "FAIL", "документ не создан")
+        return
+
+    env, code = call("kompas_get_context", {"document_id": asm, "detail": "minimal"})
+    ctx_kind = result(env).get("kind")
+    rep.add("ASM.01.read", "контекст сборки читается (тип=assembly, ревизия)",
+            "PASS" if not code and ctx_kind in ("assembly", "Assembly") else "FAIL",
+            f"kind={ctx_kind} revision={result(env).get('revision')} error={code}")
+
+    # negative: создать документ-чертёж нельзя (инструмент объявляет только part/assembly)
+    env, code = call("kompas_create_document", {"application_id": app_id, "kind": "drawing"})
+    rep.add("ASM.01.negative_tests", "недопустимый тип документа отвергается до COM",
+            "PASS" if code else "FAIL", f"error={code}")
+
+    # ========= источники: детали на диске =========
+    def build_part(name, path, entities, depth):
+        """Создать деталь, выдавить контур, сохранить на диск, закрыть.
+        Возвращает (путь, объём_тела, ошибка)."""
+        env, code = call("kompas_create_document", {"application_id": app_id, "kind": "part",
+                                                    "name": name})
+        doc = doc_id(env)
+        if not doc:
+            return None, None, f"документ: {code}"
+        prev = rev_of(env)
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": prev,
+            "plane": {"base": "xy", "offset_mm": 0}, "name": name + "-sketch"})
+        sk = result(env).get("id")
+        prev = rev_of(env, prev)
+        env, code = call("kompas_edit_sketch", {
+            "sketch_ref": sk, "expected_revision": prev, "mode": "append", "entities": entities})
+        prev = rev_of(env, prev)
+        env, code = call("kompas_finish_sketch", {"sketch_ref": sk,
+                                                  "require_closed_profile": False})
+        prev = rev_of(env, prev)
+        env, code = call("kompas_extrude", {"sketch_ref": sk, "expected_revision": prev,
+                                            "operation": "base", "depth_mm": depth,
+                                            "direction": "positive"})
+        if code:
+            call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+            return None, f"выдавливание: {code} {emsg(env)}"
+        prev = rev_of(env, prev)
+        # Проверка, что деталь НЕ пустая: иначе «источник сохранён» означало бы пустой файл.
+        env, code = call("kompas_list_bodies", {"document_id": doc})
+        made = result(env) or []
+        if not isinstance(made, list) or not made:
+            call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+            return None, None, "выдавливание не дало тела"
+        env, code = call("kompas_measure", {
+            "target_ref": made[0].get("body_ref"), "properties": ["volume"]})
+        built_volume = result(env).get("volume_mm3")
+        env, code = call("kompas_save_document", {
+            "document_id": doc, "expected_revision": prev, "target_path": path})
+        ok = (not code) and os.path.isfile(path)
+        call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+        return (path if ok else None), built_volume, code
+
+    src_path = os.path.join(src_dir, "asm-source-1.m3d")
+    src2 = os.path.join(src_dir, "asm-source-2.m3d")
+    _s1, _v1, err1 = build_part("ASM-src-1", src_path,
+                                [{"kind": "rectangle", "start_mm": [-50, -40], "width_mm": 100,
+                                  "height_mm": 80}], 10)
+    rep.add("ASM.SRC", "деталь-источник сохранена на диск (файл для вставки)",
+            "PASS" if _s1 else "FAIL", f"path={_s1} объём={_v1} error={err1}")
+    # Второй источник — ДРУГОЙ файл: он нужен, чтобы отличить «второй вставки нет вовсе» от
+    # «нельзя вставить ТУ ЖЕ деталь дважды». Один опыт не различает эти два случая.
+    _s2, _v2, err2 = build_part("ASM-src-2", src2,
+                                [{"kind": "circle", "center_mm": [0, 0], "radius_mm": 20}], 15)
+    rep.add("ASM.SRC2", "второй источник (другой файл) сохранён на диск",
+            "PASS" if _s2 else "FAIL", f"path={_s2} объём={_v2} error={err2}")
+
+    # ========= ASM.02: вставка компонента =========
+    # fixed=false: зафиксированный компонент перемещать НЕЛЬЗЯ (документация ksPart.fixedComponent:
+    # «Если компонент зафиксирован, то нельзя изменить его местоположение»), а строка ASM.04 проверяет
+    # именно запись размещения. Фиксация отдельно проверяется ниже как отрицательный контроль.
+    op_id = str(uuid.uuid4())
+    insert_payload = {"document_id": asm, "expected_revision": current_rev(asm),
+                      "source_path": src_path, "fixed": False, "operation_id": op_id}
+    _e, env, _r = client.tool("kompas_insert_component", dict(insert_payload), timeout=300)
+    env = env if isinstance(env, dict) else {}
+    code = error_code(env)
+    count1 = result(env).get("component_count")
+    ref1 = (result(env).get("component_ref") or {}).get("id") if isinstance(
+        result(env).get("component_ref"), dict) else None
+    rev = rev_of(env, rev)
+    rep.add("ASM.02.create", "компонент вставляется из файла (ровно один экземпляр)",
+            "PASS" if (not code and count1 == 1) else "FAIL",
+            f"component_count={count1} ref={ref1} level={level(env)} error={code}")
+
+    # повтор ТОГО ЖЕ operation_id с ТЕМИ ЖЕ аргументами второго не создаёт (идемпотентность).
+    # Аргументы обязаны совпасть ПОЛНОСТЬЮ: тот же id с другой ревизией — это OPERATION_ID_CONFLICT,
+    # а не повтор (измерено 04.10.2026: первая редакция строки подставляла свежую ревизию и получала
+    # конфликт, который выглядел как «повтор не сработал»).
+    _e2, env2, _r2 = client.tool("kompas_insert_component", dict(insert_payload), timeout=300)
+    env2 = env2 if isinstance(env2, dict) else {}
+    replay_count = result(env2).get("component_count")
+    env, code = call("kompas_list_components", {"document_id": asm})
+    after_replay = len(result(env).get("components") or [])
+    rep.add("ASM.02.idempotency", "повтор operation_id второго компонента НЕ создаёт",
+            "PASS" if (replay_count == count1 and after_replay == 1) else "FAIL",
+            f"повтор вернул component_count={replay_count}; в сборке компонентов={after_replay}")
+
+    # ========= ASM.03: чтение структуры =========
+    env, code = call("kompas_list_components", {"document_id": asm})
+    rows = result(env).get("components")
+    rows = rows if isinstance(rows, list) else []
+    rep.add("ASM.03.read", "структура сборки читается (перечень компонентов с именами)",
+            "PASS" if (not code and len(rows) >= 1) else "FAIL",
+            f"components={len(rows)} unique={result(env).get('unique_part_count')} "
+            f"instances={result(env).get('instance_count')} route={result(env).get('route')} "
+            f"notes={result(env).get('notes')} error={code}")
+    if rows:
+        first = rows[0]
+        rep.add("ASM.03.fields", "строка компонента несёт источник, признак детали, кратность",
+                "PASS" if (first.get("source_path") or first.get("marking")) else "FAIL",
+                f"name={first.get('name')} source={first.get('source_path')} "
+                f"is_detail={first.get('is_detail')} instance_count={first.get('instance_count')} "
+                f"ref_number={first.get('reference_number')} matrix={first.get('matrix')}")
+
+    # вторая вставка ТОЙ ЖЕ детали: кратность 2, уникальных 1 — СРАЗУ после первой, пока других
+    # компонентов нет (иначе «уникальных» считает и посторонние).
+    env, code = call("kompas_insert_component", {
+        "document_id": asm, "expected_revision": current_rev(asm), "source_path": src_path,
+        "fixed": False})
+    second_err = code
+    second_msg = emsg(env)
+    env, code = call("kompas_list_components", {"document_id": asm})
+    rows2 = result(env).get("components") or []
+    unique2 = result(env).get("unique_part_count")
+    inst2 = result(env).get("instance_count")
+    rep.add("ASM.03.multiplicity", "две вставки одной детали: кратность 2, уникальных 1",
+            "PASS" if (len(rows2) == 2 and unique2 == 1 and inst2 == 2) else "FAIL",
+            f"components={len(rows2)} unique={unique2} instances={inst2} "
+            f"вторая_вставка={second_err} msg={second_msg} error={code}")
+
+    # ========= ASM.04: размещение =========
+    if len(rows2) >= 1:
+        target = rows2[0].get("component_ref")
+        env, code = call("kompas_set_component_placement", {
+            "document_id": asm, "expected_revision": current_rev(asm), "component_ref": target,
+            "transform": {"origin_mm": [30, 0, 0], "x_axis": [1, 0, 0], "y_axis": [0, 1, 0]}})
+        after = result(env).get("placement_after_matrix")
+        origin = [after[12], after[13], after[14]] if isinstance(after, list) and len(after) >= 16 else None
+        rep.add("ASM.04.edit", "размещение задаётся и перечитывается (перенос на 30 мм)",
+                "PASS" if (not code and origin and near(origin[0], 30.0)) else "FAIL",
+                f"origin={origin} level={level(env)} error={code} msg={emsg(env)}")
+        # различающий контроль: размещение ВТОРОГО компонента иное (иначе чтение «первого» неотличимо
+        # от правильного — контроль «непустой список» прошёл бы на любом чтении)
+        env, code = call("kompas_list_components", {"document_id": asm})
+        rows3 = result(env).get("components") or []
+        if len(rows3) >= 2:
+            o1 = rows3[0].get("matrix")
+            o2 = rows3[1].get("matrix")
+            o1x = o1[12] if isinstance(o1, list) and len(o1) >= 16 else None
+            o2x = o2[12] if isinstance(o2, list) and len(o2) >= 16 else None
+            rep.add("ASM.04.distinguishing", "различающий контроль: размещение ВТОРОГО компонента иное",
+                    "PASS" if (o1x is not None and o2x is not None and abs(o1x - o2x) > 1.0) else "FAIL",
+                    f"первый origin.x={o1x} второй origin.x={o2x}")
+        else:
+            rep.add("ASM.04.distinguishing", "различающий контроль второго компонента", "FAIL",
+                    f"компонентов {len(rows3)}: различать нечего — кратность не достигнута")
+
+    # ========= ASM.05: замена компонента =========
+    src2 = os.path.join(src_dir, "asm-source-2.m3d")
+    if len(rows2) >= 1:
+        env, code = call("kompas_replace_component", {
+            "document_id": asm, "expected_revision": current_rev(asm),
+            "component_ref": rows2[0].get("component_ref"), "source_path": src2})
+        before = result(env).get("placement_before_matrix")
+        after = result(env).get("placement_after_matrix")
+        same = (isinstance(before, list) and isinstance(after, list) and len(before) >= 16
+                and len(after) >= 16 and all(abs(before[i] - after[i]) <= 0.01 for i in range(16)))
+        rep.add("ASM.05.edit", "замена компонента сохраняет размещение и кратность",
+                "PASS" if (not code and same
+                           and result(env).get("component_count") == len(rows2)) else "FAIL",
+                f"source_after={result(env).get('source_path_after')} "
+                f"placement_preserved={same} count={result(env).get('component_count')} "
+                f"error={code} msg={emsg(env)}")
+
+    # ========= ASM.06: проверка ссылок =========
+    env, code = call("kompas_check_component_links", {"document_id": asm})
+    links = result(env).get("links") or []
+    rep.add("ASM.06.read", "ссылки компонентов проверяются (источник на месте)",
+            "PASS" if (not code and len(links) >= 1) else "FAIL",
+            f"links={len(links)} broken={result(env).get('broken_count')} error={code}")
+
+    # битая ссылка: убрать файл-источник и перечитать
+    broken_named = False
+    if os.path.isfile(src_path):
+        try:
+            os.rename(src_path, src_path + ".moved")
+            env, code = call("kompas_check_component_links", {"document_id": asm})
+            links2 = result(env).get("links") or []
+            broken = [l for l in links2 if l.get("source_exists") is False]
+            broken_named = len(broken) >= 1 and result(env).get("broken_count", 0) >= 1
+            rep.add("ASM.06.negative_tests", "отсутствующий источник НАЗВАН, а не выдан за исправный",
+                    "PASS" if broken_named else "FAIL",
+                    f"broken_count={result(env).get('broken_count')} verdict="
+                    f"{broken[0].get('verdict') if broken else '—'}")
+            os.rename(src_path + ".moved", src_path)
+        except OSError as ex:
+            rep.add("ASM.06.negative_tests", "отсутствующий источник НАЗВАН", "FAIL", str(ex))
+
+    # ========= ASM.07: сохранение и переоткрытие =========
+    asm_path = os.path.join(src_dir, "asm-01.m3d")
+    env, code = call("kompas_save_document", {"document_id": asm,
+                                              "expected_revision": current_rev(asm),
+                                              "target_path": asm_path})
+    rep.add("ASM.07.save_reopen", "сборка сохраняется на диск",
+            "PASS" if (not code and os.path.isfile(asm_path)) else "FAIL",
+            f"path={asm_path} exists={os.path.isfile(asm_path)} error={code}")
+    call("kompas_close_document", {"document_id": asm, "dirty_policy": "save"})
+    env, code = call("kompas_open_document", {"application_id": app_id, "path": asm_path,
+                                              "access": "edit"})
+    asm2 = doc_id(env)
+    env, code = call("kompas_list_components", {"document_id": asm2})
+    rows4 = result(env).get("components") or []
+    inst4 = result(env).get("instance_count")
+    rep.add("ASM.07.reopen", "после save→close→reopen структура и кратность совпадают",
+            "PASS" if (len(rows4) == len(rows2) and inst4 == len(rows2)) else "FAIL",
+            f"components={len(rows4)} (до сохранения {len(rows2)}) instances={inst4} error={code}")
+
+    # ========= остальные ПРИМЕНИМЫЕ действия десятисловного словаря =========
+    # Словарь профиля: discover, create, read, edit, rebuild, save_reopen, suppress_restore,
+    # delete_dependencies, negative_tests, geometry_validation. Здесь закрываются те, что применимы
+    # к домену сборки; предметно неприменимые названы в матрице с обоснованием (подавление и
+    # удаление КОМПОНЕНТОВ в блок C1 не входят, а у режима чтения нет своего «create»).
+
+    # ASM.01.discover: сборка видна в перечислении документов
+    env, code = call("kompas_list_documents", {"application_id": app_id})
+    docs = result(env)
+    docs = docs if isinstance(docs, list) else []
+    rep.add("ASM.01.discover", "перечисление документов показывает сборку",
+            "PASS" if any((d.get("document_id") or d.get("id")) == asm2 for d in docs) else "FAIL",
+            f"документов={len(docs)} сборка={asm2} error={code}")
+
+    # ASM.01.rebuild / ASM.02.rebuild / ASM.04.rebuild: перестроение сборки
+    env, code = call("kompas_rebuild", {"document_id": asm2})
+    rep.add("ASM.01.rebuild", "перестроение сборки проходит без потери структуры",
+            "PASS" if not code else "FAIL", f"error={code} msg={emsg(env)}")
+    env, code = call("kompas_list_components", {"document_id": asm2})
+    rep.add("ASM.02.rebuild", "после перестроения компоненты на месте",
+            "PASS" if len(result(env).get("components") or []) == len(rows2) else "FAIL",
+            f"components={len(result(env).get('components') or [])} ожидалось {len(rows2)}")
+
+    # ASM.02.geometry_validation: геометрия сборки измеряется
+    env, code = call("kompas_list_bodies", {"document_id": asm2})
+    own_bodies = result(env)
+    own_bodies = own_bodies if isinstance(own_bodies, list) else []
+    # ИЗМЕРЕНО 04.10.2026: у документа-сборки СВОИХ тел нет — тела принадлежат документам-компонентам.
+    # Поэтому геометрия проверяется там, где она есть: в документе-источнике вставленного компонента.
+    # ИЗМЕРЕНО 04.10.2026: у документа-сборки СВОИХ тел нет — тела принадлежат документам-компонентам
+    # (тел_сборки=0). Геометрия поэтому проверяется там, где она есть: объём детали-источника,
+    # измеренный в момент её построения, сверяется с аналитикой 100×80×10 = 80000.
+    expected_v = 100.0 * 80.0 * 10.0
+    rep.add("ASM.02.geometry_validation",
+            "геометрия компонента: объём источника = 100×80×10 (аналитика 80000)",
+            "PASS" if (_v1 is not None and abs(_v1 - expected_v) <= max(0.01, expected_v * 1e-6))
+            else "FAIL",
+            f"тел_сборки={len(own_bodies)} (своих тел у сборки нет), объём_источника={_v1} "
+            f"ожидалось {expected_v}")
+
+    # ASM.03.negative_tests: не-сборка отвергается. Документ-ДЕТАЛЬ создаётся здесь же: отрицательный
+    # контроль обязан идти в той же постановке, что и положительный, иначе «отвергнуто» неотличимо
+    # от «документа не было».
+    env, code = call("kompas_create_document", {"application_id": app_id, "kind": "part",
+                                                "name": "ASM-not-assembly"})
+    asm3 = doc_id(env)
+    env, code = call("kompas_list_components", {"document_id": asm3})
+    rep.add("ASM.03.negative_tests", "чтение структуры не-сборки отвергается INVALID_ARGUMENT",
+            "PASS" if code == "INVALID_ARGUMENT" else "FAIL", f"error={code}")
+
+    # ASM.04.save_reopen: размещение переживает save→close→reopen
+    # (сборка уже переоткрыта как asm2; читаем размещение того же экземпляра)
+    env, code = call("kompas_list_components", {"document_id": asm2})
+    rows5 = result(env).get("components") or []
+    placed = [r for r in rows5 if isinstance(r.get("matrix"), list) and len(r["matrix"]) >= 16]
+    distinct = len({round(r["matrix"][12], 3) for r in placed})
+    rep.add("ASM.04.save_reopen", "размещения переживают save→close→reopen и остаются различными",
+            "PASS" if (len(placed) == len(rows5) and distinct == 2) else "FAIL",
+            f"прочитано размещений={len(placed)} различных origin.x={distinct} "
+            f"({sorted({round(r['matrix'][12], 3) for r in placed})})")
+
+    # ASM.04.negative_tests: устаревшая ссылка компонента отвергается
+    env, code = call("kompas_set_component_placement", {
+        "document_id": asm2, "expected_revision": current_rev(asm2),
+        "component_ref": rows2[0].get("component_ref"),
+        "transform": {"origin_mm": [5, 0, 0], "x_axis": [1, 0, 0], "y_axis": [0, 1, 0]}})
+    rep.add("ASM.04.negative_tests", "ссылка компонента прежней ревизии отвергается STALE_REFERENCE",
+            "PASS" if code == "STALE_REFERENCE" else "FAIL", f"error={code}")
+
+    # ASM.05.read: чтение источника после замены
+    env, code = call("kompas_list_components", {"document_id": asm2})
+    sources = [r.get("source_path") for r in (result(env).get("components") or [])]
+    rep.add("ASM.05.read", "после замены структура читает НОВЫЙ источник",
+            "PASS" if any(s and s.endswith("asm-source-2.m3d") for s in sources) else "FAIL",
+            f"sources={sources}")
+
+    # ASM.06.discover / ASM.07.read: чтение после переоткрытия
+    env, code = call("kompas_check_component_links", {"document_id": asm2})
+    rep.add("ASM.06.discover", "проверка ссылок перечисляет все компоненты после переоткрытия",
+            "PASS" if len(result(env).get("links") or []) == len(rows2) else "FAIL",
+            f"links={len(result(env).get('links') or [])} ожидалось {len(rows2)}")
+    env, code = call("kompas_get_context", {"document_id": asm2, "detail": "minimal"})
+    rep.add("ASM.07.read", "контекст переоткрытой сборки читается (тип assembly)",
+            "PASS" if result(env).get("kind") in ("assembly", "Assembly") else "FAIL",
+            f"kind={result(env).get('kind')} revision={result(env).get('revision')}")
+
+    # ASM.05.negative_tests: замена на отсутствующий файл отвергается
+    env, code = call("kompas_replace_component", {
+        "document_id": asm2, "expected_revision": current_rev(asm2),
+        "component_ref": (result(call("kompas_list_components", {"document_id": asm2})[0]).get(
+            "components") or [{}])[0].get("component_ref"),
+        "source_path": os.path.join(src_dir, "нет-источника-для-замены.m3d")})
+    rep.add("ASM.05.negative_tests", "замена на отсутствующий источник отвергается",
+            "PASS" if code in ("DOCUMENT_NOT_FOUND", "PATH_NOT_ALLOWED") else "FAIL",
+            f"error={code}")
+
+    # ASM.07.negative_tests: переоткрытие отсутствующего пути отвергается
+    env, code = call("kompas_open_document", {
+        "application_id": app_id, "path": os.path.join(src_dir, "нет-такой-сборки.m3d"),
+        "access": "edit"})
+    rep.add("ASM.07.negative_tests", "переоткрытие отсутствующего файла отвергается",
+            "PASS" if code in ("DOCUMENT_NOT_FOUND", "PATH_NOT_ALLOWED") else "FAIL",
+            f"error={code}")
+
+    # ========= контракт: политика путей и отсутствующий источник =========
+    env, code = call("kompas_insert_component", {
+        "document_id": asm2, "expected_revision": rev_of(env, 1),
+        "source_path": "D:\\Windows\\System32\\not-allowed.m3d"})
+    rep.add("ASM.02.negative_tests", "путь за разрешённый корень отвергается до COM",
+            "PASS" if code == "PATH_NOT_ALLOWED" else "FAIL", f"error={code}")
+
+    env, code = call("kompas_insert_component", {
+        "document_id": asm2, "expected_revision": current_rev(asm2),
+        "source_path": os.path.join(src_dir, "нет-такого-файла.m3d")})
+    rep.add("ASM.02.negative_tests_missing", "отсутствующий файл-источник называется",
+            "PASS" if code in ("DOCUMENT_NOT_FOUND", "PATH_NOT_ALLOWED") else "FAIL",
+            f"error={code}")
+
+    call("kompas_close_document", {"document_id": asm3, "dirty_policy": "discard"})
+    call("kompas_close_document", {"document_id": asm2, "dirty_policy": "discard"})
+
+
 def main():
     # x64, not bin\Debug: the solution forces x64 (Directory.Build.props), so `dotnet build`
     # refreshes bin\x64\... only — the AnyCPU output that used to be picked here silently kept
@@ -535,6 +947,13 @@ def main():
     # эти строки тонули бы среди чужих. Полный прогон всё равно обязателен — эта ветка не заменяет
     # релизную приёмку.
     nested_only = "--nested-only" in sys.argv
+    # То же для домена СБОРОК (наряд C1): одна группа ASM на своём сеансе. Отдельная ветка нужна по
+    # той же причине, что у B3M/B4/B5/F08/MANIA/DEP/IMG/NEST: клетка матрицы обязана находиться по
+    # ИМЕНИ строки (`ASM.<NN>.<действие>`), а не по номеру в общем потоке. Полный прогон всё равно
+    # обязателен — эта ветка не заменяет релизную приёмку, но она единственная, которая вообще
+    # вызывает kompas_list_components, kompas_insert_component, kompas_set_component_placement,
+    # kompas_replace_component и kompas_check_component_links.
+    assembly_only = "--assembly-only" in sys.argv
 
     rep = Report(
         ("Приёмка контракта: схемы, отказы до COM, политика путей" if only_contract
@@ -556,6 +975,7 @@ def main():
          else "Приёмка DEP: обязательный объём общих зависимостей профиля через MCP" if dep_only
         else "Приёмка IMG: растровый снимок модели (строка AUX-IMAGE.raster_export) через MCP" if image_only
         else "Приёмка NEST: вложенные контуры и несколько замкнутых контуров (критерий dep.sketch.entities)" if nested_only
+        else "Приёмка ASM: минимальные сборки через MCP (наряд C1, профиль assemblies-minimal-v1)" if assembly_only
         else "Интеграционный прогон вертикального сценария через MCP"),
         os.path.join(workdir, "chamfer-acceptance.json" if chamfer_only
                      else "fillet-acceptance.json" if fillet_only
@@ -575,6 +995,7 @@ def main():
                      else "dep-acceptance.json" if dep_only
                      else "image-acceptance.json" if image_only
                      else "nested-acceptance.json" if nested_only
+                     else "assembly-acceptance.json" if assembly_only
                      else "smoke-report.json"))
     report_override = argument("--report")
     if report_override:
@@ -928,6 +1349,14 @@ def main():
 
         if nested_only:
             nested_contour_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if assembly_only:
+            assembly_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,

@@ -15,26 +15,14 @@
 ### профиль assemblies-minimal-v1 — Минимальные сборки v24
 
 - **обязательных_режимов:** 7
-- **режимов_закрыто:** 0
+- **режимов_закрыто:** 7
 - **общих_зависимостей:** 5
-- **зависимостей_закрыто:** 0
-- **профиль_закрыт:** нет
-- **готовность_процента:** 0.0%
-- **по_очередям:** C1 0/7
-- **открытые_режимы:**
-  - `ASM-01.document.create_open`
-  - `ASM-02.component.insert`
-  - `ASM-03.structure.read`
-  - `ASM-04.placement.set_read`
-  - `ASM-05.component.replace`
-  - `ASM-06.links.check`
-  - `ASM-07.save_reopen`
-- **открытые_зависимости:**
-  - `dep.assembly.document_lifecycle`
-  - `dep.assembly.source_file`
-  - `dep.assembly.component_address`
-  - `dep.assembly.revisions`
-  - `dep.assembly.idempotency`
+- **зависимостей_закрыто:** 5
+- **профиль_закрыт:** да
+- **готовность_процента:** 100.0%
+- **по_очередям:** C1 7/7
+- **открытые_режимы:** []
+- **открытые_зависимости:** []
 
 ### профиль mechanical-core-v1 — Практическое твердотельное моделирование v24
 
@@ -51,17 +39,17 @@
 ### Метрика 2 — полный нормализованный каталог P6
 
 - **строк_каталога:** 257
-- **строк_полностью_закрыто:** 56
-- **строк_с_каким_либо_прогрессом:** 78
+- **строк_полностью_закрыто:** 68
+- **строк_с_каким_либо_прогрессом:** 83
 - **семейств_в_каталоге:** 33
 - **семейств_без_строк:** 14
 - **операций:** 82
 - **режимов_и_вариантов:** 206
-- **применимых_действий:** 2561
-- **действий_verified:** 610
-- **покрытие_действий:** 23.8%
-- **распределение_статусов:** {'not_started': 1938, 'verified': 610, 'not_applicable': 9, 'implemented': 13}
-- **уровни_каталога_операций:** {'metadata_found': 50, 'mcp_verified': 9, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 7}
+- **применимых_действий:** 2508
+- **действий_verified:** 677
+- **покрытие_действий:** 27.0%
+- **распределение_статусов:** {'not_started': 1831, 'verified': 677, 'not_applicable': 62}
+- **уровни_каталога_операций:** {'metadata_found': 50, 'mcp_verified': 16, 'runtime_verified': 6, 'documented': 10}
 - **уровни_каталога_режимов:** {'mcp_verified': 52, 'documented': 19, 'runtime_verified': 3, 'metadata_found': 48, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
@@ -69,23 +57,23 @@
 
 | режим/операция | семья | приоритет | очередь | уровень каталога | поиск | созд | чтен | правк | перестр | reopen | подавл | удал | отказ | геом | проверки |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
-| `ASM-01.document.create_open` | ASM | practical_required | C1 | metadata_found | — | код | код | — | — | код | — | — | — | — | — |
-| `ASM-02.component.insert` | ASM | practical_required | C1 | metadata_found | — | код | код | — | — | — | — | — | — | — | — |
-| `ASM-03.structure.read` | ASM | practical_required | C1 | metadata_found | — | — | код | — | — | — | — | — | — | — | — |
-| `ASM-04.placement.set_read` | ASM | practical_required | C1 | metadata_found | — | — | код | код | — | — | — | — | — | — | — |
-| `ASM-05.component.replace` | ASM | practical_required | C1 | metadata_found | — | — | код | код | — | — | — | — | — | — | — |
-| `ASM-06.links.check` | ASM | practical_required | C1 | metadata_found | — | — | код | — | — | — | — | — | — | — | — |
-| `ASM-07.save_reopen` | ASM | practical_required | C1 | metadata_found | — | — | код | — | — | код | — | — | — | — | — |
+| `ASM-01.document.create_open` | ASM | practical_required | C1 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | н/п | ASM.01.discover, ASM.01.create, ASM.01.read, ASM.01.rebuild, ASM.07.save_reopen, ASM.07.reopen, ASM.01.negative_tests, ASM.07.negative_tests |
+| `ASM-02.component.insert` | ASM | practical_required | C1 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | ASM.01.discover, ASM.03.read, ASM.02.create, ASM.03.fields, ASM.02.rebuild, ASM.07.save_reopen, ASM.07.reopen, ASM.02.idempotency, ASM.02.negative_tests, ASM.02.negative_tests_missing, ASM.02.geometry_validation |
+| `ASM-03.structure.read` | ASM | practical_required | C1 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | ASM.03.read, ASM.03.fields, ASM.03.multiplicity, ASM.06.discover, ASM.07.reopen, ASM.03.negative_tests |
+| `ASM-04.placement.set_read` | ASM | practical_required | C1 | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | OK | ASM.03.read, ASM.03.fields, ASM.04.save_reopen, ASM.04.edit, ASM.02.rebuild, ASM.04.negative_tests, ASM.04.distinguishing |
+| `ASM-05.component.replace` | ASM | practical_required | C1 | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | OK | ASM.03.read, ASM.05.read, ASM.05.edit, ASM.02.rebuild, ASM.07.reopen, ASM.05.negative_tests |
+| `ASM-06.links.check` | ASM | practical_required | C1 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | ASM.06.discover, ASM.06.read, ASM.07.reopen, ASM.06.negative_tests |
+| `ASM-07.save_reopen` | ASM | practical_required | C1 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | OK | ASM.01.discover, ASM.07.read, ASM.07.save_reopen, ASM.07.reopen, ASM.07.negative_tests, ASM.04.save_reopen |
 
 ### Общие зависимости профиля `assemblies-minimal-v1`
 
 | зависимость | закрыто | приоритетные действия | проверки |
 |---|---|---|---|
-| `dep.assembly.document_lifecycle` | нет | discover, create, read, save_reopen, negative_tests | — |
-| `dep.assembly.source_file` | нет | create, read, negative_tests | — |
-| `dep.assembly.component_address` | нет | discover, read, negative_tests | — |
-| `dep.assembly.revisions` | нет | edit, read, negative_tests | — |
-| `dep.assembly.idempotency` | нет | create, read, negative_tests | — |
+| `dep.assembly.document_lifecycle` | да | discover, create, read, save_reopen, negative_tests | ASM.01.discover, ASM.01.create, ASM.01.read, ASM.01.rebuild, ASM.07.save_reopen, ASM.07.reopen, ASM.01.negative_tests, ASM.07.negative_tests |
+| `dep.assembly.source_file` | да | create, read, negative_tests | ASM.03.read, ASM.SRC, ASM.SRC2, ASM.03.fields, ASM.07.reopen, ASM.02.negative_tests, ASM.02.negative_tests_missing, ASM.05.negative_tests, ASM.02.geometry_validation |
+| `dep.assembly.component_address` | да | discover, read, negative_tests | ASM.03.read, ASM.03.fields, ASM.03.multiplicity, ASM.07.reopen, ASM.04.negative_tests, ASM.04.distinguishing, ASM.04.edit |
+| `dep.assembly.revisions` | да | edit, read, negative_tests | ASM.01.read, ASM.07.read, ASM.04.edit, ASM.02.rebuild, ASM.07.save_reopen, ASM.04.negative_tests |
+| `dep.assembly.idempotency` | да | create, read, negative_tests | ASM.03.read, ASM.02.create, ASM.02.idempotency |
 
 ## Метрика 1 — обязательные режимы профиля `mechanical-core-v1`
 
@@ -400,13 +388,13 @@
 | `SM-29.deformation_object` | SM-29 | later | — | documented | — | — | — | — | — | — | — | — | — | — | — |
 | `SM-29.save_component_with_deformation.as_new_file` | SM-29 | later | — | documented | — | — | — | — | — | — | — | — | — | — | — |
 | `AUX-IMAGE.raster_export` | AUX-IMAGE | next | — | mcp_verified | н/п | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | IMG.01.create, IMG.02.create, IMG.03.create, IMG.04.create, IMG.05.read, IMG.06.read, IMG.07.geometry_validation, IMG.08.geometry_validation, IMG.09.geometry_validation, IMG.10.negative_tests, IMG.11.negative_tests, IMG.12.negative_tests, IMG.13.negative_tests, IMG.14.negative_tests, IMG.15.negative_tests, IMG.16.read |
-| `ASM-01.document.create_open` | ASM | practical_required | C1 | metadata_found | — | код | код | — | — | код | — | — | — | — | — |
-| `ASM-02.component.insert` | ASM | practical_required | C1 | metadata_found | — | код | код | — | — | — | — | — | — | — | — |
-| `ASM-03.structure.read` | ASM | practical_required | C1 | metadata_found | — | — | код | — | — | — | — | — | — | — | — |
-| `ASM-04.placement.set_read` | ASM | practical_required | C1 | metadata_found | — | — | код | код | — | — | — | — | — | — | — |
-| `ASM-05.component.replace` | ASM | practical_required | C1 | metadata_found | — | — | код | код | — | — | — | — | — | — | — |
-| `ASM-06.links.check` | ASM | practical_required | C1 | metadata_found | — | — | код | — | — | — | — | — | — | — | — |
-| `ASM-07.save_reopen` | ASM | practical_required | C1 | metadata_found | — | — | код | — | — | код | — | — | — | — | — |
+| `ASM-01.document.create_open` | ASM | practical_required | C1 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | н/п | ASM.01.discover, ASM.01.create, ASM.01.read, ASM.01.rebuild, ASM.07.save_reopen, ASM.07.reopen, ASM.01.negative_tests, ASM.07.negative_tests |
+| `ASM-02.component.insert` | ASM | practical_required | C1 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | ASM.01.discover, ASM.03.read, ASM.02.create, ASM.03.fields, ASM.02.rebuild, ASM.07.save_reopen, ASM.07.reopen, ASM.02.idempotency, ASM.02.negative_tests, ASM.02.negative_tests_missing, ASM.02.geometry_validation |
+| `ASM-03.structure.read` | ASM | practical_required | C1 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | ASM.03.read, ASM.03.fields, ASM.03.multiplicity, ASM.06.discover, ASM.07.reopen, ASM.03.negative_tests |
+| `ASM-04.placement.set_read` | ASM | practical_required | C1 | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | OK | ASM.03.read, ASM.03.fields, ASM.04.save_reopen, ASM.04.edit, ASM.02.rebuild, ASM.04.negative_tests, ASM.04.distinguishing |
+| `ASM-05.component.replace` | ASM | practical_required | C1 | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | OK | ASM.03.read, ASM.05.read, ASM.05.edit, ASM.02.rebuild, ASM.07.reopen, ASM.05.negative_tests |
+| `ASM-06.links.check` | ASM | practical_required | C1 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | ASM.06.discover, ASM.06.read, ASM.07.reopen, ASM.06.negative_tests |
+| `ASM-07.save_reopen` | ASM | practical_required | C1 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | OK | ASM.01.discover, ASM.07.read, ASM.07.save_reopen, ASM.07.reopen, ASM.07.negative_tests, ASM.04.save_reopen |
 | `AUX-SKETCH.plane_and_profile_lifecycle` *(вне каталога)* | AUX-SKETCH | later | — | — | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | V03, V04, V05, G07_xy, G07_xz, G07_yz, V04r, V04d, V04e, V04f, G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, F08.28.discover, F08.28.create, F08.28.read, F08.28.edit, F08.28.rebuild, F08.28.save_reopen, F08.28.negative_tests, F08.28.geometry_validation, AUXS.01.edit, AUXS.02.negative_tests |
 | `SM-04.boss` *(вне каталога)* | SM-04 | later | B5 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `dep.sketch.entities` *(вне каталога)* | AUX-SKETCH | dependency_of | — | — | OK | OK | OK | OK | — | OK | — | — | OK | OK | G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, DEP.DSE.02.create, DEP.DSE.07.geometry_validation, DEP.DSE.06.negative_tests, DEP.DSE.05.save_reopen, DEP.DSE.04.edit, DEP.DSE.01.discover, DEP.DSE.03.read |
@@ -424,11 +412,11 @@
 | `dep.api7.in_same_adapter` *(вне каталога)* | — | dependency_of | — | — | OK | — | OK | OK | — | OK | — | — | — | — | HO.1, HO.2, HO.3, HO.5r, HO.7t, HO.7, HO.8, HO.8r, HO.9, HO.24, HO.25, DEP.DAP.01.discover, DEP.DAP.02.read, DEP.DAP.03.edit, DEP.DAP.04.save_reopen |
 | `dep.foundation` *(вне каталога)* | — | dependency_of | — | — | — | — | OK | — | — | — | — | — | OK | — | DEP.DFN.02.negative_tests, DEP.DFN.01.read |
 | `dep.preserve_unknown` *(вне каталога)* | SM-30 | dependency_of | — | — | — | — | OK | OK | — | OK | — | — | — | OK | DEP.DPU.02.edit, DEP.DPU.04.geometry_validation, DEP.DPU.01.read, DEP.DPU.03.save_reopen |
-| `dep.assembly.document_lifecycle` *(вне каталога)* | — | dependency_of | — | — | — | — | — | — | — | — | — | — | — | — | — |
-| `dep.assembly.source_file` *(вне каталога)* | — | dependency_of | — | — | — | — | — | — | — | — | — | — | — | — | — |
-| `dep.assembly.component_address` *(вне каталога)* | — | dependency_of | — | — | — | — | — | — | — | — | — | — | — | — | — |
-| `dep.assembly.revisions` *(вне каталога)* | — | dependency_of | — | — | — | — | — | — | — | — | — | — | — | — | — |
-| `dep.assembly.idempotency` *(вне каталога)* | — | dependency_of | — | — | — | — | — | — | — | — | — | — | — | — | — |
+| `dep.assembly.document_lifecycle` *(вне каталога)* | — | dependency_of | — | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | н/п | ASM.01.discover, ASM.01.create, ASM.01.read, ASM.01.rebuild, ASM.07.save_reopen, ASM.07.reopen, ASM.01.negative_tests, ASM.07.negative_tests |
+| `dep.assembly.source_file` *(вне каталога)* | — | dependency_of | — | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | OK | ASM.03.read, ASM.SRC, ASM.SRC2, ASM.03.fields, ASM.07.reopen, ASM.02.negative_tests, ASM.02.negative_tests_missing, ASM.05.negative_tests, ASM.02.geometry_validation |
+| `dep.assembly.component_address` *(вне каталога)* | — | dependency_of | — | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | OK | ASM.03.read, ASM.03.fields, ASM.03.multiplicity, ASM.07.reopen, ASM.04.negative_tests, ASM.04.distinguishing, ASM.04.edit |
+| `dep.assembly.revisions` *(вне каталога)* | — | dependency_of | — | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | н/п | ASM.01.read, ASM.07.read, ASM.04.edit, ASM.02.rebuild, ASM.07.save_reopen, ASM.04.negative_tests |
+| `dep.assembly.idempotency` *(вне каталога)* | — | dependency_of | — | mcp_verified | OK | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | ASM.03.read, ASM.02.create, ASM.02.idempotency |
 
 ## Ограничения и незакрытое
 
@@ -733,27 +721,34 @@
   - габарит сверх 1600 пикселей по большей стороне и ответ сверх 2 МиБ base64 отвергаются именованно, а не ужимаются: ужатие нашим маршрутом не документировано
   - форматы, названные справкой и схемой не публикуемые: GIF, TGA, PCX, EMF; WMF справка объявляет неподдерживаемым («файл запишется в EMF») — WMF не публикуется намеренно
   - приёмка image-блоков КЛИЕНТОМ (propagation коннектором WorkBuddy) — часть клиентской приёмки и этим нарядом не исполняется; штатный фолбэк — save_path и чтение файла средствами клиента
-- `ASM-01.document.create_open` — не закрыт
-  - Маршрут измерен по справке (по проводу) и по метаданным поставленных обёрток; живого прогона по сборке не было. Статус not_started честен: это «не начато», а не «неприменимо».
-  - Код маршрута написан и собирается (Host → Worker → COM), но ЖИВОГО ПРОГОНА по сборке не было: статус implemented означает «маршрут есть», а не «работает». Подтверждение требует прогона на v24.0.0.2799 и потому не заявлено.
-- `ASM-02.component.insert` — не закрыт
-  - Маршрут измерен по справке (по проводу) и по метаданным поставленных обёрток; живого прогона по сборке не было. Статус not_started честен: это «не начато», а не «неприменимо».
-  - Код маршрута написан и собирается (Host → Worker → COM), но ЖИВОГО ПРОГОНА по сборке не было: статус implemented означает «маршрут есть», а не «работает». Подтверждение требует прогона на v24.0.0.2799 и потому не заявлено.
-- `ASM-03.structure.read` — не закрыт
-  - Маршрут измерен по справке (по проводу) и по метаданным поставленных обёрток; живого прогона по сборке не было. Статус not_started честен: это «не начато», а не «неприменимо».
-  - Код маршрута написан и собирается (Host → Worker → COM), но ЖИВОГО ПРОГОНА по сборке не было: статус implemented означает «маршрут есть», а не «работает». Подтверждение требует прогона на v24.0.0.2799 и потому не заявлено.
-- `ASM-04.placement.set_read` — не закрыт
-  - Маршрут измерен по справке (по проводу) и по метаданным поставленных обёрток; живого прогона по сборке не было. Статус not_started честен: это «не начато», а не «неприменимо».
-  - Код маршрута написан и собирается (Host → Worker → COM), но ЖИВОГО ПРОГОНА по сборке не было: статус implemented означает «маршрут есть», а не «работает». Подтверждение требует прогона на v24.0.0.2799 и потому не заявлено.
-- `ASM-05.component.replace` — не закрыт
-  - Маршрут измерен по справке (по проводу) и по метаданным поставленных обёрток; живого прогона по сборке не было. Статус not_started честен: это «не начато», а не «неприменимо».
-  - Код маршрута написан и собирается (Host → Worker → COM), но ЖИВОГО ПРОГОНА по сборке не было: статус implemented означает «маршрут есть», а не «работает». Подтверждение требует прогона на v24.0.0.2799 и потому не заявлено.
-- `ASM-06.links.check` — не закрыт
-  - Маршрут измерен по справке (по проводу) и по метаданным поставленных обёрток; живого прогона по сборке не было. Статус not_started честен: это «не начато», а не «неприменимо».
-  - Код маршрута написан и собирается (Host → Worker → COM), но ЖИВОГО ПРОГОНА по сборке не было: статус implemented означает «маршрут есть», а не «работает». Подтверждение требует прогона на v24.0.0.2799 и потому не заявлено.
-- `ASM-07.save_reopen` — не закрыт
-  - Маршрут измерен по справке (по проводу) и по метаданным поставленных обёрток; живого прогона по сборке не было. Статус not_started честен: это «не начато», а не «неприменимо».
-  - Код маршрута написан и собирается (Host → Worker → COM), но ЖИВОГО ПРОГОНА по сборке не было: статус implemented означает «маршрут есть», а не «работает». Подтверждение требует прогона на v24.0.0.2799 и потому не заявлено.
+- `ASM-01.document.create_open` — закрыт целиком
+  - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
+  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
+- `ASM-02.component.insert` — закрыт целиком
+  - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
+  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
+- `ASM-03.structure.read` — закрыт целиком
+  - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
+  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
+- `ASM-04.placement.set_read` — закрыт целиком
+  - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
+  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
+- `ASM-05.component.replace` — закрыт целиком
+  - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
+  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
+- `ASM-06.links.check` — закрыт целиком
+  - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
+  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
+- `ASM-07.save_reopen` — закрыт целиком
+  - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
+  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
 - `AUX-SKETCH.plane_and_profile_lifecycle` — закрыт целиком
   - замена и очистка после reopen работают для измеренной области: эскиз на основной XY, профиль — окружность, вырезание сквозное; точка поиска выводится из цилиндрической грани зависимого тела (проба G, строки G10…G10r)
   - вне измеренной области (наклонная плоскость, отрезки, дуги, прямоугольники) отказ явный: CAPABILITY_UNAVAILABLE с derivation=profile_not_circle / plane_not_xy, а не догадка (строка G11)
@@ -789,16 +784,26 @@
   - Признак API7 различим из API5 по типу 583 (o3d_Hole3D) и ищется сканированием ОБЕИХ коллекций — OperationElement(110) и EntityCollection(-1). Это измеренная поправка: прежний поиск по типу 52 (o3d_holeOperation) не находил признак НИКОГДА, потому что 52 — номер создания через NewEntity, а в дереве он не появляется (проба N.1).
   - Мост пересекается только через Api7Bridge, и ни один вызов не минует очередь Worker и реестр документов/ревизий/ссылок. Своей STA-очереди API7 не заводит.
   - Изоляция вклада Perpendicular от опорной грани не измерена (см. SM-07.native_hole.axis_by_face_normal) — это ограничение строки режима, а не зависимости.
-- `dep.assembly.document_lifecycle` — не закрыт
-  - Зависимость закрывается своими доказательствами, а не «попутно»: живого прогона по сборке не было, поэтому все действия not_started.
-- `dep.assembly.source_file` — не закрыт
-  - Зависимость закрывается своими доказательствами, а не «попутно»: живого прогона по сборке не было, поэтому все действия not_started.
-- `dep.assembly.component_address` — не закрыт
-  - Зависимость закрывается своими доказательствами, а не «попутно»: живого прогона по сборке не было, поэтому все действия not_started.
-- `dep.assembly.revisions` — не закрыт
-  - Зависимость закрывается своими доказательствами, а не «попутно»: живого прогона по сборке не было, поэтому все действия not_started.
-- `dep.assembly.idempotency` — не закрыт
-  - Зависимость закрывается своими доказательствами, а не «попутно»: живого прогона по сборке не было, поэтому все действия not_started.
+- `dep.assembly.document_lifecycle` — закрыт целиком
+  - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
+  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
+- `dep.assembly.source_file` — закрыт целиком
+  - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
+  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
+- `dep.assembly.component_address` — закрыт целиком
+  - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
+  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
+- `dep.assembly.revisions` — закрыт целиком
+  - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
+  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
+- `dep.assembly.idempotency` — закрыт целиком
+  - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
+  - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
+  - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
 
 ## Семьи без строк матрицы (инвентаризация не завершена)
 

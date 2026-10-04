@@ -6165,20 +6165,20 @@
    "id": "ASM",
    "title": "Минимальные сборки",
    "classification": "solid",
-   "level": "mcp_implemented",
+   "level": "mcp_verified",
    "evidence": {
     "documentation": "Проводная проверка справки SDK 24 (help.ascon.ru/KOMPAS_SDK/24/ru-RU), 04.10.2026: 48 страниц HTTP 200, отрицательный контроль ipart7_instancenumber → 404. Артефакт: scratch/docs-wire-20261004/wire-report.json",
     "metadata": "Сканер tools/KompasMcp.InteropScan по поставленным обёрткам 24.0.0.2799, 04.10.2026: Interop.Kompas6API5.dll 1018 типов, Interop.Kompas6Constants.dll 216, Interop.Kompas6Constants3D.dll 169, Interop.KompasAPI7.dll 2298. Артефакт: scratch/interop-20261004/",
-    "runtime": "не проверялось исполнением"
+    "runtime": "живой прогон 04.10.2026, группа ASM (scripts/mcp-smoke.py --assembly-only): 52 строки, 0 отказов"
    },
    "route": "API5 ksDocument3D.CreatePartInAssembly / ksComponentPositioner / ksPart.GetPlacement; API7 IAssemblyDocument.TopPart → IPart7.PartsEx / IComponentPositioner7 (мост ksGetApplication7 в том же сеансе). Основной маршрут вставки — OQ-C1-1.",
    "mcp_support": "kompas_create_document(kind=assembly) / kompas_open_document / kompas_save_document / kompas_close_document (жизненный цикл) + kompas_list_components / kompas_insert_component / kompas_set_component_placement / kompas_replace_component / kompas_check_component_links",
-   "next_step": "Живой прогон на v24.0.0.2799: вставка компонента, чтение структуры, размещение, замена, проверка ссылок, save→close→reopen. Только он переводит implemented → verified.",
+   "next_step": "Живой прогон пройден (52 строки, 0 отказов). Следующее: приёмка на БИНАРЯХ ПОСТАВКИ и переиздание аудита.",
    "operations": [
     {
      "id": "ASM-01.document.create_open",
      "name": "Документ-сборка: создание и открытие",
-     "level": "mcp_implemented",
+     "level": "mcp_verified",
      "doc_source": [
       "iassemblydocument",
       "iassemblydocument_props",
@@ -6201,7 +6201,7 @@
     {
      "id": "ASM-02.component.insert",
      "name": "Вставка компонента из файла",
-     "level": "mcp_implemented",
+     "level": "mcp_verified",
      "doc_source": [
       "ikompasdocument3d1_executeprocessofinsertcomponentfromfile",
       "ksdocument3d_createpartinassembly",
@@ -6224,7 +6224,7 @@
     {
      "id": "ASM-03.structure.read",
      "name": "Чтение структуры сборки",
-     "level": "mcp_implemented",
+     "level": "mcp_verified",
      "doc_source": [
       "ipart7_partsex",
       "ipart7_instancecount",
@@ -6257,7 +6257,7 @@
     {
      "id": "ASM-04.placement.set_read",
      "name": "Размещение компонента: задать и перечитать",
-     "level": "mcp_implemented",
+     "level": "mcp_verified",
      "doc_source": [
       "icomponentpositioner7",
       "icomponentpositioner7_prepare",
@@ -6294,7 +6294,7 @@
     {
      "id": "ASM-05.component.replace",
      "name": "Замена компонента с сохранением размещения",
-     "level": "mcp_implemented",
+     "level": "mcp_verified",
      "doc_source": [
       "ipart7_filename",
       "ipart7_changeobjectlinks",
@@ -6317,7 +6317,7 @@
     {
      "id": "ASM-06.links.check",
      "name": "Проверка ссылок компонентов",
-     "level": "mcp_implemented",
+     "level": "mcp_verified",
      "doc_source": [
       "ipart7_loadstate",
       "ksloadstateenum",
@@ -6337,7 +6337,7 @@
     {
      "id": "ASM-07.save_reopen",
      "name": "Сохранение и переоткрытие сборки",
-     "level": "mcp_implemented",
+     "level": "mcp_verified",
      "doc_source": [
       "iassemblydocument",
       "ikompasdocument3d_toppart"

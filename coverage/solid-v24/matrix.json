@@ -5138,25 +5138,35 @@
    "parameters_schema": null,
    "adapter_route": null,
    "actions": {
-    "discover": "not_started",
-    "create": "implemented",
-    "read": "implemented",
-    "edit": "not_started",
-    "rebuild": "not_started",
-    "save_reopen": "implemented",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "verified",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "verified",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
    },
-   "tests": [],
+   "tests": [
+    "ASM.01.discover",
+    "ASM.01.create",
+    "ASM.01.read",
+    "ASM.01.rebuild",
+    "ASM.07.save_reopen",
+    "ASM.07.reopen",
+    "ASM.01.negative_tests",
+    "ASM.07.negative_tests"
+   ],
    "evidence": [
-    "scratch/docs-wire-20261004/wire-report.json",
-    "scratch/interop-20261004/"
+    "docs/acceptance/assembly/assembly-acceptance.json",
+    "scripts/mcp-smoke.py"
    ],
    "limitations": [
-    "Маршрут измерен по справке (по проводу) и по метаданным поставленных обёрток; живого прогона по сборке не было. Статус not_started честен: это «не начато», а не «неприменимо».",
-    "Код маршрута написан и собирается (Host → Worker → COM), но ЖИВОГО ПРОГОНА по сборке не было: статус implemented означает «маршрут есть», а не «работает». Подтверждение требует прогона на v24.0.0.2799 и потому не заявлено."
+    "Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).",
+    "Сверено только начало координат: различающий контроль по осям (поворот) не ставился."
    ],
    "profile": "assemblies-minimal-v1",
    "priority": "practical_required",
@@ -5164,8 +5174,14 @@
    "depends_on": [
     "dep.assembly.document_lifecycle"
    ],
-   "catalog_level": "metadata_found",
-   "kind": "profile_mode"
+   "catalog_level": "mcp_verified",
+   "kind": "profile_mode",
+   "not_applicable_reasons": {
+    "edit": "режим создаёт и открывает документ; редактирование документа как отдельная операция в блок C1 не входит",
+    "suppress_restore": "документы не подавляются и не восстанавливаются",
+    "delete_dependencies": "у документа-сборки нет удаляемых зависимостей-признаков",
+    "geometry_validation": "у документа-сборки СВОИХ тел нет (измерено: 0); геометрия принадлежит документам-компонентам"
+   }
   },
   {
    "operation_id": "ASM-02.component.insert",
@@ -5174,25 +5190,38 @@
    "parameters_schema": null,
    "adapter_route": null,
    "actions": {
-    "discover": "not_started",
-    "create": "implemented",
-    "read": "implemented",
-    "edit": "not_started",
-    "rebuild": "not_started",
-    "save_reopen": "not_started",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "verified",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "verified",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
    },
-   "tests": [],
+   "tests": [
+    "ASM.01.discover",
+    "ASM.03.read",
+    "ASM.02.create",
+    "ASM.03.fields",
+    "ASM.02.rebuild",
+    "ASM.07.save_reopen",
+    "ASM.07.reopen",
+    "ASM.02.idempotency",
+    "ASM.02.negative_tests",
+    "ASM.02.negative_tests_missing",
+    "ASM.02.geometry_validation"
+   ],
    "evidence": [
-    "scratch/docs-wire-20261004/wire-report.json",
-    "scratch/interop-20261004/"
+    "docs/acceptance/assembly/assembly-acceptance.json",
+    "scripts/mcp-smoke.py"
    ],
    "limitations": [
-    "Маршрут измерен по справке (по проводу) и по метаданным поставленных обёрток; живого прогона по сборке не было. Статус not_started честен: это «не начато», а не «неприменимо».",
-    "Код маршрута написан и собирается (Host → Worker → COM), но ЖИВОГО ПРОГОНА по сборке не было: статус implemented означает «маршрут есть», а не «работает». Подтверждение требует прогона на v24.0.0.2799 и потому не заявлено."
+    "Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).",
+    "Сверено только начало координат: различающий контроль по осям (поворот) не ставился."
    ],
    "profile": "assemblies-minimal-v1",
    "priority": "practical_required",
@@ -5204,8 +5233,13 @@
     "dep.assembly.revisions",
     "dep.assembly.idempotency"
    ],
-   "catalog_level": "metadata_found",
-   "kind": "profile_mode"
+   "catalog_level": "mcp_verified",
+   "kind": "profile_mode",
+   "not_applicable_reasons": {
+    "edit": "вставка не изменяет существующий компонент; изменение — это ASM-04/ASM-05",
+    "suppress_restore": "подавление компонентов в блок C1 не входит",
+    "delete_dependencies": "удаление компонентов в блок C1 не входит"
+   }
   },
   {
    "operation_id": "ASM-03.structure.read",
@@ -5214,25 +5248,33 @@
    "parameters_schema": null,
    "adapter_route": null,
    "actions": {
-    "discover": "not_started",
-    "create": "not_started",
-    "read": "implemented",
-    "edit": "not_started",
-    "rebuild": "not_started",
-    "save_reopen": "not_started",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
    },
-   "tests": [],
+   "tests": [
+    "ASM.03.read",
+    "ASM.03.fields",
+    "ASM.03.multiplicity",
+    "ASM.06.discover",
+    "ASM.07.reopen",
+    "ASM.03.negative_tests"
+   ],
    "evidence": [
-    "scratch/docs-wire-20261004/wire-report.json",
-    "scratch/interop-20261004/"
+    "docs/acceptance/assembly/assembly-acceptance.json",
+    "scripts/mcp-smoke.py"
    ],
    "limitations": [
-    "Маршрут измерен по справке (по проводу) и по метаданным поставленных обёрток; живого прогона по сборке не было. Статус not_started честен: это «не начато», а не «неприменимо».",
-    "Код маршрута написан и собирается (Host → Worker → COM), но ЖИВОГО ПРОГОНА по сборке не было: статус implemented означает «маршрут есть», а не «работает». Подтверждение требует прогона на v24.0.0.2799 и потому не заявлено."
+    "Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).",
+    "Сверено только начало координат: различающий контроль по осям (поворот) не ставился."
    ],
    "profile": "assemblies-minimal-v1",
    "priority": "practical_required",
@@ -5241,8 +5283,16 @@
     "dep.assembly.document_lifecycle",
     "dep.assembly.component_address"
    ],
-   "catalog_level": "metadata_found",
-   "kind": "profile_mode"
+   "catalog_level": "mcp_verified",
+   "kind": "profile_mode",
+   "not_applicable_reasons": {
+    "create": "режим только читает структуру; создавать нечего",
+    "edit": "чтение структуры не изменяет модель",
+    "rebuild": "перестроение — действие мутирующих режимов (ASM-01/ASM-02)",
+    "suppress_restore": "подавление компонентов в блок C1 не входит",
+    "delete_dependencies": "удаление в блок C1 не входит",
+    "geometry_validation": "структура не геометрия; кратность и признак детали проверены как счётчики"
+   }
   },
   {
    "operation_id": "ASM-04.placement.set_read",
@@ -5251,25 +5301,34 @@
    "parameters_schema": null,
    "adapter_route": null,
    "actions": {
-    "discover": "not_started",
-    "create": "not_started",
-    "read": "implemented",
-    "edit": "implemented",
-    "rebuild": "not_started",
-    "save_reopen": "not_started",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "verified",
+    "rebuild": "verified",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
    },
-   "tests": [],
+   "tests": [
+    "ASM.03.read",
+    "ASM.03.fields",
+    "ASM.04.save_reopen",
+    "ASM.04.edit",
+    "ASM.02.rebuild",
+    "ASM.04.negative_tests",
+    "ASM.04.distinguishing"
+   ],
    "evidence": [
-    "scratch/docs-wire-20261004/wire-report.json",
-    "scratch/interop-20261004/"
+    "docs/acceptance/assembly/assembly-acceptance.json",
+    "scripts/mcp-smoke.py"
    ],
    "limitations": [
-    "Маршрут измерен по справке (по проводу) и по метаданным поставленных обёрток; живого прогона по сборке не было. Статус not_started честен: это «не начато», а не «неприменимо».",
-    "Код маршрута написан и собирается (Host → Worker → COM), но ЖИВОГО ПРОГОНА по сборке не было: статус implemented означает «маршрут есть», а не «работает». Подтверждение требует прогона на v24.0.0.2799 и потому не заявлено."
+    "Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).",
+    "Сверено только начало координат: различающий контроль по осям (поворот) не ставился."
    ],
    "profile": "assemblies-minimal-v1",
    "priority": "practical_required",
@@ -5279,8 +5338,13 @@
     "dep.assembly.component_address",
     "dep.assembly.revisions"
    ],
-   "catalog_level": "metadata_found",
-   "kind": "profile_mode"
+   "catalog_level": "mcp_verified",
+   "kind": "profile_mode",
+   "not_applicable_reasons": {
+    "create": "размещение не создаётся отдельно — оно задаётся существующему компоненту",
+    "suppress_restore": "подавление компонентов в блок C1 не входит",
+    "delete_dependencies": "удаление в блок C1 не входит"
+   }
   },
   {
    "operation_id": "ASM-05.component.replace",
@@ -5289,25 +5353,33 @@
    "parameters_schema": null,
    "adapter_route": null,
    "actions": {
-    "discover": "not_started",
-    "create": "not_started",
-    "read": "implemented",
-    "edit": "implemented",
-    "rebuild": "not_started",
-    "save_reopen": "not_started",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "verified",
+    "rebuild": "verified",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
    },
-   "tests": [],
+   "tests": [
+    "ASM.03.read",
+    "ASM.05.read",
+    "ASM.05.edit",
+    "ASM.02.rebuild",
+    "ASM.07.reopen",
+    "ASM.05.negative_tests"
+   ],
    "evidence": [
-    "scratch/docs-wire-20261004/wire-report.json",
-    "scratch/interop-20261004/"
+    "docs/acceptance/assembly/assembly-acceptance.json",
+    "scripts/mcp-smoke.py"
    ],
    "limitations": [
-    "Маршрут измерен по справке (по проводу) и по метаданным поставленных обёрток; живого прогона по сборке не было. Статус not_started честен: это «не начато», а не «неприменимо».",
-    "Код маршрута написан и собирается (Host → Worker → COM), но ЖИВОГО ПРОГОНА по сборке не было: статус implemented означает «маршрут есть», а не «работает». Подтверждение требует прогона на v24.0.0.2799 и потому не заявлено."
+    "Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).",
+    "Сверено только начало координат: различающий контроль по осям (поворот) не ставился."
    ],
    "profile": "assemblies-minimal-v1",
    "priority": "practical_required",
@@ -5318,8 +5390,13 @@
     "dep.assembly.component_address",
     "dep.assembly.revisions"
    ],
-   "catalog_level": "metadata_found",
-   "kind": "profile_mode"
+   "catalog_level": "mcp_verified",
+   "kind": "profile_mode",
+   "not_applicable_reasons": {
+    "create": "замена не создаёт новый компонент: кратность не меняется (измерено 2 → 2)",
+    "suppress_restore": "подавление компонентов в блок C1 не входит",
+    "delete_dependencies": "удаление в блок C1 не входит"
+   }
   },
   {
    "operation_id": "ASM-06.links.check",
@@ -5328,25 +5405,31 @@
    "parameters_schema": null,
    "adapter_route": null,
    "actions": {
-    "discover": "not_started",
-    "create": "not_started",
-    "read": "implemented",
-    "edit": "not_started",
-    "rebuild": "not_started",
-    "save_reopen": "not_started",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
    },
-   "tests": [],
+   "tests": [
+    "ASM.06.discover",
+    "ASM.06.read",
+    "ASM.07.reopen",
+    "ASM.06.negative_tests"
+   ],
    "evidence": [
-    "scratch/docs-wire-20261004/wire-report.json",
-    "scratch/interop-20261004/"
+    "docs/acceptance/assembly/assembly-acceptance.json",
+    "scripts/mcp-smoke.py"
    ],
    "limitations": [
-    "Маршрут измерен по справке (по проводу) и по метаданным поставленных обёрток; живого прогона по сборке не было. Статус not_started честен: это «не начато», а не «неприменимо».",
-    "Код маршрута написан и собирается (Host → Worker → COM), но ЖИВОГО ПРОГОНА по сборке не было: статус implemented означает «маршрут есть», а не «работает». Подтверждение требует прогона на v24.0.0.2799 и потому не заявлено."
+    "Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).",
+    "Сверено только начало координат: различающий контроль по осям (поворот) не ставился."
    ],
    "profile": "assemblies-minimal-v1",
    "priority": "practical_required",
@@ -5356,8 +5439,16 @@
     "dep.assembly.source_file",
     "dep.assembly.component_address"
    ],
-   "catalog_level": "metadata_found",
-   "kind": "profile_mode"
+   "catalog_level": "mcp_verified",
+   "kind": "profile_mode",
+   "not_applicable_reasons": {
+    "create": "режим только проверяет ссылки",
+    "edit": "проверка ссылок модель не меняет",
+    "rebuild": "перестроение — действие мутирующих режимов",
+    "suppress_restore": "подавление компонентов в блок C1 не входит",
+    "delete_dependencies": "удаление в блок C1 не входит",
+    "geometry_validation": "проверяется наличие файла-источника, а не геометрия"
+   }
   },
   {
    "operation_id": "ASM-07.save_reopen",
@@ -5366,25 +5457,33 @@
    "parameters_schema": null,
    "adapter_route": null,
    "actions": {
-    "discover": "not_started",
-    "create": "not_started",
-    "read": "implemented",
-    "edit": "not_started",
-    "rebuild": "not_started",
-    "save_reopen": "implemented",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
    },
-   "tests": [],
+   "tests": [
+    "ASM.01.discover",
+    "ASM.07.read",
+    "ASM.07.save_reopen",
+    "ASM.07.reopen",
+    "ASM.07.negative_tests",
+    "ASM.04.save_reopen"
+   ],
    "evidence": [
-    "scratch/docs-wire-20261004/wire-report.json",
-    "scratch/interop-20261004/"
+    "docs/acceptance/assembly/assembly-acceptance.json",
+    "scripts/mcp-smoke.py"
    ],
    "limitations": [
-    "Маршрут измерен по справке (по проводу) и по метаданным поставленных обёрток; живого прогона по сборке не было. Статус not_started честен: это «не начато», а не «неприменимо».",
-    "Код маршрута написан и собирается (Host → Worker → COM), но ЖИВОГО ПРОГОНА по сборке не было: статус implemented означает «маршрут есть», а не «работает». Подтверждение требует прогона на v24.0.0.2799 и потому не заявлено."
+    "Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).",
+    "Сверено только начало координат: различающий контроль по осям (поворот) не ставился."
    ],
    "profile": "assemblies-minimal-v1",
    "priority": "practical_required",
@@ -5394,8 +5493,15 @@
     "dep.assembly.component_address",
     "dep.assembly.revisions"
    ],
-   "catalog_level": "metadata_found",
-   "kind": "profile_mode"
+   "catalog_level": "mcp_verified",
+   "kind": "profile_mode",
+   "not_applicable_reasons": {
+    "create": "переоткрытие не создаёт документ",
+    "edit": "переоткрытие не изменяет модель",
+    "rebuild": "перестроение — действие мутирующих режимов",
+    "suppress_restore": "подавление компонентов в блок C1 не входит",
+    "delete_dependencies": "удаление в блок C1 не входит"
+   }
   },
   {
    "operation_id": "dep.assembly.document_lifecycle",
@@ -5412,16 +5518,16 @@
    "parameters_schema": null,
    "adapter_route": null,
    "actions": {
-    "discover": "not_started",
-    "create": "not_started",
-    "read": "not_started",
-    "edit": "not_started",
-    "rebuild": "not_started",
-    "save_reopen": "not_started",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "verified",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "verified",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
    },
    "required_actions": [
     "discover",
@@ -5430,12 +5536,24 @@
     "save_reopen",
     "negative_tests"
    ],
-   "tests": [],
+   "tests": [
+    "ASM.01.discover",
+    "ASM.01.create",
+    "ASM.01.read",
+    "ASM.01.rebuild",
+    "ASM.07.save_reopen",
+    "ASM.07.reopen",
+    "ASM.01.negative_tests",
+    "ASM.07.negative_tests"
+   ],
    "evidence": [
-    "scratch/docs-wire-20261004/wire-report.json"
+    "docs/acceptance/assembly/assembly-acceptance.json",
+    "scripts/mcp-smoke.py"
    ],
    "limitations": [
-    "Зависимость закрывается своими доказательствами, а не «попутно»: живого прогона по сборке не было, поэтому все действия not_started."
+    "Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).",
+    "Сверено только начало координат: различающий контроль по осям (поворот) не ставился."
    ],
    "acceptance": [
     "жизненный цикл переиспользуется как есть: новый домен не заводит второго владельца сеанса и второго жизненного цикла",
@@ -5452,7 +5570,14 @@
    ],
    "partial_note": "Потребители объявляют зависимость сами в своём depends_on; required_of выведен из него.",
    "blocked_reasons": {},
-   "read_route": null
+   "read_route": null,
+   "not_applicable_reasons": {
+    "edit": "жизненный цикл документа не редактирует модель",
+    "suppress_restore": "документы не подавляются",
+    "delete_dependencies": "у документа нет удаляемых зависимостей-признаков",
+    "geometry_validation": "жизненный цикл документа геометрией не является"
+   },
+   "catalog_level": "mcp_verified"
   },
   {
    "operation_id": "dep.assembly.source_file",
@@ -5469,28 +5594,41 @@
    "parameters_schema": null,
    "adapter_route": null,
    "actions": {
-    "discover": "not_started",
-    "create": "not_started",
-    "read": "not_started",
-    "edit": "not_started",
-    "rebuild": "not_started",
-    "save_reopen": "not_started",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "verified",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
    },
    "required_actions": [
     "create",
     "read",
     "negative_tests"
    ],
-   "tests": [],
+   "tests": [
+    "ASM.03.read",
+    "ASM.SRC",
+    "ASM.SRC2",
+    "ASM.03.fields",
+    "ASM.07.reopen",
+    "ASM.02.negative_tests",
+    "ASM.02.negative_tests_missing",
+    "ASM.05.negative_tests",
+    "ASM.02.geometry_validation"
+   ],
    "evidence": [
-    "scratch/docs-wire-20261004/wire-report.json"
+    "docs/acceptance/assembly/assembly-acceptance.json",
+    "scripts/mcp-smoke.py"
    ],
    "limitations": [
-    "Зависимость закрывается своими доказательствами, а не «попутно»: живого прогона по сборке не было, поэтому все действия not_started."
+    "Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).",
+    "Сверено только начало координат: различающий контроль по осям (поворот) не ставился."
    ],
    "acceptance": [
     "путь источника — внутри разрешённого корня; выход за корень отказывает до COM",
@@ -5503,7 +5641,14 @@
    ],
    "partial_note": "Потребители объявляют зависимость сами в своём depends_on; required_of выведен из него.",
    "blocked_reasons": {},
-   "read_route": null
+   "read_route": null,
+   "not_applicable_reasons": {
+    "edit": "файл-источник не редактируется сервером",
+    "rebuild": "перестроение не относится к выбору файла",
+    "suppress_restore": "не применимо к выбору файла",
+    "delete_dependencies": "не применимо к выбору файла"
+   },
+   "catalog_level": "mcp_verified"
   },
   {
    "operation_id": "dep.assembly.component_address",
@@ -5520,28 +5665,39 @@
    "parameters_schema": null,
    "adapter_route": null,
    "actions": {
-    "discover": "not_started",
-    "create": "not_started",
-    "read": "not_started",
-    "edit": "not_started",
-    "rebuild": "not_started",
-    "save_reopen": "not_started",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
    },
    "required_actions": [
     "discover",
     "read",
     "negative_tests"
    ],
-   "tests": [],
+   "tests": [
+    "ASM.03.read",
+    "ASM.03.fields",
+    "ASM.03.multiplicity",
+    "ASM.07.reopen",
+    "ASM.04.negative_tests",
+    "ASM.04.distinguishing",
+    "ASM.04.edit"
+   ],
    "evidence": [
-    "scratch/docs-wire-20261004/wire-report.json"
+    "docs/acceptance/assembly/assembly-acceptance.json",
+    "scripts/mcp-smoke.py"
    ],
    "limitations": [
-    "Зависимость закрывается своими доказательствами, а не «попутно»: живого прогона по сборке не было, поэтому все действия not_started."
+    "Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).",
+    "Сверено только начало координат: различающий контроль по осям (поворот) не ставился."
    ],
    "acceptance": [
     "ссылка на компонент устойчива в пределах ревизии и отвергается после перестроения (по образцу feature:/face:)",
@@ -5558,7 +5714,15 @@
    ],
    "partial_note": "Потребители объявляют зависимость сами в своём depends_on; required_of выведен из него.",
    "blocked_reasons": {},
-   "read_route": null
+   "read_route": null,
+   "not_applicable_reasons": {
+    "create": "адрес компонента выдаётся перечислением, а не создаётся отдельно",
+    "edit": "адрес не редактируется",
+    "rebuild": "перестроение не относится к адресации",
+    "suppress_restore": "не применимо к адресации",
+    "delete_dependencies": "не применимо к адресации"
+   },
+   "catalog_level": "mcp_verified"
   },
   {
    "operation_id": "dep.assembly.revisions",
@@ -5575,28 +5739,38 @@
    "parameters_schema": null,
    "adapter_route": null,
    "actions": {
-    "discover": "not_started",
-    "create": "not_started",
-    "read": "not_started",
-    "edit": "not_started",
-    "rebuild": "not_started",
-    "save_reopen": "not_started",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "verified",
+    "rebuild": "verified",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
    },
    "required_actions": [
     "edit",
     "read",
     "negative_tests"
    ],
-   "tests": [],
+   "tests": [
+    "ASM.01.read",
+    "ASM.07.read",
+    "ASM.04.edit",
+    "ASM.02.rebuild",
+    "ASM.07.save_reopen",
+    "ASM.04.negative_tests"
+   ],
    "evidence": [
-    "scratch/docs-wire-20261004/wire-report.json"
+    "docs/acceptance/assembly/assembly-acceptance.json",
+    "scripts/mcp-smoke.py"
    ],
    "limitations": [
-    "Зависимость закрывается своими доказательствами, а не «попутно»: живого прогона по сборке не было, поэтому все действия not_started."
+    "Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).",
+    "Сверено только начало координат: различающий контроль по осям (поворот) не ставился."
    ],
    "acceptance": [
     "правка структуры поднимает ревизию; expected_revision соблюдается",
@@ -5610,7 +5784,14 @@
    ],
    "partial_note": "Потребители объявляют зависимость сами в своём depends_on; required_of выведен из него.",
    "blocked_reasons": {},
-   "read_route": null
+   "read_route": null,
+   "not_applicable_reasons": {
+    "create": "ревизия не создаётся отдельной операцией",
+    "suppress_restore": "не применимо к ревизиям",
+    "delete_dependencies": "не применимо к ревизиям",
+    "geometry_validation": "ревизия — не геометрия"
+   },
+   "catalog_level": "mcp_verified"
   },
   {
    "operation_id": "dep.assembly.idempotency",
@@ -5627,28 +5808,35 @@
    "parameters_schema": null,
    "adapter_route": null,
    "actions": {
-    "discover": "not_started",
-    "create": "not_started",
-    "read": "not_started",
-    "edit": "not_started",
-    "rebuild": "not_started",
-    "save_reopen": "not_started",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "verified",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
    },
    "required_actions": [
     "create",
     "read",
     "negative_tests"
    ],
-   "tests": [],
+   "tests": [
+    "ASM.03.read",
+    "ASM.02.create",
+    "ASM.02.idempotency"
+   ],
    "evidence": [
-    "scratch/docs-wire-20261004/wire-report.json"
+    "docs/acceptance/assembly/assembly-acceptance.json",
+    "scripts/mcp-smoke.py"
    ],
    "limitations": [
-    "Зависимость закрывается своими доказательствами, а не «попутно»: живого прогона по сборке не было, поэтому все действия not_started."
+    "Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).",
+    "Сверено только начало координат: различающий контроль по осям (поворот) не ставился."
    ],
    "acceptance": [
     "повтор operation_id не добавляет второй компонент",
@@ -5661,7 +5849,16 @@
    ],
    "partial_note": "Потребители объявляют зависимость сами в своём depends_on; required_of выведен из него.",
    "blocked_reasons": {},
-   "read_route": null
+   "read_route": null,
+   "not_applicable_reasons": {
+    "edit": "идемпотентность проверяется на создании и изменении; отдельного «edit» нет",
+    "rebuild": "не применимо к дедупликации",
+    "save_reopen": "повтор после переоткрытия не проверялся и в объём не входит",
+    "suppress_restore": "не применимо",
+    "delete_dependencies": "не применимо",
+    "geometry_validation": "идемпотентность — счётчик, а не геометрия"
+   },
+   "catalog_level": "mcp_verified"
   }
  ],
  "pending_families": [

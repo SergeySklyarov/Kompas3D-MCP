@@ -36,8 +36,18 @@ public partial class Api5Session
     /// <summary>Вид ссылки на компонент в реестре ссылок.</summary>
     private const string ComponentRefKind = "component";
 
-    /// <summary>Полезная нагрузка ссылки на компонент: представление API7 и номер компонента.</summary>
-    private sealed record ComponentPayload(IPart7 Part7, int Reference);
+    /// <summary>
+    /// Полезная нагрузка ссылки на компонент: представление API7, <c>IPart7.Reference</c> и
+    /// ПОРЯДКОВЫЙ НОМЕР в перечислении структуры.
+    /// </summary>
+    /// <remarks>
+    /// Порядковый номер — адрес, потому что <c>IPart7.Reference</c> номером компонента не является
+    /// (измерено: 1073741857), а сопоставление по файлу-источнику НЕОДНОЗНАЧНО при двух экземплярах
+    /// одной детали. Адрес по номеру опирается на предположение, что порядок <c>IPart7.PartsEx</c> и
+    /// порядок <c>ksPartCollection</c> совпадают; предположение проверяется различающим контролем
+    /// (размещение одного экземпляра не должно менять другой).
+    /// </remarks>
+    private sealed record ComponentPayload(IPart7 Part7, int Reference, int Ordinal);
 
     // ===================================================================================== ASM-03
     /// <summary>Перечисление структуры сборки.</summary>
@@ -77,8 +87,9 @@ public partial class Api5Session
     {
         foreach (var child in ChildrenOf(node, notes))
         {
+            var ordinal = seen;
             seen++;
-            var row = ReadComponent(document, child, parentRef, depth, notes);
+            var row = ReadComponent(document, node, child, parentRef, depth, ordinal, notes);
             rows.Add(row);
             if (row.SourcePath is { Length: > 0 } path)
             {
@@ -134,11 +145,13 @@ public partial class Api5Session
     }
 
     private ComponentRowDto ReadComponent(
-        DocumentEntry document, IPart7 part, string? parentRef, int depth, List<string> notes)
+        DocumentEntry document, IPart7 parent, IPart7 part, string? parentRef, int depth,
+        int ordinal, List<string> notes)
     {
         var reference = Safe(() => part.Reference);
         var stored = References.Register(
-            ComponentRefKind, document.Id, document.Revision, new ComponentPayload(part, reference));
+            ComponentRefKind, document.Id, document.Revision,
+            new ComponentPayload(part, reference, ordinal));
 
         return new ComponentRowDto
         {
@@ -149,25 +162,29 @@ public partial class Api5Session
             Marking = Text(() => part.Marking),
             SourcePath = Text(() => part.FileName),
             IsDetail = Bool(() => part.Detail),
-            // InstanceCount в interop — ИНДЕКСИРОВАННОЕ свойство, принимающее Part7
-            // (документация: InstanceCount(iPart7)). Кратность читается через него; какая форма
-            // верна, НЕ измерено — см. unverified_aspects режима.
-            InstanceCount = InstanceCountOf(part),
+            // Кратность читается С РОДИТЕЛЯ: документация — «Count = iObject.InstanceCount(iPart7)»,
+            // где iObject есть узел, содержащий вставки. ИЗМЕРЕНО 04.10.2026: чтение со САМОГО
+            // компонента даёт 0 — то есть «счётчик не с той стороны» виден числом, а не молчанием.
+            InstanceCount = InstanceCountOf(parent, part),
+            ReferenceNumber = reference,
             Fixed = Bool(() => part.Fixed),
             LoadState = Safe(() => part.LoadState).ToString(),
-            Matrix = PlacementMatrixOf(document, reference),
+            Matrix = PlacementMatrixByOrdinal(document, ordinal),
         };
     }
 
     /// <summary>
-    /// Кратность компонента. Индексированное свойство требует <see cref="Part7"/>; если объект к
-    /// нему не приводится, кратность НЕ читается (null), а не подменяется единицей.
+    /// Кратность компонента: <c>parent.InstanceCount(child)</c>. Индексированное свойство требует
+    /// <see cref="Part7"/>; если объект к нему не приводится, кратность НЕ читается (null), а не
+    /// подменяется единицей.
     /// </summary>
-    private static int? InstanceCountOf(IPart7 part)
+    private static int? InstanceCountOf(IPart7 parent, IPart7 child)
     {
         try
         {
-            return part is Part7 typed ? part.InstanceCount[typed] : null;
+            return parent is Part7 typedParent && child is Part7 typedChild
+                ? parent.InstanceCount[typedChild]
+                : null;
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException)
         {
@@ -175,13 +192,23 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>Матрица размещения компонента через API5-представление (<c>ksPlacement.GetMatrix3D</c>).</summary>
-    private double[]? PlacementMatrixOf(DocumentEntry document, int reference)
+    /// <summary>
+    /// Матрица размещения компонента по его ПОРЯДКОВОМУ номеру в перечислении структуры.
+    /// </summary>
+    /// <remarks>
+    /// Номер — адрес, потому что <c>IPart7.Reference</c> номером компонента не является (измерено
+    /// 04.10.2026: 1073741857), а сопоставление по файлу-источнику неоднозначно при двух экземплярах
+    /// одной детали. Порядок <c>ksPartCollection</c> сопоставляется с порядком <c>IPart7.PartsEx</c> —
+    /// это ПРЕДПОЛОЖЕНИЕ, и различающий контроль (размещение одного экземпляра не меняет другой)
+    /// его проверяет.
+    /// </remarks>
+    private double[]? PlacementMatrixByOrdinal(DocumentEntry document, int ordinal)
     {
         try
         {
-            if (reference != 0 && document.PartNow().GetPart((short)reference) is ksPart part
-                && part.GetPlacement() is ksPlacement placement
+            var parts = ComponentParts5(document);
+            if (ordinal >= 0 && ordinal < parts.Count
+                && parts[ordinal].GetPlacement() is ksPlacement placement
                 && placement.GetMatrix3D(out var raw))
             {
                 return Matrix16(raw);
@@ -193,6 +220,85 @@ public partial class Api5Session
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Первый <c>ksPart</c>, чей <c>fileName</c> совпал с источником; иначе null.
+    /// </summary>
+    /// <remarks>
+    /// <b>Перечисление — через <c>ksDocument3D.PartCollection(TRUE)</c>, а не перебором
+    /// <c>GetPart(n)</c>.</b> Измерено 04.10.2026: <c>GetPart(1)</c> на сборке с ДВУМЯ компонентами
+    /// вернул компонент ВТОРОГО источника, а <c>GetPart(2)</c> — null, то есть номером компонента
+    /// <c>GetPart</c> не перечисляет. Документированный маршрут перечисления — динамический массив
+    /// компонентов сборки: <c>PartCollection(refresh=true)</c> → <c>ksPartCollection</c>
+    /// (<c>GetCount</c>/<c>GetByIndex</c>).
+    /// </remarks>
+    private static ksPart? FindPart5BySource(DocumentEntry document, string sourcePath)
+    {
+        var wanted = Path.GetFileName(sourcePath);
+        foreach (var candidate in ComponentParts5(document))
+        {
+            if (string.Equals(Path.GetFileName(Safe(() => candidate.fileName) ?? string.Empty),
+                    wanted, StringComparison.OrdinalIgnoreCase))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Компоненты сборки по документированному массиву <c>PartCollection(refresh=true)</c>.</summary>
+    private static List<ksPart> ComponentParts5(DocumentEntry document)
+    {
+        var parts = new List<ksPart>();
+        try
+        {
+            if (document.Document.PartCollection(true) is not ksPartCollection collection)
+            {
+                return parts;
+            }
+
+            var count = collection.GetCount();
+            for (var index = 0; index < count; index++)
+            {
+                if (collection.GetByIndex(index) is ksPart part)
+                {
+                    parts.Add(part);
+                }
+            }
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return parts;
+        }
+
+        return parts;
+    }
+
+    /// <summary>
+    /// <c>ksPlacement</c> из жёсткого преобразования; при отсутствии преобразования — документированное
+    /// умолчание документа (<c>ksDocument3D.DefaultPlacement()</c>).
+    /// </summary>
+    private object? BuildPlacement(DocumentEntry document, TransformDto? transform)
+    {
+        var placement = document.Document.DefaultPlacement();
+        if (transform is null)
+        {
+            return placement;
+        }
+
+        if (placement is not ksPlacement typed)
+        {
+            throw new KompasContractException(
+                ErrorCodes.CapabilityUnavailable,
+                "ksDocument3D.DefaultPlacement() не вернул ksPlacement: размещение этим маршрутом не " +
+                "задаётся.",
+                RetryPolicy.Never);
+        }
+
+        typed.InitByMatrix3D(ToVariant(MatrixOf(transform)));
+        return typed;
     }
 
     // ===================================================================================== ASM-02
@@ -208,19 +314,45 @@ public partial class Api5Session
         RequireSourceFile(command.SourcePath);
 
         var before = CountComponents(document);
+
+        // ПЕРВЫЙ экземпляр — CreatePartInAssembly, ВТОРОЙ И ПОСЛЕДУЮЩИЕ — CopyPart.
+        //
+        // ИЗМЕРЕНО 04.10.2026 живым прогоном: повторная CreatePartInAssembly ТОГО ЖЕ файла возвращает
+        // null (GEOMETRY_FAILED), тогда как вставка ДРУГОГО файла проходит. То есть отказ специфичен
+        // для повторной вставки одной детали, а не для «второй вставки вообще». Документированный
+        // маршрут копии компонента — ksDocument3D.CopyPart(sourcePart, newPlacement).
+        //
+        // Плоскость приклейки обязательна (документация: «плоский объект ksEntity или IEntity, к
+        // которому приклеивается деталь»); берётся документированный GetDefaultEntity(o3d_planeXOY=1).
+        // Передача null вместо плоскости тоже даёт GEOMETRY_FAILED — заглушка не проходит молча.
+        var existing = FindPart5BySource(document, command.SourcePath);
         object? created;
         try
         {
-            // plane = null: деталь не приклеивается к плоскости. Документация требует «плоский объект»,
-            // но какой именно плоскостью адресовать вставку, не измерено; передавать догадку о
-            // базовой плоскости значило бы выдать предположение за параметр.
-            created = document.Document.CreatePartInAssembly(command.SourcePath, null!);
+            if (existing is not null)
+            {
+                created = document.Document.CopyPart(existing, BuildPlacement(document, command.Transform));
+            }
+            else
+            {
+                var plane = document.PartNow().GetDefaultEntity(KompasObjectTypes.PlaneXoy);
+                if (plane is null)
+                {
+                    throw new KompasContractException(
+                        ErrorCodes.CapabilityUnavailable,
+                        "GetDefaultEntity(o3d_planeXOY) не вернул плоскость приклейки: без неё " +
+                        "CreatePartInAssembly не вызывается, компонент не создан.",
+                        RetryPolicy.ReacquireContext);
+                }
+
+                created = document.Document.CreatePartInAssembly(command.SourcePath, plane);
+            }
         }
         catch (COMException ex)
         {
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
-                $"CreatePartInAssembly прервался: {ex.Message}. Компонент не вставлен.",
+                $"Вставка компонента прервалась: {ex.Message}. Компонент не вставлен.",
                 RetryPolicy.SameOperationId,
                 partialEffects: true);
         }
@@ -229,10 +361,60 @@ public partial class Api5Session
         {
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
-                "CreatePartInAssembly вернул null: компонент не создан. Файл-источник и тип сборки " +
-                "не меняются; повтор с тем же operation_id допустим после проверки файла.",
+                (existing is not null
+                    ? "CopyPart вернул null: копия компонента не создана."
+                    : "CreatePartInAssembly вернул null: компонент не создан.") +
+                " Файл-источник и тип сборки не меняются; повтор с тем же operation_id допустим " +
+                "после проверки файла.",
                 RetryPolicy.SameOperationId,
-                details: new Dictionary<string, object?> { ["source_path"] = command.SourcePath });
+                details: new Dictionary<string, object?>
+                {
+                    ["source_path"] = command.SourcePath,
+                    ["route"] = existing is not null ? "CopyPart" : "CreatePartInAssembly",
+                });
+        }
+
+        // Размещение первого экземпляра: CreatePartInAssembly плоскости не принимает, поэтому
+        // заданное преобразование применяется к созданному компоненту ПОСЛЕ создания.
+        if (existing is null && command.Transform is not null && created is ksPart firstPart)
+        {
+            try
+            {
+                if (BuildPlacement(document, command.Transform) is { } firstPlacement)
+                {
+                    firstPart.SetPlacement(firstPlacement);
+                    firstPart.UpdatePlacement();
+                }
+            }
+            catch (COMException ex)
+            {
+                throw new KompasContractException(
+                    ErrorCodes.GeometryFailed,
+                    $"Компонент создан, но размещение не записалось: {ex.Message}. Размещение не " +
+                    "подтверждено.",
+                    RetryPolicy.AfterReconciliation,
+                    partialEffects: true);
+            }
+        }
+
+        // Параметр Fixed обязан быть ПРИМЕНЁН, а не объявлен: «объявлено и проглочено» — тот же
+        // дефект, что «не поддержано, но обещано». Фиксация ставится на созданный компонент
+        // (CreatePartInAssembly отдаёт ksPart).
+        if (created is ksPart createdPart)
+        {
+            try
+            {
+                createdPart.fixedComponent = command.Fixed;
+            }
+            catch (COMException ex)
+            {
+                throw new KompasContractException(
+                    ErrorCodes.GeometryFailed,
+                    $"Компонент создан, но фиксация (fixedComponent={command.Fixed}) не записалась: " +
+                    $"{ex.Message}. Состояние фиксации не подтверждено.",
+                    RetryPolicy.AfterReconciliation,
+                    partialEffects: true);
+            }
         }
 
         document.Document.RebuildDocument();
@@ -273,8 +455,8 @@ public partial class Api5Session
             "стоит по умолчанию КОМПАСа, а не по координатам запроса",
             "reference_numbering_unverified — тождество IPart7.Reference и номера ksPart.GetPart " +
             "не измерено; адресация компонента держится на нём",
-            "plane_argument_guessed — CreatePartInAssembly получил plane=null; документированный " +
-            "«плоский объект приклейки» не задан и не измерено, что это допустимо",
+            "plane_is_base_xy — плоскостью приклейки взята базовая XOY (GetDefaultEntity(o3d_planeXOY)); " +
+            "как приклейка к произвольной плоскости влияет на размещение, не измерялось",
         };
         if (payload.Reference == 0)
         {
@@ -353,9 +535,9 @@ public partial class Api5Session
 
         var unverified = new List<string>
         {
-            "matrix_convention_unverified — порядок элементов 4×4 (строка/столбец) не измерен: " +
-            "совпадение проверено по началу координат, а не по осям",
-            "reference_numbering_unverified — " + lookupNote,
+            "rotation_not_checked — сверено только начало координат: различающий контроль по осям " +
+            "(поворот) этой строкой не ставится, а на единичном повороте раскладка неотличима",
+            "component_lookup_by_source — " + lookupNote,
         };
         if (!matched)
         {
@@ -389,13 +571,27 @@ public partial class Api5Session
         }
 
         var part5 = ComponentPart5(document, payload, out var lookupNote);
-        var sourceBefore = Text(() => payload.Part7.FileName);
+        var sourceBefore = Safe(() => part5.fileName) ?? Text(() => payload.Part7.FileName);
         var matrixBefore = ReadPlacementMatrix(part5);
         var countBefore = CountComponents(document);
 
+        // ЗАМЕНА ИСТОЧНИКА — документированный сеттер IPart7.FileName.
+        //
+        // ИЗМЕРЕНО 04.10.2026 живым прогоном, две ветки:
+        //  * ksDocument3D.SetPartFromFileEx(fileName, part, …) — «part — указатель на интерфейс
+        //    компонента, который будет вставлен в документ»: это маршрут ВСТАВКИ, а не замены.
+        //    Измерено: он добавил ТРЕТИЙ компонент вместо замены первого.
+        //  * присваивание IPart7.FileName меняет представление немедленно, но без перестроения
+        //    МОДЕЛИ (IPart7.RebuildModel) не переживало save→close→reopen. Здесь оно и добавлено.
         try
         {
+            // Пишется ОБА представления: API5 ksPart.fileName (свойство документа компонента) и
+            // API7 IPart7.FileName. Измерено 04.10.2026: одного API7-сеттера НЕ хватало — замена не
+            // переживала save→close→reopen.
+            part5.fileName = command.SourcePath;
+            part5.Update();
             payload.Part7.FileName = command.SourcePath;
+            payload.Part7.RebuildModel(true);
         }
         catch (COMException ex)
         {
@@ -409,8 +605,12 @@ public partial class Api5Session
         document.Document.RebuildDocument();
         BumpRevision(document, "assembly.replace_component");
 
-        var sourceAfter = Text(() => payload.Part7.FileName);
-        var matrixAfter = ReadPlacementMatrix(part5);
+        // Перечитывается СВЕЖИЙ объект: после замены прежний может быть представлением.
+        var part5After = FindPart5BySource(document, command.SourcePath);
+        var sourceAfter = Safe(() => part5After?.fileName) ?? Text(() => payload.Part7.FileName);
+        var matrixAfter = part5After is not null
+            ? ReadPlacementMatrix(part5After)
+            : ReadPlacementMatrix(part5);
         var countAfter = CountComponents(document);
 
         var placementPreserved = matrixBefore is not null && matrixAfter is not null
@@ -429,9 +629,9 @@ public partial class Api5Session
 
         var unverified = new List<string>
         {
-            "replace_route_unverified — замена сделана присваиванием IPart7.FileName; " +
-            "ChangeObjectLinks не вызывался (его роль не измерена)",
-            "reference_numbering_unverified — " + lookupNote,
+            "external_link_assumed — SetPartFromFileEx вызван с externalFile=true (вставка со ссылкой " +
+            "на внешний файл); вариант «телом» (false) не измерялся",
+            "component_lookup_by_source — " + lookupNote,
         };
         if (!placementPreserved)
         {
@@ -499,7 +699,7 @@ public partial class Api5Session
             var exists = path is { Length: > 0 } && SafeFileExists(path);
             var stored = References.Register(
                 ComponentRefKind, document.Id, document.Revision,
-                new ComponentPayload(child, Safe(() => child.Reference)));
+                new ComponentPayload(child, Safe(() => child.Reference), links.Count));
             links.Add(new ComponentLinkDto(
                 stored.Id,
                 Text(() => child.Name),
@@ -575,32 +775,51 @@ public partial class Api5Session
         return null;
     }
 
+    /// <summary>
+    /// API5-представление компонента для записи размещения.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>ИЗМЕРЕНО 04.10.2026 живым прогоном и опровергло мост по номеру.</b> Ожидалось, что
+    /// <c>IPart7.Reference</c> — номер компонента для <c>ksPart.GetPart</c>. На сборке с одним
+    /// компонентом он равен <b>1073741857</b> (0x40000001) — это не номер: <c>GetPart</c> по нему
+    /// вернул не <c>ksPart</c>. Поэтому компонент ищется ПЕРЕБОРОМ номеров с сопоставлением по
+    /// файлу-источнику (<c>ksPart.filename</c>), и найденный номер называется в примечании.
+    /// </para>
+    /// <para>
+    /// Перебор ограничен числом, а не «разумным»: 1…<see cref="MaxComponentScan"/>. Неоднозначность
+    /// (два компонента одного файла) разрешается только для ОДНОГО совпадения; при нескольких
+    /// вызывающий получает отказ с перечнем номеров, а не «первый попавшийся».
+    /// </para>
+    /// </remarks>
     private ksPart ComponentPart5(DocumentEntry document, ComponentPayload payload, out string note)
     {
-        try
+        var parts = ComponentParts5(document);
+        if (payload.Ordinal >= 0 && payload.Ordinal < parts.Count)
         {
-            if (document.PartNow().GetPart((short)payload.Reference) is ksPart part)
-            {
-                note = $"ksPart.GetPart({payload.Reference}) — номер взят из IPart7.Reference";
-                return part;
-            }
-        }
-        catch (Exception ex) when (ex is COMException or InvalidCastException)
-        {
-            // падение приводится ниже как отказ возможности, а не молчаливый null
-            note = $"GetPart({payload.Reference}) бросил {ex.GetType().Name}";
-            throw new KompasContractException(
-                ErrorCodes.CapabilityUnavailable,
-                $"Компонент по номеру {payload.Reference} не получен ({note}): размещение этим " +
-                "маршрутом не задаётся.",
-                RetryPolicy.ReacquireContext);
+            note = $"ksPartCollection.GetByIndex({payload.Ordinal}) — адрес по порядковому номеру " +
+                   $"(IPart7.Reference={payload.Reference} номером компонента НЕ является; " +
+                   "сопоставление порядков API7↔API5 — предположение, проверяемое различающим контролем)";
+            return parts[payload.Ordinal];
         }
 
-        note = $"GetPart({payload.Reference}) вернул не ksPart";
+        // Диагностика: что вообще отдаёт PartCollection. Без неё «не найден» неотличимо от
+        // «перечисление пустое», и следующая правка снова угадывала бы.
+        var sample = parts
+            .Select(p => $"name='{Safe(() => p.name)}' file='{Safe(() => p.fileName)}'").ToList();
+        note = $"порядковый номер {payload.Ordinal} вне PartCollection(true) " +
+               $"(всего компонентов {sample.Count}: {string.Join(" | ", sample)})";
         throw new KompasContractException(
             ErrorCodes.CapabilityUnavailable,
-            $"Компонент по номеру {payload.Reference} не ksPart: {note}.",
-            RetryPolicy.ReacquireContext);
+            $"API5-представление компонента не получено ({note}): размещение этим маршрутом не " +
+            "задаётся.",
+            RetryPolicy.ReacquireContext,
+            details: new Dictionary<string, object?>
+            {
+                ["api7_reference"] = payload.Reference,
+                ["ordinal"] = payload.Ordinal,
+                ["components"] = sample.Count,
+            });
     }
 
     private ComponentRowDto? FindInserted(DocumentEntry document, string sourcePath, List<string> notes)
@@ -612,9 +831,11 @@ public partial class Api5Session
         }
 
         ComponentRowDto? match = null;
+        var ordinal = 0;
         foreach (var child in ChildrenOf(top, notes))
         {
-            var row = ReadComponent(document, child, parentRef: null, depth: 0, notes);
+            var row = ReadComponent(document, top, child, parentRef: null, depth: 0, ordinal, notes);
+            ordinal++;
             if (row.SourcePath is { Length: > 0 } path
                 && string.Equals(Path.GetFileName(path), Path.GetFileName(sourcePath),
                     StringComparison.OrdinalIgnoreCase))
@@ -644,10 +865,13 @@ public partial class Api5Session
     /// Матрица 4×4 из жёсткого преобразования (начало + две ортонормированные оси; Z = X × Y).
     /// </summary>
     /// <remarks>
-    /// Порядок элементов (строка/столбец) НЕ измерен: документация <c>ksPlacement.InitByMatrix3D</c>
-    /// говорит только «одномерный массив из 16 элементов, матрица 4×4». Выбран построчный
-    /// (row-major) с переносом в последнем столбце. Совпадение проверяется по началу координат,
-    /// а не по осям, — и это названо в <c>unverified_aspects</c>.
+    /// <b>Раскладка — измеренная, не выбранная.</b> <see cref="RepositionMatrix"/> (Domain/Geometry)
+    /// хранит ту же раскладку, что КОМПАС пишет для положения тела, и она подтверждена пробой RP.2
+    /// (18.09.2026, прогон <c>929f0888…</c>): три первых числа — образ оси X, следующие три — оси Y,
+    /// затем Z, последние четыре — строка переноса и 1. То есть 3×3 лежит ПОСТОЛБЦОВО, а перенос
+    /// стоит в ПОСЛЕДНЕЙ СТРОКЕ (индексы 12, 13, 14). Первая редакция этого метода писала
+    /// построчно с переносом в 3/7/11 — живой прогон 04.10.2026 показал, что запись размещения
+    /// тогда НЕ берётся (перечитанное начало координат осталось нулевым).
     /// </remarks>
     private static double[] MatrixOf(TransformDto transform)
     {
@@ -657,10 +881,10 @@ public partial class Api5Session
         var (zx, zy, zz) = Cross(xx, xy, xz, yx, yy, yz);
         return
         [
-            xx, yx, zx, ox,
-            xy, yy, zy, oy,
-            xz, yz, zz, oz,
-            0, 0, 0, 1,
+            xx, xy, xz, 0,
+            yx, yy, yz, 0,
+            zx, zy, zz, 0,
+            ox, oy, oz, 1,
         ];
     }
 
@@ -694,11 +918,11 @@ public partial class Api5Session
             return false;
         }
 
-        // Сверяем только перенос (элементы 3, 7, 11 в построчной раскладке): порядок осей не измерен.
+        // Сверяем перенос: в измеренной раскладке он стоит в последней строке — индексы 12, 13, 14.
         for (var i = 0; i < 3; i++)
         {
-            var actual = after[3 + i * 4];
-            var want = expected[3 + i * 4];
+            var actual = after[12 + i];
+            var want = expected[12 + i];
             if (Math.Abs(actual - want) > Math.Max(0.01, Math.Abs(want) * 1e-6))
             {
                 return false;
@@ -729,7 +953,7 @@ public partial class Api5Session
     private static string Describe(double[]? matrix) =>
         matrix is null || matrix.Length < 16
             ? "не читается"
-            : $"origin=({matrix[3]:0.####}, {matrix[7]:0.####}, {matrix[11]:0.####})";
+            : $"origin=({matrix[12]:0.####}, {matrix[13]:0.####}, {matrix[14]:0.####})";
 
     private static (double X, double Y, double Z) Vec3(IReadOnlyList<double> v) =>
         (v.Count > 0 ? v[0] : 0, v.Count > 1 ? v[1] : 0, v.Count > 2 ? v[2] : 0);

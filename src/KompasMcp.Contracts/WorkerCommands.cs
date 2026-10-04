@@ -8,6 +8,19 @@ public static class WorkerCommands
 {
     public const string EnvironmentProbe = "env.probe";
     public const string Ping = "sys.ping";
+
+    /// <summary>
+    /// Опись сеанса: экземпляры КОМПАС и документы, которые держит ЭТОТ Worker, с признаком
+    /// несохранённости. Команда управления, а не геометрия: нужна ровно для одного решения —
+    /// можно ли освободить сеанс без потери правок.
+    /// </summary>
+    /// <remarks>
+    /// Почему отдельная команда, а не повтор <c>doc.list</c>. <c>doc.list</c> требует
+    /// <c>application_id</c> и описывает один экземпляр; освобождению нужна опись ВСЕХ экземпляров
+    /// сразу, иначе документ второго приложения остался бы не названным, и отказ «есть
+    /// несохранённые» был бы неполным — то есть ложным по форме и верным по существу.
+    /// </remarks>
+    public const string SessionInventory = "session.inventory";
     public const string Connect = "app.connect";
     public const string Disconnect = "app.disconnect";
     public const string ListDocuments = "doc.list";

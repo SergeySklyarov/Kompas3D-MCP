@@ -92,9 +92,29 @@ public static class Program
         return 0;
     }
 
+    /// <summary>
+    /// Обслужить РОВНО ОДНО подключение Хоста и завершиться, когда оно кончится.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// ИЗМЕРЕНО 04.10.2026 на прогоне передачи сеанса: прежде здесь стоял цикл
+    /// <c>while (!cancellationToken.IsCancellationRequested)</c>, который после обрыва канала создавал
+    /// НОВЫЙ именованный канал и снова ждал подключения. Следствие: Worker НИКОГДА не завершался по
+    /// отключению Хоста — он оставался жить и ждать, а Хост, не дождавшись выхода, снимал его
+    /// убийством (`kill_used: true` в ответе <c>kompas_release_session</c>). Это прямо противоречило
+    /// и собственному контракту класса («expected to exit on Host disconnect»), и требованию
+    /// освобождения сеанса «убедиться, что Worker больше не выполняет COM и не пишет в журнал»:
+    /// процесс, который не завершается, подтвердить нельзя.
+    /// </para>
+    /// <para>
+    /// Почему это безопасно. Хост поднимает Worker'а по имени канала из <c>WorkerSupervisor</c>, и
+    /// при обрыве канала он сначала останавливает прежний процесс, а потом запускает новый с тем же
+    /// именем. Второе подключение к тому же процессу не предусмотрено ни одним маршрутом — цикл
+    /// ожидания обслуживал состояние, которого никто не запрашивал.
+    /// </para>
+    /// </remarks>
     private static async Task Serve(WorkerOptions options, CommandDispatcher session, WorkerLog log, CancellationToken cancellationToken)
     {
-        while (!cancellationToken.IsCancellationRequested)
         {
             await using var pipe = CreateServer(options.PipeName);
             log.Write("info", "waiting for host connection", new { pipe = options.PipeName });
@@ -145,6 +165,10 @@ public static class Program
                     }
                 }, cancellationToken);
             }
+
+            // КАНАЛ КОНЧИЛСЯ — ЗНАЧИТ, ХОСТ УШЁЛ. Ни новых подключений, ни нового канала: процесс
+            // завершается, и вызывающий (finally в Main) закрывает сеансы и отпускает COM.
+            log.Write("info", "host disconnected; worker exiting");
         }
     }
 

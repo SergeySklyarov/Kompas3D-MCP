@@ -79,90 +79,28 @@ public static class Program
 
         log.Write("info", "host starting", new { version = ServerVersion, pid = Environment.ProcessId, roots = new { read_only = options.ReadOnlyRoots, writable = options.WritableRoots, export = options.ExportRoots } });
 
-        // ВЛАДЕНИЕ ЖУРНАЛОМ — ПРЕЖДЕ ЖУРНАЛА, И ЭТО ПОРЯДОК, А НЕ ВКУС.
+        // ВЛАДЕНИЕ НА СТАРТЕ НЕ БЕРЁТСЯ — И ЭТО ИЗМЕРЕННОЕ РЕШЕНИЕ, А НЕ УПРОЩЕНИЕ.
         //
-        // Два Хоста с одним конфигом делят один журнал и один экземпляр КОМПАС. Отказ обязан быть
-        // ИМЕНОВАННЫМ и прийти раньше, чем кто-либо начнёт работать: измерено 21.09.2026, что
-        // необработанный IOException на старте второго Хоста оставлял клиента с нулём инструментов
-        // и без единого слова причины («MCP error -32000: Connection closed»).
-        using var ownership = HostOwnership.Claim(options.JournalPath);
-        if (ownership.Outcome != OwnershipOutcome.Acquired)
-        {
-            var refusalCode = ownership.ErrorCode ?? ErrorCodes.JournalUnavailable;
-            var refusalMessage = ownership.ErrorMessage ?? "Журнал операций недоступен.";
-            log.Write("error", "host refused to start", new
-            {
-                code = refusalCode,
-                message = refusalMessage,
-                owner_pid = ownership.OwnerPid,
-                owner_state = ownership.OwnerState?.ToString().ToLowerInvariant(),
-                owner_requests_served = ownership.OwnerRequestsServed,
-                record = ownership.RecordPath,
-            });
-            return OwnershipRefusal.Serve(
-                refusalCode,
-                refusalMessage,
-                "Закройте предыдущий сеанс клиента (или дождитесь завершения процесса KompasMcp.Host.exe "
-                + "с названным pid) и подключитесь снова.");
-        }
+        // Прежде Хост захватывал журнал до поднятия транспорта и отказывал второму Хосту на
+        // `initialize`: клиент терял ВСЕ инструменты и не видел причины («MCP error -32000:
+        // Connection closed», измерено 21.09.2026). Затем выяснилось, что владение берёт и то,
+        // что владением не является: измерено 04.10.2026, вспомогательное обнаружение инструментов
+        // заняло сеанс одним вызовом `tools/list`, и основной чат получил SESSION_OWNER_ACTIVE.
+        //
+        // Теперь старт транспорта, `initialize`, `tools/list` и диагностический `health` владения
+        // не берут. Владение даётся либо ЯВНЫМ `kompas_acquire_session`, либо согласованным
+        // допуском РЕАЛЬНОЙ CAD-операции — и никогда обнаружением каталога.
+        using var ownership = HostOwnership.Open(options.JournalPath);
+        await using var session = new HostSession(options, ownership, log);
 
-        if (ownership.TookOverFromPid is int previousOwnerPid)
+        var initialState = session.Status().Result as JsonObject;
+        log.Write("info", "host waiting for session", new
         {
-            log.Write("warn", "ownership taken over", new
-            {
-                previous_pid = previousOwnerPid,
-                previous_was_alive = ownership.TookOverFromLiveOwner,
-                record = ownership.RecordPath,
-            });
-        }
-
-        if (ownership.RecordWasUnreadable)
-        {
-            log.Write("warn", "ownership record was unreadable; treated as no owner", new { record = ownership.RecordPath });
-        }
-
-        OperationJournal? journalOrNull = null;
-        try
-        {
-            journalOrNull = new OperationJournal(options.JournalPath);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
-        {
-            // Журнал операций — механизм безопасности, а не удобство: без него перезапуск не может
-            // отличить «не выполнено» от «выполнено, но ответ потерян». Поэтому работа не
-            // начинается, а причина называется и в stderr, и в журнале Хоста.
-            var message = $"Журнал операций '{options.JournalPath}' недоступен для записи: {ex.Message}. "
-                          + "Работа без журнала безопасности не начинается.";
-            log.Write("error", "host refused to start", new { code = ErrorCodes.JournalUnavailable, message });
-            log.WriteStderr($"{ErrorCodes.JournalUnavailable}: {message}");
-            ownership.MarkDraining();
-            return 70;
-        }
-
-        using var journal = journalOrNull;
-        if (journal.RecoveredInFlight > 0)
-        {
-            log.Write("warn", "journal recovered unfinished operations as outcome_unknown", new { count = journal.RecoveredInFlight });
-        }
-
-        // ПРОПУСК В ЖУРНАЛЕ НАЗЫВАЕТСЯ ЧИСЛОМ. Рваный хвост после жёсткого убийства процесса —
-        // ожидаемое состояние, но «журнал прочитан» и «журнал прочитан не весь» — разные
-        // утверждения, и разница между ними должна быть видна, а не выведена из молчания.
-        if (journal.SkippedLines > 0)
-        {
-            log.Write("warn", "journal replay skipped unreadable lines", new
-            {
-                skipped = journal.SkippedLines,
-                torn_tail = journal.TornTail,
-                path = options.JournalPath,
-            });
-            log.WriteStderr(
-                $"журнал операций: пропущено неразобранных строк {journal.SkippedLines}"
-                + (journal.TornTail ? " (последняя строка оборвана)" : " (обрыв хвоста не подтверждён)"));
-        }
-
-        await using var supervisor = new WorkerSupervisor(options, log);
-        await using var invoker = new ToolInvoker(options, supervisor, journal, log);
+            journal = options.JournalPath,
+            record = ownership.RecordPath,
+            session_state = initialState?["session_state"]?.GetValue<string>(),
+            can_acquire = initialState?["can_acquire"]?.GetValue<bool>(),
+        });
 
         var builder = Microsoft.Extensions.Hosting.Host.CreateApplicationBuilder(args);
         // stdout carries MCP frames, so the framework's console logger cannot be used: SDK errors
@@ -183,8 +121,8 @@ public static class Program
             // Capabilities starts null on a bare McpServerOptions, so the whole object is assigned
             // rather than a member of it.
             serverOptions.Capabilities = new ServerCapabilities { Tools = new ToolsCapability() };
-            serverOptions.Handlers.ListToolsHandler = (request, cancellationToken) => ListTools(request, cancellationToken, ownership, log);
-            serverOptions.Handlers.CallToolHandler = async (request, cancellationToken) => await CallToolAsync(invoker, log, ownership, request, cancellationToken).ConfigureAwait(false);
+            serverOptions.Handlers.ListToolsHandler = (request, cancellationToken) => ListTools(request, cancellationToken, log);
+            serverOptions.Handlers.CallToolHandler = async (request, cancellationToken) => await CallToolAsync(session, log, request, cancellationToken).ConfigureAwait(false);
         }).WithStdioServerTransport();
 
         var host = builder.Build();
@@ -199,16 +137,12 @@ public static class Program
         }
         finally
         {
-            await supervisor.StopAsync().ConfigureAwait(false);
-
-            // ТРАНСПОРТ ЗАВЕРШЁН — СЕАНСА БОЛЬШЕ НЕТ. Владение объявляется свободным СРАЗУ, не
-            // дожидаясь смерти процесса: иначе следующий Хост отказал бы живому, но уже ничем не
-            // занятому предшественнику, и «владелец жив, но сеансов не ведёт» осталось бы словом.
-            if (ownership.MarkDraining() is false)
-            {
-                log.Write("warn", "ownership was already taken over; draining not recorded",
-                    new { record = ownership.RecordPath });
-            }
+            // ТРАНСПОРТ ЗАВЕРШЁН — СЕАНС НУЖНО ОТДАТЬ ТЕМ ЖЕ МЕХАНИЗМОМ, ЧТО И ЯВНОЕ ОСВОБОЖДЕНИЕ.
+            // Прежде здесь просто писалось `draining` до конца очистки, и второй Хост читал его как
+            // «можно брать»: владение переходило, пока первый Worker ещё держал COM. Теперь
+            // очистка подтверждается, и лишь после неё состояние становится `free`; чужое поколение
+            // этот finally не трогает вовсе.
+            await session.OnTransportEndAsync().ConfigureAwait(false);
         }
 
         return 0;
@@ -222,34 +156,39 @@ public static class Program
         Ревизия отменяет выданные ранее ссылки: это не ошибка, а защита от правки устаревшей модели.
         Исход исходных моделей доступен только для чтения; запись разрешена в настроенные песочницы.
         Ответы содержат verification.level: он показывает, что реально проверено, а что нет.
+
+        Одновременно моделью работает только один сеанс. Если CAD-вызов ответил SESSION_NOT_ACQUIRED
+        или SESSION_OWNER_ACTIVE, сеанс занят или требует явного захвата: вызовите
+        kompas_session_status, освободите сеанс у владельца (kompas_release_session) и займите его
+        здесь (kompas_acquire_session). После захвата — новый контекст: kompas_connect и
+        kompas_get_context, прежние document_id и revision недействительны.
         """;
 
     /// <summary>
-    /// Список инструментов. Владение проверяется и здесь, но ОТКАЗ ЗДЕСЬ НЕ ВОЗВРАЩАЕТСЯ.
+    /// Список инструментов: один и тот же каталог для владельца и для ожидающего Хоста.
     /// </summary>
     /// <remarks>
-    /// ИЗМЕРЕНО 21.09.2026 пробой P2: исключение, брошенное из этого обработчика, до клиента НЕ
-    /// доходит — SDK заменяет его на <c>-32603 «An error occurred.»</c>, и читаемый текст причины
-    /// теряется. Поэтому отказ доставляется там, где протокол его несёт: конвертом вызова
-    /// (<see cref="CallToolAsync"/>). Здесь остаётся НАЗВАННАЯ запись в журнале Хоста, а список
-    /// публикуется: клиент, у которого журнал забрал другой процесс, узнаёт причину на первом же
-    /// вызове инструмента, а не получает пустой список без объяснения.
+    /// <para>
+    /// КАТАЛОГ НЕ ЗАВИСИТ ОТ ВЛАДЕНИЯ — И ЭТО ТРЕБОВАНИЕ, А НЕ СЛУЧАЙНОСТЬ. Прежде отказ по
+    /// владению приходил на <c>initialize</c>, и второй чат оставался с НУЛЁМ инструментов: он не
+    /// мог ни узнать причину, ни освободить чужой сеанс, ни даже прочитать его состояние.
+    /// </para>
+    /// <para>
+    /// ОТКАЗ ЗДЕСЬ НЕ ВОЗВРАЩАЕТСЯ и по второй причине: измерено 21.09.2026 пробой P2 —
+    /// исключение, брошенное из этого обработчика, до клиента НЕ доходит, SDK заменяет его на
+    /// <c>-32603 «An error occurred.»</c>, и текст причины теряется. Поэтому отказ доставляется
+    /// там, где протокол его несёт: конвертом вызова (<see cref="CallToolAsync"/>).
+    /// </para>
+    /// <para>
+    /// ВЛАДЕНИЕ ЗДЕСЬ НЕ БЕРЁТСЯ И НЕ ОБНОВЛЯЕТСЯ. Ровно это и было дефектом 04.10.2026:
+    /// вспомогательное обнаружение инструментов занимало сеанс одним <c>tools/list</c>.
+    /// </para>
     /// </remarks>
-    private static ValueTask<ListToolsResult> ListTools(RequestContext<ListToolsRequestParams> request, CancellationToken cancellationToken, HostOwnership ownership, HostLog log)
+    private static ValueTask<ListToolsResult> ListTools(RequestContext<ListToolsRequestParams> request, CancellationToken cancellationToken, HostLog log)
     {
-        if (!ownership.MarkServing())
-        {
-            log.Write("error", "tools/list served while ownership is held by another process", new
-            {
-                code = ErrorCodes.SessionOwnerActive,
-                message = ownership.LostOwnershipMessage(),
-                record = ownership.RecordPath,
-                delivery = "причина доставляется конвертом tools/call: SDK не пропускает текст "
-                           + "исключения обработчика tools/list (измерено 21.09.2026)",
-            });
-        }
-
-        LogOwnershipProblem(log, ownership);
+        _ = request;
+        _ = cancellationToken;
+        log.Write("debug", "tools/list", new { tools = ToolCatalog.All.Count });
 
         var tools = ToolCatalog.All.Select(tool => new Tool
         {
@@ -273,47 +212,19 @@ public static class Program
         return ValueTask.FromResult(new ListToolsResult { Tools = tools, NextCursor = null });
     }
 
-    private static async ValueTask<CallToolResult> CallToolAsync(ToolInvoker invoker, HostLog log, HostOwnership ownership, RequestContext<CallToolRequestParams> request, CancellationToken cancellationToken)
+    private static async ValueTask<CallToolResult> CallToolAsync(HostSession session, HostLog log, RequestContext<CallToolRequestParams> request, CancellationToken cancellationToken)
     {
         var name = request.Params?.Name ?? string.Empty;
         var arguments = ToArgumentsObject(request.Params?.Arguments);
         var started = DateTimeOffset.UtcNow;
 
         ResultEnvelope<JsonNode?> envelope;
-        if (!ownership.MarkServing())
-        {
-            // Владение журналом перешло другому процессу. Отказ приходит ДО обращения к КОМПАС:
-            // иначе два Хоста вели бы операции одновременно, и «единственный владелец» осталось бы
-            // словом. Текст отказа — в конверте, а не только в журнале Хоста: клиент обязан видеть
-            // причину там, где он её читает.
-            var message = ownership.LostOwnershipMessage();
-            log.Write("error", "tool call refused: ownership lost", new { tool = name, code = ErrorCodes.SessionOwnerActive, message, record = ownership.RecordPath });
-            var refusal = new ResultEnvelope<JsonNode?>
-            {
-                Status = OperationStatus.Failed,
-                OperationId = ReadOperationId(arguments),
-                Verification = new VerificationDto(VerificationLevel.None, Array.Empty<NamedCheck>(), new[] { "no_effect_on_model" }),
-                Error = new ErrorDto(ErrorCodes.SessionOwnerActive, message, RetryPolicy.Never, null, false, null),
-            };
-            var refusalJson = JsonSerializer.SerializeToNode(refusal, KompJson.Options)!.ToJsonString();
-            return new CallToolResult
-            {
-                // Тот же формат, что у обычного ответа: текстовая строка плюс сериализованный
-                // конверт. Клиент, читающий только текстовый блок, тоже видит код и причину.
-                Content = new System.Collections.Generic.List<ModelContextProtocol.Protocol.ContentBlock>
-                {
-                    new ModelContextProtocol.Protocol.TextContentBlock { Text = $"{name}: failed | {ErrorCodes.SessionOwnerActive} — {message}\n{refusalJson}" },
-                },
-                StructuredContent = JsonDocument.Parse(refusalJson).RootElement,
-                IsError = true,
-            };
-        }
-
-        LogOwnershipProblem(log, ownership);
-
         try
         {
-            envelope = await invoker.InvokeAsync(name, arguments, cancellationToken).ConfigureAwait(false);
+            // Маршрутизация, владение и освобождение сеанса решаются ВНУТРИ HostSession: отказ по
+            // владению обязан прийти до записи в журнал и до COM, а единственное место, где это
+            // можно гарантировать, — то же, где создаются журнал и Worker.
+            envelope = await session.InvokeAsync(name, arguments, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -438,19 +349,6 @@ public static class Program
     }
 
     private static string? ReadOperationId(JsonObject arguments) => JsonScalars.ReadString(arguments["operation_id"]);
-
-    /// <summary>
-    /// Назвать проблему обновления записи владельца — ОДИН раз на случай, а не в каждой строке:
-    /// строка журнала на каждый вызов инструмента утопила бы в себе то единственное, что нужно
-    /// прочитать.
-    /// </summary>
-    private static void LogOwnershipProblem(HostLog log, HostOwnership ownership)
-    {
-        if (ownership.TakeWriteProblem() is { } problem)
-        {
-            log.Write("warn", "ownership record not refreshed", new { record = ownership.RecordPath, problem });
-        }
-    }
 
     /// <summary>
     /// Read a field of the result only when the result actually is an object. Log lines must not be

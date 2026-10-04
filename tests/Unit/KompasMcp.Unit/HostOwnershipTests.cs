@@ -7,13 +7,23 @@ using Xunit;
 namespace KompasMcp.Unit;
 
 /// <summary>
-/// Единственный активный владелец журнала (R3 наряда).
+/// Единственный владелец CAD-сеанса: захват, освобождение и поколения.
 /// </summary>
 /// <remarks>
-/// Проверяется ПРАВИЛО, а не удобный его случай. «Владелец мёртв» и «владелец жив, но сеанса не
-/// ведёт» проверяются на НАСТОЯЩЕМ чужом процессе: подставленный pid, которого нет, доказывал бы
-/// только то, что несуществующий процесс не мешает. Полный межпроцессный случай (два Хоста на
-/// бинарях поставки) меряется пробой P1/P2 наряда — юнит-тест его не заменяет и не подменяет.
+/// <para>
+/// Проверяется ПРАВИЛО, а не удобный его случай. «Владелец мёртв» и «владелец жив» проверяются на
+/// НАСТОЯЩЕМ чужом процессе: подставленный pid, которого нет, доказывал бы только то, что
+/// несуществующий процесс не мешает.
+/// </para>
+/// <para>
+/// ПОЧЕМУ ПРЕЖНИЕ ПРОВЕРКИ ПЕРЕПИСАНЫ, А НЕ ДОПОЛНЕНЫ. Старая модель захватывала владение на
+/// старте транспорта и считала <c>draining</c> разрешением взять сеанс. Оба утверждения измеренно
+/// ложны (04.10.2026): <c>tools/list</c> вспомогательного обнаружения занимал сеанс, а владение,
+/// помеченное <c>draining</c> до подтверждённой очистки, отдавалось при живом Worker. Здесь
+/// проверяется новая модель: старт владения не берёт, «освобождается» не равно «можно взять»,
+/// явный release запрещает неявный захват. Полный межпроцессный случай меряется прибором двух
+/// независимых MCP-клиентов, юнит-тест его не заменяет.
+/// </para>
 /// </remarks>
 public class HostOwnershipTests : IDisposable
 {
@@ -54,101 +64,117 @@ public class HostOwnershipTests : IDisposable
         return JsonSerializer.Deserialize<HostOwnerRecord>(reader.ReadToEnd(), RecordJson)!;
     }
 
-    private void WriteRecord(int pid, HostOwnerState state) =>
+    private void WriteRecord(int pid, HostOwnerState state, string? generation = null) =>
         File.WriteAllText(
             RecordPath,
-            JsonSerializer.Serialize(new HostOwnerRecord(pid, state, DateTimeOffset.UtcNow, 1, null), RecordJson));
+            JsonSerializer.Serialize(
+                new HostOwnerRecord(pid, generation ?? Guid.NewGuid().ToString("N"), state, DateTimeOffset.UtcNow, 1, null, null),
+                RecordJson));
+
+    // -----------------------------------------------------------------------------------------
+    // Старт владения не берёт
+    // -----------------------------------------------------------------------------------------
 
     [Fact]
-    public void FirstClaim_AcquiresAndWritesItsOwnPid()
+    public void Open_DoesNotClaimOwnershipAndLeavesNoRecord()
     {
-        using var ownership = HostOwnership.Claim(_journal);
+        using var ownership = HostOwnership.Open(_journal);
 
-        Assert.Equal(OwnershipOutcome.Acquired, ownership.Outcome);
-        Assert.Null(ownership.ErrorCode);
+        Assert.False(ownership.IsOwner);
+        Assert.Null(ownership.Generation);
+        Assert.False(File.Exists(RecordPath), "старт транспорта не имеет права занимать сеанс");
+
+        var probe = ownership.Probe();
+        Assert.True(probe.CanAcquire);
+        Assert.False(probe.RequiresExplicitAcquire);
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Захват
+    // -----------------------------------------------------------------------------------------
+
+    [Fact]
+    public void TryAcquire_WritesOwnerWithNewGeneration()
+    {
+        using var ownership = HostOwnership.Open(_journal);
+
+        var result = ownership.TryAcquire(explicitRequest: true);
+
+        Assert.Equal(OwnershipOutcome.Acquired, result.Outcome);
+        Assert.True(result.NewGeneration);
+        Assert.True(ownership.IsOwner);
 
         var record = ReadRecord();
         Assert.Equal(Environment.ProcessId, record.Pid);
-        Assert.Equal(HostOwnerState.Starting, record.State);
-    }
-
-    [Fact]
-    public void MarkServing_RecordsThatTheOwnerIsConductingASession()
-    {
-        using var ownership = HostOwnership.Claim(_journal);
-
-        Assert.True(ownership.MarkServing());
-
-        var record = ReadRecord();
         Assert.Equal(HostOwnerState.Serving, record.State);
-        Assert.Equal(1, record.RequestsServed);
+        Assert.Equal(result.Generation, record.Generation);
     }
 
     [Fact]
-    public void MarkDraining_ReleasesTheOwnershipWithoutWaitingForProcessExit()
+    public void TryAcquire_TwiceBySameHost_DoesNotCreateSecondGeneration()
     {
-        using var ownership = HostOwnership.Claim(_journal);
-        ownership.MarkServing();
+        using var ownership = HostOwnership.Open(_journal);
 
-        Assert.True(ownership.MarkDraining());
+        var first = ownership.TryAcquire(explicitRequest: true);
+        var second = ownership.TryAcquire(explicitRequest: true);
 
-        Assert.Equal(HostOwnerState.Draining, ReadRecord().State);
+        Assert.Equal(OwnershipOutcome.Acquired, first.Outcome);
+        Assert.Equal(OwnershipOutcome.AlreadyOwned, second.Outcome);
+        Assert.Equal(first.Generation, second.Generation);
+        Assert.False(second.NewGeneration, "повторный захват тем же владельцем не создаёт поколения");
     }
 
-    /// <summary>
-    /// Владелец жив и ВЕДЁТ сеанс → второй отказывает ИМЕНОВАННО, и отказ называет pid владельца.
-    /// </summary>
     [Fact]
-    public void LiveOwnerServing_IsRefusedByNameAndPid()
+    public void LiveOwnerServing_IsRefusedByNameAndPidAndDoesNotOverwriteRecord()
     {
         WriteRecord(_foreign.Id, HostOwnerState.Serving);
 
-        using var ownership = HostOwnership.Claim(_journal);
+        using var ownership = HostOwnership.Open(_journal);
+        var result = ownership.TryAcquire(explicitRequest: true);
 
-        Assert.Equal(OwnershipOutcome.RefusedActiveOwner, ownership.Outcome);
-        Assert.Equal(ErrorCodes.SessionOwnerActive, ownership.ErrorCode);
-        Assert.Equal(_foreign.Id, ownership.OwnerPid);
-        Assert.Equal(HostOwnerState.Serving, ownership.OwnerState);
-        Assert.Contains(_foreign.Id.ToString(), ownership.ErrorMessage!, StringComparison.Ordinal);
+        Assert.Equal(OwnershipOutcome.RefusedActiveOwner, result.Outcome);
+        Assert.Equal(ErrorCodes.SessionOwnerActive, result.ErrorCode);
+        Assert.Equal(_foreign.Id, result.Refusal!.OwnerPid);
+        Assert.Equal(HostOwnerState.Serving, result.Refusal.State);
+        Assert.Contains(_foreign.Id.ToString(), result.ErrorMessage!, StringComparison.Ordinal);
 
         // Отказ НЕ переписал чужую запись: иначе отказ был бы способом захватить владение.
         Assert.Equal(_foreign.Id, ReadRecord().Pid);
     }
 
     /// <summary>
-    /// Владелец жив, но сеанса не ведёт (starting) → владение берётся, и взятие названо.
+    /// «Освобождается» НЕ равно «можно взять»: живой владелец в <c>releasing</c> сохраняет
+    /// исключительное право. Это ровно то различие, которого не было в прежней модели.
     /// </summary>
     [Fact]
-    public void LiveOwnerNotServing_IsTakenOverAndNamed()
+    public void LiveOwnerReleasing_IsRefusedAndNotTakenOver()
     {
-        WriteRecord(_foreign.Id, HostOwnerState.Starting);
+        WriteRecord(_foreign.Id, HostOwnerState.Releasing);
 
-        using var ownership = HostOwnership.Claim(_journal);
+        using var ownership = HostOwnership.Open(_journal);
+        var result = ownership.TryAcquire(explicitRequest: true);
 
-        Assert.Equal(OwnershipOutcome.Acquired, ownership.Outcome);
-        Assert.True(ownership.TookOverFromLiveOwner);
-        Assert.Equal(_foreign.Id, ownership.TookOverFromPid);
-        Assert.Equal(Environment.ProcessId, ReadRecord().Pid);
+        Assert.Equal(OwnershipOutcome.RefusedActiveOwner, result.Outcome);
+        Assert.Equal(ErrorCodes.SessionOwnerActive, result.ErrorCode);
+        Assert.Equal(_foreign.Id, ReadRecord().Pid);
     }
 
     /// <summary>
-    /// Владелец снимается (draining) → владение берётся: сеанса он больше не ведёт.
+    /// Транспорт завершён, очистка не подтверждена (<c>draining</c>) — владение не отдаётся живому
+    /// владельцу. Прежняя модель здесь отдавала его, и это было измеренным дефектом.
     /// </summary>
     [Fact]
-    public void DrainingOwner_IsTakenOver()
+    public void LiveOwnerDraining_IsNotTakenOver()
     {
         WriteRecord(_foreign.Id, HostOwnerState.Draining);
 
-        using var ownership = HostOwnership.Claim(_journal);
+        using var ownership = HostOwnership.Open(_journal);
+        var result = ownership.TryAcquire(explicitRequest: true);
 
-        Assert.Equal(OwnershipOutcome.Acquired, ownership.Outcome);
-        Assert.True(ownership.TookOverFromLiveOwner);
+        Assert.Equal(OwnershipOutcome.RefusedActiveOwner, result.Outcome);
+        Assert.Equal(_foreign.Id, ReadRecord().Pid);
     }
 
-    /// <summary>
-    /// Владелец мёртв → владение берётся безусловно. Проверяется на НАСТОЯЩЕМ завершённом процессе:
-    /// «pid, которого наверное нет» измерял бы не правило, а удачу.
-    /// </summary>
     [Fact]
     public void DeadOwner_IsTakenOverUnconditionally()
     {
@@ -162,25 +188,145 @@ public class HostOwnershipTests : IDisposable
         dead.WaitForExit();
         WriteRecord(dead.Id, HostOwnerState.Serving);
 
-        using var ownership = HostOwnership.Claim(_journal);
+        using var ownership = HostOwnership.Open(_journal);
+        var result = ownership.TryAcquire(explicitRequest: true);
 
-        Assert.Equal(OwnershipOutcome.Acquired, ownership.Outcome);
-        Assert.False(ownership.TookOverFromLiveOwner);
-        Assert.Equal(dead.Id, ownership.TookOverFromPid);
+        Assert.Equal(OwnershipOutcome.Acquired, result.Outcome);
+        Assert.Equal(dead.Id, result.TookOverFromPid);
+        Assert.False(result.TookOverFromLiveOwner);
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Освобождение и поколения
+    // -----------------------------------------------------------------------------------------
+
+    [Fact]
+    public void Release_GoesThroughReleasingAndPublishesReleased()
+    {
+        using var ownership = HostOwnership.Open(_journal);
+        ownership.TryAcquire(explicitRequest: true);
+
+        Assert.True(ownership.BeginRelease());
+        Assert.Equal(HostOwnerState.Releasing, ReadRecord().State);
+
+        Assert.True(ownership.CompleteRelease());
+        Assert.Equal(HostOwnerState.Released, ReadRecord().State);
+        Assert.False(ownership.IsOwner, "после подтверждённого освобождения Хост не владелец");
+    }
+
+    [Fact]
+    public void AfterExplicitRelease_ImplicitAcquireIsRefusedButExplicitWorks()
+    {
+        using var ownership = HostOwnership.Open(_journal);
+        var first = ownership.TryAcquire(explicitRequest: true);
+        ownership.BeginRelease();
+        ownership.CompleteRelease();
+
+        var implicitAttempt = ownership.TryAcquire(explicitRequest: false);
+        Assert.Equal(OwnershipOutcome.RefusedExplicitAcquireRequired, implicitAttempt.Outcome);
+        Assert.Equal(ErrorCodes.SessionNotAcquired, implicitAttempt.ErrorCode);
+
+        var explicitAttempt = ownership.TryAcquire(explicitRequest: true);
+        Assert.Equal(OwnershipOutcome.Acquired, explicitAttempt.Outcome);
+        Assert.NotEqual(first.Generation, explicitAttempt.Generation);
+        Assert.True(explicitAttempt.NewGeneration, "захват после release создаёт НОВОЕ поколение");
+    }
+
+    [Fact]
+    public void AfterDrain_ImplicitAcquireIsAllowedAndCreatesNewGeneration()
+    {
+        using var ownership = HostOwnership.Open(_journal);
+        var first = ownership.TryAcquire(explicitRequest: true);
+
+        Assert.True(ownership.BeginDrain());
+        Assert.Equal(HostOwnerState.Draining, ReadRecord().State);
+        Assert.True(ownership.CompleteDrain());
+        Assert.Equal(HostOwnerState.Free, ReadRecord().State);
+
+        var second = ownership.TryAcquire(explicitRequest: false);
+        Assert.Equal(OwnershipOutcome.Acquired, second.Outcome);
+        Assert.NotEqual(first.Generation, second.Generation);
+    }
+
+    [Fact]
+    public void AbortRelease_ReturnsOwnerToServing()
+    {
+        using var ownership = HostOwnership.Open(_journal);
+        ownership.TryAcquire(explicitRequest: true);
+        Assert.True(ownership.BeginRelease());
+
+        Assert.True(ownership.AbortRelease());
+        Assert.Equal(HostOwnerState.Serving, ReadRecord().State);
+        Assert.True(ownership.IsOwner, "отказ до очистки обязан вернуть owned, а не полусвободное состояние");
     }
 
     /// <summary>
-    /// Потерянный владелец ОБЯЗАН узнать о потере и НЕ перезаписать чужую запись.
+    /// Незавершённое освобождение — не повод начать заново: новый захват создал бы второе поколение
+    /// и второго Worker'а поверх, возможно, ещё живого прежнего.
     /// </summary>
-    /// <remarks>
-    /// Это то, что делает взятие владения у «starting» безопасным: Хост, у которого журнал забрали,
-    /// не может вернуть его себе одной строкой в собственном журнале. Без этой проверки правило
-    /// «единственный владелец» держалось бы только на порядке запуска.
-    /// </remarks>
     [Fact]
-    public void OwnerThatLostOwnership_CannotTakeItBackByWritingItsOwnRecord()
+    public void AcquireWhileReleasing_IsRefusedAndDoesNotCreateASecondGeneration()
     {
-        using var ownership = HostOwnership.Claim(_journal);
+        using var ownership = HostOwnership.Open(_journal);
+        var acquired = ownership.TryAcquire(explicitRequest: true);
+        Assert.True(ownership.BeginRelease());
+
+        var attempt = ownership.TryAcquire(explicitRequest: true);
+
+        Assert.Equal(OwnershipOutcome.RefusedActiveOwner, attempt.Outcome);
+        Assert.Equal(ErrorCodes.SessionReleaseFailed, attempt.ErrorCode);
+        Assert.Equal(acquired.Generation, ReadRecord().Generation);
+        Assert.Equal(HostOwnerState.Releasing, ReadRecord().State);
+    }
+
+    [Fact]
+    public void CompleteRelease_WithoutBeginRelease_IsRefused()
+    {
+        using var ownership = HostOwnership.Open(_journal);
+        ownership.TryAcquire(explicitRequest: true);
+
+        Assert.False(ownership.CompleteRelease());
+        Assert.Equal(HostOwnerState.Serving, ReadRecord().State);
+    }
+
+    /// <summary>
+    /// Запоздалый callback СТАРОГО поколения не обновляет состояние нового владельца: запись с
+    /// нашим pid, но чужим поколением — не наша.
+    /// </summary>
+    [Fact]
+    public void StaleGeneration_CannotMarkServingOrRelease()
+    {
+        using var ownership = HostOwnership.Open(_journal);
+        var acquired = ownership.TryAcquire(explicitRequest: true);
+
+        // Тот же pid, но уже не то поколение: симуляция переданного сеанса.
+        WriteRecord(Environment.ProcessId, HostOwnerState.Serving, generation: Guid.NewGuid().ToString("N"));
+
+        Assert.NotEqual(acquired.Generation, ReadRecord().Generation);
+        Assert.False(ownership.MarkServing(), "чужое поколение не имеет права отметиться владельцем");
+        Assert.False(ownership.BeginRelease());
+        Assert.False(ownership.CompleteRelease());
+        Assert.False(ownership.StillOwned());
+    }
+
+    [Fact]
+    public void AfterRelease_StaleMarkServingDoesNotResurrectOwnership()
+    {
+        using var ownership = HostOwnership.Open(_journal);
+        ownership.TryAcquire(explicitRequest: true);
+        ownership.BeginRelease();
+        ownership.CompleteRelease();
+
+        Assert.False(ownership.MarkServing(), "MarkServing после release не восстанавливает владение");
+        Assert.False(ownership.IsOwner);
+        Assert.Equal(HostOwnerState.Released, ReadRecord().State);
+    }
+
+    [Fact]
+    public void LostOwner_CannotTakeOwnershipBackByWritingItsOwnRecord()
+    {
+        using var ownership = HostOwnership.Open(_journal);
+        ownership.TryAcquire(explicitRequest: true);
         WriteRecord(_foreign.Id, HostOwnerState.Serving);
 
         Assert.False(ownership.StillOwned());
@@ -188,22 +334,44 @@ public class HostOwnershipTests : IDisposable
         Assert.Equal(_foreign.Id, ReadRecord().Pid);
     }
 
-    /// <summary>
-    /// Сбой ЗАПИСИ — не потеря владения: живые вызовы не превращаются в отказы, но беда называется.
-    /// </summary>
+    // -----------------------------------------------------------------------------------------
+    // Нечитаемая запись — не свобода
+    // -----------------------------------------------------------------------------------------
+
+    [Fact]
+    public void UnreadableRecord_IsNotTreatedAsFreeSession()
+    {
+        using var ownership = HostOwnership.Open(_journal);
+
+        // Запись владельца есть, но не разбирается. «Не прочиталось» и «владельца нет» — разные
+        // состояния: приравнять их значило бы разрешить работу при неизвестном сеансе.
+        File.WriteAllText(RecordPath, "{ это не json ");
+
+        var probe = ownership.Probe();
+        Assert.True(probe.RecordUnreadable);
+        Assert.False(probe.CanAcquire, "ошибка чтения записи не равна свободному сеансу");
+        Assert.Equal(ErrorCodes.OwnershipStateUnknown, probe.RefusalCode);
+
+        var result = ownership.TryAcquire(explicitRequest: true);
+        Assert.Equal(OwnershipOutcome.RefusedStateUnknown, result.Outcome);
+        Assert.Equal(ErrorCodes.OwnershipStateUnknown, result.ErrorCode);
+    }
+
     [Fact]
     public void UnwritableRecord_DoesNotCountAsLostOwnership()
     {
-        using var ownership = HostOwnership.Claim(_journal);
+        using var ownership = HostOwnership.Open(_journal);
+        ownership.TryAcquire(explicitRequest: true);
 
-        // На месте записи владельца — КАТАЛОГ: запись невозможна, а прочитать нечего.
         File.Delete(RecordPath);
         Directory.CreateDirectory(RecordPath);
 
         Assert.True(ownership.StillOwned(), "нечитаемая запись — не доказательство потери владения");
-        Assert.True(ownership.MarkServing(), "сбой записи не имеет права превратить живой вызов в отказ");
+
+        // СБОЙ ЗАПИСИ НЕ ПРЕВРАЩАЕТ ЖИВОЙ ВЫЗОВ В ОТКАЗ: хост остаётся владельцем, но беда названа.
+        Assert.True(ownership.MarkServing());
         Assert.NotNull(ownership.TakeWriteProblem());
-        Assert.Null(ownership.TakeWriteProblem());
+        Assert.True(ownership.TakeWriteProblem() is null, "одна и та же беда называется ровно один раз");
     }
 
     public void Dispose()

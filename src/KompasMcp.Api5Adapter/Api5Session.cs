@@ -366,6 +366,47 @@ public sealed partial class Api5Session : IDisposable
     // Documents
     // ---------------------------------------------------------------------------------------------
 
+    /// <summary>
+    /// Опись сеанса: экземпляры и документы, которые держит этот адаптер, с признаком
+    /// несохранённости. Ничего не меняет — читает реестр и отпечаток документа.
+    /// </summary>
+    /// <remarks>
+    /// Признак несохранённости берётся ТОЛЬКО из <see cref="SaveStateOf"/>, то есть из отпечатка и
+    /// состояния, которое ведёт сам сервер: документированного свойства «документ изменён» у
+    /// целевой версии нет, и выдавать за него видимое в UI было бы выдумкой (см.
+    /// <see cref="SaveStateOf"/>). Именно поэтому опись идёт на CAD-полосу: читать отпечаток
+    /// приходится через COM.
+    /// </remarks>
+    public object Inventory()
+    {
+        var documents = Documents.Select(document =>
+        {
+            var state = SaveStateOf(document);
+            return new
+            {
+                document_id = document.Id,
+                application_id = document.ApplicationId,
+                kind = document.Kind.ToString().ToLowerInvariant(),
+                path = document.Path,
+                revision = document.Revision,
+                dirty = DocumentSaveTracking.IsDirty(state),
+                save_state = state.ToString().ToLowerInvariant(),
+            };
+        }).ToArray();
+
+        var applications = Applications.Select(application => new
+        {
+            application_id = application.Id,
+            process_id = application.ProcessId,
+            ownership = application.Ownership.ToString().ToLowerInvariant(),
+            connected_as = application.ConnectedAs,
+            version = application.Version,
+            document_count = documents.Count(d => d.application_id == application.Id),
+        }).ToArray();
+
+        return new { applications, documents };
+    }
+
     public ApplicationEntry RequireApplication(string applicationId) =>
         _applications.TryGetValue(applicationId, out var application)
             ? application

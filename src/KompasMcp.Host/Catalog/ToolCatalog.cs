@@ -15,7 +15,16 @@ public sealed record ToolDefinition(
 {
     /// <summary>True when the tool can change the model or the file system and therefore needs
     /// an operation_id and a journal entry.</summary>
-    public bool IsMutation => Behaviour.Destructive || Behaviour.RequiresOperationId;
+    /// <remarks>
+    /// Инструмент управления сеансом меняет состояние СЕРВЕРА, а не модель, и журнал операций не
+    /// пишет: <see cref="ToolBehaviour.HostLocal"/> выводит его из этого правила. Без флага
+    /// «освобождение сеанса» попадало бы в тот же класс, что мутация модели, и каталог требовал бы
+    /// от него operation_id, который журнал не записывает.
+    /// </remarks>
+    public bool IsMutation => !Behaviour.HostLocal && (Behaviour.Destructive || Behaviour.RequiresOperationId);
+
+    /// <summary>Обрабатывается самим Хостом, без Worker и без журнала операций.</summary>
+    public bool IsHostLocal => Behaviour.HostLocal;
 }
 
 public sealed record ToolBehaviour(
@@ -23,7 +32,8 @@ public sealed record ToolBehaviour(
     bool Destructive,
     bool RequiresOperationId,
     bool RequiresDocument,
-    bool RequiresExpectedRevision);
+    bool RequiresExpectedRevision,
+    bool HostLocal = false);
 
 /// <summary>
 /// The tool surface of v1 preview. Every entry here is implemented end to end: an unimplemented
@@ -132,6 +142,40 @@ public static class ToolCatalog
                 "Список инструментов, доступных в этой сборке, версия контракта и ограничения. Основываться на нём, а не на предположениях о КОМПАС.",
                 Sch.Props(),
                 WorkerCommands.EnvironmentProbe),
+
+            Control("kompas_session_status", "Состояние сеанса",
+                "Кто владеет сеансом КОМПАС и можно ли его занять. Различает «сеанс свободен», "
+                + "«занят другим Host», «освобождается» и «состояние определить не удалось». "
+                + "Владение НЕ берёт, Worker не запускает, к COM не обращается — и отвечает даже "
+                + "тогда, когда сеансом владеет другой чат. Ошибка чтения записи владельца НЕ "
+                + "выдаётся за свободный сеанс.",
+                Sch.Props(),
+                HostSession.StatusCommand),
+
+            Control("kompas_acquire_session", "Занять сеанс",
+                "Явный захват CAD-сеанса. Обязателен после того, как прежний владелец снял владение "
+                + "вызовом kompas_release_session: обычный CAD-вызов владение тогда не берёт. Захват "
+                + "создаёт НОВОЕ поколение сеанса и новый Worker: прежние document_id, revision и "
+                + "ссылки недействительны, следующий шаг — kompas_connect и kompas_get_context. "
+                + "Повторный захват тем же владельцем второго Worker не создаёт и поколение не меняет.",
+                Sch.Props(),
+                HostSession.AcquireCommand),
+
+            Control("kompas_release_session", "Освободить сеанс",
+                "Отдать CAD-сеанс другому чату, не завершая приложение-клиент. По умолчанию отказывает, "
+                + "если в сеансе есть несохранённые документы (перечень приходит в ответе: DOCUMENT_DIRTY) "
+                + "или незавершённая работа — выполняющаяся, очередная либо фоновая, чей ответ уже ушёл "
+                + "(SESSION_RELEASE_BUSY). Сохранение и закрытие делаются отдельными инструментами с "
+                + "явными параметрами: сервер не сохраняет и не отказывается от правок молча, "
+                + "принудительного освобождения нет. Освобождение останавливает Worker: зарегистрированные "
+                + "документы закрываются документированным ksDocument3D.close(), собственный (launched) "
+                + "экземпляр КОМПАС завершается документированным KompasObject.Quit(), пользовательский "
+                + "attached КОМПАС остаётся запущенным. MCP-транспорт сохраняется: этот Хост остаётся на "
+                + "связи и позже может занять сеанс снова. Повторный вызов безопасен и различает "
+                + "«уже освобождён» и «освобождён этим запросом».",
+                Sch.Props(),
+                HostSession.ReleaseCommand,
+                destructive: true),
 
             Mutation("kompas_connect", "Подключиться к КОМПАС",
                 "attach — подключиться к уже запущенному экземпляру (нужен однозначный выбор, иначе AMBIGUOUS_APPLICATION); launch — запустить собственный. Обычные инструменты новое приложение не создают.",
@@ -2017,6 +2061,20 @@ public static class ToolCatalog
             new ToolBehaviour(ReadOnly: false, Destructive: true, RequiresOperationId: requiresOperationId, RequiresDocument: requiresDocument, RequiresExpectedRevision: requiresRevision),
             command);
     }
+
+    /// <summary>
+    /// Инструмент управления сеансом: обрабатывается самим Хостом, а не Worker.
+    /// </summary>
+    /// <remarks>
+    /// Отдельная фабрика, а не <see cref="ReadOnly"/>/<see cref="Mutation"/>: этим трём инструментам
+    /// не нужен <c>operation_id</c> (журнал операций они не пишут: освобождение сеанса — не мутация модели),
+    /// и они обязаны отвечать тогда, когда CAD-канала нет вовсе. Пометка <c>destructive</c> у
+    /// освобождения честная: оно завершает сеанс и закрывает документы.
+    /// </remarks>
+    private static ToolDefinition Control(string name, string title, string description, JsonObject properties, string command, bool destructive = false)
+        => new(name, title, description, Request(title, properties),
+            new ToolBehaviour(ReadOnly: false, Destructive: destructive, RequiresOperationId: false, RequiresDocument: false, RequiresExpectedRevision: false, HostLocal: true),
+            command);
 
     /// <summary>Every request also carries the observation budget.</summary>
     private static JsonObject Request(string title, JsonObject properties)

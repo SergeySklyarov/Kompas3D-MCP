@@ -52,12 +52,38 @@
 
 `retry_policy`: never / same_operation_id / reacquire_context / after_reconciliation. Не использовать один флаг retriable для всех случаев.
 
-Минимальный каталог ошибок: INVALID_ARGUMENT, CAPABILITY_UNAVAILABLE, KOMPAS_NOT_INSTALLED, COM_REGISTRATION_ERROR, BITNESS_MISMATCH, LICENSE_UNAVAILABLE, AMBIGUOUS_APPLICATION, APPLICATION_DISCONNECTED, WRONG_DOCUMENT_KIND, DOCUMENT_NOT_FOUND, DOCUMENT_DIRTY, REVISION_CONFLICT, STALE_REFERENCE, AMBIGUOUS_SELECTION, NO_BODY, GEOMETRY_FAILED, NO_GEOMETRY_CHANGE, INTERSECTION_UNKNOWN, COM_BUSY, WORKER_UNRESPONSIVE, OUTCOME_UNKNOWN, QUEUE_FULL, OPERATION_ID_CONFLICT, PATH_NOT_ALLOWED, FILE_EXISTS, SAVE_FAILED, EXTERNAL_REFERENCES, EXPORT_FAILED, IMPORT_FAILED, UNITS_UNVERIFIED, NOT_CONSTANT_THICKNESS, AMBIGUOUS_FLAT_PATTERN, VERIFICATION_FAILED, CANCEL_NOT_CONFIRMED, SESSION_OWNER_ACTIVE, JOURNAL_UNAVAILABLE.
+Минимальный каталог ошибок: INVALID_ARGUMENT, CAPABILITY_UNAVAILABLE, KOMPAS_NOT_INSTALLED, COM_REGISTRATION_ERROR, BITNESS_MISMATCH, LICENSE_UNAVAILABLE, AMBIGUOUS_APPLICATION, APPLICATION_DISCONNECTED, WRONG_DOCUMENT_KIND, DOCUMENT_NOT_FOUND, DOCUMENT_DIRTY, REVISION_CONFLICT, STALE_REFERENCE, AMBIGUOUS_SELECTION, NO_BODY, GEOMETRY_FAILED, NO_GEOMETRY_CHANGE, INTERSECTION_UNKNOWN, COM_BUSY, WORKER_UNRESPONSIVE, OUTCOME_UNKNOWN, QUEUE_FULL, OPERATION_ID_CONFLICT, PATH_NOT_ALLOWED, FILE_EXISTS, SAVE_FAILED, EXTERNAL_REFERENCES, EXPORT_FAILED, IMPORT_FAILED, UNITS_UNVERIFIED, NOT_CONSTANT_THICKNESS, AMBIGUOUS_FLAT_PATTERN, VERIFICATION_FAILED, CANCEL_NOT_CONFIRMED, SESSION_OWNER_ACTIVE, JOURNAL_UNAVAILABLE,
+SESSION_NOT_ACQUIRED, SESSION_RELEASE_BUSY, SESSION_RELEASE_FAILED, OWNERSHIP_STATE_UNKNOWN.
 
-Два последних добавлены 21.09.2026 нарядом `JOURNAL_SHARING_FIX_DEVELOPER_PROMPT.md` §A и описывают состояния ЗАПУСКА, а не вызова CAD:
+Четыре последних добавлены 04.10.2026 нарядом `MCP_SESSION_RELEASE_DEVELOPER_PROMPT.md` и описывают
+владение CAD-сеансом, а не отказ запуска:
 
-- `SESSION_OWNER_ACTIVE` — на журнале операций уже работает другой Хост, владелец жив и ОБСЛУЖИВАЕТ сеанс. Второй Хост отказывается начинать работу и НАЗЫВАЕТ pid владельца, его состояние и число обслуженных запросов; отказ доставляется двумя путями — ответом на `initialize` (JSON-RPC, код `-32050`) и конвертом вызова (`status: failed`, `retry_policy: never`), потому что `tools/list` клиент вызывает после `initialize`. Владелец жив, но НЕ обслуживает (завершает работу) — второй Хост ЗАБИРАЕТ владение и работает; владелец мёртв — владение забирается безусловно.
-- `JOURNAL_UNAVAILABLE` — журнал операций недоступен для записи по причине ВНЕ правила выше (чужой процесс, права, диск). Хост завершается с кодом 70, называя причину в stderr и в журнале Хоста; **работа без журнала безопасности не начинается молча**.
+- `SESSION_NOT_ACQUIRED` — CAD-вызов пришёл от Хоста, который сеансом не владеет. Отказ приходит
+  **до записи в журнал операций и до обращения к COM**: ни одна операция не начата, ни один документ
+  не тронут. Отличается от `SESSION_OWNER_ACTIVE` исходом, а не строгостью: тот означает «владение
+  взять нельзя, им владеет другой», этот — «взять можно, но только явно». У них разные инструкции,
+  и смешивать их значило бы отвечать двумя разными советами на один вопрос.
+- `SESSION_RELEASE_BUSY` — освобождение отклонено, потому что работа ещё идёт: выполняющийся вызов,
+  очередная операция либо фоновая, чей синхронный ответ уже ушёл. **Пустая очередь не sufficient**:
+  мутация, не уложившаяся в `sync_budget_ms`, отвечает `running` и снимается из очереди, оставаясь
+  внутри COM.
+- `SESSION_RELEASE_FAILED` — освобождение не подтверждено: Worker не подтвердил завершение либо
+  состояние `released` не записано. Успехом не считается ни при каких условиях; сеанс остаётся в
+  `releasing`, повтор вызова продолжает очистку, а не повторяет разрушительное действие.
+- `OWNERSHIP_STATE_UNKNOWN` — запись владельца не читается (или именованную блокировку получить не
+  удалось). «Не прочиталось» **не** выдаётся за свободный сеанс: `kompas_session_status` отвечает
+  `session_state: unknown`, а захват отказывается.
+
+`SESSION_OWNER_ACTIVE` и `JOURNAL_UNAVAILABLE` добавлены 21.09.2026 нарядом
+`JOURNAL_SHARING_FIX_DEVELOPER_PROMPT.md` §A. **Формулировка от 21.09.2026 уточнена 04.10.2026**
+(прежняя описывала модель, в которой владение бралось на старте транспорта; она заменена — см. §2.5):
+
+- `SESSION_OWNER_ACTIVE` — сеансом владеет другой живой Хост (состояния `starting`, `serving`,
+  `releasing` или `draining`). Отказ доставляется **конвертом вызова** (`status: failed`), а не
+  отказом на `initialize`: с 04.10.2026 второй Хост проходит `initialize`, публикует каталог и
+  остаётся на связи, чтобы иметь возможность освободить сеанс или прочитать его состояние.
+- `JOURNAL_UNAVAILABLE` — журнал операций недоступен для записи (права, занятый файл, диск). Работа
+  без журнала безопасности **не начинается молча**: отказ приходит ответом `kompas_acquire_session`.
 
 Коды объявляются здесь потому, что вводить их молча запрещено: до 21.09.2026 ни один из них в каталоге не значился, а `tools/list` при этом их уже отдавал.
 
@@ -114,6 +140,63 @@
 держался пропущенный дефект. Обновление вида после мутации делается `ksRefreshActiveWindow()` и
 только в видимом режиме; сброс камеры (`ZoomPrevNextOrAll`, `ksZoom*`) запрещён и контролируется
 статическим тестом. Приёмка: `python scripts\mcp-visibility-test.py` (проверяет и окнами Windows).
+
+### 2.4.1. Владение CAD-сеансом и передача его между чатами (04.10.2026)
+
+Одновременно моделью работает **один владелец**. Владение — отдельный ресурс: оно не совпадает с
+MCP-транспортом и не берётся его стартом. Хост, не владеющий сеансом, остаётся на связи, публикует
+каталог и отвечает на диагностику.
+
+| Инструмент | Вход сверх общих полей | Результат и условия |
+|---|---|---|
+| `kompas_session_status` | — | `session_state`, `can_acquire`, `requires_explicit_acquire`, `owner`, `this_host`, `reason`, `remedy`. Владение НЕ берёт, Worker не запускает, к COM не обращается |
+| `kompas_acquire_session` | — | `acquired`, `already_owner`, `new_generation`, `generation`. При живом владельце — `SESSION_OWNER_ACTIVE` с pid, состоянием и инструкцией |
+| `kompas_release_session` | — | `released`, `released_by_this_request`, `worker{pid, confirmed, exit_code, kill_used}`. Отказ при несохранённых документах — `DOCUMENT_DIRTY` с перечнем; при незавершённой работе — `SESSION_RELEASE_BUSY` |
+
+**Состояния записи владельца** (`journal_path + ".owner.json"`):
+
+| Состояние | Что означает | Можно захватить |
+|---|---|---|
+| `starting` | владелец захватил сеанс, но ещё не обслужил запрос | нет, пока жив |
+| `serving` | владелец ведёт сеанс: держит Worker, журнал и право на CAD-вызовы | нет, пока жив |
+| `releasing` | владелец освобождает сеанс, ресурсы ещё не отпущены | **нет** — исключительное право сохраняется |
+| `draining` | транспорт завершён или Хост снимается, очистка не подтверждена | **нет** — то же отличие, что у `releasing` |
+| `released` | владение снято ЯВНЫМ `kompas_release_session`, очистка подтверждена | да, только ЯВНО |
+| `free` | владения нет, очистка подтверждена (транспорт завершён штатно) | да, и первым CAD-вызовом |
+
+Разделение `releasing`/`draining` и `released`/`free` — исправление измеренного дефекта: до
+04.10.2026 состояние `draining` писалось до подтверждённого конца очистки и читалось вторым Хостом
+как «можно брать».
+
+**Как берётся владение.** Старт транспорта, `initialize`, `tools/list` и диагностический
+`kompas_health` владения **не берут** — измерено 04.10.2026, что вспомогательное обнаружение
+инструментов занимало сеанс одним `tools/list`, и основной чат получал `SESSION_OWNER_ACTIVE`.
+Владение даётся либо явным `kompas_acquire_session`, либо **согласованным допуском реальной
+CAD-операции** — и никогда обнаружением каталога. Допуск запрещён, если прежний владелец снял
+владение ЯВНО: после `release` обычный CAD-вызов отвечает `SESSION_NOT_ACQUIRED`.
+
+**Поколение.** Каждый захват создаёт новый UUID-поколение; все обновления записи сверяют pid **и**
+поколение. Запоздалый callback, `MarkServing`, `tools/list`, `health` или `finally` старого
+поколения не обновляют состояние нового владельца. После захвата создаются новый журнал, очередь и
+Invoker; прежние `document_id`, `revision` и ссылки **недействительны** — следующий шаг
+`kompas_connect` и `kompas_get_context`.
+
+**Освобождение** — одна согласованная процедура: `serving → releasing` → запрет новых CAD-вызовов и
+проверка занятости в одном захвате замка → проверка несохранённых документов → подтверждённая
+остановка Worker → `released`. Пустая очередь свободным сеанс не делает: мутация, не уложившаяся в
+`sync_budget_ms`, отвечает `running` и снимается из очереди, оставаясь внутри COM. Отказ до очистки
+возвращает `serving`. Частичная очистка отвечает `SESSION_RELEASE_FAILED` с фактическим состоянием и
+возможностью безопасного повтора; успехом она не считается. MCP-транспорт после release сохраняется,
+и прежний Хост может занять сеанс снова.
+
+**Документированная политика экземпляра КОМПАС.** Завершение Worker закрывает зарегистрированные
+документы `ksDocument3D.close()`
+(<https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_close.html>) и завершает только
+собственный (`launched`) экземпляр `KompasObject.Quit()`
+(<https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kompasobject_quit.html>); пользовательский `attached`
+КОМПАС не завершается никогда. Документация `close()` не обещает сохранения, поэтому несохранённые
+документы — отказ release, а не «закроется само». Дерево процессов при снятии не отвечающего
+Worker не убивается: launched-экземпляр КОМПАС — его потомок.
 
 ## 2.5. Чтение и выбор геометрии — P1/P2
 

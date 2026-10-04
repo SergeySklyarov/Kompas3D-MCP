@@ -753,6 +753,19 @@ public sealed class ToolInvoker : IAsyncDisposable
 
     public IReadOnlyDictionary<string, long> QueueStatistics() => _queue.Statistics();
 
+    /// <summary>
+    /// Операции, которые ещё выполняются, хотя синхронный ответ клиенту уже ушёл.
+    /// </summary>
+    /// <remarks>
+    /// Почему этого нельзя заменить проверкой очереди. Мутация, не уложившаяся в
+    /// <c>SyncBudgetMs</c>, отвечает статусом <c>running</c> и снимается из очереди: очередь
+    /// пуста, а КОМПАС ещё работает. Освобождение сеанса, поверившее пустой очереди, передало бы
+    /// владение при живом COM-вызове — ровно тот случай, для которого правило «пустая очередь
+    /// сама по себе недостаточна» и написано.
+    /// </remarks>
+    public IReadOnlyList<string> InFlightOperationIds() =>
+        _inFlight.Where(pair => !pair.Value.IsCompleted).Select(pair => pair.Key).ToList();
+
     public async ValueTask DisposeAsync()
     {
         // The journal is owned by Program and disposed there: closing it here would leave the

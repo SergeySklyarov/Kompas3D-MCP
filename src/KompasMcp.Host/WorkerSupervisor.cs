@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO.Pipes;
 using System.Text.Json.Nodes;
@@ -30,6 +31,19 @@ public sealed class WorkerSupervisor : IAsyncDisposable
 {
     private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(30);
 
+    /// <summary>
+    /// Сколько ждать ШТАТНОГО выхода Worker'а, прежде чем снять процесс.
+    /// </summary>
+    /// <remarks>
+    /// ИЗМЕРЕНО 04.10.2026 на прогоне передачи сеанса: при окне 5 с Worker не успевал завершить
+    /// документированный маршрут `KompasObject.Quit()` для собственного экземпляра КОМПАС и снимался
+    /// убийством (`kill_used: true` в ответе `kompas_release_session`). Убийство не запрещено, но
+    /// это ХУДШИЙ из двух маршрутов: оно не даёт КОМПАС завершиться штатно и оставляет шанс, что
+    /// экземпляр останется запущенным. Окно расширено до 20 с — цена ожидания платится один раз, на
+    /// явном освобождении сеанса, а цена убийства — на каждой передаче.
+    /// </remarks>
+    private const int GracefulShutdownWindowMs = 20_000;
+
     private readonly HostOptions _options;
     private readonly HostLog _log;
     private readonly SemaphoreSlim _restartGate = new(1, 1);
@@ -46,6 +60,17 @@ public sealed class WorkerSupervisor : IAsyncDisposable
         _process is { HasExited: false };
 
     public int? WorkerProcessId => TryProcessId();
+
+    /// <summary>
+    /// Запускался ли процесс Worker в этом сеансе.
+    /// </summary>
+    /// <remarks>
+    /// «Канал создан» и «Worker запускался» — разные утверждения, и разница нужна освобождению
+    /// сеанса: если процесс не запускался, COM-сеанса не существует и спрашивать опись документов
+    /// не у кого — а запускать Worker ради одной описи значило бы породить CAD-канал в тот самый
+    /// момент, когда сеанс отдают.
+    /// </remarks>
+    public bool HasStarted { get; private set; }
 
     public event Action? WorkerLost;
 
@@ -149,6 +174,7 @@ public sealed class WorkerSupervisor : IAsyncDisposable
         };
         _process.BeginErrorReadLine();
         _process.BeginOutputReadLine();
+        HasStarted = true;
 
         _process.Exited += (_, _) =>
         {
@@ -261,7 +287,67 @@ public sealed class WorkerSupervisor : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Итог остановки Worker: подтверждено ли, что процесса больше нет.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// «Остановка выполнена» и «Worker больше не выполняет COM и не пишет в журнал» — разные
+    /// утверждения. Освобождение сеанса обязано опираться на ВТОРОЕ: иначе следующий владелец
+    /// начал бы работать, пока прежний Worker ещё внутри COM-вызова.
+    /// </para>
+    /// <para>
+    /// <see cref="KillUsed"/> — не деталь реализации, а часть ответа: процесс, снятый убийством,
+    /// мог оставить после себя незакрытые документы, и это обязано быть названо, а не спрятано.
+    /// </para>
+    /// </remarks>
+    public sealed record WorkerStopResult(int? Pid, bool Confirmed, int? ExitCode, bool KillUsed, string? Problem);
+
+    /// <summary>
+    /// Остановить Worker и ПОДТВЕРДИТЬ, что процесса больше нет.
+    /// </summary>
+    public async Task<WorkerStopResult> StopAndConfirmAsync()
+    {
+        var pid = TryProcessId();
+        var killUsed = await StopCoreAsync().ConfigureAwait(false);
+        return ConfirmStop(pid, killUsed);
+    }
+
     public async Task StopAsync()
+    {
+        await StopCoreAsync().ConfigureAwait(false);
+    }
+
+    private static WorkerStopResult ConfirmStop(int? pid, bool killUsed)
+    {
+        if (pid is null)
+        {
+            // Worker не был запущен: нечем выполнять COM и некому писать в журнал.
+            return new WorkerStopResult(null, true, null, false, null);
+        }
+
+        try
+        {
+            using var process = Process.GetProcessById(pid.Value);
+            return new WorkerStopResult(pid, process.HasExited, SafeExitCode(process), killUsed,
+                process.HasExited ? null : $"процесс Worker pid {pid} существует после остановки");
+        }
+        catch (ArgumentException)
+        {
+            return new WorkerStopResult(pid, true, null, killUsed, null);
+        }
+        catch (InvalidOperationException)
+        {
+            return new WorkerStopResult(pid, true, null, killUsed, null);
+        }
+        catch (Exception ex) when (ex is Win32Exception or UnauthorizedAccessException or NotSupportedException)
+        {
+            return new WorkerStopResult(pid, false, null, killUsed,
+                $"подтвердить завершение Worker pid {pid} не удалось ({ex.GetType().Name})");
+        }
+    }
+
+    private async Task<bool> StopCoreAsync()
     {
         var channel = _channel;
         var pipe = _pipe;
@@ -313,25 +399,44 @@ public sealed class WorkerSupervisor : IAsyncDisposable
 
         if (_process is null)
         {
-            return;
+            return false;
         }
 
         // Give the Worker time to shut down its own КОМПАС instance gracefully. If it does not
         // exit, only the Worker is terminated — never the CAD application it was talking to.
-        if (!_process.WaitForExit(5_000))
+        //
+        // ДЕРЕВО НЕ УБИВАЕТСЯ, И ЭТО ИЗМЕРЕННОЕ РЕШЕНИЕ, А НЕ СЛУЧАЙНОСТЬ. Собственный (launched)
+        // экземпляр КОМПАС порождён процессом Worker через COM, то есть является его ПОТОМКОМ:
+        // `Kill(entireProcessTree: true)` снял бы и сам КОМПАС — ровно то, что наряд запрещает
+        // («не убивать CAD»). Документированный маршрут завершения собственного экземпляра —
+        // `KompasObject.Quit()` из кадров shutdown Worker'а
+        // (<https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kompasobject_quit.html>); убийство — крайняя
+        // мера только для НЕ отвечающего Worker'а. Названное следствие: если Worker снимается
+        // убийством, его КОМПАС может остаться запущенным, и это названо в ответе, а не скрыто.
+        var killUsed = false;
+        if (!_process.WaitForExit(GracefulShutdownWindowMs))
         {
             try
             {
-                _process.Kill(entireProcessTree: true);
+                _process.Kill(entireProcessTree: false);
+                killUsed = true;
             }
             catch (InvalidOperationException)
             {
                 // Exited between the wait and the kill.
             }
+
+            // Дать убийству дойти до конца: подтверждение освобождения читает процесс по pid, и
+            // без этого ожидания оно отвечало бы «процесс ещё жив» на уже снятый процесс.
+            if (killUsed)
+            {
+                _process.WaitForExit(2_000);
+            }
         }
 
         _process.Dispose();
         _process = null;
+        return killUsed;
     }
 
     public async ValueTask DisposeAsync()

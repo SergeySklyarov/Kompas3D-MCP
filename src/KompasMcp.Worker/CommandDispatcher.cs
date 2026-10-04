@@ -186,6 +186,7 @@ public sealed class CommandDispatcher
         {
             WorkerCommands.Connect => _sta.Run(() => Connect(request), "connect", cancellationToken),
             WorkerCommands.Disconnect => _sta.Run(() => Disconnect(request), "disconnect", cancellationToken),
+            WorkerCommands.SessionInventory => _sta.Run(() => Inventory(request), "session.inventory", cancellationToken),
             WorkerCommands.ListDocuments => _sta.Run(() => List(request), "doc.list", cancellationToken),
             WorkerCommands.CreateDocument => _sta.Run(() => Create(request), "doc.create", cancellationToken),
             WorkerCommands.OpenDocument => _sta.Run(() => Open(request), "doc.open", cancellationToken),
@@ -416,6 +417,16 @@ public sealed class CommandDispatcher
         var command = Argument<DisconnectCommand>(request);
         _session.Disconnect(command.ApplicationId, command.CloseOwnedApplication);
         return new JsonObject { ["application_id"] = command.ApplicationId, ["disconnected"] = true };
+    }
+
+    /// <summary>
+    /// Опись сеанса для решения об освобождении. Команда управления, но идёт на CAD-полосу:
+    /// признак несохранённости читается через COM.
+    /// </summary>
+    private object? Inventory(IpcFrame request)
+    {
+        _ = request;
+        return _session.Inventory();
     }
 
     private object? List(IpcFrame request)

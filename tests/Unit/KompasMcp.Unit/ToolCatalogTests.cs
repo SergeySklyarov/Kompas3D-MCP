@@ -58,14 +58,37 @@ public class ToolCatalogTests
     [Fact]
     public void NonMutations_DoNotAdvertiseOperationId()
     {
+        // ПРАВИЛО УТОЧНЕНО 04.10.2026, И НЕ ОСЛАБЛЕНО. Прежде оно звучало «не-мутация не объявляет
+        // operation_id вовсе». Инструмент Хоста `kompas_release_session` вынужден объявить поле
+        // (строка S03b требует его у destructiveHint=true), но журнала он не пишет — поэтому
+        // признаком стало не «объявлено/нет», а «объявлено, только если инструмент САМ
+        // воспроизводит исход повтора». Поле, которое клиент может прислать и которое ни журнал, ни
+        // инструмент не используют, по-прежнему запрещено.
         foreach (var tool in ToolCatalog.All.Where(t => !t.IsMutation))
         {
             var properties = tool.InputSchema["properties"] as JsonObject;
+            var advertises = properties?.ContainsKey("operation_id") == true;
             Assert.True(
-                properties is null || !properties.ContainsKey("operation_id"),
-                $"{tool.Name}: не мутация, но схема обещает operation_id — поле, которое клиент " +
-                "может прислать и которое журнал не записывает.");
+                !advertises || tool.Behaviour.ReplaysOperationId,
+                $"{tool.Name}: не мутация, но схема обещает operation_id — поле, которое клиент может " +
+                "прислать, а журнал его не записывает и инструмент его не воспроизводит.");
         }
+    }
+
+    [Fact]
+    public void ReleaseSession_DeclaresTheOperationIdItReplays()
+    {
+        // Объявление поля и его использование — одна проверка, а не две: «объявлено и проглочено» —
+        // это дефект, который проект ловит отдельным классом. Здесь поле обязано быть И в схеме, И
+        // поддержано поведением (`ReplaysOperationId`), при этом инструмент остаётся инструментом
+        // Хоста и мутацией модели не становится.
+        var tool = Tool("kompas_release_session");
+        var properties = (JsonObject)tool.InputSchema["properties"]!;
+
+        Assert.True(properties.ContainsKey("operation_id"));
+        Assert.True(tool.Behaviour.ReplaysOperationId);
+        Assert.False(tool.IsMutation);
+        Assert.False(tool.Behaviour.RequiresOperationId);
     }
 
     [Fact]

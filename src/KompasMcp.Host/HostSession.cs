@@ -60,6 +60,14 @@ public sealed class HostSession : IAsyncDisposable
 
     private static readonly TimeSpan InventoryTimeout = TimeSpan.FromSeconds(30);
 
+    /// <summary>
+    /// Предел карты записанных исходов освобождения (см. <c>_releaseOutcomes</c>). Освобождение —
+    /// терминальное действие: повторы нужны в пределах одного запроса, а не за всю жизнь процесса,
+    /// поэтому карта ограничена и вытесняет самый старый id. Предел назван числом, а не «примерно»:
+    /// молчание о нём читалось бы как «карта не растёт».
+    /// </summary>
+    private const int ReleaseReplayLimit = 64;
+
     private readonly HostOptions _options;
     private readonly HostLog _log;
     private readonly HostOwnership _ownership;
@@ -72,6 +80,19 @@ public sealed class HostSession : IAsyncDisposable
     private int _activeCalls;
     private bool _releasing;
     private bool _disposed;
+
+    /// <summary>
+    /// Записанные исходы освобождения по <c>operation_id</c> — В ПАМЯТИ ПРОЦЕССА, а не в журнале:
+    /// инструменты Хоста журнала операций не ведут. Ограничения названы прямо: перезапуск Хоста
+    /// историю повторов не несёт, карта ограничена <see cref="ReleaseReplayLimit"/>, а при каждом
+    /// новом захвате сеанса она очищается — новое поколение есть новый контекст, и повтор прежнего
+    /// id не имеет права вернуть исход освобождения, выполненного в прошлом сеансе.
+    /// </summary>
+    private readonly Dictionary<string, ReleaseReplay> _releaseOutcomes = new(StringComparer.Ordinal);
+    private readonly Queue<string> _releaseOrder = new();
+
+    /// <summary>Отпечаток аргументов и готовый конверт, записанные для одного <c>operation_id</c>.</summary>
+    private sealed record ReleaseReplay(string Fingerprint, ResultEnvelope<JsonNode?> Outcome);
 
     public HostSession(HostOptions options, HostOwnership ownership, HostLog log)
     {
@@ -106,7 +127,7 @@ public sealed class HostSession : IAsyncDisposable
             case AcquireCommand:
                 return await AcquireAsync(cancellationToken).ConfigureAwait(false);
             case ReleaseCommand:
-                return await ReleaseAsync(cancellationToken).ConfigureAwait(false);
+                return await ReleaseAsync(arguments, cancellationToken).ConfigureAwait(false);
         }
 
         // ДИАГНОСТИКА НЕ ЗАНИМАЕТ СЕАНС. health и capabilities отвечают и тогда, когда владеет
@@ -415,6 +436,13 @@ public sealed class HostSession : IAsyncDisposable
                 });
             }
 
+            // НОВОЕ ПОКОЛЕНИЕ — НОВЫЙ КОНТЕКСТ: записанные исходы освобождения прежнего сеанса
+            // обесцениваются вместе со ссылками прежнего владельца. Иначе повтор прежнего
+            // operation_id вернул бы исход освобождения, выполненного ДО этого захвата, и новый
+            // сеанс ответил бы «освобождён» на освобождение, которого в нём не было.
+            _releaseOutcomes.Clear();
+            _releaseOrder.Clear();
+
             return Succeeded(new JsonObject
             {
                 ["acquired"] = true,
@@ -443,11 +471,118 @@ public sealed class HostSession : IAsyncDisposable
     // kompas_release_session
     // ---------------------------------------------------------------------------------------------
 
-    public async Task<ResultEnvelope<JsonNode?>> ReleaseAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// Освобождение сеанса с воспроизведением записанного исхода по <c>operation_id</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// ЗАЧЕМ ЗДЕСЬ <c>operation_id</c>. Строка <c>S03b</c> прибора <c>mcp-smoke.py</c> требует от
+    /// инструмента с <c>destructiveHint=true</c> объявить <c>operation_id</c> (опубликованное правило
+    /// §2.1). Объявление без поведения было бы «объявлено и проглочено», поэтому поле не только
+    /// объявлено, но и ИСПОЛЬЗУЕТСЯ: повтор с тем же id отвечает записанным исходом и не выполняет
+    /// освобождение заново.
+    /// </para>
+    /// <para>
+    /// ЧТО ИМЕННО ВОСПРОИЗВОДИТСЯ. Только ТЕРМИНАЛЬНЫЙ УСПЕХ. Отказы (<c>DOCUMENT_DIRTY</c>,
+    /// <c>SESSION_RELEASE_BUSY</c>) и незавершённые ветки (Worker не подтвердил остановку, состояние
+    /// не опубликовано) НЕ записываются: их лечение — повторить вызов, и запись заставила бы повтор
+    /// вечно возвращать тот же отказ вместо продолжения очистки. Запись — не журнал: перезапуск
+    /// Хоста её не несёт, и это названо, а не подразумевается.
+    /// </para>
+    /// </remarks>
+    /// <summary>
+    /// Запомнить исход повтора и удержать карту в пределе <see cref="ReleaseReplayLimit"/>.
+    /// Вызывается под <c>_transition</c>, поэтому отдельной блокировки не требует.
+    /// </summary>
+    private void Remember(string operationId, string fingerprint, ResultEnvelope<JsonNode?> outcome)
+    {
+        if (!_releaseOutcomes.ContainsKey(operationId))
+        {
+            _releaseOrder.Enqueue(operationId);
+        }
+
+        _releaseOutcomes[operationId] = new ReleaseReplay(fingerprint, outcome);
+
+        while (_releaseOutcomes.Count > ReleaseReplayLimit && _releaseOrder.Count > 0)
+        {
+            _releaseOutcomes.Remove(_releaseOrder.Dequeue());
+        }
+    }
+
+    /// <summary>Записанный исход повтора с предупреждением, что обращения к Worker и COM не было.</summary>
+    private static ResultEnvelope<JsonNode?> Replayed(ResultEnvelope<JsonNode?> recorded, string operationId) =>
+        recorded with
+        {
+            OperationId = operationId,
+            Warnings = recorded.Warnings
+                .Concat(new[]
+                {
+                    "Запись в памяти процесса: освобождение с этим operation_id уже выполнено, "
+                    + "повторного обращения к Worker и COM не было.",
+                })
+                .ToArray(),
+        };
+
+    /// <summary>
+    /// Устойчивый отпечаток аргументов вызова — тот же приём, что у журнала операций
+    /// (<c>ToolInvoker.Canonical</c>): поля упорядочены по имени, поэтому «те же аргументы» — это
+    /// равенство строк, а не порядок появления в JSON.
+    /// </summary>
+    private static string Fingerprint(JsonObject arguments)
+    {
+        var ordered = new JsonObject();
+        foreach (var pair in arguments.OrderBy(p => p.Key, StringComparer.Ordinal))
+        {
+            ordered[pair.Key] = pair.Value?.DeepClone();
+        }
+
+        return ordered.ToJsonString(KompJson.Options);
+    }
+
+    public async Task<ResultEnvelope<JsonNode?>> ReleaseAsync(JsonObject arguments, CancellationToken cancellationToken)
     {
         await _transition.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            var operationId = JsonScalars.ReadString(arguments["operation_id"]);
+            var fingerprint = operationId is { Length: > 0 } ? Fingerprint(arguments) : null;
+
+            // ПОВТОР ПО ТОМУ ЖЕ id — ЗАПИСАННЫЙ ИСХОД, И ПРОВЕРЯЕТСЯ ОН ДО ПРОЦЕДУРЫ. Иначе повтор
+            // выполнил бы освобождение заново (освобождать уже нечего) и ответил бы «не этим
+            // запросом» — то есть исход зависел бы от того, дошёл ли первый ответ до клиента.
+            if (operationId is { Length: > 0 } && _releaseOutcomes.TryGetValue(operationId, out var recorded))
+            {
+                if (!string.Equals(recorded.Fingerprint, fingerprint, StringComparison.Ordinal))
+                {
+                    return Refusal(
+                        ErrorCodes.OperationIdConflict,
+                        $"operation_id {operationId} уже отвечал на другой вызов kompas_release_session: "
+                        + "аргументы не совпадают. Журнала у инструментов Хоста нет, поэтому "
+                        + "совпадение проверяется по отпечатку вызова, записанному в память процесса.",
+                        RetryPolicy.Never,
+                        new JsonObject { ["operation_id"] = operationId },
+                        remedy: "Повторите освобождение с тем же набором аргументов либо возьмите новый operation_id.");
+                }
+
+                return Replayed(recorded.Outcome, operationId);
+            }
+
+            // ЗАПИСЫВАЕТСЯ ТОЛЬКО ТЕРМИНАЛЬНЫЙ УСПЕХ: отказ (DOCUMENT_DIRTY, SESSION_RELEASE_BUSY) и
+            // незавершённая ветка (Worker не подтвердил остановку, состояние не опубликовано)
+            // лечатся ПОВТОРОМ того же вызова, и запись заставила бы повтор вечно возвращать тот же
+            // отказ вместо продолжения очистки.
+            ResultEnvelope<JsonNode?> Complete(ResultEnvelope<JsonNode?> envelope)
+            {
+                if (operationId is not { Length: > 0 } || envelope.Status != OperationStatus.Succeeded)
+                {
+                    return envelope;
+                }
+
+                var stored = envelope with { OperationId = operationId };
+                Remember(operationId, fingerprint!, stored);
+                return stored;
+            }
+
             var probe = _ownership.Probe();
 
             if (!probe.SelfOwned)
@@ -466,7 +601,7 @@ public sealed class HostSession : IAsyncDisposable
 
                 // ПОВТОРНЫЙ RELEASE БЕЗ ВЛАДЕНИЯ БЕЗОПАСЕН: «уже освобождён» отличается от
                 // «освобождён этим запросом» отдельным полем, а не только текстом.
-                return Succeeded(new JsonObject
+                return Complete(Succeeded(new JsonObject
                 {
                     ["released"] = true,
                     ["released_by_this_request"] = false,
@@ -476,7 +611,7 @@ public sealed class HostSession : IAsyncDisposable
                     ["remedy"] = probe.RequiresExplicitAcquire
                         ? "Сеанс свободен; для работы вызовите kompas_acquire_session."
                         : "Сеанс свободен; владение будет взято первым CAD-вызовом.",
-                });
+                }));
             }
 
             var continuation = probe.State == HostOwnerState.Releasing;
@@ -650,7 +785,7 @@ public sealed class HostSession : IAsyncDisposable
                 documents_in_session = DocumentCount(inventory.Payload),
             });
 
-            return Succeeded(new JsonObject
+            return Complete(Succeeded(new JsonObject
             {
                 ["released"] = true,
                 ["released_by_this_request"] = true,
@@ -659,7 +794,7 @@ public sealed class HostSession : IAsyncDisposable
                 ["documents_in_session"] = DocumentCount(inventory.Payload),
                 ["next"] = "kompas_acquire_session",
             }, warnings: BuildReleaseWarnings(stop),
-            caveats: new[] { "cad_session_ended_documents_closed" });
+            caveats: new[] { "cad_session_ended_documents_closed" }));
         }
         finally
         {

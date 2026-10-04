@@ -151,7 +151,19 @@ MCP-транспортом и не берётся его стартом. Хос�
 |---|---|---|
 | `kompas_session_status` | — | `session_state`, `can_acquire`, `requires_explicit_acquire`, `owner`, `this_host`, `reason`, `remedy`. Владение НЕ берёт, Worker не запускает, к COM не обращается |
 | `kompas_acquire_session` | — | `acquired`, `already_owner`, `new_generation`, `generation`. При живом владельце — `SESSION_OWNER_ACTIVE` с pid, состоянием и инструкцией |
-| `kompas_release_session` | — | `released`, `released_by_this_request`, `worker{pid, confirmed, exit_code, kill_used}`. Отказ при несохранённых документах — `DOCUMENT_DIRTY` с перечнем; при незавершённой работе — `SESSION_RELEASE_BUSY` |
+| `kompas_release_session` | `operation_id` | `released`, `released_by_this_request`, `worker{pid, confirmed, exit_code, kill_used}`. Отказ при несохранённых документах — `DOCUMENT_DIRTY` с перечнем; при незавершённой работе — `SESSION_RELEASE_BUSY`. Повтор с тем же `operation_id` возвращает записанный исход и освобождения заново не выполняет; новый `operation_id` начинает освобождение заново |
+
+**`operation_id` у освобождения — объявлен и ИСПОЛЬЗУЕТСЯ (04.10.2026).** Строка `S03b` прибора
+`scripts/mcp-smoke.py` требует от инструмента с `destructiveHint=true` объявить `operation_id`
+(§2.1). Прежде `kompas_release_session` его не объявлял, и строка отвечала FAIL; §2.1 не менялась —
+к ней приведён продукт. Поле НЕ обязательно (Хост не проверяет схемы инструментов сеанса: они
+обязаны отвечать без Worker, и «обязательное» объявление было бы неисполненным обещанием), но если
+оно пришло, Хост сам воспроизводит исход повтора: тот же `operation_id` с теми же аргументами
+возвращает записанный результат, тот же id с другими аргументами — `OPERATION_ID_CONFLICT`, новый id
+начинает освобождение заново. Записывается только терминальный успех; отказы (`DOCUMENT_DIRTY`,
+`SESSION_RELEASE_BUSY`) и незавершённые ветки не записываются — их лечение в том и состоит, чтобы
+повторить вызов. Журнал операций инструмент по-прежнему НЕ пишет: исходы живут в памяти процесса и
+очищаются при новом захвате сеанса, поэтому перезапуск Хоста историю повторов не несёт.
 
 **Состояния записи владельца** (`journal_path + ".owner.json"`):
 

@@ -208,6 +208,92 @@ public class HostSessionLifecycleTests : IDisposable
         Assert.False(Body(second)["released_by_this_request"]!.GetValue<bool>());
     }
 
+    // -----------------------------------------------------------------------------------------
+    // Повтор освобождения по operation_id (правило §2.1: поле объявлено И используется)
+    // -----------------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Release_SameOperationId_ReplaysRecordedOutcomeAndDoesNotReleaseAgain()
+    {
+        await using var session = Session();
+        await session.InvokeAsync(HostSession.AcquireTool, new JsonObject(), CancellationToken.None);
+
+        var id = Guid.NewGuid().ToString();
+        var first = await session.InvokeAsync(HostSession.ReleaseTool,
+            new JsonObject { ["operation_id"] = id }, CancellationToken.None);
+
+        Assert.Equal(OperationStatus.Succeeded, first.Status);
+        Assert.Equal(id, first.OperationId);
+        Assert.True(Body(first)["released_by_this_request"]!.GetValue<bool>());
+
+        // ТОТ ЖЕ id — записанный исход: «освобождён ЭТИМ запросом» остаётся истиной, хотя владения
+        // уже нет. Выполнись процедура заново — ответ сказал бы «не этим запросом», и различие
+        // воспроизведения от повторного исполнения было бы невидимым.
+        var replay = await session.InvokeAsync(HostSession.ReleaseTool,
+            new JsonObject { ["operation_id"] = id }, CancellationToken.None);
+
+        Assert.Equal(OperationStatus.Succeeded, replay.Status);
+        Assert.Equal(id, replay.OperationId);
+        Assert.True(Body(replay)["released_by_this_request"]!.GetValue<bool>());
+        Assert.Contains(replay.Warnings, w => w.Contains("памяти процесса", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Release_NewOperationId_ReevaluatesInsteadOfReplaying()
+    {
+        await using var session = Session();
+        await session.InvokeAsync(HostSession.AcquireTool, new JsonObject(), CancellationToken.None);
+
+        var first = await session.InvokeAsync(HostSession.ReleaseTool,
+            new JsonObject { ["operation_id"] = Guid.NewGuid().ToString() }, CancellationToken.None);
+        Assert.True(Body(first)["released_by_this_request"]!.GetValue<bool>());
+
+        // НОВЫЙ id начинает освобождение заново: владения уже нет, поэтому «не этим запросом».
+        var fresh = await session.InvokeAsync(HostSession.ReleaseTool,
+            new JsonObject { ["operation_id"] = Guid.NewGuid().ToString() }, CancellationToken.None);
+
+        Assert.Equal(OperationStatus.Succeeded, fresh.Status);
+        Assert.False(Body(fresh)["released_by_this_request"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public async Task Release_SameOperationIdWithDifferentArguments_IsRefusedAsConflict()
+    {
+        await using var session = Session();
+        await session.InvokeAsync(HostSession.AcquireTool, new JsonObject(), CancellationToken.None);
+
+        var id = Guid.NewGuid().ToString();
+        var first = await session.InvokeAsync(HostSession.ReleaseTool,
+            new JsonObject { ["operation_id"] = id, ["timeout_ms"] = 5000 }, CancellationToken.None);
+        Assert.Equal(OperationStatus.Succeeded, first.Status);
+
+        var conflict = await session.InvokeAsync(HostSession.ReleaseTool,
+            new JsonObject { ["operation_id"] = id, ["timeout_ms"] = 9000 }, CancellationToken.None);
+
+        Assert.Equal(OperationStatus.Failed, conflict.Status);
+        Assert.Equal(ErrorCodes.OperationIdConflict, conflict.Error!.Code);
+    }
+
+    [Fact]
+    public async Task Release_ReplayHistoryIsDroppedWhenANewSessionIsAcquired()
+    {
+        await using var session = Session();
+        await session.InvokeAsync(HostSession.AcquireTool, new JsonObject(), CancellationToken.None);
+
+        var id = Guid.NewGuid().ToString();
+        var first = await session.InvokeAsync(HostSession.ReleaseTool,
+            new JsonObject { ["operation_id"] = id }, CancellationToken.None);
+        Assert.True(Body(first)["released_by_this_request"]!.GetValue<bool>());
+
+        await session.InvokeAsync(HostSession.AcquireTool, new JsonObject(), CancellationToken.None);
+        var again = await session.InvokeAsync(HostSession.ReleaseTool,
+            new JsonObject { ["operation_id"] = id }, CancellationToken.None);
+
+        // Тот же id, но НОВОЕ поколение: исход прежнего сеанса не воспроизводится — освобождение
+        // выполнено заново и снова «этим запросом». Без очистки карты ответ был бы чужим исходом.
+        Assert.True(Body(again)["released_by_this_request"]!.GetValue<bool>());
+    }
+
     /// <summary>
     /// Инструменты сеанса присутствуют в опубликованном каталоге: их нельзя добавить «для
     /// уведомления об изменении списка» — базовый каталог публикуется сразу, включая ожидающий

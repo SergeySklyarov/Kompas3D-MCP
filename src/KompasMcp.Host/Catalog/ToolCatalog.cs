@@ -27,13 +27,24 @@ public sealed record ToolDefinition(
     public bool IsHostLocal => Behaviour.HostLocal;
 }
 
+/// <summary>
+/// Поведение инструмента: что он делает с моделью и что требует от клиента.
+/// </summary>
+/// <param name="ReplaysOperationId">
+/// Инструмент Хоста объявляет <c>operation_id</c> и сам воспроизводит записанный исход повтора —
+/// БЕЗ журнала операций. Отдельный признак, а не <see cref="RequiresOperationId"/>: последний
+/// включал бы инструмент в <see cref="ToolDefinition.IsMutation"/> и требовал бы журнальной записи,
+/// которой у инструмента Хоста нет. Признак нужен, чтобы «не-мутация обещает operation_id» осталось
+/// проверяемым по свойству, а не по перечню имён (правило 3).
+/// </param>
 public sealed record ToolBehaviour(
     bool ReadOnly,
     bool Destructive,
     bool RequiresOperationId,
     bool RequiresDocument,
     bool RequiresExpectedRevision,
-    bool HostLocal = false);
+    bool HostLocal = false,
+    bool ReplaysOperationId = false);
 
 /// <summary>
 /// The tool surface of v1 preview. Every entry here is implemented end to end: an unimplemented
@@ -172,10 +183,14 @@ public static class ToolCatalog
                 + "экземпляр КОМПАС завершается документированным KompasObject.Quit(), пользовательский "
                 + "attached КОМПАС остаётся запущенным. MCP-транспорт сохраняется: этот Хост остаётся на "
                 + "связи и позже может занять сеанс снова. Повторный вызов безопасен и различает "
-                + "«уже освобождён» и «освобождён этим запросом».",
-                Sch.Props(),
+                + "«уже освобождён» и «освобождён этим запросом». Повтор с тем же operation_id "
+                + "возвращает записанный исход и освобождения заново не выполняет; новый operation_id "
+                + "начинает освобождение заново. Журнал операций инструмент не пишет: исходы хранятся "
+                + "в памяти процесса, поэтому перезапуск Хоста историю повторов не несёт.",
+                Sch.Props(("operation_id", Sch.Nullable(Sch.Ref("#/$defs/operation_id")))),
                 HostSession.ReleaseCommand,
-                destructive: true),
+                destructive: true,
+                replaysOperationId: true),
 
             Mutation("kompas_connect", "Подключиться к КОМПАС",
                 "attach — подключиться к уже запущенному экземпляру (нужен однозначный выбор, иначе AMBIGUOUS_APPLICATION); launch — запустить собственный. Обычные инструменты новое приложение не создают.",
@@ -2066,14 +2081,33 @@ public static class ToolCatalog
     /// Инструмент управления сеансом: обрабатывается самим Хостом, а не Worker.
     /// </summary>
     /// <remarks>
-    /// Отдельная фабрика, а не <see cref="ReadOnly"/>/<see cref="Mutation"/>: этим трём инструментам
-    /// не нужен <c>operation_id</c> (журнал операций они не пишут: освобождение сеанса — не мутация модели),
-    /// и они обязаны отвечать тогда, когда CAD-канала нет вовсе. Пометка <c>destructive</c> у
-    /// освобождения честная: оно завершает сеанс и закрывает документы.
+    /// Отдельная фабрика, а не <see cref="ReadOnly"/>/<see cref="Mutation"/>: журнал операций эти
+    /// инструменты не пишут (освобождение сеанса — не мутация модели), и они обязаны отвечать тогда,
+    /// когда CAD-канала нет вовсе. Пометка <c>destructive</c> у освобождения честная: оно завершает
+    /// сеанс и закрывает документы.
+    ///
+    /// <para>
+    /// <b>Почему у освобождения всё-таки есть <c>operation_id</c>.</b> Измерено 04.10.2026 (строка
+    /// <c>S03b</c> прибора <c>mcp-smoke.py</c>): правило «инструмент, аннотированный
+    /// <c>destructiveHint=true</c>, обязан объявлять <c>operation_id</c>» — это опубликованное
+    /// правило §2.1, и приводить к нему надо продукт, а не правило. Освобождение объявляет поле и
+    /// САМО воспроизводит исход повтора (<see cref="ToolBehaviour.ReplaysOperationId"/>), но
+    /// журнала по-прежнему не заводит: <see cref="ToolBehaviour.HostLocal"/> оставляет инструмент
+    /// вне <see cref="ToolDefinition.IsMutation"/>. Поле НЕ обязательно: Хост не проверяет схемы
+    /// инструментов сеанса (они обязаны отвечать без Worker), поэтому «обязательное» объявление было
+    /// бы обещанием, которого никто не исполняет, — класс «объявлено и проглочено».
+    /// </para>
     /// </remarks>
-    private static ToolDefinition Control(string name, string title, string description, JsonObject properties, string command, bool destructive = false)
+    private static ToolDefinition Control(
+        string name,
+        string title,
+        string description,
+        JsonObject properties,
+        string command,
+        bool destructive = false,
+        bool replaysOperationId = false)
         => new(name, title, description, Request(title, properties),
-            new ToolBehaviour(ReadOnly: false, Destructive: destructive, RequiresOperationId: false, RequiresDocument: false, RequiresExpectedRevision: false, HostLocal: true),
+            new ToolBehaviour(ReadOnly: false, Destructive: destructive, RequiresOperationId: false, RequiresDocument: false, RequiresExpectedRevision: false, HostLocal: true, ReplaysOperationId: replaysOperationId),
             command);
 
     /// <summary>Every request also carries the observation budget.</summary>

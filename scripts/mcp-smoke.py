@@ -529,6 +529,12 @@ def main():
     # клетка матрицы обязана находиться по ИМЕНИ строки (`IMG.<NN>.<действие>`), а не по номеру в
     # общем потоке. Полный прогон всё равно обязателен — эта ветка не заменяет релизную приёмку.
     image_only = "--image-only" in sys.argv
+    # То же для критерия «несколько замкнутых контуров и вложенные отверстия»: одна группа NEST на
+    # своём сеансе. Отдельная ветка нужна по той же причине, что у B3M/B4/B5/F08/MANIA/DEP/IMG:
+    # доказательство обязано находиться по ИМЕНИ строки (`NEST.<NN>.<действие>`), а в общем прогоне
+    # эти строки тонули бы среди чужих. Полный прогон всё равно обязателен — эта ветка не заменяет
+    # релизную приёмку.
+    nested_only = "--nested-only" in sys.argv
 
     rep = Report(
         ("Приёмка контракта: схемы, отказы до COM, политика путей" if only_contract
@@ -548,8 +554,9 @@ def main():
          else "Приёмка F08: десять действий по каждому режиму B1/B2 и эскизу (остаток F-08)" if f08_only
          else "Приёмка MANIA: сценарий «Скоба Model Mania 2021» от эскиза до переоткрытия" if mania_only
          else "Приёмка DEP: обязательный объём общих зависимостей профиля через MCP" if dep_only
-         else "Приёмка IMG: растровый снимок модели (строка AUX-IMAGE.raster_export) через MCP" if image_only
-         else "Интеграционный прогон вертикального сценария через MCP"),
+        else "Приёмка IMG: растровый снимок модели (строка AUX-IMAGE.raster_export) через MCP" if image_only
+        else "Приёмка NEST: вложенные контуры и несколько замкнутых контуров (критерий dep.sketch.entities)" if nested_only
+        else "Интеграционный прогон вертикального сценария через MCP"),
         os.path.join(workdir, "chamfer-acceptance.json" if chamfer_only
                      else "fillet-acceptance.json" if fillet_only
                      else "extrusion-acceptance.json" if extrusion_only
@@ -567,6 +574,7 @@ def main():
                      else "mania-acceptance.json" if mania_only
                      else "dep-acceptance.json" if dep_only
                      else "image-acceptance.json" if image_only
+                     else "nested-acceptance.json" if nested_only
                      else "smoke-report.json"))
     report_override = argument("--report")
     if report_override:
@@ -912,6 +920,14 @@ def main():
 
         if image_only:
             image_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if nested_only:
+            nested_contour_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -1485,6 +1501,10 @@ def main():
         # строит собственную пластину, снимает её и закрывает свой документ сама — документов
         # других групп она не касается. Порядок безопасен по той же причине, что у DEP и MANIA.
         image_checks(client, rep, app_id, workdir)
+
+        # Группа NEST идёт после IMG по той же причине: строки называются по имени
+        # (`NEST.<NN>.<действие>`), каждый случай строит СВОЙ документ и закрывает его сам.
+        nested_contour_checks(client, rep, app_id, workdir)
 
         if not keep and app_id:
             client.tool("kompas_disconnect", {"application_id": app_id, "close_owned_application": True, "operation_id": str(uuid.uuid4())}, timeout=120)
@@ -21519,6 +21539,390 @@ DEP_EXTERNAL_CANDIDATES = (
 # 7…30, а неопознанный признак у `Receptacle.m3d` стоит ШЕСТНАДЦАТЫМ — предел 12 его не доставал,
 # и постановка отвергала годный эталон.
 DEP_UNKNOWN_SCAN_LIMIT = 32
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+# NEST — «несколько замкнутых контуров и вложенные отверстия»: критерий №2 зависимости
+# `dep.sketch.entities`. Строки называются `NEST.<NN>.<действие>`; в описании стоит id зависимости
+# буквально, иначе клетку пришлось бы искать по номеру в потоке, а действие — угадывать по
+# формулировке. Группа входит и в полный прогон; отдельной веткой она стоит затем, чтобы её отказ
+# был виден по имени, а не растворялся среди тысячи строк.
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+def nested_contour_checks(client, rep, app_id, workdir):
+    """NEST.* — критерий зависимости `dep.sketch.entities`: «несколько замкнутых контуров и
+    вложенные отверстия там, где это допустимо для операции».
+
+    ЗАЧЕМ ЭТА ГРУППА. Критерий объявлен в профиле `mechanical-core-v1`, но до 04.10.2026 его не
+    называл ни один документ `docs/acceptance/`, а объёмная проверка на этой самой конфигурации
+    ОТКАЗЫВАЛА: `ProfileArea.Of` складывал площади вложенных контуров, и кольцо R10/r5 требовало
+    3926.9908 при измеренных 2356.1944901923607 (ложный отказ подтверждения, не ложный PASS).
+    Правка 24.09.2026 дефект закрыла, но замер был снят ТОЛЬКО для `operation=base`; `boss` и `cut`
+    с вложенными контурами не мерились вовсе. Здесь критерий измеряется по трём операциям и двумя
+    различающими контролями, а заявленный пункт получает имя в `docs/acceptance/`.
+
+    ЧТО ЗДЕСЬ ДОКАЗАТЕЛЬСТВО, А ЧТО НЕТ. Доказательство — ЧИСЛО: объём тела против аналитики,
+    посчитанной в приборе отдельной формулой, И уровень `geometry_checked` с
+    `volume_delta.passed=true`. Кольцо R10/r5, плита с отверстием, бобышка-кольцо и кольцевой вырез
+    имеют замкнутую аналитику, поэтому «похоже на кольцо» здесь доказательством не считается.
+
+    КОНТРОЛИ РАЗЛИЧАЮЩИЕ, А НЕ ПОДТВЕРЖДАЮЩИЕ. (а) РАЗНЕСЁННЫЕ контуры обязаны по-прежнему
+    СКЛАДЫВАТЬСЯ — если бы правка сломала и этот случай, контроль поймал бы это. (б) ПЕРЕКРЫВАЮЩИЕСЯ
+    и КАСАЮЩИЕСЯ контуры обязаны НЕ складываться молча: продукт обязан назвать величину невычислимой
+    (`not_computable`) и понизить уровень, а не выдать сумму. Оба плеча нужны: одно без другого
+    прошло бы либо на «ничего не считает», либо на «всё суммирует».
+
+    ПОЧЕМУ КАЖДЫЙ СЛУЧАЙ — СВОЙ ДОКУМЕНТ. Адрес тела не переживает мутацию, а `bs[0]` — не адрес
+    (урок строки MANIA.17: два плеча «различающей пары» измерили ОДНО тело). Один документ на
+    случай: единственное тело И ЕСТЬ адрес, и оно берётся СВЕЖИМ непосредственно перед мутацией.
+
+    ЧЕГО ЗДЕСЬ НЕТ. Группа не утверждает, что перекрытие «должно» считаться: объединение двух
+    окружностей аналитически вычислимо и ИЗМЕРЕНО здесь как контроль (5829.873553201976), но в
+    формулу не введено — один измеренный частный случай не делает общим аналитическим правилом
+    (`ProfileArea.cs`, §remarks). Отказ подтверждения на нём — названная граница, а не дефект.
+    """
+    R_OUT, R_IN = 10.0, 5.0
+    R_MID = 2.0
+    RING_AREA = math.pi * ((R_OUT * R_OUT) - (R_IN * R_IN))
+    # Площадь профиля ГЛУБИНЫ 2 (R10/r5/r2): правило чётности вложенности даёт π(100−25+4)=π·79.
+    TRIPLE_AREA = math.pi * ((R_OUT * R_OUT) - (R_IN * R_IN) + (R_MID * R_MID))
+    PLATE_W, PLATE_H, PLATE_D = 100.0, 80.0, 10.0
+    PLATE_V = PLATE_W * PLATE_H * PLATE_D
+    HOLE_R = 10.0
+
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def rev_of(env, fallback=1):
+        return (env or {}).get("revision_after") or fallback
+
+    def level(env):
+        return ((env or {}).get("verification") or {}).get("level")
+
+    def check_named(env, name):
+        return next((c for c in (((env or {}).get("verification") or {}).get("checks") or [])
+                     if c.get("name") == name), {})
+
+    def confirmed(env):
+        """Доказанность, которая и есть предмет проверки: уровень поднялся до `geometry_checked`
+        И проверка `volume_delta` прошла. Одного «status=succeeded» для этого мало — КОМПАС
+        сообщает об успехе вызова и тогда, когда измерение ожидания не подтвердило."""
+        return (level(env) == "geometry_checked"
+                and check_named(env, "volume_delta").get("passed") is True)
+
+    def bodies(doc):
+        env, _ = call("kompas_list_bodies", {"document_id": doc})
+        rows = result(env)
+        return rows if isinstance(rows, list) else []
+
+    def fresh_body(doc):
+        """Ссылка на тело — СВЕЖАЯ, непосредственно перед мутацией: создание эскиза поднимает
+        ревизию и обесценивает прежнюю ссылку (измерено 21.09.2026, см. `through_cut` группы DEP:
+        ссылка, взятая до эскиза вырезания, оставляет тело пустым при коде отказа None)."""
+        rows = bodies(doc)
+        return rows[0].get("body_ref") if rows else None
+
+    def volume(ref):
+        if not ref:
+            return None
+        env, _ = call("kompas_measure", {"target_ref": ref, "properties": ["volume"]})
+        return result(env).get("volume_mm3")
+
+    def near(a, b, tol=0.01):
+        return a is not None and abs(a - b) <= max(tol, 1e-6 * abs(b))
+
+    def new_doc(name):
+        env, _ = call("kompas_create_document", {"application_id": app_id, "kind": "part",
+                                                 "name": name})
+        r = result(env)
+        return r.get("document_id") or r.get("id"), rev_of(env)
+
+    def sketch(doc, rev, entities, name, offset=0.0):
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": rev,
+            "plane": {"base": "xy", "offset_mm": offset}, "name": name})
+        sk = result(env).get("id")
+        rev = rev_of(env, rev)
+        if code or not sk:
+            return None, rev, "создание эскиза: " + str(code)
+        env, code = call("kompas_edit_sketch", {
+            "sketch_ref": sk, "expected_revision": rev, "mode": "append", "entities": entities})
+        rev = rev_of(env, rev)
+        if code:
+            return None, rev, "контур: " + str(code)
+        env, code = call("kompas_finish_sketch", {
+            "sketch_ref": sk, "require_closed_profile": False})
+        rev = rev_of(env, rev)
+        if code:
+            return None, rev, "замыкание контура: " + str(code)
+        return sk, rev, None
+
+    def extrude(rev, sk, **kw):
+        args = {"sketch_ref": sk, "expected_revision": rev}
+        args.update(kw)
+        env, code = call("kompas_extrude", args)
+        return rev_of(env, rev), env, code
+
+    def close(doc):
+        if doc:
+            call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+
+    def circles(*spec):
+        return [{"kind": "circle", "center_mm": [c[0], c[1]], "radius_mm": c[2]} for c in spec]
+
+    def ring():
+        return circles((0.0, 0.0, R_OUT), (0.0, 0.0, R_IN))
+
+    def triple_ring():
+        """Три СООСНЫХ контура R10/r5/r2 — вложенность ГЛУБИНЫ 2: материал, отверстие, остров.
+        Площадь профиля считается правилом чётности вложенности: π(R10²−r5²+r2²) = π·79."""
+        return circles((0.0, 0.0, R_OUT), (0.0, 0.0, R_IN), (0.0, 0.0, R_MID))
+
+    def plate_profile():
+        return [{"kind": "rectangle", "start_mm": [-PLATE_W / 2.0, -PLATE_H / 2.0],
+                 "width_mm": PLATE_W, "height_mm": PLATE_H}]
+
+    def emit(row_id, title, verdict, detail, details=None):
+        rep.add(row_id, "dep.sketch.entities: критерий «несколько замкнутых контуров и вложенные "
+                        "отверстия» — " + title, verdict, detail, details=details)
+
+    def summary(env, vol, analytic):
+        vd = check_named(env, "volume_delta")
+        return ("объём %s против аналитики %.10f; уровень %s; volume_delta obs=%s exp=%s"
+                % ("%.10f" % vol if vol is not None else "не прочитан", analytic, level(env),
+                   vd.get("observed"), vd.get("expected")))
+
+    def one_shot(row_id, title, entities, depth, analytic, offset=0.0):
+        """Базовое выдавливание ОДНИМ контуром-профилем в своём документе."""
+        doc, rev = new_doc("NEST-" + row_id.replace(".", "-"))
+        if not doc:
+            emit(row_id, title, "FAIL", "документ не создан — измерять нечего")
+            return
+        sk, rev, err = sketch(doc, rev, entities, row_id + "-sk", offset=offset)
+        if err:
+            emit(row_id, title, "FAIL", "постановка не собрана: " + err)
+            close(doc)
+            return
+        rev, env, code = extrude(rev, sk, operation="base", depth_mm=depth,
+                                 direction="positive", end_condition="blind")
+        vol = volume(fresh_body(doc))
+        ok = code is None and near(vol, analytic) and confirmed(env)
+        emit(row_id, title, "PASS" if ok else "FAIL",
+             summary(env, vol, analytic) + "; код=%s" % code,
+             details={"volume_mm3": vol, "analytic_mm3": analytic, "level": level(env),
+                      "volume_delta": check_named(env, "volume_delta"), "error": code})
+        close(doc)
+
+    def on_plate(row_id, title, operation, depth, analytic_total, offset, entities=None):
+        """Пластина базовым выдавливанием, затем ВЛОЖЕННЫЙ контур операцией boss/cut на неё.
+
+        `entities` по умолчанию — кольцо R10/r5; для вложенности ГЛУБИНЫ 2 передаётся три соосных
+        контура R10/r5/r2 (`triple_ring`). Профиль параметризован, а не продублирован: иначе две
+        постановки разошлись бы при следующей правке."""
+        profile = entities if entities is not None else ring()
+        doc, rev = new_doc("NEST-" + row_id.replace(".", "-"))
+        if not doc:
+            emit(row_id, title, "FAIL", "документ не создан — измерять нечего")
+            return
+        sk1, rev, err = sketch(doc, rev, plate_profile(), row_id + "-plate")
+        if err:
+            emit(row_id, title, "FAIL", "пластина не собрана: " + err)
+            close(doc)
+            return
+        rev, env1, code1 = extrude(rev, sk1, operation="base", depth_mm=PLATE_D,
+                                   direction="positive", end_condition="blind")
+        if code1 is not None:
+            emit(row_id, title, "FAIL", "базовое выдавливание пластины: " + str(code1))
+            close(doc)
+            return
+        sk2, rev, err2 = sketch(doc, rev, profile, row_id + "-ring", offset=offset)
+        if err2:
+            emit(row_id, title, "FAIL", "вложенный контур не собран: " + err2)
+            close(doc)
+            return
+        target = fresh_body(doc)
+        rev, env2, code2 = extrude(rev, sk2, operation=operation, depth_mm=depth,
+                                   direction="positive", end_condition="blind",
+                                   target_body_ref=target)
+        vol = volume(fresh_body(doc))
+        ok = code2 is None and near(vol, analytic_total) and confirmed(env2)
+        emit(row_id, title, "PASS" if ok else "FAIL",
+             summary(env2, vol, analytic_total) + "; код=%s" % code2,
+             details={"volume_mm3": vol, "analytic_mm3": analytic_total, "level": level(env2),
+                      "volume_delta": check_named(env2, "volume_delta"), "error": code2,
+                      "operation": operation})
+        close(doc)
+
+    # ── NEST.01: вложенный контур базовым выдавливанием — внутренний контур есть ОТВЕРСТИЕ ───────
+    one_shot("NEST.01.create",
+             "кольцо R10/r5 базовым выдавливанием: внутренний контур — отверстие, а не второе тело",
+             ring(), PLATE_D, RING_AREA * PLATE_D)
+
+    # ── NEST.02: прямоугольник с кругом внутри — плита с отверстием ───────────────────────────────
+    one_shot("NEST.02.create",
+             "плита 100x80 с круглым отверстием r10 внутри контура (вложенность круг-в-прямоугольнике)",
+             plate_profile() + circles((0.0, 0.0, HOLE_R)), PLATE_D,
+             (PLATE_W * PLATE_H - math.pi * HOLE_R * HOLE_R) * PLATE_D)
+
+    # ── NEST.03: boss — вложенный контур ПРИКЛЕЕН к телу (кольцевая бобышка) ──────────────────────
+    on_plate("NEST.03.create",
+             "boss: кольцо R10/r5 приклеено к верхней грани плиты — приращение равно площади КОЛЬЦА",
+             "boss", 5.0, PLATE_V + RING_AREA * 5.0, PLATE_D)
+
+    # ── NEST.04: cut — вложенный контур ВЫРЕЗАН из тела (кольцевая канавка) ───────────────────────
+    # ЭСКИЗ СТАВИТСЯ НА ВЕРХНЮЮ ГРАНЬ (offset=PLATE_D), и это измеренный рецепт, а не догадка: та же
+    # постановка уже принята строкой SM-02.cut_extrusion.blind (`mk_cut(5.0, 10.0, "positive", …)`).
+    # Первый прогон этой строки ставил эскиз на НИЖНЮЮ грань (offset=0) и получил `NO_GEOMETRY_CHANGE`
+    # при неизменном объёме 80000: продукт отказал ИМЕНОВАННО, а не выдал ложный успех, — то есть
+    # отказ пришёл на постановку прибора, а не на вложенный контур. Ожидание исправлено ЗАМЕРОМ.
+    on_plate("NEST.04.create",
+             "cut: кольцо R10/r5 вырезано из плиты — убыль равна площади КОЛЬЦА, а не сумме кругов",
+             "cut", 5.0, PLATE_V - RING_AREA * 5.0, PLATE_D)
+
+    # ── NEST.08/NEST.09: вложенность ГЛУБИНЫ 2 на boss и cut (добавлено 04.10.2026) ───────────────
+    # До этого наряда глубина 2 была измерена ТОЛЬКО на `base` (24.09.2026: 2481.8581963359516 =
+    # π(100−25+4)·10 для кругов R10, r5, r2), а `boss`/`cut` — нет; несделанное было названо в
+    # `docs/acceptance/NESTED_CONTOURS_ACCEPTANCE.md` §5. Здесь то же, но приклеенным и вырезанным
+    # материалом, глубиной 5: правило чётности вложенности обязано дать приращение/убыль
+    # π(100−25+4)·5 = 1240.9290981679683 — то есть внутренний контур r2 работает ОСТРОВОМ, а не
+    # третьим телом и не суммой площадей. Эталон выведен формулой прибора, не взят из ответа.
+    on_plate("NEST.08.create",
+             "boss: три соосных контура R10/r5/r2 (вложенность ГЛУБИНЫ 2) приклеены — приращение "
+             "π(100−25+4)·5, остров r2 работает материалом",
+             "boss", 5.0, PLATE_V + TRIPLE_AREA * 5.0, PLATE_D, entities=triple_ring())
+
+    on_plate("NEST.09.create",
+             "cut: три соосных контура R10/r5/r2 (вложенность ГЛУБИНЫ 2) вырезаны — убыль "
+             "π(100−25+4)·5, остров r2 работает материалом",
+             "cut", 5.0, PLATE_V - TRIPLE_AREA * 5.0, PLATE_D, entities=triple_ring())
+
+    # ── NEST.05: РАЗЛИЧАЮЩАЯ ПАРА — разнесённые складываются, перекрывающиеся не суммируются ─────
+    separate_analytic = math.pi * (25.0 + 9.0) * PLATE_D
+    doc, rev = new_doc("NEST-separate")
+    ok_sep, sep_note, sep_details = False, "документ не создан", {}
+    if doc:
+        sk, rev, err = sketch(doc, rev, circles((0.0, 0.0, 5.0), (100.0, 0.0, 3.0)),
+                              "NEST-separate-sk")
+        if err:
+            sep_note = "постановка не собрана: " + err
+        else:
+            rev, env, code = extrude(rev, sk, operation="base", depth_mm=PLATE_D,
+                                     direction="positive", end_condition="blind")
+            vol = volume(fresh_body(doc))
+            ok_sep = code is None and near(vol, separate_analytic) and confirmed(env)
+            sep_note = summary(env, vol, separate_analytic) + "; код=%s" % code
+            sep_details = {"volume_mm3": vol, "analytic_mm3": separate_analytic,
+                           "level": level(env), "volume_delta": check_named(env, "volume_delta")}
+        close(doc)
+
+    # Объединение двух окружностей R10 с центрами в 15 мм: аналитика выведена в приборе отдельной
+    # формулой (сегмент круга), а не взята из ответа продукта. Круг сегмента:
+    #   cos a = d/(2R); сегмент = R²·a − (d/2)·√(R²−(d/2)²); объединение = 2πR² − 2·сегмент.
+    d_ctr = 15.0
+    alpha = math.acos(d_ctr / (2.0 * R_OUT))
+    segment = (R_OUT * R_OUT * alpha) - ((d_ctr / 2.0) * math.sqrt((R_OUT * R_OUT) - ((d_ctr / 2.0) ** 2)))
+    union_analytic = (2.0 * math.pi * R_OUT * R_OUT - 2.0 * segment) * PLATE_D
+    doc, rev = new_doc("NEST-overlap")
+    ok_ovl, ovl_note, ovl_details = False, "документ не создан", {}
+    if doc:
+        sk, rev, err = sketch(doc, rev, circles((0.0, 0.0, R_OUT), (d_ctr, 0.0, R_OUT)),
+                              "NEST-overlap-sk")
+        if err:
+            ovl_note = "постановка не собрана: " + err
+        else:
+            rev, env, code = extrude(rev, sk, operation="base", depth_mm=PLATE_D,
+                                     direction="positive", end_condition="blind")
+            vol = volume(fresh_body(doc))
+            vd = check_named(env, "volume_delta")
+            # Геометрия верна (объединение измерено), но ПОДТВЕРЖДЕНИЕ обязано быть отозвано:
+            # уровень ниже `geometry_checked`, величина названа невычислимой.
+            ok_ovl = (code is None and near(vol, union_analytic)
+                      and level(env) != "geometry_checked"
+                      and vd.get("observed") == "not_computable")
+            ovl_note = ("объём %s против НЕЗАВИСИМОГО объединения %.10f; уровень %s; "
+                        "volume_delta obs=%s — подтверждение отозвано, а не подменено суммой; код=%s"
+                        % ("%.10f" % vol if vol is not None else "не прочитан", union_analytic,
+                           level(env), vd.get("observed"), code))
+            ovl_details = {"volume_mm3": vol, "union_analytic_mm3": union_analytic,
+                           "level": level(env), "volume_delta": vd}
+        close(doc)
+
+    ok_pair = ok_sep and ok_ovl
+    emit("NEST.05.geometry_validation",
+         "различающая пара: РАЗНЕСЁННЫЕ контуры складываются (подтверждено), ПЕРЕКРЫВАЮЩИЕСЯ "
+         "складываться не дают (подтверждение отозвано, объём назван невычислимым)",
+         "PASS" if ok_pair else "FAIL",
+         "разнесённые: " + sep_note + " | перекрывающиеся: " + ovl_note,
+         details={"separate": sep_details, "overlap": ovl_details,
+                  "separate_analytic_mm3": separate_analytic, "union_analytic_mm3": union_analytic})
+
+    # ── NEST.06: КАСАЮЩИЕСЯ контуры — ни сумма, ни разность не объявляются ────────────────────────
+    # Внутренняя окружность r5 с центром (5,0) касается внешней R10 изнутри. Область зависит от
+    # того, как ядро разрешает общую точку, — это не измерено, поэтому формула обязана вернуть null,
+    # а продукт — назвать величину невычислимой. Сумма (π(100+25)=392.699) была бы ИЗОБРЕТЕНИЕМ.
+    doc, rev = new_doc("NEST-tangent")
+    ok_tan, tan_note, tan_details = False, "документ не создан", {}
+    if doc:
+        sk, rev, err = sketch(doc, rev, circles((0.0, 0.0, R_OUT), (R_IN, 0.0, R_IN)),
+                              "NEST-tangent-sk")
+        if err:
+            tan_note = "постановка не собрана: " + err
+        else:
+            rev, env, code = extrude(rev, sk, operation="base", depth_mm=PLATE_D,
+                                     direction="positive", end_condition="blind")
+            vol = volume(fresh_body(doc))
+            vd = check_named(env, "volume_delta")
+            ok_tan = (code is None and vol is not None and vol > 0.0
+                      and level(env) != "geometry_checked"
+                      and vd.get("observed") == "not_computable")
+            tan_note = ("объём %s (тело построено); уровень %s; volume_delta obs=%s — сумма "
+                        "π(100+25)*10=%.4f НЕ объявлена; код=%s"
+                        % ("%.10f" % vol if vol is not None else "не прочитан", level(env),
+                           vd.get("observed"), math.pi * 125.0 * PLATE_D, code))
+            tan_details = {"volume_mm3": vol, "level": level(env), "volume_delta": vd}
+        close(doc)
+    emit("NEST.06.negative_tests",
+         "касающиеся контуры: величина названа невычислимой, а не суммой; тело при этом построено",
+         "PASS" if ok_tan else "FAIL", tan_note, details=tan_details)
+
+    # ── NEST.07: вложенный профиль переживает save → close → reopen ──────────────────────────────
+    ok_sr, sr_note, sr_details = False, "документ не создан", {}
+    doc, rev = new_doc("NEST-reopen")
+    if doc:
+        sk, rev, err = sketch(doc, rev, ring(), "NEST-reopen-sk")
+        if err:
+            sr_note = "постановка не собрана: " + err
+        else:
+            rev, env, code = extrude(rev, sk, operation="base", depth_mm=PLATE_D,
+                                     direction="positive", end_condition="blind")
+            path = os.path.join(workdir, "nested-ring.m3d")
+            clear_path(path)
+            env, code_save = call("kompas_save_document", {
+                "document_id": doc, "expected_revision": rev_of(env, rev), "target_path": path})
+            call("kompas_close_document", {"document_id": doc, "dirty_policy": "refuse"})
+            env, code_open = call("kompas_open_document", {
+                "application_id": app_id, "path": path, "access": "edit"})
+            opened = result(env).get("document_id") or result(env).get("id")
+            vol = volume(fresh_body(opened)) if opened else None
+            ok_sr = (code is None and code_save is None and code_open is None and opened is not None
+                     and near(vol, RING_AREA * PLATE_D))
+            sr_note = ("после reopen объём %s против аналитики %.10f; сохранение=%s открытие=%s"
+                       % ("%.10f" % vol if vol is not None else "не прочитан",
+                          RING_AREA * PLATE_D, code_save, code_open))
+            sr_details = {"volume_mm3": vol, "analytic_mm3": RING_AREA * PLATE_D,
+                          "save": code_save, "open": code_open}
+            if opened:
+                call("kompas_close_document", {"document_id": opened, "dirty_policy": "discard"})
+        close(doc)
+    emit("NEST.07.save_reopen",
+         "вложенный профиль (кольцо) переживает сохранение, закрытие и повторное открытие",
+         "PASS" if ok_sr else "FAIL", sr_note, details=sr_details)
 
 
 def dep_required_actions(root):

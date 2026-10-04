@@ -464,8 +464,10 @@ public sealed class ToolInvoker : IAsyncDisposable
         var execution = ExecuteAsync(tool, arguments, operationId, cancellationToken);
         if (!_inFlight.TryAdd(operationId, execution))
         {
-            // The journal says "not started", yet a task with the same id exists: report the
-            // in-flight one rather than dispatching a second mutation.
+            // Журнал сказал «этого operation_id ещё не видел», а задача с ним уже есть: состояние,
+            // которое сюда попасть не должно. Второй раз команду всё равно не отправляем — ждём
+            // существующую. Сама защита от повтора живёт в журнале (см. OperationJournal.TryBegin),
+            // потому что только он атомарен между процессами; эта ветка — вторая линия, а не первая.
             await execution.ConfigureAwait(false);
         }
 
@@ -590,6 +592,15 @@ public sealed class ToolInvoker : IAsyncDisposable
         {
             $"Запись журнальная: этот operation_id уже выполнялся ({record.Outcome.ToString().ToLowerInvariant()}), повторного обращения к КОМПАС не было.",
         };
+
+        if (record.Outcome == JournalOutcome.InFlight)
+        {
+            // Незавершённая запись отвечает running: клиент узнаёт, что операция ИДЁТ, и что ждать
+            // надо тот же вызов, а не новый operation_id (новый начал бы мутацию заново).
+            warnings.Add(
+                "Операция ещё выполняется: повторяйте ЭТОТ ЖЕ вызов с ЭТИМ ЖЕ operation_id, пока "
+                + "статус остаётся running; новый operation_id начал бы мутацию заново.");
+        }
 
         if (record.Outcome == JournalOutcome.OutcomeUnknown)
         {

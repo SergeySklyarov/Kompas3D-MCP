@@ -299,6 +299,63 @@ def user_kompas_pids():
     return kompas_pids()
 
 
+KOMPAS_EXE = "D:/Programs/KOMPAS-3Dv24/Bin/KOMPAS.exe"
+
+
+def start_attachable_kompas():
+    """Поднять экземпляр КОМПАС, который сервер увидит как ATTACHED.
+
+    Зачем прибору запускать КОМПАС самому. Политика «attached не завершается» проверяется только
+    на экземпляре, который сервер НЕ запускал: если его поднял `mode=launch`, он помечен Launched, и
+    `Quit()` для него — правильное поведение, а не то, которое проверяется. Процесс, поднятый
+    прибором ДО первого `kompas_connect`, для сервера ничем не отличается от пользовательского: он
+    приходит из ROT и регистрируется как Attached.
+
+    Почему это не «трогать чужой КОМПАС»: процесс принадлежит прибору, прибор его же и закрывает
+    (см. cleanup ниже), а пользовательские экземпляры прибор не запускает и не останавливает.
+    Возвращает None, если путь установки не найден, — тогда строка остаётся SKIP с причиной.
+    """
+    if not os.path.isfile(KOMPAS_EXE):
+        return None
+    return subprocess.Popen([KOMPAS_EXE], close_fds=True)
+
+
+def attach_with_retry(client, process_id, attempts=24, pause=5):
+    """Подключиться attach по явному pid, дожидаясь регистрации экземпляра в ROT.
+
+    Экземпляр регистрируется в ROT не мгновенно, и до этого attach отвечает AMBIGUOUS_APPLICATION
+    («нет процесса N среди наблюдаемых»). Это состояние ожидания, а не отказ продукта — но КАЖДАЯ
+    попытка идёт с НОВЫМ operation_id: повтор того же id вернул бы записанный отказ журнала, и прибор
+    вечно читал бы первый неудачный ответ.
+    """
+    env = None
+    op = str(uuid.uuid4())
+    for _ in range(attempts):
+        env = client.tool("kompas_connect", {
+            "mode": "attach",
+            "process_id": process_id,
+            "make_visible": False,
+            "operation_id": op,
+        })
+        if status(env) == "succeeded":
+            return env
+        if status(env) == "running":
+            # Операция идёт: повтор с ТЕМ ЖЕ operation_id вернёт записанный исход и НЕ отправит
+            # вторую команду (это же правило проверяет строка S15). Новый id здесь начал бы
+            # подключение заново — то есть создал бы вторую регистрацию того же экземпляра.
+            time.sleep(pause)
+            continue
+        if code(env) == "AMBIGUOUS_APPLICATION":
+            # Экземпляр ещё не зарегистрирован в ROT: это ожидание, а не отказ. Здесь нужен НОВЫЙ
+            # operation_id — повтор прежнего вернул бы записанный отказ журнала и прибор читал бы
+            # его вечно.
+            time.sleep(pause)
+            op = str(uuid.uuid4())
+            continue
+        return env
+    return env
+
+
 # -------------------------------------------------------------------------------------------------
 # Сценарий
 # -------------------------------------------------------------------------------------------------
@@ -348,6 +405,7 @@ def main():
     foreign_kompas = set(user_kompas_pids())
     print(f"Чужие экземпляры КОМПАС на старте: {sorted(foreign_kompas) or 'нет'}")
 
+    probe_instance = None
     try:
         # ---------------------------------------------------------------- S01
         a.initialize()
@@ -626,26 +684,116 @@ def main():
                 "PASS" if ok else "FAIL", f"status={status(env)}", {"acquire": env})
 
         # ---------------------------------------------------------------- S13: attached КОМПАС
-        user_now = set(user_kompas_pids()) - foreign_kompas
-        if not foreign_kompas:
-            rep.add("S23", "Пользовательский (attached) КОМПАС не завершается освобождением",
-                    "SKIP",
-                    "не измерено: на машине нет экземпляра КОМПАС, запущенного пользователем, — прибор "
-                    "не запускает «чужой» КОМПАС ради проверки и не выдаёт пропуск за измерение "
-                    "(так же поступает scripts/mcp-attach-test.py)")
+        # Пользовательский экземпляр, если он есть, используется как есть и НЕ закрывается прибором.
+        # Если его нет — прибор поднимает свой, который сервер видит ровно так же: пришедшим из ROT,
+        # то есть Attached. Это и делает проверку исполнимо́й без ожидания пользователя.
+        attach_pid = None
+        source = ""
+        if foreign_kompas:
+            attach_pid = sorted(foreign_kompas)[0]
+            source = "экземпляр пользователя, запущенный до прибора (прибор его не закрывает)"
         else:
-            attach = watcher.tool("kompas_connect", {"mode": "attach", "make_visible": False, "operation_id": str(uuid.uuid4())}, timeout=180)
-            rel = watcher.tool("kompas_release_session")
-            alive = set(user_kompas_pids()) & foreign_kompas
-            ok = status(attach) == "succeeded" and len(alive) == len(foreign_kompas)
-            rep.add("S23", "Пользовательский (attached) КОМПАС не завершается освобождением",
+            probe_instance = start_attachable_kompas()
+            if probe_instance is not None:
+                attach_pid = probe_instance.pid
+                source = "экземпляр, поднятый САМИМ прибором до первого connect (для сервера — attached)"
+
+        if attach_pid is None:
+            rep.add("S23", "Освобождение сеанса НЕ завершает attached КОМПАС", "SKIP",
+                    f"не измерено: {KOMPAS_EXE} не найден, поднять экземпляр нечем",
+                    {"kompas_exe": KOMPAS_EXE})
+        else:
+            attach = attach_with_retry(watcher, attach_pid)
+            attached_ok = status(attach) == "succeeded" and field(attach, "result", "ownership") == "attached"
+            rep.add("S23", "Сеанс подключается к СТОРОННЕМУ экземпляру как attached, а не launched",
+                    "PASS" if attached_ok else "FAIL",
+                    f"attach pid {attach_pid}: {status(attach)}, ownership="
+                    f"{field(attach, 'result', 'ownership')}; источник — {source}",
+                    {"attach": attach, "attach_pid": attach_pid, "source": source})
+
+            doc_att = None
+            doc_att_id = None
+            save_att = None
+            if attached_ok:
+                app_att = field(attach, "result", "application_id") or field(attach, "application_id")
+                doc_att = tool_wait(watcher, "kompas_create_document", {
+                    "application_id": app_att, "kind": "part", "operation_id": str(uuid.uuid4())})
+                doc_att_id = field(doc_att, "result", "document_id") or field(doc_att, "result", "id")
+                # Документ сохраняется ЯВНО: несохранённый — законный отказ release, и проверка
+                # «attached не завершается» не должна подменяться проверкой политики несохранённых
+                # документов (измерено в первом прогоне этой строки: release ответил DOCUMENT_DIRTY).
+                save_att = save_document(watcher, doc_att_id,
+                                         os.path.join(os.path.dirname(journal), "handover-attached.m3d"))
+
+            rel_att = watcher.tool("kompas_release_session")
+            alive = attach_pid in kompas_pids()
+            ok = attached_ok and status(save_att) == "succeeded" and status(rel_att) == "succeeded" and alive
+            rep.add("S24", "Освобождение сеанса НЕ завершает attached КОМПАС",
                     "PASS" if ok else "FAIL",
-                    f"attach {status(attach)}; чужих экземпляров до {len(foreign_kompas)}, после {len(alive)}",
-                    {"attach": attach, "release": rel, "alive": sorted(alive)})
+                    f"сохранение {status(save_att)}, release {status(rel_att)}; процесс pid {attach_pid} "
+                    f"после освобождения: {'жив' if alive else 'ЗАВЕРШЁН'}; документ сеанса был {doc_att_id}",
+                    {"save": save_att, "release": rel_att, "attach_pid": attach_pid, "alive": alive,
+                     "create": doc_att, "kompas_alive": sorted(kompas_pids())})
+
+            # Документ сеанса закрыт, а сам экземпляр по-прежнему доступен для attach: это разные
+            # утверждения, и «не завершили процесс» ещё не значит «отпустили его корректно».
+            # Сеанс занимается ЯВНО: после явного release обычный CAD-вызов владение не берёт, и
+            # attach без acquire вернул бы SESSION_NOT_ACQUIRED — это правило продукта, а не отказ
+            # экземпляра (измерено в предыдущем прогоне этой строки).
+            reacquire = watcher.tool("kompas_acquire_session")
+            reattach = attach_with_retry(watcher, attach_pid, attempts=12) if status(reacquire) == "succeeded" else reacquire
+            docs = None
+            stale_doc = None
+            open_docs = None
+            if status(reattach) == "succeeded":
+                app_re = field(reattach, "result", "application_id") or field(reattach, "application_id")
+                open_docs = field(reattach, "result", "open_document_count")
+                docs = watcher.tool("kompas_list_documents", {"application_id": app_re})
+                # Документ прежнего сеанса в НОВОМ сеансе недоступен: это и есть «контекст не оживает».
+                stale_doc = watcher.tool("kompas_get_context", {"document_id": doc_att_id, "detail": "minimal"})
+                reattach_ok = (status(reacquire) == "succeeded" and status(docs) == "succeeded"
+                               and status(stale_doc) == "failed" and open_docs == 0)
+            else:
+                reattach_ok = False
+            rep.add("S25", "Экземпляр снова доступен, документов в нём нет, ссылка прежнего сеанса не принимается",
+                    "PASS" if reattach_ok else "FAIL",
+                    f"повторный acquire: {status(reacquire)}; повторный attach: {status(reattach)}; "
+                    f"открытых документов в экземпляре "
+                    f"{open_docs}; kompas_list_documents: {status(docs)}; чтение документа прежнего "
+                    f"сеанса {doc_att_id}: {code(stale_doc)}",
+                    {"reacquire": reacquire, "reattach": reattach, "documents": docs,
+                     "stale_read": stale_doc, "open_document_count": open_docs})
+
+            # Оставшийся после проверки сеанс закрывается: экземпляр, поднятый прибором, прибор и
+            # закрывает. Пользовательский экземпляр не трогается вовсе.
+            if status(reattach) == "succeeded":
+                watcher.tool("kompas_disconnect", {
+                    "application_id": field(reattach, "result", "application_id") or field(reattach, "application_id"),
+                    "close_owned_application": False,
+                    "operation_id": str(uuid.uuid4())})
+                watcher.tool("kompas_release_session")
+
+            if probe_instance is not None:
+                time.sleep(2)
+                subprocess.run(["taskkill", "/PID", str(probe_instance.pid), "/F"],
+                               capture_output=True, text=True, timeout=60)
+                time.sleep(2)
+                gone = probe_instance.pid not in kompas_pids()
+                rep.add("S26", "Прибор закрыл СВОЙ экземпляр КОМПАС; пользовательский не тронут",
+                        "PASS" if gone else "FAIL",
+                        f"pid {probe_instance.pid} после закрытия прибором: {'нет' if gone else 'ЖИВ'}",
+                        {"probe_pid": probe_instance.pid, "gone": gone,
+                         "user_instances": sorted(foreign_kompas)})
+            else:
+                rep.add("S26", "Пользовательский экземпляр не тронут прибором", "PASS",
+                        f"прибор не запускал и не закрывал ничего; пользовательских экземпляров "
+                        f"{len(foreign_kompas)}, все на месте: "
+                        f"{sorted(set(foreign_kompas) & set(kompas_pids()))}",
+                        {"user_instances": sorted(foreign_kompas)})
 
         # ---------------------------------------------------------------- Журнал
         lines = journal_lines(journal)
-        rep.add("S24", "Журнал операций не повреждён после передачи сеанса",
+        rep.add("S27", "Журнал операций не повреждён после передачи сеанса",
                 "PASS" if lines > 0 else "FAIL",
                 f"строк в {journal}: {lines}",
                 {"journal": journal, "lines": lines})
@@ -657,8 +805,16 @@ def main():
                     client.close()
                 except Exception:
                     pass
-        # Уборка: экземпляры КОМПАС, порождённые прибором, закрываются его же освобождением;
-        # если что-то осталось — называется, а не подчищается убийством.
+        # Уборка: экземпляр, поднятый САМИМ прибором для проверки attached, закрывается прибором же
+        # и на аварийном пути тоже — иначе упавший прибор оставил бы за собой чужой процесс.
+        # Пользовательские экземпляры не трогаются ни здесь, ни где-либо ещё.
+        if probe_instance is not None:
+            try:
+                subprocess.run(["taskkill", "/PID", str(probe_instance.pid), "/F"],
+                               capture_output=True, text=True, timeout=60)
+            except Exception:
+                pass
+        time.sleep(1)
         leftover = set(kompas_pids()) - foreign_kompas
         if leftover:
             print(f"ВНИМАНИЕ: остались процессы КОМПАС, порождённые прибором: {sorted(leftover)}")

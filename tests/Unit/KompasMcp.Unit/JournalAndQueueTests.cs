@@ -47,6 +47,28 @@ public class OperationJournalTests : IDisposable
         Assert.Equal("""{"body_count":1}""", again.Existing.ResultJson);
     }
 
+    /// <summary>
+    /// Повтор во время выполнения НЕ разрешает вторую отправку. Прежде журнал отвечал
+    /// <c>Proceed=true</c> на незавершённую запись, и вызывающий отправлял команду в КОМПАС второй
+    /// раз — измерено 04.10.2026: повтор <c>kompas_create_document</c> создал два документа.
+    /// </summary>
+    [Fact]
+    public void SameIdWhileStillInFlight_IsNotAllowedToProceedAgain()
+    {
+        using var journal = new OperationJournal(_file);
+        var id = Guid.NewGuid().ToString();
+        var first = journal.TryBegin(id, "kompas_create_document", Args(10), "doc-1", 3);
+        Assert.True(first.Proceed);
+
+        // Запись ещё InFlight: операция выполняется.
+        var second = journal.TryBegin(id, "kompas_create_document", Args(10), "doc-1", 3);
+
+        Assert.False(second.Proceed, "незавершённая операция не имеет права быть отправленной второй раз");
+        Assert.NotNull(second.Existing);
+        Assert.Equal(JournalOutcome.InFlight, second.Existing!.Outcome);
+        Assert.True(second.IsReplay);
+    }
+
     [Fact]
     public void SameIdDifferentArguments_Conflict()
     {

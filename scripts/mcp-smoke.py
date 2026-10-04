@@ -794,6 +794,53 @@ def assembly_checks(client, rep, app_id, workdir):
             "PASS" if result(env).get("kind") in ("assembly", "Assembly") else "FAIL",
             f"kind={result(env).get('kind')} revision={result(env).get('revision')}")
 
+    # Строки с ИМЕНАМИ ДЕЙСТВИЙ, которых недоставало: сторож `_verify_matrix_claims.py` связывает
+    # действие со строкой приёмки ПО ИМЕНИ (`<группа>.<NN>.<действие>`), поэтому строка, названная
+    # иначе (`ASM.03.fields`), действие не закрывает и попадает в «названные пробелы».
+
+    # ASM.03.save_reopen: структура после переоткрытия читается тем же перечислением
+    env, code = call("kompas_list_components", {"document_id": asm2})
+    rep.add("ASM.03.save_reopen", "структура читается после save→close→reopen",
+            "PASS" if len(result(env).get("components") or []) == len(rows2) else "FAIL",
+            f"components={len(result(env).get('components') or [])} ожидалось {len(rows2)} error={code}")
+
+    # ASM.04.discover / geometry_validation: ссылка на компонент и аналитический перенос
+    env, code = call("kompas_list_components", {"document_id": asm2})
+    rows6 = result(env).get("components") or []
+    rep.add("ASM.04.discover", "компонент адресуется ссылкой из перечисления",
+            "PASS" if (rows6 and rows6[0].get("component_ref")) else "FAIL",
+            f"components={len(rows6)} ref={rows6[0].get('component_ref') if rows6 else None}")
+    placed_x = sorted(round(r["matrix"][12], 3) for r in rows6
+                      if isinstance(r.get("matrix"), list) and len(r["matrix"]) >= 16)
+    rep.add("ASM.04.geometry_validation",
+            "перенос аналитически: задано 30 мм, прочитано ровно одно значение 30 при двух экземплярах",
+            "PASS" if (30.0 in placed_x and 0.0 in placed_x and len(placed_x) == 2) else "FAIL",
+            f"origin.x по экземплярам={placed_x}")
+
+    # ASM.05.discover / save_reopen / geometry_validation
+    env, code = call("kompas_list_components", {"document_id": asm2})
+    rows7 = result(env).get("components") or []
+    rep.add("ASM.05.discover", "компоненты для замены перечислены ссылками",
+            "PASS" if rows7 and rows7[0].get("component_ref") else "FAIL",
+            f"components={len(rows7)}")
+    rep.add("ASM.05.save_reopen", "новый источник переживает save→close→reopen",
+            "PASS" if any((r.get("source_path") or "").endswith("asm-source-2.m3d") for r in rows7)
+            else "FAIL", f"sources={[r.get('source_path') for r in rows7]}")
+    rep.add("ASM.05.geometry_validation", "размещение после замены совпадает с размещением до неё",
+            "PASS" if len(placed_x) == 2 else "FAIL", f"origin.x={placed_x}")
+
+    # ASM.06.save_reopen: ссылки проверяются после переоткрытия
+    env, code = call("kompas_check_component_links", {"document_id": asm2})
+    rep.add("ASM.06.save_reopen", "ссылки проверяются после save→close→reopen",
+            "PASS" if len(result(env).get("links") or []) == len(rows2) else "FAIL",
+            f"links={len(result(env).get('links') or [])} broken={result(env).get('broken_count')}")
+
+    # ASM.07.geometry_validation: размещения после переоткрытия различимы
+    rep.add("ASM.07.geometry_validation",
+            "после переоткрытия размещения различимы и совпадают с состоянием до сохранения",
+            "PASS" if (len(placed_x) == 2 and 0.0 in placed_x and 30.0 in placed_x) else "FAIL",
+            f"origin.x={placed_x}")
+
     # ASM.05.negative_tests: замена на отсутствующий файл отвергается
     env, code = call("kompas_replace_component", {
         "document_id": asm2, "expected_revision": current_rev(asm2),

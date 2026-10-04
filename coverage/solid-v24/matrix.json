@@ -5136,7 +5136,7 @@
    "context": "assembly",
    "catalog_ref": "ASM",
    "parameters_schema": null,
-   "adapter_route": null,
+   "adapter_route": "kompas_create_document(kind=assembly) / kompas_open_document / kompas_save_document / kompas_close_document: API5 ksDocument3D.Create(invisible, isDetail=false) + ksPart.GetPart(-1)",
    "actions": {
     "discover": "verified",
     "create": "verified",
@@ -5188,7 +5188,7 @@
    "context": "assembly",
    "catalog_ref": "ASM",
    "parameters_schema": null,
-   "adapter_route": null,
+   "adapter_route": "kompas_insert_component: API5 ksDocument3D.CreatePartInAssembly(fileName, GetDefaultEntity(o3d_planeXOY)) для первого экземпляра и ksDocument3D.CopyPart(source, placement) для повторного",
    "actions": {
     "discover": "verified",
     "create": "verified",
@@ -5246,7 +5246,7 @@
    "context": "assembly",
    "catalog_ref": "ASM",
    "parameters_schema": null,
-   "adapter_route": null,
+   "adapter_route": "kompas_list_components: API7 IAssemblyDocument.TopPart → IPart7.PartsEx(ksAllParts) + IPart7.InstanceCount/Fixed/Marking/FileName/LoadState; API5 ksDocument3D.PartCollection(true) для размещения",
    "actions": {
     "discover": "verified",
     "create": "not_applicable",
@@ -5265,7 +5265,8 @@
     "ASM.03.multiplicity",
     "ASM.06.discover",
     "ASM.07.reopen",
-    "ASM.03.negative_tests"
+    "ASM.03.negative_tests",
+    "ASM.03.save_reopen"
    ],
    "evidence": [
     "docs/acceptance/assembly/assembly-acceptance.json",
@@ -5299,7 +5300,7 @@
    "context": "assembly",
    "catalog_ref": "ASM",
    "parameters_schema": null,
-   "adapter_route": null,
+   "adapter_route": "kompas_set_component_placement: API5 ksDocument3D.DefaultPlacement() + ksPlacement.InitByMatrix3D + ksPart.SetPlacement + ksPart.UpdatePlacement; чтение ksPlacement.GetMatrix3D",
    "actions": {
     "discover": "verified",
     "create": "not_applicable",
@@ -5319,7 +5320,9 @@
     "ASM.04.edit",
     "ASM.02.rebuild",
     "ASM.04.negative_tests",
-    "ASM.04.distinguishing"
+    "ASM.04.distinguishing",
+    "ASM.04.discover",
+    "ASM.04.geometry_validation"
    ],
    "evidence": [
     "docs/acceptance/assembly/assembly-acceptance.json",
@@ -5351,7 +5354,7 @@
    "context": "assembly",
    "catalog_ref": "ASM",
    "parameters_schema": null,
-   "adapter_route": null,
+   "adapter_route": "kompas_replace_component: API5 ksPart.fileName + API7 IPart7.FileName + IPart7.RebuildModel(true) + ksDocument3D.RebuildDocument",
    "actions": {
     "discover": "verified",
     "create": "not_applicable",
@@ -5370,7 +5373,10 @@
     "ASM.05.edit",
     "ASM.02.rebuild",
     "ASM.07.reopen",
-    "ASM.05.negative_tests"
+    "ASM.05.negative_tests",
+    "ASM.05.discover",
+    "ASM.05.save_reopen",
+    "ASM.05.geometry_validation"
    ],
    "evidence": [
     "docs/acceptance/assembly/assembly-acceptance.json",
@@ -5403,7 +5409,7 @@
    "context": "assembly",
    "catalog_ref": "ASM",
    "parameters_schema": null,
-   "adapter_route": null,
+   "adapter_route": "kompas_check_component_links: API7 IPart7.FileName + IPart7.LoadState по IAssemblyDocument.TopPart → IPart7.PartsEx",
    "actions": {
     "discover": "verified",
     "create": "not_applicable",
@@ -5420,7 +5426,8 @@
     "ASM.06.discover",
     "ASM.06.read",
     "ASM.07.reopen",
-    "ASM.06.negative_tests"
+    "ASM.06.negative_tests",
+    "ASM.06.save_reopen"
    ],
    "evidence": [
     "docs/acceptance/assembly/assembly-acceptance.json",
@@ -5455,7 +5462,7 @@
    "context": "assembly",
    "catalog_ref": "ASM",
    "parameters_schema": null,
-   "adapter_route": null,
+   "adapter_route": "kompas_save_document / kompas_open_document / kompas_close_document: API5 ksDocument3D.Save/SaveAs/Open",
    "actions": {
     "discover": "verified",
     "create": "not_applicable",
@@ -5474,7 +5481,8 @@
     "ASM.07.save_reopen",
     "ASM.07.reopen",
     "ASM.07.negative_tests",
-    "ASM.04.save_reopen"
+    "ASM.04.save_reopen",
+    "ASM.07.geometry_validation"
    ],
    "evidence": [
     "docs/acceptance/assembly/assembly-acceptance.json",
@@ -5516,7 +5524,7 @@
    ],
    "title": "Общий жизненный цикл документа для сборки (создать/открыть/сохранить/закрыть)",
    "parameters_schema": null,
-   "adapter_route": null,
+   "adapter_route": "kompas_list_components: API7 IAssemblyDocument.TopPart → IPart7.PartsEx(ksAllParts) + IPart7.InstanceCount/Fixed/Marking/FileName/LoadState; API5 ksDocument3D.PartCollection(true) для размещения",
    "actions": {
     "discover": "verified",
     "create": "verified",
@@ -5544,7 +5552,11 @@
     "ASM.07.save_reopen",
     "ASM.07.reopen",
     "ASM.01.negative_tests",
-    "ASM.07.negative_tests"
+    "ASM.07.negative_tests",
+    "ASM.03.save_reopen",
+    "ASM.04.discover",
+    "ASM.05.discover",
+    "ASM.06.save_reopen"
    ],
    "evidence": [
     "docs/acceptance/assembly/assembly-acceptance.json",
@@ -5592,7 +5604,7 @@
    ],
    "title": "Выбор файла-источника внутри writable_roots",
    "parameters_schema": null,
-   "adapter_route": null,
+   "adapter_route": "kompas_list_components: API7 IAssemblyDocument.TopPart → IPart7.PartsEx(ksAllParts) + IPart7.InstanceCount/Fixed/Marking/FileName/LoadState; API5 ksDocument3D.PartCollection(true) для размещения",
    "actions": {
     "discover": "verified",
     "create": "verified",
@@ -5619,7 +5631,8 @@
     "ASM.02.negative_tests",
     "ASM.02.negative_tests_missing",
     "ASM.05.negative_tests",
-    "ASM.02.geometry_validation"
+    "ASM.02.geometry_validation",
+    "ASM.05.save_reopen"
    ],
    "evidence": [
     "docs/acceptance/assembly/assembly-acceptance.json",
@@ -5663,7 +5676,7 @@
    ],
    "title": "Устойчивая адресация компонента в структуре",
    "parameters_schema": null,
-   "adapter_route": null,
+   "adapter_route": "kompas_list_components: API7 IAssemblyDocument.TopPart → IPart7.PartsEx(ksAllParts) + IPart7.InstanceCount/Fixed/Marking/FileName/LoadState; API5 ksDocument3D.PartCollection(true) для размещения",
    "actions": {
     "discover": "verified",
     "create": "not_applicable",
@@ -5688,7 +5701,11 @@
     "ASM.07.reopen",
     "ASM.04.negative_tests",
     "ASM.04.distinguishing",
-    "ASM.04.edit"
+    "ASM.04.edit",
+    "ASM.04.discover",
+    "ASM.04.geometry_validation",
+    "ASM.05.discover",
+    "ASM.07.geometry_validation"
    ],
    "evidence": [
     "docs/acceptance/assembly/assembly-acceptance.json",
@@ -5737,7 +5754,7 @@
    ],
    "title": "Ревизии и конкурентность сборки",
    "parameters_schema": null,
-   "adapter_route": null,
+   "adapter_route": "kompas_list_components: API7 IAssemblyDocument.TopPart → IPart7.PartsEx(ksAllParts) + IPart7.InstanceCount/Fixed/Marking/FileName/LoadState; API5 ksDocument3D.PartCollection(true) для размещения",
    "actions": {
     "discover": "verified",
     "create": "not_applicable",
@@ -5761,7 +5778,9 @@
     "ASM.04.edit",
     "ASM.02.rebuild",
     "ASM.07.save_reopen",
-    "ASM.04.negative_tests"
+    "ASM.04.negative_tests",
+    "ASM.04.discover",
+    "ASM.05.save_reopen"
    ],
    "evidence": [
     "docs/acceptance/assembly/assembly-acceptance.json",
@@ -5806,7 +5825,7 @@
    ],
    "title": "Идемпотентность мутаций сборки по operation_id",
    "parameters_schema": null,
-   "adapter_route": null,
+   "adapter_route": "kompas_list_components: API7 IAssemblyDocument.TopPart → IPart7.PartsEx(ksAllParts) + IPart7.InstanceCount/Fixed/Marking/FileName/LoadState; API5 ksDocument3D.PartCollection(true) для размещения",
    "actions": {
     "discover": "verified",
     "create": "verified",
@@ -5827,7 +5846,9 @@
    "tests": [
     "ASM.03.read",
     "ASM.02.create",
-    "ASM.02.idempotency"
+    "ASM.02.idempotency",
+    "ASM.04.discover",
+    "ASM.02.negative_tests"
    ],
    "evidence": [
     "docs/acceptance/assembly/assembly-acceptance.json",

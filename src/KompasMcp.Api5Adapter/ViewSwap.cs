@@ -42,15 +42,6 @@ internal sealed class ViewSwapState
     public required string Note { get; init; }
 }
 
-/// <summary>What to do with the window view after a snapshot: put the previous projection back, or leave
-/// the requested one. The decision itself lives in <see cref="ViewRestorePlan"/> (Domain), where the
-/// deterministic test lane can call it without КОМПАС.</summary>
-/// <remarks>INVARIANT: <c>NotNeeded</c> is returned only when the caller explicitly said
-/// <c>keep_view=true</c>; that flag is a CONSENT to keep the new view, not a wish to be honoured
-/// silently. MEASURED: in a visible window before the first <c>SetCurrent</c> no projection answers
-/// <c>IsCurrent=true</c>, so nothing can be restored — the refusal is taken BEFORE the view changes
-/// rather than discovered after the snapshot.</remarks>
-
 /// <summary>Applying and restoring a view projection through the documented API5 route.</summary>
 /// <remarks>DOC: <c>ksdocument3d_getviewprojectioncollection.html</c>, <c>ksviewprojection.html</c>
 /// (<c>GetViewProjectonType</c>, <c>IsCurrent</c>, <c>SetCurrent</c>),
@@ -157,16 +148,14 @@ internal static class ViewSwap
                 PreviousView = previous is int previousType ? ViewProjections.Describe(previousType) : null,
                 Note = string.Empty,
             };
-            Restore(document, attempted, out var restoredBack, out var backNote);
+            RestoreUnconfirmedSwitch(document, attempted, out var restoredBack, out var backNote);
 
             throw new KompasContractException(
                 ErrorCodes.ViewUnavailable,
                 $"Проекция '{wanted.Wire}' не подтверждена обратным чтением: SetCurrent()={switched}, "
                 + $"прочитан тип {afterType?.ToString() ?? "null"}, ожидался {wanted.Type}. "
                 + "Снимок не снят: подписывать картинку не тем видом нельзя. "
-                + (restoredBack == true
-                    ? "Прежний вид окна возвращён."
-                    : $"Прежний вид окна вернуть не удалось: {backNote}"),
+                + DescribeUnconfirmedRestore(restoredBack, backNote),
                 RetryPolicy.SameOperationId,
                 details: new Dictionary<string, object?>
                 {
@@ -174,6 +163,7 @@ internal static class ViewSwap
                     ["requested_type"] = wanted.Type,
                     ["set_current_returned"] = switched,
                     ["type_after"] = afterType,
+                    ["keep_view"] = keepView,
                     ["previous_view_restored"] = restoredBack,
                     ["previous_view_restore_note"] = backNote,
                 });
@@ -191,6 +181,72 @@ internal static class ViewSwap
                 : $"проекция '{wanted.Wire}' применена на время снимка; прежний вид "
                     + $"{ViewProjections.Describe(previous!.Value)} будет возвращён после снимка",
         };
+    }
+
+    /// <summary>Put the previous projection back after an UNCONFIRMED switch, whatever
+    /// <c>keep_view</c> said, and read it back: "I called SetCurrent" is not "the view is back".</summary>
+    /// <remarks>INVARIANT: called from <see cref="Apply"/>'s refusal and independent of
+    /// <see cref="ViewRestorePlan"/> — that plan answers for a CONFIRMED switch, where consent decides.
+    /// Here the switch was ATTEMPTED and the label is unconfirmed, so the window may have moved without
+    /// the caller agreeing to anything: <c>keep_view=true</c> consented to a CONFIRMED projection, not to
+    /// an unverified one. This mirrors the caller's `finally`, which restores regardless of consent.
+    /// NEVER throws, for the same reason as <see cref="Restore"/>.</remarks>
+    private static void RestoreUnconfirmedSwitch(
+        DocumentEntry document, ViewSwapState state, out bool? restored, out string? note)
+    {
+        restored = null;
+        note = null;
+        if (!ViewProjections.TryResolve(state.PreviousView, out var previous))
+        {
+            restored = false;
+            note = "previous_view_not_restored — прежний вид не был прочитан или не входит в "
+                + "опубликованный перечень, вернуть его по имени нельзя";
+            return;
+        }
+
+        try
+        {
+            var collection = ReadCollection(document);
+            var target = collection is null ? null : FindByType(collection, previous.Type);
+            if (collection is null || target is null)
+            {
+                restored = false;
+                note = "previous_view_not_restored — коллекция проекций недоступна при возврате вида";
+                return;
+            }
+
+            target.SetCurrent();
+            collection.refresh();
+            restored = FindCurrentType(collection) == previous.Type;
+            if (restored != true)
+            {
+                note = "previous_view_not_restored — обратное чтение после возврата не подтвердило "
+                    + $"прежний тип {previous.Type}";
+            }
+        }
+        catch (Exception ex)
+        {
+            restored = false;
+            note = $"previous_view_not_restored — возврат вида бросил {ex.GetType().Name}: {ex.Message}";
+        }
+    }
+
+    /// <summary>The unconfirmed-switch restore outcome as one sentence for the refusal text.</summary>
+    /// <remarks>INVARIANT: the text never ends in an empty tail. The previous edition appended
+    /// <c>"…вернуть не удалось: {note}"</c> unconditionally, but the note is null on every outcome except
+    /// a failed restore — so a missing note produced the colon with nothing after it, reading as a silent
+    /// failure. The outcome, not the note, decides the wording.</remarks>
+    private static string DescribeUnconfirmedRestore(bool? restored, string? note)
+    {
+        if (restored == true)
+        {
+            return "Прежний вид окна возвращён.";
+        }
+
+        return note is { Length: > 0 }
+            ? $"Прежний вид окна вернуть не удалось: {note}"
+            : "Прежний вид окна вернуть не удалось: причина не названа, документ остался на "
+                + $"выбранной проекции '{restored}'";
     }
 
     /// <summary>Put the previous projection back. The restore is read back as well: "I called SetCurrent"

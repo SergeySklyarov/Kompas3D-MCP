@@ -110,6 +110,38 @@ public sealed class ViewRestorePlanTests
         Assert.Contains("out var restored, out var restoreNote", caller, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Unconfirmed_switch_is_restored_by_its_own_path_not_by_the_consent_plan()
+    {
+        // The refusal inside Apply decides the unconfirmed switch itself: a keep_view=true there was a
+        // consent to a CONFIRMED projection, not to an unverified one, so the plan's "consent => do
+        // nothing" answer must NOT be reused. Asserted by the name of the dedicated helper — and by the
+        // absence of the plain `Restore(` call with the old signature argument order, which would route
+        // the unconfirmed case through the consent check.
+        var swap = File.ReadAllText(Path.Combine(
+            RepoRoot, "src", "KompasMcp.Api5Adapter", "ViewSwap.cs"));
+        var apply = Body(swap, "public static ViewSwapState Apply(");
+
+        Assert.Contains("RestoreUnconfirmedSwitch(document, attempted", apply, StringComparison.Ordinal);
+        Assert.DoesNotContain("Restore(document, attempted", apply, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_unconfirmed_restore_sentence_never_ends_in_an_empty_tail()
+    {
+        // The previous edition appended "…вернуть не удалось: {note}" unconditionally, and the note is
+        // null on every outcome except a failed restore — so a missing note produced the colon with
+        // nothing after it. The outcome, not the note, must decide the wording. Checked positionally
+        // because the failure is in the refusal STRING, which cannot be reached without КОМПАС.
+        var swap = File.ReadAllText(Path.Combine(
+            RepoRoot, "src", "KompasMcp.Api5Adapter", "ViewSwap.cs"));
+        var body = Body(swap, "private static string DescribeUnconfirmedRestore(");
+
+        Assert.Contains("note is { Length: > 0 }", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("$\"Прежний вид окна вернуть не удалось: {backNote}\"", body,
+            StringComparison.Ordinal);
+    }
+
     private static readonly string RepoRoot = FindRepoRoot();
 
     private static string FindRepoRoot()

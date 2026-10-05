@@ -22814,6 +22814,119 @@ def image_checks(client, rep, app_id, workdir):
                 "прочитан обратно — окно не сдвинуто",
                 "FAIL", "второй документ не создан — случай п. 1 не проверен")
 
+    # IMG.23 — отказ `VIEW_UNAVAILABLE` ДО SetCurrent, когда ни одна проекция не текущая.
+    #
+    # ЧТО ИМЕННО ПРОВЕРЯЕТСЯ И ПОЧЕМУ ОТДЕЛЬНЫМ СЕАНСОМ. В ВИДИМОМ окне сразу после показа документа
+    # НИ ОДНА проекция не отвечает `IsCurrent=true` (измерено пробой `--suite view --view-visible`,
+    # строка VIEW.2 `[unknown]`). Тогда прежний вид прочитать нечем, и `ViewSwap.Apply` отказывает
+    # `VIEW_UNAVAILABLE` ДО первого `SetCurrent`, НЕ трогая вид окна. Это независимая ветка того же
+    # решения, которое IMG.22 проверяет С ДРУГОЙ стороны: там прежний вид читается (диметрия
+    # восстановима), здесь он НЕ читается вовсе.
+    #
+    # ДОСТИЖИМО ЛИ ЭТО ЧЕРЕЗ ДОКУМЕНТИРОВАННЫЕ ВЫЗОВЫ — измерено, а не выведено. Условие «видимый
+    # документ в видимом окне» достигается РОВНО `kompas_connect(mode="launch", make_visible=true)`:
+    # документы наследуют НАБЛЮДЁННУЮ видимость приложения (у create_document/open_document параметра
+    # видимости нет и не должно быть). Общая группа IMG подключается `make_visible=False`, поэтому
+    # здесь поднимается СОБСТВЕННОЕ окно — иначе случай недостижим и строка была бы ложной.
+    #
+    # ДВА ИСХОДА НАЗВАНЫ ЗАРАНЕЕ, и оба обязательны: (1) без `keep_view` — отказ `VIEW_UNAVAILABLE` с
+    # `keep_view_required_without_previous_view=true` и `previous_view=null`; (2) с `keep_view=true` —
+    # УСПЕХ, `previous_view=null` и `view_restored=null`. Один исход без другого ничего не доказывает:
+    # отказ без успеха означал бы, что не работает весь маршрут, а успех без отказа — что ветка
+    # отказа недостижима. Вид окна при отказе НЕ двигается: это утверждается отдельным чтением
+    # (`view_restored=null` и `applied_view=null` в отказе) и тем, что контрольный вызов с
+    # `keep_view=true` сработал на ТОМ ЖЕ документе.
+    vis_app = None
+    _ve, vc_env, _vr = client.tool("kompas_connect", {
+        "mode": "launch", "make_visible": True,
+        "operation_id": str(uuid.uuid4())}, timeout=300)
+    vis_app = (vc_env or {}).get("application_id")
+    if vis_app:
+        # Документ наследует видимость ПРИЛОЖЕНИЯ — параметра у create_document нет.
+        vis_doc, vis_rev = None, 1
+        _e, vd_env, _r = client.tool("kompas_create_document", {
+            "application_id": vis_app, "kind": "part", "name": "IMG23VIS",
+            "operation_id": str(uuid.uuid4())}, timeout=180)
+        vis_doc = ((vd_env or {}).get("result") or {}).get("document_id") \
+            or (vd_env or {}).get("document_id")
+        vis_rev = (vd_env or {}).get("revision_after") or 1
+        if vis_doc:
+            vis_result = (vd_env or {}).get("result") or {}
+            refusals = {"connect": (vc_env or {}).get("result"),
+                        "document": {"visible": vis_result.get("document_visible")}}
+            # Тело, чтобы снимку было что показать (и чтобы отказ не спутать с пустым документом).
+            _e, vs_env, _r = client.tool("kompas_create_sketch", {
+                "document_id": vis_doc, "expected_revision": vis_rev,
+                "plane": {"base": "xy", "offset_mm": 0.0}, "name": "IMG23VIS-plate",
+                "operation_id": str(uuid.uuid4())}, timeout=180)
+            vis_sketch = ((vs_env or {}).get("result") or {}).get("id")
+            vis_rev = (vs_env or {}).get("revision_after") or vis_rev
+            _e, ve_env, _r = client.tool("kompas_edit_sketch", {
+                "sketch_ref": vis_sketch, "expected_revision": vis_rev, "mode": "append",
+                "entities": [{"kind": "rectangle", "start_mm": [-50, -40],
+                              "width_mm": 100, "height_mm": 80}],
+                "operation_id": str(uuid.uuid4())}, timeout=180)
+            vis_rev = (ve_env or {}).get("revision_after") or vis_rev
+            _e, vf_env, _r = client.tool("kompas_finish_sketch", {
+                "sketch_ref": vis_sketch, "require_closed_profile": False,
+                "operation_id": str(uuid.uuid4())}, timeout=180)
+            vis_rev = (vf_env or {}).get("revision_after") or vis_rev
+            _e, vx_env, _r = client.tool("kompas_extrude", {
+                "sketch_ref": vis_sketch, "expected_revision": vis_rev, "operation": "base",
+                "depth_mm": 10.0, "direction": "positive", "end_condition": "blind",
+                "operation_id": str(uuid.uuid4())}, timeout=180)
+            vis_rev = (vx_env or {}).get("revision_after") or vis_rev
+
+            without_keep = export(vis_doc, vis_rev, format="png", resolution=100, view="up")
+            with_keep = export(vis_doc, vis_rev, format="png", resolution=100, view="up",
+                               keep_view=True)
+            wo_err = (without_keep["env"] or {}).get("error") or {}
+            wo_details = wo_err.get("details") or {}
+            wk_res = with_keep["result"]
+            # Названные условия обоих исходов. `previous_view is None` в обоих — и в отказе, и в
+            # успехе: прежняя проекция НЕ прочитана, это и есть причина ветки. `applied_view` в отказе
+            # `None` — вид окна НЕ сдвинут; в успехе — `up`, вид применён по согласию.
+            passed = (without_keep["code"] == "VIEW_UNAVAILABLE"
+                      and without_keep["block"] is None
+                      and wo_details.get("keep_view_required_without_previous_view") is True
+                      and wo_details.get("previous_view") is None
+                      and wo_details.get("previous_type") is None
+                      and wo_details.get("requested_view") == "up"
+                      and with_keep["code"] is None
+                      and wk_res.get("applied_view") == "up"
+                      and wk_res.get("previous_view") is None
+                      and wk_res.get("view_restored") is None)
+            refusals["without_keep"] = {"error": wo_err, "result": without_keep["result"]}
+            refusals["with_keep"] = wk_res
+            rep.add("IMG.23.negative_tests",
+                    "AUX-IMAGE.raster_export: в видимом окне без читаемой проекции вызов без "
+                    "keep_view отвергнут VIEW_UNAVAILABLE до SetCurrent, а с keep_view — снят",
+                    "PASS" if passed else "FAIL",
+                    f"без_keep код={without_keep['code']} "
+                    f"keep_required={wo_details.get('keep_view_required_without_previous_view')} "
+                    f"прежнее={wo_details.get('previous_view')!r} "
+                    f"вид_не_сдвинут={without_keep['result'].get('applied_view') is None} | "
+                    f"с_keep код={with_keep['code']} применено={wk_res.get('applied_view')} "
+                    f"прежнее={wk_res.get('previous_view')!r} возвращено={wk_res.get('view_restored')}",
+                    details=refusals)
+            client.tool("kompas_close_document",
+                        {"document_id": vis_doc, "dirty_policy": "discard"}, timeout=180)
+        else:
+            rep.add("IMG.23.negative_tests",
+                    "AUX-IMAGE.raster_export: в видимом окне без читаемой проекции вызов без "
+                    "keep_view отвергнут VIEW_UNAVAILABLE до SetCurrent, а с keep_view — снят",
+                    "FAIL", "документ в видимом окне не создан — случай не проверен")
+        client.tool("kompas_disconnect", {
+            "application_id": vis_app, "close_owned_application": True,
+            "operation_id": str(uuid.uuid4())}, timeout=180)
+    else:
+        # Молчание прибора — тоже утверждение: без видимого окна случай недостижим, и это названо,
+        # а не замаскировано PASS.
+        rep.add("IMG.23.negative_tests",
+                "AUX-IMAGE.raster_export: в видимом окне без читаемой проекции вызов без "
+                "keep_view отвергнут VIEW_UNAVAILABLE до SetCurrent, а с keep_view — снят",
+                "FAIL", "видимое окно не поднято — случай п. 4 не проверен")
+
     # ══ negative_tests: проекция ════════════════════════════════════════════════════════════════
     # IMG.20 — проекция вне перечня отвергается ДО COM, как и формат.
     bad_view = export(doc, rev, format="png", resolution=100, view="Спереди")

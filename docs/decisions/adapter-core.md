@@ -796,5 +796,11 @@ projection of a freshly created part is dimetry (type 8); it reads back through 
 and, once <c>dimetric</c> is published, is restorable, so a first <c>view</c> without <c>keep_view</c>
 succeeds and restores it. LIMIT: a projection type the collection does not carry, or one with no published
 name, cannot be restored; a call asking to switch without <c>keep_view</c> then refuses BEFORE the first
-<c>SetCurrent</c> rather than move the window. The restore itself never throws — an exception out of the
-caller's <c>finally</c> would replace a finished snapshot's result with a refusal.
+<c>SetCurrent</c> rather than move the window. MEASURED: that condition is reachable through documented
+calls — a VISIBLE window (`connect(launch, make_visible=true)`, documents inheriting the app's visibility)
+answers no `IsCurrent=true` before the first `SetCurrent`, so the refusal is measured live, not only coded.
+INVARIANT: an UNCONFIRMED switch (`SetCurrent` invoked, the read-back disagreeing) restores the previous
+type EVEN UNDER `keep_view` — the consent covered a CONFIRMED projection, and the window may already have
+moved; the outcome is named in the refusal, whose text never ends in an empty tail. The restore itself
+never throws — an exception out of the caller's <c>finally</c> would replace a finished snapshot's result
+with a refusal.

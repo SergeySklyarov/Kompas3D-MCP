@@ -11,20 +11,16 @@ public enum RestoreDecision
 
     /// <summary>Put the previous projection back and read the type again.</summary>
     Restore,
-
-    /// <summary>The switch was attempted but unconfirmed: try to put the previous type back, because the
-    /// window view may already have moved. The outcome belongs in the refusal's `details`.</summary>
-    AttemptAfterUnconfirmedSwitch,
 }
 
 /// <summary>The restore decision as a PURE function: the cases an instrument cannot reach through COM —
-/// "the caller consented and the restore must not run", "the switch was attempted and not confirmed",
-/// "the previous view was never read" — are testable here without KOMPAS. It takes three plain values and
-/// answers; no document, no COM, nothing that could throw.</summary>
+/// "the caller consented and the restore must not run", "the previous view was never read" — are testable
+/// here without KOMPAS.</summary>
 /// <remarks>INVARIANT: <c>keep_view=true</c> is a CONSENT, checked FIRST — the caller who asked to keep
 /// the new view is never put back, and is not told a restore is missing when none was wanted. MEASURED: a
-/// previous type the published list does not name is not restorable, so a read but unpublished value is
-/// treated as unread. History: docs/decisions/adapter-core.md#view-swap</remarks>
+/// read but unpublished previous type is not restorable, so it is treated as unread. LIMIT: the decision
+/// answers for the CONFIRMED switch only — an unconfirmed one is decided in <c>ViewSwap.Apply</c>.
+/// History: docs/decisions/adapter-core.md#view-swap</remarks>
 public static class ViewRestorePlan
 {
     /// <param name="requested">The caller asked for a projection at all.</param>

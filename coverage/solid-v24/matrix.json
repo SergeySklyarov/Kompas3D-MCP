@@ -5118,7 +5118,8 @@
     "IMG.19.edit",
     "IMG.20.negative_tests",
     "IMG.21.negative_tests",
-    "IMG.22.negative_tests"
+    "IMG.22.negative_tests",
+    "IMG.23.negative_tests"
    ],
    "evidence": [
     "docs/acceptance/INDEX.md",

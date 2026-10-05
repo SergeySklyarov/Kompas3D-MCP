@@ -57,10 +57,10 @@
 - **семейств_без_строк:** 14
 - **операций:** 82
 - **режимов_и_вариантов:** 206
-- **применимых_действий:** 2558
-- **действий_verified:** 727
+- **применимых_действий:** 2559
+- **действий_verified:** 728
 - **покрытие_действий:** 28.4%
-- **распределение_статусов:** {'not_started': 1831, 'verified': 727, 'not_applicable': 122}
+- **распределение_статусов:** {'not_started': 1831, 'verified': 728, 'not_applicable': 121}
 - **уровни_каталога_операций:** {'metadata_found': 50, 'mcp_verified': 22, 'runtime_verified': 6, 'documented': 10}
 - **уровни_каталога_режимов:** {'mcp_verified': 52, 'documented': 19, 'runtime_verified': 3, 'metadata_found': 48, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
@@ -420,7 +420,7 @@
 | `SM-29.deform_component.all_available` | SM-29 | later | — | documented | — | — | — | — | — | — | — | — | — | — | — |
 | `SM-29.deformation_object` | SM-29 | later | — | documented | — | — | — | — | — | — | — | — | — | — | — |
 | `SM-29.save_component_with_deformation.as_new_file` | SM-29 | later | — | documented | — | — | — | — | — | — | — | — | — | — | — |
-| `AUX-IMAGE.raster_export` | AUX-IMAGE | next | — | mcp_verified | н/п | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | IMG.01.create, IMG.02.create, IMG.03.create, IMG.04.create, IMG.05.read, IMG.06.read, IMG.07.geometry_validation, IMG.08.geometry_validation, IMG.09.geometry_validation, IMG.10.negative_tests, IMG.11.negative_tests, IMG.12.negative_tests, IMG.13.negative_tests, IMG.14.negative_tests, IMG.15.negative_tests, IMG.16.read |
+| `AUX-IMAGE.raster_export` | AUX-IMAGE | next | — | mcp_verified | н/п | OK | OK | OK | н/п | н/п | н/п | н/п | OK | OK | IMG.01.create, IMG.02.create, IMG.03.create, IMG.04.create, IMG.05.read, IMG.06.read, IMG.07.geometry_validation, IMG.08.geometry_validation, IMG.09.geometry_validation, IMG.10.negative_tests, IMG.11.negative_tests, IMG.12.negative_tests, IMG.13.negative_tests, IMG.14.negative_tests, IMG.15.negative_tests, IMG.16.read, IMG.17.geometry_validation, IMG.18.read, IMG.19.edit, IMG.20.negative_tests, IMG.21.negative_tests, IMG.22.negative_tests, IMG.23.negative_tests |
 | `ASM-01.document.create_open` | ASM | practical_required | C1 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | н/п | ASM.01.discover, ASM.01.create, ASM.01.read, ASM.01.rebuild, ASM.07.save_reopen, ASM.07.reopen, ASM.01.negative_tests, ASM.07.negative_tests |
 | `ASM-02.component.insert` | ASM | practical_required | C1 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | ASM.01.discover, ASM.03.read, ASM.02.create, ASM.03.fields, ASM.02.rebuild, ASM.07.save_reopen, ASM.07.reopen, ASM.02.idempotency, ASM.02.negative_tests, ASM.02.negative_tests_missing, ASM.02.geometry_validation |
 | `ASM-03.structure.read` | ASM | practical_required | C1 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | ASM.03.read, ASM.03.fields, ASM.03.multiplicity, ASM.06.discover, ASM.07.reopen, ASM.03.negative_tests, ASM.03.save_reopen |
@@ -759,7 +759,7 @@
   - ОТКРЫТАЯ ЗАВИСИМОСТЬ НАЗВАНА (§12), а не умолчана: строка закрыта на НЕПОКРЫТОЙ зависимости `dep.bodies.multibody` — «тело №0» не является универсальной целью: ΔV обязан измеряться ПО КАЖДОМУ ТЕЛУ, а не только по суммарному объёму документа. Заявленное действие этой строки не опирается на закрытие `dep.bodies.multibody`; зависимость остаётся открытой и названа здесь по имени.
 - `AUX-IMAGE.raster_export` — закрыт целиком
   - ВНЕ ОБЯЗАТЕЛЬНОГО ОБЪЁМА ВЫПУСКА: строка не входит в знаменатель профиля (54 режима + 15 зависимостей) и готовность не меняет — решение заказчика 20.09.2026
-  - вид не управляется: снимается текущее состояние окна сервера, состояние камеры не фиксировалось. ОРИЕНТАЦИЯ И ЗЕРКАЛЬНОСТЬ ГЕОМЕТРИИ СНИМКОМ НЕ ПОДТВЕРЖДАЮТСЯ — картинка вспомогательный канал, а не приёмочное доказательство (правило различающей проверки)
+  - вид УПРАВЛЯЕТСЯ параметром view документированным маршрутом (ksViewProjectionCollection → SetCurrent → refresh; измерено: смена проекции меняет снимок и НЕ помечает документ изменённым). ОРИЕНТАЦИЯ И ЗЕРКАЛЬНОСТЬ ГЕОМЕТРИИ СНИМКОМ ВСЁ РАВНО НЕ ПОДТВЕРЖДАЮТСЯ — картинка вспомогательный канал, а не приёмочное доказательство (правило различающей проверки). Пользовательская проекция (ksVPUser) и диметрия как отдельный выбор остаются вне опубликованного перечня
   - два взаимно исключающих режима измерены на ядре: непустое имя файла пишет файл и оставляет resultArrayBytes пустым, ПУСТОЕ — отдаёт System.Byte[] и файла не создаёт (шесть форм вызова, проба P2b)
   - перечень форматов ядро не проверяет (значение вне enum принимается и даёт другой формат: 99 → BMP) и путь не проверяет (создаёт отсутствующий каталог, а имя с недопустимым символом принимает молча, уводя байты в поток NTFS) — и то и другое отсекает сервер ДО COM
   - габарит сверх 1600 пикселей по большей стороне и ответ сверх 2 МиБ base64 отвергаются именованно, а не ужимаются: ужатие нашим маршрутом не документировано

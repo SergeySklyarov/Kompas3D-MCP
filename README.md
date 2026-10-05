@@ -16,6 +16,24 @@
 > revisions, and is confined to configured disk roots. No arbitrary code execution. 63 tools,
 > MIT licensed. Documentation is in Russian.
 
+## Быстрая установка через Codex
+
+<img src="docs/assets/codex-install.svg" alt="Codex: установка одной фразой" width="360">
+
+Если у вас Windows, установлен КОМПАС-3D v24 и есть [Codex](https://developers.openai.com/codex),
+ничего скачивать и собирать вручную не нужно. Скопируйте в Codex этот текст:
+
+```text
+https://github.com/SergeySklyarov/Kompas3D-MCP
+Установи и подключи последнюю принятую версию KompasMCP из этого репозитория на этой Windows-машине по инструкции docs/operator-guide/codex-setup.md; проверь зависимости, checksum и доступность инструментов; мои модели не изменяй.
+```
+
+Codex проверит зависимости, скачает готовый пакет из Releases, сверит контрольную сумму, создаст
+конфигурацию и подключит сервер. Разрешите ему скачивание и запуск установщика, когда он спросит.
+В конце перезапустите Codex (в приложении **Restart**) и в новом чате напишите
+«вызови kompas_health и kompas_capabilities»: должно прийти 63 инструмента. Подробности и ручной
+путь: [подключение к Codex](docs/operator-guide/codex-setup.md).
+
 ## Пример: деталь по чертежу, собранная агентом
 
 Агенту дают чертёж и задачу, и он строит деталь сам, вызовами инструментов этого сервера. Каждый

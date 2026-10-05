@@ -17,26 +17,26 @@ ST_MIX_GR = 0    ST_MIX_KG = 16                                      // масс
 
 `ksCurve3D.GetLength(bitVector)`, `ksEdgeDefinition.GetLength(bitVector)`,
 `ksSurface.GetArea(bitVector)`, `ksFaceDefinition.GetArea(bitVector)`,
-`CalcMassInertiaProperties(bitVector)` — единица задаётся **параметром**.
+`CalcMassInertiaProperties(bitVector)` - единица задаётся **параметром**.
 Допустимый интервал документирован как `[ST_MIX_MM..ST_MIX_M]`, то есть **1…3**;
 значение `0` = сантиметры.
 
-**ПРАВКА ТЗ (§4.5).** Наблюдение «`GetLength(0)` вернул 5,4 для 54 мм» — не расхождение
+**ПРАВКА ТЗ (§4.5).** Наблюдение «`GetLength(0)` вернул 5,4 для 54 мм» - не расхождение
 единиц и не «умножить на 10». Это корректный ответ на запрос в сантиметрах: параметр
-оставили равным 0. Единственный безопасный вариант — передавать `ST_MIX_MM = 1` явно;
+оставили равным 0. Единственный безопасный вариант - передавать `ST_MIX_MM = 1` явно;
 в адаптере это константа `KompasUnits.LengthMm`, а магический `0` запрещён.
 Координатные вызовы (`GetPoint`, `GetGabarit`, `SetOrigin`, `offset`, `depth`, координаты
-эскиза) аргумента единиц **не имеют** — это модельные миллиметры.
+эскиза) аргумента единиц **не имеют** - это модельные миллиметры.
 Прогон P0.7 подтвердил соотношение 0.1 для `GetLength(0)` против координатной длины (100 мм
 отдано как 10); выдача того же вызова при `GetLength(1)` проверяется этим же прогоном
 ниже и не считается подтверждённой, пока не получена.
 
 Объём и площадь тела: у `ksBody`/`ksPart` нет `GetVolume`/`GetArea`. Они берутся из
-`CalcMassInertiaProperties(биты)`: `v()` — объём, `F()` — площадь, `m()` — масса,
-`r()` — плотность, `xc/yc/zc` — центр тяжести. **ПРАВКА ТЗ:** упоминания
+`CalcMassInertiaProperties(биты)`: `v()` - объём, `F()` - площадь, `m()` - масса,
+`r()` - плотность, `xc/yc/zc` - центр тяжести. **ПРАВКА ТЗ:** упоминания
 `ksBody.GetVolume` в §4.5 не соответствуют API5 v24.
 
-Угол: документировано для математического 2D-интерфейса (`ksAngle` — «в градусах»),
+Угол: документировано для математического 2D-интерфейса (`ksAngle` - «в градусах»),
 для остальных вызовов принимается градусы и проверяется тестом G07/G08.
 
 ## 2. Булевы аргументы документов
@@ -46,9 +46,9 @@ BOOL Create (BOOL invisible, BOOL typeDoc)   // typeDoc: TRUE — деталь, 
 BOOL Open   (BSTR fileName, BOOL invisible)  // только видимость, тип берётся из файла
 ```
 
-**ПРАВКА ТЗ (§4.3).** Первый аргумент `Create` — **невидимость**, поэтому
+**ПРАВКА ТЗ (§4.3).** Первый аргумент `Create` - **невидимость**, поэтому
 `Create(false,true)` = *видимая* деталь, а не «обычное создание». Для невидимого режима сервера
-нужно `Create(true,true)`; то же с `Open(path, true)` — скрытое открытие.
+нужно `Create(true,true)`; то же с `Open(path, true)` - скрытое открытие.
 Исторические скрипты работали с видимыми документами, и этим объясняются окна,
 которые они поднимали.
 
@@ -58,16 +58,16 @@ BOOL Open   (BSTR fileName, BOOL invisible)  // только видимость,
 BOOL SetSideParam (BOOL forward, short type, double depth, double draftValue, BOOL draftOutward)
 ```
 
-`type` — тип конца (`etBlind` и т. п.), `depth` — **третьим** аргументом,
-`draftValue` — уклон в градусах. Исторический вызов
+`type` - тип конца (`etBlind` и т. п.), `depth` - **третьим** аргументом,
+`draftValue` - уклон в градусах. Исторический вызов
 `SetSideParam(true, 0, h, 0, false)` читается корректно: прямое направление, «на величину»,
-глубина `h`, без уклона. `directionType` — отдельное свойство, а не член `SetSideParam`:
+глубина `h`, без уклона. `directionType` - отдельное свойство, а не член `SetSideParam`:
 в proven-коде `0` для базового/приклеечного выдавливания и `2` для вырезания с двумя
 вызовами `SetSideParam` (вперёд и назад).
 
 ## 4. Типы объектов вместо магических чисел
 
-Официальный enum — `ksObj3dTypeEnum` (`ksConstants3D.tlb`, «Типы 3D объектов», 339 членов),
+Официальный enum - `ksObj3dTypeEnum` (`ksConstants3D.tlb`, «Типы 3D объектов», 339 членов),
 не `ksEntityDef`. Подмножество, нужное этому проекту:
 
 | Значение | Константа | Что это |
@@ -84,8 +84,8 @@ BOOL SetSideParam (BOOL forward, short type, double depth, double draftValue, BO
 | 52 | `o3d_holeOperation` | отверстие |
 | 53 | `o3d_polyline` | ломаная |
 
-**ПРАВКА ТЗ (§4.3):** номер 7 — это `o3d_edge`, «ребро». `EntityCollection(7)` поэтому
-возвращает **все рёбра модели**, включая эскизные и служебные контуры — ровно те
+**ПРАВКА ТЗ (§4.3):** номер 7 - это `o3d_edge`, «ребро». `EntityCollection(7)` поэтому
+возвращает **все рёбра модели**, включая эскизные и служебные контуры - ровно те
 «квадраты около ±25», на которые жаловался §4.5. Подтверждено прогоном P0.8:
 в коллекции 7 на 9 объектов больше, чем уникальных рёбер конечного тела.
 Существуют и специальные псевдотипы коллекций: `o3d_edgeCollection=121`,
@@ -101,17 +101,17 @@ BOOL SetSideParam (BOOL forward, short type, double depth, double draftValue, BO
 
 ## 6. STEP
 
-Экспорт: `format=3` (`format_STEP`) — селектор **записи**. Отдельные значения
+Экспорт: `format=3` (`format_STEP`) - селектор **записи**. Отдельные значения
 `format_STEP_AP203=203`, `AP214=214`, `AP242=242`; прикладной протокол при `format=3`
 выбирается конфигурацией конвертера (`LoadConfigurationFile`/`configurationFileName`),
-а не этим полем. То есть «STEP AP242» в отчётах нельзя обосновывать значением `format=3` —
+а не этим полем. То есть «STEP AP242» в отчётах нельзя обосновывать значением `format=3` -
 нужен разбор заголовка файла.
 
 Импорт: документирование тонкое. `LoadFromAdditionFormat(fileName, additionPar)` описан
 как метод с параметром «для **записи** в дополнительный формат», примеров импорта в v24
-нет; поля `stitchSurfaces`, `stitchPrecision`, `saveResultDocument` — импортные.
+нет; поля `stitchSurfaces`, `stitchPrecision`, `saveResultDocument` - импортные.
 Читающая сторона использует **отрицательные** идентификаторы: `load_format_STEP = -3`
-(«Для открытия документов»). Отдельный, гораздо лучше описанный маршрут — API7:
+(«Для открытия документов»). Отдельный, гораздо лучше описанный маршрут - API7:
 `KompasObject.ksGetApplication7()` → `IApplication.Converter.Convert(вход, выход, команда, без диалога)`,
 где примечание прямо говорит: «если новое имя файла не задано, конвертация будет
 происходить в новый документ системы КОМПАС», а также `IApplication.Documents.Open(path, visible, readOnly)`.
@@ -124,7 +124,7 @@ BOOL SetSideParam (BOOL forward, short type, double depth, double draftValue, BO
 
 ## 7. Чего в API5 нет
 
-* у `KompasObject` нет ни `ProcessID`, ни `PID`, ни версии процесса; члены интерфейса — `Visible`,
+* у `KompasObject` нет ни `ProcessID`, ни `PID`, ни версии процесса; члены интерфейса - `Visible`,
   `lookStyle`, `currentDirectory` и методы (`Document3D`, `ActiveDocument3D`, `GetIterator`,
   `ksGetHWindow`, `ksGetApplication7`, `TransferInterface`, `Quit`).
   Привязка объекта к процессу возможна только через `ksGetHWindow()` +

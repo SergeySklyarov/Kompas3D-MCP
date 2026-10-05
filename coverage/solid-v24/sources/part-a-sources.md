@@ -1,6 +1,6 @@
-# P6.0 срез A (SM-04/05/06/10/11/12/13/14/15/16/17) — источники
+# P6.0 срез A (SM-04/05/06/10/11/12/13/14/15/16/17) - источники
 
-Дата: 2026-09-11. Срез — документация + метаданные; **ни один COM-объект КОМПАС не запускался**
+Дата: 2026-09-11. Срез - документация + метаданные; **ни один COM-объект КОМПАС не запускался**
 (CAD-сеансы в это время использовались основной сессией). Все «metadata_found» ниже означают
 находку в библиотеке типов/констант установленного приложения либо в дампе prebuilt-interop,
 а не исполнение.
@@ -10,9 +10,9 @@
 | Артефакт | Происхождение | Что даёт |
 |---|---|---|
 | `docs/compatibility/kompas-api5-metadata.json` | reflection-дамп `Libs\PolynomLib\Bin\Client\Interop.Kompas6API5.dll` (1007 типов, шаг P0.2) | члены API5-определений (ранний prebuilt-слой; отсутствие ≠ отсутствие продукта) |
-| `scratch/api5-index.txt`, `scratch/tlgen/_0422828C_…py` | comtypes-генерация из **`Bin\kApi5.tlb`** установленного приложения | список interfaces/dispatch (0422828C = LIBID kApi5.tlb); members=0 у диспинтерфейсов — имена членов видны в interop-дампе и в IDispatch-мета-интерфейсе |
+| `scratch/api5-index.txt`, `scratch/tlgen/_0422828C_…py` | comtypes-генерация из **`Bin\kApi5.tlb`** установленного приложения | список interfaces/dispatch (0422828C = LIBID kApi5.tlb); members=0 у диспинтерфейсов - имена членов видны в interop-дампе и в IDispatch-мета-интерфейсе |
 | `scratch/inventory/part-a/api5_tlb_docs_full.txt` | `tlb_help2.py` (офлайн `LoadTypeLibEx(REGKIND_NONE)`; тот же способ, что env-passport) | helpstrings API5-интерфейсов (рус.) |
-| `scratch/api7-index.txt`, `scratch/tlgen/_69AC2981_…py` | comtypes-генерация из **`Bin\kAPI7.tlb`** (69AC2981 = его LIBID; 1498 typeinfo, 836 interfaces — сходится с env-passport) | полный список интерфейсов API7, vtable-порядок |
+| `scratch/api7-index.txt`, `scratch/tlgen/_69AC2981_…py` | comtypes-генерация из **`Bin\kAPI7.tlb`** (69AC2981 = его LIBID; 1498 typeinfo, 836 interfaces - сходится с env-passport) | полный список интерфейсов API7, vtable-порядок |
 | `scratch/inventory/part-a/api7_family_blocks.txt` | блок-экспорт из api7-index.txt | члены/типы/параметры интересующих интерфейсов |
 | `scratch/inventory/part-a/api7_tlb_docs_full.txt` | `tlb_help2.py kAPI7.tlb --ifaces …` | helpstrings API7 (рус.), свойства `IModelContainer` (33 члена) |
 | `scratch/tlgen/_2CAF168C_…py` = **`Bin\ksConstants3D.tlb`**; `enum_values.txt`, `enums3d_all.txt` | comtypes + `tlb_help2.py --enums` | `ksObj3dTypeEnum` со значениями и рус. описаниями (`o3d_*`), все семейственные enum-типы со значениями (KSChooseType, ksOperationResultEnum, ksChamferBuildingTypeEnum, ksLoftBuildingType, ksEvolutionShiftSketchTypeEnum, ksEvolutionVersionEnum, ksPipeBuildingTypeEnum, ksPipeWallDirectionEnum, ksRibSideEnum, ksScalingTypeEnum, ksCutBuildingTypeEnum, ksCornerFormEnum, ksChooseBodiesType, ksChoosePartsType, ksFilletOffsetModeEnum, ksMultiThicknessGroupTypeEnum) |
@@ -20,24 +20,24 @@
 | `scratch/interop_installed_api7.txt` vs `interop_vendor_api7.txt` | tlbimp от установленного TLB (2442 типа) vs вендорская обёртка (2298) | допустимость собственной генерации interop |
 | `src/KompasMcp.Host/Catalog/ToolCatalog.cs` | основной код | baseline `mcp_support` (инструментов создания семейств среза нет) |
 
-Использованные точные имена интерфейсов — в `entries.json` по каждому family/operation.
+Использованные точные имена интерфейсов - в `entries.json` по каждому family/operation.
 Скрипты извлечения (read-only): `tlb_help2.py`, `dump_block.py`, `dump_enums.py`,
 `enum_sections.py`, `probe_meta.py` в этом каталоге.
 
 ## 2. Документация (web_fetch 2026-09-11, все URL вернулись 200 OK, если не указано иное)
 
 ### SDK (`help.ascon.ru/KOMPAS_SDK/24/ru-RU/`)
-- `imodelcontainer_props.html` — полный список свойств контейнера (Evolutions/Lofts/PipeElements/Chamfers/Inclines/Ribs/Shells/Booleans/Cuts/SplitSolids/FullFillets/DraftsFromEdges/Scalings3D/BodyRepositions).
-- `imodelcontainer_evolutions.html`, `ievolutions.html`, `ievolution.html`, `ievolution_propers.html`, `ievolutions_add.html` — IEvolution (v18); Add принимает `o3d_bossEvolution|o3d_cutEvolution|o3d_EvolutionSurface` (базового нет — OQ-A1).
-- `iloft_propers.html` — свойства ILoft (совпадают с TLB).
-- `iboolean.html` — «КОМПАС версия v18».
-- `isplitsolid.html` — «Версия: Компас v20».
-- `idraftfromedges.html` — «Версия КОМПАС v22».
-- `ipipeelement.html` — «КOMPAS v24» (новый).
+- `imodelcontainer_props.html` - полный список свойств контейнера (Evolutions/Lofts/PipeElements/Chamfers/Inclines/Ribs/Shells/Booleans/Cuts/SplitSolids/FullFillets/DraftsFromEdges/Scalings3D/BodyRepositions).
+- `imodelcontainer_evolutions.html`, `ievolutions.html`, `ievolution.html`, `ievolution_propers.html`, `ievolutions_add.html` - IEvolution (v18); Add принимает `o3d_bossEvolution|o3d_cutEvolution|o3d_EvolutionSurface` (базового нет - OQ-A1).
+- `iloft_propers.html` - свойства ILoft (совпадают с TLB).
+- `iboolean.html` - «КОМПАС версия v18».
+- `isplitsolid.html` - «Версия: Компас v20».
+- `idraftfromedges.html` - «Версия КОМПАС v22».
+- `ipipeelement.html` - «КOMPAS v24» (новый).
 - Не найдены (404): `ievolution_props.html` (правильно `_propers`), `ipipeelement_props.html`.
 
 ### Справка пользователя (`help.ascon.ru/KOMPAS/24/ru-RU/`)
-Обход дерева разделов: `3d_modeling.html` → `aw2020629.html` («Тела»), `fy996744.html` («Элементы тел. Редактирование») и цепочки prev/next (главное меню разделов JS-рендерится, child-списки не всегда статичны — обошли ссылочными цепочками).
+Обход дерева разделов: `3d_modeling.html` → `aw2020629.html` («Тела»), `fy996744.html` («Элементы тел. Редактирование») и цепочки prev/next (главное меню разделов JS-рендерится, child-списки не всегда статичны - обошли ссылочными цепочками).
 
 | Семейство | Страницы |
 |---|---|
@@ -52,10 +52,10 @@
 | SM-15 | `730_87_5_buleva_operacija.html`, `cm_aggregate_oper.html` (Объединение/Вычитание/Пересечение; Базовый объект; Модифицирующие объекты; Сохранить копию базового/модифицирующих) |
 | SM-16 | `748_glava89_otsechenie_chasti_d.html`, `cm_make_cut_oper.html` (секущие: плоскость/поверхность/грань/набор граней/тело/эскиз; Способ Контуром/Плоскостью; «Сменить направление»; Область применения), `rezultat_oper_v_zavisimosti_ot_s_o.html` (таблица результата по типу секущего объекта), `fy1438316.html`/`fy1438319.html`/`cm_3d_split_solid.html` (Разрезание: Секущие объекты, Область применения), `cm_choice_of_bodies.html` (сохраняемые тела; исключённые остаются в файле) |
 | SM-17 | `783_glava88_masshtabirovanie.html`, `cm_ranging.html` (Равномерно/По осям СК; точка: Координаты/Точка привязки/Построить точку; Сохранить копии; Скрыть исходные кривые), `299_32_9_izmen_polozh_tela.html`, `fy1246804.html`, `cm_body_reposition_main.html` (Способ: Относительно СК / По объекту; Объекты; Сохранить копии) |
-| Классификация границ | `aw2020629.html` child-ссылки («Придание толщины…» — SM-27, «Деталь-заготовка» — SM-26 и т.д.) |
+| Классификация границ | `aw2020629.html` child-ссылки («Придание толщины…» - SM-27, «Деталь-заготовка» - SM-26 и т.д.) |
 
-Поиск альтернативных URL: `html.duckduckgo.com` — CAPTCHA (не работал); `bing.com/search` — мусор;
-`lite.duckduckgo.com/lite` — сработал (оттуда найдены страницы уклонов). `sitemap.xml`/`toc.json` help.ascon.ru — 404.
+Поиск альтернативных URL: `html.duckduckgo.com` - CAPTCHA (не работал); `bing.com/search` - мусор;
+`lite.duckduckgo.com/lite` - сработал (оттуда найдены страницы уклонов). `sitemap.xml`/`toc.json` help.ascon.ru - 404.
 Корневые/TOC-страницы справки рендерятся JS: обход выполнен по статическим prev/next-цепочкам.
 
 ## 3. Сверка ключевых терминов (справка ↔ метаданные)
@@ -78,7 +78,7 @@
 | «Изменение положения тела» | только тип `o3d_BodyReposition=569` | `IBodyReposition`/`BodyRepositions` |
 
 ## 4. Чего этот срез НЕ доказывает
-- Ничего исполнением: `runtime_verified` не присвоен ни одной записи; список проб-кандидатов — `open-questions.md`.
+- Ничего исполнением: `runtime_verified` не присвоен ни одной записи; список проб-кандидатов - `open-questions.md`.
 - Живую реакцию `IDispatch` установленных TLB (объявление ≠ отклик; прецедент A7.4: `Holes3D` живой, `LocalCoordinateSystem` вернул null).
-- Единицы полей (кроме объявленных в helpstring: `GetPathLength(ST_MIX_*)`); конвенции Angle — предположение градусы.
+- Единицы полей (кроме объявленных в helpstring: `GetPathLength(ST_MIX_*)`); конвенции Angle - предположение градусы.
 - Полноту enumerations у `c_long`-полей без собственного enum (ThinType, StopChamferOffsetMode, CentrePointBuildingType).

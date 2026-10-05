@@ -55,18 +55,18 @@ dotnet test tests\Unit\KompasMcp.Unit -c Debug  # deterministic, без КОМП
 
 * `RuntimeIdentifiers` (список разрешённых RID для restore) объявлен как `win-x64`. Без него
   `CI=true dotnet restore` отказывал с **NU1004**: lock-файлы проектов, восстановленные под RID,
-  расходились с «объявленными» идентификаторами. Ошибка срабатывает в **обе** стороны — и на
+  расходились с «объявленными» идентификаторами. Ошибка срабатывает в **обе** стороны - и на
   лишний RID в lock-файле, и на недостающий.
 * `RuntimeIdentifier` (единственное число) действительно не задан, потому что он заставляет
   собирать проект под конкретный RID всегда, а это и ломает `dotnet test`.
 
 Так что читатель, увидевший в `Directory.Build.props` строку `RuntimeIdentifiers`, не должен
 считать эту страницу устаревшей: она говорит про другое свойство. Обновлять lock-файлы после
-правки объявления — `dotnet restore <проект> -r win-x64 --force-evaluate`: обычный restore, даже
+правки объявления - `dotnet restore <проект> -r win-x64 --force-evaluate`: обычный restore, даже
 с `--force-evaluate`, ключ RID в lock-файл **не добавляет**.
 
 ## Пакеты NuGet
 
 Версии зафиксированы централизованно в `Directory.Packages.props` (Central Package Management),
-`packages.lock.json` на проект, источник — только nuget.org (`NuGet.config` с `<clear/>`).
-Обновление — правкой одного файла, не «latest» в csproj.
+`packages.lock.json` на проект, источник - только nuget.org (`NuGet.config` с `<clear/>`).
+Обновление - правкой одного файла, не «latest» в csproj.

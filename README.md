@@ -16,12 +16,19 @@
 > revisions, and is confined to configured disk roots. No arbitrary code execution. 63 tools,
 > MIT licensed. Documentation is in Russian.
 
-## Быстрая установка через Codex
+## Быстрая установка через ChatGPT Codex
 
-<img src="docs/assets/codex-install.svg" alt="Codex: установка одной фразой" width="360">
+<p>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/openai-blossom-white.svg">
+    <img src="docs/assets/openai-blossom-black.svg" alt="Логотип OpenAI" height="40" align="absmiddle">
+  </picture>
+  &nbsp;&nbsp;<b>ChatGPT Codex</b>: установка одной фразой
+</p>
 
-Если у вас Windows, установлен КОМПАС-3D v24 и есть [Codex](https://developers.openai.com/codex),
-ничего скачивать и собирать вручную не нужно. Скопируйте в Codex этот текст:
+Если у вас Windows, установлен КОМПАС-3D v24 и есть [ChatGPT Codex](https://developers.openai.com/codex)
+(приложение, CLI или расширение IDE), ничего скачивать и собирать вручную не нужно. Скопируйте в
+Codex этот текст:
 
 ```text
 https://github.com/SergeySklyarov/Kompas3D-MCP
@@ -33,6 +40,9 @@ Codex проверит зависимости, скачает готовый п�
 В конце перезапустите Codex (в приложении **Restart**) и в новом чате напишите
 «вызови kompas_health и kompas_capabilities»: должно прийти 63 инструмента. Подробности и ручной
 путь: [подключение к Codex](docs/operator-guide/codex-setup.md).
+
+<sub>ChatGPT, Codex и логотип OpenAI являются товарными знаками OpenAI. Проект не связан с OpenAI и
+не одобрен ею.</sub>
 
 ## Пример: деталь по чертежу, собранная агентом
 

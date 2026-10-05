@@ -151,8 +151,10 @@ public sealed record InsertComponentResult(
 /// <summary>Результат задания размещения: размещение ДО и ПОСЛЕ из одного момента.</summary>
 public sealed record SetComponentPlacementResult(
     ReferenceDto ComponentRef,
-    IReadOnlyList<double> PlacementBeforeMatrix,
-    IReadOnlyList<double> PlacementAfterMatrix,
+    // Матрицы НЕобязательны: «размещение не прочитано» и «размещение — нулевая матрица» — разные
+    // утверждения, и подменять первое вторым здесь так же запрещено, как в любом чтении COM.
+    IReadOnlyList<double>? PlacementBeforeMatrix,
+    IReadOnlyList<double>? PlacementAfterMatrix,
     VerificationDto Verification);
 
 /// <summary>Результат замены источника компонента с сохранением размещения.</summary>

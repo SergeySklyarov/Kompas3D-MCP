@@ -51,11 +51,27 @@ public sealed class IpcRequestChannel : IAsyncDisposable
     /// <summary>
     /// Send one request and await its answer. Safe to call from many callers at once.
     /// </summary>
+    /// <param name="isMutation">
+    /// True when the command changes the model. It decides what a cancellation AFTER the frame was
+    /// written means: for a mutation the command is already on its way to КОМПАС, so the answer is
+    /// <c>OUTCOME_UNKNOWN</c>, never "cancelled, nothing happened".
+    /// </param>
     /// <remarks>
+    /// <para>
     /// A timeout is reported as <c>OUTCOME_UNKNOWN</c>, never as a cancellation: the peer may still
     /// be executing the command, so the caller must reconcile rather than assume nothing happened.
+    /// </para>
+    /// <para>
+    /// <b>ОТМЕНА КЛИЕНТОМ ПОСЛЕ ОТПРАВКИ — НЕ «КОМАНДА НЕ ОТПРАВЛЯЛАСЬ».</b> До 05.10.2026 любая
+    /// <c>OperationCanceledException</c> с токеном клиента выходила наружу, и вызывающий записывал
+    /// терминальное <c>cancelled</c> без требования согласования: клиент получал «команда отменена
+    /// в очереди Host и не отправлялась в КОМПАС», хотя кадр уже был записан и Worker выполнял
+    /// команду до конца. Клиент, поверивший ответу, повторял мутацию с НОВЫМ <c>operation_id</c> —
+    /// и мутация применялась дважды. Поэтому отмена до записи кадра и отмена после неё — РАЗНЫЕ
+    /// состояния, и здесь они различаются флагом <c>written</c>.
+    /// </para>
     /// </remarks>
-    public async Task<IpcFrame> RequestAsync(string command, JsonNode? payload, TimeSpan timeout, CancellationToken cancellationToken)
+    public async Task<IpcFrame> RequestAsync(string command, JsonNode? payload, TimeSpan timeout, bool isMutation, CancellationToken cancellationToken)
     {
         var requestId = Guid.NewGuid().ToString("N");
         var request = new IpcFrame
@@ -69,6 +85,7 @@ public sealed class IpcRequestChannel : IAsyncDisposable
 
         var waiter = new TaskCompletionSource<IpcFrame>(TaskCreationOptions.RunContinuationsAsynchronously);
         _pending[requestId] = waiter;
+        var written = false;
         try
         {
             // A request that arrives after the reader has already stopped would wait for an answer
@@ -80,7 +97,18 @@ public sealed class IpcRequestChannel : IAsyncDisposable
                 throw Disconnected();
             }
 
-            await WriteAsync(request, cancellationToken).ConfigureAwait(false);
+            // Отмена ДО записи: кадра в канале нет, команда в Worker не ушла. Это единственный
+            // случай, где «отменено» — подтверждённое состояние, и он обязан выйти наружу как
+            // OperationCanceledException, а не как контрактная ошибка.
+            cancellationToken.ThrowIfCancellationRequested();
+
+            // Письмо идёт с CancellationToken.None: половина записанного кадра — это испорченный
+            // поток (длина префикса прочитана, полезная нагрузка — нет), и отмена посередине
+            // развалила бы канал целиком, а не отменила одну команду.
+            await WriteAsync(request, CancellationToken.None).ConfigureAwait(false);
+
+            // С этого момента команда УЖЕ ОТПРАВЛЕНА.
+            written = true;
 
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeoutCts.CancelAfter(timeout);
@@ -98,6 +126,39 @@ public sealed class IpcRequestChannel : IAsyncDisposable
                         RetryPolicy.AfterReconciliation,
                         partialEffects: true,
                         details: new Dictionary<string, object?> { ["request_id"] = requestId });
+                }
+                catch (OperationCanceledException) when (written && isMutation)
+                {
+                    // Клиент отменил вызов, но команда УЖЕ ушла в Worker: отмена токена не снимает
+                    // COM-вызов. Назвать это «команда не отправлялась» — значит разрешить клиенту
+                    // повторить мутацию с новым operation_id.
+                    throw new KompasContractException(
+                        ErrorCodes.OutcomeUnknown,
+                        $"Команда '{command}' уже отправлена в Worker, когда клиент отменил вызов: отмена " +
+                        "не снимает выполнение в КОМПАС, исход команды неизвестен. Повтор с НОВЫМ " +
+                        "operation_id применил бы мутацию второй раз.",
+                        RetryPolicy.AfterReconciliation,
+                        partialEffects: true,
+                        details: new Dictionary<string, object?>
+                        {
+                            ["request_id"] = requestId,
+                            ["cancelled_after_send"] = true,
+                        });
+                }
+                catch (OperationCanceledException) when (written)
+                {
+                    // Чтение: модель не менялась, но ответ всё равно не получен, и «отменено» —
+                    // не подтверждение, а лишь отсутствие наблюдения.
+                    throw new KompasContractException(
+                        ErrorCodes.CancelNotConfirmed,
+                        $"Команда чтения '{command}' уже отправлена в Worker, когда клиент отменил " +
+                        "вызов: ответ не получен, отмена не подтверждена.",
+                        RetryPolicy.SameOperationId,
+                        details: new Dictionary<string, object?>
+                        {
+                            ["request_id"] = requestId,
+                            ["cancelled_after_send"] = true,
+                        });
                 }
             }
         }

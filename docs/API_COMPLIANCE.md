@@ -4,11 +4,11 @@
 
 Документация — официальная справка SDK целевой версии <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/>: прочитано страниц 2178 (читалась по проводу; зеркало справки лежит вне поставки).
 
-Поставка, на которой оценивалась реализация: `artifacts/publish-mates-20261005` — Host.dll `5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1`, Worker.dll `6fecb3feca8680d97c9633c089e3932844e5a6abaf7862352905676b38c86269`, Api5Adapter.dll `157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328`; полный прогон 1095 строк, отказов 0. Паспорт: `docs/acceptance/delivery-mates-20261005/delivery-passport.json`. Опознание поставки взято измерением: `docs/acceptance/delivery-mates-20261005/delivery-passport.json`. Поставка взята по измерению, а не по времени изменения файлов. В колонке «проверка и хеш поставки» стоит короткий хеш Host.dll — тот же бинарь, что в измерении.
+Поставка, на которой оценивалась реализация: `artifacts/publish-core-c1-c2-20261005` — Host.dll `303ccf6cbeb461cf516e22dd5f0d7159819fbfaf84be0a3214c0fa6ed326dd6a`, Worker.dll `4a736cf7d3d5a90c5f05bef738951baa2ecebfaac6af24eec7ec9f7bba468022`, Api5Adapter.dll `f74936c0328dd4be3cff2e4b1a2101a1e64b60545db787404b42c4881d169a46`; полный прогон 1095 строк, отказов 0. Паспорт: `docs/acceptance/delivery-core-c1-c2-20261005/delivery-passport.json` — **PASS**, `fully_ready` true; уровни: `transport_and_delivery` PASS, `functional_acceptance` PASS, `mandatory_scope` COMPLETE, `client_acceptance` PASS. Путь выбран так: НАЗВАННАЯ подстановка: имени с меткой 'journal' нет, взято имя без метки (docs/acceptance/delivery-core-c1-c2-20261005/delivery-passport.json). Опознание поставки взято измерением: `docs/acceptance/delivery-core-c1-c2-20261005/delivery-passport.json`. Поставка взята по измерению, а не по времени изменения файлов. В колонке «проверка и хеш поставки» стоит короткий хеш Host.dll — тот же бинарь, что в измерении.
 
-**Два независимых вердикта на маршрут.** Документация: Подтверждено / Противоречие / Не подтверждено. Реализация: Подтверждено / Дефект / Недостаточно проверки / Не реализовано. «Документировано» означает **страницу официальной справки**, а не наличие члена в TLB, interop или IntelliSense: найденный в TLB член сам по себе маршрут официальным не делает.
+**Два независимых вердикта на маршрут.** Документация: Подтверждено / Противоречие / Не подтверждено. Реализация: Подтверждено / Покрыто проверками / Дефект / Недостаточно проверки / Не реализовано. «Документировано» означает **страницу официальной справки**, а не наличие члена в TLB, interop или IntelliSense: найденный в TLB член сам по себе маршрут официальным не делает. «Покрыто проверками» — вердикт ОБЩЕЙ ЗАВИСИМОСТИ: она не реализуется, а покрывается проверками, поэтому «Подтверждено» к ней неприменимо по определению; ярлык ставится только когда все её обязательные действия закрыты И подтверждены вызовами привязанных строк приёмки.
 
-**Итог одной строкой.** Проверено 63 инструментов и 97 строк покрытия; документация подтверждена у 70 строк, реализация — у 56; 3 строк объявлены планом, 38 — «Недостаточно проверки» (режимов 13, общих зависимостей 25). Находок 11: F-01 — исправленный дефект продукта (мёртвая ветка удалена); F-02 — исправленный дефект продукта (мёртвая ветка удалена, состояние сохранённости отделено от ревизии); F-03 — состояние объёма будущей работы (не дефект); F-04 — названная граница непубликуемого поля (не дефект); F-05 — исправленный дефект доказательств (не дефект продукта); F-06 — исправленный дефект прибора аудита; F-07 — исправленный дефект прибора аудита; F-08 — названный пробел трассируемости доказательств (не дефект продукта); F-09 — исправленный дефект продукта (знак дуги не доходил до конечного угла); F-10 — исправленный дефект продукта (объявленный диапазон углов дуги шире выражаемого; первая редакция правки была НЕ аддитивной, и это поймал контроль зонда); F-11 — исправленный дефект прибора ПРИЁМКИ (строка `MANIA.17` читала объём ПЕРВОГО тела документа при накапливающихся телах и проходила, не различая ничего; объявленный диапазон `sweep_deg` шире принимаемого — расхождение ОБЪЯВЛЕНИЯ). Утверждение «MCP полностью согласуется с документацией» **не делается**: у 27 строк маршрут не подтверждён документально, потому что его нет в коде.
+**Итог одной строкой.** Проверено 63 инструментов и 97 строк покрытия; документация подтверждена у 70 строк, реализация — у 69; 3 строк объявлены планом, 25 — «Покрыто проверками», 0 — «Недостаточно проверки» (режимов 0, общих зависимостей 0). Находок 11: F-01 — исправленный дефект продукта (мёртвая ветка удалена); F-02 — исправленный дефект продукта (мёртвая ветка удалена, состояние сохранённости отделено от ревизии); F-03 — состояние объёма будущей работы (не дефект); F-04 — названная граница непубликуемого поля (не дефект); F-05 — исправленный дефект доказательств (не дефект продукта); F-06 — исправленный дефект прибора аудита; F-07 — исправленный дефект прибора аудита; F-08 — названный пробел трассируемости доказательств (не дефект продукта); F-09 — исправленный дефект продукта (знак дуги не доходил до конечного угла); F-10 — исправленный дефект продукта (объявленный диапазон углов дуги шире выражаемого; первая редакция правки была НЕ аддитивной, и это поймал контроль зонда); F-11 — исправленный дефект прибора ПРИЁМКИ (строка `MANIA.17` читала объём ПЕРВОГО тела документа при накапливающихся телах и проходила, не различая ничего; объявленный диапазон `sweep_deg` шире принимаемого — расхождение ОБЪЯВЛЕНИЯ). Утверждение «MCP полностью согласуется с документацией» **не делается**: у 27 строк маршрут не подтверждён документально, потому что его нет в коде.
 
 ## 1. Сверка полноты
 
@@ -18,17 +18,17 @@
 | Схемы в `schemas/` | файлы поставки | 63 из 63; имена свойств совпадают с проводом у 63, значимая форма схемы (типы, `required`, `enum`, вложенность, `additionalProperties`, разрешённые `$ref`) — у 63 |
 | Строки матрицы покрытия | `coverage/solid-v24/matrix.json` | 97 |
 | Строки со ссылкой на схему инструмента | там же | 57 из 97 (у 40 поле пустое) |
-| Присутствие инструмента в матрице | сверка имён: собственная строка ЛИБО объявленный маршрут строки | собственной строкой 43, объявленным маршрутом 29; без обоих способов — `kompas_acquire_session`, `kompas_release_session`, `kompas_session_status` |
-| Вызываемые COM-маршруты | исходники `KompasMcp.Api5Adapter`, тип получателя установлен | 335 (API5 152 / API7 183); страница члена или список членов интерфейса найдены у 263, не подтверждено 72; унаследованных 9, индексаторов 7 |
-| Обращения без типа получателя | там же | 1323 (из них 371 — члены, уже покрытые типизированным маршрутом); получателей НЕ COM — 955 |
+| Присутствие инструмента в матрице | сверка имён: собственная строка ЛИБО объявленный маршрут строки | собственной строкой 43, объявленным маршрутом 30; без обоих способов — `kompas_acquire_session`, `kompas_release_session`, `kompas_session_status` |
+| Вызываемые COM-маршруты | исходники `KompasMcp.Api5Adapter`, тип получателя установлен | 334 (API5 152 / API7 182); страница члена или список членов интерфейса найдены у 262, не подтверждено 72; унаследованных 9, индексаторов 7 |
+| Обращения без типа получателя | там же | 1328 (из них 374 — члены, уже покрытые типизированным маршрутом); получателей НЕ COM — 965 |
 | Отражённые и строковые обращения | там же | 1 |
 | Числовые идентификаторы типов объектов | таблица `obj3dtype.html` | совпало 35, нет в таблице 0 |
-| Строки приёмки в доказательствах | 3 групповых отчётов поставки | 1013 уникальных, вердикты: PASS |
+| Строки приёмки в доказательствах | 3 групповых отчётов поставки | 1014 уникальных, вердикты: PASS |
 | Ссылки на страницы справки в этом документе | проверка каждой по проводу | открылось 215 из 215; битых 0; не проверено 0 |
 
 Строка покрытия связывается с инструментом по семейству: матрица не даёт этой связи для 40 строк из 97, поэтому маршруты читались ещё и из исходников адаптера — иначе часть вызовов выпала бы из аудита только потому, что забыта в матрице (находка F-05).
 
-Число проверок берётся из полного прогона — 1095 строк; 1013 уникальных строк приёмки, собранных из 3 групповых отчётов, — это те же проверки по частям, и с полным прогоном они не складываются. Отдельные сверки этого аудита (`tools/list` по проводу, страницы справки, таблица `obj3dtype.html`, чтение исходников) показаны своими строками выше и в приёмку не входят.
+Число проверок берётся из полного прогона — 1095 строк. Групповые отчёты каталога с ним **НЕ совпадают**: `assembly.json` — 67 строк, из них в полном прогоне 21, **уникальных 46**; `mate.json` — 55 строк, из них в полном прогоне 21, **уникальных 34**. Строк `ASM.*` и `MATE.*` в полном прогоне нет вовсе: ветки `--assembly-only` и `--mate-only` полным прогоном не вызываются, поэтому блоки ДОПОЛНЯЮТ его, а не повторяют по частям. **Число различных имён строк по всему каталогу — 1149** (объединение по идентификаторам; сам полный прогон даёт 1070 различных имён при 1095 строках — внутри отчёта имена повторяются). Сложение отчётов посчитало бы общие строки дважды. Вызовы каждого отчёта свои (10392 в полном прогоне) и с ним не складываются. Отдельные сверки этого аудита (`tools/list` по проводу, страницы справки, таблица `obj3dtype.html`, чтение исходников) показаны своими строками выше и в приёмку не входят.
 
 Ни одна строка не выдана за проверенную без записи приёмки: строк с вердиктом реализации «Подтверждено» и без строк приёмки — 0 (измерено сверкой вердикта с доказательствами).
 
@@ -56,15 +56,15 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `SM-02.base_extrusion.blind` | 10/10 verified | 28 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-02.cut_extrusion.through` | 10/10 verified | 39 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-02.base_extrusion.additional_body` | 10/10 verified | 15 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-02.base_extrusion.direction_negative` | 10/10 verified | 12 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-02.boss_extrusion.blind` | 10/10 verified | 14 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-02.boss_extrusion.explicit_target_body` | 10/10 verified | 13 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-02.cut_extrusion.blind` | 10/10 verified | 13 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-02.cut_extrusion.explicit_target_body` | 10/10 verified | 14 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-02.cut_extrusion.direction_symmetric` | 10/10 verified | 11 строк · PASS · `5ba127bb` | Подтверждено | — |
+| `SM-02.base_extrusion.blind` | 10/10 verified | 28 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-02.cut_extrusion.through` | 10/10 verified | 39 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-02.base_extrusion.additional_body` | 10/10 verified | 15 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-02.base_extrusion.direction_negative` | 10/10 verified | 12 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-02.boss_extrusion.blind` | 10/10 verified | 14 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-02.boss_extrusion.explicit_target_body` | 10/10 verified | 13 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-02.cut_extrusion.blind` | 10/10 verified | 13 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-02.cut_extrusion.explicit_target_body` | 10/10 verified | 14 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-02.cut_extrusion.direction_symmetric` | 10/10 verified | 11 строк · PASS · `303ccf6c` | Подтверждено | — |
 
 ### SM-09 — Скругление (создание API5, чтение и правка API7)
 **Инструмент:** `kompas_fillet`, `kompas_get_feature`, `kompas_update_feature`.
@@ -79,10 +79,10 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `SM-09.fillet.constant_radius_body_edges` | 10/10 verified | 25 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-09.fillet.read_radius_back` | 10/10 verified | 18 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-09.fillet.change_radius_in_place` | 10/10 verified | 15 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-09.fillet.change_edge_set` | 10/10 verified | 35 строк · PASS · `5ba127bb` | Подтверждено | — |
+| `SM-09.fillet.constant_radius_body_edges` | 10/10 verified | 25 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-09.fillet.read_radius_back` | 10/10 verified | 18 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-09.fillet.change_radius_in_place` | 10/10 verified | 15 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-09.fillet.change_edge_set` | 10/10 verified | 35 строк · PASS · `303ccf6c` | Подтверждено | — |
 
 ### SM-07 — Родное отверстие API7
 **Инструмент:** `kompas_hole`.
@@ -99,12 +99,12 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `SM-07.native_hole.through_cylindrical` | 10/10 verified | 25 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-07.native_hole.blind_flat_bottom` | 10/10 verified | 30 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-07.native_hole.through_counterbore` | 10/10 verified | 26 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-07.native_hole.through_countersink` | 10/10 verified | 27 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-07.native_hole.axis_by_face_normal` | 10/10 verified | 16 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-07.native_hole.position_off_origin` | 10/10 verified | 25 строк · PASS · `5ba127bb` | Подтверждено | — |
+| `SM-07.native_hole.through_cylindrical` | 10/10 verified | 25 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-07.native_hole.blind_flat_bottom` | 10/10 verified | 30 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-07.native_hole.through_counterbore` | 10/10 verified | 26 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-07.native_hole.through_countersink` | 10/10 verified | 27 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-07.native_hole.axis_by_face_normal` | 10/10 verified | 16 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-07.native_hole.position_off_origin` | 10/10 verified | 25 строк · PASS · `303ccf6c` | Подтверждено | — |
 
 ### SM-11 — Фаска (API5 и API7)
 **Инструмент:** `kompas_chamfer`, `kompas_update_feature`.
@@ -120,9 +120,9 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `SM-11.chamfer.mode_two_distances` | 10/10 verified | 30 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-11.chamfer.mode_distance_angle` | 10/10 verified | 24 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-11.chamfer.mode_direction` | 10/10 verified | 17 строк · PASS · `5ba127bb` | Подтверждено | — |
+| `SM-11.chamfer.mode_two_distances` | 10/10 verified | 30 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-11.chamfer.mode_distance_angle` | 10/10 verified | 24 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-11.chamfer.mode_direction` | 10/10 verified | 17 строк · PASS · `303ccf6c` | Подтверждено | — |
 
 ### SM-03 — Вращение API7 (базовое / приклеивание / вырезание)
 **Инструмент:** `kompas_rotated`.
@@ -140,11 +140,11 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `SM-03.base_rotated.full_turn` | 10/10 verified | 26 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-03.base_rotated.partial_angle` | 10/10 verified | 26 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-03.base_rotated.axis_explicit` | 10/10 verified | 27 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-03.boss_rotated.full_turn` | 10/10 verified | 45 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-03.cut_rotated.full_turn` | 10/10 verified | 31 строк · PASS · `5ba127bb` | Подтверждено | — |
+| `SM-03.base_rotated.full_turn` | 10/10 verified | 26 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-03.base_rotated.partial_angle` | 10/10 verified | 26 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-03.base_rotated.axis_explicit` | 10/10 verified | 27 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-03.boss_rotated.full_turn` | 10/10 verified | 45 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-03.cut_rotated.full_turn` | 10/10 verified | 31 строк · PASS · `303ccf6c` | Подтверждено | — |
 
 ### SM-15 — Булевы операции API7
 **Инструмент:** `kompas_boolean`, `kompas_update_feature`.
@@ -161,12 +161,12 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `SM-15.subtract` | 10/10 verified | 15 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-15.intersect` | 10/10 verified | 15 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-15.union.mode_save_tools` | 10/10 verified | 12 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-15.union.mode_multi_tools` | 10/10 verified | 12 строк · PASS · `5ba127bb` | Подтверждено | — |
+| `SM-15.subtract` | 10/10 verified | 15 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-15.intersect` | 10/10 verified | 15 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-15.union.mode_save_tools` | 10/10 verified | 12 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-15.union.mode_multi_tools` | 10/10 verified | 12 строк · PASS · `303ccf6c` | Подтверждено | — |
 | `SM-15.union.mode_save_base_copy` | 0/10 verified; открыты: `discover`, `create`, `read`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies`, `negative_tests`, `geometry_validation` | строк приёмки нет | Не реализовано | не требуется в этом аудите: строка объявлена планом и за реализованную не выдаётся |
-| `SM-15.union.explicit_target_and_tools` | 10/10 verified | 14 строк · PASS · `5ba127bb` | Подтверждено | — |
+| `SM-15.union.explicit_target_and_tools` | 10/10 verified | 14 строк · PASS · `303ccf6c` | Подтверждено | — |
 
 ### SM-16-split — Разделение тела (API7)
 **Инструмент:** `kompas_split`, `kompas_update_feature`.
@@ -180,8 +180,8 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `SM-16.split.mode_keep_parts` | 10/10 verified | 18 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-16.split.plane_tool` | 10/10 verified | 19 строк · PASS · `5ba127bb` | Подтверждено | — |
+| `SM-16.split.mode_keep_parts` | 10/10 verified | 18 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-16.split.plane_tool` | 10/10 verified | 19 строк · PASS · `303ccf6c` | Подтверждено | — |
 
 ### SM-16-cut — Отсечение по одну сторону (API7)
 **Инструмент:** `kompas_cut_by_plane`, `kompas_update_feature`.
@@ -196,7 +196,7 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `SM-16.cut_by_plane.mode_side_removed` | 10/10 verified | 28 строк · PASS · `5ba127bb` | Подтверждено | — |
+| `SM-16.cut_by_plane.mode_side_removed` | 10/10 verified | 28 строк · PASS · `303ccf6c` | Подтверждено | — |
 
 ### SM-17 — Перенос и поворот тела (API7)
 **Инструмент:** `kompas_get_feature`, `kompas_reposition`, `kompas_update_feature`.
@@ -217,8 +217,8 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `SM-17.reposition.translate_by_vector` | 10/10 verified | 27 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-17.reposition.rotate_about_axis` | 10/10 verified | 27 строк · PASS · `5ba127bb` | Подтверждено | — |
+| `SM-17.reposition.translate_by_vector` | 10/10 verified | 27 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-17.reposition.rotate_about_axis` | 10/10 verified | 27 строк · PASS · `303ccf6c` | Подтверждено | — |
 
 ### SKETCH — Эскиз: создание, правка геометрии, базовые плоскости
 **Инструмент:** `kompas_create_sketch`, `kompas_edit_sketch`, `kompas_finish_sketch`, `kompas_get_sketch_status`.
@@ -234,7 +234,7 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `AUX-SKETCH.plane_and_profile_lifecycle` | 10/10 verified | 28 строк · PASS · `5ba127bb` | Подтверждено | — |
+| `AUX-SKETCH.plane_and_profile_lifecycle` | 10/10 verified | 28 строк · PASS · `303ccf6c` | Подтверждено | — |
 
 ### PATTERN — Массивы: по сетке, круговой (концентрический), зеркальный
 **Инструмент:** `kompas_get_pattern`, `kompas_pattern_circular`, `kompas_pattern_grid`, `kompas_pattern_mirror`.
@@ -253,16 +253,16 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `SM-18.grid.single_row` | 10/10 verified | 15 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-18.grid.rectangular_grid` | 10/10 verified | 15 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-18.grid.operations` | 10/10 verified | 14 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-18.grid.bodies` | 10/10 verified | 14 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-19.circular.full_circle_no_duplicate` | 10/10 verified | 14 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-19.circular.angular_range` | 10/10 verified | 14 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-19.circular.operations` | 10/10 verified | 14 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-19.circular.bodies` | 10/10 verified | 14 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-23.mirror_all.bodies_selection` | 10/10 verified | 14 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-23.mirror_array.selected_operations` | 10/10 verified | 15 строк · PASS · `5ba127bb` | Подтверждено | — |
+| `SM-18.grid.single_row` | 10/10 verified | 15 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-18.grid.rectangular_grid` | 10/10 verified | 15 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-18.grid.operations` | 10/10 verified | 14 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-18.grid.bodies` | 10/10 verified | 14 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-19.circular.full_circle_no_duplicate` | 10/10 verified | 14 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-19.circular.angular_range` | 10/10 verified | 14 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-19.circular.operations` | 10/10 verified | 14 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-19.circular.bodies` | 10/10 verified | 14 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-23.mirror_all.bodies_selection` | 10/10 verified | 14 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-23.mirror_array.selected_operations` | 10/10 verified | 15 строк · PASS · `303ccf6c` | Подтверждено | — |
 
 ### SM-04 — Кинематическая операция — элемент по траектории (API5)
 **Инструмент:** `kompas_get_feature`, `kompas_sweep`, `kompas_update_feature`.
@@ -285,9 +285,9 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `SM-04.base.mode_orthogonal` | 10/10 verified | 12 строк · PASS · `5ba127bb` | Подтверждено | — |
+| `SM-04.base.mode_orthogonal` | 10/10 verified | 12 строк · PASS · `303ccf6c` | Подтверждено | — |
 | `SM-04.boss` | 0/10 verified; открыты: `discover`, `create`, `read`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies`, `negative_tests`, `geometry_validation` | строк приёмки нет | Не реализовано | не требуется в этом аудите: строка объявлена планом и за реализованную не выдаётся |
-| `SM-04.base.single_profile_flat_path` | 10/10 verified | 13 строк · PASS · `5ba127bb` | Подтверждено | — |
+| `SM-04.base.single_profile_flat_path` | 10/10 verified | 13 строк · PASS · `303ccf6c` | Подтверждено | — |
 
 ### SM-05 — Элемент по сечениям (API7)
 **Инструмент:** `kompas_get_feature`, `kompas_loft`, `kompas_update_feature`.
@@ -309,8 +309,8 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `SM-05.base.mode_couplings` | 10/10 verified | 14 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-05.base.parallel_sections_order` | 10/10 verified | 13 строк · PASS · `5ba127bb` | Подтверждено | — |
+| `SM-05.base.mode_couplings` | 10/10 verified | 14 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-05.base.parallel_sections_order` | 10/10 verified | 13 строк · PASS · `303ccf6c` | Подтверждено | — |
 
 ### SM-13 — Оболочка — тонкостенный элемент (API5)
 **Инструмент:** `kompas_get_feature`, `kompas_shell`, `kompas_update_feature`.
@@ -329,9 +329,9 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `SM-13.shell.mode_remove_faces` | 10/10 verified | 12 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-13.shell.mode_direction` | 10/10 verified | 13 строк · PASS · `5ba127bb` | Подтверждено | — |
-| `SM-13.shell.uniform_thickness` | 10/10 verified | 12 строк · PASS · `5ba127bb` | Подтверждено | — |
+| `SM-13.shell.mode_remove_faces` | 10/10 verified | 12 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-13.shell.mode_direction` | 10/10 verified | 13 строк · PASS · `303ccf6c` | Подтверждено | — |
+| `SM-13.shell.uniform_thickness` | 10/10 verified | 12 строк · PASS · `303ccf6c` | Подтверждено | — |
 
 ### None
 **Инструмент:** не опубликован.
@@ -340,7 +340,7 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `AUX-IMAGE.raster_export` | 10/10 verified | 16 строк · PASS · `5ba127bb` | Подтверждено | — |
+| `AUX-IMAGE.raster_export` | 10/10 verified | 16 строк · PASS · `303ccf6c` | Подтверждено | — |
 
 ### ASM-01
 **Инструмент:** не опубликован.
@@ -349,7 +349,7 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `ASM-01.document.create_open` | 10/10 verified | 8 строк · PASS · `5ba127bb` | Недостаточно проверки | доказательство под заявленным: вызовы привязанных строк не содержат `discover`, `create`, `read` |
+| `ASM-01.document.create_open` | 10/10 verified | 8 строк · PASS · `303ccf6c` | Подтверждено | — |
 
 ### ASM-02
 **Инструмент:** не опубликован.
@@ -358,7 +358,7 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `ASM-02.component.insert` | 10/10 verified | 11 строк · PASS · `5ba127bb` | Недостаточно проверки | доказательство под заявленным: вызовы привязанных строк не содержат `create`, `read`, `geometry_validation` |
+| `ASM-02.component.insert` | 10/10 verified | 11 строк · PASS · `303ccf6c` | Подтверждено | — |
 
 ### ASM-03
 **Инструмент:** не опубликован.
@@ -367,7 +367,7 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `ASM-03.structure.read` | 10/10 verified | 7 строк · PASS · `5ba127bb` | Недостаточно проверки | доказательство под заявленным: вызовы привязанных строк не содержат `discover`, `read`, `save_reopen` |
+| `ASM-03.structure.read` | 10/10 verified | 7 строк · PASS · `303ccf6c` | Подтверждено | — |
 
 ### ASM-04
 **Инструмент:** не опубликован.
@@ -376,7 +376,7 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `ASM-04.placement.set_read` | 10/10 verified | 10 строк · PASS · `5ba127bb` | Недостаточно проверки | доказательство под заявленным: вызовы привязанных строк не содержат `discover`, `read`, `edit`, `save_reopen`, `geometry_validation` |
+| `ASM-04.placement.set_read` | 10/10 verified | 10 строк · PASS · `303ccf6c` | Подтверждено | — |
 
 ### ASM-05
 **Инструмент:** не опубликован.
@@ -385,7 +385,7 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `ASM-05.component.replace` | 10/10 verified | 9 строк · PASS · `5ba127bb` | Недостаточно проверки | доказательство под заявленным: вызовы привязанных строк не содержат `discover`, `read`, `edit`, `save_reopen`, `geometry_validation` |
+| `ASM-05.component.replace` | 10/10 verified | 9 строк · PASS · `303ccf6c` | Подтверждено | — |
 
 ### ASM-06
 **Инструмент:** не опубликован.
@@ -394,7 +394,7 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `ASM-06.links.check` | 10/10 verified | 5 строк · PASS · `5ba127bb` | Недостаточно проверки | доказательство под заявленным: вызовы привязанных строк не содержат `discover`, `read`, `save_reopen`, `negative_tests` |
+| `ASM-06.links.check` | 10/10 verified | 5 строк · PASS · `303ccf6c` | Подтверждено | — |
 
 ### ASM-07
 **Инструмент:** не опубликован.
@@ -403,7 +403,7 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `ASM-07.save_reopen` | 10/10 verified | 7 строк · PASS · `5ba127bb` | Недостаточно проверки | доказательство под заявленным: вызовы привязанных строк не содержат `discover`, `read`, `geometry_validation` |
+| `ASM-07.save_reopen` | 10/10 verified | 7 строк · PASS · `303ccf6c` | Подтверждено | — |
 
 ### MATE-01
 **Инструмент:** не опубликован.
@@ -412,7 +412,7 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `MATE-01.mate.create` | 10/10 verified | 9 строк · PASS · `5ba127bb` | Недостаточно проверки | доказательство под заявленным: вызовы привязанных строк не содержат `discover`, `create`, `read`, `geometry_validation` |
+| `MATE-01.mate.create` | 10/10 verified | 9 строк · PASS · `303ccf6c` | Подтверждено | — |
 
 ### MATE-02
 **Инструмент:** не опубликован.
@@ -421,7 +421,7 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `MATE-02.mate.read` | 10/10 verified | 6 строк · PASS · `5ba127bb` | Недостаточно проверки | доказательство под заявленным: вызовы привязанных строк не содержат `discover`, `read` |
+| `MATE-02.mate.read` | 10/10 verified | 6 строк · PASS · `303ccf6c` | Подтверждено | — |
 
 ### MATE-03
 **Инструмент:** не опубликован.
@@ -430,7 +430,7 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `MATE-03.mate.param_edit` | 10/10 verified | 8 строк · PASS · `5ba127bb` | Недостаточно проверки | доказательство под заявленным: вызовы привязанных строк не содержат `discover`, `read`, `edit`, `geometry_validation` |
+| `MATE-03.mate.param_edit` | 10/10 verified | 8 строк · PASS · `303ccf6c` | Подтверждено | — |
 
 ### MATE-04
 **Инструмент:** не опубликован.
@@ -439,7 +439,7 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `MATE-04.mate.fixed` | 10/10 verified | 6 строк · PASS · `5ba127bb` | Недостаточно проверки | доказательство под заявленным: вызовы привязанных строк не содержат `discover`, `read`, `edit` |
+| `MATE-04.mate.fixed` | 10/10 verified | 6 строк · PASS · `303ccf6c` | Подтверждено | — |
 
 ### MATE-05
 **Инструмент:** не опубликован.
@@ -448,7 +448,7 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `MATE-05.mate.delete` | 10/10 verified | 7 строк · PASS · `5ba127bb` | Недостаточно проверки | доказательство под заявленным: вызовы привязанных строк не содержат `discover`, `read`, `delete_dependencies` |
+| `MATE-05.mate.delete` | 10/10 verified | 7 строк · PASS · `303ccf6c` | Подтверждено | — |
 
 ### MATE-06
 **Инструмент:** не опубликован.
@@ -457,7 +457,7 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `MATE-06.mate.placement_effect` | 10/10 verified | 6 строк · PASS · `5ba127bb` | Недостаточно проверки | доказательство под заявленным: вызовы привязанных строк не содержат `discover`, `read`, `save_reopen`, `geometry_validation` |
+| `MATE-06.mate.placement_effect` | 10/10 verified | 6 строк · PASS · `303ccf6c` | Подтверждено | — |
 
 ## 3. Запланированные семейства: маршрута в коде нет
 
@@ -494,11 +494,11 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `dep.selection.unambiguous` | 3/10 verified; открыты: `create`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies`, `geometry_validation` | 3 строк · PASS · `5ba127bb` | Недостаточно проверки | довести прогон: открыты `create`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies`, `geometry_validation` |
-| `dep.lifecycle.feature_cycle` | 7/10 verified; открыты: `discover`, `create`, `geometry_validation` | 14 строк · PASS · `5ba127bb` | Недостаточно проверки | довести прогон: открыты `discover`, `create`, `geometry_validation` |
-| `dep.bodies.multibody` | 3/10 verified; открыты: `discover`, `create`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies` | 3 строк · PASS · `5ba127bb` | Недостаточно проверки | довести прогон: открыты `discover`, `create`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies` |
-| `dep.foundation` | 2/10 verified; открыты: `discover`, `create`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies`, `geometry_validation` | 2 строк · PASS · `5ba127bb` | Недостаточно проверки | довести прогон: открыты `discover`, `create`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies`, `geometry_validation` |
-| `dep.preserve_unknown` | 4/10 verified; открыты: `discover`, `create`, `rebuild`, `suppress_restore`, `delete_dependencies`, `negative_tests` | 4 строк · PASS · `5ba127bb` | Недостаточно проверки | довести прогон: открыты `discover`, `create`, `rebuild`, `suppress_restore`, `delete_dependencies`, `negative_tests` |
+| `dep.selection.unambiguous` | 3/10 verified; открыты: `create`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies`, `geometry_validation` | 3 строк · PASS · `303ccf6c` | Покрыто проверками | — |
+| `dep.lifecycle.feature_cycle` | 7/10 verified; открыты: `discover`, `create`, `geometry_validation` | 14 строк · PASS · `303ccf6c` | Покрыто проверками | — |
+| `dep.bodies.multibody` | 3/10 verified; открыты: `discover`, `create`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies` | 3 строк · PASS · `303ccf6c` | Покрыто проверками | — |
+| `dep.foundation` | 2/10 verified; открыты: `discover`, `create`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies`, `geometry_validation` | 2 строк · PASS · `303ccf6c` | Покрыто проверками | — |
+| `dep.preserve_unknown` | 4/10 verified; открыты: `discover`, `create`, `rebuild`, `suppress_restore`, `delete_dependencies`, `negative_tests` | 4 строк · PASS · `303ccf6c` | Покрыто проверками | — |
 
 ### SKETCH — Эскиз: создание, правка геометрии, базовые плоскости — зависимости
 **Инструмент:** `kompas_create_sketch`, `kompas_edit_sketch`, `kompas_finish_sketch`, `kompas_get_sketch_status`.
@@ -514,9 +514,9 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `dep.sketch.entities` | 7/10 verified; открыты: `rebuild`, `suppress_restore`, `delete_dependencies` | 15 строк · PASS · `5ba127bb` | Недостаточно проверки | довести прогон: открыты `rebuild`, `suppress_restore`, `delete_dependencies` |
-| `dep.refs.planes` | 6/10 verified; открыты: `rebuild`, `suppress_restore`, `delete_dependencies`, `geometry_validation` | 6 строк · PASS · `5ba127bb` | Недостаточно проверки | довести прогон: открыты `rebuild`, `suppress_restore`, `delete_dependencies`, `geometry_validation` |
-| `dep.refs.axes` | 5/10 verified; открыты: `edit`, `rebuild`, `suppress_restore`, `delete_dependencies`, `geometry_validation` | 5 строк · PASS · `5ba127bb` | Недостаточно проверки | довести прогон: открыты `edit`, `rebuild`, `suppress_restore`, `delete_dependencies`, `geometry_validation` |
+| `dep.sketch.entities` | 7/10 verified; открыты: `rebuild`, `suppress_restore`, `delete_dependencies` | 15 строк · PASS · `303ccf6c` | Покрыто проверками | — |
+| `dep.refs.planes` | 6/10 verified; открыты: `rebuild`, `suppress_restore`, `delete_dependencies`, `geometry_validation` | 6 строк · PASS · `303ccf6c` | Покрыто проверками | — |
+| `dep.refs.axes` | 5/10 verified; открыты: `edit`, `rebuild`, `suppress_restore`, `delete_dependencies`, `geometry_validation` | 5 строк · PASS · `303ccf6c` | Покрыто проверками | — |
 
 ### READ — Чтение геометрии и измерения — зависимости
 **Инструмент:** `kompas_list_bodies`, `kompas_list_features`, `kompas_measure`, `kompas_read_topology`, `kompas_resolve_selection`.
@@ -533,8 +533,8 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `dep.refs.planar_face` | 4/10 verified; открыты: `create`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies` | 4 строк · PASS · `5ba127bb` | Недостаточно проверки | довести прогон: открыты `create`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies` |
-| `dep.refs.edges_faces` | 3/10 verified; открыты: `create`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies`, `geometry_validation` | 3 строк · PASS · `5ba127bb` | Недостаточно проверки | довести прогон: открыты `create`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies`, `geometry_validation` |
+| `dep.refs.planar_face` | 4/10 verified; открыты: `create`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies` | 4 строк · PASS · `303ccf6c` | Покрыто проверками | — |
+| `dep.refs.edges_faces` | 3/10 verified; открыты: `create`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies`, `geometry_validation` | 3 строк · PASS · `303ccf6c` | Покрыто проверками | — |
 
 ### EXCHANGE — Обмен: STEP import/export, единицы измерения — зависимости
 **Инструмент:** `kompas_export_step`, `kompas_import_step`, `kompas_probe_units`.
@@ -550,7 +550,7 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `dep.units.confirm` | 1/10 verified; открыты: `discover`, `create`, `read`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies`, `negative_tests` | 1 строк · PASS · `5ba127bb` | Недостаточно проверки | довести прогон: открыты `discover`, `create`, `read`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies`, `negative_tests` |
+| `dep.units.confirm` | 1/10 verified; открыты: `discover`, `create`, `read`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies`, `negative_tests` | 1 строк · PASS · `303ccf6c` | Покрыто проверками | — |
 
 ### CONNECT — Сеанс: подключение, видимость, версия, отсоединение — зависимости
 **Инструмент:** `kompas_capabilities`, `kompas_connect`, `kompas_disconnect`, `kompas_get_context`, `kompas_health`.
@@ -566,7 +566,7 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `dep.api7.in_same_adapter` | 4/10 verified; открыты: `create`, `rebuild`, `suppress_restore`, `delete_dependencies`, `negative_tests`, `geometry_validation` | 15 строк · PASS · `5ba127bb` | Недостаточно проверки | довести прогон: открыты `create`, `rebuild`, `suppress_restore`, `delete_dependencies`, `negative_tests`, `geometry_validation` |
+| `dep.api7.in_same_adapter` | 4/10 verified; открыты: `create`, `rebuild`, `suppress_restore`, `delete_dependencies`, `negative_tests`, `geometry_validation` | 15 строк · PASS · `303ccf6c` | Покрыто проверками | — |
 
 ### SM-07 — Родное отверстие API7 — зависимости
 **Инструмент:** `kompas_hole`.
@@ -583,7 +583,7 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `dep.refs.points_axes` | 3/10 verified; открыты: `discover`, `edit`, `rebuild`, `suppress_restore`, `delete_dependencies`, `negative_tests`, `geometry_validation` | 3 строк · PASS · `5ba127bb` | Недостаточно проверки | довести прогон: открыты `discover`, `edit`, `rebuild`, `suppress_restore`, `delete_dependencies`, `negative_tests`, `geometry_validation` |
+| `dep.refs.points_axes` | 3/10 verified; открыты: `discover`, `edit`, `rebuild`, `suppress_restore`, `delete_dependencies`, `negative_tests`, `geometry_validation` | 3 строк · PASS · `303ccf6c` | Покрыто проверками | — |
 
 ### SM-04 — Кинематическая операция — элемент по траектории (API5) — зависимости
 **Инструмент:** `kompas_get_feature`, `kompas_sweep`, `kompas_update_feature`.
@@ -606,7 +606,7 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `dep.paths.flat` | 3/10 verified; открыты: `discover`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies`, `geometry_validation` | 3 строк · PASS · `5ba127bb` | Недостаточно проверки | довести прогон: открыты `discover`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies`, `geometry_validation` |
+| `dep.paths.flat` | 3/10 verified; открыты: `discover`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies`, `geometry_validation` | 3 строк · PASS · `303ccf6c` | Покрыто проверками | — |
 
 ### PATTERN — Массивы: по сетке, круговой (концентрический), зеркальный — зависимости
 **Инструмент:** `kompas_get_pattern`, `kompas_pattern_circular`, `kompas_pattern_grid`, `kompas_pattern_mirror`.
@@ -625,7 +625,7 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `dep.pattern.associativity` | 4/10 verified; открыты: `discover`, `create`, `read`, `suppress_restore`, `delete_dependencies`, `negative_tests` | 45 строк · PASS · `5ba127bb` | Недостаточно проверки | довести прогон: открыты `discover`, `create`, `read`, `suppress_restore`, `delete_dependencies`, `negative_tests` |
+| `dep.pattern.associativity` | 4/10 verified; открыты: `discover`, `create`, `read`, `suppress_restore`, `delete_dependencies`, `negative_tests` | 45 строк · PASS · `303ccf6c` | Покрыто проверками | — |
 
 ### None — зависимости
 **Инструмент:** не опубликован.
@@ -634,16 +634,16 @@
 
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
-| `dep.assembly.document_lifecycle` | 10/10 verified | 12 строк · PASS · `5ba127bb` | Недостаточно проверки | доказательство под заявленным: вызовы привязанных строк не содержат `discover`, `create`, `read` |
-| `dep.assembly.source_file` | 10/10 verified | 12 строк · PASS · `5ba127bb` | Недостаточно проверки | доказательство под заявленным: вызовы привязанных строк не содержат `read` |
-| `dep.assembly.component_address` | 10/10 verified | 12 строк · PASS · `5ba127bb` | Недостаточно проверки | доказательство под заявленным: вызовы привязанных строк не содержат `discover`, `read`, `save_reopen`, `geometry_validation` |
-| `dep.assembly.revisions` | 10/10 verified | 8 строк · PASS · `5ba127bb` | Недостаточно проверки | доказательство под заявленным: вызовы привязанных строк не содержат `discover`, `read`, `edit`, `save_reopen` |
-| `dep.assembly.idempotency` | 10/10 verified | 5 строк · PASS · `5ba127bb` | Недостаточно проверки | доказательство под заявленным: вызовы привязанных строк не содержат `discover`, `create`, `read` |
-| `dep.mate.object_address` | 10/10 verified | 3 строк · PASS · `5ba127bb` | Недостаточно проверки | доказательство под заявленным: вызовы привязанных строк не содержат `discover`, `read` |
-| `dep.mate.component_insert` | 10/10 verified | 3 строк · PASS · `5ba127bb` | Недостаточно проверки | доказательство под заявленным: вызовы привязанных строк не содержат `create`, `read`, `geometry_validation` |
-| `dep.mate.revisions` | 10/10 verified | 3 строк · PASS · `5ba127bb` | Недостаточно проверки | доказательство под заявленным: вызовы привязанных строк не содержат `read`, `edit` |
-| `dep.mate.idempotency` | 10/10 verified | 3 строк · PASS · `5ba127bb` | Недостаточно проверки | доказательство под заявленным: вызовы привязанных строк не содержат `create`, `read` |
-| `dep.mate.save_reopen` | 10/10 verified | 2 строк · PASS · `5ba127bb` | Недостаточно проверки | доказательство под заявленным: вызовы привязанных строк не содержат `read` |
+| `dep.assembly.document_lifecycle` | 10/10 verified | 12 строк · PASS · `303ccf6c` | Покрыто проверками | — |
+| `dep.assembly.source_file` | 10/10 verified | 12 строк · PASS · `303ccf6c` | Покрыто проверками | — |
+| `dep.assembly.component_address` | 10/10 verified | 12 строк · PASS · `303ccf6c` | Покрыто проверками | — |
+| `dep.assembly.revisions` | 10/10 verified | 8 строк · PASS · `303ccf6c` | Покрыто проверками | — |
+| `dep.assembly.idempotency` | 10/10 verified | 5 строк · PASS · `303ccf6c` | Покрыто проверками | — |
+| `dep.mate.object_address` | 10/10 verified | 3 строк · PASS · `303ccf6c` | Покрыто проверками | — |
+| `dep.mate.component_insert` | 10/10 verified | 4 строк · PASS · `303ccf6c` | Покрыто проверками | — |
+| `dep.mate.revisions` | 10/10 verified | 3 строк · PASS · `303ccf6c` | Покрыто проверками | — |
+| `dep.mate.idempotency` | 10/10 verified | 3 строк · PASS · `303ccf6c` | Покрыто проверками | — |
+| `dep.mate.save_reopen` | 10/10 verified | 2 строк · PASS · `303ccf6c` | Покрыто проверками | — |
 
 ## 5. Находки
 
@@ -777,7 +777,7 @@
 
 **Где.** `scripts/mcp-smoke.py — журнал вызовов и окна строк (`CALL_LOG`, `calls_window`); scratch/_build_api_compliance.py — verify_claimed_actions(), derive_actions(), calls_calibration(); scratch/_f08_link_gap.py, scratch/_f08_candidate_ownership.py — разбор остатка; coverage/solid-v24/matrix.json`
 
-**Измерено.** scratch/mcp-smoke/delivery-mates-20261005/*.json — журнал вызовов ПО КАТАЛОГУ ОТЧЁТОВ: 10551 вызовов, 1143 строк приёмки с окном, 494 эпох документа. Полный прогон: 1095 строк, 10392 вызовов, отказов 0 — на бинарях поставки `publish-mates-20261005`. Групповые отчёты каталога — ПОДМНОЖЕСТВА полного прогона, поэтому их вызовы с ним не складываются: сумма по каталогу (10551) больше полного прогона (10392) ровно на вызовы повторно снятых групп
+**Измерено.** scratch/mcp-smoke/delivery-core-c1-c2-20261005/*.json — журнал вызовов ПО КАТАЛОГУ ОТЧЁТОВ: 10627 вызовов, 1147 строк приёмки с окном, 508 эпох документа. Полный прогон: 1095 строк, 10392 вызовов, отказов 0 — на бинарях поставки `publish-core-c1-c2-20261005`. Групповые отчёты каталога: `assembly.json` (67 строк, в полном прогоне 21, УНИКАЛЬНЫХ 46) — НЕ подмножество; `mate.json` (55 строк, в полном прогоне 21, УНИКАЛЬНЫХ 34) — НЕ подмножество. Общее число различных ИМЁН строк — 1149 (объединение по идентификаторам; полный прогон даёт 1070 различных имён при 1095 строках — внутри отчёта имена повторяются). Сложение отчётов посчитало бы общие строки дважды. Вызовы каждого отчёта свои и с полным прогоном не складываются.
 
 **Ожидание.** заявленное действие строки подтверждается строкой приёмки, которую можно найти по имени, а не по сходству
 
@@ -785,7 +785,7 @@
 
 **Затронутые инструменты.** `kompas_extrude`, `kompas_hole`, `kompas_fillet`, `kompas_chamfer`, `kompas_rotated`, `kompas_create_sketch`, `kompas_edit_sketch`
 
-**Что исправлять.** механизм исправлен и расширен в этом наряде: доказательство теперь измеряется, а не угадывается по имени строки. Прибор получил журнал вызовов, окно на каждую строку и семантическую подпись действия; подпись снабжена положительным контролем (на строках B3M, где действие названо именем строки: 9 действий из 10 выводятся в 10/10 строк) и отрицательным (подпись выполняется и на чужих строках, поэтому вывод по вызовам употребляется как ОТКАЗ, а не как подтверждение). Контроли нашли ЧЕТЫРЕ дефекта самого прибора до публикации: `discover` требовал оба обзора вместо любого; `rebuild` требовал вызова `kompas_rebuild`, тогда как наряд §9.1 определяет действие как проверку перестроения зависимых признаков; подпись считалась по каждой строке отдельно, из-за чего `save_reopen` (сохранение в V07, открытие в V09) не находился ни в одной; привязка по документу отброшена как НЕСОСТОЯТЕЛЬНАЯ — `document_id` есть не у всех вызовов, и она дала бы 75 ложных клеток «не выполнено». ДОПОЛНЕНО 20.09.2026, вторым проходом. (1) Отказ сторожа ТЕПЕРЬ ПОНИЖАЕТ СТАТУС СТРОКИ: `implementation.status` требует не только закрытости по ярлыкам и хотя бы одного PASS, но и того, чтобы вызовы привязанных строк содержали каждое заявленное действие. Прежде этих двух условий хватало, и отчёт говорил «Подтверждено» 21 строке, которой ТА ЖЕ сверка отказывала в заявлении: ярлык читался как доказательство. Число подтверждённых строк поэтому упало 38 → 18 — изменилось ПРАВИЛО ВЫВОДА, а не измерение, и понижение названо отдельным ключом `rows_status_lowered_by_unsupported_actions`. (2) ОСТАТОК РАЗОБРАН ДВУМЯ ПРИБОРАМИ, и он оказался НЕ тем, чем выглядел. `scratch/_f08_link_gap.py` искал проверку-кандидата по вызовам, `scratch/_f08_candidate_ownership.py` спрашивал, КОМУ она принадлежит. Первая редакция прибора считала кандидатом любую строку с нужным инструментом и потому отдавала `edit` строки `L11`/`L12`/`L13` — а они проверяют ОТКАЗ правки; дефект исправлен требованием, чтобы действие ВЫВОДИЛОСЬ из окна. Итог: привязка недостаёт ровно у ОДНОЙ строки (`SM-02.base_extrusion.blind` — `G03i`, `G03r`, привязка добавлена, `coverage/solid-v24/matrix.json` → `meta.f08_linkage_note`), а у остальных 22 проверки-кандидаты принадлежат ДРУГИМ режимам (2712 пар) либо чужим семействам (282) — приписать их было бы припиской чужого доказательства. Остаток — РАБОТА, а не правка отчёта: у 31 строки доказательство надо сделать находимым по имени режима (как `B3M.<NN>.<действие>`), у 22 — либо поставить проверки для этих режимов, либо честно понизить заявленные действия. Открытый пробел назван, а не закрыт переименованием строк и не закрыт дописыванием привязок, которых нет
+**Что исправлять.** механизм исправлен и расширен в этом наряде: доказательство теперь измеряется, а не угадывается по имени строки. Прибор получил журнал вызовов, окно на каждую строку и семантическую подпись действия; подпись снабжена положительным контролем (на строках B3M, где действие названо именем строки: 9 действий из 10 выводятся в 10/10 строк) и отрицательным (подпись выполняется и на чужих строках, поэтому вывод по вызовам употребляется как ОТКАЗ, а не как подтверждение). Контроли нашли ЧЕТЫРЕ дефекта самого прибора до публикации: `discover` требовал оба обзора вместо любого; `rebuild` требовал вызова `kompas_rebuild`, тогда как наряд §9.1 определяет действие как проверку перестроения зависимых признаков; подпись считалась по каждой строке отдельно, из-за чего `save_reopen` (сохранение в V07, открытие в V09) не находился ни в одной; привязка по документу отброшена как НЕСОСТОЯТЕЛЬНАЯ — `document_id` есть не у всех вызовов, и она дала бы 75 ложных клеток «не выполнено». ДОПОЛНЕНО 20.09.2026, вторым проходом. (1) Отказ сторожа ТЕПЕРЬ ПОНИЖАЕТ СТАТУС СТРОКИ: `implementation.status` требует не только закрытости по ярлыкам и хотя бы одного PASS, но и того, чтобы вызовы привязанных строк содержали каждое заявленное действие. Прежде этих двух условий хватало, и отчёт говорил «Подтверждено» 21 строке, которой ТА ЖЕ сверка отказывала в заявлении: ярлык читался как доказательство. Число подтверждённых строк поэтому упало 38 → 18 — изменилось ПРАВИЛО ВЫВОДА, а не измерение, и понижение названо отдельным ключом `rows_status_lowered_by_unsupported_actions`. (2) ОСТАТОК РАЗОБРАН ДВУМЯ ПРИБОРАМИ, и он оказался НЕ тем, чем выглядел. `scratch/_f08_link_gap.py` искал проверку-кандидата по вызовам, `scratch/_f08_candidate_ownership.py` спрашивал, КОМУ она принадлежит. Первая редакция прибора считала кандидатом любую строку с нужным инструментом и потому отдавала `edit` строки `L11`/`L12`/`L13` — а они проверяют ОТКАЗ правки; дефект исправлен требованием, чтобы действие ВЫВОДИЛОСЬ из окна. Итог: привязка недостаёт ровно у ОДНОЙ строки (`SM-02.base_extrusion.blind` — `G03i`, `G03r`, привязка добавлена, `coverage/solid-v24/matrix.json` → `meta.f08_linkage_note`), а у остальных 22 проверки-кандидаты принадлежат ДРУГИМ режимам (2712 пар) либо чужим семействам (282) — приписать их было бы припиской чужого доказательства. Остаток — РАБОТА, а не правка отчёта: у 31 строки доказательство надо сделать находимым по имени режима (как `B3M.<NN>.<действие>`), у 22 — либо поставить проверки для этих режимов, либо честно понизить заявленные действия. Открытый пробел назван, а не закрыт переименованием строк и не закрыт дописыванием привязок, которых нет. ЗАКРЫТО 05.10.2026 (наряд `CORE_C1_C2_FULL_COMPLETION_DEVELOPER_PROMPT.md` §5) — ИЗМЕРЕНИЕМ, а не переименованием. (1) Пятнадцать общих зависимостей, у которых ВСЕ обязательные действия были закрыты И подтверждены вызовами, печатались как «Недостаточно проверки» только потому, что у прибора не было ярлыка для НЕреализуемой строки: заведён «Покрыто проверками» с отрицательным контролем (`dependency_verdict_control`). (2) Двадцать три строки блоков C1/C2 получили ПОСТРОЧНЫЕ маршруты `<действие>_route`, объявленные прибором `scratch/_declare_c1c2_routes.py` ТОЛЬКО ПОСЛЕ проверки, что объявленный инструмент лежит в окне строки УСПЕШНЫМ вызовом. (3) Приёмочные строки переработаны так, что строка с именем действия ИСПОЛНЯЕТ его сама: `*.save_reopen` проходит save→close→open в собственном окне (прежде читала результат соседней строки), `geometry_validation` измеряет геометрию (`kompas_measure`), `discover` делает ОТДЕЛЬНЫЙ обзор документов, `delete_dependencies` удаляет сопряжение и восстанавливает состояние. (4) Одна связь осталась ПРЕДМЕТНОЙ — `MATE.01.face_range` для `negative_tests` — и объявлена ЯВНО полем `<действие>_row`, как требует наряд, вместо возврата удалённого дубликата ради совпадения имени. ИЗМЕРЕНО сторожем `scratch/_verify_matrix_claims.py` на поставке `publish-core-c1-c2-20261005`: строк с заявленным `verified` — 94, полностью подтверждённых — 94, названных пробелов — 0, приписок — 0, противоречий — 0. Строк «Недостаточно проверки» — 0 (было 38)
 
 ### F-09 — исправленный дефект продукта (знак дуги не доходил до конечного угла)
 
@@ -797,7 +797,7 @@
 
 **Документация.** <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument2d_ksarcbyangle.html>
 
-**Измерено.** ИЗМЕРЕНО ДО И ПОСЛЕ ИСПРАВЛЕНИЯ, на двух разных поставках, одним и тем же зондом `scratch/_mania_contour_probe.py`: ДО — поставка `artifacts/publish-b5f08-20260920`, адаптер `1723bf9eba687c43bacc325afac232181111da2e758b5be441672e68696ef3ad`: контур скобы «как есть», с ЗНАКОМ дуг, → `GEOMETRY_FAILED` («Entity.Create() выдавливания вернул false: признак не появился»); тот же точечный набор, выраженный дугами с углами внутри диапазона, → 174799.7403608485 при аналитическом 174799.740134. ПОСЛЕ — поставка `artifacts/publish-mates-20261005`, адаптер `3e656699f8e585eb1e53e50db68e1a2ed7de8ab3a0e1baae35eac59d2fe468c6`: ТОТ ЖЕ знаковый контур → V=174799.74036084852, отказ отсутствует (повторный прогон зонда 20.09.2026, вариант V1). Хеши Host и Worker между поставками НЕ менялись (`dd1d7ffe5ea5587345a9575288ffd6a75e69b9d29164970177bb1e57fbae0c6e` и `b0aba49019dc927a0c1534ddcf337cdc1753695ffa4570cc05799f1cebc7b409`), то есть правка лежит ИМЕННО в адаптере, где и была. В прогоне поставки: `scratch/mcp-smoke/delivery-mates-20261005/mania.json` — `MANIA.01.create` площадь контура Грин=8739.987007 против сегментов 8739.987007 (расхождение 0.000e+00) и `MANIA.02.create` V=174799.740361 против площадь×20=174799.740134
+**Измерено.** ИЗМЕРЕНО ДО И ПОСЛЕ ИСПРАВЛЕНИЯ, на двух разных поставках, одним и тем же зондом `scratch/_mania_contour_probe.py`: ДО — поставка `artifacts/publish-b5f08-20260920`, адаптер `1723bf9eba687c43bacc325afac232181111da2e758b5be441672e68696ef3ad`: контур скобы «как есть», с ЗНАКОМ дуг, → `GEOMETRY_FAILED` («Entity.Create() выдавливания вернул false: признак не появился»); тот же точечный набор, выраженный дугами с углами внутри диапазона, → 174799.7403608485 при аналитическом 174799.740134. ПОСЛЕ — поставка `artifacts/publish-core-c1-c2-20261005`, адаптер `3e656699f8e585eb1e53e50db68e1a2ed7de8ab3a0e1baae35eac59d2fe468c6`: ТОТ ЖЕ знаковый контур → V=174799.74036084852, отказ отсутствует (повторный прогон зонда 20.09.2026, вариант V1). Хеши Host и Worker между поставками НЕ менялись (`dd1d7ffe5ea5587345a9575288ffd6a75e69b9d29164970177bb1e57fbae0c6e` и `b0aba49019dc927a0c1534ddcf337cdc1753695ffa4570cc05799f1cebc7b409`), то есть правка лежит ИМЕННО в адаптере, где и была. В прогоне поставки: `scratch/mcp-smoke/delivery-core-c1-c2-20261005/mania.json` — `MANIA.01.create` площадь контура Грин=8739.987007 против сегментов 8739.987007 (расхождение 0.000e+00) и `MANIA.02.create` V=174799.740361 против площадь×20=174799.740134
 
 **Ожидание.** дуга с отрицательным `sweep_deg` строит ТОТ ЖЕ точечный набор, что та же дуга с положительным `sweep_deg` при переставленных концах
 
@@ -854,7 +854,7 @@
 | Причина | Сколько строк | Что это значит |
 |---|---|---|
 | Маршрута нет в коде (план) | 3 | документированность маршрута подтвердить нечем; за реализованное не выдаётся |
-| Действия не доведены до `verified` | 38 | общие зависимости: часть действий не проверена, строка не закрыта |
+| Действия не доведены до `verified` | 0 | общие зависимости: часть действий не проверена, строка не закрыта |
 | Строки со ссылкой на схему инструмента нет в матрице | 40 | связь «режим → инструмент» восстановлена по семейству и по исходникам, а не прочитана из матрицы (F-05) |
 | Инструмент без присутствия в матрице | 3 | `kompas_acquire_session`, `kompas_release_session`, `kompas_session_status` — ни собственной строки, ни объявленного маршрута строки (наряд §3: прежнее имя счётчика мерило только собственную строку и читалось находкой «инструмент без покрытия») |
 | Мёртвые ветки в адаптере | 0 | F-01 и F-02 исправлены в этом наряде: `PlanarNormal` удалён, неподтверждённый `IsSaved` из продукта удалён |
@@ -877,19 +877,19 @@
 ## 8. Итог
 
 - **Инструментов проверено:** 63 — все опубликованные; схем 63, имена свойств совпадают с проводом у 63, значимая форма — у 63. Инструментов без присутствия в матрице (ни собственной строки, ни объявленного маршрута): 3 — `kompas_acquire_session`, `kompas_release_session`, `kompas_session_status`.
-  - **присутствие названо двумя способами** (наряд §3): собственной строкой — 43 инструментов, объявленным маршрутом строки — 29. Разница названа, а не слита в одно число: «строку инструменту дали» и «строку инструмент обслуживает объявленным маршрутом» — разные состояния;
+  - **присутствие названо двумя способами** (наряд §3): собственной строкой — 43 инструментов, объявленным маршрутом строки — 30. Разница названа, а не слита в одно число: «строку инструменту дали» и «строку инструмент обслуживает объявленным маршрутом» — разные состояния;
   - **отрицательный контроль присутствия — три половины, сторож доказан: True**: (а) синтетический опубликованный инструмент, не упомянутый нигде, назван — True; (б) инструмент, названный только объявлением поддержки каталога и не опубликованный, назван проверкой каталога — True; (в) у инструмента `kompas_check_component_links`, присутствующего ТОЛЬКО объявленным маршрутом, маршрут снят — назван: True. Половина (в) доказывает, что способ «объявленный маршрут» действительно зачитывается;
   - **объявление поддержки каталога проверено отдельно** (класс дефекта AUX-SKETCH): объявлений прочитано 33 (форм записи: строка — 69, словарь — 36), инструментов НЕТ на проводе — ни одного. Поле `notes` словарной формы НЕ читается (11 объяснений): в нём инструменты названы именно тогда, когда их НЕТ, и чтение имён оттуда дало бы ложную находку на записи, которая поддержку отрицает.
-- **Режимов проверено:** 97 строк матрицы; документация подтверждена у 70, реализация — у 56.
-- **COM-маршруты:** 263 из 335 имеют страницу члена или список членов интерфейса; числовые идентификаторы типов: 35 совпали, 0 не найдено в таблице.
+- **Режимов проверено:** 97 строк матрицы; документация подтверждена у 70, реализация — у 69.
+- **COM-маршруты:** 262 из 334 имеют страницу члена или список членов интерфейса; числовые идентификаторы типов: 35 совпали, 0 не найдено в таблице.
 - **Заявленные действия против доказательств — три сверки (F-08):** строк с заявленным `verified` — 94; приписок (статус без единой привязанной строки) — 0; `verified` рядом с FAIL — 0.
   - **по имени режима** (так искал бы рецензент): у 23 строк НИ ОДНА строка приёмки не называет режим ни идентификатором, ни описанием — доказательство по имени режима не находится;
-  - **по привязке и вызовам**: у 23 строк есть действие, которого нет в вызовах привязанных проверок (прибор: 10551 вызовов, 1143 строк с окном);
+  - **по привязке и вызовам**: у 0 строк есть действие, которого нет в вызовах привязанных проверок (прибор: 10627 вызовов, 1147 строк с окном);
   - **по имени строки**: у 93 строк все действия названы одноимённой строкой (`B3M.<режим>.<действие>`), у 1 — нет.
-  - **следствие для статуса строки**: отказ сторожа понижает `implementation.status` до «Недостаточно проверки» и называется причиной понижения; строк, потерявших «Подтверждено» именно поэтому — 23 (подтверждённых строк стало 56). Изменилось ПРАВИЛО ВЫВОДА, а не измерение: прежде «Подтверждено» требовало закрытости по ярлыкам и хотя бы одного PASS, но не спрашивало, подтверждают ли привязанные строки заявленные действия.
+  - **следствие для статуса строки**: отказ сторожа понижает `implementation.status` до «Недостаточно проверки» и называется причиной понижения; строк, потерявших «Подтверждено» именно поэтому — 0 (подтверждённых строк стало 69). Изменилось ПРАВИЛО ВЫВОДА, а не измерение: прежде «Подтверждено» требовало закрытости по ярлыкам и хотя бы одного PASS, но не спрашивало, подтверждают ли привязанные строки заявленные действия.
   - **остаток отказа разобран, а не закрыт дописыванием привязок** (`scratch/_f08_link_gap.py`, `scratch/_f08_candidate_ownership.py`): привязка недостаёт РОВНО У ОДНОЙ строки — `SM-02.base_extrusion.blind`, где `G03i` и `G03r` читают признак того же режима и не были привязаны ни к одной строке (привязка добавлена, `coverage/solid-v24/matrix.json` → `meta.f08_linkage_note`); у остальных проверки-кандидаты уже принадлежат ДРУГИМ режимам (2712 пар) либо чужим семействам (282) — приписать их значило бы выдать чужое доказательство за своё. Это работа, а не правка отчёта.
   - **Контроли прибора «действие из вызовов»:** положительный — на строках B3M, где действие названо именем строки, выводятся 8 действий из 9; не выводится geometry_validation (измерение объёма записывается в окно строки `create`); отрицательный — подпись выполняется и на ЧУЖИХ строках, поэтому вывод по вызовам употребляется как отказ, а не как подтверждение; неразличимы по вызовам: geometry_validation и read.
-  - **Отрицательный контроль сторожа:** половина «обязан отказать» — отказал, «обязан молчать» — молчит; сторож доказан: да; отказов на реальных данных — 23.
+  - **Отрицательный контроль сторожа:** половина «обязан отказать» — отказал, «обязан молчать» — молчит; сторож доказан: да; отказов на реальных данных — 0.
 - **Находки:**
   - **F-01** — исправленный дефект продукта (мёртвая ветка удалена). была низкой — на результат не влияла; исправлено
   - **F-02** — исправленный дефект продукта (мёртвая ветка удалена, состояние сохранённости отделено от ревизии). была низкой — работал отпечаток; исправлено

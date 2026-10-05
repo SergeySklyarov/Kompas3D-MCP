@@ -473,6 +473,49 @@ def assembly_checks(client, rep, app_id, workdir):
         err = (env or {}).get("error") or {}
         return err.get("details") if isinstance(err, dict) else None
 
+    def reopen_assembly(doc, path, dirty_policy="save"):
+        """СОХРАНИТЬ → ЗАКРЫТЬ → ОТКРЫТЬ ту же сборку и вернуть НОВЫЙ идентификатор.
+
+        ЗАЧЕМ ОТДЕЛЬНАЯ ФУНКЦИЯ. Сторож аудита связывает действие `save_reopen` с ОКНОМ ВЫЗОВОВ
+        строки, названной этим действием. Прежде сохранение делала одна строка (`ASM.07.save_reopen`),
+        а переоткрытие — соседняя (`ASM.07.reopen`), поэтому строка `ASM.03.save_reopen` ЧИТАЛА
+        результат чужого сохранения, и её собственное окно не содержало ни `kompas_save_document`, ни
+        `kompas_open_document`. Аудит называл это «Недостаточно проверки» — и был прав. Теперь
+        каждая строка с именем `save_reopen` проходит цикл САМА.
+        """
+        env, code = call("kompas_save_document", {"document_id": doc,
+                                                  "expected_revision": current_rev(doc),
+                                                  "target_path": path})
+        saved = (not code) and os.path.isfile(path)
+        call("kompas_close_document", {"document_id": doc, "dirty_policy": dirty_policy})
+        env, code = call("kompas_open_document", {"application_id": app_id, "path": path,
+                                                  "access": "edit"})
+        return doc_id(env), saved, code
+
+    def measure_source_volume(path):
+        """Открыть деталь-источник и измерить объём её тела ТЕМ ЖЕ прибором, что и построение.
+
+        ЗАЧЕМ В ОКНЕ СТРОКИ. Объём источника измерялся при его построении — то есть в окне строки
+        `ASM.SRC`, а не в окне строки, ЗАЯВИВШЕЙ `geometry_validation`. Приписывать чужое измерение
+        своей строке запрещено (правило 2 памяти), поэтому строка измеряет геометрию САМА.
+        Документ закрывается за собой; сборка при этом не трогается.
+        """
+        env, code = call("kompas_open_document", {"application_id": app_id, "path": path,
+                                                  "access": "edit"})
+        doc = doc_id(env)
+        if not doc:
+            return None, f"открытие источника: {code}"
+        env, code = call("kompas_list_bodies", {"document_id": doc})
+        bodies = result(env)
+        bodies = bodies if isinstance(bodies, list) else []
+        volume = None
+        if bodies:
+            env, code = call("kompas_measure", {"target_ref": bodies[0].get("body_ref"),
+                                                "properties": ["volume"]})
+            volume = result(env).get("volume_mm3")
+        call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+        return volume, code
+
     src_dir = os.path.join(workdir, "assembly-src")
     os.makedirs(src_dir, exist_ok=True)
 
@@ -739,10 +782,18 @@ def assembly_checks(client, rep, app_id, workdir):
             links2 = result(env).get("links") or []
             broken = [l for l in links2 if l.get("source_exists") is False]
             broken_named = len(broken) >= 1 and result(env).get("broken_count", 0) >= 1
-            rep.add("ASM.06.negative_tests", "отсутствующий источник НАЗВАН, а не выдан за исправный",
-                    "PASS" if broken_named else "FAIL",
+            # ОТКАЗ ТОГО ЖЕ МАРШРУТА — ОТДЕЛЬНЫЙ ВЫЗОВ В ОКНЕ ЭТОЙ ЖЕ СТРОКИ. Действие `negative_tests`
+            # выводится по ИСХОДУ вызова (код ошибки), а «источник назван битым» — УСПЕШНЫЙ ответ
+            # (`broken_count=1`), то есть отказом не является. Без отдельного вызова строка с именем
+            # `negative_tests` не содержала отказа вовсе, и аудит справедливо её не зачитывал.
+            env_ref, code_ref = call("kompas_check_component_links",
+                                     {"document_id": "00000000000000000000000000000000"})
+            rep.add("ASM.06.negative_tests",
+                    "проверка ссылок: отсутствующий источник НАЗВАН, а несуществующий документ отвергнут",
+                    "PASS" if (broken_named
+                               and code_ref in ("DOCUMENT_NOT_FOUND", "INVALID_ARGUMENT")) else "FAIL",
                     f"broken_count={result(env).get('broken_count')} verdict="
-                    f"{broken[0].get('verdict') if broken else '—'}")
+                    f"{broken[0].get('verdict') if broken else '—'} отказ={code_ref} msg={emsg(env_ref)}")
             os.rename(src_path + ".moved", src_path)
         except OSError as ex:
             rep.add("ASM.06.negative_tests", "отсутствующий источник НАЗВАН", "FAIL", str(ex))
@@ -789,22 +840,23 @@ def assembly_checks(client, rep, app_id, workdir):
             "PASS" if len(result(env).get("components") or []) == len(rows2) else "FAIL",
             f"components={len(result(env).get('components') or [])} ожидалось {len(rows2)}")
 
-    # ASM.02.geometry_validation: геометрия сборки измеряется
+    # ASM.02.geometry_validation: геометрия компонента измеряется В ОКНЕ САМОЙ СТРОКИ
     env, code = call("kompas_list_bodies", {"document_id": asm2})
     own_bodies = result(env)
     own_bodies = own_bodies if isinstance(own_bodies, list) else []
-    # ИЗМЕРЕНО 04.10.2026: у документа-сборки СВОИХ тел нет — тела принадлежат документам-компонентам.
-    # Поэтому геометрия проверяется там, где она есть: в документе-источнике вставленного компонента.
     # ИЗМЕРЕНО 04.10.2026: у документа-сборки СВОИХ тел нет — тела принадлежат документам-компонентам
-    # (тел_сборки=0). Геометрия поэтому проверяется там, где она есть: объём детали-источника,
-    # измеренный в момент её построения, сверяется с аналитикой 100×80×10 = 80000.
+    # (тел_сборки=0). Поэтому геометрия проверяется там, где она есть — в детали-источнике вставленного
+    # компонента, — и измеряется ЗДЕСЬ, а не приписывается из окна строки `ASM.SRC`: объём источника
+    # считался при его построении, то есть в ЧУЖОМ окне, и аудит справедливо называл заявление
+    # не поддержанным (`geometry_validation`).
     expected_v = 100.0 * 80.0 * 10.0
+    measured_v, verr = measure_source_volume(src_path)
     rep.add("ASM.02.geometry_validation",
-            "геометрия компонента: объём источника = 100×80×10 (аналитика 80000)",
-            "PASS" if (_v1 is not None and abs(_v1 - expected_v) <= max(0.01, expected_v * 1e-6))
-            else "FAIL",
-            f"тел_сборки={len(own_bodies)} (своих тел у сборки нет), объём_источника={_v1} "
-            f"ожидалось {expected_v}")
+            "геометрия компонента: объём источника = 100×80×10 (аналитика 80000), измерен в этой строке",
+            "PASS" if (measured_v is not None
+                       and abs(measured_v - expected_v) <= max(0.01, expected_v * 1e-6)) else "FAIL",
+            f"тел_сборки={len(own_bodies)} (своих тел у сборки нет), объём_источника={measured_v} "
+            f"ожидалось {expected_v} (при построении было {_v1}) error={verr}")
 
     # ASM.03.negative_tests: не-сборка отвергается. Документ-ДЕТАЛЬ создаётся здесь же: отрицательный
     # контроль обязан идти в той же постановке, что и положительный, иначе «отвергнуто» неотличимо
@@ -816,16 +868,20 @@ def assembly_checks(client, rep, app_id, workdir):
     rep.add("ASM.03.negative_tests", "чтение структуры не-сборки отвергается INVALID_ARGUMENT",
             "PASS" if code == "INVALID_ARGUMENT" else "FAIL", f"error={code}")
 
-    # ASM.04.save_reopen: размещение переживает save→close→reopen
-    # (сборка уже переоткрыта как asm2; читаем размещение того же экземпляра)
+    # ASM.04.save_reopen: размещение переживает ЦИКЛ, ПРОЙДЕННЫЙ САМОЙ СТРОКОЙ.
+    #
+    # Прежде строка ЧИТАЛА сборку, переоткрытую соседней строкой `ASM.07`, поэтому её собственное окно
+    # не содержало ни `kompas_save_document`, ни `kompas_open_document` — аудит называл это
+    # «Недостаточно проверки» и был прав. Теперь цикл проходит она сама.
+    asm2, saved4, err4 = reopen_assembly(asm2, asm_path)
     env, code = call("kompas_list_components", {"document_id": asm2})
     rows5 = result(env).get("components") or []
     placed = [r for r in rows5 if isinstance(r.get("matrix"), list) and len(r["matrix"]) >= 16]
     distinct = len({round(r["matrix"][12], 3) for r in placed})
     rep.add("ASM.04.save_reopen", "размещения переживают save→close→reopen и остаются различными",
-            "PASS" if (len(placed) == len(rows5) and distinct == 2) else "FAIL",
-            f"прочитано размещений={len(placed)} различных origin.x={distinct} "
-            f"({sorted({round(r['matrix'][12], 3) for r in placed})})")
+            "PASS" if (saved4 and len(placed) == len(rows5) and distinct == 2) else "FAIL",
+            f"saved={saved4} path={asm_path} прочитано размещений={len(placed)} различных origin.x="
+            f"{distinct} ({sorted({round(r['matrix'][12], 3) for r in placed})}) error={err4}")
 
     # ASM.04.negative_tests: устаревшая ссылка компонента отвергается
     env, code = call("kompas_set_component_placement", {
@@ -856,48 +912,83 @@ def assembly_checks(client, rep, app_id, workdir):
     # действие со строкой приёмки ПО ИМЕНИ (`<группа>.<NN>.<действие>`), поэтому строка, названная
     # иначе (`ASM.03.fields`), действие не закрывает и попадает в «названные пробелы».
 
-    # ASM.03.save_reopen: структура после переоткрытия читается тем же перечислением
+    # ASM.03.save_reopen: структура читается ПОСЛЕ ЦИКЛА, пройденного самой строкой
+    asm2, saved3, err3 = reopen_assembly(asm2, asm_path)
     env, code = call("kompas_list_components", {"document_id": asm2})
-    rep.add("ASM.03.save_reopen", "структура читается после save→close→reopen",
-            "PASS" if len(result(env).get("components") or []) == len(rows2) else "FAIL",
-            f"components={len(result(env).get('components') or [])} ожидалось {len(rows2)} error={code}")
+    rep.add("ASM.03.save_reopen", "структура читается после save→close→reopen (цикл в этой строке)",
+            "PASS" if (saved3 and len(result(env).get("components") or []) == len(rows2)) else "FAIL",
+            f"saved={saved3} components={len(result(env).get('components') or [])} ожидалось "
+            f"{len(rows2)} error={err3}")
 
-    # ASM.04.discover / geometry_validation: ссылка на компонент и аналитический перенос
+    # ASM.04.discover: ОБЗОР документов, а не чтение того же перечисления, что у `read`.
+    # Отдельный вызов обязателен: один инструмент, обслуживающий два действия, не различает их ни в
+    # какую сторону (измерено 21.09.2026 — потому построчные маршруты и заведены).
+    env, code = call("kompas_list_documents", {"application_id": app_id})
+    docs_now = result(env)
+    docs_now = docs_now if isinstance(docs_now, list) else []
+    asm_found = any((d.get("document_id") or d.get("id")) == asm2 for d in docs_now)
     env, code = call("kompas_list_components", {"document_id": asm2})
     rows6 = result(env).get("components") or []
-    rep.add("ASM.04.discover", "компонент адресуется ссылкой из перечисления",
-            "PASS" if (rows6 and rows6[0].get("component_ref")) else "FAIL",
+    rep.add("ASM.04.discover", "обзор документов показывает сборку, компонент адресуется ссылкой",
+            "PASS" if (asm_found and rows6 and rows6[0].get("component_ref")) else "FAIL",
+            f"docs={len(docs_now)} сборка_найдена={asm_found} "
             f"components={len(rows6)} ref={rows6[0].get('component_ref') if rows6 else None}")
     placed_x = sorted(round(r["matrix"][12], 3) for r in rows6
                       if isinstance(r.get("matrix"), list) and len(r["matrix"]) >= 16)
+    vol4, verr4 = measure_source_volume(src_path)
     rep.add("ASM.04.geometry_validation",
-            "перенос аналитически: задано 30 мм, прочитано ровно одно значение 30 при двух экземплярах",
-            "PASS" if (30.0 in placed_x and 0.0 in placed_x and len(placed_x) == 2) else "FAIL",
-            f"origin.x по экземплярам={placed_x}")
+            "перенос аналитически (задано 30 при двух экземплярах) И геометрия источника измерена",
+            "PASS" if (30.0 in placed_x and 0.0 in placed_x and len(placed_x) == 2
+                       and vol4 is not None
+                       and abs(vol4 - 100.0 * 80.0 * 10.0) <= max(0.01, 80000.0 * 1e-6)) else "FAIL",
+            f"origin.x по экземплярам={placed_x} объём_источника={vol4} ожидалось 80000 error={verr4}")
 
     # ASM.05.discover / save_reopen / geometry_validation
+    env, code = call("kompas_list_documents", {"application_id": app_id})
+    docs_now5 = result(env)
+    docs_now5 = docs_now5 if isinstance(docs_now5, list) else []
     env, code = call("kompas_list_components", {"document_id": asm2})
     rows7 = result(env).get("components") or []
-    rep.add("ASM.05.discover", "компоненты для замены перечислены ссылками",
-            "PASS" if rows7 and rows7[0].get("component_ref") else "FAIL",
-            f"components={len(rows7)}")
-    rep.add("ASM.05.save_reopen", "новый источник переживает save→close→reopen",
-            "PASS" if any((r.get("source_path") or "").endswith("asm-source-2.m3d") for r in rows7)
-            else "FAIL", f"sources={[r.get('source_path') for r in rows7]}")
-    rep.add("ASM.05.geometry_validation", "размещение после замены совпадает с размещением до неё",
-            "PASS" if len(placed_x) == 2 else "FAIL", f"origin.x={placed_x}")
+    rep.add("ASM.05.discover", "обзор документов показывает сборку, компоненты для замены перечислены",
+            "PASS" if (any((d.get("document_id") or d.get("id")) == asm2 for d in docs_now5)
+                       and rows7 and rows7[0].get("component_ref")) else "FAIL",
+            f"docs={len(docs_now5)} components={len(rows7)}")
+    asm2, saved5, err5 = reopen_assembly(asm2, asm_path)
+    env, code = call("kompas_list_components", {"document_id": asm2})
+    rows7b = result(env).get("components") or []
+    rep.add("ASM.05.save_reopen", "новый источник переживает save→close→reopen (цикл в этой строке)",
+            "PASS" if (saved5 and any((r.get("source_path") or "").endswith("asm-source-2.m3d")
+                                      for r in rows7b)) else "FAIL",
+            f"saved={saved5} sources={[r.get('source_path') for r in rows7b]} error={err5}")
+    # Второй источник — КРУГ R20, глубиной 15: π·20²·15 = 18849.55592098715. Число измеряется здесь, а
+    # не берётся из окна построения: «после замены геометрия нового источника настоящая».
+    vol5, verr5 = measure_source_volume(src2)
+    expected5 = 3.141592653589793 * 20.0 * 20.0 * 15.0
+    rep.add("ASM.05.geometry_validation",
+            "размещение после замены совпадает с прежним И геометрия НОВОГО источника измерена",
+            "PASS" if (len(placed_x) == 2 and vol5 is not None
+                       and abs(vol5 - expected5) <= max(0.01, expected5 * 1e-6)) else "FAIL",
+            f"origin.x={placed_x} объём_нового_источника={vol5} ожидалось {expected5} error={verr5}")
 
-    # ASM.06.save_reopen: ссылки проверяются после переоткрытия
+    # ASM.06.save_reopen: ссылки проверяются после ЦИКЛА, пройденного самой строкой
+    asm2, saved6, err6 = reopen_assembly(asm2, asm_path)
     env, code = call("kompas_check_component_links", {"document_id": asm2})
-    rep.add("ASM.06.save_reopen", "ссылки проверяются после save→close→reopen",
-            "PASS" if len(result(env).get("links") or []) == len(rows2) else "FAIL",
-            f"links={len(result(env).get('links') or [])} broken={result(env).get('broken_count')}")
+    rep.add("ASM.06.save_reopen", "ссылки проверяются после save→close→reopen (цикл в этой строке)",
+            "PASS" if (saved6 and len(result(env).get("links") or []) == len(rows2)) else "FAIL",
+            f"saved={saved6} links={len(result(env).get('links') or [])} "
+            f"broken={result(env).get('broken_count')} error={err6}")
 
-    # ASM.07.geometry_validation: размещения после переоткрытия различимы
+    # ASM.07.geometry_validation: размещения после переоткрытия различимы И геометрия измерена
+    env, code = call("kompas_list_components", {"document_id": asm2})
+    placed_x7 = sorted(round(r["matrix"][12], 3) for r in (result(env).get("components") or [])
+                       if isinstance(r.get("matrix"), list) and len(r["matrix"]) >= 16)
+    vol7, verr7 = measure_source_volume(src2)
     rep.add("ASM.07.geometry_validation",
-            "после переоткрытия размещения различимы и совпадают с состоянием до сохранения",
-            "PASS" if (len(placed_x) == 2 and 0.0 in placed_x and 30.0 in placed_x) else "FAIL",
-            f"origin.x={placed_x}")
+            "после переоткрытия размещения различимы И геометрия компонента измерена",
+            "PASS" if (len(placed_x7) == 2 and 0.0 in placed_x7 and 30.0 in placed_x7
+                       and vol7 is not None
+                       and abs(vol7 - expected5) <= max(0.01, expected5 * 1e-6)) else "FAIL",
+            f"origin.x={placed_x7} объём_компонента={vol7} ожидалось {expected5} error={verr7}")
 
     # ASM.05.negative_tests: замена на отсутствующий файл отвергается
     env, code = call("kompas_replace_component", {
@@ -930,6 +1021,108 @@ def assembly_checks(client, rep, app_id, workdir):
     rep.add("ASM.02.negative_tests_missing", "отсутствующий файл-источник называется",
             "PASS" if code in ("DOCUMENT_NOT_FOUND", "PATH_NOT_ALLOWED") else "FAIL",
             f"error={code}")
+
+    # ========= ASM.02: ОБЯЗАТЕЛЬНЫЕ ПАРАМЕТРЫ ВСТАВКИ ПРИМЕНЯЮТСЯ И ПЕРЕЧИТЫВАЮТСЯ =========
+    #
+    # ИЗМЕРЕНО 05.10.2026 выборочным аудитом кода (п. B): прежняя редакция InsertComponent при
+    # недоступном API5-представлении вставленного компонента МОЛЧА пропускала заданное размещение и
+    # запись Fixed и возвращала обычный результат — «вставлено по запросу» было ложью. Строки ниже
+    # требуют применения И перечитывания, и идут на СВОЕЙ сборке: иначе сдвинулась бы кратность уже
+    # закрытых строк (ASM.03.multiplicity, ASM.04.geometry_validation, ASM.07.reopen).
+    env, code = call("kompas_create_document", {"application_id": app_id, "kind": "assembly",
+                                                "name": "ASM-insert-params"})
+    asm_p = doc_id(env)
+    env, code = call("kompas_insert_component", {
+        "document_id": asm_p, "expected_revision": current_rev(asm_p), "source_path": src_path,
+        "fixed": True,
+        "transform": {"origin_mm": [55, 0, 0], "x_axis": [1, 0, 0], "y_axis": [0, 1, 0]}})
+    first_err = code
+    first_row = result(env).get("component") or {}
+    first_matrix = first_row.get("matrix")
+    first_origin = ([first_matrix[12], first_matrix[13], first_matrix[14]]
+                    if isinstance(first_matrix, list) and len(first_matrix) >= 16 else None)
+    checks_p = {c.get("name"): c for c in
+                ((result(env).get("verification") or {}).get("checks") or [])}
+    rep.add("ASM.02.placement_applied",
+            "заданное размещение при вставке ПРИМЕНЕНО и перечитано (перенос 55 мм)",
+            "PASS" if (not first_err and first_origin and near(first_origin[0], 55.0)) else "FAIL",
+            f"origin={first_origin} check={checks_p.get('placement_applied')} error={first_err} "
+            f"msg={emsg(env)}")
+    rep.add("ASM.02.fixed_applied",
+            "заданная фиксация при вставке ПРИМЕНЕНА и перечитана (fixed=true)",
+            "PASS" if (not first_err and first_row.get("fixed") is True) else "FAIL",
+            f"fixed={first_row.get('fixed')} check={checks_p.get('fixed_applied')} error={first_err}")
+
+    # ВТОРОЙ экземпляр ТОЙ ЖЕ детали по ДРУГОМУ адресу: адреса обязаны РАЗЛИЧАТЬСЯ, а размещение
+    # каждого — совпадать со СВОИМ запросом. Без этого «адрес вставленного экземпляра» неотличим от
+    # «первого попавшегося по имени файла», а при двух экземплярах одной детали это разные вещи.
+    env, code = call("kompas_insert_component", {
+        "document_id": asm_p, "expected_revision": current_rev(asm_p), "source_path": src_path,
+        "fixed": False,
+        "transform": {"origin_mm": [77, 0, 0], "x_axis": [1, 0, 0], "y_axis": [0, 1, 0]}})
+    second_err = code
+    env, code = call("kompas_list_components", {"document_id": asm_p})
+    rows_p = result(env).get("components") or []
+    origins_p = sorted(round(r["matrix"][12], 3) for r in rows_p
+                       if isinstance(r.get("matrix"), list) and len(r["matrix"]) >= 16)
+    refs_p = [r.get("component_ref") for r in rows_p]
+    rep.add("ASM.02.address_distinguishing",
+            "два экземпляра ОДНОЙ детали: разные адреса, каждый со СВОИМ размещением",
+            "PASS" if (len(rows_p) == 2 and len(set(refs_p)) == 2
+                       and origins_p == [55.0, 77.0]) else "FAIL",
+            f"components={len(rows_p)} refs={refs_p} origin.x={origins_p} "
+            f"вторая_вставка={second_err} error={code}")
+    call("kompas_close_document", {"document_id": asm_p, "dirty_policy": "discard"})
+
+    # ========= ASM.03: ВЛОЖЕННЫЙ КОМПОНЕНТ ЧИТАЕТСЯ, НО НЕ АДРЕСУЕТСЯ =========
+    #
+    # ИЗМЕРЕНО 05.10.2026 выборочным аудитом кода (п. D): обход структуры нумеровал ВСЁ дерево ОДНИМ
+    # счётчиком и передавал номер вложенного компонента в ksDocument3D.PartCollection — а тот
+    # перечисляет компоненты ПЛОСКО, поэтому такой номер адресовал бы ЧУЖОЙ компонент. Ограничение
+    # выпуска названо прямо: вложенный компонент ЧИТАЕТСЯ, но адреса у него нет, и мутация по нему
+    # отвергается, а не выполняется по предположительному номеру.
+    env, code = call("kompas_create_document", {"application_id": app_id, "kind": "assembly",
+                                                "name": "ASM-nested"})
+    asm_n = doc_id(env)
+    sub_path = os.path.join(src_dir, "asm-sub.m3d")
+    env, code = call("kompas_create_document", {"application_id": app_id, "kind": "assembly",
+                                                "name": "ASM-sub"})
+    sub_doc = doc_id(env)
+    call("kompas_insert_component", {"document_id": sub_doc,
+                                     "expected_revision": current_rev(sub_doc),
+                                     "source_path": src_path, "fixed": False})
+    call("kompas_save_document", {"document_id": sub_doc,
+                                  "expected_revision": current_rev(sub_doc),
+                                  "target_path": sub_path})
+    call("kompas_close_document", {"document_id": sub_doc, "dirty_policy": "save"})
+    env, code = call("kompas_insert_component", {
+        "document_id": asm_n, "expected_revision": current_rev(asm_n), "source_path": sub_path,
+        "fixed": False})
+    sub_insert_err = code
+    env, code = call("kompas_list_components", {"document_id": asm_n, "recursive": True})
+    rows_r = result(env).get("components") or []
+    notes_r = result(env).get("notes") or []
+    nested = [r for r in rows_r if (r.get("depth") or 0) > 0]
+    nested_ref = nested[0].get("component_ref") if nested else None
+    rep.add("ASM.03.recursive_read",
+            "рекурсивное чтение показывает вложенный компонент и НАЗЫВАЕТ предел адресации",
+            "PASS" if (nested and any("nested_components_not_addressable" in str(n) for n in notes_r))
+            else "FAIL",
+            f"вставка_подсборки={sub_insert_err} rows={len(rows_r)} вложенных={len(nested)} "
+            f"depth={[r.get('depth') for r in rows_r]} notes={notes_r} error={code}")
+    if nested_ref:
+        env, code = call("kompas_set_component_placement", {
+            "document_id": asm_n, "expected_revision": current_rev(asm_n),
+            "component_ref": nested_ref,
+            "transform": {"origin_mm": [10, 0, 0], "x_axis": [1, 0, 0], "y_axis": [0, 1, 0]}})
+        rep.add("ASM.03.negative_tests",
+                "размещение ВЛОЖЕННОГО компонента отвергается, а не выполняется по догадке",
+                "PASS" if code in ("CAPABILITY_UNAVAILABLE", "STALE_REFERENCE") else "FAIL",
+                f"error={code} msg={emsg(env)}")
+    else:
+        rep.add("ASM.03.negative_tests", "вложенный компонент для отрицательной проверки", "FAIL",
+                f"вложенных строк нет: rows={len(rows_r)} notes={notes_r}")
+    call("kompas_close_document", {"document_id": asm_n, "dirty_policy": "discard"})
 
     call("kompas_close_document", {"document_id": asm3, "dirty_policy": "discard"})
     call("kompas_close_document", {"document_id": asm2, "dirty_policy": "discard"})
@@ -976,8 +1169,52 @@ def mate_checks(client, rep, app_id, workdir):
         r = result(env)
         return r.get("document_id") or r.get("id") or (env or {}).get("document_id")
 
+    def measure_source_volume(path):
+        """Открыть деталь-источник и измерить объём её тела ТЕМ ЖЕ прибором, что и построение.
+
+        ЗАЧЕМ В ОКНЕ СТРОКИ. Действие `geometry_validation` в аудите выводится по вызову
+        `kompas_measure`. У документа-СБОРКИ своих тел нет (измерено), поэтому измеряется геометрия
+        детали-источника — и ЗДЕСЬ, а не приписывается из окна её построения (правило 2 памяти).
+        """
+        env, code = call("kompas_open_document", {"application_id": app_id, "path": path,
+                                                  "access": "edit"})
+        doc = doc_id(env)
+        if not doc:
+            return None, f"открытие источника: {code}"
+        env, code = call("kompas_list_bodies", {"document_id": doc})
+        bodies = result(env)
+        bodies = bodies if isinstance(bodies, list) else []
+        volume = None
+        if bodies:
+            env, code = call("kompas_measure", {"target_ref": bodies[0].get("body_ref"),
+                                                "properties": ["volume"]})
+            volume = result(env).get("volume_mm3")
+        call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+        return volume, code
+
     src_dir = os.path.join(workdir, "mate-src")
     os.makedirs(src_dir, exist_ok=True)
+
+    def reopen_assembly(doc, path):
+        """СОХРАНИТЬ → ЗАКРЫТЬ → ОТКРЫТЬ сборку и вернуть новый идентификатор.
+
+        Сторож аудита связывает `save_reopen` с ОКНОМ ВЫЗОВОВ строки, названной этим действием.
+        Строка `MATE.06.save_reopen` читала результат цикла, пройденного строкой `MATE.01.save_reopen`,
+        поэтому её собственное окно не содержало ни сохранения, ни открытия. Теперь цикл проходит она
+        сама — как и требует наряд §5.
+        """
+        env, code = call("kompas_save_document", {"document_id": doc,
+                                                  "expected_revision": current_rev(doc),
+                                                  "target_path": path})
+        saved = (not code) and os.path.isfile(path)
+        call("kompas_close_document", {"document_id": doc, "dirty_policy": "save"})
+        env, code = call("kompas_open_document", {"application_id": app_id, "path": path,
+                                                  "access": "edit"})
+        return doc_id(env), saved, code
+
+    # Аналитика источника: прямоугольник 100×80, выдавлен на 10 → 80000 мм³. Число названо здесь ОДИН
+    # раз и сверяется с ним каждое измерение, а не берётся из окна построения (правило 2 памяти).
+    expected_src_volume = 100.0 * 80.0 * 10.0
 
     # ========= подготовка: деталь-источник и сборка с двумя компонентами =========
     src_path = os.path.join(src_dir, "mate-source.m3d")
@@ -1031,7 +1268,9 @@ def mate_checks(client, rep, app_id, workdir):
 
     env, code = call("kompas_list_components", {"document_id": asm})
     rows = result(env).get("components") or []
-    rep.add("MATE.PREP", "сборка с двумя компонентами, у каждого есть геометрия",
+    # Строка названа по ДЕЙСТВИЮ (`…create`): вставка компонентов — это и есть `create` зависимости
+    # `dep.mate.component_insert`, и сторож связывает действие со строкой, НАЗВАННОЙ им.
+    rep.add("MATE.PREP.create", "сборка с двумя компонентами, у каждого есть геометрия",
             "PASS" if (len(rows) == 2 and all(r.get("face_count") for r in rows)) else "FAIL",
             f"components={len(rows)} faces={[r.get('face_count') for r in rows]}")
 
@@ -1112,10 +1351,19 @@ def mate_checks(client, rep, app_id, workdir):
         cur = [m for m in (result(env).get("mates") or [])
                if m.get("constraint_type") == "distance"]
         got = cur[0].get("param_value") if cur else None
+        # ГЕОМЕТРИЯ ИЗМЕРЯЕТСЯ ЗДЕСЬ ЖЕ: действие `geometry_validation` выводится по вызову
+        # `kompas_measure`, а перечитанное число параметра — это ЧТЕНИЕ признака, а не измерение
+        # геометрии. Оба нужны, и оба предъявляются.
+        vol3, verr3 = measure_source_volume(src_path)
         rep.add("MATE.03.geometry_validation",
-                "параметр сопряжения перечитан из модели и равен заданному (30)",
-                "PASS" if (got is not None and abs(got - 30.0) <= 1e-6) else "FAIL",
-                f"param_value={got} ожидалось 30")
+                "параметр сопряжения перечитан из модели (30) И геометрия источника измерена",
+                "PASS" if (got is not None and abs(got - 30.0) <= 1e-6
+                           and vol3 is not None
+                           and abs(vol3 - expected_src_volume) <= max(0.01,
+                                                                     expected_src_volume * 1e-6))
+                else "FAIL",
+                f"param_value={got} ожидалось 30 объём_источника={vol3} ожидалось "
+                f"{expected_src_volume} error={verr3}")
 
     # ========= MATE.04: фиксация =========
     if mate_ref:
@@ -1133,11 +1381,18 @@ def mate_checks(client, rep, app_id, workdir):
     moved = [r for r in after_rows
              if isinstance(r.get("matrix"), list) and len(r["matrix"]) >= 16]
     distinct = len({round(r["matrix"][12], 3) for r in moved})
+    # ГЕОМЕТРИЯ ИЗМЕРЯЕТСЯ ЗДЕСЬ ЖЕ: перечитанная матрица — это ЧТЕНИЕ признака, а действие
+    # `geometry_validation` выводится по вызову `kompas_measure`; предъявляются оба.
+    vol6, verr6 = measure_source_volume(src_path)
     rep.add("MATE.06.geometry_validation",
-            "положение компонентов после сопряжений читается и РАЗЛИЧИМО (второй сдвинут на 150)",
-            "PASS" if (len(moved) == 2 and distinct == 2) else "FAIL",
+            "положение компонентов после сопряжений РАЗЛИЧИМО (второй сдвинут на 150) И геометрия "
+            "компонента измерена",
+            "PASS" if (len(moved) == 2 and distinct == 2 and vol6 is not None
+                       and abs(vol6 - expected_src_volume) <= max(0.01, expected_src_volume * 1e-6))
+            else "FAIL",
             f"прочитано размещений={len(moved)} различных origin.x={distinct} "
-            f"({sorted({round(r['matrix'][12], 3) for r in moved})})")
+            f"({sorted({round(r['matrix'][12], 3) for r in moved})}) объём_компонента={vol6} "
+            f"ожидалось {expected_src_volume} error={verr6}")
 
     # ========= MATE.05: удаление =========
     # ССЫЛКА ПЕРЕЧИТЫВАЕТСЯ: после правок ревизия поднялась, и прежняя ссылка законно устарела
@@ -1158,11 +1413,40 @@ def mate_checks(client, rep, app_id, workdir):
 
     if fresh_ref:
         # Строка с ИМЕНЕМ действия: удаление сопряжения — это и есть удаление зависимости.
+        #
+        # УДАЛЕНИЕ ВЫПОЛНЯЕТСЯ ЗДЕСЬ ЖЕ. Прежде строка только ЧИТАЛА перечень после удаления,
+        # сделанного соседней строкой `MATE.05.delete`: действие `delete_dependencies` выводится по
+        # ВЫЗОВУ удаления, а чтение — это `read` (класс F-08), поэтому аудит справедливо отказывал.
+        # Здесь удаляется оставшееся сопряжение И оно же ВОССТАНАВЛИВАЕТСЯ, чтобы состояние сборки
+        # осталось прежним для последующих строк: «удаление снимает зависимость» измеряется на этой
+        # строке, а не берётся у соседней.
         env, _c = call("kompas_list_mates", {"document_id": asm})
-        left_now = result(env).get("mates") or []
+        remaining = result(env).get("mates") or []
+        target_ref = remaining[0].get("mate_ref") if remaining else None
+        env, code = call("kompas_delete_mate", {
+            "document_id": asm, "expected_revision": current_rev(asm), "mate_ref": target_ref})
+        deleted_here = not code
+        env, _c = call("kompas_list_mates", {"document_id": asm})
+        after_delete = len(result(env).get("mates") or [])
+        # ССЫЛКИ НА КОМПОНЕНТЫ ПЕРЕЧИТЫВАЮТСЯ: удаление подняло ревизию, и прежние ссылки законно
+        # устарели — продукт отверг их верным отказом STALE_REFERENCE (измерено первым прогоном этой
+        # правки), а не «сломался».
+        env, _c = call("kompas_list_components", {"document_id": asm})
+        fresh_comps = result(env).get("components") or []
+        fresh_first = fresh_comps[0].get("component_ref") if len(fresh_comps) > 0 else None
+        fresh_second = fresh_comps[1].get("component_ref") if len(fresh_comps) > 1 else None
+        env, code = call("kompas_create_mate", {
+            "document_id": asm, "expected_revision": current_rev(asm),
+            "constraint_type": "distance", "param_value": 30.0,
+            "first_component_ref": fresh_first, "first_face_index": 0,
+            "second_component_ref": fresh_second, "second_face_index": 0})
+        restored = (not code) and bool((result(env).get("mate_ref") or {}).get("id"))
         rep.add("MATE.05.delete_dependencies",
-                "связь удалена: перечисление показывает на одно сопряжение меньше",
-                "PASS" if len(left_now) == 1 else "FAIL", f"mates={len(left_now)}")
+                "удаление сопряжения снимает зависимость: сопряжение УДАЛЕНО этой строкой "
+                "(счётчик 1 → 0) и состояние восстановлено",
+                "PASS" if (deleted_here and after_delete == 0 and restored) else "FAIL",
+                f"удалено={deleted_here} осталось_после_удаления={after_delete} "
+                f"восстановлено={restored} error={code} msg={emsg(env)}")
 
     # РАЗЛИЧАЮЩИЙ ОПЫТ ПОСЛЕ УДАЛЕНИЯ: свежая ссылка из list_mates идёт в мутацию. Он стоит ЗДЕСЬ,
     # а не перед удалением, потому что сам является мутацией: поставленный раньше, он поднимал
@@ -1230,11 +1514,20 @@ def mate_checks(client, rep, app_id, workdir):
             "PASS" if code in ("STALE_REFERENCE", "INVALID_ARGUMENT") else "FAIL", f"error={code}")
 
     # ---- остальные применимые действия словаря ----
+    # `discover` — ОТДЕЛЬНЫЙ ВЫЗОВ обзора документов, а не то же перечисление сопряжений, что у `read`:
+    # один инструмент, обслуживающий два действия, не различает их ни в какую сторону (измерено
+    # 21.09.2026, из-за чего и заведены построчные маршруты `<действие>_route`).
+    env_docs, code_docs = call("kompas_list_documents", {"application_id": app_id})
+    docs_now = result(env_docs)
+    docs_now = docs_now if isinstance(docs_now, list) else []
+    mate_asm_found = any((d.get("document_id") or d.get("id")) == asm for d in docs_now)
     env, code = call("kompas_list_mates", {"document_id": asm})
     rows_now = result(env).get("mates") or []
-    rep.add("MATE.02.discover", "перечисление сопряжений показывает оставшееся сопряжение",
-            "PASS" if (not code and len(rows_now) == 1) else "FAIL",
-            f"mates={len(rows_now)} error={code}")
+    rep.add("MATE.02.discover",
+            "обзор документов показывает сборку, перечисление сопряжений — оставшееся сопряжение",
+            "PASS" if (mate_asm_found and not code and len(rows_now) == 1) else "FAIL",
+            f"docs={len(docs_now)} сборка_найдена={mate_asm_found} mates={len(rows_now)} "
+            f"error={code} error_docs={code_docs}")
     if rows_now:
         rep.add("MATE.03.read", "параметр сопряжения читается в перечислении",
                 "PASS" if rows_now[0].get("param_value") is not None else "FAIL",
@@ -1287,10 +1580,14 @@ def mate_checks(client, rep, app_id, workdir):
                 f"fixed={after_reopen[0].get('fixed')}")
     rep.add("MATE.05.save_reopen", "перечисление после переоткрытия показывает то же число",
             "PASS" if len(after_reopen) == 1 else "FAIL", f"mates={len(after_reopen)}")
+    # ЦИКЛ ПРОХОДИТ САМА СТРОКА, а не читает чужой (см. `reopen_assembly`).
+    asm2, saved6, err6 = reopen_assembly(asm2, asm_path)
     env, code = call("kompas_list_components", {"document_id": asm2})
     re_rows = result(env).get("components") or []
-    rep.add("MATE.06.save_reopen", "положение компонентов переживает переоткрытие",
-            "PASS" if len(re_rows) == 2 else "FAIL", f"components={len(re_rows)}")
+    rep.add("MATE.06.save_reopen",
+            "положение компонентов переживает save→close→reopen (цикл в этой строке)",
+            "PASS" if (saved6 and len(re_rows) == 2) else "FAIL",
+            f"saved={saved6} components={len(re_rows)} error={err6}")
 
     call("kompas_close_document", {"document_id": asm2, "dirty_policy": "discard"})
 

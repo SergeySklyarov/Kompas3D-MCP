@@ -103,7 +103,7 @@ public class IpcRequestChannelTests
             const int count = 8;
             var expected = Enumerable.Range(0, count).Select(i => i % 2 == 0 ? "slow" : "fast").ToArray();
             var calls = expected
-                .Select(command => channel.RequestAsync(command, null, TimeSpan.FromSeconds(20), CancellationToken.None))
+                .Select(command => channel.RequestAsync(command, null, TimeSpan.FromSeconds(20), isMutation: false, CancellationToken.None))
                 .ToArray();
 
             var answers = await Task.WhenAll(calls).WaitAsync(TimeSpan.FromSeconds(30));
@@ -131,6 +131,134 @@ public class IpcRequestChannelTests
                 // The fake worker is allowed to end however it likes; the assertions already ran.
             }
         }
+    }
+
+    /// <summary>
+    /// Отмена клиентом ПОСЛЕ записи кадра мутации — это НЕ «команда не отправлялась».
+    /// </summary>
+    /// <remarks>
+    /// FIX H1 ревью 05.10.2026. Прежде любая <c>OperationCanceledException</c> с токеном клиента
+    /// выходила наружу, и вызывающий писал терминальное <c>cancelled</c> без требования
+    /// согласования: клиент получал «команда отменена в очереди Host и не отправлялась в КОМПАС»,
+    /// хотя Worker уже выполнял команду. Клиент, поверивший ответу, повторял мутацию с НОВЫМ
+    /// operation_id — и мутация применялась дважды.
+    /// </remarks>
+    [Fact]
+    public async Task ClientCancelsAfterTheFrameWasWritten_MutationIsOutcomeUnknownNotCancelled()
+    {
+        var (server, client) = await ConnectAsync();
+        var channel = new IpcRequestChannel(client);
+        using var workerStop = new CancellationTokenSource();
+
+        // Пир принимает кадр и НЕ отвечает: команда гарантированно ушла, но её исход никому не
+        // известен. Это и есть состояние, которое прежний код называл «отменено до отправки».
+        var received = await StartSilentWorkerAsync(server, workerStop.Token);
+
+        try
+        {
+            using var cancellation = new CancellationTokenSource();
+            var call = channel.RequestAsync("kompas_extrude", null, TimeSpan.FromSeconds(30),
+                isMutation: true, cancellation.Token);
+
+            Assert.True(await received.WaitAsync(TimeSpan.FromSeconds(10)), "кадр не дошёл до пира");
+            cancellation.Cancel();
+
+            var error = await Assert.ThrowsAsync<KompasContractException>(
+                async () => await call.WaitAsync(TimeSpan.FromSeconds(15)));
+
+            Assert.Equal(ErrorCodes.OutcomeUnknown, error.Code);
+            Assert.Equal(RetryPolicy.AfterReconciliation, error.RetryPolicy);
+            Assert.True(error.PartialEffects, "команда уже отправлена: частичный эффект обязан быть назван");
+        }
+        finally
+        {
+            workerStop.Cancel();
+            await channel.DisposeAsync();
+            server.Dispose();
+        }
+    }
+
+    /// <summary>Чтение после отправки: модель не менялась, но отмена не подтверждена.</summary>
+    [Fact]
+    public async Task ClientCancelsAfterTheFrameWasWritten_ReadIsCancelNotConfirmed()
+    {
+        var (server, client) = await ConnectAsync();
+        var channel = new IpcRequestChannel(client);
+        using var workerStop = new CancellationTokenSource();
+        var received = await StartSilentWorkerAsync(server, workerStop.Token);
+
+        try
+        {
+            using var cancellation = new CancellationTokenSource();
+            var call = channel.RequestAsync("kompas_list_features", null, TimeSpan.FromSeconds(30),
+                isMutation: false, cancellation.Token);
+
+            Assert.True(await received.WaitAsync(TimeSpan.FromSeconds(10)), "кадр не дошёл до пира");
+            cancellation.Cancel();
+
+            var error = await Assert.ThrowsAsync<KompasContractException>(
+                async () => await call.WaitAsync(TimeSpan.FromSeconds(15)));
+
+            Assert.Equal(ErrorCodes.CancelNotConfirmed, error.Code);
+        }
+        finally
+        {
+            workerStop.Cancel();
+            await channel.DisposeAsync();
+            server.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Отмена ДО записи кадра остаётся отменой: команда в Worker не ушла, и это единственный
+    /// случай, где «отменено» — подтверждённое состояние.
+    /// </summary>
+    [Fact]
+    public async Task ClientCancelsBeforeTheFrameIsWritten_CancellationStaysACancellation()
+    {
+        var (server, client) = await ConnectAsync();
+        var channel = new IpcRequestChannel(client);
+        using var workerStop = new CancellationTokenSource();
+
+        try
+        {
+            using var cancellation = new CancellationTokenSource();
+            cancellation.Cancel();
+
+            await Assert.ThrowsAsync<OperationCanceledException>(
+                async () => await channel.RequestAsync("kompas_extrude", null, TimeSpan.FromSeconds(30),
+                    isMutation: true, cancellation.Token).WaitAsync(TimeSpan.FromSeconds(15)));
+        }
+        finally
+        {
+            workerStop.Cancel();
+            await channel.DisposeAsync();
+            server.Dispose();
+        }
+    }
+
+    /// <summary>Пир, который читает один кадр и молчит. Возвращает ожидание получения кадра.</summary>
+    private static async Task<Task<bool>> StartSilentWorkerAsync(Stream server, CancellationToken cancellationToken)
+    {
+        var received = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var frame = await IpcChannel.ReadFrameAsync(server, cancellationToken);
+                if (frame is not null)
+                {
+                    received.TrySetResult(true);
+                }
+            }
+            catch (Exception)
+            {
+                // Пир уходит — ожидание получения остаётся false, и тест это увидит.
+            }
+        }, CancellationToken.None);
+
+        await Task.CompletedTask;
+        return received.Task;
     }
 
     [Fact]
@@ -164,7 +292,7 @@ public class IpcRequestChannelTests
 
         try
         {
-            var call = channel.RequestAsync("kompas_health", null, TimeSpan.FromSeconds(30), CancellationToken.None);
+            var call = channel.RequestAsync("kompas_health", null, TimeSpan.FromSeconds(30), isMutation: false, CancellationToken.None);
             Assert.True(await received.Task.WaitAsync(TimeSpan.FromSeconds(10)), "the request never reached the peer");
 
             server.Dispose();

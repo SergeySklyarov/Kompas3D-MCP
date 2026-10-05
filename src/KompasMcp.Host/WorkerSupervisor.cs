@@ -139,12 +139,9 @@ public sealed class WorkerSupervisor : IAsyncDisposable
     private void Start()
     {
         var executable = ResolveWorkerExecutable();
-        var arguments = $"--pipe {PipeName}" + (_options.WorkerLogPath is null ? string.Empty : $" --log \"{_options.WorkerLogPath}\"");
-
-        _process = Process.Start(new ProcessStartInfo
+        var startInfo = new ProcessStartInfo
         {
             FileName = executable,
-            Arguments = arguments,
             WorkingDirectory = Path.GetDirectoryName(executable) ?? AppContext.BaseDirectory,
             UseShellExecute = false,
             // The Worker's stdout must never mix with the MCP frames this process writes: keep the
@@ -153,10 +150,34 @@ public sealed class WorkerSupervisor : IAsyncDisposable
             RedirectStandardError = true,
             CreateNoWindow = true,
             Environment = { ["DOTNET_NOLOGO"] = "1", ["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1" },
-        }) ?? throw new KompasContractException(
-            ErrorCodes.WorkerUnresponsive,
-            "Не удалось запустить процесс Worker.",
-            RetryPolicy.SameOperationId);
+        };
+
+        // ИМЯ КАНАЛА ПЕРЕДАЁТСЯ СПИСКОМ АРГУМЕНТОВ, А НЕ СКЛЕЕННОЙ СТРОКОЙ.
+        //
+        // Имя содержит `Environment.UserName`. В строке `--pipe kompas-mcp-ivan petrov-…` пробел
+        // делит его надвое: Worker получает усечённое имя, никогда не подключается, и любой
+        // CAD-вызов кончается WORKER_UNRESPONSIVE по причине, которая в ответе не названа
+        // (дефект M12 ревью 05.10.2026). ArgumentList экранирует сам. Путь журнала Worker идёт
+        // тем же списком: он приходит из конфигурации и так же может содержать пробел.
+        startInfo.ArgumentList.Add("--pipe");
+        startInfo.ArgumentList.Add(PipeName);
+        startInfo.ArgumentList.Add("--copies");
+        startInfo.ArgumentList.Add(_options.ControlCopyDirectory);
+        if (_options.WorkerLogPath is { Length: > 0 } logPath)
+        {
+            startInfo.ArgumentList.Add("--log");
+            startInfo.ArgumentList.Add(logPath);
+        }
+
+        _process = Process.Start(startInfo);
+
+        if (_process is null)
+        {
+            throw new KompasContractException(
+                ErrorCodes.WorkerUnresponsive,
+                "Не удалось запустить процесс Worker.",
+                RetryPolicy.SameOperationId);
+        }
 
         _process.ErrorDataReceived += (_, e) =>
         {
@@ -176,6 +197,10 @@ public sealed class WorkerSupervisor : IAsyncDisposable
         _process.BeginOutputReadLine();
         HasStarted = true;
 
+        // БЕЗ EnableRaisingEvents СОБЫТИЕ НИКОГДА НЕ ПРИХОДИТ: подписка без этого флага — мёртвый
+        // контроль, который выглядит как живой (дефект L2 ревью 05.10.2026). Флаг ставится ДО
+        // подписки.
+        _process.EnableRaisingEvents = true;
         _process.Exited += (_, _) =>
         {
             _log.Write("warn", "worker exited", new { exit_code = SafeExitCode(_process) });
@@ -206,6 +231,54 @@ public sealed class WorkerSupervisor : IAsyncDisposable
     /// Send one command and await its answer. A transport failure after the command was written is
     /// reported as OUTCOME_UNKNOWN for mutations: the Worker may already be inside the COM call.
     /// </summary>
+    /// <summary>
+    /// Можно ли отправить команду БЕЗ перезапуска Worker.
+    /// </summary>
+    /// <remarks>
+    /// «Worker запускался» и «канал жив» — разные утверждения, и разница решает исход описи при
+    /// освобождении сеанса (см. <see cref="SendWithoutRestartAsync"/>).
+    /// </remarks>
+    public bool CanSendWithoutRestart =>
+        _channel is { IsBroken: false } && _pipe is { IsConnected: true } && _process is { HasExited: false };
+
+    /// <summary>
+    /// Отправить команду, НЕ поднимая новый Worker при сломанном канале.
+    /// </summary>
+    /// <remarks>
+    /// <b>Зачем отдельный метод.</b> Обычный <see cref="SendAsync"/> вызывает
+    /// <see cref="EnsureStartedAsync"/>, который при сломанном канале останавливает прежний Worker
+    /// (20 с ожидания, затем убийство) и поднимает НОВЫЙ. Для описи документов сеанса это ровно
+    /// худший из возможных исходов: новый Worker не знает ни одного документа, опись пуста,
+    /// <c>dirty=0</c>, и освобождение проходит, хотя модель в неизвестном состоянии. Попутно
+    /// убивается процесс, возможно находящийся внутри COM-вызова, — вопреки смыслу
+    /// <see cref="MarkBroken"/> (дефект H3 ревью 05.10.2026).
+    /// </remarks>
+    /// <returns>
+    /// null, если канал сломан или Worker не запущен: вызывающий обязан назвать состояние
+    /// документов НЕИЗВЕСТНЫМ, а не «правок нет».
+    /// </returns>
+    public async Task<IpcFrame?> SendWithoutRestartAsync(string command, JsonNode? payload, TimeSpan timeout, CancellationToken cancellationToken)
+    {
+        if (!CanSendWithoutRestart)
+        {
+            return null;
+        }
+
+        var channel = _channel!;
+        try
+        {
+            return await channel.RequestAsync(command, payload, timeout, isMutation: false, cancellationToken).ConfigureAwait(false);
+        }
+        catch (KompasContractException)
+        {
+            return null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+    }
+
     public async Task<IpcFrame> SendAsync(string command, JsonNode? payload, TimeSpan timeout, bool isMutation, CancellationToken cancellationToken)
     {
         await EnsureStartedAsync(cancellationToken).ConfigureAwait(false);
@@ -213,7 +286,7 @@ public sealed class WorkerSupervisor : IAsyncDisposable
 
         try
         {
-            return await channel.RequestAsync(command, payload, timeout, cancellationToken).ConfigureAwait(false);
+            return await channel.RequestAsync(command, payload, timeout, isMutation, cancellationToken).ConfigureAwait(false);
         }
         catch (KompasContractException ex) when (ex.Code == ErrorCodes.OutcomeUnknown || ex.Code == ErrorCodes.ApplicationDisconnected)
         {
@@ -347,6 +420,26 @@ public sealed class WorkerSupervisor : IAsyncDisposable
         }
     }
 
+    /// <summary>Ждать штатного выхода процесса, не занимая поток. true — процесс вышел.</summary>
+    private static async Task<bool> WaitForExitAsync(Process process, int timeoutMs)
+    {
+        try
+        {
+            using var timeout = new CancellationTokenSource(timeoutMs);
+            await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            return process.HasExited;
+        }
+        catch (InvalidOperationException)
+        {
+            // Процесс уже снят и дескриптор закрыт.
+            return true;
+        }
+    }
+
     private async Task<bool> StopCoreAsync()
     {
         var channel = _channel;
@@ -413,8 +506,14 @@ public sealed class WorkerSupervisor : IAsyncDisposable
         // (<https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kompasobject_quit.html>); убийство — крайняя
         // мера только для НЕ отвечающего Worker'а. Названное следствие: если Worker снимается
         // убийством, его КОМПАС может остаться запущенным, и это названо в ответе, а не скрыто.
+        // ОЖИДАНИЕ ВЫХОДА — АСИНХРОННОЕ.
+        //
+        // Прежде здесь стоял синхронный `_process.WaitForExit(20_000)` под `_restartGate`: поток
+        // пула и ВСЕ параллельные вызовы, ожидающие гейт, стояли до 20 с (дефект L3 ревью
+        // 05.10.2026). Теперь ожидание освобождает поток, а гейт по-прежнему защищает перезапуск.
+        var exited = await WaitForExitAsync(_process, GracefulShutdownWindowMs).ConfigureAwait(false);
         var killUsed = false;
-        if (!_process.WaitForExit(GracefulShutdownWindowMs))
+        if (!exited)
         {
             try
             {
@@ -430,7 +529,7 @@ public sealed class WorkerSupervisor : IAsyncDisposable
             // без этого ожидания оно отвечало бы «процесс ещё жив» на уже снятый процесс.
             if (killUsed)
             {
-                _process.WaitForExit(2_000);
+                await WaitForExitAsync(_process, 2_000).ConfigureAwait(false);
             }
         }
 

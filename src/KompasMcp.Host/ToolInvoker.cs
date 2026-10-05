@@ -340,6 +340,36 @@ public sealed class ToolInvoker : IAsyncDisposable
             yield break;
         }
 
+        // ПАРАМЕТР СОПРЯЖЕНИЯ СВЯЗАН С ЕГО ТИПОМ.
+        //
+        // Принять число там, где типу сопряжения параметра нет (coincidence, parallel,
+        // perpendicular, tangency, concentric), — это тот же дефект, что принятая и проигнорированная
+        // глубина сквозного отверстия: записанное значение не значит применённого. Для distance и
+        // angle параметр, наоборот, обязателен: без него создание отличалось бы от беcпараметрического
+        // типа только именем (дефект M10 ревью 05.10.2026).
+        if (tool.Name == "kompas_create_mate")
+        {
+            var constraint = ReadString(arguments, "constraint_type");
+            var hasParam = Present(arguments, "param_value");
+            var parametric = constraint is "distance" or "angle";
+            if (parametric && !hasParam)
+            {
+                yield return new SchemaViolation(
+                    "/param_value", "mode",
+                    $"При constraint_type={constraint} параметр param_value обязателен: это расстояние " +
+                    "или угол, и без него сопряжение не отличается от беспараметрического типа.");
+            }
+            else if (!parametric && hasParam)
+            {
+                yield return new SchemaViolation(
+                    "/param_value", "mode",
+                    $"При constraint_type={constraint} поле param_value запрещено: у этого типа сопряжения " +
+                    "нет параметра, и принятое число было бы записано и проигнорировано.");
+            }
+
+            yield break;
+        }
+
         if (tool.Name != "kompas_extrude")
         {
             yield break;
@@ -386,6 +416,13 @@ public sealed class ToolInvoker : IAsyncDisposable
 
     private ErrorDto? CheckPaths(ToolDefinition tool, JsonObject arguments)
     {
+        // `path` при открытии на ПРАВКУ — это намерение ПИСАТЬ в этот файл: документ, открытый
+        // access=edit, затем сохраняется kompas_save_document без target_path, то есть в исходный
+        // файл. Судить такое поле как чтение — значит пропустить запись в корень «только чтение»
+        // (дефект H4 ревью 05.10.2026).
+        var pathIsWrite = tool.Name == "kompas_open_document"
+                          && string.Equals(ReadString(arguments, "access"), "edit", StringComparison.Ordinal);
+
         foreach (var field in PathFields)
         {
             if (ReadString(arguments, field) is not { Length: > 0 } value)
@@ -393,8 +430,34 @@ public sealed class ToolInvoker : IAsyncDisposable
                 continue;
             }
 
+            // ОТНОСИТЕЛЬНЫЙ ПУТЬ ОТКАЗЫВАЕТСЯ, А НЕ РАЗРЕШАЕТСЯ.
+            //
+            // Решение принимается по `Path.GetFullPath` от рабочего каталога ХОСТА, а исполняется
+            // командой в Worker — от рабочего каталога Worker (папка установки) или процесса
+            // КОМПАС. Один и тот же относительный путь поэтому судится по одной папке, а читается
+            // или пишется в другой: если рабочий каталог Хоста лежит внутри разрешённого корня,
+            // путь проходит политику, а файл берётся не там (дефект M13 ревью 05.10.2026). Схема
+            // требует абсолютный путь — теперь это проверяется, а не подразумевается.
+            if (!Path.IsPathFullyQualified(value))
+            {
+                return new ErrorDto(
+                    ErrorCodes.PathNotAllowed,
+                    $"Путь '{value}' в поле '{field}' относительный: сервер принимает только абсолютные " +
+                    "пути. Относительный путь судился бы политикой по рабочему каталогу Хоста, а " +
+                    "исполнялся бы по рабочему каталогу Worker или процесса КОМПАС.",
+                    RetryPolicy.Never,
+                    null,
+                    false,
+                    new JsonObject
+                    {
+                        ["field"] = field,
+                        ["reason"] = "path_not_fully_qualified",
+                    });
+            }
+
             // Only an output destination is a write; a source path is read-only intent.
-            var writes = field is "output_path" or "target_path" or "save_path";
+            var writes = field is "output_path" or "target_path" or "save_path"
+                         || (field is "path" && pathIsWrite);
             var decision = _pathPolicy.Evaluate(value, intendToWrite: writes);
             if (decision.Access != PathAccess.Denied)
             {
@@ -422,9 +485,25 @@ public sealed class ToolInvoker : IAsyncDisposable
     // Execution
     // ---------------------------------------------------------------------------------------------
 
+    /// <summary>
+    /// Бюджет ожидания ответа Хостом: максимум из общего бюджета команды (бюджет Worker + запас) и
+    /// настройки оператора. Настройка может бюджет ПРОДЛИТЬ, но не может сделать Хост быстрее
+    /// Worker — иначе Хост первым объявит «исход неизвестен» на команде, которая просто долгая.
+    /// </summary>
+    private int BudgetFor(ToolDefinition tool) =>
+        Math.Max(CommandBudgets.HostBudgetMs(tool.WorkerCommand), _options.OperationBudgetMs);
+
     private async Task<ResultEnvelope<JsonNode?>> RunReadAsync(ToolDefinition tool, JsonObject arguments, CancellationToken cancellationToken)
     {
-        var timeout = TimeSpan.FromMilliseconds(ReadInt(arguments, "timeout_ms") ?? _options.OperationBudgetMs);
+        // БЮДЖЕТ ХОСТА — ПО КОМАНДЕ, А НЕ ОДНОЙ НАСТРОЙКОЙ НА ВСЁ.
+        //
+        // Одна настройка (operation_budget_ms, 120 с по умолчанию) против бюджетов Worker 180–300 с
+        // означала, что ХОСТ сдаётся раньше Worker: он объявлял OUTCOME_UNKNOWN, ломал канал и
+        // следующим вызовом убивал Worker, который ещё работал по своему бюджету (дефект M11 ревью
+        // 05.10.2026). Теперь бюджет берётся из общей таблицы и не может быть короче бюджета
+        // Worker; настройка оператора по-прежнему может его ПРОДЛИТЬ, но не укоротить.
+        var budgetMs = BudgetFor(tool);
+        var timeout = TimeSpan.FromMilliseconds(Math.Min(ReadInt(arguments, "timeout_ms") ?? budgetMs, budgetMs));
         try
         {
             var frame = await _worker.SendAsync(tool.WorkerCommand, arguments.DeepClone(), timeout, isMutation: false, cancellationToken).ConfigureAwait(false);
@@ -516,57 +595,81 @@ public sealed class ToolInvoker : IAsyncDisposable
         {
             // Nothing reached the Worker, so this is a clean failure and the same operation_id may
             // legitimately be sent again.
-            _journal.Fail(operationId, queueFull.ToErrorDto());
-            return Envelope(OperationStatus.Failed, tool, operationId, null, arguments, queueFull.ToErrorDto());
+            var recorded = _journal.Fail(operationId, queueFull.ToErrorDto());
+            return Envelope(OperationStatus.Failed, tool, operationId, null, arguments, queueFull.ToErrorDto(),
+                warnings: recorded ? null : new[] { TerminalWriteNotDurable });
         }
 
         try
         {
-            var timeout = TimeSpan.FromMilliseconds(_options.OperationBudgetMs);
+            // Тот же общий бюджет, что и у чтения: Хост ждёт дольше Worker (см. комментарий в
+            // RunReadAsync), иначе его «сдача» — не наблюдение тайм-аута, а собственный отказ.
+            var timeout = TimeSpan.FromMilliseconds(BudgetFor(tool));
             var frame = await _worker.SendAsync(tool.WorkerCommand, CanonicalNode(tool, arguments), timeout, isMutation: true, cancellation.Token).ConfigureAwait(false);
 
             if (frame.Error is null)
             {
                 var result = frame.Payload;
-                _journal.Complete(operationId, result?.ToJsonString());
-                return Envelope(OperationStatus.Succeeded, tool, operationId, result, arguments);
+                var recorded = _journal.Complete(operationId, result?.ToJsonString());
+                return Envelope(OperationStatus.Succeeded, tool, operationId, result, arguments,
+                    warnings: recorded ? null : new[] { TerminalWriteNotDurable });
             }
 
+            bool terminalRecorded;
             if (frame.Error.Code == ErrorCodes.OutcomeUnknown)
             {
-                _journal.MarkUnknown(operationId, frame.Error.Message);
+                terminalRecorded = _journal.MarkUnknown(operationId, frame.Error.Message);
             }
             else
             {
-                _journal.Fail(operationId, frame.Error);
+                terminalRecorded = _journal.Fail(operationId, frame.Error);
             }
 
+            // ТЕРМИНАЛЬНАЯ ЗАПИСЬ НЕ УДАЛАСЬ ПОСЛЕ ВЫПОЛНЕННОЙ МУТАЦИИ. Исход известен только
+            // этому процессу, а долговечная строка по-прежнему говорит `in_flight`; поэтому ошибку
+            // нельзя отдавать с политикой повтора «повторяй как есть» — повтор после перезапуска
+            // применил бы мутацию второй раз. Политика переводится в «после согласования», и это
+            // называется предупреждением, а не остаётся молчанием.
+            var error = terminalRecorded ? frame.Error : ForceReconciliation(frame.Error);
             return Envelope(frame.Error.Code == ErrorCodes.OutcomeUnknown ? OperationStatus.OutcomeUnknown : OperationStatus.Failed,
-                tool, operationId, null, arguments, frame.Error);
+                tool, operationId, null, arguments, error,
+                warnings: terminalRecorded ? null : new[] { TerminalWriteNotDurable });
         }
         catch (KompasContractException contract) when (contract.Code == ErrorCodes.QueueFull)
         {
-            _journal.Fail(operationId, contract.ToErrorDto());
-            return Envelope(OperationStatus.Failed, tool, operationId, null, arguments, contract.ToErrorDto());
+            var recorded = _journal.Fail(operationId, contract.ToErrorDto());
+            return Envelope(OperationStatus.Failed, tool, operationId, null, arguments, contract.ToErrorDto(),
+                warnings: recorded ? null : new[] { TerminalWriteNotDurable });
         }
         catch (KompasContractException contract)
         {
-            if (contract.Code == ErrorCodes.OutcomeUnknown)
+            // ГИБЕЛЬ WORKER ВО ВРЕМЯ МУТАЦИИ — НЕ ОБЫЧНЫЙ ОТКАЗ.
+            //
+            // Канал оборвался ПОСЛЕ отправки команды: Worker мог быть внутри COM-вызова. Статус
+            // `failed` с `needs_reconciliation=false` скрывал это и от `CountNeedingReconciliation`,
+            // и от `kompas_health` — хотя `OperationJournal.MarkUnknown` документирован ровно для
+            // «смерти Worker» (дефект M2 ревью 05.10.2026).
+            if (contract.Code == ErrorCodes.OutcomeUnknown || contract.Code == ErrorCodes.ApplicationDisconnected)
             {
-                _journal.MarkUnknown(operationId, contract.Message);
-                return Envelope(OperationStatus.OutcomeUnknown, tool, operationId, null, arguments, contract.ToErrorDto());
+                var recorded = _journal.MarkUnknown(operationId, contract.Message);
+                return Envelope(OperationStatus.OutcomeUnknown, tool, operationId, null, arguments,
+                    contract.Code == ErrorCodes.ApplicationDisconnected ? DisconnectedAsUnknown(contract) : contract.ToErrorDto(),
+                    warnings: recorded ? null : new[] { TerminalWriteNotDurable });
             }
 
-            _journal.Fail(operationId, contract.ToErrorDto());
-            return Envelope(OperationStatus.Failed, tool, operationId, null, arguments, contract.ToErrorDto());
+            var failedRecorded = _journal.Fail(operationId, contract.ToErrorDto());
+            return Envelope(OperationStatus.Failed, tool, operationId, null, arguments, contract.ToErrorDto(),
+                warnings: failedRecorded ? null : new[] { TerminalWriteNotDurable });
         }
         catch (OperationCanceledException)
         {
             // Cancelled before it ever reached the Worker: the model was not touched, so this is a
             // confirmed cancellation rather than CANCEL_NOT_CONFIRMED.
-            _journal.Cancel(operationId);
+            var recorded = _journal.Cancel(operationId);
             return Envelope(OperationStatus.Cancelled, tool, operationId, default(JsonNode?), arguments,
-                warnings: new[] { "Команда отменена в очереди Host и не отправлялась в КОМПАС." });
+                warnings: recorded
+                    ? new[] { "Команда отменена в очереди Host и не отправлялась в КОМПАС." }
+                    : new[] { "Команда отменена в очереди Host и не отправлялась в КОМПАС.", TerminalWriteNotDurable });
         }
         finally
         {
@@ -591,6 +694,19 @@ public sealed class ToolInvoker : IAsyncDisposable
             _ => OperationStatus.Running,
         };
 
+        // КОНВЕРТ НЕ ПРОТИВОРЕЧИТ САМ СЕБЕ.
+        //
+        // Терминальная запись могла не лечь в журнал ПОСЛЕ выполненной мутации: тогда исход
+        // известен только этому процессу, запись помечена требующей согласования, но её Outcome
+        // остаётся `succeeded`. Прежний ответ отдавал `status=succeeded` вместе с
+        // `error=OUTCOME_UNKNOWN` — клиент, читающий статус, считал операцию успешной и повторял её
+        // новым operation_id (дефект L5 ревью 05.10.2026). Статус, требующий согласования, — это
+        // `outcome_unknown`, а не `succeeded`.
+        if (status == OperationStatus.Succeeded && record.NeedsReconciliation)
+        {
+            status = OperationStatus.OutcomeUnknown;
+        }
+
         var warnings = new List<string>
         {
             $"Запись журнальная: этот operation_id уже выполнялся ({record.Outcome.ToString().ToLowerInvariant()}), повторного обращения к КОМПАС не было.",
@@ -605,7 +721,7 @@ public sealed class ToolInvoker : IAsyncDisposable
                 + "статус остаётся running; новый operation_id начал бы мутацию заново.");
         }
 
-        if (record.Outcome == JournalOutcome.OutcomeUnknown)
+        if (record.Outcome == JournalOutcome.OutcomeUnknown || status == OperationStatus.OutcomeUnknown)
         {
             warnings.Add("Исход предыдущей попытки неизвестен: сверьте модель с ожиданием (объём, число тел, история признаков), повтор мутации с НОВЫМ operation_id запрещён. Отдельного инструмента сверки в каталоге нет — повтор с тем же operation_id отвечает записанным исходом, но не фактическим состоянием модели.");
         }
@@ -644,6 +760,54 @@ public sealed class ToolInvoker : IAsyncDisposable
         }
 
         return ordered.ToJsonString(KompJson.Options);
+    }
+
+    /// <summary>
+    /// Предупреждение, которым называется НЕДОЛГОВЕЧНАЯ терминальная запись журнала: мутация уже
+    /// выполнена, исход известен этому процессу, но строка исхода в журнал не легла. После
+    /// перезапуска журнал прочитает `in_flight` и потребует согласования — поэтому повтор не
+    /// безопасен, и это сказано клиенту, а не скрыто.
+    /// </summary>
+    private const string TerminalWriteNotDurable =
+        "Терминальная запись журнала операций не удалась (межпроцессная блокировка не получена). " +
+        "Исход команды известен только этому процессу; после перезапуска он потребует согласования, " +
+        "и повтор с тем же operation_id до согласования не безопасен.";
+
+    /// <summary>
+    /// Обрыв канала к Worker во время мутации: код APPLICATION_DISCONNECTED говорит «связи нет», но
+    /// для МУТАЦИИ этот же факт означает «исход неизвестен». Клиенту нужен второй смысл — по нему
+    /// он решает, можно ли повторять, — поэтому код и политика переведены, а причина сохранена.
+    /// </summary>
+    private static ErrorDto DisconnectedAsUnknown(KompasContractException contract)
+    {
+        var error = contract.ToErrorDto();
+        var details = error.Details?.DeepClone() as JsonObject ?? new JsonObject();
+        details["worker_disconnected_mid_mutation"] = true;
+        details["transport_code"] = ErrorCodes.ApplicationDisconnected;
+        return error with
+        {
+            Code = ErrorCodes.OutcomeUnknown,
+            RetryPolicy = RetryPolicy.AfterReconciliation,
+            PartialEffects = true,
+            Details = details,
+        };
+    }
+
+    /// <summary>
+    /// Перевод политики повтора в «после согласования». Применяется, когда терминальная запись не
+    /// легла: клиент не имеет права считать повтор безопасным.
+    /// </summary>
+    private static ErrorDto ForceReconciliation(ErrorDto error) => error with
+    {
+        RetryPolicy = RetryPolicy.AfterReconciliation,
+        Details = MergeReconciliationFlag(error.Details),
+    };
+
+    private static JsonObject? MergeReconciliationFlag(JsonObject? details)
+    {
+        var merged = details?.DeepClone() as JsonObject ?? new JsonObject();
+        merged["terminal_journal_write_failed"] = true;
+        return merged;
     }
 
     private static ResultEnvelope<JsonNode?> Envelope(

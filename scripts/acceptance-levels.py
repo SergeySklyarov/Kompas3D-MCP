@@ -52,6 +52,17 @@ import os
 PROFILE_REL = "coverage/solid-v24/release-profiles/mechanical-core-v1.json"
 MATRIX_REL = "coverage/solid-v24/matrix.json"
 
+# ОБЪЁМ ВЫПУСКА — ТРИ ПРОФИЛЯ, А НЕ ОДИН. Прежде знаменатель объёма был ОДНИМ профилем
+# (`mechanical-core-v1`), и паспорт печатал `mandatory_scope=COMPLETE 54/54 · 15/15`, описывая при
+# этом поставку, в которую входят ещё C1 и C2. `COMPLETE` по ядру не доказывает полноту объединённого
+# выпуска — это разные утверждения. Здесь перечислены все действующие профили выпуска; их состояния
+# считаются ОТДЕЛЬНО и сводятся в один вердикт, а числители и знаменатели каждого печатаются рядом.
+PROFILES = (
+    ("mechanical-core-v1", "coverage/solid-v24/release-profiles/mechanical-core-v1.json"),
+    ("assemblies-minimal-v1", "coverage/solid-v24/release-profiles/assemblies-minimal-v1.json"),
+    ("mates-minimal-v1", "coverage/solid-v24/release-profiles/mates-minimal-v1.json"),
+)
+
 CLOSING_STATUSES = ("verified", "not_applicable")
 
 LEVEL_NAMES = ("transport_and_delivery", "functional_acceptance", "mandatory_scope",
@@ -75,13 +86,13 @@ def load(root, relative):
         return json.load(handle)
 
 
-def evaluate_scope(root):
-    """Состояние обязательного объёма профиля выпуска.
+def evaluate_profile(root, profile_rel):
+    """Состояние обязательного объёма ОДНОГО профиля выпуска.
 
     Возвращает словарь, а не вердикт-строку: читателю нужны и счётчики, и ИМЕНА незакрытых строк с
     названной причиной. Вердикт — производная, и он не может быть «PASS» по одному числу строк.
     """
-    profile = load(root, PROFILE_REL)
+    profile = load(root, profile_rel)
     matrix = load(root, MATRIX_REL)
     actions = matrix["meta"]["actions"]
     index = {row["operation_id"]: row for row in matrix["rows"]}
@@ -163,7 +174,7 @@ def evaluate_scope(root):
     return {
         "profile_id": profile["meta"]["profile_id"],
         "profile_revision": profile["meta"].get("revision"),
-        "profile_artifact": PROFILE_REL,
+        "profile_artifact": profile_rel,
         "matrix_artifact": MATRIX_REL,
         "rule": "closed_definition.mode_closed: все применимые действия verified или "
                 "not_applicable с обоснованием; blocked_api НЕ закрывает",
@@ -177,6 +188,52 @@ def evaluate_scope(root):
         "verdict": "COMPLETE" if open_total == 0 else "INCOMPLETE",
         "problems": problems,
     }
+
+
+def evaluate_scope(root):
+    """Совместимость: объём ПРОФИЛЯ ПО УМОЛЧАНИЮ (ядро). Прежний контракт сохранён дословно."""
+    return evaluate_profile(root, PROFILE_REL)
+
+
+def evaluate_release_scope(root):
+    """Объём ВСЕГО ВЫПУСКА: все действующие профили вместе, с отдельными числителями.
+
+    Вердикт объединённого выпуска — `COMPLETE` только когда КАЖДЫЙ профиль закрыт. Числа ядра при
+    этом не подменяются расширенным составом: у каждого профиля свои `modes_*`/`deps_*` и свой
+    `verdict`, а рядом печатается сводка. Общий процент не выводится: `COMPLETE` по одному профилю
+    не доказывает полноту объединённого выпуска.
+    """
+    profiles = [evaluate_profile(root, rel) for _, rel in PROFILES]
+    problems = [f"{p['profile_id']}: {line}" for p in profiles for line in p["problems"]]
+    open_entries = []
+    for profile in profiles:
+        for mode in profile["modes_open"]:
+            open_entries.append({"profile": profile["profile_id"], "kind": "mode", **mode})
+        for dep in profile["deps_open"]:
+            open_entries.append({"profile": profile["profile_id"], "kind": "dependency",
+                                 "ref": dep["id"], **dep})
+    combined = {
+        "profile_id": "+".join(p["profile_id"] for p in profiles),
+        "profile_revision": "+".join(str(p["profile_revision"]) for p in profiles),
+        "profile_artifact": [p["profile_artifact"] for p in profiles],
+        "matrix_artifact": MATRIX_REL,
+        "rule": profiles[0]["rule"],
+        "modes_total": sum(p["modes_total"] for p in profiles),
+        "modes_closed": sum(p["modes_closed"] for p in profiles),
+        "deps_total": sum(p["deps_total"] for p in profiles),
+        "deps_closed": sum(p["deps_closed"] for p in profiles),
+        "open_total": sum(p["open_total"] for p in profiles),
+        "profiles": profiles,
+        "open": open_entries,
+        "problems": problems,
+        "verdict": "COMPLETE" if all(p["verdict"] == "COMPLETE" for p in profiles)
+                   else "INCOMPLETE",
+        # Совместимость прежнего формата: поля одиночного профиля указывают на ЯДРО, а не на сводку —
+        # подмена знаменателя ядра расширенным составом запрещена нарядом.
+        "modes_open": profiles[0]["modes_open"],
+        "deps_open": profiles[0]["deps_open"],
+    }
+    return combined
 
 
 def client_acceptance_gate(block):
@@ -246,29 +303,64 @@ def summarize_levels(counts, scope, transport, client_acceptance=None):
         },
         "mandatory_scope": {
             "verdict": scope_verdict,
-            "subject": "обязательные режимы профиля выпуска и его общие зависимости",
+            "subject": "обязательные режимы ВСЕХ профилей выпуска и их общие зависимости",
             "rule": scope["rule"],
             "modes_closed": scope["modes_closed"],
             "modes_total": scope["modes_total"],
             "deps_closed": scope["deps_closed"],
             "deps_total": scope["deps_total"],
             "open_total": scope["open_total"],
+            # ЧИСЛИТЕЛИ И ЗНАМЕНАТЕЛИ КАЖДОГО ПРОФИЛЯ ПЕЧАТАЮТСЯ РЯДОМ. Сводка выше — их сумма, и она
+            # не заменяет отдельные строки: `COMPLETE` по ядру не доказывает полноту C1 и C2, а
+            # знаменатель ядра запрещено подменять расширенным составом.
+            "profiles": [
+                {
+                    "profile_id": p["profile_id"],
+                    "profile_revision": p.get("profile_revision"),
+                    "profile_artifact": p["profile_artifact"],
+                    "modes_closed": p["modes_closed"],
+                    "modes_total": p["modes_total"],
+                    "deps_closed": p["deps_closed"],
+                    "deps_total": p["deps_total"],
+                    "open_total": p["open_total"],
+                    "verdict": p["verdict"],
+                }
+                for p in scope.get("profiles", [])
+            ],
+            "profiles_note": "Вердикт объёма — по КАЖДОМУ профилю отдельно и по их сводке. "
+                             "Общий процент не выводится: «ядро закрыто» не означает «выпуск закрыт».",
             # СПИСОК ПУБЛИКУЕТСЯ ЦЕЛИКОМ. Здесь стоял срез `[:12]` — БЕЗ ПОМЕТКИ об обрезке, и это
             # было молчанием, которое читается как утверждение «это всё»: при 20 открытых записях
             # (6 режимов SM-07 + 14 зависимостей) восемь из них не попадали ни в паспорт, ни в
             # INDEX, а `open_total` рядом называл другое число, и расхождение приходилось замечать
             # читателю. Срез без пометки неотличим от «список полон»; поэтому либо полный список,
             # либо названное усечение — выбран полный.
-            "open": ([{"ref": m["ref"], "queue": m.get("queue"),
+            "open": ([{"profile": m.get("profile"), "ref": m["ref"], "queue": m.get("queue"),
                        "blocked_actions": m["blocked_actions"],
                        "missing_actions": m.get("missing_actions"),
-                       "blocked_reason": m["blocked_reason"]} for m in scope["modes_open"]]
-                     + [{"ref": d["id"], "queue": d.get("queue"),
+                       "blocked_reason": m["blocked_reason"]}
+                      for m in scope.get("open", [])
+                      if m.get("kind") != "dependency"]
+                     + [{"profile": d.get("profile"), "ref": d.get("ref", d.get("id")),
+                         "queue": d.get("queue"),
                          "blocked_actions": d["blocked_actions"],
                          "missing_actions": d.get("missing_actions"),
                          "action_statuses": d.get("action_statuses"),
-                         "blocked_reason": d["blocked_reason"]} for d in scope["deps_open"]]),
-            "open_published": len(scope["modes_open"]) + len(scope["deps_open"]),
+                         "blocked_reason": d["blocked_reason"]}
+                        for d in scope.get("open", [])
+                        if d.get("kind") == "dependency"])
+            if scope.get("open") is not None
+            else ([{"ref": m["ref"], "queue": m.get("queue"),
+                    "blocked_actions": m["blocked_actions"],
+                    "missing_actions": m.get("missing_actions"),
+                    "blocked_reason": m["blocked_reason"]} for m in scope["modes_open"]]
+                  + [{"ref": d["id"], "queue": d.get("queue"),
+                      "blocked_actions": d["blocked_actions"],
+                      "missing_actions": d.get("missing_actions"),
+                      "action_statuses": d.get("action_statuses"),
+                      "blocked_reason": d["blocked_reason"]} for d in scope["deps_open"]]),
+            "open_published": len(scope.get("open") or []) if scope.get("open") is not None
+                              else len(scope["modes_open"]) + len(scope["deps_open"]),
             "open_note": "`open` совпадает по длине с `open_total`: список открытого печатается "
                          "ПОЛНОСТЬЮ. Прежняя редакция обрезала его до 12 записей без пометки, и "
                          "усечение без пометки читается как «это всё»",
@@ -390,6 +482,6 @@ if __name__ == "__main__":
     if "--self-test" in sys.argv[1:]:
         raise SystemExit(self_test())
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    state = evaluate_scope(root)
+    state = evaluate_release_scope(root)
     print(json.dumps(state, ensure_ascii=False, indent=2))
     raise SystemExit(1 if state["problems"] else 0)

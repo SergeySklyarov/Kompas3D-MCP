@@ -29,13 +29,70 @@ public sealed class CommandDispatcher
         WorkerCommands.EnvironmentProbe,
     };
 
+    /// <summary>
+    /// Команды, которые МЕНЯЮТ модель. Список — зеркало <c>Mutation(...)</c> каталога инструментов,
+    /// и он нужен здесь по одной причине: кадр IPC не несёт признака мутации, а неожиданное
+    /// исключение в мутации и в чтении — РАЗНЫЕ состояния. В чтении «не прочитано» — это отказ; в
+    /// мутации «вызов упал» означает, что модель могла измениться, и объявлять это чистым отказом
+    /// значило бы разрешить клиенту повторить мутацию (дефект M1 ревью 05.10.2026).
+    /// </summary>
+    private static readonly HashSet<string> MutationCommands = new(StringComparer.Ordinal)
+    {
+        WorkerCommands.Connect,
+        WorkerCommands.Disconnect,
+        WorkerCommands.CreateDocument,
+        WorkerCommands.OpenDocument,
+        WorkerCommands.SaveDocument,
+        WorkerCommands.CloseDocument,
+        WorkerCommands.CreateSketch,
+        WorkerCommands.EditSketch,
+        WorkerCommands.SetSketchPlane,
+        WorkerCommands.FinishSketch,
+        WorkerCommands.Extrude,
+        WorkerCommands.Fillet,
+        WorkerCommands.Chamfer,
+        WorkerCommands.Hole,
+        WorkerCommands.Rotated,
+        WorkerCommands.Sweep,
+        WorkerCommands.Loft,
+        WorkerCommands.Shell,
+        WorkerCommands.SolidBoolean,
+        WorkerCommands.SolidSplit,
+        WorkerCommands.SolidCutByPlane,
+        WorkerCommands.SolidReposition,
+        WorkerCommands.UpdateFeature,
+        WorkerCommands.PatternGrid,
+        WorkerCommands.PatternCircular,
+        WorkerCommands.PatternMirror,
+        WorkerCommands.SuppressFeature,
+        WorkerCommands.DeleteFeature,
+        WorkerCommands.Rebuild,
+        WorkerCommands.ExportStep,
+        WorkerCommands.ImportStep,
+        WorkerCommands.ExportImage,
+        WorkerCommands.CreateAuxGeometry,
+        WorkerCommands.UpdatePlane,
+        WorkerCommands.EditSketchEntity,
+        WorkerCommands.InsertComponent,
+        WorkerCommands.SetComponentPlacement,
+        WorkerCommands.ReplaceComponent,
+        WorkerCommands.CreateMate,
+        WorkerCommands.SetMateParameter,
+        WorkerCommands.SetMateFixed,
+        WorkerCommands.DeleteMate,
+        WorkerCommands.UnitProbe,
+    };
+
     private readonly StaExecutor _sta;
     private readonly WorkerLog _log;
     private readonly Api5Session _session = new();
     private readonly Stopwatch _uptime = Stopwatch.StartNew();
 
-    /// <summary>Контрольные копии файлов документов: снимаются перед каждой мутацией.</summary>
-    private readonly DocumentControlCopies _controlCopies = new();
+    /// <summary>
+    /// Контрольные копии файлов документов: снимаются перед каждой мутацией — в СЛУЖЕБНЫЙ
+    /// каталог, а не рядом с документом (дефект H4 ревью 05.10.2026).
+    /// </summary>
+    private readonly DocumentControlCopies _controlCopies;
 
     private long _handled;
     private long _failed;
@@ -44,10 +101,11 @@ public sealed class CommandDispatcher
     /// <summary>Set when a command's outcome could not be observed; the Host must restart us.</summary>
     public bool NeedsReconciliation { get; private set; }
 
-    public CommandDispatcher(StaExecutor sta, WorkerLog log)
+    public CommandDispatcher(StaExecutor sta, WorkerLog log, string controlCopyDirectory)
     {
         _sta = sta;
         _log = log;
+        _controlCopies = new DocumentControlCopies(controlCopyDirectory);
     }
 
     public async Task<IpcFrame> HandleAsync(IpcFrame request, CancellationToken cancellationToken)
@@ -93,21 +151,38 @@ public sealed class CommandDispatcher
         }
         catch (Exception ex)
         {
-            NeedsReconciliation = true;
+            // НЕОЖИДАННОЕ ИСКЛЮЧЕНИЕ В МУТАЦИИ — ЭТО НЕ «ЧИСТЫЙ ОТКАЗ».
+            //
+            // Комментарий прежней редакции говорил «outcome is unknown», а код отвечал
+            // `RetryPolicy.SameOperationId` с `partialEffects=false`: клиенту предлагалось повторить
+            // ту же мутацию тем же operation_id, хотя модель к моменту исключения могла быть уже
+            // изменена (дефект M1 ревью 05.10.2026). Теперь признак мутации берётся из
+            // <see cref="MutationCommands"/>, и для мутации исход называется неизвестным.
+            var isMutation = MutationCommands.Contains(request.Command);
+
+            if (isMutation)
+            {
+                NeedsReconciliation = true;
+            }
+
             Interlocked.Increment(ref _failed);
             var hresult = ComHResult.From(ex);
-            _log.Write("error", "command threw", new { command = request.Command, type = ex.GetType().Name, message = ex.Message, hresult });
+            _log.Write("error", "command threw", new { command = request.Command, type = ex.GetType().Name, message = ex.Message, hresult, isMutation });
 
             // An unexpected exception during a mutation means the outcome is unknown, not "failed
             // cleanly": saying so is what stops the client from repeating a half-applied change.
             var unknown = ex is COMException && hresult is int code && ComHResult.IsDisconnected(code);
             return Failure(request, new ErrorDto(
-                unknown ? ErrorCodes.OutcomeUnknown : Classify(ex, hresult),
+                unknown || isMutation ? ErrorCodes.OutcomeUnknown : Classify(ex, hresult),
                 ex.Message,
-                unknown ? RetryPolicy.AfterReconciliation : RetryPolicy.SameOperationId,
+                unknown || isMutation ? RetryPolicy.AfterReconciliation : RetryPolicy.SameOperationId,
                 hresult,
-                unknown,
-                new JsonObject { ["exception"] = ex.GetType().Name }));
+                unknown || isMutation,
+                new JsonObject
+                {
+                    ["exception"] = ex.GetType().Name,
+                    ["is_mutation"] = isMutation,
+                }));
         }
     }
 
@@ -332,8 +407,9 @@ public sealed class CommandDispatcher
     /// </remarks>
     private JsonNode? TaggedAfter(string documentId, Func<object?> mutation, DocumentEntry document)
     {
-        // КОНТРОЛЬНАЯ КОПИЯ СНИМАЕТСЯ ДО МУТАЦИИ, и это единственная точка, через которую проходят
-        // ВСЕ мутации: разложенная по обработчикам, она неизбежно отстала бы от списка команд.
+        // КОНТРОЛЬНАЯ КОПИЯ СНИМАЕТСЯ ДО МУТАЦИИ в служебном каталоге, и это единственная точка,
+        // через которую проходят мутации ядра, сборок и сопряжений: разложенная по обработчикам,
+        // она неизбежно отстала бы от списка команд. Чтения через неё НЕ проходят.
         var copy = _controlCopies.Before(document.Path, document.Id, document.Revision);
         object? outcome;
         try
@@ -362,6 +438,11 @@ public sealed class CommandDispatcher
     /// политика повтора СОХРАНЯЮТСЯ: сбой не превращается в другой сбой из-за того, что рядом с ним
     /// появилась копия.
     /// </summary>
+    /// <remarks>
+    /// Политика повтора сохраняется из исходного исключения, но для НЕОЖИДАННОГО исключения мутации
+    /// она теперь «после согласования», а не «тем же operation_id»: partialEffects=true означает, что
+    /// модель могла измениться, и повтор как есть применил бы мутацию второй раз.
+    /// </remarks>
     private static Exception Reclassify(Exception ex, ControlCopyResult copy, string? restoreFailure)
     {
         var details = new Dictionary<string, object?>(StringComparer.Ordinal)
@@ -394,9 +475,10 @@ public sealed class CommandDispatcher
         }
 
         return new KompasContractException(
-            ErrorCodes.GeometryFailed,
-            "Мутация не завершилась: " + ex.Message,
-            RetryPolicy.SameOperationId,
+            ErrorCodes.OutcomeUnknown,
+            "Мутация не завершилась: " + ex.Message + ". Исход неизвестен: файл возвращён к состоянию " +
+            "до мутации, но модель в памяти КОМПАСа — нет, поэтому повтор требует согласования.",
+            RetryPolicy.AfterReconciliation,
             partialEffects: true,
             details: details);
     }
@@ -843,26 +925,62 @@ public sealed class CommandDispatcher
     private object? ListMates(IpcFrame request) =>
         _session.ListMates(Argument<ListMatesCommand>(request));
 
-    private object? CreateMate(IpcFrame request) =>
-        _session.CreateMate(Argument<CreateMateCommand>(request));
+    // МУТАЦИИ C1/C2 ИДУТ ЧЕРЕЗ ОБЩУЮ ТОЧКУ МУТАЦИЙ.
+    //
+    // Прежде эти семь команд возвращали результат адаптера напрямую, минуя `TaggedAfter`, и в
+    // конверте не было `revision` — вопреки собственному контракту «каждая мутация несёт ревизию»
+    // (дефект M3 ревью 05.10.2026). Приёмка этого не видела только потому, что её помощник читал
+    // ревизию отдельным вызовом `kompas_get_context` и подставлял 1. Теперь каждая мутация сборки и
+    // сопряжений несёт ревизию ПОСЛЕ применения и снимает контрольную копию ДО него.
 
-    private object? SetMateParameter(IpcFrame request) =>
-        _session.SetMateParameter(Argument<SetMateParameterCommand>(request));
+    private object? CreateMate(IpcFrame request)
+    {
+        var command = Argument<CreateMateCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return TaggedAfter(document.Id, () => _session.CreateMate(command), document);
+    }
 
-    private object? SetMateFixed(IpcFrame request) =>
-        _session.SetMateFixed(Argument<SetMateFixedCommand>(request));
+    private object? SetMateParameter(IpcFrame request)
+    {
+        var command = Argument<SetMateParameterCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return TaggedAfter(document.Id, () => _session.SetMateParameter(command), document);
+    }
 
-    private object? DeleteMate(IpcFrame request) =>
-        _session.DeleteMate(Argument<DeleteMateCommand>(request));
+    private object? SetMateFixed(IpcFrame request)
+    {
+        var command = Argument<SetMateFixedCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return TaggedAfter(document.Id, () => _session.SetMateFixed(command), document);
+    }
 
-    private object? InsertComponent(IpcFrame request) =>
-        _session.InsertComponent(Argument<InsertComponentCommand>(request));
+    private object? DeleteMate(IpcFrame request)
+    {
+        var command = Argument<DeleteMateCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return TaggedAfter(document.Id, () => _session.DeleteMate(command), document);
+    }
 
-    private object? SetComponentPlacement(IpcFrame request) =>
-        _session.SetComponentPlacement(Argument<SetComponentPlacementCommand>(request));
+    private object? InsertComponent(IpcFrame request)
+    {
+        var command = Argument<InsertComponentCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return TaggedAfter(document.Id, () => _session.InsertComponent(command), document);
+    }
 
-    private object? ReplaceComponent(IpcFrame request) =>
-        _session.ReplaceComponent(Argument<ReplaceComponentCommand>(request));
+    private object? SetComponentPlacement(IpcFrame request)
+    {
+        var command = Argument<SetComponentPlacementCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return TaggedAfter(document.Id, () => _session.SetComponentPlacement(command), document);
+    }
+
+    private object? ReplaceComponent(IpcFrame request)
+    {
+        var command = Argument<ReplaceComponentCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return TaggedAfter(document.Id, () => _session.ReplaceComponent(command), document);
+    }
 
     private object? CheckComponentLinks(IpcFrame request) =>
         _session.CheckComponentLinks(Argument<CheckComponentLinksCommand>(request));
@@ -945,6 +1063,14 @@ public sealed class CommandDispatcher
     /// Detach from every session. Documents belonging to the server are closed without saving;
     /// an attached КОМПАС is left running because it is the user's process.
     /// </summary>
+    /// <remarks>
+    /// <b>Что здесь НЕ происходит: прерывания уже поставленных команд.</b> Канал к Хосту мог
+    /// оборваться, когда на STA-полосе уже стояли команды; они выполняются до конца, потому что
+    /// отменить COM-вызов извне нельзя. Исход операции, которую Хост уже назвал
+    /// <c>OUTCOME_UNKNOWN</c>, поэтому определяется моделью, а не ответом: это состояние названо в
+    /// <c>docs/operator-guide/session-handover.md</c> (находка L8 ревью 05.10.2026), а не остаётся
+    /// подразумеваемым.
+    /// </remarks>
     public void ShutdownOwnedSessions()
     {
         foreach (var application in _session.Applications.ToArray())

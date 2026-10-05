@@ -982,14 +982,47 @@ public sealed class HostSession : IAsyncDisposable
             return (null, null);
         }
 
+        // ОПИСЬ НЕ ЗАПРАШИВАЕТСЯ ПЕРЕЗАПУСКОМ WORKER.
+        //
+        // Прежде здесь был обычный `SendAsync` → `EnsureStartedAsync`: при сломанном канале он
+        // останавливал прежний Worker (20 с ожидания, затем убийство) и поднимал НОВЫЙ. Новый
+        // Worker не знает ни одного документа → опись пуста → `dirty=0` → освобождение проходит,
+        // хотя состояние модели НЕИЗВЕСТНО. То есть защита DOCUMENT_DIRTY не срабатывала ровно
+        // тогда, когда она и нужна (дефект H3 ревью 05.10.2026). Теперь сломанный канал — это
+        // отказ описи, а не «правок нет».
+        if (!worker.CanSendWithoutRestart)
+        {
+            _log.Write("warn", "session inventory unavailable: worker channel broken", new { worker_pid = worker.WorkerProcessId });
+            return (null, new ErrorDto(
+                ErrorCodes.SessionReleaseFailed,
+                "Канал к Worker сломан: опись документов получить нельзя, состояние документов " +
+                "НЕИЗВЕСТНО. Освобождение не может утверждать, что правок нет. Перезапуск Worker " +
+                "ради описи запрещён: он потерял бы все документы сеанса и дал бы пустую опись.",
+                RetryPolicy.AfterReconciliation,
+                null,
+                false,
+                new JsonObject { ["reason"] = "worker_channel_broken" }));
+        }
+
         try
         {
-            var frame = await worker.SendAsync(
+            var frame = await worker.SendWithoutRestartAsync(
                 WorkerCommands.SessionInventory,
                 null,
                 InventoryTimeout,
-                isMutation: false,
                 cancellationToken).ConfigureAwait(false);
+
+            if (frame is null)
+            {
+                return (null, new ErrorDto(
+                    ErrorCodes.SessionReleaseFailed,
+                    "Опись документов не получена: канал к Worker оборвался во время запроса, " +
+                    "состояние документов НЕИЗВЕСТНО.",
+                    RetryPolicy.AfterReconciliation,
+                    null,
+                    false,
+                    new JsonObject { ["reason"] = "inventory_lost_mid_request" }));
+            }
 
             return (frame.Payload, frame.Error);
         }

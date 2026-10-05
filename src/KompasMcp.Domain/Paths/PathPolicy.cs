@@ -204,6 +204,18 @@ public sealed class PathPolicy
             return Denied($"Путь '{full}' лежит в только-для-чтения корне '{winner.Root}'; запись запрещена.");
         }
 
+        // REPARSE-ТОЧКА ПРОВЕРЯЕТСЯ И НА ЧТЕНИИ.
+        //
+        // Прежде проверка была только у записываемого корня. Чтение через junction из
+        // только-для-чтения корня выходило за его пределы: корень объявляет границу, а junction
+        // внутри него ведёт наружу, и путь, прошедший проверку, читал файл вне разрешённого
+        // дерева (дефект L1 ревью 05.10.2026).
+        var escape = FirstReparseOnPath(full, winner.Root);
+        if (escape is not null)
+        {
+            return Denied($"Компонента пути '{escape}' является reparse-точкой (junction/symlink): чтение через неё выходит за пределы корня '{winner.Root}', поэтому доступ не выдаётся.");
+        }
+
         return new PathDecision(PathAccess.ReadOnly, full, null, winner.Root);
     }
 

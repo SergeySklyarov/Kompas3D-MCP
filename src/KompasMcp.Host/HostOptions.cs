@@ -30,6 +30,12 @@ public sealed class HostOptions
 
     public string JournalPath { get; init; } = Default("journal", "operations.jsonl");
 
+    /// <summary>
+    /// Служебный каталог контрольных копий файлов документов. Обязателен: копия, которую сервер
+    /// снимает перед мутацией, не должна ложиться рядом с документом пользователя.
+    /// </summary>
+    public string ControlCopyDirectory { get; init; } = Default("control-copies");
+
     public string ArtifactDirectory { get; init; } = Default("artifacts");
 
     /// <summary>Bounded CAD queue depth (spec 1.13: 64).</summary>
@@ -77,6 +83,7 @@ public sealed class HostOptions
             WorkerLogPath = ReadString(node, "worker_log_path"),
             LogPath = ReadString(node, "log_path") ?? Default("logs", "host.jsonl"),
             JournalPath = ReadString(node, "journal_path") ?? Default("journal", "operations.jsonl"),
+            ControlCopyDirectory = ReadString(node, "control_copy_directory") ?? Default("control-copies"),
             ArtifactDirectory = ReadString(node, "artifact_directory") ?? Default("artifacts"),
             QueueCapacity = ReadInt(node, "queue_capacity") ?? 64,
             SyncBudgetMs = ReadInt(node, "sync_budget_ms") ?? 10_000,
@@ -119,6 +126,7 @@ public sealed class HostOptions
             WorkerLogPath = options.WorkerLogPath,
             LogPath = options.LogPath,
             JournalPath = options.JournalPath,
+            ControlCopyDirectory = options.ControlCopyDirectory,
             ArtifactDirectory = options.ArtifactDirectory,
             QueueCapacity = options.QueueCapacity,
             SyncBudgetMs = options.SyncBudgetMs,

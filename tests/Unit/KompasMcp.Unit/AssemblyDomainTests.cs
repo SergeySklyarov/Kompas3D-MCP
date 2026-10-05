@@ -10,10 +10,10 @@ namespace KompasMcp.Unit;
 /// честность их описаний.
 /// </summary>
 /// <remarks>
-/// Живого прогона по сборке не было, поэтому тесты проверяют ровно то, что проверяемо без
-/// КОМПАСа: инструменты зарегистрированы, мутации объявляют обязательные поля, схемы строгие, а
-/// описания называют неподтверждённость, а не молчат о ней. Проверка «маршрут работает» сюда НЕ
-/// входит и не подменяется — она требует прогона на v24.0.0.2799.
+/// Тесты проверяют ровно то, что проверяемо без КОМПАСа: инструменты зарегистрированы, мутации
+/// объявляют обязательные поля, схемы строгие, а описания называют ДЕЙСТВУЮЩИЕ ограничения выпуска
+/// (напр. недоступность адресации вложенных компонентов), а не наличие слова «приёмка». Проверка
+/// «маршрут работает» сюда НЕ входит и не подменяется — она требует прогона на v24.0.0.2799.
 /// </remarks>
 public class AssemblyDomainTests
 {
@@ -80,15 +80,33 @@ public class AssemblyDomainTests
         Assert.Contains("document_id", required);
     }
 
+    [Fact]
+    public void ListComponents_DescriptionNamesTheNestedAddressingLimit()
+    {
+        // Ограничение выпуска обязано быть видно клиенту, а не только в коде: вложенный компонент
+        // ЧИТАЕТСЯ, но адреса у него нет, и мутация по предположительному номеру запрещена.
+        var description = Tool("kompas_list_components").Description;
+        Assert.Contains("вложенн", description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("PartCollection", description, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void InsertComponent_DescriptionNamesTheDocumentedRoute()
+    {
+        var description = Tool("kompas_insert_component").Description;
+        Assert.Contains("AddFromFile", description, StringComparison.Ordinal);
+    }
+
     [Theory]
     [MemberData(nameof(AllTools))]
-    public void AssemblyTool_DescriptionNamesTheUnverifiedState(string name)
+    public void AssemblyTool_DescriptionIsNotAStalePromise(string name)
     {
-        // Единственное место, где клиент прочитает, что маршрут НЕ подтверждён живьём. Молчание
-        // сделало бы «реализовано» неотличимым от «проверено», и это ровно тот дефект, который
-        // проект запрещает. Проверка держит формулировку живой через следующую правку каталога.
+        // Ни одно описание не имеет права утверждать, что живого прогона не было: прогон был, и
+        // устаревшая формулировка читается как «возможность не подтверждена». Проверяется АКТУАЛЬНОЕ
+        // состояние, а не наличие слова «приёмка».
         var description = Tool(name).Description;
-        Assert.Contains("приёмк", description, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("живой приёмки не было", description, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("живого прогона не было", description, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

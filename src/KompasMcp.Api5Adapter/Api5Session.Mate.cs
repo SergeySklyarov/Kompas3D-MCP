@@ -70,7 +70,13 @@ public sealed partial class Api5Session
         var second = FaceObject7(document, command.SecondComponentRef, command.SecondFaceIndex, notes);
 
         var mates7 = RequireMateConstraints(document);
-        var before = SafeInt(() => mates7.Count) ?? 0;
+
+        // СЧЁТЧИК НЕ ПОДМЕНЯЕТСЯ НУЛЁМ. `?? 0` означало «сопряжений нет» там, где число просто не
+        // прочиталось; `?? before` — «число не изменилось» там же. Оба подменяли НЕИЗВЕСТНОЕ
+        // ИЗВЕСТНЫМ (дефект L9 ревью 05.10.2026): ложное «сопряжение не создано» и ложный отказ
+        // удаления, которое фактически прошло.
+        var before = RequireMateCount(document, mates7, "до создания");
+        var beforeRows = ReadMates(document, notes);
 
         IMateConstraint3D? mate;
         try
@@ -98,10 +104,13 @@ public sealed partial class Api5Session
         }
         catch (COMException ex)
         {
+            // Объект сопряжения УЖЕ создан вызовом Add: частичный эффект обязан поднять ревизию и
+            // отозвать ссылки, иначе модель изменилась, а ревизия и ссылки прежние (дефект M4).
+            BumpRevision(document, "mate.create.partial", invalidateAll: true);
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
                 $"Создание сопряжения прервалось: {ex.Message}. Сопряжение не подтверждено.",
-                RetryPolicy.SameOperationId,
+                RetryPolicy.AfterReconciliation,
                 partialEffects: true);
         }
 
@@ -112,6 +121,7 @@ public sealed partial class Api5Session
         }
         catch (COMException ex)
         {
+            BumpRevision(document, "mate.create.partial", invalidateAll: true);
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
                 $"IMateConstraint3D.Update() бросил: {ex.Message}. Сопряжение не подтверждено.",
@@ -120,13 +130,16 @@ public sealed partial class Api5Session
         }
 
         document.Document.RebuildDocument();
-        var valid = Safe(() => mate.Valid);
-        var after = SafeInt(() => mates7.Count) ?? before;
+        var valid = Bool(() => mate.Valid);
+        var after = RequireMateCount(document, mates7, "после создания");
 
         // ПОДТВЕРЖДЕНИЕ — это Valid, а не «Update()=true»: измерено 05.10.2026, что сопряжение с
         // двумя объектами ОДНОГО компонента тоже дало Update()=true, но Valid=false.
         if (updated != true || valid != true)
         {
+            // Недействительное сопряжение УЖЕ лежит в сборке: модель изменилась, и ревизия обязана
+            // это показать (дефект M4 ревью 05.10.2026).
+            BumpRevision(document, "mate.create.partial", invalidateAll: true);
             throw new KompasContractException(
                 ErrorCodes.VerificationFailed,
                 $"Сопряжение НЕ подтверждено: Update()={updated}, Valid={valid}, сопряжений " +
@@ -146,15 +159,41 @@ public sealed partial class Api5Session
         BumpRevision(document, "mate.create");
 
         var rows = ReadMates(document, notes);
-        var created = rows.LastOrDefault();
+
+        // НОВОЕ СОПРЯЖЕНИЕ ИЩЕТСЯ РАЗНОСТЬЮ МНОЖЕСТВ, А НЕ «ПОСЛЕДНЕЙ СТРОКОЙ».
+        //
+        // `rows.LastOrDefault()` молча предполагает, что новое сопряжение добавлено в конец и что
+        // порядок коллекции совпадает с порядком API7-индексатора — то же непроверенное
+        // соответствие порядков, что и у компонентов (дефект M7 ревью 05.10.2026). Разность
+        // считается по МУЛЬТИМНОЖЕСТВУ подписей: два одинаковых сопряжения до создания дают два
+        // вхождения, и третье после — ровно одно новое.
+        var created = FindNewMate(beforeRows, rows, out var createdNote);
+        notes.Add(createdNote);
         if (created is null)
         {
             throw new KompasContractException(
                 ErrorCodes.VerificationFailed,
-                "Сопряжение создано (сопряжений " + before + " → " + after + "), но перечитать его " +
-                "в коллекции не удалось: адресовать сопряжение нечем.",
+                "Сопряжение создано (сопряжений " + before + " → " + after + "), но выделить его в " +
+                "коллекции не удалось: " + createdNote + ". Адресовать сопряжение нечем.",
                 RetryPolicy.ReacquireContext,
                 partialEffects: true);
+        }
+
+        if (after <= before)
+        {
+            // Число сопряжений не выросло, а результат уже выдан как успешный: это тот же дефект,
+            // что «успех при проваленной проверке» (M5 ревью 05.10.2026).
+            throw new KompasContractException(
+                ErrorCodes.VerificationFailed,
+                $"Сопряжение НЕ создано: число сопряжений {before} → {after} при Update()={updated} " +
+                "и Valid=true. Успехом это не считается.",
+                RetryPolicy.AfterReconciliation,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["mate_count_before"] = before,
+                    ["mate_count_after"] = after,
+                });
         }
 
         var stored = References.Register(
@@ -225,6 +264,29 @@ public sealed partial class Api5Session
                 Expected: command.ParamValue.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)),
         };
 
+        // ПРОВАЛ ОБЯЗАТЕЛЬНОЙ ПРОВЕРКИ — ЭТО НЕ УСПЕХ: перечитанный параметр не совпал с заданным
+        // (или не прочитан), а результат «выполнено» был бы ложью (дефект M5 ревью 05.10.2026).
+        if (!matched)
+        {
+            throw new KompasContractException(
+                ErrorCodes.VerificationFailed,
+                "Параметр сопряжения ЗАПИСАН, но не подтверждён: перечитано "
+                + (after is null
+                    ? "НЕ ЧИТАЕТСЯ"
+                    : after.Value.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture))
+                + ", запрошено " + command.ParamValue.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)
+                + ". Успехом это не считается: модель изменена, параметр не подтверждён.",
+                RetryPolicy.AfterReconciliation,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["mate_ref"] = command.MateRef,
+                    ["param_before"] = before,
+                    ["param_after"] = after,
+                    ["param_requested"] = command.ParamValue,
+                });
+        }
+
         return new SetMateParameterResult(
             ToDto(References.Require(command.MateRef, document.Id, document.Revision), "mate"),
             before,
@@ -256,7 +318,10 @@ public sealed partial class Api5Session
         }
 
         var wanted = FixedFromName(command.Fixed);
-        var before = Safe(() => mate.Fixed);
+        // Чтение признака фиксации — ЯВНОЕ: непрочитанное значение не подменяется первым значением
+        // перечисления (прежний `Safe` давал `default(ksMateFixedTypeEnum)` = `ksMFixedUnknown`, то
+        // есть «снятие фиксации» там, где COM-чтение не состоялось).
+        var beforeRead = TryRead(() => mate.Fixed);
         try
         {
             mate.Fixed = wanted;
@@ -272,10 +337,35 @@ public sealed partial class Api5Session
         }
 
         document.Document.RebuildDocument();
-        var after = Safe(() => mate.Fixed);
+        var afterRead = TryRead(() => mate.Fixed);
         BumpRevision(document, "mate.set_fixed");
 
-        var matched = after == wanted;
+        // Совпадение подтверждается ТОЛЬКО прочитанным значением: `afterRead.Ok == false` — это «не
+        // прочитано», а не «совпало».
+        var matched = afterRead.Ok && afterRead.Value == wanted;
+        var before = beforeRead.Ok ? beforeRead.Value : (ksMateFixedTypeEnum?)null;
+        var after = afterRead.Ok ? afterRead.Value : (ksMateFixedTypeEnum?)null;
+
+        // ПРОВАЛ ОБЯЗАТЕЛЬНОЙ ПРОВЕРКИ — ЭТО НЕ УСПЕХ (дефект M5 ревью 05.10.2026): признак
+        // фиксации записан, но перечитанное значение не совпало с заданным или не прочитано.
+        if (!matched)
+        {
+            throw new KompasContractException(
+                ErrorCodes.VerificationFailed,
+                "Признак фиксации ЗАПИСАН, но не подтверждён: перечитано «"
+                + (FixedName(after) ?? "не читается") + "», запрошено «" + command.Fixed + "». Успехом это " +
+                "не считается.",
+                RetryPolicy.AfterReconciliation,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["mate_ref"] = command.MateRef,
+                    ["fixed_before"] = FixedName(before),
+                    ["fixed_after"] = FixedName(after),
+                    ["fixed_requested"] = command.Fixed,
+                });
+        }
+
         return new SetMateFixedResult(
             ToDto(References.Require(command.MateRef, document.Id, document.Revision), "mate"),
             FixedName(before),
@@ -288,7 +378,7 @@ public sealed partial class Api5Session
                 },
                 matched ? new List<string>() : new List<string>
                 {
-                    "fixed_not_read_back — перечитанный признак не совпал с заданным",
+                    "fixed_not_read_back — перечитанный признак не прочитан или не совпал с заданным",
                 }));
     }
 
@@ -300,13 +390,13 @@ public sealed partial class Api5Session
         RequireRevision(document, command.ExpectedRevision);
 
         var payload = RequireMate(document, command.MateRef);
-        var before = SafeInt(() => (document.Document.MateConstraintCollection() as ksMateConstraintCollection)!.GetCount()) ?? 0;
+        var before = MateConstraintCount(document, "до удаления");
 
         // Удаление — документированный ksDocument3D.RemoveMateConstraint(constraintType, obj1, obj2)
         // (ksdocument3d_removemateconstraint.html). Объекты берутся у самого сопряжения тем же
         // документированным GetBaseObj(1|2) — «первый попавшийся» здесь был бы подменой адреса.
-        var first = Safe(() => payload.Mate5.GetBaseObj(1));
-        var second = Safe(() => payload.Mate5.GetBaseObj(2));
+        var first = Ref(() => payload.Mate5.GetBaseObj(1));
+        var second = Ref(() => payload.Mate5.GetBaseObj(2));
         if (first is null || second is null)
         {
             throw new KompasContractException(
@@ -331,10 +421,17 @@ public sealed partial class Api5Session
         }
 
         document.Document.RebuildDocument();
-        var after = SafeInt(() => (document.Document.MateConstraintCollection() as ksMateConstraintCollection)!.GetCount()) ?? before;
+        var after = MateConstraintCount(document, "после удаления");
 
         if (!removed || after >= before)
         {
+            // Удаление, которое КОМПАС подтвердил, а перечитанное число — нет, означает: модель
+            // изменилась, а ревизия и ссылки об этом не знают (дефект M4 ревью 05.10.2026).
+            if (removed)
+            {
+                BumpRevision(document, "mate.delete.partial", invalidateAll: true);
+            }
+
             throw new KompasContractException(
                 ErrorCodes.VerificationFailed,
                 $"Сопряжение НЕ удалено: RemoveMateConstraint={removed}, сопряжений {before} → {after}.",
@@ -400,6 +497,97 @@ public sealed partial class Api5Session
         }
     }
 
+    /// <summary>
+    /// Число сопряжений по документированной API5-коллекции <c>ksDocument3D.MateConstraintCollection</c>.
+    /// Непрочитанное число — отказ, а не ноль и не прежнее значение.
+    /// </summary>
+    private static int MateConstraintCount(DocumentEntry document, string stage)
+    {
+        var count = SafeInt(() => (document.Document.MateConstraintCollection() as ksMateConstraintCollection)!.GetCount());
+        if (count is not null)
+        {
+            return count.Value;
+        }
+
+        throw new KompasContractException(
+            ErrorCodes.CapabilityUnavailable,
+            $"Число сопряжений {stage} не прочитано (ksMateConstraintCollection.GetCount): подтвердить " +
+            "удаление нечем.",
+            RetryPolicy.ReacquireContext,
+            details: new Dictionary<string, object?> { ["document_id"] = document.Id });
+    }
+
+    /// <summary>
+    /// Число сопряжений, ПРОЧИТАННОЕ. Непрочитанное число — отказ, а не ноль: подтвердить создание
+    /// или удаление «по непрочитанному счётчику» нельзя.
+    /// </summary>
+    private static int RequireMateCount(DocumentEntry document, IMateConstraints3D mates, string stage)
+    {
+        var count = SafeInt(() => mates.Count);
+        if (count is not null)
+        {
+            return count.Value;
+        }
+
+        throw new KompasContractException(
+            ErrorCodes.CapabilityUnavailable,
+            $"Число сопряжений {stage} не прочитано (IMateConstraints3D.Count): подтвердить операцию " +
+            "нечем. Подменять непрочитанное число нулём или прежним значением здесь запрещено.",
+            RetryPolicy.ReacquireContext,
+            details: new Dictionary<string, object?> { ["document_id"] = document.Id });
+    }
+
+    /// <summary>
+    /// Подпись строки сопряжения для сравнения двух снимков коллекции.
+    /// </summary>
+    private static string MateSignature(MateRowDto row) => string.Join('|',
+        row.ConstraintType ?? "?",
+        row.Fixed ?? "?",
+        row.ParamValue?.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture) ?? "?",
+        row.Alignment ?? "?",
+        row.Direction?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?",
+        row.BaseObject1 ?? "?",
+        row.BaseObject2 ?? "?",
+        row.Valid?.ToString() ?? "?");
+
+    /// <summary>
+    /// Выделить сопряжение, которого не было в снимке <paramref name="before"/>.
+    /// </summary>
+    /// <remarks>
+    /// Сравнение идёт по МУЛЬТИМНОЖЕСТВУ подписей: два одинаковых сопряжения до создания дают два
+    /// вхождения, и третье после — ровно одно новое. «Последняя строка» такого не различает.
+    /// </remarks>
+    private static MateRowDto? FindNewMate(List<MateRowDto> before, List<MateRowDto> after, out string note)
+    {
+        var remaining = new List<string>(before.Select(MateSignature));
+        MateRowDto? candidate = null;
+        var addedCount = 0;
+
+        foreach (var row in after)
+        {
+            var index = remaining.IndexOf(MateSignature(row));
+            if (index >= 0)
+            {
+                remaining.RemoveAt(index);
+                continue;
+            }
+
+            addedCount++;
+            candidate = row;
+        }
+
+        if (addedCount == 1 && candidate is not null)
+        {
+            note = $"новое сопряжение выделено разностью множеств: номер {candidate.Ordinal}";
+            return candidate;
+        }
+
+        note = addedCount == 0
+            ? "новое сопряжение НЕ выделено: перечитанная коллекция не отличается от снимка до создания"
+            : $"новое сопряжение НЕ выделено однозначно: разность дала {addedCount} строк";
+        return null;
+    }
+
     private ksMateConstraint? MateAt(DocumentEntry document, int ordinal)
     {
         try
@@ -451,10 +639,20 @@ public sealed partial class Api5Session
             return rows;
         }
 
-        var count = SafeInt(() => mates.GetCount()) ?? 0;
-        for (var index = 0; index < count; index++)
+        // НЕПРОЧИТАННОЕ ЧИСЛО — ЭТО ОТКАЗ ЧТЕНИЯ, А НЕ «СОПРЯЖЕНИЙ НЕТ». Прежде `?? 0` давал
+        // пустой перечень, и «сопряжений нет» было неотличимо от «коллекция не ответила»
+        // (дефект L9 ревью 05.10.2026).
+        var count = SafeInt(() => mates.GetCount());
+        if (count is null)
         {
-            var mate = Safe(() => mates.GetByIndex(index)) as ksMateConstraint;
+            notes.Add("mate_count_unread — число сопряжений не прочитано: перечень пуст, но это НЕ " +
+                      "означает «сопряжений нет»");
+            return rows;
+        }
+
+        for (var index = 0; index < count.Value; index++)
+        {
+            var mate = Ref(() => mates.GetByIndex(index)) as ksMateConstraint;
             if (mate is null)
             {
                 notes.Add($"mate_{index}_not_ksMateConstraint");
@@ -476,11 +674,11 @@ public sealed partial class Api5Session
                 Fixed = FixedName(SafeInt(() => mate.@fixed)),
                 ParamValue = SafeDouble(() => mate.distance),
                 Direction = SafeInt(() => mate.direction),
-                Alignment = AlignmentName(Safe(() => Mate7(document, index)?.Alignment)),
-                Valid = Safe(() => Mate7(document, index)?.Valid),
-                BaseObject1 = ObjectTypeName(Safe(() => mate.GetBaseObj(1))),
-                BaseObject2 = ObjectTypeName(Safe(() => mate.GetBaseObj(2))),
-                Name = Safe(() => Mate7(document, index)?.Name),
+                Alignment = AlignmentName(EnumOrNull(() => Mate7(document, index)?.Alignment)),
+                Valid = Bool(() => Mate7(document, index)?.Valid),
+                BaseObject1 = ObjectTypeName(Ref(() => mate.GetBaseObj(1))),
+                BaseObject2 = ObjectTypeName(Ref(() => mate.GetBaseObj(2))),
+                Name = Ref(() => Mate7(document, index)?.Name),
             });
         }
 
@@ -511,6 +709,26 @@ public sealed partial class Api5Session
                 $"Компонент по порядковому номеру {payload.Ordinal} не получен как ksPart: грань " +
                 "адресовать нечем.",
                 RetryPolicy.ReacquireContext);
+        }
+
+        // ТОЖДЕСТВО ПРОВЕРЯЕТСЯ И ЗДЕСЬ: грань берётся у компонента, найденного по номеру, и если
+        // номер ведёт в чужой экземпляр, сопряжение было бы создано между ЧУЖИМИ гранями (дефект M7
+        // ревью 05.10.2026).
+        var identity = IdentityMatches(part5, payload, out var identityNote);
+        notes.Add("component_identity — " + identityNote);
+        if (identity == false)
+        {
+            throw new KompasContractException(
+                ErrorCodes.StaleReference,
+                "Грань адресована по номеру, который ведёт в ЧУЖОЙ компонент: " + identityNote +
+                ". Сопряжение по неподтверждённому адресу не создаётся; перечитайте структуру " +
+                "kompas_list_components и возьмите свежую ссылку.",
+                RetryPolicy.ReacquireContext,
+                details: new Dictionary<string, object?>
+                {
+                    ["component_ref"] = componentRef,
+                    ["ordinal"] = payload.Ordinal,
+                });
         }
 
         ksFaceCollection? faces;
@@ -604,6 +822,14 @@ public sealed partial class Api5Session
         _ => $"unknown_{value}",
     };
 
+    /// <summary>
+    /// Признак фиксации по имени. Отображение опирается на ДВА документированных источника, и их
+    /// расхождение названо, а не сглажено: <c>ksmatefixedtypeenum.html</c> — «ksMFixedUnknown = 0,
+    /// Неопределено; ksMFixedPart1 = 1; ksMFixedPart2 = 2», <c>mateconstraintfixed.html</c> —
+    /// «0 нет фиксации, 1 фиксировать деталь 1, 2 фиксировать деталь 2». То есть значение 0 в
+    /// перечислении API5 названо «Неопределено», а в константах API7 — «нет фиксации»; публичное имя
+    /// <c>none</c> следует ВТОРОМУ источнику, потому что оно описывает смысл, а не имя константы.
+    /// </summary>
     private static ksMateFixedTypeEnum FixedFromName(string name) => name switch
     {
         "none" => ksMateFixedTypeEnum.ksMFixedUnknown,
@@ -624,6 +850,10 @@ public sealed partial class Api5Session
         _ => $"unknown_{(int)value.Value}",
     };
 
+    /// <summary>
+    /// Имя по СЫРОМУ числовому значению (поле <c>ksMateConstraint.fixed</c>). Та же нумерация, что и
+    /// у <see cref="FixedFromName"/>: 0 — «нет фиксации» по <c>mateconstraintfixed.html</c>.
+    /// </summary>
     private static string? FixedName(int? value) => value switch
     {
         null => null,

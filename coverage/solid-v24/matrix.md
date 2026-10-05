@@ -103,7 +103,7 @@
 | зависимость | закрыто | приоритетные действия | проверки |
 |---|---|---|---|
 | `dep.mate.object_address` | да | discover, read, negative_tests | MATE.02.discover, MATE.03.read, MATE.01.face_range |
-| `dep.mate.component_insert` | да | create, read, geometry_validation | MATE.01.create, MATE.02.read, MATE.06.geometry_validation |
+| `dep.mate.component_insert` | да | create, read, geometry_validation | MATE.01.create, MATE.02.read, MATE.06.geometry_validation, MATE.PREP, MATE.PREP.create |
 | `dep.mate.revisions` | да | read, edit, negative_tests | MATE.05.read, MATE.03.edit, MATE.03.negative_tests |
 | `dep.mate.idempotency` | да | create, read, negative_tests | MATE.01.create, MATE.02.read, MATE.05.negative_tests |
 | `dep.mate.save_reopen` | да | save_reopen, read | MATE.05.read, MATE.01.save_reopen |
@@ -457,7 +457,7 @@
 | `dep.assembly.revisions` *(вне каталога)* | — | dependency_of | — | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | н/п | ASM.01.read, ASM.07.read, ASM.04.edit, ASM.02.rebuild, ASM.07.save_reopen, ASM.04.negative_tests, ASM.04.discover, ASM.05.save_reopen |
 | `dep.assembly.idempotency` *(вне каталога)* | — | dependency_of | — | mcp_verified | OK | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | ASM.03.read, ASM.02.create, ASM.02.idempotency, ASM.04.discover, ASM.02.negative_tests |
 | `dep.mate.object_address` *(вне каталога)* | — | dependency_of | — | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | MATE.02.discover, MATE.03.read, MATE.01.face_range |
-| `dep.mate.component_insert` *(вне каталога)* | — | dependency_of | — | mcp_verified | н/п | OK | OK | н/п | н/п | н/п | н/п | н/п | н/п | OK | MATE.01.create, MATE.02.read, MATE.06.geometry_validation |
+| `dep.mate.component_insert` *(вне каталога)* | — | dependency_of | — | mcp_verified | н/п | OK | OK | н/п | н/п | н/п | н/п | н/п | н/п | OK | MATE.01.create, MATE.02.read, MATE.06.geometry_validation, MATE.PREP, MATE.PREP.create |
 | `dep.mate.revisions` *(вне каталога)* | — | dependency_of | — | mcp_verified | н/п | н/п | OK | OK | н/п | н/п | н/п | н/п | OK | н/п | MATE.05.read, MATE.03.edit, MATE.03.negative_tests |
 | `dep.mate.idempotency` *(вне каталога)* | — | dependency_of | — | mcp_verified | н/п | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | MATE.01.create, MATE.02.read, MATE.05.negative_tests |
 | `dep.mate.save_reopen` *(вне каталога)* | — | dependency_of | — | mcp_verified | н/п | н/п | OK | н/п | н/п | OK | н/п | н/п | н/п | н/п | MATE.05.read, MATE.01.save_reopen |

@@ -51,11 +51,24 @@ public sealed record JournalRecord(
 /// </remarks>
 public sealed class OperationJournal : IDisposable
 {
+    /// <summary>
+    /// Назначение именованной блокировки журнала. Вынесено в константу, потому что тем же
+    /// именем обязан пользоваться ИНСТРУМЕНТ, проверяющий поведение при удержанной блокировке:
+    /// без общей константы проверка держала бы «свою» блокировку и измеряла бы не то.
+    /// </summary>
+    public const string FileLockPurpose = "journal";
+
     private readonly object _gate = new();
     private readonly Dictionary<string, JournalRecord> _byOperation = new(StringComparer.Ordinal);
 
     /// <summary>Межпроцессная блокировка ЗАПИСИ по пути журнала. Чтение она не запрещает.</summary>
     private readonly NamedFileLock _fileGate;
+
+    /// <summary>Сколько ждать межпроцессную блокировку при записи строки.</summary>
+    private readonly TimeSpan _appendLockTimeout;
+
+    /// <summary>Сколько ждать межпроцессную блокировку при чтении журнала.</summary>
+    private readonly TimeSpan _replayLockTimeout;
 
     public string Path { get; }
 
@@ -76,16 +89,18 @@ public sealed class OperationJournal : IDisposable
 
     public event Action<JournalRecord>? RecoveredAsUnknown;
 
-    public OperationJournal(string path)
+    public OperationJournal(string path, TimeSpan? appendLockTimeout = null, TimeSpan? replayLockTimeout = null)
     {
         Path = System.IO.Path.GetFullPath(path);
+        _appendLockTimeout = appendLockTimeout ?? AppendLockTimeout;
+        _replayLockTimeout = replayLockTimeout ?? ReplayLockTimeout;
         var directory = System.IO.Path.GetDirectoryName(Path);
         if (!string.IsNullOrEmpty(directory))
         {
             System.IO.Directory.CreateDirectory(directory);
         }
 
-        _fileGate = NamedFileLock.For(Path, "journal");
+        _fileGate = NamedFileLock.For(Path, FileLockPurpose);
         Replay();
         AssertWritable();
     }
@@ -137,7 +152,7 @@ public sealed class OperationJournal : IDisposable
         // файла, а про ЧЕСТНОСТЬ ЧИСЛА: без блокировки прибор, читающий живой журнал, мог бы
         // поймать половину строки и назвать её рваным хвостом — то есть доложить о порче там, где
         // шла обычная запись.
-        var locked = _fileGate.Enter(ReplayLockTimeout);
+        var locked = _fileGate.Enter(_replayLockTimeout);
         if (!locked)
         {
             ReplayRanUnlocked = true;
@@ -146,12 +161,61 @@ public sealed class OperationJournal : IDisposable
         try
         {
             ReplayCore();
+
+            // РВАНЫЙ ХВОСТ ЧИНИТСЯ ЗДЕСЬ, А НЕ ЖДЁТ СЛЕДУЮЩЕЙ ЗАПИСИ.
+            //
+            // До 05.10.2026 журнал лишь ОТМЕЧАЛ обрыв (TornTail=true) и ничего не делал. Первая же
+            // запись нового процесса дописывала `{…B…}\n` в режиме Append прямо за обрывком, и
+            // строка становилась `{"operation_id":"trunc{…B…}` — то есть намерение B терялось
+            // полностью: следующий Replay не разбирал эту строку, журнал не знал операцию вообще, и
+            // повтор с тем же operation_id выполнял мутацию ВТОРОЙ раз. Ровно тот сценарий, ради
+            // которого журнал заведён, был сломан.
+            //
+            // Починка — один байт под той же блокировкой, что и запись: после неё файл кончается
+            // переводом строки, и следующая запись начинает свою строку.
+            RepairTornTail();
         }
         finally
         {
             _fileGate.Exit();
         }
     }
+
+    /// <summary>
+    /// Дописать перевод строки, если файл им не кончается. Ничего не делает на целом файле.
+    /// </summary>
+    private void RepairTornTail()
+    {
+        try
+        {
+            if (!File.Exists(Path) || FileEndsWithNewline(Path))
+            {
+                return;
+            }
+
+            using var stream = OpenAppend();
+            stream.WriteByte((byte)'\n');
+            stream.Flush();
+            RepairedTornTails++;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            // Починка не удалась — это НАЗЫВАЕТСЯ, а не проглатывается: при следующей записи без
+            // перевода строки потеря строки повторится, и молчание здесь сделало бы её
+            // неотличимой от «обрывов не было».
+            TornTailRepairFailures++;
+            LastRepairFailure = $"{ex.GetType().Name}: {ex.Message}";
+        }
+    }
+
+    /// <summary>Сколько рваных хвостов починено при открытии (дописан перевод строки).</summary>
+    public int RepairedTornTails { get; private set; }
+
+    /// <summary>Сколько раз починка рваного хвоста не удалась. Печатается, а не молчит.</summary>
+    public int TornTailRepairFailures { get; private set; }
+
+    /// <summary>Причина последней неудавшейся починки; null, если починок не было или все удались.</summary>
+    public string? LastRepairFailure { get; private set; }
 
     /// <summary>Чтение журнала прошло без межпроцессной блокировки: числа пропусков не гарантированы.</summary>
     public bool ReplayRanUnlocked { get; private set; }
@@ -293,9 +357,40 @@ public sealed class OperationJournal : IDisposable
                 // 3a487677… в одном экземпляре), то есть «повтор не повторяет мутацию» было ложью
                 // ровно в том окне, ради которого повтор и разрешён.
                 //
-                // Теперь Proceed=true означает ровно одно: этого operation_id журнал ещё не видел.
-                // Незавершённая запись отвечает воспроизведением со статусом running — клиент
-                // опрашивает тем же вызовом и получает записанный исход, когда операция завершится.
+                // ЧИСТЫЙ ОТКАЗ РАЗРЕШАЕТ НОВУЮ ПОПЫТКУ С ТЕМ ЖЕ operation_id.
+                //
+                // Политика `SameOperationId` ЗАПИСАННОГО отказа была НЕВЫПОЛНИМА: любая уже
+                // записанная запись `failed` (QUEUE_FULL, RequireSourceFile, AddFromFile=null,
+                // замена не применилась) воспроизводилась ВСЕГДА, и «повторите тем же
+                // operation_id» из текста ошибки не работало — клиент был вынужден брать новый id,
+                // а для отказа с частичным эффектом новый id означает повторную мутацию. Теперь
+                // различие проведено по существу: отказ без частичных эффектов — ничто не
+                // применено, повтор безопасен; отказ с частичными эффектами или неизвестным
+                // исходом — повтор воспроизведением, как прежде.
+                if (IsCleanFailure(existing))
+                {
+                    var restart = existing with
+                    {
+                        Outcome = JournalOutcome.InFlight,
+                        ResultJson = null,
+                        Error = null,
+                        FinishedUtc = null,
+                        NeedsReconciliation = false,
+                    };
+
+                    if (!TryAppend(restart))
+                    {
+                        throw JournalUnavailable();
+                    }
+
+                    _byOperation[operationId] = restart;
+                    RestartsAfterCleanFailure++;
+                    return new StartDecision(Proceed: true, restart);
+                }
+
+                // Proceed=false означает: повторное обращение к КОМПАС не безопасно. Запись
+                // воспроизводится — незавершённая отвечает `running`, частичный эффект и
+                // неизвестный исход требуют согласования.
                 return new StartDecision(Proceed: false, existing);
             }
 
@@ -312,23 +407,78 @@ public sealed class OperationJournal : IDisposable
                 null,
                 NeedsReconciliation: false);
 
+            // ЗАПИСЬ НАМЕРЕНИЯ ОБЯЗАНА БЫТЬ ДОЛГОВЕЧНОЙ И ПОД БЛОКИРОВКОЙ, ИНАЧЕ КОМАНДА НЕ УХОДИТ.
+            //
+            // Прежде результат `_fileGate.Enter(...)` здесь не проверялся: строка писалась и без
+            // блокировки, а факт назывался диагностическим флагом `AppendRanUnlocked`. Это заменяло
+            // ГАРАНТИЮ журналирования диагностикой: потерянная запись означает, что повтор после
+            // перезапуска выглядит как «не выполнялось», то есть мутация может быть применена
+            // ВТОРОЙ раз (измерено в пробе scratch/_append_probe: 381 запись из 400 без блокировки).
+            // Теперь при недоступной блокировке запись НЕ делается, в `_byOperation` НЕ остаётся
+            // фиктивной начатой операции, и вызывающий получает именованный отказ — до того, как
+            // что-либо уйдёт в Worker.
+            if (!TryAppend(record))
+            {
+                throw JournalUnavailable();
+            }
+
             _byOperation[operationId] = record;
-            Append(record);
             return new StartDecision(true, null);
         }
     }
 
-    public void Complete(string operationId, string? resultJson) => Finish(operationId, JournalOutcome.Succeeded, resultJson, null, needsReconciliation: false);
+    /// <summary>
+    /// Записанный отказ, после которого повтор с тем же operation_id НИЧЕГО не применяет второй
+    /// раз: исхода «применено частично» нет, согласование не требуется.
+    /// </summary>
+    private static bool IsCleanFailure(JournalRecord record) =>
+        record.Outcome == JournalOutcome.Failed
+        && !record.NeedsReconciliation
+        && record.Error?.PartialEffects != true;
 
-    public void Fail(string operationId, ErrorDto error) => Finish(operationId, JournalOutcome.Failed, null, error, needsReconciliation: false);
+    /// <summary>
+    /// Отказ «журнал недоступен»: намерение НЕ записано, команда НЕ уходила. Одна формулировка на
+    /// две причины (блокировка не получена / запись не удалась), потому что для вызывающего это
+    /// одно и то же состояние, а причина названа в <c>details</c>, а не спрятана.
+    /// </summary>
+    private KompasContractException JournalUnavailable() =>
+        new(
+            ErrorCodes.JournalUnavailable,
+            $"Журнал операций недоступен для записи: строка намерения не записана (блокировка не " +
+            $"получена за {_appendLockTimeout.TotalSeconds:0.#} с — {RefusedAppends} раз; запись на " +
+            $"носитель не удалась — {AppendIoFailures} раз{Explain(LastAppendFailure)}). Намерение не " +
+            "записано, команда в КОМПАС не отправлена — это чистый отказ, повтор с тем же " +
+            "operation_id допустим, когда журнал снова доступен.",
+            RetryPolicy.SameOperationId,
+            details: new Dictionary<string, object?>
+            {
+                ["journal_path"] = Path,
+                ["lock_timeout_s"] = _appendLockTimeout.TotalSeconds,
+                ["refused_appends"] = RefusedAppends,
+                ["append_io_failures"] = AppendIoFailures,
+                ["last_append_failure"] = LastAppendFailure,
+            });
 
-    public void Cancel(string operationId) => Finish(operationId, JournalOutcome.Cancelled, null, null, needsReconciliation: false);
+    private static string Explain(string? failure) =>
+        failure is null ? string.Empty : $": {failure}";
+
+    /// <summary>
+    /// Сколько раз записанный ЧИСТЫЙ отказ был начат заново тем же operation_id. Печатается:
+    /// «повтор разрешён» и «повтор ни разу не происходил» — разные утверждения.
+    /// </summary>
+    public int RestartsAfterCleanFailure { get; private set; }
+
+    public bool Complete(string operationId, string? resultJson) => Finish(operationId, JournalOutcome.Succeeded, resultJson, null, needsReconciliation: false);
+
+    public bool Fail(string operationId, ErrorDto error) => Finish(operationId, JournalOutcome.Failed, null, error, needsReconciliation: false);
+
+    public bool Cancel(string operationId) => Finish(operationId, JournalOutcome.Cancelled, null, null, needsReconciliation: false);
 
     /// <summary>
     /// Record that the outcome cannot be known. Used on a budget timeout, a worker death, or a
     /// disconnect mid-call.
     /// </summary>
-    public void MarkUnknown(string operationId, string reason) =>
+    public bool MarkUnknown(string operationId, string reason) =>
         Finish(operationId, JournalOutcome.OutcomeUnknown, null, ReconcileError(reason), needsReconciliation: true);
 
     /// <summary>
@@ -344,13 +494,13 @@ public sealed class OperationJournal : IDisposable
         true,
         new JsonObject { ["reconciliation_required"] = true });
 
-    private void Finish(string operationId, JournalOutcome outcome, string? resultJson, ErrorDto? error, bool needsReconciliation)
+    private bool Finish(string operationId, JournalOutcome outcome, string? resultJson, ErrorDto? error, bool needsReconciliation)
     {
         lock (_gate)
         {
             if (!_byOperation.TryGetValue(operationId, out var existing))
             {
-                return;
+                return false;
             }
 
             var updated = existing with
@@ -362,8 +512,30 @@ public sealed class OperationJournal : IDisposable
                 NeedsReconciliation = needsReconciliation,
             };
 
-            _byOperation[operationId] = updated;
-            Append(updated);
+            if (TryAppend(updated))
+            {
+                _byOperation[operationId] = updated;
+                return true;
+            }
+
+            // ТЕРМИНАЛЬНАЯ ЗАПИСЬ НЕ УДАЛАСЬ ПОСЛЕ ВЫПОЛНЕННОЙ МУТАЦИИ.
+            //
+            // Строка «намерение» уже долговечна и говорит `in_flight`; терминальная строка — нет.
+            // Поэтому исход этой операции нельзя объявлять ЗАПИСАННЫМ: после перезапуска журнал
+            // прочитает `in_flight` и потребует согласования, то есть повтор НЕ безопасен. Здесь это
+            // названо в памяти явно (`NeedsReconciliation`), а вызывающий получает `false` и обязан
+            // сообщить клиенту, что терминальная запись не долговечна, а не молча отдать успех.
+            // Сама мутация уже выполнена — поэтому исход в памяти СОХРАНЯЕТСЯ (он известен в этом
+            // процессе), но помечается как требующий согласования, а не как чисто записанный.
+            TerminalWriteFailures++;
+            _byOperation[operationId] = updated with
+            {
+                NeedsReconciliation = true,
+                Error = updated.Error ?? ReconcileError(
+                    "Терминальная запись журнала не удалась: исход команды известен только в этом " +
+                    "процессе и после перезапуска потребует согласования."),
+            };
+            return false;
         }
     }
 
@@ -399,41 +571,94 @@ public sealed class OperationJournal : IDisposable
     /// строки уходит одним <c>Write</c> в дескриптор, открытый в режиме добавления, и всё это
     /// (открыть-записать-закрыть) закрыто именованной блокировкой по пути журнала.
     /// </summary>
+    /// <returns>
+    /// <c>true</c> — строка записана под блокировкой; <c>false</c> — блокировка не получена за
+    /// <see cref="_appendLockTimeout"/> и НИЧЕГО не записано. Отказ называется вызывающим, а не
+    /// подменяется записью без блокировки.
+    /// </returns>
     /// <remarks>
+    /// <para>
     /// Блокировка обязательна, и это измерено, а не подстраховано: <c>FileMode.Append</c> с одной
     /// записью байтов теряет записи при двух писателях (381 из 400 в пробе
     /// <c>scratch/_append_probe</c>), потому что позиция конца файла запоминается при ОТКРЫТИИ.
     /// Для журнала безопасности потерянная запись означает, что повтор после перезапуска выглядит
     /// как «не выполнялось», — то есть мутация может быть применена второй раз. Заодно не остаётся
     /// пожизненной ручки, из-за которой второй Хост не мог даже прочитать журнал.
+    /// </para>
+    /// <para>
+    /// <b>ГРАНИЦЫ ДОЛГОВЕЧНОСТИ НАЗВАНЫ ТОЧНО.</b> <c>Flush()</c> на <see cref="FileStream"/>
+    /// сбрасывает буферы управляемого потока в ОС — он НЕ обещает, что байты легли на носитель.
+    /// Поэтому гарантия здесь — «строка ушла в ОС и видна другим читателям через файловую систему
+    /// раньше, чем команда уйдёт в Worker», а НЕ «строка переживёт отключение питания»: для второго
+    /// нужен <c>Flush(true)</c> либо запись через <c>FileOptions.WriteThrough</c>, и ни того, ни
+    /// другого здесь нет. Это осознанная граница: цена долговечности при потере питания — запись на
+    /// диск на каждой мутации, а потеря питания не является сценарием, ради которого журнал заведён
+    /// (он заведён против ПОВТОРНОЙ ОТПРАВКИ после падения процесса).
+    /// </para>
     /// </remarks>
-    private void Append(JournalRecord record)
+    private bool TryAppend(JournalRecord record)
     {
         var line = JsonSerializer.Serialize(record, JournalOptions) + "\n";
         var bytes = Encoding.UTF8.GetBytes(line);
-        var locked = _fileGate.Enter(AppendLockTimeout);
+
+        if (!_fileGate.Enter(_appendLockTimeout))
+        {
+            // Блокировка не получена — ПИСАТЬ НЕЛЬЗЯ. Прежняя редакция писала и лишь выставляла
+            // диагностический флаг: гарантия подменялась наблюдением.
+            RefusedAppends++;
+            return false;
+        }
+
         try
         {
             using var stream = OpenAppend();
             stream.Write(bytes, 0, bytes.Length);
             stream.Flush();
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+            or NotSupportedException or ObjectDisposedException)
+        {
+            // ЗАПИСЬ НЕ УДАЛАСЬ ПО ПРИЧИНЕ НОСИТЕЛЯ (диск полон, антивирус удержал файл, путь
+            // исчез). До 05.10.2026 такой исход вообще не рассматривался: блокировка получена, а
+            // сама запись бросала IOException наружу — либо операция оставалась `in_flight` в
+            // памяти при НЕзаписанной строке намерения (повторы в этом процессе вечно отвечали
+            // `running`, а после перезапуска журнал операции не знал вовсе), либо вызов падал
+            // необработанным исключением там, где ожидался конверт.
+            //
+            // Смысл отказа тот же, что у недоступной блокировки: ДОЛГОВЕЧНОЙ СТРОКИ НЕТ. Поэтому
+            // возвращается false, а причина называется числом и текстом.
+            AppendIoFailures++;
+            LastAppendFailure = $"{ex.GetType().Name}: {ex.Message}";
+            return false;
         }
         finally
         {
-            if (!locked)
-            {
-                // Запись всё равно сделана — но её совместность НЕ доказана, и это называется.
-                AppendRanUnlocked = true;
-            }
-
             _fileGate.Exit();
         }
     }
 
-    /// <summary>Запись журнала хотя бы раз прошла без межпроцессной блокировки.</summary>
-    public bool AppendRanUnlocked { get; private set; }
+    /// <summary>
+    /// Сколько раз САМА запись строки не удалась (блокировка была получена, носитель — нет).
+    /// </summary>
+    public int AppendIoFailures { get; private set; }
 
-    /// <summary>Сколько ждать межпроцессную блокировку журнала.</summary>
+    /// <summary>Причина последней неудавшейся записи; null, если неудач не было.</summary>
+    public string? LastAppendFailure { get; private set; }
+
+    /// <summary>
+    /// Сколько раз запись журнала была ОТКАЗАНА, потому что межпроцессная блокировка не получена.
+    /// Печатается вызывающим: молчание об отказе неотличимо от «отказов не было».
+    /// </summary>
+    public int RefusedAppends { get; private set; }
+
+    /// <summary>
+    /// Сколько раз терминальная запись не удалась ПОСЛЕ выполненной мутации. Такая операция
+    /// остаётся в журнале как требующая согласования: её исход известен только этому процессу.
+    /// </summary>
+    public int TerminalWriteFailures { get; private set; }
+
+    /// <summary>Сколько ждать межпроцессную блокировку журнала при записи (значение по умолчанию).</summary>
     private static readonly TimeSpan AppendLockTimeout = TimeSpan.FromSeconds(5);
 
     /// <summary>

@@ -284,6 +284,171 @@ public class OperationJournalTests : IDisposable
         Assert.Equal(2 * perWriter, reader.Recent(10_000).Count);
     }
 
+    /// <summary>
+    /// FIX A. Запись журнала при недоступной межпроцессной блокировке НЕ выполняется: намерение не
+    /// записано, начатой операции в памяти нет, команда не уходит, отказ НАЗВАН. Прежняя редакция
+    /// писала строку без блокировки и лишь выставляла диагностический флаг — гарантия журналирования
+    /// подменялась наблюдением.
+    /// </summary>
+    [Fact]
+    public void BeginRefused_WhenLockHeldElsewhere_NothingRecordedAndNamedRefusal()
+    {
+        using var journal = new OperationJournal(_file, appendLockTimeout: TimeSpan.FromMilliseconds(200));
+        using var holder = new JournalLockHolder(_file);
+        var id = Guid.NewGuid().ToString();
+
+        var ex = Assert.Throws<KompasContractException>(() =>
+            journal.TryBegin(id, "kompas_extrude", Args(10), "doc-1", 3));
+
+        Assert.Equal(ErrorCodes.JournalUnavailable, ex.Code);
+        Assert.Equal(RetryPolicy.SameOperationId, ex.RetryPolicy);
+        Assert.False(journal.TryGet(id, out _),
+            "неудачная запись намерения не имеет права оставлять фиктивную начатую операцию");
+        Assert.Equal(1, journal.RefusedAppends);
+
+        // И на диске её тоже нет: отказ — это «не записано», а не «записано без блокировки».
+        var text = File.Exists(_file) ? ReadWhileOpen(_file) : string.Empty;
+        Assert.DoesNotContain(id, text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Освобождение блокировки восстанавливает работу: тот же operation_id принимается, запись
+    /// намерения долговечна, повторной отправки уже выполненной команды не происходит.
+    /// </summary>
+    [Fact]
+    public void BeginSucceedsAfterLockReleased_AndCompletedCommandIsNotReExecuted()
+    {
+        using var journal = new OperationJournal(_file, appendLockTimeout: TimeSpan.FromMilliseconds(200));
+        var id = Guid.NewGuid().ToString();
+
+        using (new JournalLockHolder(_file))
+        {
+            Assert.Throws<KompasContractException>(() =>
+                journal.TryBegin(id, "kompas_extrude", Args(10), "doc-1", 3));
+        }
+
+        var decision = journal.TryBegin(id, "kompas_extrude", Args(10), "doc-1", 3);
+        Assert.True(decision.Proceed, "после освобождения блокировки намерение обязано записаться");
+        journal.Complete(id, """{"body_count":1}""");
+
+        var again = journal.TryBegin(id, "kompas_extrude", Args(10), "doc-1", 3);
+        Assert.False(again.Proceed, "уже выполненная команда не отправляется второй раз");
+        Assert.Equal(JournalOutcome.Succeeded, again.Existing!.Outcome);
+    }
+
+    /// <summary>
+    /// FIX A (терминальная запись). Если строка исхода не легла ПОСЛЕ выполненной мутации, исход
+    /// нельзя объявлять записанным: в памяти он помечается требующим согласования, вызывающий
+    /// получает `false`, а долговечный журнал по-прежнему говорит `in_flight`.
+    /// </summary>
+    [Fact]
+    public void TerminalWriteFailureAfterMutation_RequiresReconciliation()
+    {
+        using var journal = new OperationJournal(_file, appendLockTimeout: TimeSpan.FromMilliseconds(200));
+        var id = Guid.NewGuid().ToString();
+        journal.TryBegin(id, "kompas_extrude", Args(10), "doc-1", 3);
+
+        bool recorded;
+        using (new JournalLockHolder(_file))
+        {
+            recorded = journal.Complete(id, """{"body_count":1}""");
+        }
+
+        Assert.False(recorded, "неудачная терминальная запись обязана быть видна вызывающему");
+        Assert.Equal(1, journal.TerminalWriteFailures);
+        Assert.True(journal.TryGet(id, out var record));
+        Assert.Equal(JournalOutcome.Succeeded, record!.Outcome);
+        Assert.True(record.NeedsReconciliation,
+            "исход без долговечной терминальной строки требует согласования, а не считается записанным");
+        Assert.Contains("in_flight", ReadWhileOpen(_file), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// FIX H2. Рваный хвост НЕ только отмечается, но и ЧИНИТСЯ: иначе первая же запись нового
+    /// процесса склеивается с обрывком, и её намерение теряется полностью — журнал не знает
+    /// операции, и повтор с тем же operation_id выполняет мутацию ВТОРОЙ раз.
+    /// </summary>
+    [Fact]
+    public void TornTail_IsRepaired_SoTheNextRecordIsNotSwallowed()
+    {
+        string firstId;
+        using (var journal = new OperationJournal(_file))
+        {
+            firstId = Guid.NewGuid().ToString();
+            journal.TryBegin(firstId, "kompas_extrude", Args(10), "doc-1", 3);
+            journal.Complete(firstId, null);
+        }
+
+        // Жёсткое убийство процесса посередине записи: строка без перевода строки.
+        File.AppendAllText(_file, "{\"operation_id\":\"truncat");
+
+        string secondId;
+        using (var restarted = new OperationJournal(_file))
+        {
+            Assert.True(restarted.TornTail, "обрыв обязан быть назван");
+            Assert.Equal(1, restarted.SkippedLines);
+            Assert.Equal(1, restarted.RepairedTornTails); // обрыв обязан быть починен при открытии
+            Assert.Equal(0, restarted.TornTailRepairFailures);
+
+            secondId = Guid.NewGuid().ToString();
+            var decision = restarted.TryBegin(secondId, "kompas_extrude", Args(11), "doc-1", 3);
+            Assert.True(decision.Proceed);
+            restarted.Complete(secondId, """{"body_count":2}""");
+        }
+
+        // Намерение B не потеряно — это и было содержимым дефекта.
+        using var third = new OperationJournal(_file);
+        Assert.True(third.TryGet(firstId, out var first), "прежняя запись не имеет права теряться");
+        Assert.Equal(JournalOutcome.Succeeded, first!.Outcome);
+        Assert.True(third.TryGet(secondId, out var second));
+        Assert.Equal(JournalOutcome.Succeeded, second!.Outcome);
+        Assert.Equal(1, third.SkippedLines); // рваный хвост по-прежнему НАЗВАН пропуском
+    }
+
+    /// <summary>
+    /// FIX M1. Политика <c>SameOperationId</c> у записанного ЧИСТОГО отказа теперь выполнима:
+    /// повтор с тем же operation_id доходит до повторной отправки. Частичный эффект — не выполнима,
+    /// и это различие проведено по существу, а не по тексту ошибки.
+    /// </summary>
+    [Fact]
+    public void CleanFailure_CanBeRetriedWithTheSameOperationId()
+    {
+        using var journal = new OperationJournal(_file);
+        var id = Guid.NewGuid().ToString();
+        journal.TryBegin(id, "kompas_extrude", Args(10), "doc-1", 3);
+        journal.Fail(id, new ErrorDto(ErrorCodes.QueueFull, "очередь заполнена", RetryPolicy.SameOperationId,
+            null, false, null));
+
+        var again = journal.TryBegin(id, "kompas_extrude", Args(10), "doc-1", 3);
+
+        Assert.True(again.Proceed, "чистый отказ: ничего не применено, повтор тем же id обязан дойти до отправки");
+        Assert.Equal(1, journal.RestartsAfterCleanFailure);
+
+        // И это не «забыли прежнее»: повторно начатая операция снова in_flight, а терминальная
+        // запись перекрывает прежний отказ.
+        Assert.True(journal.TryGet(id, out var record));
+        Assert.Equal(JournalOutcome.InFlight, record!.Outcome);
+        journal.Complete(id, """{"body_count":1}""");
+        Assert.True(journal.TryGet(id, out var done));
+        Assert.Equal(JournalOutcome.Succeeded, done!.Outcome);
+    }
+
+    [Fact]
+    public void FailureWithPartialEffects_IsNotRetriedWithTheSameOperationId()
+    {
+        using var journal = new OperationJournal(_file);
+        var id = Guid.NewGuid().ToString();
+        journal.TryBegin(id, "kompas_insert_component", Args(10), "doc-1", 3);
+        journal.Fail(id, new ErrorDto(ErrorCodes.VerificationFailed, "компонент вставлен, размещение не подтверждено",
+            RetryPolicy.AfterReconciliation, null, true, null));
+
+        var again = journal.TryBegin(id, "kompas_insert_component", Args(10), "doc-1", 3);
+
+        Assert.False(again.Proceed, "отказ с частичным эффектом: повтор применил бы мутацию второй раз");
+        Assert.Equal(JournalOutcome.Failed, again.Existing!.Outcome);
+        Assert.Equal(0, journal.RestartsAfterCleanFailure);
+    }
+
     [Fact]
     public async Task Queue_IsBoundedAndRejectsWhenFull()
     {
@@ -376,6 +541,53 @@ public class OperationJournalTests : IDisposable
         queue.Complete("a");
         queue.Enqueue(new QueuedCommand("c", "t", new CancellationTokenSource()));
         Assert.Equal(2, queue.Count);
+    }
+
+    /// <summary>
+    /// Держит межпроцессную блокировку журнала ИЗ ДРУГОГО ПОТОКА: проверка «запись без блокировки»
+    /// имеет смысл только тогда, когда блокировку действительно держит кто-то ещё. Имя берётся из
+    /// <see cref="OperationJournal.FileLockPurpose"/>, а не набирается строкой: своя копия имени
+    /// разошлась бы с продуктом и проверка измеряла бы чужую блокировку.
+    /// </summary>
+    private sealed class JournalLockHolder : IDisposable
+    {
+        private readonly ManualResetEventSlim _acquired = new(false);
+        private readonly ManualResetEventSlim _release = new(false);
+        private readonly NamedFileLock _lock;
+        private readonly Thread _thread;
+
+        public JournalLockHolder(string journalPath)
+        {
+            _lock = NamedFileLock.For(journalPath, OperationJournal.FileLockPurpose);
+            _thread = new Thread(() =>
+            {
+                if (!_lock.Enter(TimeSpan.FromSeconds(10)))
+                {
+                    return; // _acquired остаётся сброшенным, и конструктор назовёт это отказом.
+                }
+
+                _acquired.Set();
+                _release.Wait(TimeSpan.FromSeconds(30));
+                _lock.Exit();
+            })
+            {
+                IsBackground = true,
+            };
+            _thread.Start();
+            if (!_acquired.Wait(TimeSpan.FromSeconds(10)))
+            {
+                throw new InvalidOperationException("тестовый поток не смог взять блокировку журнала");
+            }
+        }
+
+        public void Dispose()
+        {
+            _release.Set();
+            _thread.Join(TimeSpan.FromSeconds(10));
+            _lock.Dispose();
+            _acquired.Dispose();
+            _release.Dispose();
+        }
     }
 
     public void Dispose()

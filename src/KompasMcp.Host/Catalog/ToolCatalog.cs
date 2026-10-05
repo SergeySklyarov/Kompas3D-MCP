@@ -296,9 +296,12 @@ public static class ToolCatalog
             // возможности — mcp_implemented, а не mcp_verified, и это сказано в описании.
             ReadOnly("kompas_list_components", "Компоненты сборки",
                 "Структура сборки: экземпляры компонентов с именами/марками, признаком «деталь/сборка», "
-                + "кратностью, состоянием фиксации/загрузки и ссылкой на экземпляр. Читается через "
-                + "IAssemblyDocument.TopPart → IPart7.PartsEx. ВНИМАНИЕ: живой приёмки по сборке не "
-                + "было — маршрут измерен по справке и метаданным, но не подтверждён прогоном.",
+                + "кратностью, состоянием фиксации/загрузки, числом тел и граней и ссылкой на экземпляр. "
+                + "Читается через IAssemblyDocument.TopPart → IPart7.PartsEx; тела и грани — "
+                + "ksPart.BodyCollection → ksBody.FaceCollection. Адрес мутаций — номер в плоском "
+                + "ksDocument3D.PartCollection(true): вложенные компоненты ЧИТАЮТСЯ, но адреса у них нет, "
+                + "и размещение/замена вложенного компонента отвергаются, а не выполняются по догадке. "
+                + "Живой прогон: группа ASM проходит на бинарях поставки.",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id")),
                     ("recursive", Sch.Nullable(Sch.Bool("Обходить вложенные подсборки.", false)))),
@@ -307,9 +310,12 @@ public static class ToolCatalog
                 requiresOperationId: false),
 
             Mutation("kompas_insert_component", "Вставить компонент",
-                "Вставляет компонент из файла-источника в сборку. Ровно один экземпляр на вызов; "
-                + "повтор с тем же operation_id второго не создаёт. Размещение необязательно: без него "
-                + "компонент встаёт по умолчанию КОМПАСа. ВНИМАНИЕ: живой приёмки не было.",
+                "Вставляет компонент из файла-источника в сборку документированным "
+                + "IPart7.Parts → IParts7.AddFromFile. Ровно один экземпляр на вызов; повтор с тем же "
+                + "operation_id второго не создаёт. Компонент вставляется С ГЕОМЕТРИЕЙ (1 тело, 6 граней). "
+                + "Заданное размещение и признак фиксации применяются и ПЕРЕЧИТЫВАЮТСЯ; если "
+                + "API5-представление вставленного экземпляра не получено, вызов отказывает с частичными "
+                + "эффектами, а не молча пропускает параметры.",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id")),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
@@ -322,7 +328,8 @@ public static class ToolCatalog
 
             Mutation("kompas_set_component_placement", "Задать размещение компонента",
                 "Задаёт размещение компонента жёстким преобразованием (начало и две оси) и перечитывает "
-                + "его. ВНИМАНИЕ: живой приёмки не было; порядок элементов матрицы 4×4 не измерен.",
+                + "его. Порядок элементов матрицы 4×4 измерен различающим контролем (поворот на 90° "
+                + "вокруг Z): тройки идут не подряд — [X,0][Y,0][Z,0][перенос,1].",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id")),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
@@ -333,8 +340,9 @@ public static class ToolCatalog
                 requiresRevision: true),
 
             Mutation("kompas_replace_component", "Заменить компонент",
-                "Заменяет файл-источник компонента с сохранением размещения. Кратность не должна "
-                + "меняться. ВНИМАНИЕ: живой приёмки не было.",
+                "Заменяет файл-источник компонента с сохранением размещения документированным "
+                + "ksPart.fileName + ksPart.Update; результат проверяется чтением обратно. Кратность "
+                + "не должна меняться. Применимо к компонентам, вставленным в сборку.",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id")),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
@@ -346,9 +354,9 @@ public static class ToolCatalog
 
             ReadOnly("kompas_check_component_links", "Проверить ссылки компонентов",
                 "Проверяет ссылки компонентов на файлы-источники: отсутствующий источник НАЗЫВАЕТСЯ, "
-                + "а не выдаётся за исправный. ВНИМАНИЕ: живой приёмки по сборке не было, и чем именно "
-                + "выглядит битая ссылка в этой версии (LoadState, отказ Load или пустой FileName) "
-                + "тоже не измерено — вердикт опирается на наличие файла по пути.",
+                + "а не выдаётся за исправный. ОСТАЁТСЯ НЕИЗМЕРЕННЫМ: чем именно выглядит битая ссылка "
+                + "в этой версии (LoadState, отказ Load или пустой FileName) — вердикт опирается на "
+                + "наличие файла по пути.",
                 Sch.Props(("document_id", Sch.Ref("#/$defs/document_id"))),
                 WorkerCommands.CheckComponentLinks,
                 requiresDocument: true,
@@ -360,11 +368,19 @@ public static class ToolCatalog
             // IPart7.MateConstraints → IMateConstraints3D.Add → BaseObject1/2 → Update().
             // ksDocument3D.AddMateConstraint НЕ применяется (возвращал False при всех
             // документированных сочетаниях параметров; причина не установлена).
-            // Уровень возможности — mcp_implemented: код есть, живого прогона через продукт нет.
+            // Уровень возможности — mcp_verified: блок C2 принят живым прогоном на бинарях поставки
+            // 05.10.2026 (прогоны MATE 55/55). Прежняя пометка «mcp_implemented: живого прогона
+            // через продукт нет» устарела и была неверна уже на момент выпуска (дефект L4 ревью
+            // 05.10.2026).
             ReadOnly("kompas_list_mates", "Сопряжения сборки",
                 "Перечень сопряжений: тип, выравнивание, фиксация, параметр, оба базовых объекта и "
                 + "подтверждение Valid. Читается документированным MateConstraintCollection → "
-                + "ksMateConstraint.GetBaseObj(1|2)/constraintType. ВНИМАНИЕ: живой приёмки не было.",
+                + "ksMateConstraint.GetBaseObj(1|2)/constraintType. Подтверждение — Valid, а не "
+                + "успешный вызов. Признак фиксации печатается именем по СЫРОМУ числу поля "
+                + "ksMateConstraint.fixed по нумерации mateconstraintfixed.html "
+                + "«0 нет фиксации, 1 фиксировать деталь 1, 2 фиксировать деталь 2»; в перечислении "
+                + "API5 ksMateFixedTypeEnum то же значение 0 названо «Неопределено» "
+                + "(ksmatefixedtypeenum.html) — расхождение формулировок названо, а не сглажено.",
                 Sch.Props(("document_id", Sch.Ref("#/$defs/document_id"))),
                 WorkerCommands.ListMates,
                 requiresDocument: true,
@@ -374,7 +390,7 @@ public static class ToolCatalog
                 "Создаёт сопряжение между гранями двух компонентов документированным API7-путём "
                 + "(IMateConstraints3D.Add → BaseObject1/2 → Update). Объект адресуется парой "
                 + "«компонент + номер грани»; грань берётся ksPart.BodyCollection → ksBody.FaceCollection. "
-                + "Подтверждением служит Valid, а не Update()=true. ВНИМАНИЕ: живой приёмки не было.",
+                + "Подтверждением служит Valid, а не Update()=true.",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id")),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
@@ -389,14 +405,22 @@ public static class ToolCatalog
                     ("alignment", Sch.Nullable(Sch.Enum(
                         "Вариант выравнивания направлений (ksMateConstraintAlignmentEnum).",
                         "opposite", "cooriented", "closest"))),
-                    ("param_value", Sch.Nullable(Sch.Num("Параметр ограничения: расстояние или угол.")))),
+                    // ПАРАМЕТР СВЯЗАН С ТИПОМ И ПРОВЕРЯЕТСЯ ХОСТОМ (дефект M10 ревью 05.10.2026):
+                    // по mateconstrainttype.html параметрическими являются только mc_Distance
+                    // (5, «постоянное расстояние») и mc_Angle (6, «постоянный угол»); для остальных
+                    // принятое число было бы записано и проигнорировано. ЕДИНИЦЫ справкой
+                    // (imateconstraint3d_paramvalue.html) НЕ НАЗВАНЫ: сервер значение не
+                    // пересчитывает и подтверждает только чтением обратно.
+                    ("param_value", Sch.Nullable(Sch.Num(
+                        "Параметр ограничения: обязателен для distance и angle, запрещён для остальных "
+                        + "типов. Единицы задаются КОМПАС (справкой не названы); подтверждается "
+                        + "чтением обратно.")))),
                 WorkerCommands.CreateMate,
                 requiresDocument: true,
                 requiresRevision: true),
 
             Mutation("kompas_set_mate_parameter", "Задать параметр сопряжения",
-                "Задаёт параметр сопряжения (расстояние или угол) и перечитывает его. "
-                + "ВНИМАНИЕ: живой приёмки не было.",
+                "Задаёт параметр сопряжения (расстояние или угол) и перечитывает его.",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id")),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
@@ -407,8 +431,12 @@ public static class ToolCatalog
                 requiresRevision: true),
 
             Mutation("kompas_set_mate_fixed", "Задать фиксацию сопряжением",
-                "Задаёт признак фиксации компонентов сопряжением (ksMateFixedTypeEnum: none/first/second). "
-                + "ВНИМАНИЕ: живой приёмки не было.",
+                "Задаёт признак фиксации компонентов сопряжением (ksMateFixedTypeEnum: none/first/second) "
+                + "и перечитывает его. Нумерация документирована: ksmatefixedtypeenum.html "
+                + "(ksMFixedUnknown=0, ksMFixedPart1=1, ksMFixedPart2=2) и mateconstraintfixed.html "
+                + "«0 нет фиксации, 1 фиксировать деталь 1, 2 фиксировать деталь 2»; публичное имя "
+                + "none следует второму источнику. Несовпадение перечитанного значения — отказ, а не "
+                + "успех с предупреждением.",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id")),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
@@ -420,8 +448,7 @@ public static class ToolCatalog
 
             Mutation("kompas_delete_mate", "Удалить сопряжение",
                 "Удаляет сопряжение документированным RemoveMateConstraint(constraintType, obj1, obj2); "
-                + "оба объекта берутся у самого сопряжения через GetBaseObj(1|2). "
-                + "ВНИМАНИЕ: живой приёмки не было.",
+                + "оба объекта берутся у самого сопряжения через GetBaseObj(1|2).",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id")),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision")),

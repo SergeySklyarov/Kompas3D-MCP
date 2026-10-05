@@ -1,4 +1,4 @@
-﻿{
+{
  "meta": {
   "artifact": "coverage/solid-v24/matrix.json",
   "schema_version": "1.1",
@@ -5181,6 +5181,30 @@
     "suppress_restore": "документы не подавляются и не восстанавливаются",
     "delete_dependencies": "у документа-сборки нет удаляемых зависимостей-признаков",
     "geometry_validation": "у документа-сборки СВОИХ тел нет (измерено: 0); геометрия принадлежит документам-компонентам"
+   },
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_documents"
+     }
+    ]
+   },
+   "create_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_create_document"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_get_context"
+     }
+    ]
    }
   },
   {
@@ -5239,6 +5263,30 @@
     "edit": "вставка не изменяет существующий компонент; изменение — это ASM-04/ASM-05",
     "suppress_restore": "подавление компонентов в блок C1 не входит",
     "delete_dependencies": "удаление компонентов в блок C1 не входит"
+   },
+   "create_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_insert_component"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_components"
+     }
+    ]
+   },
+   "geometry_validation_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_measure"
+     }
+    ]
    }
   },
   {
@@ -5293,6 +5341,33 @@
     "suppress_restore": "подавление компонентов в блок C1 не входит",
     "delete_dependencies": "удаление в блок C1 не входит",
     "geometry_validation": "структура не геометрия; кратность и признак детали проверены как счётчики"
+   },
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_check_component_links"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_components"
+     }
+    ]
+   },
+   "save_reopen_route": {
+    "mode": "all",
+    "routes": [
+     {
+      "tool": "kompas_save_document"
+     },
+     {
+      "tool": "kompas_open_document"
+     }
+    ]
    }
   },
   {
@@ -5348,6 +5423,49 @@
     "create": "размещение не создаётся отдельно — оно задаётся существующему компоненту",
     "suppress_restore": "подавление компонентов в блок C1 не входит",
     "delete_dependencies": "удаление в блок C1 не входит"
+   },
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_documents"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_components"
+     }
+    ]
+   },
+   "edit_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_set_component_placement"
+     }
+    ]
+   },
+   "save_reopen_route": {
+    "mode": "all",
+    "routes": [
+     {
+      "tool": "kompas_save_document"
+     },
+     {
+      "tool": "kompas_open_document"
+     }
+    ]
+   },
+   "geometry_validation_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_measure"
+     }
+    ]
    }
   },
   {
@@ -5403,6 +5521,49 @@
     "create": "замена не создаёт новый компонент: кратность не меняется (измерено 2 → 2)",
     "suppress_restore": "подавление компонентов в блок C1 не входит",
     "delete_dependencies": "удаление в блок C1 не входит"
+   },
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_documents"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_components"
+     }
+    ]
+   },
+   "edit_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_replace_component"
+     }
+    ]
+   },
+   "save_reopen_route": {
+    "mode": "all",
+    "routes": [
+     {
+      "tool": "kompas_save_document"
+     },
+     {
+      "tool": "kompas_open_document"
+     }
+    ]
+   },
+   "geometry_validation_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_measure"
+     }
+    ]
    }
   },
   {
@@ -5456,6 +5617,33 @@
     "suppress_restore": "подавление компонентов в блок C1 не входит",
     "delete_dependencies": "удаление в блок C1 не входит",
     "geometry_validation": "проверяется наличие файла-источника, а не геометрия"
+   },
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_check_component_links"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_check_component_links"
+     }
+    ]
+   },
+   "save_reopen_route": {
+    "mode": "all",
+    "routes": [
+     {
+      "tool": "kompas_save_document"
+     },
+     {
+      "tool": "kompas_open_document"
+     }
+    ]
    }
   },
   {
@@ -5510,6 +5698,30 @@
     "rebuild": "перестроение — действие мутирующих режимов",
     "suppress_restore": "подавление компонентов в блок C1 не входит",
     "delete_dependencies": "удаление в блок C1 не входит"
+   },
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_documents"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_get_context"
+     }
+    ]
+   },
+   "geometry_validation_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_measure"
+     }
+    ]
    }
   },
   {
@@ -5583,14 +5795,37 @@
    ],
    "partial_note": "Потребители объявляют зависимость сами в своём depends_on; required_of выведен из него.",
    "blocked_reasons": {},
-   "read_route": null,
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_get_context"
+     }
+    ]
+   },
    "not_applicable_reasons": {
     "edit": "жизненный цикл документа не редактирует модель",
     "suppress_restore": "документы не подавляются",
     "delete_dependencies": "у документа нет удаляемых зависимостей-признаков",
     "geometry_validation": "жизненный цикл документа геометрией не является"
    },
-   "catalog_level": "mcp_verified"
+   "catalog_level": "mcp_verified",
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_documents"
+     }
+    ]
+   },
+   "create_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_create_document"
+     }
+    ]
+   }
   },
   {
    "operation_id": "dep.assembly.source_file",
@@ -5657,7 +5892,14 @@
    ],
    "partial_note": "Потребители объявляют зависимость сами в своём depends_on; required_of выведен из него.",
    "blocked_reasons": {},
-   "read_route": null,
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_components"
+     }
+    ]
+   },
    "not_applicable_reasons": {
     "edit": "файл-источник не редактируется сервером",
     "rebuild": "перестроение не относится к выбору файла",
@@ -5735,7 +5977,14 @@
    ],
    "partial_note": "Потребители объявляют зависимость сами в своём depends_on; required_of выведен из него.",
    "blocked_reasons": {},
-   "read_route": null,
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_components"
+     }
+    ]
+   },
    "not_applicable_reasons": {
     "create": "адрес компонента выдаётся перечислением, а не создаётся отдельно",
     "edit": "адрес не редактируется",
@@ -5743,7 +5992,34 @@
     "suppress_restore": "не применимо к адресации",
     "delete_dependencies": "не применимо к адресации"
    },
-   "catalog_level": "mcp_verified"
+   "catalog_level": "mcp_verified",
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_documents"
+     }
+    ]
+   },
+   "save_reopen_route": {
+    "mode": "all",
+    "routes": [
+     {
+      "tool": "kompas_save_document"
+     },
+     {
+      "tool": "kompas_open_document"
+     }
+    ]
+   },
+   "geometry_validation_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_measure"
+     }
+    ]
+   }
   },
   {
    "operation_id": "dep.assembly.revisions",
@@ -5807,14 +6083,48 @@
    ],
    "partial_note": "Потребители объявляют зависимость сами в своём depends_on; required_of выведен из него.",
    "blocked_reasons": {},
-   "read_route": null,
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_get_context"
+     }
+    ]
+   },
    "not_applicable_reasons": {
     "create": "ревизия не создаётся отдельной операцией",
     "suppress_restore": "не применимо к ревизиям",
     "delete_dependencies": "не применимо к ревизиям",
     "geometry_validation": "ревизия — не геометрия"
    },
-   "catalog_level": "mcp_verified"
+   "catalog_level": "mcp_verified",
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_documents"
+     }
+    ]
+   },
+   "edit_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_set_component_placement"
+     }
+    ]
+   },
+   "save_reopen_route": {
+    "mode": "all",
+    "routes": [
+     {
+      "tool": "kompas_save_document"
+     },
+     {
+      "tool": "kompas_open_document"
+     }
+    ]
+   }
   },
   {
    "operation_id": "dep.assembly.idempotency",
@@ -5874,7 +6184,14 @@
    ],
    "partial_note": "Потребители объявляют зависимость сами в своём depends_on; required_of выведен из него.",
    "blocked_reasons": {},
-   "read_route": null,
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_components"
+     }
+    ]
+   },
    "not_applicable_reasons": {
     "edit": "идемпотентность проверяется на создании и изменении; отдельного «edit» нет",
     "rebuild": "не применимо к дедупликации",
@@ -5883,7 +6200,23 @@
     "delete_dependencies": "не применимо",
     "geometry_validation": "идемпотентность — счётчик, а не геометрия"
    },
-   "catalog_level": "mcp_verified"
+   "catalog_level": "mcp_verified",
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_documents"
+     }
+    ]
+   },
+   "create_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_insert_component"
+     }
+    ]
+   }
   },
   {
    "operation_id": "MATE-01.mate.create",
@@ -5928,7 +6261,39 @@
     "suppress_restore": "подавление сопряжений в блок C2 не входит",
     "delete_dependencies": "удаление сопряжения — MATE-05; удаление ЗАВИСИМОСТЕЙ в блок не входит"
    },
-   "catalog_level": "mcp_verified"
+   "catalog_level": "mcp_verified",
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_documents"
+     }
+    ]
+   },
+   "create_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_create_mate"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_mates"
+     }
+    ]
+   },
+   "geometry_validation_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_measure"
+     }
+    ]
+   }
   },
   {
    "operation_id": "MATE-02.mate.read",
@@ -5973,7 +6338,23 @@
     "delete_dependencies": "удаление сопряжения — MATE-05",
     "geometry_validation": "структура сопряжений — не геометрия"
    },
-   "catalog_level": "mcp_verified"
+   "catalog_level": "mcp_verified",
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_documents"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_mates"
+     }
+    ]
+   }
   },
   {
    "operation_id": "MATE-03.mate.param_edit",
@@ -6017,7 +6398,39 @@
     "suppress_restore": "подавление сопряжений в блок C2 не входит",
     "delete_dependencies": "удаление сопряжения — MATE-05"
    },
-   "catalog_level": "mcp_verified"
+   "catalog_level": "mcp_verified",
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_documents"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_mates"
+     }
+    ]
+   },
+   "edit_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_set_mate_parameter"
+     }
+    ]
+   },
+   "geometry_validation_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_measure"
+     }
+    ]
+   }
   },
   {
    "operation_id": "MATE-04.mate.fixed",
@@ -6060,7 +6473,31 @@
     "delete_dependencies": "удаление сопряжения — MATE-05",
     "geometry_validation": "фиксация — признак, а не геометрия"
    },
-   "catalog_level": "mcp_verified"
+   "catalog_level": "mcp_verified",
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_documents"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_mates"
+     }
+    ]
+   },
+   "edit_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_set_mate_fixed"
+     }
+    ]
+   }
   },
   {
    "operation_id": "MATE-05.mate.delete",
@@ -6104,7 +6541,31 @@
     "suppress_restore": "подавление сопряжений в блок C2 не входит",
     "geometry_validation": "удаление сопряжения — не геометрия"
    },
-   "catalog_level": "mcp_verified"
+   "catalog_level": "mcp_verified",
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_documents"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_mates"
+     }
+    ]
+   },
+   "delete_dependencies_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_delete_mate"
+     }
+    ]
+   }
   },
   {
    "operation_id": "MATE-06.mate.placement_effect",
@@ -6147,7 +6608,42 @@
     "suppress_restore": "подавление сопряжений в блок C2 не входит",
     "delete_dependencies": "удаление сопряжения — MATE-05"
    },
-   "catalog_level": "mcp_verified"
+   "catalog_level": "mcp_verified",
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_documents"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_mates"
+     }
+    ]
+   },
+   "save_reopen_route": {
+    "mode": "all",
+    "routes": [
+     {
+      "tool": "kompas_save_document"
+     },
+     {
+      "tool": "kompas_open_document"
+     }
+    ]
+   },
+   "geometry_validation_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_measure"
+     }
+    ]
+   }
   },
   {
    "operation_id": "dep.mate.object_address",
@@ -6203,7 +6699,24 @@
     "delete_dependencies": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
     "geometry_validation": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось"
    },
-   "catalog_level": "mcp_verified"
+   "catalog_level": "mcp_verified",
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_documents"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_mates"
+     }
+    ]
+   },
+   "negative_tests_row": "MATE.01.face_range"
   },
   {
    "operation_id": "dep.mate.component_insert",
@@ -6231,7 +6744,9 @@
    "tests": [
     "MATE.01.create",
     "MATE.02.read",
-    "MATE.06.geometry_validation"
+    "MATE.06.geometry_validation",
+    "MATE.PREP",
+    "MATE.PREP.create"
    ],
    "evidence": [
     "docs/acceptance/mates/mate-acceptance.json",
@@ -6259,7 +6774,31 @@
     "delete_dependencies": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
     "negative_tests": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось"
    },
-   "catalog_level": "mcp_verified"
+   "catalog_level": "mcp_verified",
+   "create_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_insert_component"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_mates"
+     }
+    ]
+   },
+   "geometry_validation_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_measure"
+     }
+    ]
+   }
   },
   {
    "operation_id": "dep.mate.revisions",
@@ -6315,7 +6854,23 @@
     "delete_dependencies": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
     "geometry_validation": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось"
    },
-   "catalog_level": "mcp_verified"
+   "catalog_level": "mcp_verified",
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_mates"
+     }
+    ]
+   },
+   "edit_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_set_mate_parameter"
+     }
+    ]
+   }
   },
   {
    "operation_id": "dep.mate.idempotency",
@@ -6371,7 +6926,23 @@
     "delete_dependencies": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
     "geometry_validation": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось"
    },
-   "catalog_level": "mcp_verified"
+   "catalog_level": "mcp_verified",
+   "create_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_create_mate"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_mates"
+     }
+    ]
+   }
   },
   {
    "operation_id": "dep.mate.save_reopen",
@@ -6426,7 +6997,15 @@
     "negative_tests": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
     "geometry_validation": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось"
    },
-   "catalog_level": "mcp_verified"
+   "catalog_level": "mcp_verified",
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_mates"
+     }
+    ]
+   }
   }
  ],
  "pending_families": [

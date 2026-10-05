@@ -60,7 +60,7 @@ public static class Program
             lifetime.Cancel();
         };
 
-        var session = new CommandDispatcher(sta, log);
+        var session = new CommandDispatcher(sta, log, options.ControlCopyDirectory);
         try
         {
             Serve(options, session, log, lifetime.Token).GetAwaiter().GetResult();
@@ -236,10 +236,17 @@ public sealed class WorkerOptions
 
     public string? LogPath { get; init; }
 
+    /// <summary>
+    /// Служебный каталог контрольных копий. Обязателен: копия файла документа — это запись, и
+    /// класть её «рядом с документом» значит писать в папку пользователя.
+    /// </summary>
+    public required string ControlCopyDirectory { get; init; }
+
     public static WorkerOptions Parse(string[] args)
     {
         string? pipe = null;
         string? log = null;
+        string? copies = null;
 
         for (var i = 0; i < args.Length - 1; i++)
         {
@@ -251,15 +258,26 @@ public sealed class WorkerOptions
                 case "--log":
                     log = args[++i];
                     break;
+                case "--copies":
+                    copies = args[++i];
+                    break;
             }
         }
 
         if (string.IsNullOrWhiteSpace(pipe))
         {
-            Console.Error.WriteLine("использование: KompasMcp.Worker --pipe <имя> [--log <файл>]");
+            Console.Error.WriteLine("использование: KompasMcp.Worker --pipe <имя> --copies <каталог> [--log <файл>]");
             Environment.Exit(2);
         }
 
-        return new WorkerOptions { PipeName = pipe!, LogPath = log };
+        if (string.IsNullOrWhiteSpace(copies))
+        {
+            // Каталог НЕ подставляется молча: умолчание «рядом с документом» — это и есть тот
+            // дефект, который закрыт. Без названного каталога копии не снимаются вовсе.
+            Console.Error.WriteLine("использование: KompasMcp.Worker --pipe <имя> --copies <каталог> [--log <файл>]");
+            Environment.Exit(2);
+        }
+
+        return new WorkerOptions { PipeName = pipe!, LogPath = log, ControlCopyDirectory = copies! };
     }
 }

@@ -509,7 +509,17 @@ public sealed partial class Api5Session : IDisposable
         }
 
         var part = (ksPart)document.GetPart(-1);
-        return RegisterDocument(document, part, application, kind, command.Path, kindVerified: isDetail is not null);
+        var entry = RegisterDocument(document, part, application, kind, command.Path, kindVerified: isDetail is not null);
+
+        // ДОСТУП ЗАПОМИНАЕТСЯ, ПОТОМУ ЧТО ОН РЕШАЕТ ИСХОД ПОЗДНЕЙ ЗАПИСИ.
+        //
+        // Документ, открытый `read_only`, нельзя сохранить «на месте»: поле пути в вызове
+        // kompas_save_document отсутствует, и Хосту проверять нечего — его политика судит ПОЛЯ
+        // вызова, а не путь документа. Так `kompas_open_document(path в read_only_roots)` +
+        // `kompas_save_document` без target_path писал прямо в корень, объявленный «только
+        // чтение» (дефект H4 ревью 05.10.2026). Признак доступа — то, чем эта запись закрывается.
+        entry.Access = command.Access;
+        return entry;
     }
 
     private static bool IsReadOnlyHint(string path)
@@ -816,7 +826,18 @@ public sealed partial class Api5Session : IDisposable
         foreach (var child in ChildrenOf(node, notes))
         {
             count++;
-            if (Safe(() => child.Detail) == false)
+            var isDetail = Bool(() => child.Detail);
+            if (isDetail is null)
+            {
+                // Непрочитанный признак «деталь/сборка» не подменяется ни `true`, ни `false`: обход
+                // под неизвестным узлом НЕ продолжается, и это называется. Прежний `Safe` давал
+                // здесь `false` («не деталь»), то есть непрочитанное значение РАЗРЕШАЛО обход.
+                notes.Add("component_detail_unread — признак «деталь/сборка» не прочитан: обход под " +
+                          "этим узлом не продолжен, число компонентов может быть неполным");
+                continue;
+            }
+
+            if (isDetail == false)
             {
                 CountComponentsInto(child, ref count, depth + 1, notes);
             }
@@ -934,6 +955,29 @@ public sealed partial class Api5Session : IDisposable
                 details: new Dictionary<string, object?> { ["document_id"] = document.Id });
         }
 
+        // ЗАПИСЬ В ФАЙЛ ДОКУМЕНТА, ОТКРЫТОГО ТОЛЬКО ДЛЯ ЧТЕНИЯ.
+        //
+        // Вызов без target_path не несёт поля пути, поэтому политика Хоста его не проверяет:
+        // `kompas_open_document(path, access=read_only)` + `kompas_save_document` писали прямо в
+        // исходный файл — в том числе в корень, объявленный «только чтение» (дефект H4 ревью
+        // 05.10.2026). Сохранение «на место» поэтому закрывается здесь, а «сохранить как» по
+        // названному пути — по-прежнему разрешено: такой путь судит Хост.
+        if (targetPath is null && document.Access == DocumentAccess.ReadOnly)
+        {
+            throw new KompasContractException(
+                ErrorCodes.PathNotAllowed,
+                $"Сохранение документа «{document.Id}» в его файл '{path}' отклонено: документ открыт " +
+                "с access=read_only. Запись в исходный файл этим доступом не разрешена; укажите " +
+                "target_path внутри записываемого корня.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["document_id"] = document.Id,
+                    ["path"] = path,
+                    ["access"] = "read_only",
+                });
+        }
+
         bool ok;
         if (targetPath is null)
         {
@@ -967,6 +1011,14 @@ public sealed partial class Api5Session : IDisposable
 
         document.Path = path;
         document.Document.UpdateDocumentParam();
+        // «Сохранить как» по названному пути проверен Хостом как записываемый, поэтому с этого
+        // момента запись в файл документа разрешена: признак доступа следует за путём, а не
+        // остаётся навсегда от открытия.
+        if (targetPath is not null)
+        {
+            document.Access = DocumentAccess.Edit;
+        }
+
         BumpRevision(document, "save");
 
         // Единственное место, где сохранённость объявляется подтверждённой: операция вернула
@@ -1101,6 +1153,14 @@ public sealed class DocumentEntry
     public DocumentKind Kind { get; internal set; }
 
     public string? Path { get; internal set; }
+
+    /// <summary>
+    /// Режим доступа, в котором документ открыт. Решает, можно ли писать в ЕГО файл: вызов
+    /// сохранения без <c>target_path</c> не содержит поля пути, и политика Хоста его не судит
+    /// (см. комментарий в <c>OpenDocument</c>). По умолчанию <see cref="DocumentAccess.Edit"/> —
+    /// созданный документ своего файла ещё не имеет.
+    /// </summary>
+    public DocumentAccess Access { get; set; } = DocumentAccess.Edit;
 
     public ksDocument3D Document { get; }
 

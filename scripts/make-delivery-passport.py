@@ -413,6 +413,57 @@ def _continuation_prompts(limit=3):
     return [os.path.basename(p) for p in found[:limit]] or ["RESUME.md"]
 
 
+def _git(*args):
+    """Один вызов git в корне репозитория. `(ok, text)`: отсутствие git — НАЗВАННОЕ состояние, а не
+    «коммита нет»."""
+    import subprocess
+    try:
+        done = subprocess.run(("git",) + args, cwd=ROOT, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, timeout=30)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return False, f"{type(exc).__name__}: {exc}"
+    if done.returncode != 0:
+        return False, done.stderr.decode("utf-8", "replace").strip()
+    return True, done.stdout.decode("utf-8", "replace").strip()
+
+
+def _source_state():
+    """Исходное состояние, из которого собрана поставка.
+
+    FIX M14 ревью 05.10.2026. Прежде паспорт связывал поставку только с хешами сборок: хеши
+    совпадают — а восстановить исходник принятой поставки из репозитория НЕЛЬЗЯ, потому что
+    правки не закоммичены и признака грязного дерева в паспорте нет. Хеш сборки утверждает «что
+    поставлено», но не «из чего», и второе обязано быть названо.
+    """
+    ok_commit, commit = _git("rev-parse", "HEAD")
+    ok_status, status = _git("status", "--porcelain")
+    if not ok_commit or not ok_status:
+        return {
+            "measured": False,
+            "commit": None,
+            "tree_dirty": None,
+            "note": "исходное состояние НЕ ИЗМЕРЕНО: " + (commit if not ok_commit else status)
+                    + ". Паспорт без него не утверждает, что поставку можно восстановить из "
+                      "репозитория.",
+        }
+
+    changed = [line for line in status.splitlines() if line.strip()]
+    # Список изменённых файлов печатается с ПОМЕТКОЙ об обрезке: срез без пометки неотличим от
+    # полного списка и читается как утверждение «это всё».
+    return {
+        "measured": True,
+        "commit": commit,
+        "commit_short": commit[:12],
+        "tree_dirty": bool(changed),
+        "changed_files": len(changed),
+        "changed_files_sample": [line[3:].strip() for line in changed[:20]],
+        "changed_files_truncated": len(changed) > 20,
+        "rule": "паспорт издаётся из закоммиченного дерева: грязное дерево означает, что исходник "
+                "поставки из репозитория не восстанавливается, и паспорт не издаётся без явного "
+                "--allow-dirty-tree",
+    }
+
+
 def _diagnosis_report():
     """Отчёт, в котором ИЗМЕРЕНА причина отсутствия клиентской приёмки.
 
@@ -740,6 +791,11 @@ def main():
         total_counts = collections.Counter(complete["verdicts"])
         rows_complete = complete["rows"]
         complete_source = complete["group"]
+        # ПОДСКАЗКА ПЕРЕПИСЫВАЕТСЯ НИЖЕ, ПОСЛЕ ИЗМЕРЕНИЯ ПЕРЕСЕЧЕНИЯ. Здесь стояло «групповые
+        # прогоны — подмножества его же проверок», и это утверждение печаталось ДО того, как
+        # пересечение измерялось; для блоков C1/C2 оно ложно (измерено 05.10.2026: строк ASM.*/MATE.*
+        # в полном прогоне ноль). Оставляем как значение по умолчанию на случай, если измерение не
+        # состоится, и заменяем измеренным ниже.
         rows_note = ("Вердикт приёмки выведен из ПОЛНОГО прогона. Групповые прогоны ниже — "
                      "подмножества его же проверок и в это число НЕ входят: складывать их с "
                      "полным прогоном нельзя, это посчитало бы одни проверки дважды.")
@@ -764,6 +820,9 @@ def main():
     for group in group_runs:
         union_group_ids |= ids_by_group.get(group["group"], set())
     complete_ids = ids_by_group.get(complete_source, set())
+    only_in_groups = sorted(union_group_ids - complete_ids)
+    only_in_complete = sorted(complete_ids - union_group_ids)
+    distinct_union = len(union_group_ids | complete_ids)
     if complete is None:
         subset_text = ("полного прогона в отчётах нет, поэтому «входят ли группы в него» не "
                        "измерялось")
@@ -772,15 +831,60 @@ def main():
     else:
         subset_text = ("имена строк групповых прогонов входят в полный прогон НЕ ВСЕ — "
                        "различающиеся названы в отчётах групп")
-    double_count_note = (
-        f"СТРОКИ ПОЛНОГО ПРОГОНА И ГРУППОВЫХ ПРОГОНОВ НЕ СКЛАДЫВАЮТСЯ. Полный прогон — один "
-        f"процесс, покрывающий весь набор проверок; групповые прогоны — те же проверки по частям, "
-        f"и {subset_text} (измерено при сборке паспорта: {len(union_group_ids)} имён групповых "
-        f"против {len(complete_ids)} имён полного). Сумма дала бы "
-        f"{rows_group_runs + rows_complete} «строк» там, где проверок {rows_complete}, то есть "
-        f"посчитала бы одни проверки дважды. Паспорт публикует оба числа РЯДОМ: "
-        f"`rows_complete_run` (он же `rows`) и `rows_group_runs`."
-    )
+    # СЛОЖЕНИЕ ЗАПРЕЩЕНО В ОБОИХ СЛУЧАЯХ, НО ПРИЧИНА РАЗНАЯ, И ЭТО НАЗЫВАЕТСЯ. ИЗМЕРЕНО 05.10.2026
+    # на `delivery-core-c1-c2-20261005`: `assembly` (67 строк) и `mate` (55) в полный прогон НЕ
+    # входят — строк `ASM.*`/`MATE.*` в нём НОЛЬ, потому что ветки `--assembly-only`/`--mate-only`
+    # полным прогоном не вызываются. Прежняя редакция объясняла запрет ОДНОЙ причиной («те же
+    # проверки по частям»), и для блоков C1/C2 это было неверно: там группы ДОПОЛНЯЮТ полный прогон,
+    # поэтому «проверок ровно rows_complete_run» тоже неверно.
+    if complete is None:
+        double_count_note = (
+            f"Полного прогона в отчётах нет: вердикт выведен по групповым прогонам, и число строк — "
+            f"сумма ({rows_group_runs}), а не число различных проверок ({distinct_union}).")
+    elif not only_in_groups:
+        double_count_note = (
+            f"СТРОКИ ПОЛНОГО ПРОГОНА И ГРУППОВЫХ ПРОГОНОВ НЕ СКЛАДЫВАЮТСЯ: {subset_text} (измерено "
+            f"при сборке паспорта: {len(union_group_ids)} имён групповых против "
+            f"{len(complete_ids)} имён полного). Сумма дала бы {rows_group_runs + rows_complete} "
+            f"«строк» там, где проверок {rows_complete}, то есть посчитала бы одни проверки дважды. "
+            f"Паспорт публикует оба числа РЯДОМ: `rows_complete_run` (он же `rows`) и "
+            f"`rows_group_runs`.")
+    else:
+        double_count_note = (
+            f"ГРУППОВЫЕ ПРОГОНЫ НЕ ВХОДЯТ В ПОЛНЫЙ ЦЕЛИКОМ, И СКЛАДЫВАТЬ ИХ ВСЁ РАВНО НЕЛЬЗЯ. "
+            f"Измерено при сборке паспорта: {len(only_in_groups)} имён есть ТОЛЬКО в группах "
+            f"({', '.join(only_in_groups[:8])}{'…' if len(only_in_groups) > 8 else ''}), "
+            f"{len(only_in_complete)} — ТОЛЬКО в полном прогоне. Причина у блоков C1/C2 своя: "
+            f"`assembly_checks`/`mate_checks` вызываются ветками `--assembly-only`/`--mate-only`, "
+            f"которые полный прогон не запускает, поэтому блоки ДОПОЛНЯЮТ его, а не повторяют по "
+            f"частям. Общее число РАЗЛИЧНЫХ проверок — {distinct_union} (объединение по именам "
+            f"строк), а НЕ {rows_complete} и НЕ {rows_group_runs + rows_complete}: последнее "
+            f"посчитало бы общие строки дважды. Паспорт публикует оба числа РЯДОМ: "
+            f"`rows_complete_run` (он же `rows`) = {rows_complete} и `rows_group_runs` = "
+            f"{rows_group_runs}.")
+
+    # ПОДСКАЗКА О ГРУППАХ — ИЗ ИЗМЕРЕННОГО ПЕРЕСЕЧЕНИЯ, а не из утверждения «они подмножества».
+    # ИЗМЕРЕНО 05.10.2026 на `delivery-core-c1-c2-20261005`: `assembly` (67 строк) и `mate` (55) в
+    # полный прогон НЕ входят — строк `ASM.*`/`MATE.*` в нём НОЛЬ, потому что `assembly_checks` и
+    # `mate_checks` вызываются только ветками `--assembly-only`/`--mate-only`. Запрет «не складывать»
+    # остаётся в силе, но ПРИЧИНА у него другая, и читатель обязан видеть её, а не общее правило.
+    if complete is not None:
+        if not only_in_groups:
+            rows_note = ("Вердикт приёмки выведен из ПОЛНОГО прогона. Групповые прогоны ниже — "
+                         "подмножества его же проверок и в это число НЕ входят: складывать их с "
+                         "полным прогоном нельзя, это посчитало бы одни проверки дважды.")
+        else:
+            rows_note = (
+                f"Вердикт приёмки выведен из ПОЛНОГО прогона ({rows_complete} строк). Групповые "
+                f"прогоны ниже входят в него НЕ ЦЕЛИКОМ и в это число НЕ входят: измерено "
+                f"{len(only_in_groups)} имён строк, которые есть ТОЛЬКО в группах "
+                f"({', '.join(only_in_groups[:8])}{'…' if len(only_in_groups) > 8 else ''}). Причина "
+                f"у блоков C1/C2 своя: ветки `--assembly-only` и `--mate-only`, которыми сняты "
+                f"`assembly.json` ({next((g['rows'] for g in group_runs if g['group'] == 'assembly'), '?')} строк) "
+                f"и `mate.json` ({next((g['rows'] for g in group_runs if g['group'] == 'mate'), '?')} строк), "
+                f"полным прогоном НЕ вызываются, поэтому блоки ДОПОЛНЯЮТ его, а не повторяют по "
+                f"частям. Складывать всё равно нельзя: общее число различных имён строк — "
+                f"{distinct_union}, а сумма посчитала бы общие строки дважды.")
 
     # ТРИ УРОВНЯ ОТДЕЛЬНО. Прежде здесь стоял один вердикт «PASS, если строк с FAIL нет», и он
     # читался как «обязательный объём выполнен» — то есть канал и объём подменяли друг друга.
@@ -794,7 +898,7 @@ def main():
     # `acceptance.verdict PASS`, `fully_ready true` — при `client_acceptance.verdict FAIL` и
     # `tools_visible 0`. Заголовок «PASS» поверх провалившейся клиентской приёмки — не опечатка, а
     # ровно то, что даёт правило, не спрашивающее об уровне.
-    scope = levels.evaluate_scope(ROOT)
+    scope = levels.evaluate_release_scope(ROOT)
     entry = client_entry(REPORTS)
     transport = {
         "verdict": "PASS" if (package.get("verdict") == "PASS"
@@ -815,9 +919,15 @@ def main():
     if scope["problems"]:
         acceptance_levels["mandatory_scope"]["problems"] = scope["problems"]
 
+    source = _source_state()
+
     passport = {
         "run_id": RUN_ID,
         "generated_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+        # ИЗ ЧЕГО СОБРАНА ПОСТАВКА — отдельно от «что поставлено» (хеши сборок). Без этого поля
+        # хеши совпадают, а исходник принятой поставки из репозитория не восстанавливается
+        # (дефект M14 ревью 05.10.2026).
+        "source": source,
         "environment": {
             "os": "Microsoft Windows 10.0.26200",
             "runtime": ".NET 10.0.12 (Microsoft.WindowsDesktop.App 10.0.12 установлен — "
@@ -922,8 +1032,28 @@ def main():
             "ПОЛНЫЙ блок отчёта клиентской приёмки (сеанс, pid, сценарии, строки). Один без другого "
             "читается неверно: вердикт без блока не объясняет, что именно клиент не сделал, а блок "
             "без вердикта не говорит, как он повлиял на выпуск.",
+            "ОБЪЁМ ВЫПУСКА — ТРИ ПРОФИЛЯ (`mechanical-core-v1`, `assemblies-minimal-v1`, "
+            "`mates-minimal-v1`). `mandatory_scope.profiles` печатает числители и знаменатели "
+            "КАЖДОГО профиля рядом со сводкой; вердикт `COMPLETE` требует закрытия ВСЕХ трёх. "
+            "Знаменатель ядра не подменяется расширенным составом: прежний `COMPLETE 54/54 · 15/15` "
+            "описывал только ядро и не является gate объединённого выпуска.",
         ],
     }
+
+    # ПОСТАВКА ИЗ ГРЯЗНОГО ДЕРЕВА НЕ ПРИНИМАЕТСЯ МОЛЧА.
+    #
+    # Хеши сборки утверждают «что поставлено», но не «из чего»: при незакоммиченных правках
+    # восстановить исходник принятой поставки из репозитория нельзя, и паспорт, который этого не
+    # называет, выдаёт поставку за воспроизводимую (дефект M14 ревью 05.10.2026). Отказ снимается
+    # только ЯВНЫМ ключом, то есть осознанным решением, а не умолчанием.
+    if source.get("tree_dirty") and "--allow-dirty-tree" not in sys.argv[1:]:
+        print(f"ОТКАЗ: дерево репозитория не чистое — {source['changed_files']} изменённых файлов "
+              f"поверх коммита {source.get('commit_short')}.")
+        for line in source.get("changed_files_sample", [])[:10]:
+            print("  -", line)
+        print("Паспорт поставки не издаётся из грязного дерева: закоммитьте исходное состояние "
+              "поставки либо укажите --allow-dirty-tree, если невоспроизводимость осознана.")
+        return 1
 
     os.makedirs(OUT_DIR, exist_ok=True)
     out = os.path.join(OUT_DIR, "delivery-passport.json")
@@ -960,7 +1090,17 @@ def main():
         "rows_complete_run": rows_complete,
         "rows_complete_run_source": complete_source,
         "rows_group_runs": rows_group_runs,
-        "rows_group_runs_note": "подмножества полного прогона; НЕ прибавлять к нему",
+        # ПОДСКАЗКА ЧИТАТЕЛЮ — ИЗ ИЗМЕРЕНИЯ, а не вписана текстом. Здесь стояло «подмножества
+        # полного прогона; НЕ прибавлять к нему», и для блоков C1/C2 это ЛОЖЬ: `assembly` и `mate`
+        # в полный прогон не входят (строк `ASM.*`/`MATE.*` в нём ноль). Запрет «не прибавлять»
+        # остаётся верным, но ПРИЧИНА у него другая, и читатель обязан её видеть.
+        "rows_group_runs_note": (
+            "подмножества полного прогона; НЕ прибавлять к нему" if not only_in_groups else
+            f"в полный прогон входят НЕ ЦЕЛИКОМ: {len(only_in_groups)} имён есть только в группах "
+            f"({', '.join(only_in_groups[:6])}{'…' if len(only_in_groups) > 6 else ''}); блоки C1/C2 "
+            f"дополняют полный прогон (их ветки полным прогоном не вызываются). Всё равно НЕ "
+            f"прибавлять: общее число различных проверок — {distinct_union}, а сумма посчитала бы "
+            f"общие строки дважды"),
         "failed": total_failed,
         "groups": [(g["group"], g["rows"], g["verdicts"]) for g in groups],
         # `.get`, а не `[...]`: когда проверки записи клиента не было, блок отвечает

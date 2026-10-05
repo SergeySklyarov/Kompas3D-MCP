@@ -5322,7 +5322,8 @@
     "ASM.04.negative_tests",
     "ASM.04.distinguishing",
     "ASM.04.discover",
-    "ASM.04.geometry_validation"
+    "ASM.04.geometry_validation",
+    "ASM.04.rotation"
    ],
    "evidence": [
     "docs/acceptance/assembly/assembly-acceptance.json",
@@ -5632,7 +5633,9 @@
     "ASM.02.negative_tests_missing",
     "ASM.05.negative_tests",
     "ASM.02.geometry_validation",
-    "ASM.05.save_reopen"
+    "ASM.05.save_reopen",
+    "ASM.01.discover",
+    "ASM.02.create"
    ],
    "evidence": [
     "docs/acceptance/assembly/assembly-acceptance.json",
@@ -5705,7 +5708,8 @@
     "ASM.04.discover",
     "ASM.04.geometry_validation",
     "ASM.05.discover",
-    "ASM.07.geometry_validation"
+    "ASM.07.geometry_validation",
+    "ASM.03.save_reopen"
    ],
    "evidence": [
     "docs/acceptance/assembly/assembly-acceptance.json",

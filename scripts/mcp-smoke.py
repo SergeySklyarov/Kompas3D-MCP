@@ -648,6 +648,50 @@ def assembly_checks(client, rep, app_id, workdir):
             rep.add("ASM.04.distinguishing", "различающий контроль второго компонента", "FAIL",
                     f"компонентов {len(rows3)}: различать нечего — кратность не достигнута")
 
+    # ---- РАЗЛИЧАЮЩИЙ КОНТРОЛЬ РАСКЛАДКИ МАТРИЦЫ: ПОВОРОТ, А НЕ ПЕРЕНОС ----
+    # Урок измеренной `RepositionMatrix` (проба RP.2, 18.09.2026): на ЧИСТОМ ПЕРЕНОСЕ раскладку
+    # «строка/столбец» различить НЕЛЬЗЯ — единичный поворот симметричен, и транспонированная 3×3
+    # даёт тот же массив. Поэтому поворот ставится на ВТОРОЙ компонент (он в начале координат, и
+    # начало координат первого остаётся 30 — последующие строки не сдвигаются), а сверяются ОСИ,
+    # а не перенос.
+    if len(rows2) >= 2:
+        env, code = call("kompas_set_component_placement", {
+            "document_id": asm, "expected_revision": current_rev(asm),
+            "component_ref": rows2[1].get("component_ref"),
+            "transform": {"origin_mm": [0, 0, 0], "x_axis": [0, 1, 0], "y_axis": [-1, 0, 0]}})
+        env, code = call("kompas_list_components", {"document_id": asm})
+        rows_rot = result(env).get("components") or []
+        got = None
+        for row in rows_rot:
+            m = row.get("matrix")
+            if (isinstance(m, list) and len(m) >= 16
+                    and abs(m[12]) <= 0.01 and abs(m[13]) <= 0.01 and abs(m[14]) <= 0.01):
+                got = m
+        # РАСКЛАДКА ИЗМЕРЕНА ПОВОРОТОМ И ОКАЗАЛАСЬ НЕ ТОЙ, ЧТО ПРЕДПОЛАГАЛА ПЕРВАЯ РЕДАКЦИЯ ПРОВЕРКИ.
+        # Тройки идут НЕ подряд: каждая занимает три числа, за которыми стоит 0, то есть массив
+        # читается как [X,0][Y,0][Z,0][t,1]. Первая редакция брала `got[:9]` и сравнивала с
+        # [X|Y|Z] подряд — и «падала» на верной записи. На ПЕРЕНОСЕ это неотличимо (единичный
+        # поворот симметричен), поэтому раскладку и обязан различать именно поворот.
+        def triple(m, base):
+            return [m[base], m[base + 1], m[base + 2]] if m and len(m) >= base + 3 else None
+
+        got_x, got_y, got_z = (triple(got, 0), triple(got, 4), triple(got, 8)) if got else (None, None, None)
+        want_x, want_y, want_z = [0.0, 1.0, 0.0], [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0]
+        # Транспонированная запись дала бы X=(0,−1,0), Y=(1,0,0) — то есть совпадение по осям
+        # ОТЛИЧАЕТ правильную раскладку от транспонированной, чего перенос не умеет вовсе.
+        transposed_x, transposed_y = [0.0, -1.0, 0.0], [1.0, 0.0, 0.0]
+
+        def close3(a, b):
+            return a is not None and all(abs(a[i] - b[i]) <= 0.01 for i in range(3))
+
+        axes_ok = close3(got_x, want_x) and close3(got_y, want_y) and close3(got_z, want_z)
+        rep.add("ASM.04.rotation",
+                "различающий контроль раскладки: поворот 90° вокруг Z перечитан по ОСЯМ",
+                "PASS" if axes_ok else "FAIL",
+                f"X={got_x} Y={got_y} Z={got_z}; ожидалось X={want_x} Y={want_y} Z={want_z}; "
+                f"транспонированная дала бы X={transposed_x} Y={transposed_y}; "
+                f"перенос = {[got[12], got[13], got[14]] if got else None}")
+
     # ========= ASM.05: замена компонента =========
     src2 = os.path.join(src_dir, "asm-source-2.m3d")
     if len(rows2) >= 1:

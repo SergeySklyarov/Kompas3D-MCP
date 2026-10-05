@@ -10,20 +10,13 @@ using KompasMcp.Domain.References;
 namespace KompasMcp.Api5Adapter;
 
 /// <summary>Geometry: sketches, features, measurement, final topology.</summary>
-/// <remarks>
-/// Signatures here are taken from <c>docs/compatibility/kompas-api5-metadata.json</c> (dumped from
-/// the installed interop by P0.2), not from memory. Three consequences worth stating:
-/// <list type="bullet">
-/// <item><c>GetLength</c>/<c>GetArea</c>/<c>CalcMassInertiaProperties</c> take a <b>UInt32 unit
-/// selector</b>. Leaving it at 0 asks for centimetres — that is the whole 10× discrepancy of
-/// spec 4.5, reproduced in P0.7 as <c>GetLength(0)=10</c> on a 100 mm edge. Only
-/// <see cref="KompasUnits.LengthMm"/> is passed in this file.</item>
-/// <item>Volume and area come from <c>CalcMassInertiaProperties</c> (<c>.v()</c>, <c>.F()</c>):
-/// <c>ksBody</c> has no <c>GetVolume</c>/<c>GetArea</c> at all, contrary to spec 4.5's wording.</item>
-/// <li>Edges are reached through <c>GetMainBody() → FaceCollection → EdgeCollection</c>, never
-/// through <c>EntityCollection(o3d_edge)</c>, which also contains sketch and construction
-/// contours (P0.8: 23 objects against 14 real body edges).</item>
-/// </remarks>
+/// <remarks>Signatures come from <c>docs/compatibility/kompas-api5-metadata.json</c> (P0.2), not memory.
+/// MEASURED: unit selector 0 = centimetres (P0.7: <c>GetLength(0)=10</c> on a 100 mm edge), the 10×
+/// discrepancy of spec 4.5; only <see cref="KompasUnits.LengthMm"/> is passed here. Volume/area come from
+/// <c>CalcMassInertiaProperties</c> (<c>.v()</c>, <c>.F()</c>) — <c>ksBody</c> has no
+/// <c>GetVolume</c>/<c>GetArea</c>. Edges come through <c>GetMainBody() → FaceCollection →
+/// EdgeCollection</c>, never <c>EntityCollection(o3d_edge)</c> (P0.8: 23 objects vs 14 body edges).
+/// History: docs/decisions/adapter-core.md#geometry-signatures</remarks>
 public sealed partial class Api5Session
 {
     // ---------------------------------------------------------------------------------------------
@@ -136,15 +129,14 @@ public sealed partial class Api5Session
             ? $"sketch on {plane.Reference}"
             : $"{plane.Base?.ToString().ToUpperInvariant() ?? "plane"}{(Math.Abs(plane.OffsetMm) > 1e-9 ? $" +{plane.OffsetMm:0.###} mm" : string.Empty)}";
 
-    /// <summary>The contours this server drew into each sketch, in mm. Filled when the server itself drew the
-    /// primitives, and read by <see cref="Extrude"/> as the expected volume target: without it the
-    /// extrusion could only report "KOMPAS said yes", which spec 1.11 explicitly forbids as proof.</summary>
-    /// <remarks>The contour list is kept rather than the area, because the area of a profile is not the sum of
-    /// its primitives: a contour inside another one is a hole in it. Measured 24.09.2026 — while the
-    /// entry was a running sum, a sketch built by appending a circle inside another gave
-    /// π·125 = 392.699081699 against the annulus' π·75 = 235.619449019, and the extrusion of a
-    /// correct ring was reported as an unconfirmed geometry change. One number cannot carry nesting,
-    /// so the number is derived from the contours instead of accumulated next to them.</remarks>
+    /// <summary>The contours this server drew into each sketch, in mm — the expected volume target read by
+    /// <see cref="Extrude"/>, without which the extrusion could only report "KOMPAS said yes" (spec 1.11).</summary>
+    /// <remarks>The contour list is kept rather than the area, because a profile's area is not the sum of its
+    /// primitives — a contour inside another is a hole. Measured 24.09.2026: while the entry was a running sum,
+    /// a circle appended inside another gave π·125 = 392.699081699 against the annulus' π·75 = 235.619449019;
+    /// the extrusion of a correct ring was reported as an unconfirmed geometry change. One number cannot carry
+    /// nesting, so it is derived from the contours, not accumulated next to them.
+    /// History: docs/decisions/adapter-core.md#sketch-profiles-contour-list</remarks>
     private readonly Dictionary<string, SketchProfile> _sketchProfiles = new(StringComparer.Ordinal);
 
     /// <summary>Points lying on the primitives this server drew into each sketch. API5 gives no way to
@@ -407,16 +399,12 @@ public sealed partial class Api5Session
 
     /// <summary>Which base plane a sketch sits on: from memory when the server chose it, otherwise read back
     /// out of the model.</summary>
-    /// <remarks>
-    /// The memory entry only exists for a sketch this server created. A sketch that arrived with a
-    /// reopened document has none, and without a plane the derivation cannot be allowed at all —
-    /// which is correct but would make the new route useless exactly in the case it was built for.
-    /// <see cref="PlaneNormalAxis"/> already resolves a plane entity (including an offset plane,
-    /// through its base) to the model axis it is normal to, measured for the through-extent
-    /// calculation; the same resolution answers the question here. An axis has no sign, so this
-    /// establishes "the sketch is parallel to XY", not "it faces +Z" — the sign is what probe G left
-    /// unmeasured, and <see cref="SketchPointDerivation.AxisIsNormalToXyPlane"/> tolerates either.
-    /// </remarks>
+    /// <remarks>A reopened document's sketch has no memory entry, so without this the derivation would be
+    /// useless exactly where it was built. <see cref="PlaneNormalAxis"/> resolves a plane entity (offset
+    /// plane included, through its base) to the model axis it is normal to — the same resolution used for
+    /// the through-extent calculation. An axis has no sign: this establishes "parallel to XY", not "faces
+    /// +Z"; probe G left the sign unmeasured and <see cref="SketchPointDerivation.AxisIsNormalToXyPlane"/>
+    /// tolerates either. History: docs/decisions/adapter-core.md#resolve-sketch-plane-base</remarks>
     private PlaneBase? ResolveSketchPlaneBase(string sketchRef, SketchTarget target)
     {
         if (_sketchPlaneBase.TryGetValue(sketchRef, out var remembered))
@@ -448,14 +436,13 @@ public sealed partial class Api5Session
     }
 
     /// <summary>Refuses a sketch edit that destroyed a dependent body, instead of reporting it as applied.</summary>
-    /// <remarks>Closes the question probe G opened (Q-SKETCH-EDIT-ZERO). Measured in G.9: replacing a Ø20 hole
-    /// with R90 on a 100×80 plate makes the profile larger than the material, and KOMPAS answers
-    /// success to every individual call while the body disappears — V = 0, 0 faces, 0 bodies. The
-    /// vendor's return codes are therefore not a verification of anything, and the only honest
-    /// evidence is the body measurement.
-    /// The refusal is reported as <see cref="ErrorCodes.GeometryFailed"/> with <c>partialEffects:
-    /// true</c>: the model really did change, and saying otherwise would be its own lie. A general
-    /// rollback is not claimed — nothing in this adapter can restore a body KOMPAS consumed.</remarks>
+    /// <remarks>Closes probe G's question Q-SKETCH-EDIT-ZERO. Measured in G.9: replacing a Ø20 hole with R90
+    /// on a 100×80 plate makes the profile larger than the material, and KOMPAS answers success to every
+    /// individual call while the body disappears — V = 0, 0 faces, 0 bodies; vendor return codes verify
+    /// nothing, only the body measurement does. Reported as <see cref="ErrorCodes.GeometryFailed"/> with
+    /// <c>partialEffects: true</c> — the model really changed. A general rollback is not claimed: nothing
+    /// here can restore a body KOMPAS consumed.
+    /// History: docs/decisions/adapter-core.md#guard-dependent-body-survived</remarks>
     private void GuardDependentBodySurvived(DocumentEntry document, EditSketchCommand command, List<BodySnapshot> bodiesBefore)
     {
         var bodiesAfter = ReadBodySnapshots(document.PartNow());
@@ -498,18 +485,12 @@ public sealed partial class Api5Session
 
     /// <summary>Coordinates for <c>ksFindObj</c> taken from the model itself, for a sketch this server did
     /// not draw and therefore cannot remember.</summary>
-    /// <remarks>
-    /// Route measured by probe G (<c>docs/acceptance/api7/sketch-geometry-reopen.md</c>, 11 steps
-    /// PASS) on a reopened document: the through cut is found in the tree by type, its sketch via
-    /// <c>GetSketch()</c>, and the coordinate comes from the cylindrical face the cut left behind —
-    /// <c>GetSurfaceParam() → ksCylinderParam</c> gives centre and radius, and the point
-    /// <c>(cx + r; cy)</c> lies on the sketch circle. Two control points that find nothing were part
-    /// of the measurement, so the point is known to select this primitive rather than a neighbour.
-    /// Guarded by <see cref="SketchPointDerivation.Verdict"/>: only a base-XY sketch with a circular
-    /// profile qualifies. An inclined plane needs a 3D→2D transport that was never measured, and a
-    /// segment/arc/rectangle profile has no primitive a cylinder-derived point provably lies on.
-    /// Both cases refuse here with the reason stated, instead of extrapolating from one measurement.
-    /// </remarks>
+    /// <remarks>Route measured by probe G (<c>docs/acceptance/api7/sketch-geometry-reopen.md</c>, 11 steps
+    /// PASS) on a reopened document: the through cut is found by type, its sketch via <c>GetSketch()</c>, and
+    /// the coordinate from the cylindrical face it left — <c>GetSurfaceParam() → ksCylinderParam</c> gives
+    /// centre and radius, and <c>(cx + r; cy)</c> lies on the sketch circle. Guarded by
+    /// <see cref="SketchPointDerivation.Verdict"/>: only a base-XY sketch with a circular profile qualifies.
+    /// History: docs/decisions/adapter-core.md#derive-probe-points-from-model</remarks>
     private List<double[]> DeriveProbePointsFromModel(
         EditSketchCommand command,
         SketchTarget target,
@@ -995,26 +976,13 @@ public sealed partial class Api5Session
         var feature = (ksEntity)document.PartNow().NewEntity(KompasObjectTypes.Of(entityType));
         var definition = feature.GetDefinition();
 
-        // SetSideParam(side1, type, depth, draftValue, draftOutward): the second argument is the
-        // end-condition type, and depth is the third — as the historical scripts used it.
-        // directionType selects along/against/both, separately from SetSideParam.
-        //
-        // MEASURED SEMANTICS (plate 100x80x10 spanning z=[0,10], sketch on the XY plane at offset o):
-        //   directionType 0 dtNormal  -> material goes to the +z side of the sketch plane
-        //   directionType 1 dtReverse -> material goes to the -z side of the sketch plane
-        //   directionType 2 dtBoth    -> material goes to both sides (depth each way)
-        // Consequences, each measured with an exact volume rather than inferred:
-        //   base  positive          -> bbox z=[0,10]   V=80000
-        //   base  negative          -> bbox z=[-10,0]  V=80000
-        //   base  symmetric         -> bbox z=[-10,10] V=160000
-        //   cut   o=10 positive     -> -392.699082 (= pi*5^2*5, into the plate)
-        //   cut   o=0  negative     -> -392.699082 (the mirrored pair; into the plate from below)
-        //   cut   o=10 negative     -> NO_GEOMETRY_CHANGE (asks for material at z>10, where none is)
-        //   boss  o=10 positive     -> +9000 (30x30x10)
-        //   boss  o=0  negative     -> +9000
-        // A direction pointing away from the body is NOT an error: KOMPAS creates the feature and
-        // changes nothing, which the Host surfaces as NO_GEOMETRY_CHANGE. That is why the choice of
-        // sketch plane is part of the caller's contract, not a detail this adapter may paper over.
+        // SetSideParam(side1, type, depth, draftValue, draftOutward): second arg is the end-condition
+        // type, third is depth; directionType selects along/against/both, separately from SetSideParam.
+        // MEASURED SEMANTICS (plate 100x80x10, sketch on XY at offset o): directionType 0 dtNormal -> +z,
+        // 1 dtReverse -> -z, 2 dtBoth -> both sides. A direction away from the body is NOT an error:
+        // KOMPAS creates the feature and changes nothing (Host: NO_GEOMETRY_CHANGE), so the sketch-plane
+        // choice is part of the caller's contract, not a detail this adapter may paper over.
+        // History: docs/decisions/adapter-core.md#extrude-direction-semantics
         var direction = command.Direction switch
         {
             ExtrudeDirection.Positive => (short)0,
@@ -1081,16 +1049,13 @@ public sealed partial class Api5Session
 
         var changes = CompareBodySnapshots(bodiesBefore, bodiesAfter);
 
-        // THREE DIFFERENT QUANTITIES that used to be one number — that conflation produced 13 false doubts
-        // in client acceptance B3 (defect EXTRUDE-VOLUME-DELTA-ON-MULTIBODY):
-        //   * documentVolume*  — the SUM of all document bodies' volumes (`volume_mm3` is the "after");
-        //   * the volume of the body the operation concerns: the declared target (boss/cut) or the NEW body
-        //     (base);
-        //   * the MATERIAL ADDED by this feature — the only quantity comparable with `profile_area × depth`.
-        // On a multi-body document the first and third differ by the volume of everything already present
-        // (49 000 versus 1 000), and comparing them declares a discrepancy that is not in the geometry. The
-        // sum of individual volumes is also not the volume of the spatial union: two overlapping bodies give
-        // 36 000 + 24 000 = 60 000 against 36 000 for the union.
+        // THREE DIFFERENT QUANTITIES that used to be one number — the conflation produced 13 false doubts
+        // in client acceptance B3 (defect EXTRUDE-VOLUME-DELTA-ON-MULTIBODY): (a) the SUM of all document
+        // bodies (`volume_mm3` is the "after"); (b) the volume of the body the operation concerns (declared
+        // target for boss/cut, the NEW body for base); (c) the MATERIAL ADDED by this feature — the only
+        // quantity comparable with `profile_area × depth`. The sum is also not the union: two overlapping
+        // bodies give 60 000 against 36 000.
+        // History: docs/decisions/adapter-core.md#extrude-three-quantities
         var documentVolumeBefore = SumVolumesOrNull(bodiesBefore);
         var documentVolumeAfter = SumVolumesOrNull(bodiesAfter);
 
@@ -1424,17 +1389,13 @@ public sealed partial class Api5Session
             : new[] { (Min[0] + Max[0]) / 2d, (Min[1] + Max[1]) / 2d, (Min[2] + Max[2]) / 2d };
     }
 
-    /// <summary>
-    /// Per-body volumes and boxes, read exactly the way every other measurement in this project
-    /// reads them — <c>CalcMassInertiaProperties(ST_MIX_MM|ST_MIX_KG).v()</c> and
-    /// <c>ksBody.GetGabarit</c> — so the numbers compare with probes P0.7, P2.1 and P2.6.
-    /// </summary>
-    /// <remarks>
-    /// <c>refresh()</c> before counting is not decoration: without it a collection read right after
-    /// a rebuild can report the previous membership (the <c>ListBodies</c> defect). What is
-    /// deliberately not used here is <c>GetMainBody()</c> — in a multi-body part it answers one body
-    /// only, which is precisely why an operation aimed at another body looked like a no-op.
-    /// </remarks>
+    /// <summary>Per-body volumes and boxes, read the way every measurement here is — <c>CalcMassInertiaProperties(ST_MIX_MM|ST_MIX_KG).v()</c>
+    /// and <c>ksBody.GetGabarit</c> — so the numbers compare with probes P0.7, P2.1 and P2.6.</summary>
+    /// <remarks><c>refresh()</c> before counting is not decoration: without it a collection read right after a
+    /// rebuild can report the previous membership (the <c>ListBodies</c> defect). <c>GetMainBody()</c> is
+    /// deliberately not used — in a multi-body part it answers one body only, which is why an operation
+    /// aimed at another body looked like a no-op.
+    /// History: docs/decisions/adapter-core.md#read-body-snapshots</remarks>
     private static List<BodySnapshot> ReadBodySnapshots(ksPart part)
     {
         var rows = new List<BodySnapshot>();
@@ -1481,15 +1442,13 @@ public sealed partial class Api5Session
         return rows;
     }
 
-    /// <summary>
-    /// Resolves <c>target_body_ref</c> into the body the selector call needs. The reference holds a
-    /// <c>ksBody</c>; <c>ksBodyCollection.Add</c> wants the raw element of the part's body
-    /// collection (measured in P2.6: the cast to <c>ksEntity</c> and the unpacked
-    /// <c>GetDefinition()</c> are both refused), and nothing in API5 states which position the
-    /// referenced body currently occupies. The only identity available on both sides is the
-    /// object's IUnknown — the same comparison <see cref="ReadTopology"/> performs to deduplicate
-    /// edges — so the index is found by pointer and the element is taken from that same walk.
-    /// </summary>
+    /// <summary>Resolves <c>target_body_ref</c> into the body the selector call needs: the reference holds a
+    /// <c>ksBody</c>, but <c>ksBodyCollection.Add</c> wants the raw element of the part's body collection
+    /// (measured in P2.6: the cast to <c>ksEntity</c> and the unpacked <c>GetDefinition()</c> are both
+    /// refused), and API5 does not state the referenced body's position. The only shared identity is the
+    /// object's IUnknown — the comparison <see cref="ReadTopology"/> uses to deduplicate edges — so the
+    /// index is found by pointer and the element taken from that same walk.
+    /// History: docs/decisions/adapter-core.md#resolve-body-target-identity</summary>
     private BodyTarget ResolveBodyTarget(DocumentEntry document, ksPart part, string targetBodyRef, List<BodySnapshot> bodiesBefore)
     {
         var stored = References.Require(targetBodyRef, document.Id, document.Revision);
@@ -1659,15 +1618,13 @@ public sealed partial class Api5Session
     }
 
     /// <summary>How far a body's bounding box must move to count as a position change, in mm.</summary>
-    /// <remarks>The threshold exists because "the body changed" is NOT the same as "the body's volume
-    /// changed". MEASURED on order §4.1 (B3.25 of the 19.09.2026 delivery): on the boolean-edit reference the
-    /// DIFFERENCE volume and the INTERSECTION volume are equal (12 000 mm³), and only the box position tells
-    /// them apart ((0,0,0)…(20,30,20) versus (20,0,0)…(40,30,20)). While volume was the only change signal, a
-    /// correctly applied `intersect` edit looked like "no body changed" and was rejected by the instrument
-    /// itself — the verdict rested on a field that does not support it (defect
-    /// CHECK-FIELDS-DO-NOT-SUPPORT-THE-VERDICT, order §4.1). The threshold is 1 nm: the box is read as exact
-    /// B-Rep coordinates, so an untouched body's six numbers match bit-for-bit while any real shift is orders
-    /// of magnitude larger. The threshold catches solver noise, not geometry.</remarks>
+    /// <remarks>"The body changed" is NOT the same as "its volume changed". MEASURED on order §4.1 (B3.25,
+    /// 19.09.2026 delivery): on the boolean-edit reference the DIFFERENCE and INTERSECTION volumes are equal
+    /// (12 000 mm³), and only the box position tells them apart. With volume as the only signal a correct
+    /// `intersect` looked like "no body changed" and was rejected (defect CHECK-FIELDS-DO-NOT-SUPPORT-THE-
+    /// VERDICT, order §4.1). The threshold is 1 nm — the box is exact B-Rep coordinates, so an untouched
+    /// body's six numbers match bit-for-bit while any real shift is orders larger; it catches solver noise.
+    /// History: docs/decisions/adapter-core.md#box-change-floor</remarks>
     private const double BoxChangeFloorMm = 1e-6d;
 
     /// <summary>The comparison itself: what moved, what did not, and the rows that say so.</summary>
@@ -1808,15 +1765,12 @@ public sealed partial class Api5Session
         definition.directionType = direction;
         var depth = DepthOf(command);
 
-        // forward=true means "extrude to the side the sketch normal points at". dtReverse=1 already
-        // says "the other side", so passing forward=true unconditionally asks for a contradiction:
-        // the direction says reverse, the side says forward. Measured on v24 before this fix: a base
-        // extrusion asked for direction=negative answered Create()=false and the feature never
-        // appeared (GEOMETRY_FAILED). After the fix: bbox z=[-10,0], V=80000 — the exact mirror of
-        // direction=positive (bbox z=[0,10], V=80000). The side must agree with the direction.
-        //
-        // The same guard was needed on ConfigureBoss (before it, boss with direction=negative failed
-        // with GEOMETRY_FAILED) and is harmless-but-not-required on ConfigureCut (see there).
+        // forward=true means "extrude to the side the sketch normal points at". dtReverse=1 already says
+        // "the other side", so forward=true unconditionally is a contradiction. Measured on v24 before the
+        // fix: direction=negative answered Create()=false and the feature never appeared (GEOMETRY_FAILED).
+        // After: bbox z=[-10,0], V=80000 — the mirror of direction=positive (bbox z=[0,10], V=80000). The
+        // same guard was needed on ConfigureBoss and is harmless-but-not-required on ConfigureCut (see there).
+        // History: docs/decisions/adapter-core.md#extrude-forward-side
         var forward = direction != 1;
         if (!definition.SetSideParam(forward, EndConditionBlind, depth, 0, false))
         {
@@ -1919,29 +1873,14 @@ public sealed partial class Api5Session
         return true;
     }
 
-    /// <summary>
-    /// Tells the kernel which body the operation must act on, by the route measured in probe P2.6
-    /// and nowhere else in this repository:
-    /// <c>def.chooseType = ksChBodies(3)</c>; <c>cb = def.ChooseBodies()</c> (answers
-    /// <c>ksChooseBodies</c>, whose only members are <c>BodyCollection()</c> and
-    /// <c>ChooseBodiesType</c> — there is no <c>Add</c> on it);
+    /// <summary>Tells the kernel which body the operation must act on, by the route measured in probe P2.6
+    /// and nowhere else in this repository: <c>def.chooseType = ksChBodies(3)</c>; <c>cb = def.ChooseBodies()</c>
+    /// (<c>ksChooseBodies</c> has only <c>BodyCollection()</c> and <c>ChooseBodiesType</c> — no <c>Add</c>);
     /// <c>cb.ChooseBodiesType = ksManualEditing(2)</c>;
     /// <c>((ksBodyCollection)cb.BodyCollection()).Add(&lt;raw element of part.BodyCollection()&gt;)</c>.
+    /// If <c>Add</c> rejects the body the operation is refused before <c>Create</c>.
+    /// History: docs/decisions/adapter-core.md#apply-body-choice
     /// </summary>
-    /// <remarks>
-    /// Three things this call is not, all of them measured:
-    /// <list type="bullet">
-    /// <item>Not optional. With no declaration KOMPAS cuts whatever body the contour happens to lie
-    /// over, which for a single-body part is indistinguishable from success.</item>
-    /// <item>Not decorative. <c>chooseType = 2</c> (parts only, and the part has none) produced
-    /// <c>Create = true</c> and no volume change at all.</item>
-    /// <item>Not to be left at <c>ChooseBodiesType = 0</c>: on a boss that creates an additional
-    /// body even where the profile overlaps an existing one (2 bodies became 3).</item>
-    /// </list>
-    /// If <c>Add</c> does not accept the body, the operation is refused before <c>Create</c>: a
-    /// feature created without an honoured target is exactly the unaimed mutation the contract
-    /// exists to prevent.
-    /// </remarks>
     private static void ApplyBodyChoice(
         ExtrudeCommand command,
         BodyTarget? bodyTarget,
@@ -2029,16 +1968,13 @@ public sealed partial class Api5Session
         command.DepthMm is double depth ? $"{depth:0.###} мм" : "не задана (насквозь)";
 
     /// <summary>Extent of the material a through operation traverses, in mm, along the axis the sketch is
-    /// normal to. Null when the plane does not resolve to one of the three model axes: then the
-    /// expectation stays "not_computable" rather than comparing a measurement with a number that
-    /// was invented on the way.</summary>
-    /// <remarks>
-    /// <paramref name="material"/> is the body the caller declared. Falling back to
-    /// <c>GetMainBody()</c> is kept for the operations that name no target, and it is the reason a
-    /// through cut aimed at a second body used to be unverifiable: in a multi-body part
-    /// <c>GetMainBody()</c> answers one body, so the expected delta was computed from a body the
-    /// operation never touched.
-    /// </remarks>
+    /// normal to. Null when the plane resolves to none of the three model axes: the expectation then stays
+    /// "not_computable" rather than comparing a measurement with an invented number.</summary>
+    /// <remarks><paramref name="material"/> is the caller-declared body. Falling back to <c>GetMainBody()</c>
+    /// is kept for operations that name no target, and is why a through cut aimed at a second body was
+    /// unverifiable: in a multi-body part <c>GetMainBody()</c> answers one body, so the expected delta came
+    /// from a body the operation never touched.
+    /// History: docs/decisions/adapter-core.md#through-extent-mm</remarks>
     private static double? ThroughExtentMm(DocumentEntry document, ksEntity sketch, ksBody? material)
     {
         try
@@ -2104,21 +2040,14 @@ public sealed partial class Api5Session
     /// <summary>End-condition <c>ksEndTypeEnum.etThroughAll</c> — cut through all material.</summary>
     private const short EndConditionThrough = 1;
 
-    /// <summary>
-    /// Fillet over explicitly referenced body edges (docs/03 G04, docs/05 SM-09). Route measured by
-    /// probe P2.2: <c>NewEntity(o3d_fillet=34)</c> → <c>ksFilletDefinition</c> → radius/tangent →
-    /// <c>array()</c> as <c>ksEntityCollection</c> → <c>Add(edgeEntity)</c> → <c>Create()</c>.
-    /// Edges come from <c>kompas_read_topology</c> (final body), never from
-    /// <c>part.EntityCollection(o3d_edge)</c>: that collection also holds sketch and construction
-    /// contours, which is the error docs/04 §4.5 records and the historical fillet helper used.
-    /// Success is not the HRESULT: the radius is read back from a fresh definition object and the
-    /// face count is required to grow by the number of filleted edges.
-    /// </summary>
-    /// <summary>Unwraps an edge from the reference registry into a <c>ksEntity</c> — what the fillet
-    /// collection accepts. Which of the three routes works is MEASURED (probe P2.2), not assumed; the route
-    /// is returned with the entity so the answer names how the edge was obtained.</summary>
-    /// <remarks>Extracted as a shared helper because both creating a fillet and editing its edge set take
-    /// this path: two copies of one unwrapping diverge on the first edit of either.</remarks>
+    /// <summary>Fillet over explicitly referenced body edges (docs/03 G04, docs/05 SM-09). Route measured by
+    /// probe P2.2: <c>NewEntity(o3d_fillet=34)</c> → <c>ksFilletDefinition</c> → radius/tangent → <c>array()</c>
+    /// as <c>ksEntityCollection</c> → <c>Add(edgeEntity)</c> → <c>Create()</c>. Edges come from
+    /// <c>kompas_read_topology</c> (final body), never <c>part.EntityCollection(o3d_edge)</c> (docs/04 §4.5).
+    /// Success is not the HRESULT: the radius is re-read from a fresh definition object and the face count must
+    /// grow by the number of filleted edges. Unwraps an edge into a <c>ksEntity</c> for the fillet collection;
+    /// which of the three routes works is MEASURED (probe P2.2), returned so the answer names the route.
+    /// History: docs/decisions/adapter-core.md#fillet-route-and-unwrap-edge</summary>
     private static (ksEntity Entity, string Route) UnwrapEdgeToEntity(ksEdgeDefinition edge, string reference)
     {
         if (edge is ksEntity asEntity)
@@ -2326,19 +2255,13 @@ public sealed partial class Api5Session
     }
 
     /// <summary>Chamfer over the explicitly referenced edges of the final body (docs/05 SM-11).</summary>
-    /// <remarks>Route MEASURED by probe F on 12.09.2026 on v24 and repeated here call for call:
-    /// <c>NewEntity(o3d_chamfer=33)</c> → <c>GetDefinition()</c> as <c>ksChamferDefinition</c> →
-    /// <c>SetChamferParam(transfer, d1, d2)</c> → <c>array()</c> as <c>ksEntityCollection</c> →
-    /// <c>Add(edge)</c> → <c>Create()</c> → <c>RebuildDocument()</c>. On a 100×80×10 plate four vertical
-    /// corner edges with 2×2 legs removed exactly 20·d₁·d₂ = 80 mm³ (F.2), an edit to 3×3 removed 180 (F.3),
-    /// and after save→close→reopen the feature was found in the tree and edited again (F.5). Edges come from
-    /// <c>kompas_read_topology</c> (final body), not from <c>EntityCollection(o3d_edge)</c>: that collection
-    /// also holds sketch contours — the very defect docs/04 §4.5 records for the historical fillet helper.
-    /// Success is not <c>Create()</c>: the parameter is re-read from a fresh definition object, the face count
-    /// must grow by exactly the number of edges, and the volume must change per the analytic expectation if
-    /// the caller supplied one. A zero leg is refused before COM because KOMPAS accepts it and creates a
-    /// feature with four zero faces at unchanged volume (F.12) — passing that off as success would lie about
-    /// the geometry.</remarks>
+    /// <remarks>Route MEASURED by probe F on 12.09.2026 on v24: <c>NewEntity(o3d_chamfer=33)</c> →
+    /// <c>GetDefinition()</c> as <c>ksChamferDefinition</c> → <c>SetChamferParam(transfer, d1, d2)</c> →
+    /// <c>array()</c> as <c>ksEntityCollection</c> → <c>Add(edge)</c> → <c>Create()</c> → <c>RebuildDocument()</c>.
+    /// Edges come from <c>kompas_read_topology</c> (final body), not <c>EntityCollection(o3d_edge)</c>
+    /// (docs/04 §4.5). Success is not <c>Create()</c>: parameter, face count and volume are re-read/checked;
+    /// a zero leg is refused before COM (KOMPAS accepts it, F.12).
+    /// History: docs/decisions/adapter-core.md#chamfer-route</remarks>
     public ChamferResult Chamfer(ChamferCommand command)
     {
         if (command.EdgeRefs is not { Count: > 0 } edgeRefs)
@@ -2903,18 +2826,14 @@ public sealed partial class Api5Session
         };
     }
 
-    /// <summary>
-    /// Radius, extent, axis origin and direction of a cylindrical face. Route measured by probe
-    /// P2.5: <c>face.GetSurface()</c> → <c>ksSurface.GetSurfaceParam()</c> →
-    /// <c>ksCylinderParam { radius, height, GetPlacement() }</c>, with the direction taken from
-    /// <c>ksPlacement.GetVector(2)</c>.
-    ///
-    /// Two traps that make this route worth pinning down in code: <c>GetAxis</c> returns a POINT
-    /// (origin + vector), not a direction — reading it as an axis gives a vector of length ≈64.8
-    /// for this part — and the numbers are millimetres, cross-checked there against
-    /// <c>GetArea(LengthMm) = 2πrh</c> to the last digit. Radius and height do not distinguish
+    /// <summary>Radius, extent, axis origin and direction of a cylindrical face. Route measured by probe P2.5:
+    /// <c>face.GetSurface()</c> → <c>ksSurface.GetSurfaceParam()</c> → <c>ksCylinderParam { radius, height,
+    /// GetPlacement() }</c>, direction from <c>ksPlacement.GetVector(2)</c>.</summary>
+    /// <remarks>Two traps: <c>GetAxis</c> returns a POINT (origin + vector), not a direction — read as an
+    /// axis it gives a vector of length ≈64.8 for this part — and the numbers are millimetres, cross-checked
+    /// against <c>GetArea(LengthMm) = 2πrh</c> to the last digit. Radius and height do not distinguish
     /// position; only the placement does, which is why all four are published.
-    /// </summary>
+    /// History: docs/decisions/adapter-core.md#cylinder-geometry</remarks>
     private static (double? RadiusMm, double? HeightMm, double[]? CenterMm, double[]? AxisMm) CylinderGeometry(
         ksFaceDefinition face)
     {
@@ -2950,19 +2869,14 @@ public sealed partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Normal of a planar face through the typed <c>ksSurface</c> path: <c>GetNormal(u, v)</c> at
-    /// the middle of the parameter range, with the sign taken from <c>normalOrientation</c>. The
-    /// control pair in probe P2.6 measured that flag: on two flat caps the surface normal was the
-    /// same <c>(0,0,1)</c> while <c>normalOrientation</c> differed (false at z=0, true at z=10), so
-    /// true means "coincides" and false means "reversed".
-    ///
-    /// Returns null when the normal cannot be read. There is deliberately no second, reflected
-    /// route: the documented signature is <c>GetNormal(paramU, paramV, out x, out y, out z)</c>
-    /// (https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kssurface_getnormal.html), this call is it, and
-    /// a fallback that searched for other arities could only ever have returned null while reading
-    /// like a working route.
-    /// </summary>
+    /// <summary>Normal of a planar face through the typed <c>ksSurface</c> path: <c>GetNormal(u, v)</c> at the
+    /// middle of the parameter range, sign from <c>normalOrientation</c>. Probe P2.6 measured that flag: on
+    /// two flat caps the normal was the same <c>(0,0,1)</c> while <c>normalOrientation</c> differed (false at
+    /// z=0, true at z=10), so true means "coincides", false "reversed".</summary>
+    /// <remarks>Returns null when the normal cannot be read. Deliberately no second, reflected route: the
+    /// documented signature is <c>GetNormal(paramU, paramV, out x, out y, out z)</c>
+    /// (https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kssurface_getnormal.html), and a fallback searching other
+    /// arities could only ever return null while reading like a working route. History: docs/decisions/adapter-core.md#surface-normal-at-middle</remarks>
     private static double[]? SurfaceNormalAtMiddle(ksFaceDefinition face)
     {
         try
@@ -3052,15 +2966,13 @@ public sealed partial class Api5Session
         };
     }
 
-    /// <summary>
-    /// Radius and centre of a circular edge, read as <c>ksCurve3D.GetCurveParam()</c> →
-    /// <c>ksCircle3dParam</c> (probe P2.6: <c>get_radius()</c>, the curve bbox and the length
-    /// divided by 2π agree to the last digit on R10).
-    ///
-    /// Deliberately never computed as L/2π: on a straight 100 mm edge that formula yields a
-    /// plausible-looking 15.915 mm, which is precisely the kind of number a caller would then
-    /// believe. A non-circular curve therefore reports no radius at all.
-    /// </summary>
+    /// <summary>Radius and centre of a circular edge, read as <c>ksCurve3D.GetCurveParam()</c> →
+    /// <c>ksCircle3dParam</c> (probe P2.6: <c>get_radius()</c>, the curve bbox and the length divided by 2π
+    /// agree to the last digit on R10).</summary>
+    /// <remarks>Deliberately never computed as L/2π: on a straight 100 mm edge that formula yields a
+    /// plausible-looking 15.915 mm, the kind of number a caller would then believe. A non-circular curve
+    /// therefore reports no radius at all.
+    /// History: docs/decisions/adapter-core.md#circle-edge-params</remarks>
     private static (double? RadiusMm, double[]? CenterMm) CircleEdgeParams(ksEdgeDefinition edge)
     {
         try
@@ -3344,22 +3256,13 @@ public sealed partial class Api5Session
             : values[index];
 
     /// <summary>Arc end angles for <c>ksArcByAngle</c>, brought into the range the kernel accepts.</summary>
-    /// <remarks>
-    /// MEASURED 20.09.2026 on the <c>publish-mania-20260920</c> delivery by probe
-    /// <c>scratch/_arc_angle_range_probe.py</c>: the call fails if and only if
-    /// <c>start_deg + sweep_deg</c> leaves [−360°, 360°]. A start of exactly 360° and an end of exactly
-    /// 360° are accepted (R3, R4 of the probe). The angles are therefore shifted by a whole number of
-    /// turns — exactly enough for the end to enter the range; the sweep does NOT change under the
-    /// shift, i.e. the arc stays the same. If the end angle is already inside the range, the values
-    /// are returned AS IS: the call stays as before. But ADDITIVITY HOLDS ONLY TOGETHER WITH THE
-    /// CALLER'S `Min`/`Max` ORDER — see the comment in the `SketchEntityKind.Arc` branch: passing
-    /// "start, end" instead of "smaller, larger" changed the result on inputs the edit did not touch
-    /// (measured by control R8).
-    /// LIMIT: NOT MEASURED and therefore NOT touched — the case <c>|sweep_deg| &gt; 360</c> with the end
-    /// angle INSIDE the range (e.g. start −180°, sweep +400°). Such a sweep cannot be expressed by one
-    /// arc (two angles define at most one turn), but what the kernel does today was not measured, so
-    /// the behaviour is left as before rather than replaced by a guess.
-    /// </remarks>
+    /// <remarks>MEASURED 20.09.2026 on the <c>publish-mania-20260920</c> delivery by probe
+    /// <c>scratch/_arc_angle_range_probe.py</c>: the call fails iff <c>start_deg + sweep_deg</c> leaves
+    /// [−360°, 360°] (exactly 360° start/end are accepted — R3, R4). Angles are shifted by whole turns,
+    /// just enough for the end to enter the range; the sweep does NOT change. Already-inside values are
+    /// returned AS IS. ADDITIVITY HOLDS ONLY WITH THE CALLER'S `Min`/`Max` ORDER (control R8).
+    /// LIMIT: NOT MEASURED, NOT touched — <c>|sweep_deg| &gt; 360</c> with the end inside (e.g. −180°, +400°).
+    /// History: docs/decisions/adapter-core.md#arc-endpoints-range</remarks>
     private static (double First, double Second) ArcEndpoints(double startDeg, double sweepDeg)
     {
         var end = startDeg + sweepDeg;
@@ -3561,16 +3464,13 @@ public sealed partial class Api5Session
     };
 }
 
-/// <summary>Result of a sketch edit. <see cref="DeletedEntities"/> counts what was actually deleted (by the
-/// vendor convention 1 = success, and deletion goes by the object found at the stored coordinate),
-/// while <see cref="ExpectedDeleted"/> is how many were expected. The difference is not smoothed
-/// away: a partial cleanup means a dirty profile, not a deleted edit.</summary>
-/// <param name="ProbePointsFromModel">
-/// True when the coordinates for finding the objects to delete are derived from the geometry of the
-/// dependent body rather than taken from session memory. The caller needs to know: the route works
-/// for a sketch the server did not draw, but is limited to the measured configuration (base XY, a
-/// circle in the profile, through-cut) — see <c>SketchPointDerivation</c>.
-/// </param>
+/// <summary>Result of a sketch edit. <see cref="DeletedEntities"/> counts what was actually deleted (vendor
+/// convention 1 = success; by the object found at the stored coordinate), <see cref="ExpectedDeleted"/> how
+/// many were expected — the difference is not smoothed away: a partial cleanup means a dirty profile.</summary>
+/// <param name="ProbePointsFromModel">True when the coordinates for finding the objects to delete are derived
+/// from the dependent body's geometry rather than session memory: the route works for a sketch the server did
+/// not draw, but only in the measured configuration (base XY, circle in profile, through-cut) — see
+/// <c>SketchPointDerivation</c>. History: docs/decisions/adapter-core.md#edit-sketch-result</param>
 public sealed record EditSketchResult(
     int EntityCount,
     IReadOnlyList<string> Kinds,

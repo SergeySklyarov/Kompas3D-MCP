@@ -7,16 +7,13 @@ using Kompas6API5;
 namespace KompasMcp.Api5Adapter;
 
 /// <summary>Suppress, restore and delete a feature (docs/05 §4.4, §7; SM-30 in the catalog).
-/// MEASURED by probe L on 12.09.2026 on live v24 (docs/acceptance/api7/sketch-lifecycle.md), not inferred
-/// from names: L.7 — <c>ksFeature.excluded = true</c> removes the extrusion body (V becomes the plate's
-/// volume), <c>false</c> restores it, and the feature count does not change. One <c>RebuildDocument()</c>
-/// suffices: unlike a parameter edit (P2.3), <c>ksEntity.Update()</c> is not required here. L.8 —
-/// <c>ksDocument3D.DeleteObject(entity)</c> deletes the feature: returns true, feature count minus one.
-/// INVARIANT: there is no "dependent features" member in API5 or API7 — verified by reflection over both
-/// assemblies (0 matches for Dependent*/Preceding*/UsedBy*), not assumed. So the API does not answer
-/// "what will fall away with this feature", and the server does not pretend it does: it returns
-/// candidates — features standing after the deleted one in the tree — and their presence blocks deletion
-/// until the caller explicitly agrees.</summary>
+/// MEASURED by probe L on 12.09.2026 on live v24 (docs/acceptance/api7/sketch-lifecycle.md), not from
+/// names: L.7 — <c>ksFeature.excluded = true</c> removes the extrusion body, <c>false</c> restores it, and
+/// the feature count is unchanged; one <c>RebuildDocument()</c> suffices (no <c>ksEntity.Update()</c>, unlike
+/// a parameter edit P2.3). L.8 — <c>ksDocument3D.DeleteObject(entity)</c> returns true, count minus one.
+/// INVARIANT: no "dependent features" member exists in API5 or API7 (reflection: 0 matches for Dependent*/Preceding*/UsedBy*),
+/// so the server returns candidates — features standing after the deleted one — whose presence blocks deletion until the caller agrees.
+/// History: docs/decisions/adapter-core.md#lifecycle-suppress-delete</summary>
 public partial class Api5Session
 {
     public SuppressFeatureResult SetFeatureSuppressed(SuppressFeatureCommand command)
@@ -206,14 +203,13 @@ public partial class Api5Session
         }
 
         // The position is needed for exactly one thing: to enumerate what stands AFTER the deleted feature.
-        // INVARIANT: COM identity is the first and best basis, but it does NOT survive a rebuild — MEASURED
-        // 19.09.2026: suppressing and restoring a base extrusion (BG19/BG20) recreates the tree element and
-        // FindIt on the old object answers −1 even though the object is alive and IsCreated. An unknown
-        // position must not default to "no dependents": not knowing what stands after a feature is not the
-        // same as knowing nothing does. So there are two sources, both named — the name is taken ONLY when
-        // it is unambiguous (two consecutive features of one kind share a name, probe I); when ambiguous the
-        // position is UNKNOWN and the whole tree is offered as candidates, making deletion without explicit
-        // consent impossible rather than free. History: docs/decisions/adapter-core.md#delete-position
+        // INVARIANT: COM identity is the best basis but does NOT survive a rebuild — MEASURED 19.09.2026:
+        // suppressing and restoring a base extrusion (BG19/BG20) recreates the tree element and FindIt on the
+        // old object answers −1 though it is alive and IsCreated. An unknown position must not default to "no
+        // dependents". Two named sources: the name is taken ONLY when unambiguous (two consecutive features of
+        // one kind share a name, probe I); when ambiguous the position is UNKNOWN and the whole tree is offered
+        // as candidates, so deletion without explicit consent is impossible rather than free.
+        // History: docs/decisions/adapter-core.md#delete-position
         var nameMatches = tree.Where(e => e.Name == name).ToList();
         var position = identityPosition >= 0
             ? identityPosition
@@ -275,16 +271,13 @@ public partial class Api5Session
         var treeAfter = FeatureTreeElements(document);
         var volumeAfter = ReadVolume(document);
 
-        // "Deleted" is by identity: the feature object is no longer in the tree. A name check would be
-        // FALSELY negative if a same-named neighbour remains (MEASURED 19.09.2026, probe I: two features
-        // named "Change of position : Body 1").
-        // INVARIANT: three claims are kept separate. A strict "exactly one fewer" made a CASCADE falsely
-        // negative (a 5→3 tree gave feature_removed=false although the target was gone), while replacing
-        // == with <= would hide deletion of EXTRA objects. So: 1) feature_removed — was the TARGET feature
-        // removed (by object identity); 2) cascade_within_candidates — did ONLY it and the declared
-        // candidates go; 3) independent_objects_preserved — are the objects that stood BEFORE it intact.
-        // "The target was removed" and "the cascade went as expected" are DIFFERENT claims, neither
-        // derivable from the change in the total feature count.
+        // "Deleted" is by identity: the feature object is no longer in the tree; a name check would be
+        // FALSELY negative if a same-named neighbour remains (MEASURED 19.09.2026, probe I).
+        // INVARIANT: three claims kept separate. A strict "exactly one fewer" made a CASCADE falsely negative
+        // (a 5→3 tree gave feature_removed=false though the target was gone); replacing == with <= would hide
+        // deletion of EXTRA objects. 1) feature_removed (target gone by identity); 2) cascade_within_candidates
+        // (only it and the declared candidates went); 3) independent_objects_preserved (objects before it
+        // intact). "The target was removed" and "the cascade went as expected" are DIFFERENT claims.
         // History: docs/decisions/adapter-core.md#delete-position
         var stillPresent = TreePositionOf(document, entity) >= 0;
         var featureRemoved = deleted && !stillPresent;

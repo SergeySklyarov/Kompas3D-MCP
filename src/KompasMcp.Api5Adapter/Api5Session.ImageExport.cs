@@ -8,27 +8,14 @@ using KompasMcp.Domain.Imaging;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>Raster snapshot of the model via the documented API5 route (order
-/// <c>KOMPAS_EXPORT_IMAGE_DEVELOPER_PROMPT.md</c> §4).</summary>
-/// <remarks>Route: <c>ksDocument3D.RasterFormatParam()</c> (<c>ksdocument3d_rasterformatparam.html</c>)
-/// → <c>ksRasterFormatParam</c> (<c>ksrasterformatparam_props.html</c>) → <c>Init()</c> → set
-/// <c>format</c>, <c>colorBPP</c>, optionally <c>extResolution</c>/<c>extScale</c> and
-/// <c>returnResultAsArrayBytes</c> → <c>ksDocument3D.SaveAsToRasterFormat(fileName, rasterPar)</c>
-/// (<c>ksdocument3d_saveastorasterformat.html</c>).
-/// MEASURED (probe P2b, delivery <c>publish-deproutes-r2-20260921</c>, build 24.0.0.2799): the two modes
-/// are mutually exclusive, not assumed. A NON-EMPTY file name writes the file (PNG 8639 bytes, 328×448)
-/// while <c>resultArrayBytes</c> stays <c>null</c> — six call shapes (a pre-filled empty array, another
-/// raster write method, re-reading the property, a fresh parameter object after writing) all gave
-/// <c>null</c>. An EMPTY file name gives <c>resultArrayBytes</c> = <c>System.Byte[]</c>, 8639 bytes, PNG
-/// magic <c>89504e47…</c>, and NO file appears on disk (directory snapshot before/after).
-/// Hence the method's design: "return an image" and "write a file" are DIFFERENT route calls. When both
-/// are wanted, the render is done ONCE in byte mode and the file is written from those same bytes — a
-/// second render could give a different frame, and "the file and the response are the same" would then
-/// be unverifiable.
-/// LIMIT: this method does not control the projection (<c>IViewProjection7</c> is documented but left to
-/// a separate order and named as a remainder), does not silently downscale, and does not report
-/// "success" without bytes. The snapshot is the server window's current view; camera state is not
-/// captured and is named unverified in the response.</remarks>
+/// <summary>Raster snapshot of the model via the documented API5 route (order <c>KOMPAS_EXPORT_IMAGE_DEVELOPER_PROMPT.md</c> §4).</summary>
+/// <remarks>MEASURED (probe P2b, <c>publish-deproutes-r2-20260921</c>, build 24.0.0.2799): the two modes are
+/// mutually exclusive — a non-empty name writes the file (PNG 8639 bytes, 328×448) with <c>resultArrayBytes</c>
+/// null, an empty name gives <c>resultArrayBytes</c> (8639 bytes, PNG <c>89504e47…</c>) and no file on disk.
+/// So "return an image" and "write a file" are DIFFERENT route calls; when both are wanted the render runs ONCE
+/// in byte mode. LIMIT: projection not controlled (<c>IViewProjection7</c> left to a separate order), no silent
+/// downscale, no "success" without bytes; snapshot is the window's current view, camera unverified.
+/// History: docs/decisions/adapter-core.md#image-export</remarks>
 public sealed partial class Api5Session
 {
     /// <summary>Snapshot colour depth. 24 bits is what probes P1–P6 measured.</summary>

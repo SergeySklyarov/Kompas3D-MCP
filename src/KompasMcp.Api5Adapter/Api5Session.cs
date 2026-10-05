@@ -11,22 +11,14 @@ using KompasMcp.Domain.Paths;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>One KOMPAS instance the Worker owns or is attached to, plus the documents registered against
-/// it. Every method here must be called on the Worker's single STA thread; nothing in this class
-/// is thread-safe by design, because the COM objects behind it are not.</summary>
-/// <remarks>
-/// Identity rules that the contract depends on:
-/// <list type="bullet">
-/// <item>A document is addressed by server UUID, never by "the active tab". <c>Document3D()</c> is
-/// a factory (proved in P0.5: two calls give different IUnknowns), so there is no ambient document
-/// to misuse.</item>
-/// <item>Revisions are server-side counters bumped on mutation, rebuild, reload and restore.
-/// External edits made in the KOMPAS UI cannot be trusted to raise events here, so a cheap
-/// fingerprint is compared before every mutation and the document is marked
-/// <c>conservative</c> — the limitation is reported, not hidden.</item>
-/// <item>COM references are held only in this object and released exactly when the document is
-/// closed or the session ends (spec 1.6).</item>
-/// </remarks>
+/// <summary>One KOMPAS instance the Worker owns or is attached to, plus the documents registered against it.
+/// Every method must run on the Worker's single STA thread; nothing here is thread-safe by design.</summary>
+/// <remarks>Identity rules the contract depends on: (1) a document is addressed by server UUID, never by
+/// "the active tab" — <c>Document3D()</c> is a factory (P0.5: two calls give different IUnknowns); (2)
+/// revisions are server-side counters bumped on mutation, rebuild, reload and restore — external UI edits
+/// cannot be trusted to raise events, so a fingerprint is compared before every mutation and the document is
+/// marked <c>conservative</c>; (3) COM references are held only here and released when the document is closed
+/// or the session ends (spec 1.6). History: docs/decisions/adapter-core.md#session-identity-rules</remarks>
 public sealed partial class Api5Session : IDisposable
 {
     private readonly Dictionary<string, DocumentEntry> _documents = new(StringComparer.Ordinal);
@@ -752,15 +744,14 @@ public sealed partial class Api5Session : IDisposable
         }
     }
 
-    /// <summary>Assembly component count — from the STRUCTURE (<c>IPart7.PartsEx</c>), not the API5
-    /// collection.</summary>
-    /// <remarks>MEASURED 04.10.2026 by a live run, refuting the former route: the API5 collection
+    /// <summary>Assembly component count — from the STRUCTURE (<c>IPart7.PartsEx</c>), not the API5 collection.</summary>
+    /// <remarks>MEASURED 04.10.2026 by a live run, refuting the former route: API5
     /// <c>EntityCollection(o3d_part = 104)</c> on an assembly with ONE inserted component returned <b>7</b>
-    /// — not a component count. The count comes from the API7 structure:
-    /// <c>IAssemblyDocument.TopPart</c> → <c>IPart7.PartsEx(ksAllParts)</c>, recursively over subassemblies.
-    /// The error was visible only on a live assembly: before it there were no assembly tools.
-    /// LIMIT: the walk is bounded by depth — a subassembly cycle (if possible) must not loop the server. The
-    /// limit is named as a number, not "reasonable": 64 levels.</remarks>
+    /// — not a component count. The count comes from API7: <c>IAssemblyDocument.TopPart</c> →
+    /// <c>IPart7.PartsEx(ksAllParts)</c>, recursively over subassemblies (the error was visible only on a
+    /// live assembly). LIMIT: the walk is bounded by depth, named as a number not "reasonable": 64 levels,
+    /// so a subassembly cycle (if possible) cannot loop the server.
+    /// History: docs/decisions/adapter-core.md#component-count-structure</remarks>
     public int CountComponents(DocumentEntry document)
     {
         var notes = new List<string>();
@@ -1130,14 +1121,12 @@ public sealed class DocumentEntry
     public bool? ActiveReported { get; set; }
 
     /// <summary>Current root part of the document.</summary>
-    /// <remarks>
-    /// The handle captured at creation goes stale once a feature is created: measured on v24, a
-    /// cached <c>ksPart</c> started returning an empty <c>BodyCollection</c> and a null
-    /// <c>GetMainBody()</c> for a document that demonstrably had a solid body and saved it to disk.
-    /// Re-acquiring from the document per operation is therefore not a micro-optimisation to skip —
-    /// it is what makes reads agree with what KOMPAS actually holds. <see cref="Part"/> is kept for
-    /// identity checks and release bookkeeping only.
-    /// </remarks>
+    /// <remarks>The handle captured at creation goes stale once a feature is created: measured on v24, a cached
+    /// <c>ksPart</c> returned an empty <c>BodyCollection</c> and a null <c>GetMainBody()</c> for a document that
+    /// demonstrably had a solid body and saved it to disk. Re-acquiring per operation is not a
+    /// micro-optimisation to skip — it is what makes reads agree with what KOMPAS holds. <see cref="Part"/> is
+    /// kept for identity checks and release bookkeeping only.
+    /// History: docs/decisions/adapter-core.md#part-now-reacquire</remarks>
     public ksPart PartNow() => (ksPart)Document.GetPart(-1);
 
     public long Revision { get; set; }
@@ -1195,16 +1184,14 @@ public static class KompasObjectTypes
     /// <summary><c>o3d_cutRotated</c> — cut by rotation, factory number (MEASURED R.24: 29).</summary>
     public const int CutRotated = 29;
 
-    /// <summary><c>o3d_Rotated3D</c> — the number under which a finished rotation feature lies in the API5
-    /// tree.</summary>
-    /// <remarks>MEASURED 17.09.2026 by acceptance SM-03 (row RO.10t), and the measurement refuted the
-    /// expectation: the tree was expected to lag the factory by 531 as with a hole (52→583), showing the
-    /// rotation under 584. Row RO.10t printed the tree types after a cut by rotation:
-    /// <c>features=2 types=['25', '29']</c> — the base plate under 25 (<c>o3d_bossExtrusion</c>) and the cut
-    /// by rotation under <b>29</b>. So for a rotation the FACTORY number and the tree number COINCIDE
-    /// (29 = <c>o3d_cutRotated</c>), unlike a hole. The conclusion is not "the number is the same" but "the
-    /// two numbering systems behave differently across families, and analogy must not be assumed" — which is
-    /// why the value here is measured, not derived.</remarks>
+    /// <summary><c>o3d_Rotated3D</c> — the number under which a finished rotation feature lies in the API5 tree.</summary>
+    /// <remarks>MEASURED 17.09.2026 by acceptance SM-03 (row RO.10t), refuting the expectation: the tree was
+    /// expected to lag the factory by 531 as with a hole (52→583), showing the rotation under 584. RO.10t
+    /// printed <c>features=2 types=['25', '29']</c> — the base plate under 25 (<c>o3d_bossExtrusion</c>) and
+    /// the cut by rotation under <b>29</b>. So for a rotation the FACTORY number and the tree number COINCIDE
+    /// (29 = <c>o3d_cutRotated</c>), unlike a hole: the two numbering systems behave differently across
+    /// families, and analogy must not be assumed — the value is measured, not derived.
+    /// History: docs/decisions/adapter-core.md#rotated3d-numbering</remarks>
     public const int Rotated3D = 29;
     public const int BaseLoft = 30;
     public const int BossLoft = 31;
@@ -1217,15 +1204,14 @@ public static class KompasObjectTypes
     /// creation.</summary>
     public const int HoleOperation = 52;
 
-    /// <summary><c>o3d_Hole3D</c> — the number under which a finished hole feature lies in the API5
-    /// tree.</summary>
-    /// <remarks>MEASURED by probe N.1 on 17.09.2026, fixing a real defect: the adapter searched for the
-    /// feature by <see cref="HoleOperation"/> = 52 and so NEVER found it when the hole was created by the
-    /// API7 route — no <c>feature_ref</c> was issued and editing was unreachable. The probe printed both tree
-    /// collections before and after creation: <c>NewEntity(52).type = 52 (o3d_holeOperation)</c> while
-    /// <c>IHoles3D[0].ModelObjectType = 583 (o3d_Hole3D)</c>, and exactly one entry appeared in the tree —
-    /// <c>OperationElement(110)[1] type=583 ("Hole:1")</c>. 52 never appeared in the tree. Two different
-    /// numbering systems, and they must not be confused.</remarks>
+    /// <summary><c>o3d_Hole3D</c> — the number under which a finished hole feature lies in the API5 tree.</summary>
+    /// <remarks>MEASURED by probe N.1 on 17.09.2026, fixing a real defect: the adapter searched by
+    /// <see cref="HoleOperation"/> = 52 and so NEVER found it when the hole was created by the API7 route —
+    /// no <c>feature_ref</c> was issued and editing was unreachable. The probe printed
+    /// <c>NewEntity(52).type = 52 (o3d_holeOperation)</c> while <c>IHoles3D[0].ModelObjectType = 583
+    /// (o3d_Hole3D)</c>, and exactly one entry appeared in the tree — <c>OperationElement(110)[1] type=583
+    /// ("Hole:1")</c>; 52 never appeared. Two numbering systems that must not be confused.
+    /// History: docs/decisions/adapter-core.md#hole3d-numbering</remarks>
     public const int Hole3D = 583;
 
     /// <summary>The type a BOOLEAN OPERATION feature is seen under in the API5 tree
@@ -1247,16 +1233,13 @@ public static class KompasObjectTypes
     public const int CutByPlane = 50;
 
     /// <summary>The reposition feature type in the API5 tree: MEASURED <b>79</b>.</summary>
-    /// <remarks>After <c>kompas_reposition</c> exactly one new entry appears in the tree —
-    /// <c>type=79 "Change of position : Body 1"</c>. <b>79 is NOT 569.</b> The number 569
-    /// (<c>o3d_BodyReposition</c>) belongs to creating the object, while in the tree the feature lies under
-    /// 79. Exactly the same lesson as with a hole (<see cref="HoleOperation"/> = 52 versus
-    /// <see cref="Hole3D"/> = 583): the creation side and the tree side are numbered differently, and one
-    /// must not be taken for the other. The same number 79 is also carried by the auxiliary feature "Body
-    /// copy", which implements <c>keep_tools=true</c>. The collision is harmless only because the filter is
-    /// applied WITHIN one operation: for a boolean operation the expected type is 69 and the copy (79) never
-    /// becomes a candidate; for a reposition the expected type is 79 and there is exactly one new entry of
-    /// that type. One must not rely on "79 means reposition" outside the operation's context.</remarks>
+    /// <remarks>After <c>kompas_reposition</c> exactly one new entry appears — <c>type=79 "Change of position :
+    /// Body 1"</c>. <b>79 is NOT 569.</b> 569 (<c>o3d_BodyReposition</c>) creates the object, while in the tree
+    /// it lies under 79 — the same lesson as a hole (<see cref="HoleOperation"/> = 52 vs <see cref="Hole3D"/>
+    /// = 583). The same number 79 is also carried by the auxiliary "Body copy" feature (<c>keep_tools=true</c>);
+    /// the collision is harmless only because the filter is applied WITHIN one operation (boolean expects 69,
+    /// the copy 79 never becomes a candidate; reposition expects 79, exactly one new entry). Do not rely on
+    /// "79 means reposition" outside the operation's context. History: docs/decisions/adapter-core.md#body-reposition-numbering</remarks>
     public const int BodyRepositionFeature = 79;
 
     public const int Polyline3d = 53;

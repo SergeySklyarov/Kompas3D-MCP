@@ -99,14 +99,12 @@ public interface IOleMessageFilter
 }
 
 /// <summary>Message filter installed on the Worker's STA thread so a busy KOMPAS is handled by COM's own
-/// retry mechanism — and every retry is counted. Unbounded silent retry would turn a wedged
-/// KOMPAS into an unresponsive Worker, which spec 1.6 forbids.</summary>
-/// <remarks>
-/// Return values follow the documented convention: <c>RetryRejectedCall</c> returns a delay in
-/// milliseconds to retry, 0 to cancel the call, or -1 to let the default (fail) apply.
-/// <c>MessagePending</c> sets <c>ulReject</c> to <c>SERVERCALL_RETRYLATER</c> (retry) or
-/// <c>SERVERCALL_REJECTED</c> (fail).
-/// </remarks>
+/// retry mechanism — and every retry is counted. Unbounded silent retry would turn a wedged KOMPAS into
+/// an unresponsive Worker, which spec 1.6 forbids.</summary>
+/// <remarks>Return values follow the documented convention: <c>RetryRejectedCall</c> returns a delay in
+/// milliseconds to retry, 0 to cancel, or -1 to let the default (fail) apply; <c>MessagePending</c> sets
+/// <c>ulReject</c> to <c>SERVERCALL_RETRYLATER</c> (retry) or <c>SERVERCALL_REJECTED</c> (fail).
+/// History: docs/decisions/adapter-core.md#com-message-filter</remarks>
 public sealed class ComMessageFilter : IOleMessageFilter
 {
     /// <summary>Calls rejected more often than this are a wedged server, not a transient hiccup.</summary>

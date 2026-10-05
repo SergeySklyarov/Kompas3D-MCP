@@ -83,23 +83,13 @@ internal static class NativeMethods
 }
 
 /// <summary>Unit selectors for the measurement calls, and the one conversion the server performs.</summary>
-/// <remarks>
-/// In API5 the unit is an <b>argument</b>, not a property of the model:
-/// <c>GetLength(bitVector)</c>, <c>GetArea(bitVector)</c>,
-/// <c>CalcMassInertiaProperties(lengthBits | massBits)</c>. The selector values are
-/// <c>ST_MIX_SM=0, ST_MIX_MM=1, ST_MIX_DM=2, ST_MIX_M=3</c> for length and
-/// <c>ST_MIX_GR=0, ST_MIX_KG=16</c> for mass (from <c>KAPITypes.ldefin2d</c>).
-///
-/// Two consequences that the whole adapter follows:
-/// <list type="bullet">
-/// <item>Coordinates have no unit argument: they are model millimetres, so <c>GetPoint</c>,
-/// <c>GetGabarit</c>, sketch input and transform output need no conversion at all.</item>
-/// <item><c>0</c> is the <i>centimetre</i> selector and is outside the documented interval
-/// <c>[ST_MIX_MM..ST_MIX_M]</c>. Leaving the argument at its default silently returns cm — which
-/// is the 10× discrepancy the historical scripts recorded (spec 4.5) and what P0.7 reproduced on a
-/// real edge (100 mm reported as 10). This class exists so no call site can repeat that mistake.</item>
-/// </list>
-/// </remarks>
+/// <remarks>In API5 the unit is an <b>argument</b>, not a model property: <c>GetLength(bitVector)</c>,
+/// <c>GetArea(bitVector)</c>, <c>CalcMassInertiaProperties(lengthBits | massBits)</c>. Values are
+/// <c>ST_MIX_SM=0, ST_MIX_MM=1, ST_MIX_DM=2, ST_MIX_M=3</c> (length) and <c>ST_MIX_GR=0, ST_MIX_KG=16</c>
+/// (mass), from <c>KAPITypes.ldefin2d</c>. Coordinates have no unit argument — they are model millimetres, so <c>GetPoint</c>,
+/// <c>GetGabarit</c>, sketch input and transform output need no conversion. <c>0</c> is the <i>centimetre</i>
+/// selector, outside the documented interval <c>[ST_MIX_MM..ST_MIX_M]</c>: the default silently returns cm —
+/// the 10× discrepancy of spec 4.5 (P0.7: 100 mm reported as 10). History: docs/decisions/adapter-core.md#kompas-units</remarks>
 public static class KompasUnits
 {
     public const int Centimetres = 0;
@@ -132,26 +122,14 @@ public static class KompasUnits
     };
 }
 
-/// <summary>
-/// Selectors that tell an extrusion which body it must act on. The two enumerations are the
-/// vendor's own (<c>ksChooseType</c> and <c>ksChooseBodiesType</c>, both from
-/// <c>Interop.Kompas6Constants3D.dll</c>) and their values were copied from that assembly by probe
-/// P2.6, not guessed: the members are bare <c>Int32</c> on the interop interfaces, so a wrong
-/// number compiles and silently means something else.
-/// </summary>
-/// <remarks>
-/// Measured behaviour, all of it from <c>docs/acceptance/p2/p2-probe-report.md</c> step P2.6:
-/// <list type="bullet">
-/// <item><see cref="Bodies"/> is the value the kernel consults the body list with; requested 3 reads
-/// back 3 after <c>Create</c>. Requesting 0 is clamped to 1 — 0 is not a valid
-/// <c>ksChooseType</c> — and the default when nothing is set is also 1.</item>
-/// <item><see cref="Parts"/> is not decorative: with a parts-only selector and no parts in the
-/// document, <c>Create</c> returned true and no body lost any volume.</item>
-/// <item><see cref="NewBody"/> on a boss made the feature create an additional body even where its
-/// profile overlapped an existing one (2 bodies became 3). Nothing in this server wants that, so
-/// the only value ever written here is <see cref="ManualEditing"/>.</item>
-/// </list>
-/// </remarks>
+/// <summary>Selectors telling an extrusion which body to act on. Both enumerations are the vendor's own
+/// (<c>ksChooseType</c>, <c>ksChooseBodiesType</c> from <c>Interop.Kompas6Constants3D.dll</c>); values copied by
+/// probe P2.6, not guessed — the members are bare <c>Int32</c>, so a wrong number silently means something else.</summary>
+/// <remarks>Measured from <c>docs/acceptance/p2/p2-probe-report.md</c> step P2.6: <see cref="Bodies"/> is what the
+/// kernel consults (3 reads back 3; 0 is clamped to 1, not a valid <c>ksChooseType</c>; unset default 1);
+/// <see cref="Parts"/> is not decorative (parts-only, no parts: <c>Create</c> true, no volume lost);
+/// <see cref="NewBody"/> on a boss created an extra body over an existing one (2→3), so only <see cref="ManualEditing"/>
+/// is written. History: docs/decisions/adapter-core.md#kompas-choose</remarks>
 public static class KompasChoose
 {
     /// <summary><c>ksChooseType.ksChBodiesAndParts</c> — the vendor default.</summary>

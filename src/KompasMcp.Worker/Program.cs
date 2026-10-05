@@ -8,23 +8,13 @@ using KompasMcp.Contracts.Ipc;
 
 namespace KompasMcp.Worker;
 
-/// <summary>
-/// The COM-owning process. It exists so a wedged КОМПАС call cannot take the MCP connection with
-/// it: the Host keeps answering status while this process sits inside a call (spec 1.5, 1.6).
-/// </summary>
-/// <remarks>
-/// Threading contract:
-/// <list type="bullet">
-/// <item><see cref="StaExecutor"/> runs one STA thread with a message pump; every command that
-/// touches КОМПАС is queued there, one at a time, including reads.</item>
-/// <item>Pipe I/O runs on the thread pool, so <c>sys.ping</c> and <c>env.probe</c> keep being
-/// answered while the STA lane is busy. That is what lets the Host distinguish "Worker dead" from
-/// "КОМПАС busy".</item>
-/// <item>A command whose budget expires is answered with OUTCOME_UNKNOWN and this process asks to
-/// be restarted: the operation may still be executing inside КОМПАС, and nothing here pretends
-/// otherwise.</item>
-/// </list>
-/// </remarks>
+/// <summary>The COM-owning process. It exists so a wedged KOMPAS call cannot take the MCP connection with
+/// it: the Host keeps answering status while this process sits inside a call (spec 1.5, 1.6).</summary>
+/// <remarks>Threading contract: <see cref="StaExecutor"/> runs one STA thread with a message pump and every
+/// command that touches KOMPAS is queued there, one at a time, including reads; pipe I/O runs on the thread
+/// pool, so <c>sys.ping</c> and <c>env.probe</c> keep being answered while the STA lane is busy — that is what
+/// lets the Host distinguish "Worker dead" from "KOMPAS busy"; a command whose budget expires is answered with
+/// OUTCOME_UNKNOWN and this process asks to be restarted.</remarks>
 public static class Program
 {
     public static int Main(string[] args)
@@ -43,8 +33,8 @@ public static class Program
 
         if (!Environment.Is64BitProcess)
         {
-            // КОМПАС v24 is x64: a 32-bit worker would fail later with messages that do not
-            // mention bitness at all.
+            // KOMPAS v24 is x64: a 32-bit worker would fail later with messages that do not mention
+            // bitness at all.
             log.Write("fatal", "bitness mismatch", new { process = Environment.Is64BitProcess ? "x64" : "x86" });
             Console.Error.WriteLine("[worker] процесс x86, а КОМПАС v24 — x64: COM-подключение невозможно.");
             return 4;
@@ -77,8 +67,8 @@ public static class Program
         }
         finally
         {
-            // Disconnect from an attached КОМПАС without closing it, and shut down only an
-            // instance this Worker launched (spec 1.6: killing the user's КОМПАС is forbidden).
+            // Disconnect from an attached KOMPAS without closing it, and shut down only an instance this
+            // Worker launched (spec 1.6: killing the user's KOMPAS is forbidden).
             try
             {
                 sta.Run(() => session.ShutdownOwnedSessions(), "shutdown").GetAwaiter().GetResult();
@@ -92,27 +82,13 @@ public static class Program
         return 0;
     }
 
-    /// <summary>
-    /// Обслужить РОВНО ОДНО подключение Хоста и завершиться, когда оно кончится.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// ИЗМЕРЕНО 04.10.2026 на прогоне передачи сеанса: прежде здесь стоял цикл
-    /// <c>while (!cancellationToken.IsCancellationRequested)</c>, который после обрыва канала создавал
-    /// НОВЫЙ именованный канал и снова ждал подключения. Следствие: Worker НИКОГДА не завершался по
-    /// отключению Хоста — он оставался жить и ждать, а Хост, не дождавшись выхода, снимал его
-    /// убийством (`kill_used: true` в ответе <c>kompas_release_session</c>). Это прямо противоречило
-    /// и собственному контракту класса («expected to exit on Host disconnect»), и требованию
-    /// освобождения сеанса «убедиться, что Worker больше не выполняет COM и не пишет в журнал»:
-    /// процесс, который не завершается, подтвердить нельзя.
-    /// </para>
-    /// <para>
-    /// Почему это безопасно. Хост поднимает Worker'а по имени канала из <c>WorkerSupervisor</c>, и
-    /// при обрыве канала он сначала останавливает прежний процесс, а потом запускает новый с тем же
-    /// именем. Второе подключение к тому же процессу не предусмотрено ни одним маршрутом — цикл
-    /// ожидания обслуживал состояние, которого никто не запрашивал.
-    /// </para>
-    /// </remarks>
+    /// <summary>Serve EXACTLY ONE Host connection and exit when it ends.</summary>
+    /// <remarks>MEASURED 04.10.2026: previously a wait loop created a NEW pipe after the channel dropped, so
+    /// the Worker NEVER exited on Host disconnect — the Host then killed it (<c>kill_used: true</c>),
+    /// contradicting both the class contract and the release requirement "confirm the Worker no longer runs
+    /// COM". Exiting is safe: the Host stops the old process before starting a new one with the same pipe
+    /// name, and no route provides a second connection.
+    /// History: docs/decisions/worker-ipc.md#single-connection</remarks>
     private static async Task Serve(WorkerOptions options, CommandDispatcher session, WorkerLog log, CancellationToken cancellationToken)
     {
         {
@@ -166,8 +142,8 @@ public static class Program
                 }, cancellationToken);
             }
 
-            // КАНАЛ КОНЧИЛСЯ — ЗНАЧИТ, ХОСТ УШЁЛ. Ни новых подключений, ни нового канала: процесс
-            // завершается, и вызывающий (finally в Main) закрывает сеансы и отпускает COM.
+            // THE CHANNEL ENDED — SO THE HOST IS GONE. No new connections, no new pipe: the process exits,
+            // and the caller (finally in Main) closes sessions and releases COM.
             log.Write("info", "host disconnected; worker exiting");
         }
     }
@@ -236,10 +212,8 @@ public sealed class WorkerOptions
 
     public string? LogPath { get; init; }
 
-    /// <summary>
-    /// Служебный каталог контрольных копий. Обязателен: копия файла документа — это запись, и
-    /// класть её «рядом с документом» значит писать в папку пользователя.
-    /// </summary>
+    /// <summary>Service directory for control copies. Required: a document-file copy is a write, and putting
+    /// it "next to the document" means writing to the user's folder.</summary>
     public required string ControlCopyDirectory { get; init; }
 
     public static WorkerOptions Parse(string[] args)
@@ -272,8 +246,8 @@ public sealed class WorkerOptions
 
         if (string.IsNullOrWhiteSpace(copies))
         {
-            // Каталог НЕ подставляется молча: умолчание «рядом с документом» — это и есть тот
-            // дефект, который закрыт. Без названного каталога копии не снимаются вовсе.
+            // The directory is NOT substituted silently: the "next to the document" default is the very
+            // defect that was fixed. Without a named directory no copies are taken at all.
             Console.Error.WriteLine("использование: KompasMcp.Worker --pipe <имя> --copies <каталог> [--log <файл>]");
             Environment.Exit(2);
         }

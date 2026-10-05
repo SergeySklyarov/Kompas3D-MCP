@@ -3,33 +3,17 @@ using System.Text.Json.Nodes;
 
 namespace KompasMcp.Worker;
 
-/// <summary>
-/// Reports which build of each KompasMcp assembly this Worker actually loaded.
-/// </summary>
-/// <remarks>
-/// <para>
-/// This exists because of a defect that cost three separate debugging sessions. The Host launches
-/// <c>KompasMcp.Worker.exe</c> from its own output folder and does not reference the Worker or the
-/// adapter as assemblies (ADR-001: no COM in the Host). MSBuild therefore does not refresh those
-/// copies in the Host folder, and a stale copy silently ran alongside a current Host. The symptom
-/// was never a crash: it was a correct Host answering with wrong tool responses, and once it was a
-/// newly added JSON field that simply did not appear — indistinguishable from a null the code had
-/// computed, because <c>KompJson</c> serialises nulls rather than dropping them.
-/// </para>
-/// <para>
-/// The build step is fixed at the source (the copy target now carries <c>$(Platform)</c> and fails
-/// loudly when the Worker output is absent). This report is the second layer: it makes a mismatch
-/// observable from a single <c>kompas_health</c> call instead of requiring a filesystem
-/// investigation. Two timestamps and a module path answer the question "which binary is running?"
-/// without a debugger.
-/// </para>
-/// </remarks>
+/// <summary>Reports which build of each KompasMcp assembly this Worker actually loaded.</summary>
+/// <remarks>This exists because of a defect that cost three separate debugging sessions: the Host launches
+/// <c>KompasMcp.Worker.exe</c> from its own output folder without referencing it (ADR-001: no COM in the
+/// Host), so MSBuild never refreshed that copy and a STALE copy silently ran alongside a current Host — a
+/// correct Host answering with wrong tool responses, never a crash. The build step is fixed at the source;
+/// this report is the second layer, making a mismatch observable from one <c>kompas_health</c> call.
+/// History: docs/decisions/worker-ipc.md#build-identity</remarks>
 internal static class BuildIdentity
 {
-    /// <summary>
-    /// Assemblies whose version determines behaviour. <c>KompasMcp.Host</c> is deliberately absent:
-    /// the Worker cannot see the Host's assembly, and the Host reports its own identity separately.
-    /// </summary>
+    /// <summary>Assemblies whose version determines behaviour. <c>KompasMcp.Host</c> is deliberately absent:
+    /// the Worker cannot see the Host's assembly, and the Host reports its own identity separately.</summary>
     private static readonly string[] Tracked =
     [
         "KompasMcp.Worker",

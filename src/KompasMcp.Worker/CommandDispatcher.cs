@@ -11,31 +11,25 @@ using KompasMcp.Domain.Files;
 
 namespace KompasMcp.Worker;
 
-/// <summary>
-/// Translates an IPC command frame into one call on the COM session. This is the only place where
-/// a command is allowed to reach КОМПАС, so it is also the only place that can enforce the two
+/// <summary>Translates an IPC command frame into one call on the COM session. This is the only place where
+/// a command is allowed to reach KOMPAS, so it is also the only place that can enforce the two
 /// rules the contract depends on: everything is serialised onto one STA thread, and a command whose
-/// result was not observed is reported as OUTCOME_UNKNOWN instead of being retried.
-/// </summary>
+/// result was not observed is reported as OUTCOME_UNKNOWN instead of being retried.</summary>
 public sealed class CommandDispatcher
 {
-    /// <summary>
-    /// Commands that must NOT be queued onto the STA lane, because answering them while the CAD
-    /// lane is busy is precisely why the Host can tell "КОМПАС busy" apart from "Worker dead".
-    /// </summary>
+    /// <summary>Commands that must NOT be queued onto the STA lane, because answering them while the CAD
+    /// lane is busy is precisely why the Host can tell "KOMPAS busy" apart from "Worker dead".</summary>
     private static readonly HashSet<string> ControlLaneCommands = new(StringComparer.Ordinal)
     {
         WorkerCommands.Ping,
         WorkerCommands.EnvironmentProbe,
     };
 
-    /// <summary>
-    /// Команды, которые МЕНЯЮТ модель. Список — зеркало <c>Mutation(...)</c> каталога инструментов,
-    /// и он нужен здесь по одной причине: кадр IPC не несёт признака мутации, а неожиданное
-    /// исключение в мутации и в чтении — РАЗНЫЕ состояния. В чтении «не прочитано» — это отказ; в
-    /// мутации «вызов упал» означает, что модель могла измениться, и объявлять это чистым отказом
-    /// значило бы разрешить клиенту повторить мутацию (дефект M1 ревью 05.10.2026).
-    /// </summary>
+    /// <summary>Commands that CHANGE the model. The list mirrors <c>Mutation(...)</c> in the tool catalog,
+    /// and it is here for one reason: an IPC frame carries no mutation flag, and an unexpected exception in
+    /// a mutation and in a read are DIFFERENT states. In a read "not read" is a refusal; in a mutation "the
+    /// call threw" means the model may have changed, and calling that a clean failure would let the client
+    /// repeat the mutation (defect M1, review 05.10.2026).</summary>
     private static readonly HashSet<string> MutationCommands = new(StringComparer.Ordinal)
     {
         WorkerCommands.Connect,
@@ -88,10 +82,8 @@ public sealed class CommandDispatcher
     private readonly Api5Session _session = new();
     private readonly Stopwatch _uptime = Stopwatch.StartNew();
 
-    /// <summary>
-    /// Контрольные копии файлов документов: снимаются перед каждой мутацией — в СЛУЖЕБНЫЙ
-    /// каталог, а не рядом с документом (дефект H4 ревью 05.10.2026).
-    /// </summary>
+    /// <summary>Control copies of document files: taken before every mutation, into the SERVICE directory
+    /// rather than next to the document (defect H4, review 05.10.2026).</summary>
     private readonly DocumentControlCopies _controlCopies;
 
     private long _handled;
@@ -151,13 +143,10 @@ public sealed class CommandDispatcher
         }
         catch (Exception ex)
         {
-            // НЕОЖИДАННОЕ ИСКЛЮЧЕНИЕ В МУТАЦИИ — ЭТО НЕ «ЧИСТЫЙ ОТКАЗ».
-            //
-            // Комментарий прежней редакции говорил «outcome is unknown», а код отвечал
-            // `RetryPolicy.SameOperationId` с `partialEffects=false`: клиенту предлагалось повторить
-            // ту же мутацию тем же operation_id, хотя модель к моменту исключения могла быть уже
-            // изменена (дефект M1 ревью 05.10.2026). Теперь признак мутации берётся из
-            // <see cref="MutationCommands"/>, и для мутации исход называется неизвестным.
+            // AN UNEXPECTED EXCEPTION IN A MUTATION IS NOT A "CLEAN FAILURE": the earlier code answered
+            // `RetryPolicy.SameOperationId` with `partialEffects=false`, telling the client to repeat a
+            // mutation that may already have applied (defect M1, review 05.10.2026). The flag now comes from
+            // <see cref="MutationCommands"/>.
             var isMutation = MutationCommands.Contains(request.Command);
 
             if (isMutation)
@@ -203,40 +192,35 @@ public sealed class CommandDispatcher
         WorkerCommands.Ping => 2_000,
         WorkerCommands.Connect => 180_000,
         WorkerCommands.ExportStep or WorkerCommands.ImportStep => 300_000,
-        // Растровый снимок рендерит документ и (в файловом режиме) пишет файл: это дольше чтения,
-        // но короче конвертера. Бюджет назван числом, а не унаследован от умолчания: снимок
-        // большого разрешения измерялся секундами (проба P6), и упор в общий бюджет выглядел бы
-        // как отказ продукта.
+        // A raster image renders and (in file mode) writes a file; a high-resolution one was MEASURED in
+        // seconds (probe P6), so the budget is named, not inherited from the default.
         WorkerCommands.ExportImage => 240_000,
-        // Родное отверстие идёт маршрутом API7 (мост + TransferInterface + RebuildModel): это
-        // дольше чисто API5-мутации, поэтому бюджет выше умолчания, а не «на глазок».
+        // The native hole goes through the API7 route (bridge + TransferInterface + RebuildModel): longer
+        // than a pure API5 mutation, so the budget is above the default, not "by eye".
         WorkerCommands.Hole => 240_000,
-        // Операции над телами B3 идут тем же маршрутом API7 плюс перечитывание всех тел документа
-        // после перестроения, поэтому бюджет тот же, что у отверстия.
+        // The B3 body operations use the same API7 route plus a re-read of all bodies after the rebuild,
+        // hence the same budget as the hole.
         WorkerCommands.SolidBoolean or WorkerCommands.SolidSplit
             or WorkerCommands.SolidCutByPlane or WorkerCommands.SolidReposition => 240_000,
-        // B5: кинематика и оболочка идут маршрутом API5, но обе перестраивают документ и
-        // перечитывают тела после перестроения; сечения идут мостом API7 (TransferInterface на
-        // каждое сечение) плюс Rebuild. Бюджет тот же, что у операций над телами, — и по той же
-        // причине, а не «на глазок».
+        // B5: kinematics and shell use the API5 route but both rebuild the document and re-read bodies;
+        // sections go through the API7 bridge (TransferInterface per section) plus Rebuild. Same budget as
+        // the body operations, and for the same reason.
         WorkerCommands.Sweep or WorkerCommands.Loft or WorkerCommands.Shell => 240_000,
-        // Вспомогательная геометрия идёт маршрутом API7 (мост + QI(IAuxiliaryGeomContainer) +
-        // Rebuild), а перечисление читает коллекцию вызовом COM на каждый элемент. Бюджет выше
-        // умолчания по той же причине, что у отверстия: это не API5-мутация.
+        // Auxiliary geometry goes through the API7 route (bridge + QI(IAuxiliaryGeomContainer) + Rebuild)
+        // and enumerates with one COM call per element — budget above the default, as for the hole.
         WorkerCommands.CreateAuxGeometry or WorkerCommands.ListAuxGeometry => 240_000,
         WorkerCommands.UpdatePlane => 240_000,
-        // Смена опоры эскиза перестраивает зависимое тело: бюджет тот же, что у прочих мутаций
-        // геометрии, а не у́же — измеренная ступень применения (`sketch.Update()`) входит в него.
+        // Changing a sketch's support plane rebuilds the dependent body: the same budget as other geometry
+        // mutations, and not narrower — the MEASURED apply step (`sketch.Update()`) fits in it.
         WorkerCommands.SetSketchPlane => 240_000,
         WorkerCommands.ListSketchEntities or WorkerCommands.EditSketchEntity => 240_000,
-        // Сборка: вставка компонента читает файл с диска и перестраивает документ, а перечисление
-        // структуры делает вызов COM на каждый компонент — бюджет выше умолчания по той же причине,
-        // что у вспомогательной геометрии.
+        // Assembly: inserting a component reads a file and rebuilds the document, and enumerating the
+        // structure makes one COM call per component — budget above the default, as for aux geometry.
         WorkerCommands.InsertComponent or WorkerCommands.ReplaceComponent => 240_000,
         WorkerCommands.ListComponents or WorkerCommands.SetComponentPlacement
             or WorkerCommands.CheckComponentLinks => 240_000,
-        // Сопряжение перестраивает сборку (Update() + RebuildDocument), а перечисление читает
-        // каждый объект сопряжения через два интерфейса — бюджет тот же, что у операций сборки.
+        // A mate rebuilds the assembly (Update() + RebuildDocument), and the enumeration reads every mate
+        // object through two interfaces — the same budget as the assembly operations.
         WorkerCommands.ListMates or WorkerCommands.CreateMate or WorkerCommands.SetMateParameter
             or WorkerCommands.SetMateFixed or WorkerCommands.DeleteMate => 240_000,
         _ => 120_000,
@@ -359,18 +343,12 @@ public sealed class CommandDispatcher
             throw new KompasContractException(ErrorCodes.InvalidArgument, $"Команда '{request.Command}' не получила payload.");
         }
 
-        // Round-tripping through the JSON text rather than JsonNode.Deserialize<T> keeps one
-        // serialisation contract (snake_case, enum naming) shared with the Host.
-        //
-        // A payload that does not fit the typed contract is an ARGUMENT defect, not a failure of the
-        // Worker: the caller sent a field of the wrong shape, an unknown enum member or a missing
-        // required property, and can fix it. Letting the raw JsonException escape made the generic
-        // catch classify it as VERIFICATION_FAILED with NeedsReconciliation=true, which told the
-        // client the OUTCOME was unknown and to reconcile — measured on 19.09.2026 by client
-        // acceptance B3, where plane.base hit exactly this path and the declared
-        // CAPABILITY_UNAVAILABLE became unreachable. The typed shape is fixed in the contract
-        // (CutPlaneDto); this catch is the second line of defence for hand-built IPC frames, and it
-        // names the JSON path instead of hiding the defect behind "verification failed".
+        // Round-tripping through the JSON text rather than JsonNode.Deserialize<T> keeps one serialisation
+        // contract (snake_case, enum naming) shared with the Host. A payload that does not fit the typed
+        // contract is an ARGUMENT defect the caller can fix, not a Worker failure: letting the raw
+        // JsonException escape made the generic catch classify it as VERIFICATION_FAILED with
+        // NeedsReconciliation=true (MEASURED 19.09.2026, client acceptance B3). This catch names the JSON
+        // path instead. History: docs/decisions/worker-ipc.md#payload-contract
         try
         {
             return JsonSerializer.Deserialize<T>(request.Payload.ToJsonString(), KompJson.Options)
@@ -394,22 +372,16 @@ public sealed class CommandDispatcher
         }
     }
 
-    /// <summary>
-    /// Every mutation answer carries the revision the client needs for its next call, plus the
-    /// document it belongs to. Without it a caller would have to re-read the context after each
-    /// edit, and a guessed revision is exactly the silent race the contract is meant to prevent.
-    /// </summary>
-    /// <remarks>
-    /// The mutation runs FIRST and the revision is read AFTER it. Evaluating
-    /// <c>document.Revision</c> as an argument alongside the mutation call reports the pre-mutation
-    /// revision — which C# does by evaluating arguments left to right, and which made the next
-    /// legitimate command fail with REVISION_CONFLICT against a revision that never existed.
-    /// </remarks>
+    /// <summary>Every mutation answer carries the revision the client needs for its next call, plus the
+    /// document it belongs to: a guessed revision is exactly the silent race the contract prevents.</summary>
+    /// <remarks>The mutation runs FIRST and the revision is read AFTER it — evaluating <c>document.Revision</c>
+    /// as an argument alongside the mutation reports the pre-mutation revision, which made the next
+    /// legitimate command fail with REVISION_CONFLICT against a revision that never existed.</remarks>
     private JsonNode? TaggedAfter(string documentId, Func<object?> mutation, DocumentEntry document)
     {
-        // КОНТРОЛЬНАЯ КОПИЯ СНИМАЕТСЯ ДО МУТАЦИИ в служебном каталоге, и это единственная точка,
-        // через которую проходят мутации ядра, сборок и сопряжений: разложенная по обработчикам,
-        // она неизбежно отстала бы от списка команд. Чтения через неё НЕ проходят.
+        // THE CONTROL COPY IS TAKEN BEFORE THE MUTATION, into the service directory, and this is the only
+        // point the core, assembly and mate mutations pass through: spread across handlers it would
+        // inevitably fall behind the command list. Reads do NOT go through it.
         var copy = _controlCopies.Before(document.Path, document.Id, document.Revision);
         object? outcome;
         try
@@ -418,13 +390,9 @@ public sealed class CommandDispatcher
         }
         catch (Exception ex)
         {
-            // СБОЙ: файл возвращается к состоянию до мутации — НО ТОЛЬКО ТОГДА, КОГДА ЭТО ОСМЫСЛЕННО.
-            //
-            // Решение принимает чистая функция (ControlCopyRestorePolicy): документ, открытый
-            // access=read_only, не перезаписывается, а отказ, который приходит до COM и модель не
-            // менял, не заслуживает записи в файл пользователя. Прежде восстановление шло по одному
-            // признаку «файл открывается на запись» и перезаписывало документ из корня «только
-            // чтение» (дефект H4 ревью 05.10.2026).
+            // FAILURE: the file is returned to its pre-mutation state — BUT ONLY WHEN THAT MAKES SENSE. The
+            // pure ControlCopyRestorePolicy decides: a read_only document is not overwritten, and a failure
+            // before COM deserves no write to the user's file (defect H4, review 05.10.2026).
             var contract = ex as KompasContractException;
             var decision = ControlCopyRestorePolicy.Decide(
                 copy.Made, document.Access, contract?.Code, contract?.PartialEffects ?? false);
@@ -434,15 +402,15 @@ public sealed class CommandDispatcher
             throw Reclassify(ex, copy, decision, restoreFailure);
         }
 
-        // УСПЕХ: КОПИЯ УДАЛЯЕТСЯ. Она нужна была на случай отказа; оставленная, она копила бы по
-        // целому файлу документа на каждую правку (дефект H4 ревью 05.10.2026). Неудачное удаление
-        // НАЗЫВАЕТСЯ в ответе, а не проглатывается: «каталог не растёт» и «копию убрать не удалось» —
-        // разные утверждения.
+        // SUCCESS: THE COPY IS DELETED. It was there for the failure case; left behind, it would accumulate
+        // a whole document file per edit (defect H4, review 05.10.2026). A failed delete is NAMED in the
+        // response, not swallowed: "the directory does not grow" and "the copy could not be removed" are
+        // different claims.
         var copyCleanupFailure = _controlCopies.DeleteAfterSuccess(copy.Path);
 
         var node = Tagged(documentId, document.Revision, outcome) ?? new JsonObject();
-        // Копия называется и СТРОКОЙ, и ПОЛЯМИ. Строка читается человеком, поля — прибором: разбор
-        // человекочитаемой формулировки сделал бы приёмку зависящей от редакции текста.
+        // The copy is named BOTH as a string and as fields. The string is read by a human, the fields by a
+        // probe: parsing the human-readable wording would make acceptance depend on the wording's revision.
         node["control_copy"] = DocumentControlCopies.Describe(copy);
         node["control_copy_made"] = copy.Made;
         node["control_copy_path"] = copy.Path;
@@ -455,16 +423,11 @@ public sealed class CommandDispatcher
         return node;
     }
 
-    /// <summary>
-    /// Донести до клиента, что контрольная копия снята и что при сбое с ней стало. Исходный код и
-    /// политика повтора СОХРАНЯЮТСЯ: сбой не превращается в другой сбой из-за того, что рядом с ним
-    /// появилась копия.
-    /// </summary>
-    /// <remarks>
-    /// Политика повтора сохраняется из исходного исключения, но для НЕОЖИДАННОГО исключения мутации
-    /// она теперь «после согласования», а не «тем же operation_id»: partialEffects=true означает, что
-    /// модель могла измениться, и повтор как есть применил бы мутацию второй раз.
-    /// </remarks>
+    /// <summary>Carry to the client that a control copy was taken and what became of it on failure. The
+    /// original code and retry policy are PRESERVED: a failure does not become a different failure because a
+    /// copy appeared next to it.</summary>
+    /// <remarks>For an UNEXPECTED mutation exception the policy is "after reconciliation", not "same
+    /// operation_id": partialEffects=true means repeating as is would apply the mutation twice.</remarks>
     private static Exception Reclassify(
         Exception ex, ControlCopyResult copy, RestoreDecision decision, string? restoreFailure)
     {
@@ -473,9 +436,9 @@ public sealed class CommandDispatcher
             ["control_copy"] = DocumentControlCopies.Describe(copy),
             ["control_copy_made"] = copy.Made,
             ["control_copy_path"] = copy.Path,
-            // ПОЧЕМУ ФАЙЛ НЕ ВОССТАНОВЛЕН — НАЗВАНО. «Не восстановлено» без причины неотличимо от
-            // «забыли восстановить», а причина здесь содержательная: read_only-документ или отказ,
-            // который до COM не дошёл.
+            // WHY THE FILE WAS NOT RESTORED — NAMED. "Not restored" without a reason is indistinguishable
+            // from "we forgot to restore", and here the reason is substantive: a read_only document, or a
+            // failure that never reached COM.
             ["restore_attempted"] = decision.Restore,
             ["restore_decision"] = decision.Reason,
             ["restored"] = decision.Restore && restoreFailure is null,
@@ -537,7 +500,7 @@ public sealed class CommandDispatcher
         var command = Argument<ConnectCommand>(request);
         var application = _session.Connect(command);
 
-        // A launched КОМПАС needs up to a minute on a cold start; report what it actually took.
+        // A launched KOMPAS needs up to a minute on a cold start; report what it actually took.
         var openDocuments = _session.Documents.Count(d => d.ApplicationId == application.Id);
         return application.ToDto(openDocuments);
     }
@@ -549,10 +512,8 @@ public sealed class CommandDispatcher
         return new JsonObject { ["application_id"] = command.ApplicationId, ["disconnected"] = true };
     }
 
-    /// <summary>
-    /// Опись сеанса для решения об освобождении. Команда управления, но идёт на CAD-полосу:
-    /// признак несохранённости читается через COM.
-    /// </summary>
+    /// <summary>Session inventory for the release decision. A control command, but it goes on the CAD lane:
+    /// the unsaved flag is read through COM.</summary>
     private object? Inventory(IpcFrame request)
     {
         _ = request;
@@ -617,12 +578,10 @@ public sealed class CommandDispatcher
         return TaggedAfter(document.Id, () => _session.EditSketch(command), document);
     }
 
-    /// <summary>
-    /// Смена опорной плоскости эскиза — мутация: ревизия поднимается, ссылки документа переезжают
-    /// вместе с ней. Проверка ревизии идёт до COM, как у прочих мутаций: ссылка на эскиз уже несёт
-    /// документ, поэтому <c>RequireDocument</c> здесь не нужен — его делает
-    /// <c>DocumentForReference</c>.
-    /// </summary>
+    /// <summary>Changing a sketch's support plane is a mutation: the revision is bumped and the document's
+    /// references move with it. The revision is checked before COM, as for other mutations: a sketch
+    /// reference already carries the document, so <c>RequireDocument</c> is not needed here — its job is
+    /// done by <c>DocumentForReference</c>.</summary>
     private object? SetSketchPlane(IpcFrame request)
     {
         var command = Argument<SetSketchPlaneCommand>(request);
@@ -673,8 +632,8 @@ public sealed class CommandDispatcher
                 "edge_refs должен содержать хотя бы одно ребро.");
         }
 
-        // Документ берётся из первого ребра — то же правило, что у скругления: ссылка из другого
-        // документа не может протащиться в эту мутацию.
+        // The document comes from the first edge — the same rule as fillet: a reference from another
+        // document cannot be smuggled into this mutation.
         var document = _session.DocumentForReference(command.EdgeRefs[0]);
         GuardRevision(document, command.ExpectedRevision);
         return TaggedAfter(document.Id, () => _session.Chamfer(command), document);
@@ -684,8 +643,8 @@ public sealed class CommandDispatcher
     {
         var command = Argument<HoleCommand>(request);
 
-        // Документ берётся из опорной грани: отверстие адресуется поверхностью, на которой оно
-        // начинается, и ссылка из другого документа не может протащиться в эту мутацию.
+        // The document comes from the support face: a hole is addressed by the surface it starts on, and a
+        // reference from another document cannot be smuggled into this mutation.
         var document = _session.DocumentForReference(command.FaceRef);
         GuardRevision(document, command.ExpectedRevision);
         return TaggedAfter(document.Id, () => _session.Hole(command), document);
@@ -695,27 +654,20 @@ public sealed class CommandDispatcher
     {
         var command = Argument<RotatedCommand>(request);
 
-        // Документ берётся из эскиза-профиля: вращение адресуется телом развёртки, и ссылка из
-        // другого документа не может протащиться в эту мутацию. Ось задаётся координатами модели,
-        // а не ссылкой, поэтому второго источника документа здесь нет — и это осознанно: ссылка на
-        // ось позволила бы взять её из чужой детали, что вращением не проверялось.
+        // The document comes from the profile sketch: a rotation is addressed by the revolution body, and a
+        // reference from another document cannot be smuggled in. The axis is given by model coordinates, not
+        // by a reference, so there is no second document source — deliberately: an axis reference could come
+        // from a foreign part, which a rotation did not check.
         var document = _session.DocumentForReference(command.SketchRef);
         GuardRevision(document, command.ExpectedRevision);
         return TaggedAfter(document.Id, () => _session.Rotated(command), document);
     }
 
-    /// <summary>
-    /// Кинематическая операция (SM-04). Документ берётся из ЭСКИЗА-ПРОФИЛЯ — того же правила, что
-    /// у выдавливания и вращения: профиль адресует операцию, и ссылка из другой детали не может
-    /// протащиться в мутацию.
-    /// </summary>
-    /// <remarks>
-    /// Траектория — ВТОРАЯ ссылка, и её принадлежность тому же документу проверяет адаптер (он
-    /// отказывает именованным <c>INVALID_ARGUMENT</c> с обоими идентификаторами). Здесь она не
-    /// «приводится» к названному документу: подмена одной ссылки другой — это молчаливая работа не
-    /// там, где просили. Документ берётся ровно из одной ссылки, а не из <c>document_id</c>: двух
-    /// независимых утверждений о месте работы у этой операции нет.
-    /// </remarks>
+    /// <summary>Kinematic operation (SM-04). The document comes from the PROFILE SKETCH — the same rule as
+    /// extrude and rotated.</summary>
+    /// <remarks>The trajectory is a SECOND reference; the adapter checks it belongs to the same document
+    /// (named <c>INVALID_ARGUMENT</c> with both ids). It is not "reduced" to the named document: substituting
+    /// one reference for another is silent work in the wrong place.</remarks>
     private object? Sweep(IpcFrame request)
     {
         var command = Argument<SweepCommand>(request);
@@ -724,11 +676,9 @@ public sealed class CommandDispatcher
         return TaggedAfter(document.Id, () => _session.Sweep(command), document);
     }
 
-    /// <summary>
-    /// Элемент по сечениям (SM-05). Документ берётся по <c>document_id</c>, а не по ссылке на
-    /// сечение: сечений несколько, и «какое из них главное» — вопрос без ответа. Адаптер сам сверяет,
-    /// что каждое сечение принадлежит этому документу, и отказывает иначе.
-    /// </summary>
+    /// <summary>Loft (SM-05). The document comes from <c>document_id</c>, not from a section reference: there
+    /// are several sections, and "which one is the main one" has no answer. The adapter checks that every
+    /// section belongs to this document and refuses otherwise.</summary>
     private object? Loft(IpcFrame request)
     {
         var command = Argument<LoftCommand>(request);
@@ -737,11 +687,9 @@ public sealed class CommandDispatcher
         return TaggedAfter(document.Id, () => _session.Loft(command), document);
     }
 
-    /// <summary>
-    /// Оболочка (SM-13). Документ берётся по <c>document_id</c> — по той же причине, что у сечений:
-    /// удаляемых граней может быть несколько, и «главная» из них не определена. Адаптер сверяет
-    /// каждую грань с названным документом и отказывает иначе.
-    /// </summary>
+    /// <summary>Shell (SM-13). The document comes from <c>document_id</c> for the same reason as sections:
+    /// there may be several faces to remove, and the "main" one is undefined. The adapter checks each face
+    /// against the named document and refuses otherwise.</summary>
     private object? Shell(IpcFrame request)
     {
         var command = Argument<ShellCommand>(request);
@@ -754,9 +702,9 @@ public sealed class CommandDispatcher
     {
         var command = Argument<BooleanCommand>(request);
 
-        // Документ берётся из ТЕЛО-ЦЕЛИ, а не из document_id: так ссылка из другой детали не может
-        // протащиться в мутацию. Дополнительно сверяется, что вызывающий назвал тот же документ,
-        // который назвала ссылка, — расхождение это ошибка адресации, а не «используем что дали».
+        // The document comes from the TARGET BODY, not from document_id: so a reference from another part
+        // cannot be smuggled into the mutation. It is additionally checked that the caller named the same
+        // document the reference names — a mismatch is an addressing error, not "use what we were given".
         var document = DocumentForTarget(command.DocumentId, command.TargetBodyRef);
         GuardRevision(document, command.ExpectedRevision);
         return TaggedAfter(document.Id, () => _session.SolidBoolean(command), document);
@@ -786,14 +734,11 @@ public sealed class CommandDispatcher
         return TaggedAfter(document.Id, () => _session.SolidReposition(command), document);
     }
 
-    /// <summary>
-    /// Документ операции B3: из ссылки на тело-цель, со сверкой названного идентификатора.
-    /// </summary>
-    /// <remarks>
-    /// Ссылка и <c>document_id</c> — два независимых утверждения вызывающего о том, где идёт работа.
-    /// Если они расходятся, доверять одному из них значило бы молча работать не там, где просили:
-    /// ссылка из другой детали отвергается, а не «приводится» к названному документу.
-    /// </remarks>
+    /// <summary>The document of a B3 operation: from the target-body reference, with the named identifier
+    /// checked.</summary>
+    /// <remarks>The reference and <c>document_id</c> are two independent claims by the caller about where the
+    /// work happens. If they diverge, trusting one of them would silently work in the wrong place: a
+    /// reference from another part is rejected, not "reduced" to the named document.</remarks>
     private DocumentEntry DocumentForTarget(string documentId, string targetBodyRef)
     {
         var document = _session.DocumentForReference(targetBodyRef);
@@ -814,15 +759,12 @@ public sealed class CommandDispatcher
         return document;
     }
 
-    /// <summary>Параметры признака — чтение, идёт мимо журнала, как список признаков и measure.</summary>
+    /// <summary>Feature parameters — a read, bypassing the journal, like the feature list and measure.</summary>
     private object? Feature(IpcFrame request) => _session.GetFeature(Argument<GetFeatureCommand>(request));
 
-    /// <summary>
-    /// Массив по сетке (SM-18). Документ берётся по <c>document_id</c>, а не по ссылке на исходный
-    /// объект: исходных объектов может быть несколько, и «какой из них главный» — вопрос без
-    /// ответа. Адаптер сам сверяет, что каждая ссылка принадлежит этому документу, и отказывает
-    /// иначе.
-    /// </summary>
+    /// <summary>Grid pattern (SM-18). The document comes from <c>document_id</c>, not from a source-object
+    /// reference: there may be several source objects, and "which is the main one" has no answer. The adapter
+    /// checks that every reference belongs to this document and refuses otherwise.</summary>
     private object? PatternGrid(IpcFrame request)
     {
         var command = Argument<PatternGridCommand>(request);
@@ -831,7 +773,7 @@ public sealed class CommandDispatcher
         return TaggedAfter(document.Id, () => _session.PatternGrid(command), document);
     }
 
-    /// <summary>Массив по концентрической сетке (SM-19). Документ — по <c>document_id</c>.</summary>
+    /// <summary>Circular pattern (SM-19). The document comes from <c>document_id</c>.</summary>
     private object? PatternCircular(IpcFrame request)
     {
         var command = Argument<PatternCircularCommand>(request);
@@ -840,7 +782,7 @@ public sealed class CommandDispatcher
         return TaggedAfter(document.Id, () => _session.PatternCircular(command), document);
     }
 
-    /// <summary>Зеркальный массив (SM-23). Документ — по <c>document_id</c>.</summary>
+    /// <summary>Mirror pattern (SM-23). The document comes from <c>document_id</c>.</summary>
     private object? PatternMirror(IpcFrame request)
     {
         var command = Argument<PatternMirrorCommand>(request);
@@ -849,28 +791,19 @@ public sealed class CommandDispatcher
         return TaggedAfter(document.Id, () => _session.PatternMirror(command), document);
     }
 
-    /// <summary>
-    /// Чтение параметров массива. Идёт мимо журнала мутаций: оно ничего не меняет. Ревизия
-    /// возвращается, но не поднимается — тем же правилом, что у <c>get_feature</c> и
-    /// <c>sketch.status</c>.
-    /// </summary>
+    /// <summary>Read pattern parameters. Bypasses the mutation journal: it changes nothing. The revision is
+    /// returned but not bumped — the same rule as <c>get_feature</c> and <c>sketch.status</c>.</summary>
     private object? PatternRead(IpcFrame request)
     {
         var command = Argument<PatternReadCommand>(request);
         var document = _session.DocumentForReference(command.FeatureRef);
         return Tagged(document.Id, document.Revision, _session.PatternRead(command));
     }
-    /// <summary>
-    /// Определённость эскиза — чтение, идёт мимо журнала мутаций по той же причине, что
-    /// <c>measure</c> и <c>get_feature</c>: оно ничего не создаёт и не меняет. Ревизия при этом
-    /// возвращается, чтобы клиент мог продолжить цепочку, но НЕ поднимается: измерено (S.7), что
-    /// пятикратное чтение статуса не изменило ни объём, ни счётчики топологии.
-    /// </summary>
-    /// <remarks>
-    /// <c>Tagged</c>, а не <c>TaggedAfter</c>: поднимать ревизию за читающий вызов значило бы
-    /// объявить модель изменённой, чего не произошло. Ревизия берётся из реестра ссылок — она уже
-    /// сверена в <c>RequireSketch</c> внутри адаптера.
-    /// </remarks>
+    /// <summary>Sketch status is a read, bypassing the mutation journal like <c>measure</c> and
+    /// <c>get_feature</c>. The revision is returned but NOT bumped: MEASURED (S.7) that reading the status
+    /// five times changed neither the volume nor the topology counters.</summary>
+    /// <remarks><c>Tagged</c>, not <c>TaggedAfter</c>: bumping the revision for a read would declare the
+    /// model changed, which did not happen.</remarks>
     private object? SketchStatus(IpcFrame request)
     {
         var command = Argument<GetSketchStatusCommand>(request);
@@ -899,8 +832,8 @@ public sealed class CommandDispatcher
         var command = Argument<DeleteFeatureCommand>(request);
         var document = _session.DocumentForReference(command.FeatureRef);
         GuardRevision(document, command.ExpectedRevision);
-        // Ответ приходит без ссылки на признак: он удалён, и выдавать «живой» handle на него было
-        // бы обещанием, которое сервер выполнить не может.
+        // The response carries no reference to the feature: it is deleted, and handing out a "live" handle
+        // to it would be a promise the server cannot keep.
         return TaggedAfter(document.Id, () => _session.DeleteFeature(command), document);
     }
 
@@ -953,13 +886,9 @@ public sealed class CommandDispatcher
     private object? ListMates(IpcFrame request) =>
         _session.ListMates(Argument<ListMatesCommand>(request));
 
-    // МУТАЦИИ C1/C2 ИДУТ ЧЕРЕЗ ОБЩУЮ ТОЧКУ МУТАЦИЙ.
-    //
-    // Прежде эти семь команд возвращали результат адаптера напрямую, минуя `TaggedAfter`, и в
-    // конверте не было `revision` — вопреки собственному контракту «каждая мутация несёт ревизию»
-    // (дефект M3 ревью 05.10.2026). Приёмка этого не видела только потому, что её помощник читал
-    // ревизию отдельным вызовом `kompas_get_context` и подставлял 1. Теперь каждая мутация сборки и
-    // сопряжений несёт ревизию ПОСЛЕ применения и снимает контрольную копию ДО него.
+    // C1/C2 MUTATIONS GO THROUGH THE COMMON MUTATION POINT: previously these seven commands bypassed
+    // `TaggedAfter`, so the envelope carried no `revision` (defect M3, review 05.10.2026) — acceptance
+    // missed it only because its helper substituted 1. History: docs/decisions/worker-ipc.md#c1c2-tagging
 
     private object? CreateMate(IpcFrame request)
     {
@@ -1023,11 +952,9 @@ public sealed class CommandDispatcher
 
     private object? UnitProbe(IpcFrame request) => _session.UnitProbe(Argument<UnitProbeCommand>(request));
 
-    /// <summary>
-    /// Создание объекта вспомогательной геометрии — мутация: ревизия поднимается, ссылки документа
-    /// переезжают вместе с ней. Проверка ожидаемой ревизии обязательна по той же причине, что у
-    /// остальных мутаций: без неё две правки одной модели переплелись бы без предупреждения.
-    /// </summary>
+    /// <summary>Creating an auxiliary-geometry object is a mutation: the revision is bumped and the
+    /// document's references move with it. Checking the expected revision is mandatory for the same reason
+    /// as for other mutations: without it two edits of one model would interleave without warning.</summary>
     private object? CreateAuxGeometry(IpcFrame request)
     {
         var command = Argument<CreateAuxGeometryCommand>(request);
@@ -1036,11 +963,9 @@ public sealed class CommandDispatcher
         return TaggedAfter(document.Id, () => _session.CreateAuxGeometry(command), document);
     }
 
-    /// <summary>
-    /// Перечисление вспомогательной геометрии — чтение. Ревизия возвращается, но НЕ поднимается:
-    /// обход коллекций ничего не создаёт и не меняет, и объявить модель изменённой значило бы
-    /// обесценить ссылки вызывающего за вызов, который их не трогал.
-    /// </summary>
+    /// <summary>Enumerating auxiliary geometry is a read. The revision is returned but NOT bumped: walking
+    /// collections creates and changes nothing, and declaring the model changed would invalidate the caller's
+    /// references for a call that did not touch them.</summary>
     private object? ListAuxGeometry(IpcFrame request)
     {
         var command = Argument<ListAuxGeometryCommand>(request);
@@ -1048,10 +973,8 @@ public sealed class CommandDispatcher
         return Tagged(document.Id, document.Revision, _session.ListAuxGeometry(command));
     }
 
-    /// <summary>
-    /// Правка существующей плоскости — мутация: ревизия поднимается, ссылки документа переезжают
-    /// вместе с ней.
-    /// </summary>
+    /// <summary>Editing an existing plane is a mutation: the revision is bumped and the document's
+    /// references move with it.</summary>
     private object? UpdatePlane(IpcFrame request)
     {
         var command = Argument<UpdatePlaneCommand>(request);
@@ -1060,11 +983,9 @@ public sealed class CommandDispatcher
         return TaggedAfter(document.Id, () => _session.UpdatePlane(command), document);
     }
 
-    /// <summary>
-    /// Перечисление сущностей эскиза — чтение: ревизия возвращается, но НЕ поднимается. Вход в
-    /// эскиз идёт на чтение (<c>BeginEditEx(true)</c>), поэтому обход не меняет модель, и объявить
-    /// её изменённой значило бы обесценить ссылки вызывающего за вызов, который их не трогал.
-    /// </summary>
+    /// <summary>Enumerating sketch entities is a read: the revision is returned but NOT bumped. Entering the
+    /// sketch is read-only (<c>BeginEditEx(true)</c>), so the walk does not change the model, and declaring it
+    /// changed would invalidate the caller's references for a call that did not touch them.</summary>
     private object? ListSketchEntities(IpcFrame request)
     {
         var command = Argument<ListSketchEntitiesCommand>(request);
@@ -1072,7 +993,7 @@ public sealed class CommandDispatcher
         return Tagged(document.Id, document.Revision, _session.ListSketchEntities(command));
     }
 
-    /// <summary>Адресная правка одной сущности эскиза — мутация.</summary>
+    /// <summary>Targeted edit of one sketch entity — a mutation.</summary>
     private object? EditSketchEntity(IpcFrame request)
     {
         var command = Argument<EditSketchEntityCommand>(request);
@@ -1087,18 +1008,12 @@ public sealed class CommandDispatcher
         return new JsonObject { ["sessions_closed"] = true };
     }
 
-    /// <summary>
-    /// Detach from every session. Documents belonging to the server are closed without saving;
-    /// an attached КОМПАС is left running because it is the user's process.
-    /// </summary>
-    /// <remarks>
-    /// <b>Что здесь НЕ происходит: прерывания уже поставленных команд.</b> Канал к Хосту мог
-    /// оборваться, когда на STA-полосе уже стояли команды; они выполняются до конца, потому что
-    /// отменить COM-вызов извне нельзя. Исход операции, которую Хост уже назвал
-    /// <c>OUTCOME_UNKNOWN</c>, поэтому определяется моделью, а не ответом: это состояние названо в
-    /// <c>docs/operator-guide/session-handover.md</c> (находка L8 ревью 05.10.2026), а не остаётся
-    /// подразумеваемым.
-    /// </remarks>
+    /// <summary>Detach from every session. Documents belonging to the server are closed without saving;
+    /// an attached KOMPAS is left running because it is the user's process.</summary>
+    /// <remarks>WHAT DOES NOT HAPPEN HERE: interrupting commands already queued. The channel may have
+    /// dropped while commands were on the STA lane; they run to completion, because a COM call cannot be
+    /// cancelled from outside. The outcome of an operation the Host called <c>OUTCOME_UNKNOWN</c> is
+    /// therefore determined by the model (finding L8, review 05.10.2026), not by the response.</remarks>
     public void ShutdownOwnedSessions()
     {
         foreach (var application in _session.Applications.ToArray())
@@ -1115,10 +1030,8 @@ public sealed class CommandDispatcher
     }
 }
 
-/// <summary>
-/// JSONL worker log: one object per line, UTC timestamps, bounded size. Diagnostics never go to
-/// the pipe (that channel carries frames only) and never to the Host's stdout.
-/// </summary>
+/// <summary>JSONL worker log: one object per line, UTC timestamps, bounded size. Diagnostics never go to
+/// the pipe (that channel carries frames only) and never to the Host's stdout.</summary>
 public sealed class WorkerLog : IDisposable
 {
     private readonly object _gate = new();
@@ -1207,10 +1120,8 @@ public sealed class WorkerLog : IDisposable
     }
 }
 
-/// <summary>
-/// Startup environment facts, gathered without touching КОМПАС so a wedged CAD lane cannot hide
-/// them from kompas_health.
-/// </summary>
+/// <summary>Startup environment facts, gathered without touching KOMPAS so a wedged CAD lane cannot hide
+/// them from kompas_health.</summary>
 internal static class EnvironmentSnapshot
 {
     public static object Collect() => new

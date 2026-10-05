@@ -5398,7 +5398,8 @@
     "ASM.04.distinguishing",
     "ASM.04.discover",
     "ASM.04.geometry_validation",
-    "ASM.04.rotation"
+    "ASM.04.rotation",
+    "ASM.04.repeat_after_mutation"
    ],
    "evidence": [
     "docs/acceptance/assembly/assembly-acceptance.json",
@@ -5407,7 +5408,8 @@
    "limitations": [
     "Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
     "Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).",
-    "Сверено только начало координат: различающий контроль по осям (поворот) не ставился."
+    "Сверено только начало координат: различающий контроль по осям (поворот) не ставился.",
+    "Отказ по адресу компонента решает ТОЛЬКО файл-источник; имя компонента и матрица размещения — примечания (решение 05.10.2026, регрессия п. 1). Раскладка IPart7.GetSummMatrix НЕ измерена — гипотеза, не основание отказа (п. 2). Строка ASM.04.repeat_after_mutation — живая проверка второй мутации по той же ссылке, требует прогона на бинарях поставки."
    ],
    "profile": "assemblies-minimal-v1",
    "priority": "practical_required",
@@ -6245,7 +6247,8 @@
     "MATE.01.save_reopen",
     "MATE.01.negative_tests",
     "MATE.01.face_range",
-    "MATE.06.geometry_validation"
+    "MATE.06.geometry_validation",
+    "MATE.01.create_after_mate_moved"
    ],
    "evidence": [
     "docs/acceptance/mates/mate-acceptance.json",

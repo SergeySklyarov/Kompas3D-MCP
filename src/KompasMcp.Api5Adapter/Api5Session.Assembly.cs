@@ -47,9 +47,9 @@ public partial class Api5Session
     private const int MaxStructureDepth = 64;
 
     /// <summary>
-    /// Полезная нагрузка ссылки на компонент: представление API7, <c>IPart7.Reference</c> (диагностика,
-    /// не адрес), ПОРЯДКОВЫЙ НОМЕР в перечислении структуры и МАТРИЦА РАЗМЕЩЕНИЯ, прочитанная со
-    /// стороны API7 документированным <c>IPart7.GetSummMatrix</c>.
+    /// Полезная нагрузка ссылки на компонент: представление API7, РОДИТЕЛЬСКИЙ узел (из него матрица
+    /// читается свежей), <c>IPart7.Reference</c> (диагностика, не адрес) и ПОРЯДКОВЫЙ НОМЕР в
+    /// перечислении структуры.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -61,16 +61,16 @@ public partial class Api5Session
     /// нему выполнить нельзя.
     /// </para>
     /// <para>
-    /// <b><see cref="Matrix7"/> — ВТОРОЙ НЕЗАВИСИМЫЙ ПРИЗНАК ТОЖДЕСТВА.</b> Одно сравнение имени
-    /// файла слабо ровно в том случае, ради которого адресация по имени и была отвергнута: подсборка
-    /// содержит <c>plate.m3d</c>, и на верхнем уровне стоит <c>plate.m3d</c> — имена совпадают, а
-    /// экземпляры разные. Матрица размещения, прочитанная со стороны API7 (документированный
-    /// <c>ipart7_getsummmatrix.html</c>: «суммарная матрица преобразования координат, 16 элементов,
-    /// 4×4»), сверяется с матрицей API5-представления по тому же номеру: расхождение означает, что
-    /// номер ведёт в ДРУГОЙ компонент (дефект M7 ревью 05.10.2026).
+    /// <b>МАТРИЦА РАЗМЕЩЕНИЯ В ССЫЛКЕ НЕ ХРАНИТСЯ.</b> Прежняя редакция снимала её СНИМКОМ при
+    /// перечислении структуры (документированный <c>IPart7.GetSummMatrix</c>) и сверяла с текущей
+    /// API5-матрицей. Снимок устаревал от СОБСТВЕННОЙ мутации сервера: размещение менялось, а снимок
+    /// оставался прежним, и вторая мутация по той же ссылке отвергалась <c>STALE_REFERENCE</c>
+    /// (регрессия п. 1 задания 05.10.2026). Здесь хранится РОДИТЕЛЬ, а матрица читается СВЕЖЕЙ в
+    /// момент сверки — состояние сравнивается на ОДНОМ моменте времени, а не снимок со списком.
+    /// Отказом матрица при этом не управляет: см. <see cref="ComponentIdentity"/>.
     /// </para>
     /// </remarks>
-    private sealed record ComponentPayload(IPart7 Part7, int? Reference, int Ordinal, double[]? Matrix7);
+    private sealed record ComponentPayload(IPart7 Part7, IPart7? Parent7, int? Reference, int Ordinal);
 
     // ===================================================================================== ASM-03
     /// <summary>Перечисление структуры сборки.</summary>
@@ -211,16 +211,16 @@ public partial class Api5Session
         var reference = Int(() => part.Reference);
         var addressable = ordinal != NestedComponentOrdinal;
 
-        // МАТРИЦА СО СТОРОНЫ API7 — ВТОРОЙ ПРИЗНАК ТОЖДЕСТВА, а не украшение ответа. Читается
-        // документированным IPart7.GetSummMatrix (ipart7_getsummmatrix.html): «суммарная матрица
-        // преобразования координат», 16 элементов, 4×4. Именно она различает два экземпляра одной
-        // детали там, где имя файла совпадает. Читается только у адресуемого (верхнего) компонента:
-        // у вложенного адреса нет, и подтверждать нечего.
+        // МАТРИЦА СО СТОРОНЫ API7 ДЛЯ ОТВЕТА. Читается документированным IPart7.GetSummMatrix
+        // (ipart7_getsummmatrix.html): «суммарная матрица преобразования координат», 16 элементов,
+        // 4×4. Это РАЗМЕЩЕНИЕ НА МОМЕНТ ЧТЕНИЯ — оно и уходит в ответ; в ССЫЛКЕ оно не хранится,
+        // иначе снимок устаревал бы от собственной мутации сервера (см. ComponentPayload). Читается
+        // только у адресуемого (верхнего) компонента: у вложенного адреса нет, и читать нечего.
         var matrix7 = addressable ? SummMatrix7(parent, part) : null;
 
         var stored = References.Register(
             ComponentRefKind, document.Id, document.Revision,
-            new ComponentPayload(part, reference, ordinal, matrix7));
+            new ComponentPayload(part, parent, reference, ordinal));
 
         if (!addressable)
         {
@@ -253,10 +253,10 @@ public partial class Api5Session
             // подставлять вместо него чужой номер запрещено — тогда «не прочитано» честно равно null.
             BodyCount = addressable ? BodyCountOf(ComponentPart5At(document, ordinal)) : null,
             FaceCount = addressable ? FaceCountOf(ComponentPart5At(document, ordinal)) : null,
-            // РАЗМЕЩЕНИЕ ОТДАЁТСЯ СО СТОРОНЫ API7 (GetSummMatrix), а матрица API5-представления по
-            // тому же номеру остаётся ВТОРЫМ, независимым чтением: их сверка и есть проверка тождества
-            // адреса (см. IdentityMatches). Если матрица API7 не прочиталась, называется матрица API5
-            // — непрочитанное значение не подменяется нулями.
+            // РАЗМЕЩЕНИЕ ОТДАЁТСЯ СО СТОРОНЫ API7 (GetSummMatrix) на момент чтения; если матрица API7
+            // не прочиталась, называется матрица API5 — непрочитанное значение не подменяется нулями.
+            // В ССЫЛКЕ матрица не хранится: сверка тождества читает её свежей у живого родителя
+            // (см. IdentityMatches и ComponentPayload).
             Matrix = addressable ? matrix7 ?? PlacementMatrixByOrdinal(document, ordinal) : null,
         };
     }
@@ -1070,7 +1070,7 @@ public partial class Api5Session
             var exists = path is { Length: > 0 } && SafeFileExists(path);
             var stored = References.Register(
                 ComponentRefKind, document.Id, document.Revision,
-                new ComponentPayload(child, Int(() => child.Reference), links.Count, Matrix7: null));
+                new ComponentPayload(child, node, Int(() => child.Reference), links.Count));
             links.Add(new ComponentLinkDto(
                 stored.Id,
                 Text(() => child.Name),
@@ -1205,9 +1205,14 @@ public partial class Api5Session
             // список попадают вложенные компоненты, подсборка перед деталью сдвигает индексы, и
             // размещение или замена адресовали бы ЧУЖОЙ компонент; различающий контроль прежней
             // приёмки шёл на плоской сборке и этого не проверял (дефект M7 ревью 05.10.2026).
-            // Сверка идёт по ТРЁМ признакам (источник, имя, матрица размещения), и:
-            //   * расхождение хоть одного признака → отказ STALE_REFERENCE;
-            //   * «сверить нечем» (ни один признак не прочитан) → ТОЖЕ ОТКАЗ, без мутации. Прежде
+            // РЕШЕНИЕ вынесено в ЧИСТУЮ функцию ComponentIdentity (Domain), а не разложено по ветвям:
+            //   * ОТКАЗ РЕШАЕТ ТОЛЬКО ИСТОЧНИК — единственный измеренный и не изменяемый сам по себе
+            //     признак. Расхождение источника → отказ STALE_REFERENCE;
+            //   * имя компонента и матрица размещения — ПРИМЕЧАНИЯ: сравнение имён живьём не
+            //     измерялось, а матрица изменяема и её раскладка не измерена. Прежде расхождение
+            //     ЛЮБОГО из них отвергало мутацию, и вторая `set_component_placement` по той же ссылке
+            //     отвергалась после первой (регрессия п. 1 задания 05.10.2026);
+            //   * «сверить нечем» (источник не прочитан) → ТОЖЕ ОТКАЗ, без мутации. Прежде
             //     нечитаемость продолжалась с примечанием, то есть мутация по НЕПОДТВЕРЖДЁННОМУ адресу
             //     была разрешена — ровно то, что задание запрещает.
             var identity = IdentityMatches(candidate, payload, out var identityNote);
@@ -1219,19 +1224,20 @@ public partial class Api5Session
                     identity == false
                         ? "Адрес компонента НЕ подтверждён: по порядковому номеру "
                           + $"{payload.Ordinal} в ksDocument3D.PartCollection(true) лежит ДРУГОЙ " +
-                          "компонент. Мутация по неподтверждённому номеру попала бы в ЧУЖОЙ компонент, " +
-                          "поэтому она не выполняется. Перечитайте структуру сборки " +
-                          "kompas_list_components и возьмите свежую ссылку."
-                        : "Адрес компонента НЕ подтверждён: тождество не удалось сверить ни по одному " +
-                          "из признаков (источник, имя, матрица размещения). Мутация по " +
-                          "НЕПОДТВЕРЖДЁННОМУ адресу не выполняется — перечитайте структуру сборки " +
-                          "kompas_list_components и возьмите свежую ссылку.",
+                          "компонент (расходится файл-источник). Мутация по неподтверждённому номеру " +
+                          "попала бы в ЧУЖОЙ компонент, поэтому она не выполняется. Перечитайте " +
+                          "структуру сборки kompas_list_components и возьмите свежую ссылку."
+                        : "Адрес компонента НЕ подтверждён: файл-источник компонента не прочитан с " +
+                          "одной из сторон, а имя и матрица размещения отказом не управляют, поэтому " +
+                          "подтвердить адрес НЕЧЕМ. Мутация по НЕПОДТВЕРЖДЁННОМУ адресу не выполняется " +
+                          "— перечитайте структуру сборки kompas_list_components и возьмите свежую " +
+                          "ссылку.",
                     RetryPolicy.ReacquireContext,
                     details: new Dictionary<string, object?>
                     {
                         ["ordinal"] = payload.Ordinal,
                         ["identity_check"] = identityNote,
-                        ["identity_confirmed"] = identity is null ? "не сверено (ни один признак не прочитан)" : "расхождение",
+                        ["identity_confirmed"] = identity is null ? "не сверено (источник не прочитан)" : "расхождение источника",
                         ["api7_reference"] = payload.Reference,
                     });
             }
@@ -1259,26 +1265,32 @@ public partial class Api5Session
     }
 
     /// <summary>
-    /// Тот ли это компонент: сверяются ТРИ независимых признака, а не один.
+    /// Тот ли это компонент: сверяются ТРИ признака, но ОТКАЗ РЕШАЕТ ТОЛЬКО ИСТОЧНИК.
     /// </summary>
     /// <returns>
-    /// <c>true</c> — тождество подтверждено (хотя бы один признак прочитан и ни один не противоречит);
-    /// <c>false</c> — адрес ведёт в ЧУЖОЙ компонент (признак прочитан и противоречит);
-    /// <c>null</c> — сверить НЕЧЕМ (ни один признак не прочитан с обеих сторон).
+    /// <c>true</c> — тождество подтверждено (файл-источник прочитан с обеих сторон и совпал);
+    /// <c>false</c> — адрес ведёт в ЧУЖОЙ компонент (источник прочитан и расходится);
+    /// <c>null</c> — сверить НЕЧЕМ (источник не прочитан с одной из сторон).
     /// </returns>
     /// <remarks>
     /// <para>
-    /// <b>Почему одного имени файла мало.</b> Сравнение только имени файла слабо ровно в том случае,
-    /// ради которого адресация по имени и была отвергнута: подсборка содержит <c>plate.m3d</c>, и на
-    /// верхнем уровне стоит <c>plate.m3d</c> — имена совпадают, а экземпляры разные. Поэтому тождество
-    /// подтверждается ВТОРЫМ независимым признаком — матрицей размещения, прочитанной со стороны API7
-    /// документированным <c>IPart7.GetSummMatrix</c> и сверенной с API5-матрицей по тому же номеру.
+    /// <b>РЕШЕНИЕ — ЧИСТАЯ ФУНКЦИЯ.</b> Агрегация признаков вынесена в
+    /// <see cref="ComponentIdentity.Decide"/> (Domain, без COM-типов): таблицу решений можно
+    /// проверить без КОМПАС. Прежде правило жило здесь разложенным по ветвям, и каждая правка
+    /// признака ломала соседний случай незаметно для сборки и модульных тестов.
     /// </para>
     /// <para>
-    /// <b>Агрегация — по противоречию.</b> Любой прочитанный признак, который РАСХОДИТСЯ, делает
-    /// тождество ложным: расхождение — это факт о том, что номер ведёт не туда. Совпадения лишь
-    /// подтверждают. Если не прочитан НИ ОДИН признак, ответ — <c>null</c> («сверять нечем»), и
-    /// вызывающий обязан отказать, а не продолжить с примечанием (находка M7 ревью 05.10.2026).
+    /// <b>Отказом управляет только источник.</b> Это единственный признак, который измерен живьём и
+    /// не меняется сам по себе: файл-источник компонента меняет лишь явная замена. Имя компонента в
+    /// дереве (сравнение имён API5 <c>ksPart.name</c> и API7 <c>IPart7.Name</c> живьём не измерялось)
+    /// и матрица размещения (ИЗМЕНЯЕМОЕ состояние, а раскладка <c>GetSummMatrix</c> не измерена) —
+    /// ПРИМЕЧАНИЯ. Прежде расхождение ЛЮБОГО из них отвергало мутацию, и вторая мутация по той же
+    /// ссылке падала с <c>STALE_REFERENCE</c> после первой (регрессия п. 1 задания 05.10.2026).
+    /// </para>
+    /// <para>
+    /// <b>Матрица читается СВЕЖЕЙ.</b> Обе матрицы — API5 по номеру и API7 <c>GetSummMatrix</c> у
+    /// живого родителя — снимаются ЗДЕСЬ, на ОДНОМ моменте времени. Снимок матрицы из ссылки не
+    /// используется: он устаревал от собственной мутации сервера и давал ложное расхождение.
     /// </para>
     /// <para>
     /// Сравниваются ИМЕНА файлов, а не полные пути: API7 и API5 отдают путь в разном виде (полный
@@ -1293,71 +1305,48 @@ public partial class Api5Session
         var name5 = string.IsNullOrWhiteSpace(from5) ? null : Path.GetFileName(from5);
         var name7 = string.IsNullOrWhiteSpace(from7) ? null : Path.GetFileName(from7);
 
-        // Второй признак — ИМЯ КОМПОНЕНТА В ДЕРЕВЕ (документировано с обеих сторон: ksPart.name и
-        // IPart7.Name). Он назван в ответе, но отказом управляет только вместе с матрицей: сравнение
-        // имён API5/API7 живьём не измерялось, и делать его единственным основанием отказа значило бы
-        // поставить работу на непроверенное совпадение.
         var componentName5 = Ref(() => part5.name);
         var componentName7 = Text(() => payload.Part7.Name);
 
-        // Третий признак (решающий) — МАТРИЦА РАЗМЕЩЕНИЯ: API5-представление по тому же номеру против
-        // API7 GetSummMatrix, снятой при перечислении структуры.
+        // ОБЕ МАТРИЦЫ — НА ОДНОМ МОМЕНТЕ ВРЕМЕНИ. API5 — по номеру; API7 — у ЖИВОГО родителя,
+        // перечитанная здесь, а не взятая снимком из ссылки (см. ComponentPayload).
         var matrix5 = ReadPlacementMatrix(part5);
-        var matrix7 = payload.Matrix7;
+        var matrix7 = payload.Parent7 is null ? null : SummMatrix7(payload.Parent7, payload.Part7);
 
-        var signals = new List<string>();
-        var confirmed = false;
-        var contradicted = false;
+        var sourceSignal = name5 is null || name7 is null
+            ? ComponentIdentitySignal.NotRead
+            : string.Equals(name5, name7, StringComparison.OrdinalIgnoreCase)
+                ? ComponentIdentitySignal.Matches
+                : ComponentIdentitySignal.Differs;
+        var nameSignal = CompareRaw(componentName5, componentName7);
+        var matrixSignal = matrix5 is null || matrix7 is null
+            ? ComponentIdentitySignal.NotRead
+            : MatricesEqual(matrix5, matrix7)
+                ? ComponentIdentitySignal.Matches
+                : ComponentIdentitySignal.Differs;
 
-        if (name5 is not null && name7 is not null)
-        {
-            var equal = string.Equals(name5, name7, StringComparison.OrdinalIgnoreCase);
-            signals.Add(equal
-                ? $"источник «{name5}» совпал"
-                : $"источник РАСХОДИТСЯ: по номеру «{name5}», ссылка адресует «{name7}»");
-            confirmed |= equal;
-            contradicted |= !equal;
-        }
-        else
-        {
-            signals.Add("источник не читается с одной из сторон");
-        }
+        var verdict = ComponentIdentity.Decide(sourceSignal, nameSignal, matrixSignal);
 
-        if (!string.IsNullOrWhiteSpace(componentName5) && !string.IsNullOrWhiteSpace(componentName7))
-        {
-            var equal = string.Equals(componentName5, componentName7, StringComparison.Ordinal);
-            signals.Add(equal
-                ? $"имя компонента «{componentName5}» совпало"
-                : $"имя компонента РАСХОДИТСЯ: по номеру «{componentName5}», ссылка адресует «{componentName7}»");
-            confirmed |= equal;
-            contradicted |= !equal;
-        }
-        else
-        {
-            signals.Add("имя компонента не читается с одной из сторон");
-        }
+        // ЗНАЧЕНИЯ — РЯДОМ С ПРАВИЛОМ: примечание объясняет решение И называет, что именно прочитано.
+        // Молчание о расхождении неотличимо от «не смотрели».
+        detail = verdict.Detail
+            + $" [прочитано: источник по номеру «{name5 ?? "не читается"}», ссылка «{name7 ?? "не читается"}»; "
+            + $"имя «{componentName5 ?? "не читается"}» / «{componentName7 ?? "не читается"}»; "
+            + $"матрица по номеру {Describe(matrix5)}, ссылка {Describe(matrix7)}]";
+        return verdict.Matches;
+    }
 
-        if (matrix5 is not null && matrix7 is not null)
+    /// <summary>Сравнить два текста как признак тождества; пустое с любой стороны — «не прочитано».</summary>
+    private static ComponentIdentitySignal CompareRaw(string? a, string? b)
+    {
+        if (string.IsNullOrWhiteSpace(a) || string.IsNullOrWhiteSpace(b))
         {
-            var equal = MatricesEqual(matrix5, matrix7);
-            signals.Add(equal
-                ? "матрица размещения (API5 по номеру против API7 GetSummMatrix) совпала"
-                : $"матрица размещения РАСХОДИТСЯ: по номеру {Describe(matrix5)}, ссылка адресует {Describe(matrix7)}");
-            confirmed |= equal;
-            contradicted |= !equal;
-        }
-        else
-        {
-            signals.Add("матрица размещения не читается с одной из сторон");
+            return ComponentIdentitySignal.NotRead;
         }
 
-        detail = string.Join("; ", signals);
-        if (contradicted)
-        {
-            return false;
-        }
-
-        return confirmed ? true : null;
+        return string.Equals(a, b, StringComparison.Ordinal)
+            ? ComponentIdentitySignal.Matches
+            : ComponentIdentitySignal.Differs;
     }
 
     private double[]? ReadPlacementMatrix(ksPart part)

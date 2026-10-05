@@ -850,8 +850,11 @@ public sealed partial class Api5Session
 
         // ТОЖДЕСТВО ПРОВЕРЯЕТСЯ И ЗДЕСЬ, И ТОЖЕ ОТКАЗЫВАЕТ НА «НЕ СВЕРЕНО»: грань берётся у компонента,
         // найденного по номеру, и если номер ведёт в чужой экземпляр, сопряжение было бы создано между
-        // ЧУЖИМИ гранями. Нечитаемость (identity == null) — это «мутация по неподтверждённому адресу»,
-        // и она запрещена так же, как расхождение (дефект M7 ревью 05.10.2026).
+        // ЧУЖИМИ гранями. Решение — та же ЧИСТАЯ функция ComponentIdentity: отказ решает ИСТОЧНИК,
+        // нечитаемость источника (identity == null) запрещена так же, как расхождение. Имя и матрица
+        // размещения — примечания (см. IdentityMatches): снимок матрицы из ссылки устаревал от
+        // собственной мутации, и `create_mate` после смещения компонента сопряжением отвергался бы
+        // (регрессия п. 1 задания 05.10.2026).
         var identity = IdentityMatches(part5, payload, out var identityNote);
         notes.Add("component_identity — " + identityNote);
         if (identity != true)
@@ -866,7 +869,7 @@ public sealed partial class Api5Session
                 {
                     ["component_ref"] = componentRef,
                     ["ordinal"] = payload.Ordinal,
-                    ["identity_confirmed"] = identity is null ? "не сверено" : "расхождение",
+                    ["identity_confirmed"] = identity is null ? "не сверено (источник не прочитан)" : "расхождение источника",
                 });
         }
 

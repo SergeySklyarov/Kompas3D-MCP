@@ -99,6 +99,67 @@ public class ReleaseGuardTests
         Assert.Contains("НЕИЗВЕСТНО", decision.Reason!, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// ОБЯЗАТЕЛЬНАЯ СТРОКА (§4): подтверждённое неизвестное состояние снимает отказ по СЛОМАННОМУ каналу.
+    /// </summary>
+    [Fact]
+    public void UnknownDocumentState_Acknowledged_SkipsTheBrokenChannelRefusal()
+    {
+        // Сразу после обрыва канала клиент, который уже принял неизвестное состояние, обязан уметь
+        // освободить сеанс. Прежде подтверждение снимало только шаг 1, а шаг 3 («канал сломан») всё
+        // равно отказывал, и единственным выходом был обходной: сделать CAD-вызов, чтобы Worker
+        // перезапустился, и повторить. Опись при подтверждении не нужна — она не добавляет сведений.
+        var decision = ReleaseGuard.Decide(Facts(
+            canSendWithoutRestart: false,
+            documentStateUnknown: true,
+            acknowledge: true,
+            inventoryRead: false));
+
+        Assert.True(decision.Proceed);
+        Assert.Null(decision.RefusalCode);
+    }
+
+    /// <summary>ОБЯЗАТЕЛЬНАЯ СТРОКА (§4): подтверждение снимает и отказ «опись не прочитана».</summary>
+    [Fact]
+    public void UnknownDocumentState_Acknowledged_SkipsTheUnreadInventoryRefusal()
+    {
+        var decision = ReleaseGuard.Decide(Facts(
+            canSendWithoutRestart: true,
+            documentStateUnknown: true,
+            acknowledge: true,
+            inventoryRead: false));
+
+        Assert.True(decision.Proceed);
+    }
+
+    /// <summary>
+    /// Отрицательный контроль: подтверждение НЕ снимает отказ по каналу, если неизвестное состояние не
+    /// отмечено. Подтверждать нечего — признак не стоит, и «acknowledge» не должен быть универсальной
+    /// отмычкой от любой проверки описи.
+    /// </summary>
+    [Fact]
+    public void BrokenChannel_WithoutUnknownStateFlag_StillRefusesEvenWithAcknowledgement()
+    {
+        var decision = ReleaseGuard.Decide(Facts(
+            canSendWithoutRestart: false,
+            documentStateUnknown: false,
+            acknowledge: true,
+            inventoryRead: false));
+
+        Assert.False(decision.Proceed);
+        Assert.Equal(ErrorCodes.SessionReleaseFailed, decision.RefusalCode);
+    }
+
+    [Fact]
+    public void BrokenChannelRefusal_NamesTheAcknowledgementAsTheWayOut()
+    {
+        // Отказ обязан НАЗЫВАТЬ выход, а не оставлять клиента в тупике: иначе единственным способом
+        // остаётся обходной шаг, которого в тексте нет.
+        var decision = ReleaseGuard.Decide(Facts(canSendWithoutRestart: false, inventoryRead: false));
+
+        Assert.Contains("acknowledge_unknown_document_state", decision.Reason!, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void LiveChannelButUnreadInventory_IsRefused()
     {

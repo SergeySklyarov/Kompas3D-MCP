@@ -689,6 +689,26 @@ def assembly_checks(client, rep, app_id, workdir):
         rep.add("ASM.04.edit", "размещение задаётся и перечитывается (перенос на 30 мм)",
                 "PASS" if (not code and origin and near(origin[0], 30.0)) else "FAIL",
                 f"origin={origin} level={level(env)} error={code} msg={emsg(env)}")
+
+        # РЕГРЕССИЯ §1 ЗАДАНИЯ 05.10.2026: ВТОРАЯ ПОДРЯД МУТАЦИЯ ПО ТОЙ ЖЕ ССЫЛКЕ КОМПОНЕНТА.
+        #
+        # `target` получена из list_components ДО первой мутации. Прежняя редакция сверки тождества
+        # хранила в ссылке СНИМОК матрицы размещения (GetSummMatrix на момент перечисления) и сверяла
+        # его с текущей API5-матрицей: после первой set_component_placement размещение менялось, снимок
+        # — нет, и вторая мутация по той же ссылке отвергалась STALE_REFERENCE. Теперь отказ решает
+        # только файл-источник, а матрица читается свежей. Та же ссылка `target` идёт во ВТОРУЮ мутацию
+        # — она обязана пройти.
+        env, code = call("kompas_set_component_placement", {
+            "document_id": asm, "expected_revision": current_rev(asm), "component_ref": target,
+            "transform": {"origin_mm": [45, 0, 0], "x_axis": [1, 0, 0], "y_axis": [0, 1, 0]}})
+        after2 = result(env).get("placement_after_matrix")
+        origin2 = ([after2[12], after2[13], after2[14]]
+                   if isinstance(after2, list) and len(after2) >= 16 else None)
+        rep.add("ASM.04.repeat_after_mutation",
+                "вторая подряд set_component_placement по ТОЙ ЖЕ ссылке проходит (не STALE_REFERENCE)",
+                "PASS" if (not code and origin2 and near(origin2[0], 45.0)) else "FAIL",
+                f"origin={origin2} error={code} msg={emsg(env)}")
+
         # различающий контроль: размещение ВТОРОГО компонента иное (иначе чтение «первого» неотличимо
         # от правильного — контроль «непустой список» прошёл бы на любом чтении)
         env, code = call("kompas_list_components", {"document_id": asm})
@@ -1303,6 +1323,29 @@ def mate_checks(client, rep, app_id, workdir):
             f"type={mate.get('constraint_type')} valid={valid} "
             f"base1={mate.get('base_object1')} base2={mate.get('base_object2')} "
             f"count={result(env).get('mate_count')} error={code} msg={emsg(env)}")
+
+    # РЕГРЕССИЯ §1 ЗАДАНИЯ 05.10.2026: `create_mate` ПО ССЫЛКЕ, ЧЕЙ КОМПОНЕНТ СДВИНУТ СОПРЯЖЕНИЕМ.
+    #
+    # `first`/`second` получены из list_components ДО того, как сопряжение MATE.01 сдвинуло компонент.
+    # Прежняя редакция хранила в ссылке снимок матрицы размещения и отвергала ЛЮБУЮ следующую мутацию
+    # по ней, если размещение изменилось, — то есть второе сопряжение с тем же компонентом падало бы с
+    # STALE_REFERENCE. Здесь создаётся ЕЩЁ ОДНО сопряжение теми же ссылками (маршрут и параметры — как
+    # у измеренного MATE.03), затем оно удаляется, чтобы не сдвинуть счётчики строк MATE.05.
+    env, code = call("kompas_create_mate", {
+        "document_id": asm, "expected_revision": current_rev(asm),
+        "constraint_type": "distance", "param_value": 50.0,
+        "first_component_ref": first, "first_face_index": 0,
+        "second_component_ref": second, "second_face_index": 0})
+    repeat_ref = (result(env).get("mate_ref") or {}).get("id") if isinstance(
+        result(env).get("mate_ref"), dict) else None
+    repeat_valid = (result(env).get("mate") or {}).get("valid")
+    rep.add("MATE.01.create_after_mate_moved",
+            "create_mate по ссылке, чей компонент СДВИНУТ сопряжением, проходит (не STALE_REFERENCE)",
+            "PASS" if (not code and repeat_valid is True and repeat_ref) else "FAIL",
+            f"valid={repeat_valid} error={code} msg={emsg(env)}")
+    if repeat_ref:
+        call("kompas_delete_mate", {
+            "document_id": asm, "expected_revision": current_rev(asm), "mate_ref": repeat_ref})
 
     # ========= MATE.02: чтение =========
     env, code = call("kompas_list_mates", {"document_id": asm})

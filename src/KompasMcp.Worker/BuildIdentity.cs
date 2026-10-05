@@ -3,17 +3,15 @@ using System.Text.Json.Nodes;
 
 namespace KompasMcp.Worker;
 
-/// <summary>Reports which build of each KompasMcp assembly this Worker actually loaded.</summary>
-/// <remarks>This exists because of a defect that cost three separate debugging sessions: the Host launches
-/// <c>KompasMcp.Worker.exe</c> from its own output folder without referencing it (ADR-001: no COM in the
-/// Host), so MSBuild never refreshed that copy and a STALE copy silently ran alongside a current Host — a
-/// correct Host answering with wrong tool responses, never a crash. The build step is fixed at the source;
-/// this report is the second layer, making a mismatch observable from one <c>kompas_health</c> call.
+/// <summary>Reports which build of each KompasMcp assembly this Worker actually loaded.</summary> <remarks>The Host
+/// launches <c>KompasMcp.Worker.exe</c> from its own output folder without referencing it (ADR-001: no COM in the
+/// Host), so MSBuild never refreshed that copy and a STALE copy silently ran; this report makes a mismatch observable
+/// from one <c>kompas_health</c> call.
 /// History: docs/decisions/worker-ipc.md#build-identity</remarks>
 internal static class BuildIdentity
 {
-    /// <summary>Assemblies whose version determines behaviour. <c>KompasMcp.Host</c> is deliberately absent:
-    /// the Worker cannot see the Host's assembly, and the Host reports its own identity separately.</summary>
+    /// <summary>Assemblies whose version determines behaviour. <c>KompasMcp.Host</c> is absent: the Worker cannot see
+    /// the Host's assembly, and the Host reports its own identity separately.</summary>
     private static readonly string[] Tracked =
     [
         "KompasMcp.Worker",
@@ -42,8 +40,8 @@ internal static class BuildIdentity
     {
         try
         {
-            // Already-loaded assemblies only. Deliberately not Assembly.Load: loading a probe would
-            // itself change what is loaded, and the point is to report the deployment as it stands.
+            // Already-loaded assemblies only: Assembly.Load would itself change what is loaded,
+            // and the point is to report the deployment as it stands.
             var loaded = AppDomain.CurrentDomain.GetAssemblies()
                 .FirstOrDefault(a => string.Equals(a.GetName().Name, simpleName, StringComparison.Ordinal));
 
@@ -60,8 +58,7 @@ internal static class BuildIdentity
                 ["informational_version"] = loaded.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion,
             };
 
-            // The file timestamp is the field that actually reveals a stale copy: two assemblies
-            // built minutes apart are normal, five days apart is the defect this class exists for.
+            // The file timestamp reveals a stale copy: minutes apart is normal, days apart is the defect.
             try
             {
                 described["last_write_utc"] = File.Exists(location)

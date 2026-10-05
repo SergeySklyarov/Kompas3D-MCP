@@ -1,11 +1,12 @@
 namespace KompasMcp.Contracts;
 
-/// <summary>Assembly-domain contracts — block C1 (profile <c>assemblies-minimal-v1</c>, modes <c>ASM-01…ASM-07</c>).</summary>
-/// <remarks>INVARIANT: a component is a reference to a file, not a body. What leaves the server is therefore structure —
-/// the component instance, its source file, placement and multiplicity. Two insertions of one part yield TWO instances
-/// of ONE unique part: this is the substantive criterion that separates an assembly from a composition of bodies in one part.
-/// INVARIANT: placement is a rigid transform (<see cref="TransformDto"/>: origin plus two orthonormal axes), not a
-/// "shift from current" — a shift without a coordinate frame is not an address and cannot be read back.</remarks>
+/// <summary>Assembly-domain contracts — block C1 (profile <c>assemblies-minimal-v1</c>, modes
+/// <c>ASM-01…ASM-07</c>).</summary> <remarks>INVARIANT: a component is a reference to a file, not a body: what leaves
+/// the server is structure — the instance, its source file, placement and multiplicity. Two insertions of one part
+/// yield TWO instances of ONE unique part, the criterion separating an assembly from a composition. INVARIANT:
+/// placement is a rigid transform (<see cref="TransformDto"/>: origin plus two orthonormal axes), not a "shift from
+/// current" — a shift without a frame is not an address and cannot be read back.
+/// History: docs/decisions/contracts.md#assembly-contracts</remarks>
 public sealed record InsertComponentCommand
 {
     public required string DocumentId { get; init; }
@@ -15,8 +16,8 @@ public sealed record InsertComponentCommand
     /// <summary>Absolute path to the part's source file inside the allowed root (checked by the Host).</summary>
     public required string SourcePath { get; init; }
 
-    /// <summary>Component placement. <c>null</c> means "not set": the component is inserted at the
-    /// documented KOMPAS default, not at a server guess of the origin.</summary>
+    /// <summary>Component placement. <c>null</c> means "not set": the component is inserted at the documented KOMPAS
+    /// default, not at a server guess of the origin.</summary>
     public TransformDto? Transform { get; init; }
 
     /// <summary>Fix the component after insertion. A fixed component cannot be moved.</summary>
@@ -63,8 +64,8 @@ public sealed record CheckComponentLinksCommand
     public required string DocumentId { get; init; }
 }
 
-/// <summary>One assembly-structure row. An empty field means "not read", not zero; the reason is named in
-/// <see cref="ListComponentsResult.Notes"/>.</summary>
+/// <summary>One assembly-structure row. An empty field means "not read", not zero; the reason is named in <see
+/// cref="ListComponentsResult.Notes"/>.</summary>
 public sealed record ComponentRowDto
 {
     /// <summary>Opaque reference to the instance, bound to the revision.</summary>
@@ -90,18 +91,18 @@ public sealed record ComponentRowDto
     /// <summary>Multiplicity: number of insertions of this part (<c>IPart7.InstanceCount</c>).</summary>
     public int? InstanceCount { get; init; }
 
-    /// <summary>Number of bodies of the component — <c>ksPart.BodyCollection()</c>
-    /// (<c>kspart_bodycollection.html</c>). Published because "the component exists" and "the component
-    /// has geometry" are different claims: insertion via <c>CreatePartInAssembly</c> produced a component
-    /// with ZERO bodies. MEASURED: 05.10.2026.</summary>
+    /// <summary>Number of bodies of the component — <c>ksPart.BodyCollection()</c> (<c>kspart_bodycollection.html</c>).
+    /// Published because "the component exists" and "the component has geometry" are different claims: insertion via
+    /// <c>CreatePartInAssembly</c> produced a component with ZERO bodies. History:
+    /// docs/decisions/contracts.md#component-body-count</summary>
     public int? BodyCount { get; init; }
 
     /// <summary>Number of faces of the component's first body — <c>ksBody.FaceCollection()</c>.</summary>
     public int? FaceCount { get; init; }
 
     /// <summary>Component number in the document (<c>IPart7.Reference</c>) — also the argument of
-    /// <c>ksPart.GetPart</c>. Published because component addressing rests on it, and "a reference exists
-    /// but the number does not" is exactly what makes an address unverifiable.</summary>
+    /// <c>ksPart.GetPart</c>. Published because component addressing rests on it, and "a reference exists but the
+    /// number does not" is exactly what makes an address unverifiable.</summary>
     public int? ReferenceNumber { get; init; }
 
     /// <summary>Fixation state (<c>IPart7.Fixed</c>).</summary>

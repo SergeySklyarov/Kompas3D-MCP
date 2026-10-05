@@ -15,18 +15,14 @@ public enum ComponentIdentitySignal
     Differs,
 }
 
-/// <summary>Verdict on the component-address identity.</summary>
-/// <param name="Matches">
-/// <c>true</c> — identity confirmed; <c>false</c> — the address leads to a FOREIGN component;
-/// <c>null</c> — nothing to compare.
-/// </param>
-/// <param name="Detail">Human-readable explanation: which signals were read and what decided the verdict.</param>
 public sealed record ComponentIdentityVerdict(bool? Matches, string Detail);
 
 /// <summary>The component-address identity rule — a PURE function of three signals, no KOMPAS.</summary>
-/// <remarks>INVARIANT: ONLY THE SOURCE FILE decides the refusal. It is the only signal (a) MEASURED live and (b) not changing by itself — a component's source changes only by an explicit replacement.
-/// The component name (API5 <c>ksPart.name</c> vs API7 <c>IPart7.Name</c> was never compared live) and the placement matrix (MUTABLE state: the server's own mutation and a mate both change it, and the <c>GetSummMatrix</c> layout is neither documented nor measured, so per AGENTS.md it cannot drive behaviour) are NOTES.
-/// A mismatch of name or matrix is NAMED in the note — silence is indistinguishable from "we did not look". The rule is a table here so it can be tested without KOMPAS.
+/// <remarks>INVARIANT: ONLY THE SOURCE FILE decides the refusal — the only signal MEASURED live and not
+/// changing by itself. The name (API5 <c>ksPart.name</c> vs API7 <c>IPart7.Name</c>, never compared live)
+/// and the placement matrix (MUTABLE state; the <c>GetSummMatrix</c> layout is neither documented nor
+/// measured) are NOTES. A mismatch of either is NAMED in the note — silence is indistinguishable from "we
+/// did not look".
 /// History: docs/decisions/assembly.md#identity</remarks>
 public static class ComponentIdentity
 {
@@ -61,8 +57,8 @@ public static class ComponentIdentity
 
         if (source == ComponentIdentitySignal.Matches)
         {
-            // A source match confirms the address. A name or matrix mismatch does NOT drive the refusal,
-            // but if present it is stated honestly, together with the reason.
+            // A source match confirms the address; a name or matrix mismatch does NOT drive the refusal,
+            // but is stated honestly if present.
             var secondaryDiffers = name == ComponentIdentitySignal.Differs
                 || placement == ComponentIdentitySignal.Differs;
             return new ComponentIdentityVerdict(true,

@@ -4,11 +4,11 @@ using System.Text.Json.Nodes;
 
 namespace KompasMcp.Contracts.Ipc;
 
-/// <summary>Length-prefixed frame reader/writer over an arbitrary duplex stream. Shared by Host and
-/// Worker so the two ends cannot disagree about where a frame stops.</summary>
-/// <remarks>The reader is deliberately allocation-light and strict: an oversized length prefix aborts the
-/// connection rather than buffering 4 GiB, and a truncated frame raises rather than returning a
-/// half-parsed object. A peer that dies mid-frame must not be able to make us invent a response.</remarks>
+/// <summary>Length-prefixed frame reader/writer over an arbitrary duplex stream. Shared by Host and Worker so the two
+/// ends cannot disagree about where a frame stops.</summary> <remarks>The reader is deliberately allocation-light and
+/// strict: an oversized length prefix aborts the connection rather than buffering 4 GiB, and a truncated frame raises
+/// rather than returning a half-parsed object. A peer that dies mid-frame must not be able to make us invent a
+/// response.</remarks>
 public static class IpcChannel
 {
     /// <summary>Read one frame, or null when the peer closed the pipe cleanly at a frame boundary.</summary>
@@ -51,7 +51,7 @@ public static class IpcChannel
 
     // INVARIANT: request/response over a shared stream belongs to IpcRequestChannel, which owns the
     // single reader and routes answers by request id; a per-caller read loop here lets two callers
-    // interleave their bytes and corrupts the stream (MEASURED 18.09.2026).
+    // interleave their bytes and corrupts the stream.
     // History: docs/decisions/contracts.md#ipc-read-loop
 
     private static async ValueTask<bool> ReadExactAsync(Stream stream, Memory<byte> buffer, CancellationToken cancellationToken)

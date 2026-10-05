@@ -1,21 +1,20 @@
 namespace KompasMcp.Contracts;
 
 /// <summary>Mate-domain contracts — block C2 (profile <c>mates-minimal-v1</c>, modes <c>MATE-01…MATE-06</c>).</summary>
-/// <remarks>INVARIANT: mates use the documented API7 path: <c>IPart7.MateConstraints</c> → <c>IMateConstraints3D.Add(MateConstraintType)</c> →
-/// <c>BaseObject1</c>/<c>BaseObject2</c> → <c>Update()</c>; <c>ksDocument3D.AddMateConstraint</c> returned <c>False</c> on documented-path faces, cause not established.
-/// History: docs/decisions/contracts.md#mates-route
-/// INVARIANT: a mate is addressed by "component + face number": the face comes from the documented <c>ksPart.BodyCollection() → ksBody.FaceCollection()</c>
-/// (<c>kspart_bodycollection.html</c>) and moves into API7 as <c>IModelObject</c>; <see cref="ComponentRowDto.BodyCount"/>/<see cref="ComponentRowDto.FaceCount"/>
-/// distinguish "component inserted" from "empty component inserted". INVARIANT: the mate type is passed by NAME, not number; an unknown name is rejected,
-/// not replaced by the nearest known one.</remarks>
+/// <remarks>INVARIANT: mates use the documented API7 path: <c>IPart7.MateConstraints</c> →
+/// <c>IMateConstraints3D.Add(MateConstraintType)</c> → <c>BaseObject1</c>/<c>BaseObject2</c> → <c>Update()</c>.
+/// INVARIANT: a mate is addressed by "component + face number": the face comes from the documented
+/// <c>ksPart.BodyCollection() → ksBody.FaceCollection()</c> (<c>kspart_bodycollection.html</c>) and moves into API7 as
+/// <c>IModelObject</c>. INVARIANT: the mate type is passed by NAME, not number; an unknown name is rejected. History:
+/// docs/decisions/contracts.md#mates-route</remarks>
 public sealed record CreateMateCommand
 {
     public required string DocumentId { get; init; }
 
     public required long ExpectedRevision { get; init; }
 
-    /// <summary>Mate type by name: <c>coincidence</c>, <c>parallel</c>, <c>perpendicular</c>,
-    /// <c>tangency</c>, <c>concentric</c>, <c>distance</c>, <c>angle</c>.</summary>
+    /// <summary>Mate type by name: <c>coincidence</c>, <c>parallel</c>, <c>perpendicular</c>, <c>tangency</c>,
+    /// <c>concentric</c>, <c>distance</c>, <c>angle</c>.</summary>
     public required string ConstraintType { get; init; }
 
     /// <summary>Reference to the first component (from <c>kompas_list_components</c>).</summary>
@@ -28,12 +27,12 @@ public sealed record CreateMateCommand
 
     public required int SecondFaceIndex { get; init; }
 
-    /// <summary>Direction-alignment variant by name: <c>opposite</c>, <c>cooriented</c>, <c>closest</c>.
-    /// <c>null</c> keeps the documented KOMPAS default.</summary>
+    /// <summary>Direction-alignment variant by name: <c>opposite</c>, <c>cooriented</c>, <c>closest</c>. <c>null</c>
+    /// keeps the documented KOMPAS default.</summary>
     public string? Alignment { get; init; }
 
-    /// <summary>Constraint parameter (distance or angle) — <c>IMateConstraint3D.ParamValue</c>. Not set for
-    /// mates without a parameter: <c>null</c> means "not set", not zero.</summary>
+    /// <summary>Constraint parameter (distance or angle) — <c>IMateConstraint3D.ParamValue</c>. Not set for mates
+    /// without a parameter: <c>null</c> means "not set", not zero.</summary>
     public double? ParamValue { get; init; }
 }
 
@@ -78,8 +77,8 @@ public sealed record DeleteMateCommand
     public required string MateRef { get; init; }
 }
 
-/// <summary>One mate row. An empty field means "not read", not zero: silence of the instrument is never
-/// turned into a value.</summary>
+/// <summary>One mate row. An empty field means "not read", not zero: silence of the instrument is never turned into a
+/// value.</summary>
 public sealed record MateRowDto
 {
     public required string MateRef { get; init; }

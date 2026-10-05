@@ -193,11 +193,9 @@ public sealed class HostOptions
 
 /// <summary>JSONL host log. stdout is reserved for MCP frames, so nothing here is ever written there.</summary>
 /// <remarks>INVARIANT: one <c>Write</c> per line, under the named cross-process lock. A
-/// <c>StreamWriter</c> encodes into a stream that slices bytes by its own buffer, so lines from two
-/// processes could interleave (MEASURED 21.09.2026: 35994 lines, one unparsable 14-byte tail).
-/// MEASURED (probe <c>scratch/_append_probe</c>): <c>FileMode.Append</c> with a single <c>Write</c>
-/// still LOSES records with two writers (381/400) — the handle remembers end-of-file at open. Under
-/// the lock: 400/400 on two processes, 1200/1200 on four.
+/// <c>StreamWriter</c> slices bytes by its own buffer, so lines from two processes could interleave.
+/// MEASURED: <c>FileMode.Append</c> with a single <c>Write</c> still loses records with two writers
+/// (the handle remembers end-of-file at open); only the lock keeps them.
 /// History: docs/decisions/host.md#hostlog-locking</remarks>
 public sealed class HostLog : IDisposable
 {
@@ -242,7 +240,7 @@ public sealed class HostLog : IDisposable
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
         {
             // The Host log is optional (the OPERATIONS journal is mandatory, see Program), but its
-            // absence must be named aloud rather than turned into an empty file.
+            // absence is named aloud rather than turned into an empty file.
             var reason = $"журнал Хоста '{path}' не открывается: {ex.Message}";
             StderrWriter.WriteLine(reason);
             return new HostLog(null, null, reason);
@@ -297,7 +295,7 @@ public sealed class HostLog : IDisposable
             }
             catch (Exception ex) when (ex is ObjectDisposedException or IOException)
             {
-                // Already disposed by Dispose(); a trailing line is not worth a crash.
+                // Already disposed; a trailing line is not worth a crash.
             }
         }
     }

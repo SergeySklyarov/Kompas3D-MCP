@@ -4,10 +4,9 @@ using Microsoft.Extensions.Logging;
 namespace KompasMcp.Host;
 
 /// <summary>Routes framework and MCP-SDK log records into the Host's JSONL log.</summary>
-/// <remarks>INVARIANT: diagnostics never reach stdout — it is the MCP transport, and the default
-/// console logger writes there, so one SDK warning would corrupt the protocol stream for every
-/// client. Warnings and above also go to stderr. Repeated messages are rate-limited, because a
-/// broken tool called in a loop must not fill the disk at call rate.
+/// <remarks>INVARIANT: diagnostics never reach stdout — it is the MCP transport, so one SDK warning
+/// would corrupt the protocol stream. Warnings and above also go to stderr. Repeated messages are
+/// rate-limited, so a broken tool in a loop cannot fill the disk.
 /// History: docs/decisions/host.md#hostlogprovider</remarks>
 public sealed class HostLogProvider : ILoggerProvider
 {
@@ -35,7 +34,7 @@ public sealed class HostLogProvider : ILoggerProvider
             category,
             exception_type = exception?.GetType().Name,
             exception_message = exception?.Message,
-            // The top frames are what identifies the fault; the full log file keeps them readable.
+            // The top frames identify the fault; the full log keeps them readable.
             stack_head = Head(exception?.StackTrace),
         });
 
@@ -105,7 +104,7 @@ public sealed class HostLogProvider : ILoggerProvider
             }
             catch (ObjectDisposedException)
             {
-                // The host is shutting down; losing a trailing log line is correct behaviour.
+                // The host is shutting down; a lost trailing log line is fine.
             }
         }
     }

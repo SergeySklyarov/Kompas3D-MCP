@@ -7,11 +7,11 @@ using Xunit;
 namespace KompasMcp.Unit;
 
 /// <summary>The single-reader contract of the Host-Worker pipe.</summary>
-/// <remarks>INVARIANT: one serialised reader owns the stream, so concurrent tool calls each get their own
-/// answer. MEASURED: before 18.09.2026 every caller ran its own read loop, so two in-flight calls
-/// interleaved their bytes and produced a bad frame length and a JSON parse failure. The fake Worker below
-/// answers a "slow" request LATER than a "fast" one, so answers come back in reverse order — the cheapest
-/// deterministic shape of the failure. History: docs/decisions/tests.md#ipc-channel</remarks>
+/// <remarks>INVARIANT: one serialised reader owns the stream, so concurrent tool calls each get their own answer.
+/// MEASURED: every caller used to run its own read loop, so two in-flight calls interleaved their bytes and
+/// produced a bad frame length and a JSON parse failure. The fake Worker below answers a "slow" request LATER
+/// than a "fast" one, so answers come back in reverse order.
+/// History: docs/decisions/tests.md#ipc-channel-2</remarks>
 public class IpcRequestChannelTests
 {
     private static async Task<(NamedPipeServerStream Server, NamedPipeClientStream Client)> ConnectAsync()
@@ -123,9 +123,9 @@ public class IpcRequestChannelTests
     }
 
     /// <summary>INVARIANT: a client cancel AFTER a mutation frame was written is NOT "the command was not sent".</summary>
-    /// <remarks>MEASURED (FIX H1, review 05.10.2026): a client that believed "cancelled before dispatch"
-    /// repeated the mutation with a NEW operation_id and it applied twice.
-    /// History: docs/decisions/tests.md#ipc-channel</remarks>
+    /// <remarks>MEASURED (FIX H1): a client that believed "cancelled before dispatch" repeated the mutation with
+    /// a NEW operation_id and it applied twice.
+    /// History: docs/decisions/tests.md#ipc-channel-2</remarks>
     [Fact]
     public async Task ClientCancelsAfterTheFrameWasWritten_MutationIsOutcomeUnknownNotCancelled()
     {
@@ -134,7 +134,7 @@ public class IpcRequestChannelTests
         using var workerStop = new CancellationTokenSource();
 
         // The peer receives the frame and does NOT answer: the command definitely left, but its outcome is
-        // unknown to anyone — the state the old code called "cancelled before dispatch".
+        // unknown — the state the old code called "cancelled before dispatch".
         var received = await StartSilentWorkerAsync(server, workerStop.Token);
 
         try
@@ -192,8 +192,8 @@ public class IpcRequestChannelTests
         }
     }
 
-    /// <summary>INVARIANT: a cancel BEFORE the frame is written stays a cancel — the command did not reach
-    /// the Worker, and this is the only case where "cancelled" is a confirmed state.</summary>
+    /// <summary>INVARIANT: a cancel BEFORE the frame is written stays a cancel — the command did not reach the
+    /// Worker, and this is the only case where "cancelled" is a confirmed state.</summary>
     [Fact]
     public async Task ClientCancelsBeforeTheFrameIsWritten_CancellationStaysACancellation()
     {
@@ -250,10 +250,9 @@ public class IpcRequestChannelTests
         using var workerStop = new CancellationTokenSource();
         var received = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        // A peer that reads the request but never answers. The request is then genuinely in flight
-        // and already written, so the failure cannot be blamed on the write: the reader is the only
-        // party that can observe the end of the stream, so the reader is the party that must fail
-        // every waiter. Otherwise a dead Worker looks exactly like a wedged one.
+        // A peer that reads the request but never answers. The request is genuinely in flight and already
+        // written, so the reader is the only party that can observe the end of the stream and must fail every
+        // waiter — otherwise a dead Worker looks exactly like a wedged one.
         var silentWorker = Task.Run(async () =>
         {
             try

@@ -3,11 +3,10 @@ using KompasMcp.Contracts;
 namespace KompasMcp.Host;
 
 /// <summary>The facts the "may this session be released" decision depends on.</summary>
-/// <remarks>A record so the decision is a PURE function: a table-driven test needs neither KOMPAS, nor a Worker, nor a live Host, and the rule is not scattered across <see cref="HostSession.ReleaseAsync"/>.</remarks>
-/// <param name="WorkerStarted">Whether the Worker ran in this session (there may have been no COM session at all).</param>
-/// <param name="CanSendWithoutRestart">Whether the channel is alive enough to request the inventory WITHOUT restarting the Worker. False here is not "no edits" but "the inventory cannot be obtained".</param>
-/// <param name="DocumentStateUnknown">Sticky flag: the Worker was lost or restarted, and what became of its documents is unknown.</param>
-/// <param name="AcknowledgeUnknownDocumentState">The client EXPLICITLY accepted the unknown document state.</param>
+/// <param name="WorkerStarted">Whether the Worker ran in this session.</param>
+/// <param name="CanSendWithoutRestart">Whether the channel can read the inventory without a Worker restart.</param>
+/// <param name="DocumentStateUnknown">Sticky: the Worker was lost or restarted; its documents' fate is unknown.</param>
+/// <param name="AcknowledgeUnknownDocumentState">The client EXPLICITLY accepted the unknown state.</param>
 /// <param name="InventoryRead">Whether the document inventory was read.</param>
 /// <param name="DirtyCount">How many documents with unsaved edits were listed.</param>
 public sealed record ReleaseFacts(
@@ -23,26 +22,22 @@ public sealed record ReleaseDecision(bool Proceed, string? RefusalCode, string? 
 
 /// <summary>The "may this session be released" decision — a PURE function of <see cref="ReleaseFacts"/>.</summary>
 /// <remarks>The order of the checks is the meaning. The sticky unknown-state flag comes FIRST: after a
-/// channel break any CAD call raises a NEW Worker with no documents, whose inventory is empty and honest
-/// — empty precisely because the documents were LOST, not because there were no edits; checking "is the
-/// channel alive" and "is the inventory empty" first would skip exactly the state the flag exists for
-/// (defect H3, review 05.10.2026). The only way to release is an explicit
-/// <c>acknowledge_unknown_document_state: true</c>; acknowledgement also lifts the CHANNEL refusals (steps 3 and 4).
+/// channel break any CAD call raises a NEW Worker whose inventory is empty and honest — empty because
+/// the documents were LOST, not because there were no edits. Release needs an explicit
+/// <c>acknowledge_unknown_document_state: true</c>, which also lifts the CHANNEL refusals.
 /// History: docs/decisions/host.md#release-guard</remarks>
 public static class ReleaseGuard
 {
     public static ReleaseDecision Decide(ReleaseFacts facts)
     {
-        // Acknowledgement of the unknown state also lifts the channel refusal: the inventory exists to
-        // LEARN about unsaved edits, but if the client has already accepted that the state is UNKNOWN,
-        // the inventory adds nothing (an empty inventory of a new Worker and no inventory are the same
-        // to it). Steps 3 and 4 are skipped when acknowledged; step 5 is NOT — "I do not know" and "I
-        // know there are edits" are different states, and known unsaved documents are cured by saving.
+        // Acknowledgement also lifts the channel refusal: if the client accepted that the state is
+        // UNKNOWN, the inventory adds nothing. Steps 3 and 4 are skipped when acknowledged; step 5 is
+        // NOT — "I do not know" and "I know there are edits" are different states.
         // History: docs/decisions/host.md#release-guard
         var unknownAcknowledged = facts.DocumentStateUnknown && facts.AcknowledgeUnknownDocumentState;
 
-        // 1. The sticky flag comes first. The inventory after a restart is empty and "honest", so
-        //    checking it before this flag would mistake document loss for an absence of edits.
+        // 1. The sticky flag comes first: after a restart the inventory is empty and "honest", so
+        //    checking it earlier would mistake document loss for an absence of edits.
         if (facts.DocumentStateUnknown && !facts.AcknowledgeUnknownDocumentState)
         {
             return new ReleaseDecision(
@@ -56,15 +51,15 @@ public static class ReleaseGuard
                 + "acknowledge_unknown_document_state=true.");
         }
 
-        // 2. The Worker never ran: no COM session and no documents. There is nobody to ask for the inventory.
+        // 2. The Worker never ran: no COM session and no documents, so nobody to ask.
         if (!facts.WorkerStarted)
         {
             return new ReleaseDecision(true, null, null);
         }
 
-        // 3. The inventory is NOT obtained by restarting the Worker. A broken channel means the
-        //    inventory is absent, not that there are no edits; a restart for the inventory would lose
-        //    the documents and return an empty list. Acknowledged unknown state skips this step.
+        // 3. The inventory is NOT obtained by restarting the Worker: a broken channel means the
+        //    inventory is absent, not that there are no edits, and a restart would lose the documents.
+        //    Acknowledged unknown state skips this step.
         if (!facts.CanSendWithoutRestart && !unknownAcknowledged)
         {
             return new ReleaseDecision(

@@ -9,22 +9,19 @@ namespace KompasMcp.Host;
 
 /// <summary>Owns the Worker process and the pipe to it.</summary>
 /// <remarks>The Worker is a child process by design (spec 1.5): when a COM call wedges, this process
-/// keeps answering <c>kompas_health</c> and <c>kompas_capabilities</c> from the journal and queue
-/// state. Two consequences are enforced: a command is dispatched to the Worker <b>at most once</b>
-/// — a broken pipe or an expired budget means an unknown outcome marked for reconciliation (spec 1.8);
-/// restarting the Worker is allowed, killing KOMPAS is not. The pipe is read by exactly one party —
-/// the <see cref="IpcRequestChannel"/> created per connection — which routes answers by request id.
-/// History: docs/decisions/host.md#worker-child-process</remarks>
+/// keeps answering <c>kompas_health</c> and <c>kompas_capabilities</c>. Two consequences are enforced:
+/// a command is dispatched <b>at most once</b> (a broken pipe or expired budget means an unknown
+/// outcome marked for reconciliation, spec 1.8); restarting the Worker is allowed, killing KOMPAS is
+/// not. History: docs/decisions/host.md#worker-child-process</remarks>
 public sealed class WorkerSupervisor : IAsyncDisposable
 {
     private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(30);
 
     /// <summary>How long to wait for the Worker's GRACEFUL exit before taking the process down.</summary>
-    /// <remarks>MEASURED 04.10.2026 on the session-handover run: with a 5 s window the Worker did not
-    /// finish the documented `KompasObject.Quit()` route for its own KOMPAS instance and was taken
-    /// down by kill (`kill_used: true`). Killing is the WORSE of the two routes: it denies KOMPAS a
-    /// graceful shutdown and may leave the instance running. The window is 20 s — the wait is paid
-    /// once, on an explicit release, the kill cost on every handover.
+    /// <remarks>MEASURED: with a 5 s window the Worker did not finish the documented
+    /// `KompasObject.Quit()` route for its own KOMPAS instance and was taken down by kill
+    /// (`kill_used: true`). Killing is the WORSE route: it denies KOMPAS a graceful shutdown and may
+    /// leave the instance running. The window is 20 s.
     /// History: docs/decisions/host.md#shutdown-window</remarks>
     private const int GracefulShutdownWindowMs = 20_000;
 
@@ -46,19 +43,17 @@ public sealed class WorkerSupervisor : IAsyncDisposable
     public int? WorkerProcessId => TryProcessId();
 
     /// <summary>Whether the Worker process ran in this session.</summary>
-    /// <remarks>"Channel created" and "Worker ran" are different claims, and the difference matters to
-    /// session release: if the process never ran, no COM session exists and there is nobody to ask for
-    /// the document inventory — and starting a Worker just for the inventory would spawn a CAD channel
-    /// exactly when the session is being handed over.</remarks>
+    /// <remarks>"Channel created" and "Worker ran" are different claims: if the process never ran, no
+    /// COM session exists and nobody can be asked for the inventory — and starting a Worker just for
+    /// the inventory would spawn a CAD channel exactly when the session is handed over.</remarks>
     public bool HasStarted { get; private set; }
 
     /// <summary>STICKY flag: "the session's document state is UNKNOWN".</summary>
     /// <remarks>Set as soon as a Worker that ran is lost or restarted (<see cref="MarkBroken"/>, process
     /// exit, restart in <see cref="EnsureStartedAsync"/>), cleared only by a release acknowledging the
-    /// unknown state. Needed even though the channel is checked: fix H3 (05.10.2026) closed the direct bypass
-    /// of <c>DOCUMENT_DIRTY</c>, but a workaround remained — a mutation overruns the budget, the channel is
-    /// marked broken, the client calls ANY CAD tool, and <see cref="EnsureStartedAsync"/> raises a NEW Worker
-    /// with no documents, so the next <c>kompas_release_session</c> sees a live channel, an empty inventory, and passes.
+    /// unknown state. Needed even though the channel is checked: a mutation overruns the budget, the
+    /// channel is marked broken, the client calls ANY CAD tool, a NEW Worker with no documents is raised,
+    /// and the next release sees a live channel and passes.
     /// History: docs/decisions/host.md#sticky-unknown</remarks>
     public bool DocumentStateUnknown { get; private set; }
 
@@ -66,9 +61,8 @@ public sealed class WorkerSupervisor : IAsyncDisposable
     public string? DocumentStateUnknownReason { get; private set; }
 
     /// <summary>How many times the Worker restarted in this session (the first start does not count).</summary>
-    /// <remarks>Needed by the CAD-call response: if the Worker restarted during the call, previous
-    /// <c>document_id</c> values are invalid, and this must be told to the client rather than inferred
-    /// by it from "the tool answered successfully".</remarks>
+    /// <remarks>Needed by the CAD-call response: after a restart, previous <c>document_id</c> values are
+    /// invalid, and this must be told to the client, not inferred from "the tool answered".</remarks>
     public int RestartCount { get; private set; }
 
     /// <summary>Mark the document state unknown. A repeat call keeps the first reason.</summary>
@@ -123,8 +117,8 @@ public sealed class WorkerSupervisor : IAsyncDisposable
 
             // INVARIANT: restarting a Worker that ran is a LOSS of document state. A new Worker knows
             // none of the previous documents: its inventory is empty regardless of what was open and
-            // unsaved, and release refuses until the flag is cleared explicitly (defect H3, review
-            // 05.10.2026). History: docs/decisions/host.md#restart-state-loss
+            // unsaved, and release refuses until the flag is cleared explicitly.
+            // History: docs/decisions/host.md#restart-state-loss
             if (HasStarted)
             {
                 RestartCount++;
@@ -143,14 +137,10 @@ public sealed class WorkerSupervisor : IAsyncDisposable
             }
             catch (TimeoutException)
             {
-                // The pipe object exists but was never connected. Keep no reference to it: the next
-                // EnsureStartedAsync calls StopAsync first, and writing a shutdown frame into a never-connected
-                // pipe raises InvalidOperationException from PipeStream.CheckWriteOperations. That exception
-                // matched neither IOException nor KompasContractException, so it escaped the invoker entirely
-                // ("tool call escaped the invoker") and replaced the honest WORKER_UNRESPONSIVE with a crash.
-                // Measured 18.09.2026: a Host whose Worker could not start answered kompas_health with
-                // status=failed and then failed kompas_connect with VERIFICATION_FAILED, hiding the real cause
-                // (no KompasMcp.Worker.dll next to the apphost).
+                // The pipe object exists but was never connected: writing into a never-connected pipe
+                // raises InvalidOperationException from PipeStream.CheckWriteOperations, which escaped
+                // the invoker and replaced the honest WORKER_UNRESPONSIVE with a crash.
+                // History: docs/decisions/host.md#never-connected-pipe
                 pipe.Dispose();
                 MarkBroken();
                 throw new KompasContractException(
@@ -185,12 +175,10 @@ public sealed class WorkerSupervisor : IAsyncDisposable
             Environment = { ["DOTNET_NOLOGO"] = "1", ["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1" },
         };
 
-        // INVARIANT: the pipe name is passed as an argument LIST, not a glued string. The name
-        // contains `Environment.UserName`; in `--pipe kompas-mcp-ivan petrov-…` the space splits it,
-        // the Worker gets a truncated name, never connects, and any CAD call ends in
-        // WORKER_UNRESPONSIVE for a reason not named in the answer (defect M12, review 05.10.2026).
-        // ArgumentList escapes by itself; the Worker log path uses the same list, as it may also
-        // contain a space. History: docs/decisions/host.md#pipe-name-args
+        // INVARIANT: the pipe name is passed as an argument LIST, not a glued string: the name contains
+        // `Environment.UserName`, and in `--pipe kompas-mcp-ivan petrov-…` the space splits it, so the
+        // Worker gets a truncated name and never connects (WORKER_UNRESPONSIVE). ArgumentList escapes by
+        // itself; the Worker log path uses the same list. History: docs/decisions/host.md#pipe-name-args
         startInfo.ArgumentList.Add("--pipe");
         startInfo.ArgumentList.Add(PipeName);
         startInfo.ArgumentList.Add("--copies");
@@ -230,8 +218,8 @@ public sealed class WorkerSupervisor : IAsyncDisposable
         HasStarted = true;
 
         // INVARIANT: without EnableRaisingEvents the event NEVER fires — a subscription without the
-        // flag is dead control that looks alive (defect L2, review 05.10.2026). The flag is set BEFORE
-        // the subscription. History: docs/decisions/host.md#exited-events
+        // flag is dead control that looks alive. The flag is set BEFORE the subscription.
+        // History: docs/decisions/host.md#exited-events
         _process.EnableRaisingEvents = true;
         _process.Exited += (_, _) =>
         {
@@ -273,13 +261,12 @@ public sealed class WorkerSupervisor : IAsyncDisposable
         _channel is { IsBroken: false } && _pipe is { IsConnected: true } && _process is { HasExited: false };
 
     /// <summary>Send a command WITHOUT raising a new Worker on a broken channel.</summary>
-    /// <remarks>Why a separate method: the ordinary <see cref="SendAsync"/> calls
-    /// <see cref="EnsureStartedAsync"/>, which on a broken channel stops the old Worker (20 s wait, then
-    /// kill) and raises a NEW one — for the inventory the worst outcome: the new Worker knows no documents,
-    /// the inventory is empty, <c>dirty=0</c>, and release passes although the model state is unknown
-    /// (defect H3, review 05.10.2026). It also kills a process possibly inside a COM call.
+    /// <remarks>Why a separate method: <see cref="SendAsync"/> calls <see cref="EnsureStartedAsync"/>,
+    /// which on a broken channel stops the old Worker and raises a NEW one with no documents — an empty
+    /// inventory that would let release pass although the model state is unknown.
     /// History: docs/decisions/host.md#inventory-restart</remarks>
-    /// <returns>null when the channel is broken or the Worker never ran: the caller must call the document state UNKNOWN, not "no edits".</returns>
+    /// <returns>null when the channel is broken or the Worker never ran: the document state is UNKNOWN,
+    /// not "no edits".</returns>
     public async Task<IpcFrame?> SendWithoutRestartAsync(string command, JsonNode? payload, TimeSpan timeout, CancellationToken cancellationToken)
     {
         if (!CanSendWithoutRestart)
@@ -339,10 +326,9 @@ public sealed class WorkerSupervisor : IAsyncDisposable
         var pipe = _pipe;
         _pipe = null;
 
-        // A broken channel is a LOSS of contact with the documents, not "no edits". The Worker may
-        // have been inside a COM call when the break happened: only the model knows what it applied.
-        // The flag is therefore set BEFORE anyone can ask for the inventory and stays until an
-        // explicit client acknowledgement.
+        // A broken channel is a LOSS of contact with the documents, not "no edits": the Worker may have
+        // been inside a COM call. The flag is set BEFORE anyone can ask for the inventory and stays
+        // until an explicit client acknowledgement.
         if (HasStarted)
         {
             MarkDocumentStateUnknown(
@@ -407,10 +393,9 @@ public sealed class WorkerSupervisor : IAsyncDisposable
 
     /// <summary>The outcome of stopping the Worker: whether the process is confirmed gone.</summary>
     /// <remarks>"Stop performed" and "the Worker no longer runs COM or writes to the journal" are
-    /// different claims. Session release must rest on the SECOND, else the next owner would start
-    /// working while the old Worker is still inside a COM call. <see cref="KillUsed"/> is part of the
-    /// answer, not an implementation detail: a process taken down by kill may leave documents unclosed,
-    /// and that must be named, not hidden.</remarks>
+    /// different claims. Session release must rest on the SECOND, else the next owner would start while
+    /// the old Worker is inside a COM call. <see cref="KillUsed"/> is part of the answer: a process
+    /// taken down by kill may leave documents unclosed, and that must be named.</remarks>
     public sealed record WorkerStopResult(int? Pid, bool Confirmed, int? ExitCode, bool KillUsed, string? Problem);
 
     /// <summary>Stop the Worker and CONFIRM that the process is gone.</summary>
@@ -488,9 +473,8 @@ public sealed class WorkerSupervisor : IAsyncDisposable
             {
                 try
                 {
-                    // A pipe object that exists but never connected is not a pipe that can carry a
-                    // frame. Writing into it throws InvalidOperationException, which used to escape
-                    // this best-effort block and abort the whole tool call. See EnsureStartedAsync.
+                    // A pipe object that exists but never connected cannot carry a frame: writing into
+                    // it throws InvalidOperationException. See EnsureStartedAsync.
                     if (pipe.IsConnected)
                     {
                         await channel.WriteAsync(new IpcFrame
@@ -530,14 +514,11 @@ public sealed class WorkerSupervisor : IAsyncDisposable
             return false;
         }
 
-        // INVARIANT: the process tree is NOT killed. A launched KOMPAS instance is spawned by the Worker
-        // through COM, i.e. it is its CHILD, so `Kill(entireProcessTree: true)` would take KOMPAS down too —
-        // exactly what the order forbids. The documented way to end a launched instance is
-        // `KompasObject.Quit()` from the Worker's shutdown frames
-        // (<https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kompasobject_quit.html>); killing is a last resort for
-        // an UNRESPONSIVE Worker. INVARIANT: the exit wait is ASYNCHRONOUS — a synchronous
-        // `_process.WaitForExit(20_000)` under `_restartGate` blocked a pool thread and every parallel call
-        // waiting on the gate for up to 20 s (defect L3, review 05.10.2026). History: docs/decisions/host.md#no-tree-kill
+        // INVARIANT: the process tree is NOT killed — a launched KOMPAS instance is a CHILD of the
+        // Worker (spawned through COM), so `Kill(entireProcessTree: true)` would take KOMPAS down too;
+        // end it with `KompasObject.Quit()` from the shutdown frames. INVARIANT: the exit wait is
+        // ASYNCHRONOUS — a synchronous `_process.WaitForExit(20_000)` under `_restartGate` blocked a
+        // pool thread and every parallel call. History: docs/decisions/host.md#no-tree-kill
         var exited = await WaitForExitAsync(_process, GracefulShutdownWindowMs).ConfigureAwait(false);
         var killUsed = false;
         if (!exited)

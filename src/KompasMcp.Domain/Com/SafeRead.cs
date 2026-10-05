@@ -3,10 +3,9 @@ using System.Runtime.InteropServices;
 namespace KompasMcp.Domain.Com;
 
 /// <summary>Result of reading a value with an EXPLICIT distinction between "read" and "not read".</summary>
-/// <remarks>Exists because the former helper returned <c>default</c>, substituting a KNOWN value for an
-/// UNKNOWN one: an unread <c>bool</c> became <c>false</c> (and was later boxed into <c>bool?</c> as "read
-/// false"), an unread <c>int</c> became 0, an unread enum its first value. MEASURED 05.10.2026: an unread
-/// component fixing was indistinguishable from an honestly read "not fixed".</remarks>
+/// <remarks>MEASURED: an unread component fixing was indistinguishable from an honestly read "not fixed".
+/// A read that fails must report "not read", never a substituted <c>default</c> (an unread <c>bool</c> as
+/// <c>false</c>, an unread <c>int</c> as 0, an unread enum as its first value).</remarks>
 public readonly record struct ReadResult<T>(bool Ok, T Value);
 
 /// <summary>Safe reading of a COM value: an exception yields "NOT READ", not a substituted value. Lives in
@@ -17,7 +16,6 @@ public static class SafeRead
     private static bool Recoverable(Exception ex) =>
         ex is COMException or InvalidCastException or InvalidOperationException;
 
-    /// <summary>Read a value, keeping the flag that the read succeeded.</summary>
     public static ReadResult<T> TryRead<T>(Func<T> read)
     {
         try
@@ -55,7 +53,6 @@ public static class SafeRead
     public static string EnumName<T>(Func<T> read) where T : struct, Enum =>
         TryRead(read) is { Ok: true } result ? result.Value.ToString() : "unread";
 
-    /// <summary>An already-nullable enum value: <c>null</c> — NOT read.</summary>
     public static T? EnumOrNull<T>(Func<T?> read) where T : struct, Enum =>
         TryRead(read) is { Ok: true } result ? result.Value : null;
 }

@@ -1,14 +1,14 @@
 namespace KompasMcp.Contracts;
 
-/// <summary>Version of the public tool/data contract. Bumped only with a documented migration.
-/// Named in the plural so it cannot collide with the envelope's own <c>contract_version</c> member.</summary>
+/// <summary>Version of the public tool/data contract. Bumped only with a documented migration. Named in the plural so
+/// it cannot collide with the envelope's own <c>contract_version</c> member.</summary>
 public static class ContractVersions
 {
     public const string Current = "1.0";
 }
 
-/// <summary>Operation lifecycle (spec 1.8). <see cref="OutcomeUnknown"/> is a terminal-but-unresolved
-/// state: the mutation may or may not have been applied and MUST NOT be retried blindly.</summary>
+/// <summary>Operation lifecycle (spec 1.8). <see cref="OutcomeUnknown"/> is a terminal-but-unresolved state: the
+/// mutation may or may not have been applied and MUST NOT be retried blindly.</summary>
 public enum OperationStatus
 {
     Queued,
@@ -19,8 +19,8 @@ public enum OperationStatus
     OutcomeUnknown,
 }
 
-/// <summary>What evidence backs a result. Higher levels include the guarantees of lower ones.
-/// A tool must never report a level it did not actually reach (spec 1.11, 3.3).</summary>
+/// <summary>What evidence backs a result. Higher levels include the guarantees of lower ones. A tool must never report
+/// a level it did not actually reach (spec 1.11, 3.3).</summary>
 public enum VerificationLevel
 {
     /// <summary>Nothing beyond "the call returned" was checked.</summary>
@@ -48,9 +48,9 @@ public enum VerificationLevel
     GeometryRoundtripChecked = 7,
 }
 
-/// <summary>Machine-actionable advice about repeating a call (spec 2.2). Deliberately not a single
-/// "retriable" flag: "retry with the same operation_id" and "re-acquire references first"
-/// are different failure modes with different consequences.</summary>
+/// <summary>Machine-actionable advice about repeating a call (spec 2.2). Deliberately not a single "retriable" flag:
+/// "retry with the same operation_id" and "re-acquire references first" are different failure modes with different
+/// consequences.</summary>
 public enum RetryPolicy
 {
     /// <summary>Repeating is never correct.</summary>
@@ -118,13 +118,12 @@ public enum ExternalChangeDetection
     Unavailable,
 }
 
-/// <summary>What exactly a pattern copies (docs/05 SM-18/SM-19; user help <c>48_3_1_vibor_kopiruemih_obtktov</c>).</summary>
-/// <remarks>DOC: copytype.html — the value maps to the numeric <c>ksObj3dTypeEnum</c>, and that mapping is
-/// published by the SDK page, not inferred: operations — <c>o3d_meshCopy=35</c> (<c>o3d_circularCopy=36</c>),
-/// bodies — <c>o3d_BodiesMeshCopy=528</c> (<c>o3d_BodiesCircularCopy=529</c>).
-/// INVARIANT: the difference is substantive, not cosmetic — a pattern of OPERATIONS inherits the scope of
-/// the source operation and creates no new bodies (help <c>48_2_osobennoiti_postroeniy_massiviv_v_mnogotelnoy_detali</c>),
-/// while a pattern of BODIES creates body copies and the body count grows. Hence a separate mode, not a flag.</remarks>
+/// <summary>What exactly a pattern copies (docs/05 SM-18/SM-19; user help
+/// <c>48_3_1_vibor_kopiruemih_obtktov</c>).</summary> <remarks>DOC: <c>copytype.html</c> — the value maps to the
+/// numeric <c>ksObj3dTypeEnum</c>, published by the SDK page, not inferred: operations — <c>o3d_meshCopy=35</c>
+/// (<c>o3d_circularCopy=36</c>), bodies — <c>o3d_BodiesMeshCopy=528</c> (<c>o3d_BodiesCircularCopy=529</c>). INVARIANT:
+/// a pattern of OPERATIONS inherits the scope of the source operation and creates no new bodies, while a pattern of
+/// BODIES creates copies and the body count grows. Hence a separate mode, not a flag.</remarks>
 public enum PatternCopyKind
 {
     /// <summary>Operations are copied (faces and edges, or operations with parameters). No new bodies.</summary>
@@ -134,11 +133,10 @@ public enum PatternCopyKind
     Bodies,
 }
 
-/// <summary>What a mirror pattern reflects (docs/05 SM-23).</summary>
-/// <remarks>DOC: copytype.html — the mapping is published there: <c>o3d_mirrorOperation=48</c> is the
-/// "mirror pattern" «зеркальный массив» of the selected operations, <c>o3d_mirrorAllOperation=49</c> is
-/// «зеркально отразить все». Both operations produce <c>IMirrorPattern</c>; the second additionally answers
-/// <c>IChooseBodies7</c> (copytype.html: «Дополнительно имеет интерфейс выбора тел IChooseBodies7»).</remarks>
+/// <summary>What a mirror pattern reflects (docs/05 SM-23).</summary> <remarks>DOC: <c>copytype.html</c> —
+/// <c>o3d_mirrorOperation=48</c> is the "mirror pattern" «зеркальный массив» of the selected operations,
+/// <c>o3d_mirrorAllOperation=49</c> is «зеркально отразить все». Both produce <c>IMirrorPattern</c>; the second
+/// additionally answers <c>IChooseBodies7</c> («Дополнительно имеет интерфейс выбора тел IChooseBodies7»).</remarks>
 public enum PatternMirrorMode
 {
     /// <summary>Reflection of explicitly selected operations.</summary>

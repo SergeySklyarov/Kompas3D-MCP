@@ -8,13 +8,11 @@ using KompasMcp.Contracts.Ipc;
 
 namespace KompasMcp.Worker;
 
-/// <summary>The COM-owning process. It exists so a wedged KOMPAS call cannot take the MCP connection with
-/// it: the Host keeps answering status while this process sits inside a call (spec 1.5, 1.6).</summary>
-/// <remarks>Threading contract: <see cref="StaExecutor"/> runs one STA thread with a message pump and every
-/// command that touches KOMPAS is queued there, one at a time, including reads; pipe I/O runs on the thread
-/// pool, so <c>sys.ping</c> and <c>env.probe</c> keep being answered while the STA lane is busy — that is what
-/// lets the Host distinguish "Worker dead" from "KOMPAS busy"; a command whose budget expires is answered with
-/// OUTCOME_UNKNOWN and this process asks to be restarted.</remarks>
+/// <summary>The COM-owning process. It exists so a wedged KOMPAS call cannot take the MCP connection with it: the Host
+/// keeps answering status while this process sits inside a call (spec 1.5, 1.6).</summary> <remarks><see
+/// cref="StaExecutor"/> runs one STA thread with a message pump; every KOMPAS command is queued there one at a time,
+/// while pipe I/O runs on the thread pool so <c>sys.ping</c> and <c>env.probe</c> keep being answered — that is what
+/// lets the Host distinguish "Worker dead" from "KOMPAS busy".</remarks>
 public static class Program
 {
     public static int Main(string[] args)
@@ -82,13 +80,10 @@ public static class Program
         return 0;
     }
 
-    /// <summary>Serve EXACTLY ONE Host connection and exit when it ends.</summary>
-    /// <remarks>MEASURED 04.10.2026: previously a wait loop created a NEW pipe after the channel dropped, so
-    /// the Worker NEVER exited on Host disconnect — the Host then killed it (<c>kill_used: true</c>),
-    /// contradicting both the class contract and the release requirement "confirm the Worker no longer runs
-    /// COM". Exiting is safe: the Host stops the old process before starting a new one with the same pipe
-    /// name, and no route provides a second connection.
-    /// History: docs/decisions/worker-ipc.md#single-connection</remarks>
+    /// <summary>Serve EXACTLY ONE Host connection and exit when it ends.</summary> <remarks>MEASURED: a former wait
+    /// loop created a NEW pipe after the channel dropped, so the Worker NEVER exited on Host disconnect and the Host
+    /// killed it (<c>kill_used: true</c>), contradicting the release requirement "confirm the Worker no longer runs
+    /// COM". History: docs/decisions/worker-ipc.md#single-connection</remarks>
     private static async Task Serve(WorkerOptions options, CommandDispatcher session, WorkerLog log, CancellationToken cancellationToken)
     {
         {
@@ -142,17 +137,17 @@ public static class Program
                 }, cancellationToken);
             }
 
-            // THE CHANNEL ENDED — SO THE HOST IS GONE. No new connections, no new pipe: the process exits,
-            // and the caller (finally in Main) closes sessions and releases COM.
+            // THE CHANNEL ENDED — SO THE HOST IS GONE. No new pipe: the process exits, and Main's
+            // finally closes sessions and releases COM.
             log.Write("info", "host disconnected; worker exiting");
         }
     }
 
     private static NamedPipeServerStream CreateServer(string pipeName)
     {
-        // The default DACL of a pipe created by this user already limits it to that user and to
-        // administrators; the session-unique name closes "another process guessed the name".
-        // Buffer sizes are left to the runtime: a 16 MiB frame is written in pieces anyway.
+        // The default DACL limits the pipe to this user and administrators; the session-unique name closes
+        // "another process guessed the name". Buffer sizes are left to the runtime (a 16 MiB frame is written
+        // in pieces anyway).
         return new NamedPipeServerStream(
             pipeName,
             PipeDirection.InOut,
@@ -212,8 +207,8 @@ public sealed class WorkerOptions
 
     public string? LogPath { get; init; }
 
-    /// <summary>Service directory for control copies. Required: a document-file copy is a write, and putting
-    /// it "next to the document" means writing to the user's folder.</summary>
+    /// <summary>Service directory for control copies. Required: a document-file copy is a write, and "next to the
+    /// document" means writing to the user's folder.</summary>
     public required string ControlCopyDirectory { get; init; }
 
     public static WorkerOptions Parse(string[] args)
@@ -246,8 +241,8 @@ public sealed class WorkerOptions
 
         if (string.IsNullOrWhiteSpace(copies))
         {
-            // The directory is NOT substituted silently: the "next to the document" default is the very
-            // defect that was fixed. Without a named directory no copies are taken at all.
+            // The directory is NOT substituted silently: "next to the document" is the very defect that was
+            // fixed. Without a named directory no copies are taken at all.
             Console.Error.WriteLine("использование: KompasMcp.Worker --pipe <имя> --copies <каталог> [--log <файл>]");
             Environment.Exit(2);
         }

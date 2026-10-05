@@ -11,14 +11,11 @@ using KompasMcp.Domain.Paths;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>One KOMPAS instance the Worker owns or is attached to, plus the documents registered against it.
-/// Every method must run on the Worker's single STA thread; nothing here is thread-safe by design.</summary>
-/// <remarks>Identity rules the contract depends on: (1) a document is addressed by server UUID, never by
-/// "the active tab" — <c>Document3D()</c> is a factory (P0.5: two calls give different IUnknowns); (2)
-/// revisions are server-side counters bumped on mutation, rebuild, reload and restore — external UI edits
-/// cannot be trusted to raise events, so a fingerprint is compared before every mutation and the document is
-/// marked <c>conservative</c>; (3) COM references are held only here and released when the document is closed
-/// or the session ends (spec 1.6). History: docs/decisions/adapter-core.md#session-identity-rules</remarks>
+/// <summary>One KOMPAS instance the Worker owns or is attached to, plus the documents registered
+/// against it. Every method must run on the Worker's single STA thread.</summary>
+/// <remarks>INVARIANT: a document is addressed by server UUID, never by "the active tab"; revisions are
+/// server-side counters; COM references are held here and released on close (spec 1.6).
+/// History: docs/decisions/adapter-core.md#session-identity-rules</remarks>
 public sealed partial class Api5Session : IDisposable
 {
     private readonly Dictionary<string, DocumentEntry> _documents = new(StringComparer.Ordinal);
@@ -71,8 +68,7 @@ public sealed partial class Api5Session : IDisposable
     // ---------------------------------------------------------------------------------------------
 
     /// <summary>Attach to an existing instance or launch a new one, and prove which process the returned
-    /// object belongs to (spec 1.6). A launch that cannot be attributed to exactly one new PID is
-    /// refused rather than adopted.</summary>
+    /// object belongs to (spec 1.6): a launch not attributable to exactly one new PID is refused.</summary>
     public ApplicationEntry Connect(ConnectCommand command)
     {
         if (command.Mode == ConnectMode.Launch)
@@ -84,13 +80,10 @@ public sealed partial class Api5Session : IDisposable
     }
 
     /// <summary>Applies the requested visibility and records the document mode from the OBSERVED result.</summary>
-    /// <remarks>The semantics differ by the instance's origin, in line with the requirement not to touch
-    /// another user's window: <c>launch</c> — the instance is ours, so either value applies (make_visible=true
-    /// shows, false explicitly hides, as P0.4b did); <c>attach</c> — the instance is the user's. true shows
-    /// it; false is a request for "invisible" that is not applied to another's window: the server does not
-    /// hide an already visible window. Documents then inherit the application's actual visibility, not
-    /// "hidden by default": opening a file in an invisible window of the user's KOMPAS would hide the result
-    /// of their work.</remarks>
+    /// <remarks>INVARIANT: <c>launch</c> applies either value (the instance is ours); <c>attach</c> — true
+    /// shows, false is NOT applied (another user's window is not hidden). Documents inherit the
+    /// application's actual visibility, not "hidden by default".
+    /// History: docs/decisions/adapter-core.md#session-compaction</remarks>
     private ApplicationEntry WithVisibility(ApplicationEntry entry, ConnectMode mode, bool makeVisible)
     {
         if (mode == ConnectMode.Attach && !makeVisible)
@@ -154,13 +147,11 @@ public sealed partial class Api5Session : IDisposable
 
     private ApplicationEntry Attach(ConnectCommand command)
     {
-        // Scoped to the ProgID this adapter can actually drive: one running KOMPAS also registers
-        // its API7 CLSID, which is not a usable attach target and would look like a second instance.
-        //
-        // Every matching ROT entry is a candidate, including ones whose COM object failed to bind
-        // or whose PID cannot be resolved. Filtering those out before the ambiguity check made a
-        // second, unattributable instance vanish from the count, and an implicit attach then
-        // "successfully" picked the first one — the silent choice this error code exists to prevent.
+        // Scoped to the ProgID this adapter can drive: one running KOMPAS also registers its API7 CLSID,
+        // which would look like a second instance. Every matching ROT entry is a candidate, including ones
+        // whose COM object failed to bind or whose PID cannot be resolved: filtering them out made an
+        // unattributable instance vanish and an implicit attach then picked the first one.
+        // History: docs/decisions/adapter-core.md#session-compaction
         var entries = RunningObjectTable.EnumerateKompasEntries(KompasProgId);
         var candidates = entries
             .Select(e => (Entry: e, Pid: e.Object is null ? null : ProcessIdOf(e.Object)))
@@ -169,8 +160,7 @@ public sealed partial class Api5Session : IDisposable
         if (candidates.Count == 0)
         {
             // Report the unfiltered ROT total too: "no KOMPAS entries" and "the enumerator returned
-            // nothing at all" are different diagnoses — the first is a property of KOMPAS, the
-            // second is a bug of ours. Without this the refusal is unfalsifiable.
+            // nothing" are different diagnoses — without this the refusal is unfalsifiable.
             var (total, names) = RunningObjectTable.EnumerateAllEntries();
             var reason = total == 0
                 ? "Перечисление ROT не вернуло ни одной записи вообще: либо КОМПАС не зарегистрирован в ROT, либо перечислитель их не видит."
@@ -249,8 +239,8 @@ public sealed partial class Api5Session : IDisposable
         return ProcessIdOf(kompasObject);
     }
 
-    /// <summary>PID behind the application's main window. Returns null while the instance is headless,
-    /// which is exactly when the process-diff route has to carry the attribution.</summary>
+    /// <summary>PID behind the application's main window; null while the instance is headless, which is
+    /// exactly when the process-diff route has to carry the attribution.</summary>
     public static int? ProcessIdOf(object kompasObject)
     {
         try
@@ -328,8 +318,8 @@ public sealed partial class Api5Session : IDisposable
 
         try
         {
-            // Killing the process is forbidden; Quit() is the documented shutdown of an instance
-            // the server started itself, and only for owned instances (spec 1.6).
+            // Killing the process is forbidden; Quit() is the documented shutdown of an instance the
+            // server started itself, and only for owned instances (spec 1.6).
             if (closeOwnedApplication && application.Ownership == ApplicationOwnership.Launched)
             {
                 application.Application.Quit();
@@ -348,10 +338,9 @@ public sealed partial class Api5Session : IDisposable
 
     /// <summary>Session inventory: the instances and documents this adapter holds, with their unsaved flag.
     /// Changes nothing — it reads the registry and the document fingerprint.</summary>
-    /// <remarks>The unsaved flag comes ONLY from <see cref="SaveStateOf"/>, i.e. from the fingerprint and the
-    /// state the server itself keeps: the target version has no documented "document modified" property, and
-    /// passing off what is visible in the UI as one would be a fabrication (see <see cref="SaveStateOf"/>).
-    /// That is why the inventory runs on the CAD lane: the fingerprint has to be read through COM.</remarks>
+    /// <remarks>The unsaved flag comes ONLY from <see cref="SaveStateOf"/> (the fingerprint and the state the
+    /// server itself keeps), because the target version has no documented "document modified" property. That
+    /// is why the inventory runs on the CAD lane: the fingerprint has to be read through COM.</remarks>
     public object Inventory()
     {
         var documents = Documents.Select(document =>
@@ -394,10 +383,8 @@ public sealed partial class Api5Session : IDisposable
     {
         var application = RequireApplication(command.ApplicationId);
 
-        // API5's ksDocument3D.Create makes only a part or an assembly: there is no third option
-        // that produces a drawing or a fragment. Reporting success while handing back an assembly
-        // labelled "drawing" is precisely the mutation-stub failure the contract forbids, so the
-        // request is refused instead.
+        // API5's ksDocument3D.Create makes only a part or an assembly. Reporting success while handing
+        // back an assembly labelled "drawing" is the mutation-stub failure the contract forbids.
         if (command.Kind is DocumentKind.Drawing or DocumentKind.Fragment)
         {
             throw new KompasContractException(
@@ -438,8 +425,8 @@ public sealed partial class Api5Session : IDisposable
             part.marking = command.Marking;
         }
 
-        // Attribute assignment is only committed by Update(): proved in P0.6, where name and
-        // marking were silently lost across save/reopen without it.
+        // Attribute assignment is committed only by Update() (P0.6: name and marking were silently
+        // lost across save/reopen without it).
         part.Update();
         document.RebuildDocument();
 
@@ -484,12 +471,10 @@ public sealed partial class Api5Session : IDisposable
         var part = (ksPart)document.GetPart(-1);
         var entry = RegisterDocument(document, part, application, kind, command.Path, kindVerified: isDetail is not null);
 
-        // ACCESS IS REMEMBERED BECAUSE IT DECIDES THE OUTCOME OF A LATER WRITE.
-        // A document opened `read_only` must not be saved "in place": the save call carries no path field
-        // and the Host has nothing to check — its policy judges the CALL's fields, not the document's path.
-        // So `kompas_open_document(path under read_only_roots)` + `kompas_save_document` without target_path
-        // wrote straight into a root declared "read-only" (defect H4, review 05.10.2026). The access flag is
-        // what closes that write.
+        // ACCESS IS REMEMBERED BECAUSE IT DECIDES THE OUTCOME OF A LATER WRITE: a document opened
+        // `read_only` must not be saved "in place" — the save call carries no path field, so the Host's
+        // policy does not judge it (defect H4). The access flag closes that write.
+        // History: docs/decisions/adapter-core.md#readonly-save-guard
         entry.Access = command.Access;
         return entry;
     }
@@ -541,8 +526,7 @@ public sealed partial class Api5Session : IDisposable
         };
 
         // A document can be created "invisibly" and still end up on screen (and vice versa), so its state
-        // is re-read from the document itself, and presentation is applied only when the instance runs in
-        // visible mode.
+        // is re-read from the document itself.
         var (activated, _) = PresentDocument(application.Application, document, application.DocumentsVisible);
         entry.ActiveReported = activated;
         entry.Visible = application.DocumentsVisible ? ObserveDocumentVisible(document) : false;
@@ -550,8 +534,7 @@ public sealed partial class Api5Session : IDisposable
         entry.Fingerprint = ComputeFingerprint(entry);
 
         // Open: KOMPAS read it from disk, so the model matches the file. Create: the document exists only
-        // in memory and was never written — a change the close must notice (otherwise "refuse" on a new
-        // document would let the loss of the whole built model through).
+        // in memory and was never written — a change the close must notice.
         entry.SaveState = entry.Path is null
             ? DocumentSaveTracking.AfterCreate()
             : DocumentSaveTracking.AfterOpen();
@@ -565,8 +548,7 @@ public sealed partial class Api5Session : IDisposable
         References.TryGet(referenceId, out var stored) && stored is not null ? stored.DocumentId : null;
 
     /// <summary>Document owning a reference, for commands addressed by reference rather than by document id.
-    /// An unknown handle is the same STALE_REFERENCE the resolution path would report, so a caller
-    /// cannot learn the owner of a handle that is already dead.</summary>
+    /// An unknown handle is the same STALE_REFERENCE the resolution path would report.</summary>
     public DocumentEntry DocumentForReference(string referenceId)
     {
         var documentId = OwningDocumentId(referenceId)
@@ -595,9 +577,8 @@ public sealed partial class Api5Session : IDisposable
         }
     }
 
-    /// <summary>File name KOMPAS reports for a component, or null. It is read defensively because an
-    /// unsaved document reports an empty string and some interop versions expose the member as a
-    /// property rather than a getter.</summary>
+    /// <summary>File name KOMPAS reports for a component, or null. Read defensively: an unsaved document
+    /// reports an empty string and some interop versions expose the member as a property, not a getter.</summary>
     private static string SafeFileName(ksPart part)
     {
         try
@@ -628,13 +609,11 @@ public sealed partial class Api5Session : IDisposable
             UnitSystem = "mm",
             Origin = new double[] { 0, 0, 0 },
             Fingerprint = document.Fingerprint,
-            // Document visibility is a separate answer, not derived from the application's: the application
-            // can be shown while the document stays in invisible mode.
+            // Document visibility is separate: the application can be shown while the document is not.
             DocumentVisible = document.Visible,
             DocumentsVisibleMode = document.DocumentsVisible,
             DocumentActiveReported = document.ActiveReported,
-            // KOMPAS events are not wired in this build, so an edit made by hand in the UI can
-            // only be caught by the pre-mutation fingerprint check. Saying so beats implying more.
+            // KOMPAS events are not wired in this build: a UI edit is caught only by the pre-mutation check.
             ExternalChangeDetection = ExternalChangeDetection.Conservative,
         };
     }
@@ -642,13 +621,11 @@ public sealed partial class Api5Session : IDisposable
     public bool IsDirty(DocumentEntry document) => DocumentSaveTracking.IsDirty(SaveStateOf(document));
 
     /// <summary>Document save state: whether the model KOMPAS holds is exactly what is on disk. Kept by the
-    /// server because the target version has no documented "document modified" flag (see
-    /// <see cref="DocumentSaveTracking"/>).</summary>
-    /// <remarks>The fingerprint answers exactly one question — did anyone other than us change the model: a
-    /// UI edit does not pass through <see cref="BumpRevision"/> and there is nothing else to notice it. An
-    /// unreadable fingerprint does NOT prove immutability and yields "unknown", not "clean": previously the
-    /// reflected <c>IsSaved</c> and the fingerprint comparison together reported <c>dirty=false</c> right
-    /// after a mutation, defeating both close guards.</remarks>
+    /// server because the target version has no documented "document modified" flag.</summary>
+    /// <remarks>The fingerprint answers one question — did anyone other than us change the model (a UI edit
+    /// does not pass through <see cref="BumpRevision"/>). An unreadable fingerprint does NOT prove
+    /// immutability and yields "unknown", not "clean".
+    /// History: docs/decisions/adapter-core.md#save-state-fingerprint</remarks>
     public DocumentSaveState SaveStateOf(DocumentEntry document)
     {
         var observed = ComputeFingerprint(document);
@@ -668,10 +645,9 @@ public sealed partial class Api5Session : IDisposable
     }
 
     /// <summary>Cheap state digest used because KOMPAS change events are not subscribed in this build.
-    /// It is deliberately coarse: its job is to catch "the user changed the model", not to
-    /// identify which feature moved. It is NOT evidence that the file on disk is current — that
-    /// question is answered by <see cref="DocumentSaveState"/>, and conflating the two is exactly
-    /// the defect this pair replaced.</summary>
+    /// Deliberately coarse: its job is to catch "the user changed the model", not to identify which
+    /// feature moved, and it is NOT evidence that the file on disk is current (that is
+    /// <see cref="DocumentSaveState"/>).</summary>
     public string ComputeFingerprint(DocumentEntry document)
     {
         try
@@ -679,9 +655,8 @@ public sealed partial class Api5Session : IDisposable
             var bodies = CountBodies(document);
             if (bodies < 0)
             {
-                // The body collection did not answer. A fingerprint of "0:0:…" would read as an empty
-                // document and turn a read failure into an observed discrepancy — i.e. an invented external
-                // edit. A read failure is named a read failure.
+                // The body collection did not answer. A fingerprint of "0:0:…" would turn a read failure
+                // into an invented external edit; a read failure is named a read failure.
                 return DocumentSaveTracking.UnreadableFingerprint;
             }
 
@@ -720,8 +695,8 @@ public sealed partial class Api5Session : IDisposable
         try
         {
             var bodies = (ksBodyCollection)document.PartNow().BodyCollection();
-            // Same refresh rule as ListBodies: without it a collection read right after a rebuild
-            // can report stale membership and the count disagrees with the measurement.
+            // Same refresh rule as ListBodies: a collection read right after a rebuild can report stale
+            // membership, disagreeing with the measurement.
             bodies.refresh();
             return bodies.GetCount();
         }
@@ -745,12 +720,10 @@ public sealed partial class Api5Session : IDisposable
     }
 
     /// <summary>Assembly component count — from the STRUCTURE (<c>IPart7.PartsEx</c>), not the API5 collection.</summary>
-    /// <remarks>MEASURED 04.10.2026 by a live run, refuting the former route: API5
-    /// <c>EntityCollection(o3d_part = 104)</c> on an assembly with ONE inserted component returned <b>7</b>
-    /// — not a component count. The count comes from API7: <c>IAssemblyDocument.TopPart</c> →
-    /// <c>IPart7.PartsEx(ksAllParts)</c>, recursively over subassemblies (the error was visible only on a
-    /// live assembly). LIMIT: the walk is bounded by depth, named as a number not "reasonable": 64 levels,
-    /// so a subassembly cycle (if possible) cannot loop the server.
+    /// <remarks>MEASURED: the API5 <c>EntityCollection(o3d_part = 104)</c> route is not a component count;
+    /// the count comes from API7 <c>IAssemblyDocument.TopPart</c> → <c>IPart7.PartsEx(ksAllParts)</c>,
+    /// recursively over subassemblies. LIMIT: the walk is bounded by depth (64 levels), so a subassembly
+    /// cycle cannot loop the server.
     /// History: docs/decisions/adapter-core.md#component-count-structure</remarks>
     public int CountComponents(DocumentEntry document)
     {
@@ -783,7 +756,7 @@ public sealed partial class Api5Session : IDisposable
             if (isDetail is null)
             {
                 // An unread "detail/assembly" flag is not replaced by `true` or `false`: the walk under an
-                // unknown node is NOT continued, and that is named. An unread value must not PERMIT the walk.
+                // unknown node is NOT continued, and an unread value must not PERMIT the walk.
                 notes.Add("component_detail_unread — признак «деталь/сборка» не прочитан: обход под " +
                           "этим узлом не продолжен, число компонентов может быть неполным");
                 continue;
@@ -798,27 +771,22 @@ public sealed partial class Api5Session : IDisposable
 
     /// <summary>Raise the revision and move the document's references with it.</summary>
     /// <param name="reason">Recorded for diagnostics ("extrude", "rebuild", …).</param>
-    /// <param name="invalidateAll">
-    /// True when the model was re-read or rebuilt rather than edited by this server: then handles
-    /// from the previous revision must not resolve. False for an ordinary mutation, where the
-    /// sketch or feature just produced is precisely what the next command needs.
-    /// </param>
+    /// <param name="invalidateAll">True when the model was re-read or rebuilt rather than edited by this
+    /// server: then handles from the previous revision must not resolve. False for an ordinary mutation.</param>
     public void BumpRevision(DocumentEntry document, string reason, bool invalidateAll = false)
     {
         document.Revision++;
         References.RevisionForward(document.Id, document.Revision, invalidateAll);
 
-        // The single point every mutation passes through — so the redraw does not depend on which operation
-        // changed the model and is not wired into each call separately. In hidden mode it does nothing (see
-        // RefreshViewAfterMutation).
+        // The single point every mutation passes through, so the redraw does not depend on which operation
+        // changed the model. In hidden mode it does nothing (see RefreshViewAfterMutation).
         RefreshViewAfterMutation(document);
 
         if (invalidateAll)
         {
-            // Analytic profile areas belong to sketch handles; once those handles stop resolving,
-            // a stale area must not be reused as the expected volume of a later feature. The same
-            // reasoning covers what a target-body check reads: the drawn profile's extent and the
-            // plane it was drawn on.
+            // Analytic profile areas belong to sketch handles; once those stop resolving, a stale area must
+            // not be reused as the expected volume of a later feature. The same covers the drawn profile's
+            // extent and the plane it was drawn on.
             foreach (var orphan in _sketchProfiles.Keys.Where(key => !References.TryGet(key, out _)).ToArray())
             {
                 _sketchProfiles.Remove(orphan);
@@ -839,8 +807,7 @@ public sealed partial class Api5Session : IDisposable
         document.LastRevisionReason = reason;
 
         // Bumping the revision does NOT confirm savedness: the only place a document is declared saved is a
-        // confirmed write to file (SaveDocument). Writing a fingerprint here too would make the document
-        // "unchanged" after every mutation, defeating both the refusal and the save on close.
+        // confirmed write to file (SaveDocument); doing it here would defeat both close guards.
         document.SaveState = DocumentSaveTracking.AfterMutation();
     }
 
@@ -861,7 +828,7 @@ public sealed partial class Api5Session : IDisposable
                     });
 
             case CloseAction.SaveThenClose:
-                // A failed save throws — the document then stays open and still modified, not "closed with
+                // A failed save throws — the document stays open and still modified, not "closed with
                 // the edit lost".
                 SaveDocument(document, targetPath: null);
                 break;
@@ -904,12 +871,10 @@ public sealed partial class Api5Session : IDisposable
                 details: new Dictionary<string, object?> { ["document_id"] = document.Id });
         }
 
-        // WRITING TO THE FILE OF A DOCUMENT OPENED READ-ONLY.
-        // A call without target_path carries no path field, so the Host's policy does not check it:
-        // `kompas_open_document(path, access=read_only)` + `kompas_save_document` wrote straight into the
-        // source file — including into a root declared "read-only" (defect H4, review 05.10.2026). Saving
-        // "in place" is therefore closed here, while "save as" to a named path stays allowed: the Host judges
-        // such a path.
+        // WRITING TO THE FILE OF A DOCUMENT OPENED READ-ONLY. A call without target_path carries no path
+        // field, so the Host's policy does not check it (defect H4). Saving "in place" is closed here,
+        // while "save as" to a named path stays allowed.
+        // History: docs/decisions/adapter-core.md#readonly-save-guard
         if (targetPath is null && document.Access == DocumentAccess.ReadOnly)
         {
             throw new KompasContractException(
@@ -959,9 +924,8 @@ public sealed partial class Api5Session : IDisposable
 
         document.Path = path;
         document.Document.UpdateDocumentParam();
-        // "Save as" to a named path was checked by the Host as writable, so from now on writing to the
-        // document's file is allowed: the access flag follows the path rather than staying forever from the
-        // open.
+        // "Save as" to a named path was checked by the Host as writable, so writing to the document's file
+        // is now allowed: the access flag follows the path rather than staying forever from the open.
         if (targetPath is not null)
         {
             document.Access = DocumentAccess.Edit;
@@ -970,8 +934,7 @@ public sealed partial class Api5Session : IDisposable
         BumpRevision(document, "save");
 
         // The only place savedness is declared confirmed: the operation returned success AND the file was
-        // re-read from disk. There is no way, and no need, to clear the flag inside CAD for a green run —
-        // it is the file that is read.
+        // re-read from disk — it is the file that is read, not a flag inside CAD.
         document.SaveState = DocumentSaveTracking.AfterConfirmedSave();
         document.SavedFileSha256 = written.Value.Sha256;
         document.SavedFileByteLength = written.Value.ByteLength;
@@ -1034,9 +997,8 @@ public sealed record ApplicationEntry(
     string Version)
 {
     /// <summary>The mode in which this instance should create and open documents. Derived from the observed
-    /// application visibility after make_visible is applied — not from what was requested: showing the
-    /// application does not mean showing already open documents, and hiding a user's window on attach with
-    /// make_visible=false was not intended either.</summary>
+    /// application visibility after make_visible is applied, not from what was requested: showing the
+    /// application does not mean showing already open documents.</summary>
     public bool DocumentsVisible { get; set; }
 
     /// <summary>The latest window observation: the COM property, the Windows answer, and the document window
@@ -1048,8 +1010,7 @@ public sealed record ApplicationEntry(
 
     public ApplicationInfoDto ToDto(int openDocuments)
     {
-        // The observation is taken afresh: the window state can change outside the session (the user
-        // minimised or closed it), and the response must reflect the actual state.
+        // The observation is taken afresh: the window state can change outside the session.
         var observed = Observe();
         return new ApplicationInfoDto
         {
@@ -1060,9 +1021,8 @@ public sealed record ApplicationEntry(
             ConnectedAs = ConnectedAs,
             ExecutablePath = KompasInteropResolver.LocalServerPath(Api5Session.KompasProgId),
 
-            // Was: Visible = ProcessIdOf(Application) is not null — i.e. "a PID is obtained from the HWND".
-            // A hidden window has an HWND, so the field was falsely positive by construction. Now: visible
-            // when both the COM property and Windows agree.
+            // Visible when both the COM property and Windows agree: "a PID is obtained from the HWND" was
+            // falsely positive by construction, since a hidden window also has an HWND.
             Visible = observed.Visible,
             ApplicationVisibleByCom = observed.ComProperty,
             ApplicationWindowVisibleByWindows = observed.WindowVisible,
@@ -1099,9 +1059,8 @@ public sealed class DocumentEntry
     public string? Path { get; internal set; }
 
     /// <summary>The access mode the document is open in. It decides whether ITS file may be written: a save
-    /// call without <c>target_path</c> carries no path field and the Host's policy does not judge it (see the
-    /// comment in <c>OpenDocument</c>). Defaults to <see cref="DocumentAccess.Edit"/> — a created document has
-    /// no file of its own yet.</summary>
+    /// call without <c>target_path</c> carries no path field and the Host's policy does not judge it.
+    /// Defaults to <see cref="DocumentAccess.Edit"/> — a created document has no file of its own yet.</summary>
     public DocumentAccess Access { get; set; } = DocumentAccess.Edit;
 
     public ksDocument3D Document { get; }
@@ -1121,11 +1080,10 @@ public sealed class DocumentEntry
     public bool? ActiveReported { get; set; }
 
     /// <summary>Current root part of the document.</summary>
-    /// <remarks>The handle captured at creation goes stale once a feature is created: measured on v24, a cached
-    /// <c>ksPart</c> returned an empty <c>BodyCollection</c> and a null <c>GetMainBody()</c> for a document that
-    /// demonstrably had a solid body and saved it to disk. Re-acquiring per operation is not a
-    /// micro-optimisation to skip — it is what makes reads agree with what KOMPAS holds. <see cref="Part"/> is
-    /// kept for identity checks and release bookkeeping only.
+    /// <remarks>The handle captured at creation goes stale once a feature is created: a cached <c>ksPart</c>
+    /// returns an empty <c>BodyCollection</c> and a null <c>GetMainBody()</c> for a document that has a solid
+    /// body. Re-acquiring per operation is what makes reads agree with what KOMPAS holds; <see cref="Part"/>
+    /// is kept for identity checks and release bookkeeping only.
     /// History: docs/decisions/adapter-core.md#part-now-reacquire</remarks>
     public ksPart PartNow() => (ksPart)Document.GetPart(-1);
 
@@ -1135,8 +1093,7 @@ public sealed class DocumentEntry
     /// not a savedness flag — <see cref="SaveState"/> handles that.</summary>
     public string? Fingerprint { get; set; }
 
-    /// <summary>Savedness state: whether a write to file confirmed that the current model is on disk. Kept by
-    /// the server because the target version has no documented "document modified" flag.</summary>
+    /// <summary>Savedness state: whether a write to file confirmed the current model is on disk.</summary>
     public DocumentSaveState SaveState { get; set; } = DocumentSaveState.Unknown;
 
     /// <summary>Hash of the file re-read after the last confirmed save.</summary>
@@ -1170,12 +1127,11 @@ public static class KompasObjectTypes
     public const int BossExtrusion = 25;
     public const int CutExtrusion = 26;
 
-    /// <summary><c>o3d_baseRotated</c> — the number a rotation is CREATED under through the factory
-    /// <c>IModelContainer.Rotateds.Add</c> (MEASURED R.24: <c>(int)ksObj3dTypeEnum.o3d_baseRotated = 27</c>).</summary>
-    /// <remarks>As with a hole, there are two different numbering systems here and they must not be confused.
-    /// 27/28/29 are FACTORY numbers (the <c>Add</c> argument); in the API5 tree the created feature appears
-    /// under its own number <see cref="Rotated3D"/> = 29. Searching for the feature by 27/28/29 would never
-    /// find it — the same defect as searching for a hole by 52, fixed the same way.</remarks>
+    /// <summary><c>o3d_baseRotated</c> — the factory number a rotation is CREATED under
+    /// (<c>IModelContainer.Rotateds.Add</c>): MEASURED 27.</summary>
+    /// <remarks>27/28/29 are FACTORY numbers, not the tree number: a finished rotation lies under
+    /// <see cref="Rotated3D"/> = 29 — the same two-numbering trap as a hole.
+    /// History: docs/decisions/adapter-core.md#rotated3d-numbering</remarks>
     public const int BaseRotated = 27;
 
     /// <summary><c>o3d_bossRotated</c> — boss by rotation, factory number (MEASURED R.24: 28).</summary>
@@ -1185,12 +1141,8 @@ public static class KompasObjectTypes
     public const int CutRotated = 29;
 
     /// <summary><c>o3d_Rotated3D</c> — the number under which a finished rotation feature lies in the API5 tree.</summary>
-    /// <remarks>MEASURED 17.09.2026 by acceptance SM-03 (row RO.10t), refuting the expectation: the tree was
-    /// expected to lag the factory by 531 as with a hole (52→583), showing the rotation under 584. RO.10t
-    /// printed <c>features=2 types=['25', '29']</c> — the base plate under 25 (<c>o3d_bossExtrusion</c>) and
-    /// the cut by rotation under <b>29</b>. So for a rotation the FACTORY number and the tree number COINCIDE
-    /// (29 = <c>o3d_cutRotated</c>), unlike a hole: the two numbering systems behave differently across
-    /// families, and analogy must not be assumed — the value is measured, not derived.
+    /// <remarks>MEASURED: for a rotation the FACTORY number and the tree number COINCIDE (29 =
+    /// <c>o3d_cutRotated</c>), unlike a hole — the value is measured, not derived.
     /// History: docs/decisions/adapter-core.md#rotated3d-numbering</remarks>
     public const int Rotated3D = 29;
     public const int BaseLoft = 30;
@@ -1205,41 +1157,36 @@ public static class KompasObjectTypes
     public const int HoleOperation = 52;
 
     /// <summary><c>o3d_Hole3D</c> — the number under which a finished hole feature lies in the API5 tree.</summary>
-    /// <remarks>MEASURED by probe N.1 on 17.09.2026, fixing a real defect: the adapter searched by
-    /// <see cref="HoleOperation"/> = 52 and so NEVER found it when the hole was created by the API7 route —
-    /// no <c>feature_ref</c> was issued and editing was unreachable. The probe printed
-    /// <c>NewEntity(52).type = 52 (o3d_holeOperation)</c> while <c>IHoles3D[0].ModelObjectType = 583
-    /// (o3d_Hole3D)</c>, and exactly one entry appeared in the tree — <c>OperationElement(110)[1] type=583
-    /// ("Hole:1")</c>; 52 never appeared. Two numbering systems that must not be confused.
+    /// <remarks>MEASURED, fixing a real defect: searching by <see cref="HoleOperation"/> = 52 never found the
+    /// feature created by the API7 route, so no <c>feature_ref</c> was issued and editing was unreachable.
+    /// Two numbering systems that must not be confused.
     /// History: docs/decisions/adapter-core.md#hole3d-numbering</remarks>
     public const int Hole3D = 583;
 
     /// <summary>The type a BOOLEAN OPERATION feature is seen under in the API5 tree
-    /// (<c>o3d_aggregate</c>).</summary>
-    /// <remarks>MEASURED 18.09.2026 with the instrument <c>scratch/b3-measure-feature-types.py</c> via
-    /// <c>kompas_list_features</c> (which also printed <c>entity.type</c>): after <c>kompas_boolean</c>
-    /// exactly one entry appears in the tree — <c>type=69 "Boolean operation:1"</c>. The same number as
-    /// <c>ksObj3dTypeEnum.o3d_aggregate</c>.</remarks>
+    /// (<c>o3d_aggregate</c>): MEASURED 69.</summary>
+    /// <remarks>After <c>kompas_boolean</c> exactly one tree entry appears, <c>type=69</c>; the same number
+    /// as <c>ksObj3dTypeEnum.o3d_aggregate</c>.
+    /// History: docs/decisions/adapter-core.md#object-type-numbers</remarks>
     public const int BooleanOperation = 69;
 
     /// <summary>The split feature type in the API5 tree (<c>o3d_SplitSolid</c>): MEASURED 633.</summary>
-    /// <remarks>After <c>kompas_split</c> exactly one new entry appears in the tree —
-    /// <c>type=633 "Cut:1"</c>.</remarks>
+    /// <remarks>After <c>kompas_split</c> exactly one new tree entry appears, <c>type=633</c>.
+    /// History: docs/decisions/adapter-core.md#object-type-numbers</remarks>
     public const int SplitSolid = 633;
 
     /// <summary>The cut-by-plane feature type in the API5 tree (<c>o3d_cutByPlane</c>): MEASURED 50.</summary>
-    /// <remarks>After <c>kompas_cut_by_plane</c> exactly one new entry appears in the tree —
-    /// <c>type=50 "Section:1"</c>.</remarks>
+    /// <remarks>After <c>kompas_cut_by_plane</c> exactly one new tree entry appears, <c>type=50</c>.
+    /// History: docs/decisions/adapter-core.md#object-type-numbers</remarks>
     public const int CutByPlane = 50;
 
     /// <summary>The reposition feature type in the API5 tree: MEASURED <b>79</b>.</summary>
-    /// <remarks>After <c>kompas_reposition</c> exactly one new entry appears — <c>type=79 "Change of position :
-    /// Body 1"</c>. <b>79 is NOT 569.</b> 569 (<c>o3d_BodyReposition</c>) creates the object, while in the tree
-    /// it lies under 79 — the same lesson as a hole (<see cref="HoleOperation"/> = 52 vs <see cref="Hole3D"/>
-    /// = 583). The same number 79 is also carried by the auxiliary "Body copy" feature (<c>keep_tools=true</c>);
-    /// the collision is harmless only because the filter is applied WITHIN one operation (boolean expects 69,
-    /// the copy 79 never becomes a candidate; reposition expects 79, exactly one new entry). Do not rely on
-    /// "79 means reposition" outside the operation's context. History: docs/decisions/adapter-core.md#body-reposition-numbering</remarks>
+    /// <remarks>After <c>kompas_reposition</c> exactly one new tree entry appears, <c>type=79</c>.
+    /// <b>79 is NOT 569</b> (<c>o3d_BodyReposition</c> creates the object) — the same two-numbering trap
+    /// as a hole. The same number 79 is also carried by the auxiliary "Body copy" feature
+    /// (<c>keep_tools=true</c>); the collision is harmless only because the filter is applied WITHIN one
+    /// operation. Do not rely on "79 means reposition" outside the operation's context.
+    /// History: docs/decisions/adapter-core.md#body-reposition-numbering</remarks>
     public const int BodyRepositionFeature = 79;
 
     public const int Polyline3d = 53;

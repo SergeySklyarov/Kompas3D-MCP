@@ -5,9 +5,11 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>The same JSON value must read back identically whether the node was built in memory or arrived
-/// as parsed text. That equivalence is not free: JsonNode stores either the CLR value or a
-/// JsonElement, and the strict accessors only accept one of them.</summary>
+/// <summary>The same JSON value must read back identically whether the node was built in memory or arrived as
+/// parsed text.</summary>
+/// <remarks>TEST: JsonNode stores either the CLR value or a JsonElement, and the strict accessors only accept
+/// one of them.
+/// History: docs/decisions/tests.md#json-scalars-2</remarks>
 public class JsonScalarsTests
 {
     private static JsonNode RoundTrip(JsonNode node) =>

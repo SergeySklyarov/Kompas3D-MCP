@@ -3,12 +3,12 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>Body placement matrix and plane basis for B3 — checked on the SAME geometry the KOMPAS route was measured on.</summary>
-/// <remarks>MEASURED: the numbers below are reference §6.6 of the order, obtained by probe <c>--reposition</c>
-/// (run <c>929f08886f1348fe921943052a4026b0</c>, steps RP.3, RP.4, RP.5). If the matrix builder diverges from
-/// them, the adapter moves the body elsewhere and KOMPAS does not err — it just performs a different
-/// transform. ASSUMPTION: the asymmetric bar <c>[10,30]×[0,10]×[0,5]</c> is deliberate — on a symmetric part
-/// the angle sign and axis direction are indistinguishable and the test would pass on a wrong matrix.</remarks>
+/// <summary>Body placement matrix and plane basis for B3 — on the geometry the KOMPAS route was measured on.</summary>
+/// <remarks>MEASURED: the numbers below are reference §6.6 of the order, obtained by probe <c>--reposition</c>.
+/// If the matrix builder diverges from them, the adapter moves the body elsewhere and KOMPAS does not err — it
+/// just performs a different transform. ASSUMPTION: the asymmetric bar <c>[10,30]×[0,10]×[0,5]</c> is deliberate
+/// — on a symmetric part the angle sign and axis direction are indistinguishable.
+/// History: docs/decisions/tests.md#reposition-matrix-2</remarks>
 public class RepositionMatrixTests
 {
     private static readonly double[][] BarCorners = BuildCorners(10d, 30d, 0d, 10d, 0d, 5d);
@@ -41,9 +41,11 @@ public class RepositionMatrixTests
     [Fact]
     public void RotateAboutZ_StoresAxisImagesInTheMeasuredArrayLayout()
     {
-        // DISCRIMINATING control of the layout — the thing that was absent here, and whose absence made a rotation through MCP be rejected as NO_GEOMETRY_CHANGE on 18.09.2026. All the other tests in this class read the matrix through Apply, i.e. check AGREEMENT of build with read, not the layout itself: two mutually transposed errors preserve that agreement entirely. A translation does not catch the defect for the same reason — an identity rotation is symmetric.
-        //
-        // Here the RAW array is compared, exactly what goes into Position.InitByMatrix3D. The reference is the layout by which the rotation was measured in KOMPAS (probe RP.4, RotationZ): three consecutive numbers are the IMAGE of an axis. For +90° about Z: image X = (0,1,0), image Y = (−1,0,0), Z = (0,0,1).
+        // DISCRIMINATING control of the layout — whose absence made a rotation through MCP be rejected as
+        // NO_GEOMETRY_CHANGE. All the other tests read the matrix through Apply, i.e. check AGREEMENT of build
+        // with read, not the layout itself: two mutually transposed errors preserve that agreement. Here the RAW
+        // array is compared, exactly what goes into Position.InitByMatrix3D. For +90° about Z: image X = (0,1,0),
+        // image Y = (−1,0,0), Z = (0,0,1).
         var matrix = RepositionMatrix.RotateAboutAxis(
             new[] { 0d, 0d, 0d }, new[] { 0d, 0d, 1d }, 90d);
 
@@ -69,8 +71,8 @@ public class RepositionMatrixTests
             new[] { 5d, 0d, 0d }, new[] { 0d, 0d, 1d }, 90d);
         AssertClose(new[] { -5d, 5d, 0d, 5d, 25d, 5d }, Bounds(matrix));
 
-        // INVARIANT: the axis point must stay in place — that is what distinguishes a rotation "about an axis"
-        // from one "about the origin followed by a translation".
+        // INVARIANT: the axis point must stay in place — that distinguishes a rotation "about an axis" from one
+        // "about the origin followed by a translation".
         var fixedPoint = RepositionMatrix.Apply(matrix, new[] { 5d, 0d, 0d });
         Assert.Equal(5d, fixedPoint[0], 12);
         Assert.Equal(0d, fixedPoint[1], 12);
@@ -112,7 +114,7 @@ public class RepositionMatrixTests
     [Fact]
     public void Rotate_AboutTiltedAxis_KeepsLengths()
     {
-        // A tilted axis: distances between vertices must be preserved. This catches a matrix that "looks like a
+        // A tilted axis: distances between vertices must be preserved — this catches a matrix that "looks like a
         // rotation" but is not orthogonal.
         var matrix = RepositionMatrix.RotateAboutAxis(
             new[] { 3d, 2d, 1d }, new[] { 1d, 2d, 3d }, 37d);
@@ -226,8 +228,8 @@ public class RepositionMatrixTests
     private static double Distance(double[] a, double[] b) =>
         RigidFrame.Norm(new[] { a[0] - b[0], a[1] - b[1], a[2] - b[2] });
 
-    /// <summary>Coordinate comparison with a tolerance. Exact equality is unusable here: <c>cos 90°</c> is not
-    /// zero, and a difference of <c>6.1e-16</c> is a way of writing zero, not a build error.</summary>
+    /// <summary>Coordinate comparison with a tolerance: <c>cos 90°</c> is not zero, and a difference of
+    /// <c>6.1e-16</c> is a way of writing zero, not a build error.</summary>
     private static void AssertClose(double[] expected, double[] actual)
     {
         Assert.Equal(expected.Length, actual.Length);

@@ -1,8 +1,8 @@
 namespace KompasMcp.Contracts;
 
-/// <summary>Stable, English, machine-readable error identifiers (spec 2.2).
-/// Codes are part of the public contract: never rename, never reuse for a different meaning.
-/// Human-readable messages are Russian and live in <see cref="ErrorMessages"/>.</summary>
+/// <summary>Stable, English, machine-readable error identifiers (spec 2.2). Codes are part of the public contract:
+/// never rename, never reuse for a different meaning. Human-readable messages are Russian and live in <see
+/// cref="ErrorMessages"/>.</summary>
 public static class ErrorCodes
 {
     public const string InvalidArgument = "INVALID_ARGUMENT";
@@ -35,23 +35,22 @@ public static class ErrorCodes
     public const string ExportFailed = "EXPORT_FAILED";
     public const string ImportFailed = "IMPORT_FAILED";
 
-    /// <summary>The core refused raster export: <c>SaveAsToRasterFormat</c> returned FALSE or threw. A
-    /// separate code, not <see cref="ExportFailed"/>: for a raster the method's refusal is the only
-    /// observable sign, and it must be distinguishable from "the method reported success but produced no
-    /// result".</summary>
+    /// <summary>The core refused raster export: <c>SaveAsToRasterFormat</c> returned FALSE or threw. A separate code,
+    /// not <see cref="ExportFailed"/>: for a raster the method's refusal is the only observable sign, and it must be
+    /// distinguishable from "success with no result".</summary>
     public const string RasterRefused = "RASTER_REFUSED";
 
-    /// <summary>The method reported success but there is NO result: neither a byte array nor a file. A
-    /// silent "success" without an image does not exist — absence of bytes is a refusal, not a PASS.</summary>
+    /// <summary>The method reported success but there is NO result: neither a byte array nor a file. A silent "success"
+    /// without an image does not exist — absence of bytes is a refusal, not a PASS.</summary>
     public const string RasterEmpty = "RASTER_EMPTY";
 
-    /// <summary>The content does not match the declared format: the file (or byte array) magic is wrong.
-    /// The core does NOT validate the format — MEASURED (probe P5): a value outside the list is accepted
-    /// and yields a different format, so the check lives here, not in the core.</summary>
+    /// <summary>The content does not match the declared format: the file (or byte array) magic is wrong. The core does
+    /// NOT validate the format — MEASURED: a value outside the list is accepted and yields a different format, so the
+    /// check lives here, not in the core.</summary>
     public const string RasterFormatMismatch = "RASTER_FORMAT_MISMATCH";
 
-    /// <summary>The snapshot exceeded the response-context limits (pixel extent or base64 size). No silent
-    /// downscaling is done: a smaller image is a separate request with a lower <c>resolution</c>.</summary>
+    /// <summary>The snapshot exceeded the response-context limits (pixel extent or base64 size). No silent downscaling
+    /// is done: a smaller image is a separate request with a lower <c>resolution</c>.</summary>
     public const string RasterLimitExceeded = "RASTER_LIMIT_EXCEEDED";
 
     public const string UnitsUnverified = "UNITS_UNVERIFIED";
@@ -60,55 +59,51 @@ public static class ErrorCodes
     public const string VerificationFailed = "VERIFICATION_FAILED";
     public const string CancelNotConfirmed = "CANCEL_NOT_CONFIRMED";
 
-    /// <summary>A feature has candidate dependents, but the server cannot name them reliably: neither API5
-    /// nor API7 has a "dependent features" member (MEASURED by reflection over both assemblies and probe
-    /// L.8). Deletion therefore requires an explicit caller decision rather than silently taking down the
-    /// tree.</summary>
+    /// <summary>A feature has candidate dependents, but the server cannot name them reliably: neither API5 nor API7 has
+    /// a "dependent features" member (MEASURED by reflection over both assemblies). Deletion therefore requires an
+    /// explicit caller decision rather than silently taking down the tree.</summary>
     public const string DependentFeatures = "DEPENDENT_FEATURES";
 
-    /// <summary>The operation journal is held by an ACTIVE owner: another process of the same user with the
-    /// same <c>journal_path</c> already runs a session (served at least one client request). Two Hosts with
-    /// one config do not execute operations concurrently, so the second refuses NAMEDLY rather than
-    /// crashing or working silently.</summary>
+    /// <summary>The operation journal is held by an ACTIVE owner: another process of the same user with the same
+    /// <c>journal_path</c> already runs a session (served at least one client request). Two Hosts with one config do
+    /// not run concurrently, so the second refuses NAMEDLY rather than crashing silently.</summary>
     public const string SessionOwnerActive = "SESSION_OWNER_ACTIVE";
 
-    /// <summary>The operation journal is unavailable for writing for a reason unrelated to ownership: foreign
-    /// rights, a locked file, a disk error. Work without a safety journal never starts silently.</summary>
+    /// <summary>The operation journal is unavailable for writing for a reason unrelated to ownership: foreign rights, a
+    /// locked file, a disk error. Work without a safety journal never starts silently.</summary>
     public const string JournalUnavailable = "JOURNAL_UNAVAILABLE";
 
-    /// <summary>A CAD call arrived from a Host that does not own the session. The refusal comes BEFORE the
-    /// journal write and BEFORE any COM call: no operation started and no document was touched.</summary>
-    /// <remarks>A separate code, not <see cref="SessionOwnerActive"/>: that one means "ANOTHER process owns
-    /// the session and ownership cannot be taken", this one means "ownership CAN be taken, but must be taken
-    /// explicitly". They have different remedies, and mixing them would answer one question "why can't I
-    /// work" with two different instructions.</remarks>
+    /// <summary>A CAD call arrived from a Host that does not own the session. The refusal comes BEFORE the journal
+    /// write and BEFORE any COM call: no operation started and no document was touched.</summary> <remarks>A separate
+    /// code, not <see cref="SessionOwnerActive"/>: that one means "ANOTHER process owns the session and ownership
+    /// cannot be taken", this one means "ownership CAN be taken, but explicitly". Different remedies; mixing them would
+    /// answer one question with two different instructions.</remarks>
     public const string SessionNotAcquired = "SESSION_NOT_ACQUIRED";
 
-    /// <summary>Session release was refused because work is still in progress: an executing, queued or
-    /// background operation exists. An empty queue alone is not enough — operations whose synchronous
-    /// answer has already completed are counted too.</summary>
+    /// <summary>Session release was refused because work is still in progress: an executing, queued or background
+    /// operation exists. An empty queue alone is not enough — operations whose synchronous answer has already completed
+    /// are counted too.</summary>
     public const string SessionReleaseBusy = "SESSION_RELEASE_BUSY";
 
-    /// <summary>Release is NOT confirmed: the Worker stop is unconfirmed or the owner-state record was not
-    /// written. Under no conditions is this counted as a successful release.</summary>
+    /// <summary>Release is NOT confirmed: the Worker stop is unconfirmed or the owner-state record was not written.
+    /// Under no conditions is this counted as a successful release.</summary>
     public const string SessionReleaseFailed = "SESSION_RELEASE_FAILED";
 
-    /// <summary>Ownership state could not be determined: the owner record is unreadable (or the named lock
-    /// could not be acquired). "Not read" does NOT mean "the session is free".</summary>
+    /// <summary>Ownership state could not be determined: the owner record is unreadable (or the named lock could not be
+    /// acquired). "Not read" does NOT mean "the session is free".</summary>
     public const string OwnershipStateUnknown = "OWNERSHIP_STATE_UNKNOWN";
 
-    /// <summary>Session release was refused because the DOCUMENT STATE IS UNKNOWN: the Worker was lost or
-    /// restarted, and its document edits may have remained unsaved in KOMPAS.</summary>
-    /// <remarks>A separate code, not <see cref="SessionReleaseFailed"/>: that one means "the inventory could
-    /// not be obtained", this one means "the inventory WAS obtained and is empty, but empty because documents
-    /// were lost, not because there were no edits". The exit differs: here release is possible if the client
-    /// explicitly acknowledges the unknown state (<c>acknowledge_unknown_document_state=true</c>), there it
-    /// is not.</remarks>
+    /// <summary>Session release was refused because the DOCUMENT STATE IS UNKNOWN: the Worker was lost or restarted,
+    /// and its document edits may have remained unsaved in KOMPAS.</summary> <remarks>A separate code, not <see
+    /// cref="SessionReleaseFailed"/>: that one means "the inventory could not be obtained", this one means "the
+    /// inventory WAS obtained and is empty because documents were lost, not because there were no edits". Here release
+    /// is possible if the client explicitly acknowledges the unknown state
+    /// (<c>acknowledge_unknown_document_state=true</c>); there it is not.</remarks>
     public const string DocumentStateUnknown = "DOCUMENT_STATE_UNKNOWN";
 }
 
-/// <summary>Default Russian wording per error code. Callers may override the message when they have more
-/// specific context; the code stays the same.</summary>
+/// <summary>Default Russian wording per error code. Callers may override the message when they have more specific
+/// context; the code stays the same.</summary>
 public static class ErrorMessages
 {
     private static readonly Dictionary<string, string> Default = new(StringComparer.Ordinal)

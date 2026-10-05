@@ -36,32 +36,26 @@ public sealed record JournalRecord(
 /// OPERATION_ID_CONFLICT; unknown outcome → never auto-retried.</remarks>
 public sealed class OperationJournal : IDisposable
 {
-    /// <summary>Purpose string of the journal's named lock. A constant because the tool verifying behaviour
-    /// under a HELD lock must use the SAME name.</summary>
     public const string FileLockPurpose = "journal";
 
     private readonly object _gate = new();
     private readonly Dictionary<string, JournalRecord> _byOperation = new(StringComparer.Ordinal);
 
-    /// <summary>Cross-process lock over the journal path, WRITES only. Reading is not blocked.</summary>
     private readonly NamedFileLock _fileGate;
 
-    /// <summary>How long to wait for the cross-process lock when appending a line.</summary>
     private readonly TimeSpan _appendLockTimeout;
 
-    /// <summary>How long to wait for the cross-process lock when reading the journal.</summary>
     private readonly TimeSpan _replayLockTimeout;
 
     public string Path { get; }
 
     public int RecoveredInFlight { get; private set; }
 
-    /// <summary>Lines that did not parse during <see cref="Replay"/>. Printed, not swallowed: "read" and "read
-    /// in full" are different claims.</summary>
+    /// <summary>Lines that did not parse during <see cref="Replay"/>: "read" and "read in full" differ.</summary>
     public int SkippedLines { get; private set; }
 
-    /// <summary>The file's last line is cut off (no trailing newline and it does not parse). Expected after a
-    /// hard kill; reported separately from other unparsed lines — different causes.</summary>
+    /// <summary>The last line is cut off (no trailing newline, does not parse): a hard-kill tear, reported
+    /// apart from other skips.</summary>
     public bool TornTail { get; private set; }
 
     public event Action<JournalRecord>? RecoveredAsUnknown;
@@ -83,19 +77,16 @@ public sealed class OperationJournal : IDisposable
     }
 
     /// <summary>Verify the journal can be written AT ALL, BEFORE the server accepts calls. INVARIANT: no
-    /// long-lived write handle is held, so an unwritable journal would otherwise surface on the first
-    /// mutation; the error propagates and <c>Program</c> names it `JOURNAL_UNAVAILABLE`.</summary>
+    /// long-lived write handle is held, so an unwritable journal would surface only on the first mutation.</summary>
     private void AssertWritable()
     {
         using var stream = OpenAppend();
     }
 
-    /// <summary>
-    /// Handle for one append: open-append-close. INVARIANT: no write handle is held for the process
-    /// lifetime — a second Host on the same config must still be able to READ the journal. LIMIT:
+    /// <summary>Handle for one append: open-append-close. INVARIANT: no write handle is held for the
+    /// process lifetime — a second Host must still be able to READ the journal. LIMIT:
     /// <c>FileShare.ReadWrite</c> gives no write concurrency; the named lock does (see
-    /// <see cref="TryAppend"/>).
-    /// </summary>
+    /// <see cref="TryAppend"/>).</summary>
     private FileStream OpenAppend() =>
         new(Path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite, bufferSize: 1, FileOptions.None);
 
@@ -106,9 +97,8 @@ public sealed class OperationJournal : IDisposable
             return;
         }
 
-        // NOT File.ReadLines: it opens with FileShare.Read and forbids a live writer (defect
-        // JOURNAL-REPLAY-SHARING-VIOLATION). Reading runs under the same lock as writing, so a probe
-        // cannot catch half a line and call it a torn tail.
+        // INVARIANT: reading runs under the same lock as writing, so a probe cannot catch half a line
+        // and call it a torn tail. (File.ReadLines would forbid a live writer.)
         // History: docs/decisions/journaling.md#replay-sharing
         var locked = _fileGate.Enter(_replayLockTimeout);
         if (!locked)
@@ -140,15 +130,12 @@ public sealed class OperationJournal : IDisposable
         }
     }
 
-    /// <summary>The torn tail was NOT repaired on open because the lock could not be taken. Printed: silence is
-    /// indistinguishable from "there was no tear".</summary>
+    /// <summary>The torn tail was NOT repaired on open because the lock could not be taken. Printed:
+    /// silence is indistinguishable from "there was no tear".</summary>
     public bool TornTailRepairSkippedUnlocked { get; private set; }
 
-    /// <summary>The tail awaits repair: a tear was found but no lock was held. Cleared by the first successful
-    /// append, which repairs it under ITS OWN lock (see <see cref="TryAppend"/>).</summary>
     private bool _tornTailRepairPending;
 
-    /// <summary>Append a newline if the file does not end with one. No-op on an intact file.</summary>
     private void RepairTornTail()
     {
         try
@@ -165,20 +152,16 @@ public sealed class OperationJournal : IDisposable
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
         {
-            // Repair failed — NAMED, not swallowed: otherwise the next append loses a line again and
-            // silence hides it.
+            // Repair failed — NAMED, not swallowed: else the next append loses a line again in silence.
             TornTailRepairFailures++;
             LastRepairFailure = $"{ex.GetType().Name}: {ex.Message}";
         }
     }
 
-    /// <summary>Number of torn tails repaired on open (a newline was appended).</summary>
     public int RepairedTornTails { get; private set; }
 
-    /// <summary>Number of failed torn-tail repairs. Printed, not silenced.</summary>
     public int TornTailRepairFailures { get; private set; }
 
-    /// <summary>Reason of the last failed repair; null if none ran or all succeeded.</summary>
     public string? LastRepairFailure { get; private set; }
 
     /// <summary>The journal was read WITHOUT the cross-process lock: skip counts are not guaranteed.</summary>
@@ -210,7 +193,7 @@ public sealed class OperationJournal : IDisposable
                 catch (JsonException)
                 {
                     // A torn tail after a hard kill is expected; it is skipped and COUNTED, so the skip
-                    // is named by a number instead of staying silent.
+                    // is named by a number, not silent.
                     SkippedLines++;
                     lastNonEmptyLineWasSkipped = true;
                     continue;
@@ -243,13 +226,13 @@ public sealed class OperationJournal : IDisposable
             }
         }
 
-        // A tear is the last NON-EMPTY line that failed to parse with no newline after it. An unparsed
-        // line in the MIDDLE is not a tear — it has another cause.
+        // A tear is the last NON-EMPTY line that failed to parse with no newline after it; an unparsed
+        // line in the MIDDLE is not a tear.
         TornTail = SkippedLines > 0 && lastNonEmptyLineWasSkipped && !endsWithNewline;
     }
 
-    /// <summary>Whether the file ends with a newline. Reads the last byte, not the whole file: the journal grows
-    /// to hundreds of thousands of lines.</summary>
+    /// <summary>Whether the file ends with a newline. Reads the last byte: the journal grows to hundreds
+    /// of thousands of lines.</summary>
     private static bool FileEndsWithNewline(string path)
     {
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
@@ -269,8 +252,8 @@ public sealed class OperationJournal : IDisposable
         Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower) },
     };
 
-    /// <summary>Result of asking to start a mutation. The caller must handle every case; there is no "just run
-    /// it" boolean, because that is where double-application hides.</summary>
+    /// <summary>Result of asking to start a mutation. There is no "just run it" boolean, because that is
+    /// where double-application hides.</summary>
     public sealed record StartDecision(bool Proceed, JournalRecord? Existing)
     {
         public bool IsReplay => Existing is not null && Proceed == false;
@@ -303,9 +286,8 @@ public sealed class OperationJournal : IDisposable
                 }
 
                 // INVARIANT: the record IS the barrier — "already running" does not mean "may start
-                // again" (MEASURED 04.10.2026: a repeated create during execution made TWO documents).
-                // INVARIANT: a CLEAN failure allows a new attempt with the same operation_id; a failure
-                // with partial effects or an unknown outcome is replayed as before.
+                // again". INVARIANT: a CLEAN failure allows a new attempt with the same operation_id; a
+                // failure with partial effects or an unknown outcome is replayed as before.
                 // History: docs/decisions/journaling.md#same-operation-id
                 if (IsCleanFailure(existing))
                 {
@@ -348,8 +330,8 @@ public sealed class OperationJournal : IDisposable
                 NeedsReconciliation: false);
 
             // INVARIANT: the intent record MUST be durable and locked, else the command does NOT leave —
-            // a lost record makes a replay look like "never ran" (MEASURED: 381/400 without the lock).
-            // With no lock nothing is appended and the caller gets JOURNAL_UNAVAILABLE.
+            // a lost record makes a replay look like "never ran". With no lock nothing is appended and
+            // the caller gets JOURNAL_UNAVAILABLE.
             // History: docs/decisions/journaling.md#append-atomicity
             if (!TryAppend(record))
             {
@@ -361,18 +343,16 @@ public sealed class OperationJournal : IDisposable
         }
     }
 
-    /// <summary>A recorded failure after which a replay with the same operation_id applies nothing a second
-    /// time: no partial effect, so no reconciliation is required.</summary>
+    /// <summary>A recorded failure after which a replay with the same operation_id applies nothing again:
+    /// no partial effect, so no reconciliation is required.</summary>
     private static bool IsCleanFailure(JournalRecord record) =>
         record.Outcome == JournalOutcome.Failed
         && !record.NeedsReconciliation
         && record.Error?.PartialEffects != true;
 
-    /// <summary>
-    /// The "journal unavailable" refusal: the intent was NOT recorded and the command did NOT leave.
-    /// One wording for two causes (lock not acquired / append failed), with the cause named in
-    /// <c>details</c>.
-    /// </summary>
+    /// <summary>The "journal unavailable" refusal: the intent was NOT recorded and the command did NOT
+    /// leave. One wording for two causes (lock not acquired / append failed), the cause named in
+    /// <c>details</c>.</summary>
     private KompasContractException JournalUnavailable() =>
         new(
             ErrorCodes.JournalUnavailable,
@@ -394,8 +374,6 @@ public sealed class OperationJournal : IDisposable
     private static string Explain(string? failure) =>
         failure is null ? string.Empty : $": {failure}";
 
-    /// <summary>Number of times a recorded CLEAN failure was restarted with the same operation_id. Printed:
-    /// "restart allowed" and "restart never happened" are different claims.</summary>
     public int RestartsAfterCleanFailure { get; private set; }
 
     public bool Complete(string operationId, string? resultJson) => Finish(operationId, JournalOutcome.Succeeded, resultJson, null, needsReconciliation: false);
@@ -404,8 +382,8 @@ public sealed class OperationJournal : IDisposable
 
     public bool Cancel(string operationId) => Finish(operationId, JournalOutcome.Cancelled, null, null, needsReconciliation: false);
 
-    /// <summary>Record that the outcome cannot be known. Used on a budget timeout, a worker death, or a
-    /// disconnect mid-call.</summary>
+    /// <summary>Record that the outcome cannot be known: a budget timeout, a worker death, a disconnect
+    /// mid-call.</summary>
     public bool MarkUnknown(string operationId, string reason) =>
         Finish(operationId, JournalOutcome.OutcomeUnknown, null, ReconcileError(reason), needsReconciliation: true);
 
@@ -486,18 +464,21 @@ public sealed class OperationJournal : IDisposable
         }
     }
 
-    /// <summary>One record is one atomic byte write UNDER the cross-process lock: the line plus its newline go out in a single <c>Write</c> to an append-mode handle, wrapped in the named lock.</summary>
-    /// <returns><c>true</c> — written under the lock; <c>false</c> — the lock was not acquired within <see cref="_appendLockTimeout"/> and NOTHING was written.</returns>
-    /// <remarks>MEASURED: the lock is mandatory — <c>FileMode.Append</c> loses records with two writers (381/400, <c>scratch/_append_probe</c>).
-    /// LIMIT: <c>Flush()</c> reaches the OS, not the medium; the journal guards against a process crash, not power loss.</remarks>
+    /// <summary>One record is one atomic byte write UNDER the cross-process lock: the line plus its
+    /// newline go out in a single <c>Write</c> to an append-mode handle.</summary>
+    /// <returns><c>true</c> — written under the lock; <c>false</c> — the lock was not acquired within
+    /// <see cref="_appendLockTimeout"/> and NOTHING was written.</returns>
+    /// <remarks>MEASURED: the lock is mandatory — <c>FileMode.Append</c> loses records with two writers.
+    /// LIMIT: <c>Flush()</c> reaches the OS, not the medium; the journal guards against a process crash,
+    /// not power loss.</remarks>
     private bool TryAppend(JournalRecord record)
     {
         var line = JsonSerializer.Serialize(record, JournalOptions) + "\n";
 
         if (!_fileGate.Enter(_appendLockTimeout))
         {
-            // Lock not acquired — WRITING IS FORBIDDEN; an earlier revision wrote anyway and only set a
-            // diagnostic flag, replacing the guarantee with an observation.
+            // Lock not acquired — WRITING IS FORBIDDEN; a diagnostic flag would replace the guarantee
+            // with an observation.
             RefusedAppends++;
             return false;
         }
@@ -527,9 +508,9 @@ public sealed class OperationJournal : IDisposable
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
             or NotSupportedException or ObjectDisposedException)
         {
-            // The append failed for a MEDIUM cause. Until 05.10.2026 this threw IOException out; the
-            // meaning is the same as an unavailable lock: there is NO durable line. Named by number and
-            // text. History: docs/decisions/journaling.md#append-io-failure
+            // The append failed for a MEDIUM cause. The meaning is the same as an unavailable lock:
+            // there is NO durable line. Named by number and text.
+            // History: docs/decisions/journaling.md#append-io-failure
             AppendIoFailures++;
             LastAppendFailure = $"{ex.GetType().Name}: {ex.Message}";
             return false;
@@ -540,27 +521,18 @@ public sealed class OperationJournal : IDisposable
         }
     }
 
-    /// <summary>Number of times the line WRITE itself failed (lock held, medium refused).</summary>
     public int AppendIoFailures { get; private set; }
 
-    /// <summary>Reason of the last failed append; null if none failed.</summary>
     public string? LastAppendFailure { get; private set; }
 
-    /// <summary>Number of appends REFUSED because the cross-process lock was not acquired. Printed: silence is
-    /// indistinguishable from "there were no refusals".</summary>
     public int RefusedAppends { get; private set; }
 
-    /// <summary>Number of terminal writes that failed AFTER a completed mutation. Such an operation stays in the
-    /// journal as needing reconciliation.</summary>
     public int TerminalWriteFailures { get; private set; }
 
-    /// <summary>How long to wait for the journal's cross-process lock when appending (default).</summary>
     private static readonly TimeSpan AppendLockTimeout = TimeSpan.FromSeconds(5);
 
-    /// <summary>
-    /// Release the cross-process lock. The journal holds no file handle (see
+    /// <summary>Release the cross-process lock. The journal holds no file handle (see
     /// <see cref="OpenAppend"/>); the method is kept because callers own the journal through
-    /// <c>using</c>.
-    /// </summary>
+    /// <c>using</c>.</summary>
     public void Dispose() => _fileGate.Dispose();
 }

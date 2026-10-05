@@ -12,11 +12,9 @@ namespace KompasMcp.Api5Adapter;
 /// <summary>Fillet radius edit (docs/05 SM-09, mode <c>edit</c>).</summary>
 /// <remarks>
 /// INVARIANT: the radius is written to <c>IFillet.Radius1</c> on the live model, as the chamfer angle is
-/// (see <see cref="Api5Session.UpdateChamferByAngle"/>). MEASURED 16.09.2026 (row FL04r, a 100×80×10
-/// plate with R3 on four vertical edges): <c>definition.radius = 5</c> returned without error,
-/// <c>entity.Update()</c> returned true, <c>RebuildDocument()</c> passed, the definition re-read radius 5 —
-/// and the volume stayed 79922.74333882307, i.e. the geometry did not change. The setter accepts, the
-/// getter reads it, the model ignores it: v1 must call that a refusal, not a success.
+/// (see <see cref="Api5Session.UpdateChamferByAngle"/>). MEASURED: writing through
+/// <c>ksFilletDefinition.radius</c> is accepted by the setter and read back by the getter while the volume
+/// does not change — a refusal, not a success.
 /// History: docs/decisions/adapter-features.md#fillet-radius-api7
 /// INVARIANT: the API5 feature is matched to <c>IModelContainer.Fillets</c> by its OWN INPUTS, with the
 /// radius kept only as a fallback. The name differs between API5 and API7 (F.8: «f-ch2» → «Фаска:1»), so
@@ -55,12 +53,12 @@ public partial class Api5Session
             BaseObjectInputRefs: MintInputReferences(document, api7));
     }
 
-    /// <summary>Mint <c>input:&lt;hex&gt;</c> references for a feature's own inputs, one per <c>BaseObjects</c> element, ordered as <c>BaseObjectReferences</c>.</summary>
+    /// <summary>Mint <c>input:&lt;hex&gt;</c> references for a feature's own inputs, one per <c>BaseObjects</c>.</summary>
     /// <remarks>
     /// The SERVER mints the input string at read time: a feature's own input is not a body edge, has no
-    /// <c>edge:</c> registry string (the registry issues those to BODY edges), and <c>IModelObject.Reference</c> numbers are not substituted by type.
+    /// <c>edge:</c> registry string, and <c>IModelObject.Reference</c> numbers are not substituted by type.
     /// INVARIANT: minting is bound to the document REVISION, not the feature state; <c>Require</c> cuts off
-    /// previous references. Not issued when: no API7 bridge, several fillets share the radius (<c>null</c>), or no inputs.
+    /// previous references. Not issued when: no API7 bridge, several fillets share the radius, or no inputs.
     /// History: docs/decisions/adapter-features.md#mint-input-references
     /// </remarks>
     private IReadOnlyList<string>? MintInputReferences(DocumentEntry document, FilletReadDto? api7)
@@ -90,7 +88,7 @@ public partial class Api5Session
     /// INVARIANT: identify by inputs, not by radius. The radius is not a key: two fillets of one radius may
     /// legitimately live on a model, and identification by radius returned <c>null</c> on exactly such a model.
     /// The key source is the feature's OWN INPUTS (<c>FindIndexByInputReferences</c>); the radius is a FALLBACK,
-    /// used only when the composition could not be read (MEASURED: on an existing fillet the API5 definition returns no inputs).
+    /// used only when the composition could not be read.
     /// History: docs/decisions/adapter-features.md#fillet-identify-by-inputs
     /// </remarks>
     private FilletReadDto? ReadFilletRadius(DocumentEntry document, double api5Radius, object? definition = null)
@@ -337,50 +335,29 @@ public partial class Api5Session
     /// CURRENCY is chosen from what the client sent.
     /// </summary>
     /// <remarks>
-    /// INVARIANT: the route is API7 and is MEASURED. Probe H-2
-    /// (<c>docs/acceptance/api7/fillet-base-objects.md</c>, 14 PASS / 0 FAIL / 0 UNKNOWN, four consecutive
-    /// runs, own <c>run_id</c>):
-    /// <code>
-    /// IModelContainer.Fillets[i]        → IFillet
-    /// IFillet.BaseObjects               → System.Object[] of IModelObject (read)
-    /// IFillet.BaseObjects = IModelObject[] (write, full replacement)
-    /// IFillet.Update()                  (mandatory)
-    /// </code>
-    /// All objects are taken from the LIVE model — after <c>save → close → reopen</c> — and none captured
-    /// at fillet creation is reused. That was the defect of probe H.
+    /// INVARIANT: the route is API7 and is MEASURED (<c>docs/acceptance/api7/fillet-base-objects.md</c>):
+    /// <c>IModelContainer.Fillets[i]</c> → <c>IFillet</c>; <c>IFillet.BaseObjects</c> reads as
+    /// <c>System.Object[]</c> of <c>IModelObject</c> and is written by full replacement;
+    /// <c>IFillet.Update()</c> is mandatory. All objects are taken from the LIVE model, none captured at
+    /// creation is reused.
     /// History: docs/decisions/adapter-features.md#fillet-edge-set-route
-    /// LIMIT (still-valid negative result on the API5 route): MEASURED 16.09.2026 by eight probes —
-    /// <c>ksFilletDefinition.array()</c> (<c>Clear()</c> then <c>Add()</c>) does NOT edit the set of an
-    /// existing feature. After a fillet the corners are occupied by cylindrical faces and there are 0 of 4
-    /// "corner vertical" edges in the topology: (a) the original corner edges are withdrawn by the fillet
-    /// creation itself — presenting them gives <c>STALE_REFERENCE</c> before any edit; (b) the existing
-    /// vertical edges of filleted corners are NOT HELD by the feature — any set of them collapses the
-    /// definition, <c>edges_read_back = 0</c>, and the volume returns to the plate (checked at 1, 2, 4 and
-    /// 8 edges). A non-zero <c>edges_read_back</c> comes only from a SECOND consecutive call, and that is
-    /// destroy-and-rebuild, not a set edit. Hence the old route was removed from this method, not kept as a
-    /// branch.
-    /// INVARIANT: match the API5 feature to <c>IFillet</c> NOT by name, NOT by index and NOT by radius.
-    /// The name differs between API5 and API7 (F.8: «f-ch2» → «Фаска:1»); the collection index is
-    /// arbitrary; the radius does not tell two fillets of one radius apart, and the addressing experiment
-    /// (H2.7) was built on exactly such a model. The feature is identified by its OWN CURRENT inputs:
-    /// <c>ksFilletDefinition.array()</c> yields API5 edges, they are transferred to API7 and compared by
-    /// the stable <c>IModelObject.Reference</c> against the inputs of each <c>IFillet</c>. Set equality
-    /// finds the feature; at zero or several matches the call is rejected BEFORE mutation, because writing
-    /// a set into a foreign fillet means silently corrupting foreign geometry.
-    /// INVARIANT: identification and PRESENTATION are different questions with different keys.
-    /// Identification uses the feature's own inputs (above). Presentation of the new set uses objects
-    /// obtained by the <c>ksAPI7Dual</c> transfer — so the decisive control H2.4 was measured: a body edge
-    /// that was definitely not among the feature's own inputs was presented to it, and KOMPAS accepted the
-    /// composition. History: docs/decisions/adapter-features.md#fillet-edge-set-ban-lifted
-    /// LIMIT: extension on the 100×80×10 reference is not measured (the plate has exactly four vertical
-    /// corners); reduction (4→3, 4→2) and replacement at unchanged size (1→1) are. The currency differs by
-    /// operation and is mandatory, not preferred: reduction is expressed only by the feature's own inputs
-    /// (H2.3 4→3, H2.5 4→2 — the probe took objects FROM BaseObjects and did not seek body edges),
-    /// replacement by body edges (FL10x 1→1, level=geometry_checked). Mixing them in one call would later
-    /// be indistinguishable from "one of the two applied".
-    /// STATE: the route is IMPLEMENTED; product acceptance confirmation is by <c>FL10…FL10x</c>. Do not
-    /// treat the method as confirmed while <c>FL10</c> is red (the current verdict is in
-    /// <c>docs/acceptance/INDEX.md</c> and <c>docs/STATUS.md</c>).
+    /// LIMIT: the API5 route <c>ksFilletDefinition.array()</c> (<c>Clear()</c> then <c>Add()</c>) does NOT
+    /// edit the set of an existing feature — after a fillet the corner edges are withdrawn or not held, and
+    /// any set of them collapses the definition. The old route was removed, not kept as a branch.
+    /// INVARIANT: match the API5 feature to <c>IFillet</c> NOT by name, NOT by index and NOT by radius —
+    /// the name differs (F.8: «f-ch2» → «Фаска:1»), the index is arbitrary, and the radius cannot tell two
+    /// fillets of one radius apart. Identify by the feature's OWN CURRENT inputs: <c>ksFilletDefinition.array()</c>
+    /// yields API5 edges, transferred to API7 and compared by <c>IModelObject.Reference</c> against each
+    /// <c>IFillet</c>'s inputs; at zero or several matches the call is rejected BEFORE mutation.
+    /// INVARIANT: identification and PRESENTATION are different questions with different keys — the
+    /// presentation uses objects obtained by the <c>ksAPI7Dual</c> transfer (control H2.4).
+    /// History: docs/decisions/adapter-features.md#fillet-edge-set-ban-lifted
+    /// LIMIT: extension is not measured on the 100×80×10 reference (exactly four vertical corners);
+    /// reduction (4→3, 4→2) and replacement at unchanged size (1→1) are. Reduction is expressed only by the
+    /// feature's own inputs, replacement by body edges; mixing them in one call would be indistinguishable
+    /// from "one of the two applied".
+    /// STATE: the route is IMPLEMENTED; acceptance confirmation is by <c>FL10…FL10x</c>. Do not treat the
+    /// method as confirmed while <c>FL10</c> is red (verdict in <c>docs/acceptance/INDEX.md</c>).
     /// </remarks>
     private UpdateFeatureResult UpdateFilletEdgeSet(
         DocumentEntry document,
@@ -1074,11 +1051,11 @@ public partial class Api5Session
 
         var geometryConfirmed = edgesSet && sameFeature && volumeMatched;
 
-        // FEATURE ERASURE IS A REFUSAL, NOT A "SUCCESS AT A LOWER LEVEL". MEASURED 17.09.2026 (FL25): a
-        // presented set of BODY edges can describe corners the feature does NOT hold, meaning "build the
-        // fillet anew on these edges", not "keep the old one and add" — the feature was COLLAPSED (volume
-        // 68000, the L-plate WITHOUT FILLETS) while err=None and level=call_returned. So "the feature
-        // stopped reading as a fillet" is a refusal BEFORE returning success, carrying partial_effects=true.
+        // FEATURE ERASURE IS A REFUSAL, NOT A "SUCCESS AT A LOWER LEVEL". MEASURED: a presented set of
+        // BODY edges can describe corners the feature does NOT hold, meaning "build the fillet anew on
+        // these edges", not "keep the old one and add" — the feature was COLLAPSED while err=None and
+        // level=call_returned. So "the feature stopped reading as a fillet" is a refusal BEFORE returning
+        // success, carrying partial_effects=true.
         // History: docs/decisions/adapter-features.md#fillet-erasure-and-no-effect
         if (afterRefs is null || !sameFeature)
         {
@@ -1108,12 +1085,11 @@ public partial class Api5Session
                 });
         }
 
-        // A WRITE WITHOUT EFFECT IS ALSO A REFUSAL. MEASURED 18.09.2026 (FL25): the write and rebuild
-        // passed, err=None, level=call_returned, edges_read_back=1 against 2 presented, and the volume
-        // stayed on ONE corner (67980.68583470576). Between "the feature was erased" and "the set was
-        // written" there is a third outcome — "nothing happened" — also a refusal. The criterion is the
-        // RE-READ COMPOSITION, not the volume; partial_effects distinguishes a changed model from an
-        // untouched one.
+        // A WRITE WITHOUT EFFECT IS ALSO A REFUSAL. MEASURED: the write and rebuild passed, err=None,
+        // level=call_returned, edges_read_back=1 against 2 presented, and the volume stayed on ONE corner.
+        // Between "the feature was erased" and "the set was written" there is a third outcome — "nothing
+        // happened" — also a refusal. The criterion is the RE-READ COMPOSITION, not the volume;
+        // partial_effects distinguishes a changed model from an untouched one.
         // History: docs/decisions/adapter-features.md#fillet-erasure-and-no-effect
         if (!edgesSet)
         {

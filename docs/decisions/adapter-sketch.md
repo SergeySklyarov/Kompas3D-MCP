@@ -121,3 +121,24 @@ API7 (`kompas_create_aux_geometry`, `kompas_list_aux_geometry`), закрыва�
 `o3d_planeXOY/XOZ/YOZ` и переносится в API7 штатным `Api7Bridge.TransferTo7`. Перечисление вернуло бы
 «не найдено» на исправном документе, то есть отказ прибора, выданный за отказ продукта; другой
 объект вместо запрошенной опоры не подставляется.
+
+
+## <a id="sketch-status-redundancy"></a>Живой контроль `ksStateUnresolvedRedundancy` не получен
+
+MEASURED: currently `false`, and that is a measured fact, not "not done yet" — probe S read 46 shipped
+sketches and got three values (0/1/2); state 3 was NEVER encountered and no control was built for it (no
+constraint-write route was found in any of the four branches). While the flag is false, value 3 is
+published conservatively as `unknown` with reason `unresolved_redundancy_not_verified` — "declared in the
+enum" is not passed off as "measured on the product". A mock test of the conversion is not grounds to
+raise this flag.
+
+DOC: the documented route to a standard plane as an OBJECT is <c>ksPart.GetDefaultEntity</c> by type
+<c>o3d_planeXOY/XOZ/YOZ</c>; sketch creation already uses it (<c>Api5Session.Geometry.cs:ResolvePlaneEntity</c>),
+and this route is measured by acceptance on rows <c>DEP.DPL.01.discover</c> and all sketch modes; the
+obtained object is transferred to API7 by the standard <c>Api7Bridge.TransferTo7</c> and substituted into
+<c>IPlane3DBy*.BasePlane</c>. MEASURED 21.09.2026, probe <c>scratch/_probe_dpl_offset.py</c> on the shipped
+binaries <c>artifacts/publish-deproutes-20260921-b</c>: in a part that already has a body (revision 4, a
+40×40×10 plate built), <c>IAuxiliaryGeomContainer.GetPlanes3D</c> reports <c>Count = 0</c> — there are NO
+standard planes in the <c>IPlanes3D</c> collection at all, while tool-created planes do appear in it
+(<c>plane_count</c>=1 after a face support). So "find xy by enumeration" is not a route but a wish: there is
+nothing to enumerate.

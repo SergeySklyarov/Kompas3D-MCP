@@ -5,9 +5,10 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>The validator must treat a payload that arrived over the wire exactly like one built in
-/// memory. Parsed nodes wrap a JsonElement rather than a CLR double, and an earlier version threw
-/// InvalidOperationException on every numeric argument — a request crash, not a validation result.</summary>
+/// <summary>The validator must treat a payload that arrived over the wire exactly like one built in memory.</summary>
+/// <remarks>TEST: parsed nodes wrap a JsonElement rather than a CLR double; an earlier version threw
+/// InvalidOperationException on every numeric argument — a request crash, not a validation result.
+/// History: docs/decisions/tests.md#json-schema-validator-2</remarks>
 public class JsonSchemaValidatorTests
 {
     private static readonly JsonObject NumberSchema = Sch.Obj(

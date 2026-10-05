@@ -9,10 +9,13 @@ using Xunit;
 namespace KompasMcp.Unit;
 
 /// <summary>Agreement between the PUBLISHED shape of a plane and the contract that accepts it.</summary>
-/// <remarks>TEST: the check walks the chain "published schema → schema-valid JSON → DTO → contract outcome", and a nested object is the discriminating control: it MUST be rejected by the schema.
-/// LIMIT: comparing <c>schemas/*.json</c> with <c>tools/list</c> cannot catch this class of defect by construction — both sides are the same schema.
-/// MEASURED (client acceptance B3, 19.09.2026, three FAIL rows, defect <c>PLANE-BASE-DECLARED-REFUSAL-UNREACHABLE</c>): the published schema made <c>plane.base</c> a string and <c>plane.offset_mm</c> a number while the DTO expected an OBJECT one level deeper, so a call matching the published schema failed parsing and the declared refusal was unreachable.
-/// History: docs/decisions/tests.md#cut-plane-contract</remarks>
+/// <remarks>TEST: the check walks the chain "published schema → schema-valid JSON → DTO → contract outcome",
+/// and a nested object is the discriminating control: it MUST be rejected by the schema.
+/// LIMIT: comparing <c>schemas/*.json</c> with <c>tools/list</c> cannot catch this class of defect by
+/// construction — both sides are the same schema.
+/// MEASURED: the published schema made <c>plane.base</c> a string and <c>plane.offset_mm</c> a number while
+/// the DTO expected an OBJECT one level deeper, so a call matching the published schema failed parsing and
+/// the declared refusal was unreachable. History: docs/decisions/tests.md#cut-plane-2</remarks>
 public sealed class CutPlaneContractTests
 {
     private static JsonObject CutPlaneSchema() =>

@@ -7,8 +7,8 @@ namespace KompasMcp.Contracts;
 /// <summary>Reads scalars out of a <see cref="JsonNode"/> without assuming how the node is stored.</summary>
 /// <remarks>INVARIANT: a JsonNode wraps either the CLR value (<c>JsonValue&lt;long&gt;</c>, built in memory) or a
 /// <c>JsonElement</c> (arrived over the wire or through <c>DeepClone()</c>); <c>GetValue&lt;T&gt;()</c> and
-/// <c>TryGetValue&lt;T&gt;()</c> are strict about that distinction, so code that works on hand-built documents
-/// fails on parsed ones. Anything crossing the pipe or the MCP boundary reads scalars through these helpers.
+/// <c>TryGetValue&lt;T&gt;()</c> are strict about that distinction, so code that works on hand-built documents fails on
+/// parsed ones. Anything crossing the pipe or the MCP boundary reads scalars through these helpers.
 /// History: docs/decisions/contracts.md#json-scalars</remarks>
 public static class JsonScalars
 {

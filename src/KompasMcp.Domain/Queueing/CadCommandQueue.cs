@@ -22,25 +22,21 @@ public sealed class QueuedCommand
 
     public CancellationTokenSource Cancellation { get; }
 
-    /// <summary>Set when the command left the queue and started executing.</summary>
     public bool Started { get; set; }
 }
 
 /// <summary>Bounded FIFO for CAD work, with explicit backpressure (spec 1.13: 64 commands, QUEUE_FULL).</summary>
-/// <remarks>Two properties matter for the contract and are enforced here rather than left to chance:
-/// <list type="bullet">
-/// <item>The queue holds commands for <b>one</b> KOMPAS instance and hands them out one at a time, so a client sending ten parallel requests gets ten sequential CAD executions instead of ten concurrent COM calls from ten threads (test R04).</item>
-/// <item>Cancellation removes a command that has not started. A command that has started cannot be cancelled here — that is reported as CANCEL_NOT_CONFIRMED, not silently accepted (test R03).</item>
-/// </list>
-/// </remarks>
+/// <remarks>INVARIANT: the queue holds commands for <b>one</b> KOMPAS instance and hands them out one at a
+/// time, so parallel requests become sequential CAD executions, not concurrent COM calls (test R04).
+/// INVARIANT: cancellation removes only a command that has not started; one that has started is reported as
+/// CANCEL_NOT_CONFIRMED, not silently accepted (test R03).</remarks>
 public sealed class CadCommandQueue : IAsyncDisposable
 {
     private readonly Channel<QueuedCommand> _channel;
     private readonly int _capacity;
 
-    /// <summary>Commands waiting their turn, indexed for cancellation. Kept separately from the channel
-    /// because draining the channel to look for an id would consume the queue and reorder
-    /// execution — cancellation must be a lookup, never a read.</summary>
+    /// <summary>Commands waiting their turn, indexed for cancellation. Kept separately from the channel:
+    /// draining the channel to look for an id would reorder execution — cancellation must be a lookup.</summary>
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, QueuedCommand> _pending = new(StringComparer.Ordinal);
 
     private long _accepted;
@@ -58,9 +54,8 @@ public sealed class CadCommandQueue : IAsyncDisposable
         _capacity = capacity;
         _channel = Channel.CreateBounded<QueuedCommand>(new BoundedChannelOptions(capacity)
         {
-            // TryWrite below always gets a definite answer, so nothing can block an MCP handler:
-            // a full queue becomes QUEUE_FULL immediately and the client backs off. Blocking
-            // instead would turn backpressure into a timeout whose outcome is unknown.
+            // TryWrite always gets a definite answer, so nothing blocks an MCP handler: a full queue
+            // becomes QUEUE_FULL immediately. Blocking would turn backpressure into an unknown outcome.
             FullMode = BoundedChannelFullMode.Wait,
             SingleReader = true,
             SingleWriter = false,
@@ -100,10 +95,13 @@ public sealed class CadCommandQueue : IAsyncDisposable
             details: new Dictionary<string, object?> { ["queue_limit"] = _capacity, ["queued"] = Count });
     }
 
-    /// <summary>Release one slot: the command with this id has been served — successfully, with an error or as a cancellation, in all three cases it is no longer outstanding.</summary>
-    /// <remarks>This exists because the Host does not execute commands out of this queue: it enqueues for admission, then dispatches to the Worker directly (the Worker's single STA lane is what serialises CAD).
-    /// Without a matching release the channel is a one-time budget of <c>capacity</c> calls per process, and a long session starts failing with QUEUE_FULL on what is its 65th mutation — measured in the acceptance run that added the multi-body U05 group.
-    /// Reading the head rather than this particular id is deliberate: the channel is the counter of outstanding commands, and <paramref name="operationId"/> is removed from the cancellation index where identity actually matters.</remarks>
+    /// <summary>Release one slot: the command with this id has been served — successfully, with an error or
+    /// as a cancellation — so it is no longer outstanding.</summary>
+    /// <remarks>The Host does not execute commands out of this queue: it enqueues for admission, then
+    /// dispatches to the Worker directly. Without a matching release the channel is a one-time budget of
+    /// <c>capacity</c> calls per process, and a long session starts failing with QUEUE_FULL.
+    /// Reading the head rather than this particular id is deliberate: the channel is the counter of
+    /// outstanding commands, and <paramref name="operationId"/> is removed from the cancellation index.</remarks>
     public bool Complete(string operationId)
     {
         _pending.TryRemove(operationId, out _);
@@ -118,11 +116,11 @@ public sealed class CadCommandQueue : IAsyncDisposable
         return false;
     }
 
-    /// <summary>Cancel a command that has not started. Returns false when it is already executing or is not
-    /// queued at all, so the caller reports CANCEL_NOT_CONFIRMED instead of claiming a stop
-    /// (spec 1.8: running cancel is best effort, and an in-flight COM call cannot be aborted).</summary>
-    /// <remarks>The pending entry is removed here: from this moment the server no longer claims the command
-    /// is waiting, even though the object still sits in the channel until the reader skips it.</remarks>
+    /// <summary>Cancel a command that has not started. Returns false when it is already executing or not
+    /// queued, so the caller reports CANCEL_NOT_CONFIRMED instead of claiming a stop (spec 1.8: running
+    /// cancel is best effort, and an in-flight COM call cannot be aborted).</summary>
+    /// <remarks>The pending entry is removed here: the server no longer claims the command is waiting,
+    /// though the object still sits in the channel until the reader skips it.</remarks>
     public bool TryCancelQueued(string operationId)
     {
         if (!_pending.TryGetValue(operationId, out var command) || command.Started)

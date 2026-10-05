@@ -2,11 +2,14 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>The "the product talks to KOMPAS only in a typed way" boundary (order of 12.09.2026, item 4).</summary>
-/// <remarks>INVARIANT: API7 is allowed in the product (ADR-004 §1, §4) but only through vendor-generated interfaces. Late binding (<c>Type.InvokeMember</c>, <c>dynamic</c> over an RCW, a direct <c>IDispatch</c> call) stays the emergency route of the research probe <c>tools/KompasMcp.Api7Probe</c> and is not carried into <c>src/</c>.
-/// MEASURED (probe E, 2026-09-12): writing <c>IExtrusion.Sketch</c> through <c>IDispatch</c> crashed the shared process with 0xC0000409 and did not crash the isolated one, while the same write silently did not persist and was re-read by the old object. A silently unaccepted write returning S_OK is worse than a refusal precisely because acceptance would count it a success.
+/// <summary>The "the product talks to KOMPAS only in a typed way" boundary.</summary>
+/// <remarks>INVARIANT: late binding (<c>Type.InvokeMember</c>, <c>dynamic</c> over an RCW, a direct
+/// <c>IDispatch</c> call) is the emergency route of the research probe only, never carried into <c>src/</c>.
+/// MEASURED: a write through <c>IDispatch</c> crashed the shared process but not the isolated one, and the
+/// same write silently did not persist — a silently unaccepted write returning S_OK is worse than a refusal,
+/// because acceptance would count it a success.
 /// LIMIT: the check is static by source — "no late binding" is a property of code, not an observable number.
-/// History: docs/decisions/tests.md#typed-com</remarks>
+/// History: docs/decisions/tests.md#typed-com-2</remarks>
 public sealed class TypedComBoundaryGuardTests
 {
     private static string RepoRoot => FindRepoRoot();
@@ -45,10 +48,8 @@ public sealed class TypedComBoundaryGuardTests
     [InlineData("KompasMcp.Domain")]
     public void ProductCode_NeverBindsToKompasLateBound(string project)
     {
-        // Late binding under any name: InvokeMember (including Type.InvokeMember), a local IDispatch declaration
-        // with its GetIDsOfNames/Invoke, and a dynamic receiver. Exactly this set forms the emergency route in
-        // tools/KompasMcp.Api7Probe/Late.cs — copying any of these forms into the product carries over what the
-        // boundary guards against.
+        // Late binding under any name — the same forms the probe's Late.cs uses; copying any into the
+        // product carries over exactly what the boundary guards against.
         var patterns = new[]
         {
             ("InvokeMember", "Type.InvokeMember — позднее связывание в продукте"),

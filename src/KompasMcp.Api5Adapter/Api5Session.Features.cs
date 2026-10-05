@@ -8,41 +8,31 @@ using Kompas6API5;
 namespace KompasMcp.Api5Adapter;
 
 /// <summary>Reading and editing the parameters of a feature that already exists (docs/05 §4.3, §7).
-/// Everything here rests on probe P2.3 on the real v24 install, not on API5 names:</summary>
-/// <remarks>
-/// * the setter is accepted, but geometry recomputes only after <c>ksEntity.Update()</c>:
-///   <c>RebuildDocument()</c> alone left the volume unchanged and <c>ksPart.EndEdit(Rebuild=false)</c> returned False;
-/// * <c>ksFeature.type</c> is 105 (o3d_entity) for every family, so the family comes from the definition object.
-/// History: docs/decisions/adapter-features.md#feature-edit-basis
-/// </remarks>
+/// Rests on probe P2.3 on the real v24 install, not on API5 names.</summary>
+/// <remarks>SETTER ACCEPTED, GEOMETRY LATER: <c>RebuildDocument()</c> alone left the volume unchanged and
+/// <c>ksPart.EndEdit(Rebuild=false)</c> returned False; geometry recomputes only after
+/// <c>ksEntity.Update()</c>. FAMILY: <c>ksFeature.type</c> is 105 (o3d_entity) for every family, so the
+/// family comes from the definition object.
+/// History: docs/decisions/adapter-core.md#features-compaction</remarks>
 public partial class Api5Session
 {
     public FeatureReadDto GetFeature(GetFeatureCommand command)
     {
         var (document, entity) = RequireFeatureEntity(command.FeatureRef);
         var definition = entity.GetDefinition();
-        // The hole family is recognised by the ENTITY TYPE, not by the definition: the vendor wrapper
-        // has no ksHoleDefinition at all (MEASURED 16.09.2026 — of 67 declared definitions there are
-        // ksChamferDefinition and ksFilletDefinition, but no hole), so the mode parameters live only
-        // in API7 and are read from there. The type is 583 (o3d_Hole3D), not 52: 52 (o3d_holeOperation)
-        // is the number the feature is CREATED under via NewEntity and never appears in the tree
-        // (MEASURED by probe N.1 of 17.09.2026, see FindHoleEntity).
+        // The hole family is recognised by the ENTITY TYPE, not by the definition: there is no
+        // ksHoleDefinition (MEASURED), so the mode parameters live only in API7. The type is 583
+        // (o3d_Hole3D), not 52 (o3d_holeOperation, the creation factory number — see FindHoleEntity).
         var isHole = entity.type == KompasObjectTypes.Hole3D;
-        // Rotation is recognised the same way FindRotatedEntity finds it — by the FEATURE NUMBER IN THE
-        // TREE (27/28/29), not by the QI(IRotated) answer: a tree entity arrives as a raw __ComObject
-        // and refuses QI (MEASURED at the SM-03 acceptance 18.09.2026).
+        // Rotation is recognised by the FEATURE NUMBER IN THE TREE (27/28/29), not by QI(IRotated):
+        // a tree entity arrives as a raw __ComObject and refuses QI (MEASURED).
         var isRotated = IsRotatedEntity(entity);
-        // B3 features are recognised by the TREE NUMBER (69 / 633 / 50 / 79) for the same reason as
-        // rotation: they have no API5 definition at all, GetDefinition() returns null, and the API7
-        // object is not an API5 feature, so neither the definition nor QI will do. MEASURED 18.09.2026
-        // by the instrument scratch/b3-measure-feature-types.py.
+        // B3 features are recognised by the TREE NUMBER (69 / 633 / 50 / 79): no API5 definition,
+        // GetDefinition() returns null, the API7 object is not an API5 feature (MEASURED).
         var solidFamily = SolidFamilyOf(entity.type);
-        // B5: the three B5 families are recognised BY THE DEFINITION INTERFACE, not by the type number.
-        // MEASURED 20.09.2026 (probe --b5, step B5.12): a feature created by NewEntity(45)
-        // (o3d_baseEvolution) shows in the tree as 46 (o3d_bossEvolution) and its definition answers
-        // ksBossEvolutionDefinition — NOT ksBaseEvolutionDefinition. Recognition by the
-        // creation-response number would never find it: the same defect was measured at the hole
-        // (52 → 583) and at rotation (27 → 584). Both interfaces of each family are therefore accepted.
+        // B5: the three B5 families are recognised BY THE DEFINITION INTERFACE, not by the type number
+        // (MEASURED: NewEntity(45) shows as 46 and answers ksBossEvolutionDefinition). Both interfaces
+        // of each family are therefore accepted.
         var isEvolution = IsEvolutionDefinition(definition);
         var isLoft = IsLoftDefinition(definition);
         var isShell = IsShellDefinition(definition);
@@ -76,19 +66,16 @@ public partial class Api5Session
         // A hole comes entirely from API7: the API5 definition does not physically store its mode
         // numbers.
         var hole = isHole ? ReadHoleFeature(document) : null;
-        // Rotation also comes from API7, for the same reason: the parameter set lives on IRotated, and
-        // it has no API5 definition at all (entity.GetDefinition() returns null, MEASURED at the SM-03
-        // acceptance). The feature index is taken by matching on composition, not by angle: an angle is
-        // not an identifier, and FindIndexesByAngle remains a fallback.
+        // Rotation also comes from API7: the parameter set lives on IRotated, which has no API5
+        // definition (entity.GetDefinition() returns null). The index is taken by matching on
+        // composition, not by angle — an angle is not an identifier.
         var rotated = isRotated ? ReadRotatedFeature(document, entity) : null;
-        // B3 features (boolean/split/cut_by_plane/reposition) come entirely from API7: they have no API5
-        // definition and are read from the LIVE model by routes measured in probes BO.2–BO.11, SP.10 and
-        // RP.8–RP.12. Some reposition-family parameters do not read at all, and the reason is named in
+        // B3 features (boolean/split/cut_by_plane/reposition) come entirely from API7: no API5
+        // definition, read from the LIVE model. Unreadable parameters are named in
         // solid.unreadable_parameters rather than substituted with a zero.
         var solid = solidFamily is null ? null : ReadSolidFeature(document, entity, solidFamily);
-        // B5: sweep, loft and shell are read FROM THE MODEL. A failure reason is NAMED rather than left
-        // as an empty field: "not read" and "zero" must be distinguishable — silence is a claim too, and
-        // an empty field is indistinguishable from "forgot to fill it in".
+        // B5: sweep, loft and shell are read FROM THE MODEL. A failure reason is NAMED, not left empty:
+        // "not read" and "zero" must be distinguishable — silence is a claim too.
         string? sweepNote = null;
         string? loftNote = null;
         string? shellNote = null;
@@ -199,8 +186,7 @@ public partial class Api5Session
         }
         else if (family == EvolutionFamily && sweepNote is not null)
         {
-            // The reason is named, not left as an empty field: OperationResult lives only in API7, and
-            // its absence is a route boundary, not a zero.
+            // Named, not left empty: OperationResult lives only in API7; its absence is not a zero.
             unverified.Add(sweepNote);
         }
         else if (family == LoftFamily && loftNote is not null)
@@ -213,10 +199,8 @@ public partial class Api5Session
         }
         else if (solid?.UnreadableParameters is { Count: > 0 })
         {
-            // One line for the whole family, not one per field: the names and MEASURED reasons already
-            // sit in solid.unreadable_parameters, and duplicating them here would make the summary
-            // unreadable. What matters is that the caller learns the read boundary from the summary, not
-            // from a missing field.
+            // One line for the whole family, not one per field: the names and reasons already sit in
+            // solid.unreadable_parameters, so the caller learns the read boundary from the summary.
             unverified.Add("solid_params_partly_unreadable — часть параметров признака B3 не читается "
                 + "из модели; имена полей и измеренные причины — в solid.unreadable_parameters");
         }
@@ -283,15 +267,12 @@ public partial class Api5Session
         var splitRequested = command.Plane is not null || command.ExpectedPartVolumesMm3 is not null;
         var cutRequested = command.KeepSide is not null;
         var booleanRequested = command.Operation is not null;
-        // A pattern edit (queue B4) is chosen by the pattern FIELD itself, not by the tree type number:
-        // for the other families the number is measured, for a pattern it is not, and it must not be
-        // guessed. See Api5Session.PatternEdit.cs.
+        // A pattern edit (queue B4) is chosen by the pattern FIELD itself, not by the tree type number
+        // (which is not measured for a pattern). See Api5Session.PatternEdit.cs.
         var patternRequested = command.Pattern is not null;
 
-        // Edit of the three families of the last queue B5 (order §11). The family is chosen by the FIELD
-        // itself, not by the tree type number: for a sweep the CREATION number and the TREE number
-        // diverge (45 → 46, MEASURED in step B5.12), and addressing by number would edit the wrong
-        // feature. See Api5Session.FeatureEdit.B5.cs.
+        // Edit of the three families of the last queue B5 (order §11), chosen by the FIELD itself, not
+        // by the tree type number (for a sweep they diverge: 45 → 46). See Api5Session.FeatureEdit.B5.cs.
         var sweepRequested = command.ShiftMode is not null;
         var loftRequested = command.SectionRefs is not null;
         var shellRequested = command.ThicknessMm is not null || command.ThinInward is not null
@@ -299,11 +280,8 @@ public partial class Api5Session
 
         // INVARIANT: `couplings` is a SECOND INPUT of the loft family and does NOT select it — the chains
         // describe point correspondence of an ALREADY SET section set, so without section_refs there is
-        // nothing to change (UpdateLoftFeature rejects such a call by name). But couplings MUST stand in the
-        // foreign-field lists: otherwise it was accepted and swallowed. MEASURED 20.09.2026 by probe
-        // scratch/_couplings_scope_probe.py: a "distance1_mm + couplings" call on a chamfer returned success
-        // and volume 79840 → 79955, while sibling shift_mode and section_refs were rejected INVALID_ARGUMENT.
-        // Found by unit test SolidFeatureClassificationTests.
+        // nothing to change (UpdateLoftFeature rejects such a call by name). But couplings MUST stand in
+        // the foreign-field lists, otherwise it is accepted and swallowed.
         var couplingsRequested = command.Couplings is not null;
 
         // Hole (SM-07): mode fields. The feature is selected NOT by these fields but by the tree entity
@@ -349,22 +327,16 @@ public partial class Api5Session
         var featuresBefore = CountFeatures(document);
         var stateBefore = ReadFeatureState(entity);
 
-        // A pattern is the ninth editable family B4 (order §7: action edit). The branch stands BEFORE the
-        // API5 definition read: a pattern feature has no API5 definition at all (the object is created by
-        // the API7 factory), so below it would fall into "this feature is null" and the edit would be
-        // unreachable.
+        // A pattern is the ninth editable family B4 (order §7: action edit). The branch stands BEFORE
+        // the API5 definition read: a pattern feature has no API5 definition at all.
         if (patternRequested)
         {
             return UpdatePattern(document, entity, command, volumeBefore, featuresBefore, stateBefore);
         }
 
-        // A hole is the tenth editable family (order SM07 §3.2, queue B2). The branch stands HERE, not among
-        // the branches by API5 definition: a native hole has NO definition — ksHoleDefinition does not exist
-        // among the 67 declared definitions of the vendor interop (MEASURED 16.09.2026, recorded in docs/04),
-        // and `kompas_get_feature` reads a hole the same way (definition_interface = null, MEASURED by probe
-        // scratch/_hole_edit_probe.py). Recognition is by the ENTITY TYPE IN THE TREE: 583 (o3d_Hole3D), not
-        // 52 (o3d_holeOperation, the creation FACTORY number) — probe N.1: NewEntity(52).type = 52, a live
-        // IHoles3D[0].ModelObjectType = 583, and one tree entry appeared under 583.
+        // A hole is the tenth editable family (order SM07 §3.2, queue B2). The branch stands HERE, not
+        // among the branches by API5 definition: a native hole has NO definition. Recognition is by the
+        // ENTITY TYPE IN THE TREE: 583 (o3d_Hole3D), not 52 (o3d_holeOperation, the FACTORY number).
         if (entity.type == KompasObjectTypes.Hole3D)
         {
             return UpdateHole(document, entity, command, volumeBefore, featuresBefore, stateBefore);
@@ -411,9 +383,8 @@ public partial class Api5Session
                     details: new Dictionary<string, object?> { ["family"] = FilletFamily });
             }
 
-            // Radius and edge set are different routes (radius via API7, set via the API5 definition) and
-            // different edit subjects. They must not be mixed in one call: "changed both" would be
-            // indistinguishable from "one of the two applied".
+            // Radius and edge set are different routes and different edit subjects; they must not be
+            // mixed in one call: "changed both" would be indistinguishable from "one of the two applied".
             if (command.EdgeRefs is not null || command.BaseObjectRefs is not null)
             {
                 return UpdateFilletEdgeSet(document, entity, command, volumeBefore, featuresBefore, stateBefore);
@@ -423,32 +394,22 @@ public partial class Api5Session
         }
 
         // Rotation is the fourth editable family, recognised by the FEATURE NUMBER IN THE TREE
-        // (27/28/29), not by definition: rotation has no API5 definition at all, GetDefinition() returns
-        // null, and QI(IRotated) on a tree entity refuses (MEASURED 18.09.2026). A rotation edit changes
-        // only angle and direction; profile and axis retargeting was not measured, and fields of other
-        // families are rejected here rather than ignored.
+        // (27/28/29), not by definition (QI(IRotated) on a tree entity refuses, MEASURED). Only angle
+        // and direction change; foreign fields are rejected here rather than ignored.
         if (IsRotatedEntity(entity))
         {
             return UpdateRotated(document, entity, command, volumeBefore, featuresBefore, stateBefore);
         }
 
-        // Body reposition is the fifth editable family (order B3 §5, §7: action edit). It is recognised
-        // by the FEATURE NUMBER IN THE TREE (79), like rotation: it has no API5 definition at all
-        // (GetDefinition() returns null), and the API7 object is not an API5 feature — so neither the
-        // definition nor QI will do. Number 79 MEASURED 18.09.2026 by the instrument
-        // scratch/b3-measure-feature-types.py; 569 (o3d_BodyReposition) is the CREATION side, the feature
-        // lies under 79 in the tree.
+        // Body reposition is the fifth editable family (order B3 §5, §7), recognised by the FEATURE
+        // NUMBER IN THE TREE (79): no API5 definition, and 569 (o3d_BodyReposition) is the CREATION side.
         if (entity.type == KompasObjectTypes.BodyRepositionFeature)
         {
             return UpdateSolidReposition(document, entity, command, volumeBefore, featuresBefore, stateBefore);
         }
 
-        // Split and cut are the sixth and seventh editable B3 families (order §5, §7: action edit). They
-        // are recognised by the FEATURE NUMBER IN THE TREE (633 and 50) for the same reason as
-        // reposition: they have no API5 definition, and the API7 object (ISplitSolid, ICut) is not an API5
-        // feature. Numbers MEASURED 18.09.2026 by the instrument scratch/b3-measure-feature-types.py; 633
-        // is o3d_SplitSolid, 50 is o3d_cutByPlane, and both numbers are read from the TREE, not from the
-        // creation factory (for a split the factory and tree diverge just like the hole 52/583).
+        // Split and cut are the sixth and seventh editable B3 families (order §5, §7), recognised by the
+        // FEATURE NUMBER IN THE TREE (633 = o3d_SplitSolid, 50 = o3d_cutByPlane), not the creation factory.
         if (entity.type == KompasObjectTypes.SplitSolid)
         {
             return UpdateSolidSplit(document, entity, command, volumeBefore, featuresBefore, stateBefore);
@@ -459,23 +420,17 @@ public partial class Api5Session
             return UpdateSolidCutByPlane(document, entity, command, volumeBefore, featuresBefore, stateBefore);
         }
 
-        // A boolean is the eighth editable B3 family. It is recognised by number 69 (o3d_aggregate) in
-        // the tree, not by the API5 definition: the route through ksAggregateDefinition measurably does
-        // not work (it has a writable BooleanType and NO way to set bodies — §4.10.5, OQ-A16). The
-        // operation-kind edit by the API7 route was MEASURED 18.09.2026 by probe --boolean, step BO.11:
-        // rewriting IBoolean.BooleanType on an existing feature changes the geometry, and the
-        // "write + Update()" pair was confirmed by control E-E.
+        // A boolean is the eighth editable B3 family, recognised by number 69 (o3d_aggregate) in the
+        // tree, not by the API5 definition (ksAggregateDefinition has NO way to set bodies — OQ-A16).
+        // The API7 route was MEASURED: rewriting IBoolean.BooleanType changes the geometry.
         if (entity.type == KompasObjectTypes.BooleanOperation)
         {
             return UpdateSolidBoolean(document, entity, command, volumeBefore, featuresBefore, stateBefore);
         }
 
         // The three families of the last mandatory queue B5 (order §11). The branch stands HERE, not
-        // earlier: above, families with API5 definitions have already rejected foreign fields by name,
-        // and "shift_mode to a chamfer" reads clearer to the caller than "the feature does not answer the
-        // sweep interface". Recognition is by the FIELD itself, not by the tree type number: for a sweep
-        // the creation number and the tree number diverge (45 → 46, step B5.12), and addressing by number
-        // would edit the wrong feature. See Api5Session.FeatureEdit.B5.cs.
+        // earlier: families with API5 definitions above have already rejected foreign fields by name.
+        // Recognition is by the FIELD itself, not by the tree type number. See Api5Session.FeatureEdit.B5.cs.
         if (sweepRequested)
         {
             return UpdateSweepFeature(document, entity, command, volumeBefore, featuresBefore, stateBefore);
@@ -591,12 +546,9 @@ public partial class Api5Session
             }
 
             // The extrusion interop has no common interface: SetSketch is declared on each concrete
-            // definition, so the branching is mandatory, not a convenience. Write to a fresh definition
-            // object (the same discipline as for the read — P2.3). NEGATIVE RESULT, MEASURED 12.09.2026
-            // (row L11): SetSketch returns true, but GetSketch() reads back the PREVIOUS sketch and the
-            // volume does not change — the support change is not applied by this route. The cached-RCW
-            // hypothesis was not confirmed: writing to a fresh object gives the same outcome. The mode
-            // stays blocked, not "ready".
+            // definition, so the branching is mandatory. Write to a fresh definition object. NEGATIVE
+            // RESULT, MEASURED (row L11): SetSketch returns true, but GetSketch() reads back the
+            // PREVIOUS sketch and the volume does not change — the support change is not applied.
             var writeTarget = entity.GetDefinition() ?? definition!;
             var accepted = writeTarget switch
             {
@@ -623,12 +575,9 @@ public partial class Api5Session
         var updated = entity.Update();
         document.Document.RebuildDocument();
 
-        // INVARIANT: the refusal must happen BEFORE the revision bump. MEASURED by row L12 of the
-        // 12.09.2026 run: when the refusal came after BumpRevision, the document got a new revision with
-        // an unchanged model, and all issued references went stale because of an operation that did
-        // nothing.
-        // Read back through a NEW definition object — the instance held during the write may be a
-        // cached view, and "we set it" is not evidence the model stored it.
+        // INVARIANT: the refusal must happen BEFORE the revision bump (row L12: otherwise the document
+        // got a new revision with an unchanged model and all references went stale). Read back through a
+        // NEW definition object — the instance held during the write may be a cached view.
         var after = ReadExtrusion(entity.GetDefinition() ?? definition!);
         var readBack = after?.Sides.FirstOrDefault(s => s.Side == sides[0].Side);
         var volumeAfter = ReadVolume(document);
@@ -667,8 +616,7 @@ public partial class Api5Session
                 Expected: $"признаков {featuresBefore}, имя «{stateBefore.Name}»"),
         };
 
-        // Read back from a NEW definition object: the one written through may be a cached view, and "we
-        // called SetSketch" is not evidence that the model accepted it.
+        // Read back from a NEW definition object: the one written through may be a cached view.
         var sketchConfirmed = true;
         var sketchIdentityByReadBack = true;
         if (command.SketchRef is not null)
@@ -743,9 +691,8 @@ public partial class Api5Session
             && volumeBefore is double vb && volumeAfter is double va
             && Math.Abs(va - vb) <= ProfileArea.Tolerance(vb))
         {
-            // KOMPAS accepted SetSketch and did not change the model. Reporting this as "success" would
-            // lie to the caller about the support edit, so the route refuses honestly and after the
-            // read-back: the feature is intact, the volume unchanged, nothing happened.
+            // KOMPAS accepted SetSketch and did not change the model; reporting "success" would lie
+            // about the support edit, so the route refuses after the read-back.
             throw new KompasContractException(
                 ErrorCodes.CapabilityUnavailable,
                 "Смена опорного эскиза существующего признака не применена: GetSketch() перечитал " +

@@ -21,10 +21,12 @@ internal sealed record AuxGeomRow(
     IReadOnlyList<string> Notes);
 
 /// <summary>A part's auxiliary geometry as MODEL OBJECTS: planes, axes, points.</summary>
-/// <remarks>DOC: the route is from the official v24 help, not a guess (step 0 of <c>DEPENDENCIES_PRODUCT_ROUTES_DEVELOPER_PROMPT.md</c>, report <c>DEPENDENCIES_PRODUCT_ROUTES_STEP0_REPORT_20260921.md</c>): <c>IAuxiliaryGeomContainer.GetPlanes3D/GetAxes3D</c> (<c>ksapi_iauxiliarygeomcontainer_getplanes3d.html</c>, <c>…getaxes3d.html</c>), <c>IPlanes3D.Add(ksObj3dTypeEnum)</c> (<c>ksapi_iplanes3d_add.html</c>), <c>IAxes3D.Add(ksObj3dTypeEnum)</c> (<c>ksapi_iaxes3d_add.html</c>), <c>IModelContainer.GetPoints3D</c> (<c>ksapi_imodelcontainer_getpoints3d.html</c>), <c>IPoints3D.Add</c> (<c>ksapi_ipoints3d_add.html</c>), <c>IPlane3DByAngle</c> / <c>IPlane3DByOffset</c>, <c>IAxis3DBy2Points</c> / <c>IAxis3DByConeface</c> / <c>IAxis3DByEdge</c>, <c>IPoint3D</c>.
-/// Object types come from the official <c>obj3dtype.html</c> table: <c>o3d_planeAngle</c> = 15 → <c>IPlane3DByAngle</c>, <c>o3d_planeOffset</c> = 14 → <c>IPlane3DByOffset</c>, <c>o3d_axis2Points</c> = 10, <c>o3d_axisConeFace</c> = 11, <c>o3d_axisEdge</c> = 12, <c>o3d_point3D</c> = 70.
-/// MEASURED: planes and axes live on a DIFFERENT interface than points — <c>Planes3D</c>/<c>Axes3D</c> are declared on <c>IAuxiliaryGeomContainer</c> (IID <c>{950FEBE2-F916-4E77-A37D-B061E5C22FA8}</c>), while <c>Points3D</c> is on <c>IModelContainer</c>; a plain cast of the container to <c>IAuxiliaryGeomContainer</c> gives <c>null</c>, and only a QI on the live part object works (R.13; see also <c>Api7Bridge.TryBuildAxisBy2Points</c>).
-/// INVARIANT: no value is derived from a collection index or guessed from geometry — an address is only a reference issued by the enumeration; standard planes (<c>o3d_planeXOY/XOZ/YOZ</c>) are found by object TYPE, not position, and their absence is a refusal, not a substitute.
+/// <remarks>DOC: the route is from the official v24 help, not a guess:
+/// <c>IAuxiliaryGeomContainer.GetPlanes3D/GetAxes3D</c> plus Add/GetPoints3D; full list in the history.
+/// MEASURED: <c>Planes3D</c>/<c>Axes3D</c> live on <c>IAuxiliaryGeomContainer</c>, NOT on <c>IModelContainer</c>;
+/// <c>Points3D</c> is on <c>IModelContainer</c>; a plain cast gives <c>null</c>, only a QI on the live part works.
+/// INVARIANT: standard planes (<c>o3d_planeXOY/XOZ/YOZ</c>) are found by object TYPE, not position;
+/// absence is a refusal, not a substitute.
 /// History: docs/decisions/adapter-api7.md#aux-geometry</remarks>
 internal static class Api7AuxGeometry
 {
@@ -113,11 +115,10 @@ internal static class Api7AuxGeometry
                 return (null, "IPoints3D.Add() не отдал IPoint3D");
             }
 
-            // The NAME is set BEFORE Update(), as for planes and axes. MEASURED 21.09.2026
-            // (publish-deproutes-20260921-d): without the assignment the model returned an
-            // auto-generated name instead of the requested "PROBE-point", and row DEP.DPT.02.read
-            // looking a point up by name found 0 objects. The setter exists in the shipped assembly:
-            // IPoint3D.set_Name(String) (IID {D71AEDBE-01D4-4C7D-96DC-94981F2A1C37}).
+            // The NAME is set BEFORE Update(), as for planes and axes. MEASURED: without the
+            // assignment the model returned an auto-generated name, and a lookup by name found 0
+            // objects; the setter IPoint3D.set_Name(String) exists in the shipped assembly.
+            // History: docs/decisions/adapter-api7.md#aux-geometry
             if (name is { Length: > 0 })
             {
                 point.Name = name;
@@ -300,11 +301,7 @@ internal static class Api7AuxGeometry
         }
     }
 
-    // FindBasePlane (searching IPlanes3D for a standard plane by ModelObjectType) was REMOVED
-    // 21.09.2026: the route was MEASURED non-existent — a probe showed GetPlanes3D returns Count = 0
-    // on a part with a finished body, i.e. IPlanes3D holds no standard planes at all, so the search
-    // failed for a reason of the instrument, not of the product. A named datum is obtained via the
-    // documented ksPart.GetDefaultEntity (see Api5Session.AuxGeometry.cs:ResolveNamedBasePlane).
+    // FindBasePlane was REMOVED (GetPlanes3D holds no standard planes: Count = 0 on a finished body).
     // History: docs/decisions/adapter-api7.md#aux-geometry
 
     /// <summary>Read a plane: kind, angle or offset, direction, reference and a SIGNED NORMAL. DOC: the
@@ -402,10 +399,13 @@ internal static class Api7AuxGeometry
         }
     }
 
-    /// <summary>Edit an ALREADY CREATED plane: the documented setters <c>IPlane3DByOffset.Offset</c>, <c>IPlane3DByAngle.Angle</c> and <c>IPlane3DBy*.BasePlane</c>, then <c>Update()</c>.</summary>
-    /// <remarks>INVARIANT: only what was supplied is set — a <c>null</c> field means "do not change", not "set to zero", since substituting zero would rewrite an offset the client did not ask about.
-    /// INVARIANT: kind/field correspondence is checked at the caller BEFORE the call; the check here is a second safety net — the setter of a foreign kind is unreachable by type and would raise <c>InvalidCastException</c> instead of a clear refusal.
-    /// INVARIANT: success is not an applied edit — confirmation is a RE-READ (<see cref="ReadPlane"/>) done by the caller; only a named refusal reason is returned here.</remarks>
+    /// <summary>Edit an ALREADY CREATED plane via <c>IPlane3DByOffset.Offset</c>,
+    /// <c>IPlane3DByAngle.Angle</c> and <c>IPlane3DBy*.BasePlane</c>, then <c>Update()</c>.</summary>
+    /// <remarks>INVARIANT: only what was supplied is set — <c>null</c> means "do not change", not "set to
+    /// zero". INVARIANT: kind/field correspondence is checked at the caller BEFORE the call; the check
+    /// here is a second safety net (a foreign-kind setter raises <c>InvalidCastException</c>).
+    /// INVARIANT: success is not an applied edit — confirmation is a RE-READ (<see cref="ReadPlane"/>) by
+    /// the caller; only a named refusal reason is returned here.</remarks>
     public static string? UpdatePlane(
         IPlane3D plane, double? offsetMm, double? angleDeg, bool? direction, IModelObject? basePlane)
     {

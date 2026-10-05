@@ -12,22 +12,19 @@ using KompasMcp.Domain.Geometry;
 namespace KompasMcp.Api5Adapter;
 
 /// <summary>Reading B3 feature parameters FROM THE MODEL — the <c>read</c> action of order §7.</summary>
-/// <remarks>INVARIANT: every route here is measured by a probe, not derived from member names (run references sit
-/// at each read; summary in <c>docs/04_KOMPAS_API_NOTES.md</c> §4.10.9). INVARIANT: an empty field means "not read",
-/// not zero — the reason goes to <c>unreadable_parameters</c>. Of the five reposition transformation fields ONE is
-/// not published — <c>reposition_axis_point_mm</c>; the other four read by the parametric route (see history).
-/// INVARIANT: reading does not fail when the bridge is unavailable — feature state (name, IsValid, updateStamp)
-/// reads without API7, so an unavailable route does not fail all of <c>kompas_get_feature</c>.
+/// <remarks>INVARIANT: every route here is measured by a probe, not derived from member names.
+/// INVARIANT: an empty field means "not read", not zero — the reason goes to <c>unreadable_parameters</c>.
+/// INVARIANT: reading does not fail when the bridge is unavailable — feature state reads without API7.
 /// History: docs/decisions/adapter-solid.md#reposition-read</remarks>
 public partial class Api5Session
 {
-    /// <summary>The rotation axis point is not published — a MEASURED LIMIT, not an unfinished code branch.</summary>
-    /// <remarks>LIMIT: NO interface of the chain (<c>IBodyReposition</c>, <c>ILocalCoordinateSystem</c>/<c>IPoint3D</c>, <c>IPoint3DParamDisplace</c>, <c>ILocalCSAxesDirectionParam</c>, <c>ILocalCSEulerParam</c>, <c>ILocalCSObject</c>)
-    /// has a documented member for the axis point; <c>RepositionCentre</c> and <c>ILocalCSObject.CoordinateSystem</c> return no coordinates
-    /// (DOC: <c>ilocalcsobject_coordinatesystem.html</c>, <c>CoordinateSystem</c> is <c>IModelObject</c>). MEASURED: the axis point is NOT a
-    /// placement property — <c>X/Y/Z = c</c> CHANGES the bounding box of a rotated body ((−5,0,0)…(5,20,5) instead of (−5,−5,0)…(5,15,5)),
-    /// while <c>X/Y/Z = c − R·c</c> PRESERVES it; a rotation about any point of ONE line gives the SAME placement, so only a
-    /// REPRESENTATIVE is recovered (<see cref="EulerOrientation.AxisPointFromPlacement"/>), not "that" point.
+    /// <summary>The rotation axis point is not published — a MEASURED LIMIT.</summary>
+    /// <remarks>LIMIT: no interface of the chain (<c>IBodyReposition</c>, <c>ILocalCoordinateSystem</c>,
+    /// <c>IPoint3D</c>, <c>IPoint3DParamDisplace</c>, <c>ILocalCSAxesDirectionParam</c>,
+    /// <c>ILocalCSEulerParam</c>, <c>ILocalCSObject</c>) documents a member for the axis point;
+    /// <c>RepositionCentre</c> and <c>ILocalCSObject.CoordinateSystem</c> return no coordinates
+    /// (DOC: <c>ilocalcsobject_coordinatesystem.html</c>). MEASURED: the axis point is NOT a placement
+    /// property — only a REPRESENTATIVE of the axis line is recovered, not "that" point.
     /// History: docs/decisions/adapter-solid.md#reposition-axis-point</remarks>
     private const string RepositionAxisPointUnreadable =
         "reposition_axis_point_mm — не публикуется: документированного члена для точки оси НЕТ НИ У "
@@ -54,13 +51,11 @@ public partial class Api5Session
         + "есть и прочитана, но она равна c − R·c и ВХОДНЫМ вектором не является: выдать её за вход "
         + "означало бы подменить параметр операции его следствием.";
 
-    /// <summary>The reason a feature written by a FOREIGN route (a matrix) is not read — a REFUSAL, not "zeros".</summary>
-    /// <remarks>INVARIANT: recognised by the DOCUMENTED, READABLE <c>ILocalCoordinateSystem.OrientationType</c> — MEASURED
-    /// (probe <c>--reposition-params</c>, run <c>a336120926fc4652a8bf737562568271</c>): the parametric route reads
-    /// <c>1 (ksEulerCorners)</c> live and after reopen, a matrix-written one reads <c>0 (ksAxisOrientation)</c> (RP.16, RP.22).
-    /// LIMIT: a refusal, not a derivation from axes — the matrix view is SINGULAR on a reopened document with preserved
-    /// geometry (RP.16), <c>WriteToFile</c> gives a singular matrix (RP.18); nothing tells "written" from "not restored"
-    /// (<c>Valid</c> reads <c>True</c> in both states, <c>Update()</c> + rebuild does not restore the read, RP.23). "No parameters of this route" and "the read failed" are different strings; existing features are not silently converted.
+    /// <summary>The reason a feature written by a FOREIGN route (a matrix) is not read — a REFUSAL.</summary>
+    /// <remarks>INVARIANT: recognised by the DOCUMENTED, READABLE <c>ILocalCoordinateSystem.OrientationType</c>.
+    /// LIMIT: a refusal, not a derivation from axes — the matrix view is SINGULAR on a reopened document
+    /// with preserved geometry, and nothing tells "written" from "not restored". "No parameters of this
+    /// route" and "the read failed" are different strings; existing features are not silently converted.
     /// History: docs/decisions/adapter-solid.md#reposition-legacy</remarks>
     private const string RepositionLegacyReason =
         "размещение записано ЧУЖИМ маршрутом, а не документированными параметрами ориентации: "
@@ -73,8 +68,8 @@ public partial class Api5Session
         + "границу чтения, а не подставляет нули и не выдаёт выведенное за прочитанное.";
 
     /// <summary>B3 family by the FEATURE NUMBER IN THE TREE, not by definition: these families have no
-    /// API5 definition at all (<c>GetDefinition()</c> returns null). MEASURED 18.09.2026 by the instrument
-    /// <c>scratch/b3-measure-feature-types.py</c>.</summary>
+    /// API5 definition at all (<c>GetDefinition()</c> returns null).</summary>
+    /// <remarks>MEASURED by the instrument <c>scratch/b3-measure-feature-types.py</c>.</remarks>
     internal static string? SolidFamilyOf(int entityType) => entityType switch
     {
         KompasObjectTypes.BooleanOperation => BooleanFamily,
@@ -108,12 +103,10 @@ public partial class Api5Session
     }
 
     /// <summary>Boolean operation kind and tool preservation.</summary>
-    /// <remarks>MEASURED 18.09.2026 (probe <c>--boolean</c>, steps BO.11 and BO.10): a written
-    /// <c>IBoolean.BooleanType</c> reads back as <c>ksUnion</c> / <c>ksDifference</c> / <c>ksIntersect</c> —
-    /// three DIFFERENT values on three different writes, so the read distinguishes rather than returning a
-    /// constant. <c>SaveCopyModifyObjects</c> read back in BO.5 (<c>true</c>) and BO.2–BO.4, BO.6
-    /// (<c>false</c>), and step BO.10 read both fields from a REOPENED file — the route survives
-    /// save → close → reopen.</remarks>
+    /// <remarks>MEASURED: a written <c>IBoolean.BooleanType</c> reads back as <c>ksUnion</c> /
+    /// <c>ksDifference</c> / <c>ksIntersect</c> — three DIFFERENT values on three different writes.
+    /// <c>SaveCopyModifyObjects</c> reads back on a REOPENED file too (the route survives
+    /// save → close → reopen).</remarks>
     private SolidFeatureDto ReadBooleanSolid(
         DocumentEntry document, IModelContainer container, ksEntity entity, List<string> unreadable)
     {
@@ -147,13 +140,12 @@ public partial class Api5Session
         return new SolidFeatureDto(operation, keepTools, UnreadableParameters: Unreadable(unreadable));
     }
 
-    /// <summary>The support of a split (<c>ISplitSolid.CutObjects</c>) or a cut (<c>ICut.CutObject</c>) and the cut side (<c>ICut.Direction</c>).</summary>
-    /// <remarks>MEASURED 18.09.2026 (probe <c>--split</c>, step SP.10, run <c>95e24af18d694d2cb50890a99983376a</c>):
-    /// the support <c>x = 10</c> reads as points <c>(10,0,0)</c>, <c>(10,1,0)</c>, <c>(10,0,1)</c> with normal
-    /// <c>(1,0,0)</c>, and <c>x = 15</c> as <c>(15,0,0)</c>, <c>(15,1,0)</c>, <c>(15,0,1)</c> — the read
-    /// distinguishes DIFFERENT supports rather than returning a constant; <c>Direction</c> reads <c>true</c>
-    /// and <c>false</c> on the same support. Step SP.9 (E-A) showed the support reads from a live feature
-    /// and its three points are what the edit moves.</remarks>
+    /// <summary>The support of a split (<c>ISplitSolid.CutObjects</c>) or a cut (<c>ICut.CutObject</c>)
+    /// and the cut side (<c>ICut.Direction</c>).</summary>
+    /// <remarks>MEASURED: supports at DIFFERENT offsets read as different point triples and normals, so
+    /// the read distinguishes rather than returning a constant; <c>Direction</c> reads <c>true</c> and
+    /// <c>false</c> on the same support.
+    /// History: docs/decisions/adapter-solid.md#split-parts-selection</remarks>
     private SolidFeatureDto ReadSupportSolid(
         DocumentEntry document, IModelContainer container, ksEntity entity, List<string> unreadable, bool isCut)
     {
@@ -201,13 +193,13 @@ public partial class Api5Session
     }
 
     /// <summary>The reposition kind and its parameters — READ from the model, not derived.</summary>
-    /// <remarks>INVARIANT: the source is the placement PARAMETERS, not the matrix — <c>OrientationType = ksEulerCorners</c> + <c>LocalCSParameters</c>
-    /// (angle triple) and <c>ParameterType = ksPDisplace</c> + <c>Parameters</c> (translation). MEASURED in full by probe
-    /// <c>--reposition-params</c>, run <c>a336120926fc4652a8bf737562568271</c>, step RP.25 (details in history). The matrix view
-    /// (<c>GetVector</c>, <c>WriteToFile</c>) is NOT used at all (RP.16, RP.18, RP.20, RP.23). INVARIANT: the kind is decided
-    /// UNAMBIGUOUSLY from the read parameters via a rotation matrix (<see cref="EulerOrientation"/>): singular rotation + read
-    /// translation = translation, non-singular = rotation. Published: kind, vector, axis direction, angle (not the axis point).
-    /// LIMIT: a matrix-written feature is a refusal, not zeros. History: docs/decisions/adapter-solid.md#reposition-read</remarks>
+    /// <remarks>INVARIANT: the source is the placement PARAMETERS, not the matrix —
+    /// <c>OrientationType = ksEulerCorners</c> + <c>LocalCSParameters</c> and <c>ParameterType = ksPDisplace</c>
+    /// + <c>Parameters</c>; the matrix view (<c>GetVector</c>, <c>WriteToFile</c>) is NOT used.
+    /// INVARIANT: the kind is decided UNAMBIGUOUSLY from the read parameters via a rotation matrix
+    /// (<see cref="EulerOrientation"/>): singular rotation + read translation = translation, non-singular
+    /// = rotation. LIMIT: a matrix-written feature is a refusal, not zeros.
+    /// History: docs/decisions/adapter-solid.md#reposition-read</remarks>
     private SolidFeatureDto ReadRepositionSolid(
         DocumentEntry document, IModelContainer container, ksEntity entity, List<string> unreadable)
     {

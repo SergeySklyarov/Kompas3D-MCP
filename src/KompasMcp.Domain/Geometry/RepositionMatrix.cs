@@ -1,13 +1,13 @@
 namespace KompasMcp.Domain.Geometry;
 
 /// <summary>Homogeneous 4x4 matrix in the layout KOMPAS-3D v24 uses to write a body's position.</summary>
-/// <remarks>MEASURED 18.09.2026 (probe --reposition, step RP.2, run 929f08886f1348fe921943052a4026b0):
-/// ONLY the 16-number matrix moves the body — the 12-number routes and <c>SetDisplacementByAxis</c>
-/// return <c>Update() = true</c> and do not move it, so a successful <c>Update()</c> proves nothing here.
-/// LAYOUT: a 3x3 whose COLUMNS are the basis-vector images, then the translation row, then 1; the array
-/// stores the triples consecutively, i.e. COLUMN-major, so the index order is the reverse of <c>R[i, j]</c>.
-/// INVARIANT: a layout must have a discriminating control — a ROTATION; on a translation rows and columns
-/// cannot be told apart (the unit rotation is symmetric). History: docs/decisions/geometry.md#reposition-layout</remarks>
+/// <remarks>MEASURED: ONLY the 16-number matrix moves the body — the 12-number routes and
+/// <c>SetDisplacementByAxis</c> return <c>Update() = true</c> and do not move it, so a successful
+/// <c>Update()</c> proves nothing here. LAYOUT: a 3x3 whose COLUMNS are the basis-vector images, then the
+/// translation row, then 1; the array stores the triples consecutively (COLUMN-major), so the index order
+/// is the reverse of <c>R[i, j]</c>. INVARIANT: a layout must have a discriminating control — a ROTATION;
+/// on a translation rows and columns cannot be told apart.
+/// History: docs/decisions/geometry.md#reposition-layout</remarks>
 public static class RepositionMatrix
 {
     /// <summary>Element count: 16, and no other moves the body.</summary>
@@ -21,7 +21,6 @@ public static class RepositionMatrix
         0d, 0d, 0d, 1d,
     };
 
-    /// <summary>Pure translation: identity rotation and the offset in the last row.</summary>
     public static double[] Translate(IReadOnlyList<double> vectorMm)
     {
         RequireTriple(vectorMm, nameof(vectorMm));
@@ -37,9 +36,8 @@ public static class RepositionMatrix
     /// <summary>Rotation by <paramref name="angleDeg"/> about an axis through <paramref name="axisPointMm"/>
     /// with direction <paramref name="axisDirectionMm"/>. The translation is <c>c − R·c</c>, so the axis
     /// point stays put.</summary>
-    /// <remarks>The sign is the right-hand rule about the axis direction. MEASURED (RP.4): a bar
-    /// <c>[10,30]×[0,10]×[0,5]</c> rotated +90° about Z through the origin gives <c>(−10,10,0)…(0,30,5)</c>,
-    /// i.e. <c>(x,y) → (−y,x)</c>.</remarks>
+    /// <remarks>DOC: the sign is the right-hand rule about the axis direction. MEASURED: a bar rotated
+    /// +90° about Z through the origin maps <c>(x,y) → (−y,x)</c>.</remarks>
     public static double[] RotateAboutAxis(
         IReadOnlyList<double> axisPointMm,
         IReadOnlyList<double> axisDirectionMm,
@@ -91,10 +89,8 @@ public static class RepositionMatrix
 
         return new[]
         {
-            // COLUMN-major, not row-major: three consecutive numbers are the IMAGE OF ONE BASIS AXIS
-            // (R00,R10,R20 — image of X; R01,R11,R21 — image of Y; R02,R12,R22 — image of Z). The layout
-            // is MEASURED (RP.2/RP.4) and stated in the class header; the index order is reversed
-            // relative to the mathematical R[i, j].
+            // COLUMN-major: three consecutive numbers are the IMAGE OF ONE BASIS AXIS (R00,R10,R20 — X;
+            // R01,R11,R21 — Y; R02,R12,R22 — Z). The layout is MEASURED and stated in the class header.
             r[0, 0], r[1, 0], r[2, 0], 0d,
             r[0, 1], r[1, 1], r[2, 1], 0d,
             r[0, 2], r[1, 2], r[2, 2], 0d,
@@ -106,7 +102,7 @@ public static class RepositionMatrix
     /// matrix really yields the computed bounding box.</summary>
     /// <remarks>Reads the array in the SAME layout <see cref="RotateAboutAxis"/> writes: axis images in
     /// consecutive triples. A mismatch between the two places is invisible on a translation and visible
-    /// only on a rotation — which is how the layout defect reached acceptance.
+    /// only on a rotation.
     /// History: docs/decisions/geometry.md#reposition-layout</remarks>
     public static double[] Apply(double[] matrix, double[] point)
     {
@@ -147,7 +143,7 @@ public static class RepositionMatrix
 }
 
 /// <summary>Orthonormal basis of a plane — how a normal becomes three model points.</summary>
-/// <remarks>Needed because the MEASURED API7 plane route (step SP.1) is "by three model points":
+/// <remarks>MEASURED: the API7 plane route is "by three model points":
 /// <c>Planes3D.Add(o3d_plane3Points)</c> → <c>IPlane3DBy3Points</c>, where the normal is
 /// <c>(P2−P1)×(P3−P1)</c>. The basis is built so that this product matches the REQUESTED normal, not a
 /// random rotation of it in the plane.</remarks>
@@ -194,8 +190,8 @@ public static class PlaneBasis
         e1 = new[] { e1[0] / e1Length, e1[1] / e1Length, e1[2] / e1Length };
         var e2 = RigidFrame.Cross(n, e1);
 
-        // Self-check inside the construction: e1 × e2 must equal n̂, otherwise the plane gets the opposite
-        // normal, and the sign here is the choice of side, not a detail.
+        // Self-check: e1 × e2 must equal n̂, else the plane gets the opposite normal — the sign here is
+        // the choice of side, not a detail.
         var check = RigidFrame.Cross(e1, e2);
         if (Math.Abs(check[0] - n[0]) > 1e-12 || Math.Abs(check[1] - n[1]) > 1e-12 || Math.Abs(check[2] - n[2]) > 1e-12)
         {

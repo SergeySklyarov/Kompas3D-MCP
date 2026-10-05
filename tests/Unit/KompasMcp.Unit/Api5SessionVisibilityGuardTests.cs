@@ -4,10 +4,13 @@ using Xunit;
 namespace KompasMcp.Unit;
 
 /// <summary>Visibility guarantees that cannot be checked without KOMPAS, but can be checked in the code.</summary>
-/// <remarks>INVARIANT (requirement of 12.09.2026, item 7): the "visible to the user" mode refreshes the view after modelling and never resets the user camera and zoom after an operation. The second half bans a specific call — <c>ZoomPrevNextOrAll</c> and <c>ksZoom*</c> in API5 change exactly the camera.
-/// LIMIT: the check is static because a 3D document in API5 exposes no camera state (no scale getter on <c>ksDocument3D</c>, only <c>ksGetZoomScale</c> on the 2D editor), so "the camera did not change" cannot be confirmed by a number at acceptance.
-/// INVARIANT: the visibility answer is never derived from PID availability — a hidden window has both an HWND and a PID, so <c>ProcessIdOf(...) is not null</c> would read as a false <c>visible=true</c>.
-/// History: docs/decisions/tests.md#api5-visibility</remarks>
+/// <remarks>INVARIANT: the "visible to the user" mode refreshes the view after modelling and never resets the
+/// user camera and zoom — the second half bans <c>ZoomPrevNextOrAll</c> and <c>ksZoom*</c>, which change exactly
+/// the camera. LIMIT: the check is static because a 3D document in API5 exposes no camera state (no scale
+/// getter on <c>ksDocument3D</c>, only <c>ksGetZoomScale</c> on the 2D editor), so "the camera did not change"
+/// cannot be confirmed by a number at acceptance. INVARIANT: the visibility answer is never derived from PID
+/// availability — a hidden window has both an HWND and a PID, so <c>ProcessIdOf(...) is not null</c> would read
+/// as a false <c>visible=true</c>. History: docs/decisions/tests.md#api5-visibility-2</remarks>
 public sealed class Api5SessionVisibilityGuardTests
 {
     private static readonly string RepoRoot = FindRepoRoot();

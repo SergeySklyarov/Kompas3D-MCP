@@ -27,12 +27,9 @@ public static class FileHash
 
 /// <summary>Writes a file so that a reader can never see a half-written artefact: a temporary file on the
 /// same volume, then a move into place.</summary>
-/// <remarks>
-/// <c>File.Replace</c> requires the destination to exist and keeps a backup; <c>Move</c> over an
-/// existing target is the documented way to publish. Both stay on the same directory, so the
-/// operation is atomic on NTFS. A failure path deletes the temporary file but never touches the
-/// destination — an interrupted export must leave the previous artefact intact.
-/// </remarks>
+/// <remarks><c>File.Replace</c> requires the destination to exist and keeps a backup; <c>Move</c> over an
+/// existing target is the documented way to publish. Both stay on the same directory, so the operation is
+/// atomic on NTFS. A failure path deletes the temporary file but never touches the destination.</remarks>
 public static class AtomicPublish
 {
     public static void WriteFrom(string sourcePath, string destinationPath, bool allowOverwrite)

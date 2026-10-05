@@ -77,14 +77,11 @@ public static class Program
 
         log.Write("info", "host starting", new { version = ServerVersion, pid = Environment.ProcessId, roots = new { read_only = options.ReadOnlyRoots, writable = options.WritableRoots, export = options.ExportRoots } });
 
-        // INVARIANT: ownership is NOT taken at start — a measured decision, not a simplification.
-        // MEASURED 21.09.2026: an earlier Host captured the journal before the transport came up and
-        // refused a second Host at `initialize`, so the client lost ALL tools with no visible reason
-        // ("MCP error -32000: Connection closed"). MEASURED 04.10.2026: tool discovery alone took the
-        // session with one `tools/list`, and the main chat got SESSION_OWNER_ACTIVE. Transport start,
-        // `initialize`, `tools/list` and diagnostic `health` take no ownership; ownership comes from
-        // an EXPLICIT `kompas_acquire_session` or from a coordinated admission of a REAL CAD
-        // operation — never from catalog discovery. History: docs/decisions/host.md#ownership-model
+        // INVARIANT: ownership is NOT taken at start — a measured decision. MEASURED: an earlier Host
+        // captured the journal before the transport came up and refused a second Host at `initialize`,
+        // so the client lost ALL tools with no visible reason, and `tools/list` alone took the session.
+        // Ownership comes only from an EXPLICIT `kompas_acquire_session` or a coordinated admission.
+        // History: docs/decisions/host.md#ownership-model
         using var ownership = HostOwnership.Open(options.JournalPath);
         await using var session = new HostSession(options, ownership, log);
 
@@ -108,13 +105,11 @@ public static class Program
             serverOptions.ServerInfo = new Implementation { Name = ServerName, Title = "КОМПАС-3D MCP", Version = ServerVersion };
             serverOptions.ServerInstructions = Instructions;
 
-            // The schemas in ToolCatalog are the contract: they are published verbatim and are the
-            // same document the Host validates against, so tools/list and the validation cannot
-            // drift apart. The SDK-generated schema from a method signature cannot express
-            // additionalProperties:false, which is why the tools are registered this way.
+            // The schemas in ToolCatalog are the contract: published verbatim and the same document the
+            // Host validates against, so tools/list and validation cannot drift. The SDK-generated
+            // schema cannot express additionalProperties:false, hence this registration.
             //
-            // Capabilities starts null on a bare McpServerOptions, so the whole object is assigned
-            // rather than a member of it.
+            // Capabilities starts null on a bare McpServerOptions, so the whole object is assigned.
             serverOptions.Capabilities = new ServerCapabilities { Tools = new ToolsCapability() };
             serverOptions.Handlers.ListToolsHandler = (request, cancellationToken) => ListTools(request, cancellationToken, log);
             serverOptions.Handlers.CallToolHandler = async (request, cancellationToken) => await CallToolAsync(session, log, request, cancellationToken).ConfigureAwait(false);
@@ -133,10 +128,9 @@ public static class Program
         finally
         {
             // INVARIANT: transport end hands the session back by the SAME mechanism as an explicit
-            // release. An earlier revision merely wrote `draining` before cleanup finished, and a
-            // second Host read it as "free to take": ownership moved while the first Worker still held
-            // COM. Now cleanup is confirmed before the state becomes `free`, and this finally never
-            // touches another generation. History: docs/decisions/host.md#transport-end
+            // release. An earlier revision wrote `draining` before cleanup finished, and a second Host
+            // read it as "free to take" while the first Worker still held COM. Cleanup is now confirmed
+            // before the state becomes `free`. History: docs/decisions/host.md#transport-end
             await session.OnTransportEndAsync().ConfigureAwait(false);
         }
 
@@ -161,11 +155,10 @@ public static class Program
 
     /// <summary>The tool list: the same catalog for the owner and for a waiting Host.</summary>
     /// <remarks>INVARIANT: the catalog does not depend on ownership. An earlier refusal arrived at
-    /// <c>initialize</c>, leaving the second chat with ZERO tools: it could neither learn the reason nor
-    /// release the other session. A refusal is not returned here for a second reason (MEASURED 21.09.2026,
-    /// probe P2): an exception thrown from this handler never reaches the client — the SDK replaces it with
-    /// <c>-32603</c>, losing the text — so refusals travel where the protocol carries them, in the call
-    /// envelope (<see cref="CallToolAsync"/>). Ownership is neither taken nor refreshed here.
+    /// <c>initialize</c>, leaving the second chat with ZERO tools. A refusal is not returned here either:
+    /// an exception from this handler never reaches the client — the SDK replaces it with <c>-32603</c> —
+    /// so refusals travel in the call envelope (<see cref="CallToolAsync"/>). Ownership is neither taken
+    /// nor refreshed here.
     /// History: docs/decisions/host.md#listtools-no-ownership</remarks>
     private static ValueTask<ListToolsResult> ListTools(RequestContext<ListToolsRequestParams> request, CancellationToken cancellationToken, HostLog log)
     {
@@ -204,9 +197,9 @@ public static class Program
         ResultEnvelope<JsonNode?> envelope;
         try
         {
-            // Routing, ownership and session release are decided INSIDE HostSession: an ownership
-            // refusal must arrive before any journal write and before COM, and the only place that can
-            // guarantee this is the same place that creates the journal and the Worker.
+            // Routing, ownership and release are decided INSIDE HostSession: an ownership refusal must
+            // arrive before any journal write and before COM, and only the place that creates the
+            // journal and the Worker can guarantee that.
             envelope = await session.InvokeAsync(name, arguments, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
@@ -220,11 +213,10 @@ public static class Program
         }
         catch (Exception ex)
         {
-            // Anything escaping the invoker must still come back as a contract envelope. A raw
-            // exception would surface as a JSON-RPC error with no status, no operation_id and no
-            // error code — the one response shape a client cannot act on, and precisely what
-            // spec 2.2 forbids ("an exception is not the only error channel"). The exception type
-            // and message are reported verbatim so this path is diagnosable from the answer alone.
+            // Anything escaping the invoker must still come back as a contract envelope: a raw exception
+            // would surface as a JSON-RPC error with no status, no operation_id and no error code — what
+            // spec 2.2 forbids ("an exception is not the only error channel"). Type and message are
+            // reported verbatim.
             log.Write("error", "tool call escaped the invoker", new { tool = name, type = ex.GetType().Name, message = ex.Message, stack = ex.StackTrace });
             envelope = new ResultEnvelope<JsonNode?>
             {
@@ -252,14 +244,11 @@ public static class Program
             operation_id = envelope.OperationId,
             status = envelope.Status.ToString().ToLowerInvariant(),
             error = envelope.Error?.Code,
-            // Both sides of the revision chain, so a stale expectation is traceable to whichever
-            // party produced it: the Worker's payload or the Host's envelope.
+            // Both sides of the revision chain, so a stale expectation is traceable to the Worker's
+            // payload or the Host's envelope.
             //
-            // Read through ResultField(), never Result["key"]: a list-valued result is a JsonArray,
-            // and indexing one by property name throws "The node must be of type 'JsonObject'".
-            // That is exactly what happened here — a diagnostic line added to investigate an empty
-            // list turned the call into an error, and the investigation produced the symptom it was
-            // measuring.
+            // Read through ResultField(), never Result["key"]: a list-valued result is a JsonArray, and
+            // indexing one by property name throws "The node must be of type 'JsonObject'".
             payload_revision = ResultField(envelope, "revision"),
             envelope_revision_after = envelope.RevisionAfter,
             duration_ms = (int)(DateTimeOffset.UtcNow - started).TotalMilliseconds,
@@ -268,13 +257,11 @@ public static class Program
         var json = JsonSerializer.SerializeToNode(envelope, KompJson.Options) ?? JsonValue.Create("null");
         var summary = Summarize(name, envelope);
 
-        // The image travels as a separate image block, not as a base64 string in the structure.
-        // MEASURED 18.09.2026 on the live client (WorkBuddy AI 5.5.2, build 910352f0): the client
-        // builds model-visible content from TEXT blocks only and parks structuredContent in mcpMeta,
-        // which the model never sees. A base64 string in the structure would be tens of thousands of
-        // characters of text to the model — "built → saw → checked → fixed" would become "read a wall
-        // of text". The field is removed from the structure precisely because the block already
-        // delivered it: keeping it would pay twice for the same picture.
+        // INVARIANT: the image goes as a separate MCP image block, never as base64 inside the result.
+        // MEASURED: some clients build model-visible content from TEXT blocks only and park
+        // structuredContent where the model never sees it, so base64 there would arrive as a huge wall
+        // of text. The field is removed from the structure because the block already delivered it.
+        // History: docs/decisions/host.md#image-block
         string? imageBase64 = null;
         var imageMimeType = "application/octet-stream";
         if (json is JsonObject envelopeNode && envelopeNode["result"] is JsonObject resultNode)
@@ -294,14 +281,11 @@ public static class Program
         var jsonText = json.ToJsonString();
         var content = new System.Collections.Generic.List<ModelContextProtocol.Protocol.ContentBlock>
         {
-            // The summary line is for a human reading a log; the envelope underneath is what a client actually
-            // acts on. Both must travel in the TEXT block, not only in structuredContent. MEASURED 18.09.2026 on
-            // the live client (WorkBuddy AI 5.5.2, build 910352f0): its `convertMcpResult` builds the model-visible
-            // content from text blocks ONLY and parks structuredContent in `mcpMeta`, which reaches the UI but
-            // never the agent, so a summary-only text block left the agent with no document_id, no revision, no
-            // error code and no measurement. MCP 2025-06-18 asks a tool that returns structured content to also
-            // return the serialized JSON in a text block for exactly this reason.
-            // History: docs/decisions/host.md#text-block-envelope
+            // Both the human summary and the machine envelope travel in the TEXT block, not only in
+            // structuredContent: MEASURED, a client that builds model-visible content from text blocks
+            // ONLY would leave the agent with no document_id, no revision, no error code, no
+            // measurement. MCP 2025-06-18 asks a tool returning structured content to also return the
+            // serialized JSON in a text block. History: docs/decisions/host.md#text-block-envelope
             new ModelContextProtocol.Protocol.TextContentBlock { Text = summary + "\n" + jsonText },
         };
 

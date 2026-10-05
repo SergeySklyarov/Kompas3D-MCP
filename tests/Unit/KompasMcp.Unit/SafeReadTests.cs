@@ -4,9 +4,10 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>INVARIANT (FIX C): an unread COM value must differ from a successfully read <c>false</c>/<c>0</c>/
-/// first enum value. The old helper returned <c>default</c>, making "the read did not happen"
-/// indistinguishable from "the default value was read". History: docs/decisions/tests.md#safe-read</summary>
+/// <summary>An unread COM value must differ from a successfully read <c>false</c>/<c>0</c>/first enum value.</summary>
+/// <remarks>INVARIANT: the old helper returned <c>default</c>, making "the read did not happen"
+/// indistinguishable from "the default value was read".
+/// History: docs/decisions/tests.md#safe-read-2</remarks>
 public class SafeReadTests
 {
     private enum Sample

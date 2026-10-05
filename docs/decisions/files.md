@@ -35,3 +35,23 @@ Worker не проверяли, что папка документа лежит 
 собран ПО СВОЙСТВУ «отказ до мутации», а не по списку имён ради списка; коды, приходящие ПОСЛЕ обращения
 к COM (`GEOMETRY_FAILED`, `VERIFICATION_FAILED`, `OUTCOME_UNKNOWN`), в него не входят — по ним модель
 могла измениться, и файл восстанавливается.
+
+## <a id="path-invalid-name-component"></a>Компонента имени с недопустимым символом (политика путей)
+
+**Что измерено.** Ядро КОМПАСа НЕ отказывает по такому имени: вызов вернул успех, базовый файл остался
+пустым, а полезная нагрузка ушла в АЛЬТЕРНАТИВНЫЙ ПОТОК NTFS — то есть «успех» без файла, который
+пользователь может найти. Проверки `Path.GetInvalidPathChars()` для этого слишком узки: двоеточие после
+буквы диска открывает поток, а не путь.
+
+**Дословно из комментария кода.** MEASURED: the KOMPAS kernel does NOT refuse such a name — the call
+returned success, the base file stayed empty, and the payload went into an NTFS ALTERNATE STREAM, i.e.
+"success" with no file the user can find. `Path.GetInvalidPathChars()` is too narrow to catch it.
+
+## <a id="path-read-reparse-escape"></a>Reparse-точка проверяется и на чтении
+
+**Что было.** Проверка только записываемого корня позволяла junction внутри корня «только чтение» вывести
+за его пределы: путь, прошедший проверку, читал файл вне разрешённого дерева.
+
+**Дословно из комментария кода.** INVARIANT: the reparse point is checked on READ too. Checking only the
+writable root let a junction inside a read-only root lead out of it: a path that passed the check read a
+file outside the allowed tree.

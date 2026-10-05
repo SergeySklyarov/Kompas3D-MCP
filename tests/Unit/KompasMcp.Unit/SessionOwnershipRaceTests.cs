@@ -6,11 +6,10 @@ namespace KompasMcp.Unit;
 
 /// <summary>Session-ownership races: two simultaneous acquires cannot both get the right to work.</summary>
 /// <remarks>INVARIANT: a race is a claim about ORDER, not state, so sequential calls cannot check it. Each
-/// participant is a separate <see cref="HostOwnership"/> (its own Host "identity", its own lock-name
-/// acquisition), and all start SIMULTANEOUSLY from a barrier. LIMIT: a real cross-process race is measured by
-/// two independent MCP clients on the shipped binaries — within one process the pid is shared, so "same pid,
-/// foreign generation" works differently. This class checks the atomicity of the state TRANSITION, not
-/// cross-process exclusivity as a whole.</remarks>
+/// participant is a separate <see cref="HostOwnership"/> and all start SIMULTANEOUSLY from a barrier.
+/// LIMIT: a real cross-process race is measured by two independent MCP clients on the shipped binaries; this
+/// class checks the atomicity of the state TRANSITION, not cross-process exclusivity as a whole.
+/// History: docs/decisions/tests.md#session-ownership-race-2</remarks>
 public class SessionOwnershipRaceTests : IDisposable
 {
     private readonly string _journal;

@@ -19,10 +19,8 @@ public sealed record BoundingBoxDto(
         new double[] { double.NaN, double.NaN, double.NaN });
 }
 
-/// <summary>
-/// Everything a caller needs to address a document safely (spec 2.3). Commands must carry
-/// <see cref="Id"/> and, for mutations, <see cref="Revision"/> — never rely on the active tab.
-/// </summary>
+/// <summary> Everything a caller needs to address a document safely (spec 2.3). Commands must carry <see cref="Id"/>
+/// and, for mutations, <see cref="Revision"/> — never rely on the active tab. </summary>
 public sealed record DocumentContextDto
 {
     public required string Id { get; init; }
@@ -54,9 +52,9 @@ public sealed record DocumentContextDto
     /// <summary>Opaque fingerprint of geometry state, used when events are unavailable.</summary>
     public string? Fingerprint { get; init; }
 
-    /// <summary>Re-read state of the document itself: <c>!invisibleMode</c>; null means the document did
-    /// not answer. INVARIANT: separate from application visibility — showing the application and showing
-    /// the document are two facts. History: docs/decisions/contracts.md#document-visible</summary>
+    /// <summary>Re-read state of the document itself: <c>!invisibleMode</c>; null means the document did not answer.
+    /// INVARIANT: separate from application visibility — showing the application and showing the document are two
+    /// facts. History: docs/decisions/contracts.md#document-visible</summary>
     public bool? DocumentVisible { get; init; }
 
     /// <summary>Mode in which the document was created or opened (inherited from the instance).</summary>
@@ -68,8 +66,8 @@ public sealed record DocumentContextDto
     public required ExternalChangeDetection ExternalChangeDetection { get; init; }
 }
 
-/// <summary>Opaque handle to a topology element. It is scoped to a document revision: after a rebuild the
-/// server rejects it instead of silently re-resolving (spec 1.7).</summary>
+/// <summary>Opaque handle to a topology element. It is scoped to a document revision: after a rebuild the server
+/// rejects it instead of silently re-resolving (spec 1.7).</summary>
 public sealed record ReferenceDto
 {
     /// <summary>Opaque id, e.g. "face:6f2c…". Raw COM pointers never leave the Worker.</summary>
@@ -92,8 +90,8 @@ public sealed record ReferenceDto
     public string? SemanticHint { get; init; }
 }
 
-/// <summary>Rigid placement: origin plus orthonormal X and Y of a right-handed frame; Z = X × Y is
-/// computed by the server (spec 1.10). Composition order is documented in Domain.TransformMath.</summary>
+/// <summary>Rigid placement: origin plus orthonormal X and Y of a right-handed frame; Z = X × Y is computed by the
+/// server (spec 1.10). Composition order is documented in Domain.TransformMath.</summary>
 public sealed record TransformDto
 {
     public required IReadOnlyList<double> OriginMm { get; init; }
@@ -111,7 +109,7 @@ public sealed record TransformDto
     };
 }
 
-/// <summary>Cursor-bounded list (spec 2.3). A cursor is bound to a revision.</summary>
+/// <summary>Continuation-token list (spec 2.3). The token is bound to a revision.</summary>
 public sealed record PagedResult<T>
 {
     public required IReadOnlyList<T> Items { get; init; }
@@ -176,9 +174,9 @@ public sealed record ApplicationInfoDto
     /// <summary>Executable path as registered for this instance.</summary>
     public string? ExecutablePath { get; init; }
 
-    /// <summary>Actual window visibility of the application: true only when the COM <c>Visible</c> property
-    /// AND Win32 <c>IsWindowVisible</c> agree. An HWND or a resolvable PID is not visibility — a hidden
-    /// KOMPAS window has both.</summary>
+    /// <summary>Actual window visibility of the application: true only when the COM <c>Visible</c> property AND Win32
+    /// <c>IsWindowVisible</c> agree. An HWND or a resolvable PID is not visibility — a hidden KOMPAS window has
+    /// both.</summary>
     public required bool Visible { get; init; }
 
     /// <summary><c>KompasObject.Visible</c>, re-read from the application.</summary>
@@ -196,8 +194,8 @@ public sealed record ApplicationInfoDto
     /// <summary>How the observation ended when it did not complete. Absent when everything was observed.</summary>
     public string? VisibilityObservationError { get; init; }
 
-    /// <summary>Mode in which the server creates and opens documents of this instance. Separate from
-    /// application visibility: showing the window is not the same as showing the document.</summary>
+    /// <summary>Mode in which the server creates and opens documents of this instance. Separate from application
+    /// visibility: showing the window is not the same as showing the document.</summary>
     public bool DocumentsVisible { get; init; }
 
     public required int OpenDocumentCount { get; init; }

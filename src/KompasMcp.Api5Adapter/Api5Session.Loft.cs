@@ -12,28 +12,20 @@ namespace KompasMcp.Api5Adapter;
 
 /// <summary>Loft — a body from an ordered set of sections (docs/05 SM-05, queue B5).</summary>
 /// <remarks>
-/// ROUTE — API7, and this follows from the mandatory rows, not from convenience. The mandatory row
-/// <c>SM-05.base.mode_couplings</c> requires section correspondence CHAINS, and API5 has none at all:
-/// neither <c>ksBaseLoftDefinition</c> nor <c>ksBossLoftDefinition</c> declares <c>AddCoupling</c> or
-/// <c>Coupling</c>. API7 documents them — <c>iloft_propers.html</c> lists <c>Coupling</c> and
-/// <c>CouplingsCount</c>, <c>iloft_addcoupling.html</c> describes <c>AddCoupling()</c> →
-/// <c>ICoupling</c>. MEASURED (step B5.9): <c>AddCoupling()</c> returned
-/// <c>KompasAPI7.CouplingClass</c>, <c>CouplingsCount = 1</c>. The family is therefore driven by one
-/// route on which ALL its mandatory rows are expressible.
+/// ROUTE — API7: the mandatory row <c>SM-05.base.mode_couplings</c> requires section correspondence
+/// CHAINS, and API5 has none — neither <c>ksBaseLoftDefinition</c> nor <c>ksBossLoftDefinition</c>
+/// declares <c>AddCoupling</c> or <c>Coupling</c>. API7 documents them: <c>iloft_propers.html</c> lists
+/// <c>Coupling</c> and <c>CouplingsCount</c>, <c>iloft_addcoupling.html</c> describes <c>AddCoupling()</c>
+/// → <c>ICoupling</c> (MEASURED: returns <c>KompasAPI7.CouplingClass</c>, <c>CouplingsCount = 1</c>).
 /// DOC: <c>ilofts_add.html</c> — «Допустимыми значениями <c>LoftType</c> являются <c>o3d_bossLoft</c>,
 /// <c>o3d_cutLoft</c> для коллекции операций <c>IModelContainer::Lofts</c>»; «после получения нового
 /// интерфейса нужно задать параметры операции и вызвать метод <c>IModelObject::Update</c>». Sections
 /// are set by the <c>ILoft.Sketchs</c> property of type <c>VARIANT</c> — «массив <c>SAFEARRAY</c>
-/// объектов <c>LPDISPATCH</c>» (<c>iloft_sketchs.html</c>). MEASURED: assigning the array gave a
-/// read-back of <c>System.Object[]</c> of 2 elements, <c>Update() = True</c>, volume <c>28000</c> —
-/// the same reference as the API5 route <c>NewEntity(30)</c> (step B5.4).
-/// LIMIT: section ORDER is not proved by volume — concentric parallel sections give <c>28000</c> in
-/// any order, so "the order was honoured" needs a discriminating setup and is not presented as
-/// verified here. Parallelism of section planes is the checker's duty (work order §6.3 item 7); this
-/// revision does NOT check it and names it an open aspect rather than staying silent. The content of
-/// correspondence chains (which section points are matched) is not set: the chain's existence was
-/// measured, not its configuration.
-/// History: docs/decisions/adapter-features.md#loft-route
+/// объектов <c>LPDISPATCH</c>» (<c>iloft_sketchs.html</c>).
+/// LIMIT: section ORDER is not proved by volume — concentric parallel sections give one body in any
+/// order, so "the order was honoured" needs a discriminating setup; parallelism of section planes is
+/// the checker's duty (work order §6.3 item 7).
+/// History: docs/decisions/adapter-core.md#loft-compaction
 /// </remarks>
 public partial class Api5Session
 {
@@ -43,9 +35,8 @@ public partial class Api5Session
     /// <summary>Maximum number of correspondence chains in one call.</summary>
     private const int MaxLoftCouplings = 64;
 
-    /// <summary>Comparison tolerance for the point offset along the contour, mm. Taken from the
-    /// profile tolerance class for LENGTHS (0.01 mm), not tuned after a failure: MEASURED round-trip
-    /// agreement at step B5.17 — wrote 5 mm, read 5 mm, an exact match.</summary>
+    /// <summary>Comparison tolerance for the point offset along the contour, mm (0.01 mm length class);
+    /// MEASURED round-trip agreement at step B5.17 (wrote 5 mm, read 5 mm).</summary>
     private const double CouplingOffsetToleranceMm = 0.01d;
 
     /// <summary>Loft: a body from an ordered set of sections (SM-05).</summary>
@@ -80,12 +71,8 @@ public partial class Api5Session
             sections.Add(target.Sketch);
         }
 
-        // ── Parallelism of section planes is the CALLER's duty, and work order B5 §9.2 requires a
-        // NAMED refusal on non-parallel planes. ILoft itself neither requires nor forbids it:
-        // MEASURED (step B5.11) that on non-parallel planes it either refuses facelessly or builds a
-        // body describing something other than requested. The refusal fires ONLY on a MEASURED
-        // divergence of normal axes: an unreadable plane does not refuse but is named unread — a
-        // silent "probably parallel" would be a claim without measurement.
+        // ── Parallelism of section planes is the CALLER's duty (work order B5 §9.2): the refusal fires
+        // ONLY on a MEASURED divergence of normal axes; an unreadable plane is named unread, not refused.
         var planeAxes = ReadSectionPlaneAxes(targets);
         if (planeAxes.DistinctAxes.Count > 1)
         {
@@ -149,9 +136,8 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["api7_failure"] = creationFailure });
         }
 
-        // Sections are transferred to API7: Sketchs takes a SAFEARRAY of IDispatch pointers, and an
-        // untransferred object is a value API7 will not see. The same technique MEASURED on
-        // IChamfer.BaseObjects (transfer + assignment of object[]).
+        // Sketchs takes a SAFEARRAY of IDispatch pointers; an untransferred object is a value API7
+        // will not see.
         var transferred = new List<object>(sections.Count);
         foreach (var section in sections)
         {
@@ -193,10 +179,6 @@ public partial class Api5Session
         }
 
         // ── Section correspondence chains are set BEFORE the first Update() ──
-        // The order is documented by the factory («задать параметры операции и вызвать
-        // IModelObject::Update», ilofts_add.html) and MEASURED at step B5.18: a chain set before the
-        // first Update() is applied in one build (CouplingsCount = 1, volume 20000 at a 20 mm offset
-        // out of 80 — the same value as a chain added after the build).
         var chainFailures = new List<string>();
         var chainsWritten = AttachCouplings(loft, command.Couplings, chainFailures);
         if (chainFailures.Count > 0)
@@ -243,9 +225,7 @@ public partial class Api5Session
         var bodiesAfter = CountBodies(document);
         var facesAfter = CountFaces(document);
 
-        // Chains are read FROM THE MODEL and in full: how many, how many sections in each, and which
-        // offsets stand on each section. A chain count without content would prove only the object's
-        // existence, whereas the mandatory row requires a DEFINITE section correspondence.
+        // Chains are read FROM THE MODEL and in full; a bare chain count would prove only existence.
         var couplingsInModel = ReadCouplingContent(loft);
 
         var checks = new List<NamedCheck>
@@ -271,8 +251,7 @@ public partial class Api5Session
                 Expected: offsets.Expected));
         }
 
-        // Sections are read BACK from the model: how many the feature accepted. This checks that the
-        // set arrived in full, not that the order was honoured.
+        // Sections are read BACK: how many the feature accepted.
         var sectionsInModel = ReadSectionCount(loft);
         checks.Add(new NamedCheck("sections_read_back", sectionsInModel == sections.Count,
             Observed: sectionsInModel?.ToString() ?? "не прочитано",
@@ -357,9 +336,8 @@ public partial class Api5Session
     private sealed record SectionPlaneAxes(
         IReadOnlyList<int> Read, IReadOnlyList<int> DistinctAxes, int Unreadable);
 
-    /// <summary>Normal axes of the section planes, read from the SKETCH definitions. An axis is not a
-    /// sign: it answers "is the plane parallel to XOY / XOZ / YOZ", not "where the normal points".
-    /// That is enough for parallelism and no more is required.</summary>
+    /// <summary>Normal axes of the section planes, read from the SKETCH definitions. An axis answers
+    /// "is the plane parallel to XOY / XOZ / YOZ", not "where the normal points".</summary>
     private static SectionPlaneAxes ReadSectionPlaneAxes(IReadOnlyList<SketchTarget> targets)
     {
         var read = new List<int>(targets.Count);
@@ -398,9 +376,9 @@ public partial class Api5Session
         _ => "ось " + axis.ToString(CultureInfo.InvariantCulture),
     };
 
-    /// <summary>"Field ↔ capability" rules for correspondence chains, shared by create and edit: the
-    /// number of points in a chain equals the number of sections, values are finite, chains do not
-    /// exceed <see cref="MaxLoftCouplings"/>. Refused BEFORE COM.</summary>
+    /// <summary>Rules for correspondence chains, shared by create and edit: a chain's point count
+    /// equals the section count, values are finite, chains do not exceed
+    /// <see cref="MaxLoftCouplings"/>. Refused BEFORE COM.</summary>
     private static void ValidateLoftCouplings(IReadOnlyList<LoftCoupling> chains, int sectionCount)
     {
         if (chains.Count > MaxLoftCouplings)
@@ -449,8 +427,8 @@ public partial class Api5Session
     }
 
     /// <summary>Full replacement of chains on an existing feature: <c>ClearCouplings()</c>, then one
-    /// chain per request. Returns <c>false</c> and a reason if the replacement did not happen in full
-    /// — "some of the chains" is a different correspondence, not half a success.</summary>
+    /// chain per request. Returns <c>false</c> if the replacement was not full — "some of the chains"
+    /// is a different correspondence, not half a success.</summary>
     private static bool WriteLoftCouplings(
         ILoft loft, IReadOnlyList<LoftCoupling> chains, out string failure)
     {
@@ -482,9 +460,8 @@ public partial class Api5Session
 
     /// <summary>Set the section correspondence chains: <c>ILoft.AddCoupling()</c> → <c>ICoupling</c>,
     /// then <c>ICoupling.PositionOffset(Index)</c> for each section in section order.</summary>
-    /// <remarks>Returns the number of FULLY set chains, while failure reasons accumulate in
-    /// <paramref name="failures"/>: a partially set chain is a different correspondence, and silently
-    /// counting it a success would pass a foreign body off as the requested one.</remarks>
+    /// <remarks>Returns the number of FULLY set chains; failure reasons accumulate in
+    /// <paramref name="failures"/>. A partially set chain is a different correspondence.</remarks>
     private static int AttachCouplings(
         ILoft loft, IReadOnlyList<LoftCoupling> chains, List<string> failures)
     {
@@ -596,9 +573,8 @@ public partial class Api5Session
         return result;
     }
 
-    /// <summary>Comparison "requested ↔ read FROM THE MODEL" over all chains and all their points.
-    /// The tolerance is the length one (0.01 mm, as for lengths in the profile release); chain and
-    /// section counts are compared exactly.</summary>
+    /// <summary>Comparison "requested ↔ read FROM THE MODEL" over all chains and points; the tolerance
+    /// is the length one (0.01 mm), chain and section counts are compared exactly.</summary>
     private static (bool Ok, string Observed, string Expected) CouplingOffsetsMatch(
         IReadOnlyList<LoftCouplingDto>? model, IReadOnlyList<LoftCoupling> requested)
     {
@@ -650,9 +626,8 @@ public partial class Api5Session
             "цепочка " + index + " (сечений " + chain.OffsetsMm.Count.ToString(CultureInfo.InvariantCulture) +
             "): " + string.Join(" / ", chain.OffsetsMm.Select(offset => Num(offset))) + " мм"));
 
-    /// <summary>Number of sections accepted by the feature — a read <b>FROM THE MODEL</b>, not a
-    /// retelling of the request. The array arrives as a <c>SAFEARRAY</c> of objects; <c>null</c> means
-    /// "not read" and differs from zero.</summary>
+    /// <summary>Number of sections accepted by the feature — a read <b>FROM THE MODEL</b>. The array
+    /// arrives as a <c>SAFEARRAY</c> of objects; <c>null</c> means "not read", not zero.</summary>
     private static int? ReadSectionCount(ILoft loft)
     {
         try
@@ -717,19 +692,14 @@ public partial class Api5Session
                 RetryPolicy.Never);
         }
 
-        // Correspondence chains: the number of points in a chain must match the number of sections.
-        // This is not pedantry: PositionOffset(Index) is addressed by "the section index in the
-        // chain" (icoupling_positionoffset.html), and a chain shorter than the section set defines a
-        // correspondence not for all sections — i.e. a different body than requested.
+        // The number of points in a chain must match the number of sections: PositionOffset(Index) is
+        // addressed by "the section index in the chain" (icoupling_positionoffset.html).
         ValidateLoftCouplings(command.Couplings, command.SectionRefs.Count);
 
         if (command.Building != LoftBuilding.Auto)
         {
-            // The build method at the end sections is expressed by ILoft.BuildingType(BeginSection).
-            // ONLY the auto mode's value was MEASURED: on a freshly created feature both the start and
-            // the end read 0 (ksLoftAuto). Values 1/2/3 (by normal, by object, dome) were NOT measured
-            // on this route, so they are not accepted silently — otherwise "accepted and ignored"
-            // would survive to acceptance looking like a performed mode.
+            // ONLY the auto mode's value was MEASURED (both ends read 0 = ksLoftAuto on a fresh
+            // feature); values 1/2/3 were NOT measured on this route, so they are not accepted silently.
             throw new KompasContractException(
                 ErrorCodes.InvalidArgument,
                 "Способ построения у крайних сечений '" + command.Building + "' на этом маршруте не " +

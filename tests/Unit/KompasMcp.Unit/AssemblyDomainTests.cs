@@ -5,12 +5,12 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>Assembly domain (order C1, profile <c>assemblies-minimal-v1</c>): the contract of five tools and
-/// the honesty of their descriptions.</summary>
+/// <summary>Assembly domain: the contract of five tools and the honesty of their descriptions.</summary>
 /// <remarks>TEST: the tests check exactly what is checkable without KOMPAS — the tools are registered,
 /// mutations declare the mandatory fields, schemas are strict, and descriptions name the CURRENT release
 /// limits (e.g. nested components cannot be addressed) rather than the presence of the word "acceptance".
-/// The "the route works" check is NOT included and is not substituted: it requires a run on v24.0.0.2799.</remarks>
+/// The "the route works" check is NOT included and is not substituted: it requires a run on the target version.
+/// History: docs/decisions/tests.md#assembly-domain-2</remarks>
 public class AssemblyDomainTests
 {
     private static ToolDefinition Tool(string name) =>

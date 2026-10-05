@@ -4,9 +4,9 @@ using System.Text.Json.Serialization;
 
 namespace KompasMcp.Contracts;
 
-/// <summary>JSON options shared by the public tool contract and the Host/Worker IPC frame.
-/// Wire names are snake_case (spec 2.2 example); enums are lower_snake strings; nothing is
-/// dropped to null-omitting defaults because a null field is meaningful in the envelope.</summary>
+/// <summary>JSON options shared by the public tool contract and the Host/Worker IPC frame. Wire names are snake_case
+/// (spec 2.2 example); enums are lower_snake strings; nothing is dropped to null-omitting defaults because a null field
+/// is meaningful in the envelope.</summary>
 public static class KompJson
 {
     public static readonly JsonSerializerOptions Options = Create();
@@ -30,12 +30,9 @@ public static class KompJson
 
     public static T? Deserialize<T>(string json) => JsonSerializer.Deserialize<T>(json, Options);
 
-    /// <summary>
-    /// Serialise to a <see cref="JsonNode"/> so the value can be embedded as MCP
-    /// <c>structuredContent</c> without a string round-trip re-camel-casing anything.
-    /// A null result is represented by a null node — System.Text.Json has no non-null
-    /// "JSON null" JsonNode value.
-    /// </summary>
+    /// <summary> Serialise to a <see cref="JsonNode"/> so the value can be embedded as MCP <c>structuredContent</c>
+    /// without a string round-trip re-camel-casing anything. A null result is represented by a null node —
+    /// System.Text.Json has no non-null "JSON null" JsonNode value. </summary>
     public static JsonNode? ToNode<T>(T value) => JsonSerializer.SerializeToNode(value, Options);
 }
 
@@ -46,8 +43,8 @@ public sealed record NamedCheck(
     string? Observed = null,
     string? Expected = null);
 
-/// <summary>How far the result was actually verified. <c>unverified_aspects</c> must list everything
-/// the level does not cover, so a caller cannot read "file_created" as "geometry is correct".</summary>
+/// <summary>How far the result was actually verified. <c>unverified_aspects</c> must list everything the level does not
+/// cover, so a caller cannot read "file_created" as "geometry is correct".</summary>
 public sealed record VerificationDto(
     VerificationLevel Level,
     IReadOnlyList<NamedCheck> Checks,
@@ -122,10 +119,8 @@ public sealed record ResultEnvelope<TResult>
     };
 }
 
-/// <summary>
-/// Thrown inside the server to abort with a contract error. The Host converts it into an
-/// <see cref="ErrorDto"/>; it never escapes as an unhandled exception to the MCP client.
-/// </summary>
+/// <summary> Thrown inside the server to abort with a contract error. The Host converts it into an <see
+/// cref="ErrorDto"/>; it never escapes as an unhandled exception to the MCP client. </summary>
 public sealed class KompasContractException : Exception
 {
     public string Code { get; }

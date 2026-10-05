@@ -8,36 +8,23 @@ namespace KompasMcp.Api5Adapter;
 
 /// <summary>Kinematic operation — "Element along a path" (docs/05 SM-04, queue B5).</summary>
 /// <remarks>
-/// ROUTE — documented API5, verified against the help rather than by analogy with rotation.
-/// DOC: <c>ksbaseevolutiondefinition.html</c> («Основание — кинематический элемент (Интерфейсы
-/// ksBaseEvolutionDefinition, IBaseEvolutionDefinition)») — an interface «можно получить, используя
-/// метод интерфейса элемента модели <c>ksEntity::GetDefinition</c>», with exactly the members used
-/// here: <c>sketchShiftType</c>, <c>SetSketch</c>, <c>PathPartArray</c>, <c>GetPathLength(bitVector)</c>.
-/// Object type <c>o3d_baseEvolution = 45</c> (<c>obj3dtype.html</c>).
-/// MEASURED 20.09.2026 (step B5.7): <c>IEvolutions.Add(45)</c> returns a
-/// <c>KompasAPI7.EvolutionClass</c>, i.e. an object IS handed out, but body validity by that path was
-/// not measured; DOC: <c>ievolutions_add.html</c> lists only <c>o3d_bossEvolution</c> (46) and
-/// <c>o3d_cutEvolution</c> (47) as valid for <c>IEvolutions::Add</c> — base type 45 is absent. Creation
-/// therefore goes <c>ksPart.NewEntity(45)</c> + <c>ksBaseEvolutionDefinition</c>, not through the API7
-/// factory.
-/// DOC: the help declares this interface obsolete — «Данный интерфейс устарел. Рекомендуется
-/// использовать вместо него интерфейс ksBossLoftDefinition» (a divergence inside the help itself).
-/// MEASURED separately (step B5.8): the glued route <c>NewEntity(46)</c> builds the SAME body —
-/// <c>31415.92653589775</c> vs <c>31415.926535897932</c> on the reference "Ø20 circle along a 100-mm
-/// segment"; the stage's mandatory rows are described as BASE, so type 45 is used here.
+/// DOC: route is documented API5 — <c>ksbaseevolutiondefinition.html</c>: the interface is obtained via
+/// <c>ksEntity::GetDefinition</c>, with the members used here: <c>sketchShiftType</c>, <c>SetSketch</c>,
+/// <c>PathPartArray</c>, <c>GetPathLength(bitVector)</c>. Object type <c>o3d_baseEvolution = 45</c>
+/// (<c>obj3dtype.html</c>); <c>ievolutions_add.html</c> lists only <c>o3d_bossEvolution</c> (46) and
+/// <c>o3d_cutEvolution</c> (47) for <c>IEvolutions::Add</c>, so creation goes <c>ksPart.NewEntity(45)</c>
+/// + <c>ksBaseEvolutionDefinition</c>, not the API7 factory.
 /// DOC: <c>ksbaseevolutiondefinition_sketchshifttype.html</c> — 0 «образующая переносится параллельно
 /// самой себе», 1 «сохраняет исходный угол с направляющей», 2 «плоскость образующей выставляется и
-/// сохраняется ортогональной направляющей». MEASURED (step B5.2): on an R50/90° arc the orthogonal
-/// mode gave <c>S × L = 24674.011002723397</c>; the parallel mode differs by <c>8966.04773477437</c>
-/// mm³ — the mode discriminates.
-/// MEASURED (step B5.1): <c>PathPartArray()</c> returns <c>System.__ComObject</c> that successfully
-/// casts to <c>ksEntityCollection</c> and <c>Add(sketch)</c> returns <c>True</c>; reflection over
-/// <c>__ComObject</c> yields no members, so the cast works and reflection does not.
+/// сохраняется ортогональной направляющей». MEASURED: the shift mode discriminates on a curved path.
+/// MEASURED: <c>PathPartArray()</c> returns <c>System.__ComObject</c> that casts to
+/// <c>ksEntityCollection</c> and <c>Add(sketch)</c> returns <c>True</c>; reflection over
+/// <c>__ComObject</c> yields no members.
 /// INVARIANT: <c>Create()/Update()=true</c> is "accepted", not "applied" — volume is read back and
 /// compared with the caller's analytic expectation; with no expectation the level stays
 /// <c>call_returned</c>.
-/// LIMIT: thin wall (<c>SetThinParam</c>) is not set (the route was measured on a solid body), and
-/// cutting by a body (<c>SM-04.cut</c>, OQ-A2) is out of scope and not implemented.
+/// LIMIT: thin wall (<c>SetThinParam</c>) is not set; cutting by a body (<c>SM-04.cut</c>, OQ-A2) is out
+/// of scope.
 /// History: docs/decisions/adapter-features.md#sweep-route
 /// </remarks>
 public partial class Api5Session
@@ -87,11 +74,9 @@ public partial class Api5Session
                 RetryPolicy.ReacquireContext);
         }
 
-        // Input-call answers are COLLECTED, not discarded. MEASURED 20.09.2026: on geometry the probe
-        // builds by the same route and gets a body for (R10 circle along a 100-mm segment —
-        // 31415.92653589775), Create() via MCP answered false in SIX different setups in a row.
-        // Without these numbers the refusal is indistinguishable from "the kernel disliked the
-        // geometry", so SetSketch and the path holder are read back.
+        // MEASURED: Create() via MCP answered false while the same route builds a body outside MCP,
+        // so input-call answers are COLLECTED, not discarded — without them the refusal is
+        // indistinguishable from "the kernel disliked the geometry".
         var sketchAccepted = SafeBool(() => definition.SetSketch(target.Sketch));
         definition.sketchShiftType = ShiftValue(command.ShiftMode);
         var sketchReadBack = SafeBool(() => definition.GetSketch() is not null);
@@ -138,8 +123,8 @@ public partial class Api5Session
         part.RebuildModel();
         document.Document.RebuildDocument();
 
-        // Path length is read AFTER the build: the probe's first run read it before Create() and got
-        // 0 — a defect of the instrument, not a fact about the product (step B5.3).
+        // Path length is read AFTER the build: the pre-build read was an instrument defect, not a
+        // product fact.
         var pathLength = SafeDouble(() => definition.GetPathLength(PathLengthMillimetres));
 
         var reference = References.Register("feature", document.Id, document.Revision, entity);
@@ -159,12 +144,10 @@ public partial class Api5Session
 
         var unverified = new List<string>();
 
-        // INVARIANT: "material added" is separated from a numeric match — a base-type kinematic operation
-        // must INCREASE volume, checked with no analytic expectation. MEASURED 20.09.2026: on the FIRST body
-        // the pre-operation volume is not read at all — ReadVolume() returns null because the main body does
-        // not exist yet, which is not zero. States differ by WHAT WAS MEASURED: 0 bodies means no material
-        // existed before the operation; bodies > 0 with an unread volume means the value is NOT READ, and the
-        // check is named unread, not false.
+        // INVARIANT: "material added" is separated from a numeric match — a base-type kinematic
+        // operation must INCREASE volume, checked with no analytic expectation. States differ by WHAT
+        // WAS MEASURED: 0 bodies means no material existed before; bodies > 0 with an unread volume
+        // means the value is NOT READ, and the check is named unread, not false.
         // History: docs/decisions/adapter-features.md#sweep-first-body
         if (volumeAfter is not double volumeAfterValue)
         {

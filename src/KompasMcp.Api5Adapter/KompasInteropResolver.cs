@@ -7,13 +7,11 @@ using Microsoft.Win32;
 namespace KompasMcp.Api5Adapter;
 
 /// <summary>Loads the vendor KOMPAS interop assemblies from the user's installation at run time.</summary>
-/// <remarks>Why (a P0 finding, not hypothetical): the interop references are declared <c>Private=false</c>, so
-/// nothing from the ASCON installation is copied into our build output or package — the delivery does not
-/// redistribute licensed binaries. A plain reference therefore compiles but does not run: the first use of a
-/// <c>Kompas6API5</c> type throws <see cref="FileNotFoundException"/> unless the assembly is resolved from the
-/// install directory. This class is that step and must run before any interop type is touched. Search order is
-/// explicit and reported — "we silently found some copy of the API" is exactly the ambiguity that produces a
-/// version mismatch nobody can diagnose later. History: docs/decisions/adapter-core.md#interop-resolver</remarks>
+/// <remarks>INVARIANT: interop references are declared <c>Private=false</c>, so nothing from the ASCON
+/// installation is copied into the build output — the delivery does not redistribute licensed binaries. A
+/// plain reference compiles but does not run: the first use of a <c>Kompas6API5</c> type throws
+/// <see cref="FileNotFoundException"/> unless resolved from the install directory. This class is that step
+/// and must run before any interop type is touched. History: docs/decisions/adapter-core.md#interop-resolver</remarks>
 public static class KompasInteropResolver
 {
     private static readonly object Gate = new();

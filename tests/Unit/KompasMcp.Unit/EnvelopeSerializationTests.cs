@@ -6,11 +6,10 @@ using Xunit;
 namespace KompasMcp.Unit;
 
 /// <summary>A list-valued Worker result must survive being put into the envelope and serialized.</summary>
-/// <remarks>Regression test for the "kompas_list_bodies returns []" defect. The Worker was proven to send
-/// a correct one-element array (verified on the pipe: body_ref, kind=solid, bbox 100×80×10,
-/// face_count 6), so the loss had to be inside the Host's envelope/serialization path. That path
-/// carries <c>ResultEnvelope&lt;JsonNode?&gt;</c> where <c>Result</c> may be a JSON <i>array</i>
-/// rather than the usual object, and arrays are exactly what the first probe missed.</remarks>
+/// <remarks>TEST: the Worker sends a correct one-element array, so the loss was inside the Host's
+/// envelope/serialization path, which carries <c>ResultEnvelope&lt;JsonNode?&gt;</c> where <c>Result</c> may be
+/// a JSON <i>array</i> rather than the usual object — and arrays are exactly what a first probe missed.
+/// History: docs/decisions/tests.md#envelope-serialization-2</remarks>
 public class EnvelopeSerializationTests
 {
     [Fact]

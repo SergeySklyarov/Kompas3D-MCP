@@ -6,14 +6,14 @@ using Kompas6API5;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>Suppress, restore and delete a feature (docs/05 §4.4, §7; SM-30 in the catalog).
-/// MEASURED by probe L on 12.09.2026 on live v24 (docs/acceptance/api7/sketch-lifecycle.md), not from
-/// names: L.7 — <c>ksFeature.excluded = true</c> removes the extrusion body, <c>false</c> restores it, and
-/// the feature count is unchanged; one <c>RebuildDocument()</c> suffices (no <c>ksEntity.Update()</c>, unlike
-/// a parameter edit P2.3). L.8 — <c>ksDocument3D.DeleteObject(entity)</c> returns true, count minus one.
-/// INVARIANT: no "dependent features" member exists in API5 or API7 (reflection: 0 matches for Dependent*/Preceding*/UsedBy*),
-/// so the server returns candidates — features standing after the deleted one — whose presence blocks deletion until the caller agrees.
-/// History: docs/decisions/adapter-core.md#lifecycle-suppress-delete</summary>
+/// <summary>Suppress, restore and delete a feature (docs/05 §4.4, §7; SM-30 in the catalog).</summary>
+/// <remarks>MEASURED by probe L on live v24: <c>ksFeature.excluded</c> toggles the extrusion body
+/// (<c>true</c> removes, <c>false</c> restores, count unchanged) and one <c>RebuildDocument()</c> suffices
+/// (no <c>ksEntity.Update()</c>, unlike a parameter edit P2.3); <c>ksDocument3D.DeleteObject(entity)</c>
+/// returns true, count minus one. INVARIANT: no "dependent features" member exists in API5 or API7
+/// (reflection: 0 matches for Dependent*/Preceding*/UsedBy*), so the server returns candidates — features
+/// after the deleted one — whose presence blocks deletion until the caller agrees.
+/// History: docs/decisions/adapter-core.md#lifecycle-suppress-delete</remarks>
 public partial class Api5Session
 {
     public SuppressFeatureResult SetFeatureSuppressed(SuppressFeatureCommand command)
@@ -21,11 +21,9 @@ public partial class Api5Session
         var (document, entity) = RequireFeatureEntity(command.FeatureRef);
 
         // The same pre-check as for deletion: a dead object must be rejected as a stale reference, not as
-        // "the wrong type" (row L10: suppressing an already-deleted feature gave CAPABILITY_UNAVAILABLE,
-        // plausible but wrong in substance). A suppressed feature is not shown in collection 110, so it is
-        // asked about directly. Presence is checked BY IDENTITY, not by name: MEASURED 19.09.2026 (probe I)
-        // that two consecutive features of one kind carry the SAME name, so "the name is in the tree" would
-        // answer "yes" for a dead object whose same-named neighbour remains.
+        // "the wrong type" (row L10). A suppressed feature is not shown in collection 110, so it is asked
+        // about directly; presence is checked BY IDENTITY, not by name (two consecutive features share a name).
+        // History: docs/decisions/adapter-core.md#feature-suppression
         var presentInTree = TreePositionOf(document, entity) >= 0;
         if (!presentInTree && !SafeIsCreated(entity))
         {
@@ -61,11 +59,8 @@ public partial class Api5Session
         var readBack = stateAfter.Excluded == command.Suppressed;
 
         // INVARIANT: the counter is measured, not "explained by one"; a deviation beyond one is named as a
-        // separate unverified aspect, not silence. MEASURED (L04/L05 12.09.2026; probe I 19.09.2026, run
-        // c90961c6a3ba478697da5bc243040719, report docs/acceptance/api7/feature-identity.json): a suppressed
-        // feature DISAPPEARS from EntityCollection(o3d_operationElement=110), and suppression CASCADES —
-        // suppressing the first of two consecutive reposition features took collection 110 from 4 to 2 while
-        // restoring returned one (2→3).
+        // separate unverified aspect, not silence. MEASURED: a suppressed feature DISAPPEARS from
+        // EntityCollection(o3d_operationElement=110) and suppression CASCADES.
         // History: docs/decisions/adapter-core.md#feature-suppression
         var survived = stateAfter.Name == stateBefore.Name && SafeIsCreated(entity);
         var definitionReadable = entity.GetDefinition() is not null;
@@ -114,10 +109,9 @@ public partial class Api5Session
                 Expected: "не задано"));
         }
 
-        // Suppressing a boss decreases the volume, suppressing a cut increases it (MEASURED by probe L.7:
-        // excluded=true on a 40×20 through hole gave the plate back its 80000 mm³). The direction is
-        // therefore not asserted: the observed fact is that the volume CHANGED, and what it must be is
-        // declared by the caller via expected_volume_mm3.
+        // Suppressing a boss decreases the volume, suppressing a cut increases it (MEASURED). The direction
+        // is not asserted: the observed fact is that the volume CHANGED, and what it must be is declared by
+        // the caller via expected_volume_mm3.
         var effectObserved = volumeBefore is double && volumeAfter is double
                              && Math.Abs(volumeAfter.Value - volumeBefore.Value) > VolumeChangeFloorMm3;
         checks.Add(new NamedCheck(
@@ -146,10 +140,9 @@ public partial class Api5Session
         }
         if (cascadeSuspected)
         {
-            // Not an "error" but a measured property of the dependencies: the counter changed by more than
-            // one element because suppressing a feature also takes its dependents (E3: 4→2). There is no
-            // dependent list in the API (probe L.8), so the server names the observed number and does not
-            // pass it off as a feature loss or a full rollback.
+            // A measured property of the dependencies: the counter changed by more than one because
+            // suppressing a feature also takes its dependents. There is no dependent list in the API, so the
+            // server names the observed number.
             unverified.Insert(0, $"dependent_features_suppressed_together — число признаков изменилось на " +
                                  $"{countDelta} вместо одного: подавление уносит и зависимые признаки, " +
                                  "а перечислить их API не умеет. Состояние ПОСЛЕ достигается снятием " +
@@ -183,14 +176,11 @@ public partial class Api5Session
         var (document, entity) = RequireFeatureEntity(command.FeatureRef);
         var name = entity.name ?? string.Empty;
 
-        // Pre-check: the feature must be in the model. Without it, a repeated deletion by an already-used
-        // reference returned "success" while deleting nothing (row L09, run 12.09.2026: DeleteObject on a
-        // dead object answers true, the tree is unchanged). A suppressed feature is also not shown in
-        // collection 110, so "not found" is not enough: the object is asked directly whether it is alive.
-        //
-        // Presence and position are taken BY IDENTITY (FindIt), not by name: two consecutive features of
-        // one kind carry one name (MEASURED 19.09.2026, probe I), so IndexOf(name) would return the position
-        // of a FOREIGN same-named feature and declare the wrong dependents.
+        // Pre-check: the feature must be in the model — a repeated deletion by an already-used reference
+        // returned "success" while deleting nothing (row L09). A suppressed feature is also not shown in
+        // collection 110, so the object is asked directly whether it is alive. Presence and position are
+        // taken BY IDENTITY (FindIt), not by name (two consecutive features share a name).
+        // History: docs/decisions/adapter-core.md#delete-position
         var tree = FeatureTreeElements(document);
         var identityPosition = TreePositionOf(document, entity);
         if (identityPosition < 0 && !SafeIsCreated(entity))
@@ -202,13 +192,10 @@ public partial class Api5Session
                 RetryPolicy.ReacquireContext);
         }
 
-        // The position is needed for exactly one thing: to enumerate what stands AFTER the deleted feature.
-        // INVARIANT: COM identity is the best basis but does NOT survive a rebuild — MEASURED 19.09.2026:
-        // suppressing and restoring a base extrusion (BG19/BG20) recreates the tree element and FindIt on the
-        // old object answers −1 though it is alive and IsCreated. An unknown position must not default to "no
-        // dependents". Two named sources: the name is taken ONLY when unambiguous (two consecutive features of
-        // one kind share a name, probe I); when ambiguous the position is UNKNOWN and the whole tree is offered
-        // as candidates, so deletion without explicit consent is impossible rather than free.
+        // The position is needed to enumerate what stands AFTER the deleted feature. INVARIANT: COM identity
+        // does NOT survive a rebuild (FindIt on an old object answers −1 though it is alive). An unknown
+        // position must not default to "no dependents": the name is taken ONLY when unambiguous, else the
+        // whole tree is offered as candidates.
         // History: docs/decisions/adapter-core.md#delete-position
         var nameMatches = tree.Where(e => e.Name == name).ToList();
         var position = identityPosition >= 0
@@ -271,13 +258,10 @@ public partial class Api5Session
         var treeAfter = FeatureTreeElements(document);
         var volumeAfter = ReadVolume(document);
 
-        // "Deleted" is by identity: the feature object is no longer in the tree; a name check would be
-        // FALSELY negative if a same-named neighbour remains (MEASURED 19.09.2026, probe I).
-        // INVARIANT: three claims kept separate. A strict "exactly one fewer" made a CASCADE falsely negative
-        // (a 5→3 tree gave feature_removed=false though the target was gone); replacing == with <= would hide
-        // deletion of EXTRA objects. 1) feature_removed (target gone by identity); 2) cascade_within_candidates
-        // (only it and the declared candidates went); 3) independent_objects_preserved (objects before it
-        // intact). "The target was removed" and "the cascade went as expected" are DIFFERENT claims.
+        // "Deleted" is by identity: a name check would be FALSELY negative if a same-named neighbour
+        // remains. INVARIANT: three claims kept separate — 1) feature_removed (target gone by identity);
+        // 2) cascade_within_candidates (only it and the declared candidates went); 3) independent_objects
+        // preserved (objects before it intact); a strict "exactly one fewer" made a CASCADE falsely negative.
         // History: docs/decisions/adapter-core.md#delete-position
         var stillPresent = TreePositionOf(document, entity) >= 0;
         var featureRemoved = deleted && !stillPresent;
@@ -292,9 +276,8 @@ public partial class Api5Session
         var outsideCandidates = vanished.Where(n => !allowed.Contains(n)).ToList();
         var cascadeWithinCandidates = vanished.Count > 0 && outsideCandidates.Count == 0;
 
-        // Independent objects are those that stood in the tree BEFORE the target. They are checked ONLY
-        // when the position is known: with positionSource=unknown "before it" is undefined, and there is
-        // nothing to assert.
+        // Independent objects are those that stood BEFORE the target; checked ONLY when the position is
+        // known, since with positionSource=unknown "before it" is undefined.
         var independent = position >= 0
             ? tree.Take(position).Select(e => e.Name).ToList()
             : new List<string>();
@@ -362,11 +345,9 @@ public partial class Api5Session
             unverified.Add("expected_volume_not_supplied — без ожидания объёма геометрия не подтверждена");
         }
 
-        // The verification level answers "what exactly was proved". Removing the target feature is
-        // structure; geometry is added only when both the cascade and the preservation of independent
-        // objects are confirmed. With the target removed and the cascade failed the level stays structural
-        // and the reason is named in unverified — lowering it to CallReturned would deny the measured
-        // deletion, raising it to geometry_checked would claim a composition check that did not happen.
+        // The verification level answers "what exactly was proved": removing the target is structure;
+        // geometry is added only when the cascade and the preservation of independent objects are both
+        // confirmed. A failed cascade keeps the level structural with the reason named in unverified.
         return new DeleteFeatureResult(
             name,
             deleted,
@@ -385,11 +366,8 @@ public partial class Api5Session
 
     /// <summary>Names of objects that WERE in the tree before the operation and are gone after.</summary>
     /// <remarks>Comparison by name is the only one available: a tree element's COM identity is recreated by
-    /// a rebuild (MEASURED 19.09.2026: after suppressing and restoring a base extrusion, <c>FindIt</c> on
-    /// the old object answers −1), so "the same object" cannot be recovered from it. The name gives the
-    /// COMPOSITION of what left, which is exactly what is needed to separate "the target was removed" from
-    /// "the cascade went as expected" and from "something extra went". Same-named elements are removed one
-    /// by one: two same-named features are not closed by a single departure.</remarks>
+    /// a rebuild, so "the same object" cannot be recovered. The name gives the COMPOSITION of what left.
+    /// Same-named elements are removed one by one.</remarks>
     private static List<string> VanishedNames(
         List<(int Index, ksEntity Entity, string Name)> before,
         List<(int Index, ksEntity Entity, string Name)> after)
@@ -435,8 +413,7 @@ public partial class Api5Session
     /// <summary>Feature tree elements in the walk order of <c>EntityCollection(110)</c>, with their index
     /// and object.</summary>
     /// <remarks>The order here is an observed fact (the collection's walk order), not a promise that KOMPAS
-    /// rebuilds history that way. So a feature's position is taken not from its number in this list but via
-    /// <see cref="TreePositionOf"/>: the list serves to enumerate candidates, not to address them.</remarks>
+    /// rebuilds history that way; the list serves to enumerate candidates, not to address them.</remarks>
     private List<(int Index, ksEntity Entity, string Name)> FeatureTreeElements(DocumentEntry document)
     {
         var elements = new List<(int, ksEntity, string)>();
@@ -460,10 +437,8 @@ public partial class Api5Session
 
     /// <summary>A feature's position in the tree — BY COM OBJECT IDENTITY (<c>ksEntityCollection.FindIt</c>),
     /// not by its display name.</summary>
-    /// <remarks>MEASURED 19.09.2026 (probe I, run <c>c90961c6a3ba478697da5bc243040719</c>): two consecutive
-    /// reposition features carry ONE name ("Change of position : Body 1"), so a name search always points at
-    /// the first of them. <c>FindIt</c> returns a zero-based index and <c>−1</c> for an object not in the
-    /// collection; both outcomes were measured in one run.</remarks>
+    /// <remarks>MEASURED: two consecutive reposition features carry ONE name, so a name search always
+    /// points at the first of them. <c>FindIt</c> returns a zero-based index and <c>−1</c> if absent.</remarks>
     private int TreePositionOf(DocumentEntry document, ksEntity entity)
     {
         try

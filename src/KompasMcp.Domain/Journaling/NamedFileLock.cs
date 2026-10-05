@@ -4,13 +4,10 @@ using System.Text;
 namespace KompasMcp.Domain.Journaling;
 
 /// <summary>Named cross-process mutex keyed to a FILE PATH; serialises journal WRITES only.</summary>
-/// <remarks>
-/// MEASURED: <c>FileMode.Append</c> is NOT atomic with two writers (381/400 survived, probe
-/// <c>scratch/_append_probe</c>, 21.09.2026); under this lock 400/400. History:
-/// docs/decisions/journaling.md#append-atomicity
+/// <remarks>MEASURED: <c>FileMode.Append</c> is NOT atomic with two writers; under this lock it is.
 /// INVARIANT: writes are serialised, reads stay free — a lost record would let a replay re-apply the
 /// mutation. LIMIT: a named mutex, not a file lock — a file lock would also block readers.
-/// </remarks>
+/// History: docs/decisions/journaling.md#append-atomicity</remarks>
 public sealed class NamedFileLock : IDisposable
 {
     private readonly Mutex _mutex;

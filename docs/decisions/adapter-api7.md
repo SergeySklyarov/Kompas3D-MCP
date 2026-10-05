@@ -327,3 +327,27 @@ C# — это ровно тот вызов, что описывает стран
 ответе, ни в документации инструмента. Предел перечисления — число, а не умолчание: каждая строка
 стоит COM-вызова на член, и документ с сотнями объектов подвесил бы сессию на одном запросе;
 усечение не молчаливое — оно попадает в примечания строки.
+
+## <a id="moved-from-code"></a>Дословные фрагменты, вынесенные из комментариев
+
+Ниже — точные строки, убранные из комментариев `src/KompasMcp.Api5Adapter/Api7/` при сокращении
+(имена страниц справки, сигнатуры interop и `<c>`-фрагменты). Код ссылается на историю через
+`History:`, а сами строки хранятся здесь дословно.
+
+**`#aux-geometry`.** Страницы справки: `ksapi_iauxiliarygeomcontainer_getplanes3d.html`,
+`…getaxes3d.html`, `ksapi_iaxes3d_add.html`, `ksapi_iplanes3d_add.html`,
+`ksapi_imodelcontainer_getpoints3d.html`, `ksapi_ipoints3d_add.html`. Маршрут оси по двум точкам
+детали — `Api7Bridge.TryBuildAxisBy2Points`.
+
+**`#hole`.** Страница справки по правке отверстия: `iholes3d_hole3d.html`.
+
+**`#reposition`.** Страницы справки: `ilocalcoordinatesystem_localcsparameters.html`,
+`ilocalcoordinatesystem_parametertype.html`. Маршрут ориентации —
+`LocalCSParameters → ILocalCSEulerParam.PrecessionAngle/NutationAngle/RotationAngle`. Формула переноса
+точки при записи положения — `t = c − R·c`.
+
+**`#pattern`.** Члены без сеттеров в вендорском interop: `Vector1/2`, `Axis1/2`,
+`BoundaryInstancesStepFactor1/2`.
+
+**`#sketch-entities`.** Сигнатуры из interop: `IDrawingContainer.GetObjects(std::vector&lt;int32_t&gt;)`,
+`IKompasDocument.GetObjectId`.

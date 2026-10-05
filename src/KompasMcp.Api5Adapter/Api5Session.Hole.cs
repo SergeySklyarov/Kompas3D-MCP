@@ -11,10 +11,10 @@ namespace KompasMcp.Api5Adapter;
 
 /// <summary>Native hole (docs/05 SM-07): three measured modes and a position away from the origin.</summary>
 /// <remarks>
-/// Basis — probe M of 16.09.2026 (<c>docs/acceptance/api7/hole-modes.md</c>). TEST: M.2 counterbore, M.3
-/// countersink (an 11-row table), M.4 blind with a flat bottom (<c>ksDTBlind</c> does not exist — blind is
-/// <c>ksDTValue</c>), M.5 position away (<c>Point3DParamSurface</c> + <c>ksOffsetByCoords</c>). ROUTE — API7:
-/// an API5 hole (<c>NewEntity(o3d_hole=52)</c>) has no mode parameters. INVARIANT: volume on the MAIN body (<c>ReadVolume</c>).
+/// Basis — probe M (<c>docs/acceptance/api7/hole-modes.md</c>). TEST: M.2 counterbore, M.3 countersink
+/// (an 11-row table), M.4 blind with a flat bottom (<c>ksDTBlind</c> does not exist — blind is
+/// <c>ksDTValue</c>), M.5 position away (<c>Point3DParamSurface</c> + <c>ksOffsetByCoords</c>). ROUTE —
+/// API7: an API5 hole (<c>NewEntity(o3d_hole=52)</c>) has no mode parameters. INVARIANT: volume on the MAIN body.
 /// History: docs/decisions/adapter-features.md#hole-route
 /// </remarks>
 public partial class Api5Session
@@ -27,10 +27,9 @@ public partial class Api5Session
 
     /// <summary>Tolerance for comparing the WRITTEN number with the read-back one on edit, mm.</summary>
     /// <remarks><c>1e-6</c> is the same tolerance used on CREATION (<c>HoleParametersMatch</c>), and it
-    /// is not "by eye": the probe <c>scratch/_hole_edit_probe.py</c> read back 10, 12, 20, 24, 5, 4 and
-    /// 90 with no divergence at all, while the derived countersink depth returned as
-    /// <c>7.000000000000001</c> — the kernel's own noise is far beyond this tolerance and does not mask
-    /// "not applied".</remarks>
+    /// is not "by eye": the probe read the written values back with no divergence, while a derived
+    /// countersink depth returned with the kernel's own noise — which is far beyond this tolerance and
+    /// does not mask "not applied".</remarks>
     private const double HoleEditToleranceMm = 1e-6d;
 
     /// <summary>Create a native hole of a measured mode. A bridge refusal is returned as
@@ -472,16 +471,9 @@ public partial class Api5Session
     /// <summary>The last operation element, which is the hole feature. The search is by
     /// <see cref="KompasObjectTypes.Hole3D"/> (583, <c>o3d_Hole3D</c>), NOT by
     /// <see cref="KompasObjectTypes.HoleOperation"/> (52).</summary>
-    /// <remarks>This corrects a MEASURED defect, not a rename. An earlier version searched 52 —
-    /// <c>o3d_holeOperation</c>, the number the feature is CREATED with via <c>NewEntity(52)</c>. Probe
-    /// N.1 of 17.09.2026 printed both tree collections before and after creation: <c>NewEntity(52).type
-    /// = 52 (o3d_holeOperation)</c>, while the live <c>IHoles3D[0].ModelObjectType = 583
-    /// (o3d_Hole3D)</c>; exactly one entry appeared in the tree — <c>OperationElement(110)[1] type=583
-    /// («Отверстие:1»)</c>. The number 52 never appeared in the tree. So the search by 52 never found
-    /// the API7-created hole, <c>feature_ref</c> was not issued, and the cause was blamed on "the
-    /// feature is not visible in the tree".
-    /// Both collections are scanned deliberately: "OperationElement = 110" is only one of them, and a
-    /// feature's absence from one would not mean absence from the tree at all.
+    /// <remarks>MEASURED: the number the feature is CREATED with (<c>NewEntity(52)</c>) never appears in
+    /// the tree — the live hole reads as <c>583</c> (<c>o3d_Hole3D</c>) — so a search by 52 never found it
+    /// and <c>feature_ref</c> was wrongly withheld. Both tree collections are scanned deliberately.
     /// History: docs/decisions/adapter-features.md#hole-tree-type
     /// </remarks>
     private static ksEntity? FindHoleEntity(DocumentEntry document)
@@ -629,11 +621,11 @@ public partial class Api5Session
     }
 
     /// <summary>Edit the parameters of an EXISTING native hole via <c>kompas_update_feature</c>.</summary>
-    /// <remarks>ROUTE — MEASURED 20.09.2026 (probe <c>scratch/_hole_edit_probe.py</c>; report
-    /// <c>docs/acceptance/api7/hole-modes.md</c>, M.6): the feature is taken by <c>IHoles3D.Hole3D[index]</c>, the
-    /// members of ITS OWN mode are written, <c>IModelObject.Update()</c> applied, then rebuild. INVARIANT: the
-    /// address is the same as for the read and is NOT guessed — the correspondence is proven by the hole being
-    /// unique (<c>count != 1</c> refuses <c>CAPABILITY_UNAVAILABLE</c> before COM). LIMIT: the mode is NOT changed.
+    /// <remarks>ROUTE — MEASURED (probe <c>scratch/_hole_edit_probe.py</c>; report
+    /// <c>docs/acceptance/api7/hole-modes.md</c>, M.6): the feature is taken by <c>IHoles3D.Hole3D[index]</c>,
+    /// the members of ITS OWN mode are written, <c>IModelObject.Update()</c> applied, then rebuild. INVARIANT:
+    /// the address is the same as for the read — the correspondence is proven by the hole being unique
+    /// (<c>count != 1</c> refuses <c>CAPABILITY_UNAVAILABLE</c> before COM). LIMIT: the mode is NOT changed.
     /// History: docs/decisions/adapter-features.md#hole-edit-route
     /// </remarks>
     private UpdateFeatureResult UpdateHole(
@@ -659,7 +651,7 @@ public partial class Api5Session
             // blind hole's depth is set by it. Whether it is foreign FOR THE MODE (for counterbore and
             // countersink the depth is derived or set by the recess) is decided by ValidateHoleEdit from
             // the read mode — that is where it is MEASURED. Without this line editing a blind hole was
-            // refused before COM: MEASURED by rows F08.15/16/19/20.edit 20.09.2026.
+            // refused before COM (rows F08.15/16/19/20.edit).
             ownFields: new[] { "depth_mm" });
 
         var bridge = BridgeFor(document);

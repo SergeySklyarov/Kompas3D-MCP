@@ -1,10 +1,9 @@
 namespace KompasMcp.Contracts.Ipc;
 
-/// <summary>SINGLE command-budget table: one for the Host and Worker, not two that drift apart.</summary>
-/// <remarks>
-/// <para>INVARIANT: the Host budget is the Worker budget plus <see cref="HostMarginMs"/>. The Host is
-/// responsible for delivering the frame, not for the COM call, so it must wait LONGER; a smaller Host
-/// budget turns every long but normal call into "outcome unknown" plus a Worker restart.
+/// <summary>SINGLE command-budget table: one for the Host and Worker, not two that drift apart.</summary> <remarks>
+/// <para>INVARIANT: the Host budget is the Worker budget plus <see cref="HostMarginMs"/>. The Host is responsible for
+/// delivering the frame, not for the COM call, so it must wait LONGER; a smaller Host budget turns every long but
+/// normal call into "outcome unknown" plus a Worker restart.
 /// History: docs/decisions/contracts.md#budgets-single-table</para>
 /// </remarks>
 public static class CommandBudgets
@@ -12,9 +11,8 @@ public static class CommandBudgets
     /// <summary>Default budget for a command not named in the table.</summary>
     public const int DefaultMs = 120_000;
 
-    /// <summary>How much longer than the Worker budget the Host waits. Named as a number, not a "small
-    /// margin": the margin IS the difference between "the Host saw the Worker time out" and "the Host gave
-    /// up first".</summary>
+    /// <summary>How much longer than the Worker budget the Host waits. Named as a number, not a "small margin": the
+    /// margin IS the difference between "the Host saw the Worker time out" and "the Host gave up first".</summary>
     public const int HostMarginMs = 30_000;
 
     /// <summary>Worker-side command budget (STA lane), milliseconds.</summary>
@@ -27,8 +25,8 @@ public static class CommandBudgets
         WorkerCommands.ExportStep or WorkerCommands.ImportStep => 300_000,
         // A raster snapshot renders the document and (in file mode) writes a file: longer than a read,
         // shorter than a converter. The budget is a number, not inherited from the default: a
-        // high-resolution snapshot measured in seconds (probe P6), and hitting the common budget would
-        // look like a product failure.
+        // high-resolution snapshot measured in seconds, and hitting the common budget would look like a
+        // product failure.
         WorkerCommands.ExportImage => 240_000,
         // A native hole takes the API7 route (bridge + TransferInterface + RebuildModel): longer than a
         // pure API5 mutation, so the budget is above the default, not guessed.
@@ -60,7 +58,7 @@ public static class CommandBudgets
         _ => DefaultMs,
     };
 
-    /// <summary>How long the Host waits for a command's answer: the Worker budget plus
-    /// <see cref="HostMarginMs"/>.</summary>
+    /// <summary>How long the Host waits for a command's answer: the Worker budget plus <see
+    /// cref="HostMarginMs"/>.</summary>
     public static int HostBudgetMs(string command) => WorkerBudgetMs(command) + HostMarginMs;
 }

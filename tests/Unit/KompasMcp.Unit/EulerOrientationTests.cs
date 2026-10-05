@@ -4,13 +4,13 @@ using Xunit;
 namespace KompasMcp.Unit;
 
 /// <summary>Decomposing a placement into Euler angles and rebuilding it — checked by MATRIX EQUIVALENCE.</summary>
-/// <remarks>INVARIANT: Euler parametrisation is AMBIGUOUS at nutation 0/180, so validity is proved by the
-/// matrix rebuilt from the read triple equalling the original, not by matching numbers.
-/// MEASURED (probe <c>--reposition-params</c>, run <c>a336120926fc4652a8bf737562568271</c>, step RP.25):
-/// exactly ONE of six products matched — <c>PNR</c> — with difference 0 on all three composite postures
-/// (the other five differ by 1); the triples <c>(0,0,90)</c> and <c>(90,90,0)</c> are read FROM THE DOCUMENT.
+/// <remarks>INVARIANT: Euler parametrisation is AMBIGUOUS at nutation 0/180, so validity is proved by the matrix
+/// rebuilt from the read triple equalling the original, not by matching numbers.
+/// MEASURED (probe <c>--reposition-params</c>, step RP.25): exactly ONE of six products matched — <c>PNR</c> —
+/// with difference 0 on all three composite postures (the other five differ by 1); the triples <c>(0,0,90)</c>
+/// and <c>(90,90,0)</c> are read FROM THE DOCUMENT.
 /// ASSUMPTION: composite postures use a tilted axis because a symmetric part cannot tell an axis swap.
-/// History: docs/decisions/tests.md#euler-tests</remarks>
+/// History: docs/decisions/tests.md#euler-tests-2</remarks>
 public class EulerOrientationTests
 {
     /// <summary>Tolerance for numbers read from the document — the same as the matrix tolerance.</summary>
@@ -19,8 +19,7 @@ public class EulerOrientationTests
     [Fact]
     public void RotationFromAngles_ReproducesMeasuredPosture_AxisZThroughPoint()
     {
-        // Reference RP.25, posture C1: axis (0,0,1) by 90° through (5,0,0). The triple read from the
-        // document is (precession, nutation, rotation) = (0, 0, 90).
+        // Posture C1: axis (0,0,1) by 90° through (5,0,0); the read triple is (0, 0, 90).
         var measured = Rotation(RepositionMatrix.RotateAboutAxis(
             new[] { 5d, 0d, 0d }, new[] { 0d, 0d, 1d }, 90d));
 
@@ -30,8 +29,8 @@ public class EulerOrientationTests
     [Fact]
     public void RotationFromAngles_ReproducesMeasuredPosture_TiltedAxis()
     {
-        // Reference RP.25, posture C2: axis (1,1,1)/√3 by 120° through (5,−3,7). The read triple is
-        // (90, 90, 0). It also controls that PNR reproduces a TILT, not only a rotation about a coordinate axis.
+        // Posture C2: axis (1,1,1)/√3 by 120° through (5,−3,7); the read triple is (90, 90, 0). Also controls
+        // that PNR reproduces a TILT, not only a rotation about a coordinate axis.
         var measured = Rotation(RepositionMatrix.RotateAboutAxis(
             new[] { 5d, -3d, 7d }, new[] { 1d, 1d, 1d }, 120d));
 
@@ -41,8 +40,7 @@ public class EulerOrientationTests
     [Fact]
     public void RotationFromAngles_ReproducesMeasuredPosture_HalfTurn()
     {
-        // Reference RP.25, posture C3: half a turn. Here the skew part is zero, and that is a separate
-        // branch of the decomposition — the one on which a degenerate axis derivation would return zero.
+        // Posture C3: half a turn — the skew part is zero, a separate branch.
         var measured = Rotation(RepositionMatrix.RotateAboutAxis(
             new[] { 5d, 0d, 0d }, new[] { 0d, 0d, 1d }, 180d));
 
@@ -52,8 +50,8 @@ public class EulerOrientationTests
     [Fact]
     public void AnglesFromRotation_ReturnsMeasuredTriple_TiltedAxis()
     {
-        // The triple is compared with the MEASURED one (RP.25: euler_angles_C2 = (90, 90, 0)), not with any
-        // valid one: a matrix can have several valid triples, so agreement with the document is a separate fact.
+        // The triple is compared with the MEASURED one, not with any valid one — a matrix can have several
+        // valid triples, so agreement with the document is a separate fact.
         var measured = RepositionMatrix.RotateAboutAxis(
             new[] { 5d, -3d, 7d }, new[] { 1d, 1d, 1d }, 120d);
 
@@ -67,8 +65,8 @@ public class EulerOrientationTests
     [Fact]
     public void AnglesFromRotation_ReturnsMeasuredTriple_QuarterTurn()
     {
-        // RP.25: euler_angles_C1 = (0, 0, 90) and euler_angles_C3 = (0, 0, 180). Here nutation is zero, so
-        // the triple is degenerate; the test checks that the degenerate branch returns EXACTLY the measured one.
+        // Here nutation is zero, so the triple is degenerate; the test checks the degenerate branch returns
+        // EXACTLY the measured one.
         var quarter = RepositionMatrix.RotateAboutAxis(
             new[] { 5d, 0d, 0d }, new[] { 0d, 0d, 1d }, 90d);
         var (p1, n1, r1) = EulerOrientation.AnglesFromRotation(quarter);
@@ -87,9 +85,8 @@ public class EulerOrientationTests
     [Fact]
     public void WrongOrder_DoesNotReproduceTheMeasuredMatrix()
     {
-        // NEGATIVE CONTROL, without which the earlier tests prove nothing: if RotationFromAngles built ANY
-        // order they would still pass. The same three numbers in a different order must give a DIFFERENT
-        // matrix, and a noticeably different one, not a machine epsilon.
+        // NEGATIVE CONTROL, without which the earlier tests prove nothing: a different order must give a
+        // DIFFERENT matrix, and a noticeably different one, not a machine epsilon.
         var measured = Rotation(RepositionMatrix.RotateAboutAxis(
             new[] { 5d, -3d, 7d }, new[] { 1d, 1d, 1d }, 120d));
 
@@ -104,8 +101,8 @@ public class EulerOrientationTests
     [Fact]
     public void AnglesFromRotation_RoundTripsEveryMeasuredPosture()
     {
-        // Round trip over all RP.25 postures at once: the decomposition must be REVERSIBLE, otherwise what
-        // was read from the document can be neither checked nor rewritten with the same placement.
+        // Round trip over all postures: the decomposition must be REVERSIBLE, else what was read cannot be
+        // rewritten with the same placement.
         var postures = new[]
         {
             RepositionMatrix.RotateAboutAxis(new[] { 0d, 0d, 0d }, new[] { 0d, 0d, 1d }, 90d),
@@ -127,9 +124,7 @@ public class EulerOrientationTests
     [Fact]
     public void FullPlacement_IsReproducedByAnglesPlusTranslation()
     {
-        // The FULL placement is compared, not only the rotation: orientation comes from the angles, the
-        // translation from slots 12…14 — exactly how the product writes the feature (RP.25), so checking half
-        // here would not check the route.
+        // The FULL placement is compared: orientation from the angles, translation from slots 12…14.
         var placement = RepositionMatrix.RotateAboutAxis(
             new[] { 5d, -3d, 7d }, new[] { 1d, 1d, 1d }, 120d);
 
@@ -142,8 +137,7 @@ public class EulerOrientationTests
 
         AssertSameMatrix(placement, restored);
 
-        // This posture's translation is probe-measured (RP.25: displacement_written_C2 = (−2, −8, 10)) — it
-        // equals c − R·c, and its agreement with the document is checked separately from equivalence.
+        // This posture's translation is probe-measured — it equals c − R·c.
         Assert.Equal(-2d, translation[0], Precision);
         Assert.Equal(-8d, translation[1], Precision);
         Assert.Equal(10d, translation[2], Precision);
@@ -152,9 +146,8 @@ public class EulerOrientationTests
     [Fact]
     public void AxisAngleFromRotation_RecoversArbitraryAxis()
     {
-        // The axis is recovered up to sign: (d, θ) and (−d, −θ) give one matrix. So the test compares the
-        // VALIDITY of the pair, not a triple: rotating by the found angle about the found axis must give the
-        // original matrix.
+        // The axis is recovered up to sign, so the test compares the VALIDITY of the pair: rotating by the
+        // found angle about the found axis must give the original matrix.
         var cases = new[]
         {
             (Point: new[] { 0d, 0d, 0d }, Axis: new[] { 0d, 0d, 1d }, Angle: 90d),
@@ -180,9 +173,8 @@ public class EulerOrientationTests
     [Fact]
     public void AxisPointFromPlacement_ReturnsARepresentative_NotTheRecordedInput()
     {
-        // HERE IT IS PROVED THAT THE AXIS POINT IS NOT READ, supporting the claim that the product does not
-        // publish it. Two rotations about ONE line but through DIFFERENT points give the SAME placement — so
-        // the input point cannot be recovered from the placement at all.
+        // The axis point is NOT read: two rotations about ONE line but through DIFFERENT points give the SAME
+        // placement, so the input point cannot be recovered.
         var throughFirst = RepositionMatrix.RotateAboutAxis(
             new[] { 5d, 0d, 0d }, new[] { 0d, 0d, 1d }, 90d);
         var throughSecond = RepositionMatrix.RotateAboutAxis(
@@ -190,9 +182,8 @@ public class EulerOrientationTests
 
         AssertSameMatrix(throughFirst, throughSecond);
 
-        // What is recovered is a REPRESENTATIVE of the line — the point with zero component along the axis.
-        // For (5,0,0) it coincides with the input, for (5,0,7) it does not — exactly the case where publishing
-        // a "read" point would pass a derived value off as a recorded one.
+        // What is recovered is a REPRESENTATIVE of the line — the point with zero component along the axis;
+        // publishing a "read" point would pass a derived value off as a recorded one.
         var representative = EulerOrientation.AxisPointFromPlacement(throughSecond);
 
         Assert.NotNull(representative);
@@ -208,8 +199,7 @@ public class EulerOrientationTests
     [Fact]
     public void AxisPointFromPlacement_ReturnsNullWhenThereIsNoRotation()
     {
-        // A translation does not determine an axis point: it has no axis. Returning zero here would
-        // substitute a value for a missing one — forbidden along the whole read route.
+        // A translation has no axis, so no axis point: returning zero would substitute a value for a missing one.
         Assert.Null(EulerOrientation.AxisPointFromPlacement(RepositionMatrix.Translate(new[] { 7d, -11d, 13d })));
         Assert.Null(EulerOrientation.AxisPointFromPlacement(RepositionMatrix.Identity()));
     }
@@ -222,7 +212,7 @@ public class EulerOrientationTests
             RepositionMatrix.RotateAboutAxis(new[] { 5d, 0d, 0d }, new[] { 0d, 0d, 1d }, 90d)));
 
         // Discriminating control: a translation BY ZERO is also an identity rotation, and it looks like a
-        // translation. This is the pair the product distinguishes when reading (RP.25, posture C1 vs D1).
+        // translation — the pair the product distinguishes when reading.
         Assert.True(EulerOrientation.IsIdentity(RepositionMatrix.Translate(new[] { 0d, 0d, 0d })));
     }
 
@@ -250,11 +240,10 @@ public class EulerOrientationTests
     }
 
     /// <summary>INVARIANT: the parametrisation pole at nutation 180° — the rebuild must reproduce the matrix.</summary>
-    /// <remarks>MEASURED: found by acceptance row B3.59, not by unit tests; the product refused with
-    /// GEOMETRY_FAILED and a difference of 2 because the rotation sign at this pole used the neighbouring
-    /// convention's formula. The matrix here is GIVEN AS NUMBERS, not built from angles — otherwise the test
-    /// would compare the decomposition with itself and pass on any sign error.
-    /// History: docs/decisions/tests.md#euler-tests-pole</remarks>
+    /// <remarks>MEASURED: the product refused with GEOMETRY_FAILED and a difference of 2 because the rotation
+    /// sign at this pole used the neighbouring convention's formula. The matrix here is GIVEN AS NUMBERS — else
+    /// the test would compare the decomposition with itself.
+    /// History: docs/decisions/tests.md#euler-tests-pole-2</remarks>
     [Fact]
     public void AnglesFromRotation_ReproducesMatrixAtTheHalfTurnPole()
     {
@@ -271,8 +260,7 @@ public class EulerOrientationTests
     }
 
     /// <summary>The SAME POLE ON THE OPPOSITE BRANCH: 180° about an axis with a non-zero Z component.</summary>
-    /// <remarks>ASSUMPTION: a test on one axis would also pass on a decomposition valid only for XY planes;
-    /// axis (1,1,1) touches all three axes, so a sign swap in any of them is visible here.</remarks>
+    /// <remarks>ASSUMPTION: axis (1,1,1) touches all three axes, so a sign swap in any of them is visible here.</remarks>
     [Fact]
     public void AnglesFromRotation_ReproducesMatrixAtTheHalfTurnPole_TiltedAxis()
     {

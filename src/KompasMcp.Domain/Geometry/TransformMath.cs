@@ -31,7 +31,6 @@ public sealed class RigidFrame
         OriginMm[2] + (XMm[2] * xLocalMm) + (YMm[2] * yLocalMm) + (ZMm[2] * zLocalMm),
     };
 
-    /// <summary>Coordinates of a parent-space point in this frame (projection on the axes).</summary>
     public double[] FromParent(double[] parentPointMm)
     {
         var d = new[]
@@ -112,11 +111,9 @@ public static class TransformMath
         YAxis = (double[])frame.YMm.Clone(),
     };
 
-    /// <summary>
-    /// Frame of a child expressed in world space, given its placement inside a parent that is
+    /// <summary>Frame of a child expressed in world space, given its placement inside a parent that is
     /// itself placed in world space: <c>world = parent ∘ child</c>, i.e.
-    /// <c>point_world = parent.ToParent(child.ToParent(point_local))</c>.
-    /// </summary>
+    /// <c>point_world = parent.ToParent(child.ToParent(point_local))</c>.</summary>
     public static RigidFrame Compose(RigidFrame parent, RigidFrame child)
     {
         // Origin maps through the parent; the child's axes rotate with the parent's basis.
@@ -131,14 +128,11 @@ public static class TransformMath
         };
     }
 
-    /// <summary>
-    /// Placement to send to KOMPAS so that a child ends up at <paramref name="desiredWorld"/>
-    /// while the parent sits at <paramref name="parentInWorld"/>. Exact inverse of
-    /// <see cref="Compose"/>, which is what makes A03 (nested assemblies) checkable.
-    /// </summary>
+    /// <summary>Placement to send to KOMPAS so that a child ends up at <paramref name="desiredWorld"/>
+    /// while the parent sits at <paramref name="parentInWorld"/>. Exact inverse of <see cref="Compose"/>.</summary>
     /// <remarks>With R = [Xp Yp Pz] the parent's rotation (columns are its axes), the child's frame in the
-    /// parent's space is <c>origin = Rᵀ·(Od − Op)</c> and <c>axes = Rᵀ·(child world axes)</c>.
-    /// Rᵀ is used rather than an inverse solve because an orthonormal basis inverts by transpose.</remarks>
+    /// parent's space is <c>origin = Rᵀ·(Od − Op)</c> and <c>axes = Rᵀ·(child world axes)</c>. Rᵀ is used
+    /// rather than an inverse solve because an orthonormal basis inverts by transpose.</remarks>
     public static RigidFrame InverseCompose(RigidFrame parentInWorld, RigidFrame desiredWorld)
     {
         var px = parentInWorld.XMm;
@@ -161,7 +155,6 @@ public static class TransformMath
         };
     }
 
-    /// <summary>Multiply a vector by the transpose of the orthonormal basis given as columns.</summary>
     private static double[] TransposeApply(double[] c0, double[] c1, double[] c2, double[] v) => new[]
     {
         RigidFrame.Dot(c0, v),

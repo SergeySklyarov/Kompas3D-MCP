@@ -4,13 +4,13 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>The analytic profile area is what turns "KOMPAS returned true" into a verified geometry
-/// change (spec 1.11), so its own numbers must be exact and its refusals must be real.</summary>
+/// <summary>The analytic profile area turns "KOMPAS returned true" into a verified geometry change
+/// (spec 1.11), so its own numbers must be exact and its refusals must be real.</summary>
 /// <remarks>The nested cases below are not arithmetic exercises: each was measured on KOMPAS-3D v24 before it
-/// was written down (24.09.2026, extruded 10 mm from a sketch on XY), and the measured volumes are
-/// quoted next to the expectations. The controls — one circle, disjoint contours — are here for the
-/// same reason as the refusals: an instrument that cannot pass is as useless as one that cannot
-/// refuse, and without them "summing is wrong" is indistinguishable from "the check is broken".</remarks>
+/// was written down (extruded 10 mm from a sketch on XY), and the measured volumes are quoted next to the
+/// expectations. The controls — one circle, disjoint contours — are here for the same reason as the refusals:
+/// an instrument that cannot pass is as useless as one that cannot refuse.
+/// History: docs/decisions/tests.md#profile-area-2</remarks>
 public class ProfileAreaTests
 {
     private static SketchEntityDto Rect(double x, double y, double w, double h) => new()
@@ -58,8 +58,8 @@ public class ProfileAreaTests
     [Fact]
     public void OpenPolyline_IsNotAnArea()
     {
-        // Reporting an area for an unclosed contour would let an extrusion compare its volume
-        // against a number that has no meaning.
+        // Reporting an area for an unclosed contour would let an extrusion compare its volume against a number
+        // that has no meaning.
         var open = new SketchEntityDto
         {
             Kind = SketchEntityKind.Polyline,
@@ -73,8 +73,8 @@ public class ProfileAreaTests
     [Fact]
     public void SelfIntersectingPolyline_IsNotAnArea()
     {
-        // A bowtie has a shoelace figure but no single enclosed region. Measured 24.09.2026: that
-        // figure used to be returned as an expectation — the class of defect this test closes.
+        // A bowtie has a shoelace figure but no single enclosed region — that figure used to be returned as an
+        // expectation, the class of defect this test closes.
         var bowtie = Polyline(
             new double[] { 0, 0 },
             new double[] { 10, 10 },
@@ -127,9 +127,7 @@ public class ProfileAreaTests
     [Fact]
     public void DisjointPrimitives_AreSummed()
     {
-        // The control for every nested case below: contours that do not meet are two regions, and
-        // their areas do add up. Measured on v24: circles R=5@(0,0) and r=3@(100,0) extruded 10 mm
-        // give 1068.1415022205315 mm³ = (π·25 + π·9)·10.
+        // The control for every nested case: contours that do not meet are two regions and their areas add up.
         var total = ProfileArea.Of(new[] { Rect(0, 0, 10, 10), Circle(50, 0, 1) })!.Value;
 
         Assert.Equal(100d + Math.PI, total, 9);
@@ -150,8 +148,7 @@ public class ProfileAreaTests
     [Fact]
     public void NestedCircles_AreAnAnnulus()
     {
-        // Measured on v24: circles R=10 and r=5, extruded 10 mm, give 2356.1944901923607 mm³, which is
-        // π·(100−25)·10 to 6.8e-15 relative. The sum π·125 would be 3926.9908169872415 mm³.
+        // Measured on v24: circles R=10 and r=5, extruded 10 mm, give π·(100−25)·10; the sum π·125 would be wrong.
         var area = ProfileArea.Of(new[] { Circle(0, 0, 10), Circle(0, 0, 5) })!.Value;
 
         Assert.Equal(Math.PI * 75d, area, 9);
@@ -169,8 +166,7 @@ public class ProfileAreaTests
     [Fact]
     public void RectangleWithInnerCircle_IsAPlateWithAHole()
     {
-        // Measured on v24: a 100×80 rectangle with an r=10 circle at (50,40), extruded 10 mm, gives
-        // 76858.4073464102 mm³ against (8000 − 100π)·10 = 76858.40734641021.
+        // Measured on v24: a 100×80 rectangle with an r=10 circle at (50,40), extruded 10 mm, gives (8000 − 100π)·10.
         var area = ProfileArea.Of(new[] { Rect(0, 0, 100, 80), Circle(50, 40, 10) })!.Value;
 
         Assert.Equal(8000d - (Math.PI * 100d), area, 9);
@@ -179,8 +175,7 @@ public class ProfileAreaTests
     [Fact]
     public void TwoHolesInAPlate_AreBothSubtracted()
     {
-        // Measured on v24: the same plate with r=10 at (30,40) and r=6 at (70,40) gives
-        // 75727.43399111787 mm³ = (8000 − 100π − 36π)·10.
+        // Measured on v24: the same plate with r=10 at (30,40) and r=6 at (70,40) gives (8000 − 100π − 36π)·10.
         var area = ProfileArea.Of(new[] { Rect(0, 0, 100, 80), Circle(30, 40, 10), Circle(70, 40, 6) })!.Value;
 
         Assert.Equal(8000d - (Math.PI * 136d), area, 9);
@@ -189,8 +184,8 @@ public class ProfileAreaTests
     [Fact]
     public void IslandInsideAHole_IsMaterialAgain()
     {
-        // Even-odd depth: a contour inside a hole is material. Measured on v24: circles R=10, r=5 and
-        // r=2 extruded 10 mm give 2481.8581963359516 mm³ = π·(100−25+4)·10.
+        // Even-odd depth: a contour inside a hole is material. Measured on v24: circles R=10, r=5 and r=2 give
+        // π·(100−25+4)·10.
         var area = ProfileArea.Of(new[] { Circle(0, 0, 10), Circle(0, 0, 5), Circle(0, 0, 2) })!.Value;
 
         Assert.Equal(Math.PI * 79d, area, 9);
@@ -229,9 +224,8 @@ public class ProfileAreaTests
     [Fact]
     public void OverlappingCircles_AreNotAnalytic()
     {
-        // Measured on v24: the extrusion builds the union (5829.873553201979 mm³ for R=10 with centres
-        // 15 mm apart, 10 mm deep), but one measured special case is not a general formula — an
-        // overlapping pair is reported as uncomputable, never as a sum.
+        // Measured on v24: the extrusion builds the union for R=10 with centres 15 mm apart, 10 mm deep, but one
+        // special case is not a general formula — an overlapping pair is uncomputable, never a sum.
         Assert.Null(ProfileArea.Of(new[] { Circle(0, 0, 10), Circle(15, 0, 10) }));
     }
 
@@ -252,8 +246,8 @@ public class ProfileAreaTests
     [Fact]
     public void Matches_UsesRelativeTolerance()
     {
-        // The measured 80000 mm³ arrives as 79999.99999999999 in KOMPAS; a purely absolute
-        // tolerance would have to be either huge (for big models) or flaky (for small ones).
+        // The measured 80000 mm³ arrives slightly under in KOMPAS; a purely absolute tolerance would be either
+        // huge (for big models) or flaky (for small ones).
         Assert.True(ProfileArea.Matches(80000d, 79999.99999999999d));
         Assert.True(ProfileArea.Matches(1e9, 1e9 + 0.5));
         Assert.False(ProfileArea.Matches(80000d, 80001d));

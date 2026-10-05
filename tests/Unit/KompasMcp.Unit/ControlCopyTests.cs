@@ -5,9 +5,9 @@ using Xunit;
 namespace KompasMcp.Unit;
 
 /// <summary>Restoring a document file from its control copy: the decision as a table, the behaviour on files.</summary>
-/// <remarks>INVARIANT (defect H4, review 05.10.2026): a restore never overwrites a document opened
-/// <c>access=read_only</c>, and never runs for a refusal that never reached COM — writing into a user file
-/// without cause. History: docs/decisions/tests.md#control-copy</remarks>
+/// <remarks>INVARIANT: a restore never overwrites a document opened <c>access=read_only</c>, and never runs for a
+/// refusal that never reached COM — writing into a user file without cause.
+/// History: docs/decisions/tests.md#control-copy-2</remarks>
 public class ControlCopyTests : IDisposable
 {
     private readonly string _directory;
@@ -27,9 +27,7 @@ public class ControlCopyTests : IDisposable
         return path;
     }
 
-    // -----------------------------------------------------------------------------------------
-    // Decision (pure function)
-    // -----------------------------------------------------------------------------------------
+    // Decision (pure function).
 
     [Fact]
     public void ReadOnlyDocument_IsNeverRestored()
@@ -105,9 +103,7 @@ public class ControlCopyTests : IDisposable
         Assert.False(decision.Restore);
     }
 
-    // -----------------------------------------------------------------------------------------
-    // Behaviour on files
-    // -----------------------------------------------------------------------------------------
+    // Behaviour on files.
 
     [Fact]
     public void Restore_RefusesToOverwriteAReadOnlyDocument()

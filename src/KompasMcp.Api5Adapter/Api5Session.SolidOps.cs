@@ -11,13 +11,13 @@ using KompasMcp.Domain.Geometry;
 namespace KompasMcp.Api5Adapter;
 
 /// <summary>B3 body operations: boolean (SM-15), split and cut (SM-16), reposition and rotation (SM-17).</summary>
-/// <remarks>INVARIANT: the basis is measurement, not member names — three isolated probes of 18.09.2026
-/// (<c>--boolean</c>, <c>--split</c>, <c>--reposition</c>; logs in <c>docs/acceptance/api7/</c>) fixed the
+/// <remarks>INVARIANT: the basis is measurement, not member names — three isolated probes fixed the
 /// routes and their LIMITS; only what is measured is carried over, the unverified named unverified.
-/// INVARIANT: checks run before the COM call — the kernel neither rejects a repeated reference nor checks
-/// the target is not among the tools (MEASURED, step BO.9: a repeat is accepted silently, bodies 3→2).
-/// INVARIANT: a successful <c>Update()</c> is not proof — on reposition three routes out of four returned
-/// <c>true</c> and did not move the body (step RP.2); every handler re-reads the model after the call.</remarks>
+/// INVARIANT: checks run before the COM call — the kernel neither rejects a repeated reference nor
+/// checks the target is not among the tools (MEASURED, step BO.9). INVARIANT: a successful
+/// <c>Update()</c> is not proof — on reposition three routes out of four returned <c>true</c> and did
+/// not move the body (step RP.2); every handler re-reads the model after the call.
+/// History: docs/decisions/adapter-solid.md#solidops-header</remarks>
 public sealed partial class Api5Session
 {
     /// <summary>Name of the boolean-operation family in references and responses.</summary>
@@ -160,9 +160,9 @@ public sealed partial class Api5Session
 
     /// <summary>Addressing checks the kernel does not make: the target is not among the tools and
     /// there are no repeats.</summary>
-    /// <remarks>MEASURED 18.09.2026 (step BO.9): the kernel ACCEPTS a repeated reference silently
-    /// (bodies 3→2, total volume 49 000→37 000), so repeat detection must live in the
-    /// contract.</remarks>
+    /// <remarks>MEASURED (step BO.9): the kernel ACCEPTS a repeated reference silently (bodies 3→2,
+    /// total volume 49 000→37 000), so repeat detection must live in the contract.
+    /// History: docs/decisions/adapter-solid.md#identity</remarks>
     private static void GuardBooleanRefs(string targetBodyRef, IReadOnlyList<string> toolBodyRefs)
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -827,12 +827,11 @@ public sealed partial class Api5Session
     }
 
     /// <summary>The FORM of a plane specification: mutually exclusive modes, <c>offset_mm</c> without
-    /// <c>base</c>, and the declared refusal on <c>base</c>. Checked before any work with the model, on both routes.</summary>
+    /// <c>base</c>, and the declared refusal on <c>base</c>.</summary>
     /// <remarks>INVARIANT: the check priority is declared and does not depend on field order in JSON:
-    /// <c>base</c> + another mode → <c>INVALID_ARGUMENT</c>; <c>base</c> alone → <c>CAPABILITY_UNAVAILABLE</c>;
-    /// <c>offset_mm</c> without <c>base</c> → <c>INVALID_ARGUMENT</c>; <c>plane_ref</c> + point/normal →
-    /// <c>INVALID_ARGUMENT</c> (checked by the calling route). MEASURED by the B3 client acceptance
-    /// (19.09.2026, three FAIL rows): the declared refusal was UNREACHABLE (see history).
+    /// <c>base</c> + another mode → <c>INVALID_ARGUMENT</c>; <c>base</c> alone →
+    /// <c>CAPABILITY_UNAVAILABLE</c>; <c>offset_mm</c> without <c>base</c> → <c>INVALID_ARGUMENT</c>;
+    /// <c>plane_ref</c> + point/normal → <c>INVALID_ARGUMENT</c>.
     /// History: docs/decisions/adapter-solid.md#plane-form-guard</remarks>
     private static void GuardCutPlaneForm(CutPlaneDto plane)
     {
@@ -901,10 +900,10 @@ public sealed partial class Api5Session
     /// <summary>The plane of the operation: an existing support or a point + normal.</summary>
     /// <remarks>INVARIANT: three outcomes are separated, not lumped into one <c>GEOMETRY_FAILED</c>:
     /// inexpressible spec → <c>INVALID_ARGUMENT</c>; expressible but unsupported route ("base plane +
-    /// offset", never measured in a single API7 run) → <c>CAPABILITY_UNAVAILABLE</c>; kernel did not
-    /// build from correct data → <c>GEOMETRY_FAILED</c>, the only <c>null</c> return with the reason in
-    /// <paramref name="failure"/>. The sign of the base plane's normal decides which side is cut away.
-    /// MEASURED 18.09.2026 by acceptance row B3.17. History: docs/decisions/adapter-solid.md#plane-form</remarks>
+    /// offset") → <c>CAPABILITY_UNAVAILABLE</c>; kernel did not build from correct data →
+    /// <c>GEOMETRY_FAILED</c>, the only <c>null</c> return. The sign of the base plane's normal decides
+    /// which side is cut away.
+    /// History: docs/decisions/adapter-solid.md#plane-form</remarks>
     private (IPlane3D? Plane, double[]? UnitNormal, double[]? Point) ResolveCutPlane(
         DocumentEntry document,
         Api7Bridge bridge,
@@ -1096,34 +1095,13 @@ public sealed partial class Api5Session
         return true;
     }
 
-    /// <summary>The composition of the feature tree AT SNAPSHOT TIME — what makes "new" different from "was
-    /// already there".</summary>
-    /// <remarks>
-    /// <b>Why not by name.</b> The former rule "new = a name absent from the snapshot" relied on the
-    /// uniqueness of the DISPLAYED name. Client acceptance on 19.09.2026 measured the opposite: KOMPAS
-    /// gives two consecutive reposition features the SAME name
-    /// «Изменение положения : Тело 1», so the second feature was dropped by the filter, and
-    /// <c>solid.reposition</c> answered <c>GEOMETRY_FAILED</c> with the geometry built CORRECTLY.
-    /// <b>What was measured instead of a guess</b> (probe I, <c>--identity</c>, 19.09.2026, run
-    /// <c>c90961c6a3ba478697da5bc243040719</c>, report <c>docs/acceptance/api7/feature-identity.json</c>):
-    /// <list type="number">
-    /// <item>the element address is stable: two consecutive walks of collection 110 return the same
-    /// COM object at the same index;</item>
-    /// <item><c>ksEntityCollection.FindIt(entity)</c> returns the element index from zero and <c>−1</c>
-    /// for an object not in the collection;</item>
-    /// <item>a collection taken BEFORE the operation does NOT track mutation: after two operations it
-    /// still reports the original element count and <c>FindIt = −1</c> for both new features.
-    /// That is what makes it a snapshot of "what was before", not a second view of the current
-    /// state.</item>
-    /// </list>
-    /// Hence the addressing rule: an element is NEW if and only if the retained snapshot does not know
-    /// it. There is no first or last match, no fixed index and no rename here; when names coincide, it
-    /// is the identity of the COM object that distinguishes, not the string.
-    /// <b>Negative control.</b> A snapshot that does not know an element must answer <c>−1</c>, and one
-    /// that knows it — its index. Both outcomes were measured in one run: elements that existed before
-    /// the operation gave <c>0</c> and <c>1</c>, both new features — <c>−1</c>. Had <c>FindIt</c>
-    /// answered <c>−1</c> to everything, the set difference would have declared all elements new and the
-    /// address would have been rejected as ambiguous rather than handed out at random.
+    /// <summary>The composition of the feature tree AT SNAPSHOT TIME — what makes "new" different from
+    /// "was already there".</summary>
+    /// <remarks>INVARIANT: recognition is by COM-object identity, not by name or index — KOMPAS gives two
+    /// consecutive reposition features the SAME displayed name «Изменение положения : Тело 1», so the name
+    /// distinguishes nothing. <c>ksEntityCollection.FindIt(entity)</c> returns the element index from zero
+    /// and <c>−1</c> for an object not in the collection; a collection taken BEFORE the operation does NOT
+    /// track mutation. An element is NEW if and only if the retained snapshot does not know it.
     /// History: docs/decisions/adapter-solid.md#identity</remarks>
     private sealed class FeatureTreeSnapshot
     {
@@ -1186,32 +1164,13 @@ public sealed partial class Api5Session
     }
 
     /// <summary>The address of the just-created feature — an API5 TREE ELEMENT, not an API7 object.</summary>
-    /// <remarks>
-    /// Probe T (steps TL.2, TL.6, TL.7, TL.9; run <c>1c111eff3cd94007b436c5a3862e48bc</c>) measured: a
-    /// feature created by an API7 factory IS present in the API5 tree, and it is exactly the one that
-    /// answers suppression (<c>ksFeature.excluded</c>, volume 37 000 → 49 000 and back) and deletion
-    /// (<c>DeleteObject</c>, bodies 2 → 3). But the API7 object itself — <c>IBoolean</c>,
-    /// <c>ISplitSolid</c>, <c>ICut</c>, <c>IBodyReposition</c> — is not an API5 feature, and
-    /// <c>RequireFeatureEntity</c> rejects it. A reference to the API7 object would make
-    /// <c>discover</c>, <c>suppress_restore</c> and <c>delete_dependencies</c> impossible for all
-    /// eleven rows — that is, four of the ten actions per row would have to be closed as "no API".
-    /// <b>Recognition is by set difference on COM-object identity</b> relative to the
-    /// <see cref="FeatureTreeSnapshot"/> taken before the operation, plus a filter by feature TYPE.
-    /// Neither the collection order nor the displayed name is an address: names of two consecutive
-    /// features of one kind COINCIDE (MEASURED 19.09.2026, probe I), so the name distinguishes
-    /// nothing, and the order is not promised.
-    /// A candidate must answer <c>GetFeature()</c> as <c>ksFeature</c> (this cuts off auxiliary
-    /// geometry — the plane and point that split and cut create together with the feature) and be
-    /// EXACTLY ONE. Zero or several is an honest refusal with a list, not a reference "to something
-    /// similar": suppressing a foreign feature would mean silently spoiling foreign geometry.
-    /// WHY A FILTER BY TYPE AND NOT BY COUNT. The first edition of the rule required "exactly one new
-    /// element", and on the <c>save_tools</c> mode this gave a refusal with a SUCCESSFULLY performed
-    /// operation: <c>keep_tools=true</c> creates TWO features — the operation itself and the auxiliary
-    /// «Копия тела» (MEASURED: <c>type=69 «Булева операция:1»</c> and <c>type=79 «Копия тела :
-    /// Тело 1»</c>). Both are new, both answer <c>ksFeature</c>, and counting cannot tell them apart —
-    /// the operation type does. The numbers are taken from measurement
-    /// (<c>scratch/b3-measure-feature-types.py</c>, <c>kompas_list_features</c>), not by analogy:
-    /// 69 — boolean, 633 — split, 50 — cut, 79 — reposition.
+    /// <remarks>INVARIANT: recognition is by set difference on COM-object identity relative to the
+    /// <see cref="FeatureTreeSnapshot"/> taken before the operation, plus a filter by feature TYPE. A
+    /// candidate must answer <c>GetFeature()</c> as <c>ksFeature</c> and be EXACTLY ONE; zero or several
+    /// is an honest refusal, not a reference "to something similar". The API7 object itself (<c>IBoolean</c>,
+    /// <c>ISplitSolid</c>, <c>ICut</c>, <c>IBodyReposition</c>) is not an API5 feature. WHY A FILTER BY TYPE
+    /// AND NOT BY COUNT: <c>keep_tools=true</c> creates TWO features — the operation itself and the
+    /// auxiliary «Копия тела» — and counting cannot tell them apart, the operation type does.
     /// History: docs/decisions/adapter-solid.md#feature-address</remarks>
     private (ksEntity Entity, string Name) RequireCreatedFeatureAddress(
         DocumentEntry document, FeatureTreeSnapshot before, int expectedTreeType, string tool)
@@ -1309,11 +1268,10 @@ public sealed partial class Api5Session
         return true;
     }
 
-    /// <summary>OBSOLETE 19.09.2026. The former "body untouched" sign for cutting: it compared the
-    /// candidate's volume with the TARGET's, so a foreign body was never recognised (different volume),
-    /// every other body was declared untouched WITHOUT proof, and a vanished body was not listed.
-    /// Superseded by body-composition matching in <c>SolidCutByPlane</c>; kept as a record, nothing
-    /// calls it — a call would be a regression of <c>CUT-PLANE-APPLIED-TO-UNNAMED-BODIES</c>.
+    /// <summary>OBSOLETE. The former "body untouched" sign for cutting: it compared the candidate's
+    /// volume with the TARGET's, so a foreign body was never recognised and every other body was
+    /// declared untouched WITHOUT proof. Superseded by body-composition matching in
+    /// <c>SolidCutByPlane</c>; kept as a record, nothing calls it.
     /// History: docs/decisions/adapter-solid.md#cut-untouched</summary>
     private static bool IsUntouched(SolidBodyDto row, List<BodySnapshot> before, int targetIndex)
     {
@@ -1533,23 +1491,14 @@ public sealed partial class Api5Session
         }
     }
 
-    /// <summary>The index of a feature in the API7 collection of the same operation — or an honest refusal if the
-    /// match is not proven.</summary>
-    /// <remarks>
-    /// <b>Why "position less than the element count" is not enough.</b> The position in the tree and the
-    /// index in the API7 collection are two DIFFERENT lists, and they coincide only when there are
-    /// exactly as many features of this type in the tree as there are elements in the collection. For
-    /// reposition this condition is violated by measurement: the number <c>79</c> is carried not only by
-    /// «Изменение положения» but also by the auxiliary «Копия тела» that the boolean tool-preservation
-    /// mode creates (<c>scratch/b3-measure-feature-types.py</c>, 18.09.2026). In a document with a copy
-    /// the position of «Изменение положения» stops being an index into <c>BodyRepositions</c>, and the
-    /// write would land in a FOREIGN feature. Therefore, when the numbers diverge, the call is refused
-    /// before mutation.
-    /// The price of the refusal: editing a feature next to which lives a feature of the same number but
-    /// a different operation is not performed. This is the chosen side — refusal is preferred to writing
-    /// into the wrong object, because "applied in the wrong place" is indistinguishable in the response
-    /// from "applied".
-    /// </remarks>
+    /// <summary>The index of a feature in the API7 collection of the same operation — or an honest
+    /// refusal if the match is not proven.</summary>
+    /// <remarks>INVARIANT: the position in the tree and the index in the API7 collection are two
+    /// DIFFERENT lists and coincide only when the counts match; for reposition the number <c>79</c> is
+    /// carried also by the auxiliary «Копия тела», so the position stops being an index and the write
+    /// would land in a FOREIGN feature. When the numbers diverge the call is refused before mutation —
+    /// refusal is preferred to writing into the wrong object.
+    /// History: docs/decisions/adapter-solid.md#same-type-address</remarks>
     private static int RequireSameTypeIndex(
         DocumentEntry document,
         ksEntity entity,
@@ -1587,12 +1536,10 @@ public sealed partial class Api5Session
     }
 
     /// <summary>Editing an EXISTING reposition feature via <c>kompas_update_feature</c>.</summary>
-    /// <remarks>MEASURED 18.09.2026 (probe <c>--reposition</c>, step RP.6): the parameter is applied to the
-    /// ORIGINAL inputs, not the current position — rewriting the same vector leaves the bounding box
-    /// <c>(17,−11,13)…(37,−1,18)</c>, resetting it to zero brings the body home; a repeated
-    /// <c>kompas_reposition</c> instead creates a second feature and accumulates the offset.
-    /// INVARIANT: a successful <c>Update()</c> is not proof (step RP.2: three routes out of four returned
-    /// <c>true</c> and did not move the body), so the translation is READ BACK and compared by matrix.
+    /// <remarks>MEASURED (probe <c>--reposition</c>, step RP.6): the parameter is applied to the ORIGINAL
+    /// inputs, not the current position; a repeated <c>kompas_reposition</c> instead creates a second
+    /// feature and accumulates the offset. INVARIANT: a successful <c>Update()</c> is not proof (step
+    /// RP.2), so the translation is READ BACK and compared by matrix.
     /// History: docs/decisions/adapter-solid.md#edit-reposition</remarks>
     private UpdateFeatureResult UpdateSolidReposition(
         DocumentEntry document,
@@ -1930,7 +1877,7 @@ public sealed partial class Api5Session
     /// swallowed). Every family field must be ASSIGNED to a family (<see cref="SolidFields"/>). Fields of
     /// no B3 family (extrude, chamfer, fillet, rotation) are checked separately below.
     /// History: docs/decisions/adapter-solid.md#foreign-solid-fields</remarks>
-    /// <param name="ownFields">Fields THIS family reads though the role table gives them to another department (SM07 §3.2).</param>
+    /// <param name="ownFields">Fields THIS family reads though the role table gives them elsewhere.</param>
     private static void RejectForeignSolidFields(
         UpdateFeatureCommand command,
         string family,
@@ -1968,12 +1915,11 @@ public sealed partial class Api5Session
             || command.BaseObjectRefs is not null || command.RotationAngleDeg is not null
             || command.RotationDirection is not null
             // Queue B5 (kinematics, sections, shell) — also foreign fields for B3 features. `couplings`
-            // was added 20.09.2026: queue B5 added SIX editable fields, and five of them made it into the
-            // foreign-field lists while the sixth did not. This was found by the unit test
-            // SolidFeatureClassificationTests (a field with no role = a field the adapter will accept and
-            // swallow), and the probe scratch/_couplings_scope_probe.py measured the swallowing itself:
-            // a call "edit a feature + couplings" returned success, the geometry changed, and the
-            // couplings were not applied. It is rejected BEFORE COM, like the other five.
+            // was added later: queue B5 added SIX editable fields, and the sixth was found by the unit
+            // test SolidFeatureClassificationTests and the probe scratch/_couplings_scope_probe.py —
+            // "edit a feature + couplings" returned success, the geometry changed, and the couplings
+            // were not applied. Rejected BEFORE COM, like the other five.
+            // History: docs/decisions/adapter-solid.md#foreign-solid-fields
             || command.ShiftMode is not null || command.SectionRefs is not null
             || command.Couplings is not null
             || command.ThicknessMm is not null || command.ThinInward is not null
@@ -1989,13 +1935,13 @@ public sealed partial class Api5Session
         }
     }
 
-    /// <summary>Specifying the support for EDITING an SM-16 feature: the same validation as for creation, but WITHOUT creating a plane object.</summary>
-    /// <remarks>MEASURED 18.09.2026 (probe <c>--split</c>, step SP.9, negative control E-B): substituting
-    /// ANOTHER, just-created plane does NOT change the result (<c>Update()</c> returns <c>true</c>, parts
-    /// stay); the working route (E-A split, E-C cut) transfers the THREE CONSTRUCTION POINTS of the
-    /// feature's OWN support, so no plane object is created here. INVARIANT: <c>plane_ref</c> is refused on
-    /// edit — comparing plane references was not measured and a foreign plane gives no result (E-B). Checks
-    /// reuse <c>PlaneBasis.FromNormal</c> (non-zero normal) and <c>PlaneBasis.ThreePoints</c>.
+    /// <summary>Specifying the support for EDITING an SM-16 feature: the same validation as for
+    /// creation, but WITHOUT creating a plane object.</summary>
+    /// <remarks>MEASURED (probe <c>--split</c>, step SP.9, negative control E-B): substituting ANOTHER,
+    /// just-created plane does NOT change the result (<c>Update()</c> returns <c>true</c>, parts stay);
+    /// the working route (E-A split, E-C cut) transfers the THREE CONSTRUCTION POINTS of the feature's
+    /// OWN support. INVARIANT: <c>plane_ref</c> is refused on edit. Checks reuse
+    /// <c>PlaneBasis.FromNormal</c> (non-zero normal) and <c>PlaneBasis.ThreePoints</c>.
     /// History: docs/decisions/adapter-solid.md#support-plane-edit</remarks>
     private (double[] P1, double[] P2, double[] P3, double[] UnitNormal, double[] Point) ResolveSupportPlane(
         CutPlaneDto plane,
@@ -2066,12 +2012,12 @@ public sealed partial class Api5Session
     }
 
     /// <summary>Editing an EXISTING split feature: a new support written into the same feature.</summary>
-    /// <remarks>MEASURED 18.09.2026 (probe <c>--split</c>, step SP.9, run <c>c9cd7660468c44aa97b410e253ee2cb1</c>):
-    /// moving the three construction points of the OWN support turns parts <c>6 000 / 18 000</c> at <c>x = 10</c>
-    /// into <c>9 000 / 15 000</c> at <c>x = 15</c>, count <c>1 → 1</c>, sum <c>24 000</c>; negative control
-    /// E-B (another plane into <c>CutObjects</c>) does not change the result. The support reads back
-    /// (SP.10, published by <c>kompas_get_feature</c>), but a partial request is still refused. INVARIANT:
-    /// confirmation is only the composition of parts (<c>expected_part_volumes_mm3</c>), never the sum.
+    /// <remarks>MEASURED (probe <c>--split</c>, step SP.9): moving the three construction points of the
+    /// OWN support turns parts <c>6 000 / 18 000</c> at <c>x = 10</c> into <c>9 000 / 15 000</c> at
+    /// <c>x = 15</c>, count <c>1 → 1</c>, sum <c>24 000</c>; negative control E-B (another plane into
+    /// <c>CutObjects</c>) does not change the result. The support reads back (SP.10, published by
+    /// <c>kompas_get_feature</c>), but a partial request is still refused. INVARIANT: confirmation is only
+    /// the composition of parts (<c>expected_part_volumes_mm3</c>), never the sum.
     /// History: docs/decisions/adapter-solid.md#edit-split</remarks>
     private UpdateFeatureResult UpdateSolidSplit(
         DocumentEntry document,
@@ -2323,11 +2269,10 @@ public sealed partial class Api5Session
     }
 
     /// <summary>Editing an EXISTING cut feature: a new support and a new kept side.</summary>
-    /// <remarks>MEASURED 18.09.2026 (probe <c>--split</c>, step SP.9, run <c>c9cd7660468c44aa97b410e253ee2cb1</c>),
-    /// two experiments: E-C — moving the support points +5 along X changes the remainder 6000 → 9000; E-D —
-    /// changing ONLY <c>Direction</c> on the same feature changes it 9000 → 15000; negative control E-B
-    /// (substituting ANOTHER plane) does not work. INVARIANT: BOTH support AND side are required — reading
-    /// the current ones from a live feature was not measured, and half a request is an edit that did not happen.
+    /// <remarks>MEASURED (probe <c>--split</c>, step SP.9), two experiments: E-C — moving the support
+    /// points +5 along X changes the remainder 6000 → 9000; E-D — changing ONLY <c>Direction</c> on the
+    /// same feature changes it 9000 → 15000; negative control E-B (substituting ANOTHER plane) does not
+    /// work. INVARIANT: BOTH support AND side are required — half a request is an edit that did not happen.
     /// History: docs/decisions/adapter-solid.md#edit-cut</remarks>
     private UpdateFeatureResult UpdateSolidCutByPlane(
         DocumentEntry document,
@@ -2483,13 +2428,10 @@ public sealed partial class Api5Session
         var unverified = new List<string>();
 
         // ADDRESSING IS THE SUBJECT OF THIS CALL. A cut leaves EXACTLY one remainder body, so "exactly
-        // one body touched, none vanished and none appeared" is not decoration of the response but what
-        // the call must confirm. Previously there stood here
-        // changed = rows.Where(r => !MatchesAnySnapshot(r, bodiesBefore)): the walk went ONLY over bodies
-        // AFTER the operation, so a vanished body never entered the list, and an edit that swept away a
-        // foreign bar looked like "exactly one body changed" and passed as geometry_checked — this is the
-        // false confirmation from client acceptance 19.09.2026 (defect
-        // CUT-PLANE-APPLIED-TO-UNNAMED-BODIES, order §3.1).
+        // one body touched, none vanished and none appeared" is what the call must confirm. The former
+        // walk went ONLY over bodies AFTER the operation, so a vanished body never entered the list and
+        // an edit that swept away a foreign bar passed as geometry_checked.
+        // History: docs/decisions/adapter-solid.md#cut-remainder-identification
         var addressingOk = touched.Count == 1 && vanished.Count == 0 && createdBodies.Count == 0;
 
         if (!addressingOk && (touched.Count > 0 || vanished.Count > 0 || createdBodies.Count > 0))
@@ -2686,12 +2628,12 @@ public sealed partial class Api5Session
     }
 
     /// <summary>Editing the KIND of an existing boolean operation (order §7, action <c>edit</c>).</summary>
-    /// <remarks>MEASURED by probe <c>--boolean</c>, step <c>BO.11</c>, run <c>a2f5cf0a2ad342c59c36807101a65d51</c>: rewriting <c>IBoolean.BooleanType</c> on an EXISTING feature + <c>Update()</c> + rebuild changes the geometry
-    /// (E-A <c>36 000 → 12 000</c> in the bounding box <c>x ≤ 20</c>; E-D <c>12 000 → 36 000</c>); E-E confirmed
-    /// it is the PAIR "write → <c>Update()</c>" that applies. INVARIANT: the bounding box is checked, not only
-    /// the volume — on the §6.1 reference difference and intersection both have volume 12 000; the bounding box
-    /// distinguishes them (<c>x ≤ 20</c> vs <c>x ∈ [20,40]</c>). Operand bodies (<c>BaseObject</c>, <c>ModifyObjects</c>)
-    /// and tool-preservation are NOT rewritten.
+    /// <remarks>MEASURED by probe <c>--boolean</c>, step <c>BO.11</c>: rewriting <c>IBoolean.BooleanType</c>
+    /// on an EXISTING feature + <c>Update()</c> + rebuild changes the geometry (E-A <c>36 000 → 12 000</c>
+    /// in the bounding box <c>x ≤ 20</c>; E-D <c>12 000 → 36 000</c>); E-E confirmed it is the PAIR
+    /// "write → <c>Update()</c>" that applies. INVARIANT: the bounding box is checked, not only the volume —
+    /// difference and intersection both have volume 12 000; the bounding box distinguishes them. Operand
+    /// bodies (<c>BaseObject</c>, <c>ModifyObjects</c>) and tool-preservation are NOT rewritten.
     /// History: docs/decisions/adapter-solid.md#edit-boolean</remarks>
     private UpdateFeatureResult UpdateSolidBoolean(
         DocumentEntry document,
@@ -2775,13 +2717,11 @@ public sealed partial class Api5Session
         var operationPreserved = operationAfter == operation;
 
         // SUBJECT OF PROOF. The result of a boolean operation is the CHANGED (or newly appeared) body,
-        // NOT "any document body whose bounding box matched the declared one". The former edition sought
-        // the body by matching the EXPECTATION and published ALL document volumes as observed — a bounding
-        // box compared with numbers of another kind (defect CHECK-FIELDS-DO-NOT-SUPPORT-THE-VERDICT, §4.1).
-        // A second foray (MEASURED 19.09.2026, delivery publish-b3-20260919-targeting, row B3.25): going by
-        // changes.Changed (changed VOLUME) missed a correct `intersect` edit — difference and intersection
-        // volumes are EQUAL (12 000 mm³), only the bounding box distinguishes them — and it was rejected as
-        // NO_GEOMETRY_CHANGE. The predicate must cover a moved body: changes.Touched = volume OR bbox changed.
+        // NOT "any document body whose bounding box matched the declared one". A predicate over volume
+        // alone missed a correct `intersect` edit — difference and intersection volumes are EQUAL
+        // (12 000 mm³), only the bounding box distinguishes them. The predicate must cover a moved body:
+        // changes.Touched = volume OR bbox changed.
+        // History: docs/decisions/adapter-solid.md#field-classification
         var afterSnapshots = ReadBodySnapshots(document.PartNow());
         var changes = CompareBodySnapshots(bodiesBefore, afterSnapshots);
         var resultBodies = changes.Touched

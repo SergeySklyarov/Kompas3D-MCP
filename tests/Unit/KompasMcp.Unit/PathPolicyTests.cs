@@ -26,8 +26,8 @@ public class PathPolicyTests : IDisposable
     [Fact]
     public void SiblingWithRootAsTextPrefix_IsNotInsideTheRoot()
     {
-        // "D:\work" is a text prefix of "D:\workspace\evil.a3d": a StartsWith check without a
-        // separator admits it, which is the exact bug this test pins.
+        // "D:\work" is a text prefix of "D:\workspace\evil.a3d": a StartsWith check without a separator admits
+        // it — the exact bug this test pins.
         var outside = Path.Combine(_root + "extension", "evil.a3d");
         var decision = Policy().Evaluate(outside, intendToWrite: true);
         Assert.Equal(PathAccess.Denied, decision.Access);
@@ -58,8 +58,8 @@ public class PathPolicyTests : IDisposable
 
         Assert.Equal(PathAccess.ReadOnly, Policy().Evaluate(model, intendToWrite: false).Access);
 
-        // The access decision is the contract; the reason string is Russian prose for a human and
-        // deliberately not asserted on.
+        // The access decision is the contract; the reason string is Russian prose for a human and deliberately
+        // not asserted on.
         var write = Policy().Evaluate(model, intendToWrite: true);
         Assert.Equal(PathAccess.Denied, write.Access);
         Assert.NotNull(write.DeniedReason);
@@ -105,11 +105,9 @@ public class PathPolicyTests : IDisposable
     [InlineData("less<.png")]
     public void FileNameCharactersInvalidOnWindows_AreRefusedInsideTheWritableRoot(string leaf)
     {
-        // MEASURED (probe P4, order KOMPAS_EXPORT_IMAGE), not inferred: the KOMPAS kernel does NOT refuse
-        // such a name. It returned success, the base file `bad` stayed zero, and the payload (8639 bytes) went
-        // into an ALTERNATIVE NTFS STREAM:
-        //   FILE=bad LEN=0 STREAMS=:$DATA=0|name?.png=8639
-        // `Path.GetInvalidPathChars()` lets this through — its set is narrower than the name table — so the
+        // MEASURED (probe P4, order KOMPAS_EXPORT_IMAGE): the KOMPAS kernel does NOT refuse such a name — it
+        // returned success, the base file stayed zero, and the payload (8639 bytes) went into an ALTERNATIVE NTFS
+        // STREAM. `Path.GetInvalidPathChars()` lets this through (its set is narrower than the name table), so the
         // check works by components and by the NAME table.
         var decision = Policy().Evaluate(Path.Combine(_root, "out", leaf), intendToWrite: true);
         Assert.Equal(PathAccess.Denied, decision.Access);
@@ -119,8 +117,8 @@ public class PathPolicyTests : IDisposable
     [Fact]
     public void AlternateDataStreamSyntax_IsRefusedByNameNotByAccident()
     {
-        // Separate from the Theory: what matters is that the refusal came NAMED from the component check, not
-        // from a canonicalisation exception — otherwise the test would be green for a chance reason.
+        // Separate from the Theory: the refusal must come NAMED from the component check, not from a
+        // canonicalisation exception — otherwise the test would be green for a chance reason.
         var decision = Policy().Evaluate(Path.Combine(_root, "out", "bad:name?.png"), intendToWrite: true);
         Assert.Equal(PathAccess.Denied, decision.Access);
         Assert.Contains("недопустимые в имени файла", decision.DeniedReason, StringComparison.Ordinal);
@@ -155,8 +153,8 @@ public class PathPolicyTests : IDisposable
     [Fact]
     public void DriveRootKeepsItsTrailingSeparatorMeaning()
     {
-        // Trimming "D:\" to "D:" changes it to "current directory on D", which would then be
-        // compared against paths on an entirely different root.
+        // Trimming "D:\" to "D:" changes it to "current directory on D", which would then be compared against
+        // paths on an entirely different root.
         var decision = new PathPolicy(Array.Empty<string>(), new[] { "D:\\" })
             .Evaluate(@"D:\work\whatever.m3d", intendToWrite: true);
         Assert.Equal(PathAccess.Writable, decision.Access);

@@ -8,11 +8,10 @@ namespace KompasMcp.Host;
 
 /// <summary>Ownership of one Host's CAD session: when it holds the journal, queue, Invoker and Worker —
 /// and when it hands them to another Host.</summary>
-/// <remarks>INVARIANT: ownership is a separate resource with explicit acquire and release, while the MCP
-/// transport lives independently of it. Transport start, <c>initialize</c>, <c>tools/list</c> and
+/// <remarks>INVARIANT: ownership is a separate resource with explicit acquire and release, while the
+/// MCP transport lives independently of it. Transport start, <c>initialize</c>, <c>tools/list</c> and
 /// diagnostic <c>health</c> take NO ownership; an ordinary CAD call takes it only as a coordinated
-/// admission of a REAL operation and only when the previous owner did not release it EXPLICITLY; the
-/// acquisition generation changes on every acquire, so a late callback of an old generation cannot refresh a new owner's state.
+/// admission of a REAL operation, and only when the previous owner did not release it EXPLICITLY.
 /// History: docs/decisions/host.md#ownership-model</remarks>
 public sealed class HostSession : IAsyncDisposable
 {
@@ -32,8 +31,7 @@ public sealed class HostSession : IAsyncDisposable
 
     /// <summary>The bound of the release-outcome map (see <c>_releaseOutcomes</c>). Release is a
     /// terminal action: replays are needed within one request, not for the process's whole life, so
-    /// the map is bounded and evicts the oldest id. The bound is named as a number, not "roughly":
-    /// silence about it would read as "the map does not grow".</summary>
+    /// the map evicts the oldest id. The bound is named as a number, not "roughly".</summary>
     private const int ReleaseReplayLimit = 64;
 
     private readonly HostOptions _options;
@@ -51,9 +49,8 @@ public sealed class HostSession : IAsyncDisposable
 
     /// <summary>Release outcomes recorded by <c>operation_id</c> — IN PROCESS MEMORY, not in the
     /// journal: the Host tools keep no operation journal. LIMIT: a Host restart carries no replay
-    /// history; the map is bounded by <see cref="ReleaseReplayLimit"/>; and it is cleared on every new
-    /// session acquisition — a new generation is a new context, and a replay of an old id must not
-    /// return a release outcome from a previous session.</summary>
+    /// history; the map is bounded by <see cref="ReleaseReplayLimit"/> and cleared on every new
+    /// acquisition — a new generation is a new context.</summary>
     private readonly Dictionary<string, ReleaseReplay> _releaseOutcomes = new(StringComparer.Ordinal);
     private readonly Queue<string> _releaseOrder = new();
 
@@ -74,9 +71,7 @@ public sealed class HostSession : IAsyncDisposable
     /// <summary>Whether this Host holds the session right now.</summary>
     public bool OwnsSession => _ownership.IsOwner;
 
-    // ---------------------------------------------------------------------------------------------
-    // Call routing
-    // ---------------------------------------------------------------------------------------------
+    // ---- Call routing ----
 
     public async Task<ResultEnvelope<JsonNode?>> InvokeAsync(string toolName, JsonObject arguments, CancellationToken cancellationToken)
     {
@@ -96,9 +91,8 @@ public sealed class HostSession : IAsyncDisposable
                 return await ReleaseAsync(arguments, cancellationToken).ConfigureAwait(false);
         }
 
-        // Diagnostics do NOT take the session. health and capabilities answer even when another chat
-        // owns it: otherwise the second chat could not learn why it has no work and would be left
-        // without tools, as before this fix.
+        // Diagnostics do NOT take the session: health and capabilities answer even when another chat
+        // owns it, else the second chat could not learn why it has no work.
         if (DiagnosticTools.Contains(tool.Name, StringComparer.Ordinal))
         {
             return !_ownership.IsOwner
@@ -110,9 +104,9 @@ public sealed class HostSession : IAsyncDisposable
         {
             var probe = _ownership.Probe();
 
-            // Coordinated admission of a REAL operation. Only when there is no ownership at all or the
-            // previous owner released it implicitly (transport ended). After an EXPLICIT release the
-            // admission is forbidden: otherwise "released" and "still working" would become one state.
+            // Coordinated admission of a REAL operation: only when there is no ownership at all or the
+            // previous owner released implicitly (transport ended). After an EXPLICIT release it is
+            // forbidden, else "released" and "still working" become one state.
             if (!probe.CanAcquire)
             {
                 _log.Write("warn", "cad call refused: session owned by another host", new
@@ -186,8 +180,8 @@ public sealed class HostSession : IAsyncDisposable
 
         try
         {
-            // Generation check on every call. A false return means the owner record is no longer ours:
-            // the refusal must arrive before COM, else "sole owner" would remain a word.
+            // Generation check on every call: a false return means the owner record is no longer ours,
+            // and the refusal must arrive before COM.
             if (!_ownership.MarkServing())
             {
                 var probe = _ownership.Probe();
@@ -223,9 +217,8 @@ public sealed class HostSession : IAsyncDisposable
             }
 
             // INVARIANT: a call that restarted the Worker must name it. Previous document_id values
-            // are invalid after a restart: the new Worker knows no documents, and a reference to an
-            // old one addresses emptiness. A client that saw "the tool answered" must learn this from
-            // the response, not from a later refusal (defect H3, review 05.10.2026).
+            // are invalid after a restart: the new Worker knows no documents. The client must learn
+            // this from the response, not from a later refusal.
             // History: docs/decisions/host.md#worker-restart-warning
             var restartsBefore = _worker?.RestartCount ?? 0;
             var envelope = await invoker.InvokeAsync(toolName, arguments, cancellationToken).ConfigureAwait(false);
@@ -258,9 +251,7 @@ public sealed class HostSession : IAsyncDisposable
         }
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // kompas_session_status
-    // ---------------------------------------------------------------------------------------------
+    // ---- kompas_session_status ----
 
     /// <summary>Session state. Does not acquire or restore ownership, does not start the Worker and
     /// does not touch COM.</summary>
@@ -290,14 +281,13 @@ public sealed class HostSession : IAsyncDisposable
                 ["owns_session"] = probe.SelfOwned,
                 ["generation"] = _ownership.Generation,
                 ["requests_served"] = _ownership.RequestsServed,
-                // A CREATED CHANNEL does not mean "the Worker started". The Worker process starts on
-                // the first real command, not at acquisition: a waiting client spawns no CAD channel.
-                // The difference is named by fields, so "the Worker exists" does not read as "it works".
+                // A CREATED CHANNEL does not mean "the Worker started": the process starts on the
+                // first real command, not at acquisition. Named by fields, so "the Worker exists"
+                // does not read as "it works".
                 ["worker_channel"] = worker is null ? "not_created" : "created",
                 ["worker_pid"] = worker?.WorkerProcessId,
-                // The STICKY FLAG is visible in the status. Otherwise "why does release refuse" would
-                // have to be dug out of the refusal text: an unknown document state is a session state
-                // of its own, not a detail of one command.
+                // The STICKY FLAG is visible in the status: an unknown document state is a session
+                // state of its own, not a detail dug out of one refusal text.
                 ["document_state_unknown"] = worker?.DocumentStateUnknown ?? false,
                 ["document_state_unknown_reason"] = worker?.DocumentStateUnknownReason,
                 ["worker_restarts"] = worker?.RestartCount ?? 0,
@@ -314,9 +304,8 @@ public sealed class HostSession : IAsyncDisposable
 
         if (probe.RecordUnreadable || probe.LockUnavailable)
         {
-            // A READ ERROR is not the same as a FREE session, and this is said in the response rather
-            // than inferred from an empty field: "no record" and "the record is unreadable" are
-            // different states with different costs.
+            // A READ ERROR is not the same as a FREE session: "no record" and "the record is
+            // unreadable" are different states with different costs.
             node["state_is_unknown"] = true;
         }
 
@@ -330,9 +319,7 @@ public sealed class HostSession : IAsyncDisposable
         return Succeeded(node, warnings, caveats: new[] { "server_state_only" });
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // kompas_acquire_session
-    // ---------------------------------------------------------------------------------------------
+    // ---- kompas_acquire_session ----
 
     public async Task<ResultEnvelope<JsonNode?>> AcquireAsync(CancellationToken cancellationToken)
     {
@@ -368,9 +355,9 @@ public sealed class HostSession : IAsyncDisposable
                 return Refusal(
                     result.ErrorCode ?? ErrorCodes.SessionNotAcquired,
                     result.ErrorMessage ?? "Захват сеанса отклонён.",
-                    // "Owned by another" and "release not confirmed" are both states that change by
-                    // themselves (the owner will release / cleanup will finish), so a retry makes
-                    // sense. Other acquisition refusals are not cured by a retry.
+                    // "Owned by another" and "release not confirmed" change by themselves (the owner
+                    // will release / cleanup will finish), so a retry makes sense. Other acquisition
+                    // refusals are not cured by a retry.
                     result.ErrorCode is ErrorCodes.SessionOwnerActive or ErrorCodes.SessionReleaseFailed
                         ? RetryPolicy.AfterReconciliation
                         : RetryPolicy.Never,
@@ -429,10 +416,9 @@ public sealed class HostSession : IAsyncDisposable
                 });
             }
 
-            // A new generation is a new context: recorded release outcomes of the previous session
-            // are invalidated together with the previous owner's references. Otherwise a replay of an
-            // old operation_id would return a release outcome from BEFORE this acquisition, and the
-            // new session would answer "released" to a release it never had.
+            // A new generation is a new context: release outcomes of the previous session are
+            // invalidated with the previous owner's references, else a replay of an old operation_id
+            // would return an outcome from BEFORE this acquisition.
             // History: docs/decisions/host.md#new-generation
             _releaseOutcomes.Clear();
             _releaseOrder.Clear();
@@ -447,8 +433,8 @@ public sealed class HostSession : IAsyncDisposable
                 ["took_over_from_pid"] = result.TookOverFromPid,
                 ["took_over_from_live_owner"] = result.TookOverFromLiveOwner,
                 ["journal_path"] = _options.JournalPath,
-                // The new context is named by an explicit instruction, not implied: old references are
-                // deliberately not revived, and silence here would read as "you may continue".
+                // The new context is named explicitly, not implied: old references are deliberately
+                // not revived, and silence would read as "you may continue".
                 ["next"] = new JsonArray("kompas_connect", "kompas_get_context"),
             }, warnings: new[]
             {
@@ -461,17 +447,14 @@ public sealed class HostSession : IAsyncDisposable
         }
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // kompas_release_session
-    // ---------------------------------------------------------------------------------------------
+    // ---- kompas_release_session ----
 
     /// <summary>Session release with replay of the recorded outcome by <c>operation_id</c>.</summary>
-    /// <remarks>Why <c>operation_id</c> is here: line <c>S03b</c> of the <c>mcp-smoke.py</c> harness requires a
-    /// tool with <c>destructiveHint=true</c> to declare <c>operation_id</c> (published rule §2.1). Declaration
-    /// without behaviour would be "declared and swallowed", so the field is USED: a replay with the same id
-    /// answers with the recorded outcome and does not release again. Only a TERMINAL SUCCESS is recorded;
-    /// refusals (<c>DOCUMENT_DIRTY</c>, <c>SESSION_RELEASE_BUSY</c>) and unfinished branches are NOT recorded
-    /// — their cure is to repeat the call. LIMIT: the record is not a journal — a Host restart carries none of it.
+    /// <remarks>Why <c>operation_id</c> is here: line <c>S03b</c> of the <c>mcp-smoke.py</c> harness
+    /// requires a tool with <c>destructiveHint=true</c> to declare it (published rule §2.1). Only a
+    /// TERMINAL SUCCESS is recorded; refusals (<c>DOCUMENT_DIRTY</c>, <c>SESSION_RELEASE_BUSY</c>) and
+    /// unfinished branches are NOT — their cure is to repeat the call.
+    /// LIMIT: the record is not a journal.
     /// History: docs/decisions/host.md#release-replay</remarks>
 
     /// <summary>Remember a replay outcome and keep the map within <see cref="ReleaseReplayLimit"/>.
@@ -505,9 +488,9 @@ public sealed class HostSession : IAsyncDisposable
                 .ToArray(),
         };
 
-    /// <summary>A stable fingerprint of the call's arguments — the same technique as the operation
-    /// journal (<c>ToolInvoker.Canonical</c>): fields are ordered by name, so "the same arguments" is
-    /// string equality, not JSON key order.</summary>
+    /// <summary>A stable fingerprint of the call's arguments, as in the operation journal
+    /// (<c>ToolInvoker.Canonical</c>): fields are ordered by name, so "the same arguments" is string
+    /// equality, not JSON key order.</summary>
     private static string Fingerprint(JsonObject arguments)
     {
         var ordered = new JsonObject();
@@ -527,10 +510,9 @@ public sealed class HostSession : IAsyncDisposable
             var operationId = JsonScalars.ReadString(arguments["operation_id"]);
             var fingerprint = operationId is { Length: > 0 } ? Fingerprint(arguments) : null;
 
-            // A replay with the same id returns the recorded outcome, and it is checked BEFORE the
-            // procedure. Otherwise the repeat would release again (nothing left to release) and answer
-            // "not by this request" — the outcome would depend on whether the first response reached
-            // the client.
+            // A replay with the same id returns the recorded outcome, checked BEFORE the procedure:
+            // else the repeat would release again and the outcome would depend on whether the first
+            // response reached the client.
             if (operationId is { Length: > 0 } && _releaseOutcomes.TryGetValue(operationId, out var recorded))
             {
                 if (!string.Equals(recorded.Fingerprint, fingerprint, StringComparison.Ordinal))
@@ -549,9 +531,8 @@ public sealed class HostSession : IAsyncDisposable
             }
 
             // Only a TERMINAL SUCCESS is recorded: a refusal (DOCUMENT_DIRTY, SESSION_RELEASE_BUSY)
-            // and an unfinished branch (the Worker did not confirm the stop, the state was not
-            // published) are cured by REPEATING the call, and a record would make the repeat forever
-            // return the same refusal instead of continuing cleanup.
+            // and an unfinished branch are cured by REPEATING the call, and a record would make the
+            // repeat forever return the same refusal.
             ResultEnvelope<JsonNode?> Complete(ResultEnvelope<JsonNode?> envelope)
             {
                 if (operationId is not { Length: > 0 } || envelope.Status != OperationStatus.Succeeded)
@@ -611,9 +592,9 @@ public sealed class HostSession : IAsyncDisposable
                             + "kompas_session_status.");
             }
 
-            // Refusing new CAD calls and checking busyness are ONE acquisition of ONE lock. A call
-            // that entered before this point is visible in the counter; a call after it gets no entry.
-            // Nothing can slip between the check and the cleanup.
+            // Refusing new calls and checking busyness are ONE lock acquisition: a call that entered
+            // before this point is visible in the counter, a call after gets no entry, so nothing
+            // slips between the check and the cleanup.
             int active;
             lock (_callGate)
             {
@@ -643,13 +624,10 @@ public sealed class HostSession : IAsyncDisposable
                             + "записанный исход) и повторите kompas_release_session.");
             }
 
-            // Unsaved documents are refused by default. No implicit save and no discarding of edits:
-            // closing a document with the documented ksDocument3D.close() promises no save, so silently
-            // handing the session over would lose the model. The "may this be released" decision is a
-            // PURE function (ReleaseGuard). Only FACTS come here: whether the Worker ran, whether the
-            // channel is alive without a restart, whether the sticky unknown-document-state flag is set,
-            // whether the client acknowledged it, whether the inventory was read and how many dirty
-            // documents it holds. Scattered across branches, this rule once let a bypass through (defect H3).
+            // Unsaved documents are refused by default: no implicit save and no discarding of edits,
+            // because ksDocument3D.close() promises no save. The "may this be released" decision is a
+            // PURE function (ReleaseGuard); only FACTS come here (Worker ran, channel alive without a
+            // restart, sticky flag, acknowledgement, inventory read, dirty count).
             // History: docs/decisions/host.md#release-guard
             var worker = _worker;
             var acknowledge = JsonScalars.ReadBool(arguments["acknowledge_unknown_document_state"]) == true;
@@ -687,8 +665,7 @@ public sealed class HostSession : IAsyncDisposable
             }
 
             // EXPLICIT acknowledgement of the unknown state: the client took on that the previous
-            // Worker's edits may remain unsaved in KOMPAS. This is named in a warning, not left silent:
-            // "released" and "edits may be lost" are different claims.
+            // Worker's edits may remain unsaved in KOMPAS. Named in a warning, not left silent.
             var acknowledgedUnknown = acknowledge && worker?.DocumentStateUnknown == true;
             var unknownReason = worker?.DocumentStateUnknownReason;
 
@@ -697,8 +674,8 @@ public sealed class HostSession : IAsyncDisposable
             var stop = await StopWorkerAsync().ConfigureAwait(false);
             await DisposeResourcesAsync().ConfigureAwait(false);
 
-            // The flag is cleared ONLY now — after a confirmed Worker stop. Clearing it earlier would
-            // declare the state known on the client's intent alone.
+            // The flag is cleared ONLY now, after a confirmed Worker stop: earlier would declare the
+            // state known on the client's intent alone.
             worker?.ClearDocumentStateUnknown("освобождение с явным подтверждением неизвестного состояния");
 
             var stopNode = new JsonObject
@@ -789,9 +766,7 @@ public sealed class HostSession : IAsyncDisposable
         }
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // Transport end
-    // ---------------------------------------------------------------------------------------------
+    // ---- Transport end ----
 
     /// <summary>Transport ended. The same exclusion mechanism as an explicit release, but the result
     /// is <see cref="HostOwnerState.Free"/>: ownership is lifted implicitly, and the next chat's first
@@ -858,9 +833,7 @@ public sealed class HostSession : IAsyncDisposable
         }
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // Session resources
-    // ---------------------------------------------------------------------------------------------
+    // ---- Session resources ----
 
     /// <summary>Create the journal, queue and Invoker anew. Returns the problem text or null.</summary>
     /// <remarks>The journal is mandatory: without it a restart cannot tell "not done" from "done but
@@ -965,8 +938,7 @@ public sealed class HostSession : IAsyncDisposable
         // INVARIANT: the inventory is NOT obtained by restarting the Worker. An ordinary
         // `SendAsync` → `EnsureStartedAsync` used to stop the old Worker (20 s wait, then kill) and
         // raise a NEW one on a broken channel; the new Worker knows no documents → empty inventory →
-        // `dirty=0` → release passes although the model state is UNKNOWN, i.e. DOCUMENT_DIRTY failed
-        // exactly when it was needed (defect H3, review 05.10.2026). A broken channel is now an
+        // `dirty=0` → release passes although the model state is UNKNOWN. A broken channel is now an
         // inventory refusal, not "no edits". History: docs/decisions/host.md#inventory-restart
         if (!worker.CanSendWithoutRestart)
         {
@@ -1130,11 +1102,10 @@ public sealed class HostSession : IAsyncDisposable
     }
 
     /// <summary>A release refusal per the <see cref="ReleaseGuard"/> decision: the code, retry policy
-    /// and details depend on the CAUSE rather than being reduced to one wording.</summary>
-    /// <remarks>Different causes have different exits: an unknown document state is cleared by explicit
-    /// acknowledgement, dirty documents by saving or closing, an unavailable inventory by a retry. One
-    /// common wording would force the client to guess the exit, which is exactly when an "error
-    /// message" stops being an instruction.</remarks>
+    /// and details depend on the CAUSE, not on one wording.</summary>
+    /// <remarks>Different causes have different exits: an unknown state is cleared by acknowledgement,
+    /// dirty documents by saving or closing, an unavailable inventory by a retry. One common wording
+    /// would force the client to guess the exit.</remarks>
     private static ResultEnvelope<JsonNode?> ReleaseRefusal(
         ReleaseDecision decision,
         WorkerSupervisor? worker,
@@ -1188,9 +1159,7 @@ public sealed class HostSession : IAsyncDisposable
                     + "документы kompas_close_document и повторите.");
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // Classification and formatting
-    // ---------------------------------------------------------------------------------------------
+    // ---- Classification and formatting ----
 
     private static string Classify(SessionProbe probe)
     {
@@ -1263,8 +1232,7 @@ public sealed class HostSession : IAsyncDisposable
         if (string.Equals(toolName, "kompas_capabilities", StringComparison.Ordinal))
         {
             // The catalog is published even without ownership: "no tools visible" and "tools exist but
-            // the session is not ours" are different things, and conflating them would repeat the
-            // defect that left the second chat with no tools at all.
+            // the session is not ours" are different things.
             node["tools"] = new JsonArray(ToolCatalog.All.Select(t => (JsonNode)JsonValue.Create(t.Name)!).ToArray());
             node["tool_count"] = ToolCatalog.All.Count;
         }

@@ -4,12 +4,11 @@ namespace KompasMcp.Domain.Imaging;
 
 /// <summary>Raster format: the wire name, the vendor enum code and the traits by which the file is
 /// IDENTIFIED rather than taken on trust.</summary>
-/// <remarks>Codes come from the product enum (<c>ksRasterFormatEnum</c>, page <c>ksrasterformatenum.html</c>):
-/// BMP = 0, JPG = 2, PNG = 3, TIF = 4. The enum values are part of the contract with the kernel, so they
-/// live HERE, not in the adapter — the adapter must not have a "private" code set diverging from the one the
-/// tests check. LIMIT: WMF is deliberately absent — DOC (<c>ksdocument3d_saveastorasterformat.html</c>) says
-/// WMF saving is unsupported and the file is written as EMF; publishing a format the kernel silently swaps
-/// is a promise the server does not keep.</remarks>
+/// <remarks>DOC: codes come from the product enum (<c>ksRasterFormatEnum</c>, page
+/// <c>ksrasterformatenum.html</c>): BMP = 0, JPG = 2, PNG = 3, TIF = 4. They are part of the contract with
+/// the kernel, so they live HERE, not in the adapter. LIMIT: WMF is deliberately absent — DOC
+/// (<c>ksdocument3d_saveastorasterformat.html</c>) says WMF saving is unsupported and the file is written as
+/// EMF; publishing a format the kernel silently swaps is a promise the server does not keep.</remarks>
 public sealed record RasterFormatSpec(
     string Wire,
     short Code,
@@ -21,16 +20,12 @@ public sealed record RasterFormatSpec(
 /// <summary>The published raster formats and their identifying traits.</summary>
 public static class RasterFormats
 {
-    /// <summary>ksRasterFormatEnum: BMP = 0.</summary>
     public const short CodeBmp = 0;
 
-    /// <summary>ksRasterFormatEnum: JPG = 2.</summary>
     public const short CodeJpg = 2;
 
-    /// <summary>ksRasterFormatEnum: PNG = 3.</summary>
     public const short CodePng = 3;
 
-    /// <summary>ksRasterFormatEnum: TIF = 4.</summary>
     public const short CodeTif = 4;
 
     public static readonly RasterFormatSpec Png = new(
@@ -51,12 +46,12 @@ public static class RasterFormats
 
     public static readonly IReadOnlyList<RasterFormatSpec> All = new[] { Png, Jpg, Bmp, Tif };
 
-    /// <summary>Names published by the schema. Order as in the list.</summary>
+    /// <summary>Names published by the schema, in list order.</summary>
     public static readonly IReadOnlyList<string> WireNames =
         All.Select(spec => spec.Wire).ToArray();
 
-    /// <summary>Resolve a format by name. An unknown name is a refusal, not "PNG by default": a silent format
-    /// swap is indistinguishable to the caller from honouring the request.</summary>
+    /// <summary>Resolve a format by name. An unknown name is a refusal, not "PNG by default": a silent
+    /// format swap is indistinguishable to the caller from honouring the request.</summary>
     public static bool TryResolve(string? wire, out RasterFormatSpec spec)
     {
         spec = Png;
@@ -77,13 +72,12 @@ public static class RasterFormats
         return false;
     }
 
-    /// <summary>Resolve a format by the vendor enum code (the other direction).</summary>
     public static RasterFormatSpec? ByCode(short code) =>
         All.FirstOrDefault(spec => spec.Code == code);
 }
 
-/// <summary>Response-context limits. Named by numbers and kept in one place: the client reads the image
-/// through the model context, and "a 40-megapixel image" is a transport refusal, not a convenience.</summary>
+/// <summary>Response-context limits, kept in one place: the client reads the image through the model
+/// context, and an oversized image is a transport refusal, not a convenience.</summary>
 public static class RasterLimits
 {
     /// <summary>Long side of the image in pixels.</summary>
@@ -93,9 +87,8 @@ public static class RasterLimits
     public const int MaxBase64Characters = 2 * 1024 * 1024;
 }
 
-/// <summary>What could be read FROM THE FILE ITSELF. Dimensions come from parsing the header, not from "by
-/// eye" and not from the request parameters: the parameter says what was asked, the header says what came
-/// out.</summary>
+/// <summary>What could be read FROM THE FILE ITSELF. Dimensions come from the header, not from the request:
+/// the parameter says what was asked, the header says what came out.</summary>
 public sealed record RasterImageFacts(
     bool MagicMatches,
     string MagicHex,
@@ -106,10 +99,9 @@ public sealed record RasterImageFacts(
     string? DimensionNote);
 
 /// <summary>Header parsing for BMP/PNG/JPG/TIF, without external libraries.</summary>
-/// <remarks>Why this is in the product, not "by eye": the order requires the response to carry
-/// <c>pixel_width</c> and <c>pixel_height</c> read from the IHDR by the server. A dimension taken from the
-/// request would be a claim about the INTENT; a dimension from the header is a claim about the FILE — and
-/// the second one is published.</remarks>
+/// <remarks>The order requires the response to carry <c>pixel_width</c> and <c>pixel_height</c> read from
+/// the IHDR by the server. A dimension from the request is a claim about the INTENT; one from the header is
+/// a claim about the FILE — and the second is published.</remarks>
 public static class RasterImageReader
 {
     private const int PngSignatureLength = 8;
@@ -135,8 +127,8 @@ public static class RasterImageReader
             return InspectBmp(data, magicMatches, magicHex);
         }
 
-        // JPG and TIF: the magic is checked, the dimensions are not. A silent zero instead of an unread
-        // dimension would be a lie, so the field stays null and the reason is stated in words.
+        // JPG and TIF: the magic is checked, the dimensions are not. A silent zero would be a lie, so the
+        // field stays null and the reason is stated.
         return new RasterImageFacts(
             magicMatches, magicHex, null, null, null, null,
             spec.Code == RasterFormats.CodeJpg

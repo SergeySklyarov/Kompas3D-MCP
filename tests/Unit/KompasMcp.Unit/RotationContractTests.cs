@@ -6,10 +6,14 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>The rotation contract is checked against the PUBLISHED tool description, not the schema file nor the adapter code.</summary>
-/// <remarks>TEST: the reason is measured — a field declared only in C# or only in <c>schemas/*.json</c> is INVISIBLE to the client, because the Host validates the call by its own <c>InputSchema</c>, and the mismatch reads as "the product cannot do it" when the declaration is what is missing (as happened with <c>base_object_refs</c> on fillet).
-/// INVARIANT: <c>angle_deg</c> is bounded at 360, not 180 (measured 18.09.2026; experiment <c>F.1</c> got a full cylinder <c>π·r²·h</c> at <c>Angle[true]=360</c>), and the angle of an existing rotation is edited via <c>rotation_angle_deg</c>, not <c>angle_deg</c>.
-/// History: docs/decisions/tests.md#rotation-contract</remarks>
+/// <summary>The rotation contract is checked against the PUBLISHED tool description, not the schema file nor the
+/// adapter code.</summary>
+/// <remarks>TEST: the reason is measured — a field declared only in C# or only in <c>schemas/*.json</c> is
+/// INVISIBLE to the client, because the Host validates the call by its own <c>InputSchema</c>, and the mismatch
+/// reads as "the product cannot do it" (as happened with <c>base_object_refs</c> on fillet).
+/// INVARIANT: <c>angle_deg</c> is bounded at 360, not 180 (experiment <c>F.1</c> got a full cylinder <c>π·r²·h</c>
+/// at <c>Angle[true]=360</c>); the angle of an existing rotation is edited via <c>rotation_angle_deg</c>.
+/// History: docs/decisions/tests.md#rotation-contract-2</remarks>
 public class RotationContractTests
 {
     private static JsonObject Tool(string name) =>
@@ -20,9 +24,8 @@ public class RotationContractTests
         schema["properties"] as JsonObject
         ?? throw new InvalidOperationException("Схема не объявляет properties.");
 
-    /// <summary>INVARIANT: the angle upper bound is a FULL turn, not half. Checked by TWO numbers: 360 must
-    /// pass, 361 must be refused. "360 passes" alone is not enough — it would pass with no bound at all, so
-    /// the test would not tell the measured ceiling from its absence.</summary>
+    /// <summary>INVARIANT: the angle upper bound is a FULL turn, not half. Checked by TWO numbers: 360 must pass,
+    /// 361 must be refused — "360 passes" alone would pass with no bound at all.</summary>
     [Fact]
     public void Rotated_AngleBound_IsFullTurn_NotHalfTurn()
     {
@@ -38,8 +41,8 @@ public class RotationContractTests
         Assert.NotEmpty(JsonSchemaValidator.Validate(schema, payload361));
     }
 
-    /// <summary>INVARIANT: the axis is declared with EXACTLY three numbers per point. Two would leave the
-    /// third coordinate to the server's guess; four would be a silently dropped value.</summary>
+    /// <summary>INVARIANT: the axis is declared with EXACTLY three numbers per point — two would leave the third
+    /// coordinate to a guess, four would be a silently dropped value.</summary>
     [Theory]
     [InlineData("""[0,0]""")]
     [InlineData("""[0,0,0,0]""")]
@@ -53,8 +56,8 @@ public class RotationContractTests
         Assert.NotEmpty(JsonSchemaValidator.Validate(schema, payload));
     }
 
-    /// <summary>INVARIANT: the operation kind is an enumeration, not a string — an unknown value must be
-    /// refused BEFORE COM, not coerced to the nearest kind.</summary>
+    /// <summary>INVARIANT: the operation kind is an enumeration, not a string — an unknown value must be refused
+    /// BEFORE COM, not coerced to the nearest kind.</summary>
     [Fact]
     public void Rotated_Operation_IsAClosedEnumeration()
     {
@@ -66,9 +69,8 @@ public class RotationContractTests
         Assert.NotEmpty(JsonSchemaValidator.Validate(schema, payload));
     }
 
-    /// <summary>INVARIANT: the rotation edit publishes its OWN angle and direction fields rather than reusing
-    /// the chamfer's. Without this the rotation feature cannot be edited: <c>angle_deg</c> belongs to the
-    /// chamfer, and the adapter deliberately rejects it on rotation.</summary>
+    /// <summary>INVARIANT: the rotation edit publishes its OWN angle and direction fields rather than reusing the
+    /// chamfer's — <c>angle_deg</c> belongs to the chamfer, and the adapter rejects it on rotation.</summary>
     [Fact]
     public void UpdateFeature_PublishesRotationEditFields()
     {
@@ -82,8 +84,8 @@ public class RotationContractTests
             "вращения править нечем.");
     }
 
-    /// <summary>INVARIANT: reading the feature publishes the rotation parameter block. An empty field means
-    /// "not read", not zero, so the client needs the object itself, not only the family name.</summary>
+    /// <summary>INVARIANT: reading the feature publishes the rotation parameter block — an empty field means
+    /// "not read", not zero, so the client needs the object itself.</summary>
     [Fact]
     public void GetFeature_PublishesRotationReadback()
     {
@@ -95,9 +97,8 @@ public class RotationContractTests
 
     /// <summary>INVARIANT: the tool description must name the MEASURED capability, not the old limit. The old
     /// text claimed a full turn by cut is not expressible and a boss onto a non-empty part is refused — both
-    /// refuted 18.09.2026 (experiments F.9/F.10, acceptance RO.18/RO.19): "saturation" came from a one-sided
-    /// blank, and "the boss makes a second body" from a probe writing NewBody. The test catches the return of
-    /// the refuted text. History: docs/decisions/tests.md#rotation-contract</summary>
+    /// refuted (experiments F.9/F.10, acceptance RO.18/RO.19).</summary>
+    /// <remarks>History: docs/decisions/tests.md#rotation-contract-2</remarks>
     [Fact]
     public void Rotated_Description_StatesTheMeasuredFullTurnAndBossFusion()
     {
@@ -113,9 +114,8 @@ public class RotationContractTests
         Assert.DoesNotContain("НЕ переключает (измерено R.26)", description, StringComparison.Ordinal);
     }
 
-    /// <summary>INVARIANT: <c>target_body_ref</c> must carry a DESCRIPTION, not be a bare reference — the field
-    /// is ACCEPTED and checked AFTER the operation, and the client must know that, else it reads as
-    /// "unsupported" and the target is never given. The check also guards the schema builder: <c>Nullable()</c>
+    /// <summary>INVARIANT: <c>target_body_ref</c> must carry a DESCRIPTION, not be a bare reference — the field is
+    /// ACCEPTED and checked AFTER the operation. The check also guards the schema builder: <c>Nullable()</c>
     /// rebuilds <c>$ref</c> into <c>anyOf</c> and silently drops a description placed on the inner <c>$ref</c>.</summary>
     [Fact]
     public void Rotated_TargetBodyRef_CarriesItsMeasuredMeaning()

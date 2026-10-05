@@ -9,12 +9,10 @@ using KompasMcp.Contracts;
 namespace KompasMcp.Domain.Journaling;
 
 /// <summary>Session-owner state as seen by ANY Host sharing this <c>journal_path</c>.</summary>
-/// <remarks>
-/// INVARIANT: "not ready to take work, but still releasing" (<see cref="Releasing"/>,
-/// <see cref="Draining"/>) is a separate state from "may be taken" (<see cref="Released"/>,
-/// <see cref="Free"/>). One state for both made a second Host start while the first still held the
-/// Worker (MEASURED 04.10.2026). History: docs/decisions/journaling.md#ownership-model
-/// </remarks>
+/// <remarks>INVARIANT: "not ready to take work, but still releasing" (<see cref="Releasing"/>,
+/// <see cref="Draining"/>) is separate from "may be taken" (<see cref="Released"/>, <see cref="Free"/>).
+/// One state for both made a second Host start while the first still held the Worker.
+/// History: docs/decisions/journaling.md#ownership-model</remarks>
 public enum HostOwnerState
 {
     /// <summary>Ownership taken, but the owner has not yet served a client request.</summary>
@@ -23,22 +21,20 @@ public enum HostOwnerState
     /// <summary>The owner runs the session: it holds the Worker, the journal and the right to CAD calls.</summary>
     Serving,
 
-    /// <summary>The owner is releasing the session: no new CAD calls, resources not yet freed. The exclusive
-    /// right stays with it — another Host can NOT take the session.</summary>
+    /// <summary>The owner is releasing: no new CAD calls, resources not yet freed; the exclusive right
+    /// stays with it.</summary>
     Releasing,
 
-    /// <summary>
-    /// Transport finished or the Host is shutting down abnormally: cleanup NOT confirmed. Differs from
-    /// <see cref="Releasing"/> only in who initiated it, not in rights.
-    /// </summary>
+    /// <summary>Transport finished or the Host is shutting down abnormally: cleanup NOT confirmed.
+    /// Differs from <see cref="Releasing"/> only in who initiated it, not in rights.</summary>
     Draining,
 
-    /// <summary>Ownership removed by an EXPLICIT <c>kompas_release_session</c>, cleanup confirmed. An ordinary
-    /// CAD call does NOT take ownership — an explicit <c>kompas_acquire_session</c> is required.</summary>
+    /// <summary>Ownership removed by an EXPLICIT <c>kompas_release_session</c>, cleanup confirmed. An
+    /// ordinary CAD call does NOT take ownership — an explicit acquire is required.</summary>
     Released,
 
-    /// <summary>No owner, cleanup confirmed (transport finished cleanly). An ordinary CAD call takes ownership:
-    /// a coordinated admission of a real operation, not catalog discovery.</summary>
+    /// <summary>No owner, cleanup confirmed (transport finished cleanly). An ordinary CAD call takes
+    /// ownership: a coordinated admission of a real operation, not catalog discovery.</summary>
     Free,
 }
 
@@ -64,8 +60,8 @@ public enum OwnershipOutcome
     /// <summary>Another LIVE Host owns the session (serving/releasing/draining/starting).</summary>
     RefusedActiveOwner,
 
-    /// <summary>The session is free but cannot be taken by an ordinary CAD call: the previous owner released
-    /// EXPLICITLY, so an explicit <c>kompas_acquire_session</c> is required.</summary>
+    /// <summary>The session is free but cannot be taken by an ordinary CAD call: the previous owner
+    /// released EXPLICITLY, so an explicit <c>kompas_acquire_session</c> is required.</summary>
     RefusedExplicitAcquireRequired,
 
     /// <summary>The owner state could not be determined (record unreadable). Not treated as free.</summary>
@@ -109,8 +105,6 @@ public sealed record SessionProbe(
     string Reason,
     string? RefusalCode)
 {
-    /// <summary>How the owner blocking the take differs from a missing one: "releasing" is named separately from
-    /// "serving", because their remedies differ.</summary>
     public string Describe() => State switch
     {
         HostOwnerState.Releasing => "releasing",
@@ -140,12 +134,11 @@ public sealed record Release(
     SessionProbe? Probe);
 
 /// <summary>The single owner of the CAD session per <c>journal_path</c>.</summary>
-/// <remarks>INVARIANT: transport start takes NO ownership — only an explicit <c>acquire</c> or the admission of
-/// a REAL CAD operation does (<c>tools/list</c>, <c>initialize</c>, <c>health</c> never do).
-/// INVARIANT: the owner is identified by pid AND generation; a mismatch refuses the update.
-/// INVARIANT: liveness — a process with the pid that started no later than the record; undeterminable
-/// counts as ALIVE (a live owner taken for dead gives two Hosts). LIMIT: idleness never strips
-/// ownership from a live owner. INVARIANT: the lock is not held during COM.
+/// <remarks>INVARIANT: transport start takes NO ownership — only an explicit <c>acquire</c> or the
+/// admission of a REAL CAD operation does (<c>tools/list</c>, <c>initialize</c>, <c>health</c> never do).
+/// INVARIANT: the owner is identified by pid AND generation; a mismatch refuses the update. INVARIANT:
+/// liveness — undeterminable counts as ALIVE (a live owner taken for dead gives two Hosts). LIMIT:
+/// idleness never strips ownership from a live owner. INVARIANT: the lock is not held during COM.
 /// History: docs/decisions/journaling.md#ownership-model</remarks>
 public sealed class HostOwnership : IDisposable
 {
@@ -155,7 +148,6 @@ public sealed class HostOwnership : IDisposable
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower) },
     };
 
-    /// <summary>How long to wait for the named lock when inspecting ownership.</summary>
     private static readonly TimeSpan GateTimeout = TimeSpan.FromSeconds(5);
 
     private readonly Mutex _gate;
@@ -170,10 +162,8 @@ public sealed class HostOwnership : IDisposable
         JournalPath = journalPath;
     }
 
-    /// <summary>Path of the journal whose ownership is being decided. Used for readable refusal texts.</summary>
     public string JournalPath { get; }
 
-    /// <summary>Path of the owner record — next to the journal, not in the default directory.</summary>
     public string RecordPath { get; }
 
     /// <summary>Generation of the current acquisition. <c>null</c> — this Host holds no ownership.</summary>
@@ -181,10 +171,8 @@ public sealed class HostOwnership : IDisposable
 
     private string? _generation;
 
-    /// <summary>Whether this Host currently holds ownership.</summary>
     public bool IsOwner => Generation is not null;
 
-    /// <summary>How many client requests this Host served in the current generation.</summary>
     public int RequestsServed => Volatile.Read(ref _requestsServed);
 
     public static string RecordPathFor(string journalPath) => journalPath + ".owner.json";
@@ -198,7 +186,6 @@ public sealed class HostOwnership : IDisposable
         return new HostOwnership(mutex, recordPath, full);
     }
 
-    /// <summary>Read the ownership state without taking or releasing anything.</summary>
     public SessionProbe Probe()
     {
         var taken = EnterGate(out var lockProblem);
@@ -356,8 +343,8 @@ public sealed class HostOwnership : IDisposable
         }
     }
 
-    /// <summary>Begin the release: <see cref="HostOwnerState.Serving"/> → <see cref="HostOwnerState.Releasing"/>.
-    /// The exclusive right stays with the owner — another Host cannot take the session.</summary>
+    /// <summary>Begin the release: Serving → Releasing. The exclusive right stays with the owner —
+    /// another Host cannot take the session.</summary>
     public bool BeginRelease()
     {
         var taken = EnterGate(out _);
@@ -389,11 +376,8 @@ public sealed class HostOwnership : IDisposable
         }
     }
 
-    /// <summary>
-    /// Confirm the release: <see cref="HostOwnerState.Releasing"/> →
-    /// <see cref="HostOwnerState.Released"/>. Called AFTER the Worker is confirmed stopped and the queue,
-    /// journal and Invoker are released.
-    /// </summary>
+    /// <summary>Confirm the release: Releasing → Released. Called AFTER the Worker is confirmed stopped
+    /// and the queue, journal and Invoker are released.</summary>
     public bool CompleteRelease()
     {
         var taken = EnterGate(out _);
@@ -430,8 +414,8 @@ public sealed class HostOwnership : IDisposable
         }
     }
 
-    /// <summary>Abort the release: <see cref="HostOwnerState.Releasing"/> → <see cref="HostOwnerState.Serving"/>.
-    /// Called when the pre-cleanup check failed: the owner stays the owner, not "almost free".</summary>
+    /// <summary>Abort the release: Releasing → Serving. Called when the pre-cleanup check failed: the
+    /// owner stays the owner, not "almost free".</summary>
     public bool AbortRelease()
     {
         var taken = EnterGate(out _);
@@ -458,8 +442,8 @@ public sealed class HostOwnership : IDisposable
         }
     }
 
-    /// <summary>Transport finished: <see cref="HostOwnerState.Serving"/> → <see cref="HostOwnerState.Draining"/>.
-    /// This is NOT a release: resources are not yet freed.</summary>
+    /// <summary>Transport finished: Serving → Draining. This is NOT a release: resources are not yet
+    /// freed.</summary>
     public bool BeginDrain()
     {
         var taken = EnterGate(out _);
@@ -486,10 +470,8 @@ public sealed class HostOwnership : IDisposable
         }
     }
 
-    /// <summary>
-    /// Confirm the end of cleanup after transport shutdown: <see cref="HostOwnerState.Draining"/> →
-    /// <see cref="HostOwnerState.Free"/>. An ordinary CAD call takes ownership after this.
-    /// </summary>
+    /// <summary>Confirm the end of cleanup after transport shutdown: Draining → Free. An ordinary CAD
+    /// call takes ownership after this.</summary>
     public bool CompleteDrain()
     {
         var taken = EnterGate(out _);
@@ -603,7 +585,6 @@ public sealed class HostOwnership : IDisposable
         return IsOurGeneration(record);
     }
 
-    /// <summary>Readable "ownership lost" refusal text for a call already in progress.</summary>
     public string LostOwnershipMessage()
     {
         var (record, _) = ReadRecord(RecordPath);

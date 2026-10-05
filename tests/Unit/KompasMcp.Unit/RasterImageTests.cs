@@ -5,11 +5,11 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>Raster header parsing and the format list — what the <c>kompas_export_image</c> acceptance rests on.</summary>
-/// <remarks>INVARIANT: the image size is what the server PUBLISHES, so taking it from the request would
-/// publish an intention instead of a fact. LIMIT: header parsing is easy to write "by eye" and miss a byte
-/// order swap, after which the answer carries plausible but wrong numbers that a live run cannot catch —
-/// there is nothing to compare against. Here there is: bytes assembled in the test from the format spec.</remarks>
+/// <summary>Raster header parsing and format list — what the <c>kompas_export_image</c> acceptance rests on.</summary>
+/// <remarks>INVARIANT: the image size is what the server PUBLISHES, so taking it from the request would publish an
+/// intention instead of a fact. LIMIT: header parsing is easy to write "by eye" and miss a byte order swap, after
+/// which the answer carries plausible but wrong numbers a live run cannot catch. Here there is something to
+/// compare against: bytes assembled in the test from the format spec.</remarks>
 public class RasterImageTests
 {
     private static byte[] Png(int width, int height, byte bitDepth = 8, byte colorType = 2)
@@ -66,9 +66,9 @@ public class RasterImageTests
     [InlineData(null)]
     public void UnknownFormats_AreRefusedRatherThanDefaulted(string? wire)
     {
-        // INVARIANT: a silent format substitution is indistinguishable to the caller from fulfilling the
-        // request. MEASURED (probe P5): the kernel accepts a value OUTSIDE the list and substitutes another
-        // format (99 gave BMP, 440886 bytes), so an unknown name must be refused here, before COM.
+        // INVARIANT: a silent format substitution is indistinguishable to the caller from fulfilling the request.
+        // MEASURED (probe P5): the kernel accepts a value OUTSIDE the list and substitutes another format (99 gave
+        // BMP, 440886 bytes), so an unknown name must be refused here, before COM.
         Assert.False(RasterFormats.TryResolve(wire, out _));
     }
 
@@ -87,9 +87,8 @@ public class RasterImageTests
     [Fact]
     public void WrongMagic_IsReportedRatherThanIgnored()
     {
-        // A file named PNG that is not one: exactly the case the magic check in the adapter exists for. The
-        // kernel accepts a value outside the list silently (P5), so "the kernel answered success" says nothing
-        // about the format.
+        // A file named PNG that is not one: exactly the case the magic check exists for. The kernel accepts a
+        // value outside the list silently (P5), so "the kernel answered success" says nothing about the format.
         var facts = RasterImageReader.Inspect(Bmp(100, 80), RasterFormats.Png);
         Assert.False(facts.MagicMatches);
         Assert.Null(facts.PixelWidth);
@@ -141,9 +140,8 @@ public class RasterImageTests
         Assert.Equal(2 * 1024 * 1024, RasterLimits.MaxBase64Characters);
     }
 
-    /// <summary>INVARIANT: the tool schema and the Domain format list must name the SAME formats. Diverging,
-    /// they would give the client a format the adapter rejects, and the refusal would look like a product
-    /// defect rather than a mismatch of two lists.</summary>
+    /// <summary>INVARIANT: the tool schema and the Domain format list must name the SAME formats — diverging, the
+    /// client would get a format the adapter rejects, looking like a product defect rather than a list mismatch.</summary>
     [Fact]
     public void ExportImageSchema_PublishesExactlyTheSupportedFormats()
     {

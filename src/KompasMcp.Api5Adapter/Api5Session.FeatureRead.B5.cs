@@ -9,22 +9,17 @@ using KompasMcp.Contracts.Ipc;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>Reading the three B5 families — sweep, loft and shell — FROM THE MODEL, not from the creation response.</summary>
-/// <remarks>INVARIANT: a family is recognised BY THE DEFINITION INTERFACE, not by the type number.
-/// MEASURED 20.09.2026 (probe <c>--b5</c>, step B5.12): the tree number differs from the creation number —
-/// <c>NewEntity(45)</c> (<c>o3d_baseEvolution</c>) shows in the tree as <b>46</b> (<c>o3d_bossEvolution</c>) and
-/// answers <c>ksBossEvolutionDefinition</c>, <c>ILofts.Add(31)</c> as <b>31</b> (<c>ksBossLoftDefinition</c>),
-/// <c>NewEntity(43)</c> as <b>43</b> (<c>ksShellDefinition</c>); the same divergence cost a defect at the hole
-/// (52 → 583) and the rotation (27 → 584). <c>GetType().Name</c> of a COM object is always <c>__ComObject</c>.
-/// History: docs/decisions/adapter-solid.md#b5-read</remarks>
+/// <summary>Reading the three B5 families — sweep, loft and shell — FROM THE MODEL, not the response.</summary>
+/// <remarks>INVARIANT: a family is recognised BY THE DEFINITION INTERFACE, not by the type number — the
+/// tree number differs from the creation number (MEASURED).
+/// History: docs/decisions/adapter-solid.md#b5-read-compaction</remarks>
 public partial class Api5Session
 {
     private const string EvolutionFamily = "sweep";
     private const string LoftFamily = "loft";
     private const string ShellFamily = "shell";
 
-    /// <summary>Path-length unit — <c>ST_MIX_*</c>. MEASURED (step B5.3): <c>GetPathLength(1)</c> on a
-    /// 100 mm segment returned exactly 100, so millimetres are confirmed by a number, not a guess.</summary>
+    /// <summary>Path-length unit — <c>ST_MIX_*</c>. MEASURED: <c>GetPathLength(1)</c> is millimetres.</summary>
     private const uint PathLengthUnitMillimetres = 1u;
 
     /// <summary>Whether the definition answers the sweep interface. Both are accepted.</summary>
@@ -41,9 +36,7 @@ public partial class Api5Session
     /// <summary>Sweep operation read from the definition taken from the tree. No value comes from the
     /// creation response.</summary>
     /// <remarks>INVARIANT: the branch is chosen BY THE INTERFACE ANSWER, not by the type number
-    /// (MEASURED: <c>NewEntity(45)</c> yields a feature answering <c>ksBossEvolutionDefinition</c>).
-    /// Accessors are passed to the shared reader as delegates because the two definitions share no
-    /// interface for these members.</remarks>
+    /// (MEASURED: <c>NewEntity(45)</c> yields <c>ksBossEvolutionDefinition</c>).</remarks>
     private static SweepDto? ReadSweepFeature(object? definition)
     {
         if (definition is ksBaseEvolutionDefinition baseEvolution)
@@ -67,10 +60,8 @@ public partial class Api5Session
         return null;
     }
 
-    /// <summary><c>IEvolution.OperationResult</c> — the documented operation-kind answer, present ONLY
-    /// in API7 (the API5 definition has no such member). INVARIANT: the feature is matched to an
-    /// <c>Evolutions</c> element BY ORDER among same-family ones, not by name (MEASURED in B4: different
-    /// types share one display name).</summary>
+    /// <summary><c>IEvolution.OperationResult</c> — present ONLY in API7. INVARIANT: the feature is
+    /// matched to an <c>Evolutions</c> element BY ORDER among same-family ones, not by name.</summary>
     private int? ReadEvolutionOperationResult(DocumentEntry document, ksEntity entity, out string? reason)
     {
         reason = null;
@@ -139,11 +130,8 @@ public partial class Api5Session
             return null;
         }
 
-        // INVARIANT: couplings are read IN FULL — how many, how many sections each has and what
-        // offsets stand on each section; a bare CouplingsCount cannot tell "a coupling exists" from
-        // "this coupling". Section refs are derived from the definition and checked against the SAME
-        // section count published as `section_count`: a mismatch is an incomplete derivation, named
-        // and not passed off as "fewer sections".
+        // INVARIANT: couplings are read IN FULL; section refs are derived from the definition and checked
+        // against the SAME count published as `section_count` — a mismatch is an incomplete derivation.
         var sectionCount = Api7Loft.SectionCount(loft);
         var sectionRefs = LoftSectionRefs(document, entity);
         if (sectionRefs is not null && sectionCount is int declaredSections
@@ -188,8 +176,7 @@ public partial class Api5Session
                 + (faces is null ? "FaceArray" : string.Empty);
         }
 
-        // The second half of the same setup: the same three values from API7. MEASURED (B5.12) that
-        // both routes agree, recorded as a separate check.
+        // The same three values from API7, as a separate check.
         var container = TryContainerFor(document);
         if (container is null)
         {
@@ -213,9 +200,8 @@ public partial class Api5Session
             }
             else
             {
-                // Half agreement: thickness must match, so must the removed-face count. Direction is
-                // compared BY VALUE: API5 thinType=true corresponds to API7 ThinType "inward"
-                // (MEASURED: dt_reverse = 1, volume 21632).
+                // Half agreement: thickness and removed-face count must match; direction is compared BY
+                // VALUE (API5 thinType=true = API7 ThinType "inward", MEASURED).
                 var api7Thickness = Api7Shell.Thickness(shell);
                 var api7Faces = Api7Shell.DeletedFaceCount(shell);
                 if (api7Thickness is double t2 && thickness is double t1 && Math.Abs(t1 - t2) > 1e-6)
@@ -232,9 +218,8 @@ public partial class Api5Session
             }
         }
 
-        // Removed-face refs are derived FROM THE SAME collection as `removed_face_count`, so a mismatch
-        // is not "fewer removed" but an incomplete derivation, and it must be named; otherwise an empty
-        // list beside a non-zero counter would look like a fact about the model.
+        // Removed-face refs are derived FROM THE SAME collection as `removed_face_count`; a mismatch is an
+        // incomplete derivation, named — an empty list beside a non-zero counter would look like a fact.
         var removedFaceRefs = ShellRemovedFaceRefs(document, definition);
         if (removedFaceRefs is not null && faces is int faceCount && removedFaceRefs.Count != faceCount)
         {
@@ -253,18 +238,11 @@ public partial class Api5Session
     }
 
     /// <summary>Loft SECTIONS AS REFERENCES, derived from the feature definition.</summary>
-    /// <remarks>DOC: <c>ksbaseloftdefinition_sketches.html</c> and <c>ksbossloftdefinition_sketches.html</c>
-    /// describe the member «Sketches»: «Получить указатель на интерфейс массива эскизов элемента по
-    /// сечениям», returning <c>ksEntityCollection</c>, with the note «Эскизы из данного массива
-    /// используются для построения элемента по сечениям». In interop the same member is declared as
-    /// <c>Object Sketchs()</c> (read from <c>docs/compatibility/kompas-api5-metadata.json</c>) — the help
-    /// and interop spellings differ by one letter, and that is named, not smoothed over.
-    /// INVARIANT: refs are derived afresh, never remembered — a creation-time reference dies on the first
-    /// document mutation and <c>kompas_rebuild</c> revokes ALL document references, while the product has
-    /// no separate sketch-enumeration tool, so a fresh reference can only come from the definition itself.
-    /// <c>null</c> means "not read" (definition unrecognised, cast failed, COM refused); an empty list
-    /// means "no sections in the definition" — the states are not merged.
-    /// History: docs/decisions/adapter-solid.md#b5-section-refs</remarks>
+    /// <remarks>DOC: <c>ksbaseloftdefinition_sketches.html</c> / <c>ksbossloftdefinition_sketches.html</c>
+    /// — «Sketches», returning <c>ksEntityCollection</c>. INVARIANT: refs are derived afresh, never
+    /// remembered — a creation-time reference dies on the first mutation and <c>kompas_rebuild</c> revokes
+    /// ALL references. <c>null</c> means "not read"; an empty list means "no sections" — not merged.
+    /// History: docs/decisions/adapter-solid.md#b5-read-compaction</remarks>
     private IReadOnlyList<string>? LoftSectionRefs(DocumentEntry document, ksEntity entity)
     {
         try
@@ -303,12 +281,10 @@ public partial class Api5Session
     }
 
     /// <summary>Shell REMOVED FACES AS REFERENCES, derived from <c>ksShellDefinition.FaceArray()</c>.</summary>
-    /// <remarks>Same rationale as <see cref="LoftSectionRefs"/>, with a harder reason: faces removed by the shell are
-    /// ABSENT from the body topology, so <c>kompas_read_topology</c> cannot yield them at all, while the removed-face
-    /// set is the edit input. <c>null</c> means "not read"; an empty list means "no removed faces". INVARIANT: use
-    /// <c>AsInterface</c> — a bare <c>is ksFaceDefinition</c> yields an EMPTY list while <c>removed_face_count = 1</c>,
-    /// because a <c>FaceArray()</c> element comes as <c>ksEntity</c> and must be unwrapped via <c>GetDefinition()</c>.
-    /// History: docs/decisions/adapter-solid.md#b5-removed-faces</remarks>
+    /// <remarks>Faces removed by the shell are ABSENT from the body topology, so
+    /// <c>kompas_read_topology</c> cannot yield them. INVARIANT: use <c>AsInterface</c> — a bare
+    /// <c>is ksFaceDefinition</c> yields an EMPTY list while <c>removed_face_count = 1</c>.
+    /// History: docs/decisions/adapter-solid.md#b5-read-compaction</remarks>
     private IReadOnlyList<string>? ShellRemovedFaceRefs(DocumentEntry document, ksShellDefinition definition)
     {
         try
@@ -337,9 +313,8 @@ public partial class Api5Session
 
     /// <summary>Feature ORDINAL AMONG SAME-FAMILY ones — by tree position, not by name.</summary>
     /// <remarks>Same technique as measured for rotation: both the tree and the API7 collection enumerate
-    /// features in creation order, so the position among same-family ones is a stable address. A name will
-    /// not do (MEASURED in B4: different types share one display name). <c>null</c> means "not matched",
-    /// not "zero".</remarks>
+    /// features in creation order, so the position among same-family ones is a stable address.
+    /// <c>null</c> means "not matched", not "zero".</remarks>
     private static int? OrdinalAmong(ksPart part, ksEntity target, Func<ksEntity, bool> isKind)
     {
         try
@@ -450,8 +425,7 @@ public partial class Api5Session
     }
 
     /// <summary>Name of the section-shift mode. DOC: <c>ksbaseevolutiondefinition_sketchshifttype.html</c>
-    /// (0 / 1 / 2), confirmed by read-back. A value outside the declared set is returned AS A NUMBER, not
-    /// renamed or turned into <c>null</c>: "the model says 7" is a fact and must not be hidden.</summary>
+    /// (0 / 1 / 2). A value outside the declared set is returned AS A NUMBER, not turned into <c>null</c>.</summary>
     private static string? ShiftModeName(short? value) => value switch
     {
         null => null,
@@ -473,9 +447,8 @@ public partial class Api5Session
         _ => value.Value.ToString(CultureInfo.InvariantCulture),
     };
 
-    /// <summary>Thin-wall direction. MEASURED, not derived: API5 <c>thinType = true</c> gives 21632
-    /// (inward), <c>false</c> — 24832 (outward); in API7 the same read as <c>ThinType = 1</c> (inward)
-    /// and <c>0</c> (outward).</summary>
+    /// <summary>Thin-wall direction. MEASURED: API5 <c>thinType = true</c> gives 21632 (inward),
+    /// <c>false</c> — 24832 (outward).</summary>
     private static string? ThinDirectionName(bool? thinType) => thinType switch
     {
         null => null,

@@ -8,11 +8,12 @@ using Xunit;
 namespace KompasMcp.Unit;
 
 /// <summary>Session lifecycle from the Host side: acquire, release, refusal without ownership.</summary>
-/// <remarks>LIMIT: there is deliberately no COM here — the tests check what is decided BEFORE COM
-/// (routing, ownership, journal write, refusal shape). No test starts a Worker: the channel is created and
-/// the process starts only on the first real command, of which there is none here. INVARIANT: a CAD call
-/// without ownership is refused BEFORE the journal and BEFORE COM; release creates a state in which an
-/// implicit acquire is forbidden; diagnostics answer without ownership too.</remarks>
+/// <remarks>LIMIT: there is deliberately no COM here — the tests check what is decided BEFORE COM (routing,
+/// ownership, journal write, refusal shape). No test starts a Worker: the channel is created and the process
+/// starts only on the first real command, of which there is none here. INVARIANT: a CAD call without ownership
+/// is refused BEFORE the journal and BEFORE COM; release forbids an implicit acquire; diagnostics answer
+/// without ownership too.
+/// History: docs/decisions/tests.md#host-session-2</remarks>
 public class HostSessionLifecycleTests : IDisposable
 {
     private readonly string _directory;
@@ -51,9 +52,7 @@ public class HostSessionLifecycleTests : IDisposable
     private static string State(ResultEnvelope<JsonNode?> envelope) =>
         Body(envelope)["session_state"]!.GetValue<string>();
 
-    // -----------------------------------------------------------------------------------------
-    // Status
-    // -----------------------------------------------------------------------------------------
+    // Status.
 
     [Fact]
     public async Task Status_BeforeAcquire_ReportsFreeSessionAndCreatesNoWorker()
@@ -83,9 +82,7 @@ public class HostSessionLifecycleTests : IDisposable
         Assert.NotNull(Body(status)["this_host"]!["generation"]!.GetValue<string>());
     }
 
-    // -----------------------------------------------------------------------------------------
-    // Diagnostics without ownership
-    // -----------------------------------------------------------------------------------------
+    // Diagnostics without ownership.
 
     [Fact]
     public async Task Health_WithoutOwnership_AnswersLocallyAndDoesNotAcquire()
@@ -117,9 +114,7 @@ public class HostSessionLifecycleTests : IDisposable
         Assert.Contains(HostSession.ReleaseTool, names);
     }
 
-    // -----------------------------------------------------------------------------------------
-    // Acquire and release
-    // -----------------------------------------------------------------------------------------
+    // Acquire and release.
 
     [Fact]
     public async Task Acquire_GrantsOwnershipAndRepeatedAcquireKeepsOneGeneration()
@@ -154,8 +149,8 @@ public class HostSessionLifecycleTests : IDisposable
         Assert.NotNull(envelope.Error.Details);
         Assert.True(envelope.Error.Details!.ContainsKey("remedy"), "отказ обязан нести инструкцию, а не только код");
 
-        // REFUSAL BEFORE THE JOURNAL. Lines are counted, not file existence: the journal is created already
-        // at acquire, so "no file" would prove nothing here.
+        // REFUSAL BEFORE THE JOURNAL: lines are counted, not file existence — the journal is created already at
+        // acquire, so "no file" would prove nothing here.
         Assert.True(before == JournalLines(),
             "отказ без владения обязан приходить до записи в журнал операций");
     }
@@ -199,9 +194,7 @@ public class HostSessionLifecycleTests : IDisposable
         Assert.False(Body(second)["released_by_this_request"]!.GetValue<bool>());
     }
 
-    // -----------------------------------------------------------------------------------------
-    // Release replay by operation_id (rule §2.1: the field is declared AND used)
-    // -----------------------------------------------------------------------------------------
+    // Release replay by operation_id (rule §2.1: the field is declared AND used).
 
     [Fact]
     public async Task Release_SameOperationId_ReplaysRecordedOutcomeAndDoesNotReleaseAgain()
@@ -218,8 +211,7 @@ public class HostSessionLifecycleTests : IDisposable
         Assert.True(Body(first)["released_by_this_request"]!.GetValue<bool>());
 
         // INVARIANT: the SAME id replays the recorded outcome — "released BY THIS request" stays true even
-        // though ownership is already gone. Running the procedure again would answer "not by this request",
-        // making replay indistinguishable from re-execution.
+        // though ownership is already gone; running the procedure again would answer "not by this request".
         var replay = await session.InvokeAsync(HostSession.ReleaseTool,
             new JsonObject { ["operation_id"] = id }, CancellationToken.None);
 
@@ -281,13 +273,12 @@ public class HostSessionLifecycleTests : IDisposable
             new JsonObject { ["operation_id"] = id }, CancellationToken.None);
 
         // INVARIANT: the same id but a NEW generation does not replay the previous session's outcome — the
-        // release runs again and is again "by this request". Without clearing the map the answer would be foreign.
+        // release runs again and is again "by this request".
         Assert.True(Body(again)["released_by_this_request"]!.GetValue<bool>());
     }
 
     /// <summary>INVARIANT: the session tools are in the published catalog — they cannot be added "for a
-    /// list-changed notification", since the base catalog is published at once, including a waiting Host.
-    /// The check lives here because this is what achieves availability without ownership.</summary>
+    /// list-changed notification", since the base catalog is published at once, including a waiting Host.</summary>
     [Fact]
     public void SessionTools_AreInThePublishedCatalog()
     {

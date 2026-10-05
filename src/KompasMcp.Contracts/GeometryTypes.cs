@@ -11,9 +11,9 @@ public enum SketchEntityKind
     Polyline,
 }
 
-/// <summary>Sketch primitive in sketch-local millimetres (spec 2.6). Each variant uses only the fields its
-/// <see cref="SketchEntityKind"/> needs; the validator rejects the rest so a circle cannot quietly carry an
-/// ignored <see cref="EndMm"/>.</summary>
+/// <summary>Sketch primitive in sketch-local millimetres (spec 2.6). Each variant uses only the fields its <see
+/// cref="SketchEntityKind"/> needs; the validator rejects the rest so a circle cannot quietly carry an ignored <see
+/// cref="EndMm"/>.</summary>
 public sealed record SketchEntityDto
 {
     public required SketchEntityKind Kind { get; init; }
@@ -32,8 +32,8 @@ public sealed record SketchEntityDto
     /// <summary>Arc start angle, degrees, CCW from +X of the sketch frame.</summary>
     public double? StartDeg { get; init; }
 
-    /// <summary>Arc sweep in degrees. Negative means clockwise — the sign is meaningful and must be
-    /// preserved by the adapter (spec 2.6).</summary>
+    /// <summary>Arc sweep in degrees. Negative means clockwise — the sign is meaningful and must be preserved by the
+    /// adapter (spec 2.6).</summary>
     public double? SweepDeg { get; init; }
 
     /// <summary>rectangle width along sketch +X, mm.</summary>
@@ -93,11 +93,11 @@ public enum ExtrudeDirection
     Symmetric,
 }
 
-/// <summary>How an extrusion ends. MEASURED on v24 (probe P2.1): <see cref="Blind"/> honours depth_mm for
-/// every directionType, while <see cref="Through"/> (vendor etThroughAll) is honoured only when the
-/// extrusion runs symmetric — with directionType 0 nothing is cut at all and with 1 every end condition
-/// collapses to the same result. Through therefore takes no depth: 1 mm and 1000 mm cut identically through
-/// a plate, and up-to-near-surface is a different condition, not a big number.</summary>
+/// <summary>How an extrusion ends. MEASURED: <see cref="Blind"/> honours depth_mm for every directionType, while <see
+/// cref="Through"/> (vendor etThroughAll) is honoured only when the extrusion runs symmetric — with directionType 0
+/// nothing is cut and with 1 every end condition collapses to the same result. Through therefore takes no depth: 1 mm
+/// and 1000 mm cut identically through a plate, and up-to-near-surface is a different condition, not a big
+/// number.</summary>
 public enum ExtrudeEndCondition
 {
     /// <summary>To a given depth (vendor etBlind). Default value.</summary>
@@ -107,41 +107,40 @@ public enum ExtrudeEndCondition
     Through,
 }
 
-/// <summary>Chamfer construction method (docs/05 SM-11). The method must be named by the caller because
-/// <see cref="DistanceAngle"/> is physically unavailable in API5: there is no angle in either
-/// <c>ksChamferDefinition</c> or <c>SetChamferParam(transfer, d1, d2)</c> — MEASURED by probe F on v24
-/// (12.09.2026).</summary>
+/// <summary>Chamfer construction method (docs/05 SM-11). The method must be named by the caller because <see
+/// cref="DistanceAngle"/> is physically unavailable in API5: no angle exists in either <c>ksChamferDefinition</c> or
+/// <c>SetChamferParam(transfer, d1, d2)</c>.
+/// History: docs/decisions/contracts.md#chamfer-mode</summary>
 public enum ChamferMode
 {
     /// <summary>Two legs; API5 route (<c>NewEntity(o3d_chamfer=33)</c> + <c>SetChamferParam</c>).</summary>
     TwoDistances,
 
-    /// <summary>Distance and angle; API7 route (<c>IChamfer.Angle</c>). The angle is in degrees (F.10).</summary>
+    /// <summary>Distance and angle; API7 route (<c>IChamfer.Angle</c>). The angle is in degrees.</summary>
     DistanceAngle,
 }
 
-/// <summary>Native-hole mode (docs/05 SM-07). All four were MEASURED by probe M on v24 and live only in
-/// API7 of the same session: API5 has a hole (<c>o3d_hole=52</c>) but no mode parameters in its
-/// definition.</summary>
+/// <summary>Native-hole mode (docs/05 SM-07). All were MEASURED and live only in API7 of the same session: API5 has a
+/// hole (<c>o3d_hole=52</c>) but no mode parameters in its definition.</summary>
 public enum HoleMode
 {
-    /// <summary>Blind with a flat bottom: <c>ksDTValue</c> + <c>ksEFFlat</c>; removes π·r²·h (M.4).</summary>
+    /// <summary>Blind with a flat bottom: <c>ksDTValue</c> + <c>ksEFFlat</c>; removes π·r²·h.</summary>
     BlindFlat,
 
-    /// <summary>Through counterbore: a pilot through plus an annular recess (M.2).</summary>
+    /// <summary>Through counterbore: a pilot through plus an annular recess.</summary>
     ThroughCounterbore,
 
-    /// <summary>Through countersink: a pilot through plus a conical chamfer (M.3).</summary>
+    /// <summary>Through countersink: a pilot through plus a conical chamfer.</summary>
     ThroughCountersink,
 }
 
 /// <summary>Rotation operation kind. THIS value decides the action, not <c>IRotated1.OperationResult</c>.</summary>
-/// <remarks>MEASURED (17.09.2026, step R.26, run <c>95fa8441</c>): on a prepared 120×120×40 plate, <c>o3d_bossRotated</c>
-/// with a written AND read-back <c>OperationResult = ksOperationCut</c> changed the volume by 0, while the same
-/// operation created as <c>Add(o3d_cutRotated)</c> removed exactly 25132.7412287183 mm³. So <c>OperationResult</c>
-/// round-trips and affects NOTHING — it is metadata. The kind is set by the CHOICE of factory call, and the client
-/// cannot "switch" an already-open operation; hence <c>kompas_update_feature</c> refuses a kind change: that would
-/// delete the feature and create a new one, not edit in place. History: docs/decisions/contracts.md#rotation-operation</remarks>
+/// <remarks>MEASURED: on a prepared plate <c>o3d_bossRotated</c> with a written AND read-back <c>OperationResult =
+/// ksOperationCut</c> changed the volume by 0, while the same operation created as <c>Add(o3d_cutRotated)</c> removed
+/// material. So <c>OperationResult</c> round-trips and affects NOTHING — it is metadata. The kind is set by the CHOICE
+/// of factory call; hence <c>kompas_update_feature</c> refuses a kind change (that would delete and recreate, not
+/// edit).
+/// History: docs/decisions/contracts.md#rotation-operation</remarks>
 public enum RotationOperation
 {
     /// <summary>First body: <c>o3d_baseRotated</c> (27).</summary>
@@ -154,13 +153,12 @@ public enum RotationOperation
     Cut,
 }
 
-/// <summary>Rotation direction — <c>ksDirectionTypeEnum</c>, as MEASURED (R.26.sector).</summary>
-/// <remarks>MEASURED on a half-turn: <c>Normal</c> (dtNormal=0) and <c>Both</c> (dtBoth=2) put material on both sides
-/// (x[−20,20]); <c>MiddlePlane</c> (dtMiddlePlane=3) is one-sided (x[0,20]) and the ONLY one whose direction change
-/// moves the sector; <c>Reverse</c> (dtReverse=1) builds NOTHING (<c>Update()</c> returns False, 0 bodies) and the
-/// server rejects it before mutating. The shipped <c>BEARING 410</c> used <c>Both</c> for a real partial rotation (R.22).
-/// INVARIANT: on a half-turn the volume does not differ between directions (a half-cylinder is symmetric), so "the
-/// sector moved" is proved only by the side of the material — compare the extent, not the volume.
+/// <summary>Rotation direction — <c>ksDirectionTypeEnum</c>, as MEASURED.</summary> <remarks>MEASURED on a half-turn:
+/// <c>Normal</c> (dtNormal=0) and <c>Both</c> (dtBoth=2) put material on both sides (x[−20,20]); <c>MiddlePlane</c>
+/// (dtMiddlePlane=3) is one-sided (x[0,20]) and the ONLY one whose direction change moves the sector; <c>Reverse</c>
+/// (dtReverse=1) builds NOTHING (<c>Update()</c> returns False, 0 bodies) and the server rejects it before mutating.
+/// INVARIANT: on a half-turn the volume does not differ between directions, so "the sector moved" is proved only by the
+/// side of the material, not the volume.
 /// History: docs/decisions/contracts.md#rotation-direction</remarks>
 public enum RotationDirection
 {
@@ -170,7 +168,7 @@ public enum RotationDirection
     /// <summary>dtReverse=1 — MEASURED: builds NOTHING. The server rejects it before mutating.</summary>
     Reverse,
 
-    /// <summary>dtBoth=2 — both sides; the value from the shipped BEARING 410.</summary>
+    /// <summary>dtBoth=2 — both sides.</summary>
     Both,
 
     /// <summary>dtMiddlePlane=3 — one-sided, and the only one that moves the sector.</summary>
@@ -242,16 +240,14 @@ public sealed record MeasurementDto
     public IReadOnlyList<string> UnverifiedAspects { get; init; } = Array.Empty<string>();
 }
 
-/// <summary>Section-motion type along a kinematic path — <c>ksEvolutionShiftSketchTypeEnum</c>.</summary>
-/// <remarks>DOC: ksevolutionshiftsketchtypeenum.html — the numbers were read from the official SDK v24 help
-/// (opened over the wire 20.09.2026), not inferred by analogy: <c>ksEvShiftParallel = 0</c> —
-/// «образующая переносится параллельно самой себе»; <c>ksEvShiftKeepAngle = 1</c> — «образующая при переносе
-/// сохраняет исходный угол с направляющей»; <c>ksEvShiftOrtogonal = 2</c> — «плоскость образующей
-/// выставляется и сохраняется ортогональной направляющей» (vendor spelling preserved).
-/// MEASURED (20.09.2026, probe <c>--b5</c>, steps B5.1/B5.2): on an R50/90° arc the orthogonal mode gave
-/// <c>24674.011002723353</c> against the expected <c>S × L = 24674.011002723397</c>, while the parallel one
-/// gave <c>15707.963267948984</c> — a difference of <c>8966.047734774369</c> mm³. Hence the orthogonality-mode
-/// acceptance row MUST stand on an ARC, not a segment.</remarks>
+/// <summary>Section-motion type along a kinematic path — <c>ksEvolutionShiftSketchTypeEnum</c>.</summary> <remarks>DOC:
+/// <c>ksevolutionshiftsketchtypeenum.html</c> — the numbers were read from the official SDK help, not inferred by
+/// analogy: <c>ksEvShiftParallel = 0</c> — «образующая переносится параллельно самой себе»; <c>ksEvShiftKeepAngle =
+/// 1</c> — «образующая при переносе сохраняет исходный угол с направляющей»; <c>ksEvShiftOrtogonal = 2</c> — «плоскость
+/// образующей выставляется и сохраняется ортогональной направляющей» (vendor spelling preserved). MEASURED on an arc:
+/// the orthogonal mode matched the expected <c>S × L</c>, the parallel one did not, so the orthogonality row MUST stand
+/// on an ARC.
+/// History: docs/decisions/contracts.md#sweep-shift-mode</remarks>
 public enum SweepShiftMode
 {
     /// <summary>ksEvShiftParallel = 0 — translated parallel to itself.</summary>
@@ -264,10 +260,9 @@ public enum SweepShiftMode
     Orthogonal,
 }
 
-/// <summary>How a loft builds its end sections — <c>ksLoftBuildingType</c>.</summary>
-/// <remarks>DOC: ksloftbuildingtype.html — the numbers were read from the official SDK v24 help (over the
-/// wire 20.09.2026): <c>ksLoftAuto = 0</c>, <c>ksLoftByNormal = 1</c>, <c>ksLoftByObject = 2</c>,
-/// <c>ksLoftCupola = 3</c>.</remarks>
+/// <summary>How a loft builds its end sections — <c>ksLoftBuildingType</c>.</summary> <remarks>DOC:
+/// <c>ksloftbuildingtype.html</c> — the numbers were read from the official SDK help, not inferred: <c>ksLoftAuto =
+/// 0</c>, <c>ksLoftByNormal = 1</c>, <c>ksLoftByObject = 2</c>, <c>ksLoftCupola = 3</c>.</remarks>
 public enum LoftBuilding
 {
     /// <summary>ksLoftAuto = 0 — automatic.</summary>
@@ -284,10 +279,8 @@ public enum LoftBuilding
 }
 
 /// <summary>Direction in which a shell's thin wall is formed. The VALUE mapping is MEASURED, not inferred.</summary>
-/// <remarks>MEASURED (20.09.2026, probe <c>--b5</c>, step B5.5; 100×80×10 box with the top face removed,
-/// t = 2): <c>thinType = true</c> gives <c>21631.999999999996</c> mm³ — INWARD (cavity 96·76·8);
-/// <c>thinType = false</c> gives <c>24832.000000000022</c> — OUTWARD (104·84·12 − 80000). Difference
-/// <c>3200.0000000000255</c> mm³. INVARIANT: the half types differ — API7 <c>IShell.ThinType</c> is
+/// <remarks>MEASURED on a box with the top face removed: <c>thinType = true</c> gives the INWARD cavity, <c>thinType =
+/// false</c> the OUTWARD one — the two differ. INVARIANT: the half types differ — API7 <c>IShell.ThinType</c> is
 /// <c>long</c>, API5 <c>ksShellDefinition.thinType</c> is <c>bool</c>.
 /// History: docs/decisions/contracts.md#shell-thin-direction</remarks>
 public enum ShellThinDirection

@@ -2,10 +2,10 @@ using System.Text.Json.Nodes;
 
 namespace KompasMcp.Contracts.Schema;
 
-/// <summary>Tiny builder for the JSON Schema subset this project publishes. The schemas built here are
-/// simultaneously (a) what <c>tools/list</c> advertises, (b) what the Host validates incoming
-/// arguments against, and (c) what <c>schemas/*.json</c> ships to clients — so the three cannot
-/// drift apart, which was the whole point of making one source of truth (spec 2.1).</summary>
+/// <summary>Tiny builder for the JSON Schema subset this project publishes. The schemas built here are simultaneously
+/// (a) what <c>tools/list</c> advertises, (b) what the Host validates incoming arguments against, and (c) what
+/// <c>schemas/*.json</c> ships to clients — so the three cannot drift apart, which was the whole point of making one
+/// source of truth (spec 2.1).</summary>
 public static class Sch
 {
     public const string Draft = "https://json-schema.org/draft/2020-12/schema";
@@ -99,8 +99,8 @@ public static class Sch
         return obj;
     }
 
-    /// <summary>Floating-point value. Bounds are part of the contract, so a negative length is
-    /// rejected before KOMPAS is ever touched. TEST: G09</summary>
+    /// <summary>Floating-point value. Bounds are part of the contract, so a negative length is rejected before KOMPAS
+    /// is ever touched. TEST: G09</summary>
     public static JsonObject Num(
         string? description = null,
         double? min = null,
@@ -175,9 +175,9 @@ public static class Sch
         ["enum"] = new JsonArray(values.Select(v => (JsonNode)JsonValue.Create(v)!).ToArray()),
     };
 
-    /// <summary>Nullable variant. JSON Schema expresses "string or null" as a type array, but a $ref cannot
-    /// carry a type — wrapping it in anyOf is what keeps "$ref or null" actually checkable instead
-    /// of quietly becoming "anything".</summary>
+    /// <summary>Nullable variant. JSON Schema expresses "string or null" as a type array, but a $ref cannot carry a
+    /// type — wrapping it in anyOf is what keeps "$ref or null" actually checkable instead of quietly becoming
+    /// "anything".</summary>
     public static JsonObject Nullable(JsonObject schema)
     {
         var clone = (JsonObject)schema.DeepClone();
@@ -201,12 +201,9 @@ public static class Sch
         return clone;
     }
 
-    /// <summary>
-    /// Adds a description to an already-built schema object. Needed where the object is produced by a
-    /// wrapper (<see cref="Nullable"/>) rather than by a helper that takes a description: a nullable
-    /// <c>$ref</c> is rebuilt as <c>anyOf</c>, so a description set on the inner <c>$ref</c> would be
-    /// dropped on the floor.
-    /// </summary>
+    /// <summary> Adds a description to an already-built schema object. Needed where the object is produced by a wrapper
+    /// (<see cref="Nullable"/>) rather than by a helper that takes a description: a nullable <c>$ref</c> is rebuilt as
+    /// <c>anyOf</c>, so a description set on the inner <c>$ref</c> would be dropped on the floor. </summary>
     public static JsonObject Described(JsonObject schema, string description)
     {
         schema["description"] = description;
@@ -251,9 +248,9 @@ public static class Sch
         return obj;
     }
 
-    /// <summary>Attaches shared definitions so per-tool schemas stay small and identical.
-    /// A JsonNode may have only one parent, so the definitions are cloned per schema: sharing the
-    /// instance would throw the moment a second tool took the same node.</summary>
+    /// <summary>Attaches shared definitions so per-tool schemas stay small and identical. A JsonNode may have only one
+    /// parent, so the definitions are cloned per schema: sharing the instance would throw the moment a second tool took
+    /// the same node.</summary>
     public static JsonObject WithDefs(JsonObject schema, JsonObject defs)
     {
         schema["$defs"] = (JsonObject)defs.DeepClone();

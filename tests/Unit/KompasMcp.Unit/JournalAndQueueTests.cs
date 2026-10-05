@@ -5,9 +5,9 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>Idempotency and crash semantics (spec 1.8). The interesting assertions are the ones about
-/// what must NOT happen: no second COM call on replay, and no "safe to retry" after a crash.</summary>
-/// <remarks>History: docs/decisions/tests.md#journal-tests</remarks>
+/// <summary>Idempotency and crash semantics (spec 1.8): the interesting assertions are about what must NOT
+/// happen — no second COM call on replay, no "safe to retry" after a crash.</summary>
+/// <remarks>History: docs/decisions/tests.md#journal-tests-2</remarks>
 public class OperationJournalTests : IDisposable
 {
     private readonly string _file;
@@ -46,9 +46,7 @@ public class OperationJournalTests : IDisposable
         Assert.Equal("""{"body_count":1}""", again.Existing.ResultJson);
     }
 
-    /// <summary>INVARIANT: a replay while in flight does NOT allow a second dispatch. MEASURED 04.10.2026:
-    /// the old journal answered <c>Proceed=true</c> to an unfinished record, and a repeated
-    /// <c>kompas_create_document</c> created two documents.</summary>
+    /// <summary>INVARIANT: a replay while in flight does NOT allow a second dispatch.</summary>
     [Fact]
     public void SameIdWhileStillInFlight_IsNotAllowedToProceedAgain()
     {
@@ -57,7 +55,6 @@ public class OperationJournalTests : IDisposable
         var first = journal.TryBegin(id, "kompas_create_document", Args(10), "doc-1", 3);
         Assert.True(first.Proceed);
 
-        // The record is still InFlight: the operation is running.
         var second = journal.TryBegin(id, "kompas_create_document", Args(10), "doc-1", 3);
 
         Assert.False(second.Proceed, "незавершённая операция не имеет права быть отправленной второй раз");
@@ -97,7 +94,6 @@ public class OperationJournalTests : IDisposable
         Assert.Equal(JournalOutcome.OutcomeUnknown, record!.Outcome);
         Assert.Equal(RetryPolicy.AfterReconciliation, record.Error!.RetryPolicy);
 
-        // Re-sending the same operation_id must not silently dispatch again.
         var decision = reopened.TryBegin(id, "kompas_extrude", Args(10), "doc-1", 3);
         Assert.False(decision.Proceed);
         Assert.Equal(JournalOutcome.OutcomeUnknown, decision.Existing!.Outcome);
@@ -111,8 +107,6 @@ public class OperationJournalTests : IDisposable
         {
             id = Guid.NewGuid().ToString();
             journal.TryBegin(id, "kompas_extrude", Args(10), "doc-1", 3);
-            // No terminal record: this is the crash case, and the append-only file still says
-            // "in flight" — which must NOT be read back as "it never happened".
         }
 
         using var restarted = new OperationJournal(_file);
@@ -132,19 +126,14 @@ public class OperationJournalTests : IDisposable
 
         journal.TryBegin(id, "kompas_save_document", Args(1), "doc-1", null);
 
-        // The append is flushed at TryBegin, not at completion: that ordering is the whole
-        // guarantee, so it is asserted on the file itself rather than on in-memory state.
         Assert.True(File.Exists(_file), "журнальный файл не создан до отправки команды");
         var text = ReadWhileOpen(_file);
         Assert.Contains("in_flight", text, StringComparison.Ordinal);
         Assert.Contains(id, text, StringComparison.Ordinal);
     }
 
-    /// <summary>Read a file the server may still hold open. File.ReadAllText asks for FileShare.Read, which
-    /// Windows refuses against a live writer handle — so anything observing the journal or the logs while the
-    /// server runs must open with FileShare.ReadWrite. The rule still holds for the HOST log, which keeps a
-    /// handle. The "readable while a writer is live" check is a separate test —
-    /// <see cref="SecondInstance_ReadsTheJournalWhileTheFirstIsWriting"/>.</summary>
+    /// <summary>Read a file the server may still hold open: File.ReadAllText refuses against a live writer, so
+    /// observation opens with FileShare.ReadWrite.</summary>
     private static string ReadWhileOpen(string path)
     {
         using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
@@ -168,8 +157,7 @@ public class OperationJournalTests : IDisposable
         using var restarted = new OperationJournal(_file);
         Assert.NotEmpty(restarted.Recent(10));
 
-        // INVARIANT: the skip is NAMED by a number and the torn tail is named a tail. "The journal was read"
-        // and "the journal was not read in full" are different claims — silence between them is indistinguishable.
+        // INVARIANT: the skip is NAMED by a number and the torn tail a tail — silence cannot tell them apart.
         Assert.Equal(1, restarted.SkippedLines);
         Assert.True(restarted.TornTail, "незавершённая последняя строка обязана быть названа рваным хвостом");
     }
@@ -183,8 +171,7 @@ public class OperationJournalTests : IDisposable
             journal.TryBegin(id, "kompas_extrude", Args(10), "doc-1", 3);
         }
 
-        // A garbage line IN THE MIDDLE, followed by a newline and another valid line: the cause is different
-        // (file corruption, not a killed process), and calling it a torn tail would misname what was measured.
+        // A garbage line IN THE MIDDLE, followed by a newline and a valid line: corruption, not a kill.
         File.AppendAllText(_file, "{ это не запись журнала }\n");
         using (var second = new OperationJournal(_file))
         {
@@ -197,13 +184,10 @@ public class OperationJournalTests : IDisposable
         Assert.NotEmpty(restarted.Recent(10));
     }
 
-    /// <summary>INVARIANT (order R1): a journal opened for writing by ANOTHER instance is readable.</summary>
-    /// <remarks>MEASURED (21.09.2026): the read path (<c>File.ReadLines</c> with <c>FileShare.Read</c>)
-    /// forbade the write a live writer held, and the second Host died with an unhandled <c>IOException</c>
-    /// before transport start. INVARIANT: a second reader cannot know whether the writer is alive, so an
-    /// unfinished record reads as <see cref="JournalOutcome.OutcomeUnknown"/> with a reconciliation demand —
-    /// the crash-recovery rule, unweakened; this is why the journal owner must be one (R3).
-    /// History: docs/decisions/tests.md#journal-tests</remarks>
+    /// <summary>INVARIANT: a journal opened for writing by ANOTHER instance is readable.</summary>
+    /// <remarks>INVARIANT: a second reader cannot know whether the writer is alive, so an unfinished record
+    /// reads as <see cref="JournalOutcome.OutcomeUnknown"/> with a reconciliation demand.
+    /// History: docs/decisions/tests.md#journal-tests-2</remarks>
     [Fact]
     public void SecondInstance_ReadsTheJournalWhileTheFirstIsWriting()
     {
@@ -211,29 +195,27 @@ public class OperationJournalTests : IDisposable
         var id = Guid.NewGuid().ToString();
         first.TryBegin(id, "kompas_extrude", Args(10), "doc-1", 3);
 
-        // A second instance on the same path — and not a single exception.
         using var second = new OperationJournal(_file);
 
         Assert.True(second.TryGet(id, out var seen), "второй экземпляр обязан прочитать запись первого");
         Assert.Equal(JournalOutcome.OutcomeUnknown, seen!.Outcome);
         Assert.True(seen.NeedsReconciliation);
 
-        // Not a single unparsed line: reading runs under the same cross-process lock as writing, so half a
-        // line cannot be taken for a torn tail.
+        // Not a single unparsed line: reading runs under the same cross-process lock as writing.
         Assert.Equal(0, second.SkippedLines);
         Assert.False(second.TornTail);
 
-        // And the first keeps writing: sharing is needed in BOTH directions, not only on read.
+        // Sharing is needed in BOTH directions, not only on read.
         first.Complete(id, """{"body_count":1}""");
         using var third = new OperationJournal(_file);
         Assert.True(third.TryGet(id, out var completed));
         Assert.Equal(JournalOutcome.Succeeded, completed!.Outcome);
     }
 
-    /// <summary>INVARIANT (order R2): the writes of two instances do not tear each other's lines.</summary>
-    /// <remarks>The write handle is no longer held for the process lifetime: each write is open-append-close
-    /// in one call. The result is checked, not "the code looks shared": 400 records from two independent
-    /// instances, read by a third, with no unparsed and no lost line.</remarks>
+    /// <summary>INVARIANT: the writes of two instances do not tear each other's lines.</summary>
+    /// <remarks>The result is checked, not "the code looks shared": 400 records from two instances, read by a
+    /// third.
+    /// History: docs/decisions/tests.md#journal-tests-2</remarks>
     [Fact]
     public async Task TwoInstancesAppendingConcurrently_ProduceNoTornLines()
     {
@@ -258,9 +240,9 @@ public class OperationJournalTests : IDisposable
         Assert.Equal(2 * perWriter, reader.Recent(10_000).Count);
     }
 
-    /// <summary>INVARIANT (FIX A): with the cross-process lock unavailable the journal write does NOT happen
-    /// — no intent recorded, no in-memory operation, no command leaves, and the refusal is NAMED.
-    /// History: docs/decisions/tests.md#journal-tests</summary>
+    /// <summary>INVARIANT: with the cross-process lock unavailable the journal write does NOT happen —
+    /// no intent recorded, no in-memory operation, and the refusal is NAMED.</summary>
+    /// <remarks>History: docs/decisions/tests.md#journal-tests-2</remarks>
     [Fact]
     public void BeginRefused_WhenLockHeldElsewhere_NothingRecordedAndNamedRefusal()
     {
@@ -277,7 +259,7 @@ public class OperationJournalTests : IDisposable
             "неудачная запись намерения не имеет права оставлять фиктивную начатую операцию");
         Assert.Equal(1, journal.RefusedAppends);
 
-        // And it is not on disk either: a refusal is "not recorded", not "recorded without the lock".
+        // A refusal is "not recorded", not "recorded without the lock".
         var text = File.Exists(_file) ? ReadWhileOpen(_file) : string.Empty;
         Assert.DoesNotContain(id, text, StringComparison.Ordinal);
     }
@@ -305,9 +287,9 @@ public class OperationJournalTests : IDisposable
         Assert.Equal(JournalOutcome.Succeeded, again.Existing!.Outcome);
     }
 
-    /// <summary>INVARIANT (FIX A, terminal write): if the outcome line did not land AFTER a completed
-    /// mutation, the outcome cannot be declared recorded — in memory it is marked for reconciliation, the
-    /// caller gets <c>false</c>, and the durable journal still says <c>in_flight</c>.</summary>
+    /// <summary>INVARIANT (FIX A, terminal write): if the outcome line did not land AFTER a completed mutation,
+    /// the outcome cannot be declared recorded — in memory it is marked for reconciliation, the caller gets
+    /// <c>false</c>, and the durable journal still says <c>in_flight</c>.</summary>
     [Fact]
     public void TerminalWriteFailureAfterMutation_RequiresReconciliation()
     {
@@ -361,7 +343,6 @@ public class OperationJournalTests : IDisposable
             restarted.Complete(secondId, """{"body_count":2}""");
         }
 
-        // Intent B is not lost — that was the substance of the defect.
         using var third = new OperationJournal(_file);
         Assert.True(third.TryGet(firstId, out var first), "прежняя запись не имеет права теряться");
         Assert.Equal(JournalOutcome.Succeeded, first!.Outcome);
@@ -370,10 +351,10 @@ public class OperationJournalTests : IDisposable
         Assert.Equal(1, third.SkippedLines); // the torn tail is still NAMED a skip
     }
 
-    /// <summary>INVARIANT (FIX §4, 05.10.2026): a torn tail is repaired ONLY under an acquired lock. While
-    /// another writer holds the lock the repair does NOT run — else the appended newline would land inside a
-    /// foreign intact record. The first write repairs the tail under ITS OWN lock.
-    /// History: docs/decisions/tests.md#journal-tests</summary>
+    /// <summary>INVARIANT (FIX §4): a torn tail is repaired ONLY under an acquired lock. While another writer
+    /// holds the lock the repair does NOT run — else the newline would land inside a foreign intact record.
+    /// The first write repairs the tail under ITS OWN lock.</summary>
+    /// <remarks>History: docs/decisions/tests.md#journal-tests-2</remarks>
     [Fact]
     public void TornTail_IsNotRepairedWithoutTheLock_AndTheFirstAppendRepairsIt()
     {
@@ -387,8 +368,8 @@ public class OperationJournalTests : IDisposable
         File.AppendAllText(_file, "{\"operation_id\":\"truncat");
         var before = File.ReadAllBytes(_file);
 
-        // ANOTHER THREAD holds the lock: a named Windows lock belongs to a THREAD, and a second object on the
-        // same thread would take it too. So the holder is a separate thread.
+        // ANOTHER THREAD holds the lock: a named Windows lock belongs to a THREAD, so a second object on the
+        // same thread would take it too.
         using var acquired = new ManualResetEventSlim(false);
         using var release = new ManualResetEventSlim(false);
         var holder = new Thread(() =>
@@ -415,8 +396,7 @@ public class OperationJournalTests : IDisposable
             Assert.Equal(0, unlocked.RepairedTornTails);
             Assert.Equal(before, File.ReadAllBytes(_file)); // THE FILE IS UNCHANGED — that is the substance of the fix
 
-            // The holder releases the lock — and the SAME record opened without the lock must repair the tail
-            // under ITS OWN lock, not glue its line to the fragment.
+            // The holder releases the lock — and the SAME record must now repair the tail under ITS OWN lock.
             release.Set();
             holder.Join(TimeSpan.FromSeconds(10));
 
@@ -442,9 +422,9 @@ public class OperationJournalTests : IDisposable
         }
     }
 
-    /// <summary>INVARIANT (FIX M1): the <c>SameOperationId</c> policy on a recorded CLEAN failure is now
-    /// feasible — a repeat with the same operation_id reaches re-dispatch. A partial effect is not, and the
-    /// distinction is drawn by substance, not by error text.</summary>
+    /// <summary>INVARIANT (FIX M1): the <c>SameOperationId</c> policy on a recorded CLEAN failure is feasible —
+    /// a repeat with the same operation_id reaches re-dispatch. A partial effect is not, and the distinction is
+    /// drawn by substance, not by error text.</summary>
     [Fact]
     public void CleanFailure_CanBeRetriedWithTheSameOperationId()
     {
@@ -459,8 +439,7 @@ public class OperationJournalTests : IDisposable
         Assert.True(again.Proceed, "чистый отказ: ничего не применено, повтор тем же id обязан дойти до отправки");
         Assert.Equal(1, journal.RestartsAfterCleanFailure);
 
-        // And this is not "the old one was forgotten": the restarted operation is again in_flight, and the
-        // terminal record overrides the old failure.
+        // Not "the old one was forgotten": the restarted operation is again in_flight.
         Assert.True(journal.TryGet(id, out var record));
         Assert.Equal(JournalOutcome.InFlight, record!.Outcome);
         journal.Complete(id, """{"body_count":1}""");
@@ -511,9 +490,8 @@ public class OperationJournalTests : IDisposable
         var taken = await queue.DequeueAsync(default);
         Assert.Equal("first", taken!.OperationId);
 
-        // The cancelled one is skipped when the reader reaches it, so it is never handed to COM.
-        // With nothing else queued the reader then waits, and a cancelled wait is reported as
-        // OperationCanceledException rather than as a null command.
+        // The cancelled one is skipped when the reader reaches it, so it is never handed to COM; a cancelled
+        // wait is reported as OperationCanceledException, not as a null command.
         using var gate = new CancellationTokenSource(150);
         await Assert.ThrowsAsync<OperationCanceledException>(() => queue.DequeueAsync(gate.Token).AsTask());
         Assert.False(queue.IsQueued("second"));
@@ -531,12 +509,9 @@ public class OperationJournalTests : IDisposable
         Assert.False(queue.TryCancelQueued("running"));
     }
 
-    /// <summary>The Host admits a mutation through this queue and then dispatches it to the Worker directly —
-    /// the queue is the counter of outstanding CAD work, not the thing that executes it. A served
-    /// command must therefore release its slot, or <c>capacity</c> stops meaning "concurrently
-    /// waiting" and becomes a lifetime budget of mutations per process. That is not a hypothetical:
-    /// the acceptance run grew past 64 mutations in one session and every later call died with
-    /// QUEUE_FULL while the Worker was idle.</summary>
+    /// <summary>A served command must release its slot, or <c>capacity</c> becomes a lifetime budget of
+    /// mutations per process.</summary>
+    /// <remarks>History: docs/decisions/tests.md#journal-tests-2</remarks>
     [Fact]
     public async Task Queue_ServedCommandsReleaseTheirSlots_SecondHundredthMutationIsNotTheLast()
     {
@@ -558,8 +533,7 @@ public class OperationJournalTests : IDisposable
     [Fact]
     public async Task Queue_WithoutRelease_StillRefusesWhenFull()
     {
-        // The backpressure itself must survive the fix: a client that fires mutations faster than
-        // CAD serves them is told to back off, not queued without bound (docs/03 §1.13).
+        // The backpressure itself must survive the fix (docs/03 §1.13): over-firing is told to back off.
         await using var queue = new CadCommandQueue(capacity: 2);
         queue.Enqueue(new QueuedCommand("a", "t", new CancellationTokenSource()));
         queue.Enqueue(new QueuedCommand("b", "t", new CancellationTokenSource()));
@@ -570,16 +544,14 @@ public class OperationJournalTests : IDisposable
         Assert.Equal(ErrorCodes.QueueFull, ex.Code);
         Assert.Equal(2, queue.Count);
 
-        // One completion is enough to let the refused one in.
         queue.Complete("a");
         queue.Enqueue(new QueuedCommand("c", "t", new CancellationTokenSource()));
         Assert.Equal(2, queue.Count);
     }
 
-    /// <summary>Holds the journal's cross-process lock FROM ANOTHER THREAD: the "write without the lock"
-    /// check only makes sense when someone else really holds the lock. The name comes from
-    /// <see cref="OperationJournal.FileLockPurpose"/>, not typed as a literal — a private copy would diverge
-    /// from the product and the check would measure a foreign lock.</summary>
+    /// <summary>Holds the journal's cross-process lock FROM ANOTHER THREAD: the "write without the lock" check
+    /// only makes sense when someone else really holds it. The name comes from
+    /// <see cref="OperationJournal.FileLockPurpose"/>, not a literal.</summary>
     private sealed class JournalLockHolder : IDisposable
     {
         private readonly ManualResetEventSlim _acquired = new(false);

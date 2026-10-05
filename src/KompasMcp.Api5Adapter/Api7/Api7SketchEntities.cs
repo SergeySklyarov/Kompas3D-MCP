@@ -26,10 +26,13 @@ internal sealed record SketchEntitiesRead(
     string Route,
     IReadOnlyList<string> Notes);
 
-/// <summary>Sketch entities: entering an EXISTING sketch, enumerating the view's objects and a stable object address (<c>dep.sketch.entities</c>, step 0 of the product-routes order).</summary>
-/// <remarks>DOC: the route is from the official v24 help, not a guess (<c>DEPENDENCIES_PRODUCT_ROUTES_STEP0_REPORT_20260921.md</c> §6.4): <c>ISketch.BeginEdit</c> → <c>IFragmentDocument</c> → <c>IViewsAndLayersManager.Views</c> → <c>IView</c> → <c>IDrawingContainer.GetObjects</c>; the address is <c>IKompasDocument1.GetObjectId</c>; the exit is <c>ISketch.EndEdit</c>.
-/// MEASURED (InteropScan over <c>Libs/PolynomLib/Bin/Client/Interop.KompasAPI7.dll</c>, build 24.0.0.2799): four divergences between the help and the shipped interop — (1) the page names <c>BeginEdit(bool readOnly)</c>, the interop has TWO members <c>BeginEdit()</c> and <c>BeginEditEx(Boolean ReadOnly)</c>; (2) the page puts the address on <c>IKompasDocument.GetObjectId</c>, but it is declared on <c>IKompasDocument1</c> (IID <c>{58890FE8-E671-4561-994A-600DD29032E4}</c>) and absent from <c>IKompasDocument</c>, so a QI is required and is done explicitly; (3) the page names <c>IDrawingContainer.GetObjects(std::vector&lt;int32_t&gt;)</c> but the interop parameter is declared <c>Object</c> (SAFEARRAY), so an <c>int[]</c> is passed and a QI to <c>IDrawingContainer</c> is mandatory; (4) <c>FragmentDocument</c> is a co-class with ZERO members, its members live on <c>IFragmentDocument</c> (same IID <c>{E19CE626-DF9C-48C4-A83D-3E3BC7F0DACA}</c>).
-/// MEASURED: the shipped assembly has ZERO members containing <c>ByName</c>, whereas the help documents <c>IAxes3D.GetAxis3DByName</c>, <c>IPoints3D.GetPoint3DByName</c> and <c>ISketchs.GetSketchByName</c>; therefore "name as a stable address" is implemented by ENUMERATING the collection and comparing <c>Name</c>, assembled only from documented members (<c>Count</c>, the indexed property, <c>Name</c>).
+/// <summary>Sketch entities as OBJECTS with a stable address (<c>dep.sketch.entities</c>).</summary>
+/// <remarks>DOC: the route is from the official v24 help, not a guess
+/// (<c>DEPENDENCIES_PRODUCT_ROUTES_STEP0_REPORT_20260921.md</c> §6.4): <c>ISketch.BeginEdit</c> →
+/// <c>IFragmentDocument</c> → <c>IViewsAndLayersManager.Views</c> → <c>IView</c> →
+/// <c>IDrawingContainer.GetObjects</c>; the address is <c>IKompasDocument1.GetObjectId</c>; the exit
+/// is <c>ISketch.EndEdit</c>. MEASURED (InteropScan): the help and the shipped interop diverge on
+/// four points; a name is resolved by ENUMERATING the collection and comparing <c>Name</c> (<c>ByName</c> absent).
 /// History: docs/decisions/adapter-api7.md#sketch-entities</remarks>
 internal static class Api7SketchEntities
 {
@@ -135,14 +138,9 @@ internal static class Api7SketchEntities
             var rows = new List<SketchEntityRow>();
             var notes = new List<string>();
 
-            // THE FRAGMENT DOCUMENT ISSUES THE ADDRESS, NOT THE PART DOCUMENT. MEASURED 21.09.2026
-            // (scratch/_probe_dse_dpt.py, discriminating probe over receiver and parent, binaries
-            // publish-deproutes-20260921-e): only a FRAGMENT receiver yields a non-empty address,
-            // while a part receiver yields "" for every parent. DOC: the help declares parent as
-            // «родительский документ объекта (nullptr — текущий документ)», and under BeginEditEx the
-            // current document is the sketch fragment, where the entity lives. The fragment answers
-            // QI(IKompasDocument1) (measured: True) even though IFragmentDocument does not declare
-            // that member.
+            // THE FRAGMENT DOCUMENT ISSUES THE ADDRESS, NOT THE PART DOCUMENT. DOC: the help declares
+            // parent as «родительский документ объекта (nullptr — текущий документ)», and under
+            // BeginEditEx the current document is the sketch fragment, where the entity lives.
             // History: docs/decisions/adapter-api7.md#sketch-address
             var fragmentAsDocument = fragment as IKompasDocument1;
             notes.Add(fragmentAsDocument is not null
@@ -265,18 +263,14 @@ internal static class Api7SketchEntities
         {
             try
             {
-                // THE ADDRESS RECEIVER IS THE FRAGMENT DOCUMENT, NOT THE PART DOCUMENT — MEASURED,
-                // not derived. DOC (ksapi_ikompasdocument_getobjectid.html): GetObjectId(object,
-                // parent), «parent — родительский документ объекта (nullptr - текущий документ)».
-                // Under BeginEditEx(true) the current document is the sketch fragment, and the
-                // entity belongs to it. MEASURED 21.09.2026 (scratch/_probe_dse_dpt.py,
-                // publish-deproutes-20260921-e, seven candidates): a fragment receiver yields a
-                // non-empty address, a part receiver yields "" (a SILENT refusal — empty string, no
-                // exception). The second parameter is `null`, the ONLY expressible form: in the
-                // shipped Interop.KompasAPI7.dll `IKompasDocument1` is NOT an `IKompasAPIObject`
-                // (CS1503: cannot convert from 'IKompasDocument1' to 'IKompasAPIObject'), so "the
-                // current document" is expressed by the absence of a parent while the receiver
-                // document is named explicitly.
+                // THE ADDRESS RECEIVER IS THE FRAGMENT DOCUMENT, NOT THE PART DOCUMENT — MEASURED.
+                // DOC (ksapi_ikompasdocument_getobjectid.html): GetObjectId(object, parent), «parent —
+                // родительский документ объекта (nullptr - текущий документ)». Under BeginEditEx(true)
+                // the current document is the sketch fragment, and the entity belongs to it. A fragment
+                // receiver yields a non-empty address, a part receiver yields "" (a SILENT refusal, no
+                // exception). The second parameter is `null`, the ONLY expressible form: in the shipped
+                // interop `IKompasDocument1` is NOT an `IKompasAPIObject`, so "the current document" is
+                // expressed by the absence of a parent while the receiver document is named explicitly.
                 // History: docs/decisions/adapter-api7.md#sketch-address
                 var addressDocument = fragmentDocument ?? document;
                 address = addressDocument.GetObjectId(apiObject, null);

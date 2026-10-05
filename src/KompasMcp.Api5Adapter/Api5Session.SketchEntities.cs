@@ -9,9 +9,9 @@ namespace KompasMcp.Api5Adapter;
 /// <summary>Sketch entities as objects with a STABLE ADDRESS: enumeration, addressed read and
 /// addressed edit (<c>kompas_list_sketch_entities</c>, <c>kompas_edit_sketch_entity</c>).</summary>
 /// <remarks>
-/// INVARIANT: the ADDRESS is the string returned by <c>IKompasDocument1.GetObjectId</c> and accepted back by <c>IKompasDocument1.FindObjectById</c>; a collection index is NOT an address (a rebuild shifts it, so "the N-th object" would stop pointing at the same entity after the first mutation).
-/// INVARIANT: an edit is confirmed by RE-RESOLVING THE ADDRESS, not by a return code — for <c>delete</c> the address no longer resolves, for <c>set_layer</c> the layer number is read back; a code that "did not fail" is not declared an application.
-/// LIMIT: the sketch edit schema of other operations recreates the whole contour rather than editing an entity; <c>delete</c> here removes EXACTLY ONE entity named by an address, the rest staying in place — the discriminating sign of addressability.
+/// INVARIANT: the ADDRESS is the string from <c>IKompasDocument1.GetObjectId</c>, accepted back by
+/// <c>IKompasDocument1.FindObjectById</c>; a collection index is NOT an address (a rebuild shifts it).
+/// INVARIANT: an edit is confirmed by RE-RESOLVING THE ADDRESS, not by a return code.
 /// History: docs/decisions/adapter-sketch.md#sketch-entities
 /// </remarks>
 public sealed partial class Api5Session
@@ -99,8 +99,9 @@ public sealed partial class Api5Session
 
     /// <summary>Addressed edit of one existing sketch entity.</summary>
     /// <remarks>
-    /// INVARIANT: the edit entry is for WRITING — <c>BeginEdit()</c>, not <c>BeginEditEx(true)</c>: the edit must change the model, and a "read-only" mode would produce a refusal that looks like a missing capability.
-    /// LIMIT: unlike a <c>delete_entities</c> schema that rebuilds the whole contour, mode <c>delete</c> here removes EXACTLY ONE entity named by an address, leaving the others in place.
+    /// INVARIANT: the edit entry is for WRITING — <c>BeginEdit()</c>, not <c>BeginEditEx(true)</c>: a
+    /// "read-only" mode would produce a refusal that looks like a missing capability.
+    /// LIMIT: <c>delete</c> removes EXACTLY ONE entity named by an address, leaving the others in place.
     /// History: docs/decisions/adapter-sketch.md#sketch-entity-delete
     /// </remarks>
     public SketchEntityEditResult EditSketchEntity(EditSketchEntityCommand command)
@@ -190,12 +191,9 @@ public sealed partial class Api5Session
                 RetryPolicy.ReacquireContext);
         }
 
-        // INVARIANT: address resolution happens INSIDE the edit session. The address belongs to the
-        // sketch's FRAGMENT document, not to the part document: MEASURED 21.09.2026 by a discriminating
-        // receiver/parent probe (scratch/_probe_dse_dpt.py, binaries publish-deproutes-20260921-e) —
-        // the part document answers an empty string for all four entities, the fragment document yields
-        // the address. The fragment exists only between BeginEdit() and EndEdit(), so both the address
-        // resolution and the edit confirmation by re-resolution live inside ApplySketchEntityEdit.
+        // INVARIANT: address resolution happens INSIDE the edit session: the address belongs to the
+        // sketch's FRAGMENT document, not the part document, and the fragment exists only between
+        // BeginEdit() and EndEdit().
         // History: docs/decisions/adapter-sketch.md#fragment-document
         var outcome = ApplySketchEntityEdit(sketch7, command, notes);
         if (outcome.ArgumentFailure is not null)
@@ -295,11 +293,10 @@ public sealed partial class Api5Session
         string? AfterResolveFailure = null);
 
     /// <summary>Edit entry, ADDRESS RESOLUTION, edit, CONFIRMATION and EXIT — in one session.</summary>
-    /// <remarks>INVARIANT: the address belongs to the sketch's FRAGMENT document, and the fragment
-    /// exists only between <c>BeginEdit()</c> and <c>EndEdit()</c>. Hence both <c>FindObjectById</c>
-    /// and the re-resolution used as confirmation are taken HERE, not by the caller: outside the
-    /// session the part document answers an empty string for the same address (MEASURED 21.09.2026,
-    /// <c>scratch/_probe_dse_dpt.py</c>, binaries <c>publish-deproutes-20260921-e</c>).</remarks>
+    /// <remarks>INVARIANT: the address belongs to the sketch's FRAGMENT document, which exists only
+    /// between <c>BeginEdit()</c> and <c>EndEdit()</c>; outside the session the part document answers
+    /// an empty string for the same address.
+    /// History: docs/decisions/adapter-sketch.md#fragment-document</remarks>
     private static SketchEntityEditOutcome ApplySketchEntityEdit(
         ISketch sketch, EditSketchEntityCommand command, List<string> notes)
     {
@@ -353,12 +350,9 @@ public sealed partial class Api5Session
                 case "set_layer":
                     var wantedLayer = command.LayerNumber!.Value;
                     drawing.LayerNumber = wantedLayer;
-                    // The Update() return is RECORDED BUT IS NOT THE VERDICT. Project rule: "a
-                    // successful code does not equal an applied edit", and the converse holds too — an
-                    // unsuccessful code does not prove the edit was not applied. MEASURED 21.09.2026
-                    // (scratch/_probe_dse_edit.py on binaries publish-deproutes-20260921-f):
-                    // IDrawingObject.LayerNumber = 7 is accepted while Update() returns non-true, so
-                    // the application sign is taken by READING BACK below, not from this return.
+                    // The Update() return is RECORDED BUT IS NOT THE VERDICT: an unsuccessful code does
+                    // not prove the edit was not applied, so the application sign is taken by reading
+                    // the value back below, not from this return.
                     // History: docs/decisions/adapter-sketch.md#update-return
                     updateReturned = SafeUpdate(drawing);
                     notes.Add($"Действие: IDrawingObject.LayerNumber = {wantedLayer}; " +

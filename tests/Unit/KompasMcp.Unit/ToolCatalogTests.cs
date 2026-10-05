@@ -4,14 +4,14 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>INVARIANT: a registered tool must be callable with exactly the arguments its own published
-/// schema demands. A tool that cannot be called is exactly the stub the catalog forbids.</summary>
+/// <summary>INVARIANT: a registered tool must be callable with exactly the arguments its own published schema
+/// demands — a tool that cannot be called is the stub the catalog forbids.</summary>
 /// <remarks>MEASURED: two defects broke this at once and were invisible to every acceptance run until a test
-/// finally called <c>kompas_read_topology</c> over MCP — an entry declared through <c>Mutation()</c> with
+/// called <c>kompas_read_topology</c> over MCP — an entry declared through <c>Mutation()</c> with
 /// <c>requiresOperationId: false</c> never published the field the Host routed through the journal, and
-/// <c>IsMutation</c> is <c>Destructive || RequiresOperationId</c>, so the journal received a null operation
-/// id and the call died inside the Host as ArgumentNullException before KOMPAS was reached.
-/// History: docs/decisions/tests.md#tool-catalog</remarks>
+/// <c>IsMutation</c> is <c>Destructive || RequiresOperationId</c>, so the journal received a null operation id
+/// and the call died inside the Host as ArgumentNullException before KOMPAS.
+/// History: docs/decisions/tests.md#tool-catalog-2</remarks>
 public class ToolCatalogTests
 {
     private static ToolDefinition Tool(string name) =>
@@ -45,10 +45,9 @@ public class ToolCatalogTests
     {
         var tool = Tool(name);
 
-        // These two register structural references, but they change neither document nor model, so
-        // docs/02 §2.1 (operation_id is demanded of mutations) makes them reads. The assertion that
-        // matters is IsMutation == false: that is the flag choosing between the journal and a
-        // direct dispatch, and while it was true the schema published no operation_id to fill it.
+        // These two register structural references, but they change neither document nor model, so docs/02 §2.1
+        // makes them reads. The assertion that matters is IsMutation == false: that flag chooses between the
+        // journal and a direct dispatch.
         Assert.False(tool.Behaviour.Destructive);
         Assert.False(tool.IsMutation);
         Assert.False(tool.Behaviour.RequiresOperationId);
@@ -57,10 +56,9 @@ public class ToolCatalogTests
     [Fact]
     public void NonMutations_DoNotAdvertiseOperationId()
     {
-        // INVARIANT (rule refined 04.10.2026, not weakened): the sign is not "declared or not" but "declared
-        // only if the tool ITSELF replays the outcome of a repeat". The Host tool `kompas_release_session` must
-        // declare the field (row S03b requires it for destructiveHint=true) but writes no journal. A field the
-        // client can send that neither the journal nor the tool uses is still forbidden.
+        // INVARIANT (rule refined, not weakened): the sign is not "declared or not" but "declared only if the
+        // tool ITSELF replays the outcome of a repeat". <c>kompas_release_session</c> must declare the field
+        // (row S03b for destructiveHint=true) but writes no journal.
         foreach (var tool in ToolCatalog.All.Where(t => !t.IsMutation))
         {
             var properties = tool.InputSchema["properties"] as JsonObject;
@@ -75,10 +73,8 @@ public class ToolCatalogTests
     [Fact]
     public void ReleaseSession_DeclaresTheOperationIdItReplays()
     {
-        // INVARIANT: declaring the field and using it is one check, not two — "declared and swallowed" is the
-        // defect the project catches with a separate class. Here the field must be BOTH in the schema AND
-        // supported by behaviour (<c>ReplaysOperationId</c>), while the tool stays a Host tool and does not
-        // become a model mutation.
+        // INVARIANT: declaring the field and using it is one check, not two — the field must be BOTH in the
+        // schema AND supported by behaviour (<c>ReplaysOperationId</c>), while the tool stays a Host tool.
         var tool = Tool("kompas_release_session");
         var properties = (JsonObject)tool.InputSchema["properties"]!;
 
@@ -101,8 +97,8 @@ public class ToolCatalogTests
     public void SketchStatus_IsAReadThatMintsNoHandles()
     {
         // INVARIANT: the tool answers a question about the STATE of an existing sketch — it creates no
-        // references, changes no model and enters no edit mode. So it must be a read, else the call would enter
-        // the mutation journal and bump the revision for an operation that never happened.
+        // references, changes no model and enters no edit mode. So it must be a read, else the call enters the
+        // journal and bumps the revision for an operation that never happened.
         var tool = Tool("kompas_get_sketch_status");
 
         Assert.False(tool.Behaviour.Destructive);
@@ -114,9 +110,9 @@ public class ToolCatalogTests
     [Fact]
     public void SketchStatus_DemandsASketchRefAndNothingElse()
     {
-        // INVARIANT: addressing is an explicit reference. No active document, no selection, no "first sketch
-        // that comes along": without this check the next refactor could add a convenient optional field and
-        // bring guessing back into the contract.
+        // INVARIANT: addressing is an explicit reference — no active document, no selection, no "first sketch
+        // that comes along"; without this check a refactor could add a convenient optional field and bring
+        // guessing back into the contract.
         var schema = Tool("kompas_get_sketch_status").InputSchema;
         var properties = (JsonObject)schema["properties"]!;
         var required = ((JsonArray)schema["required"]!).Select(n => n!.GetValue<string>()).ToArray();
@@ -134,8 +130,8 @@ public class ToolCatalogTests
     public void SketchStatus_DescriptionCarriesTheHonestLimits()
     {
         // The description is the only place where the client reads what the tool does NOT say. Three statements
-        // must survive the next catalog edit: the "!" value is not confirmed live, there is no degree of freedom,
-        // and the read does not change the model.
+        // must survive: the "!" value is not confirmed live, there is no degree of freedom, and the read does not
+        // change the model.
         var description = Tool("kompas_get_sketch_status").Description;
 
         Assert.Contains("degrees_of_freedom всегда null", description, StringComparison.Ordinal);
@@ -149,11 +145,10 @@ public class ToolCatalogTests
     [Fact]
     public void ListBodies_PublishesTheHandleContractItsReadersDependOn()
     {
-        // MEASURED 16.09.2026 (rows EX34/EX43): four consecutive calls on an unchanged body returned four
-        // different strings, while the earlier string stayed usable for kompas_measure. That makes a body
-        // reference a handle, not an identifier — a tester who does not know it writes an assertion that can only
-        // fail, as EX43 did twice before switching to bbox comparison. The description is the only place a client
-        // reads it, so it is asserted here.
+        // MEASURED (rows EX34/EX43): four consecutive calls on an unchanged body returned four different strings,
+        // while the earlier string stayed usable for kompas_measure — a body reference is a handle, not an
+        // identifier, and a tester who does not know it writes an assertion that can only fail. The description
+        // is the only place a client reads it, so it is asserted here.
         var description = Tool("kompas_list_bodies").Description;
 
         Assert.Contains("ручка", description, StringComparison.Ordinal);

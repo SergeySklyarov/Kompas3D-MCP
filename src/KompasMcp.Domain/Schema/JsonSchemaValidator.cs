@@ -9,13 +9,13 @@ namespace KompasMcp.Domain.Schema;
 public sealed record SchemaViolation(string Path, string Keyword, string Message);
 
 /// <summary>Validator for the JSON Schema subset this project publishes (spec 2.1): <c>type</c>, <c>properties</c>,
-/// <c>required</c>, <c>additionalProperties:false</c>, <c>enum</c>, numeric bounds, <c>items</c>/<c>minItems</c>/<c>maxItems</c>,
-/// <c>minLength</c>/<c>maxLength</c>, <c>pattern</c>, <c>$ref</c> into <c>$defs</c>, <c>anyOf</c>/<c>oneOf</c> and nullability as a type array.</summary>
-/// <remarks>Deliberately small: the schemas we author are the only inputs, so a full draft-2020-12 engine would be unused
-/// surface. Unsupported keywords cause a hard startup failure rather than being skipped, so a schema can never look stricter
-/// than it is. All scalar reads go through <see cref="ReadString"/> and friends: a schema always passes through <c>DeepClone()</c>
-/// (nullable wrappers, shared <c>$defs</c>) and a cloned node stores a <c>JsonElement</c>, which <c>JsonNode.GetValue&lt;T&gt;</c>
-/// rejects with <c>InvalidOperationException</c> unless the backing type matches — the bug <c>ValidatorReadsClonedSchema</c> covers.</remarks>
+/// <c>required</c>, <c>additionalProperties:false</c>, <c>enum</c>, numeric bounds, <c>items</c>/<c>minItems</c>/
+/// <c>maxItems</c>, <c>minLength</c>/<c>maxLength</c>, <c>pattern</c>, <c>$ref</c> into <c>$defs</c>, <c>anyOf</c>/
+/// <c>oneOf</c> and nullability as a type array.</summary> <remarks>Deliberately small: the schemas we author
+/// are the only inputs. Unsupported keywords cause a hard startup failure, not a skip: a schema can never look
+/// stricter than it is. Scalar reads go through <see cref="ReadString"/> and friends: a schema passes through
+/// <c>DeepClone()</c>, and a cloned node stores a <c>JsonElement</c> that <c>JsonNode.GetValue&lt;T&gt;</c> rejects
+/// with <c>InvalidOperationException</c> unless the type matches (bug <c>ValidatorReadsClonedSchema</c>).</remarks>
 public static class JsonSchemaValidator
 {
     private static readonly HashSet<string> KnownKeywords =
@@ -217,11 +217,10 @@ public static class JsonSchemaValidator
         var properties = nodeSchema["properties"] as JsonObject;
         var additional = nodeSchema["additionalProperties"];
 
-        // A node describing NO composition (neither properties nor additionalProperties) is a wrapper such as anyOf
-        // around $ref: nothing in it forbids members, because the composition was already decided by the anyOf/oneOf
-        // branches above, and positively (else we would not be here). "additionalProperties: false by default" is a
-        // convention about HOW this server WRITES schemas (spec 2.1), not a JSON Schema rule: an absent
-        // additionalProperties means "allowed", so it must not be enforced as a rule here.
+        // A node describing NO composition (neither properties nor additionalProperties) is a wrapper such
+        // as anyOf around $ref: the composition was already decided above. "additionalProperties: false by
+        // default" is a convention about HOW this server WRITES schemas (spec 2.1), not a JSON Schema rule:
+        // an absent additionalProperties means "allowed".
         // History: docs/decisions/contracts.md#json-schema-additional-properties-default
         if (properties is null && additional is null)
         {
@@ -329,8 +328,8 @@ public static class JsonSchemaValidator
             errors.Add(new SchemaViolation(path, "maximum", $"Значение {number} больше допустимого {maxValue}."));
         }
 
-        // exclusiveMinimum is written as a number by this project's builder; a bare `true`
-        // (draft-04 style) is not accepted, so a schema cannot accidentally mean something else.
+        // exclusiveMinimum is a number in this project's builder; a bare `true` (draft-04 style) is not
+        // accepted, so a schema cannot accidentally mean something else.
         if (nodeSchema["exclusiveMinimum"] is JsonNode exMin && ReadDouble(exMin, out var exMinValue) && number <= exMinValue)
         {
             errors.Add(new SchemaViolation(path, "exclusiveMinimum", $"Значение {number} должно быть больше {exMinValue}."));
@@ -399,9 +398,8 @@ public static class JsonSchemaValidator
         return true;
     }
 
-    // Thin adapters over JsonScalars: the validator's call sites want "try" semantics, and the
-    // shared helper exists precisely because the strict JsonNode.GetValue<T> overloads are
-    // storage-sensitive. Single call each — reading twice could disagree with itself.
+    // Thin adapters over JsonScalars: call sites want "try" semantics, and the strict
+    // JsonNode.GetValue<T> overloads are storage-sensitive. Single call each.
     private static string? ReadString(JsonNode? node) => JsonScalars.ReadString(node);
 
     private static bool ReadBool(JsonNode? node, out bool value)

@@ -16,9 +16,8 @@ public sealed record ToolDefinition(
     /// <summary>True when the tool can change the model or the file system and therefore needs
     /// an operation_id and a journal entry.</summary>
     /// <remarks>A session-control tool changes the SERVER's state, not the model, and writes no
-    /// operation journal: <see cref="ToolBehaviour.HostLocal"/> exempts it from this rule. Without the
-    /// flag, "session release" would fall into the same class as a model mutation, and the catalog
-    /// would demand from it an operation_id that the journal never records.</remarks>
+    /// operation journal: <see cref="ToolBehaviour.HostLocal"/> exempts it. Otherwise "session release"
+    /// would fall into the same class as a model mutation.</remarks>
     public bool IsMutation => !Behaviour.HostLocal && (Behaviour.Destructive || Behaviour.RequiresOperationId);
 
     /// <summary>Handled by the Host itself, without Worker and without the operation journal.</summary>
@@ -27,10 +26,9 @@ public sealed record ToolDefinition(
 
 /// <summary>Tool behaviour: what it does to the model and what it requires of the client.</summary>
 /// <param name="ReplaysOperationId">A Host tool declares <c>operation_id</c> and replays the recorded
-/// outcome itself — WITHOUT an operation journal. A separate flag, not <see cref="RequiresOperationId"/>:
-/// the latter would put the tool into <see cref="ToolDefinition.IsMutation"/> and demand a journal
-/// record the Host tool does not have. The flag keeps "a non-mutation promises operation_id" checkable
-/// by property rather than by a list of names (rule 3).</param>
+/// outcome itself — WITHOUT an operation journal. Separate from <see cref="RequiresOperationId"/>, which
+/// would put the tool into <see cref="ToolDefinition.IsMutation"/> and demand a journal record it does
+/// not have. Keeps "a non-mutation promises operation_id" checkable by property (rule 3).</param>
 public sealed record ToolBehaviour(
     bool ReadOnly,
     bool Destructive,
@@ -47,21 +45,12 @@ public static class ToolCatalog
 {
     /// <summary>The section-coupling schema — ONE for creation (<c>kompas_loft</c>) and edit
     /// (<c>kompas_update_feature</c>), so the descriptions cannot drift between tools.</summary>
-    /// <remarks>Why the exposed value is an OFFSET, not point coordinates: MEASURED 20.09.2026 (probe
-    /// <c>--b5</c>, step B5.17) that <c>ICoupling.SetPoint</c> is documented
-    /// (<c>icoupling_setpoint.html</c>: «<c>SetPoint(long Index, double X, double Y, double Z)</c>»),
-    /// but the given point is PROJECTED onto the contour and read back in the LOCAL coordinates of the
-    /// section sketch — <c>(10; 10; 30)</c> (centre of a 20×20 square) in, <c>(20; 10; 30)</c> (side
-    /// midpoint, 10 mm along the contour) out. Publishing a parameter whose forward and reverse halves
-    /// disagree would promise a round-trip that does not exist. The unit is confirmed by a number:
-    /// <c>icoupling_positionoffset.html</c> — «Величина смещения точки вдоль контура сечения в мм»,
-    /// input «<c>long Index</c> — индекс сечения в цепочке»; MEASURED: with an 80 mm perimeter,
-    /// <c>PositionOffset = 5</c> reads back as <c>Position = 6.25 %</c> — exactly <c>5/80</c>.
-    /// MEASURED on a 40×40 → 20×20 pyramid at h = 30: coupling <c>0 / 0</c> gives <c>28000</c> (as
-    /// without coupling, so an explicit coupling REPLACES the automatic one), an offset of <c>20</c> mm
-    /// (25 % of the contour) gives <c>20000</c>, and reverting gives <c>28000</c>; the coupling is set
-    /// BEFORE the first <c>Update()</c> as documented (<c>ilofts_add.html</c>), which MEASURED
-    /// (step B5.18) suffices — one build gives <c>CouplingsCount = 1</c> and the same <c>20000</c>.</remarks>
+    /// <remarks>MEASURED: <c>ICoupling.SetPoint</c> is documented (<c>icoupling_setpoint.html</c>:
+    /// «<c>SetPoint(long Index, double X, double Y, double Z)</c>»), but the given point is PROJECTED
+    /// onto the contour and read back in LOCAL sketch coordinates. <c>icoupling_positionoffset.html</c>:
+    /// «Величина смещения точки вдоль контура сечения в мм», input «<c>long Index</c> — индекс сечения
+    /// в цепочке»; the coupling is set BEFORE the first <c>Update()</c>.
+    /// History: docs/decisions/host.md#couplings-schema</remarks>
     public static JsonObject CouplingsSchema { get; } = Sch.Arr(
         Sch.ObjAll(
             "Цепочка соответствия сечений",
@@ -88,10 +77,9 @@ public static class ToolCatalog
         "заданный список становится всем набором цепочек признака. Пустой список означает «без " +
         "цепочек» и применяется как ClearCouplings().",
         // The lower bound is 0, not 1 — a corrected contradiction of the schema's own declaration.
-        // The description promised in two places that an empty list means "no couplings" and applies as
-        // ClearCouplings(), while the schema forbade that same empty list (`minItems: 1`): MEASURED
-        // 20.09.2026 at acceptance B5, `couplings: []` returned INVALID_ARGUMENT "minimum 1, got 0" on
-        // $/couplings. "Remove the coupling" was thus inexpressible although declared doable.
+        // The description promised an empty list means "no couplings" (ClearCouplings()), while the
+        // schema forbade it (`minItems: 1`): MEASURED, `couplings: []` returned INVALID_ARGUMENT
+        // "minimum 1, got 0" on $/couplings.
         // History: docs/decisions/host.md#couplings-minitems
         0, 64);
 
@@ -279,9 +267,8 @@ public static class ToolCatalog
 
             // ===== assembly domain (order C1, profile assemblies-minimal-v1) =====
             // The route was measured from the help (over the wire) and the shipped wrappers' metadata,
-            // and the domain is accepted by a LIVE run: the ASM group passed on the shipped binaries
-            // (docs/acceptance/assembly/assembly-acceptance.json, 2026-10-05). Capability level is
-            // therefore mcp_verified, and the descriptions say so.
+            // and the domain is accepted by a LIVE run: the ASM group passed on the shipped binaries.
+            // Capability level is therefore mcp_verified.
             // History: docs/decisions/host.md#assemblies-domain
             ReadOnly("kompas_list_components", "Компоненты сборки",
                 "Структура сборки: экземпляры компонентов с именами/марками, признаком «деталь/сборка», "
@@ -352,12 +339,11 @@ public static class ToolCatalog
                 requiresOperationId: false),
 
             // ===== mate domain (block C2, profile mates-minimal-v1) =====
-            // The route is the customer's decision of 05.10.2026: the documented API7 path
-            // IPart7.MateConstraints → IMateConstraints3D.Add → BaseObject1/2 → Update().
-            // ksDocument3D.AddMateConstraint is NOT used (it returned False for every documented
-            // combination of parameters; the cause is not established). Capability level is
-            // mcp_verified: block C2 was accepted by a live run on the shipped binaries on 05.10.2026
-            // (MATE runs 55/55). History: docs/decisions/host.md#mates-domain
+            // Route = customer's decision: documented API7 path IPart7.MateConstraints →
+            // IMateConstraints3D.Add → BaseObject1/2 → Update(). ksDocument3D.AddMateConstraint is NOT
+            // used (returned False for every documented combination). Capability level mcp_verified:
+            // block C2 accepted by a live run on shipped binaries (MATE 55/55).
+            // History: docs/decisions/host.md#mates-domain
             ReadOnly("kompas_list_mates", "Сопряжения сборки",
                 "Перечень сопряжений: тип, выравнивание, фиксация, параметр, оба базовых объекта и "
                 + "подтверждение Valid. Читается документированным MateConstraintCollection → "
@@ -394,9 +380,8 @@ public static class ToolCatalog
                     // INVARIANT: the parameter is bound to the type and checked by the Host. Per
                     // mateconstrainttype.html only mc_Distance (5, «постоянное расстояние») and
                     // mc_Angle (6, «постоянный угол») are parametric; for the rest an accepted number
-                    // would be recorded and ignored. The help (imateconstraint3d_paramvalue.html) does
-                    // NOT name the UNITS: the server does not recompute the value and confirms it only
-                    // by reading it back. History: docs/decisions/host.md#mate-param
+                    // would be recorded and ignored. The help does NOT name the UNITS — the server
+                    // confirms by reading back. History: docs/decisions/host.md#mate-param
                     ("param_value", Sch.Nullable(Sch.Num(
                         "Параметр ограничения: обязателен для distance и angle, запрещён для остальных "
                         + "типов. Единицы задаются КОМПАС (справкой не названы); подтверждается "
@@ -978,13 +963,10 @@ public static class ToolCatalog
                         "в коллекции не принимаются — они не постоянные идентификаторы.",
                         1, 64)),
                     ("thickness_mm", Sch.PositiveMm("Толщина стенки")),
-                    // The NAME of this field is a defect fix, not style. The first revision declared it as `direction`,
-                    // while the command record (`ShellCommand`) carries `ThinDirection` — `thin_direction` on the wire.
-                    // The Host passes arguments to the Worker AS IS and the Worker binds them by snake_case name, so
-                    // `direction` never reached the command at all: MEASURED 20.09.2026 that `direction: "outward"` passed
-                    // the schema and gave a volume of 21631.999999999996 — exactly "inward" — while `kompas_get_feature`
-                    // read back `thin_direction: "inward"`. The only name the command binds, `thin_direction`, was FORBIDDEN
-                    // by the schema, so the wall direction was inexpressible and the declared parameter was "declared and swallowed".
+                    // The NAME of this field is a defect fix, not style: the command record
+                    // (`ShellCommand`) carries `ThinDirection` (`thin_direction` on the wire). The Host
+                    // passes arguments AS IS and the Worker binds by snake_case, so the former
+                    // `direction` never reached the command, and `thin_direction` was FORBIDDEN.
                     // History: docs/decisions/host.md#thin-direction
                     ("thin_direction", Sch.Nullable(Sch.Enum(
                         "Направление формирования стенки: inward — материал внутрь (thinType = true, " +
@@ -2023,12 +2005,10 @@ public static class ToolCatalog
                 WorkerCommands.ReadTopology,
                 requiresDocument: true),
 
-            // read_topology and resolve_selection mint structural handles into the reference
-            // registry, but neither changes document or CAD state — so they are reads per
-            // docs/02 §2.1, which requires operation_id of mutations only. Declaring them through
-            // Mutation() with requiresOperationId:false made IsMutation true while the schema never
-            // published the field, so every legitimate call died in the journal as
-            // ArgumentNullException(operationId).
+            // read_topology and resolve_selection mint structural handles but change no document or
+            // CAD state — reads per docs/02 §2.1, which requires operation_id of mutations only.
+            // Declaring them through Mutation() with requiresOperationId:false made IsMutation true
+            // while the schema never published the field, so every legitimate call died in the journal.
             ReadOnly("kompas_resolve_selection", "Однозначный выбор",
                 "Структурный предикат по граням тела. Два подходящих кандидата — AMBIGUOUS_SELECTION, а не молчаливый выбор первого. Применяются surface_type, area_range_mm2, normal_direction и normal_angle_tolerance_deg; поля, которые сервер не умеет, отвергаются с INVALID_ARGUMENT, а не игнорируются.",
                 Sch.Props(
@@ -2212,8 +2192,8 @@ public static class ToolCatalog
         bool requiresOperationId = true)
     {
         // A mutation always carries operation_id, and the schema has to say so: the Host rejects
-        // unknown fields, so a field the client is required to send must be declared here or the
-        // first legitimate call is refused. (This is exactly the bug the first vertical run caught.)
+        // unknown fields, so a required field must be declared here or the first legitimate call is
+        // refused.
         if (requiresOperationId)
         {
             properties["operation_id"] = Sch.Ref("#/$defs/operation_id");
@@ -2229,12 +2209,11 @@ public static class ToolCatalog
     }
 
     /// <summary>A session-control tool: handled by the Host itself, not the Worker.</summary>
-    /// <remarks>A separate factory rather than <see cref="ReadOnly"/>/<see cref="Mutation"/>: these tools
-    /// write no operation journal (session release is not a model mutation) and must answer when there is no
-    /// CAD channel at all. The <c>destructive</c> mark on release is honest: it ends the session and closes
-    /// the documents. Why release still has <c>operation_id</c>: MEASURED 04.10.2026 (line <c>S03b</c> of
-    /// <c>mcp-smoke.py</c>) that published rule §2.1 requires a tool annotated <c>destructiveHint=true</c> to
-    /// declare <c>operation_id</c>; release declares it and replays the outcome itself (<see cref="ToolBehaviour.ReplaysOperationId"/>), field NOT required.
+    /// <remarks>A separate factory: these tools write no operation journal and must answer when there
+    /// is no CAD channel at all. The <c>destructive</c> mark on release is honest: it ends the session
+    /// and closes the documents. Why release still has <c>operation_id</c>: line <c>S03b</c> of
+    /// <c>mcp-smoke.py</c> shows rule §2.1 requires a tool annotated <c>destructiveHint=true</c> to
+    /// declare it; release declares it and replays the outcome itself, field NOT required.
     /// History: docs/decisions/host.md#control-operation-id</remarks>
     private static ToolDefinition Control(
         string name,
@@ -2311,11 +2290,11 @@ public static class ToolCatalog
     });
 
     /// <summary>The plane for B3 operations: a ready reference or a point with a normal.</summary>
-    /// <remarks>The plane's SIDE is not set here. It is set by the sign <c>s = n·(p − p₀)</c> in the
-    /// cut command itself, because "the left side" without a coordinate system is not an address. The
-    /// "base plane + offset" form is declared but not supported: the API7 auxiliary-plane route with
-    /// an offset was never measured, and a call with it refuses CAPABILITY_UNAVAILABLE rather than
-    /// guessing the sign of the base plane's normal. History: docs/decisions/host.md#cut-plane-side</remarks>
+    /// <remarks>The plane's SIDE is set by the sign <c>s = n·(p − p₀)</c> in the cut command itself,
+    /// because "the left side" without a coordinate system is not an address. "base plane + offset" is
+    /// declared but not supported: the API7 route with an offset was never measured, and a call with it
+    /// refuses CAPABILITY_UNAVAILABLE rather than guessing the sign.
+    /// History: docs/decisions/host.md#cut-plane-side</remarks>
     private static JsonObject CutPlaneSchema() => new()
     {
         ["type"] = "object",

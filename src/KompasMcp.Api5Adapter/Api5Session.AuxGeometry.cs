@@ -8,10 +8,12 @@ using KompasAPI7;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>Auxiliary geometry of a part as MODEL OBJECTS: planes, axes, points (<c>kompas_create_aux_geometry</c>, <c>kompas_list_aux_geometry</c>).</summary>
+/// <summary>Auxiliary geometry as MODEL OBJECTS: planes, axes, points (<c>kompas_create_aux_geometry</c>).</summary>
 /// <remarks>
-/// INVARIANT: this is a separate tool rather than a field of a foreign operation because dependencies <c>dep.refs.planes</c>, <c>dep.refs.axes</c> and <c>dep.refs.points_axes</c> require a plane, an axis and a point to exist in the model AS OBJECTS that can be enumerated, read and survive a save cycle; a number in an argument is not available to enumeration, so the requirement is closed by enumeration.
-/// DOC: all construction is the documented API7 (step 0 of the product-routes order, report <c>DEPENDENCIES_PRODUCT_ROUTES_STEP0_REPORT_20260921.md</c> §6.1–6.3); member names were taken by the <c>tools/KompasMcp.InteropScan</c> probe from the shipped interop of the target build, not from memory; help-vs-interop divergences are listed in <see cref="Api7SketchEntities"/> and <see cref="Api7AuxEnumeration"/>.
+/// INVARIANT: a separate tool, not a field of a foreign operation: <c>dep.refs.planes</c>,
+/// <c>dep.refs.axes</c>, <c>dep.refs.points_axes</c> require real objects — a number in an argument
+/// cannot be enumerated, read or survive a save cycle.
+/// DOC: documented API7 (<c>DEPENDENCIES_PRODUCT_ROUTES_STEP0_REPORT_20260921.md</c> §6.1–6.3).
 /// History: docs/decisions/adapter-sketch.md#aux-geometry
 /// </remarks>
 public sealed partial class Api5Session
@@ -41,11 +43,12 @@ public sealed partial class Api5Session
         ["yz"] = ksObj3dTypeEnum.o3d_planeYOZ,
     };
 
-    /// <summary>Types for <c>ksPart.GetDefaultEntity</c> — the same set of names, but addressed by the type of a standard object rather than by its position in the collection.</summary>
-    /// <remarks>
-    /// MEASURED: a named support is taken by this route, not by API7 enumeration. 21.09.2026, probe <c>scratch/_probe_dpl_offset.py</c> on the shipped binaries <c>artifacts/publish-deproutes-20260921-b</c>: in a part that already has a body (revision 4, a 40×40×10 plate built), <c>IAuxiliaryGeomContainer.GetPlanes3D</c> reports <c>Count = 0</c> — there are NO standard planes in the <c>IPlanes3D</c> collection at all, while tool-created planes do appear in it (<c>plane_count</c>=1 after a face support). So "find xy by enumeration" is not a route but a wish: there is nothing to enumerate.
-    /// DOC: the documented route to a standard plane as an OBJECT is <c>ksPart.GetDefaultEntity</c> by type <c>o3d_planeXOY/XOZ/YOZ</c>; sketch creation already uses it (<c>Api5Session.Geometry.cs:ResolvePlaneEntity</c>), and this route is measured by acceptance on rows <c>DEP.DPL.01.discover</c> and all sketch modes; the obtained object is transferred to API7 by the standard <c>Api7Bridge.TransferTo7</c> and substituted into <c>IPlane3DBy*.BasePlane</c>.
-    /// </remarks>
+    /// <summary>Types for <c>ksPart.GetDefaultEntity</c> — standard-plane names addressed by type,
+    /// not by position in the collection.</summary>
+    /// <remarks>MEASURED: a named support is taken by this route, not by API7 enumeration — in a part
+    /// with a built body <c>IAuxiliaryGeomContainer.GetPlanes3D</c> reports <c>Count = 0</c>, so there is
+    /// nothing to enumerate. DOC: <c>ksPart.GetDefaultEntity</c> by <c>o3d_planeXOY/XOZ/YOZ</c>.
+    /// History: docs/decisions/adapter-sketch.md#aux-named-plane</remarks>
     private static readonly Dictionary<string, int> DefaultPlaneEntities = new(StringComparer.Ordinal)
     {
         ["xy"] = KompasObjectTypes.PlaneXoy,
@@ -510,13 +513,12 @@ public sealed partial class Api5Session
         }
     }
 
-    /// <summary>Base plane BY NAME: the only named support that can be set as a string. Extracted
-    /// because both creation and editing use it.</summary>
+    /// <summary>Base plane BY NAME: the only named support that can be set as a string.</summary>
     /// <remarks>DOC: taken via <c>ksPart.GetDefaultEntity</c>, not by enumerating <c>IPlanes3D</c>:
-    /// MEASURED 21.09.2026 (<c>scratch/_probe_dpl_offset.py</c>) that there are no standard planes in
-    /// that collection — <c>Count</c>=0 in a part with a built body. Enumeration would return "not
-    /// found" on a healthy document, i.e. a probe refusal passed off as a product refusal. A different
-    /// object is never substituted for the requested support.</remarks>
+    /// MEASURED that collection holds no standard planes — <c>Count</c>=0 in a part with a built body.
+    /// Enumeration would return "not found" on a healthy document, i.e. a probe refusal passed off as a
+    /// product refusal. A different object is never substituted for the requested support.
+    /// History: docs/decisions/adapter-sketch.md#aux-named-plane</remarks>
     private IModelObject ResolveNamedBasePlane(
         DocumentEntry document, Api7Bridge bridge, string wanted, List<string> diagnostics)
     {

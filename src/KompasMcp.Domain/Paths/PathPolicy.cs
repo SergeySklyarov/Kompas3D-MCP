@@ -21,10 +21,12 @@ public sealed record PathDecision(
     string? DeniedReason,
     string? MatchedRoot);
 
-/// <summary>File-system boundary of the server (spec 1.12). Allowed roots come from configuration; the decision is made on a resolved path, with separator-aware containment and an explicit refusal of anything the checks cannot cover.</summary>
-/// <remarks>Why not <c>StartsWith</c>: "D:\work" is a prefix of "D:\workspace\secret.a3d", so a naive check admits a path outside the root.
-/// Why not only <c>Path.GetFullPath</c>: it collapses <c>..</c> lexically but does not resolve junctions, so a directory inside the root that is really a reparse point to elsewhere still passes. Both are handled here.
-/// </remarks>
+/// <summary>File-system boundary of the server (spec 1.12). Allowed roots come from configuration; the
+/// decision is made on a resolved path, with separator-aware containment and an explicit refusal of
+/// anything the checks cannot cover.</summary>
+/// <remarks>DOC: not <c>StartsWith</c> — "D:\work" is a prefix of "D:\workspace\secret.a3d", so a naive
+/// check admits a path outside the root. DOC: not only <c>Path.GetFullPath</c> — it collapses <c>..</c>
+/// lexically but does not resolve junctions, so a reparse point inside the root still passes.</remarks>
 public sealed class PathPolicy
 {
     private static readonly char[] DirectorySeparators = { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar };
@@ -37,11 +39,9 @@ public sealed class PathPolicy
 
     /// <param name="readOnlyRoots">Existing models the server may read but never write.</param>
     /// <param name="writableRoots">Scratch/export roots the server may create files in.</param>
-    /// <param name="allowUncPaths">
-    /// Default false. UNC is refused outright rather than half-supported: without a trustworthy
-    /// way to resolve a remote share to a local canonical form, admitting it would quietly widen
-    /// the sandbox (spec 1.12 requires a refusal when UNC/reparse cannot be checked reliably).
-    /// </param>
+    /// <param name="allowUncPaths">Default false. UNC is refused outright rather than half-supported:
+    /// without a trustworthy way to resolve a remote share to a local canonical form, admitting it
+    /// would quietly widen the sandbox (spec 1.12).</param>
     public PathPolicy(IEnumerable<string> readOnlyRoots, IEnumerable<string> writableRoots, bool allowUncPaths = false)
     {
         ReadOnlyRoots = NormalizeRoots(readOnlyRoots);
@@ -104,12 +104,10 @@ public sealed class PathPolicy
         var invalidComponent = FirstInvalidNameComponent(full);
         if (invalidComponent is not null)
         {
-            // WHY THIS CHECK EXISTS AT ALL — MEASURED, not assumed (probe P4, order KOMPAS_EXPORT_IMAGE).
-            // The KOMPAS kernel does NOT refuse such a name: the call returned success, the base file `bad`
-            // stayed empty, and 8639 bytes of payload went into an NTFS ALTERNATE STREAM. Directory stream
-            // listing: FILE=bad LEN=0 STREAMS=:$DATA=0|name?.png=8639 — i.e. "success" with no file the
-            // user can find. Cut it off before COM. `Path.GetInvalidPathChars()` is not enough here: its set
-            // is narrower than the NAME table and lets this path through (a unit test that was red before).
+            // MEASURED: the KOMPAS kernel does NOT refuse such a name — the call returned success, the
+            // base file stayed empty, and the payload went into an NTFS ALTERNATE STREAM, i.e. "success"
+            // with no file the user can find. `Path.GetInvalidPathChars()` is too narrow to catch it.
+            // History: docs/decisions/files.md#path-invalid-name-component
             return Denied(
                 $"Компонента пути '{invalidComponent}' содержит символы, недопустимые в имени файла "
                 + "(в том числе ':' — двоеточие после буквы диска открывает альтернативный поток NTFS, "
@@ -121,10 +119,8 @@ public sealed class PathPolicy
     }
 
     /// <summary>First path component containing a character Windows forbids in a file NAME, or null.</summary>
-    /// <remarks>The separator itself is part of the forbidden table, so the path is split into components
-    /// first and each component is checked on its own. The drive/root part is skipped: its colon
-    /// is a volume designator, not a stream separator, and rejecting it would refuse every
-    /// ordinary absolute path.</remarks>
+    /// <remarks>The separator itself is forbidden, so the path is split into components first. The
+    /// drive/root part is skipped: its colon is a volume designator, not a stream separator.</remarks>
     private static string? FirstInvalidNameComponent(string fullPath)
     {
         var root = Path.GetPathRoot(fullPath) ?? string.Empty;
@@ -147,9 +143,9 @@ public sealed class PathPolicy
 
     private PathDecision EvaluateLocalLike(string full, bool intendToWrite)
     {
-        // The most specific matching root decides, not the first one. A read-only model root that
-        // happens to live inside a writable scratch root must keep denying writes; matching the
-        // enclosing writable root first silently granted write access to the protected tree.
+        // INVARIANT: the most specific matching root decides, not the first. A read-only root inside a
+        // writable scratch root must keep denying writes; matching the enclosing writable root first
+        // silently granted write access to the protected tree.
         var all = ReadOnlyRoots.Select(root => (Root: root, Writable: false))
             .Concat(WritableRoots.Select(root => (Root: root, Writable: true)))
             .ToList();
@@ -191,11 +187,10 @@ public sealed class PathPolicy
             return Denied($"Путь '{full}' лежит в только-для-чтения корне '{winner.Root}'; запись запрещена.");
         }
 
-        // THE REPARSE POINT IS CHECKED ON READ TOO.
-        //
-        // Previously only the writable root was checked. Reading through a junction from a read-only root
-        // escaped it: the root declares a boundary, a junction inside leads out, and a path that passed the
-        // check read a file outside the allowed tree (defect L1, review 05.10.2026).
+        // INVARIANT: the reparse point is checked on READ too. Checking only the writable root let a
+        // junction inside a read-only root lead out of it: a path that passed the check read a file
+        // outside the allowed tree.
+        // History: docs/decisions/files.md#path-read-reparse-escape
         var escape = FirstReparseOnPath(full, winner.Root);
         if (escape is not null)
         {
@@ -212,9 +207,7 @@ public sealed class PathPolicy
         new(PathAccess.Denied, null, reason, null);
 
     /// <summary>First path component at or below <paramref name="root"/> that is a reparse point, or null.
-    /// Walking from the deepest existing component upwards stops at the root so the check is
-    /// bounded, and non-existing trailing components (a file about to be created) are skipped —
-    /// a parent directory is what matters.</summary>
+    /// The walk stops at the root, and non-existing trailing components are skipped.</summary>
     private static string? FirstReparseOnPath(string fullPath, string root)
     {
         var chain = new List<string>();
@@ -253,9 +246,8 @@ public sealed class PathPolicy
         return null;
     }
 
-    /// <summary>Separator-aware containment: "D:\work" must not admit "D:\workspace". A root that already
-    /// ends with a separator (a drive root such as "D:\") is handled too — there the separator is
-    /// part of the root, so the next character is a name, not a delimiter.</summary>
+    /// <summary>Separator-aware containment: "D:\work" must not admit "D:\workspace". A drive root such
+    /// as "D:\" is handled too — its separator is part of the root, so the next character is a name.</summary>
     public static bool IsWithin(string candidate, string root)
     {
         var normalizedRoot = root.TrimEnd(DirectorySeparators);

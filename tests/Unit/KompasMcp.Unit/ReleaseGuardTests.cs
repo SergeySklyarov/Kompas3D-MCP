@@ -5,11 +5,11 @@ using Xunit;
 namespace KompasMcp.Unit;
 
 /// <summary>The "may the session be released" decision — as a table, without KOMPAS and without a Worker.</summary>
-/// <remarks>TEST: exactly the pure function is checked. INVARIANT (defect H3, review 05.10.2026): each table
-/// row is a state in which the decision must be made BEFORE contacting the Worker. INVARIANT: "Worker
-/// restarted after a break, inventory empty → refusal" — an empty inventory of a new Worker is not "no
-/// edits" but "documents lost", and the <c>DocumentStateUnknown</c> sign overrides it.
-/// History: docs/decisions/tests.md#release-guard</remarks>
+/// <remarks>TEST: exactly the pure function is checked. INVARIANT (defect H3): each table row is a state in which
+/// the decision must be made BEFORE contacting the Worker. INVARIANT: "Worker restarted after a break, inventory
+/// empty → refusal" — an empty inventory of a new Worker is not "no edits" but "documents lost", and the
+/// <c>DocumentStateUnknown</c> sign overrides it.
+/// History: docs/decisions/tests.md#release-guard-2</remarks>
 public class ReleaseGuardTests
 {
     /// <summary>Default state: Worker ran, channel live, inventory read, no edits.</summary>
@@ -44,9 +44,9 @@ public class ReleaseGuardTests
     [Fact]
     public void WorkerRestartedAfterBreakWithEmptyInventory_IsRefused()
     {
-        // An intermediate CAD call raised a new Worker: the channel is live (canSend=true), the inventory was
-        // read and is EMPTY (dirty=0) — all the "old" checks are happy. But the previous Worker's documents
-        // are lost, and this state must override the empty inventory.
+        // An intermediate CAD call raised a new Worker: the channel is live, the inventory was read and is EMPTY
+        // — all the "old" checks are happy. But the previous Worker's documents are lost, and this state must
+        // override the empty inventory.
         var decision = ReleaseGuard.Decide(Facts(
             canSendWithoutRestart: true,
             documentStateUnknown: true,
@@ -94,9 +94,8 @@ public class ReleaseGuardTests
     public void UnknownDocumentState_Acknowledged_SkipsTheBrokenChannelRefusal()
     {
         // Right after a channel break a client that has already accepted the unknown state must be able to
-        // release the session. The old code cleared only step 1 while step 3 ("channel broken") still refused,
-        // leaving a workaround as the only way out. With acknowledgement the inventory is not needed — it adds
-        // no information.
+        // release. The old code cleared only step 1 while step 3 ("channel broken") still refused; with
+        // acknowledgement the inventory is not needed.
         var decision = ReleaseGuard.Decide(Facts(
             canSendWithoutRestart: false,
             documentStateUnknown: true,
@@ -120,9 +119,8 @@ public class ReleaseGuardTests
         Assert.True(decision.Proceed);
     }
 
-    /// <summary>Negative control: acknowledgement does NOT remove the channel refusal when the unknown state
-    /// is not flagged. There is nothing to acknowledge — the sign is absent, and "acknowledge" must not be a
-    /// universal skeleton key for any inventory check.</summary>
+    /// <summary>Negative control: acknowledgement does NOT remove the channel refusal when the unknown state is
+    /// not flagged — "acknowledge" must not be a universal skeleton key for any inventory check.</summary>
     [Fact]
     public void BrokenChannel_WithoutUnknownStateFlag_StillRefusesEvenWithAcknowledgement()
     {
@@ -139,8 +137,7 @@ public class ReleaseGuardTests
     [Fact]
     public void BrokenChannelRefusal_NamesTheAcknowledgementAsTheWayOut()
     {
-        // INVARIANT: the refusal must NAME the way out, not leave the client in a dead end — otherwise the
-        // only way remains a workaround that the text does not mention.
+        // INVARIANT: the refusal must NAME the way out, not leave the client in a dead end.
         var decision = ReleaseGuard.Decide(Facts(canSendWithoutRestart: false, inventoryRead: false));
 
         Assert.Contains("acknowledge_unknown_document_state", decision.Reason!, StringComparison.Ordinal);
@@ -166,8 +163,7 @@ public class ReleaseGuardTests
     }
 
     /// <summary>Negative control: an unknown state without acknowledgement refuses EARLIER than the broken
-    /// channel is checked — otherwise the answer would name "channel broken" where the true cause is lost
-    /// documents, and the client would look for a way out in the wrong place.</summary>
+    /// channel is checked — otherwise the answer would name "channel broken" where the cause is lost documents.</summary>
     [Fact]
     public void UnknownDocumentState_IsCheckedBeforeTheChannel()
     {

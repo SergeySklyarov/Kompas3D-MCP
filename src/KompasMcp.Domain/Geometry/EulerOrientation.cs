@@ -2,12 +2,12 @@ namespace KompasMcp.Domain.Geometry;
 
 /// <summary>Placement orientation in the documented KOMPAS-3D v24 Euler-angle mode
 /// (<c>ILocalCoordinateSystem.OrientationType = ksEulerCorners</c>).</summary>
-/// <remarks>MEASURED (probe --reposition-params, run a336120926fc4652a8bf737562568271, step RP.25): the
-/// orientation is stored as PARAMETERS, not a matrix — the angle triple survives reopening, and the
-/// translation is read via <c>ksPDisplace</c> + <c>IPoint3DParamDisplace.DX/DY/DZ</c>; units are DEGREES.
-/// INVARIANT: <c>M = Rz(precession)·Rx(nutation)·Rz(rotation)</c> (z-x-z), MEASURED not guessed (DOC gives
-/// the order only as a picture, <c>rotation_pict.html</c>: RP.25 tried every product, ONE matched — PNR).
-/// LIMIT: ambiguous at nutation 0/180; validity is proved by MATRIX EQUIVALENCE, not by matching numbers. History: docs/decisions/geometry.md#euler</remarks>
+/// <remarks>MEASURED: the orientation is stored as PARAMETERS, not a matrix — the angle triple survives
+/// reopening; units are DEGREES. INVARIANT: <c>M = Rz(precession)·Rx(nutation)·Rz(rotation)</c> (z-x-z),
+/// MEASURED not guessed (DOC gives the order only as a picture, <c>rotation_pict.html</c>; ONE product
+/// matched — PNR). LIMIT: ambiguous at nutation 0/180; validity is proved by MATRIX EQUIVALENCE, not by
+/// matching numbers.
+/// History: docs/decisions/geometry.md#euler</remarks>
 public static class EulerOrientation
 {
     /// <summary>Matrix comparison tolerance: dimensionless values of order one.</summary>
@@ -42,8 +42,8 @@ public static class EulerOrientation
 
     /// <summary>Three Euler angles from a rotation matrix — the inverse of <see cref="RotationFromAngles"/>.</summary>
     /// <remarks>At the pole (<c>sn = 0</c>) precession and rotation are not separately defined; precession
-    /// is taken as zero and rotation carries the whole sum. This loses nothing: a matrix rebuilt from the
-    /// returned triple equals the input, and that equality is what the tests check.
+    /// is taken as zero and rotation carries the whole sum. A matrix rebuilt from the returned triple equals
+    /// the input, and that equality is what the tests check.
     /// History: docs/decisions/geometry.md#euler-pole</remarks>
     public static (double PrecessionDeg, double NutationDeg, double RotationDeg) AnglesFromRotation(
         IReadOnlyList<double> matrix)
@@ -70,9 +70,7 @@ public static class EulerOrientation
         else
         {
             // Pole: nutation = 0 or 180. Precession is taken as zero, so rotation carries the whole
-            // difference — AND THE SIGN OF THAT DIFFERENCE DIFFERS BETWEEN THE TWO POLES. The sign for
-            // nutation = 180 was wrong and rebuilt the matrix as [[0,−1,0],[−1,0,0],[0,0,−1]] instead of
-            // [[0,1,0],[1,0,0],[0,0,−1]] (acceptance row B3.59). Derivation:
+            // difference — AND THE SIGN DIFFERS BETWEEN THE TWO POLES. Derivation:
             // docs/decisions/geometry.md#euler-pole
             precession = 0d;
             rotation = m22 > 0d ? Math.Atan2(m10, m00) : Math.Atan2(-m01, m00);
@@ -133,7 +131,7 @@ public static class EulerOrientation
     /// <c>c = ((1−cos θ)·t + sin θ·(d × t)) / (2(1−cos θ))</c>.</summary>
     /// <remarks>LIMIT: an axis point is not a property of the placement — rotating about any point of ONE
     /// line gives the same placement, so what is recovered is a representative of the line, not "that"
-    /// point; at θ = 0 the translation does not determine it and <c>null</c> is returned, not zero.
+    /// point; at θ = 0 <c>null</c> is returned, not zero.
     /// History: docs/decisions/geometry.md#axis-point</remarks>
     public static double[]? AxisPointFromPlacement(IReadOnlyList<double> matrix)
     {
@@ -163,14 +161,13 @@ public static class EulerOrientation
         };
     }
 
-    /// <summary>Translation part of the placement — the same 12…14 that <see cref="RepositionMatrix.Apply"/> reads.</summary>
+    /// <summary>Translation of the placement — the same 12…14 that <see cref="RepositionMatrix.Apply"/> reads.</summary>
     public static double[] TranslationOf(IReadOnlyList<double> matrix)
     {
         Require(matrix, nameof(matrix));
         return new[] { matrix[12], matrix[13], matrix[14] };
     }
 
-    /// <summary>Whether the rotation part is the identity (then the transform is a translation).</summary>
     public static bool IsIdentity(IReadOnlyList<double> matrix, double tolerance = MatrixTolerance)
     {
         Require(matrix, nameof(matrix));
@@ -189,7 +186,6 @@ public static class EulerOrientation
         return true;
     }
 
-    /// <summary>Largest difference between two matrices — what proves equivalence.</summary>
     public static double MaxDifference(IReadOnlyList<double> left, IReadOnlyList<double> right)
     {
         Require(left, nameof(left));
@@ -203,7 +199,6 @@ public static class EulerOrientation
         return worst;
     }
 
-    /// <summary>Unit axis direction, or an exception: a zero direction defines no axis.</summary>
     public static double[] UnitAxis(IReadOnlyList<double> direction)
     {
         if (direction is not { Count: 3 })
@@ -226,7 +221,6 @@ public static class EulerOrientation
     private static double Cell(IReadOnlyList<double> matrix, int row, int column) =>
         matrix[(column * 4) + row];
 
-    /// <summary>Write a 3x3 row-wise into the <see cref="RepositionMatrix"/> layout (column-major).</summary>
     private static double[] FromRows(
         double r00, double r01, double r02,
         double r10, double r11, double r12,

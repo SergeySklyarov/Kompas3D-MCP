@@ -13,23 +13,19 @@ using KompasMcp.Host.Catalog;
 namespace KompasMcp.Host;
 
 /// <summary>Turns a validated MCP tool call into exactly one Worker command.</summary>
-/// <remarks>Ordered so that the guarantees hold without extra ceremony: schema validation (unknown
-/// field, NaN, negative length, bad enum) — no COM call yet; path policy — a refusal here never touches
-/// the model; <b>durable journal append</b> — before dispatch, so a crash afterwards is recoverable as
-/// outcome-unknown rather than as "it never happened"; bounded queue → single Worker dispatch; terminal
-/// journal record with the result or the error. The same <c>operation_id</c> with the same arguments
-/// returns the recorded outcome instead of re-running: that is what makes a client retry after a timeout
-/// safe for reads and honest for writes.</remarks>
+/// <remarks>Ordered so the guarantees hold: schema validation (unknown field, NaN, negative length,
+/// bad enum) — no COM yet; path policy — a refusal never touches the model; <b>durable journal
+/// append</b> — before dispatch, so a crash afterwards is outcome-unknown; bounded queue → single
+/// Worker dispatch; terminal journal record. The same <c>operation_id</c> with the same arguments
+/// returns the recorded outcome instead of re-running, making a client retry safe for reads and honest
+/// for writes.</remarks>
 public sealed class ToolInvoker : IAsyncDisposable
 {
-    // save_path is the same class of field as output_path/target_path: a file destination. Named
-    // separately because for a raster snapshot it means "where to put the picture", and the policy must
-    // judge it just as strictly: MEASURED (probe P4) that the CORE does not check the path — on forbidden
-    // characters it wrote a truncated empty file, and a missing directory it created itself; the only
-    // defence is a HOST refusal before COM. source_path is the assembly component's source file (order C1):
-    // same class as input_path, i.e. a READ, not a write — named here because the path policy judges a field
-    // by its NAME, and without this line a component insert/replace path would slip past the allowed root.
-    // History: docs/decisions/host.md#path-fields
+    // save_path is a file destination, like output_path/target_path, and the policy must judge it as
+    // strictly: MEASURED that the CORE does not check the path — on forbidden characters it wrote a
+    // truncated empty file, and a missing directory it created itself; the only defence is a HOST
+    // refusal before COM. source_path (order C1) is a READ, like input_path — named because the path
+    // policy judges a field by its NAME. History: docs/decisions/host.md#path-fields
     private static readonly string[] PathFields = { "path", "output_path", "target_path", "input_path", "save_path", "source_path" };
 
     private readonly HostOptions _options;
@@ -59,11 +55,10 @@ public sealed class ToolInvoker : IAsyncDisposable
 
     public IReadOnlyList<ToolDefinition> Tools => ToolCatalog.All;
 
-    /// <summary>Public entry point. Every contract error is converted into an envelope here, including the
-    /// ones raised deep inside the journal or the queue: a <see cref="KompasContractException"/>
-    /// that escapes would be reported by the caller as an unclassified VERIFICATION_FAILED, and
-    /// OPERATION_ID_CONFLICT in particular must never lose its code — that code is the whole
-    /// answer to "may I send this again".</summary>
+    /// <summary>Public entry point. Every contract error is converted into an envelope here, including
+    /// ones raised inside the journal or queue: an escaping <see cref="KompasContractException"/>
+    /// would be reported as an unclassified VERIFICATION_FAILED, and OPERATION_ID_CONFLICT in
+    /// particular must never lose its code.</summary>
     public async Task<ResultEnvelope<JsonNode?>> InvokeAsync(string toolName, JsonObject arguments, CancellationToken cancellationToken)
     {
         try
@@ -137,9 +132,7 @@ public sealed class ToolInvoker : IAsyncDisposable
             : await RunReadAsync(tool, arguments, cancellationToken).ConfigureAwait(false);
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // Validation
-    // ---------------------------------------------------------------------------------------------
+    // ---- Validation ----
 
     private List<SchemaViolation> Validate(ToolDefinition tool, JsonObject arguments)
     {
@@ -155,10 +148,9 @@ public sealed class ToolInvoker : IAsyncDisposable
     }
 
     /// <summary>Mode-dependent field rules. The published validator understands anyOf/oneOf but not
-    /// if/then/allOf, so a combination cannot be expressed in the schema without adding keywords
-    /// that would then be silently ignored everywhere else; it is checked here instead, before COM.
-    /// Spec 4.1 (docs/05) demands exactly this: required, optional and forbidden fields per mode,
-    /// with unsupported combinations rejected rather than normalised away.</summary>
+    /// if/then/allOf, so a combination cannot be expressed in the schema; it is checked here, before
+    /// COM. Spec 4.1 (docs/05) demands exactly this: required, optional and forbidden fields per
+    /// mode, unsupported combinations rejected rather than normalised away.</summary>
     private static IEnumerable<SchemaViolation> ModeViolations(ToolDefinition tool, JsonObject arguments)
     {
         if (tool.Name == "kompas_edit_sketch")
@@ -217,11 +209,10 @@ public sealed class ToolInvoker : IAsyncDisposable
 
         if (tool.Name == "kompas_hole")
         {
-            // The "field ↔ mode" rules live here, not in the schema: the validator would publish an
-            // if/then that is silently ignored elsewhere (see the comment above). The cost of an error
-            // is asymmetric here — a spurious refusal is visible at once, while an accepted and
-            // ignored number survives to acceptance, because mode parameters of different modes live
-            // in DIFFERENT API7 interfaces (ISpotfacingHoleParameters vs ICountersinkHoleParameters).
+            // The "field ↔ mode" rules live here, not in the schema (see above). The cost of an error
+            // is asymmetric: a spurious refusal is visible at once, while an accepted and ignored
+            // number survives to acceptance, because mode parameters of different modes live in
+            // DIFFERENT API7 interfaces (ISpotfacingHoleParameters vs ICountersinkHoleParameters).
             var mode = ReadString(arguments, "mode") ?? "blind_flat";
             var holeHasDepth = Present(arguments, "depth_mm");
             var hasBoreDiameter = Present(arguments, "counterbore_diameter_mm");
@@ -321,17 +312,16 @@ public sealed class ToolInvoker : IAsyncDisposable
             }
 
             // The angle edit is not duplicated here: that refusal belongs to the adapter
-            // (CAPABILITY_UNAVAILABLE, because the route was never measured), while the "field ↔ mode"
-            // rule above is the contract layer. Two checks of one case with different codes would give
-            // acceptance two answers to one request, and "where exactly it refused" would stop reading.
+            // (CAPABILITY_UNAVAILABLE, route never measured), while the "field ↔ mode" rule above is
+            // the contract layer. Two checks of one case with different codes would give acceptance
+            // two answers to one request.
             yield break;
         }
 
         // A mate parameter is bound to its type. Accepting a number where the mate type has no
         // parameter (coincidence, parallel, perpendicular, tangency, concentric) is the same defect
         // as an accepted-and-ignored through-hole depth: a recorded value does not mean an applied
-        // one. For distance and angle the parameter is instead mandatory — without it creation would
-        // differ from the parameterless type in name only (defect M10, review 05.10.2026).
+        // one. For distance and angle the parameter is mandatory.
         // History: docs/decisions/host.md#mate-param
         if (tool.Name == "kompas_create_mate")
         {
@@ -367,8 +357,8 @@ public sealed class ToolInvoker : IAsyncDisposable
         var hasTarget = arguments.TryGetPropertyValue("target_body_ref", out var targetBody) && targetBody is not null;
 
         // docs/02 makes target_body_ref a field of boss and cut only. `base` creates the first body,
-        // so there is nothing for it to aim at; letting the pair through and ignoring the reference
-        // would report a honoured target that was never requested from KOMPAS.
+        // so there is nothing to aim at; letting the pair through would report a honoured target that
+        // was never requested from KOMPAS.
         if (TargetBodyGuard.TargetBodyRefusedForOperation(operation, hasTarget))
         {
             yield return new SchemaViolation(
@@ -404,8 +394,8 @@ public sealed class ToolInvoker : IAsyncDisposable
     {
         // `path` on an EDIT open is an intent to WRITE to that file: a document opened with
         // access=edit is later saved by kompas_save_document without target_path, i.e. back to the
-        // source file. Judging such a field as a read would let a write into a "read-only" root slip
-        // through (defect H4, review 05.10.2026). History: docs/decisions/host.md#path-write
+        // source file. Judging it as a read would let a write into a "read-only" root slip through.
+        // History: docs/decisions/host.md#path-write
         var pathIsWrite = tool.Name == "kompas_open_document"
                           && string.Equals(ReadString(arguments, "access"), "edit", StringComparison.Ordinal);
 
@@ -418,11 +408,9 @@ public sealed class ToolInvoker : IAsyncDisposable
 
             // INVARIANT: a relative path is REFUSED, not allowed. The decision is made via
             // `Path.GetFullPath` from the HOST's working directory, but the command runs in the Worker
-            // — from the Worker's (install folder) or the KOMPAS process's working directory. The same
-            // relative path is thus judged against one folder and read/written in another: if the
-            // Host's working directory lies inside an allowed root, the path passes the policy and the
-            // file is taken elsewhere (defect M13, review 05.10.2026). The schema demands an absolute
-            // path — now it is checked, not implied. History: docs/decisions/host.md#relative-path
+            // (install folder) or the KOMPAS process: the same relative path is judged against one
+            // folder and read/written in another. The schema demands an absolute path — now checked,
+            // not implied. History: docs/decisions/host.md#relative-path
             if (!Path.IsPathFullyQualified(value))
             {
                 return new ErrorDto(
@@ -466,9 +454,7 @@ public sealed class ToolInvoker : IAsyncDisposable
         return null;
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // Execution
-    // ---------------------------------------------------------------------------------------------
+    // ---- Execution ----
 
     /// <summary>The Host's answer-wait budget: the maximum of the shared command budget (Worker budget
     /// plus margin) and the operator setting. The setting may LENGTHEN the budget but cannot make the
@@ -480,11 +466,10 @@ public sealed class ToolInvoker : IAsyncDisposable
     private async Task<ResultEnvelope<JsonNode?>> RunReadAsync(ToolDefinition tool, JsonObject arguments, CancellationToken cancellationToken)
     {
         // INVARIANT: the Host budget is PER COMMAND, not one setting for everything. A single setting
-        // (operation_budget_ms, 120 s default) against Worker budgets of 180–300 s meant the HOST gave
-        // up before the Worker: it declared OUTCOME_UNKNOWN, broke the channel, and the next call
-        // killed a Worker still working to its own budget (defect M11, review 05.10.2026). The budget
-        // now comes from the shared table and cannot be shorter than the Worker's; the operator
-        // setting may still LENGTHEN it, not shorten it. History: docs/decisions/host.md#budget-per-command
+        // (operation_budget_ms, 120 s default) against Worker budgets of 180–300 s made the HOST give
+        // up before the Worker and kill a Worker still working. The budget now comes from the shared
+        // table and cannot be shorter than the Worker's; the operator setting may LENGTHEN it, not
+        // shorten it. History: docs/decisions/host.md#budget-per-command
         var budgetMs = BudgetFor(tool);
         var timeout = TimeSpan.FromMilliseconds(Math.Min(ReadInt(arguments, "timeout_ms") ?? budgetMs, budgetMs));
         try
@@ -529,11 +514,9 @@ public sealed class ToolInvoker : IAsyncDisposable
         var execution = ExecuteAsync(tool, arguments, operationId, cancellationToken);
         if (!_inFlight.TryAdd(operationId, execution))
         {
-            // The journal said "never saw this operation_id", yet a task with it already exists — a
-            // state that should not occur. The command is not sent a second time: we await the
-            // existing one. The replay defence itself lives in the journal (see
-            // OperationJournal.TryBegin), because only it is atomic across processes; this branch is a
-            // second line, not the first.
+            // The journal said "never saw this operation_id", yet a task with it exists. The command
+            // is not sent a second time: we await the existing one. The replay defence itself lives in
+            // the journal (OperationJournal.TryBegin), atomic across processes; this is a second line.
             await execution.ConfigureAwait(false);
         }
 
@@ -555,11 +538,8 @@ public sealed class ToolInvoker : IAsyncDisposable
         return Envelope(OperationStatus.Running, tool, operationId, null, arguments,
             warnings: new[]
             {
-                // The warning used to say "poll kompas_operation_status" — a tool of that name does
-                // not exist in the catalog and never did. A client trusting the server's own hint got
-                // "unknown tool" instead of the operation state. Polling is a repeat of the SAME call
-                // with the SAME operation_id: the journal replays the recorded outcome (see Replayed),
-                // and an unfinished operation answers Running.
+                // Polling is a repeat of the SAME call with the SAME operation_id: the journal replays
+                // the recorded outcome (see Replayed), and an unfinished operation answers Running.
                 // History: docs/decisions/host.md#running-poll
                 $"Операция не завершилась за {_options.SyncBudgetMs / 1000} с и продолжает выполняться; " +
                 "повторите тот же вызов с тем же operation_id — журнал вернёт записанный исход, " +
@@ -611,10 +591,10 @@ public sealed class ToolInvoker : IAsyncDisposable
             }
 
             // INVARIANT: a failed terminal write after a completed mutation is not a normal refusal.
-            // The outcome is known only to this process, while the durable line still says `in_flight`;
-            // the error must therefore not carry the "retry as is" policy — a retry after restart
-            // would apply the mutation a second time. The policy becomes "after reconciliation", and
-            // this is named in a warning, not left silent. History: docs/decisions/host.md#terminal-write
+            // The outcome is known only to this process while the durable line says `in_flight`, so the
+            // error must not carry the "retry as is" policy — a retry after restart would apply the
+            // mutation twice. The policy becomes "after reconciliation", named in a warning.
+            // History: docs/decisions/host.md#terminal-write
             var error = terminalRecorded ? frame.Error : ForceReconciliation(frame.Error);
             return Envelope(frame.Error.Code == ErrorCodes.OutcomeUnknown ? OperationStatus.OutcomeUnknown : OperationStatus.Failed,
                 tool, operationId, null, arguments, error,
@@ -631,8 +611,8 @@ public sealed class ToolInvoker : IAsyncDisposable
             // A Worker death during a mutation is NOT an ordinary refusal. The channel broke AFTER
             // the command was sent: the Worker may be inside a COM call. A `failed` status with
             // `needs_reconciliation=false` hid this from both `CountNeedingReconciliation` and
-            // `kompas_health`, although `OperationJournal.MarkUnknown` is documented exactly for a
-            // "Worker death" (defect M2, review 05.10.2026). History: docs/decisions/host.md#worker-death-mutation
+            // `kompas_health`, although `OperationJournal.MarkUnknown` is documented for exactly this.
+            // History: docs/decisions/host.md#worker-death-mutation
             if (contract.Code == ErrorCodes.OutcomeUnknown || contract.Code == ErrorCodes.ApplicationDisconnected)
             {
                 var recorded = _journal.MarkUnknown(operationId, contract.Message);
@@ -660,8 +640,7 @@ public sealed class ToolInvoker : IAsyncDisposable
             // The queue admits work, it does not execute it: the command goes to the Worker straight
             // after Enqueue, so the slot must be released here. Without this the bounded channel is a
             // lifetime budget of QueueCapacity mutations per process, and the 65th mutation of a long
-            // session fails with QUEUE_FULL — which is exactly what the first acceptance run of the
-            // multi-body U05 group hit.
+            // session fails with QUEUE_FULL.
             _queue.Complete(operationId);
             cancellation.Dispose();
         }
@@ -678,12 +657,10 @@ public sealed class ToolInvoker : IAsyncDisposable
             _ => OperationStatus.Running,
         };
 
-        // INVARIANT: the envelope does not contradict itself. A terminal write may have failed to
-        // land AFTER a completed mutation: the outcome is then known only to this process, the record
-        // is marked as needing reconciliation, but its Outcome stays `succeeded`. An earlier response
-        // returned `status=succeeded` together with `error=OUTCOME_UNKNOWN` — a client reading the
-        // status took the operation as successful and repeated it with a new operation_id (defect L5,
-        // review 05.10.2026). A status requiring reconciliation is `outcome_unknown`, not `succeeded`.
+        // INVARIANT: the envelope does not contradict itself. A terminal write may have failed to land
+        // AFTER a completed mutation: the outcome is known only to this process, the record is marked
+        // as needing reconciliation, but its Outcome stays `succeeded`. A status requiring
+        // reconciliation is `outcome_unknown`, not `succeeded`.
         // History: docs/decisions/host.md#replay-status
         if (status == OperationStatus.Succeeded && record.NeedsReconciliation)
         {
@@ -697,9 +674,8 @@ public sealed class ToolInvoker : IAsyncDisposable
 
         if (record.Outcome == JournalOutcome.InFlight)
         {
-            // An unfinished record answers running: the client learns that the operation is IN
-            // PROGRESS and that it must await the same call, not a new operation_id (which would
-            // restart the mutation).
+            // An unfinished record answers running: the operation is IN PROGRESS and the client must
+            // await the same call, not a new operation_id (which would restart the mutation).
             warnings.Add(
                 "Операция ещё выполняется: повторяйте ЭТОТ ЖЕ вызов с ЭТИМ ЖЕ operation_id, пока "
                 + "статус остаётся running; новый operation_id начал бы мутацию заново.");
@@ -747,18 +723,16 @@ public sealed class ToolInvoker : IAsyncDisposable
     }
 
     /// <summary>The warning that names a NON-DURABLE terminal journal write: the mutation is done and
-    /// the outcome is known to this process, but the outcome line never landed. After a restart the
-    /// journal reads `in_flight` and demands reconciliation — so a retry is not safe, and this is told
-    /// to the client, not hidden.</summary>
+    /// the outcome known to this process, but the line never landed. After a restart the journal reads
+    /// `in_flight` and demands reconciliation, so a retry is not safe.</summary>
     private const string TerminalWriteNotDurable =
         "Терминальная запись журнала операций не удалась (межпроцессная блокировка не получена). " +
         "Исход команды известен только этому процессу; после перезапуска он потребует согласования, " +
         "и повтор с тем же operation_id до согласования не безопасен.";
 
-    /// <summary>A channel break to the Worker during a mutation: the code APPLICATION_DISCONNECTED
-    /// says "no connection", but for a MUTATION the same fact means "outcome unknown". The client
-    /// needs the second meaning — it decides from it whether a retry is safe — so the code and policy
-    /// are translated while the cause is preserved.</summary>
+    /// <summary>A channel break to the Worker during a mutation: APPLICATION_DISCONNECTED says "no
+    /// connection", but for a MUTATION the same fact means "outcome unknown". The client decides from
+    /// it whether a retry is safe, so the code and policy are translated, the cause preserved.</summary>
     private static ErrorDto DisconnectedAsUnknown(KompasContractException contract)
     {
         var error = contract.ToErrorDto();
@@ -800,10 +774,9 @@ public sealed class ToolInvoker : IAsyncDisposable
     {
         var merged = new List<string>(warnings ?? Array.Empty<string>());
 
-        // Identity fields are taken from the caller first and from the Worker's answer second:
-        // kompas_connect has no application_id in its arguments (it is the call that invents one),
-        // and leaving the envelope null there would hide the session id from the very response
-        // whose job is to report it.
+        // Identity fields come from the caller first, the Worker's answer second: kompas_connect has
+        // no application_id in its arguments (it invents one), and leaving the envelope null there
+        // would hide the session id from the response whose job is to report it.
         var applicationId = ReadString(arguments, "application_id") ?? ReadString(result, "application_id");
         var documentId = ReadString(arguments, "document_id")
             ?? ReadString(result, "document_id")
@@ -820,10 +793,9 @@ public sealed class ToolInvoker : IAsyncDisposable
             RevisionBefore = ReadLong(arguments, "expected_revision") ?? ReadLong(result, "revision_before"),
             RevisionAfter = ReadLong(result, "revision") ?? ReadLong(result, "revision_after"),
             Result = result,
-            // The Worker is the only party that actually observed the model or the file, so its
-            // verification level wins. The Host's own value is a floor, never a ceiling: claiming
-            // "geometry_checked" here would be overclaiming, and silently downgrading the Worker's
-            // honest answer to "call_returned" would hide proof the client is entitled to.
+            // The Worker actually observed the model or the file, so its verification level wins. The
+            // Host's own value is a floor, never a ceiling: claiming "geometry_checked" here would be
+            // overclaiming, and downgrading the Worker's honest answer would hide proof.
             Verification = WorkerVerification(result) ?? new VerificationDto(
                 status == OperationStatus.Succeeded
                     ? tool.Behaviour.ReadOnly ? VerificationLevel.ArgumentValidated : VerificationLevel.CallReturned
@@ -868,9 +840,8 @@ public sealed class ToolInvoker : IAsyncDisposable
         }
     }
 
-    // Reads go through JsonScalars because these nodes arrived over the named pipe and are
-    // JsonElement-backed; the strict GetValue<T>/TryGetValue<T> overloads silently return nothing
-    // for that storage, which made the revision chain look stale.
+    // Reads go through JsonScalars: these nodes arrived over the named pipe and are JsonElement-backed,
+    // and the strict GetValue<T>/TryGetValue<T> overloads silently return nothing for that storage.
     private static string? ReadString(JsonNode? node, string key) =>
         node is JsonObject obj ? JsonScalars.ReadString(obj[key]) : null;
 
@@ -906,12 +877,10 @@ public sealed class ToolInvoker : IAsyncDisposable
 
     public IReadOnlyDictionary<string, long> QueueStatistics() => _queue.Statistics();
 
-    /// <summary>Operations that are still running although the synchronous response has already gone.</summary>
-    /// <remarks>Why this cannot be replaced by a queue check: a mutation that overruns
-    /// <c>SyncBudgetMs</c> answers <c>running</c> and leaves the queue, so the queue is empty while
-    /// KOMPAS still works. A session release trusting the empty queue would hand over ownership with
-    /// a live COM call — exactly the case the rule "an empty queue alone is insufficient" was written
-    /// for.</remarks>
+    /// <summary>Operations still running although the synchronous response has already gone.</summary>
+    /// <remarks>A queue check cannot replace this: a mutation that overruns <c>SyncBudgetMs</c> answers
+    /// <c>running</c> and leaves the queue, so the queue is empty while KOMPAS still works. A release
+    /// trusting the empty queue would hand over ownership with a live COM call.</remarks>
     public IReadOnlyList<string> InFlightOperationIds() =>
         _inFlight.Where(pair => !pair.Value.IsCompleted).Select(pair => pair.Key).ToList();
 

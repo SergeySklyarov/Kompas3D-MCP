@@ -4,11 +4,11 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>Command budgets: the Host must never give up before the Worker (defect M11, review 05.10.2026).</summary>
+/// <summary>Command budgets: the Host must never give up before the Worker.</summary>
 /// <remarks>INVARIANT: the Host budget is derived from the Worker budget on one shared table, not set by an
-/// independent number — otherwise the Host declares OUTCOME_UNKNOWN and breaks the channel before the
-/// Worker reaches its own limit, and the next call kills a Worker that is still working.
-/// History: docs/decisions/tests.md#command-budget</remarks>
+/// independent number — otherwise the Host declares OUTCOME_UNKNOWN and breaks the channel before the Worker
+/// reaches its own limit, and the next call kills a Worker that is still working.
+/// History: docs/decisions/tests.md#command-budget-2</remarks>
 public class CommandBudgetTests
 {
     [Theory]
@@ -43,8 +43,8 @@ public class CommandBudgetTests
         Assert.Equal(worker + CommandBudgets.HostMarginMs, host);
     }
 
-    /// <summary>INVARIANT: the default budget (120 s) need no longer exceed the Worker budget, but it must be
-    /// no LESS than the old flat one — the old 120 s Host vs 240 s Worker was the discrepancy closed here.</summary>
+    /// <summary>INVARIANT: the default budget need no longer exceed the Worker budget, but it must be no LESS
+    /// than the old flat one.</summary>
     [Fact]
     public void LongCommandsGetMoreThanTheOldFlatHostBudget()
     {

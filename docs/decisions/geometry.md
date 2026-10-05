@@ -116,3 +116,10 @@ than guessing a sign — the mistake G07 was left open over. A through cut trave
 in both directions from the sketch plane, which sits outside the material by construction (the probe's
 cut plane was 10 mm above the bodies), so requiring the body to straddle the plane would refuse the
 very operation being measured.
+
+## <a id="sketch-profiles-contour-list"></a>Список контуров профиля и площадь области
+
+**Дословно из комментария кода.** INVARIANT: a profile's area is not the sum of its primitives — a contour
+inside another is a hole. The extent is therefore derived from the contour list, never accumulated next to
+it. The area is computed on demand rather than cached: it is read once per extrusion, and a cached figure
+can go stale against the contour list it describes.

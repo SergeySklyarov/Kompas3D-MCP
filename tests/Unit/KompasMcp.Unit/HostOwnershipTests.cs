@@ -8,11 +8,11 @@ namespace KompasMcp.Unit;
 
 /// <summary>The single owner of the CAD session: acquire, release and generations.</summary>
 /// <remarks>INVARIANT: the tests check the RULE, not a convenient case — "owner dead" and "owner alive" are
-/// checked against a REAL foreign process, since a fabricated pid would only prove that a nonexistent
-/// process does not interfere. INVARIANT (model of 04.10.2026): transport start takes no ownership,
-/// "releasing" is not "free to take", and an explicit release forbids an implicit acquire. LIMIT: the full
-/// cross-process case is measured by two independent MCP clients; a unit test does not replace it.
-/// History: docs/decisions/tests.md#host-ownership</remarks>
+/// checked against a REAL foreign process, since a fabricated pid would only prove that a nonexistent process
+/// does not interfere. INVARIANT (owner model): transport start takes no ownership, "releasing" is not "free to
+/// take", and an explicit release forbids an implicit acquire. LIMIT: the full cross-process case is measured by
+/// two independent MCP clients; a unit test does not replace it.
+/// History: docs/decisions/tests.md#host-ownership-2</remarks>
 public class HostOwnershipTests : IDisposable
 {
     private readonly string _journal;
@@ -59,9 +59,7 @@ public class HostOwnershipTests : IDisposable
                 new HostOwnerRecord(pid, generation ?? Guid.NewGuid().ToString("N"), state, DateTimeOffset.UtcNow, 1, null, null),
                 RecordJson));
 
-    // -----------------------------------------------------------------------------------------
-    // Transport start takes no ownership
-    // -----------------------------------------------------------------------------------------
+    // Transport start takes no ownership.
 
     [Fact]
     public void Open_DoesNotClaimOwnershipAndLeavesNoRecord()
@@ -77,9 +75,7 @@ public class HostOwnershipTests : IDisposable
         Assert.False(probe.RequiresExplicitAcquire);
     }
 
-    // -----------------------------------------------------------------------------------------
-    // Acquire
-    // -----------------------------------------------------------------------------------------
+    // Acquire.
 
     [Fact]
     public void TryAcquire_WritesOwnerWithNewGeneration()
@@ -130,8 +126,7 @@ public class HostOwnershipTests : IDisposable
         Assert.Equal(_foreign.Id, ReadRecord().Pid);
     }
 
-    /// <summary>INVARIANT: "releasing" is NOT "free to take" — a live owner in <c>releasing</c> keeps the
-    /// exclusive right.</summary>
+    /// <summary>INVARIANT: "releasing" is NOT "free to take" — a live owner in <c>releasing</c> keeps the right.</summary>
     [Fact]
     public void LiveOwnerReleasing_IsRefusedAndNotTakenOver()
     {
@@ -145,8 +140,8 @@ public class HostOwnershipTests : IDisposable
         Assert.Equal(_foreign.Id, ReadRecord().Pid);
     }
 
-    /// <summary>INVARIANT: transport finished but cleanup unconfirmed (<c>draining</c>) — ownership is not
-    /// handed to a live owner (the old model did, a measured defect).</summary>
+    /// <summary>INVARIANT: transport finished but cleanup unconfirmed (<c>draining</c>) — ownership is not handed
+    /// to a live owner (the old model did, a measured defect).</summary>
     [Fact]
     public void LiveOwnerDraining_IsNotTakenOver()
     {
@@ -180,9 +175,7 @@ public class HostOwnershipTests : IDisposable
         Assert.False(result.TookOverFromLiveOwner);
     }
 
-    // -----------------------------------------------------------------------------------------
-    // Release and generations
-    // -----------------------------------------------------------------------------------------
+    // Release and generations.
 
     [Fact]
     public void Release_GoesThroughReleasingAndPublishesReleased()
@@ -244,8 +237,8 @@ public class HostOwnershipTests : IDisposable
         Assert.True(ownership.IsOwner, "отказ до очистки обязан вернуть owned, а не полусвободное состояние");
     }
 
-    /// <summary>INVARIANT: an unfinished release is no reason to start over — a new acquire would create a
-    /// second generation and a second Worker over a possibly still-live one.</summary>
+    /// <summary>INVARIANT: an unfinished release is no reason to start over — a new acquire would create a second
+    /// generation and a second Worker over a possibly still-live one.</summary>
     [Fact]
     public void AcquireWhileReleasing_IsRefusedAndDoesNotCreateASecondGeneration()
     {
@@ -271,8 +264,8 @@ public class HostOwnershipTests : IDisposable
         Assert.Equal(HostOwnerState.Serving, ReadRecord().State);
     }
 
-    /// <summary>INVARIANT: a late callback from an OLD generation does not update the new owner's state — a
-    /// record with our pid but a foreign generation is not ours.</summary>
+    /// <summary>INVARIANT: a late callback from an OLD generation does not update the new owner's state — a record
+    /// with our pid but a foreign generation is not ours.</summary>
     [Fact]
     public void StaleGeneration_CannotMarkServingOrRelease()
     {
@@ -314,17 +307,15 @@ public class HostOwnershipTests : IDisposable
         Assert.Equal(_foreign.Id, ReadRecord().Pid);
     }
 
-    // -----------------------------------------------------------------------------------------
-    // An unreadable record is not freedom
-    // -----------------------------------------------------------------------------------------
+    // An unreadable record is not freedom.
 
     [Fact]
     public void UnreadableRecord_IsNotTreatedAsFreeSession()
     {
         using var ownership = HostOwnership.Open(_journal);
 
-        // INVARIANT: the owner record exists but does not parse. "Did not read" and "no owner" are different
-        // states — equating them would allow work with an unknown session.
+        // INVARIANT: the owner record exists but does not parse — "did not read" and "no owner" are different
+        // states, and equating them would allow work with an unknown session.
         File.WriteAllText(RecordPath, "{ это не json ");
 
         var probe = ownership.Probe();
@@ -348,7 +339,8 @@ public class HostOwnershipTests : IDisposable
 
         Assert.True(ownership.StillOwned(), "нечитаемая запись — не доказательство потери владения");
 
-        // INVARIANT: a write failure does not turn a live call into a refusal — the host stays the owner, but the trouble is named.
+        // INVARIANT: a write failure does not turn a live call into a refusal — the host stays owner, but the
+        // trouble is named.
         Assert.True(ownership.MarkServing());
         Assert.NotNull(ownership.TakeWriteProblem());
         Assert.True(ownership.TakeWriteProblem() is null, "одна и та же беда называется ровно один раз");

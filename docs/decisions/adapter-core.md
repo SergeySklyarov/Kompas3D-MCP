@@ -419,7 +419,8 @@ printed the tree types after a cut by rotation: `features=2 types=['25', '29']` 
 (`o3d_bossExtrusion`) and the cut by rotation under 29. So for a rotation the FACTORY number and the tree
 number COINCIDE (29 = `o3d_cutRotated`), unlike a hole. The conclusion is not "the number is the same" but
 "the two numbering systems behave differently across families, and analogy must not be assumed" — which is
-why the value here is measured, not derived.
+why the value here is measured, not derived. Factory side, MEASURED by probe R.24:
+`(int)ksObj3dTypeEnum.o3d_baseRotated = 27`.
 
 ## <a id="hole3d-numbering"></a>Hole tree number vs factory number (probe N.1, 17.09.2026)
 
@@ -513,3 +514,261 @@ unverifiable. LIMIT: this method does not control the projection (`IViewProjecti
 to a separate order and named as a remainder), does not silently downscale, and does not report "success"
 without bytes. The snapshot is the server window's current view; camera state is not captured and is named
 unverified in the response.
+
+
+## <a id="readonly-save-guard"></a>Запись в файл документа, открытого read-only (review 05.10.2026)
+
+ACCESS IS REMEMBERED BECAUSE IT DECIDES THE OUTCOME OF A LATER WRITE. A document opened `read_only` must
+not be saved "in place": the save call carries no path field and the Host has nothing to check — its policy
+judges the CALL's fields, not the document's path. So `kompas_open_document(path under read_only_roots)` +
+`kompas_save_document` without target_path wrote straight into a root declared "read-only" (defect H4,
+review 05.10.2026). The access flag is what closes that write.
+
+## <a id="session-compaction"></a>Ядро сеанса — история, вынесенная из кода
+
+Identity rules the contract depends on: (1) a document is addressed by server UUID, never by "the active
+tab" — <c>Document3D()</c> is a factory (P0.5: two calls give different IUnknowns); (2) revisions are
+server-side counters bumped on mutation, rebuild, reload and restore — external UI edits cannot be trusted
+to raise events, so a fingerprint is compared before every mutation and the document is marked
+<c>conservative</c>; (3) COM references are held only here and released when the document is closed or the
+session ends (spec 1.6).
+
+Visibility semantics: <c>launch</c> — make_visible=true shows, false explicitly hides, as P0.4b did;
+<c>attach</c> — false is a request for "invisible" that is not applied to another's window. Opening a file
+in an invisible window of the user's KOMPAS would hide the result of their work.
+
+Component count: MEASURED 04.10.2026 by a live run (the error was visible only on a live assembly). LIMIT:
+the walk is bounded by depth, named as a number not "reasonable": 64 levels, so a subassembly cycle (if
+possible) cannot loop the server.
+
+Rotation numbering: MEASURED 17.09.2026 by acceptance SM-03 (row RO.10t). The two numbering systems behave
+differently across families, and analogy must not be assumed — the value is measured, not derived.
+
+Hole numbering: MEASURED by probe N.1 on 17.09.2026, fixing a real defect. Two numbering systems that must
+not be confused.
+
+Boolean operation type: MEASURED 18.09.2026 with the instrument <c>scratch/b3-measure-feature-types.py</c>
+via <c>kompas_list_features</c> (which also printed <c>entity.type</c>).
+
+Reposition numbering: the filter is applied WITHIN one operation (boolean expects 69, the copy 79 never
+becomes a candidate; reposition expects 79, exactly one new entry).
+
+
+## <a id="lifecycle-compaction"></a>Жизненный цикл признака — история, вынесенная из кода
+
+MEASURED by probe L on 12.09.2026 on live v24 (docs/acceptance/api7/sketch-lifecycle.md), not from names.
+Suppressing an already-deleted feature gave CAPABILITY_UNAVAILABLE, plausible but wrong in substance
+(row L10). MEASURED 19.09.2026 (probe I) that two consecutive features of one kind carry the SAME name.
+Row L09, run 12.09.2026: DeleteObject on a dead object answers true, the tree is unchanged.
+
+Counter: MEASURED (L04/L05 12.09.2026; probe I 19.09.2026, run
+<c>c90961c6a3ba478697da5bc243040719</c>, report docs/acceptance/api7/feature-identity.json): restoring
+returned one (2→3).
+
+Position: MEASURED 19.09.2026: suppressing and restoring a base extrusion (BG19/BG20) recreates the tree
+element and FindIt on the old object answers −1 though it is alive and IsCreated. Two consecutive features
+of one kind share a name (probe I). MEASURED 19.09.2026, probe I: a name check would be FALSELY negative
+if a same-named neighbour remains. "The target was removed" and "the cascade went as expected" are
+DIFFERENT claims. MEASURED 19.09.2026: after suppressing and restoring a base extrusion, <c>FindIt</c> on
+the old object answers −1.
+
+Tree position: MEASURED 19.09.2026 (probe I, run <c>c90961c6a3ba478697da5bc243040719</c>); both outcomes
+were measured in one run. MEASURED by probe L.7: excluded=true on a 40×20 through hole gave the plate back
+its 80000 mm³. MEASURED: suppressing the first of two consecutive reposition features took collection 110
+from 4 to 2 while restoring returned one. Row L09: DeleteObject on a dead object answers true, the tree is
+unchanged. A strict "exactly one fewer" made a CASCADE falsely negative (a 5→3 tree gave
+feature_removed=false though the target was gone). Two consecutive reposition features carry ONE name
+("Change of position : Body 1").
+
+## <a id="pattern-route"></a>Маршрут массивов: обоснование и ожидание (SM-18/SM-19/SM-23)
+
+The "type → interface" correspondence is taken from the SDK help page <c>copytype.html</c>, opened on
+the wire in this work, not inferred by analogy with rotation. The axis route
+<c>IAuxiliaryGeomContainer.Axes3D.Add(o3d_axis2Points)</c> was already MEASURED by rotation (SM-03)
+and is reused here as MEASURED, not assumed. DOC: <c>icircularpattern_props.html</c> calls
+<c>Count1</c>/<c>Step1</c> RADIAL and <c>Count2</c>/<c>Step2</c> ANNULAR, with <c>Step2</c> labelled
+«Угловой шаг (градусы)». This closes OQ-B-02 and refutes the expectation recorded in the work order
+(§6.3, §8), where the first direction was considered annular. It is the EXPECTATION that is called
+into question, not the measurement. Ранее эта ссылка вела на
+docs/decisions/adapter-features.md#pattern-route.
+
+## <a id="chamfer-compaction"></a>Фаска — пояснения, вынесенные из кода
+
+Ранее эта ссылка вела на docs/decisions/adapter-features.md#chamfer-route и
+docs/decisions/adapter-features.md#chamfer-method-substitution.
+
+Basis — probe F (<c>docs/acceptance/api7/chamfer.md</c>), not method names. TEST: F.3/F.5 — editing the
+legs applies in place both before and after save→close→reopen, and the value is read back. TEST:
+F.9/F.10 — with the "distance and angle" method the chamfer is built only via
+<c>IChamfer.Angle = ksChamferSideAngle</c>, the angle in DEGREES; the radian hypothesis would have
+given a negative number and was refuted by measurement. The names are what
+<c>IChamfer.BuildingType.ToString()</c> returns from API7 (API5 has no method at all); needed to
+recognise the feature for which the API5 write route loses the build method. Without RebuildModel the
+IChamfer write stays a representation: MEASURED by probe E on IExtrusion.Sketch, and the same call
+order is mandatory for the chamfer. Search by type and order, not by name: F.8 MEASURED that a name
+given in API5 reads differently in API7 — the name is not a feature identifier. If an API7 bridge is
+also built to the same document and there is one chamfer in it, angle and method are added. An empty
+field means "not read", not "zero". Measuring the angle of "the first chamfer in a row" with several
+chamfers would attribute a foreign number to the feature, so on ambiguity the server returns null and
+explains the cause in <c>unverified</c>. Differences from the API5 route (UpdateChamfer): the feature
+is addressed by INDEX in <c>IModelContainer.Chamfers</c> and matched to the API5 feature by the first
+leg (the name is not an identifier — F.8); the second leg is DERIVED from the angle, so it is written
+only if the client set it explicitly; success is not "Update() returned true" but that the model gives
+the new angle and the leg <c>d₁·tg α</c>. An angle is not physically expressible in API5
+(ksChamferDefinition declares no "angle" member), so with angle_deg present IChamfer writes. MEASURED:
+writing Angle followed by Update() applies to the model, the build method stays ksChamferSideAngle, and
+the kernel recomputes the second leg as d₂ = d₁·tg α. Only calls without angle_deg land here. If the
+feature's method is "distance and angle", the API5 write would lose the angle, so such a call is
+refused BEFORE the mutation with an explanation of what to do instead. The API5 write route
+(SetChamferParam) only knows ksChamferTwoSides and does NOT preserve a "distance and angle" chamfer
+(ksChamferSideAngle, d₂ = d₁·tg α), so the write is refused BEFORE the mutation. The method is read
+from API7; on an ambiguous match ReadChamferAngle returns null and the write is NOT refused — "method
+not read" is not "method is angular". The second leg changes only together with the first or
+explicitly: otherwise editing "one leg" would silently become editing both. The order "write →
+Update() → RebuildDocument()" is part of the contract: without Update() the model stays as it was
+although every setter returned true (P2.3 for extrusions, F.3 for the chamfer). The value is read back
+from the new definition object, the feature must stay the same, and geometry is confirmed by volume
+measurement.
+
+## <a id="loft-compaction"></a>Элемент по сечениям — пояснения, вынесенные из кода
+
+The mandatory row <c>SM-05.base.mode_couplings</c> requires section correspondence CHAINS, and API5 has
+none at all: neither <c>ksBaseLoftDefinition</c> nor <c>ksBossLoftDefinition</c> declares
+<c>AddCoupling</c> or <c>Coupling</c>. MEASURED: assigning the <c>ILoft.Sketchs</c> array gave a
+read-back of <c>System.Object[]</c> of 2 elements and <c>Update() = True</c>. Parallelism of section
+planes is the CALLER's duty, and work order B5 §9.2 requires a NAMED refusal on non-parallel planes.
+ILoft itself neither requires nor forbids it: MEASURED (step B5.11) that on non-parallel planes it
+either refuses facelessly or builds a body describing something other than requested. A silent
+"probably parallel" would be a claim without measurement. The same transfer technique was MEASURED on
+IChamfer.BaseObjects (transfer + assignment of object[]). The chain order is documented by the factory
+(«задать параметры операции и вызвать <c>IModelObject::Update</c>», <c>ilofts_add.html</c>) and
+MEASURED at step B5.18: a chain set before the first Update() is applied in one build (CouplingsCount
+= 1, volume 20000 at a 20 mm offset out of 80 — the same value as a chain added after the build). The
+content of correspondence chains is not set: the chain's existence was measured, not its
+configuration. The build method at the end sections is expressed by
+ILoft.BuildingType(BeginSection); on a freshly created feature both the start and the end read 0
+(ksLoftAuto). Values 1/2/3 (by normal, by object, dome) were NOT measured on this route, so they are
+not accepted silently — otherwise "accepted and ignored" would survive to acceptance looking like a
+performed mode. This is not pedantry: a chain shorter than the section set defines a correspondence
+not for all sections — i.e. a different body than requested. A chain count without content would prove
+only the object's existence, whereas the mandatory row requires a DEFINITE section correspondence.
+This checks that the set arrived in full, not that the order was honoured. Ранее эта ссылка вела на
+docs/decisions/adapter-features.md#loft-route.
+
+## <a id="pattern-compaction"></a>Массивы — пояснения, вынесенные из кода
+
+The tail is factored out because the three families differ ONLY in the setup while the proof is
+common: <c>Update()=true</c> is "accepted", and without reading the model back the response would not
+tell "built" from "written". A name match without the stamp does not tell two same-named features
+apart. This is the "per instance" measurement: <c>ksCylinderParam.GetPlacement()</c> gives the surface
+placement and <c>ksPlacement.GetOrigin</c> the axis point. Without coordinates the check would reduce
+to volume, and volume does not tell N holes from N−1 holes and one overlapping. Radius and height are
+FILTERED, not "all cylinders" taken: otherwise foreign cylindrical geometry would enter the instance
+count and the check would become non-discriminating. Geometric copy is documented by SDK page
+<c>ifeaturepattern_geometrypattern.html</c> and user help <c>48_3_3_geometricheskiy_massiv</c>, but has
+its own constraints (surface closure, non-intersection of instances, same operation kind) and its own
+mode — <c>SM-18.grid.operations.geometry</c>, which is NOT in the mandatory B4 scope. The factory's
+numeric type is chosen once, and a "body pattern from operations" does not assemble. Three numbers are
+returned: how many matched, what is missing and what is extra — "matched" without "extra" does not tell
+a correct grid from one with an added instance. The tolerance is not tuned after a failure.
+<c>Num(double?)</c> is already declared in the rotation part and is reused here: two same-named members
+in one partial part is a compile error, caught by the build rather than by eye. The user help
+<c>glava_48_obzhie_svedeniy</c> states directly that excluding instances is unavailable for a mirror
+pattern and a pattern-by-sample. This is a domain inapplicability with a source, not an unclosed
+action. The order "write → Update() → Rebuild()" was MEASURED on rotation and is the same here. The
+feature name is read from the tree WRAPPER: ksFeature.Name does not exist (a compile error caught by
+the build), while the name lives at ksEntity.name.
+
+## <a id="mirror-all-bodies"></a>Зеркальный массив: источник зависит от режима (B4M.10)
+
+WHAT IS THE SOURCE DEPENDS ON THE MODE, and this is MEASURED by running row B4M.10:
+selected_operations reflects OPERATIONS, all_bodies reflects BODIES. While the kind was the same
+(Operations), the "all bodies" mode was unexecutable in TWO ways: an empty list created the feature but
+reflected no body (bodies stay 2, volume 8000), and explicit body: references were rejected
+STALE_REFERENCE with "points to __ComObject instead of a feature" — because body references were parsed
+as feature references. The tool contract, however, promised body: references for all_bodies from the
+start. Ранее эта ссылка вела на docs/decisions/adapter-features.md#mirror-all-bodies.
+
+## <a id="features-compaction"></a>Чтение и правка признака — пояснения, вынесенные из кода
+
+Ранее эта ссылка вела на docs/decisions/adapter-features.md#feature-edit-basis.
+
+The vendor wrapper has no ksHoleDefinition at all (MEASURED — of 67 declared definitions there are
+ksChamferDefinition and ksFilletDefinition, but no hole), so the mode parameters live only in API7. The
+type is 583 (o3d_Hole3D), not 52 (o3d_holeOperation, the creation factory number, which never appears
+in the tree — see FindHoleEntity). A tree entity arrives as a raw __ComObject and refuses QI
+(MEASURED). B3 features are recognised by the TREE NUMBER (69 / 633 / 50 / 79) for the same reason as
+rotation: they have no API5 definition at all, GetDefinition() returns null, and the API7 object is not
+an API5 feature, so neither the definition nor QI will do (MEASURED). MEASURED: a feature created by
+NewEntity(45) (o3d_baseEvolution) shows in the tree as 46 (o3d_bossEvolution) and its definition
+answers ksBossEvolutionDefinition — NOT ksBaseEvolutionDefinition. Recognition by the creation-response
+number would never find it: the same defect was measured at the hole (52 → 583) and at rotation (27 →
+584). The parameter set lives on IRotated, and it has no API5 definition at all (entity.GetDefinition()
+returns null, MEASURED at the SM-03 acceptance). The feature index is taken by matching on composition,
+not by angle: an angle is not an identifier, and FindIndexesByAngle remains a fallback. B3 features are
+read from the LIVE model by routes measured in probes BO.2–BO.11, SP.10 and RP.8–RP.12. Some
+reposition-family parameters do not read at all, and the reason is named in solid.unreadable_parameters
+rather than substituted with a zero. A failure reason is NAMED rather than left as an empty field:
+"not read" and "zero" must be distinguishable — silence is a claim too, and an empty field is
+indistinguishable from "forgot to fill it in". OperationResult lives only in API7, and its absence is a
+route boundary, not a zero. The names and MEASURED reasons already sit in solid.unreadable_parameters,
+and duplicating them here would make the summary unreadable. A pattern edit is chosen by the pattern
+FIELD itself, not by the tree type number: for the other families the number is measured, for a
+pattern it is not, and it must not be guessed. The pattern branch stands BEFORE the API5 definition
+read: a pattern feature has no API5 definition at all (the object is created by the API7 factory), so
+below it would fall into "this feature is null" and the edit would be unreachable. Couplings were once
+accepted and swallowed (MEASURED: a "distance1_mm + couplings" call on a chamfer returned success while
+sibling shift_mode and section_refs were rejected INVALID_ARGUMENT). Found by unit test
+SolidFeatureClassificationTests. The hole branch stands HERE, not among the branches by API5
+definition: a native hole has NO definition — ksHoleDefinition does not exist among the 67 declared
+definitions of the vendor interop (recorded in docs/04) — and `kompas_get_feature` reads a hole the
+same way (definition_interface = null). Rotation has no API5 definition at all, GetDefinition() returns
+null, and QI(IRotated) on a tree entity refuses (MEASURED); a rotation edit changes only angle and
+direction, and profile and axis retargeting was not measured. Reposition has no API5 definition at all
+(GetDefinition() returns null), and the API7 object is not an API5 feature — so neither the definition
+nor QI will do (MEASURED); 569 (o3d_BodyReposition) is the CREATION side, the feature lies under 79 in
+the tree. Split and cut have no API5 definition, and the API7 object (ISplitSolid, ICut) is not an API5
+feature (MEASURED); 633 is o3d_SplitSolid, 50 is o3d_cutByPlane, and both numbers are read from the
+TREE, not from the creation factory (for a split the factory and tree diverge just like the hole
+52/583). Boolean is recognised by number 69 (o3d_aggregate) in the tree, not by the API5 definition:
+the route through ksAggregateDefinition measurably does not work (it has a writable BooleanType and NO
+way to set bodies — OQ-A16). The operation-kind edit by the API7 route was MEASURED: rewriting
+IBoolean.BooleanType on an existing feature changes the geometry, and the "write + Update()" pair was
+confirmed by control E-E. The B5 branch stands HERE, not earlier: above, families with API5 definitions
+have already rejected foreign fields by name, and "shift_mode to a chamfer" reads clearer to the caller
+than "the feature does not answer the sweep interface". Recognition is by the FIELD itself, not by the
+tree type number: for a sweep the creation number and the tree number diverge (45 → 46, step B5.12),
+and addressing by number would edit the wrong feature. Radius and edge set are different routes and
+different edit subjects; they must not be mixed in one call: "changed both" would be indistinguishable
+from "one of the two applied". Draft and its orientation carry over from what the feature reports: a
+parameter the caller never mentioned must not silently reset to zero. SetSketch returns true, but
+GetSketch() reads back the PREVIOUS sketch and the volume does not change — the support change is not
+applied by this route. The cached-RCW hypothesis was not confirmed: writing to a fresh object gives the
+same outcome; the mode stays blocked. MEASURED by row L12: when the refusal came after BumpRevision,
+the document got a new revision with an unchanged model, and all issued references went stale because
+of an operation that did nothing. The one written through may be a cached view, and "we called
+SetSketch" is not evidence that the model accepted it. KOMPAS accepted SetSketch and did not change the
+model. Reporting this as "success" would lie to the caller about the support edit, so the route refuses
+honestly and after the read-back: the feature is intact, the volume unchanged, nothing happened.
+
+## <a id="save-state-fingerprint"></a>Состояние сохранности и отпечаток модели — история из кода
+
+Отпечаток отвечает ровно на один вопрос — менял ли модель кто-то, кроме нас: правка в UI не проходит
+через BumpRevision, и заметить её больше нечем. Нечитаемый отпечаток НЕ доказывает неизменность и даёт
+"unknown", а не "clean": ранее отражённый `IsSaved` и сравнение отпечатков вместе сообщали `dirty=false`
+сразу после мутации, обесточивая обе защиты закрытия.
+
+## <a id="object-type-numbers"></a>Номера признаков в дереве API5 — история из кода
+
+Ранее эти ссылки вели на комментарии к константам KompasObjectTypes в Api5Session.cs.
+
+Булева операция: после kompas_boolean в дереве появляется ровно одна запись —
+`type=69 "Boolean operation:1"`. Разделение: после kompas_split появляется ровно одна новая запись —
+`type=633 "Cut:1"`. Сечение плоскостью: после kompas_cut_by_plane появляется ровно одна новая запись —
+`type=50 "Section:1"`. Инструмент измерения — `scratch/b3-measure-feature-types.py` через
+`kompas_list_features`.
+
+## <a id="plane-offset-sign"></a>Смещение плоскости: знак и направление
+
+DOC: `ksplaneoffsetdefinition_props.html`, «смещение вдоль нормали базовой плоскости». MEASURED:
+`direction=true` means offset along the plane's own normal for XY, XZ and YZ alike.

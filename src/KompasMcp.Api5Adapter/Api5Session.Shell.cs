@@ -8,26 +8,17 @@ namespace KompasMcp.Api5Adapter;
 
 /// <summary>Shell — a thin-walled element (docs/05 SM-13, queue B5).</summary>
 /// <remarks>
-/// ROUTE — documented API5, and MEASURED by number as well. DOC: <c>ksshelldefinition.html</c>
-/// («Тонкостенная оболочка (Интерфейсы ksShellDefinition, IShellDefinition)»): the interface «можно
-/// получить, используя метод интерфейса элемента модели <c>ksEntity::GetDefinition</c>»; its members
-/// are <c>thickness</c>, <c>thinType</c> and <c>FaceArray()</c>, returning «динамический массив
+/// DOC: <c>ksshelldefinition.html</c> — the interface is obtained via <c>ksEntity::GetDefinition</c>;
+/// members are <c>thickness</c>, <c>thinType</c> and <c>FaceArray()</c> returning «динамический массив
 /// удаляемых граней <c>ksEntityCollection</c>». Object type <c>o3d_shellOperation = 43</c>
 /// (<c>obj3dtype.html</c>).
 /// DOC: <c>ksshelldefinition_thintype.html</c> — «<c>TRUE</c> — внутрь, <c>FALSE</c> — наружу».
-/// MEASURED 20.09.2026 on a 100×80×10 box with the top face removed at <c>t = 2</c>:
-/// <c>thinType=true</c> → <c>21631.999999999996</c> mm³ (cavity 96×76×8); <c>thinType=false</c> →
-/// <c>24832.000000000022</c> mm³ (body 104×84×12 minus 100×80×10). Both match the analytic values, so
-/// the correspondence is established twice — by the help page and by volume.
-/// LIMIT: an empty face list is refused BEFORE COM — a MEASURED refusal, not a taste-based ban.
-/// MEASURED 20.09.2026 on BOTH APIs: API5 (step B5.6) gave <c>80000</c>, API7 (step B5.10, four
-/// setups) gave <c>79999.99999999999</c> at <b>6 faces</b>, exactly as the source box, while an open
-/// shell gives <c>21632</c> at <b>11</b> faces. <c>Create()/Update()</c> return <c>true</c>
-/// ("accepted") while the body does not change ("not applied"); passing that off as a built shell is
-/// forbidden.
+/// MEASURED: the inward/outward correspondence is confirmed by volume on a box with the top face
+/// removed.
+/// LIMIT: an empty face list is refused BEFORE COM — a MEASURED refusal, not a taste-based ban: the
+/// body does not change while <c>Create()/Update()</c> return <c>true</c> ("accepted", not "applied").
 /// INVARIANT: geometry is confirmed by volume against the caller's analytic expectation and by face
-/// count; <c>Create()/Update()=true</c> is only "accepted", and with no expectation the level honestly
-/// stays <c>call_returned</c>.
+/// count; with no expectation the level honestly stays <c>call_returned</c>.
 /// History: docs/decisions/adapter-features.md#shell-empty-faces
 /// </remarks>
 public partial class Api5Session
@@ -275,9 +266,8 @@ public partial class Api5Session
         if (command.FaceRefs.Count == 0)
         {
             // The refusal is MEASURED, not cautious: an empty face list yields no closed shell on
-            // either API5 (B5.6: 80000) or API7 (B5.10: 80000 at 6 faces), though Create()/Update()
-            // return true. Accepting it would tell the caller "shell built" where the body did not
-            // change.
+            // either API5 or API7, though Create()/Update() return true. Accepting it would tell the
+            // caller "shell built" where the body did not change.
             throw new KompasContractException(
                 ErrorCodes.InvalidArgument,
                 "Список удаляемых граней пуст. Измерено 20.09.2026 на обоих API: при пустом списке " +

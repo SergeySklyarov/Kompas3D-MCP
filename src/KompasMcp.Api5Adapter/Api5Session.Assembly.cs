@@ -16,8 +16,9 @@ namespace KompasMcp.Api5Adapter;
 /// <remarks>MEASURED: structure read via API7 (<c>IPart7.PartsEx</c>), placement written via API5
 /// (<c>ksPart.GetPlacement/SetPlacement/UpdatePlacement</c>) — API7 has no absolute placement write.
 /// INVARIANT: a component address is the ORDINAL in the flat <c>ksDocument3D.PartCollection(true)</c>,
-/// not <c>IPart7.Reference</c> (MEASURED: 1073741857). The ordinal addresses TOP-LEVEL components only;
-/// a nested component has no address and a mutation by a guessed ordinal is forbidden.</remarks>
+/// not <c>IPart7.Reference</c>. The ordinal addresses TOP-LEVEL components only; a nested component
+/// has no address and a mutation by a guessed ordinal is forbidden.
+/// History: docs/decisions/assembly.md#identity</remarks>
 public partial class Api5Session
 {
     /// <summary>Component reference kind in the reference registry.</summary>
@@ -30,13 +31,16 @@ public partial class Api5Session
     /// <summary>Depth limit of the structure walk. Exceeding it is NAMED, not silenced.</summary>
     private const int MaxStructureDepth = 64;
 
-    /// <summary>Component reference payload: the API7 view, the PARENT node (the matrix is read fresh from it), <c>IPart7.Reference</c> (diagnostics, not an address) and the ORDINAL in the structure enumeration.</summary>
-    /// <remarks>The ordinal is the address: <c>IPart7.Reference</c> is not a component number (MEASURED: 1073741857) and matching by source file is ambiguous with two instances of one part. The parent is stored so the matrix is read FRESH at comparison time.
-    /// INVARIANT: the placement matrix is NOT stored in the reference — a snapshot went stale from the server's OWN mutation and rejected a second mutation with <c>STALE_REFERENCE</c>.
+    /// <summary>Component reference payload: the API7 view, the PARENT node (the matrix is read fresh
+    /// from it), <c>IPart7.Reference</c> (diagnostics, not an address) and the ORDINAL.</summary>
+    /// <remarks>The ordinal is the address; <c>IPart7.Reference</c> is not a component number. The
+    /// parent is stored so the matrix is read FRESH at comparison time.
+    /// INVARIANT: the placement matrix is NOT stored in the reference — a snapshot went stale from the
+    /// server's OWN mutation and rejected a second mutation with <c>STALE_REFERENCE</c>.
     /// History: docs/decisions/assembly.md#identity</remarks>
     private sealed record ComponentPayload(IPart7 Part7, IPart7? Parent7, int? Reference, int Ordinal);
 
-    // ===================================================================================== ASM-03
+    // ── ASM-03 ──
     /// <summary>Enumerate the assembly structure.</summary>
     public ListComponentsResult ListComponents(ListComponentsCommand command)
     {
@@ -85,8 +89,8 @@ public partial class Api5Session
     {
         if (depth > MaxStructureDepth)
         {
-            // The depth limit is NAMED: a silent "cut off and did not say" is indistinguishable from
-            // "the structure ended". The former walk had no limit at all.
+            // The depth limit is NAMED: a silent "cut off" is indistinguishable from "the structure
+            // ended".
             notes.Add($"structure_depth_limit — обход структуры остановлен на глубине {MaxStructureDepth}");
             return;
         }
@@ -95,12 +99,10 @@ public partial class Api5Session
         {
             enumerated++;
 
-            // AN API5 ADDRESS EXISTS ONLY FOR A TOP-LEVEL COMPONENT.
-            // `ksDocument3D.PartCollection(true)` enumerates assembly components FLATLY, so the ordinal
-            // is meaningful only at depth 0. The former walk numbered the WHOLE tree with ONE counter,
-            // and a nested component's ordinal was passed to PartCollection — so geometry reads and
-            // mutations would hit a FOREIGN component. That is not "nested support" but address
-            // substitution.
+            // AN API5 ADDRESS EXISTS ONLY FOR A TOP-LEVEL COMPONENT:
+            // `ksDocument3D.PartCollection(true)` enumerates components FLATLY, so the ordinal is
+            // meaningful only at depth 0. A nested ordinal passed to PartCollection would hit a FOREIGN
+            // component — address substitution, not "nested support".
             var ordinal = depth == 0 ? topLevelOrdinal++ : NestedComponentOrdinal;
             var row = ReadComponent(document, node, child, parentRef, depth, ordinal, notes);
             rows.Add(row);
@@ -111,9 +113,8 @@ public partial class Api5Session
 
             if (row.IsDetail is null)
             {
-                // AN UNREAD SIGNAL IS NAMED, NOT SWALLOWED. The former walk simply stopped: "the
-                // structure ended" and "the signal was not read" were indistinguishable, whereas
-                // `CountComponents` writes a note in the same case (defect L6, review 05.10.2026).
+                // AN UNREAD SIGNAL IS NAMED, NOT SWALLOWED: "the structure ended" and "the signal was
+                // not read" must not look alike, and `CountComponents` writes a note in the same case.
                 notes.Add($"component_detail_unread_in_walk — у компонента «{row.Name ?? "?"}» " +
                           "признак «деталь/сборка» не прочитан: обход под этим узлом не продолжен, " +
                           "структура может быть неполной");
@@ -171,17 +172,14 @@ public partial class Api5Session
         int ordinal, List<string> notes)
     {
         // Reference is a diagnostic number, NOT an address (see ComponentPayload). An unread value
-        // stays null instead of becoming 0: "the number was not read" and "number 0" are different
-        // claims.
+        // stays null, not 0: "not read" and "0" are different claims.
         var reference = Int(() => part.Reference);
         var addressable = ordinal != NestedComponentOrdinal;
 
-        // THE API7 MATRIX FOR THE RESPONSE. Read via the documented IPart7.GetSummMatrix
+        // THE API7 MATRIX FOR THE RESPONSE, via the documented IPart7.GetSummMatrix
         // (ipart7_getsummmatrix.html): «суммарная матрица преобразования координат», 16 elements, 4x4.
-        // This is the placement AT READ TIME — it is what goes into the response; it is NOT stored in
-        // the REFERENCE, otherwise the snapshot would go stale from the server's own mutation (see
-        // ComponentPayload). Read only for an addressable (top-level) component: a nested one has no
-        // address, so there is nothing to read.
+        // It is the placement AT READ TIME; it is NOT stored in the REFERENCE (see ComponentPayload),
+        // and is read only for an addressable (top-level) component — a nested one has no address.
         var matrix7 = addressable ? SummMatrix7(parent, part) : null;
 
         var stored = References.Register(
@@ -205,9 +203,8 @@ public partial class Api5Session
             SourcePath = Text(() => part.FileName),
             IsDetail = Bool(() => part.Detail),
             // Instance count is read from the PARENT: DOC — «Count = iObject.InstanceCount(iPart7)»,
-            // where iObject is the node containing the insertions. MEASURED 04.10.2026: reading from
-            // the component ITSELF gives 0 — i.e. "the counter is on the wrong side" is visible as a
-            // number, not as silence.
+            // where iObject is the node containing the insertions. Reading from the component ITSELF
+            // gives 0 — "the counter is on the wrong side" is visible as a number, not as silence.
             InstanceCount = InstanceCountOf(parent, part),
             ReferenceNumber = reference,
             Fixed = Bool(() => part.Fixed),
@@ -225,23 +222,19 @@ public partial class Api5Session
         };
     }
 
-    /// <summary>
-    /// The component's total coordinate-transform matrix from the API7 side — the documented
-    /// <c>IPart7.GetSummMatrix(IPart7 Part1)</c>.
-    /// </summary>
+    /// <summary>The component's total coordinate-transform matrix from API7 — the documented
+    /// <c>IPart7.GetSummMatrix(IPart7 Part1)</c>.</summary>
     /// <remarks>DOC: <c>ipart7_getsummmatrix.html</c>, verbatim: «GetSummMatrix — Получить суммарную матрицу
     /// преобразование координат»; «Элементы матрицы возвращаются в виде одномерного массива из
     /// шестнадцати элементов»; «Матрица имеет размер 4х4»; parameter <c>Part1</c> — «указатель на
-    /// интерфейс IPart7 детали из которой нужно сделать пересчет координат». Called on the PARENT: for
-    /// a top-level component the parent is the assembly's top component, so the matrix is in document
-    /// coordinates and comparable with API5 <c>ksPart.GetPlacement().GetMatrix3D</c>. An unread value
-    /// is <c>null</c>, not zeros.</remarks>
+    /// интерфейс IPart7 детали из которой нужно сделать пересчет координат». Called on the PARENT, so the
+    /// matrix is in document coordinates and comparable with API5 <c>ksPart.GetPlacement().GetMatrix3D</c>.
+    /// An unread value is <c>null</c>, not zeros.</remarks>
     private static double[]? SummMatrix7(IPart7 parent, IPart7 child)
     {
         // The parameter is documented as "a pointer to the IPart7 interface", while the shipped wrapper
-        // 24.0.0.2799 declares it as the concrete class Part7 — a wrapper/help divergence, named here
-        // rather than smoothed over: if the object does not cast to Part7, the matrix is NOT read
-        // (null), and the caller will see that.
+        // declares it as the concrete class Part7 — a wrapper/help divergence, named here rather than
+        // smoothed over: if the object does not cast to Part7, the matrix is NOT read (null).
         if (child is not Part7 typedChild)
         {
             return null;
@@ -322,10 +315,9 @@ public partial class Api5Session
     }
 
     /// <summary>Component placement matrix by its ORDINAL in the structure enumeration.</summary>
-    /// <remarks>The ordinal is the address because <c>IPart7.Reference</c> is not a component number (MEASURED
-    /// 04.10.2026: 1073741857), and matching by source file is ambiguous with two instances of one part.
-    /// The <c>ksPartCollection</c> order is matched to the <c>IPart7.PartsEx</c> order — this is an
-    /// ASSUMPTION, and a discriminating control (moving one instance does not move another) checks it.</remarks>
+    /// <remarks>The ordinal is the address (<c>IPart7.Reference</c> is not a component number; matching by
+    /// source file is ambiguous). The <c>ksPartCollection</c> ↔ <c>IPart7.PartsEx</c> order is an
+    /// ASSUMPTION, checked by a discriminating control (moving one instance does not move another).</remarks>
     private double[]? PlacementMatrixByOrdinal(DocumentEntry document, int ordinal)
     {
         try
@@ -348,10 +340,10 @@ public partial class Api5Session
 
     /// <summary>Assembly components via the documented array <c>PartCollection(refresh=true)</c>.</summary>
     /// <remarks>
-    /// ENUMERATION IS VIA <c>ksDocument3D.PartCollection(TRUE)</c>, not <c>GetPart(n)</c>: MEASURED
-    /// 04.10.2026, <c>GetPart(1)</c> returned the component of the SECOND source and <c>GetPart(2)</c>
-    /// returned null. The documented array is <c>PartCollection(refresh=true)</c> →
-    /// <c>ksPartCollection</c> (<c>GetCount</c>/<c>GetByIndex</c>).
+    /// ENUMERATION IS VIA <c>ksDocument3D.PartCollection(TRUE)</c>, not <c>GetPart(n)</c>: <c>GetPart(1)</c>
+    /// returned the component of the SECOND source and <c>GetPart(2)</c> returned null. The documented
+    /// array is <c>PartCollection(refresh=true)</c> → <c>ksPartCollection</c>
+    /// (<c>GetCount</c>/<c>GetByIndex</c>).
     /// </remarks>
     private static List<ksPart> ComponentParts5(DocumentEntry document)
     {
@@ -405,13 +397,12 @@ public partial class Api5Session
         return typed;
     }
 
-    // ===================================================================================== ASM-02
+    // ── ASM-02 ──
     /// <summary>Insert a component from a file — the documented API7 <c>IPart7.Parts →
     /// IParts7.AddFromFile(FileName, ExternalFile=true, Redraw=true) → Part7</c>
     /// (<c>iparts7_addfromfile.html</c>), yielding components WITH GEOMETRY.</summary>
-    /// <remarks>LIMIT: <c>ksDocument3D.CreatePartInAssembly</c> is rejected as MEASURABLY wrong (0 bodies, 0
-    /// faces; it CREATES a part, it does not insert one).
-    /// History: docs/decisions/assembly.md#insert-route</remarks>
+    /// <remarks>LIMIT: <c>ksDocument3D.CreatePartInAssembly</c> is MEASURABLY wrong (0 bodies, 0 faces — it
+    /// CREATES a part, not inserts one). History: docs/decisions/assembly.md#insert-route</remarks>
     public InsertComponentResult InsertComponent(InsertComponentCommand command)
     {
         var document = RequireAssembly(command.DocumentId);
@@ -424,10 +415,9 @@ public partial class Api5Session
         var beforeOrdinals = beforeParts.Count;
         var beforeNames = beforeParts.Select(p => Ref(() => p.fileName)).ToList();
 
-        // COMPONENT INSERTION — the documented IParts7.AddFromFile (iparts7_addfromfile.html).
-        // MEASURED 05.10.2026: the former CreatePartInAssembly gave 0 bodies / 0 faces — DOC calls it a
-        // part CREATED in the assembly, not an insertion. Here each component gets 1 body / 6 faces and
-        // survives save→close→reopen. History: docs/decisions/assembly.md#insert-route
+        // COMPONENT INSERTION — the documented IParts7.AddFromFile (iparts7_addfromfile.html). Each
+        // component gets 1 body / 6 faces and survives save→close→reopen, unlike CreatePartInAssembly.
+        // History: docs/decisions/assembly.md#insert-route
         var bridge = BridgeFor(document);
         if (bridge.TransferTo7(document.Document) is not IKompasDocument3D document7)
         {
@@ -472,14 +462,10 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["source_path"] = command.SourcePath });
         }
 
-        // THE INSERTED INSTANCE'S ADDRESS IS CONFIRMED, NOT "THE LAST IN THE COLLECTION".
-        //
-        // `ksDocument3D.PartCollection(true)` (ksdocument3d_partcollection.html) enumerates assembly
-        // components, and insertion adds EXACTLY ONE. The new ordinal is confirmed by TWO discriminating
-        // signals AT ONCE: (1) the new component's source matched the requested one; (2) the neighbour
-        // at the former ordinal kept ITS former source. "Last" alone is not enough: with a
-        // non-appending order it would address a foreign component, and matching by file name is
-        // ambiguous with two instances of one part.
+        // THE INSERTED INSTANCE'S ADDRESS IS CONFIRMED, NOT "THE LAST IN THE COLLECTION":
+        // `ksDocument3D.PartCollection(true)` (ksdocument3d_partcollection.html) enumerates components,
+        // and insertion adds EXACTLY ONE. Two signals are checked AT ONCE: (1) the new source matched the
+        // request; (2) the neighbour at the former ordinal kept ITS source — "last" alone is not enough.
         var afterParts = ComponentParts5(document);
         ksPart? createdPart = null;
         var addressNote = $"после вставки компонентов {afterParts.Count}, ожидалось {beforeOrdinals + 1}";
@@ -513,8 +499,8 @@ public partial class Api5Session
         if (createdPart is null)
         {
             // A PARTIAL EFFECT BUMPS THE REVISION AND REVOKES REFERENCES: the model changed while the
-            // revision and references stayed old, so the next call would mutate a model that is already
-            // different (defect M4, review 05.10.2026).
+            // revision and references stayed old, so the next call would mutate a model already
+            // different.
             BumpRevision(document, "assembly.insert_component.partial", invalidateAll: true);
 
             throw new KompasContractException(
@@ -593,8 +579,7 @@ public partial class Api5Session
         BumpRevision(document, "assembly.insert_component");
 
         // A FAILED MANDATORY CHECK IS NOT SUCCESS: the revision is already bumped, so a client reading
-        // only `status` must not take an unapplied placement for a completed one (defect M5, review
-        // 05.10.2026).
+        // only `status` must not take an unapplied placement for a completed one.
         if (!placementApplied || !fixedApplied)
         {
             throw new KompasContractException(
@@ -697,7 +682,7 @@ public partial class Api5Session
                 checks, unverified));
     }
 
-    // ===================================================================================== ASM-04
+    // ── ASM-04 ──
     /// <summary>
     /// Set a component's placement by a rigid transform and re-read it. Write via API5
     /// <c>ksPlacement.InitByMatrix3D</c> + <c>ksPart.SetPlacement</c> + <c>ksPart.UpdatePlacement</c>
@@ -720,9 +705,8 @@ public partial class Api5Session
         var part5 = ComponentPart5(document, payload, out var lookupNote);
         var matrix = MatrixOf(command.Transform);
 
-        // AN UNREAD MATRIX IS NOT A ZERO MATRIX. An earlier revision substituted
-        // `Array.Empty<double>()`, i.e. "zero placement", where the placement simply was not read
-        // (defect M6, review 05.10.2026 — the same class as fix C).
+        // AN UNREAD MATRIX IS NOT A ZERO MATRIX: substituting `Array.Empty<double>()` would report a
+        // "zero placement" where the placement simply was not read (the same class as fix C).
         var beforeMatrix = ReadPlacementMatrix(part5);
 
         bool written;
@@ -800,7 +784,7 @@ public partial class Api5Session
                 checks, unverified));
     }
 
-    // ===================================================================================== ASM-05
+    // ── ASM-05 ──
     /// <summary>Replace a component's source while preserving placement.</summary>
     public ReplaceComponentResult ReplaceComponent(ReplaceComponentCommand command)
     {
@@ -826,9 +810,8 @@ public partial class Api5Session
         // verbatim: «Метод используется для компонентов, вставленных в сборку»; «Документ с указанным
         // именем должен существовать»; «Компонент не должен быть деталью из библиотеки моделей или
         // стандартным элементом»; «ИЗМЕНЕНИЕ ВСТУПАЕТ В СИЛУ ПОСЛЕ ВЫЗОВА МЕТОДА ksPart::Update» —
-        // hence Update below. The method returns BOOL and the return IS checked; the shipped wrapper
-        // 24.0.0.2799 declares only a property, so the result is read back through the documented getter
-        // ksPart.fileName. History: docs/decisions/assembly.md#replace-source
+        // hence Update below. The shipped wrapper declares only a property, so the BOOL return is read
+        // back through the getter ksPart.fileName. History: docs/decisions/assembly.md#replace-source
         try
         {
             part5.fileName = command.SourcePath;
@@ -881,8 +864,8 @@ public partial class Api5Session
         BumpRevision(document, "assembly.replace_component");
 
         // THE SAME INSTANCE IS RE-READ — by the SAME ORDINAL, not "the first with the same file": a name
-        // search read `sourceAfter`/`matrixAfter` from a DIFFERENT instance when the assembly already had
-        // the new source (defect M8, review 05.10.2026).
+        // search would read `sourceAfter`/`matrixAfter` from a DIFFERENT instance when the assembly
+        // already had the new source.
         var part5After = ComponentPart5At(document, payload.Ordinal);
         var sourceAfter = Ref(() => part5After?.fileName) ?? Text(() => payload.Part7.FileName);
         var matrixAfter = part5After is not null
@@ -928,7 +911,7 @@ public partial class Api5Session
                 checks, unverified));
     }
 
-    // ===================================================================================== ASM-06
+    // ── ASM-06 ──
     /// <summary>Check component references to source files.</summary>
     public CheckComponentLinksResult CheckComponentLinks(CheckComponentLinksCommand command)
     {
@@ -987,7 +970,7 @@ public partial class Api5Session
         }
     }
 
-    // ===================================================================================== helpers
+    // ── helpers ──
     private DocumentEntry RequireAssembly(string documentId)
     {
         var document = RequireDocument(documentId);
@@ -1052,19 +1035,16 @@ public partial class Api5Session
 
     /// <summary>The API5 view of a component for writing placement.</summary>
     /// <remarks>
-    /// MEASURED 04.10.2026, and it REFUTED the bridge by <c>IPart7.Reference</c>: on a one-component
-    /// assembly it equals 1073741857 (0x40000001), and <c>GetPart</c> by it returned no <c>ksPart</c>.
-    /// So the address is the ORDINAL in the flat <c>ksDocument3D.PartCollection(true)</c>. The
-    /// <c>ksPartCollection</c>↔<c>IPart7.PartsEx</c> order is an ASSUMPTION, so identity is checked
-    /// before a mutation (<see cref="IdentityMatches"/>).
+    /// The address is the ORDINAL in the flat <c>ksDocument3D.PartCollection(true)</c>, because
+    /// <c>IPart7.Reference</c> is not a component number. The <c>ksPartCollection</c>↔<c>IPart7.PartsEx</c>
+    /// order is an ASSUMPTION, so identity is checked before a mutation (<see cref="IdentityMatches"/>).
     /// </remarks>
     private ksPart ComponentPart5(DocumentEntry document, ComponentPayload payload, out string note)
     {
         if (payload.Ordinal == NestedComponentOrdinal)
         {
             // NESTED COMPONENT: no address. A mutation "by a guessed ordinal" is forbidden — it would hit
-            // a FOREIGN component, because PartCollection enumerates components flatly. This is a LIMIT
-            // of the delivery, named and not worked around.
+            // a FOREIGN component, because PartCollection enumerates components flatly (a LIMIT, named).
             note = "вложенный компонент: адрес API5 неприменим (PartCollection перечисляет компоненты плоско)";
             throw new KompasContractException(
                 ErrorCodes.CapabilityUnavailable,
@@ -1093,8 +1073,7 @@ public partial class Api5Session
             // IDENTITY IS CHECKED BEFORE THE MUTATION, and the refusal also fires on "not compared": the
             // ordinal from `IPart7.PartsEx` indexes the flat `PartCollection(true)`, so a subassembly
             // before a part would shift the indices and address a FOREIGN component. The DECISION is the
-            // PURE `ComponentIdentity.Decide` (Domain); ONLY THE SOURCE decides the refusal, name and
-            // placement matrix are notes, and "nothing to compare" refuses too.
+            // PURE `ComponentIdentity.Decide` (Domain): ONLY THE SOURCE decides, name and matrix are notes.
             // History: docs/decisions/assembly.md#identity
             var identity = IdentityMatches(candidate, payload, out var identityNote);
             note += "; " + identityNote;
@@ -1145,11 +1124,12 @@ public partial class Api5Session
             });
     }
 
-    /// <summary>Whether this is the same component: THREE signals are compared, but ONLY THE SOURCE DECIDES THE REFUSAL.</summary>
-    /// <returns><c>true</c> — identity confirmed (the source file was read on both sides and matched); <c>false</c> — the address leads to a FOREIGN component (the source was read and differs); <c>null</c> — NOTHING to compare (the source was not read on one side).</returns>
-    /// <remarks>DECISION IS A PURE FUNCTION (<see cref="ComponentIdentity.Decide"/>, Domain, no COM types): the table is checked without KOMPAS.
-    /// Only the SOURCE FILE decides the refusal — the one signal MEASURED live and not changing by itself; the component name (never compared live) and the placement matrix (MUTABLE, layout not measured) are NOTES.
-    /// Both matrices are read FRESH at ONE point in time, and FILE NAMES are compared, not full paths (API7 and API5 return the path differently).
+    /// <summary>Whether this is the same component: THREE signals compared, ONLY THE SOURCE DECIDES THE
+    /// REFUSAL.</summary>
+    /// <returns><c>true</c> — the source matched on both sides; <c>false</c> — it differs (a FOREIGN
+    /// component); <c>null</c> — the source was not read on one side, so NOTHING to compare.</returns>
+    /// <remarks>DECISION IS A PURE FUNCTION (<see cref="ComponentIdentity.Decide"/>, Domain, no COM types).
+    /// Only the SOURCE FILE decides; name and MUTABLE matrix are NOTES; FILE NAMES (not paths) are compared.
     /// History: docs/decisions/assembly.md#identity</remarks>
     private bool? IdentityMatches(ksPart part5, ComponentPayload payload, out string detail)
     {
@@ -1219,9 +1199,8 @@ public partial class Api5Session
     /// <summary>A 4x4 matrix from a rigid transform (origin + two orthonormal axes; Z = X × Y).</summary>
     /// <remarks>
     /// The layout is MEASURED, not chosen: the triples are NOT consecutive — the array reads as
-    /// <c>[X, 0][Y, 0][Z, 0][translation, 1]</c> (MEASURED by rotation, 04.10.2026, row
-    /// <c>ASM.04.rotation</c>; the first revision shifted at 3/7/11 and the write did not take). A pure
-    /// translation cannot tell the packing apart, so the discriminating control must be a rotation.
+    /// <c>[X, 0][Y, 0][Z, 0][translation, 1]</c>. A pure translation cannot tell the packing apart, so
+    /// the discriminating control must be a rotation.
     /// </remarks>
     private static double[] MatrixOf(TransformDto transform)
     {
@@ -1238,8 +1217,8 @@ public partial class Api5Session
         ];
     }
 
-    /// <returns>A 16-number matrix, or <c>null</c> if the value was NOT READ (an earlier revision returned zeros,
-    /// turning "not read" into "at the origin" — defect M6, review 05.10.2026).</returns>
+    /// <returns>A 16-number matrix, or <c>null</c> if the value was NOT READ (returning zeros would turn
+    /// "not read" into "at the origin").</returns>
     private static double[]? Matrix16(object? variant)
     {
         if (variant is Array array && array.Length >= 16)
@@ -1264,9 +1243,9 @@ public partial class Api5Session
     }
 
     /// <summary>Whether the RE-READ placement matches the requested one: rotation and translation.</summary>
-    /// <remarks>12 significant elements are compared: three rotation rows (0…2, 4…6, 8…10) and the translation
-    /// (12…14). An earlier revision compared ONLY the translation, so an unapplied rotation read back as
-    /// confirmed (defect M6, review 05.10.2026).</remarks>
+    /// <remarks>12 significant elements are compared: three rotation rows (0…2, 4…6, 8…10) and the
+    /// translation (12…14). Comparing ONLY the translation would let an unapplied rotation read back as
+    /// confirmed.</remarks>
     private static bool MatrixMatchesRequest(double[]? after, double[] expected)
     {
         if (after is null || after.Length < 16)

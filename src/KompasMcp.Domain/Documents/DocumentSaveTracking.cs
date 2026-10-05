@@ -2,10 +2,14 @@ using KompasMcp.Contracts;
 
 namespace KompasMcp.Domain.Documents;
 
-/// <summary>Whether the document is saved, in the MCP's OWN model: what confirms that the file on disk holds the model KOMPAS is holding.</summary>
-/// <remarks>WHY OWN TRACKING, NOT KOMPAS. The target version has no documented "document changed" flag: the v24 help lists every member of <c>ksDocument3D</c> and there is no <c>IsSaved</c>/<c>Modified</c> (<c>ksdocument3d_methods.html</c>, <c>ksdocument3d_properties.html</c>), nor is there such a member in the installed interop — so the application must keep the state.
-/// LIMIT: a coarse geometry fingerprint is not enough, and that was MEASURED on this very code: a mutation wrote a fresh fingerprint, so "fingerprints equal" held exactly when the model had already diverged from the file. A fingerprint answers a different question — "did someone else change the model" — and is used only for that.
-/// History: docs/decisions/documents.md#save-tracking</remarks>
+/// <summary>Whether the document is saved, in the MCP's OWN model: what confirms that the file on disk holds
+/// the model KOMPAS is holding.</summary>
+/// <remarks>DOC: the target version has no documented "document changed" flag — the v24 help lists every
+/// member of <c>ksDocument3D</c> and there is no <c>IsSaved</c>/<c>Modified</c> (<c>ksdocument3d_methods.html</c>,
+/// <c>ksdocument3d_properties.html</c>), nor such a member in the installed interop, so the application must
+/// keep the state. LIMIT: a geometry fingerprint is not enough — a mutation wrote a fresh one, so
+/// "fingerprints equal" held exactly when the model had already diverged from the file; a fingerprint answers
+/// "did someone else change the model", nothing more. History: docs/decisions/documents.md#save-tracking</remarks>
 public enum DocumentSaveState
 {
     /// <summary>No change unconfirmed by a file write.</summary>
@@ -64,8 +68,8 @@ public static class DocumentSaveTracking
     /// <summary>A save confirmed: the operation succeeded AND the file was re-read from disk.</summary>
     public static DocumentSaveState AfterConfirmedSave() => DocumentSaveState.Clean;
 
-    /// <summary>A failed save does not clear the state: a former "clean" becomes "changed" (the model
-    /// diverged from the file); "changed"/"unknown" stay as they are.</summary>
+    /// <summary>A failed save does not clear the state: "clean" becomes "changed"; "changed"/"unknown" stay
+    /// as they are.</summary>
     public static DocumentSaveState AfterFailedSave(DocumentSaveState current) =>
         current == DocumentSaveState.Clean ? DocumentSaveState.Dirty : current;
 

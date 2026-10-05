@@ -12,22 +12,15 @@ namespace KompasMcp.Api5Adapter;
 /// <remarks>
 /// ROUTE — single and published: <c>IModelContainer.FeaturePatterns.Add(ksObj3dTypeEnum)</c> →
 /// <c>QI(ILinearPattern | ICircularPattern | IMirrorPattern)</c> → write parameters → <c>Update()</c> →
-/// <c>Rebuild</c>. The "type → interface" correspondence is taken from the SDK help page
-/// <c>copytype.html</c>, opened on the wire in this work, not inferred by analogy with rotation.
+/// <c>Rebuild</c>; the "type → interface" correspondence is from SDK page <c>copytype.html</c>.
 /// INVARIANT: the axis is built in the SAME part from two model points — patterns take an
-/// <c>IModelObject</c>, not a reference, so a reference from a foreign document does not get through.
-/// The axis route <c>IAuxiliaryGeomContainer.Axes3D.Add(o3d_axis2Points)</c> was already MEASURED by
-/// rotation (SM-03) and is reused here as MEASURED, not assumed.
-/// INVARIANT: <c>Update()=true</c> is "accepted", not "applied", so after the rebuild the model is READ
-/// BACK: feature parameters, instance counts (<c>GetExemplarsCounts</c>), document volume, body count
-/// and — for hole patterns — a NAMED set of cylindrical faces with their axis coordinates. The last is
-/// the "per instance" check: volume does not tell four holes from three plus one overlapping.
-/// DOC: <c>icircularpattern_props.html</c> calls <c>Count1</c>/<c>Step1</c> RADIAL and
-/// <c>Count2</c>/<c>Step2</c> ANNULAR, with <c>Step2</c> labelled «Угловой шаг (градусы)». This closes
-/// OQ-B-02 and refutes the expectation recorded in the work order (§6.3, §8), where the first
-/// direction was considered annular. It is the EXPECTATION that is called into question, not the
-/// measurement.
-/// History: docs/decisions/adapter-features.md#pattern-route
+/// <c>IModelObject</c>, not a reference; route <c>IAuxiliaryGeomContainer.Axes3D.Add(o3d_axis2Points)</c>
+/// is MEASURED (SM-03). INVARIANT: <c>Update()=true</c> is "accepted", not "applied", so the model is
+/// READ BACK after the rebuild: parameters, counts (<c>GetExemplarsCounts</c>), volume, body count and a
+/// NAMED set of cylindrical-face axes for hole patterns.
+/// DOC: <c>icircularpattern_props.html</c>: <c>Count1</c>/<c>Step1</c> RADIAL, <c>Count2</c>/<c>Step2</c>
+/// ANNULAR, <c>Step2</c> = «Угловой шаг (градусы)».
+/// History: docs/decisions/adapter-core.md#pattern-route
 /// </remarks>
 public partial class Api5Session
 {
@@ -201,14 +194,9 @@ public partial class Api5Session
         var bodiesBeforeSnapshot = ReadBodySnapshots(part);
         var holesBefore = ReadHoleAxes(part, command.ExpectedHoleRadiusMm, command.ExpectedHoleHeightMm);
 
-        // WHAT IS THE SOURCE DEPENDS ON THE MODE, and this is MEASURED by running row B4M.10:
-        // selected_operations reflects OPERATIONS, all_bodies reflects BODIES. While the kind was the
-        // same (Operations), the "all bodies" mode was unexecutable in TWO ways: an empty list created
-        // the feature but reflected no body (bodies stay 2, volume 8000), and explicit body: references
-        // were rejected STALE_REFERENCE with "points to __ComObject instead of a feature" — because
-        // body references were parsed as feature references. The tool contract, however, promised
-        // body: references for all_bodies from the start.
-        // History: docs/decisions/adapter-features.md#mirror-all-bodies
+        // WHAT IS THE SOURCE DEPENDS ON THE MODE (MEASURED, row B4M.10): selected_operations reflects
+        // OPERATIONS, all_bodies reflects BODIES.
+        // History: docs/decisions/adapter-core.md#mirror-all-bodies
         var sources7 = ResolvePatternSources(
             bridge, document, part, command.SourceRefs,
             command.Mode == PatternMirrorMode.AllBodies
@@ -319,8 +307,7 @@ public partial class Api5Session
     }
 
     /// <summary>Match a tree feature with a pattern-collection element by <c>Owner.Name</c> and
-    /// <c>UpdateStamp</c>: the collection index is not an address (KOMPAS reorders elements), and a
-    /// name match without the stamp does not tell two same-named features apart.</summary>
+    /// <c>UpdateStamp</c>: the collection index is not an address (KOMPAS reorders elements).</summary>
     private bool MatchesEntity(Api7Bridge bridge, IModelContainer container, int index, ksEntity entity, DocumentEntry document)
     {
         try
@@ -336,8 +323,8 @@ public partial class Api5Session
                 return false;
             }
 
-            // The feature name is read from the tree WRAPPER: ksFeature.Name does not exist (a
-            // compile error caught by the build), while the name lives at ksEntity.name.
+            // The feature name is read from the tree WRAPPER: ksFeature.Name does not exist (a compile
+            // error caught by the build); the name lives at ksEntity.name.
             var treeName = entity.name ?? (entity.GetFeature() as ksFeature)?.name;
             return !string.IsNullOrEmpty(treeName)
                 && string.Equals(name, treeName, StringComparison.Ordinal);
@@ -349,9 +336,8 @@ public partial class Api5Session
     }
 
     /// <summary>Common tail of pattern creation: rebuild, read-back, checks and response assembly.</summary>
-    /// <remarks>The tail is factored out because the three families differ ONLY in the setup while the
-    /// proof is common: <c>Update()=true</c> is "accepted", and without reading the model back the
-    /// response would not tell "built" from "written".</remarks>
+    /// <remarks>Factored out because the three families differ ONLY in setup; the proof is common.
+    /// History: docs/decisions/adapter-core.md#pattern-compaction</remarks>
     private PatternResult FinishPattern(
         DocumentEntry document,
         ksPart part,
@@ -380,8 +366,7 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["api7_failure"] = failure });
         }
 
-        // Without the rebuild the API7 write stays a representation: the order "write → Update() →
-        // Rebuild()" was MEASURED on rotation and is the same here.
+        // Without the rebuild the API7 write stays a representation.
         Api7Bridge.Rebuild(container, document.Document);
         BumpRevision(document, "pattern." + family);
 
@@ -482,13 +467,12 @@ public partial class Api5Session
     }
 
     /// <summary>Common volume tolerance from the profile's <c>tolerance_classes</c>: 0.01 mm³ absolute
-    /// and 1e-6 relative, the LARGER of the two. The tolerance is not tuned after a failure.</summary>
+    /// and 1e-6 relative, the LARGER of the two.</summary>
     private static double VolumeToleranceMm3(double target) =>
         Math.Max(0.01d, Math.Abs(target) * 1e-6);
 
-    /// <summary>Match the measured hole axes with the analytic set. Three numbers are returned: how
-    /// many matched, what is missing and what is extra — "matched" without "extra" does not tell a
-    /// correct grid from one with an added instance.</summary>
+    /// <summary>Match the measured hole axes with the analytic set: matched, missing and extra —
+    /// "matched" without "extra" does not tell a correct grid from an added instance.</summary>
     private static (int Matched, List<string> Missing, List<string> Extra) MatchCenters(
         IReadOnlyList<HoleAxis> measured,
         IReadOnlyList<IReadOnlyList<double>> expected)
@@ -541,8 +525,7 @@ public partial class Api5Session
     }
 
     /// <summary>Resolve the pattern's source objects: <c>feature:</c> references for operations,
-    /// <c>body:</c> for bodies. Kinds must not be mixed in one call: the factory's numeric type is
-    /// chosen once, and a "body pattern from operations" does not assemble.</summary>
+    /// <c>body:</c> for bodies. Kinds must not be mixed in one call.</summary>
     private object[] ResolvePatternSources(
         Api7Bridge bridge,
         DocumentEntry document,
@@ -626,11 +609,8 @@ public partial class Api5Session
     }
 
     /// <summary>Axes of the main body's cylindrical faces with the expected radius and height.</summary>
-    /// <remarks>This is the "per instance" measurement: <c>ksCylinderParam.GetPlacement()</c> gives the
-    /// surface placement and <c>ksPlacement.GetOrigin</c> the axis point. Without coordinates the check
-    /// would reduce to volume, and volume does not tell N holes from N−1 holes and one overlapping.
-    /// Radius and height are FILTERED, not "all cylinders" taken: otherwise foreign cylindrical
-    /// geometry would enter the instance count and the check would become non-discriminating.</remarks>
+    /// <remarks>The "per instance" check; radius and height are FILTERED, not "all cylinders" taken.
+    /// History: docs/decisions/adapter-core.md#pattern-compaction</remarks>
     private static List<HoleAxis> ReadHoleAxes(ksPart part, double? radius, double? height)
     {
         var found = new List<HoleAxis>();
@@ -810,13 +790,10 @@ public partial class Api5Session
     }
 
     /// <summary>Geometric copy is refused before COM.</summary>
-    /// <remarks>Route B4 is measured at <c>GeometryPattern = false</c>. It is documented by SDK page
-    /// <c>ifeaturepattern_geometrypattern.html</c> and user help
-    /// <c>48_3_3_geometricheskiy_massiv</c>, but has its own constraints (surface closure,
-    /// non-intersection of instances, same operation kind) and its own mode —
-    /// <c>SM-18.grid.operations.geometry</c>, which is NOT in the mandatory B4 scope. So <c>true</c>
-    /// is a <c>CAPABILITY_UNAVAILABLE</c> refusal with a cause, not a silent write of an unmeasured
-    /// number.</remarks>
+    /// <remarks>Route B4 is measured at <c>GeometryPattern = false</c>. Documented by SDK page
+    /// <c>ifeaturepattern_geometrypattern.html</c> and user help <c>48_3_3_geometricheskiy_massiv</c>,
+    /// but its mode <c>SM-18.grid.operations.geometry</c> is NOT in the mandatory B4 scope, so <c>true</c>
+    /// is a <c>CAPABILITY_UNAVAILABLE</c> refusal, not a silent write of an unmeasured number.</remarks>
     private static void RejectUnmeasuredGeometryPattern(bool geometryPattern, string what)
     {
         if (!geometryPattern)
@@ -855,9 +832,7 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>A number, or the "not read" wording instead of zero. <c>Num(double?)</c> is already
-    /// declared in the rotation part and is reused here: two same-named members in one partial part is
-    /// a compile error, caught by the build rather than by eye.</summary>
+    /// <summary>A number, or the "not read" wording instead of zero.</summary>
     private static string Num(int? value) =>
         value?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "не прочитано";
 
@@ -919,10 +894,8 @@ public sealed record PatternResult(
 }
 
 /// <summary>Result of reading pattern parameters by a feature reference.</summary>
-/// <param name="DeletedInstancesApplicable"><c>false</c> for a mirror pattern: the user help
-/// <c>glava_48_obzhie_svedeniy</c> states directly that excluding instances is unavailable for a
-/// mirror pattern and a pattern-by-sample. This is a domain inapplicability with a source, not an
-/// unclosed action.</param>
+/// <param name="DeletedInstancesApplicable"><c>false</c> for a mirror pattern — a domain
+/// inapplicability with a source, not an unclosed action.</param>
 public sealed record PatternReadResult(
     string Family,
     int? PatternIndex,

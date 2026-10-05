@@ -7,10 +7,10 @@ namespace KompasMcp.Unit;
 /// <summary>A sketch is built by several calls (append per contour, replace to clear), and the extrusion's
 /// expected volume is the area of the WHOLE profile — so the accumulation, not just the formula, is
 /// what the check stands on.</summary>
-/// <remarks>Measured 24.09.2026: while the adapter remembered a running sum, drawing the outer circle and then
-/// the inner one gave exactly the same figure as drawing both at once — π·100 + π·25 = 392.699081699
-/// against the ring's π·75 = 235.619449019. A scalar cannot carry nesting, so a later edit could never
-/// turn the remembered number into a hole; these tests hold the contour list to that.</remarks>
+/// <remarks>MEASURED: a running-sum adapter gave the same figure for outer+inner circles as for both at once;
+/// a scalar cannot carry nesting, so a later edit could never turn the remembered number into a hole.
+/// TEST: these tests hold the contour list to that.
+/// History: docs/decisions/tests.md#sketch-profile-2</remarks>
 public class SketchProfileTests
 {
     private static SketchEntityDto Circle(double cx, double cy, double r) => new()
@@ -34,7 +34,7 @@ public class SketchProfileTests
         profile.Append(new[] { Circle(0, 0, 10) });
         Assert.Equal(Math.PI * 100d, profile.AreaMm2!.Value, 9);
 
-        // The second call is what makes it a ring — and the accumulated profile has to see it.
+        // The second call turns the disc into a ring — the accumulated profile must see it.
         profile.Append(new[] { Circle(0, 0, 5) });
         Assert.Equal(Math.PI * 75d, profile.AreaMm2!.Value, 9);
     }
@@ -86,8 +86,7 @@ public class SketchProfileTests
     [Fact]
     public void Append_UnknownShape_MakesTheAreaUnknown()
     {
-        // A line is not a region, and one unknown primitive makes the whole profile unknown: the
-        // extrusion then says "not computable" instead of comparing against a partial figure.
+        // A line is not a region; one unknown primitive makes the whole profile unknown.
         var profile = new SketchProfile();
         profile.Append(new[] { Circle(0, 0, 10) });
         profile.Append(new[] { Line() });

@@ -4,15 +4,12 @@ namespace KompasMcp.Domain.Geometry;
 
 /// <summary>Axis-aligned box of the primitives the server itself drew into a sketch, in sketch-local
 /// millimetres (<c>u</c> along sketch X, <c>v</c> along sketch Y).</summary>
-/// <remarks>The box is deliberately an <b>over-approximation</b>, never an under-approximation, because the
-/// only consumer is <see cref="TargetBodyGuard.ProfileMayAffectBody"/>: that test refuses an operation, so a
-/// box that is too small would refuse legitimate work, while a box that is too big only weakens the refusal.
-/// An arc is therefore boxed by its full circle, and a polyline by the rectangle around its vertices. Null is
-/// returned for anything whose extent cannot be stated (a missing coordinate pair, an unknown kind); absence
-/// is reported as absence — the caller says "not checked" instead of treating an empty box as a proof.</remarks>
+/// <remarks>INVARIANT: deliberately an <b>over-approximation</b>, never an under-approximation — the only
+/// consumer refuses an operation, so too small a box would refuse legitimate work. An arc is boxed by its
+/// full circle, a polyline by the rectangle around its vertices. Null is returned for anything whose
+/// extent cannot be stated; absence is reported as absence, never as an empty proof.</remarks>
 public readonly record struct ProfileBox(double MinU, double MinV, double MaxU, double MaxV)
 {
-    /// <summary>Extent of a whole batch of primitives, or null if any of them is unmeasurable.</summary>
     public static ProfileBox? Of(IReadOnlyList<SketchEntityDto> entities)
     {
         ProfileBox? acc = null;
@@ -38,14 +35,13 @@ public readonly record struct ProfileBox(double MinU, double MinV, double MaxU, 
                 return Pair(entity.StartMm, entity.EndMm);
 
             case SketchEntityKind.Circle:
-                // A full circle: centre ± radius on both axes.
                 return entity.CenterMm is { Count: >= 2 } center && entity.RadiusMm is double radius
                     ? new ProfileBox(center[0] - radius, center[1] - radius, center[0] + radius, center[1] + radius)
                     : null;
 
             case SketchEntityKind.Arc:
-                // Over-approximation on purpose: the arc lies inside the box of its full circle, and
-                // a box this test is unhappy about must never be a false accusation.
+                // Over-approximation on purpose: the arc lies inside its full circle's box, and this test
+                // must never raise a false accusation.
                 return entity.CenterMm is { Count: >= 2 } arcCenter && entity.RadiusMm is double arcRadius
                     ? new ProfileBox(arcCenter[0] - arcRadius, arcCenter[1] - arcRadius, arcCenter[0] + arcRadius, arcCenter[1] + arcRadius)
                     : null;
@@ -104,7 +100,6 @@ public readonly record struct ProfileBox(double MinU, double MinV, double MaxU, 
             Math.Max(left.Value.MaxV, right.Value.MaxV));
     }
 
-    /// <summary>Interval of the box along one sketch axis (0 = u, 1 = v).</summary>
     public double[] Interval(int axis) => axis switch
     {
         0 => new[] { MinU, MaxU },
@@ -128,22 +123,19 @@ public readonly record struct ProfileBox(double MinU, double MinV, double MaxU, 
 
 /// <summary>The two decisions about an extrusion's target body that can be made without KOMPAS: whether an
 /// operation may name a body at all, and whether a drawn profile can plausibly lie over the declared body.</summary>
-/// <remarks>The second test is necessary, not sufficient, and must never be presented as geometric
-/// containment: it compares two rectangles — the over-approximated profile extent and the <c>GetGabarit</c>
-/// box of the declared body. Agreement says only "these two boxes are not disjoint"; disagreement says
-/// something stronger and is the reason the test exists (probe P2.6). The axis correspondence is measured by
-/// probe P2.4 and asserted by acceptance rows <c>G07_xy</c>/<c>G07_xz</c>/<c>G07_yz</c>; the plane's normal axis is never constrained.
+/// <remarks>LIMIT: the second test is necessary, not sufficient, and is never geometric containment — it
+/// compares two rectangles (the over-approximated profile extent and the <c>GetGabarit</c> box of the
+/// declared body). Agreement says only "not disjoint"; disagreement is stronger and is why the test exists.
+/// The axis correspondence is asserted by acceptance rows <c>G07_xy</c>/<c>G07_xz</c>/<c>G07_yz</c>.
 /// History: docs/decisions/geometry.md#target-body-guard</remarks>
 public static class TargetBodyGuard
 {
-    /// <summary>Slack applied when deciding that two intervals are disjoint, in mm. It is the coordinate
-    /// tolerance of docs/03 §3.3, and it only ever widens the boxes — a profile touching a body
-    /// exactly on its boundary counts as agreement.</summary>
+    /// <summary>Slack applied when deciding that two intervals are disjoint, in mm (the coordinate tolerance
+    /// of docs/03 §3.3). It only ever widens the boxes, so a boundary touch counts as agreement.</summary>
     public const double ContactToleranceMm = 1e-3;
 
     /// <summary>How sketch axes <c>u</c>/<c>v</c> land on model axes for each base plane: axis index
-    /// (0=x, 1=y, 2=z) and sign, plus the model axis the plane is normal to. Values are the
-    /// measured ones described in the type remarks.</summary>
+    /// (0=x, 1=y, 2=z) and sign, plus the normal axis. Values are the measured ones (type remarks).</summary>
     private static readonly Dictionary<PlaneBase, (int AxisU, int SignU, int AxisV, int SignV, int NormalAxis)> Frames = new()
     {
         [PlaneBase.Xy] = (0, 1, 1, 1, 2),
@@ -151,16 +143,12 @@ public static class TargetBodyGuard
         [PlaneBase.Yz] = (2, -1, 1, -1, 0),
     };
 
-    /// <summary>Wire names of the operations that act on a body the caller must name.</summary>
     public static bool OperationTakesTargetBody(string? operation) =>
         operation is "boss" or "cut";
 
-    /// <summary>
-    /// <c>operation=base</c> creates the first body, so there is nothing to aim it at. Accepting
-    /// <c>target_body_ref</c> there and ignoring it would tell the caller a target had been honoured
-    /// when no such thing happened — docs/05 §4.1 forbids normalising an unsupported combination
-    /// away, so it is refused.
-    /// </summary>
+    /// <summary><c>operation=base</c> creates the first body, so there is nothing to aim it at. Accepting
+    /// <c>target_body_ref</c> and ignoring it would tell the caller a target had been honoured when no
+    /// such thing happened — docs/05 §4.1 forbids normalising an unsupported combination away.</summary>
     public static bool TargetBodyRefusedForOperation(string? operation, bool targetBodyProvided) =>
         targetBodyProvided && !OperationTakesTargetBody(operation);
 
@@ -208,8 +196,7 @@ public static class TargetBodyGuard
             unconstrained++;
         }
 
-        // Both in-plane axes agreed. Anything else (an unmapped axis) would have returned null
-        // above, so reaching here with both axes checked is the only way to answer true.
+        // Both in-plane axes agreed; an unmapped axis would have returned null above.
         return unconstrained == 2;
     }
 }

@@ -4,12 +4,12 @@ using System.Text.Json.Nodes;
 namespace KompasMcp.Contracts.Ipc;
 
 /// <summary>Client (Host) side of a request/response session over a length-prefixed frame stream.</summary>
-/// <remarks>INVARIANT: a frame stream has exactly one reader, so request/response over it belongs here: any number
-/// of callers may have a request in flight at once, exactly one background loop reads the stream and routes each
-/// response to its caller by <see cref="IpcFrame.RequestId"/> (a caller never reads the stream), and writes are
-/// serialised behind one gate because frames are not interleavable.
-/// The reader is the only party that can tell the stream is finished, so it also fails every waiting request when
-/// the stream ends. History: docs/decisions/contracts.md#ipc-read-loop</remarks>
+/// <remarks>INVARIANT: a frame stream has exactly one reader, so request/response over it belongs here: any number of
+/// callers may have a request in flight at once, exactly one background loop reads the stream and routes each response
+/// to its caller by <see cref="IpcFrame.RequestId"/> (a caller never reads the stream), and writes are serialised
+/// behind one gate because frames are not interleavable. The reader is the only party that can tell the stream is
+/// finished, so it also fails every waiting request when the stream ends. History:
+/// docs/decisions/contracts.md#ipc-read-loop</remarks>
 public sealed class IpcRequestChannel : IAsyncDisposable
 {
     private readonly Stream _stream;
@@ -27,18 +27,18 @@ public sealed class IpcRequestChannel : IAsyncDisposable
         _readLoop = Task.Run(() => ReadLoopAsync(_lifetime.Token));
     }
 
-    /// <summary>True once the reader has stopped: the peer closed the pipe, the stream faulted, or the
-    /// channel was disposed. A caller that sees this must obtain a fresh channel rather than send.</summary>
+    /// <summary>True once the reader has stopped: the peer closed the pipe, the stream faulted, or the channel was
+    /// disposed. A caller that sees this must obtain a fresh channel rather than send.</summary>
     public bool IsBroken => _broken;
 
-    /// <summary>Send one request and await its answer. Safe to call from many callers at once.</summary>
-    /// <param name="isMutation">True when the command changes the model. It decides what a cancellation AFTER the frame
-    /// was written means: for a mutation the command is already on its way to KOMPAS, so the answer is
-    /// <c>OUTCOME_UNKNOWN</c>, never "cancelled, nothing happened".</param>
-    /// <remarks>A timeout is reported as <c>OUTCOME_UNKNOWN</c>, never as a cancellation: the peer may still be executing the
-    /// command, so the caller must reconcile rather than assume nothing happened. INVARIANT: a client cancellation AFTER the
-    /// frame was written is NOT "the command was never sent" — cancelling the token does not abort the COM call; cancellation
-    /// before the frame and after it are different states, told apart by <c>written</c>. History: docs/decisions/contracts.md#cancel-after-send</remarks>
+    /// <summary>Send one request and await its answer. Safe to call from many callers at once.</summary> <param
+    /// name="isMutation">True when the command changes the model. It decides what a cancellation AFTER the frame was
+    /// written means: for a mutation the command is already on its way to KOMPAS, so the answer is
+    /// <c>OUTCOME_UNKNOWN</c>, never "cancelled, nothing happened".</param> <remarks>A timeout is reported as
+    /// <c>OUTCOME_UNKNOWN</c>, never as a cancellation: the peer may still be executing, so the caller must reconcile
+    /// rather than assume nothing happened. INVARIANT: a client cancellation AFTER the frame was written is NOT "the
+    /// command was never sent" — cancelling the token does not abort the COM call. History:
+    /// docs/decisions/contracts.md#cancel-after-send</remarks>
     public async Task<IpcFrame> RequestAsync(string command, JsonNode? payload, TimeSpan timeout, bool isMutation, CancellationToken cancellationToken)
     {
         var requestId = Guid.NewGuid().ToString("N");

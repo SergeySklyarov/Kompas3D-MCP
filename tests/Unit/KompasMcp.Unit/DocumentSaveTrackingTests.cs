@@ -5,11 +5,11 @@ using Xunit;
 namespace KompasMcp.Unit;
 
 /// <summary>Document saved-ness: state transitions and the close decision table.</summary>
-/// <remarks>DOC: the target version has no documented "document modified" sign on <c>ksDocument3D</c> in
-/// the v24 help, so the product tracks the state and the only place to check it without KOMPAS is the
-/// transitions themselves; behaviour in CAD is proved by the <c>DL</c> acceptance rows on shipped binaries.
+/// <remarks>DOC: the target version has no documented "document modified" sign on <c>ksDocument3D</c>, so the
+/// product tracks the state and the only place to check it without KOMPAS is the transitions themselves;
+/// behaviour in CAD is proved by the <c>DL</c> acceptance rows on shipped binaries.
 /// INVARIANT: a mutation never declares the document saved — only a confirmed write does.
-/// History: docs/decisions/tests.md#document-save</remarks>
+/// History: docs/decisions/tests.md#document-save-2</remarks>
 public sealed class DocumentSaveTrackingTests
 {
     [Fact]

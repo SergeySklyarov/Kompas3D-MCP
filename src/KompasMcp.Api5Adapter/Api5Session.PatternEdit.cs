@@ -13,9 +13,8 @@ namespace KompasMcp.Api5Adapter;
 /// INVARIANT: identified NOT by number but by the read's instrument
 /// (<see cref="Api5Session.PatternRead"/>): matching an <c>IModelContainer.FeaturePatterns</c> element
 /// by tree-wrapper name and update stamp. <c>Update()=true</c> is "accepted", not "applied" — READ BACK
-/// (<c>Api7Pattern.ReadPattern</c>) with a <c>read_back_&lt;member&gt;</c> check; support change refused pre-mutation.
-/// History: docs/decisions/adapter-features.md#pattern-edit
-/// </remarks>
+/// (<c>Api7Pattern.ReadPattern</c>) with a <c>read_back_&lt;member&gt;</c> check; support change refused.
+/// History: docs/decisions/adapter-features.md#pattern-edit</remarks>
 public partial class Api5Session
 {
     /// <summary>Edit-family name for pattern features.</summary>
@@ -110,8 +109,7 @@ public partial class Api5Session
         else
         {
             // A missing expectation does not "pass by default": without analytics the edit is
-            // confirmed by the parameter read-back alone, said plainly instead of hidden in an empty
-            // field.
+            // confirmed by the parameter read-back alone.
             checks.Add(new NamedCheck(
                 "volume_after_update",
                 false,
@@ -181,8 +179,8 @@ public partial class Api5Session
 
     /// <summary>The live pattern object by collection index.</summary>
     /// <remarks>The object is NOT cached between calls: a COM object address does not survive a rebuild,
-    /// and a saved object would edit the wrong feature. The index comes from the match made in this
-    /// same call, before the write — the collection did not change between match and write.</remarks>
+    /// and a saved object would edit the wrong feature. The index comes from the match made in this same
+    /// call, before the write.</remarks>
     private static IFeaturePattern PatternAt(IModelContainer container, int index) =>
         container.FeaturePatterns?.FeaturePattern[index] as IFeaturePattern
         ?? throw new KompasContractException(
@@ -190,12 +188,10 @@ public partial class Api5Session
             $"Элемент FeaturePatterns[{index}] не читается как признак массива.",
             RetryPolicy.ReacquireContext);
 
-    /// <summary>Match a tree feature with a pattern-collection element — the same instrument as the
-    /// read.</summary>
-    /// <remarks>A non-match is NOT "feature not found" but a refusal with a named cause: the reference
-    /// may point to a feature the pattern collection does not show (e.g. the feature was rolled back,
-    /// or the reference was issued for another document). The caller must tell these outcomes apart,
-    /// while a silent write "into the first one found" would change a foreign feature.</remarks>
+    /// <summary>Match a tree feature with a pattern-collection element — the same instrument as the read.</summary>
+    /// <remarks>A non-match is NOT "feature not found" but a refusal with a named cause: the reference may
+    /// point to a feature the collection does not show (e.g. it was rolled back, or issued for another
+    /// document). A silent write "into the first one found" would change a foreign feature.</remarks>
     private (int Index, PatternReadout Readout) MatchPatternForEdit(
         Api7Bridge bridge,
         IModelContainer container,
@@ -230,10 +226,8 @@ public partial class Api5Session
     }
 
     /// <summary>Read-back checks: each REQUESTED member gets its own check, not one common one.</summary>
-    /// <remarks>A common "parameters matched" check would not tell which member failed to apply, and
-    /// the acceptance row could not name the cause. Only requested members are compared: an unset
-    /// member stays as it was, and demanding a new value from it would demand what the call did not
-    /// ask for.</remarks>
+    /// <remarks>A common "parameters matched" check would not tell which member failed to apply. Only
+    /// requested members are compared: an unset member stays as it was.</remarks>
     private static IEnumerable<NamedCheck> ReadBackChecks(PatternEditDto edit, PatternReadout? after)
     {
         // Local functions are NOT overloaded by parameter type (error CS0128, caught by the build):
@@ -462,10 +456,8 @@ public partial class Api5Session
         }
 
         // Fields of the latest queue B5. Without them a call "pattern + shift_mode" would be ACCEPTED
-        // with shift_mode swallowed: the B5 branch is chosen by the field itself, but the pattern
-        // branch comes first and diverts the call into itself. `couplings` was added 20.09.2026:
-        // queue B5 added six editable fields and only five were listed here — the sixth passed
-        // silently.
+        // with shift_mode swallowed: the pattern branch comes first and diverts the call. `couplings` was
+        // added the same way: the B5 field list was one short, so the sixth field passed silently.
         if (command.ShiftMode is not null)
         {
             names.Add("shift_mode");
@@ -496,9 +488,9 @@ public partial class Api5Session
             names.Add("face_refs");
         }
 
-        // HOLE-family fields (work order SM07 §3.2). Listed here for the same reason as the B5
-        // fields: the pattern branch comes BEFORE the hole branch, so "pattern + diameter_mm" would be
-        // diverted into the pattern and the diameter swallowed — an accepted and unapplied number.
+        // HOLE-family fields (work order SM07 §3.2), listed here for the same reason as the B5 fields:
+        // the pattern branch comes BEFORE the hole branch, so "pattern + diameter_mm" would be diverted
+        // into the pattern and the diameter swallowed — an accepted and unapplied number.
         if (command.DiameterMm is not null)
         {
             names.Add("diameter_mm");
@@ -603,11 +595,9 @@ public partial class Api5Session
     }
 
     /// <summary>Members this family does NOT have are refused before the mutation.</summary>
-    /// <remarks>Different pattern families are different API7 interfaces, and some names coincide only
-    /// in appearance. Handing <c>save_initial_orientation</c> to a mesh and staying silent about the
-    /// member not being applied would lie about the edit; writing <c>step2_deg</c> into
-    /// <c>ILinearPattern.Step2</c> (where it is MILLIMETRES) would change geometry by a different
-    /// quantity than the request names. So the check names the specific inapplicable member.</remarks>
+    /// <remarks>Different pattern families are different API7 interfaces, and some names coincide only in
+    /// appearance. Handing <c>step2_deg</c> to <c>ILinearPattern.Step2</c> (where it is MILLIMETRES) would
+    /// change geometry by a different quantity — so the check names the specific inapplicable member.</remarks>
     private static void ValidatePatternEditForFamily(PatternEditDto edit, string family)
     {
         var bad = new List<string>();

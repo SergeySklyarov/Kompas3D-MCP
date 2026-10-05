@@ -394,7 +394,7 @@ request field.
 
 ## <a id="b5-shell-edit"></a>Правка оболочки — толщина и направление вместе (20.09.2026)
 
-**Что измерено.** Шаг B5.13: `t = 2 внутрь → 4 внутрь → 4 наружу → 2 внутрь` на одном признаке дали
+**Что измерено.** Шаг B5.13, дословная запись шага: `t = 2 inward → 4 inward → 4 outward → 2 inward` на одном признаке дали
 `21632 → 40256 → 53056 → 21632`. Шаг B5.14: набор снятых граней правится на том же признаке — вторая
 грань даёт `7040` при `10` гранях, возврат к прежнему набору `21632` при `11`; повторная запись того же
 набора объём не двигает (отрицательный контроль). LIMIT: пустой список граней отвергается — операция
@@ -525,3 +525,153 @@ is not our write order. At CREATION the same sequence keeps the chain (probe B5.
 a MEASUREMENT of the implementation's behaviour, named here and not silenced. Accepting such a request
 would promise a coupling the model never gets and return "done" on a body without it; the refusal
 therefore stands BEFORE the write, and the feature is unchanged.
+
+
+## <a id="solidread-compaction"></a>Чтение B3 — история, вынесенная из кода
+
+INVARIANT: every route here is measured by a probe, not derived from member names (run references sit
+at each read; summary in <c>docs/04_KOMPAS_API_NOTES.md</c> §4.10.9). Of the five reposition
+transformation fields ONE is not published — <c>reposition_axis_point_mm</c>; the other four read by the
+parametric route (see history). Feature state (name, IsValid, updateStamp) reads without API7, so an
+unavailable route does not fail all of <c>kompas_get_feature</c>.
+
+MEASURED: the axis point is NOT a placement property — <c>X/Y/Z = c</c> CHANGES the bounding box of a
+rotated body ((−5,0,0)…(5,20,5) instead of (−5,−5,0)…(5,15,5)), while <c>X/Y/Z = c − R·c</c> PRESERVES
+it; a rotation about any point of ONE line gives the SAME placement, so only a REPRESENTATIVE is
+recovered (<see cref="EulerOrientation.AxisPointFromPlacement"/>), not "that" point. DOC:
+<c>ilocalcsobject_coordinatesystem.html</c>, <c>CoordinateSystem</c> is <c>IModelObject</c>.
+
+MEASURED (probe <c>--reposition-params</c>, run <c>a336120926fc4652a8bf737562568271</c>): the parametric
+route reads <c>1 (ksEulerCorners)</c> live and after reopen, a matrix-written one reads
+<c>0 (ksAxisOrientation)</c> (RP.16, RP.22). The matrix view is SINGULAR on a reopened document with
+preserved geometry (RP.16), <c>WriteToFile</c> gives a singular matrix (RP.18); nothing tells "written"
+from "not restored" (<c>Valid</c> reads <c>True</c> in both states, <c>Update()</c> + rebuild does not
+restore the read, RP.23).
+
+MEASURED 18.09.2026 (probe <c>--boolean</c>, steps BO.11 and BO.10): a written <c>IBoolean.BooleanType</c>
+reads back as <c>ksUnion</c> / <c>ksDifference</c> / <c>ksIntersect</c> — three DIFFERENT values on three
+different writes, so the read distinguishes rather than returning a constant.
+<c>SaveCopyModifyObjects</c> read back in BO.5 (<c>true</c>) and BO.2–BO.4, BO.6 (<c>false</c>), and step
+BO.10 read both fields from a REOPENED file — the route survives save → close → reopen.
+
+MEASURED 18.09.2026 (probe <c>--split</c>, step SP.10, run <c>95e24af18d694d2cb50890a99983376a</c>): the
+support <c>x = 10</c> reads as points <c>(10,0,0)</c>, <c>(10,1,0)</c>, <c>(10,0,1)</c> with normal
+<c>(1,0,0)</c>, and <c>x = 15</c> as <c>(15,0,0)</c>, <c>(15,1,0)</c>, <c>(15,0,1)</c> — the read
+distinguishes DIFFERENT supports rather than returning a constant; <c>Direction</c> reads <c>true</c> and
+<c>false</c> on the same support. Step SP.9 (E-A) showed the support reads from a live feature and its
+three points are what the edit moves.
+
+MEASURED in full by probe <c>--reposition-params</c>, run <c>a336120926fc4652a8bf737562568271</c>, step
+RP.25 (details in history). The matrix view (<c>GetVector</c>, <c>WriteToFile</c>) is NOT used at all
+(RP.16, RP.18, RP.20, RP.23). Published: kind, vector, axis direction, angle (not the axis point).
+
+MEASURED 18.09.2026 by the instrument <c>scratch/b3-measure-feature-types.py</c>.
+
+
+## <a id="solidops-header"></a>B3 body operations — история, вынесенная из кода
+
+INVARIANT: the basis is measurement, not member names — three isolated probes of 18.09.2026 (<c>--boolean</c>,
+<c>--split</c>, <c>--reposition</c>; logs in <c>docs/acceptance/api7/</c>) fixed the routes and their
+LIMITS. The kernel neither rejects a repeated reference nor checks the target is not among the tools
+(MEASURED, step BO.9: a repeat is accepted silently, bodies 3→2).
+
+**Feature identity.** Probe I, <c>--identity</c>, 19.09.2026, run
+<c>c90961c6a3ba478697da5bc243040719</c>, report <c>docs/acceptance/api7/feature-identity.json</c>: the
+element address is stable (two consecutive walks of collection 110 return the same COM object at the same
+index); <c>ksEntityCollection.FindIt(entity)</c> returns the element index from zero and <c>−1</c> for an
+object not in the collection; a collection taken BEFORE the operation does NOT track mutation (after two
+operations it still reports the original element count and <c>FindIt = −1</c> for both new features).
+Negative control: elements that existed before the operation gave <c>0</c> and <c>1</c>, both new features —
+<c>−1</c>. Client acceptance on 19.09.2026 measured that KOMPAS gives two consecutive reposition features
+the SAME name «Изменение положения : Тело 1», so the second feature was dropped by the filter and
+<c>solid.reposition</c> answered <c>GEOMETRY_FAILED</c> with the geometry built CORRECTLY.
+
+**Feature address.** Probe T (steps TL.2, TL.6, TL.7, TL.9; run
+<c>1c111eff3cd94007b436c5a3862e48bc</c>) measured: a feature created by an API7 factory IS present in the
+API5 tree, and it answers suppression (<c>ksFeature.excluded</c>, volume 37 000 → 49 000 and back) and
+deletion (<c>DeleteObject</c>, bodies 2 → 3). A reference to the API7 object would make <c>discover</c>,
+<c>suppress_restore</c> and <c>delete_dependencies</c> impossible for all eleven rows — four of the ten
+actions per row closed as "no API". The first edition required "exactly one new element", and on
+<c>save_tools</c> this gave a refusal with a SUCCESSFULLY performed operation: <c>keep_tools=true</c>
+creates TWO features — the operation itself and the auxiliary «Копия тела» (MEASURED: <c>type=69 «Булева
+операция:1»</c> and <c>type=79 «Копия тела : Тело 1»</c>). Numbers from measurement
+(<c>scratch/b3-measure-feature-types.py</c>, <c>kompas_list_features</c>): 69 — boolean, 633 — split,
+50 — cut, 79 — reposition. Names of two consecutive features of one kind COINCIDE (MEASURED 19.09.2026,
+probe I).
+
+**Same-type address.** The number <c>79</c> is carried also by the auxiliary «Копия тела»
+(<c>scratch/b3-measure-feature-types.py</c>, 18.09.2026). The price of the refusal: editing a feature next
+to which lives a feature of the same number but a different operation is not performed.
+
+**Cut plane form.** MEASURED by the B3 client acceptance (19.09.2026, three FAIL rows): the declared refusal
+was UNREACHABLE. MEASURED 18.09.2026 by acceptance row B3.17. The sign of the base plane's normal decides
+which side is cut away.
+
+**Body untouched (obsolete).** OBSOLETE 19.09.2026: every other body was declared untouched WITHOUT proof,
+and a vanished body was not listed; a call would be a regression of
+<c>CUT-PLANE-APPLIED-TO-UNNAMED-BODIES</c>.
+
+**Reposition edit.** MEASURED 18.09.2026 (probe <c>--reposition</c>, step RP.6): rewriting the same vector
+leaves the bounding box <c>(17,−11,13)…(37,−1,18)</c>, resetting it to zero brings the body home. Step RP.2:
+three routes out of four returned <c>true</c> and did not move the body.
+
+**Foreign fields.** `couplings` was added 20.09.2026: five of the SIX new B5 fields made it into the
+foreign-field lists while the sixth did not; a field with no role = a field the adapter will accept and
+swallow. SM07 §3.2.
+
+**SM-16 support edit.** MEASURED 18.09.2026 (probe <c>--split</c>, step SP.9, negative control E-B):
+comparing plane references was not measured and a foreign plane gives no result (E-B).
+
+**Split edit.** MEASURED 18.09.2026 (probe <c>--split</c>, step SP.9, run
+<c>c9cd7660468c44aa97b410e253ee2cb1</c>).
+
+**Cut edit.** MEASURED 18.09.2026 (probe <c>--split</c>, step SP.9, run
+<c>c9cd7660468c44aa97b410e253ee2cb1</c>); reading the current support and side from a live feature was not
+measured.
+
+**Cut remainder addressing.** Previously there stood here
+changed = rows.Where(r => !MatchesAnySnapshot(r, bodiesBefore)): the walk went ONLY over bodies AFTER the
+operation, so a vanished body never entered the list, and an edit that swept away a foreign bar looked like
+"exactly one body changed" and passed as geometry_checked — the false confirmation from client acceptance
+19.09.2026 (defect CUT-PLANE-APPLIED-TO-UNNAMED-BODIES, order §3.1).
+
+**Boolean edit.** MEASURED by probe <c>--boolean</c>, step <c>BO.11</c>, run
+<c>a2f5cf0a2ad342c59c36807101a65d51</c>. On the §6.1 reference difference and intersection both have volume
+12 000; the bounding box distinguishes them (<c>x ≤ 20</c> vs <c>x ∈ [20,40]</c>). The former edition sought
+the body by matching the EXPECTATION and published ALL document volumes as observed — a bounding box compared
+with numbers of another kind (defect CHECK-FIELDS-DO-NOT-SUPPORT-THE-VERDICT, §4.1). A second foray
+(MEASURED 19.09.2026, delivery <c>publish-b3-20260919-targeting</c>, row B3.25): going by changes.Changed
+(changed VOLUME) missed a correct `intersect` edit — difference and intersection volumes are EQUAL
+(12 000 mm³), only the bounding box distinguishes them — and it was rejected as NO_GEOMETRY_CHANGE.
+
+## <a id="b5-read-compaction"></a>Чтение семейств B5 — пояснения, вынесенные из кода
+
+Ранее эта ссылка вела на docs/decisions/adapter-solid.md#b5-read, docs/decisions/adapter-solid.md#b5-section-refs,
+docs/decisions/adapter-solid.md#b5-removed-faces.
+
+A family is recognised BY THE DEFINITION INTERFACE, not by the type number — the tree number differs from
+the creation number (MEASURED). <c>GetType().Name</c> of a COM object is always <c>__ComObject</c>.
+MEASURED: <c>GetPathLength(1)</c> on a 100 mm segment returned exactly 100, so millimetres are confirmed
+by a number, not a guess. MEASURED: <c>NewEntity(45)</c> yields a feature answering
+<c>ksBossEvolutionDefinition</c>. Accessors are passed to the shared reader as delegates because the two
+definitions share no interface for these members. The feature is matched to an <c>Evolutions</c> element
+BY ORDER among same-family ones, not by name (MEASURED in B4: different types share one display name). A
+bare CouplingsCount cannot tell "a coupling exists" from "this coupling". Section refs are derived from
+the definition and checked against the SAME section count published as `section_count`: a mismatch is an
+incomplete derivation, named and not passed off as "fewer sections". MEASURED (B5.12) that both routes
+agree, recorded as a separate check. API5 thinType=true corresponds to API7 ThinType "inward" (MEASURED:
+dt_reverse = 1, volume 21632). Otherwise an empty list beside a non-zero counter would look like a fact
+about the model. DOC: <c>ksbaseloftdefinition_sketches.html</c> and <c>ksbossloftdefinition_sketches.html</c>
+describe the member «Sketches»: «Получить указатель на интерфейс массива эскизов элемента по сечениям»,
+returning <c>ksEntityCollection</c>, with the note «Эскизы из данного массива используются для
+построения элемента по сечениям». In interop the same member is declared as <c>Object Sketchs()</c>
+(read from <c>docs/compatibility/kompas-api5-metadata.json</c>) — the help and interop spellings differ
+by one letter, and that is named, not smoothed over. INVARIANT: refs are derived afresh, never
+remembered — a creation-time reference dies on the first document mutation and <c>kompas_rebuild</c>
+revokes ALL document references, while the product has no separate sketch-enumeration tool, so a fresh
+reference can only come from the definition itself. Faces removed by the shell are ABSENT from the body
+topology, so <c>kompas_read_topology</c> cannot yield them at all, while the removed-face set is the
+edit input. INVARIANT: use <c>AsInterface</c> — a bare <c>is ksFaceDefinition</c> yields an EMPTY list
+while <c>removed_face_count = 1</c>, because a <c>FaceArray()</c> element comes as <c>ksEntity</c> and
+must be unwrapped via <c>GetDefinition()</c>. Both the tree and the API7 collection enumerate features in
+creation order, so the position among same-family ones is a stable address.

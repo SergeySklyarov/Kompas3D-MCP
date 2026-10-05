@@ -3,12 +3,12 @@ using KompasMcp.Contracts;
 namespace KompasMcp.Domain.Geometry;
 
 /// <summary>Analytic area of the <b>region</b> a sketch profile encloses, used as the expected value for an
-/// extrusion (spec 1.11: a silent PASS is forbidden — volume must be compared against an analytic expectation).</summary>
-/// <remarks>The region, not the sum of the primitives: a contour inside another is a hole, so a disk with a
-/// concentric circle is an annulus (π(R²−r²)), not π(R²+r²) — MEASURED, not assumed. Nesting is resolved by
-/// the even-odd rule: every contour strictly inside another flips the sign of its area. Only shapes whose
-/// region is exactly computable from the primitives the caller sent are answered (circles, rectangles,
-/// closed polylines); everything else returns null and the extrusion reports "not computable".
+/// extrusion (spec 1.11: a silent PASS is forbidden — volume must be compared against an expectation).</summary>
+/// <remarks>INVARIANT: the region, not the sum of the primitives — a contour inside another is a hole, so a
+/// disk with a concentric circle is an annulus (π(R²−r²)), not π(R²+r²). Nesting is resolved by the
+/// even-odd rule: every contour strictly inside another flips the sign of its area. LIMIT: only circles,
+/// rectangles and closed polylines are answered; anything else returns null and the extrusion reports
+/// "not computable".
 /// History: docs/decisions/geometry.md#profile-area</remarks>
 public static class ProfileArea
 {
@@ -73,7 +73,6 @@ public static class ProfileArea
         return double.IsFinite(total) && total > 0d ? total : null;
     }
 
-    /// <summary>Area of a closed polygon, absolute value of the shoelace sum, in mm².</summary>
     public static double Shoelace(IReadOnlyList<IReadOnlyList<double>> points)
     {
         double sum = 0d;
@@ -88,8 +87,8 @@ public static class ProfileArea
     }
 
     /// <summary>Tolerance for comparing a measured volume with the analytic expectation: a relative part
-    /// plus an absolute floor, so a tiny model is not failed by floating-point noise and a huge
-    /// one is not passed by an oversized absolute slack.</summary>
+    /// plus an absolute floor, so a tiny model is not failed by noise and a huge one is not passed by an
+    /// oversized absolute slack.</summary>
     public static double Tolerance(double expectedMm3) =>
         Math.Max(1e-3, 1e-9 * Math.Abs(expectedMm3));
 
@@ -103,21 +102,17 @@ public static class ProfileArea
         return Math.Abs(measured - expected) <= Tolerance(expected);
     }
 
-    /// <summary>How two contours lie relative to each other.</summary>
     private enum Relation
     {
-        /// <summary>Neither contains the other and they do not meet.</summary>
         Disjoint,
 
         FirstInsideSecond,
         SecondInsideFirst,
 
-        /// <summary>Touching, overlapping, or otherwise not decidable by this formula.</summary>
         Ambiguous,
     }
 
-    /// <summary>A closed contour with the area it encloses, plus its bounding box (a cheap and sound
-    /// prefilter: disjoint boxes mean disjoint contours).</summary>
+    /// <summary>A closed contour with the area it encloses, plus its bounding box (a sound prefilter).</summary>
     private abstract record Contour(double AreaMm2, double MinU, double MinV, double MaxU, double MaxV)
     {
         public bool BoxesMeet(Contour other) =>
@@ -191,9 +186,6 @@ public static class ProfileArea
         }
     }
 
-    /// <summary>A closed polygon as a contour, or null when it is degenerate or self-intersecting. A
-    /// self-intersecting outline has a shoelace figure but no single enclosed region, so answering
-    /// with that figure would be an invented expectation.</summary>
     private static Ring? PolygonOf(IReadOnlyList<double[]> points)
     {
         if (SelfIntersects(points))
@@ -229,7 +221,6 @@ public static class ProfileArea
         _ => relation,
     };
 
-    /// <summary>Two circles: nested, disjoint, or neither.</summary>
     private static Relation DiskToDisk(Disk first, Disk second)
     {
         var centres = Distance(first.Cx, first.Cy, second.Cx, second.Cy);
@@ -252,7 +243,6 @@ public static class ProfileArea
         return centres > first.R + second.R + EpsMm ? Relation.Disjoint : Relation.Ambiguous;
     }
 
-    /// <summary>Circle against polygon: which contains which, or neither.</summary>
     private static Relation DiskToRing(Disk disk, Ring ring)
     {
         var distances = ring.Points.Select(p => Distance(disk.Cx, disk.Cy, p[0], p[1])).ToArray();
@@ -280,7 +270,6 @@ public static class ProfileArea
         return Relation.Ambiguous;
     }
 
-    /// <summary>Two polygons: nested, disjoint, or neither.</summary>
     private static Relation RingToRing(Ring first, Ring second)
     {
         if (EdgesIntersect(first.Points, second.Points))
@@ -307,7 +296,6 @@ public static class ProfileArea
     private static double Distance(double ax, double ay, double bx, double by) =>
         Math.Sqrt(((ax - bx) * (ax - bx)) + ((ay - by) * (ay - by)));
 
-    /// <summary>Shortest distance from a point to the polygon's boundary (0 when it lies on it).</summary>
     private static double MinEdgeDistance(double px, double py, IReadOnlyList<double[]> points)
     {
         var best = double.PositiveInfinity;
@@ -333,9 +321,9 @@ public static class ProfileArea
         return Distance(px, py, a[0] + (t * dx), a[1] + (t * dy));
     }
 
-    /// <summary>Even-odd point-in-polygon by ray casting. Points on the boundary count as inside: the callers
-    /// have already refused touching contours, so a boundary point here is a contradiction to
-    /// resolve conservatively rather than a case to decide.</summary>
+    /// <summary>Even-odd point-in-polygon by ray casting. Points on the boundary count as inside: callers
+    /// have already refused touching contours, so a boundary point is a contradiction, resolved
+    /// conservatively.</summary>
     private static bool PointInPolygon(double px, double py, IReadOnlyList<double[]> points)
     {
         var inside = false;
@@ -403,9 +391,8 @@ public static class ProfileArea
         return false;
     }
 
-    /// <summary>Whether two segments cross or touch. Touching counts as meeting on purpose: a shared point or
-    /// a shared edge makes the enclosed region depend on the kernel's resolution, which this formula
-    /// is not entitled to predict.</summary>
+    /// <summary>Whether two segments cross or touch. Touching counts as meeting on purpose: a shared point
+    /// or edge makes the enclosed region depend on the kernel's resolution.</summary>
     private static bool SegmentsMeet(double[] p1, double[] p2, double[] q1, double[] q2)
     {
         // The cross products carry mm², so the tolerance has to follow the size of the figure.
@@ -436,11 +423,9 @@ public static class ProfileArea
             || (Math.Abs(d4) <= eps && OnSegment(p1, p2, q2, eps));
     }
 
-    /// <summary>Cross product of (b − a) × (p − a); its sign says which side of ab the point is on.</summary>
     private static double Cross(double[] a, double[] b, double[] p) =>
         ((b[0] - a[0]) * (p[1] - a[1])) - ((b[1] - a[1]) * (p[0] - a[0]));
 
-    /// <summary>Whether a point known to be collinear with ab lies within the segment.</summary>
     private static bool OnSegment(double[] a, double[] b, double[] p, double eps) =>
         p[0] >= Math.Min(a[0], b[0]) - eps
         && p[0] <= Math.Max(a[0], b[0]) + eps

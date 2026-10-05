@@ -4,9 +4,12 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>Transform rules from spec 1.10/2.3: the basis must be right-handed and orthonormal, Z is
-/// derived, and the composition order is fixed — checked on a rotate-then-translate pair that does
-/// not commute, so an accidental swap cannot pass.</summary>
+/// <summary>Transform rules: the basis must be right-handed and orthonormal, Z is derived, and the
+/// composition order is fixed — checked on a rotate-then-translate pair that does not commute, so an
+/// accidental swap cannot pass.</summary>
+/// <remarks>TEST: the basis and composition checks are the contract; the non-commuting pair discriminates
+/// whether the order is honoured.
+/// History: docs/decisions/tests.md#transform-math-2</remarks>
 public class TransformMathTests
 {
     private static TransformDto Frame(double[] origin, double[] x, double[] y) => new()

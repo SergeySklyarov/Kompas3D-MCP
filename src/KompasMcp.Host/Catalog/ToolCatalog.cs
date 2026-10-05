@@ -15,28 +15,22 @@ public sealed record ToolDefinition(
 {
     /// <summary>True when the tool can change the model or the file system and therefore needs
     /// an operation_id and a journal entry.</summary>
-    /// <remarks>
-    /// Инструмент управления сеансом меняет состояние СЕРВЕРА, а не модель, и журнал операций не
-    /// пишет: <see cref="ToolBehaviour.HostLocal"/> выводит его из этого правила. Без флага
-    /// «освобождение сеанса» попадало бы в тот же класс, что мутация модели, и каталог требовал бы
-    /// от него operation_id, который журнал не записывает.
-    /// </remarks>
+    /// <remarks>A session-control tool changes the SERVER's state, not the model, and writes no
+    /// operation journal: <see cref="ToolBehaviour.HostLocal"/> exempts it from this rule. Without the
+    /// flag, "session release" would fall into the same class as a model mutation, and the catalog
+    /// would demand from it an operation_id that the journal never records.</remarks>
     public bool IsMutation => !Behaviour.HostLocal && (Behaviour.Destructive || Behaviour.RequiresOperationId);
 
-    /// <summary>Обрабатывается самим Хостом, без Worker и без журнала операций.</summary>
+    /// <summary>Handled by the Host itself, without Worker and without the operation journal.</summary>
     public bool IsHostLocal => Behaviour.HostLocal;
 }
 
-/// <summary>
-/// Поведение инструмента: что он делает с моделью и что требует от клиента.
-/// </summary>
-/// <param name="ReplaysOperationId">
-/// Инструмент Хоста объявляет <c>operation_id</c> и сам воспроизводит записанный исход повтора —
-/// БЕЗ журнала операций. Отдельный признак, а не <see cref="RequiresOperationId"/>: последний
-/// включал бы инструмент в <see cref="ToolDefinition.IsMutation"/> и требовал бы журнальной записи,
-/// которой у инструмента Хоста нет. Признак нужен, чтобы «не-мутация обещает operation_id» осталось
-/// проверяемым по свойству, а не по перечню имён (правило 3).
-/// </param>
+/// <summary>Tool behaviour: what it does to the model and what it requires of the client.</summary>
+/// <param name="ReplaysOperationId">A Host tool declares <c>operation_id</c> and replays the recorded
+/// outcome itself — WITHOUT an operation journal. A separate flag, not <see cref="RequiresOperationId"/>:
+/// the latter would put the tool into <see cref="ToolDefinition.IsMutation"/> and demand a journal
+/// record the Host tool does not have. The flag keeps "a non-mutation promises operation_id" checkable
+/// by property rather than by a list of names (rule 3).</param>
 public sealed record ToolBehaviour(
     bool ReadOnly,
     bool Destructive,
@@ -46,42 +40,28 @@ public sealed record ToolBehaviour(
     bool HostLocal = false,
     bool ReplaysOperationId = false);
 
-/// <summary>
-/// The tool surface of v1 preview. Every entry here is implemented end to end: an unimplemented
+/// <summary>The tool surface of v1 preview. Every entry here is implemented end to end: an unimplemented
 /// tool is not registered, because a mutation that returns success without doing anything is the
-/// failure mode the contract explicitly forbids (spec 2.1).
-/// </summary>
+/// failure mode the contract explicitly forbids (spec 2.1).</summary>
 public static class ToolCatalog
 {
-    /// <summary>
-    /// Схема цепочек соответствия сечений — ОДНА на создание (<c>kompas_loft</c>) и правку
-    /// (<c>kompas_update_feature</c>), чтобы описания не разошлись между инструментами.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Почему наружу выходит СМЕЩЕНИЕ, а не координаты точки.</b> Измерено 20.09.2026 (проба
-    /// <c>--b5</c>, шаг B5.17): <c>ICoupling.SetPoint</c> документирован
+    /// <summary>The section-coupling schema — ONE for creation (<c>kompas_loft</c>) and edit
+    /// (<c>kompas_update_feature</c>), so the descriptions cannot drift between tools.</summary>
+    /// <remarks>Why the exposed value is an OFFSET, not point coordinates: MEASURED 20.09.2026 (probe
+    /// <c>--b5</c>, step B5.17) that <c>ICoupling.SetPoint</c> is documented
     /// (<c>icoupling_setpoint.html</c>: «<c>SetPoint(long Index, double X, double Y, double Z)</c>»),
-    /// но поданная точка <b>проецируется на контур</b> и читается обратно в <b>локальных координатах
-    /// эскиза сечения</b> — подано <c>(10; 10; 30)</c> (центр квадрата 20×20), прочитано
-    /// <c>(20; 10; 30)</c> (середина стороны, 10 мм контура). Публиковать параметр с несовпадающими
-    /// прямой и обратной половинами значило бы обещать round-trip, которого нет.
-    /// </para>
-    /// <para>
-    /// <b>Единица подтверждена числом.</b> <c>icoupling_positionoffset.html</c> — «Величина смещения
-    /// точки вдоль контура сечения в мм», входной параметр «<c>long Index</c> — индекс сечения в
-    /// цепочке». Измерено: у сечения с периметром 80 мм запись <c>PositionOffset = 5</c> читается как
-    /// <c>Position = 6.25 %</c> — в точности <c>5/80</c>.
-    /// </para>
-    /// <para>
-    /// <b>Что даёт цепочка по существу.</b> Измерено на пирамиде 40×40 → 20×20 при h = 30: цепочка
-    /// <c>0 / 0</c> даёт <c>28000</c> — ровно как без цепочки, то есть явное соответствие
-    /// ЗАМЕЩАЕТ автоматическое; смещение точки второго сечения на <c>20</c> мм (25 % контура) даёт
-    /// <c>20000</c>; возврат даёт <c>28000</c>. Цепочка задаётся ДО первого <c>Update()</c> — так
-    /// документирована фабрика (<c>ilofts_add.html</c>), и измерено (шаг B5.18), что этого
-    /// достаточно: одно построение даёт <c>CouplingsCount = 1</c> и те же <c>20000</c>.
-    /// </para>
-    /// </remarks>
+    /// but the given point is PROJECTED onto the contour and read back in the LOCAL coordinates of the
+    /// section sketch — <c>(10; 10; 30)</c> (centre of a 20×20 square) in, <c>(20; 10; 30)</c> (side
+    /// midpoint, 10 mm along the contour) out. Publishing a parameter whose forward and reverse halves
+    /// disagree would promise a round-trip that does not exist. The unit is confirmed by a number:
+    /// <c>icoupling_positionoffset.html</c> — «Величина смещения точки вдоль контура сечения в мм»,
+    /// input «<c>long Index</c> — индекс сечения в цепочке»; MEASURED: with an 80 mm perimeter,
+    /// <c>PositionOffset = 5</c> reads back as <c>Position = 6.25 %</c> — exactly <c>5/80</c>.
+    /// MEASURED on a 40×40 → 20×20 pyramid at h = 30: coupling <c>0 / 0</c> gives <c>28000</c> (as
+    /// without coupling, so an explicit coupling REPLACES the automatic one), an offset of <c>20</c> mm
+    /// (25 % of the contour) gives <c>20000</c>, and reverting gives <c>28000</c>; the coupling is set
+    /// BEFORE the first <c>Update()</c> as documented (<c>ilofts_add.html</c>), which MEASURED
+    /// (step B5.18) suffices — one build gives <c>CouplingsCount = 1</c> and the same <c>20000</c>.</remarks>
     public static JsonObject CouplingsSchema { get; } = Sch.Arr(
         Sch.ObjAll(
             "Цепочка соответствия сечений",
@@ -107,13 +87,12 @@ public static class ToolCatalog
         "не объявляют ни AddCoupling, ни Coupling, поэтому маршрут семейства — API7. Полная замена: " +
         "заданный список становится всем набором цепочек признака. Пустой список означает «без " +
         "цепочек» и применяется как ClearCouplings().",
-        // НИЖНЯЯ ГРАНИЦА 0, А НЕ 1, И ЭТО ИСПРАВЛЕННОЕ ПРОТИВОРЕЧИЕ СОБСТВЕННОГО ОБЪЯВЛЕНИЯ.
-        // Описание обещало в двух местах: «Пустой список означает «без цепочек» и применяется как
-        // ClearCouplings()», — а схема этот же пустой список запрещала (`minItems: 1`), и обещание
-        // было неисполнимо: измерено 20.09.2026 на приёмке B5, где `couplings: []` вернул
-        // INVALID_ARGUMENT «Минимум 1 элементов, получено 0» на $/couplings. То есть «снять
-        // соответствие» было невыразимо, хотя объявлено выполнимым — класс «объявлено и проглочено»,
-        // только наоборот: объявлено выполнимым и отвергнуто контрактом.
+        // The lower bound is 0, not 1 — a corrected contradiction of the schema's own declaration.
+        // The description promised in two places that an empty list means "no couplings" and applies as
+        // ClearCouplings(), while the schema forbade that same empty list (`minItems: 1`): MEASURED
+        // 20.09.2026 at acceptance B5, `couplings: []` returned INVALID_ARGUMENT "minimum 1, got 0" on
+        // $/couplings. "Remove the coupling" was thus inexpressible although declared doable.
+        // History: docs/decisions/host.md#couplings-minitems
         0, 64);
 
     /// <summary>Definitions shared by every tool, so a document id means the same thing everywhere.</summary>
@@ -298,12 +277,12 @@ public static class ToolCatalog
                 requiresDocument: true,
                 requiresOperationId: false),
 
-            // ===== домен сборок (наряд C1, профиль assemblies-minimal-v1) =====
-            //
-            // Маршрут измерен по справке (по проводу) и по метаданным поставленных обёрток, но
-            // живого прогона по сборке не было. Инструменты зарегистрированы, потому что реализованы
-            // сквозным маршрутом (Host → Worker → COM → чтение обратно), а не заглушкой: уровень
-            // возможности — mcp_implemented, а не mcp_verified, и это сказано в описании.
+            // ===== assembly domain (order C1, profile assemblies-minimal-v1) =====
+            // The route was measured from the help (over the wire) and the shipped wrappers' metadata,
+            // and the domain is accepted by a LIVE run: the ASM group passed on the shipped binaries
+            // (docs/acceptance/assembly/assembly-acceptance.json, 2026-10-05). Capability level is
+            // therefore mcp_verified, and the descriptions say so.
+            // History: docs/decisions/host.md#assemblies-domain
             ReadOnly("kompas_list_components", "Компоненты сборки",
                 "Структура сборки: экземпляры компонентов с именами/марками, признаком «деталь/сборка», "
                 + "кратностью, состоянием фиксации/загрузки, числом тел и граней и ссылкой на экземпляр. "
@@ -372,16 +351,13 @@ public static class ToolCatalog
                 requiresDocument: true,
                 requiresOperationId: false),
 
-            // ===== домен сопряжений (блок C2, профиль mates-minimal-v1) =====
-            //
-            // Маршрут — решение заказчика 05.10.2026: документированный API7-путь
+            // ===== mate domain (block C2, profile mates-minimal-v1) =====
+            // The route is the customer's decision of 05.10.2026: the documented API7 path
             // IPart7.MateConstraints → IMateConstraints3D.Add → BaseObject1/2 → Update().
-            // ksDocument3D.AddMateConstraint НЕ применяется (возвращал False при всех
-            // документированных сочетаниях параметров; причина не установлена).
-            // Уровень возможности — mcp_verified: блок C2 принят живым прогоном на бинарях поставки
-            // 05.10.2026 (прогоны MATE 55/55). Прежняя пометка «mcp_implemented: живого прогона
-            // через продукт нет» устарела и была неверна уже на момент выпуска (дефект L4 ревью
-            // 05.10.2026).
+            // ksDocument3D.AddMateConstraint is NOT used (it returned False for every documented
+            // combination of parameters; the cause is not established). Capability level is
+            // mcp_verified: block C2 was accepted by a live run on the shipped binaries on 05.10.2026
+            // (MATE runs 55/55). History: docs/decisions/host.md#mates-domain
             ReadOnly("kompas_list_mates", "Сопряжения сборки",
                 "Перечень сопряжений: тип, выравнивание, фиксация, параметр, оба базовых объекта и "
                 + "подтверждение Valid. Читается документированным MateConstraintCollection → "
@@ -415,12 +391,12 @@ public static class ToolCatalog
                     ("alignment", Sch.Nullable(Sch.Enum(
                         "Вариант выравнивания направлений (ksMateConstraintAlignmentEnum).",
                         "opposite", "cooriented", "closest"))),
-                    // ПАРАМЕТР СВЯЗАН С ТИПОМ И ПРОВЕРЯЕТСЯ ХОСТОМ (дефект M10 ревью 05.10.2026):
-                    // по mateconstrainttype.html параметрическими являются только mc_Distance
-                    // (5, «постоянное расстояние») и mc_Angle (6, «постоянный угол»); для остальных
-                    // принятое число было бы записано и проигнорировано. ЕДИНИЦЫ справкой
-                    // (imateconstraint3d_paramvalue.html) НЕ НАЗВАНЫ: сервер значение не
-                    // пересчитывает и подтверждает только чтением обратно.
+                    // INVARIANT: the parameter is bound to the type and checked by the Host. Per
+                    // mateconstrainttype.html only mc_Distance (5, «постоянное расстояние») and
+                    // mc_Angle (6, «постоянный угол») are parametric; for the rest an accepted number
+                    // would be recorded and ignored. The help (imateconstraint3d_paramvalue.html) does
+                    // NOT name the UNITS: the server does not recompute the value and confirms it only
+                    // by reading it back. History: docs/decisions/host.md#mate-param
                     ("param_value", Sch.Nullable(Sch.Num(
                         "Параметр ограничения: обязателен для distance и angle, запрещён для остальных "
                         + "типов. Единицы задаются КОМПАС (справкой не названы); подтверждается "
@@ -1002,18 +978,16 @@ public static class ToolCatalog
                         "в коллекции не принимаются — они не постоянные идентификаторы.",
                         1, 64)),
                     ("thickness_mm", Sch.PositiveMm("Толщина стенки")),
-                    // ИМЯ ЭТОГО ПОЛЯ — НЕ СТИЛИСТИКА, А ИСПРАВЛЕНИЕ ДЕФЕКТА, ИЗМЕРЕННОГО 20.09.2026.
-                    // Первая редакция объявляла поле как `direction`, тогда как запись команды
-                    // (`ShellCommand`) несёт `ThinDirection`, то есть на проводе `thin_direction`.
-                    // Хост передаёт аргументы в Worker КАК ЕСТЬ, а Worker связывает их по имени
-                    // snake_case, поэтому `direction` до команды НЕ ДОХОДИЛ ВООБЩЕ: измерено, что
-                    // `direction: "outward"` принимался схемой и давал объём 21631.999999999996 —
-                    // ровно «внутрь», — а `kompas_get_feature` читал обратно `thin_direction:
-                    // "inward"`. Единственное имя, которое команда связывает, `thin_direction`,
-                    // схемой было ЗАПРЕЩЕНО («Неизвестное поле запрещено контрактом»), то есть
-                    // направление стенки было невыразимо в принципе, а объявленный параметр был
-                    // «объявлен и проглочен». Это тот же класс, что и параметр, не объявленный в
-                    // схеме: для продукта невидим.
+                    // The NAME of this field is a defect fix, not style. The first revision declared it
+                    // as `direction`, while the command record (`ShellCommand`) carries `ThinDirection`
+                    // — `thin_direction` on the wire. The Host passes arguments to the Worker AS IS and
+                    // the Worker binds them by snake_case name, so `direction` never reached the command
+                    // at all: MEASURED 20.09.2026 that `direction: "outward"` passed the schema and gave
+                    // a volume of 21631.999999999996 — exactly "inward" — while `kompas_get_feature` read
+                    // back `thin_direction: "inward"`. The only name the command binds, `thin_direction`,
+                    // was FORBIDDEN by the schema, so the wall direction was inexpressible and the
+                    // declared parameter was "declared and swallowed".
+                    // History: docs/decisions/host.md#thin-direction
                     ("thin_direction", Sch.Nullable(Sch.Enum(
                         "Направление формирования стенки: inward — материал внутрь (thinType = true, " +
                         "измерено 21632 при t = 2); outward — наружу (false, 24832). Соответствие " +
@@ -2256,27 +2230,19 @@ public static class ToolCatalog
             command);
     }
 
-    /// <summary>
-    /// Инструмент управления сеансом: обрабатывается самим Хостом, а не Worker.
-    /// </summary>
-    /// <remarks>
-    /// Отдельная фабрика, а не <see cref="ReadOnly"/>/<see cref="Mutation"/>: журнал операций эти
-    /// инструменты не пишут (освобождение сеанса — не мутация модели), и они обязаны отвечать тогда,
-    /// когда CAD-канала нет вовсе. Пометка <c>destructive</c> у освобождения честная: оно завершает
-    /// сеанс и закрывает документы.
-    ///
-    /// <para>
-    /// <b>Почему у освобождения всё-таки есть <c>operation_id</c>.</b> Измерено 04.10.2026 (строка
-    /// <c>S03b</c> прибора <c>mcp-smoke.py</c>): правило «инструмент, аннотированный
-    /// <c>destructiveHint=true</c>, обязан объявлять <c>operation_id</c>» — это опубликованное
-    /// правило §2.1, и приводить к нему надо продукт, а не правило. Освобождение объявляет поле и
-    /// САМО воспроизводит исход повтора (<see cref="ToolBehaviour.ReplaysOperationId"/>), но
-    /// журнала по-прежнему не заводит: <see cref="ToolBehaviour.HostLocal"/> оставляет инструмент
-    /// вне <see cref="ToolDefinition.IsMutation"/>. Поле НЕ обязательно: Хост не проверяет схемы
-    /// инструментов сеанса (они обязаны отвечать без Worker), поэтому «обязательное» объявление было
-    /// бы обещанием, которого никто не исполняет, — класс «объявлено и проглочено».
-    /// </para>
-    /// </remarks>
+    /// <summary>A session-control tool: handled by the Host itself, not the Worker.</summary>
+    /// <remarks>A separate factory rather than <see cref="ReadOnly"/>/<see cref="Mutation"/>: these
+    /// tools write no operation journal (session release is not a model mutation) and must answer when
+    /// there is no CAD channel at all. The <c>destructive</c> mark on release is honest: it ends the
+    /// session and closes the documents. Why release still has <c>operation_id</c>: MEASURED
+    /// 04.10.2026 (line <c>S03b</c> of <c>mcp-smoke.py</c>) that published rule §2.1 requires a tool
+    /// annotated <c>destructiveHint=true</c> to declare <c>operation_id</c> — the product is brought to
+    /// the rule, not the rule to the product. Release declares the field and replays the outcome itself
+    /// (<see cref="ToolBehaviour.ReplaysOperationId"/>) but still keeps no journal:
+    /// <see cref="ToolBehaviour.HostLocal"/> leaves it outside <see cref="ToolDefinition.IsMutation"/>.
+    /// The field is NOT required — the Host does not validate session-tool schemas (they must answer
+    /// without a Worker), so a "required" declaration would be a promise nobody keeps.
+    /// History: docs/decisions/host.md#control-operation-id</remarks>
     private static ToolDefinition Control(
         string name,
         string title,
@@ -2351,16 +2317,12 @@ public static class ToolCatalog
         ("max_mm", Sch.Ref("#/$defs/vector3")),
     });
 
-    /// <summary>
-    /// Плоскость для операций B3: готовая ссылка либо точка с нормалью.
-    /// </summary>
-    /// <remarks>
-    /// Сторона плоскости здесь НЕ задаётся. Её задаёт знак <c>s = n·(p − p₀)</c> в самой команде
-    /// отсечения, потому что «левая сторона» без системы координат — не адрес. Способ «базовая
-    /// плоскость + смещение» объявлен, но не поддержан: маршрут вспомогательной плоскости API7 со
-    /// смещением не измерен, и вызов с ним отказывает CAPABILITY_UNAVAILABLE, а не подставляет
-    /// догадку о знаке нормали базовой плоскости.
-    /// </remarks>
+    /// <summary>The plane for B3 operations: a ready reference or a point with a normal.</summary>
+    /// <remarks>The plane's SIDE is not set here. It is set by the sign <c>s = n·(p − p₀)</c> in the
+    /// cut command itself, because "the left side" without a coordinate system is not an address. The
+    /// "base plane + offset" form is declared but not supported: the API7 auxiliary-plane route with
+    /// an offset was never measured, and a call with it refuses CAPABILITY_UNAVAILABLE rather than
+    /// guessing the sign of the base plane's normal. History: docs/decisions/host.md#cut-plane-side</remarks>
     private static JsonObject CutPlaneSchema() => new()
     {
         ["type"] = "object",

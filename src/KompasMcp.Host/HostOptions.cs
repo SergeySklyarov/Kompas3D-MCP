@@ -5,10 +5,8 @@ using KompasMcp.Domain.Journaling;
 
 namespace KompasMcp.Host;
 
-/// <summary>
-/// Host configuration. Loaded from a JSON file and environment overrides; nothing is downloaded
-/// and no default points at a user's model directory (spec 1.12).
-/// </summary>
+/// <summary>Host configuration. Loaded from a JSON file and environment overrides; nothing is downloaded
+/// and no default points at a user's model directory (spec 1.12).</summary>
 public sealed class HostOptions
 {
     /// <summary>Model roots the server may read but never write.</summary>
@@ -30,10 +28,8 @@ public sealed class HostOptions
 
     public string JournalPath { get; init; } = Default("journal", "operations.jsonl");
 
-    /// <summary>
-    /// Служебный каталог контрольных копий файлов документов. Обязателен: копия, которую сервер
-    /// снимает перед мутацией, не должна ложиться рядом с документом пользователя.
-    /// </summary>
+    /// <summary>Service directory for control copies of document files. Mandatory: the copy the server
+    /// takes before a mutation must not land next to the user's document.</summary>
     public string ControlCopyDirectory { get; init; } = Default("control-copies");
 
     public string ArtifactDirectory { get; init; } = Default("artifacts");
@@ -149,10 +145,8 @@ public sealed class HostOptions
 
     private static bool? ReadBool(JsonObject node, string key) => node[key] is JsonValue value && value.TryGetValue<bool>(out var parsed) ? parsed : null;
 
-    /// <summary>
-    /// Refuse to start when the configuration would allow writing into a directory the operator
-    /// declared read-only, or when no writable root exists at all.
-    /// </summary>
+    /// <summary>Refuse to start when the configuration would allow writing into a directory the operator
+    /// declared read-only, or when no writable root exists at all.</summary>
     public IReadOnlyList<string> Validate()
     {
         var problems = new List<string>();
@@ -197,22 +191,14 @@ public sealed class HostOptions
     }
 }
 
-/// <summary>
-/// JSONL host log. stdout is reserved for MCP frames, so nothing here is ever written there.
-/// </summary>
-/// <remarks>
-/// ЗАПИСЬ — ОДИН ВЫЗОВ НА СТРОКУ, И ВСЁ ЖЕ ПОД БЛОКИРОВКОЙ. Прежде здесь стоял
-/// <c>StreamWriter</c>: он кодирует строку и пишет её в поток, а тот нарезает байты по своему
-/// буферу, поэтому две строки от ДВУХ процессов в одном файле могли перемешаться. Измерено
-/// 21.09.2026 на журнале клиентского сеанса: 35994 строки, из них ровно одна неразбираемая —
-/// 14-байтовый хвост <c>st_pid":38072}</c>.
-///
-/// Одной записи байтов ОКАЗАЛОСЬ НЕДОСТАТОЧНО: проба <c>scratch/_append_probe</c> измерила, что
-/// <c>FileMode.Append</c> с одним вызовом <c>Write</c> при двух писателях ТЕРЯЕТ записи (381 из
-/// 400) — дескриптор запоминает конец файла в момент открытия. Поэтому запись идёт под той же
-/// именованной межпроцессной блокировкой, что и журнал операций: один вызов <c>Write</c> внутри
-/// блокировки, 400/400 на двух процессах и 1200/1200 на четырёх.
-/// </remarks>
+/// <summary>JSONL host log. stdout is reserved for MCP frames, so nothing here is ever written there.</summary>
+/// <remarks>INVARIANT: one <c>Write</c> per line, under the named cross-process lock. A
+/// <c>StreamWriter</c> encodes into a stream that slices bytes by its own buffer, so lines from two
+/// processes could interleave (MEASURED 21.09.2026: 35994 lines, one unparsable 14-byte tail).
+/// MEASURED (probe <c>scratch/_append_probe</c>): <c>FileMode.Append</c> with a single <c>Write</c>
+/// still LOSES records with two writers (381/400) — the handle remembers end-of-file at open. Under
+/// the lock: 400/400 on two processes, 1200/1200 on four.
+/// History: docs/decisions/host.md#hostlog-locking</remarks>
 public sealed class HostLog : IDisposable
 {
     private readonly object _gate = new();
@@ -226,10 +212,8 @@ public sealed class HostLog : IDisposable
         UnavailableReason = unavailableReason;
     }
 
-    /// <summary>
-    /// Почему журнал Хоста не пишется. Пусто — пишется. Названо, а не проглочено: журнал без
-    /// строки «host starting» неотличим от Хоста, который не запускался.
-    /// </summary>
+    /// <summary>Why the Host log is not being written; empty means it is. Named, not swallowed: a log
+    /// without a "host starting" line is indistinguishable from a Host that never started.</summary>
     public string? UnavailableReason { get; }
 
     public static HostLog Open(string path)
@@ -249,7 +233,7 @@ public sealed class HostLog : IDisposable
             }
 
             // Readable while open: the operator guide tells the reader to tail this file.
-            // bufferSize 1 = без буферизации: строка уходит одним системным вызовом.
+            // bufferSize 1 = unbuffered: a line leaves in one system call.
             return new HostLog(
                 new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite, bufferSize: 1, FileOptions.None),
                 NamedFileLock.For(path, "hostlog"),
@@ -257,8 +241,8 @@ public sealed class HostLog : IDisposable
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
         {
-            // Журнал Хоста необязателен для работы (журнал ОПЕРАЦИЙ — обязателен, см. Program), но
-            // его отсутствие обязано быть названо вслух, а не превратиться в пустой файл.
+            // The Host log is optional (the OPERATIONS journal is mandatory, see Program), but its
+            // absence must be named aloud rather than turned into an empty file.
             var reason = $"журнал Хоста '{path}' не открывается: {ex.Message}";
             StderrWriter.WriteLine(reason);
             return new HostLog(null, null, reason);
@@ -276,8 +260,7 @@ public sealed class HostLog : IDisposable
                 return;
             }
 
-            // Блокировка НЕ удерживается дольше одной строки: строка журнала Хоста не имеет права
-            // задерживать вызов инструмента.
+            // The lock is NOT held longer than one line: a Host log line must not delay a tool call.
             var locked = _fileGate?.Enter(WriteLockTimeout) ?? false;
             try
             {
@@ -286,7 +269,7 @@ public sealed class HostLog : IDisposable
             }
             catch (Exception ex) when (ex is IOException or ObjectDisposedException)
             {
-                // Best effort: диагностика не имеет права уронить вызов инструмента.
+                // Best effort: diagnostics must not bring down a tool call.
             }
             finally
             {
@@ -341,7 +324,7 @@ public sealed class HostLog : IDisposable
             }
             catch (Exception ex) when (ex is ObjectDisposedException or IOException)
             {
-                // Уже закрыт.
+                // Already closed.
             }
         }
     }

@@ -2,27 +2,18 @@ using KompasMcp.Contracts;
 
 namespace KompasMcp.Host;
 
-/// <summary>
-/// Факты, от которых зависит решение «можно ли освобождать сеанс».
-/// </summary>
-/// <remarks>
-/// Вынесены в отдельную запись, чтобы решение было ЧИСТОЙ функцией: тест на таблице значений не
-/// требует ни КОМПАС, ни Worker, ни живого Хоста, а «правило» перестаёт быть разбросанным по ветвям
-/// <see cref="HostSession.ReleaseAsync"/>.
-/// </remarks>
-/// <param name="WorkerStarted">Запускался ли Worker в этом сеансе (COM-сеанса могло не быть вовсе).</param>
-/// <param name="CanSendWithoutRestart">
-/// Жив ли канал настолько, чтобы запросить опись БЕЗ перезапуска Worker. Ложь здесь — не «правок
-/// нет», а «опись получить нечем».
-/// </param>
-/// <param name="DocumentStateUnknown">
-/// Липкий признак: Worker терялся или перезапускался, и что стало с его документами, неизвестно.
-/// </param>
-/// <param name="AcknowledgeUnknownDocumentState">
-/// Клиент ЯВНО принял неизвестное состояние документов на себя.
-/// </param>
-/// <param name="InventoryRead">Прочитана ли опись документов.</param>
-/// <param name="DirtyCount">Сколько документов с несохранёнными правками перечислено.</param>
+/// <summary>The facts the "may this session be released" decision depends on.</summary>
+/// <remarks>Split into a record so the decision is a PURE function: a table-driven test needs neither
+/// KOMPAS, nor a Worker, nor a live Host, and the rule stops being scattered across the branches of
+/// <see cref="HostSession.ReleaseAsync"/>.</remarks>
+/// <param name="WorkerStarted">Whether the Worker ran in this session (there may have been no COM session at all).</param>
+/// <param name="CanSendWithoutRestart">Whether the channel is alive enough to request the inventory
+/// WITHOUT restarting the Worker. False here is not "no edits" but "the inventory cannot be obtained".</param>
+/// <param name="DocumentStateUnknown">Sticky flag: the Worker was lost or restarted, and what became of
+/// its documents is unknown.</param>
+/// <param name="AcknowledgeUnknownDocumentState">The client EXPLICITLY accepted the unknown document state.</param>
+/// <param name="InventoryRead">Whether the document inventory was read.</param>
+/// <param name="DirtyCount">How many documents with unsaved edits were listed.</param>
 public sealed record ReleaseFacts(
     bool WorkerStarted,
     bool CanSendWithoutRestart,
@@ -31,48 +22,34 @@ public sealed record ReleaseFacts(
     bool InventoryRead,
     int DirtyCount);
 
-/// <summary>Решение об освобождении: либо выполнять, либо отказ с названным кодом и причиной.</summary>
+/// <summary>The release decision: either proceed, or refuse with a named code and reason.</summary>
 public sealed record ReleaseDecision(bool Proceed, string? RefusalCode, string? Reason);
 
-/// <summary>
-/// Решение «можно ли освобождать сеанс» — ЧИСТАЯ функция от <see cref="ReleaseFacts"/>.
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Порядок проверок — не украшение, а сам смысл.</b> Липкий признак неизвестного состояния стоит
-/// ПЕРВЫМ: он отвечает на случай, который каналом не ловится. После обрыва канала любой CAD-вызов
-/// поднимает НОВЫЙ Worker, у которого нет ни одного документа: его опись пуста и честна, но пуста
-/// она ровно потому, что документы ПОТЕРЯНЫ, а не потому, что правок не было. Проверять после этого
-/// «жив ли канал» и «пуста ли опись» — значит пропустить именно то состояние, ради которого признак
-/// заведён (дефект H3 ревью 05.10.2026, обход через промежуточный вызов).
-/// </para>
-/// <para>
-/// <b>Выход есть, и он явный.</b> Единственный способ освободить сеанс с неизвестным состоянием —
-/// <c>acknowledge_unknown_document_state: true</c>: клиент берёт на себя, что правки прежнего Worker
-/// могли остаться в КОМПАС несохранёнными. Молчаливого выхода нет — он был бы тем же обходом, только
-/// с другого конца. Подтверждение снимает и отказы по КАНАЛУ (шаги 3 и 4): если клиент принял
-/// неизвестное состояние, опись не добавляет сведений, а без этого сломанный канал был бы тупиком —
-/// сразу после обрыва подтвердивший клиент не освободил бы сеанс (находка §4 задания 05.10.2026).
-/// </para>
-/// </remarks>
+/// <summary>The "may this session be released" decision — a PURE function of <see cref="ReleaseFacts"/>.</summary>
+/// <remarks>The order of the checks is the meaning, not decoration. The sticky unknown-state flag
+/// comes FIRST: it covers the case the channel cannot catch. After a channel break any CAD call
+/// raises a NEW Worker with no documents at all, whose inventory is empty and honest — empty precisely
+/// because the documents were LOST, not because there were no edits. Checking "is the channel alive"
+/// and "is the inventory empty" first would skip exactly the state the flag exists for (defect H3,
+/// review 05.10.2026). The only way to release an unknown-state session is an explicit
+/// <c>acknowledge_unknown_document_state: true</c>: the client takes on that the previous Worker's
+/// edits may remain unsaved in KOMPAS. There is no silent exit; acknowledgement also lifts the CHANNEL
+/// refusals (steps 3 and 4), else a broken channel would be a dead end right after a break.
+/// History: docs/decisions/host.md#release-guard</remarks>
 public static class ReleaseGuard
 {
     public static ReleaseDecision Decide(ReleaseFacts facts)
     {
-        // ПОДТВЕРЖДЕНИЕ НЕИЗВЕСТНОГО СОСТОЯНИЯ СНИМАЕТ И ОТКАЗ ПО КАНАЛУ.
-        //
-        // Опись документов существует, чтобы УЗНАТЬ о несохранённых правках. Но если клиент уже
-        // принял на себя, что состояние документов НЕИЗВЕСТНО, опись не добавляет сведений: пустая
-        // опись нового Worker и отсутствие описи — для него одно и то же. Прежде подтверждение
-        // снимало только шаг 1, и сразу после обрыва канала подтвердивший клиент всё равно не мог
-        // освободить сеанс (шаг 3): выход был только обходной — сделать любой CAD-вызов, чтобы Worker
-        // перезапустился, и повторить. Теперь шаги 3 и 4 пропускаются при подтверждении (находка §4
-        // задания 05.10.2026). Шаг 5 НЕ пропускается: «я не знаю» и «я знаю, что там правки» —
-        // разные состояния, и известные несохранённые документы лечатся сохранением.
+        // Acknowledgement of the unknown state also lifts the channel refusal: the inventory exists to
+        // LEARN about unsaved edits, but if the client has already accepted that the state is UNKNOWN,
+        // the inventory adds nothing (an empty inventory of a new Worker and no inventory are the same
+        // to it). Steps 3 and 4 are skipped when acknowledged; step 5 is NOT — "I do not know" and "I
+        // know there are edits" are different states, and known unsaved documents are cured by saving.
+        // History: docs/decisions/host.md#release-guard
         var unknownAcknowledged = facts.DocumentStateUnknown && facts.AcknowledgeUnknownDocumentState;
 
-        // 1. ЛИПКИЙ ПРИЗНАК — ПЕРВЫМ. Опись после перезапуска пуста и «честна», поэтому проверять
-        //    её до этого признака значило бы принимать потерю документов за отсутствие правок.
+        // 1. The sticky flag comes first. The inventory after a restart is empty and "honest", so
+        //    checking it before this flag would mistake document loss for an absence of edits.
         if (facts.DocumentStateUnknown && !facts.AcknowledgeUnknownDocumentState)
         {
             return new ReleaseDecision(
@@ -86,15 +63,15 @@ public static class ReleaseGuard
                 + "acknowledge_unknown_document_state=true.");
         }
 
-        // 2. WORKER НЕ ЗАПУСКАЛСЯ — COM-СЕАНСА И ДОКУМЕНТОВ НЕТ. Описи спрашивать не у кого.
+        // 2. The Worker never ran: no COM session and no documents. There is nobody to ask for the inventory.
         if (!facts.WorkerStarted)
         {
             return new ReleaseDecision(true, null, null);
         }
 
-        // 3. ОПИСЬ НЕ ЗАПРАШИВАЕТСЯ ПЕРЕЗАПУСКОМ WORKER. Сломанный канал — это отсутствие описи, а
-        //    не «правок нет»; перезапуск ради описи потерял бы документы и дал пустой список. При
-        //    подтверждении неизвестного состояния опись не нужна — шаг пропускается.
+        // 3. The inventory is NOT obtained by restarting the Worker. A broken channel means the
+        //    inventory is absent, not that there are no edits; a restart for the inventory would lose
+        //    the documents and return an empty list. Acknowledged unknown state skips this step.
         if (!facts.CanSendWithoutRestart && !unknownAcknowledged)
         {
             return new ReleaseDecision(
@@ -107,8 +84,8 @@ public static class ReleaseGuard
                 + "acknowledge_unknown_document_state=true — тогда опись не потребуется.");
         }
 
-        // 4. ОПИСЬ НЕ ПРОЧИТАНА — ТОЖЕ «НЕИЗВЕСТНО», а не «правок нет». При подтверждении
-        //    неизвестного состояния опись не нужна — шаг пропускается.
+        // 4. The inventory was not read — also UNKNOWN, not "no edits". Acknowledged unknown state
+        //    skips this step.
         if (!facts.InventoryRead && !unknownAcknowledged)
         {
             return new ReleaseDecision(
@@ -119,7 +96,7 @@ public static class ReleaseGuard
                 + "acknowledge_unknown_document_state=true — тогда опись не потребуется.");
         }
 
-        // 5. НЕСОХРАНЁННЫЕ ДОКУМЕНТЫ — ОТКАЗ ПО УМОЛЧАНИЮ.
+        // 5. Unsaved documents are refused by default.
         if (facts.DirtyCount > 0)
         {
             return new ReleaseDecision(

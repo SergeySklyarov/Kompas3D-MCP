@@ -13,11 +13,9 @@ using ModelContextProtocol.Server;
 
 namespace KompasMcp.Host;
 
-/// <summary>
-/// KompasMcp.Host: the only process that speaks MCP. stdout carries protocol frames and nothing
+/// <summary>KompasMcp.Host: the only process that speaks MCP. stdout carries protocol frames and nothing
 /// else — diagnostics go to stderr and to the JSONL log, because a stray log line on stdout breaks
-/// the transport for the client.
-/// </summary>
+/// the transport for the client.</summary>
 public static class Program
 {
     public const string ServerName = "kompas-mcp";
@@ -79,17 +77,14 @@ public static class Program
 
         log.Write("info", "host starting", new { version = ServerVersion, pid = Environment.ProcessId, roots = new { read_only = options.ReadOnlyRoots, writable = options.WritableRoots, export = options.ExportRoots } });
 
-        // ВЛАДЕНИЕ НА СТАРТЕ НЕ БЕРЁТСЯ — И ЭТО ИЗМЕРЕННОЕ РЕШЕНИЕ, А НЕ УПРОЩЕНИЕ.
-        //
-        // Прежде Хост захватывал журнал до поднятия транспорта и отказывал второму Хосту на
-        // `initialize`: клиент терял ВСЕ инструменты и не видел причины («MCP error -32000:
-        // Connection closed», измерено 21.09.2026). Затем выяснилось, что владение берёт и то,
-        // что владением не является: измерено 04.10.2026, вспомогательное обнаружение инструментов
-        // заняло сеанс одним вызовом `tools/list`, и основной чат получил SESSION_OWNER_ACTIVE.
-        //
-        // Теперь старт транспорта, `initialize`, `tools/list` и диагностический `health` владения
-        // не берут. Владение даётся либо ЯВНЫМ `kompas_acquire_session`, либо согласованным
-        // допуском РЕАЛЬНОЙ CAD-операции — и никогда обнаружением каталога.
+        // INVARIANT: ownership is NOT taken at start — a measured decision, not a simplification.
+        // MEASURED 21.09.2026: an earlier Host captured the journal before the transport came up and
+        // refused a second Host at `initialize`, so the client lost ALL tools with no visible reason
+        // ("MCP error -32000: Connection closed"). MEASURED 04.10.2026: tool discovery alone took the
+        // session with one `tools/list`, and the main chat got SESSION_OWNER_ACTIVE. Transport start,
+        // `initialize`, `tools/list` and diagnostic `health` take no ownership; ownership comes from
+        // an EXPLICIT `kompas_acquire_session` or from a coordinated admission of a REAL CAD
+        // operation — never from catalog discovery. History: docs/decisions/host.md#ownership-model
         using var ownership = HostOwnership.Open(options.JournalPath);
         await using var session = new HostSession(options, ownership, log);
 
@@ -137,11 +132,11 @@ public static class Program
         }
         finally
         {
-            // ТРАНСПОРТ ЗАВЕРШЁН — СЕАНС НУЖНО ОТДАТЬ ТЕМ ЖЕ МЕХАНИЗМОМ, ЧТО И ЯВНОЕ ОСВОБОЖДЕНИЕ.
-            // Прежде здесь просто писалось `draining` до конца очистки, и второй Хост читал его как
-            // «можно брать»: владение переходило, пока первый Worker ещё держал COM. Теперь
-            // очистка подтверждается, и лишь после неё состояние становится `free`; чужое поколение
-            // этот finally не трогает вовсе.
+            // INVARIANT: transport end hands the session back by the SAME mechanism as an explicit
+            // release. An earlier revision merely wrote `draining` before cleanup finished, and a
+            // second Host read it as "free to take": ownership moved while the first Worker still held
+            // COM. Now cleanup is confirmed before the state becomes `free`, and this finally never
+            // touches another generation. History: docs/decisions/host.md#transport-end
             await session.OnTransportEndAsync().ConfigureAwait(false);
         }
 
@@ -164,26 +159,15 @@ public static class Program
         kompas_get_context, прежние document_id и revision недействительны.
         """;
 
-    /// <summary>
-    /// Список инструментов: один и тот же каталог для владельца и для ожидающего Хоста.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// КАТАЛОГ НЕ ЗАВИСИТ ОТ ВЛАДЕНИЯ — И ЭТО ТРЕБОВАНИЕ, А НЕ СЛУЧАЙНОСТЬ. Прежде отказ по
-    /// владению приходил на <c>initialize</c>, и второй чат оставался с НУЛЁМ инструментов: он не
-    /// мог ни узнать причину, ни освободить чужой сеанс, ни даже прочитать его состояние.
-    /// </para>
-    /// <para>
-    /// ОТКАЗ ЗДЕСЬ НЕ ВОЗВРАЩАЕТСЯ и по второй причине: измерено 21.09.2026 пробой P2 —
-    /// исключение, брошенное из этого обработчика, до клиента НЕ доходит, SDK заменяет его на
-    /// <c>-32603 «An error occurred.»</c>, и текст причины теряется. Поэтому отказ доставляется
-    /// там, где протокол его несёт: конвертом вызова (<see cref="CallToolAsync"/>).
-    /// </para>
-    /// <para>
-    /// ВЛАДЕНИЕ ЗДЕСЬ НЕ БЕРЁТСЯ И НЕ ОБНОВЛЯЕТСЯ. Ровно это и было дефектом 04.10.2026:
-    /// вспомогательное обнаружение инструментов занимало сеанс одним <c>tools/list</c>.
-    /// </para>
-    /// </remarks>
+    /// <summary>The tool list: the same catalog for the owner and for a waiting Host.</summary>
+    /// <remarks>INVARIANT: the catalog does not depend on ownership. An earlier refusal arrived at
+    /// <c>initialize</c>, leaving the second chat with ZERO tools: it could neither learn the reason
+    /// nor release the other session. A refusal is not returned here for a second reason (MEASURED
+    /// 21.09.2026, probe P2): an exception thrown from this handler never reaches the client — the SDK
+    /// replaces it with <c>-32603</c>, losing the text — so refusals travel where the protocol carries
+    /// them, in the call envelope (<see cref="CallToolAsync"/>). Ownership is neither taken nor
+    /// refreshed here: taking it here was the 04.10.2026 defect.
+    /// History: docs/decisions/host.md#listtools-no-ownership</remarks>
     private static ValueTask<ListToolsResult> ListTools(RequestContext<ListToolsRequestParams> request, CancellationToken cancellationToken, HostLog log)
     {
         _ = request;
@@ -221,9 +205,9 @@ public static class Program
         ResultEnvelope<JsonNode?> envelope;
         try
         {
-            // Маршрутизация, владение и освобождение сеанса решаются ВНУТРИ HostSession: отказ по
-            // владению обязан прийти до записи в журнал и до COM, а единственное место, где это
-            // можно гарантировать, — то же, где создаются журнал и Worker.
+            // Routing, ownership and session release are decided INSIDE HostSession: an ownership
+            // refusal must arrive before any journal write and before COM, and the only place that can
+            // guarantee this is the same place that creates the journal and the Worker.
             envelope = await session.InvokeAsync(name, arguments, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
@@ -240,7 +224,7 @@ public static class Program
             // Anything escaping the invoker must still come back as a contract envelope. A raw
             // exception would surface as a JSON-RPC error with no status, no operation_id and no
             // error code — the one response shape a client cannot act on, and precisely what
-            // spec 2.2 forbids ("исключение не единственный канал ошибки"). The exception type
+            // spec 2.2 forbids ("an exception is not the only error channel"). The exception type
             // and message are reported verbatim so this path is diagnosable from the answer alone.
             log.Write("error", "tool call escaped the invoker", new { tool = name, type = ex.GetType().Name, message = ex.Message, stack = ex.StackTrace });
             envelope = new ResultEnvelope<JsonNode?>
@@ -285,16 +269,13 @@ public static class Program
         var json = JsonSerializer.SerializeToNode(envelope, KompJson.Options) ?? JsonValue.Create("null");
         var summary = Summarize(name, envelope);
 
-        // КАРТИНКА ЕДЕТ ОТДЕЛЬНЫМ image-БЛОКОМ, А НЕ СТРОКОЙ base64 В СТРУКТУРЕ.
-        //
-        // Причина измерена на живом клиенте (запись от 18.09.2026, WorkBuddy AI 5.5.2, build
-        // 910352f0): клиент строит видимый модели контент из ТЕКСТОВЫХ блоков, а structuredContent
-        // убирает в mcpMeta, куда модель не смотрит. Строка base64 в структуре была бы для модели
-        // текстом на десятки тысяч символов — то есть «построил → увидел → сверил → поправил»
-        // превратилось бы в «прочитал простыню», и ради чего инструмент и делался, не случилось бы.
-        //
-        // Поле ИЗ СТРУКТУРЫ УБИРАЕТСЯ ровно потому, что оно уже доставлено блоком: оставить его
-        // значило бы платить за одну и ту же картинку дважды — и в контексте, и в блоке.
+        // The image travels as a separate image block, not as a base64 string in the structure.
+        // MEASURED 18.09.2026 on the live client (WorkBuddy AI 5.5.2, build 910352f0): the client
+        // builds model-visible content from TEXT blocks only and parks structuredContent in mcpMeta,
+        // which the model never sees. A base64 string in the structure would be tens of thousands of
+        // characters of text to the model — "built → saw → checked → fixed" would become "read a wall
+        // of text". The field is removed from the structure precisely because the block already
+        // delivered it: keeping it would pay twice for the same picture.
         string? imageBase64 = null;
         var imageMimeType = "application/octet-stream";
         if (json is JsonObject envelopeNode && envelopeNode["result"] is JsonObject resultNode)
@@ -350,10 +331,8 @@ public static class Program
 
     private static string? ReadOperationId(JsonObject arguments) => JsonScalars.ReadString(arguments["operation_id"]);
 
-    /// <summary>
-    /// Read a field of the result only when the result actually is an object. Log lines must not be
-    /// able to fail a call: results are objects for reads of one entity and arrays for listings.
-    /// </summary>
+    /// <summary>Read a field of the result only when the result actually is an object. Log lines must not be
+    /// able to fail a call: results are objects for reads of one entity and arrays for listings.</summary>
     private static string? ResultField(ResultEnvelope<JsonNode?> envelope, string field) =>
         envelope.Result is JsonObject obj ? JsonScalars.ReadString(obj[field]) ?? JsonScalars.ReadLong(obj[field])?.ToString() : null;
 

@@ -12,9 +12,7 @@ using KompasMcp.Host.Catalog;
 
 namespace KompasMcp.Host;
 
-/// <summary>
-/// Turns a validated MCP tool call into exactly one Worker command.
-/// </summary>
+/// <summary>Turns a validated MCP tool call into exactly one Worker command.</summary>
 /// <remarks>
 /// Ordered so that the guarantees hold without extra ceremony:
 /// <list type="bullet">
@@ -31,14 +29,15 @@ namespace KompasMcp.Host;
 /// </remarks>
 public sealed class ToolInvoker : IAsyncDisposable
 {
-    // save_path — тот же класс поля, что output_path/target_path: назначение файла. Назван
-    // отдельно, потому что у растрового снимка он означает «куда положить картинку», и политика
-    // обязана судить его так же строго: измерено (проба P4 наряда), что ЯДРО путь не проверяет —
-    // на запрещённых символах оно записало усечённый пустой файл, а несуществующий каталог
-    // создало само. Единственная защита от такого пути — отказ ХОСТА до COM.
-    // source_path — файл-источник компонента сборки (наряд C1): тот же класс, что input_path, то
-    // есть ЧТЕНИЕ, а не запись. Назван здесь, потому что политика путей судит поле по ИМЕНИ, и без
-    // этой строки путь вставки/замены компонента уходил бы за разрешённый корень без отказа.
+    // save_path is the same class of field as output_path/target_path: a file destination. Named
+    // separately because for a raster snapshot it means "where to put the picture", and the policy
+    // must judge it just as strictly: MEASURED (probe P4) that the CORE does not check the path — on
+    // forbidden characters it wrote a truncated empty file, and a missing directory it created
+    // itself. The only defence against such a path is a HOST refusal before COM.
+    // source_path is the assembly component's source file (order C1): same class as input_path, i.e.
+    // a READ, not a write. Named here because the path policy judges a field by its NAME, and without
+    // this line a component insert/replace path would slip past the allowed root without a refusal.
+    // History: docs/decisions/host.md#path-fields
     private static readonly string[] PathFields = { "path", "output_path", "target_path", "input_path", "save_path", "source_path" };
 
     private readonly HostOptions _options;
@@ -68,13 +67,11 @@ public sealed class ToolInvoker : IAsyncDisposable
 
     public IReadOnlyList<ToolDefinition> Tools => ToolCatalog.All;
 
-    /// <summary>
-    /// Public entry point. Every contract error is converted into an envelope here, including the
+    /// <summary>Public entry point. Every contract error is converted into an envelope here, including the
     /// ones raised deep inside the journal or the queue: a <see cref="KompasContractException"/>
     /// that escapes would be reported by the caller as an unclassified VERIFICATION_FAILED, and
     /// OPERATION_ID_CONFLICT in particular must never lose its code — that code is the whole
-    /// answer to "may I send this again".
-    /// </summary>
+    /// answer to "may I send this again".</summary>
     public async Task<ResultEnvelope<JsonNode?>> InvokeAsync(string toolName, JsonObject arguments, CancellationToken cancellationToken)
     {
         try
@@ -165,13 +162,11 @@ public sealed class ToolInvoker : IAsyncDisposable
         return violations;
     }
 
-    /// <summary>
-    /// Mode-dependent field rules. The published validator understands anyOf/oneOf but not
+    /// <summary>Mode-dependent field rules. The published validator understands anyOf/oneOf but not
     /// if/then/allOf, so a combination cannot be expressed in the schema without adding keywords
     /// that would then be silently ignored everywhere else; it is checked here instead, before COM.
     /// Spec 4.1 (docs/05) demands exactly this: required, optional and forbidden fields per mode,
-    /// with unsupported combinations rejected rather than normalised away.
-    /// </summary>
+    /// with unsupported combinations rejected rather than normalised away.</summary>
     private static IEnumerable<SchemaViolation> ModeViolations(ToolDefinition tool, JsonObject arguments)
     {
         if (tool.Name == "kompas_edit_sketch")
@@ -190,8 +185,8 @@ public sealed class ToolInvoker : IAsyncDisposable
 
         if (tool.Name == "kompas_chamfer")
         {
-            // Правила «поля ↔ способ» живут здесь, а не в схеме: валидатор публиковал бы
-            // if/then, который в остальных местах молча игнорируется (см. комментарий выше).
+            // The "field ↔ mode" rules live here, not in the schema: the validator would publish an
+            // if/then that is silently ignored elsewhere (see the comment above).
             var mode = ReadString(arguments, "mode") ?? "two_distances";
             var hasDistance2 = arguments.TryGetPropertyValue("distance2_mm", out var d2) && d2 is not null;
             var hasAngle = arguments.TryGetPropertyValue("angle_deg", out var angle) && angle is not null;
@@ -213,8 +208,8 @@ public sealed class ToolInvoker : IAsyncDisposable
                         "При mode=distance_angle нужен angle_deg (градусы, строго между 0 и 90).");
                     break;
                 case "distance_angle" when hasDistance2:
-                    // Второй катет при этом способе нечем выразить: принять и промолчать — значит
-                    // выдать за применённый параметр, который запросили и не получили.
+                    // The second leg cannot be expressed in this mode: accepting it and staying
+                    // silent would pass off as applied a parameter that was requested and not received.
                     yield return new SchemaViolation(
                         "/distance2_mm", "mode",
                         "При mode=distance_angle поле distance2_mm запрещено: сторону задаёт angle_deg.");
@@ -230,11 +225,11 @@ public sealed class ToolInvoker : IAsyncDisposable
 
         if (tool.Name == "kompas_hole")
         {
-            // Правила «поля ↔ режим» живут здесь, а не в схеме: валидатор публиковал бы if/then,
-            // который в остальных местах молча игнорируется (см. комментарий выше). Цена ошибки
-            // здесь не симметрична — лишний отказ виден сразу, а принятое и проигнорированное
-            // число доживает до приёмки, потому что режимные параметры разных режимов живут в
-            // РАЗНЫХ интерфейсах API7 (ISpotfacingHoleParameters против ICountersinkHoleParameters).
+            // The "field ↔ mode" rules live here, not in the schema: the validator would publish an
+            // if/then that is silently ignored elsewhere (see the comment above). The cost of an error
+            // is asymmetric here — a spurious refusal is visible at once, while an accepted and
+            // ignored number survives to acceptance, because mode parameters of different modes live
+            // in DIFFERENT API7 interfaces (ISpotfacingHoleParameters vs ICountersinkHoleParameters).
             var mode = ReadString(arguments, "mode") ?? "blind_flat";
             var holeHasDepth = Present(arguments, "depth_mm");
             var hasBoreDiameter = Present(arguments, "counterbore_diameter_mm");
@@ -265,8 +260,8 @@ public sealed class ToolInvoker : IAsyncDisposable
                         "другим режимам и живут в других интерфейсах параметров.");
                     break;
                 case "through_counterbore" when holeHasDepth:
-                    // Принять число и промолчать — значит выдать за применённую ту глубину,
-                    // которую сквозной режим не читает.
+                    // Accepting a number and staying silent would pass off as applied a depth that the
+                    // through mode does not read.
                     yield return new SchemaViolation(
                         "/depth_mm", "mode",
                         "При mode=through_counterbore поле depth_mm запрещено: режим сквозной и " +
@@ -315,9 +310,9 @@ public sealed class ToolInvoker : IAsyncDisposable
 
         if (tool.Name == "kompas_update_feature")
         {
-            // Семейство признака сервер узнаёт только из COM, поэтому здесь проверяется то, что
-            // видно из аргументов: выдавочные и фасочные поля в одном вызове противоречат друг
-            // другу, и молча применить половину было бы хуже отказа.
+            // The server learns the feature's family only from COM, so only what is visible from the
+            // arguments is checked here: extrude and chamfer fields in one call contradict each other,
+            // and silently applying half would be worse than a refusal.
             var chamferFields = new[] { "distance1_mm", "distance2_mm", "angle_deg", "direction" }
                 .Where(f => arguments.TryGetPropertyValue(f, out var v) && v is not null)
                 .ToList();
@@ -333,20 +328,19 @@ public sealed class ToolInvoker : IAsyncDisposable
                     + "семейство признака определяет, какие поля вообще имеют смысл.");
             }
 
-            // Правку угла здесь не дублируем: отказ принадлежит адаптеру (CAPABILITY_UNAVAILABLE,
-            // потому что маршрут не измерен), а правило «поля ↔ способ» выше — контрактный слой.
-            // Две проверки одного случая с разными кодами дали бы приёмке два ответа на один
-            // запрос, и «где именно отказали» перестал бы читаться.
+            // The angle edit is not duplicated here: that refusal belongs to the adapter
+            // (CAPABILITY_UNAVAILABLE, because the route was never measured), while the "field ↔ mode"
+            // rule above is the contract layer. Two checks of one case with different codes would give
+            // acceptance two answers to one request, and "where exactly it refused" would stop reading.
             yield break;
         }
 
-        // ПАРАМЕТР СОПРЯЖЕНИЯ СВЯЗАН С ЕГО ТИПОМ.
-        //
-        // Принять число там, где типу сопряжения параметра нет (coincidence, parallel,
-        // perpendicular, tangency, concentric), — это тот же дефект, что принятая и проигнорированная
-        // глубина сквозного отверстия: записанное значение не значит применённого. Для distance и
-        // angle параметр, наоборот, обязателен: без него создание отличалось бы от беcпараметрического
-        // типа только именем (дефект M10 ревью 05.10.2026).
+        // A mate parameter is bound to its type. Accepting a number where the mate type has no
+        // parameter (coincidence, parallel, perpendicular, tangency, concentric) is the same defect
+        // as an accepted-and-ignored through-hole depth: a recorded value does not mean an applied
+        // one. For distance and angle the parameter is instead mandatory — without it creation would
+        // differ from the parameterless type in name only (defect M10, review 05.10.2026).
+        // History: docs/decisions/host.md#mate-param
         if (tool.Name == "kompas_create_mate")
         {
             var constraint = ReadString(arguments, "constraint_type");
@@ -382,7 +376,7 @@ public sealed class ToolInvoker : IAsyncDisposable
 
         // docs/02 makes target_body_ref a field of boss and cut only. `base` creates the first body,
         // so there is nothing for it to aim at; letting the pair through and ignoring the reference
-        // would report a honoured target that was never requested from КОМПАС.
+        // would report a honoured target that was never requested from KOMPAS.
         if (TargetBodyGuard.TargetBodyRefusedForOperation(operation, hasTarget))
         {
             yield return new SchemaViolation(
@@ -398,7 +392,7 @@ public sealed class ToolInvoker : IAsyncDisposable
                     "/depth_mm", "mode", "При end_condition=blind глубина depth_mm обязательна.");
                 break;
             case "through" when hasDepth:
-                // Accepting a number that КОМПАС then ignores would let a caller believe a depth
+                // Accepting a number that KOMPAS then ignores would let a caller believe a depth
                 // was applied. Probe P2.1: depth 1 mm and 1000 mm cut identically through-all.
                 yield return new SchemaViolation(
                     "/depth_mm", "mode", "При end_condition=through поле depth_mm запрещено: режим насквозь числа не принимает.");
@@ -416,10 +410,10 @@ public sealed class ToolInvoker : IAsyncDisposable
 
     private ErrorDto? CheckPaths(ToolDefinition tool, JsonObject arguments)
     {
-        // `path` при открытии на ПРАВКУ — это намерение ПИСАТЬ в этот файл: документ, открытый
-        // access=edit, затем сохраняется kompas_save_document без target_path, то есть в исходный
-        // файл. Судить такое поле как чтение — значит пропустить запись в корень «только чтение»
-        // (дефект H4 ревью 05.10.2026).
+        // `path` on an EDIT open is an intent to WRITE to that file: a document opened with
+        // access=edit is later saved by kompas_save_document without target_path, i.e. back to the
+        // source file. Judging such a field as a read would let a write into a "read-only" root slip
+        // through (defect H4, review 05.10.2026). History: docs/decisions/host.md#path-write
         var pathIsWrite = tool.Name == "kompas_open_document"
                           && string.Equals(ReadString(arguments, "access"), "edit", StringComparison.Ordinal);
 
@@ -430,14 +424,13 @@ public sealed class ToolInvoker : IAsyncDisposable
                 continue;
             }
 
-            // ОТНОСИТЕЛЬНЫЙ ПУТЬ ОТКАЗЫВАЕТСЯ, А НЕ РАЗРЕШАЕТСЯ.
-            //
-            // Решение принимается по `Path.GetFullPath` от рабочего каталога ХОСТА, а исполняется
-            // командой в Worker — от рабочего каталога Worker (папка установки) или процесса
-            // КОМПАС. Один и тот же относительный путь поэтому судится по одной папке, а читается
-            // или пишется в другой: если рабочий каталог Хоста лежит внутри разрешённого корня,
-            // путь проходит политику, а файл берётся не там (дефект M13 ревью 05.10.2026). Схема
-            // требует абсолютный путь — теперь это проверяется, а не подразумевается.
+            // INVARIANT: a relative path is REFUSED, not allowed. The decision is made via
+            // `Path.GetFullPath` from the HOST's working directory, but the command runs in the Worker
+            // — from the Worker's (install folder) or the KOMPAS process's working directory. The same
+            // relative path is thus judged against one folder and read/written in another: if the
+            // Host's working directory lies inside an allowed root, the path passes the policy and the
+            // file is taken elsewhere (defect M13, review 05.10.2026). The schema demands an absolute
+            // path — now it is checked, not implied. History: docs/decisions/host.md#relative-path
             if (!Path.IsPathFullyQualified(value))
             {
                 return new ErrorDto(
@@ -485,23 +478,21 @@ public sealed class ToolInvoker : IAsyncDisposable
     // Execution
     // ---------------------------------------------------------------------------------------------
 
-    /// <summary>
-    /// Бюджет ожидания ответа Хостом: максимум из общего бюджета команды (бюджет Worker + запас) и
-    /// настройки оператора. Настройка может бюджет ПРОДЛИТЬ, но не может сделать Хост быстрее
-    /// Worker — иначе Хост первым объявит «исход неизвестен» на команде, которая просто долгая.
-    /// </summary>
+    /// <summary>The Host's answer-wait budget: the maximum of the shared command budget (Worker budget
+    /// plus margin) and the operator setting. The setting may LENGTHEN the budget but cannot make the
+    /// Host faster than the Worker — else the Host would be first to declare "outcome unknown" on a
+    /// command that is merely slow.</summary>
     private int BudgetFor(ToolDefinition tool) =>
         Math.Max(CommandBudgets.HostBudgetMs(tool.WorkerCommand), _options.OperationBudgetMs);
 
     private async Task<ResultEnvelope<JsonNode?>> RunReadAsync(ToolDefinition tool, JsonObject arguments, CancellationToken cancellationToken)
     {
-        // БЮДЖЕТ ХОСТА — ПО КОМАНДЕ, А НЕ ОДНОЙ НАСТРОЙКОЙ НА ВСЁ.
-        //
-        // Одна настройка (operation_budget_ms, 120 с по умолчанию) против бюджетов Worker 180–300 с
-        // означала, что ХОСТ сдаётся раньше Worker: он объявлял OUTCOME_UNKNOWN, ломал канал и
-        // следующим вызовом убивал Worker, который ещё работал по своему бюджету (дефект M11 ревью
-        // 05.10.2026). Теперь бюджет берётся из общей таблицы и не может быть короче бюджета
-        // Worker; настройка оператора по-прежнему может его ПРОДЛИТЬ, но не укоротить.
+        // INVARIANT: the Host budget is PER COMMAND, not one setting for everything. A single setting
+        // (operation_budget_ms, 120 s default) against Worker budgets of 180–300 s meant the HOST gave
+        // up before the Worker: it declared OUTCOME_UNKNOWN, broke the channel, and the next call
+        // killed a Worker still working to its own budget (defect M11, review 05.10.2026). The budget
+        // now comes from the shared table and cannot be shorter than the Worker's; the operator
+        // setting may still LENGTHEN it, not shorten it. History: docs/decisions/host.md#budget-per-command
         var budgetMs = BudgetFor(tool);
         var timeout = TimeSpan.FromMilliseconds(Math.Min(ReadInt(arguments, "timeout_ms") ?? budgetMs, budgetMs));
         try
@@ -546,10 +537,11 @@ public sealed class ToolInvoker : IAsyncDisposable
         var execution = ExecuteAsync(tool, arguments, operationId, cancellationToken);
         if (!_inFlight.TryAdd(operationId, execution))
         {
-            // Журнал сказал «этого operation_id ещё не видел», а задача с ним уже есть: состояние,
-            // которое сюда попасть не должно. Второй раз команду всё равно не отправляем — ждём
-            // существующую. Сама защита от повтора живёт в журнале (см. OperationJournal.TryBegin),
-            // потому что только он атомарен между процессами; эта ветка — вторая линия, а не первая.
+            // The journal said "never saw this operation_id", yet a task with it already exists — a
+            // state that should not occur. The command is not sent a second time: we await the
+            // existing one. The replay defence itself lives in the journal (see
+            // OperationJournal.TryBegin), because only it is atomic across processes; this branch is a
+            // second line, not the first.
             await execution.ConfigureAwait(false);
         }
 
@@ -571,11 +563,12 @@ public sealed class ToolInvoker : IAsyncDisposable
         return Envelope(OperationStatus.Running, tool, operationId, null, arguments,
             warnings: new[]
             {
-                // Раньше здесь было «опрашивайте kompas_operation_status» — инструмента с таким
-                // именем в каталоге нет и никогда не было. Клиент, поверивший подсказке самого
-                // сервера, получал отказ «неизвестный инструмент» вместо состояния операции.
-                // Опрос идёт повтором ТОЙ ЖЕ команды с ТЕМ ЖЕ operation_id: журнал воспроизводит
-                // записанный исход (см. Replayed), а незавершённая операция отвечает Running.
+                // The warning used to say "poll kompas_operation_status" — a tool of that name does
+                // not exist in the catalog and never did. A client trusting the server's own hint got
+                // "unknown tool" instead of the operation state. Polling is a repeat of the SAME call
+                // with the SAME operation_id: the journal replays the recorded outcome (see Replayed),
+                // and an unfinished operation answers Running.
+                // History: docs/decisions/host.md#running-poll
                 $"Операция не завершилась за {_options.SyncBudgetMs / 1000} с и продолжает выполняться; " +
                 "повторите тот же вызов с тем же operation_id — журнал вернёт записанный исход, " +
                 "пока операция идёт, статус остаётся running.",
@@ -602,8 +595,8 @@ public sealed class ToolInvoker : IAsyncDisposable
 
         try
         {
-            // Тот же общий бюджет, что и у чтения: Хост ждёт дольше Worker (см. комментарий в
-            // RunReadAsync), иначе его «сдача» — не наблюдение тайм-аута, а собственный отказ.
+            // The same shared budget as reads: the Host waits longer than the Worker (see the comment
+            // in RunReadAsync), else its "giving up" is not a timeout observation but a self-refusal.
             var timeout = TimeSpan.FromMilliseconds(BudgetFor(tool));
             var frame = await _worker.SendAsync(tool.WorkerCommand, CanonicalNode(tool, arguments), timeout, isMutation: true, cancellation.Token).ConfigureAwait(false);
 
@@ -625,11 +618,11 @@ public sealed class ToolInvoker : IAsyncDisposable
                 terminalRecorded = _journal.Fail(operationId, frame.Error);
             }
 
-            // ТЕРМИНАЛЬНАЯ ЗАПИСЬ НЕ УДАЛАСЬ ПОСЛЕ ВЫПОЛНЕННОЙ МУТАЦИИ. Исход известен только
-            // этому процессу, а долговечная строка по-прежнему говорит `in_flight`; поэтому ошибку
-            // нельзя отдавать с политикой повтора «повторяй как есть» — повтор после перезапуска
-            // применил бы мутацию второй раз. Политика переводится в «после согласования», и это
-            // называется предупреждением, а не остаётся молчанием.
+            // INVARIANT: a failed terminal write after a completed mutation is not a normal refusal.
+            // The outcome is known only to this process, while the durable line still says `in_flight`;
+            // the error must therefore not carry the "retry as is" policy — a retry after restart
+            // would apply the mutation a second time. The policy becomes "after reconciliation", and
+            // this is named in a warning, not left silent. History: docs/decisions/host.md#terminal-write
             var error = terminalRecorded ? frame.Error : ForceReconciliation(frame.Error);
             return Envelope(frame.Error.Code == ErrorCodes.OutcomeUnknown ? OperationStatus.OutcomeUnknown : OperationStatus.Failed,
                 tool, operationId, null, arguments, error,
@@ -643,12 +636,11 @@ public sealed class ToolInvoker : IAsyncDisposable
         }
         catch (KompasContractException contract)
         {
-            // ГИБЕЛЬ WORKER ВО ВРЕМЯ МУТАЦИИ — НЕ ОБЫЧНЫЙ ОТКАЗ.
-            //
-            // Канал оборвался ПОСЛЕ отправки команды: Worker мог быть внутри COM-вызова. Статус
-            // `failed` с `needs_reconciliation=false` скрывал это и от `CountNeedingReconciliation`,
-            // и от `kompas_health` — хотя `OperationJournal.MarkUnknown` документирован ровно для
-            // «смерти Worker» (дефект M2 ревью 05.10.2026).
+            // A Worker death during a mutation is NOT an ordinary refusal. The channel broke AFTER
+            // the command was sent: the Worker may be inside a COM call. A `failed` status with
+            // `needs_reconciliation=false` hid this from both `CountNeedingReconciliation` and
+            // `kompas_health`, although `OperationJournal.MarkUnknown` is documented exactly for a
+            // "Worker death" (defect M2, review 05.10.2026). History: docs/decisions/host.md#worker-death-mutation
             if (contract.Code == ErrorCodes.OutcomeUnknown || contract.Code == ErrorCodes.ApplicationDisconnected)
             {
                 var recorded = _journal.MarkUnknown(operationId, contract.Message);
@@ -694,14 +686,13 @@ public sealed class ToolInvoker : IAsyncDisposable
             _ => OperationStatus.Running,
         };
 
-        // КОНВЕРТ НЕ ПРОТИВОРЕЧИТ САМ СЕБЕ.
-        //
-        // Терминальная запись могла не лечь в журнал ПОСЛЕ выполненной мутации: тогда исход
-        // известен только этому процессу, запись помечена требующей согласования, но её Outcome
-        // остаётся `succeeded`. Прежний ответ отдавал `status=succeeded` вместе с
-        // `error=OUTCOME_UNKNOWN` — клиент, читающий статус, считал операцию успешной и повторял её
-        // новым operation_id (дефект L5 ревью 05.10.2026). Статус, требующий согласования, — это
-        // `outcome_unknown`, а не `succeeded`.
+        // INVARIANT: the envelope does not contradict itself. A terminal write may have failed to
+        // land AFTER a completed mutation: the outcome is then known only to this process, the record
+        // is marked as needing reconciliation, but its Outcome stays `succeeded`. An earlier response
+        // returned `status=succeeded` together with `error=OUTCOME_UNKNOWN` — a client reading the
+        // status took the operation as successful and repeated it with a new operation_id (defect L5,
+        // review 05.10.2026). A status requiring reconciliation is `outcome_unknown`, not `succeeded`.
+        // History: docs/decisions/host.md#replay-status
         if (status == OperationStatus.Succeeded && record.NeedsReconciliation)
         {
             status = OperationStatus.OutcomeUnknown;
@@ -714,8 +705,9 @@ public sealed class ToolInvoker : IAsyncDisposable
 
         if (record.Outcome == JournalOutcome.InFlight)
         {
-            // Незавершённая запись отвечает running: клиент узнаёт, что операция ИДЁТ, и что ждать
-            // надо тот же вызов, а не новый operation_id (новый начал бы мутацию заново).
+            // An unfinished record answers running: the client learns that the operation is IN
+            // PROGRESS and that it must await the same call, not a new operation_id (which would
+            // restart the mutation).
             warnings.Add(
                 "Операция ещё выполняется: повторяйте ЭТОТ ЖЕ вызов с ЭТИМ ЖЕ operation_id, пока "
                 + "статус остаётся running; новый operation_id начал бы мутацию заново.");
@@ -762,22 +754,19 @@ public sealed class ToolInvoker : IAsyncDisposable
         return ordered.ToJsonString(KompJson.Options);
     }
 
-    /// <summary>
-    /// Предупреждение, которым называется НЕДОЛГОВЕЧНАЯ терминальная запись журнала: мутация уже
-    /// выполнена, исход известен этому процессу, но строка исхода в журнал не легла. После
-    /// перезапуска журнал прочитает `in_flight` и потребует согласования — поэтому повтор не
-    /// безопасен, и это сказано клиенту, а не скрыто.
-    /// </summary>
+    /// <summary>The warning that names a NON-DURABLE terminal journal write: the mutation is done and
+    /// the outcome is known to this process, but the outcome line never landed. After a restart the
+    /// journal reads `in_flight` and demands reconciliation — so a retry is not safe, and this is told
+    /// to the client, not hidden.</summary>
     private const string TerminalWriteNotDurable =
         "Терминальная запись журнала операций не удалась (межпроцессная блокировка не получена). " +
         "Исход команды известен только этому процессу; после перезапуска он потребует согласования, " +
         "и повтор с тем же operation_id до согласования не безопасен.";
 
-    /// <summary>
-    /// Обрыв канала к Worker во время мутации: код APPLICATION_DISCONNECTED говорит «связи нет», но
-    /// для МУТАЦИИ этот же факт означает «исход неизвестен». Клиенту нужен второй смысл — по нему
-    /// он решает, можно ли повторять, — поэтому код и политика переведены, а причина сохранена.
-    /// </summary>
+    /// <summary>A channel break to the Worker during a mutation: the code APPLICATION_DISCONNECTED
+    /// says "no connection", but for a MUTATION the same fact means "outcome unknown". The client
+    /// needs the second meaning — it decides from it whether a retry is safe — so the code and policy
+    /// are translated while the cause is preserved.</summary>
     private static ErrorDto DisconnectedAsUnknown(KompasContractException contract)
     {
         var error = contract.ToErrorDto();
@@ -793,10 +782,8 @@ public sealed class ToolInvoker : IAsyncDisposable
         };
     }
 
-    /// <summary>
-    /// Перевод политики повтора в «после согласования». Применяется, когда терминальная запись не
-    /// легла: клиент не имеет права считать повтор безопасным.
-    /// </summary>
+    /// <summary>Translates the retry policy to "after reconciliation". Applied when the terminal write
+    /// did not land: the client must not consider a retry safe.</summary>
     private static ErrorDto ForceReconciliation(ErrorDto error) => error with
     {
         RetryPolicy = RetryPolicy.AfterReconciliation,
@@ -870,10 +857,8 @@ public sealed class ToolInvoker : IAsyncDisposable
             new JsonObject { ["available"] = new JsonArray(ToolCatalog.All.Select(t => (JsonNode)JsonValue.Create(t.Name)!).ToArray()) }),
     };
 
-    /// <summary>
-    /// Read the Worker's own verification block, if it sent one. Absent or unparseable means the
-    /// Host falls back to the conservative level rather than inventing one.
-    /// </summary>
+    /// <summary>Read the Worker's own verification block, if it sent one. Absent or unparseable means the
+    /// Host falls back to the conservative level rather than inventing one.</summary>
     private static VerificationDto? WorkerVerification(JsonNode? result)
     {
         if (result is not JsonObject obj || obj["verification"] is not JsonObject verification)
@@ -897,11 +882,9 @@ public sealed class ToolInvoker : IAsyncDisposable
     private static string? ReadString(JsonNode? node, string key) =>
         node is JsonObject obj ? JsonScalars.ReadString(obj[key]) : null;
 
-    /// <summary>
-    /// Поле задано и не null. Отличается от «TryGetPropertyValue» тем, что пустая строка и ноль
-    /// считаются заданными: отказ должен приходить от правила «поле запрещено в этом режиме», а не
-    /// от того, что значение оказалось ложным для bool.
-    /// </summary>
+    /// <summary>The field is present and not null. Differs from a bare `TryGetPropertyValue` in that an
+    /// empty string and zero count as present: the refusal must come from the "field forbidden in this
+    /// mode" rule, not from a value that happened to be falsy for a bool.</summary>
     private static bool Present(JsonObject arguments, string key) =>
         arguments.TryGetPropertyValue(key, out var value) && value is not null;
 
@@ -931,16 +914,12 @@ public sealed class ToolInvoker : IAsyncDisposable
 
     public IReadOnlyDictionary<string, long> QueueStatistics() => _queue.Statistics();
 
-    /// <summary>
-    /// Операции, которые ещё выполняются, хотя синхронный ответ клиенту уже ушёл.
-    /// </summary>
-    /// <remarks>
-    /// Почему этого нельзя заменить проверкой очереди. Мутация, не уложившаяся в
-    /// <c>SyncBudgetMs</c>, отвечает статусом <c>running</c> и снимается из очереди: очередь
-    /// пуста, а КОМПАС ещё работает. Освобождение сеанса, поверившее пустой очереди, передало бы
-    /// владение при живом COM-вызове — ровно тот случай, для которого правило «пустая очередь
-    /// сама по себе недостаточна» и написано.
-    /// </remarks>
+    /// <summary>Operations that are still running although the synchronous response has already gone.</summary>
+    /// <remarks>Why this cannot be replaced by a queue check: a mutation that overruns
+    /// <c>SyncBudgetMs</c> answers <c>running</c> and leaves the queue, so the queue is empty while
+    /// KOMPAS still works. A session release trusting the empty queue would hand over ownership with
+    /// a live COM call — exactly the case the rule "an empty queue alone is insufficient" was written
+    /// for.</remarks>
     public IReadOnlyList<string> InFlightOperationIds() =>
         _inFlight.Where(pair => !pair.Value.IsCompleted).Select(pair => pair.Key).ToList();
 

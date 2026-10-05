@@ -3,20 +3,12 @@ using Microsoft.Extensions.Logging;
 
 namespace KompasMcp.Host;
 
-/// <summary>
-/// Routes framework and MCP-SDK log records into the Host's JSONL log.
-/// </summary>
-/// <remarks>
-/// Why this exists rather than a one-line <c>AddConsole()</c>: stdout is the MCP transport, and
-/// the default console logger writes there — one SDK warning would corrupt the protocol stream for
-/// every client. The obvious alternative was to keep silencing logs (an earlier build called
-/// <c>ClearProviders()</c> and nothing else), which is how an SDK-side failure surfaced to the
-/// client as a bare "An error occurred invoking …" with no diagnosable trace anywhere. So:
-/// diagnostics go to the log file and, for warnings and above, to stderr, never to stdout.
-///
-/// Repeated messages are rate-limited because a broken tool called in a loop must not fill the
-/// disk at call rate.
-/// </remarks>
+/// <summary>Routes framework and MCP-SDK log records into the Host's JSONL log.</summary>
+/// <remarks>INVARIANT: diagnostics never reach stdout — it is the MCP transport, and the default
+/// console logger writes there, so one SDK warning would corrupt the protocol stream for every
+/// client. Warnings and above also go to stderr. Repeated messages are rate-limited, because a
+/// broken tool called in a loop must not fill the disk at call rate.
+/// History: docs/decisions/host.md#hostlogprovider</remarks>
 public sealed class HostLogProvider : ILoggerProvider
 {
     private const int ThrottleWindowSeconds = 60;

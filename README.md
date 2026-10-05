@@ -94,48 +94,50 @@ KompasMcp.Api5Adapter единственный проект, который зн
 - Windows x64.
 - Установленный и лицензированный **КОМПАС-3D v24 x64**. Сервер работает с настоящим приложением
   и CAD не эмулирует.
-- Для сборки: .NET SDK 10 (`global.json` закрепляет 10.0.401). Для запуска поставки: .NET 10
-  Desktop Runtime x64.
+- Для готового пакета: **.NET 10 Runtime x64** (подходит и .NET 10 Desktop Runtime x64). .NET SDK
+  не нужен.
+- Для сборки из исходников: .NET SDK 10 (`global.json` закрепляет 10.0.401).
 
-Interop-сборки берутся из каталога установки КОМПАС и в репозиторий не входят. По той же причине
-сборка в облачном CI невозможна: проверка изменений идёт на машине с установленным КОМПАС.
+Interop-сборки берутся из каталога установки КОМПАС и ни в репозиторий, ни в пакет не входят. По
+той же причине сборка в облачном CI невозможна: проверка изменений идёт на машине с установленным
+КОМПАС.
 
-## Установка и подключение
+## Установка
 
-1. Собрать поставку (каталог `artifacts\publish`):
+**Готовый пакет.** В [Releases](https://github.com/SergeySklyarov/Kompas3D-MCP/releases/latest)
+лежат `KompasMCP-<тег>-win-x64.zip`, `SHA256SUMS.txt`, `release-manifest.json` и установщик
+`Install-KompasMcp.ps1`. Собирать ничего не нужно. Архив «Source code» на странице выпуска - это
+исходники, готового сервера в нём нет.
 
-   ```powershell
-   .\scripts\publish.ps1 -Configuration Release
-   ```
+**Через Codex.** Дайте агенту ссылку на этот репозиторий и поручение:
 
-   Для отладочной сборки: `dotnet build KompasMcp.sln -c Debug -p:Platform=x64 -p:KompasRoot="<корень установки КОМПАС-3D v24>"`.
+> Установи и подключи последнюю принятую версию KompasMCP из этого репозитория на этой
+> Windows-машине; проверь зависимости, checksum и доступность инструментов; мои модели не изменяй.
 
-2. Создать конфигурацию из шаблона и задать корни доступа к диску:
+Что он сделает и как проверить результат: [подключение к Codex](docs/operator-guide/codex-setup.md).
 
-   ```powershell
-   Copy-Item config\kompas-mcp.example.json config\kompas-mcp.local.json
-   ```
+**Другой MCP-клиент.** Распакуйте пакет, создайте конфигурацию из `config\kompas-mcp.example.json`
+и подключите `KompasMcp.Host.exe --config <конфиг>` как stdio-сервер. Пример для клиентов с
+JSON-конфигурацией:
 
-3. Подключить сервер в MCP-клиенте как stdio-сервер:
+```json
+{
+  "mcpServers": {
+    "kompas": {
+      "command": "<каталог-пакета>\KompasMcp.Host.exe",
+      "args": ["--config", "<путь>\kompas-mcp.json"],
+      "timeout": 600000
+    }
+  }
+}
+```
 
-   ```json
-   {
-     "mcpServers": {
-       "kompas": {
-         "command": "<каталог-поставки>\\KompasMcp.Host.exe",
-         "args": ["--config", "<путь>\\kompas-mcp.local.json"],
-         "timeout": 600000
-       }
-     }
-   }
-   ```
+Проверка из клиента: `kompas_health`, `kompas_capabilities`, затем `kompas_connect {"mode": "launch"}`.
 
-4. Проверить из клиента: `kompas_capabilities`, `kompas_health`, затем
-   `kompas_connect {"mode": "launch"}`.
-
-Подробно: [установка](docs/operator-guide/install.md), [конфигурация и клиент](docs/operator-guide/mcp-config.md),
-[сборка](docs/operator-guide/build.md), [диагностика](docs/operator-guide/diagnostics.md).
-Модульные тесты идут без КОМПАС:
+**Из исходников.** `.\scripts\publish.ps1 -Configuration Release` собирает тот же пакет в
+`artifacts\publish`. Подробно: [установка](docs/operator-guide/install.md),
+[конфигурация](docs/operator-guide/mcp-config.md), [сборка](docs/operator-guide/build.md),
+[диагностика](docs/operator-guide/diagnostics.md). Модульные тесты идут без КОМПАС:
 `dotnet test tests\Unit\KompasMcp.Unit\KompasMcp.Unit.csproj -c Debug -p:Platform=x64`.
 
 ## Инструменты
@@ -156,7 +158,7 @@ Interop-сборки берутся из каталога установки К�
 | Сборки (`assemblies-minimal-v1`) | 7/7 | 5/5 |
 | Сопряжения (`mates-minimal-v1`) | 6/6 | 5/5 |
 
-Клиентская приёмка поставки рабочим MCP-клиентом пройдена: 16 сценариев из 16. Текущее состояние
+Клиентская приёмка выпуска рабочим MCP-клиентом (Codex) пройдена: 16 сценариев из 16. Текущее состояние
 и измеренные числа: [`docs/STATUS.md`](docs/STATUS.md); каталог операций, матрица покрытия и
 профили: [`coverage/solid-v24/`](coverage/solid-v24/).
 
@@ -165,9 +167,13 @@ Interop-сборки берутся из каталога установки К�
 **Чего пока нет:**
 
 - **Чертежи и спецификации.** Работы с 2D-документами КОМПАС в сервере пока нет.
+- **В сборках** массивы компонентов, полная спецификация (BOM) и виды сопряжений сверх профиля
+  `mates-minimal-v1` в этот выпуск не входят. Компоненты внутри подсборок читаются, но адреса для
+  правки у них нет: размещение и замена вложенного компонента отвергаются.
 - Родные приклеивание и вырезание по траектории (`SM-04.boss`) отложены; сохранение копии базового
   объекта при объединении (`SM-15.union.mode_save_base_copy`) запланировано следующим этапом.
-- Каталог операций шире выпуска: 32 семейства, из них 14 в обязательном объёме. План:
+- Выпуск закрывает три профиля из таблицы выше, а не весь каталог операций P6: в каталоге
+  32 семейства, из них 14 в обязательном объёме. План:
   [implementation-plan.md](coverage/solid-v24/implementation-plan.md).
 - Сервер не правит произвольную операцию КОМПАС: то, что не подтверждено, возвращается как
   `CAPABILITY_UNAVAILABLE` с объяснением, а не как успех.

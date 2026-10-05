@@ -1,5 +1,8 @@
 # Релизные заметки: `mechanical-core-v1` - практическое ядро твердотельного моделирования
 
+> Это заметки прежнего выпуска `v24-mechanical-core-v1`. Действующий выпуск - детали, сборки и
+> сопряжения: [docs/distribution/v24-core-assemblies-mates-v1.md](docs/distribution/v24-core-assemblies-mates-v1.md).
+
 **Профиль:** `coverage/solid-v24/release-profiles/mechanical-core-v1.json` («Практическое твердотельное
 моделирование v24», редакция 1.1).
 **Целевая среда:** КОМПАС-3D **v24.0.0.2799 x64**.

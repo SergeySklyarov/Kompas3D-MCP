@@ -1,14 +1,20 @@
 # Установка и запуск на машине заказчика
 
+**Готовый пакет без сборки.** Выпуски на GitHub содержат `KompasMCP-<тег>-win-x64.zip`,
+`SHA256SUMS.txt`, `release-manifest.json` и установщик `Install-KompasMcp.ps1`. Установка из выпуска,
+проверка контрольной суммы, конфигурация и регистрация в Codex: [codex-setup.md](codex-setup.md).
+Раздел «Установка из портабельного пакета» ниже описывает сборку того же пакета из исходников.
+
 Предусловия проверяются, а не предполагаются: `kompas_capabilities` показывает, что реально
 найдено.
 
 ## Требования
 
 1. Windows x64 (проверяется при старте Worker).
-2. .NET 10 Desktop Runtime **x64**. Сборка публикуется с `--self-contained false`, поэтому runtime
-   на целевой машине **обязателен** и в поставку не входит - проверяется отдельно:
-   `dotnet --list-runtimes | Select-String "WindowsDesktop"` (нужен `Microsoft.WindowsDesktop.App 10.*`).
+2. .NET 10 Runtime **x64**: `runtimeconfig.json` поставки требует `Microsoft.NETCore.App 10.x`;
+   .NET 10 Desktop Runtime x64 его включает и тоже подходит. Сборка публикуется с
+   `--self-contained false`, поэтому runtime на целевой машине **обязателен** и в поставку не входит -
+   проверяется отдельно: `dotnet --list-runtimes | Select-String "NETCore.App 10"`.
    Отсутствие runtime видно как `You must install .NET Desktop Runtime` при первом запуске Host.
 3. КОМПАС-3D v24 x64, зарегистрированный для **текущего пользователя**. Проверка:
    `HKCR\KOMPAS.Application.5\CLSID` существует, `LocalServer32` указывает на существующий

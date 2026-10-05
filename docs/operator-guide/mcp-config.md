@@ -34,7 +34,9 @@
 
 ## Подключение в MCP-клиент
 
-Windows-клиент запускает Host как `stdio`-сервер:
+Windows-клиент запускает Host как `stdio`-сервер. Пример ниже - для клиентов с JSON-конфигурацией;
+Codex читает TOML (`[mcp_servers.kompas]` в `config.toml`), его формат и проверка подключения -
+в [codex-setup.md](codex-setup.md).
 
 ```json
 {

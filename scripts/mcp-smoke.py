@@ -22028,19 +22028,21 @@ def mania_scenario_checks(client, rep, app_id, workdir):
              details={"cases": cases})
 
         # ── 16: сохранность — тела, грани и объём не меняются перестроением ──────────────────
+        # INVARIANT: the volume "before" is read BEFORE the rebuild; the earlier form read both sides
+        # after it and compared the rebuilt model with itself.
+        # History: docs/decisions/tests.md#mania-rebuild-before
         n_bodies = len(bodies2())
         n_faces = len(faces(bodies2()[0].get("body_ref"))) if n_bodies else 0
         rev_before = revision2()
+        v16_before = sum(x["v"] or 0.0 for x in rows2())
         env, _ = call("kompas_rebuild", {"document_id": doc2})
         rev_after = revision()
         v16 = sum(x["v"] or 0.0 for x in rows2())
         emit(16, "geometry_validation",
              "сохранность: тела, грани и объём не изменились перестроением",
-             "PASS" if (n_bodies >= 1 and near(v16, sum(x["v"] or 0.0 for x in rows2())))
-             else "FAIL",
+             "PASS" if (n_bodies >= 1 and near(v16, v16_before)) else "FAIL",
              "тел=%d граней=%d; V до перестроения=%.6f после=%.6f; ревизия %s→%s"
-             % (n_bodies, n_faces, sum(x["v"] or 0.0 for x in rows2()), v16, rev_before,
-                rev_after),
+             % (n_bodies, n_faces, v16_before, v16, rev_before, rev_after),
              details={"bodies": n_bodies, "faces": n_faces, "volume": v16})
 
         # ── 17: НЕГАТИВНЫЙ КОНТРОЛЬ ДЕФЕКТА ДУГИ (наряд §3.5) ────────────────────────────────

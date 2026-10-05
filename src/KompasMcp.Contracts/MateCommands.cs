@@ -1,22 +1,13 @@
 namespace KompasMcp.Contracts;
 
-/// <summary>Mate-domain contracts — block C2 (profile <c>mates-minimal-v1</c>, modes
-/// <c>MATE-01…MATE-06</c>).</summary>
-/// <remarks>
-/// <para>INVARIANT: mates are built on the documented API7 path: <c>IPart7.MateConstraints</c> →
-/// <c>IMateConstraints3D.Add(MateConstraintType)</c> → <c>BaseObject1</c>/<c>BaseObject2</c> →
-/// <c>Update()</c>. <c>ksDocument3D.AddMateConstraint</c> is documented for PERMANENT mates but returned
-/// <c>False</c> on faces obtained by the documented path, under every documented parameter combination;
-/// the cause is not established. History: docs/decisions/contracts.md#mates-route</para>
-/// <para>INVARIANT: a mate object is addressed by the pair "component + face number". The face is taken by
-/// the documented <c>ksPart.BodyCollection() → ksBody.FaceCollection()</c>
-/// (<c>kspart_bodycollection.html</c>) and moved into API7 as <c>IModelObject</c>. Body and face counts are
-/// visible in <see cref="ComponentRowDto.BodyCount"/>/<see cref="ComponentRowDto.FaceCount"/>: without them
-/// "component inserted" is indistinguishable from "empty component inserted".</para>
-/// <para>INVARIANT: the mate type is passed by NAME, not by number. The numeric <c>MateConstraintType</c>
-/// values are a wrapper implementation detail; the name is what leaves the server, and an unknown name is
-/// rejected rather than replaced by the nearest known one.</para>
-/// </remarks>
+/// <summary>Mate-domain contracts — block C2 (profile <c>mates-minimal-v1</c>, modes <c>MATE-01…MATE-06</c>).</summary>
+/// <remarks>INVARIANT: mates use the documented API7 path: <c>IPart7.MateConstraints</c> → <c>IMateConstraints3D.Add(MateConstraintType)</c> →
+/// <c>BaseObject1</c>/<c>BaseObject2</c> → <c>Update()</c>; <c>ksDocument3D.AddMateConstraint</c> returned <c>False</c> on documented-path faces, cause not established.
+/// History: docs/decisions/contracts.md#mates-route
+/// INVARIANT: a mate is addressed by "component + face number": the face comes from the documented <c>ksPart.BodyCollection() → ksBody.FaceCollection()</c>
+/// (<c>kspart_bodycollection.html</c>) and moves into API7 as <c>IModelObject</c>; <see cref="ComponentRowDto.BodyCount"/>/<see cref="ComponentRowDto.FaceCount"/>
+/// distinguish "component inserted" from "empty component inserted". INVARIANT: the mate type is passed by NAME, not number; an unknown name is rejected,
+/// not replaced by the nearest known one.</remarks>
 public sealed record CreateMateCommand
 {
     public required string DocumentId { get; init; }

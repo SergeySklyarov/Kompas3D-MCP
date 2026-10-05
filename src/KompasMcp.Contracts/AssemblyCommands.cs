@@ -1,16 +1,11 @@
 namespace KompasMcp.Contracts;
 
-/// <summary>Assembly-domain contracts — block C1 (profile <c>assemblies-minimal-v1</c>, modes
-/// <c>ASM-01…ASM-07</c>).</summary>
-/// <remarks>
-/// <para>INVARIANT: a component is a reference to a file, not a body. What leaves the server is therefore
-/// structure — the component instance, its source file, placement and multiplicity. Two insertions of one
-/// part yield TWO instances of ONE unique part: this is the substantive criterion that separates an
-/// assembly from a composition of bodies in one part.</para>
-/// <para>INVARIANT: placement is a rigid transform (<see cref="TransformDto"/>: origin plus two
-/// orthonormal axes), not a "shift from current" — a shift without a coordinate frame is not an address
-/// and cannot be read back.</para>
-/// </remarks>
+/// <summary>Assembly-domain contracts — block C1 (profile <c>assemblies-minimal-v1</c>, modes <c>ASM-01…ASM-07</c>).</summary>
+/// <remarks>INVARIANT: a component is a reference to a file, not a body. What leaves the server is therefore structure —
+/// the component instance, its source file, placement and multiplicity. Two insertions of one part yield TWO instances
+/// of ONE unique part: this is the substantive criterion that separates an assembly from a composition of bodies in one part.
+/// INVARIANT: placement is a rigid transform (<see cref="TransformDto"/>: origin plus two orthonormal axes), not a
+/// "shift from current" — a shift without a coordinate frame is not an address and cannot be read back.</remarks>
 public sealed record InsertComponentCommand
 {
     public required string DocumentId { get; init; }

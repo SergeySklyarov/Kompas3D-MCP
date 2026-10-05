@@ -147,6 +147,31 @@ t = 2): `thinType = true` даёт 21631.999999999996 мм³ — внутрь (�
 (маршрут API7, отрицательный результат по API5, граница «расширение набора не выражается»), а сюда
 переехало «прежде было…».
 
+No object captured when the fillet was created is used. After the fillet the corner edges are absent
+from the topology (0 of 4 — the corners are occupied by cylindrical faces), the original corner edges
+are revoked by the very creation of the fillet (`STALE_REFERENCE` before any edit), and the existing
+vertical edges of the filleted corners are not retained by the feature: the set collapses
+(`edges_read_back=0`) and the volume returns to the plate. A non-zero `edges_read_back` is obtained
+only by a second call in a row — and that is a rebuild from scratch, not a set edit.
+
+Bounds that do not carry over to the general conclusion: set expansion on the 100×80×10 reference was
+not measured (the plate has exactly four vertical corners, no fifth); what was measured is shrinkage
+(4→3) and replacement at an unchanged size (1→1).
+
+PRODUCT STATE: the route was moved into the adapter, acceptance PASSED (17.09.2026).
+`scripts/mcp-smoke.py --fillet-only` gives 46 lines, 0 FAIL: shrinkage `FL10` (4→3,
+`V=79942.0575041173` against the analytic `79942.05750411731`), `FL10s` (3→2), `FL10b` (2→1) and
+replacement at an unchanged size `FL10x` (1→1) — all `level=geometry_checked`.
+
+BOUND: set EXPANSION is not covered by this field. MEASURED by `FL25` on an L-shaped plate with FREE
+corners: expansion (1→2, 2→3) is expressed by neither of the two currencies. A full replacement by body
+edges means "build the fillet anew on these edges" — the former edge is not kept, whereas expansion
+needs exactly the opposite. The outcome is a refusal AFTER mutation: `GEOMETRY_FAILED` with
+`partial_effects=true`. Before 17.09.2026 that outcome was returned as `err=None` and
+`level=call_returned`, i.e. the disappearance of the feature was passed off as a successful edit; now
+the disappearance of the feature is a refusal. Edit the COMPOSITION (shrinkage and replacement), do not
+add edges. Details — `docs/STATUS.md`.
+
 ## <a id="assembly-domain-contracts"></a>Контракты домена сборок вынесены в AssemblyCommands.cs (наряд C1)
 
 **Что было.** В `WorkerCommands.cs` были объявлены заготовки `ListComponentsCommand` (с
@@ -222,6 +247,31 @@ API7: `IModelContainer.Rotateds.Add(type)` → `QI(IRotated)` → запись �
 клиент не сочиняет и не переносит идентификаторы, а подставляет выданные. Ссылки минтит чтение
 признака на текущую ревизию документа, поэтому они стареют так же, как `edge:`-ссылки.
 
+Here are registry strings minted by THIS server, so `UpdateFeatureCommand.BaseObjectRefs` accepts them.
+An empty field means "not read" (the API7 bridge was not built or there are several fillets with the
+same radius); an empty list — the feature holds no input. These are different states, as with
+`BaseObjectReferences`.
+
+That is, `EdgeRefs` expresses replacement but NOT shrinkage. Separately: an early acceptance presented
+BODY EDGES to this very field and collapsed the feature into the plate — presenting them here is still
+forbidden, they are rejected by the reference kind. The set from `base_object_references` is the only
+measured currency of shrinkage. This is the same format the server already returns references in, so
+the client substitutes the numbers as they are. The set is a FULL replacement, not an addition: what
+must remain is what is passed. An empty list is rejected (`INVALID_ARGUMENT`).
+
+It cannot be combined with `EdgeRefs` in one call (`INVALID_ARGUMENT` before mutation): two different
+compositions in one request are indistinguishable in the response, and "one of the two applied" would
+look like "both applied". An unknown or foreign `input:` reference is rejected before mutation. A
+reference issued to another document is rejected as `STALE_REFERENCE` (`FL26`), inputs of a foreign
+feature of the same document — as `CAPABILITY_UNAVAILABLE` (`FL27`); in both cases the model does not
+change.
+
+BOUND: set EXPANSION is NOT expressed by this field. A new edge is not a feature's own input, and the
+currencies must not be mixed. MEASURED by `FL25` (L-shaped plate with free corners): expansion (1→2,
+2→3) ends in a refusal AFTER mutation with `partial_effects=true`. Before 17.09.2026 the same outcome
+was returned as success with `level=call_returned` — that was a wrong message and it is fixed: the
+disappearance of the feature is now a refusal, not "success at a reduced level".
+
 ## <a id="reposition-position-member"></a>Перенос тела: член `Position` значение не хранит (18.09.2026)
 
 **Что было.** Первая редакция правки сверяла записанный перенос с `IBodyReposition.Position.X/Y/Z`.
@@ -265,3 +315,53 @@ API7: `IModelContainer.Rotateds.Add(type)` → `QI(IRotated)` → запись �
 у самого признака, поэтому документ не накапливает неиспользованные плоскости. `plane_ref` на
 признаке разделения/отсечения отвергается кодом `CAPABILITY_UNAVAILABLE`: подстановка чужой плоскости
 измеренно ничего не делает (E-B).
+
+## <a id="json-schema-additional-properties-default"></a>Валидатор: «additionalProperties: false по умолчанию» — соглашение, не правило (18.09.2026)
+
+The first revision applied the convention as a rule and rejected a CORRECT call —
+expected_bbox_mm ({min_mm,max_mm}) passed the $ref branch and was then called an "unknown field"
+at the wrapper level (MEASURED 18.09.2026: INVALID_ARGUMENT with
+violations=[$/expected_bbox_mm/min_mm additionalProperties, …/max_mm additionalProperties]).
+It showed only on an OBJECT value under a pure anyOf: under an array the parse goes to
+ValidateArray, and under an object the loop below was reached for the first time here.
+
+## <a id="pattern-edit-members"></a>PatternEditDto: члены трёх интерфейсов (queue B4)
+
+Exactly those members that the property pages
+(ilinearpattern_props.html, icircularpattern_props.html,
+imirrorpattern_props.html, checked over the wire) declare on these interfaces:
+
+- ILinearPattern: Angle1/2, Count1/2, Direction1/2, Step1/2, BuildingType.
+- ICircularPattern: Count1/2, Step1/2, StepByAxis, ReverseDirection, SaveInitialOrientation, BuildingType.
+- IMirrorPattern: SaveInitialObjects.
+
+## <a id="pattern-edit-routing"></a>PatternEditDto: маршрут правки признака массива (queue B4)
+
+Grouping makes the family boundary visible in the contract itself, not only in the documentation. For
+the other editable families the branch is chosen by `entity.type`, and that is a measured number.
+
+## <a id="hole-edit-address"></a>Правка отверстия: адрес признака не угадывается (шаг M.6, 20.09.2026)
+
+A feature name is not an identifier: it does not survive the API5↔API7 transition (MEASURED on the
+chamfer, F.8). A mode change was not measured.
+
+## <a id="solid-feature-reposition-read"></a>SolidFeatureDto: чтение параметров переноса (шаг RP.25)
+
+The route was MEASURED at step RP.25 of probe `--reposition-params` (run
+`a336120926fc4652a8bf737562568271`): both the triple of angles and the displacement are read from a
+REOPENED document BEFORE assembly and BEFORE any write.
+
+A feature written by a matrix is not readable — and this is a refusal, not zeros. Such a feature is
+recognized by the READ `OrientationType = 0 (ksAxisOrientation)`: it has no orientation parameters,
+and the matrix form of placement on a reopened document is unit while the geometry is preserved, so
+the kind cannot be derived from it — this is exactly what produced a false `RepositionKind = "translate"`
+for a written rotation. Existing features are not silently converted: all five fields are named
+unreadable with this reason.
+
+## <a id="boolean-edit-kind"></a>Правка вида булевой операции (шаг BO.11, 18.09.2026)
+
+Reference §6.1: A ∪ B — 36 000 in bbox (0,0,0)…(60,30,20), A − B — 12 000 in x ≤ 20, A ∩ B —
+12 000 in x ∈ [20,40]. Experiment E-E confirms that it is the pair "write → Update()" that applies:
+a write without Update() (but with a rebuild) does not change the geometry. If another family ever
+needs its own "operation kind", it MUST take a QUALIFIED name (as the rotation angle did —
+RepositionAngleDeg) rather than introduce a second Operation field.

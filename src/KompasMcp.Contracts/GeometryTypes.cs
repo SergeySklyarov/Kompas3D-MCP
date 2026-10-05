@@ -136,14 +136,12 @@ public enum HoleMode
 }
 
 /// <summary>Rotation operation kind. THIS value decides the action, not <c>IRotated1.OperationResult</c>.</summary>
-/// <remarks>MEASURED (17.09.2026, step R.26, run <c>95fa8441</c>): on a prepared 120×120×40 plate,
-/// <c>o3d_bossRotated</c> with a written AND read-back <c>OperationResult = ksOperationCut</c> changed the
-/// volume by 0, while the same operation created as <c>Add(o3d_cutRotated)</c> removed exactly
-/// 25132.7412287183 mm³. So <c>OperationResult</c> round-trips and affects NOTHING — it is metadata. The
-/// operation kind is therefore set by the CHOICE of factory call, and the client cannot "switch" an
-/// already-open operation; hence <c>kompas_update_feature</c> refuses an attempt to change the rotation
-/// kind: that would delete the feature and create a new one, not edit in place.
-/// History: docs/decisions/contracts.md#rotation-operation</remarks>
+/// <remarks>MEASURED (17.09.2026, step R.26, run <c>95fa8441</c>): on a prepared 120×120×40 plate, <c>o3d_bossRotated</c>
+/// with a written AND read-back <c>OperationResult = ksOperationCut</c> changed the volume by 0, while the same
+/// operation created as <c>Add(o3d_cutRotated)</c> removed exactly 25132.7412287183 mm³. So <c>OperationResult</c>
+/// round-trips and affects NOTHING — it is metadata. The kind is set by the CHOICE of factory call, and the client
+/// cannot "switch" an already-open operation; hence <c>kompas_update_feature</c> refuses a kind change: that would
+/// delete the feature and create a new one, not edit in place. History: docs/decisions/contracts.md#rotation-operation</remarks>
 public enum RotationOperation
 {
     /// <summary>First body: <c>o3d_baseRotated</c> (27).</summary>
@@ -157,20 +155,13 @@ public enum RotationOperation
 }
 
 /// <summary>Rotation direction — <c>ksDirectionTypeEnum</c>, as MEASURED (R.26.sector).</summary>
-/// <remarks>MEASURED on a half-turn, and one of the four values builds nothing:
-/// <list type="bullet">
-/// <item><c>Normal</c> (dtNormal=0) — material on both sides of the axis (extent x[−20,20]);</item>
-/// <item><c>Both</c> (dtBoth=2) — also both sides; the value the shipped <c>BEARING 410</c> file used for a
-/// real partial rotation (R.22);</item>
-/// <item><c>MiddlePlane</c> (dtMiddlePlane=3) — one-sided (x[0,20]) and the ONLY one whose direction change
-/// moves the sector;</item>
-/// <item><c>Reverse</c> (dtReverse=1) — builds NOTHING: <c>Update()</c> returns False, 0 bodies. A fact about
-/// the value, not about rotation; the server must reject it before mutating rather than report "built" from
-/// the return code.</item>
-/// </list>
-/// INVARIANT: on a half-turn the volume does not differ between directions (a half-cylinder is symmetric),
-/// so "the sector moved" is proved only by the side of the material — a caller checking this must compare the
-/// extent, not the volume. History: docs/decisions/contracts.md#rotation-direction</remarks>
+/// <remarks>MEASURED on a half-turn: <c>Normal</c> (dtNormal=0) and <c>Both</c> (dtBoth=2) put material on both sides
+/// (x[−20,20]); <c>MiddlePlane</c> (dtMiddlePlane=3) is one-sided (x[0,20]) and the ONLY one whose direction change
+/// moves the sector; <c>Reverse</c> (dtReverse=1) builds NOTHING (<c>Update()</c> returns False, 0 bodies) and the
+/// server rejects it before mutating. The shipped <c>BEARING 410</c> used <c>Both</c> for a real partial rotation (R.22).
+/// INVARIANT: on a half-turn the volume does not differ between directions (a half-cylinder is symmetric), so "the
+/// sector moved" is proved only by the side of the material — compare the extent, not the volume.
+/// History: docs/decisions/contracts.md#rotation-direction</remarks>
 public enum RotationDirection
 {
     /// <summary>dtNormal=0 — both sides of the axis.</summary>

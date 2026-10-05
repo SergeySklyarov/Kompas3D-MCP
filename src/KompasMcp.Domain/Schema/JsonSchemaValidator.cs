@@ -8,25 +8,14 @@ namespace KompasMcp.Domain.Schema;
 /// <summary>One validation violation, addressed by JSON pointer so a client can fix the right field.</summary>
 public sealed record SchemaViolation(string Path, string Keyword, string Message);
 
-/// <summary>
-/// Validator for the JSON Schema subset this project publishes (spec 2.1):
-/// <c>type</c>, <c>properties</c>, <c>required</c>, <c>additionalProperties:false</c>,
-/// <c>enum</c>, numeric bounds, <c>items</c>/<c>minItems</c>/<c>maxItems</c>,
-/// <c>minLength</c>/<c>maxLength</c>, <c>pattern</c>, <c>$ref</c> into <c>$defs</c>,
-/// <c>anyOf</c>/<c>oneOf</c> and nullability as a type array.
-/// </summary>
-/// <remarks>
-/// Deliberately small: the schemas we author are the only inputs, so a full draft-2020-12 engine
-/// would be unused surface. Unsupported keywords cause a hard startup failure rather than being
-/// skipped, so a schema can never look stricter than it is.
-///
-/// All scalar reads go through <see cref="ReadString"/> and friends. A schema here always passes
-/// through <c>DeepClone()</c> (nullable wrappers, shared <c>$defs</c>), and a cloned node stores a
-/// <c>JsonElement</c> rather than the original CLR value; <c>JsonNode.GetValue&lt;T&gt;</c> demands
-/// an exact backing-type match and throws <c>InvalidOperationException</c> otherwise. That turned a
-/// perfectly valid numeric argument into an unhandled server error — the bug these helpers exist to
-/// make impossible, covered by <c>ValidatorReadsClonedSchema</c>.
-/// </remarks>
+/// <summary>Validator for the JSON Schema subset this project publishes (spec 2.1): <c>type</c>, <c>properties</c>,
+/// <c>required</c>, <c>additionalProperties:false</c>, <c>enum</c>, numeric bounds, <c>items</c>/<c>minItems</c>/<c>maxItems</c>,
+/// <c>minLength</c>/<c>maxLength</c>, <c>pattern</c>, <c>$ref</c> into <c>$defs</c>, <c>anyOf</c>/<c>oneOf</c> and nullability as a type array.</summary>
+/// <remarks>Deliberately small: the schemas we author are the only inputs, so a full draft-2020-12 engine would be unused
+/// surface. Unsupported keywords cause a hard startup failure rather than being skipped, so a schema can never look stricter
+/// than it is. All scalar reads go through <see cref="ReadString"/> and friends: a schema always passes through <c>DeepClone()</c>
+/// (nullable wrappers, shared <c>$defs</c>) and a cloned node stores a <c>JsonElement</c>, which <c>JsonNode.GetValue&lt;T&gt;</c>
+/// rejects with <c>InvalidOperationException</c> unless the backing type matches — the bug <c>ValidatorReadsClonedSchema</c> covers.</remarks>
 public static class JsonSchemaValidator
 {
     private static readonly HashSet<string> KnownKeywords =
@@ -228,18 +217,12 @@ public static class JsonSchemaValidator
         var properties = nodeSchema["properties"] as JsonObject;
         var additional = nodeSchema["additionalProperties"];
 
-        // A node describing NO composition at all (neither properties nor additionalProperties) is a wrapper
-        // such as anyOf around $ref: there is nothing in it to forbid members, because the composition was
-        // already decided by the anyOf/oneOf branches above, and positively (else we would not be here).
-        //
-        // "additionalProperties: false by default" is a convention about HOW this server WRITES schemas
-        // (spec 2.1), not a JSON Schema rule: in JSON Schema an absent additionalProperties means "allowed".
-        // The first revision applied the convention as a rule and rejected a CORRECT call —
-        // expected_bbox_mm ({min_mm,max_mm}) passed the $ref branch and was then called an "unknown field"
-        // at the wrapper level (MEASURED 18.09.2026: INVALID_ARGUMENT with
-        // violations=[$/expected_bbox_mm/min_mm additionalProperties, …/max_mm additionalProperties]).
-        // It showed only on an OBJECT value under a pure anyOf: under an array the parse goes to
-        // ValidateArray, and under an object the loop below was reached for the first time here.
+        // A node describing NO composition (neither properties nor additionalProperties) is a wrapper such as anyOf
+        // around $ref: nothing in it forbids members, because the composition was already decided by the anyOf/oneOf
+        // branches above, and positively (else we would not be here). "additionalProperties: false by default" is a
+        // convention about HOW this server WRITES schemas (spec 2.1), not a JSON Schema rule: an absent
+        // additionalProperties means "allowed", so it must not be enforced as a rule here.
+        // History: docs/decisions/contracts.md#json-schema-additional-properties-default
         if (properties is null && additional is null)
         {
             return;

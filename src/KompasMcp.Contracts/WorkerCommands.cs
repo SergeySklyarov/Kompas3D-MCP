@@ -96,15 +96,13 @@ public static class WorkerCommands
     public const string Shell = "feat.shell";
 
     /// <summary>Boolean operation on bodies with an explicit target and tools (docs/05 SM-15).</summary>
-    /// <remarks>Route MEASURED on 18.09.2026 by probe <c>--boolean</c> (run
-    /// <c>b10ffb70b7d24b6497417bc6639581b1</c>, PASS 13 · FAIL 0): <c>IModelContainer.Booleans.Add()</c>
-    /// → <c>IBoolean</c>, fields <c>BaseObject</c> (target), <c>ModifyObjects</c> (tool array),
+    /// <remarks>Route MEASURED on 18.09.2026 by probe <c>--boolean</c> (run <c>b10ffb70b7d24b6497417bc6639581b1</c>, PASS 13 · FAIL 0):
+    /// <c>IModelContainer.Booleans.Add()</c> → <c>IBoolean</c>, fields <c>BaseObject</c> (target), <c>ModifyObjects</c> (tool array),
     /// <c>BooleanType</c>, <c>SaveCopyModifyObjects</c>, then <c>Update()</c>.
-    /// <para>Difference operand order MEASURED: <b>target minus tools</b>. The <c>ksBooleanType</c>
-    /// values — <c>ksIntersect=1</c>, <c>ksDifference=2</c>, <c>ksUnion=3</c> — come from the enum, not
-    /// from the catalog (the catalog called union zero and was wrong).</para>
-    /// <para>The core neither rejects a repeated reference nor checks that the target is outside the
-    /// tool set: both checks MUST live in the contract, before the COM call.</para></remarks>
+    /// Difference operand order MEASURED: <b>target minus tools</b>. The <c>ksBooleanType</c> values — <c>ksIntersect=1</c>,
+    /// <c>ksDifference=2</c>, <c>ksUnion=3</c> — come from the enum, not from the catalog (the catalog called union zero and was wrong).
+    /// The core neither rejects a repeated reference nor checks that the target is outside the tool set: both checks MUST live in
+    /// the contract, before the COM call.</remarks>
     public const string SolidBoolean = "solid.boolean";
 
     /// <summary>Splitting a body into parts by a plane (docs/05 SM-16).</summary>
@@ -237,15 +235,11 @@ public static class WorkerCommands
     /// successful code is not passed off as an applied edit.</remarks>
     public const string UpdatePlane = "aux.update_plane";
 
-    /// <summary>Enumerates the entities of an EXISTING sketch with a STABLE ADDRESS
-    /// (<c>dep.sketch.entities</c>, actions <c>discover</c> and <c>read</c>).</summary>
-    /// <remarks><para>DOC: route documented by the v24 help: <c>ISketch.BeginEditEx(true)</c> →
-    /// <c>IFragmentDocument.ViewsAndLayersManager.Views</c> → <c>IView</c> →
-    /// <c>IDrawingContainer.GetObjects(ksAllObj)</c> → address <c>IKompasDocument1.GetObjectId</c> →
-    /// <c>ISketch.EndEdit()</c>.</para>
-    /// <para>The address is not "the Nth object of the collection" nor a coordinate: it is the
-    /// <c>GetObjectId</c> string that <c>FindObjectById</c> accepts back, so it survives a model rebuild
-    /// and a document reopen. A collection index is NOT declared a stable address.</para></remarks>
+    /// <summary>Enumerates the entities of an EXISTING sketch with a STABLE ADDRESS (<c>dep.sketch.entities</c>, actions <c>discover</c> and <c>read</c>).</summary>
+    /// <remarks>DOC: route documented by the v24 help: <c>ISketch.BeginEditEx(true)</c> → <c>IFragmentDocument.ViewsAndLayersManager.Views</c> →
+    /// <c>IView</c> → <c>IDrawingContainer.GetObjects(ksAllObj)</c> → address <c>IKompasDocument1.GetObjectId</c> → <c>ISketch.EndEdit()</c>.
+    /// The address is not "the Nth object of the collection" nor a coordinate: it is the <c>GetObjectId</c> string that
+    /// <c>FindObjectById</c> accepts back, so it survives a model rebuild and a document reopen. A collection index is NOT declared a stable address.</remarks>
     public const string ListSketchEntities = "sketch.entities";
 
     /// <summary>Address-targeted edit of ONE existing sketch entity (<c>dep.sketch.entities</c>,
@@ -669,17 +663,14 @@ public sealed record EditSketchCommand
     public required long ExpectedRevision { get; init; }
 }
 
-/// <summary>Request to change the support plane of an existing sketch (command
-/// <see cref="WorkerCommands.SetSketchPlane"/>).</summary>
-/// <remarks><para><b>The shape of <see cref="Plane"/> is THE SAME as for sketch creation:</b>
-/// <c>base</c>+<c>offset_mm</c> OR <c>reference</c>, exactly one at a time. No second dialect of support
-/// is introduced: two shapes of one concept diverge, and the divergence looks like a difference in
-/// product behaviour.</para>
-/// <para><b>A non-plane refusal happens BEFORE COM and is named by a code.</b> MEASURED (probe
-/// <c>--sketch-plane</c>, steps SP.8/SP.9): the core ACCEPTS a flat face as support — all six faces of a
-/// box rebind the dependent body — and REJECTS an edge and a body (<c>SetPlane = False</c>). The product
-/// does not inherit this answer: a <c>reference</c> not leading to a plane is rejected by the KIND of the
-/// reference from the registry, without touching COM.</para></remarks>
+/// <summary>Request to change the support plane of an existing sketch (command <see cref="WorkerCommands.SetSketchPlane"/>).</summary>
+/// <remarks>The shape of <see cref="Plane"/> is THE SAME as for sketch creation: <c>base</c>+<c>offset_mm</c> OR <c>reference</c>,
+/// exactly one at a time. No second dialect of support is introduced: two shapes of one concept diverge, and the divergence looks
+/// like a difference in product behaviour.
+/// A non-plane refusal happens BEFORE COM and is named by a code. MEASURED (probe <c>--sketch-plane</c>, steps SP.8/SP.9): the core
+/// ACCEPTS a flat face as support — all six faces of a box rebind the dependent body — and REJECTS an edge and a body
+/// (<c>SetPlane = False</c>). The product does not inherit this answer: a <c>reference</c> not leading to a plane is rejected by the
+/// KIND of the reference from the registry, without touching COM.</remarks>
 public sealed record SetSketchPlaneCommand
 {
     public required string DocumentId { get; init; }
@@ -854,26 +845,19 @@ public sealed record HoleCommand
 }
 
 /// <summary>Rotation (docs/05 SM-03). The operation kind is stated explicitly and in advance: MEASURED on
-/// 18.09.2026 that the factory kind (<c>Rotateds.Add(27/28/29)</c>) declares which
-/// <c>OperationResult</c> values are admissible for it. Controlled experiment on one geometry:
-/// <c>ksOperationUnion</c> fuses (bodies 1→1), <c>ksOperationNewBody</c> makes a second body (1→2).
+/// 18.09.2026 that the factory kind (<c>Rotateds.Add(27/28/29)</c>) declares which <c>OperationResult</c>
+/// values are admissible for it. Controlled experiment on one geometry: <c>ksOperationUnion</c> fuses
+/// (bodies 1→1), <c>ksOperationNewBody</c> makes a second body (1→2).
 /// History: docs/decisions/contracts.md#rotation-operation-result</summary>
-/// <remarks><para><b>The axis is mandatory and is built in the SAME part.</b> MEASURED (R.24/R.25): a
-/// rotation written without an axis is not built at all — <c>Update()</c> returns False and 0 bodies
-/// remain. The axis is given by two points in MODEL coordinates: the server builds it itself as
-/// <c>o3d_axis2Points</c> in the same part, because <c>IRotated.Axis</c> accepts a model object, not a
-/// sketch line, and a foreign axis from another document is not substituted — references between
-/// documents are not carried over.</para>
-/// <para><b>The angle is in DEGREES and equals the built one, up to a full turn.</b> MEASURED on
-/// 18.09.2026 (probe <c>FullTurnProbe</c>, steps F.1…F.5; independent <c>.m3d</c> read-back by probe
-/// <c>M3dVerificationProbe</c>; analysis — <c>docs/acceptance/api7/full-turn-findings.md</c>):
-/// <c>Angle[true]</c> carries the requested angle directly (90→90°, 180→180°, 360→360°), and the second
-/// half of the pair, equal to the first, doubles the sweep. A full turn is therefore reached with one
-/// call at <c>angle_deg = 360</c>, and refusal starts only above 360 — the sector ceiling, not the
-/// former wrong limit. History: docs/decisions/contracts.md#rotation-angle-limit</para>
-/// <para><b>Thin wall was not tested.</b> The route was measured on a solid body
-/// (<c>IThinParameters.Thin = false</c>); <see cref="ThinWallMm"/> is declared but must not be set — the
-/// server refuses CAPABILITY_UNAVAILABLE rather than writing an unmeasured number.</para></remarks>
+
+/// <remarks>The axis is mandatory and is built in the SAME part. MEASURED (R.24/R.25): a rotation written without an axis
+/// is not built at all — <c>Update()</c> returns False and 0 bodies remain. The axis is given by two points in MODEL
+/// coordinates, built by the server as <c>o3d_axis2Points</c>, because <c>IRotated.Axis</c> accepts a model object, not a
+/// sketch line, and a foreign axis is not substituted. The angle is in DEGREES and equals the built one up to a full turn:
+/// <c>Angle[true]</c> carries the requested angle directly (90→90°, 180→180°, 360→360°), a full turn is reached with one call
+/// at <c>angle_deg = 360</c>, and refusal starts only above 360 (probe <c>FullTurnProbe</c>, steps F.1…F.5; <c>.m3d</c> read-back
+/// by <c>M3dVerificationProbe</c>; analysis <c>docs/acceptance/api7/full-turn-findings.md</c>). Thin wall was not tested.
+/// History: docs/decisions/contracts.md#rotation-angle-limit</remarks>
 public sealed record RotatedCommand
 {
     /// <summary>Profile sketch: an explicit <c>sketch:</c> reference from kompas_create_sketch / kompas_get_feature.</summary>
@@ -919,19 +903,13 @@ public sealed record RotatedCommand
 }
 
 /// <summary>Grid pattern (docs/05 SM-18, profile <c>mechanical-core-v1</c>, queue B4).</summary>
-/// <remarks><para><b>The axis is given by two MODEL points, not a reference.</b> Same decision as for
-/// rotation (SM-03), same reason: <c>ILinearPattern.Axis1/Axis2</c> accept <c>IModelObject</c>, and the
-/// server builds the axis itself as <c>o3d_axis2Points</c> in the SAME part. An axis reference could
-/// drag one in from a foreign part, which patterns never checked.</para>
-/// <para><b>The direction vector is absent here deliberately.</b> In <c>kAPI7.tlb</c>
-/// <c>ILinearPattern.Vector1/Vector2</c> declare getters only (<c>_get_Vector1</c>, <c>_set_Vector1</c>
-/// is absent — read from the dump), and in the vendor interop assembly <c>Interop.KompasAPI7.dll</c>
-/// these members are not declared AT ALL (checked with
-/// <c>KompasMcp.InteropScan --type-members ILinearPattern</c>). Direction is therefore set by an axis,
-/// not a vector, and this is open question OQ-B-03, named rather than bypassed.</para>
-/// <para><b>The second direction is optional.</b> If <see cref="Axis2Point1Mm"/> and
-/// <see cref="Count2"/> are not set, this is a single-row pattern (<c>SM-18.grid.single_row</c>), and
-/// then <c>Count2 = 1</c> and the second-direction fields are not written to the model.</para></remarks>
+/// <remarks>The axis is given by two MODEL points, not a reference (same decision as rotation, SM-03): <c>ILinearPattern.Axis1/Axis2</c>
+/// accept <c>IModelObject</c>, and the server builds the axis itself as <c>o3d_axis2Points</c> in the SAME part — an axis reference
+/// could drag one in from a foreign part, which patterns never checked. The direction vector is absent deliberately: in <c>kAPI7.tlb</c>
+/// <c>ILinearPattern.Vector1/Vector2</c> declare getters only (<c>_get_Vector1</c>, no <c>_set_Vector1</c>), and in <c>Interop.KompasAPI7.dll</c>
+/// these members are not declared AT ALL (checked with <c>KompasMcp.InteropScan --type-members ILinearPattern</c>); direction is set by an
+/// axis, not a vector — open question OQ-B-03. The second direction is optional: if <see cref="Axis2Point1Mm"/> and <see cref="Count2"/>
+/// are not set, this is a single-row pattern (<c>SM-18.grid.single_row</c>), <c>Count2 = 1</c>.</remarks>
 public sealed record PatternGridCommand
 {
     public required string DocumentId { get; init; }
@@ -956,15 +934,12 @@ public sealed record PatternGridCommand
     /// <summary>Instance count along the first direction, including the source. Greater than 1.</summary>
     public required int Count1 { get; init; }
 
-    /// <summary>Tilt angle of the first grid axis, DEGREES. Not set — the model value stays as is (0),
-    /// i.e. the axis is taken as built.</summary>
-    /// <remarks>The type was MADE OPTIONAL BY MEASUREMENT, not for looks. While the field was mandatory
-    /// "not set" was inexpressible and the adapter ALWAYS wrote zero. For the second axis this measurably
-    /// broke the grid: Angle2 is the angle BETWEEN directions, zero aligns the second direction with the
-    /// first, and a rectangular grid degenerated into a line (MEASURED: copies continued the first axis —
-    /// x = 20, 40, 60, 50, 70, 90 at y = 20). The tool schema already declared both angles optional
-    /// (Sch.Nullable), so the change does not alter the wire contract — only the behaviour when the field
-    /// is omitted.</remarks>
+    /// <summary>Tilt angle of the first grid axis, DEGREES. Not set — the model value stays as is (0), i.e. the axis is taken as built.</summary>
+    /// <remarks>The type was MADE OPTIONAL BY MEASUREMENT, not for looks. While the field was mandatory "not set" was inexpressible and
+    /// the adapter ALWAYS wrote zero. For the second axis this measurably broke the grid: Angle2 is the angle BETWEEN directions, zero
+    /// aligns the second direction with the first, and a rectangular grid degenerated into a line (MEASURED: copies continued the first
+    /// axis — x = 20, 40, 60, 50, 70, 90 at y = 20). The tool schema already declared both angles optional (Sch.Nullable), so the change
+    /// does not alter the wire contract — only the behaviour when the field is omitted.</remarks>
     public double? Angle1Deg { get; init; }
 
     /// <summary>Copy direction along the first axis.</summary>
@@ -1190,34 +1165,14 @@ public sealed record PatternReadCommand
     public required string FeatureRef { get; init; }
 }
 
-/// <summary>New parameters of an EXISTING pattern feature (edit per docs/05 §4.3: not "delete and create
-/// a similar one"). Passed in the <c>pattern</c> field of the <c>kompas_update_feature</c> tool.</summary>
-/// <remarks><para><b>Why a separate type rather than fields on the edit command itself.</b> A pattern has
-/// no depth, no radius, no sketch: the members that edit it belong to THREE different API7 interfaces
-/// (<c>ILinearPattern</c>, <c>ICircularPattern</c>, <c>IMirrorPattern</c>), and some names coincide only
-/// in appearance. A flat set of fields on <see cref="UpdateFeatureCommand"/> would read as "all this
-/// applies to any pattern", which is wrong: <c>save_initial_orientation</c> exists only on circular,
-/// <c>save_initial_objects</c> only on mirror, <c>step2_deg</c> only on circular.</para>
-/// <para><b>What is here and why.</b> Exactly those members that the property pages
-/// (<c>ilinearpattern_props.html</c>, <c>icircularpattern_props.html</c>,
-/// <c>imirrorpattern_props.html</c>, checked over the wire) declare on these interfaces:</para>
-/// <list type="bullet">
-/// <item><description><c>ILinearPattern</c>: <c>Angle1/2</c>, <c>Count1/2</c>,
-/// <c>Direction1/2</c>, <c>Step1/2</c>, <c>BuildingType</c>.</description></item>
-/// <item><description><c>ICircularPattern</c>: <c>Count1/2</c>, <c>Step1/2</c>,
-/// <c>StepByAxis</c>, <c>ReverseDirection</c>, <c>SaveInitialOrientation</c>,
-/// <c>BuildingType</c>.</description></item>
-/// <item><description><c>IMirrorPattern</c>: <c>SaveInitialObjects</c>.</description></item>
-/// </list>
-/// <para><b>What is not here.</b> Axes and plane: <c>Axis1/Axis2</c> and <c>Plane</c> accept
-/// <c>IModelObject</c>, and the caller cannot hand out a reference to a support object the way it hands
-/// out a <c>feature:</c> reference to a feature — and no B4 run measured changing the support of an
-/// existing pattern. These members cannot be silently left out of the contract, so they are named here
-/// as non-editable. <c>Vector1/Vector2</c> are absent for the same reason as at creation: they are not
-/// declared at all in the vendor interop assembly (OQ-B-03).</para>
-/// <para><b>A full statement, not "what changed".</b> An edit must carry the values of ALL mode
-/// parameters that should remain: members not set in the request stay as they are, and this is the only
-/// way to tell "exactly the requested thing changed" from "this changed too".</para></remarks>
+/// <summary>New parameters of an EXISTING pattern feature (edit per docs/05 §4.3: not "delete and create a similar one"); passed in the <c>pattern</c> field of <c>kompas_update_feature</c>.</summary>
+/// <remarks>A pattern has no depth, no radius, no sketch: its members belong to THREE API7 interfaces (<c>ILinearPattern</c>,
+/// <c>ICircularPattern</c>, <c>IMirrorPattern</c>), and some names coincide only in appearance — <c>save_initial_orientation</c>
+/// exists only on circular, <c>save_initial_objects</c> only on mirror, <c>step2_deg</c> only on circular. A flat set of fields
+/// on <see cref="UpdateFeatureCommand"/> would read as "all this applies to any pattern". Axes and plane (<c>Axis1/Axis2</c>,
+/// <c>Plane</c>) are non-editable: they accept <c>IModelObject</c>, no <c>feature:</c> reference reaches them, and no B4 run
+/// measured changing the support of an existing pattern; <c>Vector1/Vector2</c> are absent (OQ-B-03). An edit must carry ALL mode
+/// parameters that should remain — members not set stay as they are, the only way to tell "exactly the requested thing changed" from "this changed too". History: docs/decisions/contracts.md#pattern-edit-members</remarks>
 public sealed record PatternEditDto
 {
     /// <summary>Instance count along the first direction. For grid — axis 1, for circular — RADIAL.</summary>
@@ -1326,47 +1281,14 @@ public sealed record ChamferDto(
     bool? Direction,
     int? BaseObjectCount);
 
-/// <summary>Fillet parameters. The radius is read from API7 (<c>IFillet.Radius1</c>): in API5
-/// <c>ksFilletDefinition.radius</c> is declared and readable but NOT applied when written to an existing
-/// feature (MEASURED by row FL04r), so the live model is the authoritative source. An empty field means
-/// "not read" (the API7 bridge was not built or there are several fillets), not "zero".</summary>
-/// <param name="BaseObjectReferences">Feature input references — <c>IModelObject.Reference</c> of each
-/// element of <c>IFillet.BaseObjects</c>. An observable of the composition: it shows what the feature was
-/// assembled from, and it also serves as a diagnostic when editing the set.
-/// <para>It is NOT the address for editing the set: <c>edge_refs</c> accepts registry strings of the form
-/// <c>edge:&lt;hex&gt;</c>, whereas here lie NUMBERS <c>IModelObject.Reference</c> that have no registry
-/// string, so they cannot be substituted into <c>edge_refs</c> by type, whatever the context.
-/// History: docs/decisions/contracts.md#fillet-base-object-references</para>
-/// <para><b>The MEASURED reason why body edges are not enough to edit the set.</b> After filleting all
-/// corners the body has 24 edges: 16 lines and 8 arcs of length π·3/2 (a quarter circle R3). All eight
-/// "vertical" lines lie on the tangent seams of the cylinders <c>(±47,±40)</c> and <c>(±50,±37)</c>;
-/// there are ZERO corner vertical edges in the topology (<c>len(corner_edges) = 0</c>) — the fillet
-/// itself recalled them.</para>
-/// <para><b>And most importantly: feature inputs and body edges are NOT interchangeable as a write
-/// currency.</b> Probe H-2 reduced the set (4→3, 4→2) with objects read FROM <c>BaseObjects</c> — no body
-/// edge was searched for or carried over. MEASURED on 17.09.2026 (FL10): presenting three body edges
-/// (arcs) instead of the feature's own inputs COLLAPSES the feature — the volume returns to the plate
-/// (<c>79999.99999999999</c>), <c>level=call_returned</c>. A replacement at unchanged size (1→1), by
-/// contrast, works with carried-over edges (FL10x, <c>level=geometry_checked</c>). Hence: REDUCING the
-/// set and REPLACING the composition are different operations with different currencies, and the single
-/// field <c>edge_refs</c> expresses only the latter.</para>
-/// <para>An empty list — the feature holds no input; <c>null</c> — not read.</para></param>
-/// <param name="BaseObjectInputRefs">Registry references to the feature's OWN inputs —
-/// <c>input:&lt;hex&gt;</c>, one per element of <c>IFillet.BaseObjects</c>, in the same order as
-/// <paramref name="BaseObjectReferences"/>.</param>
-/// <remarks>This is the REDUCTION currency that was missing. The difference from
-/// <paramref name="BaseObjectReferences"/> is fundamental and MEASURED: there lie NUMBERS
-/// <c>IModelObject.Reference</c> with no registry string, so they are not substituted into
-/// <c>edge_refs</c> by type; here are registry strings minted by THIS server, so
-/// <see cref="UpdateFeatureCommand.BaseObjectRefs"/> accepts them. The rule is the same for all server
-/// references: the client does not invent or carry over identifiers, it substitutes the issued ones.
-/// <para>The references are minted by READING the feature (<c>kompas_get_feature</c>) against the current
-/// document revision, so they age exactly like <c>edge:</c> references: after a mutation
-/// <c>REVISION_CONFLICT</c> or <c>STALE_REFERENCE</c> forces a context re-read rather than substituting a
-/// stale number.</para>
-/// <para><c>null</c> — the inputs were not read (the API7 bridge was not built or there are several
-/// fillets with the same radius); an empty list — the feature holds no input. These are different states,
-/// as with <paramref name="BaseObjectReferences"/>.</para></remarks>
+/// <summary>Fillet parameters. The radius is read from API7 (<c>IFillet.Radius1</c>): API5 <c>ksFilletDefinition.radius</c> is readable but
+/// NOT applied when written to an existing feature (MEASURED by row FL04r), so the live model is authoritative; empty = "not read".</summary>
+/// <param name="BaseObjectReferences">Feature input references — <c>IModelObject.Reference</c> of each element of <c>IFillet.BaseObjects</c>;
+/// an observable of the composition, NOT the address for editing the set (<c>edge_refs</c> takes registry <c>edge:&lt;hex&gt;</c> strings,
+/// here lie NUMBERS with none). History: docs/decisions/contracts.md#fillet-base-object-references</param>
+/// <param name="BaseObjectInputRefs">Registry references to the feature's OWN inputs — <c>input:&lt;hex&gt;</c>, one per element of
+/// <c>IFillet.BaseObjects</c>, in the same order as <paramref name="BaseObjectReferences"/>; the REDUCTION currency that was missing.
+/// They age like <c>edge:</c> references (minted by <c>kompas_get_feature</c> against the current revision): after a mutation <c>REVISION_CONFLICT</c> or <c>STALE_REFERENCE</c> forces a context re-read; <c>null</c> — not read, empty list — no input.</param>
 public sealed record FilletDto(
     double? RadiusMm,
     double? Radius2Mm,
@@ -1391,30 +1313,14 @@ public sealed record SupportPlaneDto(
     IReadOnlyList<double> Point2Mm,
     IReadOnlyList<double> Point3Mm);
 
-/// <summary>Parameters of a B3 feature (boolean, split, cut, reposition), read FROM THE MODEL — the
-/// <c>read</c> action of order §7.</summary>
-/// <remarks><para><b>Only fields of its own family are filled</b>; for other families they are
-/// <c>null</c>. An empty field means "not read", not zero, and the reason goes into
-/// <see cref="UnreadableParameters"/>.</para>
-/// <para><b>Of the five reposition fields, ONE is not published:</b>
-/// <see cref="RepositionAxisPointMm"/>. An axis point has no documented member in any interface of the
-/// chain, and it is not a placement property — a rotation about any point of ONE AND THE SAME line gives
-/// the same placement, so what is reconstructed from the read orientation and translation is a
-/// REPRESENTATIVE of the line, not the original input. The field is always <c>null</c> and always named
-/// in <see cref="UnreadableParameters"/>: for a rotation — "not readable", for a translation — "not
-/// applicable". The other four (<see cref="RepositionKind"/>, <see cref="RepositionVectorMm"/>,
-/// <see cref="RepositionAxisDirectionMm"/>, <see cref="RepositionAngleDeg"/>) are read by the documented
-/// parametric route: <c>OrientationType = ksEulerCorners</c> + <c>LocalCSParameters →
-/// ILocalCSEulerParam</c> for orientation and <c>ParameterType = ksPDisplace</c> + <c>Parameters →
-/// IPoint3DParamDisplace</c> for translation. The route was MEASURED at step RP.25 of probe
-/// <c>--reposition-params</c> (run <c>a336120926fc4652a8bf737562568271</c>): both the triple of angles and
-/// the displacement are read from a REOPENED document BEFORE assembly and BEFORE any write.</para>
-/// <para><b>A feature written by a matrix is not readable — and this is a refusal, not zeros.</b> Such a
-/// feature is recognized by the READ <c>OrientationType = 0 (ksAxisOrientation)</c>: it has no
-/// orientation parameters, and the matrix form of placement on a reopened document is unit while the
-/// geometry is preserved, so the kind cannot be derived from it — this is exactly what produced a false
-/// <c>RepositionKind = "translate"</c> for a written rotation. Existing features are not silently
-/// converted: all five fields are named unreadable with this reason.</para></remarks>
+/// <summary>Parameters of a B3 feature (boolean, split, cut, reposition), read FROM THE MODEL — the <c>read</c> action of order §7.</summary>
+/// <remarks>Only fields of its own family are filled; for other families they are <c>null</c>. An empty field means "not read", not zero,
+/// and the reason goes into <see cref="UnreadableParameters"/>. Of the five reposition fields ONE is not published —
+/// <see cref="RepositionAxisPointMm"/>: an axis point has no documented member and is not a placement property (a rotation about any point of
+/// one line gives the same placement), so it is a REPRESENTATIVE, always <c>null</c>, named "not readable" for a rotation / "not applicable"
+/// for a translation. The other four are read by the documented parametric route: <c>OrientationType = ksEulerCorners</c> +
+/// <c>LocalCSParameters → ILocalCSEulerParam</c>, and <c>ParameterType = ksPDisplace</c> + <c>Parameters → IPoint3DParamDisplace</c>.
+/// History: docs/decisions/contracts.md#solid-feature-reposition-read</remarks>
 public sealed record SolidFeatureDto(
     /// <summary>Boolean operation kind: <c>union</c>, <c>difference</c> or <c>intersect</c>.</summary>
     string? Operation = null,
@@ -1484,23 +1390,14 @@ public sealed record FeatureReadDto(
     /// MEASURED by probes <c>--boolean</c> (BO.2–BO.5, BO.10), <c>--split</c> (SP.10) and
     /// <c>--reposition</c> (RP.8–RP.12); the summary is in docs/04_KOMPAS_API_NOTES.md §4.10.9.</summary>
     SolidFeatureDto? Solid = null,
-    /// <summary>Sweep parameters. Also trailing: filled only for <c>family = "sweep"</c> and null
-    /// otherwise.</summary>
-    /// <remarks><para><b>Read from the TREE, and the tree type number does not equal the creation
-    /// number.</b> MEASURED on 20.09.2026 (probe <c>--b5</c>, step B5.12): a feature created by
-    /// <c>NewEntity(45)</c> (<c>o3d_baseEvolution</c>) appears in the tree under number <b>46</b>
-    /// (<c>o3d_bossEvolution</c>), and its definition answers the interface <c>ksBossEvolutionDefinition</c>
-    /// — <b>not</b> <c>ksBaseEvolutionDefinition</c>. This is the same class of discrepancy already
-    /// measured for the hole (created 52, in tree 583) and rotation (created 27, in tree 584): the family
-    /// cannot be recognized by the type number from the creation answer.</para>
-    /// <para>The family is therefore recognized <b>by the definition interface</b>, and both are
-    /// accepted — <c>ksBossEvolutionDefinition</c> and <c>ksBaseEvolutionDefinition</c>: which one you get
-    /// depends on what created the feature, and this is measured, not assumed.</para>
-    /// <para>Read values and their check at step B5.12: <c>sketchShiftType</c> = 2 (written orthogonal),
-    /// <c>PathPartArray()</c> = 1 part, <c>GetPathLength(1)</c> = 100 mm for a 100 mm path,
-    /// <c>GetSketch()</c> returns an object. <c>OperationResult</c> lives only in API7
-    /// (<c>IEvolution</c>): the value <b>1</b> was read from the document collection; if the collection is
-    /// unavailable or empty, the field stays null — "not read", not zero.</para></remarks>
+    /// <summary>Sweep parameters. Also trailing: filled only for <c>family = "sweep"</c> and null otherwise.</summary>
+    /// <remarks>Read from the TREE, and the tree type number does not equal the creation number. MEASURED on 20.09.2026 (probe <c>--b5</c>, step B5.12):
+    /// a feature created by <c>NewEntity(45)</c> (<c>o3d_baseEvolution</c>) appears in the tree under number <b>46</b> (<c>o3d_bossEvolution</c>) and its
+    /// definition answers <c>ksBossEvolutionDefinition</c> — <b>not</b> <c>ksBaseEvolutionDefinition</c>. Same class of discrepancy already measured for the
+    /// hole (created 52, in tree 583) and rotation (created 27, in tree 584): the family is recognized BY THE DEFINITION INTERFACE (both accepted), not by
+    /// the creation type number. Read values at step B5.12: <c>sketchShiftType</c> = 2 (written orthogonal), <c>PathPartArray()</c> = 1 part,
+    /// <c>GetPathLength(1)</c> = 100 mm for a 100 mm path, <c>GetSketch()</c> returns an object. <c>OperationResult</c> lives only in API7 (<c>IEvolution</c>):
+    /// the value <b>1</b> was read from the document collection; if unavailable or empty the field stays null — "not read", not zero.</remarks>
     SweepDto? Sweep = null,
     /// <summary>Loft parameters. Trailing: only for <c>family = "loft"</c>.</summary>
     /// <remarks>MEASURED on 20.09.2026 (step B5.12): a feature created by the adapter route
@@ -1539,23 +1436,14 @@ public sealed record GetSketchStatusCommand
     public required string SketchRef { get; init; }
 }
 
-/// <summary>Normalized sketch-definiteness status — what the server actually read, not what it
-/// assumed.</summary>
-/// <remarks><para><b>The mapping to native states is MEASURED, not assigned</b> (probe S, run
-/// <c>82880ed0</c>; the enum values were checked against those declared at step S.3):
-/// <list type="bullet">
-/// <item><c>ksStateWellConstrained</c> (1) → <see cref="FullyDefined"/>;</item>
-/// <item><c>ksStateUnderConstrained</c> (2) → <see cref="UnderDefined"/>;</item>
-/// <item><c>ksStateUnknown</c> (0) → <see cref="Unknown"/> — KOMPAS itself did not establish a status
-/// (obtained both on an empty sketch and on 11 shipped sketches);</item>
-/// <item><c>ksStateUnresolvedRedundancy</c> (3) → <see cref="NeedsAttention"/> — declared, but live
-/// control was <b>not obtained</b>; published conservatively (see
-/// <see cref="SketchStatusResult.Limitations"/>).</item>
-/// </list></para>
-/// <para><b>The API does not return degrees of freedom.</b> <c>ISketch.ConstraintsState</c> returns a
-/// status, not a counter, so <see cref="SketchStatusResult.DegreesOfFreedom"/> is always <c>null</c>, and
-/// deriving it from the number of dimensions is forbidden: constraints relate objects to each other
-/// rather than summing.</para></remarks>
+/// <summary>Normalized sketch-definiteness status — what the server actually read, not what it assumed.</summary>
+/// <remarks>The mapping to native states is MEASURED, not assigned (probe S, run <c>82880ed0</c>; enum values checked at step S.3):
+/// <c>ksStateWellConstrained</c> (1) → <see cref="FullyDefined"/>; <c>ksStateUnderConstrained</c> (2) → <see cref="UnderDefined"/>;
+/// <c>ksStateUnknown</c> (0) → <see cref="Unknown"/> — KOMPAS itself did not establish a status (obtained both on an empty sketch and
+/// on 11 shipped sketches); <c>ksStateUnresolvedRedundancy</c> (3) → <see cref="NeedsAttention"/> — declared, but live control was
+/// <b>not obtained</b>, published conservatively (see <see cref="SketchStatusResult.Limitations"/>). The API does not return degrees of
+/// freedom: <c>ISketch.ConstraintsState</c> returns a status, not a counter, so <see cref="SketchStatusResult.DegreesOfFreedom"/> is always
+/// <c>null</c>, and deriving it from the number of dimensions is forbidden: constraints relate objects to each other rather than summing.</remarks>
 public enum SketchDefinitionStatus
 {
     /// <summary>State not established. <c>ksStateUnknown</c> (0) or an unknown enum value.</summary>
@@ -1571,16 +1459,13 @@ public enum SketchDefinitionStatus
     NeedsAttention,
 }
 
-/// <summary>Snapshot of sketch definiteness. <see cref="IsFullyDefined"/> is nullable deliberately:
-/// <c>null</c> means "not reliably established", and substituting <c>false</c> for it is forbidden —
-/// "indeterminate" and "under-defined" are different answers.</summary>
+/// <summary>Snapshot of sketch definiteness. <see cref="IsFullyDefined"/> is nullable deliberately: <c>null</c> means "not reliably established", and substituting <c>false</c> for it is forbidden — "indeterminate" and "under-defined" are different answers.</summary>
 /// <param name="DefinitionStatus">Normalized status.</param>
-/// <param name="IsFullyDefined">Only <c>true</c>/<c>false</c>/<c>null</c>; <c>null</c> for
-/// <see cref="SketchDefinitionStatus.Unknown"/> and <see cref="SketchDefinitionStatus.NeedsAttention"/>.</param>
-/// <param name="DegreesOfFreedom">Always <c>null</c>: the confirmed route returns a status, not a number.
-/// Not derived from the number of dimensions and not substituted with zero.</param>
-/// <param name="Diagnostics">Understandable reasons: why the status is what it is and what prevented
-/// it.</param>
+/// <param name="IsFullyDefined">Only <c>true</c>/<c>false</c>/<c>null</c>; <c>null</c> for <see cref="SketchDefinitionStatus.Unknown"/>
+/// and <see cref="SketchDefinitionStatus.NeedsAttention"/>.</param>
+/// <param name="DegreesOfFreedom">Always <c>null</c>: the confirmed route returns a status, not a number. Not derived from the number
+/// of dimensions and not substituted with zero.</param>
+/// <param name="Diagnostics">Understandable reasons: why the status is what it is and what prevented it.</param>
 /// <param name="Limitations">Bounds of the answer's reliability, named explicitly.</param>
 public sealed record SketchStatusResult(
     SketchDefinitionStatus DefinitionStatus,
@@ -1687,14 +1572,11 @@ public sealed record UpdateFeatureCommand
     public SweepShiftMode? ShiftMode { get; init; }
 
     /// <summary>New set of loft sections (family=<c>loft</c>), in joining order.</summary>
-    /// <remarks><b>Route MEASURED on 20.09.2026</b> (step B5.13): rebinding sections on an already built
-    /// feature changes the geometry — 40×40+20×20 give <c>28000</c>, 40×40+40×40 give the prism
-    /// <c>48000</c>, returning to the previous set restores <c>28000</c>.
-    /// <para><b>The <c>closed</c> field is absent here deliberately, and this is a measured fact, not an
-    /// omission.</b> Writing <c>ILoft.Closed</c> on a built feature returns <c>Update() = True</c>, but the
-    /// read-back gives <c>False</c> and the volume stays the same: "accepted" does not mean "applied". So
-    /// closure is set ONLY at creation (<c>kompas_loft.closed</c>) and is not declared editable
-    /// here.</para></remarks>
+    /// <remarks><b>Route MEASURED on 20.09.2026</b> (step B5.13): rebinding sections on an already built feature changes the geometry —
+    /// 40×40+20×20 give <c>28000</c>, 40×40+40×40 give the prism <c>48000</c>, returning to the previous set restores <c>28000</c>.
+    /// The <c>closed</c> field is absent here deliberately, and this is a measured fact, not an omission: writing <c>ILoft.Closed</c> on a
+    /// built feature returns <c>Update() = True</c>, but the read-back gives <c>False</c> and the volume stays the same — "accepted" does not
+    /// mean "applied". So closure is set ONLY at creation (<c>kompas_loft.closed</c>) and is not declared editable here.</remarks>
     public IReadOnlyList<string>? SectionRefs { get; init; }
 
     /// <summary>New set of coupling chains (family=<c>loft</c>) — a <b>full replacement</b>, as with
@@ -1727,21 +1609,14 @@ public sealed record UpdateFeatureCommand
     /// outward. A separate field, not the chamfer's shared <c>direction</c>.</summary>
     public bool? ThinInward { get; init; }
 
-    /// <summary>New SET of removed shell faces (family=<c>shell</c>) — a full replacement, not an addition
-    /// to the existing ones: what is passed is what should remain removed. Faces come from
-    /// <c>kompas_read_topology</c>, not collection positions.</summary>
-    /// <remarks><para><b>Route MEASURED on 20.09.2026</b> (probe <c>--b5</c>, step B5.14): on one feature
-    /// of a 100×80×10 box a shell <c>t = 2</c> inward with the top face removed gives <c>21632</c> at
-    /// <c>11</c> faces; adding the second face (bottom, 100×80) makes the cavity through and gives
-    /// <c>7040</c> at <c>10</c> faces; reverting to the previous set restores <c>21632</c> at <c>11</c>.
-    /// The negative control sits there too: re-writing the same set does not move the volume.</para>
-    /// <para><b>Why this is a separate route, not a carry-over from the fillet.</b> The same technique
-    /// (<c>Clear()</c> + <c>Add()</c> over <c>ksEntityCollection</c>) measurably did NOT work for the
-    /// FILLET (row <c>FL04r</c>: the set collapsed, the volume returned to the plate). So the shell was
-    /// verified by its own run rather than inferred by analogy.</para>
-    /// <para><b>An empty list is rejected</b> here too, for the same measured reason as at creation: with
-    /// an empty list the operation is accepted (<c>Create/Update = true</c>) but the body does not change —
-    /// the volume stays <c>80000</c> at <c>6</c> faces.</para></remarks>
+    /// <summary>New SET of removed shell faces (family=<c>shell</c>) — a full replacement, not an addition to the existing ones: what is passed is what
+    /// should remain removed. Faces come from <c>kompas_read_topology</c>, not collection positions.</summary>
+    /// <remarks>Route MEASURED on 20.09.2026 (probe <c>--b5</c>, step B5.14): on one feature of a 100×80×10 box a shell <c>t = 2</c> inward with the top face
+    /// removed gives <c>21632</c> at <c>11</c> faces; adding the second face (bottom, 100×80) makes the cavity through and gives <c>7040</c> at <c>10</c> faces;
+    /// reverting restores <c>21632</c> at <c>11</c> (negative control: re-writing the same set does not move the volume). A separate route, not a carry-over from
+    /// the fillet: <c>Clear()</c> + <c>Add()</c> over <c>ksEntityCollection</c> measurably did NOT work for the FILLET (row <c>FL04r</c>), so the shell was
+    /// verified by its own run. An empty list is rejected here too: with it the operation is accepted (<c>Create/Update = true</c>) but the body does not
+    /// change — the volume stays <c>80000</c> at <c>6</c> faces.</remarks>
     public IReadOnlyList<string>? FaceRefs { get; init; }
 
     /// <summary>Change the support sketch of the same feature (support edit per docs/05 §4.3). Needed for
@@ -1763,21 +1638,14 @@ public sealed record UpdateFeatureCommand
     /// <summary>New chamfer side (API5 transfer / API7 Direction).</summary>
     public bool? Direction { get; init; }
 
-    /// <summary>New ROTATION angle (family=<c>rotation</c>), degrees. A separate field, not the shared
-    /// <see cref="AngleDeg"/>: for a chamfer that member means the chamfer angle, for a rotation the sweep
-    /// angle, and one and the same quantity under one name for two different families would make the
-    /// answer ambiguous ("the angle was applied" — where?). A call with <see cref="AngleDeg"/> on a
-    /// rotation feature is rejected with INVALID_ARGUMENT pointing at this field rather than interpreted
-    /// silently.</summary>
-    /// <remarks><para><b>Route MEASURED on 18.09.2026.</b> Probe <c>FullTurnProbe</c>, step <c>F.2</c>:
-    /// on ONE feature (reference R20 H40, axis by two model points) changing the angle 360 → 180 → 360
-    /// gave volumes <c>50265.4824574366 → 25132.7412287183 → 50265.4824574366</c> at bbox
-    /// <c>z[−20,20] → z[−0,20] → z[−20,20]</c>, i.e. a geometric change, not just a written number. The
-    /// order "write the angle to <c>IRotated.Angle[true]</c> → <c>IRotated.Update()</c> →
-    /// <c>RebuildModel</c>/<c>RebuildDocument</c>" is part of the contract, as at creation.</para>
-    /// <para><b>Angle only.</b> Changing the profile and axis of an existing rotation is NOT done by this
-    /// call: those are separate routes, and neither was measured on rotation. So <see cref="SketchRef"/> on
-    /// a rotation feature is rejected, not ignored.</para></remarks>
+    /// <summary>New ROTATION angle (family=<c>rotation</c>), degrees. A separate field, not the shared <see cref="AngleDeg"/>: for a chamfer that member
+    /// means the chamfer angle, for a rotation the sweep angle, and one quantity under one name for two families would make the answer ambiguous. A call
+    /// with <see cref="AngleDeg"/> on a rotation feature is rejected with INVALID_ARGUMENT pointing at this field rather than interpreted silently.</summary>
+    /// <remarks>Route MEASURED on 18.09.2026 (probe <c>FullTurnProbe</c>, step <c>F.2</c>): on ONE feature (reference R20 H40, axis by two model points)
+    /// changing the angle 360 → 180 → 360 gave volumes <c>50265.4824574366 → 25132.7412287183 → 50265.4824574366</c> at bbox
+    /// <c>z[−20,20] → z[−0,20] → z[−20,20]</c> — a geometric change, not just a written number. The order "write the angle to <c>IRotated.Angle[true]</c> →
+    /// <c>IRotated.Update()</c> → <c>RebuildModel</c>/<c>RebuildDocument</c>" is part of the contract, as at creation. Angle only: changing the profile and
+    /// axis of an existing rotation is NOT done by this call (separate routes, neither measured), so <see cref="SketchRef"/> on a rotation feature is rejected.</remarks>
     public double? RotationAngleDeg { get; init; }
 
     /// <summary>New rotation direction (family=<c>rotation</c>). <c>reverse</c> is rejected before
@@ -1785,18 +1653,13 @@ public sealed record UpdateFeatureCommand
     public RotationDirection? RotationDirection { get; init; }
 
     /// <summary>Kind of transformation when editing a REPOSITION feature (family=<c>reposition</c>).</summary>
-    /// <remarks><para><b>Why separate fields rather than re-creating.</b> Order B3 §5 requires an edit to
-    /// change the parameters of an EXISTING feature relative to its ORIGINAL inputs, not to apply them to
-    /// the current placement. A repeated <c>kompas_reposition</c> call does not satisfy this by
-    /// construction: it creates a SECOND feature and shifts the body from the current placement, i.e. the
-    /// offset accumulates. MEASURED by probe RP.6: editing feature[0] by re-writing the same vector leaves
-    /// the bbox <c>(17,−11,13)…(37,−1,18)</c>, and returning the vector to zero brings the body home — the
-    /// parameter is applied to the original body.</para>
-    /// <para><b>Prefixed names, as with <see cref="RotationAngleDeg"/>.</b> In <c>kompas_reposition</c>
-    /// the same quantities are called <c>kind</c>, <c>vector_mm</c>, <c>axis_point_mm</c> and
-    /// <c>angle_deg</c>. Here <c>angle_deg</c> is already taken by the CHAMFER angle, so the rotation
-    /// angle is called <see cref="RepositionAngleDeg"/>: one name for two different quantities would make
-    /// the answer ambiguous ("the angle was applied" — where?).</para></remarks>
+    /// <remarks>Why separate fields rather than re-creating: order B3 §5 requires an edit to change the parameters of an EXISTING feature relative to
+    /// its ORIGINAL inputs, not to apply them to the current placement. A repeated <c>kompas_reposition</c> call creates a SECOND feature and shifts the
+    /// body from the current placement, so the offset accumulates. MEASURED by probe RP.6: editing feature[0] by re-writing the same vector leaves the
+    /// bbox <c>(17,−11,13)…(37,−1,18)</c>, and returning the vector to zero brings the body home — the parameter is applied to the original body.
+    /// Prefixed names, as with <see cref="RotationAngleDeg"/>: in <c>kompas_reposition</c> the same quantities are <c>kind</c>, <c>vector_mm</c>,
+    /// <c>axis_point_mm</c> and <c>angle_deg</c>; here <c>angle_deg</c> is taken by the CHAMFER angle, so the rotation angle is
+    /// <see cref="RepositionAngleDeg"/> (one name for two quantities would make the answer ambiguous).</remarks>
     public RepositionKind? RepositionKind { get; init; }
 
     /// <summary>New translation vector, mm, model coordinates. Mandatory for <c>translate</c>.</summary>
@@ -1815,48 +1678,24 @@ public sealed record UpdateFeatureCommand
     public double? RepositionAngleDeg { get; init; }
 
     /// <summary>Analytic expectation of the body bbox after the edit.</summary>
-    /// <remarks><para>Needed where volume cannot serve as the expectation. Under a rigid transformation the
-    /// volume is an INVARIANT, so <see cref="ExpectedVolumeMm3"/> for the <c>reposition</c> family confirms
-    /// only that the transformation stayed rigid, not that the body went where it was asked: for a
-    /// translation "moved" and "stayed" are indistinguishable by volume. The bbox distinguishes, and this
-    /// same requirement is written into acceptance (row `B3L.04`: for a translation the volume before and
-    /// after is 1 000, and a row checking only volumes would pass on complete inaction).</para>
-    /// <para><b>Why not by reading the parameter back.</b> The first revision of the edit compared the
-    /// written translation against <c>IBodyReposition.Position.X/Y/Z</c>. MEASURED on 18.09.2026: that
-    /// member does NOT carry the translation — after <c>InitByMatrix3D</c> with vector <c>(7,−11,13)</c> it
-    /// reads as <c>(0,0,0)</c>, while the body bbox is correct. Checking against a member that does not
-    /// store the value means measuring the instrument, not the product, so the check was moved to geometry.
-    /// History: docs/decisions/contracts.md#reposition-position-member</para></remarks>
+    /// <remarks>Needed where volume cannot serve as the expectation. Under a rigid transformation the volume is an INVARIANT, so
+    /// <see cref="ExpectedVolumeMm3"/> for the <c>reposition</c> family confirms only that the transformation stayed rigid, not that the body went
+    /// where it was asked: for a translation "moved" and "stayed" are indistinguishable by volume. The bbox distinguishes, and the same requirement
+    /// is written into acceptance (row `B3L.04`: for a translation the volume before and after is 1 000, and a row checking only volumes would pass
+    /// on complete inaction). Not by reading the parameter back: the first revision compared the written translation against
+    /// <c>IBodyReposition.Position.X/Y/Z</c>. MEASURED on 18.09.2026: that member does NOT carry the translation — after <c>InitByMatrix3D</c> with
+    /// vector <c>(7,−11,13)</c> it reads as <c>(0,0,0)</c>, while the bbox is correct — so the check was moved to geometry. History: docs/decisions/contracts.md#reposition-position-member</remarks>
     public BoundingBoxDto? ExpectedBboxMm { get; init; }
 
-    /// <summary>New support of a SPLIT feature (<c>family=split</c>) or CUT feature
-    /// (<c>family=cut_by_plane</c>).</summary>
-    /// <remarks><para><b>Why a plane rather than a repeated call.</b> Order B3 §5 requires an edit to change
-    /// the parameters of an EXISTING feature relative to its ORIGINAL inputs. A repeated
-    /// <c>kompas_split_body</c> does not satisfy this: it creates a SECOND split feature and cuts the
-    /// already obtained part. MEASURED on 18.09.2026 (probe <c>--split</c>, step SP.9): editing the support
-    /// of an existing feature moves the parts <c>6 000 / 18 000</c> at <c>x = 10</c> to <c>9 000 / 15 000</c>
-    /// at <c>x = 15</c> with an unchanged feature count <c>1 → 1</c> and unchanged sum <c>24 000</c>.
-    /// History: docs/decisions/contracts.md#split-support-route</para>
-    /// <para>The shape is the same as the like-named field of <c>kompas_split_body</c> and
-    /// <c>kompas_cut_body</c> (<c>#/$defs/cut_plane</c>): <c>plane_ref</c> to an existing plane or
-    /// <c>point_mm</c> + <c>normal_mm</c> in model coordinates. The side is set by the sign
-    /// <c>s = n·(p − p₀)</c>. A zero and non-numeric normal is rejected before COM.</para>
-    /// <para><b>The route is moving the CONSTRUCTION POINTS of the feature's OWN support, and this is
-    /// MEASURED, not inferred.</b> Step <c>SP.9</c> of probe <c>--split</c> (run
-    /// <c>c9cd7660468c44aa97b410e253ee2cb1</c>) compared two routes on the same feature. <c>CutObjects</c>
-    /// reads back as ONE object (not an array) and answers <c>IPlane3DBy3Points</c>; moving its three
-    /// construction points followed by <c>Update()</c> and a rebuild changes the geometry (E-A: parts
-    /// <c>9 000 / 15 000</c>, split features <c>1 → 1</c>). Substituting a SECOND, newly built plane into
-    /// <c>CutObjects</c> with <c>Update() = true</c> does NOT change the result — negative control E-B. The
-    /// implementation therefore edits the feature's support rather than substituting another plane, and
-    /// <c>Update() = true</c> is not taken as proof here: the geometry is checked separately.</para>
-    /// <para><b>Route cost and bounds.</b> An auxiliary plane is NOT created during the edit: the support
-    /// object is taken from the feature itself, so the document does not accumulate unused planes.
-    /// <c>plane_ref</c> on a split/cut feature is rejected with <c>CAPABILITY_UNAVAILABLE</c>: substituting
-    /// a foreign plane measurably does nothing (E-B), and there is no way to prove the reference points at
-    /// THIS feature's own support. The <c>base</c> field ("base plane with offset") is rejected there
-    /// too.</para></remarks>
+    /// <summary>New support of a SPLIT feature (<c>family=split</c>) or CUT feature (<c>family=cut_by_plane</c>).</summary>
+    /// <remarks>Why a plane rather than a repeated call: order B3 §5 requires an edit to change the parameters of an EXISTING feature relative to its ORIGINAL
+    /// inputs. A repeated <c>kompas_split_body</c> creates a SECOND split feature and cuts the already obtained part. MEASURED on 18.09.2026 (probe <c>--split</c>,
+    /// step SP.9): editing the support moves the parts <c>6 000 / 18 000</c> at <c>x = 10</c> to <c>9 000 / 15 000</c> at <c>x = 15</c> with an unchanged feature
+    /// count <c>1 → 1</c> and sum <c>24 000</c>. The shape is the same as the like-named field of <c>kompas_split_body</c> and <c>kompas_cut_body</c> (<c>#/$defs/cut_plane</c>):
+    /// <c>plane_ref</c> or <c>point_mm</c> + <c>normal_mm</c> in model coordinates; the side is <c>s = n·(p − p₀)</c>, and a zero or non-numeric normal is rejected before COM.
+    /// The route moves the CONSTRUCTION POINTS of the feature's OWN support (step SP.9, run <c>c9cd7660468c44aa97b410e253ee2cb1</c>): <c>CutObjects</c> reads back as ONE
+    /// <c>IPlane3DBy3Points</c>, moving its points + <c>Update()</c> changes the geometry (E-A); substituting a SECOND plane does NOT (E-B); <c>plane_ref</c> is rejected <c>CAPABILITY_UNAVAILABLE</c> here, and no auxiliary plane is created. History: docs/decisions/contracts.md#split-support-route</remarks>
+
     public CutPlaneDto? Plane { get; init; }
 
     /// <summary>New kept side for <c>family=cut_by_plane</c>: <c>positive</c> — <c>s &gt; 0</c>,
@@ -1868,44 +1707,22 @@ public sealed record UpdateFeatureCommand
     public string? KeepSide { get; init; }
 
     /// <summary>Analytic expectation of the PART volumes after a split edit (<c>family=split</c>).</summary>
-    /// <remarks><para>The only quantity that confirms a split edit. The sum of part volumes does not change
-    /// on an edit (24 000 both at <c>x = 10</c> and at <c>x = 15</c>), so preservation of volume is not a
-    /// confirmation but an invariant: a row checking only the sum would pass on complete inaction. Only the
-    /// PER-VOLUME composition of the parts distinguishes them: <c>[6 000, 18 000]</c> versus
-    /// <c>[9 000, 15 000]</c>.</para>
-    /// <para>The matching is by volume equality WITHIN TOLERANCE (0.01 mm³ abs. / 1e-6 rel.) and with
-    /// multiplicity: each expected volume gets its own body, one body cannot cover two expectations. The
-    /// order of the parts does not matter — the core is entitled to swap them.</para>
-    /// <para>If an expectation is declared and does not match, the call returns <c>NO_GEOMETRY_CHANGE</c>
-    /// with <c>partial_effects=true</c> and the actual composition in <c>details</c>: a sign that the
-    /// parameter was applied not to the feature's original inputs.</para></remarks>
+    /// <remarks>The only quantity that confirms a split edit. The sum of part volumes does not change on an edit (24 000 both at <c>x = 10</c> and at
+    /// <c>x = 15</c>), so preservation of volume is an invariant, not a confirmation: a row checking only the sum would pass on complete inaction. Only the
+    /// PER-VOLUME composition distinguishes them: <c>[6 000, 18 000]</c> versus <c>[9 000, 15 000]</c>. The matching is by volume equality WITHIN TOLERANCE
+    /// (0.01 mm³ abs. / 1e-6 rel.) and with multiplicity: each expected volume gets its own body, one body cannot cover two expectations; the order of the
+    /// parts does not matter. If an expectation is declared and does not match, the call returns <c>NO_GEOMETRY_CHANGE</c> with <c>partial_effects=true</c>
+    /// and the actual composition in <c>details</c> — a sign that the parameter was applied not to the feature's original inputs.</remarks>
     public IReadOnlyList<double>? ExpectedPartVolumesMm3 { get; init; }
 
-    /// <summary>New KIND of an existing boolean operation (family=<c>boolean</c>): <c>union</c>,
-    /// <c>difference</c> or <c>intersect</c>.</summary>
-    /// <remarks><para><b>Route MEASURED on 18.09.2026.</b> Probe <c>--boolean</c>, step <c>BO.11</c>, run
-    /// <c>a2f5cf0a2ad342c59c36807101a65d51</c> (log <c>docs/acceptance/api7/boolean-ops.json</c>).
-    /// Reference §6.1: <c>A ∪ B</c> — 36 000 in bbox <c>(0,0,0)…(60,30,20)</c>, <c>A − B</c> — 12 000 in
-    /// <c>x ≤ 20</c>, <c>A ∩ B</c> — 12 000 in <c>x ∈ [20,40]</c>. Re-writing
-    /// <c>IBoolean.BooleanType</c> on an EXISTING feature followed by <c>Update()</c> and a rebuild changes
-    /// the geometry: E-A gives <c>36 000 → 12 000</c> (bbox <c>x ≤ 20</c>), E-D — <c>12 000 → 36 000</c>,
-    /// features <c>1 → 1</c>.</para>
-    /// <para><b>Why the control is mandatory here and what it is.</b> On the reference the difference and
-    /// intersection volumes are EQUAL (12 000), so experiment E-C goes from difference to intersection: the
-    /// volume stays 12 000 while the bbox changes to <c>x ∈ [20,40]</c>. A row checking only the volume
-    /// would pass on complete inaction. Experiment E-E confirms that it is the pair "write →
-    /// <c>Update()</c>" that applies: a write without <c>Update()</c> (but with a rebuild) does not change
-    /// the geometry.</para>
-    /// <para><b>Cost and bounds.</b> The support bodies of the existing operation are NOT changed by this
-    /// field: <c>BaseObject</c> and <c>ModifyObjects</c> are writable, but editing the tool set was not
-    /// measured, so a call that changes only the kind does not touch them. The value
-    /// <c>ksBooleanUnknown</c> (0) is normalized by the setter to <c>ksUnion</c> — MEASURED (E-B): a client
-    /// that writes 0 gets a union rather than a refusal, and this is recorded here so the behaviour is not
-    /// a surprise.</para>
-    /// <para><b>The field name.</b> Here it deliberately coincides with the <c>operation</c> parameter of
-    /// the <c>kompas_boolean</c> tool: it is the same quantity. If another family ever needs its own
-    /// "operation kind", it MUST take a QUALIFIED name (as the rotation angle did —
-    /// <see cref="RepositionAngleDeg"/>) rather than introduce a second <c>Operation</c> field.</para></remarks>
+    /// <summary>New KIND of an existing boolean operation (family=<c>boolean</c>): <c>union</c>, <c>difference</c> or <c>intersect</c>.</summary>
+    /// <remarks>Route MEASURED on 18.09.2026 (probe <c>--boolean</c>, step <c>BO.11</c>, run <c>a2f5cf0a2ad342c59c36807101a65d51</c>, log
+    /// <c>docs/acceptance/api7/boolean-ops.json</c>): re-writing <c>IBoolean.BooleanType</c> on an EXISTING feature followed by <c>Update()</c> and a rebuild
+    /// changes the geometry (E-A: <c>36 000 → 12 000</c>, bbox <c>x ≤ 20</c>; E-D: <c>12 000 → 36 000</c>, features <c>1 → 1</c>). The control is mandatory: on
+    /// the reference the difference and intersection volumes are EQUAL (12 000), so E-C goes difference → intersection — the volume stays 12 000 while the bbox
+    /// changes to <c>x ∈ [20,40]</c>. Support bodies are NOT changed (<c>BaseObject</c> and <c>ModifyObjects</c> are writable but editing the tool set was not
+    /// measured); <c>ksBooleanUnknown</c> (0) is normalized to <c>ksUnion</c> (E-B); the field name coincides with the <c>operation</c> parameter of <c>kompas_boolean</c>.
+    /// History: docs/decisions/contracts.md#boolean-edit-kind</remarks>
     public BooleanOperation? Operation { get; init; }
 
     /// <summary>New fillet radius (mm); family=<c>fillet</c>. Editable only through the API7 route: in API5
@@ -1917,179 +1734,63 @@ public sealed record UpdateFeatureCommand
     /// API7).</summary>
     public double? RadiusMm { get; init; }
 
-    /// <summary>
-    /// New SET of fillet edges (family=<c>fillet</c>) — a full replacement, not an addition to the
-    /// existing ones: what must remain is what is passed. The edges come from
-    /// <c>kompas_read_topology</c>, not from positions in a collection.
-    /// </summary>
-    /// <remarks>
-    /// <b>The route is API7, and it is MEASURED.</b> Probe H-2
-    /// (<c>docs/acceptance/api7/fillet-base-objects.md</c>, 14 PASS / 0 FAIL / 0 UNKNOWN, its own
-    /// <c>run_id</c>, reproduced over four runs): <c>IModelContainer.Fillets[i] → IFillet</c>, read and
-    /// write of <c>IFillet.BaseObjects</c> (full replacement of the set), then the mandatory
-    /// <c>IFillet.Update()</c>. All objects are taken from the LIVE model after
-    /// <c>save → close → reopen</c>; no object captured when the fillet was created is used. Addressing
-    /// was checked on a model with TWO fillets of the same radius (H2.7): editing one feature did not
-    /// touch the neighbouring one.
-    /// <b>THE NEGATIVE RESULT ON THE FORMER ROUTE STILL HOLDS.</b> The route through the API5
-    /// definition (<c>ksFilletDefinition.array()</c> → <c>Clear()</c> → <c>Add()</c> →
-    /// <c>entity.Update()</c>) does NOT edit the set on an existing feature: MEASURED on 16.09.2026 by
-    /// eight probes, and the arrival of a working route does not cancel it. After the fillet the corner
-    /// edges are absent from the topology (0 of 4 — the corners are occupied by cylindrical faces), the
-    /// original corner edges are revoked by the very creation of the fillet (<c>STALE_REFERENCE</c>
-    /// before any edit), and the existing vertical edges of the filleted corners are not retained by
-    /// the feature: the set collapses (<c>edges_read_back=0</c>) and the volume returns to the plate. A
-    /// non-zero <c>edges_read_back</c> is obtained only by a second call in a row — and that is a
-    /// rebuild from scratch, not a set edit. This is exactly why the route in the adapter was replaced
-    /// rather than kept as a branch.
-    /// <b>Bounds that do not carry over to the general conclusion:</b> set expansion on the 100×80×10
-    /// reference was not measured (the plate has exactly four vertical corners, no fifth); what was
-    /// measured is shrinkage (4→3) and replacement at an unchanged size (1→1).
-    /// <b>Reference bands are ADJACENT — MEASURED, and this refutes an earlier claim in this comment.</b>
-    /// In <c>FL10x</c> the feature input <c>1073742308</c> sits against the carried-over body edge
-    /// <c>1073742309</c>; both are of type <c>ksObjectEdge</c>, both references are stable across a
-    /// repeat, and only the RCW address bindings differ. This is the ordinary API5/API7 duality. The
-    /// earlier conclusion "a feature input cannot be matched to a body edge by <c>Reference</c>" did not
-    /// follow from the previous measurement: the difference <c>…065-67</c> versus <c>…080</c> is a
-    /// difference of VALUES. Body edges can be presented, and <c>FL10x</c> confirms it.
-    /// History: docs/decisions/contracts.md#fillet-edge-set-history
-    /// <b>PRODUCT STATE: the route was moved into the adapter, acceptance PASSED (17.09.2026).</b>
-    /// <c>scripts/mcp-smoke.py --fillet-only</c> gives 46 lines, 0 FAIL: shrinkage <c>FL10</c> (4→3,
-    /// <c>V=79942.0575041173</c> against the analytic <c>79942.05750411731</c>), <c>FL10s</c> (3→2),
-    /// <c>FL10b</c> (2→1) and replacement at an unchanged size <c>FL10x</c> (1→1) — all
-    /// <c>level=geometry_checked</c>.
-    /// <b>Root cause of the former refusal, named by measurement and it was NOT the assumed one.</b> It
-    /// was neither the write route (that worked all those runs — <c>FL10x</c> passed) nor an
-    /// "inexpressibility" of shrinkage: the <c>base_object_refs</c> property was simply NOT DECLARED in
-    /// the schema of the <c>kompas_update_feature</c> tool, so the Host with
-    /// <c>additionalProperties: false</c> rejected the call by validation BEFORE COM and the shrinkage
-    /// never reached the adapter. The route and the currency were written correctly; the publication was
-    /// missing. History: docs/decisions/contracts.md#fillet-edge-set-history
-    /// <b>BOUND: set EXPANSION is not covered by this field.</b> MEASURED by <c>FL25</c> on an L-shaped
-    /// plate with FREE corners: expansion (1→2, 2→3) is expressed by neither of the two currencies. A
-    /// full replacement by body edges means "build the fillet anew on these edges" — the former edge is
-    /// not kept, whereas expansion needs exactly the opposite. The outcome is a refusal AFTER mutation:
-    /// <c>GEOMETRY_FAILED</c> with <c>partial_effects=true</c>. Before 17.09.2026 that outcome was
-    /// returned as <c>err=None</c> and <c>level=call_returned</c>, i.e. the disappearance of the feature
-    /// was passed off as a successful edit; now the disappearance of the feature is a refusal. Edit the
-    /// COMPOSITION (shrinkage and replacement), do not add edges. Details — <c>docs/STATUS.md</c>.
-    /// </remarks>
+    /// <summary>New SET of fillet edges (family=<c>fillet</c>) — a full replacement, not an addition: what must remain is what is passed. The edges come from
+    /// <c>kompas_read_topology</c>, not from positions in a collection.</summary>
+    /// <remarks>The route is API7 and MEASURED: probe H-2 (<c>docs/acceptance/api7/fillet-base-objects.md</c>, 14 PASS / 0 FAIL / 0 UNKNOWN, reproduced over four
+    /// runs) — <c>IModelContainer.Fillets[i] → IFillet</c>, read/write of <c>IFillet.BaseObjects</c> (full replacement), then the mandatory <c>IFillet.Update()</c>;
+    /// all objects are taken from the LIVE model after <c>save → close → reopen</c>, and addressing was checked with TWO fillets of the same radius (H2.7).
+    /// THE NEGATIVE RESULT ON THE FORMER API5 ROUTE STILL HOLDS: <c>ksFilletDefinition.array()</c> → <c>Clear()</c> → <c>Add()</c> → <c>entity.Update()</c> does
+    /// NOT edit the set on an existing feature (MEASURED on 16.09.2026 by eight probes; <c>edges_read_back=0</c>, the volume returns to the plate). BOUND: set
+    /// EXPANSION is not covered — <c>FL25</c> expansion (1→2, 2→3) ends in a refusal AFTER mutation (<c>GEOMETRY_FAILED</c>, <c>partial_effects=true</c>). History: docs/decisions/contracts.md#fillet-edge-set-history</remarks>
     public IReadOnlyList<string>? EdgeRefs { get; init; }
 
-    /// <summary>New set by the feature's OWN inputs (family=<c>fillet</c>) — the second currency of the same
-    /// edit subject, added on 17.09.2026 as an extension of the contract.</summary>
-    /// <remarks>
-    /// <b>Why a second field when <see cref="EdgeRefs"/> exists.</b> Shrinking a set and replacing its
-    /// composition are different operations with different currencies, and this is MEASURED, not
-    /// inferred from convenience: shrinkage is expressed only by objects read FROM the feature's
-    /// <c>BaseObjects</c>, while <see cref="EdgeRefs"/> takes BODY edges. Acceptance confirms the two
-    /// currencies separately: shrinkage <c>FL10</c> (4→3, <c>V=79942.0575041173</c> against the analytic
-    /// <c>79942.05750411731</c>), <c>FL10s</c>, <c>FL10b</c> — by this field; replacement at an
-    /// unchanged size <c>FL10x</c> (1→1) — by <see cref="EdgeRefs"/>, all at
-    /// <c>level=geometry_checked</c>. That is, <see cref="EdgeRefs"/> expresses replacement but NOT
-    /// shrinkage. Separately: an early acceptance presented BODY EDGES to this very field and collapsed
-    /// the feature into the plate — presenting them here is still forbidden, they are rejected by the
-    /// reference kind.
-    /// <b>Why a single field would not do.</b> A feature's own input is an <c>IModelObject</c> from
-    /// <c>IFillet.BaseObjects</c>, addressed by the number <c>IModelObject.Reference</c> (the same one
-    /// in <c>fillet.base_object_references</c> from <c>kompas_get_feature</c>). It has NO registry string
-    /// <c>edge:&lt;hex&gt;</c>: the registry issues such strings to BODY edges, and a feature input is
-    /// not a body edge. A number cannot be substituted into <see cref="EdgeRefs"/> by type. The set from
-    /// <c>base_object_references</c> is the only measured currency of shrinkage.
-    /// <b>Form.</b> A reference is the string <c>input:&lt;hex Reference&gt;</c>, where <c>&lt;hex&gt;</c>
-    /// is the number from <c>base_object_references</c> in hexadecimal form (<c>1073742308</c> →
-    /// <c>input:40000164</c>). This is the same format the server already returns references in, so the
-    /// client substitutes the numbers as they are. The set is a FULL replacement, not an addition: what
-    /// must remain is what is passed. An empty list is rejected (<c>INVALID_ARGUMENT</c>).
-    /// <b>It cannot be combined with <see cref="EdgeRefs"/> in one call</b>
-    /// (<c>INVALID_ARGUMENT</c> before mutation): two different compositions in one request are
-    /// indistinguishable in the response, and "one of the two applied" would look like "both applied".
-    /// <para>An unknown or foreign <c>input:</c> reference is rejected before mutation. A reference
-    /// issued to another document is rejected as <c>STALE_REFERENCE</c> (<c>FL26</c>), inputs of a
-    /// foreign feature of the same document — as <c>CAPABILITY_UNAVAILABLE</c> (<c>FL27</c>); in both
-    /// cases the model does not change.</para>
-    /// <para><b>BOUND: set EXPANSION is NOT expressed by this field.</b> A new edge is not a feature's
-    /// own input, and the currencies must not be mixed. MEASURED by <c>FL25</c> (L-shaped plate with
-    /// free corners): expansion (1→2, 2→3) ends in a refusal AFTER mutation with
-    /// <c>partial_effects=true</c>. Before 17.09.2026 the same outcome was returned as success with
-    /// <c>level=call_returned</c> — that was a wrong message and it is fixed: the disappearance of the
-    /// feature is now a refusal, not "success at a reduced level".</para>
-    /// </remarks>
+    /// <summary>New set by the feature's OWN inputs (family=<c>fillet</c>) — the second currency of the same edit subject, added on 17.09.2026.</summary>
+    /// <remarks>Shrinking a set and replacing its composition are different operations with different currencies (MEASURED, not inferred): shrinkage is expressed
+    /// only by objects read FROM the feature's <c>BaseObjects</c>, while <see cref="EdgeRefs"/> takes BODY edges. Acceptance confirms both separately: shrinkage
+    /// <c>FL10</c> (4→3), <c>FL10s</c>, <c>FL10b</c> — by this field; replacement at an unchanged size <c>FL10x</c> (1→1) — by <see cref="EdgeRefs"/>, all at
+    /// <c>level=geometry_checked</c>. A feature's own input is an <c>IModelObject</c> from <c>IFillet.BaseObjects</c>, addressed by <c>IModelObject.Reference</c>
+    /// (the same number in <c>fillet.base_object_references</c> from <c>kompas_get_feature</c>); it has NO registry <c>edge:&lt;hex&gt;</c> string, so a number cannot
+    /// be substituted into <see cref="EdgeRefs"/> by type. The form is <c>input:&lt;hex Reference&gt;</c> (<c>1073742308</c> → <c>input:40000164</c>), a FULL
+    /// replacement; it cannot be combined with <see cref="EdgeRefs"/> in one call. BOUND: expansion is NOT expressed here (<c>FL25</c>: 1→2, 2→3 → refusal). History: docs/decisions/contracts.md#fillet-base-object-references</remarks>
     public IReadOnlyList<string>? BaseObjectRefs { get; init; }
 
     /// <summary>Analytic expectation of the volume after the edit (G03: 100·80·12 = 96000 mm³).</summary>
     public double? ExpectedVolumeMm3 { get; init; }
 
-    /// <summary>Body the feature's scope is directed at when editing (family=<c>cut_by_plane</c>).
-    /// <remarks>
-    /// <b>Why the field is on the edit.</b> Order B3 §3.2 requires "assigning and RESTORING the scope at
-    /// create/edit/rebuild/save-reopen". At creation it is assigned, and at edit it can only be re-read:
-    /// if the feature ended up in the "All objects" default (help page
-    /// <c>rezultat_oper_v_zavisimosti_ot_s_o.html</c>), moving the support would remove material from
-    /// unrelated bodies — and without this field there would be nothing to fix the feature with except
-    /// deletion and rebuilding.
-    /// <b>An absent field is not "all the same".</b> If the field is not set, the adapter MUST READ the
-    /// scope of the live feature before mutation and refuse if it is not addressed
-    /// (<c>ChooseType ≠ ksChBodies</c> or an empty body list). A silent edit of a feature in the default
-    /// would remove material from unrelated bodies exactly as at creation.
-    /// <b>Route MEASURED on 19.09.2026</b> by probe <c>--cut-area</c>, steps CA.4 (addressing accepted:
-    /// A=12000, S=1000), CA.5 (negative control with another body: A=18000, S=500), CA.6 (editing the
-    /// support preserves addressing) and CA.7 (addressing survives <c>save → close → open</c>).
-    /// </remarks>
+    /// <summary>Body the feature's scope is directed at when editing (family=<c>cut_by_plane</c>).</summary>
+    /// <remarks>Why the field is on the edit: order B3 §3.2 requires "assigning and RESTORING the scope at create/edit/rebuild/save-reopen". At edit it can only be
+    /// re-read — if the feature ended up in the "All objects" default (help page <c>rezultat_oper_v_zavisimosti_ot_s_o.html</c>), moving the support would remove
+    /// material from unrelated bodies, and without this field there would be nothing to fix it with except deletion and rebuilding. An absent field is not "all the
+    /// same": if not set, the adapter MUST READ the scope of the live feature before mutation and refuse if it is not addressed (<c>ChooseType ≠ ksChBodies</c> or
+    /// an empty body list). Route MEASURED on 19.09.2026 by probe <c>--cut-area</c>: CA.4 (addressing accepted: A=12000, S=1000), CA.5 (negative control with
+    /// another body: A=18000, S=500), CA.6 (editing the support preserves addressing), CA.7 (addressing survives <c>save → close → open</c>).</remarks>
     public string? TargetBodyRef { get; init; }
 
-    /// <summary>New parameters of a PATTERN feature (family=<c>pattern</c>, queue B4: SM-18 / SM-19 / SM-23).
-    /// <remarks>
-    /// <b>Why the set is put in a separate field rather than spread over flat command fields.</b> The
-    /// <c>pattern</c> family is the only one whose edit subject belongs to THREE different API7
-    /// interfaces at once, and some names coincide between them only in appearance. A flat <c>count2</c>
-    /// field on the command itself would read as "applicable to any pattern", whereas for a grid it
-    /// means instances along axis 2 and for a circular pattern along the RING; a flat
-    /// <c>save_initial_orientation</c> would look applicable to a grid, where no such member exists at
-    /// all. Grouping makes the family boundary visible in the contract itself, not only in the
-    /// documentation.
-    /// <b>The feature is identified BY THE FIELD ITSELF, not by the type number in the tree.</b> For the
-    /// other editable families the branch is chosen by <c>entity.type</c>, and that is a measured
-    /// number. For a pattern the type number in the tree was not measured in this session, so it is not
-    /// guessed here: the feature is matched to an element of <c>IModelContainer.FeaturePatterns</c> with
-    /// the same instrument as reading (<see cref="PatternReadCommand"/>) — by the tree wrapper name and
-    /// the update stamp. If the field is not set, no branch is chosen at all and the edit behaviour does
-    /// not change.
-    /// <b>Mixing with other families is rejected before mutation.</b> A call that carries, together with
-    /// <c>pattern</c>, a field of another family (depth, radius, plane, boolean operation kind) is not
-    /// executed: "one of the two applied" is later indistinguishable from "both applied".
-    /// </remarks>
+    /// <summary>New parameters of a PATTERN feature (family=<c>pattern</c>, queue B4: SM-18 / SM-19 / SM-23).</summary>
+    /// <remarks>Why a separate field rather than flat command fields: the <c>pattern</c> family is the only one whose edit subject belongs to THREE API7 interfaces at
+    /// once, and some names coincide only in appearance — a flat <c>count2</c> would read as "applicable to any pattern" (for a grid it means instances along axis 2,
+    /// for a circular pattern along the RING), and a flat <c>save_initial_orientation</c> would look applicable to a grid where no such member exists. The feature is
+    /// identified BY THE FIELD ITSELF, not by the tree type number: the pattern type number was not measured in this session, so the feature is matched to an element
+    /// of <c>IModelContainer.FeaturePatterns</c> by the same instrument as reading (<see cref="PatternReadCommand"/>) — tree wrapper name and update stamp; if the
+    /// field is not set, no branch is chosen and the edit behaviour does not change. Mixing with other families (depth, radius, plane, boolean operation kind) is
+    /// rejected before mutation: "one of the two applied" is later indistinguishable from "both applied". History: docs/decisions/contracts.md#pattern-edit-routing</remarks>
     public PatternEditDto? Pattern { get; init; }
 
-    /// <summary>New hole diameter (family=<c>hole</c>), mm: the pilot of a counterbore and countersink, the hole
-    /// itself for a blind and a through cylindrical hole.</summary>
-    /// <remarks>
-    /// <b>Route MEASURED on 20.09.2026</b> (probe <c>scratch/_hole_edit_probe.py</c>, leg 2 — raw helper
-    /// <c>scratch/hole-edit-raw</c>, report <c>docs/acceptance/api7/hole-modes.md</c> § M.6): the
-    /// existing hole is taken by the documented member <c>IHoles3D.Hole3D[index]</c>, the members of its
-    /// own mode are written into it, <c>IModelObject.Update()</c> is applied, then a rebuild. A through
-    /// cylindrical Ø10 → Ø12 on a 10 mm plate removed <c>345.575191895</c> mm³ = π·(36−25)·10, and this
-    /// survived <c>save → close → reopen</c>.
-    /// <b>The feature address is not guessed.</b> The correspondence "tree feature ↔ <c>Holes3D</c>
-    /// record" is proved by the uniqueness of the hole in the document: with several holes the call is
-    /// rejected <c>CAPABILITY_UNAVAILABLE</c> before COM, because writing to <c>Holes3D[0]</c> would
-    /// change someone else's hole. A feature name is not an identifier: it does not survive the
-    /// API5↔API7 transition (MEASURED on the chamfer, F.8).
-    /// <b>The mode is not changed by an edit.</b> The mode of the existing feature is read from the
-    /// model (<c>IHole3D.HoleType</c>) and serves as the frame: a field of a foreign mode is rejected
-    /// <c>INVALID_ARGUMENT</c> before COM with a list of its own fields. A mode change was not measured.
-    /// </remarks>
+    /// <summary>New hole diameter (family=<c>hole</c>), mm: the pilot of a counterbore and countersink, the hole itself for a blind and a through cylindrical hole.</summary>
+    /// <remarks>Route MEASURED on 20.09.2026 (probe <c>scratch/_hole_edit_probe.py</c>, leg 2 — raw helper <c>scratch/hole-edit-raw</c>, report
+    /// <c>docs/acceptance/api7/hole-modes.md</c> § M.6): the existing hole is taken by <c>IHoles3D.Hole3D[index]</c>, its own mode's members are written, then
+    /// <c>IModelObject.Update()</c> and a rebuild; a through cylindrical Ø10 → Ø12 on a 10 mm plate removed <c>345.575191895</c> mm³ = π·(36−25)·10, surviving
+    /// <c>save → close → reopen</c>. The address is not guessed: the "tree feature ↔ <c>Holes3D</c> record" correspondence is proved by the uniqueness of the hole;
+    /// with several holes the call is rejected <c>CAPABILITY_UNAVAILABLE</c> before COM (writing to <c>Holes3D[0]</c> would change someone else's hole), and a
+    /// feature name is not an identifier (does not survive the API5↔API7 transition — MEASURED on the chamfer, F.8). The mode is NOT changed by an edit: it is read
+    /// (<c>IHole3D.HoleType</c>) and serves as the frame — a foreign-mode field is rejected <c>INVALID_ARGUMENT</c> before COM. A mode change was not measured. History: docs/decisions/contracts.md#hole-edit-address</remarks>
     public double? DiameterMm { get; init; }
 
-    /// <summary>New counterbore relief diameter (mode <c>through_counterbore</c>), mm. A field of a FOREIGN mode
-    /// for the rest: on a blind hole and on a countersink it is rejected <c>INVALID_ARGUMENT</c>.</summary>
-    /// <remarks>
-    /// <b>Route MEASURED on 20.09.2026</b> (step M.6): a relief Ø18×4 → Ø20×5 removed
-    /// <c>474.380490692</c> mm³ over the previous — the ring difference π/4·(D²−d²)·h (1178.097244573
-    /// against 703.716754404, formula M.2). It is written to
-    /// <c>ISpotfacingHoleParameters.SpotfacingDiameter</c>; on a foreign mode this interface is
-    /// UNREACHABLE on the object — MEASURED by control (c) of the probe.
-    /// </remarks>
+    /// <summary>New counterbore relief diameter (mode <c>through_counterbore</c>), mm. A field of a FOREIGN mode for the rest: on a blind hole and on a
+    /// countersink it is rejected <c>INVALID_ARGUMENT</c>.</summary>
+    /// <remarks>Route MEASURED on 20.09.2026 (step M.6): a relief Ø18×4 → Ø20×5 removed <c>474.380490692</c> mm³ over the previous — the ring difference
+    /// π/4·(D²−d²)·h (1178.097244573 against 703.716754404, formula M.2). It is written to <c>ISpotfacingHoleParameters.SpotfacingDiameter</c>; on a foreign
+    /// mode this interface is UNREACHABLE on the object — MEASURED by control (c) of the probe.</remarks>
     public double? CounterboreDiameterMm { get; init; }
 
     /// <summary>New counterbore relief depth (mode <c>through_counterbore</c>), mm.</summary>
@@ -2107,21 +1808,14 @@ public sealed record UpdateFeatureCommand
     /// <summary>New countersink angle (mode <c>through_countersink</c>), degrees.</summary>
     public double? CountersinkAngleDeg { get; init; }
 
-    /// <summary>Analytic expectation of the material REMOVED by the edit, mm³: <c>volume_before − volume_after</c>.
-    /// <remarks>
-    /// <b>The sign is part of the definition of the quantity, not decoration.</b> A hole removes
-    /// material, so for "became deeper" the delta is positive and for "became shallower" it is negative;
-    /// comparing the magnitude is not allowed. This is exactly where the first edition of the probe
-    /// erred: it compared the volume increment (positive) with the analytic "removed" and gave a false
-    /// "mismatch" on correct geometry — an INSTRUMENT defect, not a fact about the product.
-    /// <b>Why a delta rather than the full volume.</b> The full document volume depends on everything in
-    /// it; the delta is tied to the edit and therefore distinguishes "exactly what was requested
-    /// applied" from "something else applied". <see cref="ExpectedVolumeMm3"/> is also accepted — it is
-    /// checked separately and independently.
-    /// Without a declared expectation the edit is not confirmed by a number: the level stays
-    /// <c>call_returned</c>, and <c>expected_volume_delta_not_supplied</c> appears in
-    /// <c>unverified_aspects</c>.
-    /// </remarks>
+    /// <summary>Analytic expectation of the material REMOVED by the edit, mm³: <c>volume_before − volume_after</c>.</summary>
+    /// <remarks>The sign is part of the definition of the quantity, not decoration: a hole removes material, so "became deeper" is positive and "became
+    /// shallower" is negative, and comparing the magnitude is not allowed. This is where the first edition of the probe erred — it compared the volume
+    /// increment (positive) with the analytic "removed" and gave a false "mismatch" on correct geometry: an INSTRUMENT defect, not a fact about the product.
+    /// Why a delta rather than the full volume: the full document volume depends on everything in it, while the delta is tied to the edit and distinguishes
+    /// "exactly what was requested applied" from "something else applied". <see cref="ExpectedVolumeMm3"/> is also accepted, checked separately. Without a
+    /// declared expectation the edit is not confirmed by a number: the level stays <c>call_returned</c>, and <c>expected_volume_delta_not_supplied</c> appears
+    /// in <c>unverified_aspects</c>.</remarks>
     public double? ExpectedVolumeDeltaMm3 { get; init; }
 }
 
@@ -2159,15 +1853,11 @@ public sealed record DeleteFeatureCommand
     public required long ExpectedRevision { get; init; }
 }
 
-/// <summary>Body in the result of operation B3: reference, volume, bounding box and a multi-piece flag.
-/// <remarks>
-/// A separate record, not <c>BodyRowDto</c>, for two reasons. First, acceptance B3 is counted by
-/// VOLUMES, and <c>BodyRowDto</c> carries no volume. Second, <c>MultiBodyParts</c> is no decoration
-/// here: the core represents a result of several pieces as ONE body with several pieces (MEASURED on
-/// 18.09.2026, step BO.8), and without this field "one body" would read as "material intact".
-/// <c>VolumeMm3</c> is <c>null</c> when the volume was not read: "not read" and "zero" are different
-/// answers and must not be mixed.
-/// </remarks>
+/// <summary>Body in the result of operation B3: reference, volume, bounding box and a multi-piece flag.</summary>
+/// <remarks>A separate record, not <c>BodyRowDto</c>, for two reasons. First, acceptance B3 is counted by VOLUMES, and <c>BodyRowDto</c> carries no volume.
+/// Second, <c>MultiBodyParts</c> is no decoration here: the core represents a result of several pieces as ONE body with several pieces (MEASURED on
+/// 18.09.2026, step BO.8), and without this field "one body" would read as "material intact". <c>VolumeMm3</c> is <c>null</c> when the volume was not read:
+/// "not read" and "zero" are different answers and must not be mixed.</remarks>
 public sealed record SolidBodyDto
 {
     public required string BodyRef { get; init; }
@@ -2187,24 +1877,14 @@ public sealed record SolidBodyDto
     public required bool MultiBodyParts { get; init; }
 }
 
-/// <summary>Plane for operations B3: an existing support, a point + normal, or a base plane with an offset.
-/// <remarks>
-/// The three ways are mutually exclusive, and this is checked before the COM call. The plane side is
-/// NOT set here: it is set by the sign <c>s = n·(p − p₀)</c> in the cut command itself, because "the
-/// left side" without a coordinate system is not an address.
-/// The normal must be non-zero and finite. The point and the normal are in MODEL coordinates, mm.
-/// <b>The field shape matches the PUBLISHED <c>cut_plane</c> schema literally.</b> MEASURED on
-/// 19.09.2026 by client acceptance B3 (three FAIL rows: <c>B3C.neg.plane_base_declared</c>,
-/// <c>B3C.08.plane_base.cut_by_plane</c>, <c>B3C.08.plane_base.split</c>): the schema published
-/// <c>base</c> as the string <c>xy|xz|yz</c> and the neighbouring <c>offset_mm</c> as a number, while
-/// the DTO expected a <c>PlaneRefDto</c> OBJECT here — i.e. the shape diverged by one nesting level,
-/// and the declared <c>CAPABILITY_UNAVAILABLE</c> was unreachable: the call failed on payload parsing
-/// (<c>JsonException</c> at <c>$.plane.base</c>) with the code <c>VERIFICATION_FAILED</c>. The field was
-/// brought to the published shape; "declared and executed" coincide again.
-/// <b><c>offset_mm</c> without <c>base</c> is an argument error, not silence.</b> An offset without a
-/// base plane does not express a plane, and accepting it "just in case" would mean declaring the
-/// parameter accepted and ignoring it.
-/// </remarks>
+/// <summary>Plane for operations B3: an existing support, a point + normal, or a base plane with an offset.</summary>
+/// <remarks>The three ways are mutually exclusive, and this is checked before the COM call. The plane side is NOT set here: it is set by the sign
+/// <c>s = n·(p − p₀)</c> in the cut command itself, because "the left side" without a coordinate system is not an address. The normal must be non-zero and
+/// finite; the point and the normal are in MODEL coordinates, mm. The field shape matches the PUBLISHED <c>cut_plane</c> schema literally — MEASURED on
+/// 19.09.2026 by client acceptance B3 (three FAIL rows: <c>B3C.neg.plane_base_declared</c>, <c>B3C.08.plane_base.cut_by_plane</c>, <c>B3C.08.plane_base.split</c>):
+/// the schema published <c>base</c> as the string <c>xy|xz|yz</c> and <c>offset_mm</c> as a number, while the DTO expected a <c>PlaneRefDto</c> OBJECT — the shape
+/// diverged by one nesting level, so the declared <c>CAPABILITY_UNAVAILABLE</c> was unreachable and the call failed parsing (<c>JsonException</c> at <c>$.plane.base</c>,
+/// <c>VERIFICATION_FAILED</c>); the field was brought to the published shape. <c>offset_mm</c> without <c>base</c> is an argument error, not silence.</remarks>
 public sealed record CutPlaneDto
 {
     /// <summary>Reference to an existing document plane.</summary>
@@ -2243,22 +1923,13 @@ public enum CutPlaneFormVerdict
     OffsetWithoutBase,
 }
 
-/// <summary>The shape rule of <see cref="CutPlaneDto"/> — in one place and without COM, so it can be checked by
-/// a test rather than only by acceptance on a live model.</summary>
-/// <remarks>
-/// The priority is declared and does not depend on the order of fields in JSON:
-/// <list type="number">
-/// <item><see cref="CutPlaneFormVerdict.ModesConflict"/> — <c>base</c> together with <c>plane_ref</c> or
-/// a point with a normal. Checked FIRST: the request is contradictory, and answering it with a declared
-/// capability refusal would hide from the client that it named two ways at once;</item>
-/// <item><see cref="CutPlaneFormVerdict.BaseUnsupported"/> — <c>base</c> named alone;</item>
-/// <item><see cref="CutPlaneFormVerdict.OffsetWithoutBase"/> — an offset without a base plane;</item>
-/// <item><see cref="CutPlaneFormVerdict.Ok"/> — either <c>plane_ref</c> or a point with a normal.</item>
-/// </list>
-/// The mutual exclusion "<c>plane_ref</c> versus a point with a normal" is NOT checked here: a feature
-/// edit has its own reason to reject a reference (the edit route is a transfer of the points of its OWN
-/// support), and the route must name it itself.
-/// </remarks>
+/// <summary>The shape rule of <see cref="CutPlaneDto"/> — in one place and without COM, so it can be checked by a test rather than only by acceptance on a live model.</summary>
+/// <remarks>The priority is declared and does not depend on the order of fields in JSON: <see cref="CutPlaneFormVerdict.ModesConflict"/> — <c>base</c> together with
+/// <c>plane_ref</c> or a point with a normal, checked FIRST (the request is contradictory, and a declared capability refusal would hide that two ways were named at
+/// once); <see cref="CutPlaneFormVerdict.BaseUnsupported"/> — <c>base</c> named alone; <see cref="CutPlaneFormVerdict.OffsetWithoutBase"/> — an offset without a
+/// base plane; <see cref="CutPlaneFormVerdict.Ok"/> — either <c>plane_ref</c> or a point with a normal. The mutual exclusion "<c>plane_ref</c> versus a point with a
+/// normal" is NOT checked here: a feature edit has its own reason to reject a reference (the edit route transfers the points of its OWN support), and the route
+/// must name it itself.</remarks>
 public static class CutPlaneForm
 {
     public static CutPlaneFormVerdict Validate(CutPlaneDto plane)
@@ -2534,21 +2205,13 @@ public sealed record ImportStepCommand
     public bool TraceLifecycle { get; init; }
 }
 
-/// <summary>
-/// Raster snapshot of the current session's model by the documented API5 route:
-/// <c>ksDocument3D.RasterFormatParam()</c> → <c>ksRasterFormatParam</c> →
-/// <c>ksDocument3D.SaveAsToRasterFormat(fileName, rasterPar)</c>.
-/// </summary>
-/// <remarks>
-/// <b>The two route modes are MUTUALLY EXCLUSIVE, and this is MEASURED (probe P2b of the order, delivery
-/// <c>publish-deproutes-r2-20260921</c>):</b> with a NON-EMPTY file name the core writes the file and
-/// <c>resultArrayBytes</c> stays null (six call shapes differing in the order of member writes, a
-/// pre-supplied array, a second write method and a re-read of the property — all gave null); with an
-/// EMPTY file name the core returns <c>System.Byte[]</c> (8639 bytes, PNG magic) and does NOT create a
-/// file at all. So "return the picture" and "write the file" are two different route calls, not one
-/// with two consequences.
-/// Fields not confirmed by the probe are not part of the contract: <c>IViewProjection7</c> (projection
-/// control) is documented, but is not implemented by this order and is named as a remainder.
+/// <summary>Raster snapshot of the current session's model by the documented API5 route: <c>ksDocument3D.RasterFormatParam()</c> → <c>ksRasterFormatParam</c> →
+/// <c>ksDocument3D.SaveAsToRasterFormat(fileName, rasterPar)</c>.</summary>
+/// <remarks>The two route modes are MUTUALLY EXCLUSIVE, and this is MEASURED (probe P2b of the order, delivery <c>publish-deproutes-r2-20260921</c>): with a
+/// NON-EMPTY file name the core writes the file and <c>resultArrayBytes</c> stays null (six call shapes differing in the order of member writes, a pre-supplied
+/// array, a second write method and a re-read of the property — all gave null); with an EMPTY file name the core returns <c>System.Byte[]</c> (8639 bytes, PNG
+/// magic) and does NOT create a file at all. So "return the picture" and "write the file" are two different route calls, not one with two consequences. Fields
+/// not confirmed by the probe are not part of the contract: <c>IViewProjection7</c> (projection control) is documented but not implemented by this order.
 /// </remarks>
 public sealed record ExportImageCommand
 {
@@ -2657,15 +2320,12 @@ public sealed record FeatureRowDto
 
     public IReadOnlyList<string> Dependencies { get; init; } = Array.Empty<string>();
 
-    /// <summary>Reference to the sketch this feature is built on, when it is an extrusion and the sketch can
-    /// be read back through <c>GetSketch()</c>. Null for feature families without a sketch and when
-    /// the read-back fails.</summary>
-    /// <remarks>This closes the long-standing <c>sketch_reference_not_resolved</c> gap: before it, a sketch
-    /// that arrived with a reopened document could be neither named nor edited, because nothing
-    /// handed the caller a reference to it. It is the missing half of the model-derived sketch
-    /// route — the coordinate can now be derived, and this is how the sketch to edit is found in the
-    /// first place. It is a plain reference minted against the current revision, so the usual
-    /// staleness rules apply to it unchanged (it dies on the next rebuild like any other handle).</remarks>
+    /// <summary>Reference to the sketch this feature is built on, when it is an extrusion and the sketch can be read back through <c>GetSketch()</c>. Null for
+    /// feature families without a sketch and when the read-back fails.</summary>
+    /// <remarks>This closes the long-standing <c>sketch_reference_not_resolved</c> gap: before it, a sketch that arrived with a reopened document could be
+    /// neither named nor edited, because nothing handed the caller a reference to it. It is the missing half of the model-derived sketch route — the
+    /// coordinate can now be derived, and this is how the sketch to edit is found in the first place. It is a plain reference minted against the current
+    /// revision, so the usual staleness rules apply unchanged (it dies on the next rebuild like any other handle).</remarks>
     public string? SketchRef { get; init; }
 }
 
@@ -2945,17 +2605,12 @@ public sealed record ShellCommand
     /// <summary>Wall formation direction. The correspondence is MEASURED, see the type description.</summary>
     public ShellThinDirection ThinDirection { get; init; } = ShellThinDirection.Inward;
 
-    /// <summary>Tangent faces — <c>IShell.SetFaces(Faces, TangentFaces)</c> in API7.
-    /// <remarks>
-    /// The parameter is <b>declared</b> in the contract because it exists in the API7 route and because
-    /// an undeclared parameter is invisible to the product: <c>additionalProperties: false</c> would
-    /// reject the call before COM, and that would read as "not supported".
-    /// But <c>true</c> is <b>refused with a named refusal</b> rather than silently ignored: API5
-    /// <c>ksShellDefinition</c> has no "tangent faces" member at all, and this tool's route is API5.
-    /// Silent ignoring would give success for work that did not happen — exactly the defect the contract
-    /// forbids. The mode <c>SM-13.shell.mode_tangent_faces</c> is not part of the mandatory scope of
-    /// this stage, so the bound is named rather than hidden.
-    /// </remarks>
+    /// <summary>Tangent faces — <c>IShell.SetFaces(Faces, TangentFaces)</c> in API7.</summary>
+    /// <remarks>The parameter is <b>declared</b> because it exists in the API7 route and an undeclared parameter is invisible to the product:
+    /// <c>additionalProperties: false</c> would reject the call before COM and that would read as "not supported". But <c>true</c> is <b>refused with a named
+    /// refusal</b> rather than silently ignored: API5 <c>ksShellDefinition</c> has no "tangent faces" member at all, and this tool's route is API5. Silent
+    /// ignoring would give success for work that did not happen — the defect the contract forbids. The mode <c>SM-13.shell.mode_tangent_faces</c> is not part
+    /// of the mandatory scope of this stage, so the bound is named rather than hidden.</remarks>
     public bool TangentFaces { get; init; }
 
     public double? ExpectedVolumeMm3 { get; init; }
@@ -3019,23 +2674,13 @@ public sealed record SweepDto(
 public sealed record LoftCouplingDto(int? SectionCount, IReadOnlyList<double?> OffsetsMm);
 
 /// <summary>Loft parameters read from the model.</summary>
-/// <remarks>
-/// <see cref="SectionRefs"/> — SECTIONS AS REFERENCES, derived from the feature definition
-/// (<c>ksBaseLoftDefinition.Sketches()</c> / <c>ksBossLoftDefinition.Sketches()</c>, help pages
-/// <c>ksbaseloftdefinition_sketches.html</c> and <c>ksbossloftdefinition_sketches.html</c>, which
-/// return <c>ksEntityCollection</c>), not saved since creation.
-/// Why this field exists at all. A loft edit changes ONLY the section set
-/// (<c>kompas_update_feature</c>, field <c>section_refs</c>), and it has no other currency. A reference
-/// issued at creation lives until the first document mutation, and <c>kompas_rebuild</c> revokes all
-/// document references wholesale; the product cannot list sketches with a separate tool —
-/// <c>kompas_list_features</c> returns only the shaping elements
-/// (<c>EntityCollection(o3d_operationElement)</c>), and it is MEASURED that on a document with two
-/// sketches and one loft the tree shows ONE row. Without this field, editing an existing loft is
-/// inexpressible neither in a new session nor after <c>save → close → reopen</c>, i.e. the input stops
-/// being a reference exactly where order §11 requires the opposite.
-/// <c>null</c> means "not read", while an empty list means "there are none in the definition"; these are
-/// different states and are not merged.
-/// </remarks>
+/// <remarks><see cref="SectionRefs"/> — SECTIONS AS REFERENCES, derived from the feature definition (<c>ksBaseLoftDefinition.Sketches()</c> /
+/// <c>ksBossLoftDefinition.Sketches()</c>, help pages <c>ksbaseloftdefinition_sketches.html</c> and <c>ksbossloftdefinition_sketches.html</c>, returning
+/// <c>ksEntityCollection</c>), not saved since creation. A loft edit changes ONLY the section set (<c>kompas_update_feature</c>, field <c>section_refs</c>),
+/// and has no other currency. A reference issued at creation lives until the first document mutation, and <c>kompas_rebuild</c> revokes all document
+/// references wholesale; the product cannot list sketches separately — <c>kompas_list_features</c> returns only shaping elements
+/// (<c>EntityCollection(o3d_operationElement)</c>), and MEASURED: on a document with two sketches and one loft the tree shows ONE row. Without this field,
+/// editing an existing loft is inexpressible in a new session or after <c>save → close → reopen</c>, where order §11 requires the opposite; <c>null</c> means "not read", an empty list "there are none in the definition" — different states, not merged.</remarks>
 public sealed record LoftDto(
     string? Building,
     bool? Closed,
@@ -3045,14 +2690,10 @@ public sealed record LoftDto(
     IReadOnlyList<string>? SectionRefs = null);
 
 /// <summary>Shell parameters read from the model.</summary>
-/// <remarks>
-/// <see cref="RemovedFaceRefs"/> — REMOVED FACES AS REFERENCES, derived from the feature definition
-/// (<c>ksShellDefinition.FaceArray()</c> → <c>ksEntityCollection</c>), for the same reason as
-/// <see cref="LoftDto.SectionRefs"/>: the set of removed faces is the edit input, and without a
-/// reference to the faces removed BY THE FEATURE ITSELF a repeated set edit after a mutation is
-/// inexpressible. Faces removed by the feature are ABSENT from the body topology, so
-/// <c>kompas_read_topology</c> has nothing to take them from.
-/// </remarks>
+/// <remarks><see cref="RemovedFaceRefs"/> — REMOVED FACES AS REFERENCES, derived from the feature definition
+/// (<c>ksShellDefinition.FaceArray()</c> → <c>ksEntityCollection</c>), for the same reason as <see cref="LoftDto.SectionRefs"/>: the set of removed faces is
+/// the edit input, and without a reference to the faces removed BY THE FEATURE ITSELF a repeated set edit after a mutation is inexpressible. Faces removed
+/// by the feature are ABSENT from the body topology, so <c>kompas_read_topology</c> has nothing to take them from.</remarks>
 public sealed record ShellDto(
     double? ThicknessMm,
     string? ThinDirection,

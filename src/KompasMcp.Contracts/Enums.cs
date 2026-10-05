@@ -118,15 +118,13 @@ public enum ExternalChangeDetection
     Unavailable,
 }
 
-/// <summary>What exactly a pattern copies (docs/05 SM-18/SM-19; user help
-/// <c>48_3_1_vibor_kopiruemih_obtktov</c>).</summary>
+/// <summary>What exactly a pattern copies (docs/05 SM-18/SM-19; user help <c>48_3_1_vibor_kopiruemih_obtktov</c>).</summary>
 /// <remarks>DOC: copytype.html — the value maps to the numeric <c>ksObj3dTypeEnum</c>, and that mapping is
 /// published by the SDK page, not inferred: operations — <c>o3d_meshCopy=35</c> (<c>o3d_circularCopy=36</c>),
 /// bodies — <c>o3d_BodiesMeshCopy=528</c> (<c>o3d_BodiesCircularCopy=529</c>).
 /// INVARIANT: the difference is substantive, not cosmetic — a pattern of OPERATIONS inherits the scope of
-/// the source operation and creates no new bodies (help
-/// <c>48_2_osobennoiti_postroeniy_massiviv_v_mnogotelnoy_detali</c>), while a pattern of BODIES creates body
-/// copies and the body count grows. Hence a separate mode, not a flag.</remarks>
+/// the source operation and creates no new bodies (help <c>48_2_osobennoiti_postroeniy_massiviv_v_mnogotelnoy_detali</c>),
+/// while a pattern of BODIES creates body copies and the body count grows. Hence a separate mode, not a flag.</remarks>
 public enum PatternCopyKind
 {
     /// <summary>Operations are copied (faces and edges, or operations with parameters). No new bodies.</summary>

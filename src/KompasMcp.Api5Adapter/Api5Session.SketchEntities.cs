@@ -9,17 +9,9 @@ namespace KompasMcp.Api5Adapter;
 /// <summary>Sketch entities as objects with a STABLE ADDRESS: enumeration, addressed read and
 /// addressed edit (<c>kompas_list_sketch_entities</c>, <c>kompas_edit_sketch_entity</c>).</summary>
 /// <remarks>
-/// INVARIANT: the ADDRESS is the string returned by <c>IKompasDocument1.GetObjectId</c> and accepted
-/// back by <c>IKompasDocument1.FindObjectById</c>. A collection index is NOT declared an address:
-/// a rebuild shifts it, and "the N-th object" would stop pointing at the same entity after the very
-/// first mutation.
-/// INVARIANT: an edit is confirmed by RE-RESOLVING THE ADDRESS, not by a return code — for
-/// <c>delete</c> the confirmation is that the address no longer resolves, for <c>set_layer</c> it is
-/// the layer number read back. A code that "did not fail" is not declared an application.
-/// LIMIT: the sketch edit schema of other operations takes a mode and a WHOLE NEW SET of primitives,
-/// i.e. it recreates the contour rather than editing an entity. Hence <c>delete</c> here removes
-/// EXACTLY ONE entity named by an address, and the rest stay in place — that is the discriminating
-/// sign of addressability.
+/// INVARIANT: the ADDRESS is the string returned by <c>IKompasDocument1.GetObjectId</c> and accepted back by <c>IKompasDocument1.FindObjectById</c>; a collection index is NOT an address (a rebuild shifts it, so "the N-th object" would stop pointing at the same entity after the first mutation).
+/// INVARIANT: an edit is confirmed by RE-RESOLVING THE ADDRESS, not by a return code — for <c>delete</c> the address no longer resolves, for <c>set_layer</c> the layer number is read back; a code that "did not fail" is not declared an application.
+/// LIMIT: the sketch edit schema of other operations recreates the whole contour rather than editing an entity; <c>delete</c> here removes EXACTLY ONE entity named by an address, the rest staying in place — the discriminating sign of addressability.
 /// History: docs/decisions/adapter-sketch.md#sketch-entities
 /// </remarks>
 public sealed partial class Api5Session
@@ -107,11 +99,8 @@ public sealed partial class Api5Session
 
     /// <summary>Addressed edit of one existing sketch entity.</summary>
     /// <remarks>
-    /// INVARIANT: the edit entry is for WRITING — <c>BeginEdit()</c>, not <c>BeginEditEx(true)</c>:
-    /// the edit must change the model, and taking a "read-only" mode for it would produce a refusal
-    /// that looks like a missing capability.
-    /// LIMIT: unlike a <c>delete_entities</c> schema that rebuilds the whole contour, mode
-    /// <c>delete</c> here removes EXACTLY ONE entity named by an address, leaving the others in place.
+    /// INVARIANT: the edit entry is for WRITING — <c>BeginEdit()</c>, not <c>BeginEditEx(true)</c>: the edit must change the model, and a "read-only" mode would produce a refusal that looks like a missing capability.
+    /// LIMIT: unlike a <c>delete_entities</c> schema that rebuilds the whole contour, mode <c>delete</c> here removes EXACTLY ONE entity named by an address, leaving the others in place.
     /// History: docs/decisions/adapter-sketch.md#sketch-entity-delete
     /// </remarks>
     public SketchEntityEditResult EditSketchEntity(EditSketchEntityCommand command)

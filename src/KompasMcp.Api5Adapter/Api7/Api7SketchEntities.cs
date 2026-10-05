@@ -26,31 +26,10 @@ internal sealed record SketchEntitiesRead(
     string Route,
     IReadOnlyList<string> Notes);
 
-/// <summary>Sketch entities: entering an EXISTING sketch, enumerating the view's objects and a stable
-/// object address (<c>dep.sketch.entities</c>, step 0 of the product-routes order).</summary>
-/// <remarks>DOC: the route is from the official v24 help, not a guess
-/// (<c>DEPENDENCIES_PRODUCT_ROUTES_STEP0_REPORT_20260921.md</c> §6.4): <c>ISketch.BeginEdit</c> →
-/// <c>IFragmentDocument</c> → <c>IViewsAndLayersManager.Views</c> → <c>IView</c> →
-/// <c>IDrawingContainer.GetObjects</c>; the address is <c>IKompasDocument1.GetObjectId</c>; the exit is
-/// <c>ISketch.EndEdit</c>.
-/// MEASURED (InteropScan over <c>Libs/PolynomLib/Bin/Client/Interop.KompasAPI7.dll</c>, build
-/// 24.0.0.2799): four divergences between the help and the shipped interop. (1) The page names
-/// <c>BeginEdit(bool readOnly)</c>, the interop has TWO members <c>BeginEdit()</c> and
-/// <c>BeginEditEx(Boolean ReadOnly)</c>, so read-only mode is <c>BeginEditEx(true)</c> and a bare
-/// <c>BeginEdit()</c> would open the sketch for writing. (2) The page puts the address on
-/// <c>IKompasDocument.GetObjectId</c>, but it is declared on <c>IKompasDocument1</c>
-/// (IID <c>{58890FE8-E671-4561-994A-600DD29032E4}</c>) and absent from <c>IKompasDocument</c> — a QI
-/// is required and is done explicitly. (3) The page names
-/// <c>IDrawingContainer.GetObjects(std::vector&lt;int32_t&gt;)</c>, but the interop parameter is
-/// declared <c>Object</c> (SAFEARRAY), so an <c>int[]</c> is passed; <c>IView</c> does not itself
-/// carry <c>Objects</c>, so a QI to <c>IDrawingContainer</c> is mandatory. (4) <c>FragmentDocument</c>
-/// is a co-class with ZERO members; its members live on <c>IFragmentDocument</c> (same IID
-/// <c>{E19CE626-DF9C-48C4-A83D-3E3BC7F0DACA}</c>), so that cast is part of the route.
-/// MEASURED: the shipped assembly has ZERO members containing <c>ByName</c>, whereas the help
-/// documents <c>IAxes3D.GetAxis3DByName</c>, <c>IPoints3D.GetPoint3DByName</c> and
-/// <c>ISketchs.GetSketchByName</c>; therefore "name as a stable address" is implemented by
-/// ENUMERATING the collection and comparing <c>Name</c>, assembled only from documented members
-/// (<c>Count</c>, the indexed property, <c>Name</c>).
+/// <summary>Sketch entities: entering an EXISTING sketch, enumerating the view's objects and a stable object address (<c>dep.sketch.entities</c>, step 0 of the product-routes order).</summary>
+/// <remarks>DOC: the route is from the official v24 help, not a guess (<c>DEPENDENCIES_PRODUCT_ROUTES_STEP0_REPORT_20260921.md</c> §6.4): <c>ISketch.BeginEdit</c> → <c>IFragmentDocument</c> → <c>IViewsAndLayersManager.Views</c> → <c>IView</c> → <c>IDrawingContainer.GetObjects</c>; the address is <c>IKompasDocument1.GetObjectId</c>; the exit is <c>ISketch.EndEdit</c>.
+/// MEASURED (InteropScan over <c>Libs/PolynomLib/Bin/Client/Interop.KompasAPI7.dll</c>, build 24.0.0.2799): four divergences between the help and the shipped interop — (1) the page names <c>BeginEdit(bool readOnly)</c>, the interop has TWO members <c>BeginEdit()</c> and <c>BeginEditEx(Boolean ReadOnly)</c>; (2) the page puts the address on <c>IKompasDocument.GetObjectId</c>, but it is declared on <c>IKompasDocument1</c> (IID <c>{58890FE8-E671-4561-994A-600DD29032E4}</c>) and absent from <c>IKompasDocument</c>, so a QI is required and is done explicitly; (3) the page names <c>IDrawingContainer.GetObjects(std::vector&lt;int32_t&gt;)</c> but the interop parameter is declared <c>Object</c> (SAFEARRAY), so an <c>int[]</c> is passed and a QI to <c>IDrawingContainer</c> is mandatory; (4) <c>FragmentDocument</c> is a co-class with ZERO members, its members live on <c>IFragmentDocument</c> (same IID <c>{E19CE626-DF9C-48C4-A83D-3E3BC7F0DACA}</c>).
+/// MEASURED: the shipped assembly has ZERO members containing <c>ByName</c>, whereas the help documents <c>IAxes3D.GetAxis3DByName</c>, <c>IPoints3D.GetPoint3DByName</c> and <c>ISketchs.GetSketchByName</c>; therefore "name as a stable address" is implemented by ENUMERATING the collection and comparing <c>Name</c>, assembled only from documented members (<c>Count</c>, the indexed property, <c>Name</c>).
 /// History: docs/decisions/adapter-api7.md#sketch-entities</remarks>
 internal static class Api7SketchEntities
 {

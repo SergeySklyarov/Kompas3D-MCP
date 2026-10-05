@@ -11,19 +11,9 @@ using KompasMcp.Domain.Geometry;
 namespace KompasMcp.Api5Adapter.Api7;
 
 /// <summary>The API5→API7 bridge within a single session (ADR-004 §1, §5).</summary>
-/// <remarks>The class exists because some practical-release modes are physically unreachable from
-/// API5 — MEASURED, not assumed: <c>ksChamferDefinition</c> has no angle, only <c>IChamfer.Angle</c>
-/// does (probe F.10). A second KOMPAS instance is not started for this — <c>ksGetApplication7()</c>
-/// on the same API5 object returns the application with the same PID (api7-findings §3), so the
-/// bridge lives beside the API5 session and uses its STA queue.
-/// INVARIANT: typed interfaces, not IDispatch. Every call here goes through the vtable of the
-/// vendor-generated wrapper. The late-binding fallback stays in <c>tools/KompasMcp.Api7Probe</c>
-/// (isolated process) and is not carried into the product: probe E MEASURED that writing via
-/// <c>IDispatch</c> in the shared process crashed it with 0xC0000409, while a property that silently
-/// failed to save would read as "success".
-/// INVARIANT: the transferred-document cache is keyed by document id AND revision — after any mutation
-/// the cache for that document is invalid, otherwise it would hand out a view of an already-rebuilt
-/// model.
+/// <remarks>The class exists because some practical-release modes are physically unreachable from API5 — MEASURED, not assumed: <c>ksChamferDefinition</c> has no angle, only <c>IChamfer.Angle</c> does (probe F.10). A second KOMPAS instance is not started for this — <c>ksGetApplication7()</c> on the same API5 object returns the application with the same PID (api7-findings §3), so the bridge lives beside the API5 session and uses its STA queue.
+/// INVARIANT: typed interfaces, not IDispatch. Every call goes through the vtable of the vendor-generated wrapper; the late-binding fallback stays in <c>tools/KompasMcp.Api7Probe</c> (isolated process) and is not carried into the product: probe E MEASURED that writing via <c>IDispatch</c> in the shared process crashed it with 0xC0000409, while a property that silently failed to save would read as "success".
+/// INVARIANT: the transferred-document cache is keyed by document id AND revision — after any mutation the cache for that document is invalid, otherwise it would hand out a view of an already-rebuilt model.
 /// History: docs/decisions/adapter-api7.md#bridge</remarks>
 internal sealed class Api7Bridge
 {
@@ -234,17 +224,10 @@ internal static class Api7Chamfer
         }
     }
 
-    /// <summary>Write parameters into an EXISTING feature via <c>IChamfer</c> — the route that edits the
-    /// angle (API5 has no angle member at all, hence this one).</summary>
-    /// <remarks>INVARIANT: only supplied fields are written — an unsupplied field keeps what is in the
-    /// model. In the "distance and angle" method the second leg is DERIVED from the angle
-    /// (<c>d₂ = d₁·tg α</c>); writing a "previous number" into it would freeze a stale derivative and
-    /// lose the link to the angle.
-    /// INVARIANT: the order "write → Update() → RebuildModel()" is part of the contract, not style —
-    /// without <c>Update()</c> the setters return success while the model stays as before (also
-    /// MEASURED on <c>IExtrusion.Sketch</c> by probe E and on chamfer creation F.10).
-    /// Returns (written, reason), not an exception: the caller must distinguish a KOMPAS refusal from an
-    /// adapter crash, and "could not" must not look like "wrote".</remarks>
+    /// <summary>Write parameters into an EXISTING feature via <c>IChamfer</c> — the route that edits the angle (API5 has no angle member at all, hence this one).</summary>
+    /// <remarks>INVARIANT: only supplied fields are written — an unsupplied field keeps what is in the model. In the "distance and angle" method the second leg is DERIVED from the angle (<c>d₂ = d₁·tg α</c>); writing a "previous number" into it would freeze a stale derivative and lose the link to the angle.
+    /// INVARIANT: the order "write → Update() → RebuildModel()" is part of the contract, not style — without <c>Update()</c> the setters return success while the model stays as before (also MEASURED on <c>IExtrusion.Sketch</c> by probe E and on chamfer creation F.10).
+    /// Returns (written, reason), not an exception: the caller must distinguish a KOMPAS refusal from an adapter crash, and "could not" must not look like "wrote".</remarks>
     public static (bool Written, string? Failure) TryWrite(
         IModelContainer container,
         int index,
@@ -393,38 +376,13 @@ public sealed record HoleReadDto(
     string? CountersinkType,
     IReadOnlyList<string> ReadRoutes);
 
-/// <summary>Typed API7 operations over native holes (SM-07). Every route is MEASURED by probe M on v24
-/// (<c>docs/acceptance/api7/hole-modes.md</c>), and none is declared supported by the mere existence of
-/// a type: three attempts to write mode parameters into <c>IHole3D</c> itself were refuted by
-/// measurement, because the mode numbers live elsewhere.</summary>
-/// <remarks>INVARIANT: mode parameters live not on <c>IHole3D</c> (13 members, dispids 1…12, no mode
-/// numbers among them) but on <c>HoleParameters</c> — a read-only object cast to the interface of ITS
-/// OWN mode: counterbore — <c>ISpotfacingHoleParameters</c> (<c>SpotfacingDiameter</c>,
-/// <c>SpotfacingDepth</c>); countersink — <c>ICountersinkHoleParameters</c> (<c>CountersinkType</c>,
-/// <c>CountersinkDiameter</c>, <c>CountersinkAngle</c>, <c>CountersinkDepth</c>).
-/// INVARIANT: the countersink depth is DERIVED. With <c>CountersinkType = ksCTDiameterAngle (0)</c>,
-/// writing 2, 4 or 6 into <c>CountersinkDepth</c> changes NOTHING — the depth follows from diameter and
-/// angle, and the object returns <c>(rM − rP)/tan(angle/2)</c>, where <c>rM</c> is the mouth radius and
-/// <c>rP</c> the pilot radius. MEASURED 17.09.2026 (probe N.2): varying the mouth with pilot and angle
-/// fixed gave Ø14/16/18/20/24 → h = 2/3/4/5/7, matching <c>(rM − rP)/tan(45°)</c> in all five rows and
-/// diverging from a constant in four of five. Therefore <c>TryCreateCountersink</c> does not treat the
-/// depth write as proof of geometry but reads it back and returns it to the caller — compare what the
-/// object returned, not what was written.
-/// MEASURED (TLB read): a blind hole is <c>ksDTValue</c> — the member <c>ksDTBlind</c> does not exist
-/// in the vendor enum at all (<c>ksDepthTypeEnum</c> = ksDTValue 0, ksDTReachThrough 1, ksDTObject 2),
-/// so "blind" is expressed by the first; the bottom is set by <c>ksEndFaceTypeEnum.ksEFFlat</c>.
-/// MEASURED (M.5): a position off the origin is set by <c>IHoleDisposal.Point3DParamSurface</c> cast to
-/// <c>IPoint3DParamSurface</c>, with <c>OffsetType = ksOffsetByCoords (3)</c> and offsets
-/// <c>Offset1</c> (X) and <c>Offset2</c> (Y) — of five routes tried this is the only one that moved the
-/// hole; <c>SetSurfaceObject(BaseSurface)</c> returned False, recorded as is and not cancelling the
-/// route, since the three offset writes are what move the hole.
+/// <summary>Typed API7 operations over native holes (SM-07). Every route is MEASURED by probe M on v24 (<c>docs/acceptance/api7/hole-modes.md</c>), and none is declared supported by the mere existence of a type: three attempts to write mode parameters into <c>IHole3D</c> itself were refuted by measurement, because the mode numbers live elsewhere.</summary>
+/// <remarks>INVARIANT: mode parameters live not on <c>IHole3D</c> (13 members, dispids 1…12, no mode numbers among them) but on <c>HoleParameters</c> — a read-only object cast to the interface of ITS OWN mode: counterbore — <c>ISpotfacingHoleParameters</c> (<c>SpotfacingDiameter</c>, <c>SpotfacingDepth</c>); countersink — <c>ICountersinkHoleParameters</c> (<c>CountersinkType</c>, <c>CountersinkDiameter</c>, <c>CountersinkAngle</c>, <c>CountersinkDepth</c>).
+/// INVARIANT: the countersink depth is DERIVED — with <c>CountersinkType = ksCTDiameterAngle (0)</c>, writing 2, 4 or 6 into <c>CountersinkDepth</c> changes NOTHING; the depth follows from diameter and angle and equals <c>(rM − rP)/tan(angle/2)</c>, where <c>rM</c> is the mouth radius and <c>rP</c> the pilot radius (MEASURED 17.09.2026, probe N.2: Ø14/16/18/20/24 → h = 2/3/4/5/7, matching <c>(rM − rP)/tan(45°)</c> in all five rows and diverging from a constant in four of five). Therefore <c>TryCreateCountersink</c> reads the depth back rather than treating the write as proof.
+/// MEASURED (TLB read): a blind hole is <c>ksDTValue</c> — the member <c>ksDTBlind</c> does not exist in the vendor enum at all (<c>ksDepthTypeEnum</c> = ksDTValue 0, ksDTReachThrough 1, ksDTObject 2); the bottom is set by <c>ksEndFaceTypeEnum.ksEFFlat</c>.
+/// MEASURED (M.5): a position off the origin is set by <c>IHoleDisposal.Point3DParamSurface</c> cast to <c>IPoint3DParamSurface</c>, with <c>OffsetType = ksOffsetByCoords (3)</c> and offsets <c>Offset1</c> (X) and <c>Offset2</c> (Y) — of five routes tried this is the only one that moved the hole; <c>SetSurfaceObject(BaseSurface)</c> returned False, recorded as is and not cancelling the route.
 /// History: docs/decisions/adapter-api7.md#hole</remarks>
-/// <summary>The result of positioning: whether the offset was applied, the refusal reason and notes on
-/// the route. A separate type, not a triple, because this shape describes an <em>interstitial step</em>
-/// passed into <c>TryCreateBlindFlat</c>/<c>TryCreateCounterbore</c>/<c>TryCreateCountersink</c> and run
-/// between <c>Add()</c> and <c>Update()</c> on the same object. MEASURED (acceptance HO.6): all three
-/// modes support positioning — without this branch a through counterbore silently stayed at the origin
-/// with error=None.</summary>
+/// <summary>The result of positioning: whether the offset was applied, the refusal reason and notes on the route. A separate type, not a triple, because this shape describes an <em>interstitial step</em> passed into <c>TryCreateBlindFlat</c>/<c>TryCreateCounterbore</c>/<c>TryCreateCountersink</c> and run between <c>Add()</c> and <c>Update()</c> on the same object. MEASURED (acceptance HO.6): all three modes support positioning — without this branch a through counterbore silently stayed at the origin with error=None.</summary>
 internal sealed record PlacementOutcome(
     bool Applied,
     string? Failure,
@@ -496,17 +454,9 @@ internal static class Api7Hole
     }
 
     /// <summary>Edit an EXISTING flat-bottomed blind hole (mode <c>blind_flat</c>).</summary>
-    /// <remarks>MEASURED 20.09.2026 (probe <c>scratch/_hole_edit_probe.py</c> leg 2): the hole is taken
-    /// by the documented <c>IHoles3D.Hole3D[index]</c> (<c>iholes3d_hole3d.html</c>), its own-mode
-    /// members are written, <c>IModelObject.Update()</c> is applied (<c>imodelobject_update.html</c>),
-    /// and the volume changes exactly analytically — Ø10, 6 → 8 mm removed <c>157.079632679</c> mm³ =
-    /// π·r²·2.
-    /// INVARIANT: only members of THIS mode are written; <c>HoleType</c>, <c>DepthType</c> and
-    /// <c>EndFaceType</c> are part of mode identification, not a caller parameter (for blind they are
-    /// <c>ksHTBase</c>, <c>ksDTValue</c> and <c>ksEFFlat</c>), and leaving them "as read" would edit a
-    /// feature whose mode was not set by the caller. INVARIANT: an unsupplied numeric member is NOT
-    /// written — a caller changing only depth must not get the diameter overwritten with a "previous"
-    /// number, since a read value is derived from the model and must not be frozen as input.
+    /// <remarks>MEASURED 20.09.2026 (probe <c>scratch/_hole_edit_probe.py</c> leg 2): the hole is taken by the documented <c>IHoles3D.Hole3D[index]</c> (<c>iholes3d_hole3d.html</c>), its own-mode members are written, <c>IModelObject.Update()</c> is applied (<c>imodelobject_update.html</c>), and the volume changes exactly analytically — Ø10, 6 → 8 mm removed <c>157.079632679</c> mm³ = π·r²·2.
+    /// INVARIANT: only members of THIS mode are written; <c>HoleType</c>, <c>DepthType</c> and <c>EndFaceType</c> are part of mode identification, not a caller parameter (for blind they are <c>ksHTBase</c>, <c>ksDTValue</c> and <c>ksEFFlat</c>), and leaving them "as read" would edit a feature whose mode was not set by the caller.
+    /// INVARIANT: an unsupplied numeric member is NOT written — a caller changing only depth must not get the diameter overwritten with a "previous" number, since a read value is derived from the model and must not be frozen as input.
     /// History: docs/decisions/adapter-api7.md#hole</remarks>
     public static (bool Written, string? Failure) TryWriteBlindFlat(
         IModelContainer container,
@@ -609,14 +559,9 @@ internal static class Api7Hole
     }
 
     /// <summary>Edit an EXISTING through countersink (mode <c>through_countersink</c>).</summary>
-    /// <remarks>MEASURED 20.09.2026 (probe <c>scratch/_hole_edit_probe.py</c> leg 2): mouth Ø20 → Ø24 at
-    /// 90° removed <c>605.280184592</c> mm³ beyond the previous — the difference
-    /// <c>π·h/3·(rM² + rP·rM − 2·rP²)</c> with derived <c>h = (rM − rP)/tan(angle/2)</c>
-    /// (1128.878960190 versus 523.598775598).
-    /// INVARIANT: the countersink depth is NOT written — under <c>ksCTDiameterAngle</c> it is derived
-    /// (M.3: writing 2, 4 or 6 changes nothing), so writing it would be a number the object does not
-    /// read; the value is read back AFTER <c>Update()</c>, since a derived property still holds its
-    /// previous value before the rebuild. History: docs/decisions/adapter-api7.md#hole</remarks>
+    /// <remarks>MEASURED 20.09.2026 (probe <c>scratch/_hole_edit_probe.py</c> leg 2): mouth Ø20 → Ø24 at 90° removed <c>605.280184592</c> mm³ beyond the previous — the difference <c>π·h/3·(rM² + rP·rM − 2·rP²)</c> with derived <c>h = (rM − rP)/tan(angle/2)</c> (1128.878960190 versus 523.598775598).
+    /// INVARIANT: the countersink depth is NOT written — under <c>ksCTDiameterAngle</c> it is derived (M.3: writing 2, 4 or 6 changes nothing), so writing it would be a number the object does not read; the value is read back AFTER <c>Update()</c>, since a derived property still holds its previous value before the rebuild.
+    /// History: docs/decisions/adapter-api7.md#hole</remarks>
     public static (bool Written, string? Failure, double? ReportedDepthMm) TryWriteCountersink(
         IModelContainer container,
         int index,
@@ -1008,23 +953,11 @@ internal sealed record AxisHandle(
     IReadOnlyList<string> Notes);
 
 /// <summary>Typed API7 operations over rotation (SM-03).</summary>
-/// <remarks>MEASURED (run <c>95fa844107ce41609d6278f8f6c5759f</c>, 17.09.2026, steps R.24/R.25/R.26):
-/// all SM-03 steps PASS.
-/// INVARIANT: neither <c>NewEntity</c> nor <c>Create()</c>. An API5 wrapper around an API7 factory
-/// object is a mixed lifetime in which <c>Create()</c> returns <c>true</c> on an empty operation, the
-/// object appears in the tree, <c>Update()</c> reads True, and nothing is built; the route is therefore
-/// only <c>Rotateds.Add → IRotated → Update()</c>, the one that accepts <c>Profile</c> and <c>Axis</c>.
-/// MEASURED (R.26): <c>OperationResult</c> decides nothing — a <c>boss</c> with a written and read-back
-/// <c>ksOperationCut</c> changed the volume by 0; it is written for consistency with the tree and read
-/// back so a divergence is visible, and the caller must not rely on it (the operation kind comes from
-/// <see cref="RotationOperation"/>).
-/// INVARIANT (angle law, 18.09.2026): <c>Angle[true]</c> carries the REQUESTED sweep angle directly,
-/// and the second half of the pair, if equal to the first, DOUBLES the sweep — hence
-/// <c>(360, 0) → 360°</c> (full cylinder, <c>V = 50265.4824574366</c>), <c>(180, 0) → 180°</c>
-/// (<c>25132.7412287183</c>), <c>(90, 0) → 90°</c>, <c>(180, 180) → 360°</c>. A full turn is expressed
-/// by one call, and the operation kind (<c>base</c>/<c>boss</c>/<c>cut</c>) does not affect the law.
-/// MEASURED (FullTurnProbe F.1…F.5 and independent M3dVerificationProbe reading of the saved
-/// <c>.m3d</c>; table in <c>docs/acceptance/api7/full-turn-findings.md</c>).
+/// <remarks>MEASURED (run <c>95fa844107ce41609d6278f8f6c5759f</c>, 17.09.2026, steps R.24/R.25/R.26): all SM-03 steps PASS.
+/// INVARIANT: neither <c>NewEntity</c> nor <c>Create()</c>. An API5 wrapper around an API7 factory object is a mixed lifetime in which <c>Create()</c> returns <c>true</c> on an empty operation, the object appears in the tree, <c>Update()</c> reads True, and nothing is built; the route is therefore only <c>Rotateds.Add → IRotated → Update()</c>, the one that accepts <c>Profile</c> and <c>Axis</c>.
+/// MEASURED (R.26): <c>OperationResult</c> decides nothing — a <c>boss</c> with a written and read-back <c>ksOperationCut</c> changed the volume by 0; it is written for consistency with the tree and read back so a divergence is visible, and the caller must not rely on it (the operation kind comes from <see cref="RotationOperation"/>).
+/// INVARIANT (angle law, 18.09.2026): <c>Angle[true]</c> carries the REQUESTED sweep angle directly, and the second half of the pair, if equal to the first, DOUBLES the sweep — hence <c>(360, 0) → 360°</c> (full cylinder, <c>V = 50265.4824574366</c>), <c>(180, 0) → 180°</c> (<c>25132.7412287183</c>), <c>(90, 0) → 90°</c>, <c>(180, 180) → 360°</c>. A full turn is expressed by one call, and the operation kind (<c>base</c>/<c>boss</c>/<c>cut</c>) does not affect the law.
+/// MEASURED (FullTurnProbe F.1…F.5 and independent M3dVerificationProbe reading of the saved <c>.m3d</c>; table in <c>docs/acceptance/api7/full-turn-findings.md</c>).
 /// History: docs/decisions/adapter-api7.md#rotated</remarks>
 internal static class Api7Rotated
 {
@@ -1075,16 +1008,9 @@ internal static class Api7Rotated
     }
 
     /// <summary>Build a rotation axis from two MODEL points in the part itself.</summary>
-    /// <remarks>MEASURED: the path to the axes collection is non-trivial — <c>Axes3D</c> is declared on
-    /// <c>IAuxiliaryGeomContainer</c> (IID <c>{950FEBE2-F916-4E77-A37D-B061E5C22FA8}</c>), NOT on
-    /// <c>IModelContainer</c>, so a plain cast of the container gives <c>null</c> and only a QI on the
-    /// live part object works; <c>part</c> is transferred by the same bridge (<c>ksAPI7Dual</c>) as the
-    /// document, so no second KOMPAS instance is needed (ADR-004 §1).
-    /// INVARIANT: <c>Update()</c> is called AFTER both points — MEASURED (R.13) that an axis updated
-    /// before the points reads <c>Valid=False</c> and does not enter the tree; rotation follows the same
-    /// order. INVARIANT: an invalid axis is named, not discarded — if <c>Valid</c> is not True it is
-    /// recorded in the notes and returned, since a rotation failure on an invalid axis would not be a
-    /// fact about rotation; <c>null</c> is returned only when the axis could not be built at all.
+    /// <remarks>MEASURED: the path to the axes collection is non-trivial — <c>Axes3D</c> is declared on <c>IAuxiliaryGeomContainer</c> (IID <c>{950FEBE2-F916-4E77-A37D-B061E5C22FA8}</c>), NOT on <c>IModelContainer</c>, so a plain cast of the container gives <c>null</c> and only a QI on the live part object works; <c>part</c> is transferred by the same bridge (<c>ksAPI7Dual</c>) as the document, so no second KOMPAS instance is needed (ADR-004 §1).
+    /// INVARIANT: <c>Update()</c> is called AFTER both points — MEASURED (R.13) that an axis updated before the points reads <c>Valid=False</c> and does not enter the tree; rotation follows the same order.
+    /// INVARIANT: an invalid axis is named, not discarded — if <c>Valid</c> is not True it is recorded in the notes and returned, since a rotation failure on an invalid axis would not be a fact about rotation; <c>null</c> is returned only when the axis could not be built at all.
     /// History: docs/decisions/adapter-api7.md#rotated</remarks>
     public static AxisHandle? TryBuildAxisBy2Points(
         Api7Bridge bridge,
@@ -1163,15 +1089,9 @@ internal static class Api7Rotated
     }
 
     /// <summary>Create a rotation, write its parameters, then <c>Update()</c>.</summary>
-    /// <remarks>Returns (object, refusal reason): the caller must distinguish a KOMPAS refusal from an
-    /// adapter crash, and "could not" must not look like "created". The object is handed out because
-    /// after <c>Update()</c> it must be read back — and what is read back is the proof.
-    /// INVARIANT: the write order is part of the contract — <c>Profile</c> and <c>Axis</c> before the
-    /// rest, because a rotation without an axis has no sweep at all and writing an angle into such an
-    /// object means nothing. INVARIANT: the angle is written into the first half of the pair, the second
-    /// is zero — MEASURED 18.09.2026 (FullTurnProbe F.1/F.1a…F.1e, independent M3dVerificationProbe):
-    /// the second half equal to the first DOUBLES the sweep, so zero there is the condition "the turn
-    /// equals the requested angle", not an empty field.
+    /// <remarks>Returns (object, refusal reason): the caller must distinguish a KOMPAS refusal from an adapter crash, and "could not" must not look like "created". The object is handed out because after <c>Update()</c> it must be read back — and what is read back is the proof.
+    /// INVARIANT: the write order is part of the contract — <c>Profile</c> and <c>Axis</c> before the rest, because a rotation without an axis has no sweep at all and writing an angle into such an object means nothing.
+    /// INVARIANT: the angle is written into the first half of the pair, the second is zero — MEASURED 18.09.2026 (FullTurnProbe F.1/F.1a…F.1e, independent M3dVerificationProbe): the second half equal to the first DOUBLES the sweep, so zero there is the condition "the turn equals the requested angle", not an empty field.
     /// History: docs/decisions/adapter-api7.md#rotated</remarks>
     public static (IRotated? Rotation, string? Failure) TryCreate(
         IModelContainer container,
@@ -1198,15 +1118,8 @@ internal static class Api7Rotated
             rotation.Profile = profile;
             rotation.Axis = axis;
 
-            // Indexed properties: both getter and setter take Boolean Normal. A write without the index
-            // does not compile (CS0856) — the compiler is cheaper here than a silent write to a member
-            // the object lacks.
-            //
-            // The angle goes into the FIRST half of the pair, the second is ZERO. MEASURED, not chosen by
-            // symmetry (FullTurnProbe F.1/F.1a…F.1e, docs/acceptance/api7/full-turn-findings.md):
-            // Angle[true] carries the REQUESTED sweep angle directly, while the second half equal to the
-            // first DOUBLES the sweep, so zero there is the condition "the turn equals the requested
-            // angle"; writing the same number there would give a double sector passed off as requested.
+            // Indexed properties: both getter and setter take Boolean Normal; a write without the index does not compile (CS0856) — the compiler is cheaper here than a silent write to a member the object lacks.
+            // The angle goes into the FIRST half of the pair, the second is ZERO. MEASURED, not chosen by symmetry (FullTurnProbe F.1/F.1a…F.1e, docs/acceptance/api7/full-turn-findings.md): Angle[true] carries the REQUESTED sweep angle directly, while the second half equal to the first DOUBLES the sweep, so zero there is the condition "the turn equals the requested angle"; writing the same number there would give a double sector passed off as requested.
             rotation.Angle[true] = angleDeg;
             rotation.Angle[false] = 0d;
             rotation.Direction = DirectionOf(direction);
@@ -1289,17 +1202,9 @@ internal static class Api7Rotated
         return found;
     }
 
-    /// <summary>The index of the rotation matching an API5 entity by COMPOSITION (angle and direction).
-    /// Returns <c>null</c> if there is no match or more than one: "take the first" here would write the
-    /// angle into a foreign feature.</summary>
-    /// <remarks>Matching by angle is weak — two half-turns about different axes give the same pair — so
-    /// ambiguity is resolved by REFUSAL, not by choice; the same principle as
-    /// <c>FindIndexesByIdenticalRadius</c> for a fillet, except direction is also compared, so in
-    /// practice there is usually one candidate. When the composition cannot be read, the caller passes
-    /// <paramref name="knownIndex"/>: an entity taken from the API5 tree arrives as a raw
-    /// <c>__ComObject</c> and refuses the cast to <c>IRotated</c> (MEASURED 18.09.2026), so there is no
-    /// reference to compare against and the address is known in advance as the feature's position among
-    /// the tree's rotations (see <c>RotatedOrdinal</c>).</remarks>
+    /// <summary>The index of the rotation matching an API5 entity by COMPOSITION (angle and direction). Returns <c>null</c> if there is no match or more than one: "take the first" here would write the angle into a foreign feature.</summary>
+    /// <remarks>Matching by angle is weak — two half-turns about different axes give the same pair — so ambiguity is resolved by REFUSAL, not by choice; the same principle as <c>FindIndexesByIdenticalRadius</c> for a fillet, except direction is also compared, so in practice there is usually one candidate.
+    /// When the composition cannot be read, the caller passes <paramref name="knownIndex"/>: an entity taken from the API5 tree arrives as a raw <c>__ComObject</c> and refuses the cast to <c>IRotated</c> (MEASURED 18.09.2026), so there is no reference to compare against and the address is known in advance as the feature's position among the tree's rotations (see <c>RotatedOrdinal</c>).</remarks>
     public static int? FindIndexFor(IModelContainer container, ksEntity entity, int? knownIndex = null)
     {
         if (Count(container) is not int count || count <= 0)
@@ -1630,16 +1535,9 @@ internal static class Api7Fillet
         return matches.Count == 1 ? matches[0] : null;
     }
 
-    /// <summary>Indices of fillets whose radius read as the given one. A fallback identification for
-    /// when the input composition cannot be read: the API5 definition does not give edges on an existing
-    /// feature (MEASURED — 0 of 4 after a fillet, row FL10).</summary>
-    /// <remarks>LIMIT: this does not replace identification by composition — the radius does not
-    /// distinguish two fillets of one radius (MEASURED H2.7, and exactly such a model was used), so the
-    /// caller must reject an ambiguous answer: two candidates mean "nothing to identify with", not "take
-    /// the first". It is still needed because the API5 definition route can always read a feature's
-    /// radius while the input composition is not always available; narrowing by radius together with a
-    /// post-write composition check gives working identification where the main path is
-    /// unavailable.</remarks>
+    /// <summary>Indices of fillets whose radius read as the given one. A fallback identification for when the input composition cannot be read: the API5 definition does not give edges on an existing feature (MEASURED — 0 of 4 after a fillet, row FL10).</summary>
+    /// <remarks>LIMIT: this does not replace identification by composition — the radius does not distinguish two fillets of one radius (MEASURED H2.7, and exactly such a model was used), so the caller must reject an ambiguous answer: two candidates mean "nothing to identify with", not "take the first".
+    /// It is still needed because the API5 definition route can always read a feature's radius while the input composition is not always available; narrowing by radius together with a post-write composition check gives working identification where the main path is unavailable.</remarks>
     public static IReadOnlyList<int> FindIndexesByRadius(IModelContainer container, double radiusMm)
     {
         var found = new List<int>();
@@ -1726,16 +1624,9 @@ internal static class Api7Fillet
         return all;
     }
 
-    /// <summary>Stable references of the inputs — <c>IModelObject.Reference</c>. They measure the
-    /// feature's COMPOSITION: independent of collection issuance order and re-read after a
-    /// mutation.</summary>
-    /// <remarks>MEASURED 17.09.2026 (decisive control <c>FL10x</c>): reference bands are ADJACENT — a
-    /// transferred body edge got <c>1073742309</c> while the feature input was <c>1073742308</c>, both of
-    /// type <c>ksObjectEdge</c>, both stable to re-reading and differing only in RCW address bindings.
-    /// This is the ordinary API5/API7 duality (<c>ksEntity</c> of the body and <c>IModelObject</c> of the
-    /// feature are two different COM objects for one edge), not an impassable boundary, so presenting
-    /// body edges is allowed (and <c>FL10x</c> confirms it). The references are still used to compare a
-    /// feature's composition with itself, but that is convenience, not a prohibition.
+    /// <summary>Stable references of the inputs — <c>IModelObject.Reference</c>. They measure the feature's COMPOSITION: independent of collection issuance order and re-read after a mutation.</summary>
+    /// <remarks>MEASURED 17.09.2026 (decisive control <c>FL10x</c>): reference bands are ADJACENT — a transferred body edge got <c>1073742309</c> while the feature input was <c>1073742308</c>, both of type <c>ksObjectEdge</c>, both stable to re-reading and differing only in RCW address bindings.
+    /// This is the ordinary API5/API7 duality (<c>ksEntity</c> of the body and <c>IModelObject</c> of the feature are two different COM objects for one edge), not an impassable boundary, so presenting body edges is allowed (and <c>FL10x</c> confirms it); the references are still used to compare a feature's composition with itself, but that is convenience, not a prohibition.
     /// History: docs/decisions/adapter-api7.md#fillet</remarks>
     public static IReadOnlyList<int> ReferencesOf(IReadOnlyList<IModelObject> inputs)
     {
@@ -1755,22 +1646,11 @@ internal static class Api7Fillet
         return refs;
     }
 
-    /// <summary>Write a NEW input set into an existing fillet via <c>IFillet.BaseObjects</c> — the route
-    /// that edits the edge set, because the API5 definition route does not apply it.</summary>
-    /// <remarks>MEASURED by probe H-2 (<c>docs/acceptance/api7/fillet-base-objects.md</c>, 14 PASS / 0
-    /// FAIL, four runs in a row). Decisive control — replacement at an UNCHANGED set size (H2.4): the
-    /// composition shifted <c>(50,40) → (50,-40)</c> while the volume stayed literally the same
-    /// <c>79980.6858347058</c> — a "recompute what you already are" scenario has nothing to move, so the
-    /// volume distinguishes nothing here and the composition does; addressing was checked on a model with
-    /// TWO fillets of one radius (H2.7): editing <c>Fillets[1]</c> left the witness <c>Fillets[0]</c>
-    /// alone. INVARIANT: the set is replaced WHOLE by one assignment (a preliminary emptying would
-    /// substitute the subject of the experiment, and the final body's edges for fillet corners are absent
-    /// from the topology, 0 of 4, since the corners are occupied by cylindrical faces); the objects
-    /// presented are read FROM <c>BaseObjects</c> of the same feature. Order: write →
-    /// <c>IFillet.Update()</c> → model rebuild by the caller — without <c>Update()</c> the setter returns
-    /// success while the model stays as before, the same contract as for the radius (F.10, probe E).
-    /// Returns (written, reason), not an exception: the caller must distinguish a KOMPAS refusal from an
-    /// adapter crash, and "could not" must not look like "wrote".
+    /// <summary>Write a NEW input set into an existing fillet via <c>IFillet.BaseObjects</c> — the route that edits the edge set, because the API5 definition route does not apply it.</summary>
+    /// <remarks>MEASURED by probe H-2 (<c>docs/acceptance/api7/fillet-base-objects.md</c>, 14 PASS / 0 FAIL, four runs in a row). Decisive control — replacement at an UNCHANGED set size (H2.4): the composition shifted <c>(50,40) → (50,-40)</c> while the volume stayed literally the same <c>79980.6858347058</c> — a "recompute what you already are" scenario has nothing to move, so the volume distinguishes nothing here and the composition does; addressing was checked on a model with TWO fillets of one radius (H2.7): editing <c>Fillets[1]</c> left the witness <c>Fillets[0]</c> alone.
+    /// INVARIANT: the set is replaced WHOLE by one assignment (a preliminary emptying would substitute the subject of the experiment, and the final body's edges for fillet corners are absent from the topology, 0 of 4, since the corners are occupied by cylindrical faces); the objects presented are read FROM <c>BaseObjects</c> of the same feature.
+    /// Order: write → <c>IFillet.Update()</c> → model rebuild by the caller — without <c>Update()</c> the setter returns success while the model stays as before, the same contract as for the radius (F.10, probe E).
+    /// Returns (written, reason), not an exception: the caller must distinguish a KOMPAS refusal from an adapter crash, and "could not" must not look like "wrote".
     /// History: docs/decisions/adapter-api7.md#fillet</remarks>
     public static (bool Written, string? Failure) TryWriteBaseObjects(
         IModelContainer container,
@@ -1915,22 +1795,11 @@ internal static class Api7SolidBoolean
         }
     }
 
-    /// <summary>Edit the KIND of an existing boolean operation: overwrite <c>IBoolean.BooleanType</c>
-    /// and call <c>Update()</c>. The operand bodies (<c>BaseObject</c>, <c>ModifyObjects</c>) and the
-    /// tool-keep policy are NOT overwritten — that route was not measured.</summary>
-    /// <remarks>MEASURED 18.09.2026 by probe <c>--boolean</c>, step BO.11 (run
-    /// <c>a2f5cf0a2ad342c59c36807101a65d51</c>, log <c>docs/acceptance/api7/boolean-ops.json</c>).
-    /// Reference §6.1: <c>A ∪ B</c> gives 36 000 within <c>(0,0,0)…(60,30,20)</c>, <c>A − B</c> —
-    /// 12 000 at <c>x ≤ 20</c>, <c>A ∩ B</c> — 12 000 at <c>x ∈ [20,40]</c>.
-    /// INVARIANT: <c>Update()</c> is mandatory in the pair — writing <c>ksDifference</c> WITHOUT
-    /// <c>Update()</c> but WITH a rebuild leaves the geometry unchanged (36 000), while the same write
-    /// WITH <c>Update()</c> gives 12 000 (control E-E). MEASURED (E-B): writing
-    /// <c>ksBooleanUnknown</c> turns the feature into a union and reads back as <c>ksUnion</c> — the
-    /// setter NORMALISES an unknown value to union, so a client writing <c>0</c> gets a union, not a
-    /// refusal.
-    /// LIMIT: changing the OPERANDS of an existing boolean is not measured — <c>BaseObject</c> and
-    /// <c>ModifyObjects</c> are not overwritten here although writable; editing the tool set is a
-    /// separate experiment not yet done.
+    /// <summary>Edit the KIND of an existing boolean operation: overwrite <c>IBoolean.BooleanType</c> and call <c>Update()</c>. The operand bodies (<c>BaseObject</c>, <c>ModifyObjects</c>) and the tool-keep policy are NOT overwritten — that route was not measured.</summary>
+    /// <remarks>MEASURED 18.09.2026 by probe <c>--boolean</c>, step BO.11 (run <c>a2f5cf0a2ad342c59c36807101a65d51</c>, log <c>docs/acceptance/api7/boolean-ops.json</c>). Reference §6.1: <c>A ∪ B</c> gives 36 000 within <c>(0,0,0)…(60,30,20)</c>, <c>A − B</c> — 12 000 at <c>x ≤ 20</c>, <c>A ∩ B</c> — 12 000 at <c>x ∈ [20,40]</c>.
+    /// INVARIANT: <c>Update()</c> is mandatory in the pair — writing <c>ksDifference</c> WITHOUT <c>Update()</c> but WITH a rebuild leaves the geometry unchanged (36 000), while the same write WITH <c>Update()</c> gives 12 000 (control E-E).
+    /// MEASURED (E-B): writing <c>ksBooleanUnknown</c> turns the feature into a union and reads back as <c>ksUnion</c> — the setter NORMALISES an unknown value to union, so a client writing <c>0</c> gets a union, not a refusal.
+    /// LIMIT: changing the OPERANDS of an existing boolean is not measured — <c>BaseObject</c> and <c>ModifyObjects</c> are not overwritten here although writable; editing the tool set is a separate experiment not yet done.
     /// History: docs/decisions/adapter-api7.md#boolean</remarks>
     public static (bool Written, string? Failure) TryWriteOperation(
         IModelContainer container,
@@ -2152,23 +2021,12 @@ internal static class Api7SolidSplit
     }
 
     /// <summary>Overwrite the support of an EXISTING split feature — the edit route (action <c>edit</c>).</summary>
-    /// <remarks>Route MEASURED 18.09.2026 by probe <c>--split</c>, step SP.9 (run
-    /// <c>c9cd7660468c44aa97b410e253ee2cb1</c>), and measured TOGETHER with a negative control, because
-    /// the first, "obvious" route turned out to be wrong:
+    /// <remarks>Route MEASURED 18.09.2026 by probe <c>--split</c>, step SP.9 (run <c>c9cd7660468c44aa97b410e253ee2cb1</c>), and measured TOGETHER with a negative control, because the first, "obvious" route turned out to be wrong:
     /// <list type="bullet">
-    /// <item><b>E-A — works:</b> the support is read back from an existing feature (<c>CutObjects</c>
-    /// returns one object), answers <c>IPlane3DBy3Points</c>, and moving its THREE BUILD POINTS by +5 in
-    /// X with an <c>Update()</c> each and a rebuild yields parts 9000 and 15000 with the split-feature
-    /// count unchanged at <c>1 → 1</c>;</item>
-    /// <item><b>E-B — does NOT work (negative control):</b> writing a SECOND, just-created plane
-    /// (<c>x = 20</c>) into <c>CutObjects</c> of the same feature with <c>Update() = true</c> and a
-    /// rebuild does NOT change the result — the parts stayed 9000 and 15000. So <c>Update() = true</c>
-    /// here means "accepted", not "applied": the feature keeps cutting by ITS OWN former support.</item>
+    /// <item><b>E-A — works:</b> the support is read back from an existing feature (<c>CutObjects</c> returns one object), answers <c>IPlane3DBy3Points</c>, and moving its THREE BUILD POINTS by +5 in X with an <c>Update()</c> each and a rebuild yields parts 9000 and 15000 with the split-feature count unchanged at <c>1 → 1</c>;</item>
+    /// <item><b>E-B — does NOT work (negative control):</b> writing a SECOND, just-created plane (<c>x = 20</c>) into <c>CutObjects</c> of the same feature with <c>Update() = true</c> and a rebuild does NOT change the result — the parts stayed 9000 and 15000; so <c>Update() = true</c> here means "accepted", not "applied": the feature keeps cutting by ITS OWN former support.</item>
     /// </list>
-    /// <para>Hence editing the support means moving the build points of the support ITSELF, not
-    /// substituting another plane. Substitution works only on CREATE (step SP.2) and is not used on
-    /// edit. The plane object reference is not kept between calls (a document revision invalidates
-    /// references), so the support is re-read from the LIVE model every time.</para>
+    /// Hence editing the support means moving the build points of the support ITSELF, not substituting another plane; substitution works only on CREATE (step SP.2) and is not used on edit; the plane object reference is not kept between calls (a document revision invalidates references), so the support is re-read from the LIVE model every time.
     /// History: docs/decisions/adapter-api7.md#solid-split</remarks>
     public static (bool Moved, string? Failure) TryMoveSupport(
         IModelContainer container,
@@ -2394,35 +2252,11 @@ internal static class Api7SolidCut
         }
     }
 
-    /// <summary>Overwrite the support and side of an EXISTING cut feature — the edit route (action
-    /// <c>edit</c>).</summary>
-    /// <remarks>Route MEASURED 18.09.2026 by probe <c>--split</c>, step SP.9 (run
-    /// <c>c9cd7660468c44aa97b410e253ee2cb1</c>), in two separate experiments:
-    /// <list type="bullet">
-    /// <item><b>E-C — support:</b> <c>ICut.CutObject</c> is read back, answers
-    /// <c>IPlane3DBy3Points</c>, and moving its three points by +5 in X (<c>x = 10 → 15</c>) with a
-    /// rebuild changes the remainder from 6000 to 9000;</item>
-    /// <item><b>E-D — side:</b> changing ONLY <c>Direction</c> on the same existing feature changes the
-    /// remainder from 9000 to 15000. So the side can be edited, but the support only by moving its
-    /// build points: substituting another plane does not work (negative control E-B on split, same
-    /// object and same route).</item>
-    /// </list>
-    /// <para>The order "support, then side, then <c>Update()</c>" is taken from the measured
-    /// experiments: E-C changed the support without writing the side, E-D the side without moving the
-    /// support. The combined edit makes both writes in a row; this is what acceptance checks, not
-    /// assumes.</para>
-    /// <para><c>BuildingType</c> and <c>CutObject</c> are NOT overwritten: the side route was measured
-    /// without them, and writing the build type into an existing feature is a separate experiment that
-    /// was not run. A feature whose support does not answer <c>IPlane3DBy3Points</c> is rejected, not
-    /// edited at random.</para>
-    /// <para><b>Scope on edit — MEASURED 19.09.2026</b> by probe <c>--cut-area</c>, step CA.6 (run
-    /// <c>9e7599ce6e2448bb9ef983326eb16439</c>): moving the support on an existing feature PRESERVES
-    /// the targeting (A=6000, S=1000), and step CA.7 shows it also survives <c>save → close → open</c>.
-    /// So <paramref name="targetBody"/> is NOT required here: without it the scope is read back BEFORE
-    /// <c>Update()</c> and an untargeted feature is rejected; with it, the scope is reassigned by the
-    /// same route as on create. Reassignment is never done without reading back: the product accepts
-    /// <c>ChooseBodies</c> silently and in a form that addresses nothing (negative control CA.5 differs
-    /// from the positive only by the body).</para>
+    /// <summary>Overwrite the support and side of an EXISTING cut feature — the edit route (action <c>edit</c>).</summary>
+    /// <remarks>Route MEASURED 18.09.2026 by probe <c>--split</c>, step SP.9 (run <c>c9cd7660468c44aa97b410e253ee2cb1</c>), in two separate experiments: <b>E-C — support:</b> <c>ICut.CutObject</c> is read back, answers <c>IPlane3DBy3Points</c>, and moving its three points by +5 in X (<c>x = 10 → 15</c>) with a rebuild changes the remainder from 6000 to 9000; <b>E-D — side:</b> changing ONLY <c>Direction</c> on the same existing feature changes the remainder from 9000 to 15000 — so the side can be edited, but the support only by moving its build points (substituting another plane does not work; negative control E-B on split, same object and same route).
+    /// The order "support, then side, then <c>Update()</c>" is taken from the measured experiments: E-C changed the support without writing the side, E-D the side without moving the support; the combined edit makes both writes in a row, and this is what acceptance checks, not assumes.
+    /// <c>BuildingType</c> and <c>CutObject</c> are NOT overwritten: the side route was measured without them, and writing the build type into an existing feature is a separate experiment that was not run; a feature whose support does not answer <c>IPlane3DBy3Points</c> is rejected, not edited at random.
+    /// <b>Scope on edit — MEASURED 19.09.2026</b> by probe <c>--cut-area</c>, step CA.6 (run <c>9e7599ce6e2448bb9ef983326eb16439</c>): moving the support on an existing feature PRESERVES the targeting (A=6000, S=1000), and step CA.7 shows it also survives <c>save → close → open</c>; so <paramref name="targetBody"/> is NOT required here — without it the scope is read back BEFORE <c>Update()</c> and an untargeted feature is rejected; with it, the scope is reassigned by the same route as on create. Reassignment is never done without reading back: the product accepts <c>ChooseBodies</c> silently and in a form that addresses nothing (negative control CA.5 differs from the positive only by the body).
     /// History: docs/decisions/adapter-api7.md#solid-cut</remarks>
     public static (bool Updated, string? Failure) TryMoveSupportAndSide(
         IModelContainer container,
@@ -2491,48 +2325,12 @@ internal static class Api7SolidCut
         (ComHResult.From(ex) is int code ? $" [{ComHResult.Name(code)}]" : string.Empty);
 }
 
-/// <summary>Body reposition (SM-17): writes and reads placement through the DOCUMENTED PARAMETRIC route
-/// — orientation by Euler angles, translation by displacement. Route MEASURED 18.09.2026 by probe
-/// <c>--reposition</c> (run <c>929f08886f1348fe921943052a4026b0</c>, PASS 10 · FAIL 0).</summary>
-/// <remarks>MEASURED: only <c>Position.InitByMatrix3D</c> (homogeneous 4×4 matrix) writes the placement
-/// (OQ-A19); the 12-number routes and <c>SetDisplacementByAxis</c> are accepted with <c>Update() = true</c>
-/// yet do not move the body — so <c>Update() = true</c> is NOT proof here, and the adapter must verify
-/// the placement after the call rather than trust the returned value. Negative control built in:
-/// <c>Update() = false</c> with no target and no placement (step RP.1) — this is what separates
-/// "operation performed" from "operation silently accepted".
-/// <para><b>Why the matrix route was replaced, not supplemented.</b> The former revision wrote the
-/// placement as a homogeneous 4×4 matrix (<c>ILocalCoordinateSystem.InitByMatrix3D</c>) and read it back
-/// on the same basis. MEASURED (probe <c>--reposition-params</c>, steps RP.14–RP.23): the document stores
-/// orientation PARAMETERS, not a matrix, so the matrix view does NOT survive a reopen — for a recorded
-/// 90° rotation about Z, after save/close/open <c>GetVector(OX)</c> returns <c>(1,0,0)</c> while the
-/// bounding box <c>(−5,−5,0)…(5,15,5)</c> confirms the rotation (RP.16), <c>WriteToFile</c> returns the
-/// identity matrix (RP.18), and the correct read survives exactly until the next open (RP.20). There is
-/// NO WAY to tell "written" from "not restored": <c>Valid</c> reads <c>True</c> in both states, and the
-/// documented <c>Update()</c> + build sequence does not restore the read (RP.23).</para>
-/// <para><b>The replacement was measured in full, not chosen for convenience</b> (probe
-/// <c>--reposition-params</c>, run <c>a336120926fc4652a8bf737562568271</c>, step RP.25). The documented
-/// parametric route SURVIVES a reopen in both orientation and translation:
-/// <c>Position.OrientationType = ksEulerCorners</c> + <c>LocalCSParameters →
-/// ILocalCSEulerParam.PrecessionAngle/NutationAngle/RotationAngle</c> — the angle triple is read from
-/// the reopened document BEFORE assembly and BEFORE any write (<c>angles_kept_D1 = true</c>,
-/// <c>angles_kept_D2 = true</c>); <c>Position.ParameterType = ksPDisplace</c> +
-/// <c>Parameters → IPoint3DParamDisplace.DX/DY/DZ</c> — the translation is read there too and
-/// distinguishes the two settings of a discriminating pair (<c>displacement_after_D1 = (7,−11,13)</c>,
-/// <c>displacement_after_D2 = (1,2,3)</c>), whereas negative control D0, whose displacement was NOT
-/// written, gives <c>ParameterType = 1 (ksPParamCoord)</c> and <c>(?,?,?)</c> — i.e. the read
-/// discriminates rather than returning a constant.</para>
-/// <para><b>The member order is mandatory and measured, not chosen by taste:</b> first
-/// <c>OrientationType</c>, then the parameter interface of THAT mode on <c>LocalCSParameters</c>; then
-/// <c>ParameterType</c>, then the interface of THAT type on <c>Parameters</c>
-/// (<c>ilocalcoordinatesystem_localcsparameters.html</c>, <c>ilocalcoordinatesystem_parametertype.html</c>).
-/// The reverse order yields an object of a FOREIGN mode, and writing to it is silently ignored.</para>
-/// <para><b>Units are DEGREES</b> (MEASURED: an angle of 30 produced a 30° rotation, <c>angle_deg_for_30
-/// = 29.99999999999998</c>); the triple conjugation order is <c>PNR</c> (measured by matching against
-/// all six products; the other five differ by 1). Decomposition and assembly of the triple live in
-/// <see cref="EulerOrientation"/> — the only place where this order is recorded.</para>
-/// <para><b>A successful <c>Update()</c> is not proof</b> (step RP.2: three routes out of four returned
-/// <c>true</c> and did not move the body), so both write and read must be confirmed separately:
-/// geometry by the caller, parameters by <see cref="ReadPlacement"/>.</para>
+/// <summary>Body reposition (SM-17): writes and reads placement through the DOCUMENTED PARAMETRIC route — orientation by Euler angles, translation by displacement. Route MEASURED 18.09.2026 by probe <c>--reposition</c> (run <c>929f08886f1348fe921943052a4026b0</c>, PASS 10 · FAIL 0).</summary>
+/// <remarks>MEASURED: only <c>Position.InitByMatrix3D</c> (homogeneous 4×4 matrix) writes the placement (OQ-A19); the 12-number routes and <c>SetDisplacementByAxis</c> are accepted with <c>Update() = true</c> yet do not move the body — so <c>Update() = true</c> is NOT proof here, and the adapter must verify the placement after the call rather than trust the returned value. Negative control built in: <c>Update() = false</c> with no target and no placement (step RP.1).
+/// <para>The former matrix route (<c>ILocalCoordinateSystem.InitByMatrix3D</c>) was REPLACED, not supplemented, because the matrix view does NOT survive a reopen (probe <c>--reposition-params</c>, steps RP.14–RP.23) — the full measurement, including the discriminating-pair values and the member order, is in <c>docs/decisions/adapter-api7.md#reposition</c>.</para>
+/// <para><b>The replacement was measured in full, not chosen for convenience</b> (run <c>a336120926fc4652a8bf737562568271</c>, step RP.25): the parametric route SURVIVES a reopen in both orientation (<c>Position.OrientationType = ksEulerCorners</c> + <c>LocalCSParameters → ILocalCSEulerParam.PrecessionAngle/NutationAngle/RotationAngle</c>) and translation (<c>Position.ParameterType = ksPDisplace</c> + <c>Parameters → IPoint3DParamDisplace.DX/DY/DZ</c>).</para>
+/// <para><b>The member order is mandatory and measured, not chosen by taste:</b> first <c>OrientationType</c>, then the parameter interface of THAT mode on <c>LocalCSParameters</c>; then <c>ParameterType</c>, then the interface of THAT type on <c>Parameters</c> (<c>ilocalcoordinatesystem_localcsparameters.html</c>, <c>ilocalcoordinatesystem_parametertype.html</c>) — the reverse order yields an object of a FOREIGN mode, and writing to it is silently ignored.</para>
+/// <para><b>Units are DEGREES</b>; the triple conjugation order is <c>PNR</c>, and decomposition/assembly of the triple live in <see cref="EulerOrientation"/> — the only place where this order is recorded. <b>A successful <c>Update()</c> is not proof</b> (step RP.2: three routes out of four returned <c>true</c> and did not move the body), so both write and read are confirmed separately: geometry by the caller, parameters by <see cref="ReadPlacement"/>.</para>
 /// History: docs/decisions/adapter-api7.md#reposition</remarks>
 internal static class Api7SolidReposition
 {
@@ -2640,17 +2438,9 @@ internal static class Api7SolidReposition
         }
     }
 
-    /// <summary>Write the placement through the parametric route: orientation as an Euler-angle triple,
-    /// translation as a documented displacement. <c>null</c> — written; otherwise the reason for refusal.</summary>
-    /// <remarks>The matrix is decomposed, not substituted: the rotation is taken from <c>matrix[0…10]</c>
-    /// via <see cref="EulerOrientation.AnglesFromRotation"/> and the translation from
-    /// <c>matrix[12…14]</c>, exactly where <see cref="RepositionMatrix.Translate"/> and
-    /// <see cref="RepositionMatrix.RotateAboutAxis"/> put it (<c>t = c − R·c</c>). A second matrix
-    /// decomposition is deliberately not introduced here.
-    /// <para><b>The translation is ALWAYS written, even a zero one.</b> For a rotation about an axis
-    /// through the origin <c>t = 0</c>, and skipping the write would leave the feature with a FOREIGN
-    /// point parameter type (<c>ksPParamCoord</c>), so the read value would depend on whether anyone had
-    /// written a translation — that is reading session history, not reading the model.</para>
+    /// <summary>Write the placement through the parametric route: orientation as an Euler-angle triple, translation as a documented displacement. <c>null</c> — written; otherwise the reason for refusal.</summary>
+    /// <remarks>The matrix is decomposed, not substituted: the rotation is taken from <c>matrix[0…10]</c> via <see cref="EulerOrientation.AnglesFromRotation"/> and the translation from <c>matrix[12…14]</c>, exactly where <see cref="RepositionMatrix.Translate"/> and <see cref="RepositionMatrix.RotateAboutAxis"/> put it (<c>t = c − R·c</c>); a second matrix decomposition is deliberately not introduced here.
+    /// <b>The translation is ALWAYS written, even a zero one.</b> For a rotation about an axis through the origin <c>t = 0</c>, and skipping the write would leave the feature with a FOREIGN point parameter type (<c>ksPParamCoord</c>), so the read value would depend on whether anyone had written a translation — that is reading session history, not reading the model.
     /// History: docs/decisions/adapter-api7.md#reposition</remarks>
     private static string? WritePlacement(ILocalCoordinateSystem position, double[] matrix16)
     {
@@ -2679,17 +2469,9 @@ internal static class Api7SolidReposition
         return null;
     }
 
-    /// <summary>Read the placement from a feature through the PARAMETRIC route — as is, without
-    /// writing.</summary>
-    /// <remarks><b>Nothing is written before the read, and that is a requirement, not a style choice.</b>
-    /// MEASURED (RP.20): a repeated write restores a correct read of the matrix view for one step, so
-    /// writing before reading would mask the defect. No setter is called here: only <c>OrientationType</c>,
-    /// <c>LocalCSParameters</c>, <c>ParameterType</c> and <c>Parameters</c>, all for reading.
-    /// <para><b>The interfaces are taken WITHOUT forcing the mode.</b> <c>LocalCSParameters</c> returns
-    /// the parameters of the CURRENT mode, and on a reopened document the mode is already read from the
-    /// file: for a feature written by the product it is <c>ILocalCSEulerParam</c>, for a feature written
-    /// by a matrix it is the interface of a DIFFERENT mode. Forcing the mode by assignment here would
-    /// mean creating a parametric view where there is none and passing it off as read.</para>
+    /// <summary>Read the placement from a feature through the PARAMETRIC route — as is, without writing.</summary>
+    /// <remarks><b>Nothing is written before the read, and that is a requirement, not a style choice.</b> MEASURED (RP.20): a repeated write restores a correct read of the matrix view for one step, so writing before reading would mask the defect. No setter is called here: only <c>OrientationType</c>, <c>LocalCSParameters</c>, <c>ParameterType</c> and <c>Parameters</c>, all for reading.
+    /// <b>The interfaces are taken WITHOUT forcing the mode.</b> <c>LocalCSParameters</c> returns the parameters of the CURRENT mode, and on a reopened document the mode is already read from the file: for a feature written by the product it is <c>ILocalCSEulerParam</c>, for a feature written by a matrix it is the interface of a DIFFERENT mode. Forcing the mode by assignment here would mean creating a parametric view where there is none and passing it off as read.
     /// History: docs/decisions/adapter-api7.md#reposition</remarks>
     public static (PlacementReading? Reading, string? Failure) ReadPlacement(
         IModelContainer container,

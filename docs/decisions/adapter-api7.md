@@ -182,6 +182,16 @@ PASS 10 · FAIL 0): положение пишет ТОЛЬКО `Position.InitByM
 запись применяется к ИСХОДНЫМ входам, а не к текущему положению). Перед чтением не пишется ничего
 (RP.20): запись перед чтением маскирует дефект.
 
+**Перенесено из кода (дословно, `Api7SolidReposition`).** the angle triple is read from the reopened
+document BEFORE assembly and BEFORE any write (`<c>angles_kept_D1 = true</c>`,
+`<c>angles_kept_D2 = true</c>`); the translation is read there too and distinguishes the two settings
+of a discriminating pair (`<c>displacement_after_D1 = (7,−11,13)</c>`,
+`<c>displacement_after_D2 = (1,2,3)</c>`), whereas negative control D0, whose displacement was NOT
+written, gives `ParameterType = 1 (ksPParamCoord)` and `(?,?,?)` — i.e. the read discriminates rather
+than returning a constant. Units are DEGREES (MEASURED: an angle of 30 produced a 30° rotation,
+`<c>angle_deg_for_30 = 29.99999999999998</c>`); the triple conjugation order is `PNR` (measured by
+matching against all six products; the other five differ by 1).
+
 ## <a id="loft"></a>Чтение элемента по сечениям из коллекции API7
 
 **Что измерено.** 20.09.2026 (проба `--b5`, шаг B5.12): `IModelContainer.Lofts` отвечает

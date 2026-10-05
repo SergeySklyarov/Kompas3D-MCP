@@ -21,28 +21,10 @@ internal sealed record AuxGeomRow(
     IReadOnlyList<string> Notes);
 
 /// <summary>A part's auxiliary geometry as MODEL OBJECTS: planes, axes, points.</summary>
-/// <remarks>DOC: the route is from the official v24 help, not a guess (step 0 of
-/// <c>DEPENDENCIES_PRODUCT_ROUTES_DEVELOPER_PROMPT.md</c>, report
-/// <c>DEPENDENCIES_PRODUCT_ROUTES_STEP0_REPORT_20260921.md</c>):
-/// <c>IAuxiliaryGeomContainer.GetPlanes3D/GetAxes3D</c>
-/// (<c>ksapi_iauxiliarygeomcontainer_getplanes3d.html</c>, <c>…getaxes3d.html</c>),
-/// <c>IPlanes3D.Add(ksObj3dTypeEnum)</c> (<c>ksapi_iplanes3d_add.html</c>),
-/// <c>IAxes3D.Add(ksObj3dTypeEnum)</c> (<c>ksapi_iaxes3d_add.html</c>),
-/// <c>IModelContainer.GetPoints3D</c> (<c>ksapi_imodelcontainer_getpoints3d.html</c>),
-/// <c>IPoints3D.Add</c> (<c>ksapi_ipoints3d_add.html</c>), <c>IPlane3DByAngle</c> /
-/// <c>IPlane3DByOffset</c>, <c>IAxis3DBy2Points</c> / <c>IAxis3DByConeface</c> / <c>IAxis3DByEdge</c>,
-/// <c>IPoint3D</c>. Object types come from the official <c>obj3dtype.html</c> table:
-/// <c>o3d_planeAngle</c> = 15 → <c>IPlane3DByAngle</c>, <c>o3d_planeOffset</c> = 14 →
-/// <c>IPlane3DByOffset</c>, <c>o3d_axis2Points</c> = 10, <c>o3d_axisConeFace</c> = 11,
-/// <c>o3d_axisEdge</c> = 12, <c>o3d_point3D</c> = 70.
-/// MEASURED: planes and axes live on a DIFFERENT interface than points — <c>Planes3D</c>/<c>Axes3D</c>
-/// are declared on <c>IAuxiliaryGeomContainer</c> (IID <c>{950FEBE2-F916-4E77-A37D-B061E5C22FA8}</c>),
-/// while <c>Points3D</c> is on <c>IModelContainer</c>; a plain cast of the container to
-/// <c>IAuxiliaryGeomContainer</c> gives <c>null</c>, and only a QI on the live part object works
-/// (R.13; see also <c>Api7Bridge.TryBuildAxisBy2Points</c>).
-/// INVARIANT: no value is derived from a collection index or guessed from geometry — an address is
-/// only a reference issued by the enumeration; standard planes (<c>o3d_planeXOY/XOZ/YOZ</c>) are
-/// found by object TYPE, not position, and their absence is a refusal, not a substitute.
+/// <remarks>DOC: the route is from the official v24 help, not a guess (step 0 of <c>DEPENDENCIES_PRODUCT_ROUTES_DEVELOPER_PROMPT.md</c>, report <c>DEPENDENCIES_PRODUCT_ROUTES_STEP0_REPORT_20260921.md</c>): <c>IAuxiliaryGeomContainer.GetPlanes3D/GetAxes3D</c> (<c>ksapi_iauxiliarygeomcontainer_getplanes3d.html</c>, <c>…getaxes3d.html</c>), <c>IPlanes3D.Add(ksObj3dTypeEnum)</c> (<c>ksapi_iplanes3d_add.html</c>), <c>IAxes3D.Add(ksObj3dTypeEnum)</c> (<c>ksapi_iaxes3d_add.html</c>), <c>IModelContainer.GetPoints3D</c> (<c>ksapi_imodelcontainer_getpoints3d.html</c>), <c>IPoints3D.Add</c> (<c>ksapi_ipoints3d_add.html</c>), <c>IPlane3DByAngle</c> / <c>IPlane3DByOffset</c>, <c>IAxis3DBy2Points</c> / <c>IAxis3DByConeface</c> / <c>IAxis3DByEdge</c>, <c>IPoint3D</c>.
+/// Object types come from the official <c>obj3dtype.html</c> table: <c>o3d_planeAngle</c> = 15 → <c>IPlane3DByAngle</c>, <c>o3d_planeOffset</c> = 14 → <c>IPlane3DByOffset</c>, <c>o3d_axis2Points</c> = 10, <c>o3d_axisConeFace</c> = 11, <c>o3d_axisEdge</c> = 12, <c>o3d_point3D</c> = 70.
+/// MEASURED: planes and axes live on a DIFFERENT interface than points — <c>Planes3D</c>/<c>Axes3D</c> are declared on <c>IAuxiliaryGeomContainer</c> (IID <c>{950FEBE2-F916-4E77-A37D-B061E5C22FA8}</c>), while <c>Points3D</c> is on <c>IModelContainer</c>; a plain cast of the container to <c>IAuxiliaryGeomContainer</c> gives <c>null</c>, and only a QI on the live part object works (R.13; see also <c>Api7Bridge.TryBuildAxisBy2Points</c>).
+/// INVARIANT: no value is derived from a collection index or guessed from geometry — an address is only a reference issued by the enumeration; standard planes (<c>o3d_planeXOY/XOZ/YOZ</c>) are found by object TYPE, not position, and their absence is a refusal, not a substitute.
 /// History: docs/decisions/adapter-api7.md#aux-geometry</remarks>
 internal static class Api7AuxGeometry
 {
@@ -420,15 +402,10 @@ internal static class Api7AuxGeometry
         }
     }
 
-    /// <summary>Edit an ALREADY CREATED plane: the documented setters <c>IPlane3DByOffset.Offset</c>,
-    /// <c>IPlane3DByAngle.Angle</c> and <c>IPlane3DBy*.BasePlane</c>, then <c>Update()</c>.</summary>
-    /// <remarks>INVARIANT: only what was supplied is set — a <c>null</c> field means "do not change",
-    /// not "set to zero", since substituting zero would rewrite an offset the client did not ask about.
-    /// INVARIANT: kind/field correspondence is checked at the caller BEFORE the call; the check here is
-    /// a second safety net — the setter of a foreign kind is unreachable by type and would raise
-    /// <c>InvalidCastException</c> instead of a clear refusal. INVARIANT: success is not an applied edit
-    /// — confirmation is a RE-READ (<see cref="ReadPlane"/>) done by the caller; only a named refusal
-    /// reason is returned here.</remarks>
+    /// <summary>Edit an ALREADY CREATED plane: the documented setters <c>IPlane3DByOffset.Offset</c>, <c>IPlane3DByAngle.Angle</c> and <c>IPlane3DBy*.BasePlane</c>, then <c>Update()</c>.</summary>
+    /// <remarks>INVARIANT: only what was supplied is set — a <c>null</c> field means "do not change", not "set to zero", since substituting zero would rewrite an offset the client did not ask about.
+    /// INVARIANT: kind/field correspondence is checked at the caller BEFORE the call; the check here is a second safety net — the setter of a foreign kind is unreachable by type and would raise <c>InvalidCastException</c> instead of a clear refusal.
+    /// INVARIANT: success is not an applied edit — confirmation is a RE-READ (<see cref="ReadPlane"/>) done by the caller; only a named refusal reason is returned here.</remarks>
     public static string? UpdatePlane(
         IPlane3D plane, double? offsetMm, double? angleDeg, bool? direction, IModelObject? basePlane)
     {

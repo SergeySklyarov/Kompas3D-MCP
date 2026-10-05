@@ -3,18 +3,10 @@ using KompasAPI7;
 
 namespace KompasMcp.Api5Adapter.Api7;
 
-/// <summary>Enumeration of a part's auxiliary geometry — planes, axes, points — as OBJECTS with a
-/// collection index. This is what the product lacked for the <c>discover</c> and <c>read</c> actions
-/// of the <c>dep.refs.planes</c>, <c>dep.refs.axes</c> and <c>dep.refs.points_axes</c> dependencies.</summary>
-/// <remarks>DOC: the help documents <c>IAxes3D.GetAxis3DByName</c>, <c>IPoints3D.GetPoint3DByName</c>
-/// and <c>ISketchs.GetSketchByName</c>. MEASURED (InteropScan, 21.09.2026): the shipped
-/// <c>Interop.KompasAPI7.dll</c> has NO member whose name contains <c>ByName</c>, so a name is
-/// resolved by ENUMERATING the collection and comparing <c>Name</c> — built only from documented
-/// members (<c>Count</c>, the indexed property, <c>Name</c>). LIMIT: the returned <c>Index</c> is a
-/// position in the collection and is NOT stable — a rebuild shifts it — so it is never called an
-/// address, neither in the response nor in the tool documentation. LIMIT: the enumeration limit is a
-/// number, not a default — each row costs a COM call per member, and a document with hundreds of
-/// objects would hang the session on one request; truncation is not silent, it lands in the row notes.
+/// <summary>Enumeration of a part's auxiliary geometry — planes, axes, points — as OBJECTS with a collection index. This is what the product lacked for the <c>discover</c> and <c>read</c> actions of the <c>dep.refs.planes</c>, <c>dep.refs.axes</c> and <c>dep.refs.points_axes</c> dependencies.</summary>
+/// <remarks>DOC: the help documents <c>IAxes3D.GetAxis3DByName</c>, <c>IPoints3D.GetPoint3DByName</c> and <c>ISketchs.GetSketchByName</c>. MEASURED (InteropScan, 21.09.2026): the shipped <c>Interop.KompasAPI7.dll</c> has NO member whose name contains <c>ByName</c>, so a name is resolved by ENUMERATING the collection and comparing <c>Name</c> — built only from documented members (<c>Count</c>, the indexed property, <c>Name</c>).
+/// LIMIT: the returned <c>Index</c> is a position in the collection and is NOT stable — a rebuild shifts it — so it is never called an address, neither in the response nor in the tool documentation.
+/// LIMIT: the enumeration limit is a number, not a default — each row costs a COM call per member, and a document with hundreds of objects would hang the session on one request; truncation is not silent, it lands in the row notes.
 /// History: docs/decisions/adapter-api7.md#aux-enumeration</remarks>
 internal static class Api7AuxEnumeration
 {

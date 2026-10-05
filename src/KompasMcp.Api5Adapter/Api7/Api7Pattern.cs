@@ -7,28 +7,11 @@ using KompasMcp.Contracts.Ipc;
 namespace KompasMcp.Api5Adapter.Api7;
 
 /// <summary>Typed API7 operations over patterns and the mirror pattern (SM-18 / SM-19 / SM-23).</summary>
-/// <remarks>DOC: the basis is a published help page, not a name found in the interface. The
-/// "numeric type → interface" mapping is taken from SDK page <c>copytype.html</c> fetched over the
-/// wire (<c>https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/copytype.html</c>, HTTP 200):
-/// <c>o3d_meshCopy 35 ILinearPattern</c>, <c>o3d_circularCopy 36 ICircularPattern</c>,
-/// <c>o3d_mirrorOperation 48 IMirrorPattern</c>, <c>o3d_mirrorAllOperation 49 IMirrorPattern</c>,
-/// <c>o3d_BodiesMeshCopy 528 ILinearPattern</c>, <c>o3d_BodiesCircularCopy 529 ICircularPattern</c>.
-/// The numbers themselves were read from <c>Interop.Kompas6Constants3D.dll</c> by
-/// <c>KompasMcp.InteropScan</c>, not paraphrased. Members are taken from the interface property page,
-/// not by symmetry: <c>ilinearpattern_props.html</c> lists <c>Angle1/2</c>, <c>Axis1/2</c>,
-/// <c>BoundaryInstancesStepFactor1/2</c>, <c>BuildingType</c>, <c>Count1/2</c>, <c>Direction1/2</c>,
-/// <c>Step1/2</c>, <c>Vector1/2</c>; <c>icircularpattern_props.html</c> — <c>Axis</c>,
-/// <c>BoundaryInstancesStepFactor1/2</c>, <c>BuildingType</c>, <c>Count1/2</c>,
-/// <c>ReverseDirection</c>, <c>SaveInitialOrientation</c>, <c>Step1/2</c>, <c>StepByAxis</c>;
-/// <c>imirrorpattern_props.html</c> — only <c>Plane</c> and <c>SaveInitialObjects</c>.
-/// LIMIT: <c>Vector1/Vector2</c> are not written — in <c>kAPI7.tlb</c> they have getters only and in
-/// the vendor interop they are not declared at all (MEASURED <c>InteropScan --type-members
-/// ILinearPattern</c>: 39 members, neither <c>Vector1</c> nor <c>Vector2</c>); direction is set by an
-/// axis. This is open question OQ-B-03, named, not silently bypassed.
-/// INVARIANT: no <c>NewEntity</c> and no <c>Create()</c>. The rotation lesson (SM-03): an API5 wrapper
-/// around an API7 factory object is a mixed lifetime in which <c>Create()</c> returns <c>true</c> on
-/// an empty operation and nothing is built; patterns are created ONLY by
-/// <c>IModelContainer.FeaturePatterns.Add</c>.
+/// <remarks>DOC: the basis is a published help page, not a name found in the interface. The "numeric type → interface" mapping is taken from SDK page <c>copytype.html</c> (<c>https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/copytype.html</c>, HTTP 200): <c>o3d_meshCopy 35 ILinearPattern</c>, <c>o3d_circularCopy 36 ICircularPattern</c>, <c>o3d_mirrorOperation 48 IMirrorPattern</c>, <c>o3d_mirrorAllOperation 49 IMirrorPattern</c>, <c>o3d_BodiesMeshCopy 528 ILinearPattern</c>, <c>o3d_BodiesCircularCopy 529 ICircularPattern</c>.
+/// MEASURED: the numbers themselves were read from <c>Interop.Kompas6Constants3D.dll</c> by <c>KompasMcp.InteropScan</c>, not paraphrased; members are taken from the interface property pages, not by symmetry.
+/// <c>ilinearpattern_props.html</c>: <c>Angle1/2</c>, <c>Axis1/2</c>, <c>BoundaryInstancesStepFactor1/2</c>, <c>BuildingType</c>, <c>Count1/2</c>, <c>Direction1/2</c>, <c>Step1/2</c>, <c>Vector1/2</c>; <c>icircularpattern_props.html</c>: <c>Axis</c>, <c>BoundaryInstancesStepFactor1/2</c>, <c>BuildingType</c>, <c>Count1/2</c>, <c>ReverseDirection</c>, <c>SaveInitialOrientation</c>, <c>Step1/2</c>, <c>StepByAxis</c>; <c>imirrorpattern_props.html</c>: only <c>Plane</c> and <c>SaveInitialObjects</c>.
+/// LIMIT: <c>Vector1/Vector2</c> are not written — in <c>kAPI7.tlb</c> they have getters only and in the vendor interop they are not declared at all (MEASURED <c>InteropScan --type-members ILinearPattern</c>: 39 members, neither <c>Vector1</c> nor <c>Vector2</c>); direction is set by an axis. This is open question OQ-B-03, named, not silently bypassed.
+/// INVARIANT: no <c>NewEntity</c> and no <c>Create()</c>. The rotation lesson (SM-03): an API5 wrapper around an API7 factory object is a mixed lifetime in which <c>Create()</c> returns <c>true</c> on an empty operation and nothing is built; patterns are created ONLY by <c>IModelContainer.FeaturePatterns.Add</c>.
 /// History: docs/decisions/adapter-api7.md#pattern</remarks>
 internal static class Api7Pattern
 {
@@ -331,18 +314,9 @@ internal static class Api7Pattern
     }
 
     /// <summary>Overwrite the parameters of an EXISTING pattern feature and call <c>Update()</c>.</summary>
-    /// <remarks>INVARIANT: editing is writing to the SAME object and calling <c>Update()</c>, not
-    /// creating a similar one — the object is taken from the live <c>IModelContainer.FeaturePatterns</c>
-    /// by matching the tree feature, not kept between calls, since a COM object address does not survive
-    /// a rebuild and a "saved" object would edit a different feature.
-    /// INVARIANT: only members that were supplied are written — an unsupplied member keeps its value,
-    /// otherwise "exactly what was requested changed" would be indistinguishable from "reset to
-    /// default"; each family has its own set of allowed members, checked by the caller BEFORE mutation
-    /// (<c>save_initial_orientation</c> only for circular, <c>save_initial_objects</c> only for mirror,
-    /// <c>step2_deg</c> only for circular, <c>step2_mm</c>, <c>angle1/2</c> and <c>direction1/2</c> only
-    /// for grid). LIMIT: <c>Update() = true</c> here means "accepted", not "applied", so the checks are
-    /// named <c>set_&lt;member&gt;</c> and speak of the write; application is confirmed by a separate
-    /// read of the model AFTER the rebuild.</remarks>
+    /// <remarks>INVARIANT: editing is writing to the SAME object and calling <c>Update()</c>, not creating a similar one — the object is taken from the live <c>IModelContainer.FeaturePatterns</c> by matching the tree feature, not kept between calls, since a COM object address does not survive a rebuild and a "saved" object would edit a different feature.
+    /// INVARIANT: only members that were supplied are written — an unsupplied member keeps its value, otherwise "exactly what was requested changed" would be indistinguishable from "reset to default"; each family has its own set of allowed members, checked by the caller BEFORE mutation (<c>save_initial_orientation</c> only for circular, <c>save_initial_objects</c> only for mirror, <c>step2_deg</c> only for circular, <c>step2_mm</c>, <c>angle1/2</c> and <c>direction1/2</c> only for grid).
+    /// LIMIT: <c>Update() = true</c> here means "accepted", not "applied", so the checks are named <c>set_&lt;member&gt;</c> and speak of the write; application is confirmed by a separate read of the model AFTER the rebuild.</remarks>
     public static (bool Applied, string? Failure, IReadOnlyList<NamedCheck> Writes) TryEdit(
         IFeaturePattern pattern,
         PatternEditDto edit)

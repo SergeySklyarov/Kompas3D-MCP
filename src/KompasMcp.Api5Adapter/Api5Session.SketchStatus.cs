@@ -7,26 +7,12 @@ using KompasMcp.Contracts.Ipc;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>Sketch certainty: read the aggregate state of the constraint system
-/// (<c>kompas_get_sketch_status</c>, docs/05 §2.2).</summary>
+/// <summary>Sketch certainty: read the aggregate state of the constraint system (<c>kompas_get_sketch_status</c>, docs/05 §2.2).</summary>
 /// <remarks>
-/// MEASURED: the route below was measured 17.09.2026 by probe S (run
-/// <c>82880ed0b14a4e299bb0e93d7f8a7f2f</c>, artifacts
-/// <c>docs/acceptance/api7/sketch-definition.{md,json}</c>, PASS 9 · FAIL 0 · UNKNOWN 6) and confirmed
-/// on build 24.0.0.2799. The transfer goes through the existing <see cref="Api7Bridge"/> of the same
-/// STA session — no second KOMPAS instance is started and the research probe is not wired into the
-/// product (ADR-003).
-/// <code>
-/// TransferInterface(sketchEntity, ksAPITypeEnum.ksAPI7Dual, 0)  →  KompasAPI7.ISketch
-/// ISketch.ConstraintsState                                       →  ksConstraintsStateEnum
-/// </code>
-/// INVARIANT: this is a READ, not a mutation. MEASURED (S.7): reading the state five times changed
-/// neither the volume (80000) nor the body count (1) nor faces (6) nor edges (12). Hence no
-/// <c>BeginEdit</c>, <c>EndEdit</c>, <c>Update</c> or rebuild here, and the document revision is not
-/// bumped — the "read" annotation is backed by code, not merely declared.
-/// LIMIT: the route does NOT yield degrees of freedom. <c>ConstraintsState</c> returns a state, not a
-/// count, so <c>degrees_of_freedom</c> is always <c>null</c> in the response; deriving it from the
-/// dimension count is forbidden.
+/// MEASURED: the route below was measured 17.09.2026 by probe S (run <c>82880ed0b14a4e299bb0e93d7f8a7f2f</c>, artifacts <c>docs/acceptance/api7/sketch-definition.{md,json}</c>, PASS 9 · FAIL 0 · UNKNOWN 6) and confirmed on build 24.0.0.2799; the transfer goes through the existing <see cref="Api7Bridge"/> of the same STA session — no second KOMPAS instance is started and the research probe is not wired into the product (ADR-003).
+/// <code>TransferInterface(sketchEntity, ksAPITypeEnum.ksAPI7Dual, 0) → KompasAPI7.ISketch; ISketch.ConstraintsState → ksConstraintsStateEnum</code>
+/// INVARIANT: this is a READ, not a mutation. MEASURED (S.7): reading the state five times changed neither the volume (80000) nor the body count (1) nor faces (6) nor edges (12); hence no <c>BeginEdit</c>, <c>EndEdit</c>, <c>Update</c> or rebuild here, and the document revision is not bumped.
+/// LIMIT: the route does NOT yield degrees of freedom: <c>ConstraintsState</c> returns a state, not a count, so <c>degrees_of_freedom</c> is always <c>null</c> in the response; deriving it from the dimension count is forbidden.
 /// </remarks>
 public sealed partial class Api5Session
 {
@@ -41,14 +27,10 @@ public sealed partial class Api5Session
     /// <summary>Read the sketch certainty by an explicit reference.</summary>
     /// <remarks>INVARIANT: errors and "unknown" are kept apart deliberately:
     /// <list type="bullet">
-    /// <item>reference unknown/stale/foreign → <c>StaleReference</c> from <see cref="RequireSketch"/>
-    /// (a normal registry error, not <c>unknown</c>);</item>
+    /// <item>reference unknown/stale/foreign → <c>StaleReference</c> from <see cref="RequireSketch"/> (a normal registry error, not <c>unknown</c>);</item>
     /// <item>reference does not lead to a sketch → <c>InvalidArgument</c>;</item>
-    /// <item>the API7 bridge was not built or <c>ConstraintsState</c> failed at the COM level →
-    /// <c>CapabilityUnavailable</c> / <c>VerificationFailed</c> with diagnostics;</item>
-    /// <item>KOMPAS answered <c>ksStateUnknown</c> → a successful response with status <c>unknown</c>.
-    /// That is a product answer, and turning it into an error would erase a MEASURED fact (S.5b: an
-    /// empty sketch answers exactly so).</item>
+    /// <item>the API7 bridge was not built or <c>ConstraintsState</c> failed at the COM level → <c>CapabilityUnavailable</c> / <c>VerificationFailed</c> with diagnostics;</item>
+    /// <item>KOMPAS answered <c>ksStateUnknown</c> → a successful response with status <c>unknown</c>. That is a product answer, and turning it into an error would erase a MEASURED fact (S.5b: an empty sketch answers exactly so).</item>
     /// </list></remarks>
     public SketchStatusResult GetSketchStatus(GetSketchStatusCommand command)
     {

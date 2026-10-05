@@ -11,6 +11,12 @@
     <RootNamespace>KompasMcp.P0Probe</RootNamespace>
     <AssemblyName>KompasMcp.P0Probe</AssemblyName>
     <StartupObject>KompasMcp.P0Probe.Program</StartupObject>
+    <!--
+      The view suite reads IKompasDocument.Changed (API7 document of the same window, help page
+      ikompasdocument_changed). API5 ksDocument3D carries no modified flag at all, so the reference
+      is required rather than convenient.
+    -->
+    <KompasApi7Interop>true</KompasApi7Interop>
   </PropertyGroup>
 
   <ItemGroup>

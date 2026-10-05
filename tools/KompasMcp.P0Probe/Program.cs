@@ -25,10 +25,17 @@ public static class Program
         {
             Title = options.Suite == "p2"
                 ? "P2 — отчёт измерения COM-маршрутов (отверстие, правка признака, скругление, плоскости эскиза, измерение цилиндрической грани, целевое тело операции, очистка существующего эскиза, ключи сырого чтения единиц)"
-                : "P0 — отчёт технического исследования",
+                : options.Suite == "view"
+                    ? "VIEW — отчёт измерения маршрута проекции отображения (коллекция проекций, IsCurrent, SetCurrent, побайтовое сравнение снимков, возврат прежнего вида)"
+                    : "P0 — отчёт технического исследования",
         };
         var sw = Stopwatch.StartNew();
-        var reportName = options.Suite == "p2" ? "p2-probe-report" : "p0-probe-report";
+        var reportName = options.Suite switch
+        {
+            "p2" => "p2-probe-report",
+            "view" => "view-probe-report",
+            _ => "p0-probe-report",
+        };
 
         Directory.CreateDirectory(options.WorkDir);
         Console.WriteLine($"{options.Suite.ToUpperInvariant()} probe run {report.RunId} — рабочая папка: {options.WorkDir}");
@@ -59,7 +66,20 @@ public static class Program
 
         try
         {
-            if (options.Suite == "p2")
+            if (options.Suite == "view")
+            {
+                // The view suite is self-contained as well: it starts its own instance and closes
+                // it. It exists because a projection route found in the help must be measured on
+                // the installed build before any MCP tool is written on top of it.
+                sta.Run(() => EnvironmentFacts.Collect(report, options, "VIEW.0a"), "env").GetAwaiter().GetResult();
+                sta.Run(() =>
+                {
+                    P2Facts.Connect(report, options);
+                    ViewProjectionProbe.Run(report, options);
+                    P2Facts.Shutdown(report, options);
+                }, "view").GetAwaiter().GetResult();
+            }
+            else if (options.Suite == "p2")
             {
                 // The P2 suite is self-contained on purpose: it does not re-run the P0 steps, and
                 // it does not re-emit docs/compatibility/kompas-api5-metadata.json, so a P2
@@ -159,8 +179,24 @@ public sealed class ProbeOptions
     /// <summary>launch | attach | none</summary>
     public required string Mode { get; init; }
 
-    /// <summary>p0 (the original investigation) | p2 (hole, fillet, feature edit, plane orientation).</summary>
+    /// <summary>p0 (the original investigation) | p2 (hole, fillet, feature edit, plane orientation)
+    /// | view (projection collection, current view, apply, snapshot comparison, restore).</summary>
     public string Suite { get; init; } = "p0";
+
+    /// <summary>Projection name from <c>ProjectionType</c> the view suite applies; empty = the suite
+    /// keeps whatever name the order gives it and uses the numeric <see cref="ViewType"/>.</summary>
+    public string ViewName { get; init; } = string.Empty;
+
+    /// <summary>Numeric <c>ProjectionType</c> value the view suite applies (default <c>vp_IsoXYZ</c>).</summary>
+    public int ViewType { get; init; } = 7;
+
+    /// <summary>Measure whether a view change moves the document revision / change fingerprint.</summary>
+    public bool ViewState { get; init; }
+
+    /// <summary>Create the document VISIBLE in a visible window (the product creates it invisible).
+    /// Both modes are measured, because the snapshot may or may not depend on the projection in the
+    /// invisible case.</summary>
+    public bool ViewVisible { get; init; }
 
     public int? ProcessId { get; init; }
 
@@ -179,6 +215,10 @@ public sealed class ProbeOptions
         var keep = false;
         var runImport = true;
         string? workOverride = null;
+        var viewName = string.Empty;
+        var viewType = 7;
+        var viewState = false;
+        var viewVisible = false;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -186,6 +226,18 @@ public sealed class ProbeOptions
             {
                 case "--suite" when i + 1 < args.Length:
                     suite = args[++i].ToLowerInvariant();
+                    break;
+                case "--view-name" when i + 1 < args.Length:
+                    viewName = args[++i];
+                    break;
+                case "--view-type" when i + 1 < args.Length:
+                    viewType = int.Parse(args[++i], CultureInfo.InvariantCulture);
+                    break;
+                case "--view-state":
+                    viewState = true;
+                    break;
+                case "--view-visible":
+                    viewVisible = true;
                     break;
                 case "--mode" when i + 1 < args.Length:
                     mode = args[++i].ToLowerInvariant();
@@ -203,7 +255,8 @@ public sealed class ProbeOptions
                     workOverride = args[++i];
                     break;
                 case "--help":
-                    Console.WriteLine("P0Probe [--suite p0|p2] [--mode launch|attach|none] [--pid N] [--work DIR] [--keep] [--no-import]");
+                    Console.WriteLine("P0Probe [--suite p0|p2|view] [--mode launch|attach|none] [--pid N] [--work DIR] [--keep] [--no-import]");
+                    Console.WriteLine("        [--view-name NAME] [--view-type N] [--view-state] [--view-visible]  — only for --suite view");
                     Environment.Exit(0);
                     break;
             }
@@ -226,6 +279,10 @@ public sealed class ProbeOptions
             ProcessId = pid,
             KeepRunning = keep,
             RunStepImport = runImport,
+            ViewName = viewName,
+            ViewType = viewType,
+            ViewState = viewState,
+            ViewVisible = viewVisible,
         };
     }
 

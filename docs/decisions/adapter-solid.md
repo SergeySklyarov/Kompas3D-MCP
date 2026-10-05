@@ -124,6 +124,11 @@ ksChManualEditing` + `ChooseBodies = object[] { transferred }`; незаадре
 **Что решено.** Перенос читается обратно и сверяется ПО МАТРИЦЕ (см. `RequirePlacementRoundTrip`);
 уровень «геометрия проверена» требует объявленного ожидания (объём и/или габарит), а не именно объёма.
 
+Дополнение (вынесено из кода). The translation is READ BACK (<c>Position.X/Y/Z</c>) and compared with
+the matrix that was requested: if the offset accumulated, the read would give a doubled value. Volume
+under a rigid transformation must be preserved, and that is checked too — by it "moved" and "stayed"
+are indistinguishable, but "the transformation stayed rigid" is visible.
+
 ## <a id="edit-split"></a>Правка разделения — перенос точек собственной опоры (18.09.2026)
 
 **Что было.** Обработчик подставлял в признак ДРУГУЮ плоскость.
@@ -135,6 +140,17 @@ ksChManualEditing` + `ChooseBodies = object[] { transferred }`; незаадре
 
 **Что решено.** Правка переносит три точки построения; опора читается обратно шагом SP.10 и публикуется
 `kompas_get_feature`; подтверждение — состав частей (`expected_part_volumes_mm3`), а не сумма объёмов.
+
+Дополнение (вынесено из кода). The definition is enumerated in full, not "the field being changed". A
+split has two kinds of support (an existing plane or a point with a normal). Reading the support back
+IS possible — this is MEASURED 18.09.2026 by step SP.10 (<c>CutObjects</c> returns three construction
+points and a normal, and different supports read differently), and this is exactly what
+<c>kompas_get_feature</c> publishes in the <c>solid.plane</c> block. The requirement of request
+completeness is kept not because reading is impossible, but because an answer to a partial request
+would not tell "exactly what was asked changed" from "what was not mentioned changed too". The sum of
+volumes does not change when a split is edited, so <c>expected_volume_mm3</c> is not accepted here at
+all (it is rejected with a pointer to <c>expected_part_volumes_mm3</c>): a row checking the sum would
+pass on complete inaction.
 
 ## <a id="edit-cut"></a>Правка отсечения — опора и сторона вместе (18.09.2026)
 
@@ -164,6 +180,15 @@ ksChManualEditing` + `ChooseBodies = object[] { transferred }`; незаадре
 изменился объём ИЛИ габарит); ожидание, наблюдение и вердикт относятся к ОДНОМУ телу; габарит различает
 разность и пересечение.
 
+Дополнение (вынесено из кода). Experiment E-E confirmed that it is the PAIR "write → <c>Update()</c>"
+that applies: a write without <c>Update()</c> but with a rebuild does not change the geometry. The same
+lesson as in row <c>B3L.04</c> (for a translation the volume before and after is 1 000, and a row
+checking only volumes would pass on inaction). The former edition sought the body by matching the
+EXPECTATION: <c>rowsAfter.FirstOrDefault(r => BoxMatches(r.Bbox, command.ExpectedBboxMm))</c> and
+published the volumes of ALL document bodies as observed — it compared a bounding box with numbers of
+another kind and another subject. A body found by SUCH a search may be foreign — a bounding box
+matching the expectation does not make the body the result of THIS operation.
+
 ## <a id="field-classification"></a>Классификация полей B3 — одна таблица (18–20.09.2026)
 
 **Что было.** Владельцы полей жили в словаре, а значения — в отдельном перечислителе; запрещённые поля
@@ -181,6 +206,19 @@ ksChManualEditing` + `ChooseBodies = object[] { transferred }`; незаадре
 COM; `ownFields` (заведено 20.09.2026, наряд SM07 §3.2) отдаёт семейству поле, которое таблица ролей
 приписывает другому ведомству (`depth_mm` глухого отверстия).
 
+Дополнение (вынесено из кода). <b>Why one table and not two.</b> The first edition kept owners in a
+dictionary and values in a separate enumerator, and these two structures could diverge. They would
+have diverged silently: a field added to the enumerator without an entry in the dictionary was NEVER
+rejected, because <c>TryGetValue</c> returned <c>false</c> and the "field is foreign" condition
+short-circuited to <c>false</c>. This is exactly the same class of defect as P5 (a declared but
+swallowed field), only from the other side. <b>Why an enumeration, not a "forbidden list".</b> The
+enumeration of what occurs in the command changes together with the contract, and the default here
+must be "do not reject": a field not assigned to any family is rejected not here, but by its family or
+by the check of inapplicable parameters below. Therefore the completeness of the table is checked
+separately — by the test <c>SolidFeatureClassificationTests</c>, which verifies it against the
+contract itself: a new command field will not pass until it is assigned to a family, to the
+inapplicable, to addressing or to geometry expectations.
+
 ## <a id="reposition-read"></a>Чтение изменения положения — из параметров (18.09.2026)
 
 **Что было.** Вид преобразования выводился из матричного вида размещения.
@@ -194,6 +232,31 @@ COM; `ownFields` (заведено 20.09.2026, наряд SM07 §3.2) отдаё
 `LocalCSParameters`; `ParameterType = ksPDisplace` + `Parameters`), а не матрица; вид определяется из
 собранной матрицы однозначно.
 
+Дополнение (вынесено из кода). The other four transformation fields are read by the documented
+parametric route (<c>OrientationType</c> + <c>LocalCSParameters</c>, <c>ParameterType</c> +
+<c>Parameters</c>) measured in step RP.25 of probe <c>--reposition-params</c>; where a feature has no
+parameters of that route (it was written as a matrix), ALL FIVE are named — a refusal, not zeros.
+INVARIANT: reading does not fail because the bridge is unavailable — feature state (name, IsValid,
+updateStamp) reads without API7, so an unavailable route goes to <c>unreadable_parameters</c> rather
+than failing all of <c>kompas_get_feature</c>, which would rob the caller of the part that does read.
+
+The document stores orientation and translation as PARAMETERS that survive reopen:
+<c>OrientationType = ksEulerCorners</c> + <c>LocalCSParameters → ILocalCSEulerParam</c> (the angle
+triple) and <c>ParameterType = ksPDisplace</c> + <c>Parameters → IPoint3DParamDisplace</c> (the
+translation). The angle triple and displacement were read from a REOPENED document before the build
+and before any write, on two discriminating setups (<c>displacement_after_D1 = (7,−11,13)</c>,
+<c>displacement_after_D2 = (1,2,3)</c>, <c>angles_kept_D1 = angles_kept_D2 = true</c>), while the
+negative control D0, whose displacement was not written, gave <c>ParameterType = 1 (ksPParamCoord)</c>
+and <c>(?,?,?)</c>. The matrix view (<c>GetVector</c>, <c>WriteToFile</c>) is NOT used at all —
+neither as source nor as confirmation: it returns what was written only in the writing session and is
+singular on a reopened document with the geometry preserved (RP.16, RP.18, RP.20, RP.23). Published:
+kind, translation vector, axis direction and angle; the axis point is NOT published because it exists
+on no interface of the chain and is not a placement property (see <c>RepositionAxisPointUnreadable</c>)
+— for a translation the axis point is NOT APPLICABLE, for a rotation the vector is NOT APPLICABLE, and
+both are named so the caller sees the read boundary from the response itself. LIMIT: a feature written
+by a matrix is not read — a refusal, not zeros — recognised by the read
+<c>OrientationType = 0 (ksAxisOrientation)</c>; see <c>RepositionLegacyReason</c>.
+
 ## <a id="reposition-axis-point"></a>Точка оси поворота не публикуется (18.09.2026)
 
 **Что измерено.** LIMIT: ни один интерфейс цепочки (`IBodyReposition`,
@@ -205,6 +268,11 @@ COM; `ownFields` (заведено 20.09.2026, наряд SM07 §3.2) отдаё
 **Что решено.** Из ориентации и переноса восстанавливается ПРЕДСТАВИТЕЛЬ прямой
 (`EulerOrientation.AxisPointFromPlacement`), а не исходный вход. Поле остаётся строкой требования;
 причина названа в `unreadable_parameters`.
+
+Дополнение (вынесено из кода). The member lists were read from the product type library. DOC declares
+<c>CoordinateSystem</c> as <c>IModelObject</c> (<c>ilocalcsobject_coordinatesystem.html</c>).
+INVARIANT: the read requirement is not lifted by this — the field stays a row requirement; only the
+reason the product does not publish it is named here.
 
 ## <a id="reposition-legacy"></a>Признак, записанный чужим маршрутом, — отказ (18.09.2026)
 
@@ -220,6 +288,10 @@ COM; `ownFields` (заведено 20.09.2026, наряд SM07 §3.2) отдаё
 **Что решено.** Существующие признаки молча не конвертируются: старый признак остаётся как есть, а
 продукт честно сообщает, что параметров преобразования у него нет. «Нет параметров этого маршрута» и
 «чтение не удалось» — РАЗНЫЕ строки причины.
+
+Дополнение (вынесено из кода). The wording is generic: the field name is substituted by the caller.
+The former revision derived <c>reposition_kind</c> from that singular orientation and returned
+<c>"translate"</c> for a WRITTEN ROTATION — a false result, now removed.
 
 ## <a id="reposition-axes-removed"></a>Оси размещения убраны из чтения (18.09.2026)
 
@@ -256,6 +328,10 @@ RP.18), то есть оси из него — следствие, а не вх�
 **Что решено.** Правка пишет в ТОТ ЖЕ признак и подтверждается ГЕОМЕТРИЕЙ, а не ответом `Update()`;
 `closed` у элемента по сечениям не объявлен правимым; входы сдвига отвергаются по имени.
 
+Дополнение (вынесено из кода). INVARIANT: fields of other families are rejected, not ignored — the
+cost of error is asymmetric: a superfluous refusal is seen at once, while an accepted-and-ignored
+number survives to acceptance looking like a completed operation.
+
 ## <a id="b5-sweep-edit"></a>Правка режима сдвига (20.09.2026)
 
 **Что измерено.** Шаг B5.13: смена `sketchShiftType` `orthogonal → parallel → orthogonal` дала объёмы
@@ -265,6 +341,10 @@ RP.18), то есть оси из него — следствие, а не вх�
 
 **Что решено.** Порядок «запись → `Update()` → пересборка» — часть контракта; объём читается с модели и
 сверяется с аналитическим ожиданием; `sketch_ref` отвергается по имени.
+
+Дополнение (вынесено из кода). Without <c>Update()</c> the setter returns success while the model
+stays as before. The feature's inputs are not changed by this call, and that is a measured refusal,
+not caution.
 
 ## <a id="b5-loft-edit"></a>Правка набора сечений элемента по сечениям (20.09.2026)
 
@@ -287,6 +367,18 @@ LIMIT: запись `ILoft.Closed` на построенном признаке 
 **Что решено.** Вход пишется в оба места: сначала в определение, затем в `ILoft.Sketchs`. Чтение
 определения признак не «портит» — оно делает определение владельцем входа, а без него не было бы
 `kompas_get_feature`.
+
+Дополнение (вынесено из кода). While nobody has read the definition, writing to <c>ILoft.Sketchs</c>
+applies — "3 before, 2 after assignment, 2 after <c>Update()</c>, volume 48000" — and repeats four
+times in a row. Writing the set INTO BOTH STORES (definition first: "3 before <c>Clear()</c>,
+<c>Clear</c>=True, 2 added, now 2"; then <c>ILoft.Sketchs</c>; then <c>Update()</c>) lifts the
+cancellation — read 2, volume <c>48000</c>. <c>ksEntity.Update()</c> is the same call that applies the
+definition write for the shell. Both stores are written, definition first, then <c>ILoft.Sketchs</c>
+(see <c>WriteLoftSectionsToDefinition</c>). Reading the definition does not "spoil" the feature — it
+makes the definition the owner of the input; dropping the read would drop <c>kompas_get_feature</c>.
+LIMIT: the write does not check that a section stands ABOVE the feature in the tree; that must be
+checked on the instrument's side, not the server's, because "above" is defined by tree order, not by a
+request field.
 
 ## <a id="b5-readdress"></a>Переадресация сечения из дерева (20.09.2026)
 
@@ -330,3 +422,106 @@ interop он объявлен как `Object Sketchs()` — справка и in
 **Что решено.** Ссылки выводятся из `ksShellDefinition.FaceArray()`; элемент приходит как `ksEntity` и
 разворачивается через `GetDefinition()` (`AsInterface`), а не голым `is`. `null` — «не прочитано»,
 пустой список — «снятых граней нет».
+
+Дополнение (вынесено из кода). Without deriving refs from the definition, re-editing the removed-face
+set is inexpressible after a mutation or a reopen.
+
+## <a id="placement-round-trip"></a>Проверка «запись → чтение» размещения — по матрице (18–19.09.2026)
+
+INVARIANT: a successful <c>IBodyReposition.Update()</c> means "accepted", not "applied" — MEASURED
+(step RP.2) that three routes out of four returned <c>true</c> and did not move the body, so creation
+is additionally confirmed by reading the written parameters back. INVARIANT: comparison is by matrix,
+not by the number triple — the Euler-angle parameterisation is ambiguous (at nutation 0 or 180° the
+sum of precession and rotation is defined up to redistribution), so requiring equal numbers would
+reject a CORRECT write. A matrix is assembled from the read triple and compared with the requested
+one: <c>EulerOrientation</c> keeps the conjugation order in one place, and swapping that order
+diverges here at once — MEASURED divergence with a foreign order is 1, with the correct one 0 or
+2.2·10⁻¹⁶. LIMIT: the tolerance 10⁻⁶ is six orders below the divergence a wrong order produces (1)
+and ten orders above the measured residual of the correct decomposition (2.2·10⁻¹⁶); it is
+deliberately wider than machine precision so that rounding is not turned into a refusal.
+
+## <a id="plane-form-guard"></a>Проверка формы плоскости — приоритет объявлен (19.09.2026)
+
+MEASURED by the B3 client acceptance (19.09.2026, three FAIL rows): the schema's declared
+<c>CAPABILITY_UNAVAILABLE</c> on <c>plane.base</c> was UNREACHABLE — the DTO field shape differed
+from the published one, and the call failed while parsing the payload with <c>JsonException</c> and
+code <c>VERIFICATION_FAILED</c>. The shape is brought in line with the published one
+(<c>CutPlaneDto</c>), and this check makes the declared outcome executable and shared by
+<c>kompas_split</c>, <c>kompas_cut_by_plane</c> and the applicable <c>kompas_update_feature</c>.
+
+Priority list (verbatim from the code):
+
+1. <c>base</c> named TOGETHER with another mode (<c>plane_ref</c> or point with normal) —
+   <c>INVALID_ARGUMENT</c>: the request is contradictory, and answering it with the declared
+   capability refusal would hide from the client that it named two modes at once;
+2. <c>base</c> named alone (with or without an offset) — <c>CAPABILITY_UNAVAILABLE</c>: exactly what
+   the field description promises;
+3. <c>offset_mm</c> without <c>base</c> — <c>INVALID_ARGUMENT</c>: an offset without a base plane
+   does not express a plane, and accepting the parameter silently would declare it accepted;
+4. <c>plane_ref</c> together with a point or normal — <c>INVALID_ARGUMENT</c> (checked by the calling
+   route, because edit refuses a reference for its own reason).
+
+## <a id="same-type-address"></a>Адрес B3-признака — по позиции среди однотипных (18–19.09.2026)
+
+**Why position, not name.** The name in API5 and the name in API7 for one and the same object
+diverge — this is MEASURED on a fillet (F.8: a name set in API5 reads differently in API7), and for
+the same reason <c>Api7Fillet.FindIndexesByIdenticalRadius</c> and <c>Api7Rotated.FindIndexFor</c>
+match by VALUE, not by name. For B3 features there is no identifier value known before the edit at
+all (the boolean operands are consumed after the union, the split plane is an auxiliary object), so
+the address is taken by position. This is the same technique used to edit a rotation when the tree
+entity does not answer <c>QI(IRotated)</c> (<c>RotatedOrdinal</c>), and it is checked by geometry in
+acceptance: editing the wrong feature will not give the expected volume and bounding box. The feature
+count is returned TOGETHER with the position, not by a separate walk: two walks of one collection
+could diverge, and the decision on address suitability is made from both numbers at once
+(<c>RequireSameTypeIndex</c>).
+
+## <a id="foreign-solid-fields"></a>Чужие поля B3-семейств — перечисление, не «список запрещённых» (18–20.09.2026)
+
+**Why an enumeration, not a "forbidden list".** The first edition listed the forbidden fields by
+hand, and it already suffered from this: <c>keep_side</c> did not make it into the list, so a call
+<c>plane + keep_side</c> on a SPLIT feature was accepted and <c>keep_side</c> was silently ignored —
+exactly the class of defect the rule "a parameter not declared in the schema does not reach COM" was
+written against (§9.1 P4), only from the other side: declared but swallowed. Here every family field
+must be ASSIGNED to a family (<c>SolidFields</c>), and a field passed to a family that does not own it
+is rejected. **What this check does not promise.** It rejects a passed field but does NOT prove that
+the list of family fields is complete: completeness is held by the test
+<c>SolidFeatureClassificationTests</c>, which verifies the table against the contract itself. Earlier
+there stood here a claim that the table and the enumerator "are verified on refusal"; that was wrong —
+they were verified nowhere, and the divergence between them was silent.
+
+`ownFields` (introduced 20.09.2026 by order SM07 §3.2 for one measured case): <c>depth_mm</c> is an
+EXTRUDE field in the table and at the same time an OWN field of a blind hole (<c>blind_flat</c>).
+Without this list, editing a blind hole was rejected INVALID_ARGUMENT before COM — and this is
+MEASURED on the first delivery with the hole branch (rows F08.15/16/19/20.edit, run 20.09.2026): the
+depth is read as a foreign field, although the hole branch reads it. The length of the list is held
+not by "common sense" but by acceptance: with it a blind hole is edited, while counterbore and
+countersink with <c>depth_mm</c> are still rejected — but now BY MODE (<c>ValidateHoleEdit</c>), where
+that is measured (HO.13/HO.16).
+
+## <a id="support-plane-edit"></a>Опора при правке SM-16 — три точки, без объекта плоскости (18.09.2026)
+
+**Why without creation.** MEASURED 18.09.2026 (probe <c>--split</c>, step SP.9, step E-B — negative
+control): substituting ANOTHER, just-created plane into an existing feature does NOT change the
+result — <c>Update()</c> returns <c>true</c> and the parts stay as they were. A different route works
+(E-A for split, E-C for cut): transferring the THREE CONSTRUCTION POINTS of the feature's OWN
+support. Therefore three points are computed here and no plane object is created at all — otherwise
+an unused object would remain in the document on every edit. <c>plane_ref</c> is refused on edit: the
+route is measured for the feature's OWN support, and there is no way to prove that the presented
+reference is that support — comparing plane references was not measured, and substituting a foreign
+plane gives no result (E-B). The point and normal checks are not duplicated but taken from the same
+rules as at creation: finiteness here, a non-zero normal — from <c>PlaneBasis.FromNormal</c>, three
+construction points — from <c>PlaneBasis.ThreePoints</c>.
+
+## <a id="b5-couplings-edit"></a>Непустые цепочки на существующем признаке — отказ (20.09.2026)
+
+MEASURED 20.09.2026 (B5 acceptance, rows B5S.01/B5S.02): on a BUILT feature <c>ILoft.AddCoupling()</c>
+returns <c>ICoupling</c>, <c>PositionOffset</c> accepts offsets, and <c>CouplingsCount</c> reads 1
+RIGHT AFTER the write — but the build does not carry the chain: after <c>Update()</c> the model has 0
+chains, and the volume matches a body WITHOUT coupling. Reproduced in TWO write orders (one build; and
+"build the section set, then re-read <c>ILoft</c> via <c>ILofts::Loft</c> and set the coupling"), so it
+is not our write order. At CREATION the same sequence keeps the chain (probe B5.18: CouplingsCount =
+1, volume 20000 vs 28000). The documented members (<c>iloft_addcoupling.html</c>,
+<c>iloft_clearcouplings.html</c>, <c>iloft_deletecoupling.html</c>) declare no such limit — so this is
+a MEASUREMENT of the implementation's behaviour, named here and not silenced. Accepting such a request
+would promise a coupling the model never gets and return "done" on a body without it; the refusal
+therefore stands BEFORE the write, and the feature is unchanged.

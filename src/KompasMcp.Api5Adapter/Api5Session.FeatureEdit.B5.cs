@@ -10,28 +10,13 @@ using KompasMcp.Domain.References;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>Editing the three B5 families — sweep, loft and shell — via
-/// <c>kompas_update_feature</c>.</summary>
-/// <remarks>INVARIANT: the edit exists rather than "delete and re-create" — order B5 §11 requires
-/// changing the parameters of an EXISTING feature: re-creation yields a different tree feature, a
-/// different name and a different position among same-family ones, and for features with dependents
-/// below them in the tree, a different dependency set too. Each family therefore has a measured "write
-/// to the same feature → <c>Update()</c> → rebuild" route, and the edit is confirmed by GEOMETRY, not by
-/// the <c>Update()</c> answer.
-/// MEASURED (probe <c>--b5</c>, report <c>docs/acceptance/api7/b5-sweep-loft-shell.json</c>): B5.13 —
-/// sweep mode <c>24674.011002723353 → 15707.963267948984 → 24674.011002723353</c>, shell thickness and
-/// direction <c>21632 → 40256 → 53056 → 21632</c>, section retargeting <c>28000 → 48000 → 28000</c>;
-/// B5.14 — shell removed-face set <c>21632 → 7040 → 21632</c> at <c>11 → 10 → 11</c> faces, with a
-/// negative control (re-writing the same set moves no volume); B5.15 — sweep INPUTS: <c>SetSketch</c>
-/// and path retargeting are accepted (<c>Update = true</c>) and NOT applied under a positive control on
-/// the same feature.
-/// LIMIT: <c>closed</c> of a loft is not declared editable — writing <c>ILoft.Closed</c> on a built
-/// feature returns <c>Update() = True</c>, reads back <c>False</c>, the volume does not change (B5.13):
-/// "accepted" does not mean "applied"; sweep inputs (<c>sketch_ref</c>, path) are rejected by name
-/// because the route measurably does not apply (B5.15).
-/// INVARIANT: fields of other families are rejected, not ignored — the cost of error is asymmetric: a
-/// superfluous refusal is seen at once, while an accepted-and-ignored number survives to acceptance
-/// looking like a completed operation.
+/// <summary>Editing the three B5 families — sweep, loft and shell — via <c>kompas_update_feature</c>.</summary>
+/// <remarks>INVARIANT: the edit exists rather than "delete and re-create" (order B5 §11) — re-creation yields a
+/// different tree feature, name, position and dependency set; each family has a measured "write to the same
+/// feature → <c>Update()</c> → rebuild" route, and the edit is confirmed by GEOMETRY, not by <c>Update()</c>.
+/// MEASURED (probe <c>--b5</c>, report <c>docs/acceptance/api7/b5-sweep-loft-shell.json</c>, steps B5.13–B5.15,
+/// details in history). LIMIT: <c>closed</c> of a loft is not declared editable; sweep inputs (<c>sketch_ref</c>,
+/// path) are rejected by name because the route measurably does not apply. INVARIANT: fields of other families are rejected, not ignored — an accepted-and-ignored number survives to acceptance looking like a completed edit.
 /// History: docs/decisions/adapter-solid.md#b5-edit</remarks>
 public partial class Api5Session
 {
@@ -128,19 +113,11 @@ public partial class Api5Session
     // ══════════════════════════════════════════════════════════ sweep ══
 
     /// <summary>Edit the section-shift mode of an EXISTING sweep.</summary>
-    /// <remarks>MEASURED 20.09.2026 (probe <c>--b5</c>, step B5.13): on ONE feature, changing
-    /// <c>sketchShiftType</c> <c>orthogonal → parallel → orthogonal</c> gave volumes
-    /// <c>24674.011002723353 → 15707.963267948984 → 24674.011002723353</c>; the setup discriminates only
-    /// on an ARC — on a straight path both modes give one body (B5.2, B5.8).
-    /// INVARIANT: the order "write → <c>Update()</c> → rebuild" is part of the contract — without
-    /// <c>Update()</c> the setter returns success while the model stays as before; the <c>Update() =
-    /// true</c> answer is not taken as proof — the volume is read from the model and compared with the
-    /// caller's analytical expectation.
-    /// LIMIT: the feature's inputs are not changed by this call, and that is a measured refusal, not
-    /// caution — step B5.15: <c>SetSketch</c> on an existing feature and retargeting
-    /// <c>PathPartArray()</c> are accepted (<c>Update = true</c>) and NOT applied (the volume stays),
-    /// while changing the MODE on the same feature does change it; <c>sketch_ref</c> is therefore
-    /// rejected by name.
+    /// <remarks>MEASURED 20.09.2026 (probe <c>--b5</c>, step B5.13): on ONE feature, changing <c>sketchShiftType</c>
+    /// <c>orthogonal → parallel → orthogonal</c> gave volumes <c>24674.011002723353 → 15707.963267948984 → 24674.011002723353</c>; the setup discriminates only on an ARC (on a straight path both modes give one body, B5.2, B5.8).
+    /// INVARIANT: the order "write → <c>Update()</c> → rebuild" is part of the contract — the <c>Update() = true</c>
+    /// answer is not proof; the volume is read from the model and compared with the caller's analytical expectation.
+    /// LIMIT: step B5.15 — <c>SetSketch</c> and retargeting <c>PathPartArray()</c> are accepted (<c>Update = true</c>) and NOT applied (the volume stays), while changing the MODE on the same feature does change it; <c>sketch_ref</c> is therefore rejected by name.
     /// History: docs/decisions/adapter-solid.md#b5-sweep-edit</remarks>
     private UpdateFeatureResult UpdateSweepFeature(
         DocumentEntry document,
@@ -333,19 +310,12 @@ public partial class Api5Session
     // ══════════════════════════════════════════════════════════ loft ══
 
     /// <summary>Edit the section set of an EXISTING loft.</summary>
-    /// <remarks>MEASURED (step B5.13): the INPUT is edited — retargeting <c>ILoft.Sketchs</c> on an
-    /// already-built feature changes the geometry: <c>40×40 + 20×20</c> give <c>28000</c>,
-    /// <c>40×40 + 40×40</c> give the prism <c>h/3·(A₁ + A₂ + √(A₁A₂)) = 10·(1600+1600+1600) = 48000</c>,
-    /// returning to the previous set returns <c>28000</c>.
-    /// LIMIT: closedness (<c>closed</c>) is not declared an editable parameter — writing
-    /// <c>ILoft.Closed</c> on a built feature returns <c>Update() = True</c>, reads back <c>False</c>, the
-    /// volume stays <c>28000</c>: "accepted" does not mean "applied"; closedness is set only at creation
-    /// (<c>kompas_loft.closed</c>).
-    /// INVARIANT: the element address is taken by order among same-family ones, and the order is checked
-    /// — both the tree and the API7 collection enumerate features in creation order, so the position is a
-    /// stable address (a name will not do: different types share one display name), but "tree position =
-    /// collection index" is proved only with an EQUAL element count; otherwise the call is rejected by
-    /// name rather than editing an element "at random".
+    /// <remarks>MEASURED (step B5.13): the INPUT is edited — retargeting <c>ILoft.Sketchs</c> on an already-built
+    /// feature changes the geometry: <c>40×40 + 20×20</c> give <c>28000</c>, <c>40×40 + 40×40</c> give the prism
+    /// <c>h/3·(A₁ + A₂ + √(A₁A₂)) = 10·(1600+1600+1600) = 48000</c>, returning to the previous set returns <c>28000</c>.
+    /// LIMIT: closedness (<c>closed</c>) is not declared editable — writing <c>ILoft.Closed</c> returns <c>Update() = True</c>, reads back <c>False</c>,
+    /// the volume stays <c>28000</c>; closedness is set only at creation (<c>kompas_loft.closed</c>).
+    /// INVARIANT: the address is by order among same-family features — stable (both tree and API7 enumerate in creation order; a name will not do: different types share one display name), but "tree position = collection index" is proved only with an EQUAL element count, else the call is rejected by name.
     /// History: docs/decisions/adapter-solid.md#b5-loft-edit</remarks>
     private UpdateFeatureResult UpdateLoftFeature(
         DocumentEntry document,
@@ -544,16 +514,12 @@ public partial class Api5Session
 
         // ── NON-EMPTY CHAINS ON AN EXISTING FEATURE ARE REJECTED BEFORE THE WRITE ──
         // MEASURED 20.09.2026 (B5 acceptance, rows B5S.01/B5S.02): on a BUILT feature ILoft.AddCoupling()
-        // returns ICoupling, PositionOffset accepts offsets, and CouplingsCount reads 1 RIGHT AFTER the
-        // write — but the build does not carry the chain: after Update() the model has 0 chains, and the
-        // volume matches a body WITHOUT coupling. Reproduced in TWO write orders (one build; and "build
-        // the section set, then re-read ILoft via ILofts::Loft and set the coupling"), so it is not our
-        // write order. At CREATION the same sequence keeps the chain (probe B5.18: CouplingsCount = 1,
-        // volume 20000 vs 28000). The documented members (iloft_addcoupling.html,
-        // iloft_clearcouplings.html, iloft_deletecoupling.html) declare no such limit — so this is a
-        // MEASUREMENT of the implementation's behaviour, named here and not silenced. Accepting such a
-        // request would promise a coupling the model never gets and return "done" on a body without it;
-        // the refusal therefore stands BEFORE the write, and the feature is unchanged.
+        // returns ICoupling, PositionOffset accepts offsets, CouplingsCount reads 1 RIGHT AFTER the write —
+        // but the build does not carry the chain (after Update() the model has 0 chains, volume matches a body
+        // WITHOUT coupling). Reproduced in TWO write orders, so it is not our order. At CREATION the same
+        // sequence keeps the chain (B5.18: CouplingsCount = 1, volume 20000 vs 28000). The documented members
+        // declare no such limit — this is a MEASUREMENT, named and not silenced. The refusal stands BEFORE
+        // the write; the feature is unchanged.
         if (command.Couplings is { Count: > 0 })
         {
             throw new KompasContractException(
@@ -601,21 +567,13 @@ public partial class Api5Session
         }
 
         // ── WRITING THE SECTION SET: INTO BOTH INPUT STORES — THE API5 DEFINITION AND ILoft ──
-        // The "section set" input lives in TWO places: in the API5 definition
-        // (ksBase/BossLoftDefinition.Sketchs() → ksEntityCollection) and in the API7 operation object
-        // (ILoft.Sketchs). MEASURED 20.09.2026 (probe --b5, step B5.21, a feature created on three
-        // sections reduced to two):
-        //   • while NOBODY HAS READ the definition, writing to ILoft.Sketchs applies — "3 before, 2 after
-        //     assignment, 2 after Update(), volume 48000" — and repeats four times in a row;
-        //   • after ONE read of ksBaseLoftDefinition.Sketchs() — the very member LoftSectionRefs and
-        //     hence kompas_get_feature reads through — the definition becomes the OWNER of the section
-        //     COUNT, and the same write is cancelled by the first update: "2 after assignment, 3 after
-        //     ksEntity.Update(), volume still 16114.2858257129";
-        //   • writing the set INTO BOTH STORES (definition first: "3 before Clear(), Clear=True, 2 added,
-        //     now 2"; then ILoft.Sketchs; then Update()) lifts the cancellation — read 2, volume 48000.
-        // Both are therefore written. Dropping the definition read would drop kompas_get_feature: the
-        // section refs come exactly from there, and without it the edit input is not expressed at all.
-        // The former revision wrote only to ILoft and so worked only until the first read of the feature.
+        // The "section set" input lives in TWO places: the API5 definition (ksBase/BossLoftDefinition.Sketchs()
+        // → ksEntityCollection) and the API7 object (ILoft.Sketchs). MEASURED 20.09.2026 (probe --b5, step
+        // B5.21, a three-section feature reduced to two): while NOBODY HAS READ the definition, writing to
+        // ILoft.Sketchs applies (48000); after ONE read of ksBaseLoftDefinition.Sketchs() the definition
+        // becomes OWNER of the COUNT and the same write is cancelled by the first update (16114.2858257129);
+        // writing INTO BOTH STORES lifts the cancellation (48000). Dropping the definition read would drop
+        // kompas_get_feature, whose section refs come exactly from there. The former revision wrote only to ILoft.
         var definitionBeforeWrite = DefinitionOf(entity);
         var definitionWrite = WriteLoftSectionsToDefinition(definitionBeforeWrite, freshEntities);
         var sectionsInDefinitionAfterWrite = definitionBeforeWrite is { } definitionWritten
@@ -657,23 +615,14 @@ public partial class Api5Session
             }
         }
 
-        // APPLYING THE INPUT — ksEntity.Update(). The choice is measured, and its RATIONALE WAS
-        // CORRECTED 20.09.2026. The former revision attributed the cancellation to the call itself:
-        // "ILoft.Update() = true, and after it ILoft holds 3 again — so Update() does not apply the
-        // written input". This turned out FALSE; the measured difference (probe --b5, step B5.21, a
-        // feature created on three sections reduced to two):
-        //   • WHILE NOBODY HAS READ the definition, both ILoft.Update() and ksEntity.Update() apply —
-        //     "2 after assignment, 2 after Update(), volume 48000", four times in a row;
-        //   • the definition becomes the OWNER of the section COUNT from ONE read of
-        //     ksBaseLoftDefinition.Sketchs() — the very member LoftSectionRefs reads through (and hence
-        //     kompas_get_feature): after such a read the SAME write is cancelled by the first update,
-        //     whatever it is — "2 after assignment, 3 after ksEntity.Update()". So it was not the update
-        //     that cancelled but the inconsistency of the two input stores.
-        //   • writing the set INTO BOTH STORES (see WriteLoftSectionsToDefinition above) lifts the
-        //     cancellation.
-        // ksEntity.Update() therefore applies — the same call that applies the definition write for the
-        // shell — but one call must not be relied on here: what matters is that BOTH stores are written.
-        // Dropping the definition read would drop kompas_get_feature.
+        // APPLYING THE INPUT — ksEntity.Update(). RATIONALE CORRECTED 20.09.2026: the former revision blamed
+        // the call itself ("ILoft.Update() = true, and after it ILoft holds 3 again"). That is FALSE. MEASURED
+        // (probe --b5, step B5.21, three-section feature reduced to two): while NOBODY HAS READ the definition,
+        // both ILoft.Update() and ksEntity.Update() apply (48000); after ONE read of
+        // ksBaseLoftDefinition.Sketchs() the definition owns the COUNT and the SAME write is cancelled by the
+        // first update (whatever it is) — not the update cancelled, but the two input stores disagreed; writing
+        // INTO BOTH STORES (WriteLoftSectionsToDefinition) lifts the cancellation. ksEntity.Update() therefore
+        // applies, but what matters is that BOTH stores are written; dropping the definition read would drop kompas_get_feature.
         var updated = SafeBool(entity.Update) == true;
         var sectionsAfterEntityUpdate = Api7Loft.SectionCount(loft);
         if (!updated)
@@ -849,19 +798,12 @@ public partial class Api5Session
     }
 
     /// <summary>Write the section set into <c>ILoft.Sketchs</c> — a SAFEARRAY of IDispatch pointers.</summary>
-    /// <remarks>INVARIANT: the write route is the very object the feature was created by — the feature is
-    /// created by <c>IModelContainer.Lofts.Add(o3d_bossLoft)</c>, so <c>ILoft</c> is the operation owning
-    /// the feature, and both the input is written and <c>Update()</c> taken from it. Probe B5.13 by this
-    /// route got 48000 on an ALREADY BUILT feature (retargeting S5+S6 → S5+S7), so the route executes.
-    /// INVARIANT: writing through the definition collection is MANDATORY — a single read of the
-    /// definition makes IT the owner of the section COUNT, and then a write only to <c>ILoft</c> is
-    /// cancelled by the first update; both stores are therefore written, definition first, then
-    /// <c>ILoft.Sketchs</c> (see <see cref="WriteLoftSectionsToDefinition"/>).
-    /// LIMIT: this write does NOT check that a section stands ABOVE the feature in the tree — MEASURED at
-    /// the same time: a sketch created AFTER the feature is not taken in by the feature (the write is
-    /// accepted, <c>Update()</c> = true, 2 sections read, the body unchanged). A feature references only
-    /// what stands above it, and that must be checked on the instrument's side, not the server's, because
-    /// "above" is defined by tree order, not by a request field.
+    /// <remarks>INVARIANT: the write route is the very object the feature was created by — <c>IModelContainer.Lofts.Add(o3d_bossLoft)</c>,
+    /// so <c>ILoft</c> owns the feature; probe B5.13 by this route got 48000 on an ALREADY BUILT feature (retargeting S5+S6 → S5+S7).
+    /// INVARIANT: writing through the definition collection is MANDATORY — one read of the definition makes IT the owner of the
+    /// section COUNT, and a write only to <c>ILoft</c> is then cancelled by the first update; both stores are written, definition
+    /// first, then <c>ILoft.Sketchs</c> (see <see cref="WriteLoftSectionsToDefinition"/>).
+    /// LIMIT: this write does NOT check that a section stands ABOVE the feature in the tree — MEASURED: a sketch created AFTER the feature is not taken in (write accepted, <c>Update()</c> = true, 2 sections read, body unchanged); "above" is tree order, not a request field.
     /// History: docs/decisions/adapter-solid.md#b5-loft-both-stores</remarks>
     private static bool WriteLoftSections(ILoft loft, object[] sections)
     {
@@ -877,20 +819,13 @@ public partial class Api5Session
     }
 
     /// <summary>Writing the section set INTO THE API5 DEFINITION — the SECOND store of the same input.</summary>
-    /// <remarks>INVARIANT: why, if the write goes into <c>ILoft</c> — MEASURED 20.09.2026 (probe
-    /// <c>--b5</c>, step B5.21): a feature created on THREE sections is reduced to TWO by a write to
-    /// <c>ILoft.Sketchs</c>, and this repeats while nobody has read the definition ("3 before, 2 after
-    /// assignment, 2 after <c>Update()</c>, volume 48000" — four times in a row). But a single read of
-    /// <c>ksBaseLoftDefinition.Sketchs()</c> — the member <see cref="LoftSectionRefs"/> and hence
-    /// <c>kompas_get_feature</c> reads through — makes the definition the OWNER of the section COUNT, and
-    /// the next SAME write is cancelled by the first update: "2 after assignment, 3 after <c>Update()</c>,
-    /// volume still 16114.2858257129". Conversely, the same edit with the set written INTO BOTH STORES —
-    /// definition first ("3 before <c>Clear()</c>, <c>Clear</c>=True, 2 added, now 2"), then
-    /// <c>ILoft.Sketchs</c>, then <c>Update()</c> — applies again: read 2, volume <c>48000</c>. The input
-    /// is therefore written to both places. INVARIANT: reading the definition does not "spoil" the
-    /// feature — it makes the definition the owner of the input; dropping the read would drop
-    /// <c>kompas_get_feature</c>.
-    /// History: docs/decisions/adapter-solid.md#b5-loft-both-stores</remarks>
+    /// <remarks>INVARIANT: why, if the write goes into <c>ILoft</c> — MEASURED 20.09.2026 (probe <c>--b5</c>, step B5.21):
+    /// a three-section feature is reduced to two by a write to <c>ILoft.Sketchs</c>, repeating while nobody has read the definition
+    /// ("3 before, 2 after assignment, 2 after <c>Update()</c>, volume 48000"). But ONE read of <c>ksBaseLoftDefinition.Sketchs()</c>
+    /// (the member <see cref="LoftSectionRefs"/> and hence <c>kompas_get_feature</c> reads through) makes the definition OWNER of the
+    /// section COUNT, and the next SAME write is cancelled ("2 after assignment, 3 after <c>Update()</c>, volume 16114.2858257129");
+    /// writing INTO BOTH STORES (definition first, then <c>ILoft.Sketchs</c>, then <c>Update()</c>) applies again (48000). Dropping the
+    /// read would drop <c>kompas_get_feature</c>. History: docs/decisions/adapter-solid.md#b5-loft-both-stores</remarks>
     private static (bool Ok, string Note) WriteLoftSectionsToDefinition(
         object? definition, IReadOnlyList<ksEntity> sections)
     {
@@ -954,16 +889,12 @@ public partial class Api5Session
     }
 
     /// <summary>Re-address a sketch-section FROM THE TREE at edit time, by name.</summary>
-    /// <remarks>INVARIANT: the re-addressing is needed because a registry pointer lives against the
-    /// revision it was registered in, while the edit arrives in the next one; the tree gives an address AT
-    /// EDIT TIME, and it is proven by the same enumeration the probe uses
-    /// (<c>ksPart.EntityCollection(0).refresh()</c>).
-    /// INVARIANT: a name is accepted only if UNAMBIGUOUS — a name is not an address (different entities
-    /// share one display name), so the tree collections are tried in turn and the first with a match is
-    /// taken; if it has more than one match, the address is NOT PROVEN and the caller must refuse by name
-    /// rather than edit the feature "at random". A match is described in <c>note</c> on success too:
-    /// without it "re-addressed" is indistinguishable from "re-addressed to another entity with the same
-    /// name", and the collection difference (0 / 110 / −1) disappears from the report.
+    /// <remarks>INVARIANT: re-addressing is needed because a registry pointer lives against the revision it was registered in, while
+    /// the edit arrives in the next one; the tree gives an address AT EDIT TIME, proven by the same enumeration the probe uses
+    /// (<c>ksPart.EntityCollection(0).refresh()</c>). INVARIANT: a name is accepted only if UNAMBIGUOUS — a name is not an address
+    /// (different entities share one display name), so collections are tried in turn, first match taken; with more than one match
+    /// the address is NOT PROVEN and the caller refuses by name. A match is described in <c>note</c> on success too — otherwise the
+    /// collection difference (0 / 110 / −1) disappears from the report.
     /// History: docs/decisions/adapter-solid.md#b5-readdress</remarks>
     private static ksEntity? ReAddressFromTree(ksPart part, ksEntity section, out string note)
     {        note = string.Empty;
@@ -1094,19 +1025,12 @@ public partial class Api5Session
     // ══════════════════════════════════════════════════════════ shell ══
 
     /// <summary>Edit the thickness, direction and removed-face set of an EXISTING shell.</summary>
-    /// <remarks>INVARIANT: thickness and direction are written TOGETHER — not a convenience but a
-    /// requirement of the setup: the shell mode is a (thickness, direction) pair, and writing only the
-    /// changed half makes "exactly what was requested changed" indistinguishable from "this changed too";
-    /// the missing half is taken FROM THE MODEL (not from a defaulted value) — MEASURED (B5.13) that
-    /// <c>thinType</c> reads back correctly after each edit.
-    /// MEASURED 20.09.2026. Step B5.13: <c>t = 2 inward → 4 inward → 4 outward → 2 inward</c> on one
-    /// feature gave <c>21632 → 40256 → 53056 → 21632</c>. Step B5.14: the removed-face set is edited by
-    /// the same feature — adding a second face gives <c>7040</c> at <c>10</c> faces, returning to the
-    /// previous set <c>21632</c> at <c>11</c>; re-writing the same set moves no volume (negative
-    /// control).
-    /// LIMIT: an empty face list is rejected here too — MEASURED on both APIs (B5.6, B5.10): with an
-    /// empty list the operation is accepted (<c>Create/Update = true</c>) but the body does not change;
-    /// accepting such a call would return "the shell was built" where nothing happened.
+    /// <remarks>INVARIANT: thickness and direction are written TOGETHER — the shell mode is a (thickness, direction)
+    /// pair, and writing only the changed half makes "exactly what was requested changed" indistinguishable from "this
+    /// changed too"; the missing half is taken FROM THE MODEL, not a default (MEASURED, B5.13: <c>thinType</c> reads
+    /// back correctly after each edit). MEASURED 20.09.2026 — step B5.13: <c>t = 2 inward → 4 inward → 4 outward → 2
+    /// inward</c> gave <c>21632 → 40256 → 53056 → 21632</c>; step B5.14: a second removed face gives <c>7040</c> at
+    /// <c>10</c> faces, returning to <c>21632</c> at <c>11</c> (re-writing the same set moves no volume). LIMIT: an empty face list is rejected — MEASURED (B5.6, B5.10): the operation is accepted (<c>Create/Update = true</c>) but the body does not change.
     /// History: docs/decisions/adapter-solid.md#b5-shell-edit</remarks>
     private UpdateFeatureResult UpdateShellFeature(
         DocumentEntry document,

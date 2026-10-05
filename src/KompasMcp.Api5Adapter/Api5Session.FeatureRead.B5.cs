@@ -9,16 +9,13 @@ using KompasMcp.Contracts.Ipc;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>Reading the three B5 families — sweep, loft and shell — FROM THE MODEL, not from the
-/// creation response.</summary>
+/// <summary>Reading the three B5 families — sweep, loft and shell — FROM THE MODEL, not from the creation response.</summary>
 /// <remarks>INVARIANT: a family is recognised BY THE DEFINITION INTERFACE, not by the type number.
-/// MEASURED 20.09.2026 (probe <c>--b5</c>, step B5.12): the tree number differs from the creation
-/// number — <c>NewEntity(45)</c> (<c>o3d_baseEvolution</c>) shows in the tree as <b>46</b>
-/// (<c>o3d_bossEvolution</c>) and answers <c>ksBossEvolutionDefinition</c>, while <c>ILofts.Add(31)</c>
-/// shows as <b>31</b> (<c>ksBossLoftDefinition</c>) and <c>NewEntity(43)</c> as <b>43</b>
-/// (<c>ksShellDefinition</c>). The same divergence already cost a defect at the hole (52 → 583) and at
-/// the rotation (27 → 584). MEASURED: <c>GetType().Name</c> of a COM object is always <c>__ComObject</c>,
-/// so a class name proves nothing — ask whether the object answers the interface.
+/// MEASURED 20.09.2026 (probe <c>--b5</c>, step B5.12): the tree number differs from the creation number —
+/// <c>NewEntity(45)</c> (<c>o3d_baseEvolution</c>) shows in the tree as <b>46</b> (<c>o3d_bossEvolution</c>) and
+/// answers <c>ksBossEvolutionDefinition</c>, <c>ILofts.Add(31)</c> as <b>31</b> (<c>ksBossLoftDefinition</c>),
+/// <c>NewEntity(43)</c> as <b>43</b> (<c>ksShellDefinition</c>); the same divergence cost a defect at the hole
+/// (52 → 583) and the rotation (27 → 584). <c>GetType().Name</c> of a COM object is always <c>__ComObject</c>.
 /// History: docs/decisions/adapter-solid.md#b5-read</remarks>
 public partial class Api5Session
 {
@@ -306,13 +303,11 @@ public partial class Api5Session
     }
 
     /// <summary>Shell REMOVED FACES AS REFERENCES, derived from <c>ksShellDefinition.FaceArray()</c>.</summary>
-    /// <remarks>Same rationale as <see cref="LoftSectionRefs"/>, with a harder reason: faces removed by
-    /// the shell are ABSENT from the body topology, so <c>kompas_read_topology</c> cannot yield them at
-    /// all, while the removed-face set is the edit input — without deriving refs from the definition,
-    /// re-editing the set is inexpressible after a mutation or a reopen. <c>null</c> means "not read"; an
-    /// empty list means "no removed faces". INVARIANT: use <c>AsInterface</c> — a bare
-    /// <c>is ksFaceDefinition</c> yields an EMPTY list while <c>removed_face_count = 1</c>, because a
-    /// <c>FaceArray()</c> element comes as <c>ksEntity</c> and must be unwrapped via <c>GetDefinition()</c>.
+    /// <remarks>Same rationale as <see cref="LoftSectionRefs"/>, with a harder reason: faces removed by the shell are
+    /// ABSENT from the body topology, so <c>kompas_read_topology</c> cannot yield them at all, while the removed-face
+    /// set is the edit input. <c>null</c> means "not read"; an empty list means "no removed faces". INVARIANT: use
+    /// <c>AsInterface</c> — a bare <c>is ksFaceDefinition</c> yields an EMPTY list while <c>removed_face_count = 1</c>,
+    /// because a <c>FaceArray()</c> element comes as <c>ksEntity</c> and must be unwrapped via <c>GetDefinition()</c>.
     /// History: docs/decisions/adapter-solid.md#b5-removed-faces</remarks>
     private IReadOnlyList<string>? ShellRemovedFaceRefs(DocumentEntry document, ksShellDefinition definition)
     {

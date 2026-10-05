@@ -10,18 +10,14 @@ using KompasMcp.Domain.Geometry;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>B3 body operations: boolean (SM-15), split and cut (SM-16), reposition and rotation
-/// (SM-17).</summary>
-/// <remarks>INVARIANT: the basis is measurement, not member names — three isolated probes of
-/// 18.09.2026 (<c>--boolean</c>, <c>--split</c>, <c>--reposition</c>; logs in
-/// <c>docs/acceptance/api7/</c>) confirmed the routes and, more importantly, their LIMITS; only what
-/// is measured is carried over below, and the unverified is named unverified.
-/// INVARIANT: the checks run before the COM call — the kernel neither rejects a repeated reference
-/// nor checks that the target is not among the tools (MEASURED, step BO.9: a repeat is accepted
-/// silently, bodies 3→2), so both checks live here, before COM, rather than relying on the kernel.
-/// INVARIANT: a successful <c>Update()</c> is not proof — on reposition three routes out of four
-/// returned <c>true</c> and did not move the body (step RP.2), so every handler re-reads the model
-/// after the call and returns the ACTUAL state, not the promised one.</remarks>
+/// <summary>B3 body operations: boolean (SM-15), split and cut (SM-16), reposition and rotation (SM-17).</summary>
+/// <remarks>INVARIANT: the basis is measurement, not member names — three isolated probes of 18.09.2026
+/// (<c>--boolean</c>, <c>--split</c>, <c>--reposition</c>; logs in <c>docs/acceptance/api7/</c>) fixed the
+/// routes and their LIMITS; only what is measured is carried over, the unverified named unverified.
+/// INVARIANT: checks run before the COM call — the kernel neither rejects a repeated reference nor checks
+/// the target is not among the tools (MEASURED, step BO.9: a repeat is accepted silently, bodies 3→2).
+/// INVARIANT: a successful <c>Update()</c> is not proof — on reposition three routes out of four returned
+/// <c>true</c> and did not move the body (step RP.2); every handler re-reads the model after the call.</remarks>
 public sealed partial class Api5Session
 {
     /// <summary>Name of the boolean-operation family in references and responses.</summary>
@@ -722,21 +718,13 @@ public sealed partial class Api5Session
         }
     }
 
-    /// <summary>A written placement is read back and compared with the requested one BY MATRIX, not
-    /// by numbers.</summary>
-    /// <remarks>INVARIANT: a successful <c>IBodyReposition.Update()</c> means "accepted", not
-    /// "applied" — MEASURED (step RP.2) that three routes out of four returned <c>true</c> and did
-    /// not move the body, so creation is additionally confirmed by reading the written parameters
-    /// back. INVARIANT: comparison is by matrix, not by the number triple — the Euler-angle
-    /// parameterisation is ambiguous (at nutation 0 or 180° the sum of precession and rotation is
-    /// defined up to redistribution), so requiring equal numbers would reject a CORRECT write. A
-    /// matrix is assembled from the read triple and compared with the requested one:
-    /// <see cref="EulerOrientation"/> keeps the conjugation order in one place, and swapping that
-    /// order diverges here at once — MEASURED divergence with a foreign order is 1, with the correct
-    /// one 0 or 2.2·10⁻¹⁶. LIMIT: the tolerance 10⁻⁶ is six orders below the divergence a wrong
-    /// order produces (1) and ten orders above the measured residual of the correct decomposition
-    /// (2.2·10⁻¹⁶); it is deliberately wider than machine precision so that rounding is not turned
-    /// into a refusal.</remarks>
+    /// <summary>A written placement is read back and compared with the requested one BY MATRIX, not by numbers.</summary>
+    /// <remarks>INVARIANT: a successful <c>IBodyReposition.Update()</c> means "accepted", not "applied"
+    /// (MEASURED, step RP.2: three routes out of four returned <c>true</c> and did not move the body), so
+    /// creation is confirmed by reading the written parameters back. INVARIANT: comparison is by matrix —
+    /// the Euler-angle parameterisation is ambiguous, so equal numbers would reject a CORRECT write.
+    /// LIMIT: the tolerance is 10⁻⁶ (<see cref="PlacementRoundTripTolerance"/>).
+    /// History: docs/decisions/adapter-solid.md#placement-round-trip</remarks>
     private static void RequirePlacementRoundTrip(
         IBodyReposition feature, double[] matrix, RepositionKind kind)
     {
@@ -839,28 +827,13 @@ public sealed partial class Api5Session
     }
 
     /// <summary>The FORM of a plane specification: mutually exclusive modes, <c>offset_mm</c> without
-    /// <c>base</c>, and the declared refusal on <c>base</c>. Checked before any work with the model,
-    /// on both routes — creation and edit.</summary>
-    /// <remarks>MEASURED by the B3 client acceptance (19.09.2026, three FAIL rows): the schema's
-    /// declared <c>CAPABILITY_UNAVAILABLE</c> on <c>plane.base</c> was UNREACHABLE — the DTO field
-    /// shape differed from the published one, and the call failed while parsing the payload with
-    /// <c>JsonException</c> and code <c>VERIFICATION_FAILED</c>. The shape is brought in line with
-    /// the published one (<c>CutPlaneDto</c>), and this check makes the declared outcome executable
-    /// and shared by <c>kompas_split</c>, <c>kompas_cut_by_plane</c> and the applicable
-    /// <c>kompas_update_feature</c>. INVARIANT: the check priority is declared and does not depend
-    /// on field order in JSON.
-    /// <list type="number">
-    /// <item><c>base</c> named TOGETHER with another mode (<c>plane_ref</c> or point with normal) —
-    /// <c>INVALID_ARGUMENT</c>: the request is contradictory, and answering it with the declared
-    /// capability refusal would hide from the client that it named two modes at once;</item>
-    /// <item><c>base</c> named alone (with or without an offset) — <c>CAPABILITY_UNAVAILABLE</c>:
-    /// exactly what the field description promises;</item>
-    /// <item><c>offset_mm</c> without <c>base</c> — <c>INVALID_ARGUMENT</c>: an offset without a base
-    /// plane does not express a plane, and accepting the parameter silently would declare it
-    /// accepted;</item>
-    /// <item><c>plane_ref</c> together with a point or normal — <c>INVALID_ARGUMENT</c> (checked by
-    /// the calling route, because edit refuses a reference for its own reason).</item>
-    /// </list></remarks>
+    /// <c>base</c>, and the declared refusal on <c>base</c>. Checked before any work with the model, on both routes.</summary>
+    /// <remarks>INVARIANT: the check priority is declared and does not depend on field order in JSON:
+    /// <c>base</c> + another mode → <c>INVALID_ARGUMENT</c>; <c>base</c> alone → <c>CAPABILITY_UNAVAILABLE</c>;
+    /// <c>offset_mm</c> without <c>base</c> → <c>INVALID_ARGUMENT</c>; <c>plane_ref</c> + point/normal →
+    /// <c>INVALID_ARGUMENT</c> (checked by the calling route). MEASURED by the B3 client acceptance
+    /// (19.09.2026, three FAIL rows): the declared refusal was UNREACHABLE (see history).
+    /// History: docs/decisions/adapter-solid.md#plane-form-guard</remarks>
     private static void GuardCutPlaneForm(CutPlaneDto plane)
     {
         switch (CutPlaneForm.Validate(plane))
@@ -926,26 +899,12 @@ public sealed partial class Api5Session
     }
 
     /// <summary>The plane of the operation: an existing support or a point + normal.</summary>
-    /// <remarks>The "base plane + offset" mode is refused with <c>CAPABILITY_UNAVAILABLE</c> and a reason, not
-    /// filled in by a guess: the offset auxiliary-plane route of API7 was not measured in a single
-    /// run, and the sign of the base plane's normal is exactly what decides which side the operation
-    /// cuts away.</remarks>
-    /// <remarks>
-    /// THREE different outcomes are separated here, and previously they were lumped into one
-    /// <c>GEOMETRY_FAILED</c>:
-    /// <list type="bullet">
-    /// <item>the specification is inexpressible (both forms at once, neither form, a zero or
-    /// non-numeric normal) — <c>INVALID_ARGUMENT</c>, fixed by the client;</item>
-    /// <item>the specification is expressible but the route is unsupported ("base plane + offset") —
-    /// <c>CAPABILITY_UNAVAILABLE</c>, exactly as promised in the schema field description;</item>
-    /// <item>the kernel did not build the plane from correct data — <c>GEOMETRY_FAILED</c>, and only
-    /// this outcome remains a <c>null</c> return with the reason in <paramref name="failure"/>.</item>
-    /// </list>
-    /// MEASURED 18.09.2026 by acceptance row B3.17: before this separation a zero normal and a plane
-    /// without a normal answered <c>GEOMETRY_FAILED</c>, i.e. "the kernel failed" instead of "the
-    /// request is inexpressible". For the client these are different invitations: repeat the operation
-    /// versus fix the argument.
-    /// History: docs/decisions/adapter-solid.md#plane-form</remarks>
+    /// <remarks>INVARIANT: three outcomes are separated, not lumped into one <c>GEOMETRY_FAILED</c>:
+    /// inexpressible spec → <c>INVALID_ARGUMENT</c>; expressible but unsupported route ("base plane +
+    /// offset", never measured in a single API7 run) → <c>CAPABILITY_UNAVAILABLE</c>; kernel did not
+    /// build from correct data → <c>GEOMETRY_FAILED</c>, the only <c>null</c> return with the reason in
+    /// <paramref name="failure"/>. The sign of the base plane's normal decides which side is cut away.
+    /// MEASURED 18.09.2026 by acceptance row B3.17. History: docs/decisions/adapter-solid.md#plane-form</remarks>
     private (IPlane3D? Plane, double[]? UnitNormal, double[]? Point) ResolveCutPlane(
         DocumentEntry document,
         Api7Bridge bridge,
@@ -1515,20 +1474,12 @@ public sealed partial class Api5Session
 
     /// <summary>The position of a tree element among features OF THE SAME TYPE — how many such features stand in
     /// the tree before it. This is the element's address in the API7 collection of the same operation.</summary>
-    /// <remarks>
-    /// <b>Why position, not name.</b> The name in API5 and the name in API7 for one and the same object
-    /// diverge — this is MEASURED on a fillet (F.8: a name set in API5 reads differently in API7), and
-    /// for the same reason <c>Api7Fillet.FindIndexesByIdenticalRadius</c> and
-    /// <c>Api7Rotated.FindIndexFor</c> match by VALUE, not by name. For B3 features there is no
-    /// identifier value known before the edit at all (the boolean operands are consumed after the
-    /// union, the split plane is an auxiliary object), so the address is taken by position. This is the
-    /// same technique used to edit a rotation when the tree entity does not answer <c>QI(IRotated)</c>
-    /// (<c>RotatedOrdinal</c>), and it is checked by geometry in acceptance: editing the wrong feature
-    /// will not give the expected volume and bounding box.
-    /// The feature count is returned TOGETHER with the position, not by a separate walk: two walks of
-    /// one collection could diverge, and the decision on address suitability is made from both numbers
-    /// at once (<see cref="RequireSameTypeIndex"/>).
-    /// </remarks>
+    /// <remarks>INVARIANT: the address is by position, not by name — API5 and API7 names for one object
+    /// diverge (MEASURED on a fillet, F.8), and B3 features have no identifier value known before the edit
+    /// (boolean operands are consumed after the union, the split plane is auxiliary). Same technique as
+    /// <c>RotatedOrdinal</c> when the tree entity does not answer <c>QI(IRotated)</c>; checked by geometry
+    /// in acceptance. The count is returned TOGETHER with the position (<see cref="RequireSameTypeIndex"/>).
+    /// History: docs/decisions/adapter-solid.md#same-type-address</remarks>
     private static SameTypeScan ScanSameType(ksPart part, ksEntity target, int type)
     {
         try
@@ -1589,9 +1540,9 @@ public sealed partial class Api5Session
     /// index in the API7 collection are two DIFFERENT lists, and they coincide only when there are
     /// exactly as many features of this type in the tree as there are elements in the collection. For
     /// reposition this condition is violated by measurement: the number <c>79</c> is carried not only by
-    /// "Изменение положения" but also by the auxiliary «Копия тела» that the boolean tool-preservation
+    /// «Изменение положения» but also by the auxiliary «Копия тела» that the boolean tool-preservation
     /// mode creates (<c>scratch/b3-measure-feature-types.py</c>, 18.09.2026). In a document with a copy
-    /// the position of "Изменение положения" stops being an index into <c>BodyRepositions</c>, and the
+    /// the position of «Изменение положения» stops being an index into <c>BodyRepositions</c>, and the
     /// write would land in a FOREIGN feature. Therefore, when the numbers diverge, the call is refused
     /// before mutation.
     /// The price of the refusal: editing a feature next to which lives a feature of the same number but
@@ -1636,21 +1587,12 @@ public sealed partial class Api5Session
     }
 
     /// <summary>Editing an EXISTING reposition feature via <c>kompas_update_feature</c>.</summary>
-    /// <remarks>
-    /// <b>The route is MEASURED 18.09.2026</b> (probe <c>--reposition</c>, step RP.6): editing feature[0]
-    /// by rewriting the same vector leaves the bounding box <c>(17,−11,13)…(37,−1,18)</c>, and resetting
-    /// the vector to zero brings the body home — the parameter is applied to the ORIGINAL inputs, not to
-    /// the current position. This is exactly what order §5 requires, and a repeated
-    /// <c>kompas_reposition</c> does not satisfy it: it creates a second feature and accumulates the
-    /// offset.
-    /// <b>A successful <c>Update()</c> is not proof.</b> Step RP.2 measured three routes out of four that
-    /// returned <c>true</c> and did not move the body. So the translation is READ BACK
-    /// (<c>Position.X/Y/Z</c>) and compared with the matrix that was requested: if the offset accumulated,
-    /// the read would give a doubled value. Volume under a rigid transformation must be preserved, and
-    /// that is checked too — by it "moved" and "stayed" are indistinguishable, but "the transformation
-    /// stayed rigid" is visible.
-    /// The checks "fields of other families are rejected" are the same here as for the other editable
-    /// families: silently applying half a request is worse than refusing.
+    /// <remarks>MEASURED 18.09.2026 (probe <c>--reposition</c>, step RP.6): the parameter is applied to the
+    /// ORIGINAL inputs, not the current position — rewriting the same vector leaves the bounding box
+    /// <c>(17,−11,13)…(37,−1,18)</c>, resetting it to zero brings the body home; a repeated
+    /// <c>kompas_reposition</c> instead creates a second feature and accumulates the offset.
+    /// INVARIANT: a successful <c>Update()</c> is not proof (step RP.2: three routes out of four returned
+    /// <c>true</c> and did not move the body), so the translation is READ BACK and compared by matrix.
     /// History: docs/decisions/adapter-solid.md#edit-reposition</remarks>
     private UpdateFeatureResult UpdateSolidReposition(
         DocumentEntry document,
@@ -1926,22 +1868,11 @@ public sealed partial class Api5Session
 
     /// <summary>All fields of <see cref="UpdateFeatureCommand"/> belonging to the B3 families — ONE table for two
     /// questions: "who owns the field" and "what lies in it".</summary>
-    /// <remarks>
-    /// <b>Why one table and not two.</b> The first edition kept owners in a dictionary and values in a
-    /// separate enumerator, and these two structures could diverge. They would have diverged silently: a
-    /// field added to the enumerator without an entry in the dictionary was NEVER rejected, because
-    /// <c>TryGetValue</c> returned <c>false</c> and the "field is foreign" condition short-circuited to
-    /// <c>false</c>. This is exactly the same class of defect as P5 (a declared but swallowed field),
-    /// only from the other side: there the field was forgotten in the forbidden list, here — in the known
-    /// list, and the outcome is one — the field is accepted and not applied. Now there is nothing to
-    /// diverge: the enumerator walks this same table.
-    /// <b>Why an enumeration, not a "forbidden list".</b> The enumeration of what occurs in the command
-    /// changes together with the contract, and the default here must be "do not reject": a field not
-    /// assigned to any family is rejected not here, but by its family or by the check of inapplicable
-    /// parameters below. Therefore the completeness of the table is checked separately — by the test
-    /// <c>SolidFeatureClassificationTests</c>, which verifies it against the contract itself: a new
-    /// command field will not pass until it is assigned to a family, to the inapplicable, to addressing
-    /// or to geometry expectations.
+    /// <remarks>INVARIANT: one table, not two — a separate owners dictionary and values enumerator could
+    /// diverge silently: a field added to the enumerator without a dictionary entry was NEVER rejected
+    /// (<c>TryGetValue</c> returned <c>false</c> and the "field is foreign" condition short-circuited). This
+    /// is the same class of defect as P5, from the other side: accepted and not applied. Completeness is
+    /// held by <c>SolidFeatureClassificationTests</c> against the contract itself.
     /// History: docs/decisions/adapter-solid.md#field-classification</remarks>
     private static readonly SolidField[] SolidFields =
     {
@@ -1993,34 +1924,13 @@ public sealed partial class Api5Session
         command.ExpectedVolumeMm3 is not null || command.ExpectedBboxMm is not null;
 
     /// <summary>Refusal on fields of FOREIGN B3 families: the definition of the feature is enumerated IN FULL.</summary>
-    /// <remarks>
-    /// <b>Why an enumeration, not a "forbidden list".</b> The first edition listed the forbidden fields
-    /// by hand, and it already suffered from this: <c>keep_side</c> did not make it into the list, so a
-    /// call <c>plane + keep_side</c> on a SPLIT feature was accepted and <c>keep_side</c> was silently
-    /// ignored — exactly the class of defect the rule "a parameter not declared in the schema does not
-    /// reach COM" was written against (§9.1 P4), only from the other side: declared but swallowed. Here
-    /// every family field must be ASSIGNED to a family (<see cref="SolidFields"/>), and a field passed to
-    /// a family that does not own it is rejected.
-    /// <b>What this check does not promise.</b> It rejects a passed field but does NOT prove that the
-    /// list of family fields is complete: completeness is held by the test
-    /// <c>SolidFeatureClassificationTests</c>, which verifies the table against the contract itself.
-    /// Earlier there stood here a claim that the table and the enumerator "are verified on refusal"; that
-    /// was wrong — they were verified nowhere, and the divergence between them was silent. The line is
-    /// replaced with a description of what the check actually does.
-    /// Fields belonging to no B3 family (extrude, chamfer, fillet, rotation) are checked separately
-    /// below: they are not "a foreign family" but simply inapplicable to a B3 feature.
-    /// </remarks>
-    /// <param name="ownFields">
-    /// Names of fields that THIS family reads, even though the role table gives them to another
-    /// department. Introduced 20.09.2026 by order SM07 §3.2 for one measured case: <c>depth_mm</c> is an
-    /// EXTRUDE field in the table and at the same time an OWN field of a blind hole (<c>blind_flat</c>).
-    /// Without this list, editing a blind hole was rejected INVALID_ARGUMENT before COM — and this is
-    /// MEASURED on the first delivery with the hole branch (rows F08.15/16/19/20.edit, run 20.09.2026):
-    /// the depth is read as a foreign field, although the hole branch reads it. The length of the list is
-    /// held not by "common sense" but by acceptance: with it a blind hole is edited, while counterbore
-    /// and countersink with <c>depth_mm</c> are still rejected — but now BY MODE
-    /// (<c>ValidateHoleEdit</c>), where that is measured (HO.13/HO.16).
-    /// </param>
+    /// <remarks>INVARIANT: an enumeration, not a hand-written "forbidden list" — the first edition listed
+    /// forbidden fields by hand, so <c>keep_side</c> was missed and a call <c>plane + keep_side</c> on a
+    /// SPLIT feature was accepted and silently ignored (§9.1 P4, from the other side: declared but
+    /// swallowed). Every family field must be ASSIGNED to a family (<see cref="SolidFields"/>). Fields of
+    /// no B3 family (extrude, chamfer, fillet, rotation) are checked separately below.
+    /// History: docs/decisions/adapter-solid.md#foreign-solid-fields</remarks>
+    /// <param name="ownFields">Fields THIS family reads though the role table gives them to another department (SM07 §3.2).</param>
     private static void RejectForeignSolidFields(
         UpdateFeatureCommand command,
         string family,
@@ -2079,24 +1989,14 @@ public sealed partial class Api5Session
         }
     }
 
-    /// <summary>Specifying the support for EDITING an SM-16 feature: the same validation as for creation, but
-    /// WITHOUT creating a plane object.</summary>
-    /// <remarks>
-    /// <b>Why without creation.</b> MEASURED 18.09.2026 (probe <c>--split</c>, step SP.9, step E-B —
-    /// negative control): substituting ANOTHER, just-created plane into an existing feature does NOT
-    /// change the result — <c>Update()</c> returns <c>true</c> and the parts stay as they were. A
-    /// different route works (E-A for split, E-C for cut): transferring the THREE CONSTRUCTION POINTS of
-    /// the feature's OWN support. Therefore three points are computed here and no plane object is created
-    /// at all — otherwise an unused object would remain in the document on every edit.
-    /// <b><c>plane_ref</c> is refused on edit.</b> The route is measured for the feature's OWN support,
-    /// and there is no way to prove that the presented reference is that support: comparing plane
-    /// references was not measured, and substituting a foreign plane gives no result (E-B). Moving a
-    /// foreign plane and reporting an edit would mean passing the unreached off as reached, so the
-    /// outcome is honest — a refusal stating that the support is described by a point and a normal.
-    /// The point and normal checks are not duplicated but taken from the same rules as at creation:
-    /// finiteness here, a non-zero normal — from <c>PlaneBasis.FromNormal</c>, three construction points —
-    /// from <c>PlaneBasis.ThreePoints</c>.
-    /// </remarks>
+    /// <summary>Specifying the support for EDITING an SM-16 feature: the same validation as for creation, but WITHOUT creating a plane object.</summary>
+    /// <remarks>MEASURED 18.09.2026 (probe <c>--split</c>, step SP.9, negative control E-B): substituting
+    /// ANOTHER, just-created plane does NOT change the result (<c>Update()</c> returns <c>true</c>, parts
+    /// stay); the working route (E-A split, E-C cut) transfers the THREE CONSTRUCTION POINTS of the
+    /// feature's OWN support, so no plane object is created here. INVARIANT: <c>plane_ref</c> is refused on
+    /// edit — comparing plane references was not measured and a foreign plane gives no result (E-B). Checks
+    /// reuse <c>PlaneBasis.FromNormal</c> (non-zero normal) and <c>PlaneBasis.ThreePoints</c>.
+    /// History: docs/decisions/adapter-solid.md#support-plane-edit</remarks>
     private (double[] P1, double[] P2, double[] P3, double[] UnitNormal, double[] Point) ResolveSupportPlane(
         CutPlaneDto plane,
         string family)
@@ -2166,25 +2066,12 @@ public sealed partial class Api5Session
     }
 
     /// <summary>Editing an EXISTING split feature: a new support written into the same feature.</summary>
-    /// <remarks>
-    /// <b>The route is MEASURED 18.09.2026</b> (probe <c>--split</c>, step SP.9, run
-    /// <c>c9cd7660468c44aa97b410e253ee2cb1</c>): transferring the three construction points of the
-    /// feature's OWN support turns the parts <c>6 000 / 18 000</c> at <c>x = 10</c> into
-    /// <c>9 000 / 15 000</c> at <c>x = 15</c>, the feature count stays <c>1 → 1</c>, the sum
-    /// <c>24 000</c> does not change. The negative control of the same step (E-B) showed that the
-    /// "obvious" route — substituting another plane into <c>CutObjects</c> — does not change the result,
-    /// and it is not used in the edit.
-    /// <b>The definition is enumerated in full, not "the field being changed".</b> A split has two kinds
-    /// of support (an existing plane or a point with a normal). Reading the support back IS possible —
-    /// this is MEASURED 18.09.2026 by step SP.10 (<c>CutObjects</c> returns three construction points and
-    /// a normal, and different supports read differently), and this is exactly what
-    /// <c>kompas_get_feature</c> publishes in the <c>solid.plane</c> block. The requirement of request
-    /// completeness is kept not because reading is impossible, but because an answer to a partial request
-    /// would not tell "exactly what was asked changed" from "what was not mentioned changed too".
-    /// <b>Confirmation is only the composition of parts.</b> The sum of volumes does not change when a
-    /// split is edited, so <c>expected_volume_mm3</c> is not accepted here at all (it is rejected with a
-    /// pointer to <c>expected_part_volumes_mm3</c>): a row checking the sum would pass on complete
-    /// inaction.
+    /// <remarks>MEASURED 18.09.2026 (probe <c>--split</c>, step SP.9, run <c>c9cd7660468c44aa97b410e253ee2cb1</c>):
+    /// moving the three construction points of the OWN support turns parts <c>6 000 / 18 000</c> at <c>x = 10</c>
+    /// into <c>9 000 / 15 000</c> at <c>x = 15</c>, count <c>1 → 1</c>, sum <c>24 000</c>; negative control
+    /// E-B (another plane into <c>CutObjects</c>) does not change the result. The support reads back
+    /// (SP.10, published by <c>kompas_get_feature</c>), but a partial request is still refused. INVARIANT:
+    /// confirmation is only the composition of parts (<c>expected_part_volumes_mm3</c>), never the sum.
     /// History: docs/decisions/adapter-solid.md#edit-split</remarks>
     private UpdateFeatureResult UpdateSolidSplit(
         DocumentEntry document,
@@ -2272,12 +2159,9 @@ public sealed partial class Api5Session
         var sameFeature = string.Equals(stateBefore.Name, stateAfter.Name, StringComparison.Ordinal);
 
         // PARTS ARE RECOGNISED BY CHANGE, not by matching the expectation. The former edition fed ALL
-        // document bodies into UnmatchedVolume and published their volumes as observed: the expectation
-        // was sought ANYWHERE in the document, so a foreign body whose volume accidentally matched a
-        // declared part closed the declaration; an extra part did not prevent a pass; and a composition
-        // mismatch could not be told from bad arithmetic (defect
-        // CHECK-FIELDS-DO-NOT-SUPPORT-THE-VERDICT, order §4.2). Here the set of parts is taken from
-        // BODY-COMPOSITION MATCHING and does not depend on the declared expectation at all. The predicate
+        // document bodies into UnmatchedVolume, so a foreign body whose volume matched a declared part
+        // closed the declaration (defect CHECK-FIELDS-DO-NOT-SUPPORT-THE-VERDICT, order §4.2). Here the
+        // set comes from BODY-COMPOSITION MATCHING and does not depend on the expectation. The predicate
         // is changes.Touched (volume OR bounding box changed), not changes.Changed: a part that moved
         // with the same volume is still a part of this split and must not drop out of the set.
         var afterSnapshots = ReadBodySnapshots(document.PartNow());
@@ -2439,16 +2323,11 @@ public sealed partial class Api5Session
     }
 
     /// <summary>Editing an EXISTING cut feature: a new support and a new kept side.</summary>
-    /// <remarks>
-    /// <b>The route is MEASURED 18.09.2026</b> (probe <c>--split</c>, step SP.9, run
-    /// <c>c9cd7660468c44aa97b410e253ee2cb1</c>), by two separate experiments: E-C — transferring the
-    /// support points by +5 along X changes the remainder from 6000 to 9000; E-D — changing ONLY
-    /// <c>Direction</c> on the same feature changes the remainder from 9000 to 15000. The former edition
-    /// of this handler substituted ANOTHER plane into the feature, and this is measured not to work
-    /// (negative control E-B).
-    /// <b>The definition is enumerated in full.</b> BOTH the support AND the side are required: reading
-    /// the current support and side from a live feature and filling in the missing part was not measured,
-    /// and silently performing half the request means reporting an edit that did not happen.
+    /// <remarks>MEASURED 18.09.2026 (probe <c>--split</c>, step SP.9, run <c>c9cd7660468c44aa97b410e253ee2cb1</c>),
+    /// two experiments: E-C — moving the support points +5 along X changes the remainder 6000 → 9000; E-D —
+    /// changing ONLY <c>Direction</c> on the same feature changes it 9000 → 15000; negative control E-B
+    /// (substituting ANOTHER plane) does not work. INVARIANT: BOTH support AND side are required — reading
+    /// the current ones from a live feature was not measured, and half a request is an edit that did not happen.
     /// History: docs/decisions/adapter-solid.md#edit-cut</remarks>
     private UpdateFeatureResult UpdateSolidCutByPlane(
         DocumentEntry document,
@@ -2772,19 +2651,12 @@ public sealed partial class Api5Session
 
         // Only two cases land here: exactly one body changed (handled above), or NO body changed,
         // vanished or appeared. The "more than one changed" branch above became unreachable on purpose:
-        // it was a separate refusal for exactly the same subject as the addressing check, and two checks
-        // of one case would diverge — that is precisely why the former edition missed a vanished body:
-        // the `changed.Count > 1` branch counted only bodies AFTER the operation.
-        //
-        // No body changed — this is NOT a refusal: the feature may already have had such support and
-        // side. But neither is it confirmation: this call cannot tell "the parameters were already like
-        // this" from "the write was not applied" — reading the support and side back on a live feature
-        // was not measured. So the outcome is honest: the call passed, the level is "call returned", and
-        // the reason is named.
-        //
-        // The case "the body moved but the volume did not change" is named separately: a cut removes
-        // material, so a remainder without ΔV is not a remainder, and a declared expectation is not
-        // applied to it.
+        // it duplicated the addressing check, and the former edition missed a vanished body because its
+        // `changed.Count > 1` branch counted only bodies AFTER the operation.
+        // No body changed — NOT a refusal (the feature may already have had such support and side), but
+        // not confirmation either: "already like this" cannot be told from "the write was not applied"
+        // (reading support and side back on a live feature was not measured). Level is "call returned".
+        // "The body moved but the volume did not change" is named separately: a remainder without ΔV is not one.
         var movedOnly = touched.Count == 1 && changed.Count == 0;
         checks.Add(new NamedCheck(
             "geometry_changed",
@@ -2814,23 +2686,12 @@ public sealed partial class Api5Session
     }
 
     /// <summary>Editing the KIND of an existing boolean operation (order §7, action <c>edit</c>).</summary>
-    /// <remarks>
-    /// <b>The route is MEASURED</b> by probe <c>--boolean</c>, step <c>BO.11</c>, run
-    /// <c>a2f5cf0a2ad342c59c36807101a65d51</c>: rewriting <c>IBoolean.BooleanType</c> on an EXISTING
-    /// feature + <c>Update()</c> + rebuild changes the geometry (E-A <c>36 000 → 12 000</c> in the
-    /// bounding box <c>x ≤ 20</c>; E-D <c>12 000 → 36 000</c>). Experiment E-E confirmed that it is the
-    /// PAIR "write → <c>Update()</c>" that applies: a write without <c>Update()</c> but with a rebuild
-    /// does not change the geometry.
-    /// <b>Why the bounding box and not only the volume.</b> The volume of the difference and the volume
-    /// of the intersection on the reference of §6.1 are EQUAL (12 000), so checking one volume alone
-    /// would also confirm complete inaction. The bounding box distinguishes: the difference lies in
-    /// <c>x ≤ 20</c>, the intersection — in <c>x ∈ [20,40]</c>. This is the same lesson as in row
-    /// <c>B3L.04</c> (for a translation the volume before and after is 1 000, and a row checking only
-    /// volumes would pass on inaction), and it is repeated here on its own family rather than carried
-    /// over.
-    /// <b>What the edit does not do.</b> The operand bodies (<c>BaseObject</c>, <c>ModifyObjects</c>) and
-    /// the tool-preservation policy are NOT rewritten: editing the tool set was not measured, and
-    /// rewriting an untested route would pass the unreached off as reached.
+    /// <remarks>MEASURED by probe <c>--boolean</c>, step <c>BO.11</c>, run <c>a2f5cf0a2ad342c59c36807101a65d51</c>: rewriting <c>IBoolean.BooleanType</c> on an EXISTING feature + <c>Update()</c> + rebuild changes the geometry
+    /// (E-A <c>36 000 → 12 000</c> in the bounding box <c>x ≤ 20</c>; E-D <c>12 000 → 36 000</c>); E-E confirmed
+    /// it is the PAIR "write → <c>Update()</c>" that applies. INVARIANT: the bounding box is checked, not only
+    /// the volume — on the §6.1 reference difference and intersection both have volume 12 000; the bounding box
+    /// distinguishes them (<c>x ≤ 20</c> vs <c>x ∈ [20,40]</c>). Operand bodies (<c>BaseObject</c>, <c>ModifyObjects</c>)
+    /// and tool-preservation are NOT rewritten.
     /// History: docs/decisions/adapter-solid.md#edit-boolean</remarks>
     private UpdateFeatureResult UpdateSolidBoolean(
         DocumentEntry document,
@@ -2915,21 +2776,12 @@ public sealed partial class Api5Session
 
         // SUBJECT OF PROOF. The result of a boolean operation is the CHANGED (or newly appeared) body,
         // NOT "any document body whose bounding box matched the declared one". The former edition sought
-        // the body by matching the EXPECTATION:
-        //   rowsAfter.FirstOrDefault(r => BoxMatches(r.Bbox, command.ExpectedBboxMm))
-        // and published the volumes of ALL document bodies as observed — that is, it compared a bounding
-        // box with numbers of another kind and another subject. Separately: a body found by SUCH a search
-        // may be foreign — a bounding box matching the expectation does not make the body the result of
-        // THIS operation, so the "confirmation" rested on fitting to the expectation (defect
-        // CHECK-FIELDS-DO-NOT-SUPPORT-THE-VERDICT, order §4.1).
-        //
-        // A second foray into the same defect (MEASURED 19.09.2026 on delivery
-        // publish-b3-20260919-targeting, row B3.25): recognition went by changes.Changed, which is the
-        // list of bodies with a changed VOLUME. On the reference the volume of the difference and the
-        // volume of the intersection are EQUAL (12 000 mm³), only the bounding box position
-        // distinguishes them, so a correctly applied `intersect` edit landed in resultBodies.Count == 0
-        // and was rejected as NO_GEOMETRY_CHANGE. The predicate "the result changed" must also cover a
-        // body that moved: changes.Touched = volume OR bounding box changed.
+        // the body by matching the EXPECTATION and published ALL document volumes as observed — a bounding
+        // box compared with numbers of another kind (defect CHECK-FIELDS-DO-NOT-SUPPORT-THE-VERDICT, §4.1).
+        // A second foray (MEASURED 19.09.2026, delivery publish-b3-20260919-targeting, row B3.25): going by
+        // changes.Changed (changed VOLUME) missed a correct `intersect` edit — difference and intersection
+        // volumes are EQUAL (12 000 mm³), only the bounding box distinguishes them — and it was rejected as
+        // NO_GEOMETRY_CHANGE. The predicate must cover a moved body: changes.Touched = volume OR bbox changed.
         var afterSnapshots = ReadBodySnapshots(document.PartNow());
         var changes = CompareBodySnapshots(bodiesBefore, afterSnapshots);
         var resultBodies = changes.Touched

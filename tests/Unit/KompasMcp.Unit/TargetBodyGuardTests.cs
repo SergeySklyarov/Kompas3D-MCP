@@ -4,18 +4,10 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>The two decisions about an extrusion's target body that do not need KOMPAS: which operations may
-/// name a body, and whether a drawn profile can plausibly lie over the body that was named.</summary>
-/// <remarks>
-/// The second one exists because probe P2.6 measured a silent no-op: declaring a body the contour
-/// does not sit over makes SetSketch, Create and RebuildDocument all answer true while no body
-/// changes volume at all. A server that cannot see the contradiction must not be able to report the
-/// result as success, and the numbers below are the two configurations that measurement produced —
-/// a 100×80 plate at x∈[-50,50] and a blob at x∈[138,162] with a Ø10 contour over it.
-///
-/// The axis correspondences asserted here are the ones measured by probe P2.4 and re-asserted by
-/// acceptance rows G07_xy/G07_xz/G07_yz, not a convention invented for the test.
-/// </remarks>
+/// <summary>The two decisions about an extrusion's target body that do not need KOMPAS: which operations may name a body, and whether a drawn profile can plausibly lie over the body that was named.</summary>
+/// <remarks>The second one exists because probe P2.6 measured a silent no-op: declaring a body the contour does not sit over makes SetSketch, Create and RebuildDocument all answer true while no body changes volume at all.
+/// A server that cannot see the contradiction must not be able to report the result as success, and the numbers below are the two configurations that measurement produced — a 100×80 plate at x∈[-50,50] and a blob at x∈[138,162] with a Ø10 contour over it.
+/// The axis correspondences asserted here are the ones measured by probe P2.4 and re-asserted by acceptance rows G07_xy/G07_xz/G07_yz, not a convention invented for the test.</remarks>
 public class TargetBodyGuardTests
 {
     private static readonly double[] PlateMin = { -50d, -40d, 0d };

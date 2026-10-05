@@ -9,14 +9,9 @@ using KompasMcp.Contracts;
 namespace KompasMcp.Api5Adapter;
 
 /// <summary>Mates domain — block C2, profile <c>mates-minimal-v1</c>, modes <c>MATE-01…MATE-06</c>.</summary>
-/// <remarks>
-/// ROUTE — customer decision 05.10.2026, the documented API7 path: <c>IPart7.MateConstraints</c> →
-/// <c>IMateConstraints3D.Add(MateConstraintType)</c> → <c>BaseObject1/2</c> → <c>Update()</c>;
-/// confirmation is <c>Valid</c>, not <c>Update()=true</c>. LIMIT: <c>ksDocument3D.AddMateConstraint</c>
-/// is NOT used — DOC documents it as a constant-mate method, but it returned <c>False</c> under every
-/// documented combination; cause not established, closed by customer decision.
-/// DOC: a component face is <c>ksPart.BodyCollection() → ksBody.FaceCollection()</c>
-/// (<c>kspart_bodycollection.html</c>), then transferred to API7 as <c>IModelObject</c>.
+/// <remarks>ROUTE — customer decision 05.10.2026, the documented API7 path: <c>IPart7.MateConstraints</c> → <c>IMateConstraints3D.Add(MateConstraintType)</c> → <c>BaseObject1/2</c> → <c>Update()</c>; confirmation is <c>Valid</c>, not <c>Update()=true</c>.
+/// LIMIT: <c>ksDocument3D.AddMateConstraint</c> is NOT used — DOC documents it as a constant-mate method, but it returned <c>False</c> under every documented combination; cause not established, closed by customer decision.
+/// DOC: a component face is <c>ksPart.BodyCollection() → ksBody.FaceCollection()</c> (<c>kspart_bodycollection.html</c>), then transferred to API7 as <c>IModelObject</c>.
 /// History: docs/decisions/mates.md#api5-addmateconstraint
 /// </remarks>
 public sealed partial class Api5Session
@@ -497,20 +492,11 @@ public sealed partial class Api5Session
         }
     }
 
-    /// <summary>Whether this is the same mate: the API7 type and base objects are compared against the API5
-    /// collection at the same ordinal.</summary>
-    /// <returns>
-    /// <c>true</c> — identity confirmed; <c>false</c> — mismatch (the ordinal leads to another mate);
-    /// <c>null</c> — nothing to compare.
-    /// </returns>
-    /// <remarks>
-    /// WHY: the API7 mate is taken by the ordinal from the API5 collection, and the API7↔API5 order
-    /// correspondence is an ASSUMPTION of the same kind as for components; if violated, the parameter
-    /// would be written into a FOREIGN mate. WHAT IS COMPARED: type (API5 <c>constraintType</c> vs API7
-    /// <c>ConstraintType</c>) and base objects by PRESENCE. Bitwise comparison of the objects is NOT
-    /// done — the wrapper's identity to the COM mate was not MEASURED live, and a false mismatch would
-    /// block correct work. History: docs/decisions/mates.md#mate-identity
-    /// </remarks>
+    /// <summary>Whether this is the same mate: the API7 type and base objects are compared against the API5 collection at the same ordinal.</summary>
+    /// <returns><c>true</c> — identity confirmed; <c>false</c> — mismatch (the ordinal leads to another mate); <c>null</c> — nothing to compare.</returns>
+    /// <remarks>WHY: the API7 mate is taken by the ordinal from the API5 collection, and the API7↔API5 order correspondence is an ASSUMPTION of the same kind as for components; if violated, the parameter would be written into a FOREIGN mate.
+    /// WHAT IS COMPARED: type (API5 <c>constraintType</c> vs API7 <c>ConstraintType</c>) and base objects by PRESENCE. Bitwise comparison of the objects is NOT done — the wrapper's identity to the COM mate was not MEASURED live, and a false mismatch would block correct work.
+    /// History: docs/decisions/mates.md#mate-identity</remarks>
     private bool? MateIdentityMatches(MatePayload payload, IMateConstraint3D mate7, out string detail)
     {
         var type5 = payload.ConstraintType;
@@ -927,7 +913,7 @@ public sealed partial class Api5Session
     /// <summary>Fixing flag by name. DOC: <c>ksmatefixedtypeenum.html</c> — «ksMFixedUnknown = 0, Неопределено;
     /// ksMFixedPart1 = 1; ksMFixedPart2 = 2»; DOC: <c>mateconstraintfixed.html</c> — «0 нет фиксации,
     /// 1 фиксировать деталь 1, 2 фиксировать деталь 2». The two sources diverge and the divergence is
-    /// named: value 0 is "Неопределено" in the API5 enum but "no fixing" in the API7 constants, and the
+    /// named: value 0 is «Неопределено» in the API5 enum but "no fixing" in the API7 constants, and the
     /// public name <c>none</c> follows the SECOND source.</summary>
     private static ksMateFixedTypeEnum FixedFromName(string name) => name switch
     {

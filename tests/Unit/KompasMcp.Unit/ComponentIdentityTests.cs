@@ -4,13 +4,10 @@ using Xunit;
 namespace KompasMcp.Unit;
 
 /// <summary>Component-address identity — as a table, without KOMPAS.</summary>
-/// <remarks>TEST: exactly the pure function is checked. INVARIANT (findings §1 and §3 of the 05.10.2026
-/// order):
+/// <remarks>TEST: exactly the pure function is checked. INVARIANT (findings §1 and §3 of the 05.10.2026 order):
 /// <list type="bullet">
-/// <item><description>source matches, name matches, matrix CHANGED after an own mutation → identity is NOT
-/// false. The matrix is mutable state: both an own mutation and a mate change it.</description></item>
-/// <item><description>name DIFFERS while source and matrix match → NOT a refusal. API5/API7 name comparison
-/// was never measured live, and a systematic format difference would refuse every assembly mutation.</description></item>
+/// <item><description>source matches, name matches, matrix CHANGED after an own mutation → identity is NOT false. The matrix is mutable state: both an own mutation and a mate change it.</description></item>
+/// <item><description>name DIFFERS while source and matrix match → NOT a refusal. API5/API7 name comparison was never measured live, and a systematic format difference would refuse every assembly mutation.</description></item>
 /// </list>
 /// History: docs/decisions/tests.md#component-identity</remarks>
 public class ComponentIdentityTests

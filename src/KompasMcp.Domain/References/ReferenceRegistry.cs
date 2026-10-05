@@ -57,19 +57,8 @@ public sealed class ReferenceRegistry
     public bool TryGet(string id, out StoredReference? reference) => _byId.TryGetValue(id, out reference);
 
     /// <summary>Register a reference whose identifier is DETERMINED BY THE SUBJECT, not by a fresh uuid.</summary>
-    /// <remarks>
-    /// Almost every reference in this server is opaque: the caller is told a uuid and may do nothing
-    /// with it but hand it back. A fillet's own input is the exception, and the reason is measured
-    /// (<c>docs/acceptance/api7/fillet-base-objects.md</c>): the only currency that shrinks a fillet's
-    /// edge set is the set of <c>IModelObject</c> objects the feature itself hands out through
-    /// <c>IFillet.BaseObjects</c>, and their address is the number <c>IModelObject.Reference</c>.
-    /// Those numbers are what <c>kompas_get_feature</c> already reports as
-    /// <c>base_object_references</c>, so the identifier is fixed by the model, not chosen here.
-    /// Minting a uuid instead would produce a reference that carries no address at all.
-    /// Re-registration is idempotent and REFRESHES the revision: the same input read twice is the
-    /// same reference, and the later read is the one whose revision must match. Treating it as a
-    /// collision would make the second <c>kompas_get_feature</c> fail.
-    /// </remarks>
+    /// <remarks>Almost every reference in this server is opaque: the caller is told a uuid and may do nothing with it but hand it back. A fillet's own input is the exception, and the reason is measured (<c>docs/acceptance/api7/fillet-base-objects.md</c>): the only currency that shrinks a fillet's edge set is the set of <c>IModelObject</c> objects the feature itself hands out through <c>IFillet.BaseObjects</c>, and their address is the number <c>IModelObject.Reference</c>. Those numbers are what <c>kompas_get_feature</c> already reports as <c>base_object_references</c>, so the identifier is fixed by the model, not chosen here. Minting a uuid instead would produce a reference that carries no address at all.
+    /// Re-registration is idempotent and REFRESHES the revision: the same input read twice is the same reference, and the later read is the one whose revision must match. Treating it as a collision would make the second <c>kompas_get_feature</c> fail.</remarks>
     public StoredReference RegisterDeterministic(
         string id, string kind, string documentId, long revision, object? payload,
         string? persistentFeatureId = null)
@@ -154,29 +143,15 @@ public sealed class ReferenceRegistry
     public static bool IsTopologyHandle(string kind) =>
         kind is "face" or "edge" or "vertex" or "loop" or InputKind;
 
-    /// <summary>
-    /// Kind of a reference that addresses a FEATURE'S OWN INPUT (an <c>IModelObject</c> from
-    /// <c>IFillet.BaseObjects</c>) rather than an element of the body's topology.
-    /// </summary>
-    /// <remarks>This kind counts as a topology handle on purpose: an own input is as perishable as a body
-    /// edge — after any mutation the feature may hold a different set — so an ordinary revision
-    /// bump must DROP these references rather than re-stamp them. Re-stamping is reserved for the
-    /// handles this server just minted for objects it created or edited, which is exactly what an
-    /// input is not: its composition can change under the caller's feet.</remarks>
+    /// <summary>Kind of a reference that addresses a FEATURE'S OWN INPUT (an <c>IModelObject</c> from <c>IFillet.BaseObjects</c>) rather than an element of the body's topology.</summary>
+    /// <remarks>This kind counts as a topology handle on purpose: an own input is as perishable as a body edge — after any mutation the feature may hold a different set — so an ordinary revision bump must DROP these references rather than re-stamp them.
+    /// Re-stamping is reserved for the handles this server just minted for objects it created or edited, which is exactly what an input is not: its composition can change under the caller's feet.</remarks>
     public const string InputKind = "input";
 
     /// <summary>Move a document's references to a new revision.</summary>
     /// <param name="documentId">Document whose references are affected.</param>
     /// <param name="newRevision">Revision the surviving references are re-stamped to.</param>
-    /// <param name="invalidateAll">
-    /// True after a rebuild, reload, restore or a detected external change — then nothing from
-    /// the previous revision survives. False for an ordinary mutation performed by this server:
-    /// in that case the model objects it just created or edited (a sketch, a feature, a body)
-    /// are exactly the handles the next command needs, so they are re-stamped instead of
-    /// dropped. Dropping them made the natural sequence create_sketch → edit_sketch → extrude
-    /// impossible, because the second step bumped the revision and killed the sketch the third
-    /// step was about to consume.
-    /// </param>
+    /// <param name="invalidateAll">True after a rebuild, reload, restore or a detected external change — then nothing from the previous revision survives. False for an ordinary mutation performed by this server: in that case the model objects it just created or edited (a sketch, a feature, a body) are exactly the handles the next command needs, so they are re-stamped instead of dropped. Dropping them made the natural sequence create_sketch → edit_sketch → extrude impossible, because the second step bumped the revision and killed the sketch the third step was about to consume.</param>
     /// <returns>How many references were dropped.</returns>
     public int RevisionForward(string documentId, long newRevision, bool invalidateAll)
     {

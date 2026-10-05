@@ -21,14 +21,9 @@ public sealed record PathDecision(
     string? DeniedReason,
     string? MatchedRoot);
 
-/// <summary>File-system boundary of the server (spec 1.12). Allowed roots come from configuration; the
-/// decision is made on a resolved path, with separator-aware containment and an explicit refusal
-/// of anything the checks cannot cover.</summary>
-/// <remarks>
-/// Why not <c>StartsWith</c>: "D:\work" is a prefix of "D:\workspace\secret.a3d", so a naive
-/// check admits a path outside the root. Why not only <c>Path.GetFullPath</c>: it collapses
-/// <c>..</c> lexically but does not resolve junctions, so a directory inside the root that is
-/// really a reparse point to elsewhere still passes. Both are handled here.
+/// <summary>File-system boundary of the server (spec 1.12). Allowed roots come from configuration; the decision is made on a resolved path, with separator-aware containment and an explicit refusal of anything the checks cannot cover.</summary>
+/// <remarks>Why not <c>StartsWith</c>: "D:\work" is a prefix of "D:\workspace\secret.a3d", so a naive check admits a path outside the root.
+/// Why not only <c>Path.GetFullPath</c>: it collapses <c>..</c> lexically but does not resolve junctions, so a directory inside the root that is really a reparse point to elsewhere still passes. Both are handled here.
 /// </remarks>
 public sealed class PathPolicy
 {

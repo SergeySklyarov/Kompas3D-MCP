@@ -6,24 +6,12 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>Editing a native hole (order SM07 §3.4): three properties the acceptance run does NOT hold, while a
-/// disagreement between contract, schema and adapter is caught here.</summary>
-/// <remarks>INVARIANT, three claims acceptance cannot prove (it proves behaviour on a live model, not the
-/// agreement of the three places):
-/// <list type="number">
-/// <item>the hole feature is recognised in the edit dispatcher BY TREE TYPE, and the branch stands before
-/// reading the API5 definition — a hole has no definition at all, so the reverse order would make the edit
-/// unreachable;</item>
-/// <item>every hole-edit field is rejected by the neighbouring families — otherwise it is accepted and
-/// swallowed (measured class: <c>keep_side</c> P5, <c>couplings</c> 20.09.2026);</item>
-/// <item>the derived countersink depth is NOT declared writable and NOT asserted to match the requested one
-/// — with the "diameter + angle" method a write into it has no effect (M.3), so requiring a match would
-/// demand a false claim from acceptance.</item>
-/// </list>
-/// LIMIT: the check is by SOURCE, not by assembly — the adapter assembly does not load without KOMPAS
-/// installed (interop types are not copied to the output, <c>Private=false</c> in
-/// <c>build/KompasInterop.props</c>). Comments are stripped from the parsed text, else the test would find
-/// the name in an explanation, not in the code. History: docs/decisions/tests.md#hole-edit</remarks>
+/// <summary>Editing a native hole (order SM07 §3.4): three properties the acceptance run does NOT hold, while a disagreement between contract, schema and adapter is caught here.</summary>
+/// <remarks>INVARIANT, three claims acceptance cannot prove (it proves behaviour on a live model, not the agreement of the three places): (1) the hole feature is recognised in the edit dispatcher BY TREE TYPE, and the branch stands before reading the API5 definition — a hole has no definition at all, so the reverse order would make the edit unreachable;
+/// (2) every hole-edit field is rejected by the neighbouring families — otherwise it is accepted and swallowed (measured class: <c>keep_side</c> P5, <c>couplings</c> 20.09.2026);
+/// (3) the derived countersink depth is NOT declared writable and NOT asserted to match the requested one — with the "diameter + angle" method a write into it has no effect (M.3), so requiring a match would demand a false claim from acceptance.
+/// LIMIT: the check is by SOURCE, not by assembly — the adapter assembly does not load without KOMPAS installed (interop types are not copied to the output, <c>Private=false</c> in <c>build/KompasInterop.props</c>). Comments are stripped from the parsed text, else the test would find the name in an explanation, not in the code.
+/// History: docs/decisions/tests.md#hole-edit</remarks>
 public sealed class HoleEditClassificationTests
 {
     private static readonly string RepoRoot = FindRepoRoot();

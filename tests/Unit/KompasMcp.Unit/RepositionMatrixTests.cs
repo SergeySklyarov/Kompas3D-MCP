@@ -41,15 +41,9 @@ public class RepositionMatrixTests
     [Fact]
     public void RotateAboutZ_StoresAxisImagesInTheMeasuredArrayLayout()
     {
-        // DISCRIMINATING control of the layout — the thing that was absent here, and whose absence made a
-        // rotation through MCP be rejected as NO_GEOMETRY_CHANGE on 18.09.2026. All the other tests in this
-        // class read the matrix through Apply, i.e. check AGREEMENT of build with read, not the layout itself:
-        // two mutually transposed errors preserve that agreement entirely. A translation does not catch the
-        // defect for the same reason — an identity rotation is symmetric.
+        // DISCRIMINATING control of the layout — the thing that was absent here, and whose absence made a rotation through MCP be rejected as NO_GEOMETRY_CHANGE on 18.09.2026. All the other tests in this class read the matrix through Apply, i.e. check AGREEMENT of build with read, not the layout itself: two mutually transposed errors preserve that agreement entirely. A translation does not catch the defect for the same reason — an identity rotation is symmetric.
         //
-        // Here the RAW array is compared, exactly what goes into Position.InitByMatrix3D. The reference is the
-        // layout by which the rotation was measured in KOMPAS (probe RP.4, RotationZ): three consecutive
-        // numbers are the IMAGE of an axis. For +90° about Z: image X = (0,1,0), image Y = (−1,0,0), Z = (0,0,1).
+        // Here the RAW array is compared, exactly what goes into Position.InitByMatrix3D. The reference is the layout by which the rotation was measured in KOMPAS (probe RP.4, RotationZ): three consecutive numbers are the IMAGE of an axis. For +90° about Z: image X = (0,1,0), image Y = (−1,0,0), Z = (0,0,1).
         var matrix = RepositionMatrix.RotateAboutAxis(
             new[] { 0d, 0d, 0d }, new[] { 0d, 0d, 1d }, 90d);
 

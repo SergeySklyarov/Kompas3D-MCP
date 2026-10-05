@@ -24,13 +24,9 @@ public enum ComponentIdentitySignal
 public sealed record ComponentIdentityVerdict(bool? Matches, string Detail);
 
 /// <summary>The component-address identity rule — a PURE function of three signals, no KOMPAS.</summary>
-/// <remarks>INVARIANT: ONLY THE SOURCE FILE decides the refusal. It is the only signal (a) MEASURED live
-/// and (b) not changing by itself — a component's source changes only by an explicit replacement. The
-/// component name (API5 <c>ksPart.name</c> vs API7 <c>IPart7.Name</c> was never compared live) and the
-/// placement matrix (MUTABLE state: the server's own mutation and a mate both change it, and the
-/// <c>GetSummMatrix</c> layout is neither documented nor measured, so per AGENTS.md it cannot drive
-/// behaviour) are NOTES. A mismatch of name or matrix is NAMED in the note — silence is indistinguishable
-/// from "we did not look". The rule is a table here so it can be tested without KOMPAS.
+/// <remarks>INVARIANT: ONLY THE SOURCE FILE decides the refusal. It is the only signal (a) MEASURED live and (b) not changing by itself — a component's source changes only by an explicit replacement.
+/// The component name (API5 <c>ksPart.name</c> vs API7 <c>IPart7.Name</c> was never compared live) and the placement matrix (MUTABLE state: the server's own mutation and a mate both change it, and the <c>GetSummMatrix</c> layout is neither documented nor measured, so per AGENTS.md it cannot drive behaviour) are NOTES.
+/// A mismatch of name or matrix is NAMED in the note — silence is indistinguishable from "we did not look". The rule is a table here so it can be tested without KOMPAS.
 /// History: docs/decisions/assembly.md#identity</remarks>
 public static class ComponentIdentity
 {

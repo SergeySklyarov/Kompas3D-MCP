@@ -8,15 +8,10 @@ namespace KompasMcp.Domain.Files;
 /// the reason is stated, not left to the caller to guess.</remarks>
 public sealed record ControlCopyResult(bool Made, string? Path, string? Reason);
 
-/// <summary>Control copies of a document file: taken BEFORE a mutation and restored on failure
-/// (<c>dep.foundation</c>, action <c>negative_tests</c>).</summary>
-/// <remarks>INVARIANT: the copy lives in the SERVICE directory, never next to the document — writing next
-/// to a read-only model put a full-file copy beside it and restoration OVERWROTE the document file
-/// (defect H4, review 05.10.2026). INVARIANT: the copy name carries document and revision — a copy at
-/// revision 7 and one at 8 are different files. LIMIT: the copy does NOT roll back the in-memory KOMPAS
-/// model — it restores the FILE, and the caller must say so. INVARIANT: the directory grows by OUTCOME,
-/// not by count — a copy is deleted after a SUCCESSFUL mutation, so only FAILURE copies remain ("keep the
-/// last N" would restore the wrong state). Policy: docs/operator-guide/control-copies.md.
+/// <summary>Control copies of a document file: taken BEFORE a mutation and restored on failure (<c>dep.foundation</c>, action <c>negative_tests</c>).</summary>
+/// <remarks>INVARIANT: the copy lives in the SERVICE directory, never next to the document — writing next to a read-only model put a full-file copy beside it and restoration OVERWROTE the document file (defect H4, review 05.10.2026).
+/// INVARIANT: the copy name carries document and revision — a copy at revision 7 and one at 8 are different files. LIMIT: the copy does NOT roll back the in-memory KOMPAS model — it restores the FILE, and the caller must say so.
+/// INVARIANT: the directory grows by OUTCOME, not by count — a copy is deleted after a SUCCESSFUL mutation, so only FAILURE copies remain ("keep the last N" would restore the wrong state). Policy: docs/operator-guide/control-copies.md.
 /// History: docs/decisions/files.md#control-copies</remarks>
 public sealed class DocumentControlCopies
 {
@@ -74,14 +69,9 @@ public sealed class DocumentControlCopies
         }
     }
 
-    /// <summary>Restore the document file to its pre-mutation state. Returns <c>null</c> on success or a
-    /// named reason: a failed restore must be visible, not swallowed.</summary>
-    /// <remarks>Restoring is a WRITE to the document file, so it happens only when the file is writable
-    /// AND the document is open for writing; a read-only document is not overwritten and the refusal is
-    /// named. INVARIANT: the access mode is checked HERE, not only by the caller — a document opened
-    /// <c>access=read_only</c> previously got its file overwritten (defect H4, review 05.10.2026). The
-    /// decision is made by <see cref="ControlCopyRestorePolicy"/>; this is the second line of defence, so
-    /// "do not restore read_only" cannot be bypassed by forgetting to pass the flag.
+    /// <summary>Restore the document file to its pre-mutation state. Returns <c>null</c> on success or a named reason: a failed restore must be visible, not swallowed.</summary>
+    /// <remarks>Restoring is a WRITE to the document file, so it happens only when the file is writable AND the document is open for writing; a read-only document is not overwritten and the refusal is named.
+    /// INVARIANT: the access mode is checked HERE, not only by the caller — a document opened <c>access=read_only</c> previously got its file overwritten (defect H4, review 05.10.2026). The decision is made by <see cref="ControlCopyRestorePolicy"/>; this is the second line of defence, so "do not restore read_only" cannot be bypassed by forgetting to pass the flag.
     /// History: docs/decisions/files.md#control-copies</remarks>
     public string? Restore(string? documentPath, string? copyPath, DocumentAccess access)
     {

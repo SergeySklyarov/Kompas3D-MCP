@@ -4,14 +4,9 @@ using Xunit;
 namespace KompasMcp.Unit;
 
 /// <summary>Converting the raw <c>ksConstraintsStateEnum</c> into the published sketch-definiteness status.</summary>
-/// <remarks>TEST: these tests check the PURE function <see cref="SketchStatusResult.FromRawState"/> and nothing
-/// else. LIMIT: there is no live KOMPAS here, so no run of this file confirms the read route — the route is
-/// confirmed by probe S (<c>docs/acceptance/api7/sketch-definition.json</c>), not by a mock value; the test on
-/// value 3 is deliberately written NOT to count as proof of reading the state on a live model (see
-/// <see cref="Redundancy_WithoutLiveVerification_StaysUnknown"/>). INVARIANT: three properties, each easy to
-/// lose on the next edit — <c>is_fully_defined</c> is nullable (false vs null are different answers);
-/// <c>degrees_of_freedom</c> is always null and never derived from the dimension count; an unknown enum value
-/// is not a success and not "under-defined" but an honest <c>unknown</c> with a reason.</remarks>
+/// <remarks>TEST: these tests check the PURE function <see cref="SketchStatusResult.FromRawState"/> and nothing else.
+/// LIMIT: there is no live KOMPAS here, so no run of this file confirms the read route — the route is confirmed by probe S (<c>docs/acceptance/api7/sketch-definition.json</c>), not by a mock value; the test on value 3 is deliberately written NOT to count as proof of reading the state on a live model (see <see cref="Redundancy_WithoutLiveVerification_StaysUnknown"/>).
+/// INVARIANT: three properties, each easy to lose on the next edit — <c>is_fully_defined</c> is nullable (false vs null are different answers); <c>degrees_of_freedom</c> is always null and never derived from the dimension count; an unknown enum value is not a success and not "under-defined" but an honest <c>unknown</c> with a reason.</remarks>
 public class SketchStatusConversionTests
 {
     private static readonly string[] Diagnostics = { "Эскиз: Эскиз:1.", "Перенос в ISketch: ISketch напрямую." };

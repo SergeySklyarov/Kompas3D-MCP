@@ -5,17 +5,11 @@ namespace KompasMcp.Domain.Files;
 /// <summary>Decision "should the document file be restored from the control copy": yes/no plus a NAMED reason.</summary>
 public sealed record RestoreDecision(bool Restore, string Reason);
 
-/// <summary>The document-file restore decision — a PURE function of the failure signals and the document
-/// access.</summary>
-/// <remarks>WHY A SEPARATE FUNCTION: the former restore checked only file writability
-/// (<c>File.Open(..., ReadWrite)</c>), not the document access or the failure class. Consequence (defect H4,
-/// review 05.10.2026): a document opened <c>access=read_only</c> from a read-only root got its file
-/// OVERWRITTEN after a rejected mutation, bypassing the path policy. It also restored on failures that
-/// GUARANTEED no model change (<c>REVISION_CONFLICT</c>, <c>INVALID_ARGUMENT</c>, <c>STALE_REFERENCE</c>
-/// without partial effects) — writing to a user file where there was nothing to write.
-/// INVARIANT: access is checked BEFORE the partial effect: a read-only document is not overwritten even when
-/// the mutation applied partially — overwriting around the path policy is worse than no rollback, and the
-/// reason is stated in the response. History: docs/decisions/files.md#restore-policy</remarks>
+/// <summary>The document-file restore decision — a PURE function of the failure signals and the document access.</summary>
+/// <remarks>WHY A SEPARATE FUNCTION: the former restore checked only file writability (<c>File.Open(..., ReadWrite)</c>), not the document access or the failure class. Consequence (defect H4, review 05.10.2026): a document opened <c>access=read_only</c> from a read-only root got its file OVERWRITTEN after a rejected mutation, bypassing the path policy.
+/// It also restored on failures that GUARANTEED no model change (<c>REVISION_CONFLICT</c>, <c>INVALID_ARGUMENT</c>, <c>STALE_REFERENCE</c> without partial effects) — writing to a user file where there was nothing to write.
+/// INVARIANT: access is checked BEFORE the partial effect: a read-only document is not overwritten even when the mutation applied partially — overwriting around the path policy is worse than no rollback, and the reason is stated in the response.
+/// History: docs/decisions/files.md#restore-policy</remarks>
 public static class ControlCopyRestorePolicy
 {
     /// <summary>Failures that GUARANTEED no model change: they come BEFORE COM or from the contract layer.

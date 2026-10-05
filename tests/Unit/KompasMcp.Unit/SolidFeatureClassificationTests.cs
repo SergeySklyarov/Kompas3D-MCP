@@ -7,16 +7,9 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>Classification of the B3 feature-edit fields and addressing by tree type number — what ties the
-/// contract, the published schema and the adapter together, which an acceptance run does not replace.</summary>
-/// <remarks>TEST: two ways of checking. What lives in the contract and catalog
-/// (<see cref="UpdateFeatureCommand"/>, the tool schema) is checked BY VALUE — the types are available to the
-/// test process. What lives in the adapter is checked BY SOURCE: the adapter assembly does not load without
-/// KOMPAS installed, because its interop types are deliberately not copied to the output (<c>Private=false</c>
-/// in <c>build/KompasInterop.props</c>). LIMIT: these checks hold the CONSISTENCY of the three places and do
-/// not prove that a foreign-field refusal reaches the client — that is proved by acceptance (row <c>B3.28</c>
-/// sends <c>plane + keep_side</c> to a split feature and gets <c>INVALID_ARGUMENT</c> with
-/// <c>foreign_fields == ["keep_side"]</c> on a live model).
+/// <summary>Classification of the B3 feature-edit fields and addressing by tree type number — what ties the contract, the published schema and the adapter together, which an acceptance run does not replace.</summary>
+/// <remarks>TEST: two ways of checking. What lives in the contract and catalog (<see cref="UpdateFeatureCommand"/>, the tool schema) is checked BY VALUE — the types are available to the test process. What lives in the adapter is checked BY SOURCE: the adapter assembly does not load without KOMPAS installed, because its interop types are deliberately not copied to the output (<c>Private=false</c> in <c>build/KompasInterop.props</c>).
+/// LIMIT: these checks hold the CONSISTENCY of the three places and do not prove that a foreign-field refusal reaches the client — that is proved by acceptance (row <c>B3.28</c> sends <c>plane + keep_side</c> to a split feature and gets <c>INVALID_ARGUMENT</c> with <c>foreign_fields == ["keep_side"]</c> on a live model).
 /// History: docs/decisions/tests.md#solid-feature</remarks>
 public sealed class SolidFeatureClassificationTests
 {

@@ -6,14 +6,9 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>The rotation contract is checked against the PUBLISHED tool description, not the schema file nor
-/// the adapter code.</summary>
-/// <remarks>TEST: the reason is measured — a field declared only in C# or only in <c>schemas/*.json</c> is
-/// INVISIBLE to the client, because the Host validates the call by its own <c>InputSchema</c>, and the
-/// mismatch reads as "the product cannot do it" when the declaration is what is missing (as happened with
-/// <c>base_object_refs</c> on fillet). INVARIANT: <c>angle_deg</c> is bounded at 360, not 180 (measured
-/// 18.09.2026; experiment <c>F.1</c> got a full cylinder <c>π·r²·h</c> at <c>Angle[true]=360</c>), and the
-/// angle of an existing rotation is edited via <c>rotation_angle_deg</c>, not <c>angle_deg</c>.
+/// <summary>The rotation contract is checked against the PUBLISHED tool description, not the schema file nor the adapter code.</summary>
+/// <remarks>TEST: the reason is measured — a field declared only in C# or only in <c>schemas/*.json</c> is INVISIBLE to the client, because the Host validates the call by its own <c>InputSchema</c>, and the mismatch reads as "the product cannot do it" when the declaration is what is missing (as happened with <c>base_object_refs</c> on fillet).
+/// INVARIANT: <c>angle_deg</c> is bounded at 360, not 180 (measured 18.09.2026; experiment <c>F.1</c> got a full cylinder <c>π·r²·h</c> at <c>Angle[true]=360</c>), and the angle of an existing rotation is edited via <c>rotation_angle_deg</c>, not <c>angle_deg</c>.
 /// History: docs/decisions/tests.md#rotation-contract</remarks>
 public class RotationContractTests
 {

@@ -486,15 +486,10 @@ public sealed class OperationJournal : IDisposable
         }
     }
 
-    /// <summary>One record is one atomic byte write UNDER the cross-process lock: the line plus its newline go
-    /// out in a single <c>Write</c> to an append-mode handle, wrapped in the named lock.</summary>
-    /// <returns>
-    /// <c>true</c> — written under the lock; <c>false</c> — the lock was not acquired within
-    /// <see cref="_appendLockTimeout"/> and NOTHING was written.
-    /// </returns>
-    /// <remarks>MEASURED: the lock is mandatory — <c>FileMode.Append</c> loses records with two writers
-    /// (381/400, <c>scratch/_append_probe</c>). LIMIT: <c>Flush()</c> reaches the OS, not the medium;
-    /// the journal guards against a process crash, not power loss.</remarks>
+    /// <summary>One record is one atomic byte write UNDER the cross-process lock: the line plus its newline go out in a single <c>Write</c> to an append-mode handle, wrapped in the named lock.</summary>
+    /// <returns><c>true</c> — written under the lock; <c>false</c> — the lock was not acquired within <see cref="_appendLockTimeout"/> and NOTHING was written.</returns>
+    /// <remarks>MEASURED: the lock is mandatory — <c>FileMode.Append</c> loses records with two writers (381/400, <c>scratch/_append_probe</c>).
+    /// LIMIT: <c>Flush()</c> reaches the OS, not the medium; the journal guards against a process crash, not power loss.</remarks>
     private bool TryAppend(JournalRecord record)
     {
         var line = JsonSerializer.Serialize(record, JournalOptions) + "\n";

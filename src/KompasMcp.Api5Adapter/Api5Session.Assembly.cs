@@ -30,16 +30,10 @@ public partial class Api5Session
     /// <summary>Depth limit of the structure walk. Exceeding it is NAMED, not silenced.</summary>
     private const int MaxStructureDepth = 64;
 
-    /// <summary>
-    /// Component reference payload: the API7 view, the PARENT node (the matrix is read fresh from it),
-    /// <c>IPart7.Reference</c> (diagnostics, not an address) and the ORDINAL in the structure
-    /// enumeration.
-    /// </summary>
-    /// <remarks>The ordinal is the address: <c>IPart7.Reference</c> is not a component number (MEASURED:
-    /// 1073741857) and matching by source file is ambiguous with two instances of one part. The parent
-    /// is stored so the matrix is read FRESH at comparison time. INVARIANT: the placement matrix is NOT
-    /// stored in the reference — a snapshot went stale from the server's OWN mutation and rejected a
-    /// second mutation with <c>STALE_REFERENCE</c>. History: docs/decisions/assembly.md#identity</remarks>
+    /// <summary>Component reference payload: the API7 view, the PARENT node (the matrix is read fresh from it), <c>IPart7.Reference</c> (diagnostics, not an address) and the ORDINAL in the structure enumeration.</summary>
+    /// <remarks>The ordinal is the address: <c>IPart7.Reference</c> is not a component number (MEASURED: 1073741857) and matching by source file is ambiguous with two instances of one part. The parent is stored so the matrix is read FRESH at comparison time.
+    /// INVARIANT: the placement matrix is NOT stored in the reference — a snapshot went stale from the server's OWN mutation and rejected a second mutation with <c>STALE_REFERENCE</c>.
+    /// History: docs/decisions/assembly.md#identity</remarks>
     private sealed record ComponentPayload(IPart7 Part7, IPart7? Parent7, int? Reference, int Ordinal);
 
     // ===================================================================================== ASM-03
@@ -1151,19 +1145,12 @@ public partial class Api5Session
             });
     }
 
-    /// <summary>Whether this is the same component: THREE signals are compared, but ONLY THE SOURCE DECIDES THE
-    /// REFUSAL.</summary>
-    /// <returns>
-    /// <c>true</c> — identity confirmed (the source file was read on both sides and matched);
-    /// <c>false</c> — the address leads to a FOREIGN component (the source was read and differs);
-    /// <c>null</c> — NOTHING to compare (the source was not read on one side).
-    /// </returns>
-    /// <remarks>DECISION IS A PURE FUNCTION (<see cref="ComponentIdentity.Decide"/>, Domain, no COM types): the
-    /// table is checked without KOMPAS. Only the SOURCE FILE decides the refusal — the one signal
-    /// MEASURED live and not changing by itself; the component name (never compared live) and the
-    /// placement matrix (MUTABLE, layout not measured) are NOTES. Both matrices are read FRESH at ONE
-    /// point in time, and FILE NAMES are compared, not full paths (API7 and API5 return the path
-    /// differently). History: docs/decisions/assembly.md#identity</remarks>
+    /// <summary>Whether this is the same component: THREE signals are compared, but ONLY THE SOURCE DECIDES THE REFUSAL.</summary>
+    /// <returns><c>true</c> — identity confirmed (the source file was read on both sides and matched); <c>false</c> — the address leads to a FOREIGN component (the source was read and differs); <c>null</c> — NOTHING to compare (the source was not read on one side).</returns>
+    /// <remarks>DECISION IS A PURE FUNCTION (<see cref="ComponentIdentity.Decide"/>, Domain, no COM types): the table is checked without KOMPAS.
+    /// Only the SOURCE FILE decides the refusal — the one signal MEASURED live and not changing by itself; the component name (never compared live) and the placement matrix (MUTABLE, layout not measured) are NOTES.
+    /// Both matrices are read FRESH at ONE point in time, and FILE NAMES are compared, not full paths (API7 and API5 return the path differently).
+    /// History: docs/decisions/assembly.md#identity</remarks>
     private bool? IdentityMatches(ksPart part5, ComponentPayload payload, out string detail)
     {
         var from5 = Ref(() => part5.fileName);

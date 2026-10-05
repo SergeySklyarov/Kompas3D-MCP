@@ -27,14 +27,10 @@ public sealed class QueuedCommand
 }
 
 /// <summary>Bounded FIFO for CAD work, with explicit backpressure (spec 1.13: 64 commands, QUEUE_FULL).</summary>
-/// <remarks>
-/// Two properties matter for the contract and are enforced here rather than left to chance:
+/// <remarks>Two properties matter for the contract and are enforced here rather than left to chance:
 /// <list type="bullet">
-/// <item>The queue holds commands for <b>one</b> KOMPAS instance and hands them out one at a time,
-/// so a client sending ten parallel requests gets ten sequential CAD executions instead of ten
-/// concurrent COM calls from ten threads (test R04).</item>
-/// <item>Cancellation removes a command that has not started. A command that has started cannot be
-/// cancelled here — that is reported as CANCEL_NOT_CONFIRMED, not silently accepted (test R03).</item>
+/// <item>The queue holds commands for <b>one</b> KOMPAS instance and hands them out one at a time, so a client sending ten parallel requests gets ten sequential CAD executions instead of ten concurrent COM calls from ten threads (test R04).</item>
+/// <item>Cancellation removes a command that has not started. A command that has started cannot be cancelled here — that is reported as CANCEL_NOT_CONFIRMED, not silently accepted (test R03).</item>
 /// </list>
 /// </remarks>
 public sealed class CadCommandQueue : IAsyncDisposable
@@ -104,18 +100,10 @@ public sealed class CadCommandQueue : IAsyncDisposable
             details: new Dictionary<string, object?> { ["queue_limit"] = _capacity, ["queued"] = Count });
     }
 
-    /// <summary>Release one slot: the command with this id has been served — successfully, with an error or
-    /// as a cancellation, in all three cases it is no longer outstanding.</summary>
-    /// <remarks>
-    /// This exists because the Host does not execute commands out of this queue: it enqueues for
-    /// admission, then dispatches to the Worker directly (the Worker's single STA lane is what
-    /// serialises CAD). Without a matching release the channel is a one-time budget of
-    /// <c>capacity</c> calls per process, and a long session starts failing with QUEUE_FULL on what
-    /// is its 65th mutation — measured in the acceptance run that added the multi-body U05 group.
-    /// Reading the head rather than this particular id is deliberate: the channel is the counter of
-    /// outstanding commands, and <paramref name="operationId"/> is removed from the cancellation
-    /// index where identity actually matters.
-    /// </remarks>
+    /// <summary>Release one slot: the command with this id has been served — successfully, with an error or as a cancellation, in all three cases it is no longer outstanding.</summary>
+    /// <remarks>This exists because the Host does not execute commands out of this queue: it enqueues for admission, then dispatches to the Worker directly (the Worker's single STA lane is what serialises CAD).
+    /// Without a matching release the channel is a one-time budget of <c>capacity</c> calls per process, and a long session starts failing with QUEUE_FULL on what is its 65th mutation — measured in the acceptance run that added the multi-body U05 group.
+    /// Reading the head rather than this particular id is deliberate: the channel is the counter of outstanding commands, and <paramref name="operationId"/> is removed from the cancellation index where identity actually matters.</remarks>
     public bool Complete(string operationId)
     {
         _pending.TryRemove(operationId, out _);

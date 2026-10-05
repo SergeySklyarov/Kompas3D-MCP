@@ -3,14 +3,9 @@ using Xunit;
 namespace KompasMcp.Unit;
 
 /// <summary>The "the product talks to KOMPAS only in a typed way" boundary (order of 12.09.2026, item 4).</summary>
-/// <remarks>INVARIANT: API7 is allowed in the product (ADR-004 §1, §4) but only through vendor-generated
-/// interfaces. Late binding (<c>Type.InvokeMember</c>, <c>dynamic</c> over an RCW, a direct <c>IDispatch</c>
-/// call) stays the emergency route of the research probe <c>tools/KompasMcp.Api7Probe</c> and is not carried
-/// into <c>src/</c>. MEASURED (probe E, 2026-09-12): writing <c>IExtrusion.Sketch</c> through <c>IDispatch</c>
-/// crashed the shared process with 0xC0000409 and did not crash the isolated one, while the same write
-/// silently did not persist and was re-read by the old object. A silently unaccepted write returning S_OK is
-/// worse than a refusal precisely because acceptance would count it a success. LIMIT: the check is static by
-/// source — "no late binding" is a property of code, not an observable number.
+/// <remarks>INVARIANT: API7 is allowed in the product (ADR-004 §1, §4) but only through vendor-generated interfaces. Late binding (<c>Type.InvokeMember</c>, <c>dynamic</c> over an RCW, a direct <c>IDispatch</c> call) stays the emergency route of the research probe <c>tools/KompasMcp.Api7Probe</c> and is not carried into <c>src/</c>.
+/// MEASURED (probe E, 2026-09-12): writing <c>IExtrusion.Sketch</c> through <c>IDispatch</c> crashed the shared process with 0xC0000409 and did not crash the isolated one, while the same write silently did not persist and was re-read by the old object. A silently unaccepted write returning S_OK is worse than a refusal precisely because acceptance would count it a success.
+/// LIMIT: the check is static by source — "no late binding" is a property of code, not an observable number.
 /// History: docs/decisions/tests.md#typed-com</remarks>
 public sealed class TypedComBoundaryGuardTests
 {

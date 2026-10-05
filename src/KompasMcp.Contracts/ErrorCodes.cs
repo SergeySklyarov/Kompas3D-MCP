@@ -1,10 +1,8 @@
 namespace KompasMcp.Contracts;
 
-/// <summary>
-/// Stable, English, machine-readable error identifiers (spec 2.2).
+/// <summary>Stable, English, machine-readable error identifiers (spec 2.2).
 /// Codes are part of the public contract: never rename, never reuse for a different meaning.
-/// Human-readable messages are Russian and live in <see cref="ErrorMessages"/>.
-/// </summary>
+/// Human-readable messages are Russian and live in <see cref="ErrorMessages"/>.</summary>
 public static class ErrorCodes
 {
     public const string InvalidArgument = "INVALID_ARGUMENT";
@@ -37,30 +35,23 @@ public static class ErrorCodes
     public const string ExportFailed = "EXPORT_FAILED";
     public const string ImportFailed = "IMPORT_FAILED";
 
-    /// <summary>
-    /// Ядро отказало в растровом экспорте: <c>SaveAsToRasterFormat</c> вернул FALSE либо бросил.
-    /// Отдельный код, а не <see cref="ExportFailed"/>: у растра отказ метода — единственный
-    /// наблюдаемый признак, и он обязан быть отличим от «метод ответил успехом, а результата нет».
-    /// </summary>
+    /// <summary>The core refused raster export: <c>SaveAsToRasterFormat</c> returned FALSE or threw. A
+    /// separate code, not <see cref="ExportFailed"/>: for a raster the method's refusal is the only
+    /// observable sign, and it must be distinguishable from "the method reported success but produced no
+    /// result".</summary>
     public const string RasterRefused = "RASTER_REFUSED";
 
-    /// <summary>
-    /// Метод ответил успехом, но результата НЕТ: ни массива байт, ни файла. Молчаливого «успеха»
-    /// без картинки не бывает — отсутствие байтов это отказ, а не PASS.
-    /// </summary>
+    /// <summary>The method reported success but there is NO result: neither a byte array nor a file. A
+    /// silent "success" without an image does not exist — absence of bytes is a refusal, not a PASS.</summary>
     public const string RasterEmpty = "RASTER_EMPTY";
 
-    /// <summary>
-    /// Содержимое не соответствует заявленному формату: магия файла (или массива байт) не та.
-    /// Ядро формат НЕ проверяет — измерено, что значение вне перечня принимается и даёт другой
-    /// формат (проба P5), поэтому проверка стоит здесь, а не в ядре.
-    /// </summary>
+    /// <summary>The content does not match the declared format: the file (or byte array) magic is wrong.
+    /// The core does NOT validate the format — MEASURED (probe P5): a value outside the list is accepted
+    /// and yields a different format, so the check lives here, not in the core.</summary>
     public const string RasterFormatMismatch = "RASTER_FORMAT_MISMATCH";
 
-    /// <summary>
-    /// Снимок превысил ограничения контекста ответа (габарит в пикселях или размер base64).
-    /// Молчаливого ужатия не делается: уменьшение — отдельный запрос с меньшим <c>resolution</c>.
-    /// </summary>
+    /// <summary>The snapshot exceeded the response-context limits (pixel extent or base64 size). No silent
+    /// downscaling is done: a smaller image is a separate request with a lower <c>resolution</c>.</summary>
     public const string RasterLimitExceeded = "RASTER_LIMIT_EXCEEDED";
 
     public const string UnitsUnverified = "UNITS_UNVERIFIED";
@@ -69,75 +60,55 @@ public static class ErrorCodes
     public const string VerificationFailed = "VERIFICATION_FAILED";
     public const string CancelNotConfirmed = "CANCEL_NOT_CONFIRMED";
 
-    /// <summary>
-    /// У признака есть кандидаты зависимых, а сервер не может назвать их достоверно: ни в API5,
-    /// ни в API7 члена «зависимые признаков» нет (измерено рефлексией по обеим сборкам и пробой
-    /// L.8). Поэтому удаление требует явного решения вызывающего, а не молча сносит дерево.
-    /// </summary>
+    /// <summary>A feature has candidate dependents, but the server cannot name them reliably: neither API5
+    /// nor API7 has a "dependent features" member (MEASURED by reflection over both assemblies and probe
+    /// L.8). Deletion therefore requires an explicit caller decision rather than silently taking down the
+    /// tree.</summary>
     public const string DependentFeatures = "DEPENDENT_FEATURES";
 
-    /// <summary>
-    /// Журнал операций держит АКТИВНЫЙ владелец: другой процесс этого же пользователя с тем же
-    /// <c>journal_path</c> уже ведёт сеанс (обслужил хотя бы один запрос клиента). Два Хоста с одним
-    /// конфигом не выполняют операции одновременно, поэтому второй отказывает ИМЕНОВАННО, а не
-    /// падает и не работает молча.
-    /// </summary>
+    /// <summary>The operation journal is held by an ACTIVE owner: another process of the same user with the
+    /// same <c>journal_path</c> already runs a session (served at least one client request). Two Hosts with
+    /// one config do not execute operations concurrently, so the second refuses NAMEDLY rather than
+    /// crashing or working silently.</summary>
     public const string SessionOwnerActive = "SESSION_OWNER_ACTIVE";
 
-    /// <summary>
-    /// Журнал операций недоступен для записи по причине, не связанной с владельцем: чужие права,
-    /// занятый файл, ошибка диска. Работа без журнала безопасности не начинается молча.
-    /// </summary>
+    /// <summary>The operation journal is unavailable for writing for a reason unrelated to ownership: foreign
+    /// rights, a locked file, a disk error. Work without a safety journal never starts silently.</summary>
     public const string JournalUnavailable = "JOURNAL_UNAVAILABLE";
 
-    /// <summary>
-    /// CAD-вызов пришло от Хоста, который сеансом не владеет. Отказ приходит ДО записи в журнал
-    /// операций и ДО обращения к COM: ни одна операция не начата и ни один документ не тронут.
-    /// </summary>
-    /// <remarks>
-    /// Отдельный код, а не <see cref="SessionOwnerActive"/>: тот означает «сеансом владеет ДРУГОЙ
-    /// процесс и владение взять нельзя», этот — «владение взять МОЖНО, но нужно сделать это явно».
-    /// У них разные remedies, и смешивать их значило бы отвечать двумя разными инструкциями на
-    /// один и тот же вопрос «почему я не могу работать».
-    /// </remarks>
+    /// <summary>A CAD call arrived from a Host that does not own the session. The refusal comes BEFORE the
+    /// journal write and BEFORE any COM call: no operation started and no document was touched.</summary>
+    /// <remarks>A separate code, not <see cref="SessionOwnerActive"/>: that one means "ANOTHER process owns
+    /// the session and ownership cannot be taken", this one means "ownership CAN be taken, but must be taken
+    /// explicitly". They have different remedies, and mixing them would answer one question "why can't I
+    /// work" with two different instructions.</remarks>
     public const string SessionNotAcquired = "SESSION_NOT_ACQUIRED";
 
-    /// <summary>
-    /// Освобождение сеанса отклонено, потому что работа ещё идёт: есть выполняющаяся, очередная
-    /// или фоновая операция. Пустая очередь сама по себе недостаточна — учитываются и операции,
-    /// чей синхронный ответ уже завершился.
-    /// </summary>
+    /// <summary>Session release was refused because work is still in progress: an executing, queued or
+    /// background operation exists. An empty queue alone is not enough — operations whose synchronous
+    /// answer has already completed are counted too.</summary>
     public const string SessionReleaseBusy = "SESSION_RELEASE_BUSY";
 
-    /// <summary>
-    /// Освобождение НЕ подтверждено: остановка Worker не подтверждена или запись состояния
-    /// владельца не записана. Успешным освобождением это не считается ни при каких условиях.
-    /// </summary>
+    /// <summary>Release is NOT confirmed: the Worker stop is unconfirmed or the owner-state record was not
+    /// written. Under no conditions is this counted as a successful release.</summary>
     public const string SessionReleaseFailed = "SESSION_RELEASE_FAILED";
 
-    /// <summary>
-    /// Состояние владения определить не удалось: запись владельца не читается (или именованную
-    /// блокировку получить не удалось). «Не прочиталось» НЕ означает «сеанс свободен».
-    /// </summary>
+    /// <summary>Ownership state could not be determined: the owner record is unreadable (or the named lock
+    /// could not be acquired). "Not read" does NOT mean "the session is free".</summary>
     public const string OwnershipStateUnknown = "OWNERSHIP_STATE_UNKNOWN";
 
-    /// <summary>
-    /// Освобождение сеанса отклонено, потому что СОСТОЯНИЕ ДОКУМЕНТОВ НЕИЗВЕСТНО: Worker терялся или
-    /// перезапускался, и правки его документов могли остаться в КОМПАС несохранёнными.
-    /// </summary>
-    /// <remarks>
-    /// Отдельный код, а не <see cref="SessionReleaseFailed"/>: тот означает «опись получить не
-    /// удалось», а этот — «опись ПОЛУЧЕНА и пуста, но пуста она потому, что документы потеряны, а не
-    /// потому, что правок не было». Разница в выходе: здесь освобождение возможно, если клиент явно
-    /// подтвердит неизвестное состояние (<c>acknowledge_unknown_document_state=true</c>), там — нет.
-    /// </remarks>
+    /// <summary>Session release was refused because the DOCUMENT STATE IS UNKNOWN: the Worker was lost or
+    /// restarted, and its document edits may have remained unsaved in KOMPAS.</summary>
+    /// <remarks>A separate code, not <see cref="SessionReleaseFailed"/>: that one means "the inventory could
+    /// not be obtained", this one means "the inventory WAS obtained and is empty, but empty because documents
+    /// were lost, not because there were no edits". The exit differs: here release is possible if the client
+    /// explicitly acknowledges the unknown state (<c>acknowledge_unknown_document_state=true</c>), there it
+    /// is not.</remarks>
     public const string DocumentStateUnknown = "DOCUMENT_STATE_UNKNOWN";
 }
 
-/// <summary>
-/// Default Russian wording per error code. Callers may override the message when they have
-/// more specific context; the code stays the same.
-/// </summary>
+/// <summary>Default Russian wording per error code. Callers may override the message when they have more
+/// specific context; the code stays the same.</summary>
 public static class ErrorMessages
 {
     private static readonly Dictionary<string, string> Default = new(StringComparer.Ordinal)

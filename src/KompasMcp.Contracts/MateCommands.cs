@@ -1,31 +1,21 @@
 namespace KompasMcp.Contracts;
 
-/// <summary>
-/// Контракты домена сопряжений — блок C2 (профиль <c>mates-minimal-v1</c>, режимы
-/// <c>MATE-01…MATE-06</c>).
-/// </summary>
+/// <summary>Mate-domain contracts — block C2 (profile <c>mates-minimal-v1</c>, modes
+/// <c>MATE-01…MATE-06</c>).</summary>
 /// <remarks>
-/// <para>
-/// <b>Маршрут — решение заказчика от 05.10.2026.</b> Сопряжения строятся на документированном
-/// API7-пути: <c>IPart7.MateConstraints</c> → <c>IMateConstraints3D.Add(MateConstraintType)</c> →
-/// <c>BaseObject1</c>/<c>BaseObject2</c> → <c>Update()</c>. Метод
-/// <c>ksDocument3D.AddMateConstraint</c> документирован как метод ПОСТОЯННОГО сопряжения, но на
-/// гранях, полученных документированным путём, вернул <c>False</c> при всех документированных
-/// сочетаниях параметров, и <b>причина не установлена</b>; вопрос закрыт решением, а не выводом
-/// «метод не работает».
-/// </para>
-/// <para>
-/// <b>Объект сопряжения адресуется парой «компонент + номер грани».</b> Грань берётся
-/// документированным <c>ksPart.BodyCollection() → ksBody.FaceCollection()</c>
-/// (<c>kspart_bodycollection.html</c>) и переносится в API7 как <c>IModelObject</c>. Число тел и
-/// граней компонента видно в <see cref="ComponentRowDto.BodyCount"/>/<see cref="ComponentRowDto.FaceCount"/>:
-/// без них «компонент вставлен» неотличимо от «вставлен пустой компонент».
-/// </para>
-/// <para>
-/// <b>Тип сопряжения передаётся ИМЕНЕМ, а не числом.</b> Числовые значения
-/// <c>MateConstraintType</c> — деталь реализации обёртки; наружу выходит имя, и неизвестное имя
-/// отвергается, а не подменяется ближайшим известным.
-/// </para>
+/// <para>INVARIANT: mates are built on the documented API7 path: <c>IPart7.MateConstraints</c> →
+/// <c>IMateConstraints3D.Add(MateConstraintType)</c> → <c>BaseObject1</c>/<c>BaseObject2</c> →
+/// <c>Update()</c>. <c>ksDocument3D.AddMateConstraint</c> is documented for PERMANENT mates but returned
+/// <c>False</c> on faces obtained by the documented path, under every documented parameter combination;
+/// the cause is not established. History: docs/decisions/contracts.md#mates-route</para>
+/// <para>INVARIANT: a mate object is addressed by the pair "component + face number". The face is taken by
+/// the documented <c>ksPart.BodyCollection() → ksBody.FaceCollection()</c>
+/// (<c>kspart_bodycollection.html</c>) and moved into API7 as <c>IModelObject</c>. Body and face counts are
+/// visible in <see cref="ComponentRowDto.BodyCount"/>/<see cref="ComponentRowDto.FaceCount"/>: without them
+/// "component inserted" is indistinguishable from "empty component inserted".</para>
+/// <para>INVARIANT: the mate type is passed by NAME, not by number. The numeric <c>MateConstraintType</c>
+/// values are a wrapper implementation detail; the name is what leaves the server, and an unknown name is
+/// rejected rather than replaced by the nearest known one.</para>
 /// </remarks>
 public sealed record CreateMateCommand
 {
@@ -33,42 +23,36 @@ public sealed record CreateMateCommand
 
     public required long ExpectedRevision { get; init; }
 
-    /// <summary>
-    /// Тип сопряжения именем: <c>coincidence</c>, <c>parallel</c>, <c>perpendicular</c>,
-    /// <c>tangency</c>, <c>concentric</c>, <c>distance</c>, <c>angle</c>.
-    /// </summary>
+    /// <summary>Mate type by name: <c>coincidence</c>, <c>parallel</c>, <c>perpendicular</c>,
+    /// <c>tangency</c>, <c>concentric</c>, <c>distance</c>, <c>angle</c>.</summary>
     public required string ConstraintType { get; init; }
 
-    /// <summary>Ссылка на первый компонент (из <c>kompas_list_components</c>).</summary>
+    /// <summary>Reference to the first component (from <c>kompas_list_components</c>).</summary>
     public required string FirstComponentRef { get; init; }
 
-    /// <summary>Номер грани первого компонента в его <c>FaceCollection()</c>.</summary>
+    /// <summary>Face number of the first component in its <c>FaceCollection()</c>.</summary>
     public required int FirstFaceIndex { get; init; }
 
     public required string SecondComponentRef { get; init; }
 
     public required int SecondFaceIndex { get; init; }
 
-    /// <summary>
-    /// Вариант выравнивания направлений именем: <c>opposite</c>, <c>cooriented</c>, <c>closest</c>.
-    /// <c>null</c> — оставить документированное умолчание КОМПАСа.
-    /// </summary>
+    /// <summary>Direction-alignment variant by name: <c>opposite</c>, <c>cooriented</c>, <c>closest</c>.
+    /// <c>null</c> keeps the documented KOMPAS default.</summary>
     public string? Alignment { get; init; }
 
-    /// <summary>
-    /// Параметр ограничения (расстояние или угол) — <c>IMateConstraint3D.ParamValue</c>. Для
-    /// сопряжений без параметра не задаётся: <c>null</c> означает «не задано», а не ноль.
-    /// </summary>
+    /// <summary>Constraint parameter (distance or angle) — <c>IMateConstraint3D.ParamValue</c>. Not set for
+    /// mates without a parameter: <c>null</c> means "not set", not zero.</summary>
     public double? ParamValue { get; init; }
 }
 
-/// <summary>Перечисление сопряжений сборки.</summary>
+/// <summary>Enumerate the assembly's mates.</summary>
 public sealed record ListMatesCommand
 {
     public required string DocumentId { get; init; }
 }
 
-/// <summary>Изменить параметр существующего сопряжения (расстояние или угол).</summary>
+/// <summary>Change the parameter of an existing mate (distance or angle).</summary>
 public sealed record SetMateParameterCommand
 {
     public required string DocumentId { get; init; }
@@ -80,7 +64,7 @@ public sealed record SetMateParameterCommand
     public required double ParamValue { get; init; }
 }
 
-/// <summary>Задать признак фиксации компонентов сопряжением.</summary>
+/// <summary>Set the component-fixation flag through a mate.</summary>
 public sealed record SetMateFixedCommand
 {
     public required string DocumentId { get; init; }
@@ -89,11 +73,11 @@ public sealed record SetMateFixedCommand
 
     public required string MateRef { get; init; }
 
-    /// <summary>Именем: <c>none</c>, <c>first</c>, <c>second</c> (по <c>ksMateFixedTypeEnum</c>).</summary>
+    /// <summary>By name: <c>none</c>, <c>first</c>, <c>second</c> (per <c>ksMateFixedTypeEnum</c>).</summary>
     public required string Fixed { get; init; }
 }
 
-/// <summary>Удалить сопряжение.</summary>
+/// <summary>Delete a mate.</summary>
 public sealed record DeleteMateCommand
 {
     public required string DocumentId { get; init; }
@@ -103,18 +87,16 @@ public sealed record DeleteMateCommand
     public required string MateRef { get; init; }
 }
 
-/// <summary>
-/// Строка сопряжения. Пустое поле означает «не прочитано», а не ноль: молчание прибора не
-/// превращается в значение.
-/// </summary>
+/// <summary>One mate row. An empty field means "not read", not zero: silence of the instrument is never
+/// turned into a value.</summary>
 public sealed record MateRowDto
 {
     public required string MateRef { get; init; }
 
-    /// <summary>Порядковый номер в <c>MateConstraintCollection</c> — он же адрес ссылки.</summary>
+    /// <summary>Ordinal in <c>MateConstraintCollection</c> — also the address of the reference.</summary>
     public int? Ordinal { get; init; }
 
-    /// <summary>Тип сопряжения именем; неизвестное число называется числом, а не выдумкой.</summary>
+    /// <summary>Mate type by name; an unknown number is reported as the number, not invented.</summary>
     public string? ConstraintType { get; init; }
 
     public string? Alignment { get; init; }
@@ -125,12 +107,12 @@ public sealed record MateRowDto
 
     public int? Direction { get; init; }
 
-    /// <summary>Тип первого базового объекта, как его называет сам КОМПАС.</summary>
+    /// <summary>Type of the first base object, as KOMPAS itself names it.</summary>
     public string? BaseObject1 { get; init; }
 
     public string? BaseObject2 { get; init; }
 
-    /// <summary><c>IMateConstraint3D.Valid</c> — подтверждение сопряжения, а не «Update()=true».</summary>
+    /// <summary><c>IMateConstraint3D.Valid</c> — confirmation of the mate, not "Update()=true".</summary>
     public bool? Valid { get; init; }
 
     public string? Name { get; init; }

@@ -3,19 +3,8 @@ using System.Text.Json.Nodes;
 
 namespace KompasMcp.Contracts.Ipc;
 
-/// <summary>
-/// Client (Host) side of a request/response session over a length-prefixed frame stream.
-/// </summary>
-/// <remarks>
-/// This type exists because a frame stream has exactly one reader. The first version of the Host let
-/// every caller run its own read loop, so two tool calls in flight at the same time read the same
-/// pipe concurrently, interleaved their bytes, and turned the stream into garbage — the Host then
-/// reported <c>WORKER_UNRESPONSIVE</c> ("Недопустимая длина кадра …") and, once the length prefix
-/// happened to land on a valid value, a JSON parse error. Measured 18.09.2026 from the WorkBuddy
-/// client, which issues tool calls concurrently; the acceptance suite called tools one at a time and
-/// so never exercised the path.
-///
-/// Concurrency contract:
+/// <summary>Client (Host) side of a request/response session over a length-prefixed frame stream.</summary>
+/// <remarks>INVARIANT: a frame stream has exactly one reader, so request/response over it belongs here.
 /// <list type="bullet">
 /// <item>any number of callers may have a request in flight at once;</item>
 /// <item>exactly one background loop reads the stream, and routes each response to its caller by
@@ -23,8 +12,7 @@ namespace KompasMcp.Contracts.Ipc;
 /// <item>writes are serialised behind one gate, because frames are not interleavable.</item>
 /// </list>
 /// The reader is the only party that can tell the stream is finished, so it is also the party that
-/// fails every waiting request when the stream ends.
-/// </remarks>
+/// fails every waiting request when the stream ends. History: docs/decisions/contracts.md#ipc-read-loop</remarks>
 public sealed class IpcRequestChannel : IAsyncDisposable
 {
     private readonly Stream _stream;
@@ -42,34 +30,22 @@ public sealed class IpcRequestChannel : IAsyncDisposable
         _readLoop = Task.Run(() => ReadLoopAsync(_lifetime.Token));
     }
 
-    /// <summary>
-    /// True once the reader has stopped: the peer closed the pipe, the stream faulted, or the
-    /// channel was disposed. A caller that sees this must obtain a fresh channel rather than send.
-    /// </summary>
+    /// <summary>True once the reader has stopped: the peer closed the pipe, the stream faulted, or the
+    /// channel was disposed. A caller that sees this must obtain a fresh channel rather than send.</summary>
     public bool IsBroken => _broken;
 
-    /// <summary>
-    /// Send one request and await its answer. Safe to call from many callers at once.
-    /// </summary>
+    /// <summary>Send one request and await its answer. Safe to call from many callers at once.</summary>
     /// <param name="isMutation">
     /// True when the command changes the model. It decides what a cancellation AFTER the frame was
-    /// written means: for a mutation the command is already on its way to КОМПАС, so the answer is
+    /// written means: for a mutation the command is already on its way to KOMPAS, so the answer is
     /// <c>OUTCOME_UNKNOWN</c>, never "cancelled, nothing happened".
     /// </param>
     /// <remarks>
-    /// <para>
-    /// A timeout is reported as <c>OUTCOME_UNKNOWN</c>, never as a cancellation: the peer may still
-    /// be executing the command, so the caller must reconcile rather than assume nothing happened.
-    /// </para>
-    /// <para>
-    /// <b>ОТМЕНА КЛИЕНТОМ ПОСЛЕ ОТПРАВКИ — НЕ «КОМАНДА НЕ ОТПРАВЛЯЛАСЬ».</b> До 05.10.2026 любая
-    /// <c>OperationCanceledException</c> с токеном клиента выходила наружу, и вызывающий записывал
-    /// терминальное <c>cancelled</c> без требования согласования: клиент получал «команда отменена
-    /// в очереди Host и не отправлялась в КОМПАС», хотя кадр уже был записан и Worker выполнял
-    /// команду до конца. Клиент, поверивший ответу, повторял мутацию с НОВЫМ <c>operation_id</c> —
-    /// и мутация применялась дважды. Поэтому отмена до записи кадра и отмена после неё — РАЗНЫЕ
-    /// состояния, и здесь они различаются флагом <c>written</c>.
-    /// </para>
+    /// <para>A timeout is reported as <c>OUTCOME_UNKNOWN</c>, never as a cancellation: the peer may still
+    /// be executing the command, so the caller must reconcile rather than assume nothing happened.</para>
+    /// <para>INVARIANT: a client cancellation AFTER the frame was written is NOT "the command was never
+    /// sent" — cancelling the token does not abort the COM call. Cancellation before the frame and after
+    /// it are different states, told apart by <c>written</c>. History: docs/decisions/contracts.md#cancel-after-send</para>
     /// </remarks>
     public async Task<IpcFrame> RequestAsync(string command, JsonNode? payload, TimeSpan timeout, bool isMutation, CancellationToken cancellationToken)
     {
@@ -97,17 +73,17 @@ public sealed class IpcRequestChannel : IAsyncDisposable
                 throw Disconnected();
             }
 
-            // Отмена ДО записи: кадра в канале нет, команда в Worker не ушла. Это единственный
-            // случай, где «отменено» — подтверждённое состояние, и он обязан выйти наружу как
-            // OperationCanceledException, а не как контрактная ошибка.
+            // Cancellation BEFORE the write: no frame is in the channel and the command never left.
+            // The only case where "cancelled" is a confirmed state; it must surface as an
+            // OperationCanceledException, not as a contract error.
             cancellationToken.ThrowIfCancellationRequested();
 
-            // Письмо идёт с CancellationToken.None: половина записанного кадра — это испорченный
-            // поток (длина префикса прочитана, полезная нагрузка — нет), и отмена посередине
-            // развалила бы канал целиком, а не отменила одну команду.
+            // The write runs with CancellationToken.None: half a written frame corrupts the stream
+            // (length prefix read, payload not), and a mid-write cancel would break the whole
+            // channel rather than cancel one command.
             await WriteAsync(request, CancellationToken.None).ConfigureAwait(false);
 
-            // С этого момента команда УЖЕ ОТПРАВЛЕНА.
+            // From this moment the command is ALREADY SENT.
             written = true;
 
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -129,9 +105,9 @@ public sealed class IpcRequestChannel : IAsyncDisposable
                 }
                 catch (OperationCanceledException) when (written && isMutation)
                 {
-                    // Клиент отменил вызов, но команда УЖЕ ушла в Worker: отмена токена не снимает
-                    // COM-вызов. Назвать это «команда не отправлялась» — значит разрешить клиенту
-                    // повторить мутацию с новым operation_id.
+                    // The client cancelled, but the command is ALREADY in the Worker: cancelling the
+                    // token does not abort the COM call. Calling this "never sent" would let the
+                    // client repeat the mutation under a new operation_id.
                     throw new KompasContractException(
                         ErrorCodes.OutcomeUnknown,
                         $"Команда '{command}' уже отправлена в Worker, когда клиент отменил вызов: отмена " +
@@ -147,8 +123,8 @@ public sealed class IpcRequestChannel : IAsyncDisposable
                 }
                 catch (OperationCanceledException) when (written)
                 {
-                    // Чтение: модель не менялась, но ответ всё равно не получен, и «отменено» —
-                    // не подтверждение, а лишь отсутствие наблюдения.
+                    // Read: the model did not change, but the answer is still missing; "cancelled"
+                    // is not confirmation, only absence of observation.
                     throw new KompasContractException(
                         ErrorCodes.CancelNotConfirmed,
                         $"Команда чтения '{command}' уже отправлена в Worker, когда клиент отменил " +

@@ -4,15 +4,11 @@ using System.Text.Json.Nodes;
 
 namespace KompasMcp.Contracts.Ipc;
 
-/// <summary>
-/// Length-prefixed frame reader/writer over an arbitrary duplex stream. Shared by Host and
-/// Worker so the two ends cannot disagree about where a frame stops.
-/// </summary>
-/// <remarks>
-/// The reader is deliberately allocation-light and strict: an oversized length prefix aborts the
+/// <summary>Length-prefixed frame reader/writer over an arbitrary duplex stream. Shared by Host and
+/// Worker so the two ends cannot disagree about where a frame stops.</summary>
+/// <remarks>The reader is deliberately allocation-light and strict: an oversized length prefix aborts the
 /// connection rather than buffering 4 GiB, and a truncated frame raises rather than returning a
-/// half-parsed object. A peer that dies mid-frame must not be able to make us invent a response.
-/// </remarks>
+/// half-parsed object. A peer that dies mid-frame must not be able to make us invent a response.</remarks>
 public static class IpcChannel
 {
     /// <summary>Read one frame, or null when the peer closed the pipe cleanly at a frame boundary.</summary>
@@ -53,15 +49,10 @@ public static class IpcChannel
         }
     }
 
-    // RequestAsync used to live here: it wrote the request, then ran its own read loop until the
-    // matching response arrived. That is safe for one caller and corrupt for two. When a client
-    // issues tool calls concurrently — a long mutation plus a kompas_health probe is the case the
-    // design exists for — both callers read the same stream, interleave their bytes, and the length
-    // prefix lands mid-JSON. Measured 18.09.2026 from the WorkBuddy client:
-    //   "Недопустимая длина кадра 1919951483 байт" (the four bytes were '{"pr')
-    //   "JsonException: 'o' is an invalid start of a value"
-    // Request/response over a shared stream now belongs to IpcRequestChannel, which owns the single
-    // reader and routes answers by request id. Do not reintroduce a per-caller read loop here.
+    // INVARIANT: request/response over a shared stream belongs to IpcRequestChannel, which owns the
+    // single reader and routes answers by request id; a per-caller read loop here lets two callers
+    // interleave their bytes and corrupts the stream (MEASURED 18.09.2026).
+    // History: docs/decisions/contracts.md#ipc-read-loop
 
     private static async ValueTask<bool> ReadExactAsync(Stream stream, Memory<byte> buffer, CancellationToken cancellationToken)
     {

@@ -4,20 +4,12 @@ using System.Text.Json.Nodes;
 
 namespace KompasMcp.Contracts;
 
-/// <summary>
-/// Reads scalars out of a <see cref="JsonNode"/> without assuming how the node is stored.
-/// </summary>
-/// <remarks>
-/// This exists because a JsonNode has two very different shapes depending on where it came from:
-/// one built in memory wraps the CLR value (<c>JsonValue&lt;long&gt;</c>), while one that arrived
-/// over the wire or through <c>DeepClone()</c> wraps a <c>JsonElement</c>.
-/// <c>JsonNode.GetValue&lt;T&gt;()</c> and <c>TryGetValue&lt;T&gt;()</c> are strict about that
-/// distinction, so code that works on hand-built documents fails on parsed ones — twice in this
-/// project: once in the schema validator (every numeric argument crashed) and once reading the
-/// Worker's <c>revision</c> back in the Host, which silently produced a stale revision chain.
-///
-/// Anything crossing the pipe or the MCP boundary should read scalars through these helpers.
-/// </remarks>
+/// <summary>Reads scalars out of a <see cref="JsonNode"/> without assuming how the node is stored.</summary>
+/// <remarks>INVARIANT: a JsonNode wraps either the CLR value (<c>JsonValue&lt;long&gt;</c>, built in memory) or a
+/// <c>JsonElement</c> (arrived over the wire or through <c>DeepClone()</c>); <c>GetValue&lt;T&gt;()</c> and
+/// <c>TryGetValue&lt;T&gt;()</c> are strict about that distinction, so code that works on hand-built documents
+/// fails on parsed ones. Anything crossing the pipe or the MCP boundary reads scalars through these helpers.
+/// History: docs/decisions/contracts.md#json-scalars</remarks>
 public static class JsonScalars
 {
     public static string? ReadString(JsonNode? node)

@@ -1,25 +1,19 @@
 namespace KompasMcp.Contracts.Ipc;
 
-/// <summary>
-/// Command names on the Host→Worker pipe. Adding a command means adding a handler in the
-/// Worker; an unhandled name fails as CAPABILITY_UNAVAILABLE rather than being ignored.
-/// </summary>
+/// <summary>Command names on the Host→Worker pipe. Adding a command means adding a handler in the
+/// Worker; an unhandled name fails as CAPABILITY_UNAVAILABLE rather than being ignored.</summary>
 public static class WorkerCommands
 {
     public const string EnvironmentProbe = "env.probe";
     public const string Ping = "sys.ping";
 
-    /// <summary>
-    /// Опись сеанса: экземпляры КОМПАС и документы, которые держит ЭТОТ Worker, с признаком
-    /// несохранённости. Команда управления, а не геометрия: нужна ровно для одного решения —
-    /// можно ли освободить сеанс без потери правок.
-    /// </summary>
-    /// <remarks>
-    /// Почему отдельная команда, а не повтор <c>doc.list</c>. <c>doc.list</c> требует
-    /// <c>application_id</c> и описывает один экземпляр; освобождению нужна опись ВСЕХ экземпляров
-    /// сразу, иначе документ второго приложения остался бы не названным, и отказ «есть
-    /// несохранённые» был бы неполным — то есть ложным по форме и верным по существу.
-    /// </remarks>
+    /// <summary>Session inventory: KOMPAS instances and documents held by THIS Worker, with a dirty
+    /// flag. A control command, not geometry: it serves exactly one decision — whether the session can
+    /// be released without losing edits.</summary>
+    /// <remarks>A separate command, not a repeat of <c>doc.list</c>: that one requires
+    /// <c>application_id</c> and describes one instance, while release needs an inventory of ALL
+    /// instances at once — otherwise a second application's document would stay unnamed and the
+    /// "unsaved edits" refusal would be incomplete.</remarks>
     public const string SessionInventory = "session.inventory";
     public const string Connect = "app.connect";
     public const string Disconnect = "app.disconnect";
@@ -37,211 +31,154 @@ public static class WorkerCommands
     public const string CreateSketch = "sketch.create";
     public const string EditSketch = "sketch.edit";
 
-    /// <summary>
-    /// Смена ОПОРНОЙ плоскости СУЩЕСТВУЮЩЕГО эскиза документированным
+    /// <summary>Changes the SUPPORT plane of an EXISTING sketch through the documented
     /// <c>ksSketchDefinition.SetPlane</c> («Изменить базовую плоскость эскиза»,
-    /// <c>kssketchdefinition_setplane.html</c>), затем обязательный <c>sketch.Update()</c>.
-    /// </summary>
-    /// <remarks>
-    /// ВТОРАЯ половина действия <c>edit</c> строки <c>AUX-SKETCH.plane_and_profile_lifecycle</c>:
-    /// первая (профиль) выражается <c>kompas_edit_sketch</c>, опора до этого не выражалась ничем.
-    /// Маршрут измерен пробой <c>tools/KompasMcp.Api7Probe --sketch-plane</c>; отчёт —
-    /// <c>docs/acceptance/image/sketch-plane-probe-report.md</c>. Отдельная команда, а не поле чужой:
-    /// расширение <c>kompas_edit_sketch</c> полем <c>plane</c> измерено как размывающее (301 чужая
-    /// строка при нулевом приросте своих).
-    /// </remarks>
+    /// <c>kssketchdefinition_setplane.html</c>), then a mandatory <c>sketch.Update()</c>.</summary>
+    /// <remarks>The SECOND half of the <c>edit</c> action of row
+    /// <c>AUX-SKETCH.plane_and_profile_lifecycle</c>: the first half (profile) is expressed by
+    /// <c>kompas_edit_sketch</c>, while the support had no expression at all before. MEASURED by probe
+    /// <c>tools/KompasMcp.Api7Probe --sketch-plane</c> (report
+    /// <c>docs/acceptance/image/sketch-plane-probe-report.md</c>). A separate command, not a field on
+    /// another tool: extending <c>kompas_edit_sketch</c> with a <c>plane</c> field measured as
+    /// blurring (301 foreign rows for zero rows of its own).</remarks>
     public const string SetSketchPlane = "sketch.set_plane";
     public const string FinishSketch = "sketch.finish";
     public const string Extrude = "feat.extrude";
 
-    /// <summary>Скругление по явным ссылкам на рёбра конечного тела.</summary>
+    /// <summary>Fillet by explicit references to the edges of the final body.</summary>
     public const string Fillet = "feat.fillet";
 
-    /// <summary>
-    /// Фаска по явным ссылкам на рёбра (docs/05 SM-11). Маршрут измерен пробой F от 12.09.2026:
-    /// в API5 это <c>NewEntity(o3d_chamfer=33)</c> + <c>ksChamferDefinition.SetChamferParam</c>,
-    /// режим «расстояние и угол» — только API7 (<c>IChamfer.Angle</c>).
-    /// </summary>
+    /// <summary>Chamfer by explicit edge references (docs/05 SM-11). MEASURED by probe F on
+    /// 12.09.2026: in API5 this is <c>NewEntity(o3d_chamfer=33)</c> +
+    /// <c>ksChamferDefinition.SetChamferParam</c>; the «расстояние и угол» mode is API7 only
+    /// (<c>IChamfer.Angle</c>).</summary>
     public const string Chamfer = "feat.chamfer";
 
-    /// <summary>
-    /// Родное отверстие (docs/05 SM-07). Режимы измерены пробой M от 16.09.2026 и достижимы только
-    /// через API7 того же сеанса: параметры режима живут не на <c>IHole3D</c>, а на
-    /// <c>HoleParameters</c>, приведённом к интерфейсу своего режима
-    /// (<c>ISpotfacingHoleParameters</c>, <c>ICountersinkHoleParameters</c>). Позиция вне начала
-    /// координат задаётся <c>IHoleDisposal.Point3DParamSurface</c> + <c>OffsetType=ksOffsetByCoords</c>.
-    /// </summary>
+    /// <summary>Native hole (docs/05 SM-07). Modes MEASURED by probe M on 16.09.2026 and reachable only
+    /// through API7 of the same session: mode parameters live not on <c>IHole3D</c> but on
+    /// <c>HoleParameters</c> cast to the interface of its own mode (<c>ISpotfacingHoleParameters</c>,
+    /// <c>ICountersinkHoleParameters</c>). A position off the origin is set by
+    /// <c>IHoleDisposal.Point3DParamSurface</c> + <c>OffsetType=ksOffsetByCoords</c>.</summary>
     public const string Hole = "feat.hole";
 
-    /// <summary>
-    /// Вращение (docs/05 SM-03). Маршрут измерен 17.09.2026 (шаги R.24…R.26, прогон
-    /// <c>95fa8441</c>) и лежит ЦЕЛИКОМ в API7: <c>IModelContainer.Rotateds.Add(type)</c> →
-    /// <c>QI(IRotated)</c> → запись параметров → <c>Update()</c>. Оболочка API5
-    /// (<c>NewEntity</c> + <c>Create()</c>) на этом объекте не работает — это измерено и было
-    /// причиной многомесячной блокировки, а не свойство вращения.
-    /// </summary>
+    /// <summary>Rotation (docs/05 SM-03). Route MEASURED on 17.09.2026 (steps R.24…R.26, run
+    /// <c>95fa8441</c>) and lies ENTIRELY in API7: <c>IModelContainer.Rotateds.Add(type)</c> →
+    /// <c>QI(IRotated)</c> → write parameters → <c>Update()</c>. The API5 wrapper (<c>NewEntity</c> +
+    /// <c>Create()</c>) does not work on this object — MEASURED, not a property of rotation.
+    /// History: docs/decisions/contracts.md#rotation-route</summary>
     public const string Rotated = "feat.rotated";
 
-    /// <summary>
-    /// Кинематическая операция — «Элемент по траектории» (docs/05 SM-04).
-    /// </summary>
-    /// <remarks>
-    /// <b>Маршрут — документированный API5, и это следует из справки, а не из удобства.</b>
-    /// <c>obj3dtype.html</c> документирует <c>o3d_baseEvolution = 45 → ksBaseEvolutionDefinition</c>,
-    /// но <c>ievolutions_add.html</c> перечисляет допустимыми для <c>IEvolutions::Add</c> только
-    /// <c>o3d_bossEvolution</c> и <c>o3d_cutEvolution</c> — базового типа в списке нет. Измерено
-    /// 20.09.2026 (шаг B5.7): <c>IEvolutions.Add(45)</c> возвращает <c>KompasAPI7.EvolutionClass</c>,
-    /// то есть объект ВЫДАЁТСЯ, но валидность тела по этому пути не измерялась и за документированный
-    /// маршрут он не принимается. Рабочий маршрут — <c>ksPart.NewEntity(45)</c> +
-    /// <c>ksBaseEvolutionDefinition</c>; он подтверждён объёмом (шаг B5.1).
-    /// </remarks>
+    /// <summary>Sweep — «Элемент по траектории» (docs/05 SM-04).</summary>
+    /// <remarks>The route is documented API5, and this follows from the help rather than from
+    /// convenience. <c>obj3dtype.html</c> documents <c>o3d_baseEvolution = 45 →
+    /// ksBaseEvolutionDefinition</c>, but <c>ievolutions_add.html</c> lists only
+    /// <c>o3d_bossEvolution</c> and <c>o3d_cutEvolution</c> as valid for <c>IEvolutions::Add</c> — the
+    /// base type is absent from the list. MEASURED on 20.09.2026 (step B5.7): <c>IEvolutions.Add(45)</c>
+    /// returns <c>KompasAPI7.EvolutionClass</c>, i.e. an object IS handed back, but body validity along
+    /// this path was not measured and it is not accepted as the documented route. The working route is
+    /// <c>ksPart.NewEntity(45)</c> + <c>ksBaseEvolutionDefinition</c>, confirmed by volume (step
+    /// B5.1).</remarks>
     public const string Sweep = "feat.sweep";
 
-    /// <summary>
-    /// Элемент по сечениям (docs/05 SM-05).
-    /// </summary>
-    /// <remarks>
-    /// <b>Маршрут — документированный API5, по той же причине, что у кинематической операции.</b>
-    /// <c>obj3dtype.html</c> документирует <c>o3d_baseLoft = 30 → ksBaseLoftDefinition</c>, но
-    /// <c>ilofts_add.html</c> перечисляет для <c>ILofts::Add</c> только <c>o3d_bossLoft</c> и
-    /// <c>o3d_cutLoft</c>. Рабочий маршрут — <c>ksPart.NewEntity(30)</c> +
-    /// <c>ksBaseLoftDefinition</c>, подтверждён объёмом <c>28000</c> (шаг B5.4).
-    /// </remarks>
+    /// <summary>Loft (docs/05 SM-05).</summary>
+    /// <remarks>The route is documented API5, for the same reason as sweep. <c>obj3dtype.html</c>
+    /// documents <c>o3d_baseLoft = 30 → ksBaseLoftDefinition</c>, but <c>ilofts_add.html</c> lists only
+    /// <c>o3d_bossLoft</c> and <c>o3d_cutLoft</c> for <c>ILofts::Add</c>. The working route is
+    /// <c>ksPart.NewEntity(30)</c> + <c>ksBaseLoftDefinition</c>, confirmed by volume <c>28000</c>
+    /// (step B5.4).</remarks>
     public const string Loft = "feat.loft";
 
-    /// <summary>
-    /// Оболочка (docs/05 SM-13).
-    /// </summary>
-    /// <remarks>
-    /// <b>Маршрут — документированный API7 и он единственный из трёх, где базового типа не нужно:</b>
-    /// <c>ishells_add.html</c> объявляет <c>IShells::Add()</c> без аргумента типа вовсе. Измерено
-    /// (шаг B5.7): <c>IModelContainer.Shells.Add()</c> возвращает <c>KompasAPI7._ShellClass</c> и
-    /// приводится к <c>IShell</c>. Объёмы подтверждены: 21632 / 24832 / 40256 (шаги B5.5, B5.6).
-    /// </remarks>
+    /// <summary>Shell (docs/05 SM-13).</summary>
+    /// <remarks>The route is documented API7, and it is the only one of the three that needs no base
+    /// type: <c>ishells_add.html</c> declares <c>IShells::Add()</c> with no type argument at all.
+    /// MEASURED (step B5.7): <c>IModelContainer.Shells.Add()</c> returns <c>KompasAPI7._ShellClass</c>
+    /// and casts to <c>IShell</c>. Volumes confirmed: 21632 / 24832 / 40256 (steps B5.5, B5.6).</remarks>
     public const string Shell = "feat.shell";
 
-    /// <summary>
-    /// Булева операция над телами с явными целью и инструментами (docs/05 SM-15).
-    /// </summary>
-    /// <remarks>
-    /// Маршрут измерен 18.09.2026 пробой <c>--boolean</c> (прогон <c>b10ffb70b7d24b6497417bc6639581b1</c>,
-    /// PASS 13 · FAIL 0): <c>IModelContainer.Booleans.Add()</c> → <c>IBoolean</c>, поля
-    /// <c>BaseObject</c> (цель), <c>ModifyObjects</c> (массив инструментов), <c>BooleanType</c>,
-    /// <c>SaveCopyModifyObjects</c>, затем <c>Update()</c>.
-    /// <para>
-    /// Порядок операндов разности измерен: <b>цель минус инструменты</b>. Значения
-    /// <c>ksBooleanType</c> — <c>ksIntersect=1</c>, <c>ksDifference=2</c>, <c>ksUnion=3</c> — взяты
-    /// из перечисления, а не из каталога (каталог называл объединение нулём и ошибался).
-    /// </para>
-    /// <para>
-    /// Ядро не отвергает повтор ссылки и не проверяет, что цель не входит в набор инструментов:
-    /// обе проверки обязаны стоять в контракте, до вызова COM.
-    /// </para>
-    /// </remarks>
+    /// <summary>Boolean operation on bodies with an explicit target and tools (docs/05 SM-15).</summary>
+    /// <remarks>Route MEASURED on 18.09.2026 by probe <c>--boolean</c> (run
+    /// <c>b10ffb70b7d24b6497417bc6639581b1</c>, PASS 13 · FAIL 0): <c>IModelContainer.Booleans.Add()</c>
+    /// → <c>IBoolean</c>, fields <c>BaseObject</c> (target), <c>ModifyObjects</c> (tool array),
+    /// <c>BooleanType</c>, <c>SaveCopyModifyObjects</c>, then <c>Update()</c>.
+    /// <para>Difference operand order MEASURED: <b>target minus tools</b>. The <c>ksBooleanType</c>
+    /// values — <c>ksIntersect=1</c>, <c>ksDifference=2</c>, <c>ksUnion=3</c> — come from the enum, not
+    /// from the catalog (the catalog called union zero and was wrong).</para>
+    /// <para>The core neither rejects a repeated reference nor checks that the target is outside the
+    /// tool set: both checks MUST live in the contract, before the COM call.</para></remarks>
     public const string SolidBoolean = "solid.boolean";
 
-    /// <summary>
-    /// Разделение тела плоскостью на части (docs/05 SM-16).
-    /// </summary>
-    /// <remarks>
-    /// Маршрут измерен 18.09.2026 пробой <c>--split</c> (прогон <c>124682af57a242728ea765f1aae4816c</c>,
-    /// PASS 11 · FAIL 0): <c>IModelContainer.SplitSolids.Add()</c> → <c>ISplitSolid</c> с
-    /// единственным содержательным членом <c>CutObjects</c>, затем <c>Update()</c>. Разделение
-    /// сохраняет ВСЕ части по построению — отдельного члена «набор сохраняемых» не требуется, и
-    /// именно это измерение сняло блокировку OQ-A18.
-    /// </remarks>
+    /// <summary>Splitting a body into parts by a plane (docs/05 SM-16).</summary>
+    /// <remarks>Route MEASURED on 18.09.2026 by probe <c>--split</c> (run
+    /// <c>124682af57a242728ea765f1aae4816c</c>, PASS 11 · FAIL 0):
+    /// <c>IModelContainer.SplitSolids.Add()</c> → <c>ISplitSolid</c> with the single meaningful member
+    /// <c>CutObjects</c>, then <c>Update()</c>. Splitting keeps ALL parts by construction — no separate
+    /// "kept set" member is needed, and this measurement lifted blocker OQ-A18.</remarks>
     public const string SolidSplit = "solid.split";
 
-    /// <summary>
-    /// Отсечение тела плоскостью с выбором оставляемой стороны (docs/05 SM-16).
-    /// </summary>
-    /// <remarks>
-    /// Маршрут измерен 18.09.2026 пробой <c>--split</c>, шаг SP.7: <c>IModelContainer.Cuts.Add()</c>
-    /// → <c>ICut</c> с <c>BuildingType = ksCutByPlane</c>, <c>CutObject</c> = плоскость,
-    /// <c>Direction</c> = выбор стороны, затем <c>Update()</c>.
-    /// <para>
-    /// Правило знака измерено: при нормали <c>(1,0,0)</c> и плоскости <c>x = 10</c>
-    /// <c>Direction = true</c> оставляет сторону <b>в направлении нормали</b> (<c>s &gt; 0</c>,
-    /// V = 18 000), <c>false</c> — противоположную (<c>s &lt; 0</c>, V = 6 000).
-    /// </para>
-    /// </remarks>
+    /// <summary>Cutting a body by a plane with a chosen kept side (docs/05 SM-16).</summary>
+    /// <remarks>Route MEASURED on 18.09.2026 by probe <c>--split</c>, step SP.7:
+    /// <c>IModelContainer.Cuts.Add()</c> → <c>ICut</c> with <c>BuildingType = ksCutByPlane</c>,
+    /// <c>CutObject</c> = plane, <c>Direction</c> = side choice, then <c>Update()</c>.
+    /// <para>Sign rule MEASURED: with normal <c>(1,0,0)</c> and plane <c>x = 10</c>,
+    /// <c>Direction = true</c> keeps the side <b>along the normal</b> (<c>s &gt; 0</c>, V = 18 000),
+    /// <c>false</c> the opposite one (<c>s &lt; 0</c>, V = 6 000).</para></remarks>
     public const string SolidCutByPlane = "solid.cut_by_plane";
 
-    /// <summary>
-    /// Перенос и поворот тела (docs/05 SM-17).
-    /// </summary>
-    /// <remarks>
-    /// Маршрут измерен 18.09.2026 пробой <c>--reposition</c> (прогон <c>929f08886f1348fe921943052a4026b0</c>,
-    /// PASS 10 · FAIL 0): <c>IModelContainer.BodyRepositions.Add()</c> → <c>IBodyReposition</c>,
-    /// <c>RepositionBody</c> = тело, положение пишется <c>Position.InitByMatrix3D</c>, затем
-    /// <c>Update()</c>.
-    /// <para>
-    /// <b>Положение пишет ТОЛЬКО однородная матрица 4×4</b> (OQ-A19): маршруты из 12 чисел
-    /// («оси, затем начало» и «начало, затем оси») и <c>SetDisplacementByAxis</c> возвращают
-    /// <c>Update() = true</c> и НЕ двигают тело. Успешный <c>Update()</c> здесь не является
-    /// доказательством, поэтому адаптер обязан проверять положение после вызова, а не доверять
-    /// возвращённому значению.
-    /// </para>
-    /// <para>
-    /// Направление поворота измерено как правое правило: <c>(x,y) → (−y,x)</c>. На переносе
-    /// раскладку строк и столбцов различить нельзя (единичный поворот симметричен), поэтому
-    /// доказательством раскладки служит поворот, а не перенос.
-    /// </para>
-    /// </remarks>
+    /// <summary>Body translation and rotation (docs/05 SM-17).</summary>
+    /// <remarks>Route MEASURED on 18.09.2026 by probe <c>--reposition</c> (run
+    /// <c>929f08886f1348fe921943052a4026b0</c>, PASS 10 · FAIL 0):
+    /// <c>IModelContainer.BodyRepositions.Add()</c> → <c>IBodyReposition</c>, <c>RepositionBody</c> =
+    /// body, the placement is written by <c>Position.InitByMatrix3D</c>, then <c>Update()</c>.
+    /// <para><b>Only a homogeneous 4×4 matrix writes the placement</b> (OQ-A19): routes from 12 numbers
+    /// («axes then origin» and «origin then axes») and <c>SetDisplacementByAxis</c> return
+    /// <c>Update() = true</c> and do NOT move the body. A successful <c>Update()</c> is therefore not
+    /// proof here, so the adapter MUST verify the placement after the call rather than trust the
+    /// returned value.</para>
+    /// <para>Rotation direction MEASURED as the right-hand rule: <c>(x,y) → (−y,x)</c>. On a
+    /// translation the row/column layout cannot be told apart (a unit rotation is symmetric), so the
+    /// layout is proved by a rotation, not a translation.</para></remarks>
     public const string SolidReposition = "solid.reposition";
 
-    /// <summary>
-    /// Параметрическая определённость существующего эскиза — тот статус, который КОМПАС показывает
-    /// знаками «+», «−», «!».
-    /// </summary>
-    /// <remarks>
-    /// Маршрут измерен 17.09.2026 пробой S (<c>docs/acceptance/api7/sketch-definition.md</c>, прогон
-    /// <c>82880ed0b14a4e299bb0e93d7f8a7f2f</c>, PASS 9 · FAIL 0 · UNKNOWN 6) и лежит в API7:
-    /// <c>TransferInterface(sketchEntity, ksAPI7Dual, 0)</c> → <c>ISketch.ConstraintsState</c> типа
-    /// <c>ksConstraintsStateEnum</c>. Пятикратное чтение не изменило объём и счётчики топологии (S.7),
-    /// поэтому команда исполняется как ЧТЕНИЕ — без <c>BeginEdit</c>, <c>Update</c> и перестроения.
-    /// </remarks>
+    /// <summary>Parametric definiteness of an existing sketch — the status KOMPAS shows with the
+    /// «+», «−», «!» signs.</summary>
+    /// <remarks>Route MEASURED on 17.09.2026 by probe S (<c>docs/acceptance/api7/sketch-definition.md</c>,
+    /// run <c>82880ed0b14a4e299bb0e93d7f8a7f2f</c>, PASS 9 · FAIL 0 · UNKNOWN 6) and lies in API7:
+    /// <c>TransferInterface(sketchEntity, ksAPI7Dual, 0)</c> → <c>ISketch.ConstraintsState</c> of type
+    /// <c>ksConstraintsStateEnum</c>. Five repeated reads changed neither volume nor topology counts
+    /// (S.7), so the command runs as a READ — without <c>BeginEdit</c>, <c>Update</c> or rebuild.</remarks>
     public const string SketchStatus = "sketch.status";
 
-    /// <summary>Чтение параметров существующего признака (docs/05 §7 kompas_get_feature).</summary>
+    /// <summary>Reading the parameters of an existing feature (docs/05 §7 kompas_get_feature).</summary>
     public const string GetFeature = "feat.get";
-    /// <summary>Изменение параметров существующего признака на месте (docs/05 §4.3, §7).</summary>
+    /// <summary>Editing the parameters of an existing feature in place (docs/05 §4.3, §7).</summary>
     public const string UpdateFeature = "feat.update";
 
-    /// <summary>
-    /// Массив по сетке (docs/05 SM-18). Маршрут — только API7:
-    /// <c>IModelContainer.FeaturePatterns.Add(o3d_meshCopy=35)</c> → <c>QI(ILinearPattern)</c>.
-    /// </summary>
-    /// <remarks>
-    /// <b>Почему не API5.</b> Определения API5 (<c>ksMeshCopyDefinition</c>,
-    /// <c>ksMeshPartArrayDefinition</c>) в дампе метаданных присутствуют, но продуктового маршрута
-    /// через <c>NewEntity + Create()</c> у массивов нет: на вращении (SM-03) измерено, что оболочка
-    /// API5 вокруг объекта фабрики API7 не строит ничего — <c>Create()</c> возвращает <c>true</c>,
-    /// объект появляется в дереве, объём не меняется. Здесь повторять этот опыт не нужно, потому что
-    /// маршрут API7 опубликован страницей SDK <c>copytype.html</c> («o3d_meshCopy 35 ILinearPattern»).
-    /// </remarks>
+    /// <summary>Grid pattern (docs/05 SM-18). Route is API7 only:
+    /// <c>IModelContainer.FeaturePatterns.Add(o3d_meshCopy=35)</c> → <c>QI(ILinearPattern)</c>.</summary>
+    /// <remarks>Not API5: the API5 definitions (<c>ksMeshCopyDefinition</c>,
+    /// <c>ksMeshPartArrayDefinition</c>) exist in the metadata dump, but patterns have no product route
+    /// through <c>NewEntity + Create()</c> — on rotation (SM-03) it was MEASURED that the API5 wrapper
+    /// around an API7 factory object builds nothing (<c>Create()</c> returns <c>true</c>, the object
+    /// appears in the tree, the volume does not change). The experiment is not repeated here because the
+    /// API7 route is published by SDK page <c>copytype.html</c> («o3d_meshCopy 35 ILinearPattern»).</remarks>
     public const string PatternGrid = "pattern.grid";
 
-    /// <summary>
-    /// Массив по концентрической сетке (docs/05 SM-19):
-    /// <c>FeaturePatterns.Add(o3d_circularCopy=36)</c> → <c>QI(ICircularPattern)</c>.
-    /// </summary>
+    /// <summary>Circular pattern (docs/05 SM-19):
+    /// <c>FeaturePatterns.Add(o3d_circularCopy=36)</c> → <c>QI(ICircularPattern)</c>.</summary>
     public const string PatternCircular = "pattern.circular";
 
-    /// <summary>
-    /// Зеркальный массив (docs/05 SM-23): <c>FeaturePatterns.Add(o3d_mirrorOperation=48</c> либо
-    /// <c>o3d_mirrorAllOperation=49)</c> → <c>QI(IMirrorPattern)</c>, у второго вида дополнительно
-    /// <c>QI(IChooseBodies7)</c>.
-    /// </summary>
+    /// <summary>Mirror pattern (docs/05 SM-23): <c>FeaturePatterns.Add(o3d_mirrorOperation=48</c> or
+    /// <c>o3d_mirrorAllOperation=49)</c> → <c>QI(IMirrorPattern)</c>, the second kind additionally
+    /// <c>QI(IChooseBodies7)</c>.</summary>
     public const string PatternMirror = "pattern.mirror";
 
-    /// <summary>Перечитать параметры существующего массива либо зеркала из модели.</summary>
+    /// <summary>Re-read the parameters of an existing pattern or mirror from the model.</summary>
     public const string PatternRead = "pattern.read";
 
-    /// <summary>Подавление и восстановление признака (ksFeature.excluded, измерено пробой L.7).</summary>
+    /// <summary>Suppress and restore a feature (ksFeature.excluded, MEASURED by probe L.7).</summary>
     public const string SuppressFeature = "feat.suppress";
 
-    /// <summary>Удаление признака с перечнем кандидатов зависимых до обращения к КОМПАС (проба L.8).</summary>
+    /// <summary>Delete a feature with a list of dependent candidates before touching KOMPAS (probe L.8).</summary>
     public const string DeleteFeature = "feat.delete";
     public const string Rebuild = "doc.rebuild";
     public const string ExportStep = "export.step";
@@ -249,20 +186,20 @@ public static class WorkerCommands
     public const string ExportImage = "export.image";
     public const string UnitProbe = "probe.units";
 
-    // Домен сборок (наряд C1). Команды названы по режимам профиля assemblies-minimal-v1:
+    // Assembly domain (order C1). Commands are named after the modes of profile assemblies-minimal-v1:
     // asm.list_components → ASM-03, asm.insert_component → ASM-02, asm.set_placement → ASM-04,
-    // asm.replace_component → ASM-05, asm.check_links → ASM-06. ASM-01/ASM-07 переиспользуют общий
-    // жизненный цикл (doc.create/doc.open/doc.save/doc.close), а не заводят второй.
+    // asm.replace_component → ASM-05, asm.check_links → ASM-06. ASM-01/ASM-07 reuse the common
+    // lifecycle (doc.create/doc.open/doc.save/doc.close) instead of starting a second one.
     public const string ListComponents = "asm.list_components";
     public const string InsertComponent = "asm.insert_component";
     public const string SetComponentPlacement = "asm.set_placement";
     public const string ReplaceComponent = "asm.replace_component";
     public const string CheckComponentLinks = "asm.check_links";
 
-    // ── блок C2 «минимальные сопряжения» (профиль mates-minimal-v1) ──
+    // ── block C2 "minimal mates" (profile mates-minimal-v1) ──
     // mate.create → MATE-01, mate.list → MATE-02, mate.set_parameter → MATE-03,
-    // mate.set_fixed → MATE-04, mate.delete → MATE-05. MATE-06 (положение компонента после
-    // сопряжения) читается существующим asm.list_components и своего инструмента не заводит.
+    // mate.set_fixed → MATE-04, mate.delete → MATE-05. MATE-06 (component placement after a mate)
+    // is read by the existing asm.list_components and starts no tool of its own.
     public const string ListMates = "mate.list";
     public const string CreateMate = "mate.create";
     public const string SetMateParameter = "mate.set_parameter";
@@ -270,172 +207,131 @@ public static class WorkerCommands
     public const string DeleteMate = "mate.delete";
     public const string Shutdown = "sys.shutdown";
 
-    /// <summary>
-    /// Создание объекта вспомогательной геометрии детали — плоскости, оси или точки
-    /// (<c>dep.refs.planes</c>, <c>dep.refs.axes</c>, <c>dep.refs.points_axes</c>).
-    /// </summary>
-    /// <remarks>
-    /// <b>Маршрут — документированный API7 и взят из справки v24</b> (шаг 0 наряда продуктовых
-    /// маршрутов, отчёт <c>DEPENDENCIES_PRODUCT_ROUTES_STEP0_REPORT_20260921.md</c> §6.1–6.3):
-    /// <c>IAuxiliaryGeomContainer.GetPlanes3D/GetAxes3D</c>, <c>IModelContainer.GetPoints3D</c>,
-    /// затем <c>Add(ksObj3dTypeEnum)</c> с типом из официальной таблицы <c>obj3dtype.html</c>:
+    /// <summary>Creates a part auxiliary-geometry object — a plane, axis or point
+    /// (<c>dep.refs.planes</c>, <c>dep.refs.axes</c>, <c>dep.refs.points_axes</c>).</summary>
+    /// <remarks>DOC: route is documented API7 and taken from the v24 help (step 0 of the product-routes
+    /// order, report <c>DEPENDENCIES_PRODUCT_ROUTES_STEP0_REPORT_20260921.md</c> §6.1–6.3):
+    /// <c>IAuxiliaryGeomContainer.GetPlanes3D/GetAxes3D</c>, <c>IModelContainer.GetPoints3D</c>, then
+    /// <c>Add(ksObj3dTypeEnum)</c> with a type from the official table <c>obj3dtype.html</c>:
     /// <c>o3d_planeOffset</c> = 14, <c>o3d_planeAngle</c> = 15, <c>o3d_axis2Points</c> = 10,
-    /// <c>o3d_axisConeFace</c> = 11, <c>o3d_axisEdge</c> = 12, <c>o3d_point3D</c> = 70.
-    /// </remarks>
+    /// <c>o3d_axisConeFace</c> = 11, <c>o3d_axisEdge</c> = 12, <c>o3d_point3D</c> = 70.</remarks>
     public const string CreateAuxGeometry = "aux.create";
 
-    /// <summary>
-    /// Перечисление и чтение объектов вспомогательной геометрии детали: плоскости, оси, точки.
-    /// </summary>
-    /// <remarks>
-    /// <b>Имя как адрес разрешается перечислением, и это ИЗМЕРЕНО, а не выбрано.</b> Справка
-    /// документирует <c>IAxes3D.GetAxis3DByName</c>, <c>IPoints3D.GetPoint3DByName</c> и
-    /// <c>ISketchs.GetSketchByName</c>, но в поставленном <c>Interop.KompasAPI7.dll</c> целевой
-    /// сборки нет НИ ОДНОГО члена с подстрокой <c>ByName</c> (прибор
-    /// <c>tools/KompasMcp.InteropScan</c>, 21.09.2026). Поэтому имя сопоставляется перечислением
-    /// коллекции по документированным членам <c>Count</c> + индексированное свойство + <c>Name</c>.
-    /// Возвращаемый индекс коллекции НЕ объявляется устойчивым адресом: перестроение его сдвигает.
-    /// </remarks>
+    /// <summary>Enumerates and reads part auxiliary-geometry objects: planes, axes, points.</summary>
+    /// <remarks><b>A name is resolved to an address by enumeration, and this is MEASURED, not
+    /// chosen.</b> The help documents <c>IAxes3D.GetAxis3DByName</c>, <c>IPoints3D.GetPoint3DByName</c>
+    /// and <c>ISketchs.GetSketchByName</c>, but the shipped <c>Interop.KompasAPI7.dll</c> of the target
+    /// assembly has NOT ONE member containing the substring <c>ByName</c> (instrument
+    /// <c>tools/KompasMcp.InteropScan</c>, 21.09.2026). A name is therefore matched by enumerating the
+    /// collection through the documented members <c>Count</c> + indexed property + <c>Name</c>. The
+    /// returned collection index is NOT declared a stable address: a rebuild shifts it.</remarks>
     public const string ListAuxGeometry = "aux.list";
 
-    /// <summary>
-    /// Правка УЖЕ СОЗДАННОЙ плоскости как объекта детали: смещение, угол наклона, опора
-    /// (<c>dep.refs.planes</c>, действие <c>edit</c>).
-    /// </summary>
-    /// <remarks>
-    /// <b>Это отдельный маршрут, а не поле чужого вызова.</b> Измерено строкой
-    /// <c>DEP.DPL.04.edit</c> прежнего прогона: правка признака полем <c>plane</c> ПРИНИМАЛАСЬ
-    /// (код отказа <c>None</c>) и геометрию НЕ меняла. Здесь правка идёт документированными
-    /// сеттерами <c>IPlane3DByOffset.Offset</c> / <c>IPlane3DByAngle.Angle</c> /
-    /// <c>IPlane3DBy*.BasePlane</c>, затем <c>Update()</c> и <c>RebuildModel</c>, а ответ несёт
-    /// ПРОЧИТАННОЕ ОБРАТНО значение: успешный код не выдаётся за применённую правку.
-    /// </remarks>
+    /// <summary>Edits an ALREADY CREATED plane as a part object: offset, tilt angle, support
+    /// (<c>dep.refs.planes</c>, action <c>edit</c>).</summary>
+    /// <remarks>A separate route, not a field on another call. MEASURED by row <c>DEP.DPL.04.edit</c>
+    /// of an earlier run: editing the feature through a <c>plane</c> field was ACCEPTED (failure code
+    /// <c>None</c>) and did NOT change the geometry. Here the edit goes through the documented setters
+    /// <c>IPlane3DByOffset.Offset</c> / <c>IPlane3DByAngle.Angle</c> / <c>IPlane3DBy*.BasePlane</c>,
+    /// then <c>Update()</c> and <c>RebuildModel</c>, and the answer carries the value READ BACK: a
+    /// successful code is not passed off as an applied edit.</remarks>
     public const string UpdatePlane = "aux.update_plane";
 
-    /// <summary>
-    /// Перечисление сущностей СУЩЕСТВУЮЩЕГО эскиза с УСТОЙЧИВЫМ АДРЕСОМ
-    /// (<c>dep.sketch.entities</c>, действия <c>discover</c> и <c>read</c>).
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Маршрут документирован справкой v24: <c>ISketch.BeginEditEx(true)</c> →
+    /// <summary>Enumerates the entities of an EXISTING sketch with a STABLE ADDRESS
+    /// (<c>dep.sketch.entities</c>, actions <c>discover</c> and <c>read</c>).</summary>
+    /// <remarks><para>DOC: route documented by the v24 help: <c>ISketch.BeginEditEx(true)</c> →
     /// <c>IFragmentDocument.ViewsAndLayersManager.Views</c> → <c>IView</c> →
-    /// <c>IDrawingContainer.GetObjects(ksAllObj)</c> → адрес <c>IKompasDocument1.GetObjectId</c> →
-    /// <c>ISketch.EndEdit()</c>.
-    /// </para>
-    /// <para>
-    /// Адрес — не «N-й объект коллекции» и не координата: это строка <c>GetObjectId</c>, которую
-    /// <c>FindObjectById</c> принимает обратно, поэтому она переживает перестроение модели и
-    /// переоткрытие документа. Индекс коллекции устойчивым адресом НЕ объявляется.
-    /// </para>
-    /// </remarks>
+    /// <c>IDrawingContainer.GetObjects(ksAllObj)</c> → address <c>IKompasDocument1.GetObjectId</c> →
+    /// <c>ISketch.EndEdit()</c>.</para>
+    /// <para>The address is not "the Nth object of the collection" nor a coordinate: it is the
+    /// <c>GetObjectId</c> string that <c>FindObjectById</c> accepts back, so it survives a model rebuild
+    /// and a document reopen. A collection index is NOT declared a stable address.</para></remarks>
     public const string ListSketchEntities = "sketch.entities";
 
-    /// <summary>
-    /// Адресная правка ОДНОЙ существующей сущности эскиза (<c>dep.sketch.entities</c>, действие
-    /// <c>edit</c>).
-    /// </summary>
-    /// <remarks>
-    /// Прежняя схема правки эскиза принимала только режим (<c>append</c>/<c>replace</c>/
-    /// <c>delete_entities</c>) и НОВЫЙ НАБОР примитивов целиком — то есть пересоздавала контур, а
-    /// не правила сущность. Измерено различающим контролем строки <c>DEP.DSE.04.edit</c>: после
-    /// <c>replace</c> объём базового тела менялся с 80000 на 24000, то есть контур был ПЕРЕСОЗДАН.
-    /// Здесь правка адресует ровно одну сущность, а ответ несёт прочитанное ПОСЛЕ правки
-    /// состояние — «принято» и «применено» различаются измерением, а не формулировкой.
-    /// </remarks>
+    /// <summary>Address-targeted edit of ONE existing sketch entity (<c>dep.sketch.entities</c>,
+    /// action <c>edit</c>).</summary>
+    /// <remarks>The earlier sketch-edit schema accepted only a mode
+    /// (<c>append</c>/<c>replace</c>/<c>delete_entities</c>) and a WHOLE NEW set of primitives — i.e.
+    /// it recreated the contour rather than editing an entity. MEASURED by the distinguishing control of
+    /// row <c>DEP.DSE.04.edit</c>: after <c>replace</c> the base-body volume changed from 80000 to 24000,
+    /// so the contour was RECREATED. Here the edit targets exactly one entity, and the answer carries the
+    /// state read AFTER the edit — "accepted" and "applied" differ by measurement, not by wording.</remarks>
     public const string EditSketchEntity = "sketch.entity_edit";
 }
 
-/// <summary>
-/// Запрос создания объекта вспомогательной геометрии.
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Вид и способ разделены, а не слиты в одно поле.</b> <see cref="Kind"/> отвечает «что это»
-/// (плоскость, ось, точка), <see cref="Mode"/> — «как построено». Одно поле с шестью значениями
-/// сделало бы ответ неоднозначным: «angle» без вида не говорит, угол чего.
-/// </para>
-/// <para>
-/// <b>Поля чужих способов не игнорируются молча.</b> Каждый способ объявляет свой набор; поле вне
-/// набора отвергается <c>INVALID_ARGUMENT</c> с перечнем своих полей. Принятое и проигнорированное
-/// поле доживает до приёмки, выглядя как выполненная работа, — это ровно тот дефект, который
-/// контракт запрещает.
-/// </para>
-/// </remarks>
+/// <summary>Request to create an auxiliary-geometry object.</summary>
+/// <remarks><para><b>Kind and mode are separated, not merged into one field.</b> <see cref="Kind"/>
+/// answers "what it is" (plane, axis, point), <see cref="Mode"/> "how it is built". One field with six
+/// values would make the answer ambiguous: "angle" without a kind does not say the angle of what.</para>
+/// <para><b>Fields of foreign modes are not silently ignored.</b> Each mode declares its own set; a
+/// field outside the set is rejected with <c>INVALID_ARGUMENT</c> listing its own fields. An accepted
+/// and ignored field survives to acceptance looking like completed work — exactly the defect the
+/// contract forbids.</para></remarks>
 public sealed record CreateAuxGeometryCommand
 {
     public required string DocumentId { get; init; }
 
     public required long ExpectedRevision { get; init; }
 
-    /// <summary><c>plane</c>, <c>axis</c> либо <c>point</c>.</summary>
+    /// <summary><c>plane</c>, <c>axis</c> or <c>point</c>.</summary>
     public required string Kind { get; init; }
 
-    /// <summary>
-    /// Способ построения. Для плоскости: <c>offset</c> (смещение вдоль нормали) либо <c>angle</c>
-    /// (наклон вокруг базовой прямой). Для оси: <c>by_2_points</c>, <c>by_face</c> (цилиндрическая
-    /// или коническая поверхность), <c>by_edge</c>. Для точки: <c>coordinates</c> либо
-    /// <c>displace</c> (смещение от опорной вершины).
-    /// </summary>
+    /// <summary>Construction mode. For a plane: <c>offset</c> (offset along the normal) or
+    /// <c>angle</c> (tilt around a base line). For an axis: <c>by_2_points</c>, <c>by_face</c>
+    /// (cylindrical or conical surface), <c>by_edge</c>. For a point: <c>coordinates</c> or
+    /// <c>displace</c> (offset from a support vertex).</summary>
     public required string Mode { get; init; }
 
-    /// <summary>Смещение в мм. Только для <c>plane/offset</c>.</summary>
+    /// <summary>Offset in mm. Only for <c>plane/offset</c>.</summary>
     public double? OffsetMm { get; init; }
 
-    /// <summary>Угол в градусах. Только для <c>plane/angle</c>.</summary>
+    /// <summary>Angle in degrees. Only for <c>plane/angle</c>.</summary>
     public double? AngleDeg { get; init; }
 
-    /// <summary>
-    /// Знак направления. У смещённой плоскости — вдоль нормали или против; у наклонной — сторона
-    /// отсчёта угла. <c>null</c> означает «не задано», и тогда берётся документированное умолчание
-    /// самого КОМПАСа, а не наше: подставлять знак от себя значило бы выдать догадку за параметр.
-    /// </summary>
+    /// <summary>Direction sign. For an offset plane — along or against the normal; for a tilted one —
+    /// the side the angle is measured from. <c>null</c> means "not set", and then the documented KOMPAS
+    /// default is used rather than ours: substituting a sign ourselves would pass a guess off as a
+    /// parameter.</summary>
     public bool? Direction { get; init; }
 
-    /// <summary>Базовая плоскость именем: <c>xy</c>, <c>xz</c> либо <c>yz</c>. Только для плоскости.</summary>
+    /// <summary>Base plane by name: <c>xy</c>, <c>xz</c> or <c>yz</c>. Plane only.</summary>
     public string? BasePlane { get; init; }
 
-    /// <summary>Базовая прямая (ось наклона) — ссылка на ось. Только для <c>plane/angle</c>.</summary>
+    /// <summary>Base line (tilt axis) — a reference to an axis. Only for <c>plane/angle</c>.</summary>
     public string? BaseAxisRef { get; init; }
 
-    /// <summary>
-    /// Опора — ПЛОСКАЯ ГРАНЬ ссылкой. Для <c>plane/offset</c> это документированная опора
-    /// (<c>IPlane3DByOffset.BasePlane</c> принимает «базовую плоскость ИЛИ плоскую грань»).
-    /// </summary>
+    /// <summary>Support — a FLAT FACE by reference. For <c>plane/offset</c> this is the documented
+    /// support (<c>IPlane3DByOffset.BasePlane</c> accepts «базовую плоскость ИЛИ плоскую грань»).</summary>
     public string? BaseFaceRef { get; init; }
 
-    /// <summary>Первая точка оси. Только для <c>axis/by_2_points</c>.</summary>
+    /// <summary>First axis point. Only for <c>axis/by_2_points</c>.</summary>
     public double[]? Point1Mm { get; init; }
 
-    /// <summary>Вторая точка оси. Только для <c>axis/by_2_points</c>.</summary>
+    /// <summary>Second axis point. Only for <c>axis/by_2_points</c>.</summary>
     public double[]? Point2Mm { get; init; }
 
-    /// <summary>Грань оси. Только для <c>axis/by_face</c>.</summary>
+    /// <summary>Axis face. Only for <c>axis/by_face</c>.</summary>
     public string? FaceRef { get; init; }
 
-    /// <summary>Ребро оси. Только для <c>axis/by_edge</c>.</summary>
+    /// <summary>Axis edge. Only for <c>axis/by_edge</c>.</summary>
     public string? EdgeRef { get; init; }
 
-    /// <summary>Координаты точки. Только для <c>point/coordinates</c>.</summary>
+    /// <summary>Point coordinates. Only for <c>point/coordinates</c>.</summary>
     public double[]? CoordinatesMm { get; init; }
 
-    /// <summary>Опорная вершина точки. Только для <c>point/displace</c>.</summary>
+    /// <summary>Support vertex of the point. Only for <c>point/displace</c>.</summary>
     public string? AssociationVertexRef { get; init; }
 
-    /// <summary>Смещение точки от опорной вершины. Только для <c>point/displace</c>.</summary>
+    /// <summary>Point offset from the support vertex. Only for <c>point/displace</c>.</summary>
     public double[]? DisplacementMm { get; init; }
 
-    /// <summary>
-    /// Имя создаваемого объекта. Необязательно: без него КОМПАС даёт своё. Имя — не адрес:
-    /// адресом служит ссылка, выданная перечислением.
-    /// </summary>
+    /// <summary>Name of the object to create. Optional: without it KOMPAS supplies its own. A name is
+    /// not an address: the address is the reference minted by enumeration.</summary>
     public string? Name { get; init; }
 }
 
-/// <summary>
-/// Результат создания объекта вспомогательной геометрии: прочитанное ОБРАТНО из модели, а не
-/// пересказ запроса.
-/// </summary>
+/// <summary>Result of creating an auxiliary-geometry object: read BACK from the model, not a restatement
+/// of the request.</summary>
 public sealed record AuxGeometryResult(
     string Kind,
     string Mode,
@@ -454,32 +350,30 @@ public sealed record AuxGeometryResult(
     int PointCount,
     IReadOnlyList<string> Diagnostics);
 
-/// <summary>Запрос перечисления объектов вспомогательной геометрии.</summary>
+/// <summary>Request to enumerate auxiliary-geometry objects.</summary>
 public sealed record ListAuxGeometryCommand
 {
     public required string DocumentId { get; init; }
 
-    /// <summary>Что читать: <c>planes</c>, <c>axes</c>, <c>points</c> либо <c>all</c>.</summary>
+    /// <summary>What to read: <c>planes</c>, <c>axes</c>, <c>points</c> or <c>all</c>.</summary>
     public required string Include { get; init; }
 
-    /// <summary>Имя для адресации ОДНОГО объекта. Необязательно.</summary>
+    /// <summary>Name to address ONE object. Optional.</summary>
     public string? Name { get; init; }
 
-    /// <summary>Предел числа строк. Ограничение названо числом: цена строки — вызов COM.</summary>
+    /// <summary>Row limit. The bound is named as a number: a row costs one COM call.</summary>
     public int? Limit { get; init; }
 }
 
-/// <summary>Ответ перечисления: строки, маршрут и счётчики коллекций.</summary>
+/// <summary>Enumeration answer: rows, route and collection counts.</summary>
 public sealed record AuxGeometryListResult(
     IReadOnlyList<AuxGeometryRowDto> Rows,
     IReadOnlyDictionary<string, int?> CollectionCounts,
     string Route,
     IReadOnlyList<string> Notes);
 
-/// <summary>
-/// Строка перечисления вспомогательной геометрии. Пустое поле означает «не прочитано», а не ноль;
-/// причина называется в <see cref="Notes"/>.
-/// </summary>
+/// <summary>Auxiliary-geometry enumeration row. An empty field means "not read", not zero; the reason
+/// is named in <see cref="Notes"/>.</summary>
 public sealed record AuxGeometryRowDto(
     string Kind,
     int Index,
@@ -494,42 +388,36 @@ public sealed record AuxGeometryRowDto(
     string? LineName,
     IReadOnlyList<string> Notes);
 
-/// <summary>
-/// Запрос правки существующей плоскости. Ровно ОДНО из <see cref="OffsetMm"/> и
-/// <see cref="AngleDeg"/> задаётся, и оно обязано соответствовать виду плоскости: у смещённой
-/// плоскости угла нет, у наклонной нет смещения.
-/// </summary>
-/// <remarks>
-/// Поле чужого вида отвергается <c>INVALID_ARGUMENT</c> с перечнем допустимых — по той же причине,
-/// по которой это делает создание: принятое и проигнорированное поле доживает до приёмки,
-/// выглядя как выполненная правка.
-/// </remarks>
+/// <summary>Request to edit an existing plane. Exactly ONE of <see cref="OffsetMm"/> and
+/// <see cref="AngleDeg"/> is set, and it must match the plane kind: an offset plane has no angle, a
+/// tilted one has no offset.</summary>
+/// <remarks>A field of a foreign kind is rejected with <c>INVALID_ARGUMENT</c> listing the allowed ones —
+/// for the same reason creation does this: an accepted and ignored field survives to acceptance looking
+/// like a completed edit.</remarks>
 public sealed record UpdatePlaneCommand
 {
     public required string DocumentId { get; init; }
 
     public required long ExpectedRevision { get; init; }
 
-    /// <summary>Ссылка на плоскость, выданная созданием либо перечислением.</summary>
+    /// <summary>Plane reference minted by creation or enumeration.</summary>
     public required string PlaneRef { get; init; }
 
-    /// <summary>Новое смещение вдоль нормали, мм. Только для смещённой плоскости.</summary>
+    /// <summary>New offset along the normal, mm. Offset plane only.</summary>
     public double? OffsetMm { get; init; }
 
-    /// <summary>Новый угол наклона, градусы. Только для наклонной плоскости.</summary>
+    /// <summary>New tilt angle, degrees. Tilted plane only.</summary>
     public double? AngleDeg { get; init; }
 
-    /// <summary>Новая опора именем: <c>xy</c>, <c>xz</c> либо <c>yz</c>.</summary>
+    /// <summary>New support by name: <c>xy</c>, <c>xz</c> or <c>yz</c>.</summary>
     public string? BasePlane { get; init; }
 
-    /// <summary>Знак направления: вдоль нормали или против, сторона отсчёта угла.</summary>
+    /// <summary>Direction sign: along or against the normal, the side the angle is measured from.</summary>
     public bool? Direction { get; init; }
 }
 
-/// <summary>
-/// Результат правки плоскости: значение, ПРОЧИТАННОЕ ОБРАТНО из модели, и признак применения,
-/// выведенный из сравнения запрошенного с прочитанным.
-/// </summary>
+/// <summary>Plane-edit result: the value READ BACK from the model and an applied flag derived from
+/// comparing the request with the read-back.</summary>
 public sealed record PlaneUpdateResult(
     string? ReferenceId,
     string? Kind,
@@ -546,29 +434,27 @@ public sealed record PlaneUpdateResult(
     int PlaneCount,
     IReadOnlyList<string> Diagnostics);
 
-/// <summary>Запрос перечисления сущностей эскиза.</summary>
+/// <summary>Request to enumerate sketch entities.</summary>
 public sealed record ListSketchEntitiesCommand
 {
     public required string SketchRef { get; init; }
 
-    /// <summary>Адрес ОДНОЙ сущности. Необязательно: без него перечисляются все.</summary>
+    /// <summary>Address of ONE entity. Optional: without it all are enumerated.</summary>
     public string? Address { get; init; }
 
-    /// <summary>Предел числа строк: цена строки — вызов COM, предел назван числом.</summary>
+    /// <summary>Row limit: a row costs one COM call, the bound is named as a number.</summary>
     public int? Limit { get; init; }
 }
 
-/// <summary>Ответ перечисления сущностей эскиза: строки, счётчики коллекций, маршрут, заметки.</summary>
+/// <summary>Sketch-entity enumeration answer: rows, collection counts, route, notes.</summary>
 public sealed record SketchEntitiesResult(
     IReadOnlyList<SketchEntityRowDto> Rows,
     IReadOnlyDictionary<string, int?> CollectionCounts,
     string Route,
     IReadOnlyList<string> Notes);
 
-/// <summary>
-/// Строка перечисления сущности эскиза. Пустое поле означает «не прочитано», а не ноль; причина
-/// называется в <see cref="Notes"/>.
-/// </summary>
+/// <summary>Sketch-entity enumeration row. An empty field means "not read", not zero; the reason is
+/// named in <see cref="Notes"/>.</summary>
 public sealed record SketchEntityRowDto(
     int Index,
     string? Address,
@@ -577,10 +463,8 @@ public sealed record SketchEntityRowDto(
     int? TypeCode,
     IReadOnlyList<string> Notes);
 
-/// <summary>
-/// Запрос адресной правки сущности эскиза. <see cref="Address"/> обязателен: правка «первой
-/// попавшейся» сущности не является адресной.
-/// </summary>
+/// <summary>Request for an address-targeted sketch-entity edit. <see cref="Address"/> is mandatory: an
+/// edit of "the first entity that comes up" is not address-targeted.</summary>
 public sealed record EditSketchEntityCommand
 {
     public required string SketchRef { get; init; }
@@ -589,17 +473,15 @@ public sealed record EditSketchEntityCommand
 
     public required string Address { get; init; }
 
-    /// <summary><c>set_layer</c> — назначить номер слоя, <c>delete</c> — удалить сущность.</summary>
+    /// <summary><c>set_layer</c> — assign the layer number, <c>delete</c> — delete the entity.</summary>
     public required string Action { get; init; }
 
-    /// <summary>Номер слоя. Обязателен при <c>action = set_layer</c>.</summary>
+    /// <summary>Layer number. Mandatory when <c>action = set_layer</c>.</summary>
     public int? LayerNumber { get; init; }
 }
 
-/// <summary>
-/// Результат адресной правки: состояние, ПРОЧИТАННОЕ ПОСЛЕ правки тем же адресом, и признак
-/// применения. «Код не отказал» применением не объявляется.
-/// </summary>
+/// <summary>Address-targeted edit result: the state READ AFTER the edit through the same address, and an
+/// applied flag. "The code did not refuse" is not declared an application.</summary>
 public sealed record SketchEntityEditResult(
     string? Address,
     string Action,
@@ -626,10 +508,10 @@ public sealed record EnvironmentProbeResult
 
     public required string ServerPathBitness { get; init; }
 
-    /// <summary>Live КОМПАС processes found by the OS, with window state. Read-only observation.</summary>
+    /// <summary>Live KOMPAS processes found by the OS, with window state. Read-only observation.</summary>
     public required IReadOnlyList<RunningInstanceInfo> RunningInstances { get; init; }
 
-    /// <summary>Number of КОМПАС objects visible in the running object table.</summary>
+    /// <summary>Number of KOMPAS objects visible in the running object table.</summary>
     public required int RotEntryCount { get; init; }
 
     public required IReadOnlyList<string> InteropAssemblies { get; init; }
@@ -647,10 +529,8 @@ public sealed record ConnectCommand
 {
     public required ConnectMode Mode { get; init; }
 
-    /// <summary>
-    /// Explicit selector. Null means "attach is only allowed if exactly one candidate exists".
-    /// Never resolves to "whichever object the ROT handed back first".
-    /// </summary>
+    /// <summary>Explicit selector. Null means "attach is only allowed if exactly one candidate exists".
+    /// Never resolves to "whichever object the ROT handed back first".</summary>
     public int? ProcessId { get; init; }
 
     public string? WindowTitle { get; init; }
@@ -789,47 +669,36 @@ public sealed record EditSketchCommand
     public required long ExpectedRevision { get; init; }
 }
 
-/// <summary>
-/// Запрос смены опорной плоскости существующего эскиза (команда
-/// <see cref="WorkerCommands.SetSketchPlane"/>).
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Форма <see cref="Plane"/> — ТА ЖЕ, что у создания эскиза:</b> <c>base</c>+<c>offset_mm</c>
-/// ЛИБО <c>reference</c>, одновременно ровно одно. Второй диалект опоры не заводится: две формы
-/// одного понятия расходятся, и расхождение выглядит как разница поведения продукта.
-/// </para>
-/// <para>
-/// <b>Отказ не-плоскости происходит ДО COM и называется кодом.</b> Измерено (проба
-/// <c>--sketch-plane</c>, шаги SP.8/SP.9): ядро ПРИНИМАЕТ в опору плоскую грань — все шесть граней
-/// коробки перепривязывают зависимое тело, — и ОТВЕРГАЕТ ребро и тело (<c>SetPlane = False</c>).
-/// Продукт этот ответ не наследует: <c>reference</c>, ведущая не на плоскость, отвергается по ВИДУ
-/// ссылки из реестра, без обращения к COM.
-/// </para>
-/// </remarks>
+/// <summary>Request to change the support plane of an existing sketch (command
+/// <see cref="WorkerCommands.SetSketchPlane"/>).</summary>
+/// <remarks><para><b>The shape of <see cref="Plane"/> is THE SAME as for sketch creation:</b>
+/// <c>base</c>+<c>offset_mm</c> OR <c>reference</c>, exactly one at a time. No second dialect of support
+/// is introduced: two shapes of one concept diverge, and the divergence looks like a difference in
+/// product behaviour.</para>
+/// <para><b>A non-plane refusal happens BEFORE COM and is named by a code.</b> MEASURED (probe
+/// <c>--sketch-plane</c>, steps SP.8/SP.9): the core ACCEPTS a flat face as support — all six faces of a
+/// box rebind the dependent body — and REJECTS an edge and a body (<c>SetPlane = False</c>). The product
+/// does not inherit this answer: a <c>reference</c> not leading to a plane is rejected by the KIND of the
+/// reference from the registry, without touching COM.</para></remarks>
 public sealed record SetSketchPlaneCommand
 {
     public required string DocumentId { get; init; }
 
-    /// <summary>Ссылка на эскиз, выданная созданием либо чтением признака.</summary>
+    /// <summary>Sketch reference minted by creation or by reading the feature.</summary>
     public required string SketchRef { get; init; }
 
     public required PlaneRefDto Plane { get; init; }
 
-    /// <summary>Ревизия, которую прочитал вызывающий. Проверяется до обращения к COM.</summary>
+    /// <summary>Revision the caller read. Checked before touching COM.</summary>
     public required long ExpectedRevision { get; init; }
 }
 
-/// <summary>
-/// Результат смены опоры: опора, ПРОЧИТАННАЯ ОБРАТНО документированным <c>GetPlane()</c>, и
-/// состояние зависимого тела до и после — то, чем «принято» отличается от «применено».
-/// </summary>
-/// <remarks>
-/// <b>Две половины называются раздельно, и ни одна не выдаётся за другую.</b> Чтение опоры отвечает
-/// на вопрос «записалась ли опора»; габарит и объём зависимого тела — на вопрос «перестроилась ли
-/// модель». Измерено, что при смене опоры на другую перестраивает именно <c>sketch.Update()</c>,
-/// поэтому <see cref="ApplyRoute"/> несёт ФАКТИЧЕСКИ вызванный маршрут, а не намерение.
-/// </remarks>
+/// <summary>Support-change result: the support READ BACK through the documented <c>GetPlane()</c>, and
+/// the state of the dependent body before and after — what distinguishes "accepted" from "applied".</summary>
+/// <remarks><b>The two halves are named separately, and neither is passed off as the other.</b> Reading
+/// the support answers "was the support written"; the bbox and volume of the dependent body answer "was
+/// the model rebuilt". MEASURED that on a support change it is <c>sketch.Update()</c> that rebuilds, so
+/// <see cref="ApplyRoute"/> carries the route ACTUALLY invoked, not the intent.</remarks>
 public sealed record SetSketchPlaneResult(
     string SketchRef,
     string? SupportTypeBefore,
@@ -873,23 +742,19 @@ public sealed record ExtrudeCommand
     public required long ExpectedRevision { get; init; }
 }
 
-/// <summary>Скругление выбранных рёбер (docs/03 G04, docs/05 SM-09).</summary>
+/// <summary>Fillet of selected edges (docs/03 G04, docs/05 SM-09).</summary>
 public sealed record FilletCommand
 {
-    /// <summary>
-    /// Явные <c>edge:</c>-ссылки, полученные kompas_read_topology. Номера позиций в коллекции не
-    /// принимаются: docs/05 §6.5 запрещает использовать индексы как постоянные идентификаторы.
-    /// </summary>
+    /// <summary>Explicit <c>edge:</c> references obtained from kompas_read_topology. Collection position
+    /// numbers are not accepted: docs/05 §6.5 forbids using indices as persistent identifiers.</summary>
     public required IReadOnlyList<string> EdgeRefs { get; init; }
 
     public required double RadiusMm { get; init; }
 
-    /// <summary>
-    /// Аналитическое ожидание изменения объёма, если оно выводимо у вызывающего (например
-    /// 4·(1−π/4)·r²·h для четырёх параллельных рёбер). Сервер сверяет с ним измерение и не выдаёт
-    /// geometry_checked без совпадения. Без него подтверждается только чтением радиуса обратно, и
-    /// результат честно помечается недоказанной геометрией.
-    /// </summary>
+    /// <summary>Analytic expectation of the volume change, when derivable by the caller (e.g.
+    /// 4·(1−π/4)·r²·h for four parallel edges). The server checks the measurement against it and does not
+    /// report geometry_checked without a match. Without it, only the radius read-back confirms the edit,
+    /// and the result is honestly marked as unproven geometry.</summary>
     public double? ExpectedVolumeDeltaMm3 { get; init; }
 
     public required long ExpectedRevision { get; init; }
@@ -900,552 +765,442 @@ public sealed record RebuildCommand
     public required string DocumentId { get; init; }
 }
 
-/// <summary>
-/// Фаска по явным рёбрам (docs/05 SM-11). Способ задаётся явно: двух катетов хватает не для
-/// каждого режима, а угол в API5-определении отсутствует физически.
-/// </summary>
+/// <summary>Chamfer by explicit edges (docs/05 SM-11). The mode is stated explicitly: two legs are not
+/// enough for every mode, and an angle is physically absent from the API5 definition.</summary>
 public sealed record ChamferCommand
 {
-    /// <summary>
-    /// Явные <c>edge:</c>-ссылки из kompas_read_topology. Позиции в коллекции не принимаются:
-    /// docs/05 §6.5 запрещает использовать индексы как постоянные идентификаторы.
-    /// </summary>
+    /// <summary>Explicit <c>edge:</c> references from kompas_read_topology. Collection positions are not
+    /// accepted: docs/05 §6.5 forbids using indices as persistent identifiers.</summary>
     public required IReadOnlyList<string> EdgeRefs { get; init; }
 
-    /// <summary>two_distances (API5) или distance_angle (API7); см. <see cref="ChamferMode"/>.</summary>
+    /// <summary>two_distances (API5) or distance_angle (API7); see <see cref="ChamferMode"/>.</summary>
     public required ChamferMode Mode { get; init; }
 
-    /// <summary>Первый катет, мм. Единицы измерены пробой F: число передаётся в API как есть и даёт мм.</summary>
+    /// <summary>First leg, mm. Units MEASURED by probe F: the number is passed to the API as is and yields mm.</summary>
     public required double Distance1Mm { get; init; }
 
-    /// <summary>Второй катет, мм. Обязателен при two_distances, запрещён при distance_angle.</summary>
+    /// <summary>Second leg, mm. Mandatory for two_distances, forbidden for distance_angle.</summary>
     public double? Distance2Mm { get; init; }
 
-    /// <summary>
-    /// Угол фаски в ГРАДУСАХ — измерено пробой F.10 (Angle=30 при Distance1=2 снял
-    /// 20·d·(d·tg 30°) = 46.188021535141 мм³, радианная гипотеза отвергнута числом).
-    /// Обязателен при distance_angle, запрещён при two_distances.
-    /// </summary>
+    /// <summary>Chamfer angle in DEGREES — MEASURED by probe F.10 (Angle=30 with Distance1=2 removed
+    /// 20·d·(d·tg 30°) = 46.188021535141 mm³; the radian hypothesis was rejected by the number).
+    /// Mandatory for distance_angle, forbidden for two_distances.</summary>
     public double? AngleDeg { get; init; }
 
-    /// <summary>
-    /// Сторона фаски: в API5 это параметр <c>transfer</c>, в API7 — <c>IChamfer.Direction</c>.
-    /// Измерено (F.4, F.11): при неравных катетах значение меняет, какой катет ложится на какую
-    /// грань; объём при этом не различается, поэтому различатор — площади боковых граней.
-    /// </summary>
+    /// <summary>Chamfer side: in API5 this is the <c>transfer</c> parameter, in API7
+    /// <c>IChamfer.Direction</c>. MEASURED (F.4, F.11): with unequal legs the value changes which leg
+    /// lands on which face; the volume does not differ, so the distinguisher is the lateral face
+    /// areas.</summary>
     public bool Direction { get; init; }
 
-    /// <summary>
-    /// Аналитическое ожидание уменьшения объёма. Для N параллельных прямых рёбер длиной L
-    /// это N·(d₁·d₂/2)·L; без него подтверждается только направление изменения.
-    /// </summary>
+    /// <summary>Analytic expectation of the volume decrease. For N parallel straight edges of length L
+    /// this is N·(d₁·d₂/2)·L; without it only the direction of change is confirmed.</summary>
     public double? ExpectedVolumeDeltaMm3 { get; init; }
 
     public required long ExpectedRevision { get; init; }
 }
 
-/// <summary>
-/// Родное отверстие (docs/05 SM-07). Режим назван явно, потому что поля у режимов разные, а
-/// сервер обязан отклонять несочетаемое до обращения в COM, а не применять половину.
-/// </summary>
-/// <remarks>
-/// <para>
-/// Опорная грань задаётся ссылкой <c>face:</c>, а не «верхней гранью тела»: <c>IChamfer.BaseObjects</c>
-/// и <c>IHoleDisposal.BaseSurface</c> принимают объект, и выбрать его за клиента значило бы
-/// выдумать опору. Проба M брала самую большую грань по площади, но это был приём пробы, а не
-/// контракт.
-/// </para>
-/// <para>
-/// Позиция — необязательная пара координат НА опорной грани (измерено M.5: отверстие Ø10 встало
-/// ровно в (25, 15)). Без неё отверстие остаётся в начале координат поверхности.
-/// </para>
-/// </remarks>
+/// <summary>Native hole (docs/05 SM-07). The mode is stated explicitly because modes have different
+/// fields, and the server MUST reject mismatches before touching COM rather than apply half.</summary>
+/// <remarks><para>The support face is given by a <c>face:</c> reference, not "the top face of the body":
+/// <c>IChamfer.BaseObjects</c> and <c>IHoleDisposal.BaseSurface</c> accept an object, and choosing it
+/// for the client would invent the support. Probe M took the largest face by area, but that was a probe
+/// technique, not the contract.</para>
+/// <para>The position is an optional coordinate pair ON the support face (MEASURED M.5: a Ø10 hole
+/// landed exactly at (25, 15)). Without it the hole stays at the surface origin.</para></remarks>
 public sealed record HoleCommand
 {
-    /// <summary>Явная <c>face:</c>-ссылка из kompas_read_topology: поверхность, с которой начинается отверстие.</summary>
+    /// <summary>Explicit <c>face:</c> reference from kompas_read_topology: the surface the hole starts from.</summary>
     public required string FaceRef { get; init; }
 
     /// <summary>blind_flat (API7: ksDTValue + ksEFFlat), through_counterbore (M.2), through_countersink (M.3).</summary>
     public required HoleMode Mode { get; init; }
 
-    /// <summary>Диаметр отверстия, мм: у цековки и зенковки это диаметр ПИЛОТА, а не выточки и не устья.</summary>
+    /// <summary>Hole diameter, mm: for counterbore and countersink this is the PILOT diameter, not the recess or the mouth.</summary>
     public required double DiameterMm { get; init; }
 
-    /// <summary>Глубина, мм. Только при mode=blind_flat; при сквозных режимах запрещена.</summary>
+    /// <summary>Depth, mm. Only when mode=blind_flat; forbidden for through modes.</summary>
     public double? DepthMm { get; init; }
 
-    /// <summary>Диаметр выточки, мм (цековка, M.2). Должен быть больше диаметра пилота.</summary>
+    /// <summary>Counterbore recess diameter, mm (counterbore, M.2). Must exceed the pilot diameter.</summary>
     public double? CounterboreDiameterMm { get; init; }
 
-    /// <summary>Глубина выточки, мм (цековка, M.2).</summary>
+    /// <summary>Counterbore recess depth, mm (counterbore, M.2).</summary>
     public double? CounterboreDepthMm { get; init; }
 
-    /// <summary>Диаметр устья зенковки, мм (M.3). Должен быть больше диаметра пилота.</summary>
+    /// <summary>Countersink mouth diameter, mm (M.3). Must exceed the pilot diameter.</summary>
     public double? CountersinkDiameterMm { get; init; }
 
-    /// <summary>
-    /// Угол зенковки в ГРАДУСАХ, строго между 0 и 180 (M.3: таблица из трёх углов — 60, 90, 120).
-    /// Глубина при способе «диаметр + угол» ПРОИЗВОДНА: объект возвращает
-    /// <c>(rM − rP)/tan(угол/2)</c>, где <c>rM</c> — радиус устья, <c>rP</c> — радиус пилота
-    /// (измерено N.2: серия устьев Ø14/16/18/20/24 при пилоте Ø10 и 90° дала h = 2/3/4/5/7).
-    /// </summary>
+    /// <summary>Countersink angle in DEGREES, strictly between 0 and 180 (M.3: a table of three angles —
+    /// 60, 90, 120). For the "diameter + angle" mode the depth is DERIVED: the object returns
+    /// <c>(rM − rP)/tan(angle/2)</c>, where <c>rM</c> is the mouth radius and <c>rP</c> the pilot radius
+    /// (MEASURED N.2: a series of mouths Ø14/16/18/20/24 at pilot Ø10 and 90° gave h = 2/3/4/5/7).</summary>
     public double? CountersinkAngleDeg { get; init; }
 
-    /// <summary>Смещение центра отверстия вдоль X опорной грани, мм. Вместе с <see cref="OffsetYMm"/>.</summary>
+    /// <summary>Hole centre offset along the support face X, mm. Together with <see cref="OffsetYMm"/>.</summary>
     public double? OffsetXMm { get; init; }
 
-    /// <summary>Смещение центра отверстия вдоль Y опорной грани, мм.</summary>
+    /// <summary>Hole centre offset along the support face Y, mm.</summary>
     public double? OffsetYMm { get; init; }
 
-    /// <summary>
-    /// Аналитическое ожидание уменьшения объёма, если выводимо у вызывающего:
-    /// <c>π·r²·h</c> (глухое), <c>π·r²·h + π/4·(D²−d²)·h_выточки</c> (цековка),
-    /// <c>π·r²·h + π·h_факт/3·(rM² + rP·rM − 2·rP²)</c> (зенковка, причём <c>h_факт</c> —
-    /// глубина, которую вернул объект, а не запрошенная). Без него подтверждается только чтение
-    /// параметров обратно, и результат честно помечается недоказанной геометрией.
-    /// </summary>
+    /// <summary>Analytic expectation of the volume decrease, when derivable by the caller:
+    /// <c>π·r²·h</c> (blind), <c>π·r²·h + π/4·(D²−d²)·h_recess</c> (counterbore),
+    /// <c>π·r²·h + π·h_actual/3·(rM² + rP·rM − 2·rP²)</c> (countersink, where <c>h_actual</c> is the
+    /// depth the object returned, not the requested one). Without it, only the parameter read-back
+    /// confirms the edit, and the result is honestly marked as unproven geometry.</summary>
     public double? ExpectedVolumeDeltaMm3 { get; init; }
 
     public required long ExpectedRevision { get; init; }
 }
 
-/// <summary>
-/// Вращение (docs/05 SM-03). Вид операции назван явно и заранее: измерено 18.09.2026, что
-/// <c>OperationResult</c> ВЫБИРАЕТ исход, а вид фабрики (<c>Rotateds.Add(27/28/29)</c>) объявляет,
-/// какие значения для него допустимы. Управляемый опыт на одной геометрии: <c>ksOperationUnion</c>
-/// даёт сращивание (тел 1→1), <c>ksOperationNewBody</c> — второе тело (тел 1→2). Прежнее
-/// утверждение «этот член не переключает действие» происходило из опыта, который писал пару,
-/// недопустимую для своего вида, и потому измерял отказ.
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Ось обязательна и строится в ТОЙ ЖЕ детали.</b> Измерено (R.24/R.25): вращение, записанное
-/// без оси, не строится вовсе — <c>Update()</c> возвращает False и тел остаётся 0. Ось подаётся
-/// двумя точками в координатах МОДЕЛИ: сервер строит её сам как <c>o3d_axis2Points</c> в этой же
-/// детали, потому что <c>IRotated.Axis</c> принимает модельный объект, а не линию эскиза, и чужая
-/// ось из другого документа не подставляется — ссылки между документами не переносятся.
-/// </para>
-/// <para>
-/// <b>Угол задаётся в ГРАДУСАХ и равен построенному, вплоть до полного оборота.</b> Прежнее
-/// утверждение «угол насыщается на 180°, запись 360 даёт половину» ОПРОВЕРГНУТО измерением
-/// 18.09.2026 (проба <c>FullTurnProbe</c>, шаги F.1…F.5; независимое чтение <c>.m3d</c> пробой
-/// <c>M3dVerificationProbe</c>; разбор — <c>docs/acceptance/api7/full-turn-findings.md</c>).
-/// Измерено: <c>Angle[true]</c> несёт запрошенный угол напрямую (90→90°, 180→180°, 360→360°), а
-/// вторая половина пары, равная первой, развёртку удваивает. Поэтому полный оборот достигается
-/// одним вызовом с <c>angle_deg = 360</c>, а отказ начинается только выше 360 — это потолок
-/// сектора, а не прежний неверный предел.
-/// </para>
-/// <para>
-/// <b>Тонкая стенка не проверялась.</b> Маршрут измерен на сплошном теле
-/// (<c>IThinParameters.Thin = false</c>); <see cref="ThinWallMm"/> объявлен, но задавать его
-/// нельзя — сервер отказывает CAPABILITY_UNAVAILABLE, а не записывает незмеренное число.
-/// </para>
-/// </remarks>
+/// <summary>Rotation (docs/05 SM-03). The operation kind is stated explicitly and in advance: MEASURED on
+/// 18.09.2026 that the factory kind (<c>Rotateds.Add(27/28/29)</c>) declares which
+/// <c>OperationResult</c> values are admissible for it. Controlled experiment on one geometry:
+/// <c>ksOperationUnion</c> fuses (bodies 1→1), <c>ksOperationNewBody</c> makes a second body (1→2).
+/// History: docs/decisions/contracts.md#rotation-operation-result</summary>
+/// <remarks><para><b>The axis is mandatory and is built in the SAME part.</b> MEASURED (R.24/R.25): a
+/// rotation written without an axis is not built at all — <c>Update()</c> returns False and 0 bodies
+/// remain. The axis is given by two points in MODEL coordinates: the server builds it itself as
+/// <c>o3d_axis2Points</c> in the same part, because <c>IRotated.Axis</c> accepts a model object, not a
+/// sketch line, and a foreign axis from another document is not substituted — references between
+/// documents are not carried over.</para>
+/// <para><b>The angle is in DEGREES and equals the built one, up to a full turn.</b> MEASURED on
+/// 18.09.2026 (probe <c>FullTurnProbe</c>, steps F.1…F.5; independent <c>.m3d</c> read-back by probe
+/// <c>M3dVerificationProbe</c>; analysis — <c>docs/acceptance/api7/full-turn-findings.md</c>):
+/// <c>Angle[true]</c> carries the requested angle directly (90→90°, 180→180°, 360→360°), and the second
+/// half of the pair, equal to the first, doubles the sweep. A full turn is therefore reached with one
+/// call at <c>angle_deg = 360</c>, and refusal starts only above 360 — the sector ceiling, not the
+/// former wrong limit. History: docs/decisions/contracts.md#rotation-angle-limit</para>
+/// <para><b>Thin wall was not tested.</b> The route was measured on a solid body
+/// (<c>IThinParameters.Thin = false</c>); <see cref="ThinWallMm"/> is declared but must not be set — the
+/// server refuses CAPABILITY_UNAVAILABLE rather than writing an unmeasured number.</para></remarks>
 public sealed record RotatedCommand
 {
-    /// <summary>Эскиз-профиль: явная <c>sketch:</c>-ссылка из kompas_create_sketch / kompas_get_feature.</summary>
+    /// <summary>Profile sketch: an explicit <c>sketch:</c> reference from kompas_create_sketch / kompas_get_feature.</summary>
     public required string SketchRef { get; init; }
 
-    /// <summary>Вид операции. Решает действие сам вызов фабрики, а не OperationResult.</summary>
+    /// <summary>Operation kind. The factory call itself decides the action, not OperationResult.</summary>
     public required RotationOperation Operation { get; init; }
 
-    /// <summary>
-    /// Угол в ГРАДУСАХ, строго больше 0 и не больше 360. Полный оборот (360) строится одним
-    /// вызовом: измерено 18.09.2026, что запись даёт полный цилиндр (проба F.1a:
-    /// <c>V=50265.4824574366</c> при r=20, h=40), подтверждено слепым чтением сохранённого
-    /// <c>.m3d</c>. Значение больше 360 отвергается до мутации: сектор не может занять больше
-    /// целого оборота. Прежний предел 180 происходил из опровергнутого измерения (шаг менял
-    /// <c>CutOffByPoint</c>, а не угол) — см. <c>docs/acceptance/api7/full-turn-findings.md</c>.
-    /// </summary>
+    /// <summary>Angle in DEGREES, strictly greater than 0 and not more than 360. A full turn (360) is
+    /// built with one call: MEASURED on 18.09.2026 that the write yields a full cylinder (probe F.1a:
+    /// <c>V=50265.4824574366</c> at r=20, h=40), confirmed by a blind read of the saved <c>.m3d</c>. A
+    /// value above 360 is rejected before mutating: a sector cannot exceed a full turn.
+    /// History: docs/decisions/contracts.md#rotation-angle-limit</summary>
     public required double AngleDeg { get; init; }
 
-    /// <summary>Первая точка оси в координатах модели, мм.</summary>
+    /// <summary>First axis point in model coordinates, mm.</summary>
     public required IReadOnlyList<double> AxisPoint1Mm { get; init; }
 
-    /// <summary>Вторая точка оси в координатах модели, мм. Обязана отличаться от первой.</summary>
+    /// <summary>Second axis point in model coordinates, mm. Must differ from the first.</summary>
     public required IReadOnlyList<double> AxisPoint2Mm { get; init; }
 
-    /// <summary>
-    /// Направление. <see cref="RotationDirection.Reverse"/> отвергается до мутации: измерено
-    /// (R.26.sector), что это значение не строит ничего.
-    /// </summary>
+    /// <summary>Direction. <see cref="RotationDirection.Reverse"/> is rejected before mutating:
+    /// MEASURED (R.26.sector) that this value builds nothing.</summary>
     public RotationDirection Direction { get; init; } = RotationDirection.Normal;
 
-    /// <summary>
-    /// Целевое тело для boss и cut — явная <c>body:</c>-ссылка. Для boss и cut обязательна:
-    /// приклеивать и резать «вообще» значит выбрать тело за клиента, а изделие из нескольких тел
-    /// такого выбора не прощает. Для base запрещена.
-    /// </summary>
+    /// <summary>Target body for boss and cut — an explicit <c>body:</c> reference. Mandatory for boss
+    /// and cut: gluing and cutting "in general" means choosing the body for the client, and a multi-body
+    /// part does not forgive such a choice. Forbidden for base.</summary>
     public string? TargetBodyRef { get; init; }
 
-    /// <summary>
-    /// Тонкая стенка, мм. Не задана — тело сплошное, и это измеренная настройка маршрута:
-    /// <c>IThinParameters.Thin = false</c> (R.24/R.25). Тонкая стенка не проверялась ни одним
-    /// прогоном, поэтому, если она задана, сервер откажет CAPABILITY_UNAVAILABLE, а не поставит
-    /// число, которое не измерено.
-    /// </summary>
+    /// <summary>Thin wall, mm. Not set — the body is solid, and this is the MEASURED route setting:
+    /// <c>IThinParameters.Thin = false</c> (R.24/R.25). Thin wall was not tested by any run, so if it is
+    /// set the server refuses CAPABILITY_UNAVAILABLE rather than write a number that was not
+    /// measured.</summary>
     public double? ThinWallMm { get; init; }
 
-    /// <summary>
-    /// Аналитическое ожидание объёма ПОСЛЕ операции, если оно выводимо у вызывающего. Без него
-    /// подтверждается только чтение параметров обратно, и результат честно помечается недоказанной
-    /// геометрией.
-    /// </summary>
+    /// <summary>Analytic expectation of the volume AFTER the operation, when derivable by the caller.
+    /// Without it, only the parameter read-back confirms the edit, and the result is honestly marked as
+    /// unproven geometry.</summary>
     public double? ExpectedVolumeMm3 { get; init; }
 
     public required long ExpectedRevision { get; init; }
 }
 
-/// <summary>
-/// Массив по сетке (docs/05 SM-18, профиль <c>mechanical-core-v1</c>, очередь B4).
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Ось подаётся двумя точками МОДЕЛИ, а не ссылкой.</b> Это то же решение, что у вращения
-/// (SM-03), и у него та же причина: <c>ILinearPattern.Axis1/Axis2</c> принимают <c>IModelObject</c>,
-/// а сервер строит ось сам как <c>o3d_axis2Points</c> в ТОЙ ЖЕ детали. Ссылка на ось позволила бы
-/// протащить её из чужой детали, чего массивы не проверяли.
-/// </para>
-/// <para>
-/// <b>Вектор направления здесь отсутствует осознанно.</b> В <c>kAPI7.tlb</c> у
-/// <c>ILinearPattern.Vector1/Vector2</c> объявлены только геттеры (<c>_get_Vector1</c>,
-/// <c>_set_Vector1</c> отсутствует — прочитано из дампа), а в вендорской интероп-сборке
-/// <c>Interop.KompasAPI7.dll</c> эти члены не объявлены ВООБЩЕ (проверено
-/// <c>KompasMcp.InteropScan --type-members ILinearPattern</c>). Поэтому направление задаётся
-/// осью, а не вектором, и это открытый вопрос OQ-B-03, названный, а не обойдённый.
-/// </para>
-/// <para>
-/// <b>Второе направление необязательно.</b> Не заданы <see cref="Axis2Point1Mm"/> и
-/// <see cref="Count2"/> — это массив по одной линии (<c>SM-18.grid.single_row</c>), и тогда
-/// <c>Count2 = 1</c>, а поля второго направления в модель не пишутся.
-/// </para>
-/// </remarks>
+/// <summary>Grid pattern (docs/05 SM-18, profile <c>mechanical-core-v1</c>, queue B4).</summary>
+/// <remarks><para><b>The axis is given by two MODEL points, not a reference.</b> Same decision as for
+/// rotation (SM-03), same reason: <c>ILinearPattern.Axis1/Axis2</c> accept <c>IModelObject</c>, and the
+/// server builds the axis itself as <c>o3d_axis2Points</c> in the SAME part. An axis reference could
+/// drag one in from a foreign part, which patterns never checked.</para>
+/// <para><b>The direction vector is absent here deliberately.</b> In <c>kAPI7.tlb</c>
+/// <c>ILinearPattern.Vector1/Vector2</c> declare getters only (<c>_get_Vector1</c>, <c>_set_Vector1</c>
+/// is absent — read from the dump), and in the vendor interop assembly <c>Interop.KompasAPI7.dll</c>
+/// these members are not declared AT ALL (checked with
+/// <c>KompasMcp.InteropScan --type-members ILinearPattern</c>). Direction is therefore set by an axis,
+/// not a vector, and this is open question OQ-B-03, named rather than bypassed.</para>
+/// <para><b>The second direction is optional.</b> If <see cref="Axis2Point1Mm"/> and
+/// <see cref="Count2"/> are not set, this is a single-row pattern (<c>SM-18.grid.single_row</c>), and
+/// then <c>Count2 = 1</c> and the second-direction fields are not written to the model.</para></remarks>
 public sealed record PatternGridCommand
 {
     public required string DocumentId { get; init; }
 
-    /// <summary>Что копируется: операции либо тела. Решает числовой тип фабрики, а не флаг.</summary>
+    /// <summary>What is copied: operations or bodies. The factory numeric type decides, not a flag.</summary>
     public required PatternCopyKind CopyKind { get; init; }
 
-    /// <summary>
-    /// Исходные объекты массива: ссылки <c>feature:</c> (для операций) либо <c>body:</c>
-    /// (для тел). Пустой список отвергается до COM: массив без исходных объектов не собирается.
-    /// </summary>
+    /// <summary>Pattern source objects: <c>feature:</c> references (for operations) or <c>body:</c>
+    /// references (for bodies). An empty list is rejected before COM: a pattern without sources is not
+    /// built.</summary>
     public required IReadOnlyList<string> SourceRefs { get; init; }
 
-    /// <summary>Первая точка оси первого направления, координаты модели, мм.</summary>
+    /// <summary>First axis point of the first direction, model coordinates, mm.</summary>
     public required IReadOnlyList<double> Axis1Point1Mm { get; init; }
 
-    /// <summary>Вторая точка оси первого направления, координаты модели, мм.</summary>
+    /// <summary>Second axis point of the first direction, model coordinates, mm.</summary>
     public required IReadOnlyList<double> Axis1Point2Mm { get; init; }
 
-    /// <summary>Шаг по первому направлению, мм.</summary>
+    /// <summary>Step along the first direction, mm.</summary>
     public required double Step1Mm { get; init; }
 
-    /// <summary>Число экземпляров по первому направлению, включая исходный. Больше 1.</summary>
+    /// <summary>Instance count along the first direction, including the source. Greater than 1.</summary>
     public required int Count1 { get; init; }
 
-    /// <summary>
-    /// Угол наклона первой оси сетки, ГРАДУСЫ. Не задан — значение модели остаётся как есть (0),
-    /// то есть ось берётся как построена.
-    /// </summary>
-    /// <remarks>
-    /// Тип СДЕЛАН НЕОБЯЗАТЕЛЬНЫМ ПО ЗАМЕРУ, а не для красоты. Пока поле было обязательным, «не
-    /// задан» было невыразимо и адаптер писал ноль ВСЕГДА. Для второй оси это измеренно ломало
-    /// сетку: Angle2 — угол МЕЖДУ направлениями, ноль совмещает второе направление с первым, и
-    /// прямоугольная сетка вырождалась в линию (измерено: копии продолжили первую ось —
-    /// x = 20, 40, 60, 50, 70, 90 при y = 20). Схема инструмента объявляла оба угла
-    /// необязательными и раньше (Sch.Nullable), поэтому правка не меняет контракт по проводу —
-    /// только поведение при пропущенном поле.
-    /// </remarks>
+    /// <summary>Tilt angle of the first grid axis, DEGREES. Not set — the model value stays as is (0),
+    /// i.e. the axis is taken as built.</summary>
+    /// <remarks>The type was MADE OPTIONAL BY MEASUREMENT, not for looks. While the field was mandatory
+    /// "not set" was inexpressible and the adapter ALWAYS wrote zero. For the second axis this measurably
+    /// broke the grid: Angle2 is the angle BETWEEN directions, zero aligns the second direction with the
+    /// first, and a rectangular grid degenerated into a line (MEASURED: copies continued the first axis —
+    /// x = 20, 40, 60, 50, 70, 90 at y = 20). The tool schema already declared both angles optional
+    /// (Sch.Nullable), so the change does not alter the wire contract — only the behaviour when the field
+    /// is omitted.</remarks>
     public double? Angle1Deg { get; init; }
 
-    /// <summary>Направление копирования вдоль первой оси.</summary>
+    /// <summary>Copy direction along the first axis.</summary>
     public bool Direction1 { get; init; } = true;
 
-    /// <summary>
-    /// Интерпретация шага на границе первого направления
-    /// (<c>BoundaryInstancesStepFactor1</c>). По умолчанию <c>false</c>.
-    /// </summary>
+    /// <summary>Interpretation of the step at the first-direction boundary
+    /// (<c>BoundaryInstancesStepFactor1</c>). Default <c>false</c>.</summary>
     public bool BoundaryInstancesStepFactor1 { get; init; }
 
-    /// <summary>Первая точка оси второго направления; не задана — сетка по одной линии.</summary>
+    /// <summary>First axis point of the second direction; not set — a single-row pattern.</summary>
     public IReadOnlyList<double>? Axis2Point1Mm { get; init; }
 
-    /// <summary>Вторая точка оси второго направления.</summary>
+    /// <summary>Second axis point of the second direction.</summary>
     public IReadOnlyList<double>? Axis2Point2Mm { get; init; }
 
-    /// <summary>Шаг по второму направлению, мм. Действует только вместе с <see cref="Count2"/>.</summary>
+    /// <summary>Step along the second direction, mm. Effective only together with <see cref="Count2"/>.</summary>
     public double? Step2Mm { get; init; }
 
-    /// <summary>Число экземпляров по второму направлению. Не задано — направление не участвует.</summary>
+    /// <summary>Instance count along the second direction. Not set — the direction does not participate.</summary>
     public int? Count2 { get; init; }
 
-    /// <summary>
-    /// Угол МЕЖДУ направлениями сетки, ГРАДУСЫ. Прямоугольная сетка — 90°; 0° совмещает второе
-    /// направление с первым. Не задан — значение модели остаётся как есть (90°).
-    /// </summary>
-    /// <remarks>
-    /// «Угол между направлениями», а не «наклон второй оси»: измерено прогоном в одной постановке
-    /// при второй оси (0,0,0)→(0,−80,0) и шаге 30 — при 0° копии продолжили первую ось, при 90° встали
-    /// по второй, а при 270° модель привела значение к 180° и увела второе направление в
-    /// противоположную сторону. Вторая ось при этом задаёт, В КАКУЮ сторону откладывать угол.
-    /// </remarks>
+    /// <summary>Angle BETWEEN grid directions, DEGREES. A rectangular grid is 90°; 0° aligns the second
+    /// direction with the first. Not set — the model value stays as is (90°).</summary>
+    /// <remarks>"Angle between directions", not "tilt of the second axis": MEASURED in one setup with the
+    /// second axis (0,0,0)→(0,−80,0) and step 30 — at 0° copies continued the first axis, at 90° they
+    /// stood along the second, and at 270° the model normalized the value to 180° and sent the second
+    /// direction the opposite way. The second axis itself sets WHICH way the angle is laid out.</remarks>
     public double? Angle2Deg { get; init; }
 
-    /// <summary>Направление копирования вдоль второй оси.</summary>
+    /// <summary>Copy direction along the second axis.</summary>
     public bool Direction2 { get; init; } = true;
 
-    /// <summary>Интерпретация шага на границе второго направления.</summary>
+    /// <summary>Interpretation of the step at the second-direction boundary.</summary>
     public bool BoundaryInstancesStepFactor2 { get; init; }
 
-    /// <summary>
-    /// Способ построения массива, <c>ksLinearPatternBuildingTypeEnum</c> словом контракта:
+    /// <summary>Pattern building method, <c>ksLinearPatternBuildingTypeEnum</c> as a contract word:
     /// <c>save_all</c> (0), <c>save_along_perimeter</c> (1), <c>save_along_axially</c> (2),
-    /// <c>chess_order_by_axis1</c> (3), <c>chess_order_by_axis2</c> (4). Числа прочитаны из
-    /// <c>Interop.Kompas6Constants3D.dll</c>, а не из каталога.
-    /// </summary>
+    /// <c>chess_order_by_axis1</c> (3), <c>chess_order_by_axis2</c> (4). The numbers were read from
+    /// <c>Interop.Kompas6Constants3D.dll</c>, not from the catalog.</summary>
     public string BuildingType { get; init; } = "save_all";
 
-    /// <summary>
-    /// Геометрическое копирование (<c>IFeaturePattern.GeometryPattern</c>). Документировано
-    /// страницей SDK <c>ifeaturepattern_geometrypattern.html</c>; маршрут B4 измеряется на
-    /// <c>false</c>, поэтому <c>true</c> отвергается до COM как неизмеренный режим.
-    /// </summary>
+    /// <summary>Geometric copy (<c>IFeaturePattern.GeometryPattern</c>). Documented by SDK page
+    /// <c>ifeaturepattern_geometrypattern.html</c>; route B4 is measured on <c>false</c>, so <c>true</c>
+    /// is rejected before COM as an unmeasured mode.</summary>
     public bool GeometryPattern { get; init; }
 
-    /// <summary>Аналитическое ожидание объёма документа ПОСЛЕ операции, мм³.</summary>
+    /// <summary>Analytic expectation of the document volume AFTER the operation, mm³.</summary>
     public double? ExpectedVolumeMm3 { get; init; }
 
-    /// <summary>
-    /// Аналитическое ожидание числа тел ПОСЛЕ операции. Для массива операций оно равно числу тел
-    /// до операции, для массива тел — растёт. Сравнение точное: допуск к счётным величинам не
-    /// применяется (tolerance_classes профиля).
-    /// </summary>
+    /// <summary>Analytic expectation of the body count AFTER the operation. For an operation pattern it
+    /// equals the body count before, for a body pattern it grows. The comparison is exact: no tolerance
+    /// is applied to countable quantities (the profile's tolerance_classes).</summary>
     public int? ExpectedBodyCount { get; init; }
 
-    /// <summary>
-    /// Радиус цилиндрической грани, по которой считается число экземпляров (мм). Отверстие Ø10
-    /// даёт радиус 5. Без него поимённая проверка экземпляров не выполняется, и это честно
-    /// помечается в <c>unverified_aspects</c>, а не выдаётся за проверку.
-    /// </summary>
+    /// <summary>Radius of the cylindrical face by which the instance count is taken (mm). A Ø10 hole
+    /// gives radius 5. Without it the per-name instance check is not performed, and this is honestly
+    /// marked in <c>unverified_aspects</c> rather than passed off as a check.</summary>
     public double? ExpectedHoleRadiusMm { get; init; }
 
-    /// <summary>Высота цилиндрической грани, мм (толщина пластины для сквозного отверстия).</summary>
+    /// <summary>Height of the cylindrical face, mm (plate thickness for a through hole).</summary>
     public double? ExpectedHoleHeightMm { get; init; }
 
-    /// <summary>Аналитическое ожидание числа экземпляров-отверстий. Точное совпадение.</summary>
+    /// <summary>Analytic expectation of the hole-instance count. Exact match.</summary>
     public int? ExpectedHoleCount { get; init; }
 
-    /// <summary>
-    /// Аналитические координаты осей каждого экземпляра в координатах модели, мм. Объём не
-    /// отличает четыре отверстия от трёх плюс одно наложенное — этот набор отличает.
-    /// </summary>
+    /// <summary>Analytic axis coordinates of each instance in model coordinates, mm. Volume does not
+    /// distinguish four holes from three plus one superimposed — this set does.</summary>
     public IReadOnlyList<IReadOnlyList<double>>? ExpectedHoleCentersMm { get; init; }
 
     public required long ExpectedRevision { get; init; }
 }
 
-/// <summary>
-/// Массив по концентрической сетке (docs/05 SM-19).
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Соотнесение направлений взято со страницы справки, а не из ожидания.</b> Страница SDK
-/// <c>icircularpattern_props.html</c> (проверена по проводу) называет члены так:
-/// <c>Count1</c> — «Количество экземпляров в РАДИАЛЬНОМ направлении», <c>Step1</c> — «Шаг
-/// копирования в РАДИАЛЬНОМ направлении», <c>Count2</c> — «Количество экземпляров в КОЛЬЦЕВОМ
-/// направлении», <c>Step2</c> — «УГЛОВОЙ шаг (ГРАДУСЫ) — шаг копирования в КОЛЬЦЕВОМ
-/// направлении». Поэтому кольцевое направление здесь — это ПАРА (Count2, Step2), а не
-/// (Count1, Step1), как предполагалось до проверки страницы. Это закрытие OQ-B-02.
-/// </para>
-/// <para>
-/// <b>Полный оборот выражается парой (Count2, Step2), а не признаком.</b> Отдельного члена
-/// «полный оборот» у <c>ICircularPattern</c> нет ни в интероп-сборке, ни в справке; ожидаемая
-/// семантика — <c>Step2 = 360 / Count2</c>, и она измеряется обеими половинами в одной постановке
-/// (шаг 90° при Count2 = 4 против шага 120° в отрицательном контроле: дубль на 360° виден по
-/// объёму, расхождение ровно объёму одного отверстия).
-/// </para>
-/// </remarks>
+/// <summary>Circular pattern (docs/05 SM-19).</summary>
+/// <remarks><para><b>The direction mapping is taken from the help page, not from expectation.</b> SDK
+/// page <c>icircularpattern_props.html</c> (checked over the wire) names the members:
+/// <c>Count1</c> — «Количество экземпляров в РАДИАЛЬНОМ направлении», <c>Step1</c> — «Шаг копирования в
+/// РАДИАЛЬНОМ направлении», <c>Count2</c> — «Количество экземпляров в КОЛЬЦЕВОМ направлении»,
+/// <c>Step2</c> — «УГЛОВОЙ шаг (ГРАДУСЫ) — шаг копирования в КОЛЬЦЕВОМ направлении». So the circular
+/// direction here is the PAIR (Count2, Step2), not (Count1, Step1) as assumed before the page was
+/// checked. This closes OQ-B-02.</para>
+/// <para><b>A full turn is expressed by the pair (Count2, Step2), not by a flag.</b>
+/// <c>ICircularPattern</c> has no separate "full turn" member in either the interop assembly or the
+/// help; the expected semantics is <c>Step2 = 360 / Count2</c>, and it is measured by both halves in one
+/// setup (step 90° at Count2 = 4 versus step 120° in the negative control: a 360° duplicate is visible
+/// by volume, the difference exactly one hole's volume).</para></remarks>
 public sealed record PatternCircularCommand
 {
     public required string DocumentId { get; init; }
 
     public required PatternCopyKind CopyKind { get; init; }
 
-    /// <summary>Исходные объекты массива: <c>feature:</c> либо <c>body:</c>-ссылки.</summary>
+    /// <summary>Pattern source objects: <c>feature:</c> or <c>body:</c> references.</summary>
     public required IReadOnlyList<string> SourceRefs { get; init; }
 
-    /// <summary>Первая точка оси массива, координаты модели, мм.</summary>
+    /// <summary>First pattern axis point, model coordinates, mm.</summary>
     public required IReadOnlyList<double> AxisPoint1Mm { get; init; }
 
-    /// <summary>Вторая точка оси массива, координаты модели, мм.</summary>
+    /// <summary>Second pattern axis point, model coordinates, mm.</summary>
     public required IReadOnlyList<double> AxisPoint2Mm { get; init; }
 
-    /// <summary>Число экземпляров в РАДИАЛЬНОМ направлении (<c>Count1</c>). Не задано — 1.</summary>
+    /// <summary>Instance count in the RADIAL direction (<c>Count1</c>). Not set — 1.</summary>
     public int Count1 { get; init; } = 1;
 
-    /// <summary>Шаг в РАДИАЛЬНОМ направлении (<c>Step1</c>), мм. Действует при <c>Count1 &gt; 1</c>.</summary>
+    /// <summary>Step in the RADIAL direction (<c>Step1</c>), mm. Effective when <c>Count1 &gt; 1</c>.</summary>
     public double Step1Mm { get; init; }
 
-    /// <summary>Число экземпляров в КОЛЬЦЕВОМ направлении (<c>Count2</c>).</summary>
+    /// <summary>Instance count in the CIRCULAR direction (<c>Count2</c>).</summary>
     public required int Count2 { get; init; }
 
-    /// <summary>
-    /// УГЛОВОЙ шаг в КОЛЬЦЕВОМ направлении (<c>Step2</c>), ГРАДУСЫ. Единица названа самой
-    /// страницей справки; расхождение «градусы против радиан» различается в 57,3 раза и проверяется
-    /// отдельной калибровочной пробой.
-    /// </summary>
+    /// <summary>ANGULAR step in the CIRCULAR direction (<c>Step2</c>), DEGREES. The unit is named by the
+    /// help page itself; the "degrees versus radians" discrepancy differs by a factor of 57.3 and is
+    /// checked by a separate calibration probe.</summary>
     public required double Step2Deg { get; init; }
 
-    /// <summary>Шаг вдоль оси (<c>StepByAxis</c>), мм.</summary>
+    /// <summary>Step along the axis (<c>StepByAxis</c>), mm.</summary>
     public double StepByAxisMm { get; init; }
 
-    /// <summary>Интерпретация шага на границе радиального направления.</summary>
+    /// <summary>Interpretation of the step at the radial-direction boundary.</summary>
     public bool BoundaryInstancesStepFactor1 { get; init; }
 
-    /// <summary>Интерпретация шага на границе кольцевого направления.</summary>
+    /// <summary>Interpretation of the step at the circular-direction boundary.</summary>
     public bool BoundaryInstancesStepFactor2 { get; init; }
 
-    /// <summary>Направление построения массива (<c>ReverseDirection</c>).</summary>
+    /// <summary>Pattern build direction (<c>ReverseDirection</c>).</summary>
     public bool ReverseDirection { get; init; }
 
-    /// <summary>
-    /// Ориентация экземпляров (<c>SaveInitialOrientation</c>). Член есть ТОЛЬКО у кругового массива:
-    /// у <c>ILinearPattern</c> он отсутствует и в справке, и в интероп-сборке, поэтому между
-    /// семействами он не переносится.
-    /// </summary>
+    /// <summary>Instance orientation (<c>SaveInitialOrientation</c>). The member exists ONLY on the
+    /// circular pattern: <c>ILinearPattern</c> lacks it in both the help and the interop assembly, so it
+    /// does not carry over between families.</summary>
     public bool SaveInitialOrientation { get; init; } = true;
 
-    /// <summary>Способ построения: <c>save_all</c> (0), <c>chess_order_by_axis1</c> (1), <c>chess_order_by_axis2</c> (2).</summary>
+    /// <summary>Build method: <c>save_all</c> (0), <c>chess_order_by_axis1</c> (1), <c>chess_order_by_axis2</c> (2).</summary>
     public string BuildingType { get; init; } = "save_all";
 
-    /// <summary>Геометрическое копирование. <c>true</c> отвергается до COM как неизмеренный режим.</summary>
+    /// <summary>Geometric copy. <c>true</c> is rejected before COM as an unmeasured mode.</summary>
     public bool GeometryPattern { get; init; }
 
     public double? ExpectedVolumeMm3 { get; init; }
 
     public int? ExpectedBodyCount { get; init; }
 
-    /// <summary>Радиус цилиндрической грани-экземпляра, мм (Ø10 → 5). См. PatternGridCommand.</summary>
+    /// <summary>Radius of the cylindrical instance face, mm (Ø10 → 5). See PatternGridCommand.</summary>
     public double? ExpectedHoleRadiusMm { get; init; }
 
-    /// <summary>Высота цилиндрической грани-экземпляра, мм.</summary>
+    /// <summary>Height of the cylindrical instance face, mm.</summary>
     public double? ExpectedHoleHeightMm { get; init; }
 
-    /// <summary>Аналитическое ожидание числа экземпляров-отверстий.</summary>
+    /// <summary>Analytic expectation of the hole-instance count.</summary>
     public int? ExpectedHoleCount { get; init; }
 
-    /// <summary>Аналитические координаты осей экземпляров в координатах модели, мм.</summary>
+    /// <summary>Analytic axis coordinates of the instances in model coordinates, mm.</summary>
     public IReadOnlyList<IReadOnlyList<double>>? ExpectedHoleCentersMm { get; init; }
 
     public required long ExpectedRevision { get; init; }
 }
 
-/// <summary>
-/// Зеркальный массив (docs/05 SM-23).
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Плоскость — явный объект, а не текущее выделение окна.</b> Это требование зависимости
-/// <c>dep.refs.planes</c>, и оно же снимает вопрос о знаке нормали: сторона отражения задаётся
-/// самой плоскостью, а не порядком точек выделения. Знак нормали YOZ (направлена в −X) при этом
-/// остаётся фактом модели и записан в контракт плоскости (<c>PlaneRefDto</c>), а не спрятан в
-/// разрешении ссылки.
-/// </para>
-/// <para>
-/// <b>Числа типов опубликованы, а не подобраны.</b> <c>copytype.html</c>:
+/// <summary>Mirror pattern (docs/05 SM-23).</summary>
+/// <remarks><para><b>The plane is an explicit object, not the current window selection.</b> This is a
+/// requirement of dependency <c>dep.refs.planes</c>, and it also removes the question of the normal sign:
+/// the reflection side is set by the plane itself, not by the order of the selection points. The YOZ
+/// normal sign (pointing in −X) remains a fact of the model and is recorded in the plane contract
+/// (<c>PlaneRefDto</c>), not hidden in reference resolution.</para>
+/// <para><b>The type numbers are published, not picked.</b> <c>copytype.html</c>:
 /// <c>o3d_mirrorOperation=48</c> — «зеркальный массив» (<c>IMirrorPattern</c>),
-/// <c>o3d_mirrorAllOperation=49</c> — «зеркально отразить все» (тот же <c>IMirrorPattern</c>,
-/// дополнительно <c>IChooseBodies7</c>).
-/// </para>
-/// </remarks>
+/// <c>o3d_mirrorAllOperation=49</c> — «зеркально отразить все» (the same <c>IMirrorPattern</c>,
+/// additionally <c>IChooseBodies7</c>).</para></remarks>
 public sealed record PatternMirrorCommand
 {
     public required string DocumentId { get; init; }
 
     public required PatternMirrorMode Mode { get; init; }
 
-    /// <summary>
-    /// Исходные объекты. Для <see cref="PatternMirrorMode.SelectedOperations"/> — <c>feature:</c>
-    /// ссылки и непустой список; для <see cref="PatternMirrorMode.AllBodies"/> — либо пусто
-    /// («все тела»), либо явные <c>body:</c> ссылки.
-    /// </summary>
+    /// <summary>Source objects. For <see cref="PatternMirrorMode.SelectedOperations"/> — <c>feature:</c>
+    /// references and a non-empty list; for <see cref="PatternMirrorMode.AllBodies"/> — either empty
+    /// ("all bodies") or explicit <c>body:</c> references.</summary>
     public required IReadOnlyList<string> SourceRefs { get; init; }
 
-    /// <summary>Плоскость симметрии: <c>plane:</c>-ссылка либо базовая плоскость через <c>base</c>.</summary>
+    /// <summary>Symmetry plane: a <c>plane:</c> reference or a base plane through <c>base</c>.</summary>
     public required PlaneRefDto Plane { get; init; }
 
-    /// <summary>
-    /// Сохранять исходные объекты (<c>SaveInitialObjects</c>). <c>true</c> добавляет отражённую
-    /// копию, оставляя исходник; <c>false</c> заменяет исходник ею.
-    /// <para>
-    /// ОБЛАСТЬ ДЕЙСТВИЯ ОГРАНИЧЕНА СПРАВКОЙ, И ЭТО ИЗМЕРЕНО. Страница
-    /// <c>imirrorpattern_saveinitialobjects.html</c> говорит прямо: «Свойство работает ТОЛЬКО для
-    /// <c>o3d_mirrorAllOperation</c>» и «у других операций зеркального копирования возможность
-    /// скрыть экземпляры отсутствует». Измерено прогоном на обеих операциях: у
-    /// <c>o3d_mirrorAllOperation</c> (режим <see cref="PatternMirrorMode.AllBodies"/>) запись
-    /// <c>false</c> читается обратно как <c>false</c> и тела действительно заменяются отражёнными
-    /// (2 → 2 тела по 4 000), а у <c>o3d_mirrorOperation</c> (режим
-    /// <see cref="PatternMirrorMode.SelectedOperations"/>) запись <c>false</c> читается обратно как
-    /// <c>true</c> и геометрия не меняется вовсе. Требовать различия половин на операции 48 значило
-    /// бы требовать того, что справка у неё отрицает; параметр принимается, а его непринятие
-    /// называется заметкой маршрута, а не выдаётся за сработавшее свойство.
-    /// </para>
-    /// </summary>
+    /// <summary>Keep the source objects (<c>SaveInitialObjects</c>). <c>true</c> adds a reflected copy,
+    /// leaving the source; <c>false</c> replaces the source with it.
+    /// <para>The scope is bounded by the help, and this is MEASURED. Page
+    /// <c>imirrorpattern_saveinitialobjects.html</c> says plainly: «Свойство работает ТОЛЬКО для
+    /// <c>o3d_mirrorAllOperation</c>» and «у других операций зеркального копирования возможность
+    /// скрыть экземпляры отсутствует». MEASURED by a run on both operations: on
+    /// <c>o3d_mirrorAllOperation</c> (mode <see cref="PatternMirrorMode.AllBodies"/>) a write of
+    /// <c>false</c> reads back as <c>false</c> and the bodies really are replaced by the reflected ones
+    /// (2 → 2 bodies of 4 000), while on <c>o3d_mirrorOperation</c> (mode
+    /// <see cref="PatternMirrorMode.SelectedOperations"/>) a write of <c>false</c> reads back as
+    /// <c>true</c> and the geometry does not change at all. Requiring the halves to differ on operation
+    /// 48 would require what the help denies it; the parameter is accepted, and its non-acceptance is
+    /// named as a route note rather than passed off as a worked property.</para></summary>
     public required bool SaveInitialObjects { get; init; }
 
-    /// <summary>
-    /// Тип действия над телами для <c>IChooseBodies7.ChooseBodiesType</c>:
-    /// <c>new_body</c> (0), <c>automatic</c> (1), <c>manual</c> (2), <c>all_bodies</c> (3).
-    /// Действует только у <see cref="PatternMirrorMode.AllBodies"/>.
-    /// </summary>
+    /// <summary>Body action type for <c>IChooseBodies7.ChooseBodiesType</c>: <c>new_body</c> (0),
+    /// <c>automatic</c> (1), <c>manual</c> (2), <c>all_bodies</c> (3). Effective only on
+    /// <see cref="PatternMirrorMode.AllBodies"/>.</summary>
     public string ChooseBodiesType { get; init; } = "all_bodies";
 
     public double? ExpectedVolumeMm3 { get; init; }
 
     public int? ExpectedBodyCount { get; init; }
 
-    /// <summary>Радиус цилиндрической грани-экземпляра, мм.</summary>
+    /// <summary>Radius of the cylindrical instance face, mm.</summary>
     public double? ExpectedHoleRadiusMm { get; init; }
 
-    /// <summary>Высота цилиндрической грани-экземпляра, мм.</summary>
+    /// <summary>Height of the cylindrical instance face, mm.</summary>
     public double? ExpectedHoleHeightMm { get; init; }
 
-    /// <summary>Аналитическое ожидание числа экземпляров-отверстий.</summary>
+    /// <summary>Analytic expectation of the hole-instance count.</summary>
     public int? ExpectedHoleCount { get; init; }
 
-    /// <summary>Аналитические координаты осей экземпляров в координатах модели, мм.</summary>
+    /// <summary>Analytic axis coordinates of the instances in model coordinates, mm.</summary>
     public IReadOnlyList<IReadOnlyList<double>>? ExpectedHoleCentersMm { get; init; }
 
     public required long ExpectedRevision { get; init; }
 }
 
-/// <summary>Перечитать параметры массива либо зеркала по ссылке на признак.</summary>
+/// <summary>Re-read the parameters of a pattern or mirror by a feature reference.</summary>
 public sealed record PatternReadCommand
 {
     public required string FeatureRef { get; init; }
 }
 
-/// <summary>
-/// Новые параметры СУЩЕСТВУЮЩЕГО признака массива (правка по docs/05 §4.3: не «удалить и создать
-/// похожий»). Передаётся полем <c>pattern</c> инструмента <c>kompas_update_feature</c>.
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Почему отдельный тип, а не поля на самой команде правки.</b> У массива нет ни глубины, ни
-/// радиуса, ни эскиза: члены, которыми он правится, принадлежат ТРЁМ разным интерфейсам API7
-/// (<c>ILinearPattern</c>, <c>ICircularPattern</c>, <c>IMirrorPattern</c>), и часть имён между ними
-/// совпадает только по виду. Плоский набор полей на <see cref="UpdateFeatureCommand"/> читался бы
-/// как «это всё применимо к любому массиву», а это неверно: <c>save_initial_orientation</c> есть
-/// только у кругового, <c>save_initial_objects</c> — только у зеркального, <c>step2_deg</c> —
-/// только у кругового.
-/// </para>
-/// <para>
-/// <b>Что здесь есть и почему.</b> Перечислены ровно те члены, которые страницы свойств
+/// <summary>New parameters of an EXISTING pattern feature (edit per docs/05 §4.3: not "delete and create
+/// a similar one"). Passed in the <c>pattern</c> field of the <c>kompas_update_feature</c> tool.</summary>
+/// <remarks><para><b>Why a separate type rather than fields on the edit command itself.</b> A pattern has
+/// no depth, no radius, no sketch: the members that edit it belong to THREE different API7 interfaces
+/// (<c>ILinearPattern</c>, <c>ICircularPattern</c>, <c>IMirrorPattern</c>), and some names coincide only
+/// in appearance. A flat set of fields on <see cref="UpdateFeatureCommand"/> would read as "all this
+/// applies to any pattern", which is wrong: <c>save_initial_orientation</c> exists only on circular,
+/// <c>save_initial_objects</c> only on mirror, <c>step2_deg</c> only on circular.</para>
+/// <para><b>What is here and why.</b> Exactly those members that the property pages
 /// (<c>ilinearpattern_props.html</c>, <c>icircularpattern_props.html</c>,
-/// <c>imirrorpattern_props.html</c>, проверены по проводу) объявляют у этих интерфейсов:
-/// </para>
+/// <c>imirrorpattern_props.html</c>, checked over the wire) declare on these interfaces:</para>
 /// <list type="bullet">
 /// <item><description><c>ILinearPattern</c>: <c>Angle1/2</c>, <c>Count1/2</c>,
 /// <c>Direction1/2</c>, <c>Step1/2</c>, <c>BuildingType</c>.</description></item>
@@ -1454,83 +1209,74 @@ public sealed record PatternReadCommand
 /// <c>BuildingType</c>.</description></item>
 /// <item><description><c>IMirrorPattern</c>: <c>SaveInitialObjects</c>.</description></item>
 /// </list>
-/// <para>
-/// <b>Чего здесь нет.</b> Оси и плоскость: <c>Axis1/Axis2</c> и <c>Plane</c> принимают
-/// <c>IModelObject</c>, а ссылку на объект опоры вызывающий не может выдать так же, как выдаёт
-/// <c>feature:</c>-ссылку на признак, — и ни один прогон B4 смену опоры существующего массива не
-/// измерял. Молча оставить эти члены вне контракта нельзя, поэтому они названы здесь как
-/// неправимые. <c>Vector1/Vector2</c> отсутствуют по той же причине, что и при создании: в
-/// вендорской интероп-сборке они не объявлены вовсе (OQ-B-03).
-/// </para>
-/// <para>
-/// <b>Полная постановка, а не «что изменилось».</b> Правка обязана нести значения ВСЕХ параметров
-/// режима, которые должны остаться: члены, не заданные в запросе, остаются как есть, и это
-/// единственный способ отличить «изменилось ровно запрошенное» от «изменилось ещё и это».
-/// </para>
-/// </remarks>
+/// <para><b>What is not here.</b> Axes and plane: <c>Axis1/Axis2</c> and <c>Plane</c> accept
+/// <c>IModelObject</c>, and the caller cannot hand out a reference to a support object the way it hands
+/// out a <c>feature:</c> reference to a feature — and no B4 run measured changing the support of an
+/// existing pattern. These members cannot be silently left out of the contract, so they are named here
+/// as non-editable. <c>Vector1/Vector2</c> are absent for the same reason as at creation: they are not
+/// declared at all in the vendor interop assembly (OQ-B-03).</para>
+/// <para><b>A full statement, not "what changed".</b> An edit must carry the values of ALL mode
+/// parameters that should remain: members not set in the request stay as they are, and this is the only
+/// way to tell "exactly the requested thing changed" from "this changed too".</para></remarks>
 public sealed record PatternEditDto
 {
-    /// <summary>Число экземпляров по первому направлению. У сетки — по оси 1, у кругового — РАДИАЛЬНОЕ.</summary>
+    /// <summary>Instance count along the first direction. For grid — axis 1, for circular — RADIAL.</summary>
     public int? Count1 { get; init; }
 
-    /// <summary>Число экземпляров по второму направлению. У кругового — КОЛЬЦЕВОЕ.</summary>
+    /// <summary>Instance count along the second direction. For circular — CIRCULAR.</summary>
     public int? Count2 { get; init; }
 
-    /// <summary>Шаг по первому направлению, мм (у кругового — радиальный шаг).</summary>
+    /// <summary>Step along the first direction, mm (for circular — the radial step).</summary>
     public double? Step1Mm { get; init; }
 
-    /// <summary>Шаг по второму направлению массива ПО СЕТКЕ, мм. У кругового неприменим.</summary>
+    /// <summary>Step along the second direction of a GRID pattern, mm. Not applicable to circular.</summary>
     public double? Step2Mm { get; init; }
 
-    /// <summary>УГЛОВОЙ шаг кольцевого направления кругового массива, ГРАДУСЫ. У сетки неприменим.</summary>
+    /// <summary>ANGULAR step of the circular direction of a circular pattern, DEGREES. Not applicable to grid.</summary>
     public double? Step2Deg { get; init; }
 
-    /// <summary>Угол наклона первой оси сетки, ГРАДУСЫ. У кругового неприменим.</summary>
+    /// <summary>Tilt angle of the first grid axis, DEGREES. Not applicable to circular.</summary>
     public double? Angle1Deg { get; init; }
 
-    /// <summary>Угол наклона второй оси сетки, ГРАДУСЫ. У кругового неприменим.</summary>
+    /// <summary>Tilt angle of the second grid axis, DEGREES. Not applicable to circular.</summary>
     public double? Angle2Deg { get; init; }
 
-    /// <summary>Направление копирования вдоль первой оси. У кругового неприменим.</summary>
+    /// <summary>Copy direction along the first axis. Not applicable to circular.</summary>
     public bool? Direction1 { get; init; }
 
-    /// <summary>Направление копирования вдоль второй оси. У кругового неприменим.</summary>
+    /// <summary>Copy direction along the second axis. Not applicable to circular.</summary>
     public bool? Direction2 { get; init; }
 
-    /// <summary>
-    /// Способ построения. Слова контракта — те же, что при создании: у сетки <c>save_all</c>,
+    /// <summary>Building method. The contract words are the same as at creation: for grid <c>save_all</c>,
     /// <c>save_along_perimeter</c>, <c>save_along_axially</c>, <c>chess_order_by_axis1</c>,
-    /// <c>chess_order_by_axis2</c>; у кругового <c>save_all</c>, <c>chess_order_by_axis1</c>,
-    /// <c>chess_order_by_axis2</c>. Неизвестное слово отвергается до мутации, а не подменяется
-    /// умолчанием.
-    /// </summary>
+    /// <c>chess_order_by_axis2</c>; for circular <c>save_all</c>, <c>chess_order_by_axis1</c>,
+    /// <c>chess_order_by_axis2</c>. An unknown word is rejected before mutating rather than substituted
+    /// with a default.</summary>
     public string? BuildingType { get; init; }
 
-    /// <summary>Шаг вдоль оси кругового массива, мм. У сетки неприменим.</summary>
+    /// <summary>Step along the axis of a circular pattern, mm. Not applicable to grid.</summary>
     public double? StepByAxisMm { get; init; }
 
-    /// <summary>Направление построения кругового массива. У сетки неприменим.</summary>
+    /// <summary>Build direction of a circular pattern. Not applicable to grid.</summary>
     public bool? ReverseDirection { get; init; }
 
-    /// <summary>Ориентация экземпляров кругового массива. У сетки и у зеркала неприменима.</summary>
+    /// <summary>Instance orientation of a circular pattern. Not applicable to grid or mirror.</summary>
     public bool? SaveInitialOrientation { get; init; }
 
-    /// <summary>Сохранять исходные объекты зеркального массива. У сетки и у кругового неприменим.</summary>
+    /// <summary>Keep the source objects of a mirror pattern. Not applicable to grid or circular.</summary>
     public bool? SaveInitialObjects { get; init; }
 
-    /// <summary>Аналитическое ожидание объёма документа ПОСЛЕ правки, мм³.</summary>
+    /// <summary>Analytic expectation of the document volume AFTER the edit, mm³.</summary>
     public double? ExpectedVolumeMm3 { get; init; }
 
-    /// <summary>Аналитическое ожидание числа тел ПОСЛЕ правки. Сравнение точное.</summary>
+    /// <summary>Analytic expectation of the body count AFTER the edit. Exact comparison.</summary>
     public int? ExpectedBodyCount { get; init; }
 }
 
-/// <remarks>
-/// <see cref="AngleDeg"/> — то, что лежит в модели первым слотом пары <c>Angle[true]</c>, и оно
-/// равно заданному углу вплоть до полного оборота (измерено 18.09.2026, проба F.1a и слепое
-/// чтение файла). Прежняя оговорка «при насыщении на 180° эти числа расходятся» относилась к
-/// опровергнутому измерению и снята.
-/// </remarks>
+/// <remarks><see cref="AngleDeg"/> is what lies in the model as the first slot of the pair
+/// <c>Angle[true]</c>, and it equals the requested angle up to a full turn (MEASURED on 18.09.2026,
+/// probe F.1a and a blind file read).
+/// History: docs/decisions/contracts.md#rotation-angle-limit</remarks>
 public sealed record RotatedDto(
     string? OperationType,
     double? AngleDeg,
@@ -1539,10 +1285,8 @@ public sealed record RotatedDto(
     int? ProfileInputCount);
 
 
-/// <remarks>
-/// <see cref="CountersinkDepthMm"/> — то, что вернул ОБЪЕКТ, а не то, что записали: при способе
-/// «диаметр + угол» глубина производна, и запись в неё чисел 2/4/6 не меняет ничего (M.3).
-/// </remarks>
+/// <remarks><see cref="CountersinkDepthMm"/> is what the OBJECT returned, not what was written: in the
+/// "diameter + angle" mode the depth is derived, and writing 2/4/6 into it changes nothing (M.3).</remarks>
 public sealed record HoleDto(
     string? HoleType,
     double? DiameterMm,
@@ -1556,7 +1300,7 @@ public sealed record HoleDto(
     double? CountersinkDepthMm,
     double[]? CenterMm);
 
-/// <summary>Одна сторона выдавливания, как её вернул <c>GetSideParam</c>.</summary>
+/// <summary>One extrusion side, as returned by <c>GetSideParam</c>.</summary>
 public sealed record FeatureSideDto(    bool Side,
     short EndConditionType,
     string EndCondition,
@@ -1564,17 +1308,15 @@ public sealed record FeatureSideDto(    bool Side,
     double DraftValue,
     bool DraftOutward);
 
-/// <summary>Тонкая стенка выдавливания; <c>ReverseThicknessMm</c> — член с вендорской опечаткой в геттере.</summary>
+/// <summary>Extrusion thin wall; <c>ReverseThicknessMm</c> is a member with a vendor typo in the getter.</summary>
 public sealed record FeatureThinDto(
     bool Thin,
     short ThinType,
     double NormalThicknessMm,
     double ReverseThicknessMm);
 
-/// <summary>
-/// Фаска, перечитанная из модели. Поля null тогда, когда вызов их не дал: «не прочитано» и
-/// «ноль» — разные ответы, и смешивать их нельзя (тот же стандарт, что у measure).
-/// </summary>
+/// <summary>Chamfer re-read from the model. Fields are null when the call did not provide them: "not
+/// read" and "zero" are different answers, and they must not be mixed (the same standard as measure).</summary>
 public sealed record ChamferDto(
     bool? Transfer,
     double? Distance1Mm,
@@ -1584,65 +1326,47 @@ public sealed record ChamferDto(
     bool? Direction,
     int? BaseObjectCount);
 
-/// <summary>
-/// Параметры скругления. Радиус читается из API7 (<c>IFillet.Radius1</c>): у API5
-/// <c>ksFilletDefinition.radius</c> объявлен и читается, но НЕ применяется при записи на
-/// существующем признаке (измерено строкой FL04r), поэтому авторитетным источником служит живая
-/// модель. Пустое поле означает «не прочитано» (мост API7 не построен или скруглений несколько),
-/// а не «ноль».
-/// </summary>
-/// <param name="BaseObjectReferences">
-/// Ссылки входов признака — <c>IModelObject.Reference</c> каждого элемента <c>IFillet.BaseObjects</c>.
-/// Наблюдаемая величина состава: по ней видно, из чего признак собран, и она же служит диагностикой
-/// при правке набора.
-/// <para>
-/// <b>Чего она НЕ делает — и это исправление прежней редакции (17.09.2026).</b> Здесь было написано,
-/// что это «ЕДИНСТВЕННЫЙ источник, по которому признак адресуется в правке набора (<c>edge_refs</c>)».
-/// Неверно, и проверить это можно не выходя из кода: <c>edge_refs</c> принимает строки реестра ссылок
-/// вида <c>edge:&lt;hex&gt;</c>, а здесь лежат ЧИСЛА <c>IModelObject.Reference</c> — у них строки реестра
-/// нет, и подставить их в <c>edge_refs</c> нельзя. Так что адресовать признак этим полем невозможно
-/// по типу, независимо от контекстов.
-/// </para>
-/// <para>
-/// <b>Измеренная причина, почему рёбер тела для правки набора мало.</b> После скругления всех углов у
-/// тела 24 ребра: 16 линий и 8 дуг длины π·3/2 (четверть окружности R3). Все восемь «вертикальных»
-/// линий лежат на швах касания цилиндров <c>(±47,±40)</c> и <c>(±50,±37)</c>; угловых вертикальных
-/// рёбер в топологии НОЛЬ (<c>len(corner_edges) = 0</c>) — их отозвало само скругление.
-/// </para>
-/// <para>
-/// <b>И главное: входы признака и рёбра тела НЕ взаимозаменяемы как валюта записи.</b> Проба H-2
-/// сокращала набор (4→3, 4→2) объектами, прочитанными ИЗ <c>BaseObjects</c>, — ни одно ребро тела при
-/// этом не искалось и не переносилось. Замер 17.09.2026 (FL10): предъявление трёх рёбер тела
-/// (дуг) вместо собственных входов признака СХЛОПЫВАЕТ признак — объём возвращается к пластине
-/// (<c>79999.99999999999</c>), <c>level=call_returned</c>. Замена при неизменном размере (1→1),
-/// наоборот, работает перенесёнными рёбрами (FL10x, <c>level=geometry_checked</c>).
-/// Отсюда: СОКРАЩЕНИЕ набора и ЗАМЕНА состава — разные операции с разной валютой, и одним полем
-/// <c>edge_refs</c> выражается только вторая.
-/// </para>
-/// <para>Пустой список — признак не удерживает ни одного входа; <c>null</c> — не прочитано.</para>
-/// </param>
-/// <param name="BaseObjectInputRefs">
-/// Ссылки реестра на СОБСТВЕННЫЕ входы признака — <c>input:&lt;hex&gt;</c>, по одной на элемент
-/// <c>IFillet.BaseObjects</c>, в том же порядке, что <paramref name="BaseObjectReferences"/>.
-/// </param>
-/// <remarks>
-/// Это и есть ВАЛЮТА СОКРАЩЕНИЯ, которой не хватало. Отличие от
-/// <paramref name="BaseObjectReferences"/> принципиальное и измеренное: там ЧИСЛА
-/// <c>IModelObject.Reference</c>, у которых строки реестра нет, поэтому в <c>edge_refs</c> они не
-/// подставляются по типу; здесь — строки реестра, выпущенные ЭТИМ сервером, поэтому их принимает
-/// <see cref="UpdateFeatureCommand.BaseObjectRefs"/>. Правило одно и то же для всех ссылок сервера:
-/// клиент не сочиняет и не переносит идентификаторы, а подставляет выданные.
-/// <para>
-/// Ссылки минтит ЧТЕНИЕ признака (<c>kompas_get_feature</c>) на текущую ревизию документа, поэтому
-/// они стареют ровно так же, как <c>edge:</c>-ссылки: после мутации <c>REVISION_CONFLICT</c> или
-/// <c>STALE_REFERENCE</c> заставит перечитать контекст, а не подставить устаревшее число.
-/// </para>
-/// <para>
-/// <c>null</c> — входы не прочитаны (мост API7 не построен или скруглений с тем же радиусом
-/// несколько); пустой список — признак не удерживает ни одного входа. Это разные состояния, как и у
-/// <paramref name="BaseObjectReferences"/>.
-/// </para>
-/// </remarks>
+/// <summary>Fillet parameters. The radius is read from API7 (<c>IFillet.Radius1</c>): in API5
+/// <c>ksFilletDefinition.radius</c> is declared and readable but NOT applied when written to an existing
+/// feature (MEASURED by row FL04r), so the live model is the authoritative source. An empty field means
+/// "not read" (the API7 bridge was not built or there are several fillets), not "zero".</summary>
+/// <param name="BaseObjectReferences">Feature input references — <c>IModelObject.Reference</c> of each
+/// element of <c>IFillet.BaseObjects</c>. An observable of the composition: it shows what the feature was
+/// assembled from, and it also serves as a diagnostic when editing the set.
+/// <para>It is NOT the address for editing the set: <c>edge_refs</c> accepts registry strings of the form
+/// <c>edge:&lt;hex&gt;</c>, whereas here lie NUMBERS <c>IModelObject.Reference</c> that have no registry
+/// string, so they cannot be substituted into <c>edge_refs</c> by type, whatever the context.
+/// History: docs/decisions/contracts.md#fillet-base-object-references</para>
+/// <para><b>The MEASURED reason why body edges are not enough to edit the set.</b> After filleting all
+/// corners the body has 24 edges: 16 lines and 8 arcs of length π·3/2 (a quarter circle R3). All eight
+/// "vertical" lines lie on the tangent seams of the cylinders <c>(±47,±40)</c> and <c>(±50,±37)</c>;
+/// there are ZERO corner vertical edges in the topology (<c>len(corner_edges) = 0</c>) — the fillet
+/// itself recalled them.</para>
+/// <para><b>And most importantly: feature inputs and body edges are NOT interchangeable as a write
+/// currency.</b> Probe H-2 reduced the set (4→3, 4→2) with objects read FROM <c>BaseObjects</c> — no body
+/// edge was searched for or carried over. MEASURED on 17.09.2026 (FL10): presenting three body edges
+/// (arcs) instead of the feature's own inputs COLLAPSES the feature — the volume returns to the plate
+/// (<c>79999.99999999999</c>), <c>level=call_returned</c>. A replacement at unchanged size (1→1), by
+/// contrast, works with carried-over edges (FL10x, <c>level=geometry_checked</c>). Hence: REDUCING the
+/// set and REPLACING the composition are different operations with different currencies, and the single
+/// field <c>edge_refs</c> expresses only the latter.</para>
+/// <para>An empty list — the feature holds no input; <c>null</c> — not read.</para></param>
+/// <param name="BaseObjectInputRefs">Registry references to the feature's OWN inputs —
+/// <c>input:&lt;hex&gt;</c>, one per element of <c>IFillet.BaseObjects</c>, in the same order as
+/// <paramref name="BaseObjectReferences"/>.</param>
+/// <remarks>This is the REDUCTION currency that was missing. The difference from
+/// <paramref name="BaseObjectReferences"/> is fundamental and MEASURED: there lie NUMBERS
+/// <c>IModelObject.Reference</c> with no registry string, so they are not substituted into
+/// <c>edge_refs</c> by type; here are registry strings minted by THIS server, so
+/// <see cref="UpdateFeatureCommand.BaseObjectRefs"/> accepts them. The rule is the same for all server
+/// references: the client does not invent or carry over identifiers, it substitutes the issued ones.
+/// <para>The references are minted by READING the feature (<c>kompas_get_feature</c>) against the current
+/// document revision, so they age exactly like <c>edge:</c> references: after a mutation
+/// <c>REVISION_CONFLICT</c> or <c>STALE_REFERENCE</c> forces a context re-read rather than substituting a
+/// stale number.</para>
+/// <para><c>null</c> — the inputs were not read (the API7 bridge was not built or there are several
+/// fillets with the same radius); an empty list — the feature holds no input. These are different states,
+/// as with <paramref name="BaseObjectReferences"/>.</para></remarks>
 public sealed record FilletDto(
     double? RadiusMm,
     double? Radius2Mm,
@@ -1652,17 +1376,14 @@ public sealed record FilletDto(
     IReadOnlyList<int>? BaseObjectReferences = null,
     IReadOnlyList<string>? BaseObjectInputRefs = null);
 
-/// <summary>
-/// Опора признака B3, прочитанная ИЗ МОДЕЛИ: точка, единичная нормаль и — отдельно — три точки
-/// построения, из которых нормаль и выведена.
-/// </summary>
-/// <remarks>
-/// Три точки публикуются намеренно. Нормаль — величина ПРОИЗВОДНАЯ (векторное произведение), и
-/// читающий вправе видеть, из чего она получена, а не принимать её на веру. Измерено 18.09.2026
-/// (проба <c>--split</c>, шаг SP.10): у плоскости <c>x = 10</c> чтение возвращает ровно
-/// <c>(10,0,0)</c>, <c>(10,1,0)</c>, <c>(10,0,1)</c> и нормаль <c>(1,0,0)</c>, а у плоскости
-/// <c>x = 15</c> — те же три точки со сдвигом, то есть чтение различает разные опоры.
-/// </remarks>
+/// <summary>Support of a B3 feature, read FROM THE MODEL: a point, a unit normal, and — separately — the
+/// three construction points the normal is derived from.</summary>
+/// <remarks>The three points are published deliberately. The normal is a DERIVED quantity (a cross
+/// product), and a reader is entitled to see what it was derived from rather than take it on faith.
+/// MEASURED on 18.09.2026 (probe <c>--split</c>, step SP.10): for the plane <c>x = 10</c> the read
+/// returns exactly <c>(10,0,0)</c>, <c>(10,1,0)</c>, <c>(10,0,1)</c> and normal <c>(1,0,0)</c>, and for
+/// the plane <c>x = 15</c> the same three points shifted, so the read distinguishes different
+/// supports.</remarks>
 public sealed record SupportPlaneDto(
     IReadOnlyList<double> PointMm,
     IReadOnlyList<double> NormalMm,
@@ -1670,80 +1391,61 @@ public sealed record SupportPlaneDto(
     IReadOnlyList<double> Point2Mm,
     IReadOnlyList<double> Point3Mm);
 
-/// <summary>
-/// Параметры признака B3 (булева операция, разделение, отсечение, изменение положения),
-/// прочитанные ИЗ МОДЕЛИ — действие <c>read</c> наряда §7.
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Заполняются только поля своего семейства</b>; у остальных семейств они <c>null</c>. Пустое
-/// поле означает «не прочитано», а не ноль, и причина попадает в
-/// <see cref="UnreadableParameters"/>.
-/// </para>
-/// <para>
-/// <b>Из пяти полей преобразования положения не публикуется ОДНО:</b>
-/// <see cref="RepositionAxisPointMm"/>. У точки оси нет документированного члена ни у одного
-/// интерфейса цепочки, и она не является свойством размещения — поворот вокруг любой точки ОДНОЙ
-/// И ТОЙ ЖЕ прямой даёт то же размещение, поэтому из прочитанных ориентации и переноса
-/// восстанавливается ПРЕДСТАВИТЕЛЬ прямой, а не исходный вход. Поле всегда <c>null</c> и всегда
-/// названо в <see cref="UnreadableParameters"/>: у поворота — «не читается», у переноса —
-/// «неприменимо». Остальные четыре (<see cref="RepositionKind"/>, <see cref="RepositionVectorMm"/>,
-/// <see cref="RepositionAxisDirectionMm"/>, <see cref="RepositionAngleDeg"/>) читаются
-/// документированным параметрическим маршрутом: <c>OrientationType = ksEulerCorners</c> +
-/// <c>LocalCSParameters → ILocalCSEulerParam</c> для ориентации и <c>ParameterType = ksPDisplace</c>
-/// + <c>Parameters → IPoint3DParamDisplace</c> для переноса. Маршрут измерен шагом RP.25 пробы
-/// <c>--reposition-params</c> (прогон <c>a336120926fc4652a8bf737562568271</c>): и тройка углов, и
-/// смещение читаются с ПЕРЕОТКРЫТОГО документа ДО сборки и ДО всякой записи.
-/// </para>
-/// <para>
-/// <b>Признак, записанный матрицей, не читается — и это отказ, а не нули.</b> Такой признак
-/// опознаётся по ПРОЧИТАННОМУ <c>OrientationType = 0 (ksAxisOrientation)</c>: параметров ориентации
-/// у него нет, а матричный вид размещения на переоткрытом документе единичен при сохранённой
-/// геометрии, поэтому вывести из него вид нельзя — именно это давало ложный
-/// <c>RepositionKind = "translate"</c> у записанного поворота. Существующие признаки не
-/// преобразуются молча: все пять полей называются непрочитанными с этой причиной.
-/// </para>
-/// </remarks>
+/// <summary>Parameters of a B3 feature (boolean, split, cut, reposition), read FROM THE MODEL — the
+/// <c>read</c> action of order §7.</summary>
+/// <remarks><para><b>Only fields of its own family are filled</b>; for other families they are
+/// <c>null</c>. An empty field means "not read", not zero, and the reason goes into
+/// <see cref="UnreadableParameters"/>.</para>
+/// <para><b>Of the five reposition fields, ONE is not published:</b>
+/// <see cref="RepositionAxisPointMm"/>. An axis point has no documented member in any interface of the
+/// chain, and it is not a placement property — a rotation about any point of ONE AND THE SAME line gives
+/// the same placement, so what is reconstructed from the read orientation and translation is a
+/// REPRESENTATIVE of the line, not the original input. The field is always <c>null</c> and always named
+/// in <see cref="UnreadableParameters"/>: for a rotation — "not readable", for a translation — "not
+/// applicable". The other four (<see cref="RepositionKind"/>, <see cref="RepositionVectorMm"/>,
+/// <see cref="RepositionAxisDirectionMm"/>, <see cref="RepositionAngleDeg"/>) are read by the documented
+/// parametric route: <c>OrientationType = ksEulerCorners</c> + <c>LocalCSParameters →
+/// ILocalCSEulerParam</c> for orientation and <c>ParameterType = ksPDisplace</c> + <c>Parameters →
+/// IPoint3DParamDisplace</c> for translation. The route was MEASURED at step RP.25 of probe
+/// <c>--reposition-params</c> (run <c>a336120926fc4652a8bf737562568271</c>): both the triple of angles and
+/// the displacement are read from a REOPENED document BEFORE assembly and BEFORE any write.</para>
+/// <para><b>A feature written by a matrix is not readable — and this is a refusal, not zeros.</b> Such a
+/// feature is recognized by the READ <c>OrientationType = 0 (ksAxisOrientation)</c>: it has no
+/// orientation parameters, and the matrix form of placement on a reopened document is unit while the
+/// geometry is preserved, so the kind cannot be derived from it — this is exactly what produced a false
+/// <c>RepositionKind = "translate"</c> for a written rotation. Existing features are not silently
+/// converted: all five fields are named unreadable with this reason.</para></remarks>
 public sealed record SolidFeatureDto(
-    /// <summary>Вид булевой операции: <c>union</c>, <c>difference</c> или <c>intersect</c>.</summary>
+    /// <summary>Boolean operation kind: <c>union</c>, <c>difference</c> or <c>intersect</c>.</summary>
     string? Operation = null,
-    /// <summary>Сохраняется ли инструмент отдельным телом (<c>IBoolean.SaveCopyModifyObjects</c>).</summary>
+    /// <summary>Whether the tool is kept as a separate body (<c>IBoolean.SaveCopyModifyObjects</c>).</summary>
     bool? KeepTools = null,
-    /// <summary>Опора разделения либо отсечения: точка, нормаль и три точки построения.</summary>
+    /// <summary>Support of the split or cut: point, normal and three construction points.</summary>
     SupportPlaneDto? Plane = null,
-    /// <summary>Какая сторона осталась у отсечения (<c>ICut.Direction</c>): true — сторона нормали.</summary>
+    /// <summary>Which side remained in the cut (<c>ICut.Direction</c>): true — the normal side.</summary>
     bool? KeepSide = null,
-    /// <summary>
-    /// Вид преобразования положения: <c>translate</c> либо <c>rotate</c>. Читается из параметров
-    /// размещения: единичный прочитанный поворот при прочитанном переносе — перенос, неединичный —
-    /// поворот (см. remarks).
-    /// </summary>
+    /// <summary>Kind of the reposition: <c>translate</c> or <c>rotate</c>. Read from the placement
+    /// parameters: a unit read rotation with a read translation is a translation, a non-unit one is a
+    /// rotation (see remarks).</summary>
     string? RepositionKind = null,
-    /// <summary>
-    /// Вектор переноса, мм. Читается у переноса (<c>ksPDisplace</c> + <c>IPoint3DParamDisplace</c>);
-    /// у поворота <c>null</c> и назван неприменимым — контракт поворота вектора не принимает.
-    /// </summary>
+    /// <summary>Translation vector, mm. Read for a translation (<c>ksPDisplace</c> +
+    /// <c>IPoint3DParamDisplace</c>); for a rotation <c>null</c> and named not applicable — the rotation
+    /// contract does not accept a vector.</summary>
     IReadOnlyList<double>? RepositionVectorMm = null,
-    /// <summary>
-    /// Точка на оси поворота, мм. ВСЕГДА null: у поворота не читается (документированного члена нет,
-    /// и она не является свойством размещения), у переноса неприменима (см. remarks).
-    /// </summary>
+    /// <summary>Point on the rotation axis, mm. ALWAYS null: for a rotation it is not readable (no
+    /// documented member, and it is not a placement property), for a translation it is not applicable (see
+    /// remarks).</summary>
     IReadOnlyList<double>? RepositionAxisPointMm = null,
-    /// <summary>
-    /// Единичное направление оси поворота — читается у поворота; у переноса <c>null</c>.
-    /// </summary>
+    /// <summary>Unit direction of the rotation axis — read for a rotation; <c>null</c> for a
+    /// translation.</summary>
     IReadOnlyList<double>? RepositionAxisDirectionMm = null,
-    /// <summary>
-    /// Угол поворота в градусах — читается у поворота; у переноса <c>null</c>.
-    /// </summary>
+    /// <summary>Rotation angle in degrees — read for a rotation; <c>null</c> for a translation.</summary>
     double? RepositionAngleDeg = null,
-    /// <summary>
-    /// Имена непрочитанных параметров с ИЗМЕРЕННОЙ причиной. Непустой список — это не отказ чтения,
-    /// а его граница: остальные поля при этом заполнены.
-    /// </summary>
+    /// <summary>Names of unread parameters with the MEASURED reason. A non-empty list is not a read
+    /// failure but its boundary: the other fields are filled.</summary>
     IReadOnlyList<string>? UnreadableParameters = null);
 
-/// <summary>Что сервер прочитал из определения существующего признака (docs/05 §7 kompas_get_feature).</summary>
+/// <summary>What the server read from the definition of an existing feature (docs/05 §7 kompas_get_feature).</summary>
 public sealed record FeatureReadDto(
     ReferenceDto FeatureRef,
     string Family,
@@ -1761,197 +1463,149 @@ public sealed record FeatureReadDto(
     string? OwnerFeatureName,
     ChamferDto? Chamfer,
     VerificationDto Verification,
-    /// <summary>
-    /// Параметры скругления. Хвостовым параметром, чтобы не сдвигать позиционные аргументы у
-    /// остальных семейств: поле заполняется только для <c>family = "fillet"</c> и у прочих null.
-    /// </summary>
+    /// <summary>Fillet parameters. A trailing parameter so as not to shift positional arguments of the
+    /// other families: the field is filled only for <c>family = "fillet"</c> and is null otherwise.</summary>
     FilletDto? Fillet = null,
-    /// <summary>
-    /// Параметры родного отверстия. Тоже хвостовым: заполняется только для <c>family = "hole"</c>.
-    /// Читается целиком из API7 (<c>IHole3D</c> + <c>HoleParameters</c> приведённые к своему
-    /// режиму), потому что в API5 определения отверстия не существует физически — измерено
-    /// 16.09.2026: среди 67 объявленных в вендорской обёртке определений есть
-    /// <c>ksChamferDefinition</c> и <c>ksFilletDefinition</c>, а <c>ksHoleDefinition</c> нет.
-    /// </summary>
+    /// <summary>Native-hole parameters. Also trailing: filled only for <c>family = "hole"</c>. Read
+    /// entirely from API7 (<c>IHole3D</c> + <c>HoleParameters</c> cast to its own mode), because in API5 a
+    /// hole definition does not exist physically — MEASURED on 16.09.2026: among the 67 definitions
+    /// declared in the vendor wrapper there are <c>ksChamferDefinition</c> and <c>ksFilletDefinition</c>,
+    /// but no <c>ksHoleDefinition</c>.</summary>
     HoleDto? Hole = null,
-    /// <summary>
-    /// Параметры вращения. Тоже хвостовым: заполняется только для <c>family = "rotation"</c> и у
-    /// прочих null. Читается из API7 (<c>IRotated</c>), потому что определения API5 у вращения нет
-    /// вовсе — <c>entity.GetDefinition()</c> возвращает null (измерено при приёмке SM-03).
-    /// </summary>
+    /// <summary>Rotation parameters. Also trailing: filled only for <c>family = "rotation"</c> and null
+    /// otherwise. Read from API7 (<c>IRotated</c>), because rotation has no API5 definition at all —
+    /// <c>entity.GetDefinition()</c> returns null (MEASURED during SM-03 acceptance).</summary>
     RotatedDto? Rotated = null,
-    /// <summary>
-    /// Параметры признаков B3. Тоже хвостовым: заполняется только для <c>family</c> из
-    /// {<c>boolean</c>, <c>split</c>, <c>cut_by_plane</c>, <c>reposition</c>} и у прочих null.
-    /// Читается из API7, потому что определения API5 у этих семейств нет вовсе —
-    /// <c>entity.GetDefinition()</c> возвращает null, а сами они опознаются по НОМЕРУ ПРИЗНАКА В
-    /// ДЕРЕВЕ (69 / 633 / 50 / 79), измеренному 18.09.2026 прибором
-    /// <c>scratch/b3-measure-feature-types.py</c>. Что читается и что нет — измерено пробами
-    /// <c>--boolean</c> (BO.2–BO.5, BO.10), <c>--split</c> (SP.10) и <c>--reposition</c>
-    /// (RP.8–RP.12); сводка — в docs/04_KOMPAS_API_NOTES.md §4.10.9.
-    /// </summary>
+    /// <summary>B3 feature parameters. Also trailing: filled only for a <c>family</c> of
+    /// {<c>boolean</c>, <c>split</c>, <c>cut_by_plane</c>, <c>reposition</c>} and null otherwise. Read from
+    /// API7, because these families have no API5 definition at all — <c>entity.GetDefinition()</c> returns
+    /// null, and they are recognized by the FEATURE NUMBER IN THE TREE (69 / 633 / 50 / 79), MEASURED on
+    /// 18.09.2026 with instrument <c>scratch/b3-measure-feature-types.py</c>. What is and is not read was
+    /// MEASURED by probes <c>--boolean</c> (BO.2–BO.5, BO.10), <c>--split</c> (SP.10) and
+    /// <c>--reposition</c> (RP.8–RP.12); the summary is in docs/04_KOMPAS_API_NOTES.md §4.10.9.</summary>
     SolidFeatureDto? Solid = null,
-    /// <summary>
-    /// Параметры кинематической операции. Тоже хвостовым: заполняется только для
-    /// <c>family = "sweep"</c> и у прочих null.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Читается из ДЕРЕВА, и номер типа в дереве не равен номеру создания.</b> Измерено
-    /// 20.09.2026 (проба <c>--b5</c>, шаг B5.12): признак, созданный <c>NewEntity(45)</c>
-    /// (<c>o3d_baseEvolution</c>), виден в дереве под номером <b>46</b>
-    /// (<c>o3d_bossEvolution</c>), а его определение отвечает интерфейсу
-    /// <c>ksBossEvolutionDefinition</c> — <b>не</b> <c>ksBaseEvolutionDefinition</c>. Это тот же
-    /// класс расхождения, что уже измерен у отверстия (создаётся 52, в дереве 583) и у вращения
-    /// (создаётся 27, в дереве 584): опознавать семейство по номеру типа из ответа создания нельзя.
-    /// </para>
-    /// <para>
-    /// Поэтому семейство опознаётся <b>по интерфейсу определения</b>, и принимаются оба —
-    /// <c>ksBossEvolutionDefinition</c> и <c>ksBaseEvolutionDefinition</c>: какой из них достанется,
-    /// зависит от того, чем признак создан, и это измеряется, а не предполагается.
-    /// </para>
-    /// <para>
-    /// Прочитанные величины и их сверка на шаге B5.12: <c>sketchShiftType</c> = 2 (записано
-    /// ортогонально), <c>PathPartArray()</c> = 1 часть, <c>GetPathLength(1)</c> = 100 мм при
-    /// траектории 100 мм, <c>GetSketch()</c> отдаёт объект. <c>OperationResult</c> живёт только в
-    /// API7 (<c>IEvolution</c>): из коллекции документа прочитано значение <b>1</b>; если коллекция
-    /// недоступна или пуста, поле остаётся null — «не прочитано», а не ноль.
-    /// </para>
-    /// </remarks>
+    /// <summary>Sweep parameters. Also trailing: filled only for <c>family = "sweep"</c> and null
+    /// otherwise.</summary>
+    /// <remarks><para><b>Read from the TREE, and the tree type number does not equal the creation
+    /// number.</b> MEASURED on 20.09.2026 (probe <c>--b5</c>, step B5.12): a feature created by
+    /// <c>NewEntity(45)</c> (<c>o3d_baseEvolution</c>) appears in the tree under number <b>46</b>
+    /// (<c>o3d_bossEvolution</c>), and its definition answers the interface <c>ksBossEvolutionDefinition</c>
+    /// — <b>not</b> <c>ksBaseEvolutionDefinition</c>. This is the same class of discrepancy already
+    /// measured for the hole (created 52, in tree 583) and rotation (created 27, in tree 584): the family
+    /// cannot be recognized by the type number from the creation answer.</para>
+    /// <para>The family is therefore recognized <b>by the definition interface</b>, and both are
+    /// accepted — <c>ksBossEvolutionDefinition</c> and <c>ksBaseEvolutionDefinition</c>: which one you get
+    /// depends on what created the feature, and this is measured, not assumed.</para>
+    /// <para>Read values and their check at step B5.12: <c>sketchShiftType</c> = 2 (written orthogonal),
+    /// <c>PathPartArray()</c> = 1 part, <c>GetPathLength(1)</c> = 100 mm for a 100 mm path,
+    /// <c>GetSketch()</c> returns an object. <c>OperationResult</c> lives only in API7
+    /// (<c>IEvolution</c>): the value <b>1</b> was read from the document collection; if the collection is
+    /// unavailable or empty, the field stays null — "not read", not zero.</para></remarks>
     SweepDto? Sweep = null,
-    /// <summary>
-    /// Параметры элемента по сечениям. Хвостовым: только для <c>family = "loft"</c>.
-    /// </summary>
-    /// <remarks>
-    /// Измерено 20.09.2026 (шаг B5.12): признак, созданный маршрутом адаптера
-    /// (<c>ILofts.Add(o3d_bossLoft = 31)</c>), виден в дереве под тем же номером <b>31</b>, а его
-    /// определение отвечает интерфейсу <c>ksBossLoftDefinition</c>. Параметры читаются из
-    /// <b>коллекции документа</b> (<c>IModelContainer.Lofts</c> → <c>ILofts</c>), а не из ручки
-    /// создания: <c>Count</c> = 1, <c>Loft(0)</c> отдал <c>Sketchs</c> = 2 элемента,
-    /// <c>Closed</c> = False, <c>CouplingsCount</c> = 0, <c>BuildingType(true)</c> = 0.
-    /// </remarks>
+    /// <summary>Loft parameters. Trailing: only for <c>family = "loft"</c>.</summary>
+    /// <remarks>MEASURED on 20.09.2026 (step B5.12): a feature created by the adapter route
+    /// (<c>ILofts.Add(o3d_bossLoft = 31)</c>) appears in the tree under the same number <b>31</b>, and its
+    /// definition answers the interface <c>ksBossLoftDefinition</c>. The parameters are read from the
+    /// <b>document collection</b> (<c>IModelContainer.Lofts</c> → <c>ILofts</c>), not from the creation
+    /// handle: <c>Count</c> = 1, <c>Loft(0)</c> returned <c>Sketchs</c> = 2 elements, <c>Closed</c> =
+    /// False, <c>CouplingsCount</c> = 0, <c>BuildingType(true)</c> = 0.</remarks>
     LoftDto? Loft = null,
-    /// <summary>
-    /// Параметры оболочки. Хвостовым: только для <c>family = "shell"</c>.
-    /// </summary>
-    /// <remarks>
-    /// Измерено 20.09.2026 (шаг B5.12): признак, созданный <c>NewEntity(43)</c>, виден в дереве под
-    /// номером <b>43</b> (<c>o3d_shellOperation</c>), определение отвечает <c>ksShellDefinition</c>,
-    /// и с него читаются <c>thickness</c> = 2, <c>thinType</c> = true, <c>FaceArray</c> = 1 грань —
-    /// ровно записанное. Из API7 (<c>IShells</c> → <c>IShell</c>) те же величины видны как
-    /// <c>Thickness</c> = 2, <c>ThinType</c> = <c>dt_reverse</c> (внутрь), <c>DeletedFaces</c> = 1:
-    /// две независимые половины одной постановки.
-    /// </remarks>
+    /// <summary>Shell parameters. Trailing: only for <c>family = "shell"</c>.</summary>
+    /// <remarks>MEASURED on 20.09.2026 (step B5.12): a feature created by <c>NewEntity(43)</c> appears in
+    /// the tree under number <b>43</b> (<c>o3d_shellOperation</c>), its definition answers
+    /// <c>ksShellDefinition</c>, and from it are read <c>thickness</c> = 2, <c>thinType</c> = true,
+    /// <c>FaceArray</c> = 1 face — exactly what was written. From API7 (<c>IShells</c> → <c>IShell</c>) the
+    /// same quantities appear as <c>Thickness</c> = 2, <c>ThinType</c> = <c>dt_reverse</c> (inward),
+    /// <c>DeletedFaces</c> = 1: two independent halves of one setup.</remarks>
     ShellDto? Shell = null);
 
 public sealed record GetFeatureCommand
 {
-    /// <summary>Ссылка <c>feature:</c> из kompas_list_features или результата мутации. Её ревизия и
-    /// сверяется — отдельного expected_revision у чтения нет по той же причине, что у measure.</summary>
+    /// <summary>A <c>feature:</c> reference from kompas_list_features or a mutation result. Its revision
+    /// is what is checked — a read has no separate expected_revision for the same reason as measure.</summary>
     public required string FeatureRef { get; init; }
 }
 
-/// <summary>
-/// Чтение параметрической определённости существующего эскиза
-/// (<see cref="WorkerCommands.SketchStatus"/>, <c>kompas_get_sketch_status</c>).
-/// </summary>
-/// <remarks>
-/// Отдельного <c>expected_revision</c> у чтения нет — по той же причине, что у measure и
-/// get_feature: ревизия, для которой выпущена ссылка, уже лежит в реестре и сверяется там. Молчаливое
-/// «возьмём текущую» здесь было бы ровно тем, чего контракт требует не делать.
-/// </remarks>
+/// <summary>Reading the parametric definiteness of an existing sketch
+/// (<see cref="WorkerCommands.SketchStatus"/>, <c>kompas_get_sketch_status</c>).</summary>
+/// <remarks>A read has no separate <c>expected_revision</c> — for the same reason as measure and
+/// get_feature: the revision the reference was minted for already lies in the registry and is checked
+/// there. A silent "take the current one" here would be exactly what the contract forbids.</remarks>
 public sealed record GetSketchStatusCommand
 {
-    /// <summary>
-    /// Ссылка <c>sketch:</c>, выданная этим сервером (kompas_create_sketch или чтение признака).
-    /// Активный документ, текущее выделение и «первый попавшийся эскиз» не используются: адресация
-    /// только явная, а ревизия — из реестра ссылок.
-    /// </summary>
+    /// <summary>A <c>sketch:</c> reference minted by this server (kompas_create_sketch or a feature read).
+    /// The active document, the current selection and "the first sketch that comes up" are not used:
+    /// addressing is explicit only, and the revision comes from the reference registry.</summary>
     public required string SketchRef { get; init; }
 }
 
-/// <summary>
-/// Нормализованный статус определённости эскиза — то, что сервер действительно прочитал, а не то,
-/// что он предположил.
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Соответствие нативным состояниям измерено, а не назначено</b> (проба S, прогон
-/// <c>82880ed0</c>; значения перечисления сверены с объявленными шагом S.3):
+/// <summary>Normalized sketch-definiteness status — what the server actually read, not what it
+/// assumed.</summary>
+/// <remarks><para><b>The mapping to native states is MEASURED, not assigned</b> (probe S, run
+/// <c>82880ed0</c>; the enum values were checked against those declared at step S.3):
 /// <list type="bullet">
 /// <item><c>ksStateWellConstrained</c> (1) → <see cref="FullyDefined"/>;</item>
 /// <item><c>ksStateUnderConstrained</c> (2) → <see cref="UnderDefined"/>;</item>
-/// <item><c>ksStateUnknown</c> (0) → <see cref="Unknown"/> — КОМПАС сам не установил статус
-/// (получено и на пустом эскизе, и на 11 эскизах поставки);</item>
-/// <item><c>ksStateUnresolvedRedundancy</c> (3) → <see cref="NeedsAttention"/> — объявлено, но
-/// живой контроль <b>не получен</b>; публикуется консервативно (см.
+/// <item><c>ksStateUnknown</c> (0) → <see cref="Unknown"/> — KOMPAS itself did not establish a status
+/// (obtained both on an empty sketch and on 11 shipped sketches);</item>
+/// <item><c>ksStateUnresolvedRedundancy</c> (3) → <see cref="NeedsAttention"/> — declared, but live
+/// control was <b>not obtained</b>; published conservatively (see
 /// <see cref="SketchStatusResult.Limitations"/>).</item>
-/// </list>
-/// </para>
-/// <para>
-/// <b>Числа степеней свободы API не отдаёт.</b> <c>ISketch.ConstraintsState</c> возвращает статус, а
-/// не счётчик, поэтому <see cref="SketchStatusResult.DegreesOfFreedom"/> — всегда <c>null</c>, и
-/// вычислять его из числа размеров запрещено: ограничения связывают объекты между собой, а не
-/// складываются.
-/// </para>
-/// </remarks>
+/// </list></para>
+/// <para><b>The API does not return degrees of freedom.</b> <c>ISketch.ConstraintsState</c> returns a
+/// status, not a counter, so <see cref="SketchStatusResult.DegreesOfFreedom"/> is always <c>null</c>, and
+/// deriving it from the number of dimensions is forbidden: constraints relate objects to each other
+/// rather than summing.</para></remarks>
 public enum SketchDefinitionStatus
 {
-    /// <summary>Состояние не установлено. <c>ksStateUnknown</c> (0) либо неизвестное значение enum.</summary>
+    /// <summary>State not established. <c>ksStateUnknown</c> (0) or an unknown enum value.</summary>
     Unknown,
 
-    /// <summary>Полностью определён: «+». <c>ksStateWellConstrained</c> (1).</summary>
+    /// <summary>Fully defined: «+». <c>ksStateWellConstrained</c> (1).</summary>
     FullyDefined,
 
-    /// <summary>Недоопределён: «−». <c>ksStateUnderConstrained</c> (2).</summary>
+    /// <summary>Under-defined: «−». <c>ksStateUnderConstrained</c> (2).</summary>
     UnderDefined,
 
-    /// <summary>Требует внимания: «!». <c>ksStateUnresolvedRedundancy</c> (3), живой контроль не получен.</summary>
+    /// <summary>Needs attention: «!». <c>ksStateUnresolvedRedundancy</c> (3), live control not obtained.</summary>
     NeedsAttention,
 }
 
-/// <summary>
-/// Снимок определённости эскиза. <see cref="IsFullyDefined"/> nullable намеренно: <c>null</c>
-/// означает «достоверно не установлено», и подменять его <c>false</c> запрещено — «неопределено» и
-/// «недоопределён» это разные ответы.
-/// </summary>
-/// <param name="DefinitionStatus">Нормализованный статус.</param>
-/// <param name="IsFullyDefined">Только <c>true</c>/<c>false</c>/<c>null</c>; <c>null</c> при
-/// <see cref="SketchDefinitionStatus.Unknown"/> и <see cref="SketchDefinitionStatus.NeedsAttention"/>.</param>
-/// <param name="DegreesOfFreedom">Всегда <c>null</c>: подтверждённый маршрут отдаёт статус, а не
-/// число. Не вычисляется из числа размеров и не подставляется нулём.</param>
-/// <param name="Diagnostics">Понятные причины: почему статус именно такой и что помешало.</param>
-/// <param name="Limitations">Границы достоверности ответа, названные явно.</param>
+/// <summary>Snapshot of sketch definiteness. <see cref="IsFullyDefined"/> is nullable deliberately:
+/// <c>null</c> means "not reliably established", and substituting <c>false</c> for it is forbidden —
+/// "indeterminate" and "under-defined" are different answers.</summary>
+/// <param name="DefinitionStatus">Normalized status.</param>
+/// <param name="IsFullyDefined">Only <c>true</c>/<c>false</c>/<c>null</c>; <c>null</c> for
+/// <see cref="SketchDefinitionStatus.Unknown"/> and <see cref="SketchDefinitionStatus.NeedsAttention"/>.</param>
+/// <param name="DegreesOfFreedom">Always <c>null</c>: the confirmed route returns a status, not a number.
+/// Not derived from the number of dimensions and not substituted with zero.</param>
+/// <param name="Diagnostics">Understandable reasons: why the status is what it is and what prevented
+/// it.</param>
+/// <param name="Limitations">Bounds of the answer's reliability, named explicitly.</param>
 public sealed record SketchStatusResult(
     SketchDefinitionStatus DefinitionStatus,
     bool? IsFullyDefined,
     int? DegreesOfFreedom,
     IReadOnlyList<string> Diagnostics,
     IReadOnlyList<string> Limitations,
-    /// <summary>
-    /// Сырое значение <c>ksConstraintsStateEnum</c>, как его вернул КОМПАС. <c>null</c> — вызов не
-    /// дошёл. Хранится отдельно от нормализованного статуса, чтобы «неизвестное значение enum» и
-    /// «КОМПАС ответил <c>ksStateUnknown</c>» не сливались в один <c>unknown</c>.
-    /// </summary>
+    /// <summary>Raw <c>ksConstraintsStateEnum</c> value as KOMPAS returned it. <c>null</c> — the call did
+    /// not arrive. Kept separately from the normalized status so "unknown enum value" and "KOMPAS answered
+    /// <c>ksStateUnknown</c>" do not merge into one <c>unknown</c>.</summary>
     int? RawState = null,
-    /// <summary>Имя состояния, как оно объявлено в сборке констант. <c>null</c> при неизвестном числе.</summary>
+    /// <summary>State name as declared in the constants assembly. <c>null</c> for an unknown number.</summary>
     string? NativeStateName = null,
-    /// <summary>Имя эскиза в модели — чтобы человек мог убедиться, что прочитан именно тот эскиз.</summary>
+    /// <summary>Sketch name in the model — so a human can confirm that exactly that sketch was read.</summary>
     string? SketchName = null,
-    /// <summary>Каким путём объект дошёл до <c>ISketch</c>: «ISketch напрямую» либо «IModelObject → ISketch».</summary>
+    /// <summary>By which route the object reached <c>ISketch</c>: "ISketch directly" or "IModelObject → ISketch".</summary>
     string? TransferRoute = null)
 {
-    /// <summary>
-    /// Раскрыть нормализованный статус из сырого значения перечисления. Чистая функция — держится
-    /// отдельно от COM, чтобы её можно было проверить тестом без КОМПАСа, и отдельно от
-    /// <see cref="DegreesOfFreedom"/>, которого у маршрута нет вовсе.
-    /// </summary>
-    /// <remarks>
-    /// Значение 3 нормализуется в <see cref="SketchDefinitionStatus.NeedsAttention"/> только когда
-    /// <paramref name="redundancyVerified"/> истинно. Пока живой контроль не получен, вызывающий
-    /// обязан передать <c>false</c>, и значение 3 честно остаётся <see cref="SketchDefinitionStatus.Unknown"/>:
-    /// «объявлено в перечислении» — не то же самое, что «измерено на живой модели».
-    /// </remarks>
+    /// <summary>Expand the normalized status from the raw enum value. A pure function — kept separate from
+    /// COM so it can be tested without KOMPAS, and separate from <see cref="DegreesOfFreedom"/>, which the
+    /// route does not have at all.</summary>
+    /// <remarks>The value 3 normalizes to <see cref="SketchDefinitionStatus.NeedsAttention"/> only when
+    /// <paramref name="redundancyVerified"/> is true. Until live control is obtained the caller MUST pass
+    /// <c>false</c>, and the value 3 honestly stays <see cref="SketchDefinitionStatus.Unknown"/>:
+    /// "declared in the enum" is not the same as "measured on a live model".</remarks>
     public static SketchStatusResult FromRawState(
         int? raw,
         bool redundancyVerified,
@@ -2008,679 +1662,496 @@ public sealed record SketchStatusResult(
     }
 }
 
-/// <summary>
-/// Правка параметров настоящего признака на месте (docs/05 §4.3: не «удалить и создать похожий»).
-/// Пока поддержано семейство выдачиваний; значение проверяется перечитыванием с нового
-/// объекта определения, а геометрия — измерением объёма.
-/// </summary>
+/// <summary>Editing the parameters of a real feature in place (docs/05 §4.3: not "delete and create a
+/// similar one"). Extrusions are supported for now; the value is checked by re-reading from the new
+/// definition object, and the geometry by measuring the volume.</summary>
 public sealed record UpdateFeatureCommand
 {
     public required string FeatureRef { get; init; }
 
     public required long ExpectedRevision { get; init; }
 
-    /// <summary>Глубина для end_condition=blind. Ожидается сторона, а не «изменить всё подряд».</summary>
+    /// <summary>Depth for end_condition=blind. A side is expected, not "change everything at once".</summary>
     public double? DepthMm { get; init; }
 
     public ExtrudeEndCondition? EndCondition { get; init; }
 
-    /// <summary>
-    /// Новый режим движения сечения кинематической операции (family=<c>sweep</c>). Отдельное поле, а
-    /// не общий <c>direction</c>: у фаски <c>direction</c> — сторона фаски, у оболочки — сторона
-    /// стенки, и одно имя для трёх разных предметов сделало бы ответ неоднозначным.
-    /// </summary>
-    /// <remarks>
-    /// <b>Маршрут измерен 20.09.2026</b> (проба <c>--b5</c>, шаг B5.13): на ОДНОМ признаке смена
-    /// режима <c>orthogonal → parallel → orthogonal</c> дала объёмы
-    /// <c>24674.011002723353 → 15707.963267948984 → 24674.011002723353</c>, а <c>sketchShiftType</c>
-    /// читался обратно 0 и 2. Постановка различающая только на ДУГЕ: на прямой траектории оба режима
-    /// дают одно тело.
-    /// </remarks>
+    /// <summary>New section-motion mode of a sweep (family=<c>sweep</c>). A separate field, not a shared
+    /// <c>direction</c>: for a chamfer <c>direction</c> is the chamfer side, for a shell the wall side, and
+    /// one name for three different things would make the answer ambiguous.</summary>
+    /// <remarks><b>Route MEASURED on 20.09.2026</b> (probe <c>--b5</c>, step B5.13): on ONE feature
+    /// changing the mode <c>orthogonal → parallel → orthogonal</c> gave volumes
+    /// <c>24674.011002723353 → 15707.963267948984 → 24674.011002723353</c>, and <c>sketchShiftType</c>
+    /// read back 0 and 2. The setup distinguishes only on an ARC: on a straight path both modes give one
+    /// body.</remarks>
     public SweepShiftMode? ShiftMode { get; init; }
 
-    /// <summary>
-    /// Новый набор сечений элемента по сечениям (family=<c>loft</c>), в порядке соединения.
-    /// </summary>
-    /// <remarks>
-    /// <b>Маршрут измерен 20.09.2026</b> (шаг B5.13): перепривязка сечений на уже построенном
-    /// признаке меняет геометрию — 40×40+20×20 дают <c>28000</c>, 40×40+40×40 дают призму
-    /// <c>48000</c>, возврат к прежнему набору возвращает <c>28000</c>.
-    /// <para>
-    /// <b>Поле <c>closed</c> здесь отсутствует намеренно, и это измеренный факт, а не пропуск.</b>
-    /// Запись <c>ILoft.Closed</c> на построенном признаке возвращает <c>Update() = True</c>, но
-    /// обратное чтение даёт <c>False</c>, а объём остаётся прежним: «принято» не означает
-    /// «применено». Поэтому замкнутость задаётся ТОЛЬКО при создании
-    /// (<c>kompas_loft.closed</c>), а не объявляется правимой здесь.
-    /// </para>
-    /// </remarks>
+    /// <summary>New set of loft sections (family=<c>loft</c>), in joining order.</summary>
+    /// <remarks><b>Route MEASURED on 20.09.2026</b> (step B5.13): rebinding sections on an already built
+    /// feature changes the geometry — 40×40+20×20 give <c>28000</c>, 40×40+40×40 give the prism
+    /// <c>48000</c>, returning to the previous set restores <c>28000</c>.
+    /// <para><b>The <c>closed</c> field is absent here deliberately, and this is a measured fact, not an
+    /// omission.</b> Writing <c>ILoft.Closed</c> on a built feature returns <c>Update() = True</c>, but the
+    /// read-back gives <c>False</c> and the volume stays the same: "accepted" does not mean "applied". So
+    /// closure is set ONLY at creation (<c>kompas_loft.closed</c>) and is not declared editable
+    /// here.</para></remarks>
     public IReadOnlyList<string>? SectionRefs { get; init; }
 
-    /// <summary>
-    /// Новый набор цепочек соответствия (family=<c>loft</c>) — <b>полная замена</b>, как и
-    /// <see cref="SectionRefs"/>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Почему отдельное поле, а не «оставить как было».</b> Цепочка описывает соответствие точек
-    /// КОНКРЕТНОГО набора сечений: <c>ICoupling.Count</c> — «количество сечений в цепочке»
-    /// (<c>icoupling_count.html</c>), а <c>PositionOffset(Index)</c> адресуется индексом сечения в
-    /// цепочке (<c>icoupling_positionoffset.html</c>). Поэтому после замены набора сечений прежняя
-    /// цепочка описывает уже не этот признак, и оставить её «как было» значило бы молча оставить
-    /// чужое соответствие. Если признак несёт цепочки, а правка меняет сечения и НЕ называет цепочки,
-    /// вызов отвергается именованным отказом; пустой список означает «без цепочек».
-    /// </para>
-    /// <para>
-    /// <b>Маршрут измерен 20.09.2026</b> (проба <c>--b5</c>, шаги B5.17 и B5.18): цепочка задаётся
-    /// <c>ILoft.AddCoupling()</c> → <c>ICoupling</c> → <c>PositionOffset(Index)</c>; на пирамиде
-    /// 40×40 → 20×20 при h = 30 смещения <c>0 / 0</c> дают <c>28000</c> (как без цепочки), смещение
-    /// <c>0 / 20</c> мм (25 % контура 80 мм) даёт <c>20000</c>, возврат даёт <c>28000</c>. Замена
-    /// цепочек выполняется <c>ClearCouplings()</c> + <c>AddCoupling()</c>; <c>ICoupling.Delete()</c>
-    /// измерен как работающий, но полная замена не зависит от того, в каком порядке удалять.
-    /// </para>
-    /// </remarks>
+    /// <summary>New set of coupling chains (family=<c>loft</c>) — a <b>full replacement</b>, as with
+    /// <see cref="SectionRefs"/>.</summary>
+    /// <remarks><para><b>Why a separate field rather than "leave as it was".</b> A chain describes the
+    /// point correspondence of a SPECIFIC section set: <c>ICoupling.Count</c> is «количество сечений в
+    /// цепочке» (<c>icoupling_count.html</c>), and <c>PositionOffset(Index)</c> is addressed by the
+    /// section index in the chain (<c>icoupling_positionoffset.html</c>). So after the section set is
+    /// replaced the old chain no longer describes this feature, and leaving it "as it was" would silently
+    /// keep a foreign correspondence. If the feature carries chains and an edit changes the sections and
+    /// does NOT name the chains, the call is rejected with a named refusal; an empty list means "no
+    /// chains".</para>
+    /// <para><b>Route MEASURED on 20.09.2026</b> (probe <c>--b5</c>, steps B5.17 and B5.18): a chain is
+    /// set by <c>ILoft.AddCoupling()</c> → <c>ICoupling</c> → <c>PositionOffset(Index)</c>; on a pyramid
+    /// 40×40 → 20×20 at h = 30 offsets <c>0 / 0</c> give <c>28000</c> (as without a chain), offset
+    /// <c>0 / 20</c> mm (25 % of the 80 mm contour) gives <c>20000</c>, reverting gives <c>28000</c>.
+    /// Chains are replaced by <c>ClearCouplings()</c> + <c>AddCoupling()</c>; <c>ICoupling.Delete()</c> was
+    /// MEASURED working, but a full replacement does not depend on the deletion order.</para></remarks>
     public IReadOnlyList<LoftCoupling>? Couplings { get; init; }
 
-    /// <summary>
-    /// Новая толщина стенки оболочки (family=<c>shell</c>), мм.
-    /// </summary>
-    /// <remarks>
-    /// <b>Маршрут измерен 20.09.2026</b> (шаг B5.13): на одном признаке <c>t = 2 → 4 → 4 → 2</c>
-    /// дало <c>21632 → 40256 → 53056 → 21632</c>, значения читались обратно. Третье число —
-    /// направление наружу при <c>t = 4</c>: внешний короб <c>108×88×14 = 133056</c> минус полость
-    /// <c>80000</c>. Правка несёт ОБА параметра режима — и толщину, и направление, — потому что
-    /// иначе «изменилось ровно запрошенное» неотличимо от «изменилось ещё и это».
-    /// </remarks>
+    /// <summary>New shell wall thickness (family=<c>shell</c>), mm.</summary>
+    /// <remarks><b>Route MEASURED on 20.09.2026</b> (step B5.13): on one feature <c>t = 2 → 4 → 4 → 2</c>
+    /// gave <c>21632 → 40256 → 53056 → 21632</c>, values read back. The third number is the outward
+    /// direction at <c>t = 4</c>: outer box <c>108×88×14 = 133056</c> minus the cavity <c>80000</c>. The
+    /// edit carries BOTH mode parameters — thickness and direction — because otherwise "exactly the
+    /// requested thing changed" is indistinguishable from "this changed too".</remarks>
     public double? ThicknessMm { get; init; }
 
-    /// <summary>
-    /// Новое направление стенки оболочки (family=<c>shell</c>): <c>true</c> — внутрь, <c>false</c> —
-    /// наружу. Отдельное поле, а не общий <c>direction</c> фаски.
-    /// </summary>
+    /// <summary>New shell wall direction (family=<c>shell</c>): <c>true</c> — inward, <c>false</c> —
+    /// outward. A separate field, not the chamfer's shared <c>direction</c>.</summary>
     public bool? ThinInward { get; init; }
 
-    /// <summary>
-    /// Новый НАБОР удаляемых граней оболочки (family=<c>shell</c>) — полная замена, а не добавление
-    /// к имеющимся: передаётся то, что должно остаться снятым. Грани — из
-    /// <c>kompas_read_topology</c>, а не позиции в коллекции.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Маршрут измерен 20.09.2026</b> (проба <c>--b5</c>, шаг B5.14): на одном признаке короба
-    /// 100×80×10 оболочка <c>t = 2</c> внутрь со снятой верхней гранью даёт <c>21632</c> при
-    /// <c>11</c> гранях; добавление второй грани (нижней, 100×80) делает полость сквозной и даёт
-    /// <c>7040</c> при <c>10</c> гранях; возврат к прежнему набору возвращает <c>21632</c> при
-    /// <c>11</c>. Отрицательный контроль стоит там же: повторная запись того же набора объём не
-    /// двигает.
-    /// </para>
-    /// <para>
-    /// <b>Почему это отдельный маршрут, а не перенос со скругления.</b> Тот же приём
-    /// (<c>Clear()</c> + <c>Add()</c> по <c>ksEntityCollection</c>) у СКРУГЛЕНИЯ измеренно НЕ
-    /// работал (строка <c>FL04r</c>: набор схлопывался, объём возвращался к пластине). Поэтому
-    /// оболочка проверена своим прогоном, а не выведена по аналогии.
-    /// </para>
-    /// <para>
-    /// <b>Пустой список отвергается</b> и здесь, и по той же измеренной причине, что при создании:
-    /// при пустом списке операция принимается (<c>Create/Update = true</c>), а тело не меняется —
-    /// объём остаётся <c>80000</c> при <c>6</c> гранях.
-    /// </para>
-    /// </remarks>
+    /// <summary>New SET of removed shell faces (family=<c>shell</c>) — a full replacement, not an addition
+    /// to the existing ones: what is passed is what should remain removed. Faces come from
+    /// <c>kompas_read_topology</c>, not collection positions.</summary>
+    /// <remarks><para><b>Route MEASURED on 20.09.2026</b> (probe <c>--b5</c>, step B5.14): on one feature
+    /// of a 100×80×10 box a shell <c>t = 2</c> inward with the top face removed gives <c>21632</c> at
+    /// <c>11</c> faces; adding the second face (bottom, 100×80) makes the cavity through and gives
+    /// <c>7040</c> at <c>10</c> faces; reverting to the previous set restores <c>21632</c> at <c>11</c>.
+    /// The negative control sits there too: re-writing the same set does not move the volume.</para>
+    /// <para><b>Why this is a separate route, not a carry-over from the fillet.</b> The same technique
+    /// (<c>Clear()</c> + <c>Add()</c> over <c>ksEntityCollection</c>) measurably did NOT work for the
+    /// FILLET (row <c>FL04r</c>: the set collapsed, the volume returned to the plate). So the shell was
+    /// verified by its own run rather than inferred by analogy.</para>
+    /// <para><b>An empty list is rejected</b> here too, for the same measured reason as at creation: with
+    /// an empty list the operation is accepted (<c>Create/Update = true</c>) but the body does not change —
+    /// the volume stays <c>80000</c> at <c>6</c> faces.</para></remarks>
     public IReadOnlyList<string>? FaceRefs { get; init; }
 
-    /// <summary>
-    /// Сменить опорный эскиз того же признака (правка опоры по docs/05 §4.3). Нужен для режимов,
-    /// где глубины как параметра нет: у сквозного вырезания число игнорируется solver'ом, поэтому
-    /// «изменить параметр» там возможно только сменой профиля.
-    /// </summary>
+    /// <summary>Change the support sketch of the same feature (support edit per docs/05 §4.3). Needed for
+    /// modes where there is no depth parameter: in a through cut the number is ignored by the solver, so
+    /// "change the parameter" there is possible only by changing the profile.</summary>
     public string? SketchRef { get; init; }
 
-    /// <summary>
-    /// Новый первый катет фаски (мм).family=<c>chamfer</c>; для выдачиваний не применяется.
-    /// Измерено пробой F.3/F.5: <c>SetChamferParam</c> на признаке 2×2→3×3 меняет объём ровно на
-    /// 20·(d₂²−d₁²)·… и значение перечитывается с нового объекта определения.
-    /// </summary>
+    /// <summary>New first chamfer leg (mm). family=<c>chamfer</c>; not applied to extrusions. MEASURED by
+    /// probe F.3/F.5: <c>SetChamferParam</c> on a 2×2→3×3 feature changes the volume by exactly
+    /// 20·(d₂²−d₁²)·… and the value is re-read from the new definition object.</summary>
     public double? Distance1Mm { get; init; }
 
-    /// <summary>Новый второй катет фаски (мм).</summary>
+    /// <summary>New second chamfer leg (mm).</summary>
     public double? Distance2Mm { get; init; }
 
-    /// <summary>Новый угол фаски в градусах; правится только маршрутом API7.</summary>
+    /// <summary>New chamfer angle in degrees; editable only through the API7 route.</summary>
     public double? AngleDeg { get; init; }
 
-    /// <summary>Новая сторона фаски (API5 transfer / API7 Direction).</summary>
+    /// <summary>New chamfer side (API5 transfer / API7 Direction).</summary>
     public bool? Direction { get; init; }
 
-    /// <summary>
-    /// Новый угол ВРАЩЕНИЯ (family=<c>rotation</c>), градусы. Отдельное поле, а не общий
-    /// <see cref="AngleDeg"/>: у фаски этот член означает угол фаски, у вращения — угол развёртки,
-    /// и одна и та же величина с одним именем для двух разных семейств сделала бы ответ
-    /// неоднозначным («угол применён» — куда?). Вызов с <see cref="AngleDeg"/> на признаке вращения
-    /// отвергается INVALID_ARGUMENT с указанием на это поле, а не толкуется молча.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Маршрут измерен 18.09.2026.</b> Проба <c>FullTurnProbe</c>, шаг <c>F.2</c>: на ОДНОМ
-    /// признаке (эталон R20 H40, ось по двум точкам модели) смена угла 360 → 180 → 360 дала объёмы
-    /// <c>50265.4824574366 → 25132.7412287183 → 50265.4824574366</c> при габарите
-    /// <c>z[−20,20] → z[−0,20] → z[−20,20]</c>, то есть геометрическое изменение, а не только
-    /// записанное число. Порядок «запись угла в <c>IRotated.Angle[true]</c> →
-    /// <c>IRotated.Update()</c> → <c>RebuildModel</c>/<c>RebuildDocument</c>» — часть контракта, как
-    /// и при создании.
-    /// </para>
-    /// <para>
-    /// <b>Только угол.</b> Смена профиля и оси существующего вращения этим вызовом НЕ выполняется:
-    /// это отдельные маршруты, и ни один из них не измерялся на вращении. Поэтому
-    /// <see cref="SketchRef"/> на признаке вращения отвергается, а не игнорируется.
-    /// </para>
-    /// </remarks>
+    /// <summary>New ROTATION angle (family=<c>rotation</c>), degrees. A separate field, not the shared
+    /// <see cref="AngleDeg"/>: for a chamfer that member means the chamfer angle, for a rotation the sweep
+    /// angle, and one and the same quantity under one name for two different families would make the
+    /// answer ambiguous ("the angle was applied" — where?). A call with <see cref="AngleDeg"/> on a
+    /// rotation feature is rejected with INVALID_ARGUMENT pointing at this field rather than interpreted
+    /// silently.</summary>
+    /// <remarks><para><b>Route MEASURED on 18.09.2026.</b> Probe <c>FullTurnProbe</c>, step <c>F.2</c>:
+    /// on ONE feature (reference R20 H40, axis by two model points) changing the angle 360 → 180 → 360
+    /// gave volumes <c>50265.4824574366 → 25132.7412287183 → 50265.4824574366</c> at bbox
+    /// <c>z[−20,20] → z[−0,20] → z[−20,20]</c>, i.e. a geometric change, not just a written number. The
+    /// order "write the angle to <c>IRotated.Angle[true]</c> → <c>IRotated.Update()</c> →
+    /// <c>RebuildModel</c>/<c>RebuildDocument</c>" is part of the contract, as at creation.</para>
+    /// <para><b>Angle only.</b> Changing the profile and axis of an existing rotation is NOT done by this
+    /// call: those are separate routes, and neither was measured on rotation. So <see cref="SketchRef"/> on
+    /// a rotation feature is rejected, not ignored.</para></remarks>
     public double? RotationAngleDeg { get; init; }
 
-    /// <summary>
-    /// Новое направление вращения (family=<c>rotation</c>). <c>reverse</c> отвергается до мутации:
-    /// измерено (R.26.sector), что оно не строит ничего.
-    /// </summary>
+    /// <summary>New rotation direction (family=<c>rotation</c>). <c>reverse</c> is rejected before
+    /// mutating: MEASURED (R.26.sector) that it builds nothing.</summary>
     public RotationDirection? RotationDirection { get; init; }
 
-    /// <summary>
-    /// Вид преобразования при правке признака ИЗМЕНЕНИЯ ПОЛОЖЕНИЯ (family=<c>reposition</c>).
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Зачем отдельные поля, а не повторное создание.</b> Наряд B3 §5 требует, чтобы правка
-    /// меняла параметры СУЩЕСТВУЮЩЕГО признака относительно его ИСХОДНЫХ входов, а не
-    /// применялась к текущему положению. Повторный вызов <c>kompas_reposition</c> этому не
-    /// удовлетворяет по построению: он создаёт ВТОРОЙ признак и сдвигает тело от текущего
-    /// положения, то есть смещение накапливается. Измерено пробой RP.6: правка признака[0]
-    /// повторной записью того же вектора оставляет габарит <c>(17,−11,13)…(37,−1,18)</c>, а
-    /// возврат вектора в ноль возвращает тело домой — параметр применяется к исходному телу.
-    /// </para>
-    /// <para>
-    /// <b>Имена с префиксом, как у <see cref="RotationAngleDeg"/>.</b> У <c>kompas_reposition</c>
-    /// те же величины называются <c>kind</c>, <c>vector_mm</c>, <c>axis_point_mm</c> и
-    /// <c>angle_deg</c>. Здесь <c>angle_deg</c> уже занято углом ФАСКИ, поэтому угол поворота
-    /// называется <see cref="RepositionAngleDeg"/>: одно имя для двух разных величин сделало бы
-    /// ответ неоднозначным («угол применён» — куда?).
-    /// </para>
-    /// </remarks>
+    /// <summary>Kind of transformation when editing a REPOSITION feature (family=<c>reposition</c>).</summary>
+    /// <remarks><para><b>Why separate fields rather than re-creating.</b> Order B3 §5 requires an edit to
+    /// change the parameters of an EXISTING feature relative to its ORIGINAL inputs, not to apply them to
+    /// the current placement. A repeated <c>kompas_reposition</c> call does not satisfy this by
+    /// construction: it creates a SECOND feature and shifts the body from the current placement, i.e. the
+    /// offset accumulates. MEASURED by probe RP.6: editing feature[0] by re-writing the same vector leaves
+    /// the bbox <c>(17,−11,13)…(37,−1,18)</c>, and returning the vector to zero brings the body home — the
+    /// parameter is applied to the original body.</para>
+    /// <para><b>Prefixed names, as with <see cref="RotationAngleDeg"/>.</b> In <c>kompas_reposition</c>
+    /// the same quantities are called <c>kind</c>, <c>vector_mm</c>, <c>axis_point_mm</c> and
+    /// <c>angle_deg</c>. Here <c>angle_deg</c> is already taken by the CHAMFER angle, so the rotation
+    /// angle is called <see cref="RepositionAngleDeg"/>: one name for two different quantities would make
+    /// the answer ambiguous ("the angle was applied" — where?).</para></remarks>
     public RepositionKind? RepositionKind { get; init; }
 
-    /// <summary>Новый вектор переноса, мм, модельные координаты. Обязателен для <c>translate</c>.</summary>
+    /// <summary>New translation vector, mm, model coordinates. Mandatory for <c>translate</c>.</summary>
     public IReadOnlyList<double>? RepositionVectorMm { get; init; }
 
-    /// <summary>Новая точка на оси поворота, мм. Обязательна для <c>rotate</c>.</summary>
+    /// <summary>New point on the rotation axis, mm. Mandatory for <c>rotate</c>.</summary>
     public IReadOnlyList<double>? RepositionAxisPointMm { get; init; }
 
-    /// <summary>Новое направление оси поворота. Взаимоисключающе с <c>reposition_axis_point2_mm</c>.</summary>
+    /// <summary>New rotation axis direction. Mutually exclusive with <c>reposition_axis_point2_mm</c>.</summary>
     public IReadOnlyList<double>? RepositionAxisDirectionMm { get; init; }
 
-    /// <summary>Новая вторая точка оси поворота. Взаимоисключающе с <c>reposition_axis_direction_mm</c>.</summary>
+    /// <summary>New second rotation axis point. Mutually exclusive with <c>reposition_axis_direction_mm</c>.</summary>
     public IReadOnlyList<double>? RepositionAxisPoint2Mm { get; init; }
 
-    /// <summary>Новый угол поворота, градусы. Обязателен для <c>rotate</c>.</summary>
+    /// <summary>New rotation angle, degrees. Mandatory for <c>rotate</c>.</summary>
     public double? RepositionAngleDeg { get; init; }
 
-    /// <summary>
-    /// Аналитическое ожидание габарита тела после правки.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Нужно там, где объём ожиданием служить не может. У жёсткого преобразования объём —
-    /// ИНВАРИАНТ, поэтому <see cref="ExpectedVolumeMm3"/> у семейства <c>reposition</c>
-    /// подтверждает только то, что преобразование осталось жёстким, но не то, что тело встало
-    /// куда просили: при переносе «сдвинулось» и «осталось» по объёму неразличимы. Габарит
-    /// различает, и это же требование записано в приёмке (строка `B3L.04`: у переноса объём до и
-    /// после равен 1 000, и строка, сверяющая одни объёмы, прошла бы на полном бездействии).
-    /// </para>
-    /// <para>
-    /// <b>Почему не чтением параметра обратно.</b> Первая редакция правки сверяла записанный
-    /// перенос с <c>IBodyReposition.Position.X/Y/Z</c>. Измерено 18.09.2026: этот член перенос НЕ
-    /// несёт — после <c>InitByMatrix3D</c> с вектором <c>(7,−11,13)</c> он читается как
-    /// <c>(0,0,0)</c>, тогда как габарит тела верен. Сверять с членом, который не хранит значение,
-    /// значит измерять прибор, а не продукт, поэтому проверка перенесена на геометрию.
-    /// </para>
-    /// </remarks>
+    /// <summary>Analytic expectation of the body bbox after the edit.</summary>
+    /// <remarks><para>Needed where volume cannot serve as the expectation. Under a rigid transformation the
+    /// volume is an INVARIANT, so <see cref="ExpectedVolumeMm3"/> for the <c>reposition</c> family confirms
+    /// only that the transformation stayed rigid, not that the body went where it was asked: for a
+    /// translation "moved" and "stayed" are indistinguishable by volume. The bbox distinguishes, and this
+    /// same requirement is written into acceptance (row `B3L.04`: for a translation the volume before and
+    /// after is 1 000, and a row checking only volumes would pass on complete inaction).</para>
+    /// <para><b>Why not by reading the parameter back.</b> The first revision of the edit compared the
+    /// written translation against <c>IBodyReposition.Position.X/Y/Z</c>. MEASURED on 18.09.2026: that
+    /// member does NOT carry the translation — after <c>InitByMatrix3D</c> with vector <c>(7,−11,13)</c> it
+    /// reads as <c>(0,0,0)</c>, while the body bbox is correct. Checking against a member that does not
+    /// store the value means measuring the instrument, not the product, so the check was moved to geometry.
+    /// History: docs/decisions/contracts.md#reposition-position-member</para></remarks>
     public BoundingBoxDto? ExpectedBboxMm { get; init; }
 
-    /// <summary>
-    /// Новая опора признака РАЗДЕЛЕНИЯ (<c>family=split</c>) или ОТСЕЧЕНИЯ
-    /// (<c>family=cut_by_plane</c>).
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Зачем плоскость, а не повторный вызов.</b> Наряд B3 §5 требует, чтобы правка меняла
-    /// параметры СУЩЕСТВУЮЩЕГО признака относительно его ИСХОДНЫХ входов. Повторный
-    /// <c>kompas_split_body</c> этому не удовлетворяет: он создаёт ВТОРОЙ признак разделения и режет
-    /// уже полученную часть. Измерено 18.09.2026 (проба <c>--split</c>, шаг SP.9): правка опоры
-    /// существующего признака переводит части <c>6 000 / 18 000</c> при <c>x = 10</c> в
-    /// <c>9 000 / 15 000</c> при <c>x = 15</c> при неизменном числе признаков <c>1 → 1</c> и
-    /// неизменной сумме <c>24 000</c>.
-    /// </para>
-    /// <para>
-    /// <b>Поправка 18.09.2026: здесь стояла ссылка на шаг SP.6, и она вводила в заблуждение.</b>
-    /// Шаг SP.6 назван «Правка той же плоскости: x=10 → x=15», но его код переносит три точки
-    /// построения плоскости, а не правит опору признака; шаг SP.7, в свою очередь, строит отсечение
-    /// ЗАНОВО в свежем документе под каждое значение <c>Direction</c>. Ни один из них маршрут
-    /// «записать в существующий признак другую плоскость» не проверял. По этой ссылке маршрут был
-    /// выведен из НАЗВАНИЯ шага, а не из его кода, и реализация подстановки чужой плоскости
-    /// измеренно не работала (<c>Update() = true</c>, части <c>6 000 / 18 000</c> прежние).
-    /// Авторитетная ссылка — SP.9 с отрицательным контролем E-B; SP.6 остаётся верным как факт о
-    /// плоскости, но не как доказательство правки признака.
-    /// </para>
-    /// <para>
-    /// Форма та же, что у одноимённого поля <c>kompas_split_body</c> и <c>kompas_cut_body</c>
-    /// (<c>#/$defs/cut_plane</c>): <c>plane_ref</c> на существующую плоскость либо
-    /// <c>point_mm</c> + <c>normal_mm</c> в модельных координатах. Сторона задаётся знаком
-    /// <c>s = n·(p − p₀)</c>. Нулевая и нечисловая нормаль отвергаются до COM.
-    /// </para>
-    /// <para>
-    /// <b>Маршрут — перенос ТОЧЕК СОБСТВЕННОЙ опоры признака, и это измерено, а не выведено.</b>
-    /// Шаг <c>SP.9</c> пробы <c>--split</c> (прогон <c>c9cd7660468c44aa97b410e253ee2cb1</c>) сравнил
-    /// два маршрута на одном и том же признаке. <c>CutObjects</c> читается обратно как ОДИН объект
-    /// (не массив) и отвечает <c>IPlane3DBy3Points</c>; перенос его трёх точек построения с
-    /// последующим <c>Update()</c> и пересборкой меняет геометрию (E-A: части
-    /// <c>9 000 / 15 000</c>, признаков разделения <c>1 → 1</c>). Подстановка ВТОРОЙ, заново
-    /// построенной плоскости в <c>CutObjects</c> при <c>Update() = true</c> результат НЕ меняет —
-    /// отрицательный контроль E-B. Поэтому реализация правит опору признака, а не подставляет
-    /// другую плоскость, и <c>Update() = true</c> здесь доказательством не считается: геометрия
-    /// сверяется отдельно.
-    /// </para>
-    /// <para>
-    /// <b>Цена маршрута и границы.</b> Вспомогательная плоскость при правке НЕ создаётся: объект
-    /// опоры берётся у самого признака, поэтому документ не накапливает неиспользованные плоскости.
-    /// <c>plane_ref</c> на признаке разделения/отсечения отвергается кодом
-    /// <c>CAPABILITY_UNAVAILABLE</c>: подстановка чужой плоскости измеренно ничего не делает (E-B),
-    /// а доказать, что ссылка указывает именно на опору ЭТОГО признака, нечем. Поле
-    /// <c>base</c> («базовая плоскость со смещением») отвергается там же.
-    /// </para>
-    /// </remarks>
+    /// <summary>New support of a SPLIT feature (<c>family=split</c>) or CUT feature
+    /// (<c>family=cut_by_plane</c>).</summary>
+    /// <remarks><para><b>Why a plane rather than a repeated call.</b> Order B3 §5 requires an edit to change
+    /// the parameters of an EXISTING feature relative to its ORIGINAL inputs. A repeated
+    /// <c>kompas_split_body</c> does not satisfy this: it creates a SECOND split feature and cuts the
+    /// already obtained part. MEASURED on 18.09.2026 (probe <c>--split</c>, step SP.9): editing the support
+    /// of an existing feature moves the parts <c>6 000 / 18 000</c> at <c>x = 10</c> to <c>9 000 / 15 000</c>
+    /// at <c>x = 15</c> with an unchanged feature count <c>1 → 1</c> and unchanged sum <c>24 000</c>.
+    /// History: docs/decisions/contracts.md#split-support-route</para>
+    /// <para>The shape is the same as the like-named field of <c>kompas_split_body</c> and
+    /// <c>kompas_cut_body</c> (<c>#/$defs/cut_plane</c>): <c>plane_ref</c> to an existing plane or
+    /// <c>point_mm</c> + <c>normal_mm</c> in model coordinates. The side is set by the sign
+    /// <c>s = n·(p − p₀)</c>. A zero and non-numeric normal is rejected before COM.</para>
+    /// <para><b>The route is moving the CONSTRUCTION POINTS of the feature's OWN support, and this is
+    /// MEASURED, not inferred.</b> Step <c>SP.9</c> of probe <c>--split</c> (run
+    /// <c>c9cd7660468c44aa97b410e253ee2cb1</c>) compared two routes on the same feature. <c>CutObjects</c>
+    /// reads back as ONE object (not an array) and answers <c>IPlane3DBy3Points</c>; moving its three
+    /// construction points followed by <c>Update()</c> and a rebuild changes the geometry (E-A: parts
+    /// <c>9 000 / 15 000</c>, split features <c>1 → 1</c>). Substituting a SECOND, newly built plane into
+    /// <c>CutObjects</c> with <c>Update() = true</c> does NOT change the result — negative control E-B. The
+    /// implementation therefore edits the feature's support rather than substituting another plane, and
+    /// <c>Update() = true</c> is not taken as proof here: the geometry is checked separately.</para>
+    /// <para><b>Route cost and bounds.</b> An auxiliary plane is NOT created during the edit: the support
+    /// object is taken from the feature itself, so the document does not accumulate unused planes.
+    /// <c>plane_ref</c> on a split/cut feature is rejected with <c>CAPABILITY_UNAVAILABLE</c>: substituting
+    /// a foreign plane measurably does nothing (E-B), and there is no way to prove the reference points at
+    /// THIS feature's own support. The <c>base</c> field ("base plane with offset") is rejected there
+    /// too.</para></remarks>
     public CutPlaneDto? Plane { get; init; }
 
-    /// <summary>
-    /// Новая оставляемая сторона для <c>family=cut_by_plane</c>: <c>positive</c> — <c>s &gt; 0</c>,
-    /// <c>negative</c> — <c>s &lt; 0</c>.
-    /// </summary>
-    /// <remarks>
-    /// Соответствие измерено шагом SP.7: <c>ICut.Direction = true</c> оставляет сторону в
-    /// направлении нормали (<c>s &gt; 0</c>, V = 18 000), <c>false</c> — противоположную
-    /// (<c>s &lt; 0</c>, V = 6 000). При правке стороны признак тот же: правка меняет ОСТАТОК, а не
-    /// число тел.
-    /// </remarks>
+    /// <summary>New kept side for <c>family=cut_by_plane</c>: <c>positive</c> — <c>s &gt; 0</c>,
+    /// <c>negative</c> — <c>s &lt; 0</c>.</summary>
+    /// <remarks>The mapping is MEASURED at step SP.7: <c>ICut.Direction = true</c> keeps the side along the
+    /// normal (<c>s &gt; 0</c>, V = 18 000), <c>false</c> the opposite one (<c>s &lt; 0</c>, V = 6 000). When
+    /// editing the side the feature is the same: the edit changes the REMAINDER, not the body
+    /// count.</remarks>
     public string? KeepSide { get; init; }
 
-    /// <summary>
-    /// Аналитическое ожидание объёмов ЧАСТЕЙ после правки разделения (<c>family=split</c>).
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Единственная величина, которая подтверждает правку разделения. Сумма объёмов частей при
-    /// правке не меняется (24 000 и при <c>x = 10</c>, и при <c>x = 15</c>), поэтому сохранение
-    /// объёма — не подтверждение, а инвариант: строка, сверяющая только сумму, прошла бы на полном
-    /// бездействии. Различает части только их ПООБЪЁМНЫЙ состав: <c>[6 000, 18 000]</c> против
-    /// <c>[9 000, 15 000]</c>.
-    /// </para>
-    /// <para>
-    /// Сопоставление — по совпадению с ДОПУСКОМ объёма (0.01 мм³ абс. / 1e-6 отн.) и с учётом
-    /// кратности: каждому ожидаемому объёму находится своё тело, одно тело не может закрыть два
-    /// ожидания. Порядок частей значения не имеет — ядро вправе переставить их местами.
-    /// </para>
-    /// <para>
-    /// Если ожидание объявлено и не совпало, вызов возвращает <c>NO_GEOMETRY_CHANGE</c> с
-    /// <c>partial_effects=true</c> и фактическим составом в <c>details</c>: это признак того, что
-    /// параметр применён не к исходным входам признака.
-    /// </para>
-    /// </remarks>
+    /// <summary>Analytic expectation of the PART volumes after a split edit (<c>family=split</c>).</summary>
+    /// <remarks><para>The only quantity that confirms a split edit. The sum of part volumes does not change
+    /// on an edit (24 000 both at <c>x = 10</c> and at <c>x = 15</c>), so preservation of volume is not a
+    /// confirmation but an invariant: a row checking only the sum would pass on complete inaction. Only the
+    /// PER-VOLUME composition of the parts distinguishes them: <c>[6 000, 18 000]</c> versus
+    /// <c>[9 000, 15 000]</c>.</para>
+    /// <para>The matching is by volume equality WITHIN TOLERANCE (0.01 mm³ abs. / 1e-6 rel.) and with
+    /// multiplicity: each expected volume gets its own body, one body cannot cover two expectations. The
+    /// order of the parts does not matter — the core is entitled to swap them.</para>
+    /// <para>If an expectation is declared and does not match, the call returns <c>NO_GEOMETRY_CHANGE</c>
+    /// with <c>partial_effects=true</c> and the actual composition in <c>details</c>: a sign that the
+    /// parameter was applied not to the feature's original inputs.</para></remarks>
     public IReadOnlyList<double>? ExpectedPartVolumesMm3 { get; init; }
 
-    /// <summary>
-    /// Новый ВИД существующей булевой операции (family=<c>boolean</c>): <c>union</c>, <c>difference</c>
-    /// или <c>intersect</c>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Маршрут измерен 18.09.2026.</b> Проба <c>--boolean</c>, шаг <c>BO.11</c>, прогон
-    /// <c>a2f5cf0a2ad342c59c36807101a65d51</c> (журнал <c>docs/acceptance/api7/boolean-ops.json</c>).
-    /// Эталон §6.1: <c>A ∪ B</c> — 36 000 в габарите <c>(0,0,0)…(60,30,20)</c>, <c>A − B</c> — 12 000
-    /// в <c>x ≤ 20</c>, <c>A ∩ B</c> — 12 000 в <c>x ∈ [20,40]</c>. Перезапись
-    /// <c>IBoolean.BooleanType</c> на СУЩЕСТВУЮЩЕМ признаке с последующим <c>Update()</c> и пересборкой
-    /// меняет геометрию: E-A даёт <c>36 000 → 12 000</c> (габарит <c>x ≤ 20</c>), E-D —
-    /// <c>12 000 → 36 000</c>, признаков <c>1 → 1</c>.
-    /// </para>
-    /// <para>
-    /// <b>Почему контроль здесь обязателен и каков он.</b> Объём разности и объём пересечения на
-    /// эталоне РАВНЫ (12 000), поэтому опыт E-C идёт от разности к пересечению: объём остаётся 12 000,
-    /// а габарит меняется на <c>x ∈ [20,40]</c>. Строка, сверяющая только объём, прошла бы на полном
-    /// бездействии. Опыт E-E подтверждает, что применяет именно пара «запись → <c>Update()</c>»:
-    /// запись без <c>Update()</c> (но с пересборкой) геометрию не меняет.
-    /// </para>
-    /// <para>
-    /// <b>Цена и границы.</b> Опорные тела существующей операции этим полем НЕ меняются:
-    /// <c>BaseObject</c> и <c>ModifyObjects</c> доступны на запись, но правка набора инструментов не
-    /// измерялась, поэтому вызов, меняющий только вид, их не трогает. Значение <c>ksBooleanUnknown</c>
-    /// (0) сеттер нормализует в <c>ksUnion</c> — измерено (E-B): клиент, записавший 0, получит
-    /// объединение, а не отказ, и это записано здесь, чтобы такое поведение не было сюрпризом.
-    /// </para>
-    /// <para>
-    /// <b>Имя поля.</b> Здесь оно намеренно совпадает с параметром <c>operation</c> инструмента
-    /// <c>kompas_boolean</c>: это одна и та же величина. Если другому семейству когда-нибудь
-    /// понадобится свой «вид операции», оно обязано взять УТОЧНЁННОЕ имя (как это сделал угол
-    /// поворота — <see cref="RepositionAngleDeg"/>), а не завести второе поле <c>Operation</c>.
-    /// </para>
-    /// </remarks>
+    /// <summary>New KIND of an existing boolean operation (family=<c>boolean</c>): <c>union</c>,
+    /// <c>difference</c> or <c>intersect</c>.</summary>
+    /// <remarks><para><b>Route MEASURED on 18.09.2026.</b> Probe <c>--boolean</c>, step <c>BO.11</c>, run
+    /// <c>a2f5cf0a2ad342c59c36807101a65d51</c> (log <c>docs/acceptance/api7/boolean-ops.json</c>).
+    /// Reference §6.1: <c>A ∪ B</c> — 36 000 in bbox <c>(0,0,0)…(60,30,20)</c>, <c>A − B</c> — 12 000 in
+    /// <c>x ≤ 20</c>, <c>A ∩ B</c> — 12 000 in <c>x ∈ [20,40]</c>. Re-writing
+    /// <c>IBoolean.BooleanType</c> on an EXISTING feature followed by <c>Update()</c> and a rebuild changes
+    /// the geometry: E-A gives <c>36 000 → 12 000</c> (bbox <c>x ≤ 20</c>), E-D — <c>12 000 → 36 000</c>,
+    /// features <c>1 → 1</c>.</para>
+    /// <para><b>Why the control is mandatory here and what it is.</b> On the reference the difference and
+    /// intersection volumes are EQUAL (12 000), so experiment E-C goes from difference to intersection: the
+    /// volume stays 12 000 while the bbox changes to <c>x ∈ [20,40]</c>. A row checking only the volume
+    /// would pass on complete inaction. Experiment E-E confirms that it is the pair "write →
+    /// <c>Update()</c>" that applies: a write without <c>Update()</c> (but with a rebuild) does not change
+    /// the geometry.</para>
+    /// <para><b>Cost and bounds.</b> The support bodies of the existing operation are NOT changed by this
+    /// field: <c>BaseObject</c> and <c>ModifyObjects</c> are writable, but editing the tool set was not
+    /// measured, so a call that changes only the kind does not touch them. The value
+    /// <c>ksBooleanUnknown</c> (0) is normalized by the setter to <c>ksUnion</c> — MEASURED (E-B): a client
+    /// that writes 0 gets a union rather than a refusal, and this is recorded here so the behaviour is not
+    /// a surprise.</para>
+    /// <para><b>The field name.</b> Here it deliberately coincides with the <c>operation</c> parameter of
+    /// the <c>kompas_boolean</c> tool: it is the same quantity. If another family ever needs its own
+    /// "operation kind", it MUST take a QUALIFIED name (as the rotation angle did —
+    /// <see cref="RepositionAngleDeg"/>) rather than introduce a second <c>Operation</c> field.</para></remarks>
     public BooleanOperation? Operation { get; init; }
 
-    /// <summary>
-    /// Новый радиус скругления (мм); family=<c>fillet</c>. Правится только маршрутом API7:
-    /// в API5 у <c>ksFilletDefinition</c> радиус есть, но запись в него на существующем признаке
-    /// НЕ применяется — измерено 16.09.2026 строкой FL04r: сеттер возвращает успех, а
-    /// <c>entity.Update()</c> + <c>RebuildDocument()</c> оставляют объём прежним (см.
-    /// <c>Api5Session.UpdateFilletRadius</c>). Поэтому радиус пишется в <c>IFillet.Radius1</c>
-    /// на живой модели, а признак API5 сопоставляется с ним по СОВПАДЕНИЮ РАДИУСА, а не по имени
-    /// (F.8: имя, заданное в API5, в API7 читается иначе).
-    /// </summary>
+    /// <summary>New fillet radius (mm); family=<c>fillet</c>. Editable only through the API7 route: in API5
+    /// <c>ksFilletDefinition</c> has a radius, but writing to it on an existing feature is NOT applied —
+    /// MEASURED on 16.09.2026 by row FL04r: the setter returns success while <c>entity.Update()</c> +
+    /// <c>RebuildDocument()</c> leave the volume unchanged (see <c>Api5Session.UpdateFilletRadius</c>). The
+    /// radius is therefore written to <c>IFillet.Radius1</c> on the live model, and the API5 feature is
+    /// matched to it by RADIUS EQUALITY, not by name (F.8: a name set in API5 reads differently in
+    /// API7).</summary>
     public double? RadiusMm { get; init; }
 
     /// <summary>
-    /// Новый НАБОР рёбер скругления (family=<c>fillet</c>) — полная замена, а не добавление к
-    /// имеющимся: передаётся то, что должно остаться. Рёбра — из <c>kompas_read_topology</c>, а не
-    /// позиции в коллекции.
+    /// New SET of fillet edges (family=<c>fillet</c>) — a full replacement, not an addition to the
+    /// existing ones: what must remain is what is passed. The edges come from
+    /// <c>kompas_read_topology</c>, not from positions in a collection.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// <b>Маршрут — API7, и он измерен.</b> Проба H-2 (<c>docs/acceptance/api7/fillet-base-objects.md</c>,
-    /// 14 PASS / 0 FAIL / 0 UNKNOWN, собственный <c>run_id</c>, воспроизведено четырьмя прогонами):
-    /// <c>IModelContainer.Fillets[i] → IFillet</c>, чтение и запись <c>IFillet.BaseObjects</c>
-    /// (полная замена набора), затем обязательный <c>IFillet.Update()</c>. Все объекты берутся с
-    /// ЖИВОЙ модели после <c>save → close → reopen</c>; ни один объект, захваченный при создании
-    /// скругления, не используется. Адресация проверена на модели с ДВУМЯ скруглениями одного
-    /// радиуса (H2.7): правка одного признака не задела соседний.
-    /// </para>
-    /// <para>
-    /// <b>ОТРИЦАТЕЛЬНЫЙ РЕЗУЛЬТАТ ПО ПРЕЖНЕМУ МАРШРУТУ ОСТАЁТСЯ ВЕРНЫМ.</b> Маршрут через
-    /// определение API5 (<c>ksFilletDefinition.array()</c> → <c>Clear()</c> → <c>Add()</c> →
-    /// <c>entity.Update()</c>) правку набора на существующем признаке НЕ даёт: измерено 16.09.2026
-    /// восемью пробами, и с появлением рабочего маршрута не отменяется. После скругления угловые
-    /// рёбра в топологии отсутствуют (0 из 4 — углы заняты цилиндрическими гранями), исходные
-    /// угловые рёбра отзывает само создание скругления (<c>STALE_REFERENCE</c> до всякой правки), а
-    /// существующие вертикальные рёбра скруглённых углов признак не удерживает: набор схлопывается
-    /// (<c>edges_read_back=0</c>), объём возвращается к пластине. Ненулевой <c>edges_read_back</c>
-    /// получается только вторым вызовом подряд — и это пересборка с нуля, а не правка набора.
-    /// Именно поэтому маршрут в адаптере заменён, а не оставлен веткой.
-    /// </para>
-    /// <para>
-    /// <b>Ранняя проба H</b> (<c>docs/acceptance/api7/fillet-edge-set.md</c>) сообщала о применении
-    /// набора (сокращение дало 79961.3716694115, расширение — 79922.7433388231). Числа верны как
-    /// геометрия и неверны как доказательство правки набора: проба мерила пересчёт признака по
-    /// ПОДСТАВЛЕННОМУ входу, а не правку набора существующего признака. Вердикт изменён не пробой H,
-    /// а пробой H-2.
-    /// </para>
-    /// <para>
-    /// <b>Границы, не переносимые на общий вывод:</b> расширение набора на эталоне 100×80×10 не
-    /// измерено (у пластины ровно четыре вертикальных угла, пятого нет); измерены сокращение
-    /// (4→3) и замена при неизменном размере (1→1).
-    /// </para>
-    /// <para>
-    /// <b>Поправка 17.09.2026: здесь стояло «ссылки входов признака и рёбра тела лежат в РАЗНЫХ
-    /// контекстах», и это ОПРОВЕРГНУТО замером.</b> Полосы ссылок СОСЕДНИЕ — в <c>FL10x</c> вход
-    /// признака <c>1073742308</c> против перенесённого ребра тела <c>1073742309</c>; тип у обоих
-    /// <c>ksObjectEdge</c>, обе ссылки устойчивы к повтору, различаются лишь адресные привязки RCW.
-    /// Это обычная двойственность API5/API7. Вывод «сопоставить вход с ребром тела по
-    /// <c>Reference</c> нельзя» из прежнего замера не следовал: различие <c>…065-67</c> против
-    /// <c>…080</c> — разность ЗНАЧЕНИЙ. Рёбра тела предъявлять можно, и <c>FL10x</c> это
-    /// подтверждает.
-    /// </para>
-    /// <para>
-    /// <b>СОСТОЯНИЕ ПРОДУКТА: маршрут перенесён в адаптер, приёмка ПРОЙДЕНА (17.09.2026).</b>
-    /// <c>scripts/mcp-smoke.py --fillet-only</c> даёт 46 строк, 0 FAIL: сокращение <c>FL10</c> (4→3,
-    /// <c>V=79942.0575041173</c> при аналитике <c>79942.05750411731</c>), <c>FL10s</c> (3→2),
-    /// <c>FL10b</c> (2→1) и замена при неизменном размере <c>FL10x</c> (1→1) — все
+    /// <b>The route is API7, and it is MEASURED.</b> Probe H-2
+    /// (<c>docs/acceptance/api7/fillet-base-objects.md</c>, 14 PASS / 0 FAIL / 0 UNKNOWN, its own
+    /// <c>run_id</c>, reproduced over four runs): <c>IModelContainer.Fillets[i] → IFillet</c>, read and
+    /// write of <c>IFillet.BaseObjects</c> (full replacement of the set), then the mandatory
+    /// <c>IFillet.Update()</c>. All objects are taken from the LIVE model after
+    /// <c>save → close → reopen</c>; no object captured when the fillet was created is used. Addressing
+    /// was checked on a model with TWO fillets of the same radius (H2.7): editing one feature did not
+    /// touch the neighbouring one.
+    /// <b>THE NEGATIVE RESULT ON THE FORMER ROUTE STILL HOLDS.</b> The route through the API5
+    /// definition (<c>ksFilletDefinition.array()</c> → <c>Clear()</c> → <c>Add()</c> →
+    /// <c>entity.Update()</c>) does NOT edit the set on an existing feature: MEASURED on 16.09.2026 by
+    /// eight probes, and the arrival of a working route does not cancel it. After the fillet the corner
+    /// edges are absent from the topology (0 of 4 — the corners are occupied by cylindrical faces), the
+    /// original corner edges are revoked by the very creation of the fillet (<c>STALE_REFERENCE</c>
+    /// before any edit), and the existing vertical edges of the filleted corners are not retained by
+    /// the feature: the set collapses (<c>edges_read_back=0</c>) and the volume returns to the plate. A
+    /// non-zero <c>edges_read_back</c> is obtained only by a second call in a row — and that is a
+    /// rebuild from scratch, not a set edit. This is exactly why the route in the adapter was replaced
+    /// rather than kept as a branch.
+    /// <b>Bounds that do not carry over to the general conclusion:</b> set expansion on the 100×80×10
+    /// reference was not measured (the plate has exactly four vertical corners, no fifth); what was
+    /// measured is shrinkage (4→3) and replacement at an unchanged size (1→1).
+    /// <b>Reference bands are ADJACENT — MEASURED, and this refutes an earlier claim in this comment.</b>
+    /// In <c>FL10x</c> the feature input <c>1073742308</c> sits against the carried-over body edge
+    /// <c>1073742309</c>; both are of type <c>ksObjectEdge</c>, both references are stable across a
+    /// repeat, and only the RCW address bindings differ. This is the ordinary API5/API7 duality. The
+    /// earlier conclusion "a feature input cannot be matched to a body edge by <c>Reference</c>" did not
+    /// follow from the previous measurement: the difference <c>…065-67</c> versus <c>…080</c> is a
+    /// difference of VALUES. Body edges can be presented, and <c>FL10x</c> confirms it.
+    /// History: docs/decisions/contracts.md#fillet-edge-set-history
+    /// <b>PRODUCT STATE: the route was moved into the adapter, acceptance PASSED (17.09.2026).</b>
+    /// <c>scripts/mcp-smoke.py --fillet-only</c> gives 46 lines, 0 FAIL: shrinkage <c>FL10</c> (4→3,
+    /// <c>V=79942.0575041173</c> against the analytic <c>79942.05750411731</c>), <c>FL10s</c> (3→2),
+    /// <c>FL10b</c> (2→1) and replacement at an unchanged size <c>FL10x</c> (1→1) — all
     /// <c>level=geometry_checked</c>.
-    /// </para>
-    /// <para>
-    /// <b>Корневая причина прежнего отказа названа измерением и оказалась НЕ той, что предполагалась.
-    /// </b> Дело было не в маршруте записи (он работал все эти прогоны — <c>FL10x</c> проходил) и не
-    /// в «невыразимости» сокращения: свойство <c>base_object_refs</c> попросту НЕ БЫЛО ОБЪЯВЛЕНО в
-    /// схеме инструмента <c>kompas_update_feature</c>, поэтому Host с <c>additionalProperties:
-    /// false</c> отвергал вызов валидацией ещё ДО COM, и сокращение не доходило до адаптера. Маршрут
-    /// и валюта были написаны верно; не хватало публикации. Прежние объяснения («признак того же
-    /// прогона не опознаётся, <c>family=null</c>», «сокращение невыразимо валютой») сняты замером.
-    /// </para>
-    /// <para>
-    /// <b>ГРАНИЦА, которая этим полем не закрывается — РАСШИРЕНИЕ набора.</b> Измерено <c>FL25</c> на
-    /// Г-образной пластине со СВОБОДНЫМИ углами: расширение (1→2, 2→3) не выражается ни одной из двух
-    /// валют. Полная замена по рёбрам тела означает «построй скругление заново по этим рёбрам» —
-    /// прежнее ребро не сохраняется, тогда как расширению нужно ровно обратное. Исход — отказ ПОСЛЕ
-    /// мутации: <c>GEOMETRY_FAILED</c> с <c>partial_effects=true</c>. До 17.09.2026 этот исход
-    /// возвращался как <c>err=None</c> и <c>level=call_returned</c>, то есть исчезновение признака
-    /// выдавалось за успешную правку; теперь исчезновение признака — отказ. Правьте СОСТАВ
-    /// (сокращение и замену), не добавляйте рёбра. Подробности — <c>docs/STATUS.md</c>.
-    /// </para>
+    /// <b>Root cause of the former refusal, named by measurement and it was NOT the assumed one.</b> It
+    /// was neither the write route (that worked all those runs — <c>FL10x</c> passed) nor an
+    /// "inexpressibility" of shrinkage: the <c>base_object_refs</c> property was simply NOT DECLARED in
+    /// the schema of the <c>kompas_update_feature</c> tool, so the Host with
+    /// <c>additionalProperties: false</c> rejected the call by validation BEFORE COM and the shrinkage
+    /// never reached the adapter. The route and the currency were written correctly; the publication was
+    /// missing. History: docs/decisions/contracts.md#fillet-edge-set-history
+    /// <b>BOUND: set EXPANSION is not covered by this field.</b> MEASURED by <c>FL25</c> on an L-shaped
+    /// plate with FREE corners: expansion (1→2, 2→3) is expressed by neither of the two currencies. A
+    /// full replacement by body edges means "build the fillet anew on these edges" — the former edge is
+    /// not kept, whereas expansion needs exactly the opposite. The outcome is a refusal AFTER mutation:
+    /// <c>GEOMETRY_FAILED</c> with <c>partial_effects=true</c>. Before 17.09.2026 that outcome was
+    /// returned as <c>err=None</c> and <c>level=call_returned</c>, i.e. the disappearance of the feature
+    /// was passed off as a successful edit; now the disappearance of the feature is a refusal. Edit the
+    /// COMPOSITION (shrinkage and replacement), do not add edges. Details — <c>docs/STATUS.md</c>.
     /// </remarks>
     public IReadOnlyList<string>? EdgeRefs { get; init; }
 
-    /// <summary>
-    /// НОВЫЙ набор по СОБСТВЕННЫМ входам признака (family=<c>fillet</c>) — вторая валюта того же
-    /// предмета правки, добавленная 17.09.2026 как расширение контракта.
-    /// </summary>
+    /// <summary>New set by the feature's OWN inputs (family=<c>fillet</c>) — the second currency of the same
+    /// edit subject, added on 17.09.2026 as an extension of the contract.</summary>
     /// <remarks>
-    /// <para>
-    /// <b>Зачем второе поле, когда есть <see cref="EdgeRefs"/>.</b> Сокращение набора и замена
-    /// состава — разные операции с разной валютой, и это ИЗМЕРЕНО, а не выведено из удобства:
-    /// сокращение выражается только объектами, прочитанными ИЗ <c>BaseObjects</c> признака, а
-    /// <see cref="EdgeRefs"/> принимает рёбра ТЕЛА. Приёмка подтверждает обе валюты порознь:
-    /// сокращение <c>FL10</c> (4→3, <c>V=79942.0575041173</c> при аналитике <c>79942.05750411731</c>),
-    /// <c>FL10s</c>, <c>FL10b</c> — этим полем; замена при неизменном размере <c>FL10x</c> (1→1) —
-    /// <see cref="EdgeRefs"/>, <c>level=geometry_checked</c> у всех. То есть <see cref="EdgeRefs"/>
-    /// выражает замену, но НЕ сокращение. Отдельно: ранняя приёмка предъявляла РЁБРА ТЕЛА именно
-    /// этому полю и схлопывала признак в пластину — предъявлять их сюда по-прежнему нельзя, они
-    /// отвергаются по виду ссылки.
-    /// </para>
-    /// <para>
-    /// <b>Почему нельзя было обойтись одним полем.</b> Собственный вход признака — это
-    /// <c>IModelObject</c> из <c>IFillet.BaseObjects</c>, и адресуется он числом
-    /// <c>IModelObject.Reference</c> (оно же в <c>fillet.base_object_references</c> от
-    /// <c>kompas_get_feature</c>). Строки реестра <c>edge:&lt;hex&gt;</c> у него НЕТ: реестр выдаёт
-    /// такие строки рёбрам ТЕЛА, а вход признака — не ребро тела. Подставить число в
-    /// <see cref="EdgeRefs"/> нельзя по типу. Набор из <c>base_object_references</c> —
-    /// единственная измеренная валюта сокращения.
-    /// </para>
-    /// <para>
-    /// <b>Форма.</b> Ссылка — строка <c>input:&lt;hex Reference&gt;</c>, где <c>&lt;hex&gt;</c> —
-    /// число из <c>base_object_references</c> в шестнадцатеричном виде (<c>1073742308</c> →
-    /// <c>input:40000164</c>). Это тот же формат, которым сервер уже отдаёт ссылки наружу, поэтому
-    /// клиент подставляет числа как есть. Набор — ПОЛНАЯ замена, а не добавление: передаётся то,
-    /// что должно остаться. Пустой список отвергается (<c>INVALID_ARGUMENT</c>).
-    /// </para>
-    /// <para>
-    /// <b>С <see cref="EdgeRefs"/> в одном вызове не сочетается</b>
-    /// (<c>INVALID_ARGUMENT</c> до мутации): два разных состава в одном запросе неразличимы в
-    /// ответе, и «применилось одно из двух» выглядело бы как «применилось и то, и другое».
-    /// </para>
-    /// <para>Неизвестная или чужая ссылка <c>input:</c> отвергается до мутации. Ссылка, выданная
-    /// другому документу, отвергается как <c>STALE_REFERENCE</c> (<c>FL26</c>), входы чужого признака
-    /// того же документа — как <c>CAPABILITY_UNAVAILABLE</c> (<c>FL27</c>); в обоих случаях модель не
-    /// меняется.</para>
-    /// <para><b>ГРАНИЦА: расширение набора этим полем НЕ выражается.</b> Новое ребро не является
-    /// собственным входом признака, а смешивать валюты нельзя. Измерено <c>FL25</c> (Г-образная
-    /// пластина со свободными углами): расширение (1→2, 2→3) заканчивается отказом ПОСЛЕ мутации с
-    /// <c>partial_effects=true</c>. До 17.09.2026 тот же исход возвращался как успех с
-    /// <c>level=call_returned</c> — это было неверное сообщение, и оно исправлено: исчезновение
-    /// признака теперь отказ, а не «успех с пониженным уровнем».</para>
+    /// <b>Why a second field when <see cref="EdgeRefs"/> exists.</b> Shrinking a set and replacing its
+    /// composition are different operations with different currencies, and this is MEASURED, not
+    /// inferred from convenience: shrinkage is expressed only by objects read FROM the feature's
+    /// <c>BaseObjects</c>, while <see cref="EdgeRefs"/> takes BODY edges. Acceptance confirms the two
+    /// currencies separately: shrinkage <c>FL10</c> (4→3, <c>V=79942.0575041173</c> against the analytic
+    /// <c>79942.05750411731</c>), <c>FL10s</c>, <c>FL10b</c> — by this field; replacement at an
+    /// unchanged size <c>FL10x</c> (1→1) — by <see cref="EdgeRefs"/>, all at
+    /// <c>level=geometry_checked</c>. That is, <see cref="EdgeRefs"/> expresses replacement but NOT
+    /// shrinkage. Separately: an early acceptance presented BODY EDGES to this very field and collapsed
+    /// the feature into the plate — presenting them here is still forbidden, they are rejected by the
+    /// reference kind.
+    /// <b>Why a single field would not do.</b> A feature's own input is an <c>IModelObject</c> from
+    /// <c>IFillet.BaseObjects</c>, addressed by the number <c>IModelObject.Reference</c> (the same one
+    /// in <c>fillet.base_object_references</c> from <c>kompas_get_feature</c>). It has NO registry string
+    /// <c>edge:&lt;hex&gt;</c>: the registry issues such strings to BODY edges, and a feature input is
+    /// not a body edge. A number cannot be substituted into <see cref="EdgeRefs"/> by type. The set from
+    /// <c>base_object_references</c> is the only measured currency of shrinkage.
+    /// <b>Form.</b> A reference is the string <c>input:&lt;hex Reference&gt;</c>, where <c>&lt;hex&gt;</c>
+    /// is the number from <c>base_object_references</c> in hexadecimal form (<c>1073742308</c> →
+    /// <c>input:40000164</c>). This is the same format the server already returns references in, so the
+    /// client substitutes the numbers as they are. The set is a FULL replacement, not an addition: what
+    /// must remain is what is passed. An empty list is rejected (<c>INVALID_ARGUMENT</c>).
+    /// <b>It cannot be combined with <see cref="EdgeRefs"/> in one call</b>
+    /// (<c>INVALID_ARGUMENT</c> before mutation): two different compositions in one request are
+    /// indistinguishable in the response, and "one of the two applied" would look like "both applied".
+    /// <para>An unknown or foreign <c>input:</c> reference is rejected before mutation. A reference
+    /// issued to another document is rejected as <c>STALE_REFERENCE</c> (<c>FL26</c>), inputs of a
+    /// foreign feature of the same document — as <c>CAPABILITY_UNAVAILABLE</c> (<c>FL27</c>); in both
+    /// cases the model does not change.</para>
+    /// <para><b>BOUND: set EXPANSION is NOT expressed by this field.</b> A new edge is not a feature's
+    /// own input, and the currencies must not be mixed. MEASURED by <c>FL25</c> (L-shaped plate with
+    /// free corners): expansion (1→2, 2→3) ends in a refusal AFTER mutation with
+    /// <c>partial_effects=true</c>. Before 17.09.2026 the same outcome was returned as success with
+    /// <c>level=call_returned</c> — that was a wrong message and it is fixed: the disappearance of the
+    /// feature is now a refusal, not "success at a reduced level".</para>
     /// </remarks>
     public IReadOnlyList<string>? BaseObjectRefs { get; init; }
 
-    /// <summary>Аналитическое ожидание объёма после правки (G03: 100·80·12 = 96000 мм³).</summary>
+    /// <summary>Analytic expectation of the volume after the edit (G03: 100·80·12 = 96000 mm³).</summary>
     public double? ExpectedVolumeMm3 { get; init; }
 
-    /// <summary>
-    /// Тело, на которое направлена область применения признака при правке (family=<c>cut_by_plane</c>).
-    /// </summary>
+    /// <summary>Body the feature's scope is directed at when editing (family=<c>cut_by_plane</c>).
     /// <remarks>
-    /// <para>
-    /// <b>Зачем поле на правке.</b> Наряд B3 §3.2 требует «назначать и ВОССТАНАВЛИВАТЬ область
-    /// применения при create/edit/rebuild/save-reopen». На создании она назначается, а на правке её
-    /// можно только перечитать: если признак оказался в умолчании «Все объекты» (справка
-    /// <c>rezultat_oper_v_zavisimosti_ot_s_o.html</c>), то перенос опоры снимет материал у
-    /// посторонних тел — и без этого поля починить признак было бы нечем, кроме удаления и сборки
-    /// заново.
-    /// </para>
-    /// <para>
-    /// <b>Отсутствие поля — не «всё равно».</b> Если поле не задано, адаптер обязан ПРОЧИТАТЬ область
-    /// применения живого признака до мутации и отказать, если она не адресована
-    /// (<c>ChooseType ≠ ksChBodies</c> либо пустой список тел). Молчаливая правка признака в умолчании
-    /// снимала бы материал у посторонних тел ровно так же, как на создании.
-    /// </para>
-    /// <para>
-    /// <b>Маршрут измерен 19.09.2026</b> пробой <c>--cut-area</c>, шаги CA.4 (адресация принята:
-    /// A=12000, S=1000), CA.5 (отрицательный контроль другим телом: A=18000, S=500), CA.6 (правка
-    /// опоры адресность сохраняет) и CA.7 (адресность переживает <c>save → close → open</c>).
-    /// </para>
+    /// <b>Why the field is on the edit.</b> Order B3 §3.2 requires "assigning and RESTORING the scope at
+    /// create/edit/rebuild/save-reopen". At creation it is assigned, and at edit it can only be re-read:
+    /// if the feature ended up in the "All objects" default (help page
+    /// <c>rezultat_oper_v_zavisimosti_ot_s_o.html</c>), moving the support would remove material from
+    /// unrelated bodies — and without this field there would be nothing to fix the feature with except
+    /// deletion and rebuilding.
+    /// <b>An absent field is not "all the same".</b> If the field is not set, the adapter MUST READ the
+    /// scope of the live feature before mutation and refuse if it is not addressed
+    /// (<c>ChooseType ≠ ksChBodies</c> or an empty body list). A silent edit of a feature in the default
+    /// would remove material from unrelated bodies exactly as at creation.
+    /// <b>Route MEASURED on 19.09.2026</b> by probe <c>--cut-area</c>, steps CA.4 (addressing accepted:
+    /// A=12000, S=1000), CA.5 (negative control with another body: A=18000, S=500), CA.6 (editing the
+    /// support preserves addressing) and CA.7 (addressing survives <c>save → close → open</c>).
     /// </remarks>
     public string? TargetBodyRef { get; init; }
 
-    /// <summary>
-    /// Новые параметры признака МАССИВА (family=<c>pattern</c>, очередь B4: SM-18 / SM-19 / SM-23).
-    /// </summary>
+    /// <summary>New parameters of a PATTERN feature (family=<c>pattern</c>, queue B4: SM-18 / SM-19 / SM-23).
     /// <remarks>
-    /// <para>
-    /// <b>Почему набор вынесен в отдельное поле, а не разложен по плоским полям команды.</b>
-    /// Семейство <c>pattern</c> — единственное, у которого предмет правки принадлежит ТРЁМ разным
-    /// интерфейсам API7 сразу, и часть имён между ними совпадает только по виду. Плоское поле
-    /// <c>count2</c> на самой команде читалось бы как «применимо к любому массиву», тогда как у
-    /// сетки это экземпляры по оси 2, а у кругового — по КОЛЬЦУ; плоское
-    /// <c>save_initial_orientation</c> выглядело бы применимым к сетке, где такого члена нет
-    /// вовсе. Группировка делает границу семейства видимой в самом контракте, а не только в
-    /// документации.
-    /// </para>
-    /// <para>
-    /// <b>Опознание признака идёт по САМОМУ ПОЛЮ, а не по номеру типа в дереве.</b> У остальных
-    /// правимых семейств ветка выбирается по <c>entity.type</c>, и это измеренный номер. Для массива
-    /// номер типа в дереве в этом сеансе не измерялся, поэтому он здесь и не угадывается: признак
-    /// сопоставляется с элементом <c>IModelContainer.FeaturePatterns</c> тем же прибором, что и
-    /// чтение (<see cref="PatternReadCommand"/>), — по имени оболочки дерева и штампу обновления.
-    /// Если поле не задано, ветка не выбирается вовсе, и поведение правки не меняется.
-    /// </para>
-    /// <para>
-    /// <b>Смешение с другими семействами отвергается до мутации.</b> Вызов, в котором вместе с
-    /// <c>pattern</c> пришло поле другого семейства (глубина, радиус, плоскость, вид булевой
-    /// операции), не выполняется: «применилось одно из двух» неотличимо потом от «применилось и то,
-    /// и другое».
-    /// </para>
+    /// <b>Why the set is put in a separate field rather than spread over flat command fields.</b> The
+    /// <c>pattern</c> family is the only one whose edit subject belongs to THREE different API7
+    /// interfaces at once, and some names coincide between them only in appearance. A flat <c>count2</c>
+    /// field on the command itself would read as "applicable to any pattern", whereas for a grid it
+    /// means instances along axis 2 and for a circular pattern along the RING; a flat
+    /// <c>save_initial_orientation</c> would look applicable to a grid, where no such member exists at
+    /// all. Grouping makes the family boundary visible in the contract itself, not only in the
+    /// documentation.
+    /// <b>The feature is identified BY THE FIELD ITSELF, not by the type number in the tree.</b> For the
+    /// other editable families the branch is chosen by <c>entity.type</c>, and that is a measured
+    /// number. For a pattern the type number in the tree was not measured in this session, so it is not
+    /// guessed here: the feature is matched to an element of <c>IModelContainer.FeaturePatterns</c> with
+    /// the same instrument as reading (<see cref="PatternReadCommand"/>) — by the tree wrapper name and
+    /// the update stamp. If the field is not set, no branch is chosen at all and the edit behaviour does
+    /// not change.
+    /// <b>Mixing with other families is rejected before mutation.</b> A call that carries, together with
+    /// <c>pattern</c>, a field of another family (depth, radius, plane, boolean operation kind) is not
+    /// executed: "one of the two applied" is later indistinguishable from "both applied".
     /// </remarks>
     public PatternEditDto? Pattern { get; init; }
 
-    /// <summary>
-    /// Новый диаметр отверстия (family=<c>hole</c>), мм: пилота у цековки и зенковки, самого
-    /// отверстия у глухого и сквозного цилиндрического.
-    /// </summary>
+    /// <summary>New hole diameter (family=<c>hole</c>), mm: the pilot of a counterbore and countersink, the hole
+    /// itself for a blind and a through cylindrical hole.</summary>
     /// <remarks>
-    /// <para>
-    /// <b>Маршрут измерен 20.09.2026</b> (зонд <c>scratch/_hole_edit_probe.py</c>, нога 2 — сырой
-    /// помощник <c>scratch/hole-edit-raw</c>, отчёт <c>docs/acceptance/api7/hole-modes.md</c> § M.6):
-    /// существующее отверстие берётся документированным членом <c>IHoles3D.Hole3D[index]</c>,
-    /// в него записываются члены своего режима, применяется <c>IModelObject.Update()</c>, затем
-    /// перестроение. Сквозное цилиндрическое Ø10 → Ø12 на плите 10 мм сняло
-    /// <c>345.575191895</c> мм³ = π·(36−25)·10, и это пережило <c>save → close → reopen</c>.
-    /// </para>
-    /// <para>
-    /// <b>Адрес признака не угадывается.</b> Соответствие «признак дерева ↔ запись <c>Holes3D</c>»
-    /// доказывается единственностью отверстия в документе: при нескольких отверстиях вызов
-    /// отвергается <c>CAPABILITY_UNAVAILABLE</c> до COM, потому что запись в <c>Holes3D[0]</c>
-    /// изменила бы чужое отверстие. Имя признака идентификатором не является: оно не переживает
-    /// переход API5↔API7 (измерено на фаске, F.8).
-    /// </para>
-    /// <para>
-    /// <b>Режим правкой не меняется.</b> Режим существующего признака читается из модели
-    /// (<c>IHole3D.HoleType</c>) и служит рамкой: поле чужого режима отвергается
-    /// <c>INVALID_ARGUMENT</c> до COM с перечнем своих полей. Смена режима не измерялась.
-    /// </para>
+    /// <b>Route MEASURED on 20.09.2026</b> (probe <c>scratch/_hole_edit_probe.py</c>, leg 2 — raw helper
+    /// <c>scratch/hole-edit-raw</c>, report <c>docs/acceptance/api7/hole-modes.md</c> § M.6): the
+    /// existing hole is taken by the documented member <c>IHoles3D.Hole3D[index]</c>, the members of its
+    /// own mode are written into it, <c>IModelObject.Update()</c> is applied, then a rebuild. A through
+    /// cylindrical Ø10 → Ø12 on a 10 mm plate removed <c>345.575191895</c> mm³ = π·(36−25)·10, and this
+    /// survived <c>save → close → reopen</c>.
+    /// <b>The feature address is not guessed.</b> The correspondence "tree feature ↔ <c>Holes3D</c>
+    /// record" is proved by the uniqueness of the hole in the document: with several holes the call is
+    /// rejected <c>CAPABILITY_UNAVAILABLE</c> before COM, because writing to <c>Holes3D[0]</c> would
+    /// change someone else's hole. A feature name is not an identifier: it does not survive the
+    /// API5↔API7 transition (MEASURED on the chamfer, F.8).
+    /// <b>The mode is not changed by an edit.</b> The mode of the existing feature is read from the
+    /// model (<c>IHole3D.HoleType</c>) and serves as the frame: a field of a foreign mode is rejected
+    /// <c>INVALID_ARGUMENT</c> before COM with a list of its own fields. A mode change was not measured.
     /// </remarks>
     public double? DiameterMm { get; init; }
 
-    /// <summary>
-    /// Новый диаметр выточки цековки (режим <c>through_counterbore</c>), мм. Поле ЧУЖОГО режима для
-    /// остальных: на глухом и на зенковке отвергается <c>INVALID_ARGUMENT</c>.
-    /// </summary>
+    /// <summary>New counterbore relief diameter (mode <c>through_counterbore</c>), mm. A field of a FOREIGN mode
+    /// for the rest: on a blind hole and on a countersink it is rejected <c>INVALID_ARGUMENT</c>.</summary>
     /// <remarks>
-    /// <b>Маршрут измерен 20.09.2026</b> (шаг M.6): выточка Ø18×4 → Ø20×5 сняла <c>474.380490692</c>
-    /// мм³ сверх прежнего — разность колец π/4·(D²−d²)·h (1178.097244573 против 703.716754404,
-    /// формула M.2). Пишется в <c>ISpotfacingHoleParameters.SpotfacingDiameter</c>; у чужого режима
-    /// этот интерфейс на объекте НЕДОСТИЖИМ — измерено контролем (в) зонда.
+    /// <b>Route MEASURED on 20.09.2026</b> (step M.6): a relief Ø18×4 → Ø20×5 removed
+    /// <c>474.380490692</c> mm³ over the previous — the ring difference π/4·(D²−d²)·h (1178.097244573
+    /// against 703.716754404, formula M.2). It is written to
+    /// <c>ISpotfacingHoleParameters.SpotfacingDiameter</c>; on a foreign mode this interface is
+    /// UNREACHABLE on the object — MEASURED by control (c) of the probe.
     /// </remarks>
     public double? CounterboreDiameterMm { get; init; }
 
-    /// <summary>Новая глубина выточки цековки (режим <c>through_counterbore</c>), мм.</summary>
+    /// <summary>New counterbore relief depth (mode <c>through_counterbore</c>), mm.</summary>
     public double? CounterboreDepthMm { get; init; }
 
-    /// <summary>
-    /// Новый диаметр УСТЬЯ зенковки (режим <c>through_countersink</c>), мм — устья, а не пилота:
-    /// пилот задаётся <see cref="DiameterMm"/>.
-    /// </summary>
+    /// <summary>New countersink MOUTH diameter (mode <c>through_countersink</c>), mm — the mouth, not the pilot:
+    /// the pilot is set by <see cref="DiameterMm"/>.</summary>
     /// <remarks>
-    /// <b>Маршрут измерен 20.09.2026</b> (шаг M.6): устье Ø20 → Ø24 при 90° сняло
-    /// <c>605.280184592</c> мм³ сверх прежнего — разность <c>π·h/3·(rM² + rP·rM − 2·rP²)</c> при
-    /// производной <c>h = (rM − rP)/tan(угол/2)</c> (1128.878960190 против 523.598775598).
+    /// <b>Route MEASURED on 20.09.2026</b> (step M.6): a mouth Ø20 → Ø24 at 90° removed
+    /// <c>605.280184592</c> mm³ over the previous — the difference <c>π·h/3·(rM² + rP·rM − 2·rP²)</c>
+    /// with the derivative <c>h = (rM − rP)/tan(angle/2)</c> (1128.878960190 against 523.598775598).
     /// </remarks>
     public double? CountersinkDiameterMm { get; init; }
 
-    /// <summary>Новый угол зенковки (режим <c>through_countersink</c>), градусы.</summary>
+    /// <summary>New countersink angle (mode <c>through_countersink</c>), degrees.</summary>
     public double? CountersinkAngleDeg { get; init; }
 
-    /// <summary>
-    /// Аналитическое ожидание СНЯТОГО правкой материала, мм³: <c>объём_до − объём_после</c>.
-    /// </summary>
+    /// <summary>Analytic expectation of the material REMOVED by the edit, mm³: <c>volume_before − volume_after</c>.
     /// <remarks>
-    /// <para>
-    /// <b>Знак — часть определения величины, а не оформление.</b> Отверстие снимает материал, поэтому
-    /// у «стало глубже» дельта положительна, а у «стало мельче» — отрицательна; модуль сравнивать
-    /// нельзя. Ровно на этом ошиблась первая редакция зонда: она сравнивала приращение объёма
-    /// (положительное) с аналитическим «снято» и давала ложное «не совпало» на верной геометрии —
-    /// дефект ПРИБОРА, а не факт о продукте.
-    /// </para>
-    /// <para>
-    /// <b>Почему дельта, а не полный объём.</b> Полный объём документа зависит от всего, что в нём
-    /// есть; дельта привязана к правке и потому различает «применилось ровно запрошенное» от
-    /// «применилось не то». <see cref="ExpectedVolumeMm3"/> тоже принимается — он проверяется
-    /// отдельно и независимо.
-    /// </para>
-    /// <para>
-    /// Без объявленного ожидания правка не подтверждается числом: уровень остаётся
-    /// <c>call_returned</c>, и в <c>unverified_aspects</c> появляется
-    /// <c>expected_volume_delta_not_supplied</c>.
-    /// </para>
+    /// <b>The sign is part of the definition of the quantity, not decoration.</b> A hole removes
+    /// material, so for "became deeper" the delta is positive and for "became shallower" it is negative;
+    /// comparing the magnitude is not allowed. This is exactly where the first edition of the probe
+    /// erred: it compared the volume increment (positive) with the analytic "removed" and gave a false
+    /// "mismatch" on correct geometry — an INSTRUMENT defect, not a fact about the product.
+    /// <b>Why a delta rather than the full volume.</b> The full document volume depends on everything in
+    /// it; the delta is tied to the edit and therefore distinguishes "exactly what was requested
+    /// applied" from "something else applied". <see cref="ExpectedVolumeMm3"/> is also accepted — it is
+    /// checked separately and independently.
+    /// Without a declared expectation the edit is not confirmed by a number: the level stays
+    /// <c>call_returned</c>, and <c>expected_volume_delta_not_supplied</c> appears in
+    /// <c>unverified_aspects</c>.
     /// </remarks>
     public double? ExpectedVolumeDeltaMm3 { get; init; }
 }
 
 /// <summary>
-/// Подавить или восстановить признак. Маршрут измерен пробой L.7 (12.09.2026):
-/// <c>ksFeature.excluded = true</c> снимает тело выдавливания до объёма пластины,
-/// <c>false</c> возвращает объём обратно; число признаков не меняется.
+/// Suppress or restore a feature. Route MEASURED by probe L.7 (12.09.2026):
+/// <c>ksFeature.excluded = true</c> removes the extrusion body down to the plate volume,
+/// <c>false</c> restores the volume; the feature count does not change.
 /// </summary>
 public sealed record SuppressFeatureCommand
 {
     public required string FeatureRef { get; init; }
 
-    /// <summary>true — подавить, false — восстановить.</summary>
+    /// <summary>true — suppress, false — restore.</summary>
     public required bool Suppressed { get; init; }
 
-    /// <summary>
-    /// Аналитическое ожидание объёма после подавления (или возврата). Без него подтверждается
-    /// только состояние признака, и результат честно помечается недоказанной геометрией.
-    /// </summary>
+    /// <summary>Analytic expectation of the volume after suppression (or restore). Without it only the feature
+    /// state is confirmed, and the result is honestly marked as unproven geometry.</summary>
     public double? ExpectedVolumeMm3 { get; init; }
 
     public required long ExpectedRevision { get; init; }
 }
 
-/// <summary>
-/// Удаление признака. Зависимые перечисляются ДО обращения к КОМПАС; достоверного перечня ни
-/// API5, ни API7 не даёт (проба L.8), поэтому после удаляемого признака в дереве возвращаются
-/// кандидаты, а их наличие требует <see cref="ConfirmDependents"/>.
-/// </summary>
+/// <summary>Feature deletion. Dependents are listed BEFORE calling KOMPAS; neither API5 nor API7 gives a
+/// reliable list (probe L.8), so the tree returns the candidates after the deleted feature, and their
+/// presence requires <see cref="ConfirmDependents"/>.</summary>
 public sealed record DeleteFeatureCommand
 {
     public required string FeatureRef { get; init; }
 
-    /// <summary>Явное согласие удалить признак, после которого в дереве есть другие.</summary>
+    /// <summary>Explicit consent to delete a feature that has others after it in the tree.</summary>
     public bool ConfirmDependents { get; init; }
 
     public double? ExpectedVolumeMm3 { get; init; }
@@ -2688,24 +2159,20 @@ public sealed record DeleteFeatureCommand
     public required long ExpectedRevision { get; init; }
 }
 
-/// <summary>
-/// Тело в результате операции B3: ссылка, объём, габарит и признак многокусочности.
-/// </summary>
+/// <summary>Body in the result of operation B3: reference, volume, bounding box and a multi-piece flag.
 /// <remarks>
-/// Отдельная запись, а не <c>BodyRowDto</c>, по двум причинам. Во-первых, приёмка B3 считается по
-/// ОБЪЁМАМ, а <c>BodyRowDto</c> объёма не несёт. Во-вторых, <c>MultiBodyParts</c> здесь не
-/// украшение: ядро представляет результат из нескольких кусков ОДНИМ телом с несколькими кусками
-/// (измерено 18.09.2026, шаг BO.8), и без этого поля «одно тело» читалось бы как «материал целый».
-/// <para>
-/// <c>VolumeMm3</c> равно <c>null</c>, когда объём не прочитан: «не прочитано» и «ноль» — разные
-/// ответы, и смешивать их нельзя.
-/// </para>
+/// A separate record, not <c>BodyRowDto</c>, for two reasons. First, acceptance B3 is counted by
+/// VOLUMES, and <c>BodyRowDto</c> carries no volume. Second, <c>MultiBodyParts</c> is no decoration
+/// here: the core represents a result of several pieces as ONE body with several pieces (MEASURED on
+/// 18.09.2026, step BO.8), and without this field "one body" would read as "material intact".
+/// <c>VolumeMm3</c> is <c>null</c> when the volume was not read: "not read" and "zero" are different
+/// answers and must not be mixed.
 /// </remarks>
 public sealed record SolidBodyDto
 {
     public required string BodyRef { get; init; }
 
-    /// <summary><c>solid</c> или <c>sheet</c>.</summary>
+    /// <summary><c>solid</c> or <c>sheet</c>.</summary>
     public required string Kind { get; init; }
 
     public double? VolumeMm3 { get; init; }
@@ -2714,100 +2181,83 @@ public sealed record SolidBodyDto
 
     public required int FaceCount { get; init; }
 
-    /// <summary>
-    /// Тело состоит из нескольких несвязных кусков. Именно так ядро представляет распавшийся
-    /// результат, и именно это поле отличает «одно тело из двух кусков» от «одно тело целое».
-    /// </summary>
+    /// <summary>The body consists of several disconnected pieces. This is exactly how the core represents a
+    /// broken-up result, and it is exactly this field that distinguishes "one body of two pieces" from
+    /// "one body intact".</summary>
     public required bool MultiBodyParts { get; init; }
 }
 
-/// <summary>
-/// Плоскость для операций B3: существующая опора, точка + нормаль или базовая плоскость со смещением.
-/// </summary>
+/// <summary>Plane for operations B3: an existing support, a point + normal, or a base plane with an offset.
 /// <remarks>
-/// Три способа взаимоисключающие, и это проверяется до вызова COM. Сторона плоскости НЕ задаётся
-/// здесь: она задаётся знаком <c>s = n·(p − p₀)</c> в самой команде отсечения, потому что «левая
-/// сторона» без системы координат — не адрес.
-/// <para>
-/// Нормаль обязана быть ненулевой и конечной. Точка и нормаль — в МОДЕЛЬНЫХ координатах, мм.
-/// </para>
-/// <para>
-/// <b>Форма полей совпадает с ОПУБЛИКОВАННОЙ схемой <c>cut_plane</c> буквально.</b> 19.09.2026
-/// измерено клиентской приёмкой B3 (три строки FAIL: <c>B3C.neg.plane_base_declared</c>,
-/// <c>B3C.08.plane_base.cut_by_plane</c>, <c>B3C.08.plane_base.split</c>): схема публиковала
-/// <c>base</c> строкой <c>xy|xz|yz</c> и соседний <c>offset_mm</c> числом, а DTO ждал здесь ОБЪЕКТ
-/// <c>PlaneRefDto</c> — то есть форма расходилась на один уровень вложенности, и объявленный
-/// <c>CAPABILITY_UNAVAILABLE</c> был недостижим: вызов падал на разборе payload
-/// (<c>JsonException</c> по <c>$.plane.base</c>) с кодом <c>VERIFICATION_FAILED</c>. Поле приведено к
-/// опубликованной форме; «объявленное и исполняемое» снова совпадают.
-/// </para>
-/// <para>
-/// <b><c>offset_mm</c> без <c>base</c> — ошибка аргумента, а не молчание.</b> Смещение без базовой
-/// плоскости не выражает плоскость, и принимать его «на всякий случай» значило бы объявить
-/// параметр принятым и проигнорировать его.
-/// </para>
+/// The three ways are mutually exclusive, and this is checked before the COM call. The plane side is
+/// NOT set here: it is set by the sign <c>s = n·(p − p₀)</c> in the cut command itself, because "the
+/// left side" without a coordinate system is not an address.
+/// The normal must be non-zero and finite. The point and the normal are in MODEL coordinates, mm.
+/// <b>The field shape matches the PUBLISHED <c>cut_plane</c> schema literally.</b> MEASURED on
+/// 19.09.2026 by client acceptance B3 (three FAIL rows: <c>B3C.neg.plane_base_declared</c>,
+/// <c>B3C.08.plane_base.cut_by_plane</c>, <c>B3C.08.plane_base.split</c>): the schema published
+/// <c>base</c> as the string <c>xy|xz|yz</c> and the neighbouring <c>offset_mm</c> as a number, while
+/// the DTO expected a <c>PlaneRefDto</c> OBJECT here — i.e. the shape diverged by one nesting level,
+/// and the declared <c>CAPABILITY_UNAVAILABLE</c> was unreachable: the call failed on payload parsing
+/// (<c>JsonException</c> at <c>$.plane.base</c>) with the code <c>VERIFICATION_FAILED</c>. The field was
+/// brought to the published shape; "declared and executed" coincide again.
+/// <b><c>offset_mm</c> without <c>base</c> is an argument error, not silence.</b> An offset without a
+/// base plane does not express a plane, and accepting it "just in case" would mean declaring the
+/// parameter accepted and ignoring it.
 /// </remarks>
 public sealed record CutPlaneDto
 {
-    /// <summary>Ссылка на существующую плоскость документа.</summary>
+    /// <summary>Reference to an existing document plane.</summary>
     public string? PlaneRef { get; init; }
 
-    /// <summary>Точка, через которую проходит плоскость, мм, модельные координаты.</summary>
+    /// <summary>Point the plane passes through, mm, model coordinates.</summary>
     public IReadOnlyList<double>? PointMm { get; init; }
 
-    /// <summary>Нормаль плоскости, безразмерная, модельные координаты. Ненулевая и конечная.</summary>
+    /// <summary>Plane normal, dimensionless, model coordinates. Non-zero and finite.</summary>
     public IReadOnlyList<double>? NormalMm { get; init; }
 
     /// <summary>
-    /// Базовая плоскость (<c>xy</c> | <c>xz</c> | <c>yz</c>) — ОБЪЯВЛЕННЫЙ, но НЕ ПОДДЕРЖАННЫЙ способ:
-    /// маршрут вспомогательной плоскости API7 со смещением не измерен, и вызов с этим полем отказывает
-    /// <c>CAPABILITY_UNAVAILABLE</c> до всякой мутации.
+    /// Base plane (<c>xy</c> | <c>xz</c> | <c>yz</c>) — a DECLARED but NOT SUPPORTED way: the API7
+    /// auxiliary-plane-with-offset route is not measured, and a call with this field refuses
+    /// <c>CAPABILITY_UNAVAILABLE</c> before any mutation.
     /// </summary>
     public PlaneBase? Base { get; init; }
 
-    /// <summary>Смещение вдоль нормали базовой плоскости, мм. Имеет смысл только вместе с <see cref="Base"/>.</summary>
+    /// <summary>Offset along the base plane normal, mm. Meaningful only together with <see cref="Base"/>.</summary>
     public double? OffsetMm { get; init; }
 }
 
-/// <summary>
-/// Форма постановки плоскости: к какому исходу она обязывает, ДО всякой работы с моделью.
-/// </summary>
+/// <summary>Shape verdict for a plane: which outcome it commits to, BEFORE any work with the model.
 public enum CutPlaneFormVerdict
 {
-    /// <summary>Форма допустима: дальнейшие проверки — за маршрутом (ссылка, конечность, нормаль).</summary>
+    /// <summary>Shape admissible: further checks are up to the route (reference, finiteness, normal).</summary>
     Ok,
 
-    /// <summary>Названо больше одного способа. Противоречивый запрос — <c>INVALID_ARGUMENT</c>.</summary>
+    /// <summary>More than one way was named. A contradictory request — <c>INVALID_ARGUMENT</c>.</summary>
     ModesConflict,
 
-    /// <summary>Назван <c>base</c> — объявленный и НЕ поддержанный способ: <c>CAPABILITY_UNAVAILABLE</c>.</summary>
+    /// <summary><c>base</c> was named — a declared and NOT supported way: <c>CAPABILITY_UNAVAILABLE</c>.</summary>
     BaseUnsupported,
 
-    /// <summary><c>offset_mm</c> без <c>base</c> — смещение не выражает плоскость: <c>INVALID_ARGUMENT</c>.</summary>
+    /// <summary><c>offset_mm</c> without <c>base</c> — the offset does not express a plane: <c>INVALID_ARGUMENT</c>.</summary>
     OffsetWithoutBase,
 }
 
-/// <summary>
-/// Правило формы <see cref="CutPlaneDto"/> — в одном месте и без COM, чтобы его можно было
-/// проверить тестом, а не только приёмкой на живой модели.
-/// </summary>
+/// <summary>The shape rule of <see cref="CutPlaneDto"/> — in one place and without COM, so it can be checked by
+/// a test rather than only by acceptance on a live model.</summary>
 /// <remarks>
-/// <para>
-/// Приоритет объявлен и не зависит от порядка полей в JSON:
+/// The priority is declared and does not depend on the order of fields in JSON:
 /// <list type="number">
-/// <item><see cref="CutPlaneFormVerdict.ModesConflict"/> — <c>base</c> вместе с <c>plane_ref</c> или
-/// точкой с нормалью. Проверяется ПЕРВЫМ: запрос противоречив, и ответить на него объявленным
-/// отказом возможности значило бы спрятать от клиента, что он назвал два способа сразу;</item>
-/// <item><see cref="CutPlaneFormVerdict.BaseUnsupported"/> — <c>base</c> назван один;</item>
-/// <item><see cref="CutPlaneFormVerdict.OffsetWithoutBase"/> — смещение без базовой плоскости;</item>
-/// <item><see cref="CutPlaneFormVerdict.Ok"/> — либо <c>plane_ref</c>, либо точка с нормалью.</item>
+/// <item><see cref="CutPlaneFormVerdict.ModesConflict"/> — <c>base</c> together with <c>plane_ref</c> or
+/// a point with a normal. Checked FIRST: the request is contradictory, and answering it with a declared
+/// capability refusal would hide from the client that it named two ways at once;</item>
+/// <item><see cref="CutPlaneFormVerdict.BaseUnsupported"/> — <c>base</c> named alone;</item>
+/// <item><see cref="CutPlaneFormVerdict.OffsetWithoutBase"/> — an offset without a base plane;</item>
+/// <item><see cref="CutPlaneFormVerdict.Ok"/> — either <c>plane_ref</c> or a point with a normal.</item>
 /// </list>
-/// </para>
-/// <para>
-/// Взаимоисключение «<c>plane_ref</c> против точки с нормалью» здесь НЕ проверяется: у правки
-/// признака своя причина отвергать ссылку (маршрут правки — перенос точек СОБСТВЕННОЙ опоры), и
-/// маршрут обязан назвать её сам.
-/// </para>
+/// The mutual exclusion "<c>plane_ref</c> versus a point with a normal" is NOT checked here: a feature
+/// edit has its own reason to reject a reference (the edit route is a transfer of the points of its OWN
+/// support), and the route must name it itself.
 /// </remarks>
 public static class CutPlaneForm
 {
@@ -2832,7 +2282,7 @@ public static class CutPlaneForm
     }
 }
 
-/// <summary>Вид булевой операции. Числа соответствуют <c>Kompas6Constants.ksBooleanType</c>.</summary>
+/// <summary>Boolean operation kind. The numbers correspond to <c>Kompas6Constants.ksBooleanType</c>.</summary>
 public enum BooleanOperation
 {
     Union = 3,
@@ -2840,49 +2290,40 @@ public enum BooleanOperation
     Intersect = 1,
 }
 
-/// <summary>
-/// Булева операция над телами: явная цель, явный список инструментов, вид операции и политика
-/// сохранения инструментов (docs/05 SM-15).
-/// </summary>
-/// <remarks>
-/// Адресация — только по ссылкам. Ни «текущее окно», ни «индекс 0», ни порядок коллекции целью не
-/// являются: заявленное тело ищется среди элементов BodyCollection по IUnknown, и при отсутствии
-/// совпадения вызов отвергается, а не подставляется позиция.
-/// <para>
-/// Проверки, которые ядро НЕ делает и потому делает контракт: цель не входит в набор инструментов;
-/// в наборе нет повторов; список непуст. Повтор ссылки ядро принимает молча (измерено 18.09.2026,
-/// шаг BO.9), поэтому полагаться на него нельзя.
-/// </para>
-/// </remarks>
+/// <summary>Boolean operation on bodies: explicit target, explicit tool list, operation kind and tool-keeping
+/// policy (docs/05 SM-15).</summary>
+/// <remarks>Addressing is by references only. Neither "the current window", nor "index 0", nor the collection
+/// order is a target: the declared body is searched among the BodyCollection elements by IUnknown, and
+/// when there is no match the call is refused rather than a position being substituted.
+/// Checks the core does NOT make and therefore the contract does: the target is not part of the tool
+/// set; the set has no repeats; the list is non-empty. The core accepts a repeated reference silently
+/// (MEASURED on 18.09.2026, step BO.9), so it must not be relied on.</remarks>
 public sealed record BooleanCommand
 {
     public required string DocumentId { get; init; }
 
-    /// <summary>Тело-цель. Разность считается как «цель минус инструменты».</summary>
+    /// <summary>Target body. Difference is computed as "target minus tools".</summary>
     public required string TargetBodyRef { get; init; }
 
-    /// <summary>Тела-инструменты. Непустой список без повторов и без цели.</summary>
+    /// <summary>Tool bodies. A non-empty list without repeats and without the target.</summary>
     public required IReadOnlyList<string> ToolBodyRefs { get; init; }
 
     public required BooleanOperation Operation { get; init; }
 
-    /// <summary>
-    /// Сохранить инструменты отдельными телами на прежнем месте
-    /// (<c>IBoolean.SaveCopyModifyObjects</c>). Копия цели не поддерживается: это отдельный режим
-    /// <c>SM-15.union.mode_save_base_copy</c> с приоритетом <c>next</c>, вне обязательного объёма.
-    /// </summary>
+    /// <summary>Keep the tools as separate bodies in their former place
+    /// (<c>IBoolean.SaveCopyModifyObjects</c>). A copy of the target is not supported: that is a
+    /// separate mode <c>SM-15.union.mode_save_base_copy</c> with priority <c>next</c>, outside the
+    /// mandatory scope.</summary>
     public bool KeepTools { get; init; }
 
-    /// <summary>Аналитическое ожидание объёма результата, если оно выводимо у вызывающего.</summary>
+    /// <summary>Analytic expectation of the result volume, when the caller can derive it.</summary>
     public double? ExpectedVolumeMm3 { get; init; }
 
     public required long ExpectedRevision { get; init; }
 }
 
-/// <summary>
-/// Разделение тела плоскостью на части. Все полученные части сохраняются — это измеренное поведение
-/// <c>ISplitSolid</c>, а не выбранная политика.
-/// </summary>
+/// <summary>Splitting a body into parts by a plane. All resulting parts are kept — this is the measured
+/// behaviour of <c>ISplitSolid</c>, not a chosen policy.</summary>
 public sealed record SplitCommand
 {
     public required string DocumentId { get; init; }
@@ -2896,13 +2337,9 @@ public sealed record SplitCommand
     public required long ExpectedRevision { get; init; }
 }
 
-/// <summary>
-/// Отсечение тела по одну сторону плоскости (docs/05 SM-16).
-/// </summary>
-/// <remarks>
-/// Оставляемая сторона задаётся знаком <c>s = n·(p − p₀)</c>. Измеренное соответствие: сторона
-/// «в направлении нормали» (<c>s &gt; 0</c>) — это <c>ICut.Direction = true</c>.
-/// </remarks>
+/// <summary>Cutting a body on one side of a plane (docs/05 SM-16).
+/// <remarks>The kept side is set by the sign <c>s = n·(p − p₀)</c>. MEASURED correspondence: the side "in the
+/// direction of the normal" (<c>s &gt; 0</c>) is <c>ICut.Direction = true</c>.</remarks>
 public sealed record CutByPlaneCommand
 {
     public required string DocumentId { get; init; }
@@ -2911,7 +2348,7 @@ public sealed record CutByPlaneCommand
 
     public required CutPlaneDto Plane { get; init; }
 
-    /// <summary>Оставляемая сторона: <c>positive</c> — <c>s &gt; 0</c>, <c>negative</c> — <c>s &lt; 0</c>.</summary>
+    /// <summary>Kept side: <c>positive</c> — <c>s &gt; 0</c>, <c>negative</c> — <c>s &lt; 0</c>.</summary>
     public required string KeepSide { get; init; }
 
     public double? ExpectedVolumeMm3 { get; init; }
@@ -2919,7 +2356,7 @@ public sealed record CutByPlaneCommand
     public required long ExpectedRevision { get; init; }
 }
 
-/// <summary>Вид преобразования положения тела.</summary>
+/// <summary>Body position transform kind.</summary>
 public enum RepositionKind
 {
     Translate,
@@ -2927,14 +2364,13 @@ public enum RepositionKind
 }
 
 /// <summary>
-/// Перенос и поворот тела (docs/05 SM-17). Оба вида — одно признак <c>IBodyReposition</c>, и оба
-/// пишутся однородной матрицей 4×4: положение пишет только она (OQ-A19).
+/// Translation and rotation of a body (docs/05 SM-17). Both kinds are one feature
+/// <c>IBodyReposition</c>, and both are written by a homogeneous 4×4 matrix: only it writes the
+/// position (OQ-A19).
 /// </summary>
-/// <remarks>
-/// Ось поворота задаётся точкой и направлением либо двумя различными точками — в модельных
-/// координатах, мм. Вырожденная ось (совпадающие точки, нулевое направление) отвергается до COM.
-/// Угол — в градусах, знак по правому правилу вокруг направления оси.
-/// </remarks>
+/// <remarks>The rotation axis is given by a point and a direction, or by two distinct points — in model
+/// coordinates, mm. A degenerate axis (coincident points, zero direction) is refused before COM. The
+/// angle is in degrees, the sign by the right-hand rule around the axis direction.</remarks>
 public sealed record RepositionCommand
 {
     public required string DocumentId { get; init; }
@@ -2943,29 +2379,27 @@ public sealed record RepositionCommand
 
     public required RepositionKind Kind { get; init; }
 
-    /// <summary>Вектор переноса, мм, модельные координаты. Обязателен для <c>translate</c>.</summary>
+    /// <summary>Translation vector, mm, model coordinates. Mandatory for <c>translate</c>.</summary>
     public IReadOnlyList<double>? VectorMm { get; init; }
 
-    /// <summary>Точка на оси поворота, мм. Обязательна для <c>rotate</c>.</summary>
+    /// <summary>Point on the rotation axis, mm. Mandatory for <c>rotate</c>.</summary>
     public IReadOnlyList<double>? AxisPointMm { get; init; }
 
-    /// <summary>Направление оси поворота. Взаимоисключающе с <c>AxisPoint2Mm</c>.</summary>
+    /// <summary>Rotation axis direction. Mutually exclusive with <c>AxisPoint2Mm</c>.</summary>
     public IReadOnlyList<double>? AxisDirectionMm { get; init; }
 
-    /// <summary>Вторая точка оси поворота. Взаимоисключающе с <c>AxisDirectionMm</c>.</summary>
+    /// <summary>Second point of the rotation axis. Mutually exclusive with <c>AxisDirectionMm</c>.</summary>
     public IReadOnlyList<double>? AxisPoint2Mm { get; init; }
 
-    /// <summary>Угол поворота в градусах. Обязателен для <c>rotate</c>.</summary>
+    /// <summary>Rotation angle in degrees. Mandatory for <c>rotate</c>.</summary>
     public double? AngleDeg { get; init; }
 
     public required long ExpectedRevision { get; init; }
 }
 
-/// <summary>
-/// Фактическая структура результата булевой операции. Обещаний о числе тел нет: ядро представляет
-/// результат из нескольких кусков ОДНИМ телом с несколькими кусками (измерено 18.09.2026, шаг BO.8:
-/// V = 18 000, <c>MultiBodyParts = true</c>, 12 граней при двух кусках по 6).
-/// </summary>
+/// <summary>Actual structure of a boolean result. There are no promises about the body count: the core
+/// represents a result of several pieces as ONE body with several pieces (MEASURED on 18.09.2026, step
+/// BO.8: V = 18 000, <c>MultiBodyParts = true</c>, 12 faces for two pieces of 6).</summary>
 public sealed record BooleanResultDto
 {
     public required string FeatureRef { get; init; }
@@ -2974,22 +2408,20 @@ public sealed record BooleanResultDto
 
     public required bool KeepTools { get; init; }
 
-    /// <summary>Тела после операции — фактический состав, а не ожидаемый.</summary>
+    /// <summary>Bodies after the operation — the actual composition, not the expected one.</summary>
     public required IReadOnlyList<SolidBodyDto> ResultBodies { get; init; }
 
-    /// <summary>Инструменты, сохранённые отдельными телами (пустой список, если политика их поглотила).</summary>
+    /// <summary>Tools kept as separate bodies (an empty list if the policy consumed them).</summary>
     public required IReadOnlyList<SolidBodyDto> SavedTools { get; init; }
 
-    /// <summary>Тела, которые операция потребла.</summary>
+    /// <summary>Bodies the operation consumed.</summary>
     public required IReadOnlyList<string> ConsumedInputs { get; init; }
 
-    /// <summary>Сумма объёмов всех тел документа после операции.</summary>
+    /// <summary>Sum of the volumes of all document bodies after the operation.</summary>
     public required double TotalVolumeMm3 { get; init; }
 
-    /// <summary>
-    /// Сумма индивидуальных объёмов и объём пространственного объединения — разные величины, и
-    /// смешивать их нельзя. Здесь — именно сумма по телам.
-    /// </summary>
+    /// <summary>The sum of the individual volumes and the volume of the spatial union are different quantities
+    /// and must not be mixed. Here it is exactly the sum over bodies.</summary>
     public string? VolumeNote { get; init; }
 
     public required long Revision { get; init; }
@@ -2997,20 +2429,20 @@ public sealed record BooleanResultDto
     public IReadOnlyList<string>? UnverifiedAspects { get; init; }
 }
 
-/// <summary>Результат разделения: полный список частей, каждая со своей ссылкой.</summary>
+/// <summary>Split result: the full list of parts, each with its own reference.</summary>
 public sealed record SplitResultDto
 {
     public required string FeatureRef { get; init; }
 
-    /// <summary>Все части, полученные разделением, со ссылками и объёмами.</summary>
+    /// <summary>All parts produced by the split, with references and volumes.</summary>
     public required IReadOnlyList<SolidBodyDto> Parts { get; init; }
 
-    /// <summary>Тела документа, не участвовавшие в операции, — доказательство их непричастности.</summary>
+    /// <summary>Document bodies that did not take part in the operation — proof of their non-involvement.</summary>
     public required IReadOnlyList<SolidBodyDto> UntouchedBodies { get; init; }
 
     public required double PartsVolumeSumMm3 { get; init; }
 
-    /// <summary>Нормаль плоскости в модельных координатах — та, что реально применилась.</summary>
+    /// <summary>Plane normal in model coordinates — the one that actually applied.</summary>
     public IReadOnlyList<double>? PlaneNormalMm { get; init; }
 
     public IReadOnlyList<double>? PlanePointMm { get; init; }
@@ -3020,22 +2452,22 @@ public sealed record SplitResultDto
     public IReadOnlyList<string>? UnverifiedAspects { get; init; }
 }
 
-/// <summary>Результат отсечения: что осталось и что удалено, названное явно.</summary>
+/// <summary>Cut result: what remained and what was removed, named explicitly.</summary>
 public sealed record CutByPlaneResultDto
 {
     public required string FeatureRef { get; init; }
 
-    /// <summary>Оставленное тело.</summary>
+    /// <summary>The remaining body.</summary>
     public required SolidBodyDto Remaining { get; init; }
 
-    /// <summary>Сторона, названная знаком: <c>positive</c> — <c>s &gt; 0</c>.</summary>
+    /// <summary>The side named by the sign: <c>positive</c> — <c>s &gt; 0</c>.</summary>
     public required string KeptSide { get; init; }
 
     public required IReadOnlyList<double> PlaneNormalMm { get; init; }
 
     public required IReadOnlyList<double> PlanePointMm { get; init; }
 
-    /// <summary>Тела документа, не участвовавшие в операции.</summary>
+    /// <summary>Document bodies that did not take part in the operation.</summary>
     public required IReadOnlyList<SolidBodyDto> UntouchedBodies { get; init; }
 
     public required long Revision { get; init; }
@@ -3043,17 +2475,16 @@ public sealed record CutByPlaneResultDto
     public IReadOnlyList<string>? UnverifiedAspects { get; init; }
 
     /// <summary>
-    /// Проверки, на которых держится вердикт: адресность (материал снят у НАЗВАННОГО тела) и
-    /// сохранность посторонних тел. Публикуются отдельно от
-    /// <see cref="UnverifiedAspects"/>, потому что пустой список ограничений при исчезнувшем
-    /// постороннем теле читался бы как «проверено полностью» — именно так клиентская приёмка
-    /// 19.09.2026 получила ложный <c>geometry_checked</c> (дефект
-    /// <c>CUT-PLANE-APPLIED-TO-UNNAMED-BODIES</c>).
+    /// The checks the verdict rests on: addressing (material removed from the NAMED body) and the
+    /// integrity of unrelated bodies. They are published separately from
+    /// <see cref="UnverifiedAspects"/>, because an empty limitation list with a vanished unrelated body
+    /// would read as "fully verified" — this is exactly how client acceptance on 19.09.2026 got a false
+    /// <c>geometry_checked</c> (defect <c>CUT-PLANE-APPLIED-TO-UNNAMED-BODIES</c>).
     /// </summary>
     public IReadOnlyList<NamedCheck>? Checks { get; init; }
 }
 
-/// <summary>Результат переноса или поворота: положение до и после, объём и число тел.</summary>
+/// <summary>Reposition result: the position before and after, the volume and the body count.</summary>
 public sealed record RepositionResultDto
 {
     public required string FeatureRef { get; init; }
@@ -3066,7 +2497,7 @@ public sealed record RepositionResultDto
 
     public required double VolumeMm3 { get; init; }
 
-    /// <summary>Число тел документа до и после — преобразование положения не создаёт и не потребляет тела.</summary>
+    /// <summary>Document body count before and after — a position transform neither creates nor consumes bodies.</summary>
     public required int BodiesBefore { get; init; }
 
     public required int BodiesAfter { get; init; }
@@ -3098,92 +2529,83 @@ public sealed record ImportStepCommand
 
     public string? TargetPath { get; init; }
 
-    /// <summary>
-    /// P0 diagnostic mode: log every return value, null and interface type observed around
-    /// the import instead of throwing at the first null. Used only by the probe.
-    /// </summary>
+    /// <summary>P0 diagnostic mode: log every return value, null and interface type observed around
+    /// the import instead of throwing at the first null. Used only by the probe.</summary>
     public bool TraceLifecycle { get; init; }
 }
 
 /// <summary>
-/// Растровый снимок модели текущего сеанса документированным маршрутом API5:
+/// Raster snapshot of the current session's model by the documented API5 route:
 /// <c>ksDocument3D.RasterFormatParam()</c> → <c>ksRasterFormatParam</c> →
 /// <c>ksDocument3D.SaveAsToRasterFormat(fileName, rasterPar)</c>.
 /// </summary>
 /// <remarks>
-/// <b>Два режима маршрута ВЗАИМОИСКЛЮЧАЮЩИЕ, и это измерено (проба P2b наряда, поставка
-/// <c>publish-deproutes-r2-20260921</c>):</b> с НЕПУСТЫМ именем файла ядро пишет файл, а
-/// <c>resultArrayBytes</c> остаётся null (шесть форм вызова, отличающихся порядком записи членов,
-/// предварительно подставленным массивом, вторым методом записи и повторным чтением свойства, —
-/// все дали null); с ПУСТЫМ именем файла ядро отдаёт <c>System.Byte[]</c> (8639 байт, магия PNG) и
-/// файла НЕ создаёт вовсе. Поэтому «вернуть картинку» и «записать файл» — два разных вызова
-/// маршрута, а не один с двумя последствиями.
-/// <para>
-/// Поля, не подтверждённые пробой, в контракт не входят: <c>IViewProjection7</c> (управление
-/// проекцией) документирован, но этим нарядом не реализуется и назван остатком.
-/// </para>
+/// <b>The two route modes are MUTUALLY EXCLUSIVE, and this is MEASURED (probe P2b of the order, delivery
+/// <c>publish-deproutes-r2-20260921</c>):</b> with a NON-EMPTY file name the core writes the file and
+/// <c>resultArrayBytes</c> stays null (six call shapes differing in the order of member writes, a
+/// pre-supplied array, a second write method and a re-read of the property — all gave null); with an
+/// EMPTY file name the core returns <c>System.Byte[]</c> (8639 bytes, PNG magic) and does NOT create a
+/// file at all. So "return the picture" and "write the file" are two different route calls, not one
+/// with two consequences.
+/// Fields not confirmed by the probe are not part of the contract: <c>IViewProjection7</c> (projection
+/// control) is documented, but is not implemented by this order and is named as a remainder.
 /// </remarks>
 public sealed record ExportImageCommand
 {
     public required string DocumentId { get; init; }
 
-    /// <summary>Ревизия, прочитанная вызывающим; расхождение даёт REVISION_CONFLICT до COM.</summary>
+    /// <summary>Revision read by the caller; a mismatch gives REVISION_CONFLICT before COM.</summary>
     public required long ExpectedRevision { get; init; }
 
-    /// <summary>Имя формата на проводе: png, jpg, bmp или tif.</summary>
+    /// <summary>Format name on the wire: png, jpg, bmp or tif.</summary>
     public required string Format { get; init; }
 
-    /// <summary>
-    /// Значение <c>extResolution</c>. Не задано — член НЕ записывается, действует умолчание ядра
-    /// (измерено пробой P6 отдельной строкой). Ограничения ответа применяются к результату в любом
-    /// случае: превышение отвергается, а не ужимается.
-    /// </summary>
+    /// <summary>Value of <c>extResolution</c>. Not set — the member is NOT written and the core default applies
+    /// (MEASURED by probe P6 on a separate line). The response limits apply to the result in any case: an
+    /// excess is refused, not squeezed.</summary>
     public int? Resolution { get; init; }
 
-    /// <summary>Значение <c>extScale</c>. Не задано — член не записывается.</summary>
+    /// <summary>Value of <c>extScale</c>. Not set — the member is not written.</summary>
     public double? Scale { get; init; }
 
-    /// <summary>Куда положить файл. Не задано — файл не создаётся (байтовый режим).</summary>
+    /// <summary>Where to put the file. Not set — no file is created (byte mode).</summary>
     public string? SavePath { get; init; }
 
-    /// <summary>Вернуть ли картинку в ответе. Умолчание — да.</summary>
+    /// <summary>Whether to return the picture in the response. Default — yes.</summary>
     public bool ReturnImageContent { get; init; } = true;
 }
 
-/// <summary>
-/// Результат растрового снимка. Габариты — ПРОЧИТАННЫЕ ИЗ ЗАГОЛОВКА, а не взятые из запроса:
-/// параметр говорит, что просили, заголовок — что получилось.
-/// </summary>
+/// <summary>Raster snapshot result. The dimensions are READ FROM THE HEADER, not taken from the request: the
+/// parameter says what was asked for, the header says what came out.</summary>
 public sealed record ExportImageResultDto
 {
     public required string Format { get; init; }
 
     public required string MimeType { get; init; }
 
-    /// <summary>Габарит из заголовка; null — не прочитан (у JPG и TIF габарит не разбирается).</summary>
+    /// <summary>Dimension from the header; null — not read (JPG and TIF dimensions are not parsed).</summary>
     public int? PixelWidth { get; init; }
 
     public int? PixelHeight { get; init; }
 
-    /// <summary>Размер артефакта в байтах — измеренный, а не выведенный из запроса.</summary>
+    /// <summary>Artifact size in bytes — MEASURED, not derived from the request.</summary>
     public required long BytesCount { get; init; }
 
-    /// <summary>Путь записанного файла; null — файл не запрашивался.</summary>
+    /// <summary>Path of the written file; null — no file was requested.</summary>
     public string? SavePath { get; init; }
 
-    /// <summary>
-    /// Каким режимом маршрута получен артефакт: <c>memory</c> (пустое имя файла, байты в ответе)
-    /// или <c>file</c> (непустое имя, файл на диске). Назван потому, что это разные вызовы ядра.
-    /// </summary>
+    /// <summary>By which route mode the artifact was obtained: <c>memory</c> (empty file name, bytes in the
+    /// response) or <c>file</c> (non-empty name, file on disk). Named because these are different core
+    /// calls.</summary>
     public required string RasterRoute { get; init; }
 
-    /// <summary>Файл записан ИЗ ТЕХ ЖЕ байтов, что вернулись в ответе (один рендер, не два).</summary>
+    /// <summary>The file was written FROM THE SAME bytes that came back in the response (one render, not two).</summary>
     public bool? SavePathFromMemory { get; init; }
 
-    /// <summary>Состояние вида: снимок снят с текущего вида окна сервера.</summary>
+    /// <summary>View state: the snapshot was taken from the server window's current view.</summary>
     public required string ViewNote { get; init; }
 
-    /// <summary>base64 картинки. Хост переносит его в image-блок и ИЗ СТРУКТУРЫ УБИРАЕТ.</summary>
+    /// <summary>base64 of the picture. The Host moves it into an image block and REMOVES it from the structure.</summary>
     public string? ImageBase64 { get; init; }
 
     public required VerificationLevel ReachedLevel { get; init; }
@@ -3218,12 +2640,8 @@ public sealed record UnitProbeResult
     public required IReadOnlyList<string> UnverifiedAspects { get; init; }
 }
 
-// Контракты домена сборок вынесены в AssemblyCommands.cs (наряд C1). Прежние заготовки
-// (ListComponentsCommand с IncludeSuppressed/IncludeHidden, SetComponentTransformCommand с
-// CoordinateSpace, CheckIntersectionsCommand) были объявлены от первоначальной спеки и ни одним
-// инструментом не использовались: их поля не совпадают с составом блока C1 (подавления компонентов
-// и контроля пересечений в нём нет). Они удалены как нереализованная заготовка, а не как требование:
-// знаменатель профиля от этого не меняется, счётчик закрытого не растёт.
+// The assembly-domain contracts live in AssemblyCommands.cs (order C1).
+// History: docs/decisions/contracts.md#assembly-domain-contracts
 /// <summary>Feature row returned to the Host (spec 2.5).</summary>
 public sealed record FeatureRowDto
 {
@@ -3239,19 +2657,15 @@ public sealed record FeatureRowDto
 
     public IReadOnlyList<string> Dependencies { get; init; } = Array.Empty<string>();
 
-    /// <summary>
-    /// Reference to the sketch this feature is built on, when it is an extrusion and the sketch can
+    /// <summary>Reference to the sketch this feature is built on, when it is an extrusion and the sketch can
     /// be read back through <c>GetSketch()</c>. Null for feature families without a sketch and when
-    /// the read-back fails.
-    /// </summary>
-    /// <remarks>
-    /// This closes the long-standing <c>sketch_reference_not_resolved</c> gap: before it, a sketch
+    /// the read-back fails.</summary>
+    /// <remarks>This closes the long-standing <c>sketch_reference_not_resolved</c> gap: before it, a sketch
     /// that arrived with a reopened document could be neither named nor edited, because nothing
     /// handed the caller a reference to it. It is the missing half of the model-derived sketch
     /// route — the coordinate can now be derived, and this is how the sketch to edit is found in the
     /// first place. It is a plain reference minted against the current revision, so the usual
-    /// staleness rules apply to it unchanged (it dies on the next rebuild like any other handle).
-    /// </remarks>
+    /// staleness rules apply to it unchanged (it dies on the next rebuild like any other handle).</remarks>
     public string? SketchRef { get; init; }
 }
 
@@ -3281,13 +2695,13 @@ public sealed record FaceRowDto
 
     public IReadOnlyList<double>? NormalAtCenter { get; init; }
 
-    /// <summary>Радиус цилиндрической грани, мм; null для нецилиндрических.</summary>
+    /// <summary>Radius of a cylindrical face, mm; null for non-cylindrical ones.</summary>
     public double? RadiusMm { get; init; }
 
-    /// <summary>Протяжённость цилиндрической грани вдоль оси, мм; не глубина операции.</summary>
+    /// <summary>Extent of a cylindrical face along the axis, mm; not the operation depth.</summary>
     public double? HeightMm { get; init; }
 
-    /// <summary>Направление оси цилиндрической грани (из placement, не из GetAxis).</summary>
+    /// <summary>Axis direction of a cylindrical face (from placement, not from GetAxis).</summary>
     public IReadOnlyList<double>? AxisMm { get; init; }
 
     public required bool NormalAmbiguous { get; init; }
@@ -3344,168 +2758,131 @@ public sealed record ImportResultDto
     public IReadOnlyList<string> Trace { get; init; } = Array.Empty<string>();
 }
 
-/// <summary>
-/// Кинематическая операция: плоский замкнутый профиль переносится по непрерывной траектории
-/// (docs/05 SM-04, профиль <c>mechanical-core-v1</c>, очередь B5).
-/// </summary>
+/// <summary>Sweep: a flat closed profile is carried along a continuous path
+/// (docs/05 SM-04, profile <c>mechanical-core-v1</c>, queue B5).</summary>
 /// <remarks>
-/// <para>
-/// <b>Документ берётся из ПРОФИЛЯ, а не из отдельного поля.</b> Тот же приём, что у вращения:
-/// ссылка из чужой детали не может протащиться в мутацию, потому что второго источника документа
-/// здесь нет.
-/// </para>
-/// <para>
-/// <b>Маршрут документирован страницей API5, а не выведен из аналогии с вращением.</b>
+/// <b>The document is taken from the PROFILE, not from a separate field.</b> The same device as for
+/// rotation: a reference from a foreign part cannot be dragged into the mutation, because there is no
+/// second document source here.
+/// <b>The route is documented by an API5 page, not inferred by analogy with rotation.</b>
 /// <c>ksbaseevolutiondefinition.html</c> («Основание — кинематический элемент (Интерфейсы
-/// ksBaseEvolutionDefinition, IBaseEvolutionDefinition)») описывает интерфейс, который «можно
-/// получить, используя метод интерфейса элемента модели <c>ksEntity::GetDefinition</c>»; состав —
-/// <c>sketchShiftType</c>, <c>SetSketch</c>/<c>GetSketch</c>, <c>PathPartArray</c>,
-/// <c>GetPathLength(bitVector)</c>, <c>Get/SetThinParam</c>. Страница помечает интерфейс
-/// <b>устаревшим</b> и рекомендует приклеенный <c>ksBossLoftDefinition</c> (в тексте именно так —
-/// для кинематической операции ожидался <c>ksBossEvolutionDefinition</c>; расхождение внутри
-/// справки записано как есть). Приклеенный маршрут <c>NewEntity(46)</c> измерен отдельно и даёт
-/// ТО ЖЕ тело (шаг B5.8), но обязательные строки этапа описаны как <b>базовые</b>, поэтому
-/// используется базовый тип 45.
-/// </para>
-/// <para>
-/// <b>Траектория — тоже эскиз, и это измерено, а не предположено.</b> Шаг B5.1/B5.2: держатель
-/// траектории, который возвращает <c>ksBaseEvolutionDefinition.PathPartArray()</c>, приводится к
-/// <c>ksEntityCollection</c>, и <c>Add(эскиз)</c> возвращает <c>True</c>. Разрыв траектории —
-/// <b>отказ</b>, а не частичный результат.
-/// </para>
-/// <para>
-/// <b>Режим ортогональности обязан проверяться НА ДУГЕ.</b> На прямой траектории
-/// <see cref="SweepShiftMode.Parallel"/> и <see cref="SweepShiftMode.Orthogonal"/> дают одно тело —
-/// измерено, что на дуге R50/90° они различаются на <c>8966.047734774369</c> мм³.
-/// </para>
+/// ksBaseEvolutionDefinition, IBaseEvolutionDefinition)») describes an interface that «можно
+/// получить, используя метод интерфейса элемента модели <c>ksEntity::GetDefinition</c>»; its
+/// composition is <c>sketchShiftType</c>, <c>SetSketch</c>/<c>GetSketch</c>, <c>PathPartArray</c>,
+/// <c>GetPathLength(bitVector)</c>, <c>Get/SetThinParam</c>. The page marks the interface
+/// <b>deprecated</b> and recommends the glued <c>ksBossLoftDefinition</c> (the text says exactly that —
+/// for a sweep <c>ksBossEvolutionDefinition</c> was expected; the discrepancy inside the help is
+/// recorded as it is). The glued route <c>NewEntity(46)</c> was MEASURED separately and gives the SAME
+/// body (step B5.8), but the mandatory rows of this stage are described as <b>base</b>, so base type 45
+/// is used.
+/// <b>The path is also a sketch, and this is MEASURED, not assumed.</b> Steps B5.1/B5.2: the path
+/// holder returned by <c>ksBaseEvolutionDefinition.PathPartArray()</c> is cast to
+/// <c>ksEntityCollection</c>, and <c>Add(sketch)</c> returns <c>True</c>. A path break is a
+/// <b>refusal</b>, not a partial result.
+/// <b>The orthogonality mode must be checked ON AN ARC.</b> On a straight path
+/// <see cref="SweepShiftMode.Parallel"/> and <see cref="SweepShiftMode.Orthogonal"/> give one body —
+/// MEASURED that on an R50/90° arc they differ by <c>8966.047734774369</c> mm³.
 /// </remarks>
 public sealed record SweepCommand
 {
-    /// <summary>Эскиз-профиль: явная <c>sketch:</c>-ссылка. Задаёт и документ.</summary>
+    /// <summary>Profile sketch: an explicit <c>sketch:</c> reference. It also sets the document.</summary>
     public required string SketchRef { get; init; }
 
-    /// <summary>Эскиз-траектория: явная <c>sketch:</c>-ссылка. Обязана лежать в ТОЙ ЖЕ детали.</summary>
+    /// <summary>Path sketch: an explicit <c>sketch:</c> reference. It must lie in the SAME part.</summary>
     public required string PathRef { get; init; }
 
     /// <summary>
-    /// Тип движения сечения по траектории. По умолчанию <see cref="SweepShiftMode.Orthogonal"/>:
-    /// это документированное поведение «плоскость образующей ортогональна направляющей», и именно
-    /// оно даёт <c>S × L</c>.
+    /// Kind of section motion along the path. Default <see cref="SweepShiftMode.Orthogonal"/>: this is
+    /// the documented behaviour «плоскость образующей ортогональна направляющей», and it is what gives
+    /// <c>S × L</c>.
     /// </summary>
     public SweepShiftMode ShiftMode { get; init; } = SweepShiftMode.Orthogonal;
 
-    /// <summary>
-    /// Аналитическое ожидание объёма ПОСЛЕ операции. Без него подтверждается только чтение
-    /// параметров обратно, и результат честно помечается недоказанной геометрией.
-    /// </summary>
+    /// <summary>Analytic expectation of the volume AFTER the operation. Without it only the read-back of the
+    /// parameters is confirmed, and the result is honestly marked as unproven geometry.</summary>
     public double? ExpectedVolumeMm3 { get; init; }
 
     public required long ExpectedRevision { get; init; }
 }
 
-/// <summary>
-/// Элемент по сечениям: тело строится по упорядоченному набору сечений
-/// (docs/05 SM-05, профиль <c>mechanical-core-v1</c>, очередь B5).
-/// </summary>
+/// <summary>Loft: the body is built on an ordered set of sections
+/// (docs/05 SM-05, profile <c>mechanical-core-v1</c>, queue B5).</summary>
 /// <remarks>
-/// <para>
-/// <b>Маршрут — API7, и это следует из состава обязательных строк, а не из удобства.</b>
-/// Обязательная строка <c>SM-05.base.mode_couplings</c> требует <b>цепочек соответствия сечений</b>,
-/// а в API5 их нет вовсе: ни <c>ksBaseLoftDefinition</c>, ни <c>ksBossLoftDefinition</c> не
-/// объявляют ни <c>AddCoupling</c>, ни <c>Coupling</c>. В API7 они документированы:
-/// <c>iloft_propers.html</c> перечисляет <c>Coupling</c> и <c>CouplingsCount</c>,
-/// <c>iloft_addcoupling.html</c> — <c>AddCoupling()</c> → <c>ICoupling</c>. Измерено (шаг B5.9):
-/// <c>AddCoupling()</c> вернул <c>KompasAPI7.CouplingClass</c>, <c>CouplingsCount = 1</c>.
-/// </para>
-/// <para>
-/// <b>Фабрика API7 документирована для приклеенного типа.</b> <c>ilofts_add.html</c>: «Допустимыми
-/// значениями <c>LoftType</c> являются <c>o3d_bossLoft</c>, <c>o3d_cutLoft</c> для коллекции
-/// операций <c>IModelContainer::Lofts</c>»; «после получения нового интерфейса нужно задать
-/// параметры операции и вызвать метод <c>IModelObject::Update</c>». Сечения задаются свойством
-/// <c>ILoft.Sketchs</c> типа <c>VARIANT</c> — «массив <c>SAFEARRAY</c> объектов <c>LPDISPATCH</c>»
-/// (<c>iloft_sketchs.html</c>), и это измерено: присваивание массива дало чтение
-/// <c>System.Object[]</c> из 2 элементов, <c>Update() = True</c>, объём <c>28000</c> — тот же
-/// эталон, что у API5-маршрута (шаг B5.4).
-/// </para>
-/// <para>
-/// <b>Порядок сечений задаёт вызывающий, и он же является частью требования.</b> При
-/// концентрических параллельных сечениях объём ПОРЯДОК НЕ РАЗЛИЧАЕТ — измерено, что усечённая
-/// пирамида 40×40 → 20×20 при h = 30 даёт <c>28000</c> в обе стороны. Поэтому «порядок соблюдён»
-/// доказывается различающей постановкой (разная форма или поворот сечений, габарит, число граней),
-/// а не объёмом, и строка приёмки обязана это учитывать.
-/// </para>
-/// <para>
-/// <b>Объём считается по формуле усечённой пирамиды</b>
-/// <c>V = h/3 · (A₁ + A₂ + √(A₁A₂))</c>, а не «средней площадью × высота»: для 40/20 при h = 30 это
-/// <c>28000</c> против <c>30000</c>, и расхождение <c>2000</c> мм³ достаточно, чтобы отличить
-/// правильную формулу от ошибочной.
-/// </para>
+/// <b>The route is API7, and this follows from the set of mandatory rows, not from convenience.</b> The
+/// mandatory row <c>SM-05.base.mode_couplings</c> requires <b>section correspondence chains</b>, and
+/// API5 has none at all: neither <c>ksBaseLoftDefinition</c> nor <c>ksBossLoftDefinition</c> declares
+/// either <c>AddCoupling</c> or <c>Coupling</c>. In API7 they are documented:
+/// <c>iloft_propers.html</c> lists <c>Coupling</c> and <c>CouplingsCount</c>,
+/// <c>iloft_addcoupling.html</c> — <c>AddCoupling()</c> → <c>ICoupling</c>. MEASURED (step B5.9):
+/// <c>AddCoupling()</c> returned <c>KompasAPI7.CouplingClass</c>, <c>CouplingsCount = 1</c>.
+/// <b>The API7 factory is documented for the glued type.</b> <c>ilofts_add.html</c>: «Допустимыми
+/// значениями <c>LoftType</c> являются <c>o3d_bossLoft</c>, <c>o3d_cutLoft</c> для коллекции операций
+/// <c>IModelContainer::Lofts</c>»; «после получения нового интерфейса нужно задать параметры
+/// операции и вызвать метод <c>IModelObject::Update</c>». The sections are set by the
+/// <c>ILoft.Sketchs</c> property of type <c>VARIANT</c> — «массив <c>SAFEARRAY</c> объектов
+/// <c>LPDISPATCH</c>» (<c>iloft_sketchs.html</c>), and this is MEASURED: assigning an array gave a read
+/// of <c>System.Object[]</c> of 2 elements, <c>Update() = True</c>, volume <c>28000</c> — the same
+/// reference as the API5 route (step B5.4).
+/// <b>The section order is set by the caller, and it is itself part of the requirement.</b> With
+/// concentric parallel sections the volume does NOT distinguish the ORDER — MEASURED that a truncated
+/// pyramid 40×40 → 20×20 at h = 30 gives <c>28000</c> either way. So "the order was honoured" is proved
+/// by a distinguishing setup (a different shape or a rotation of the sections, the bounding box, the
+/// face count), not by the volume, and the acceptance row must take this into account.
+/// <b>The volume is computed by the truncated-pyramid formula</b>
+/// <c>V = h/3 · (A₁ + A₂ + √(A₁A₂))</c>, not "average area × height": for 40/20 at h = 30 that is
+/// <c>28000</c> against <c>30000</c>, and the <c>2000</c> mm³ difference is enough to tell the correct
+/// formula from the wrong one.
 /// </remarks>
 public sealed record LoftCommand
 {
-    /// <summary>Документ детали: у набора сечений нет одного «опорного» объекта, как у профиля.</summary>
+    /// <summary>Part document: a section set has no single "support" object, unlike a profile.</summary>
     public required string DocumentId { get; init; }
 
-    /// <summary>
-    /// Сечения В ПОРЯДКЕ соединения. Не менее двух: по одному сечению тело не строится. Эскизы,
-    /// контуры, пространственные кривые и грани — состав объявлен справкой SDK
-    /// (<c>iloft_propers.html</c>).
-    /// </summary>
+    /// <summary>Sections IN THE ORDER of connection. At least two: a body is not built from a single section.
+    /// Sketches, contours, spatial curves and faces — the composition is declared by the SDK help
+    /// (<c>iloft_propers.html</c>).</summary>
     public required IReadOnlyList<string> SectionRefs { get; init; }
 
-    /// <summary>
-    /// Способ построения у крайних сечений — <c>ILoft.BuildingType(BeginSection)</c>. Значения
-    /// документированы страницей <c>ksloftbuildingtype.html</c>; <c>Auto</c> подтверждён измерением
-    /// (шаг B5.9: <c>BuildingType(true) = 0</c> и <c>BuildingType(false) = 0</c> для только что
-    /// созданного признака, то есть <c>ksLoftAuto = 0</c>).
-    /// </summary>
+    /// <summary>Build method at the extreme sections — <c>ILoft.BuildingType(BeginSection)</c>. The values are
+    /// documented by the page <c>ksloftbuildingtype.html</c>; <c>Auto</c> is confirmed by measurement
+    /// (step B5.9: <c>BuildingType(true) = 0</c> and <c>BuildingType(false) = 0</c> for a just-created
+    /// feature, i.e. <c>ksLoftAuto = 0</c>).</summary>
     public LoftBuilding Building { get; init; } = LoftBuilding.Auto;
 
     /// <summary>
-    /// Замкнуть траекторию — <c>ILoft.Closed</c>. Запись и обратное чтение измерены (шаг B5.9:
-    /// записано <c>false</c>, прочитано <c>False</c>). Отличие от «замкнутой оболочки»: здесь
-    /// замыкается <b>траектория соединения сечений</b>, а не тело.
+    /// Close the path — <c>ILoft.Closed</c>. The write and the read-back are MEASURED (step B5.9:
+    /// written <c>false</c>, read <c>False</c>). The difference from a "closed shell": here it is the
+    /// <b>path joining the sections</b> that closes, not the body.
     /// </summary>
     public bool Closed { get; init; }
 
-    /// <summary>
-    /// Цепочки соответствия сечений — то, чем обязательная строка <c>SM-05.base.mode_couplings</c>
-    /// отличается от «просто тела по сечениям».
-    /// </summary>
+    /// <summary>Section correspondence chains — what makes the mandatory row <c>SM-05.base.mode_couplings</c>
+    /// different from "just a body through sections".</summary>
     /// <remarks>
-    /// <para>
-    /// <b>Маршрут измерен, а не выбран.</b> Документировано: <c>iloft_addcoupling.html</c> —
-    /// <c>AddCoupling()</c> возвращает указатель на <c>ICoupling</c>; <c>icoupling_count.html</c> —
-    /// <c>Count</c> «Количество сечений в цепочке»; <c>icoupling_positionoffset.html</c> —
-    /// <c>PositionOffset(Index)</c> «Величина смещения точки вдоль контура сечения в мм», где
-    /// <c>Index</c> — индекс сечения в цепочке. Измерено (шаг B5.17, 20.09.2026): у пирамиды
-    /// 40×40 → 20×20 при h = 30 цепочка из двух точек со смещениями <c>0 / 0</c> даёт <c>28000</c> —
-    /// ровно как без цепочки, то есть явное соответствие <b>замещает</b> автоматическое; сдвиг точки
-    /// второго сечения на <c>25 %</c> контура (20 мм из 80) даёт <c>20000</c>, то есть
-    /// <b>содержимое цепочки применяется</b> (разность 8000 мм³ против допуска 0,01), а возврат
-    /// точки возвращает <c>28000</c>.
-    /// </para>
-    /// <para>
-    /// <b>Единица подтверждена числом.</b> Периметр сечения 20×20 равен 80 мм; измерено, что
-    /// <c>PositionOffset = 5</c> читается как <c>Position = 6.25 %</c> — это в точности
-    /// <c>5/80</c>. Поэтому наружу выходит смещение в мм, а не доля: доля зависит от длины контура,
-    /// которую вызывающая сторона может не знать.
-    /// </para>
-    /// <para>
-    /// <b>Координаты точки наружу не выходят, и это измеренное решение.</b> <c>ICoupling.SetPoint</c>
-    /// документирован, но измерено, что поданная точка <b>проецируется на контур</b> и читается
-    /// обратно <b>в локальных координатах эскиза сечения</b>: подано <c>(10; 10; 30)</c> (центр
-    /// квадрата 20×20), прочитано <c>(20; 10; 30)</c> — середина правой стороны, 10 мм контура.
-    /// Публиковать параметр, у которого прямая и обратная половины не совпадают, значило бы обещать
-    /// round-trip, которого нет.
-    /// </para>
-    /// <para>
-    /// <b>Порядок построения.</b> Цепочка задаётся ДО первого <c>Update()</c> — так документирована
-    /// фабрика («задать параметры операции и вызвать <c>IModelObject::Update</c>»). Измерено
-    /// (шаг B5.18): цепочка, заданная до первого <c>Update()</c>, даёт <c>CouplingsCount = 1</c> и
-    /// объём <c>20000</c> — то же значение, что и цепочка, добавленная после построения, то есть
-    /// одно построение достаточно.
-    /// </para>
+    /// <b>The route is MEASURED, not chosen.</b> Documented: <c>iloft_addcoupling.html</c> —
+    /// <c>AddCoupling()</c> returns a pointer to <c>ICoupling</c>; <c>icoupling_count.html</c> —
+    /// <c>Count</c> is «Количество сечений в цепочке»; <c>icoupling_positionoffset.html</c> —
+    /// <c>PositionOffset(Index)</c> is «Величина смещения точки вдоль контура сечения в мм», where
+    /// <c>Index</c> is the section index in the chain. MEASURED (step B5.17, 20.09.2026): on a pyramid
+    /// 40×40 → 20×20 at h = 30 a chain of two points with offsets <c>0 / 0</c> gives <c>28000</c> —
+    /// exactly as without a chain, i.e. an explicit correspondence <b>replaces</b> the automatic one;
+    /// shifting the second section's point by <c>25 %</c> of the contour (20 mm of 80) gives
+    /// <c>20000</c>, i.e. <b>the chain content is applied</b> (difference 8000 mm³ against a tolerance
+    /// of 0.01), and reverting the point returns <c>28000</c>.
+    /// <b>The unit is confirmed by a number.</b> The perimeter of the 20×20 section is 80 mm; MEASURED
+    /// that <c>PositionOffset = 5</c> reads as <c>Position = 6.25 %</c> — exactly <c>5/80</c>. So the
+    /// offset goes out in mm, not as a fraction: the fraction depends on the contour length, which the
+    /// caller may not know.
+    /// <b>Point coordinates do not go out, and this is a MEASURED decision.</b> <c>ICoupling.SetPoint</c>
+    /// is documented, but it is MEASURED that the supplied point <b>is projected onto the contour</b>
+    /// and read back <b>in the local coordinates of the section sketch</b>: supplied <c>(10; 10; 30)</c>
+    /// (the centre of the 20×20 square), read <c>(20; 10; 30)</c> — the middle of the right side, 10 mm
+    /// along the contour. Publishing a parameter whose forward and inverse halves do not coincide would
+    /// mean promising a round-trip that does not exist.
+    /// <b>Build order.</b> The chain is set BEFORE the first <c>Update()</c> — that is how the factory is
+    /// documented («задать параметры операции и вызвать <c>IModelObject::Update</c>»). MEASURED
+    /// (step B5.18): a chain set before the first <c>Update()</c> gives <c>CouplingsCount = 1</c> and
+    /// volume <c>20000</c> — the same value as a chain added after the build, i.e. one build is enough.
     /// </remarks>
     public IReadOnlyList<LoftCoupling> Couplings { get; init; } = Array.Empty<LoftCoupling>();
 
@@ -3515,81 +2892,69 @@ public sealed record LoftCommand
 }
 
 /// <summary>
-/// Цепочка соответствия сечений: по одному смещению на КАЖДОЕ сечение, в порядке
-/// <see cref="LoftCommand.SectionRefs"/>. Число смещений обязано совпасть с числом сечений — это
-/// проверяет <c>ICoupling.Count</c> («количество сечений в цепочке», измерено: 2 у двух сечений).
+/// Section correspondence chain: one offset per EACH section, in the order of
+/// <see cref="LoftCommand.SectionRefs"/>. The number of offsets must match the number of sections —
+/// this is checked by <c>ICoupling.Count</c> («количество сечений в цепочке», MEASURED: 2 for two
+/// sections).
 /// </summary>
 public sealed record LoftCoupling
 {
     /// <summary>
-    /// Смещения вдоль контуров сечений, мм — <c>ICoupling.PositionOffset(Index)</c>, где
-    /// <c>Index</c> — индекс сечения в цепочке. Ноль означает начало контура; это же значение
-    /// воспроизводит автоматическое соответствие (измерено: <c>0 / 0</c> даёт <c>28000</c>, как без
-    /// цепочки).
+    /// Offsets along the section contours, mm — <c>ICoupling.PositionOffset(Index)</c>, where
+    /// <c>Index</c> is the section index in the chain. Zero means the start of the contour; this same
+    /// value reproduces the automatic correspondence (MEASURED: <c>0 / 0</c> gives <c>28000</c>, as
+    /// without a chain).
     /// </summary>
     public required IReadOnlyList<double> OffsetsMm { get; init; }
 }
 
-/// <summary>
-/// Оболочка: из тела вычитается полость заданной толщины, при необходимости со снятием граней
-/// (docs/05 SM-13, профиль <c>mechanical-core-v1</c>, очередь B5).
-/// </summary>
+/// <summary>Shell: a cavity of the given thickness is subtracted from the body, optionally with faces removed
+/// (docs/05 SM-13, profile <c>mechanical-core-v1</c>, queue B5).</summary>
 /// <remarks>
-/// <para>
-/// <b>Пустой список граней НЕ даёт замкнутой оболочки, и это измерено на ОБОИХ API.</b>
-/// Ожидание наряда: без удалённых граней <c>t = 2</c> внутрь даёт <c>36224</c>
-/// (<c>80000 − 96·76·6</c>). Измерено на API5 (шаг B5.6): <c>80000</c>. Измерено на API7
-/// (шаг B5.10, четыре постановки на том же коробе 100×80×10): <c>79999.99999999999</c> при
-/// <b>6 гранях</b> — ровно как у исходного короба, тогда как открытая оболочка даёт
-/// <c>21632</c> при <b>11</b> гранях. То есть <c>Update() = True</c> означает «принято», а
-/// неизменное число граней — «не применено»; это второй независимый признак рядом с объёмом.
-/// Поэтому пустой список граней <b>отвергается до COM</b> именованным отказом, а не выдаётся за
-/// замкнутую оболочку.
-/// </para>
-/// <para>
-/// <b>Направление стенки задаётся ЗНАЧЕНИЕМ, и соответствие подтверждено дважды.</b>
-/// Документация: <c>ksshelldefinition_thintype.html</c> — «<c>TRUE</c> — внутрь, <c>FALSE</c> —
-/// наружу» для API5. Измерение API5 (шаг B5.5): <c>true</c> → <c>21631.999999999996</c>,
-/// <c>false</c> → <c>24832.000000000022</c>. Измерение API7 (шаг B5.10):
+/// <b>An empty face list does NOT give a closed shell, and this is MEASURED on BOTH APIs.</b> The
+/// order's expectation: without removed faces <c>t = 2</c> inward gives <c>36224</c>
+/// (<c>80000 − 96·76·6</c>). MEASURED on API5 (step B5.6): <c>80000</c>. MEASURED on API7
+/// (step B5.10, four setups on the same 100×80×10 box): <c>79999.99999999999</c> with <b>6 faces</b> —
+/// exactly as the original box, whereas an open shell gives <c>21632</c> with <b>11</b> faces. That is,
+/// <c>Update() = True</c> means "accepted", and an unchanged face count means "not applied"; this is a
+/// second independent sign next to the volume. Therefore an empty face list is <b>refused before
+/// COM</b> with a named refusal rather than passed off as a closed shell.
+/// <b>The wall direction is set by the VALUE, and the correspondence is confirmed twice.</b>
+/// Documentation: <c>ksshelldefinition_thintype.html</c> — «<c>TRUE</c> — внутрь, <c>FALSE</c> —
+/// наружу» for API5. Measurement on API5 (step B5.5): <c>true</c> → <c>21631.999999999996</c>,
+/// <c>false</c> → <c>24832.000000000022</c>. Measurement on API7 (step B5.10):
 /// <c>ThinType = 1</c> → <c>21631.999999999996</c>, <c>ThinType = 0</c> →
-/// <c>24832.000000000022</c>. Типы половин разные — API7 <c>ThinType</c> объявлен <c>long</c>
-/// (в interop — <c>ksDirectionTypeEnum</c>), API5 <c>thinType</c> — <c>bool</c>.
-/// </para>
+/// <c>24832.000000000022</c>. The half types are different — API7 <c>ThinType</c> is declared
+/// <c>long</c> (in interop — <c>ksDirectionTypeEnum</c>), API5 <c>thinType</c> — <c>bool</c>.
 /// </remarks>
 public sealed record ShellCommand
 {
     public required string DocumentId { get; init; }
 
     /// <summary>
-    /// Грани, которые снимаются перед образованием стенки — ссылки <c>face:</c>. Список обязан быть
-    /// <b>непустым</b>: пустой не даёт замкнутой оболочки (измерено на обоих API — объём остаётся
-    /// <c>80000</c>, число граней <c>6</c>, как у исходного тела), и такой вызов отвергается
-    /// именованным отказом до обращения к COM.
+    /// Faces removed before the wall is formed — <c>face:</c> references. The list must be
+    /// <b>non-empty</b>: an empty one does not give a closed shell (MEASURED on both APIs — the volume
+    /// stays <c>80000</c>, the face count <c>6</c>, as for the original body), and such a call is
+    /// refused with a named refusal before touching COM.
     /// </summary>
     public IReadOnlyList<string> FaceRefs { get; init; } = Array.Empty<string>();
 
-    /// <summary>Толщина стенки, мм. Строго больше 0.</summary>
+    /// <summary>Wall thickness, mm. Strictly greater than 0.</summary>
     public required double ThicknessMm { get; init; }
 
-    /// <summary>Направление формирования стенки. Соответствие измерено, см. описание типа.</summary>
+    /// <summary>Wall formation direction. The correspondence is MEASURED, see the type description.</summary>
     public ShellThinDirection ThinDirection { get; init; } = ShellThinDirection.Inward;
 
-    /// <summary>
-    /// Касательные грани — <c>IShell.SetFaces(Faces, TangentFaces)</c> в API7.
-    /// </summary>
+    /// <summary>Tangent faces — <c>IShell.SetFaces(Faces, TangentFaces)</c> in API7.
     /// <remarks>
-    /// <para>
-    /// Параметр <b>объявлен</b> в контракте, потому что он существует в маршруте API7 и потому что
-    /// необъявленный параметр для продукта невидим: <c>additionalProperties: false</c> отверг бы
-    /// вызов до COM, и это читалось бы как «не поддерживается».
-    /// </para>
-    /// <para>
-    /// Но <c>true</c> <b>отвергается именованным отказом</b>, а не игнорируется молча: у API5
-    /// <c>ksShellDefinition</c> члена «касательные грани» нет вовсе, а маршрут этого инструмента —
-    /// API5. Молчаливое игнорирование дало бы успех за работу, которой не было, — это ровно тот
-    /// дефект, который контракт запрещает. Режим <c>SM-13.shell.mode_tangent_faces</c> в обязательный
-    /// объём этого этапа не входит, поэтому граница названа, а не спрятана.
-    /// </para>
+    /// The parameter is <b>declared</b> in the contract because it exists in the API7 route and because
+    /// an undeclared parameter is invisible to the product: <c>additionalProperties: false</c> would
+    /// reject the call before COM, and that would read as "not supported".
+    /// But <c>true</c> is <b>refused with a named refusal</b> rather than silently ignored: API5
+    /// <c>ksShellDefinition</c> has no "tangent faces" member at all, and this tool's route is API5.
+    /// Silent ignoring would give success for work that did not happen — exactly the defect the contract
+    /// forbids. The mode <c>SM-13.shell.mode_tangent_faces</c> is not part of the mandatory scope of
+    /// this stage, so the bound is named rather than hidden.
     /// </remarks>
     public bool TangentFaces { get; init; }
 
@@ -3598,7 +2963,7 @@ public sealed record ShellCommand
     public required long ExpectedRevision { get; init; }
 }
 
-/// <summary>Результат кинематической операции.</summary>
+/// <summary>Sweep result.</summary>
 public sealed record SweepResult(
     ReferenceDto? FeatureRef,
     string ShiftMode,
@@ -3611,7 +2976,7 @@ public sealed record SweepResult(
     VerificationDto Verification,
     IReadOnlyList<string> Notes);
 
-/// <summary>Результат элемента по сечениям.</summary>
+/// <summary>Loft result.</summary>
 public sealed record LoftResult(
     ReferenceDto? FeatureRef,
     string Building,
@@ -3625,7 +2990,7 @@ public sealed record LoftResult(
     VerificationDto Verification,
     IReadOnlyList<string> Notes);
 
-/// <summary>Результат оболочки.</summary>
+/// <summary>Shell result.</summary>
 public sealed record ShellResult(
     ReferenceDto? FeatureRef,
     double ThicknessMm,
@@ -3637,10 +3002,8 @@ public sealed record ShellResult(
     VerificationDto Verification,
     IReadOnlyList<string> Notes);
 
-/// <summary>
-/// Параметры кинематической операции, прочитанные из модели. Все поля nullable: пустое поле
-/// означает «НЕ ПРОЧИТАНО», а не ноль.
-/// </summary>
+/// <summary>Sweep parameters read from the model. All fields are nullable: an empty field means "NOT READ",
+/// not zero.</summary>
 public sealed record SweepDto(
     string? ShiftMode,
     int? SectionCount,
@@ -3648,34 +3011,30 @@ public sealed record SweepDto(
     double? PathLengthMm);
 
 /// <summary>
-/// Цепочка соответствия, прочитанная <b>ИЗ МОДЕЛИ</b> — не пересказ запроса. Элемент
-/// <see cref="OffsetsMm"/> — <c>null</c>, если смещение на этом сечении прочитать не удалось:
-/// «не прочитано» отличается от нуля. <see cref="SectionCount"/> — <c>ICoupling.Count</c>,
-/// «количество сечений в цепочке»; <c>null</c> означает, что и размер цепочки не прочитан.
+/// A correspondence chain read <b>FROM THE MODEL</b> — not a retelling of the request. An element of
+/// <see cref="OffsetsMm"/> is <c>null</c> if the offset on that section could not be read: "not read"
+/// differs from zero. <see cref="SectionCount"/> is <c>ICoupling.Count</c>, «количество сечений в
+/// цепочке»; <c>null</c> means the chain size was not read either.
 /// </summary>
 public sealed record LoftCouplingDto(int? SectionCount, IReadOnlyList<double?> OffsetsMm);
 
-/// <summary>Параметры элемента по сечениям, прочитанные из модели.</summary>
+/// <summary>Loft parameters read from the model.</summary>
 /// <remarks>
-/// <see cref="SectionRefs"/> — СЕЧЕНИЯ КАК ССЫЛКИ, выведенные из определения признака
-/// (<c>ksBaseLoftDefinition.Sketches()</c> / <c>ksBossLoftDefinition.Sketches()</c>,
-/// справка <c>ksbaseloftdefinition_sketches.html</c> и <c>ksbossloftdefinition_sketches.html</c>,
-/// возвращают <c>ksEntityCollection</c>), а не сохранённые с момента создания.
-/// <para>
-/// Зачем это поле вообще существует. Правка элемента по сечениям меняет ТОЛЬКО набор сечений
-/// (<c>kompas_update_feature</c>, поле <c>section_refs</c>), и другой валюты у неё нет. Ссылка же,
-/// выданная при создании, живёт до первой мутации документа, а <c>kompas_rebuild</c> отзывает все
-/// ссылки документа целиком; перечислять эскизы отдельным инструментом продукт не умеет —
-/// <c>kompas_list_features</c> отдаёт только формообразующие элементы
-/// (<c>EntityCollection(o3d_operationElement)</c>), и измерено, что на документе с двумя эскизами и
-/// одним элементом по сечениям в дереве видна ОДНА строка. Без этого поля правка существующего
-/// элемента по сечениям невыразима ни в новой сессии, ни после <c>save → close → reopen</c>, то есть
-/// вход перестаёт быть ссылкой ровно там, где наряд §11 требует обратного.
-/// </para>
-/// <para>
-/// <c>null</c> означает «не прочитано», а пустой список — «в определении сечений нет»; это разные
-/// состояния и они не сливаются.
-/// </para>
+/// <see cref="SectionRefs"/> — SECTIONS AS REFERENCES, derived from the feature definition
+/// (<c>ksBaseLoftDefinition.Sketches()</c> / <c>ksBossLoftDefinition.Sketches()</c>, help pages
+/// <c>ksbaseloftdefinition_sketches.html</c> and <c>ksbossloftdefinition_sketches.html</c>, which
+/// return <c>ksEntityCollection</c>), not saved since creation.
+/// Why this field exists at all. A loft edit changes ONLY the section set
+/// (<c>kompas_update_feature</c>, field <c>section_refs</c>), and it has no other currency. A reference
+/// issued at creation lives until the first document mutation, and <c>kompas_rebuild</c> revokes all
+/// document references wholesale; the product cannot list sketches with a separate tool —
+/// <c>kompas_list_features</c> returns only the shaping elements
+/// (<c>EntityCollection(o3d_operationElement)</c>), and it is MEASURED that on a document with two
+/// sketches and one loft the tree shows ONE row. Without this field, editing an existing loft is
+/// inexpressible neither in a new session nor after <c>save → close → reopen</c>, i.e. the input stops
+/// being a reference exactly where order §11 requires the opposite.
+/// <c>null</c> means "not read", while an empty list means "there are none in the definition"; these are
+/// different states and are not merged.
 /// </remarks>
 public sealed record LoftDto(
     string? Building,
@@ -3685,13 +3044,14 @@ public sealed record LoftDto(
     IReadOnlyList<LoftCouplingDto>? Couplings = null,
     IReadOnlyList<string>? SectionRefs = null);
 
-/// <summary>Параметры оболочки, прочитанные из модели.</summary>
+/// <summary>Shell parameters read from the model.</summary>
 /// <remarks>
-/// <see cref="RemovedFaceRefs"/> — СНЯТЫЕ ГРАНИ КАК ССЫЛКИ, выведенные из определения признака
-/// (<c>ksShellDefinition.FaceArray()</c> → <c>ksEntityCollection</c>), по той же причине, что и
-/// <see cref="LoftDto.SectionRefs"/>: набор удаляемых граней — вход правки, и без ссылки на грани,
-/// снятые САМИМ признаком, повторная правка набора после мутации невыразима. Грани, снятые
-/// признаком, в топологии тела ОТСУТСТВУЮТ, поэтому из <c>kompas_read_topology</c> их взять нечем.
+/// <see cref="RemovedFaceRefs"/> — REMOVED FACES AS REFERENCES, derived from the feature definition
+/// (<c>ksShellDefinition.FaceArray()</c> → <c>ksEntityCollection</c>), for the same reason as
+/// <see cref="LoftDto.SectionRefs"/>: the set of removed faces is the edit input, and without a
+/// reference to the faces removed BY THE FEATURE ITSELF a repeated set edit after a mutation is
+/// inexpressible. Faces removed by the feature are ABSENT from the body topology, so
+/// <c>kompas_read_topology</c> has nothing to take them from.
 /// </remarks>
 public sealed record ShellDto(
     double? ThicknessMm,

@@ -54,26 +54,22 @@ public sealed record DocumentContextDto
     /// <summary>Opaque fingerprint of geometry state, used when events are unavailable.</summary>
     public string? Fingerprint { get; init; }
 
-    /// <summary>
-    /// Перечитанное состояние самого документа: <c>!invisibleMode</c>. null — документ не ответил.
-    /// Отдельно от видимости приложения, потому что показать приложение и показать документ — два
-    /// разных факта (дефект 12.09.2026 был именно в их смешении).
-    /// </summary>
+    /// <summary>Re-read state of the document itself: <c>!invisibleMode</c>; null means the document did
+    /// not answer. INVARIANT: separate from application visibility — showing the application and showing
+    /// the document are two facts. History: docs/decisions/contracts.md#document-visible</summary>
     public bool? DocumentVisible { get; init; }
 
-    /// <summary>Режим, в котором документ был создан или открыт (наследуется от экземпляра).</summary>
+    /// <summary>Mode in which the document was created or opened (inherited from the instance).</summary>
     public bool DocumentsVisibleMode { get; init; }
 
-    /// <summary>Что вернул <c>ksDocument3D.SetActive()</c> при предъявлении документа.</summary>
+    /// <summary>What <c>ksDocument3D.SetActive()</c> returned when the document was presented.</summary>
     public bool? DocumentActiveReported { get; init; }
 
     public required ExternalChangeDetection ExternalChangeDetection { get; init; }
 }
 
-/// <summary>
-/// Opaque handle to a topology element. It is scoped to a document revision: after a rebuild the
-/// server rejects it instead of silently re-resolving (spec 1.7).
-/// </summary>
+/// <summary>Opaque handle to a topology element. It is scoped to a document revision: after a rebuild the
+/// server rejects it instead of silently re-resolving (spec 1.7).</summary>
 public sealed record ReferenceDto
 {
     /// <summary>Opaque id, e.g. "face:6f2c…". Raw COM pointers never leave the Worker.</summary>
@@ -96,10 +92,8 @@ public sealed record ReferenceDto
     public string? SemanticHint { get; init; }
 }
 
-/// <summary>
-/// Rigid placement: origin plus orthonormal X and Y of a right-handed frame; Z = X × Y is
-/// computed by the server (spec 1.10). Composition order is documented in Domain.TransformMath.
-/// </summary>
+/// <summary>Rigid placement: origin plus orthonormal X and Y of a right-handed frame; Z = X × Y is
+/// computed by the server (spec 1.10). Composition order is documented in Domain.TransformMath.</summary>
 public sealed record TransformDto
 {
     public required IReadOnlyList<double> OriginMm { get; init; }
@@ -165,7 +159,7 @@ public sealed record BomRowDto
     public IReadOnlyList<string> Warnings { get; init; } = Array.Empty<string>();
 }
 
-/// <summary>Session-level facts about one КОМПАС instance (spec 1.6).</summary>
+/// <summary>Session-level facts about one KOMPAS instance (spec 1.6).</summary>
 public sealed record ApplicationInfoDto
 {
     public required string ApplicationId { get; init; }
@@ -182,34 +176,28 @@ public sealed record ApplicationInfoDto
     /// <summary>Executable path as registered for this instance.</summary>
     public string? ExecutablePath { get; init; }
 
-    /// <summary>
-    /// Фактическая видимость окна приложения: истина только когда и COM-свойство Visible, и
-    /// Win32 IsWindowVisible согласны. Наличие HWND или определимый PID видимостью не считаются —
-    /// скрытое окно КОМПАС даёт и то, и другое.
-    /// </summary>
+    /// <summary>Actual window visibility of the application: true only when the COM <c>Visible</c> property
+    /// AND Win32 <c>IsWindowVisible</c> agree. An HWND or a resolvable PID is not visibility — a hidden
+    /// KOMPAS window has both.</summary>
     public required bool Visible { get; init; }
 
-    /// <summary>Значение <c>KompasObject.Visible</c>, перечитанное у приложения.</summary>
+    /// <summary><c>KompasObject.Visible</c>, re-read from the application.</summary>
     public bool? ApplicationVisibleByCom { get; init; }
 
-    /// <summary>Ответ <c>IsWindowVisible</c> по главному окну приложения — независимое наблюдение.</summary>
+    /// <summary><c>IsWindowVisible</c> on the application's main window — an independent observation.</summary>
     public bool? ApplicationWindowVisibleByWindows { get; init; }
 
-    /// <summary>Главное окно приложения, как его вернул <c>ksGetHWindow</c> (0 — окно не получено).</summary>
+    /// <summary>Main window of the application as returned by <c>ksGetHWindow</c> (0 — no window).</summary>
     public long WindowHandle { get; init; }
 
-    /// <summary>Заголовки видимых дочерних окон: окна документов, открытые у пользователя.</summary>
+    /// <summary>Titles of visible child windows: document windows open for the user.</summary>
     public IReadOnlyList<string> DocumentVisibleTitles { get; init; } = Array.Empty<string>();
 
-    /// <summary>
-    /// Чем наблюдение закончилось, если оно не удалось целиком. Отсутствует, когда наблюдено всё.
-    /// </summary>
+    /// <summary>How the observation ended when it did not complete. Absent when everything was observed.</summary>
     public string? VisibilityObservationError { get; init; }
 
-    /// <summary>
-    /// В каком режиме сервер создаёт и открывает документы этого экземпляра. Отдельно от
-    /// видимости приложения: показать окно — не то же самое, что показать документ.
-    /// </summary>
+    /// <summary>Mode in which the server creates and opens documents of this instance. Separate from
+    /// application visibility: showing the window is not the same as showing the document.</summary>
     public bool DocumentsVisible { get; init; }
 
     public required int OpenDocumentCount { get; init; }

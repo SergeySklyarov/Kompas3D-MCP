@@ -2,12 +2,10 @@ using System.Text.Json.Nodes;
 
 namespace KompasMcp.Contracts.Schema;
 
-/// <summary>
-/// Tiny builder for the JSON Schema subset this project publishes. The schemas built here are
+/// <summary>Tiny builder for the JSON Schema subset this project publishes. The schemas built here are
 /// simultaneously (a) what <c>tools/list</c> advertises, (b) what the Host validates incoming
 /// arguments against, and (c) what <c>schemas/*.json</c> ships to clients — so the three cannot
-/// drift apart, which was the whole point of making one source of truth (spec 2.1).
-/// </summary>
+/// drift apart, which was the whole point of making one source of truth (spec 2.1).</summary>
 public static class Sch
 {
     public const string Draft = "https://json-schema.org/draft/2020-12/schema";
@@ -102,7 +100,7 @@ public static class Sch
     }
 
     /// <summary>Floating-point value. Bounds are part of the contract, so a negative length is
-    /// rejected before КОМПАС is ever touched (test G09).</summary>
+    /// rejected before KOMPAS is ever touched. TEST: G09</summary>
     public static JsonObject Num(
         string? description = null,
         double? min = null,
@@ -177,11 +175,9 @@ public static class Sch
         ["enum"] = new JsonArray(values.Select(v => (JsonNode)JsonValue.Create(v)!).ToArray()),
     };
 
-    /// <summary>
-    /// Nullable variant. JSON Schema expresses "string or null" as a type array, but a $ref cannot
+    /// <summary>Nullable variant. JSON Schema expresses "string or null" as a type array, but a $ref cannot
     /// carry a type — wrapping it in anyOf is what keeps "$ref or null" actually checkable instead
-    /// of quietly becoming "anything".
-    /// </summary>
+    /// of quietly becoming "anything".</summary>
     public static JsonObject Nullable(JsonObject schema)
     {
         var clone = (JsonObject)schema.DeepClone();
@@ -255,11 +251,9 @@ public static class Sch
         return obj;
     }
 
-    /// <summary>
-    /// Attaches shared definitions so per-tool schemas stay small and identical.
+    /// <summary>Attaches shared definitions so per-tool schemas stay small and identical.
     /// A JsonNode may have only one parent, so the definitions are cloned per schema: sharing the
-    /// instance would throw the moment a second tool took the same node.
-    /// </summary>
+    /// instance would throw the moment a second tool took the same node.</summary>
     public static JsonObject WithDefs(JsonObject schema, JsonObject defs)
     {
         schema["$defs"] = (JsonObject)defs.DeepClone();

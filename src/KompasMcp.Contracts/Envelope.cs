@@ -4,11 +4,9 @@ using System.Text.Json.Serialization;
 
 namespace KompasMcp.Contracts;
 
-/// <summary>
-/// JSON options shared by the public tool contract and the Host/Worker IPC frame.
+/// <summary>JSON options shared by the public tool contract and the Host/Worker IPC frame.
 /// Wire names are snake_case (spec 2.2 example); enums are lower_snake strings; nothing is
-/// dropped to null-omitting defaults because a null field is meaningful in the envelope.
-/// </summary>
+/// dropped to null-omitting defaults because a null field is meaningful in the envelope.</summary>
 public static class KompJson
 {
     public static readonly JsonSerializerOptions Options = Create();
@@ -48,10 +46,8 @@ public sealed record NamedCheck(
     string? Observed = null,
     string? Expected = null);
 
-/// <summary>
-/// How far the result was actually verified. <c>unverified_aspects</c> must list everything
-/// the level does not cover, so a caller cannot read "file_created" as "geometry is correct".
-/// </summary>
+/// <summary>How far the result was actually verified. <c>unverified_aspects</c> must list everything
+/// the level does not cover, so a caller cannot read "file_created" as "geometry is correct".</summary>
 public sealed record VerificationDto(
     VerificationLevel Level,
     IReadOnlyList<NamedCheck> Checks,
@@ -79,9 +75,7 @@ public sealed record ArtifactDto(
     long? SourceRevision,
     string Provenance);
 
-/// <summary>
-/// The uniform envelope every CAD tool returns (spec 2.2).
-/// </summary>
+/// <summary>The uniform envelope every CAD tool returns (spec 2.2).</summary>
 public sealed record ResultEnvelope<TResult>
 {
     public string ContractVersion { get; init; } = ContractVersions.Current;

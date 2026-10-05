@@ -1,21 +1,15 @@
 namespace KompasMcp.Contracts;
 
-/// <summary>
-/// Контракты домена сборок — наряд C1 (профиль <c>assemblies-minimal-v1</c>, режимы
-/// <c>ASM-01…ASM-07</c>).
-/// </summary>
+/// <summary>Assembly-domain contracts — block C1 (profile <c>assemblies-minimal-v1</c>, modes
+/// <c>ASM-01…ASM-07</c>).</summary>
 /// <remarks>
-/// <para>
-/// <b>Компонент — это ссылка на файл, а не тело.</b> Поэтому наружу выходит не геометрия, а
-/// структура: экземпляр компонента, его источник (файл), размещение и кратность. Две вставки одной
-/// детали дают ДВА экземпляра ОДНОЙ уникальной детали — это и есть содержательный критерий блока,
-/// отделяющий сборку от композиции тел в одной детали.
-/// </para>
-/// <para>
-/// <b>Размещение задаётся жёстким преобразованием</b> (<see cref="TransformDto"/>: начало и две
-/// ортонормированные оси), а не «сдвигом от текущего»: сдвиг без системы координат — не адрес, и
-/// перечитать его обратно нельзя.
-/// </para>
+/// <para>INVARIANT: a component is a reference to a file, not a body. What leaves the server is therefore
+/// structure — the component instance, its source file, placement and multiplicity. Two insertions of one
+/// part yield TWO instances of ONE unique part: this is the substantive criterion that separates an
+/// assembly from a composition of bodies in one part.</para>
+/// <para>INVARIANT: placement is a rigid transform (<see cref="TransformDto"/>: origin plus two
+/// orthonormal axes), not a "shift from current" — a shift without a coordinate frame is not an address
+/// and cannot be read back.</para>
 /// </remarks>
 public sealed record InsertComponentCommand
 {
@@ -23,29 +17,27 @@ public sealed record InsertComponentCommand
 
     public required long ExpectedRevision { get; init; }
 
-    /// <summary>Абсолютный путь к файлу-источнику детали внутри разрешённого корня (проверен Хостом).</summary>
+    /// <summary>Absolute path to the part's source file inside the allowed root (checked by the Host).</summary>
     public required string SourcePath { get; init; }
 
-    /// <summary>
-    /// Размещение компонента. <c>null</c> означает «не задано»: компонент вставляется по
-    /// документированному умолчанию КОМПАСа, а не по догадке сервера о начале координат.
-    /// </summary>
+    /// <summary>Component placement. <c>null</c> means "not set": the component is inserted at the
+    /// documented KOMPAS default, not at a server guess of the origin.</summary>
     public TransformDto? Transform { get; init; }
 
-    /// <summary>Зафиксировать компонент после вставки. Зафиксированный компонент перемещать нельзя.</summary>
+    /// <summary>Fix the component after insertion. A fixed component cannot be moved.</summary>
     public bool Fixed { get; init; } = true;
 }
 
-/// <summary>Перечисление структуры сборки.</summary>
+/// <summary>Enumerate the assembly structure.</summary>
 public sealed record ListComponentsCommand
 {
     public required string DocumentId { get; init; }
 
-    /// <summary>Обходить ли вложенные подсборки.</summary>
+    /// <summary>Whether to walk nested sub-assemblies.</summary>
     public bool Recursive { get; init; }
 }
 
-/// <summary>Задать размещение компонента жёстким преобразованием и перечитать его.</summary>
+/// <summary>Set a component's placement with a rigid transform and read it back.</summary>
 public sealed record SetComponentPlacementCommand
 {
     public required string DocumentId { get; init; }
@@ -57,7 +49,7 @@ public sealed record SetComponentPlacementCommand
     public required TransformDto Transform { get; init; }
 }
 
-/// <summary>Заменить источник компонента с сохранением размещения.</summary>
+/// <summary>Replace a component's source while keeping its placement.</summary>
 public sealed record ReplaceComponentCommand
 {
     public required string DocumentId { get; init; }
@@ -66,74 +58,68 @@ public sealed record ReplaceComponentCommand
 
     public required string ComponentRef { get; init; }
 
-    /// <summary>Новый файл-источник внутри разрешённого корня.</summary>
+    /// <summary>New source file inside the allowed root.</summary>
     public required string SourcePath { get; init; }
 }
 
-/// <summary>Проверка ссылок компонентов на файлы-источники.</summary>
+/// <summary>Check component links against their source files.</summary>
 public sealed record CheckComponentLinksCommand
 {
     public required string DocumentId { get; init; }
 }
 
-/// <summary>
-/// Строка структуры сборки. Пустое поле означает «не прочитано», а не ноль; причина называется в
-/// <see cref="ListComponentsResult.Notes"/>.
-/// </summary>
+/// <summary>One assembly-structure row. An empty field means "not read", not zero; the reason is named in
+/// <see cref="ListComponentsResult.Notes"/>.</summary>
 public sealed record ComponentRowDto
 {
-    /// <summary>Непрозрачная ссылка на экземпляр, привязанная к ревизии.</summary>
+    /// <summary>Opaque reference to the instance, bound to the revision.</summary>
     public required string ComponentRef { get; init; }
 
-    /// <summary>Ссылка на родительский узел (подсборку); null — компонент верхнего уровня.</summary>
+    /// <summary>Reference to the parent node (sub-assembly); null for a top-level component.</summary>
     public string? ParentRef { get; init; }
 
-    /// <summary>Глубина вложенности: 0 — верхний уровень.</summary>
+    /// <summary>Nesting depth: 0 is the top level.</summary>
     public required int Depth { get; init; }
 
     public string? Name { get; init; }
 
-    /// <summary>Обозначение компонента (<c>IPart7.Marking</c>).</summary>
+    /// <summary>Component designation (<c>IPart7.Marking</c>).</summary>
     public string? Marking { get; init; }
 
-    /// <summary>Имя файла-источника (<c>IPart7.FileName</c>).</summary>
+    /// <summary>Source file name (<c>IPart7.FileName</c>).</summary>
     public string? SourcePath { get; init; }
 
-    /// <summary>Признак «деталь/сборка» (<c>IPart7.Detail</c> или <c>ksPart.IsDetail</c>).</summary>
+    /// <summary>Part/assembly flag (<c>IPart7.Detail</c> or <c>ksPart.IsDetail</c>).</summary>
     public bool? IsDetail { get; init; }
 
-    /// <summary>Кратность: число вставок этой детали (<c>IPart7.InstanceCount</c>).</summary>
+    /// <summary>Multiplicity: number of insertions of this part (<c>IPart7.InstanceCount</c>).</summary>
     public int? InstanceCount { get; init; }
 
-    /// <summary>
-    /// Число тел компонента — <c>ksPart.BodyCollection()</c>
-    /// (<c>kspart_bodycollection.html</c>). Названо наружу потому, что «компонент есть» и «у
-    /// компонента есть геометрия» — разные утверждения: вставка методом
-    /// <c>CreatePartInAssembly</c> давала компонент с НУЛЁМ тел (измерено 05.10.2026).
-    /// </summary>
+    /// <summary>Number of bodies of the component — <c>ksPart.BodyCollection()</c>
+    /// (<c>kspart_bodycollection.html</c>). Published because "the component exists" and "the component
+    /// has geometry" are different claims: insertion via <c>CreatePartInAssembly</c> produced a component
+    /// with ZERO bodies. MEASURED: 05.10.2026.</summary>
     public int? BodyCount { get; init; }
 
-    /// <summary>Число граней первого тела компонента — <c>ksBody.FaceCollection()</c>.</summary>
+    /// <summary>Number of faces of the component's first body — <c>ksBody.FaceCollection()</c>.</summary>
     public int? FaceCount { get; init; }
 
-    /// <summary>
-    /// Номер компонента в документе (<c>IPart7.Reference</c>) — он же аргумент
-    /// <c>ksPart.GetPart</c>. Назван наружу, потому что адресация компонента держится на нём, и
-    /// «ссылка есть, а номера нет» — это ровно то, что делает адрес непроверяемым.
-    /// </summary>
+    /// <summary>Component number in the document (<c>IPart7.Reference</c>) — also the argument of
+    /// <c>ksPart.GetPart</c>. Published because component addressing rests on it, and "a reference exists
+    /// but the number does not" is exactly what makes an address unverifiable.</summary>
     public int? ReferenceNumber { get; init; }
 
-    /// <summary>Состояние фиксации (<c>IPart7.Fixed</c>).</summary>
+    /// <summary>Fixation state (<c>IPart7.Fixed</c>).</summary>
     public bool? Fixed { get; init; }
 
-    /// <summary>Состояние загрузки источника (<c>IPart7.LoadState</c>, <c>ksLoadStateEnum</c>).</summary>
+    /// <summary>Source load state (<c>IPart7.LoadState</c>, <c>ksLoadStateEnum</c>).</summary>
     public string? LoadState { get; init; }
 
-    /// <summary>Суммарная матрица размещения (16 чисел 4×4), если прочитана.</summary>
+    /// <summary>Cumulative placement matrix (16 numbers, 4×4), if read.</summary>
     public IReadOnlyList<double>? Matrix { get; init; }
 }
 
-/// <summary>Ответ перечисления структуры сборки.</summary>
+/// <summary>Answer to an assembly-structure enumeration.</summary>
 public sealed record ListComponentsResult(
     IReadOnlyList<ComponentRowDto> Components,
     int UniquePartCount,
@@ -141,23 +127,23 @@ public sealed record ListComponentsResult(
     string Route,
     IReadOnlyList<string> Notes);
 
-/// <summary>Результат вставки компонента: перечитанный из модели, а не пересказ запроса.</summary>
+/// <summary>Result of inserting a component: re-read from the model, not a retelling of the request.</summary>
 public sealed record InsertComponentResult(
     ReferenceDto ComponentRef,
     ComponentRowDto Component,
     int ComponentCount,
     VerificationDto Verification);
 
-/// <summary>Результат задания размещения: размещение ДО и ПОСЛЕ из одного момента.</summary>
+/// <summary>Result of setting placement: placement BEFORE and AFTER from one instant.</summary>
 public sealed record SetComponentPlacementResult(
     ReferenceDto ComponentRef,
-    // Матрицы НЕобязательны: «размещение не прочитано» и «размещение — нулевая матрица» — разные
-    // утверждения, и подменять первое вторым здесь так же запрещено, как в любом чтении COM.
+    // Matrices are optional: "placement not read" and "placement is the zero matrix" are different
+    // claims, and substituting the second for the first is as forbidden here as in any COM read.
     IReadOnlyList<double>? PlacementBeforeMatrix,
     IReadOnlyList<double>? PlacementAfterMatrix,
     VerificationDto Verification);
 
-/// <summary>Результат замены источника компонента с сохранением размещения.</summary>
+/// <summary>Result of replacing a component's source while keeping its placement.</summary>
 public sealed record ReplaceComponentResult(
     ReferenceDto ComponentRef,
     string? SourcePathBefore,
@@ -167,7 +153,7 @@ public sealed record ReplaceComponentResult(
     int ComponentCount,
     VerificationDto Verification);
 
-/// <summary>Строка проверки ссылки компонента на файл-источник.</summary>
+/// <summary>One row checking a component's link to its source file.</summary>
 public sealed record ComponentLinkDto(
     string ComponentRef,
     string? Name,
@@ -176,7 +162,7 @@ public sealed record ComponentLinkDto(
     string? LoadState,
     string Verdict);
 
-/// <summary>Результат проверки ссылок: перечень с вердиктом по каждой.</summary>
+/// <summary>Result of a link check: the list with a verdict per link.</summary>
 public sealed record CheckComponentLinksResult(
     IReadOnlyList<ComponentLinkDto> Links,
     int BrokenCount,

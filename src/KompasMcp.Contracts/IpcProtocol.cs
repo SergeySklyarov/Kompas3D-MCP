@@ -11,10 +11,8 @@ public enum IpcFrameKind
     Event,
 }
 
-/// <summary>
-/// Versioned JSON frame: 4-byte little-endian length prefix + UTF-8 payload (spec 1.5).
-/// Binary artefacts travel as path+hash references, never inside a frame.
-/// </summary>
+/// <summary>Versioned JSON frame: 4-byte little-endian length prefix + UTF-8 payload (spec 1.5).
+/// Binary artefacts travel as path+hash references, never inside a frame.</summary>
 public sealed record IpcFrame
 {
     public const int CurrentProtocolVersion = 1;
@@ -60,10 +58,8 @@ public sealed record IpcFrame
         return frame;
     }
 
-    /// <summary>
-    /// Decode a payload that was already read and length-checked by the stream reader.
-    /// Rejects a protocol version this build does not speak rather than guessing field names.
-    /// </summary>
+    /// <summary>Decode a payload that was already read and length-checked by the stream reader.
+    /// Rejects a protocol version this build does not speak rather than guessing field names.</summary>
     public static IpcFrame DecodePayload(ReadOnlySpan<byte> json)
     {
         var frame = JsonSerializer.Deserialize<IpcFrame>(json, KompJson.Options)

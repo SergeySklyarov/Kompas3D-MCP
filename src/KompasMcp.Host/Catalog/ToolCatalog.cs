@@ -186,8 +186,18 @@ public static class ToolCatalog
                 + "«уже освобождён» и «освобождён этим запросом». Повтор с тем же operation_id "
                 + "возвращает записанный исход и освобождения заново не выполняет; новый operation_id "
                 + "начинает освобождение заново. Журнал операций инструмент не пишет: исходы хранятся "
-                + "в памяти процесса, поэтому перезапуск Хоста историю повторов не несёт.",
-                Sch.Props(("operation_id", Sch.Nullable(Sch.Ref("#/$defs/operation_id")))),
+                + "в памяти процесса, поэтому перезапуск Хоста историю повторов не несёт. Отдельный "
+                + "отказ DOCUMENT_STATE_UNKNOWN приходит, когда Worker терялся или перезапускался: его "
+                + "документы новому Worker не известны, и правки могли остаться несохранёнными. Выход "
+                + "один и он явный — acknowledge_unknown_document_state=true.",
+                Sch.Props(
+                    ("operation_id", Sch.Nullable(Sch.Ref("#/$defs/operation_id"))),
+                    ("acknowledge_unknown_document_state", Sch.Nullable(Sch.Bool(
+                        "Принять на себя неизвестное состояние документов: Worker терялся или "
+                        + "перезапускался, и правки его документов могли остаться в КОМПАС "
+                        + "несохранёнными. По умолчанию false — освобождение тогда отказывает кодом "
+                        + "DOCUMENT_STATE_UNKNOWN. Сервер НЕ проверяет, сохранились ли правки: "
+                        + "подтверждение переносит этот риск на клиента.")))),
                 HostSession.ReleaseCommand,
                 destructive: true,
                 replaysOperationId: true),

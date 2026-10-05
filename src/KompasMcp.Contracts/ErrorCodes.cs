@@ -120,6 +120,18 @@ public static class ErrorCodes
     /// блокировку получить не удалось). «Не прочиталось» НЕ означает «сеанс свободен».
     /// </summary>
     public const string OwnershipStateUnknown = "OWNERSHIP_STATE_UNKNOWN";
+
+    /// <summary>
+    /// Освобождение сеанса отклонено, потому что СОСТОЯНИЕ ДОКУМЕНТОВ НЕИЗВЕСТНО: Worker терялся или
+    /// перезапускался, и правки его документов могли остаться в КОМПАС несохранёнными.
+    /// </summary>
+    /// <remarks>
+    /// Отдельный код, а не <see cref="SessionReleaseFailed"/>: тот означает «опись получить не
+    /// удалось», а этот — «опись ПОЛУЧЕНА и пуста, но пуста она потому, что документы потеряны, а не
+    /// потому, что правок не было». Разница в выходе: здесь освобождение возможно, если клиент явно
+    /// подтвердит неизвестное состояние (<c>acknowledge_unknown_document_state=true</c>), там — нет.
+    /// </remarks>
+    public const string DocumentStateUnknown = "DOCUMENT_STATE_UNKNOWN";
 }
 
 /// <summary>
@@ -190,6 +202,9 @@ public static class ErrorMessages
             "Освобождение не подтверждено: Worker не остановлен или состояние владельца не записано.",
         [ErrorCodes.OwnershipStateUnknown] =
             "Состояние владения сеансом определить не удалось: запись владельца не читается.",
+        [ErrorCodes.DocumentStateUnknown] =
+            "Состояние документов сеанса неизвестно: Worker терялся или перезапускался, правки могли " +
+            "остаться несохранёнными. Освобождение требует acknowledge_unknown_document_state=true.",
     };
 
     public static string For(string code) =>

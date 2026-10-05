@@ -171,15 +171,40 @@ public sealed class OperationJournal : IDisposable
             // повтор с тем же operation_id выполнял мутацию ВТОРОЙ раз. Ровно тот сценарий, ради
             // которого журнал заведён, был сломан.
             //
-            // Починка — один байт под той же блокировкой, что и запись: после неё файл кончается
-            // переводом строки, и следующая запись начинает свою строку.
-            RepairTornTail();
+            // ПОЧИНКА — ТОЛЬКО ПОД ПОЛУЧЕННОЙ БЛОКИРОВКОЙ. Прежде она шла и тогда, когда блокировку
+            // взять не удалось (ReplayRanUnlocked): перевод строки дописывался в файл, который в этот
+            // момент писал ДРУГОЙ Хост, и `\n` ложился в СЕРЕДИНУ его строки — то есть починка одного
+            // обрыва портила чужую целую запись (находка §4 задания 05.10.2026). Без блокировки хвост
+            // НЕ чинится: факт называется (TornTailRepairSkippedUnlocked), а починку выполняет первая
+            // же запись — под своей блокировкой, см. TryAppend.
+            if (locked)
+            {
+                RepairTornTail();
+            }
+            else if (TornTail)
+            {
+                TornTailRepairSkippedUnlocked = true;
+                _tornTailRepairPending = true;
+            }
         }
         finally
         {
             _fileGate.Exit();
         }
     }
+
+    /// <summary>
+    /// Рваный хвост НЕ починен при открытии, потому что межпроцессную блокировку взять не удалось.
+    /// Печатается вызывающим: молчание об этом неотличимо от «обрывов не было», а починка чужой
+    /// строки под чужим писателем — от «файл цел».
+    /// </summary>
+    public bool TornTailRepairSkippedUnlocked { get; private set; }
+
+    /// <summary>
+    /// Хвост ждёт починки: обрыв найден, но блокировки при открытии не было. Сбрасывается первой же
+    /// удачной записью, которая чинит хвост под СВОЕЙ блокировкой (см. <see cref="TryAppend"/>).
+    /// </summary>
+    private bool _tornTailRepairPending;
 
     /// <summary>
     /// Дописать перевод строки, если файл им не кончается. Ничего не делает на целом файле.
@@ -599,7 +624,6 @@ public sealed class OperationJournal : IDisposable
     private bool TryAppend(JournalRecord record)
     {
         var line = JsonSerializer.Serialize(record, JournalOptions) + "\n";
-        var bytes = Encoding.UTF8.GetBytes(line);
 
         if (!_fileGate.Enter(_appendLockTimeout))
         {
@@ -611,6 +635,26 @@ public sealed class OperationJournal : IDisposable
 
         try
         {
+            // ПОЧИНКА РВАНОГО ХВОСТА, ОТЛОЖЕННАЯ ПРИ ОТКРЫТИИ, ДЕЛАЕТСЯ ЗДЕСЬ — ПОД ЭТОЙ БЛОКИРОВКОЙ.
+            //
+            // Открытие журнала могло не получить блокировку (ReplayRanUnlocked) и тогда хвост не
+            // чинило: дописать `\n` без блокировки значило бы вставить перевод строки в середину
+            // строки, которую в этот момент пишет ДРУГОЙ Хост. Здесь блокировка уже наша, поэтому
+            // починка безопасна, и перевод строки идёт ПЕРЕД нашей записью — одной операцией Write,
+            // чтобы между ними не влез третий писатель.
+            var prefix = string.Empty;
+            if (_tornTailRepairPending)
+            {
+                if (!FileEndsWithNewline(Path))
+                {
+                    prefix = "\n";
+                    RepairedTornTails++;
+                }
+
+                _tornTailRepairPending = false;
+            }
+
+            var bytes = Encoding.UTF8.GetBytes(prefix + line);
             using var stream = OpenAppend();
             stream.Write(bytes, 0, bytes.Length);
             stream.Flush();

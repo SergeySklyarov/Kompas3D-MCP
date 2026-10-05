@@ -406,6 +406,79 @@ public class OperationJournalTests : IDisposable
     }
 
     /// <summary>
+    /// FIX §4 (05.10.2026). Рваный хвост чинится ТОЛЬКО под полученной блокировкой. Пока блокировку
+    /// держит другой писатель, починка НЕ выполняется — иначе дописанный перевод строки лёг бы в
+    /// середину чужой целой записи. Хвост чинит первая же запись — под СВОЕЙ блокировкой.
+    /// </summary>
+    [Fact]
+    public void TornTail_IsNotRepairedWithoutTheLock_AndTheFirstAppendRepairsIt()
+    {
+        using (var journal = new OperationJournal(_file))
+        {
+            var id = Guid.NewGuid().ToString();
+            journal.TryBegin(id, "kompas_extrude", Args(10), "doc-1", 3);
+            journal.Complete(id, null);
+        }
+
+        File.AppendAllText(_file, "{\"operation_id\":\"truncat");
+        var before = File.ReadAllBytes(_file);
+
+        // Блокировку держит ДРУГОЙ ПОТОК: именованная блокировка Windows принадлежит ПОТОКУ, и с того же
+        // потока её взял бы и второй объект. Поэтому держатель — отдельный поток.
+        using var acquired = new ManualResetEventSlim(false);
+        using var release = new ManualResetEventSlim(false);
+        var holder = new Thread(() =>
+        {
+            using var gate = NamedFileLock.For(_file, OperationJournal.FileLockPurpose);
+            gate.Enter(TimeSpan.FromSeconds(10));
+            acquired.Set();
+            release.Wait(TimeSpan.FromSeconds(20));
+            gate.Exit();
+        }) { IsBackground = true };
+        holder.Start();
+        Assert.True(acquired.Wait(TimeSpan.FromSeconds(10)), "держатель блокировки не стартовал");
+
+        try
+        {
+            using var unlocked = new OperationJournal(
+                _file,
+                appendLockTimeout: TimeSpan.FromMilliseconds(200),
+                replayLockTimeout: TimeSpan.FromMilliseconds(200));
+
+            Assert.True(unlocked.ReplayRanUnlocked, "блокировка занята — чтение обязано идти без неё");
+            Assert.True(unlocked.TornTailRepairSkippedUnlocked,
+                "без блокировки починка обязана быть НАЗВАНА пропущенной");
+            Assert.Equal(0, unlocked.RepairedTornTails);
+            Assert.Equal(before, File.ReadAllBytes(_file)); // ФАЙЛ НЕ ИЗМЕНЁН — это и есть содержание правки
+
+            // Держатель отпускает блокировку — и ТА ЖЕ открытая без блокировки запись обязана починить
+            // хвост под СВОЕЙ блокировкой, а не склеить свою строку с обрывком.
+            release.Set();
+            holder.Join(TimeSpan.FromSeconds(10));
+
+            var secondId = Guid.NewGuid().ToString();
+            var decision = unlocked.TryBegin(secondId, "kompas_extrude", Args(11), "doc-1", 3);
+            Assert.True(decision.Proceed);
+            unlocked.Complete(secondId, null);
+            Assert.Equal(1, unlocked.RepairedTornTails);
+
+            using var third = new OperationJournal(_file);
+            Assert.True(third.TryGet(secondId, out var second), "строка после починки обязана разбираться");
+            Assert.Equal(JournalOutcome.Succeeded, second!.Outcome);
+            Assert.EndsWith("\n", File.ReadAllText(_file));
+        }
+        finally
+        {
+            if (!release.IsSet)
+            {
+                release.Set();
+            }
+
+            holder.Join(TimeSpan.FromSeconds(10));
+        }
+    }
+
+    /// <summary>
     /// FIX M1. Политика <c>SameOperationId</c> у записанного ЧИСТОГО отказа теперь выполнима:
     /// повтор с тем же operation_id доходит до повторной отправки. Частичный эффект — не выполнима,
     /// и это различие проведено по существу, а не по тексту ошибки.

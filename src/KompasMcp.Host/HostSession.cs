@@ -258,7 +258,32 @@ public sealed class HostSession : IAsyncDisposable
                     remedy: "Повторите kompas_acquire_session.");
             }
 
-            return await invoker.InvokeAsync(toolName, arguments, cancellationToken).ConfigureAwait(false);
+            // ВЫЗОВ, ПЕРЕЗАПУСТИВШИЙ WORKER, ОБЯЗАН ЭТО НАЗВАТЬ.
+            //
+            // Прежние document_id после перезапуска недействительны: новый Worker не знает ни одного
+            // документа, и ссылка на прежний адресует пустоту. Клиент, увидевший «инструмент ответил»,
+            // обязан узнать об этом из ответа, а не из последующего отказа (дефект H3 ревью
+            // 05.10.2026, обход через промежуточный вызов).
+            var restartsBefore = _worker?.RestartCount ?? 0;
+            var envelope = await invoker.InvokeAsync(toolName, arguments, cancellationToken).ConfigureAwait(false);
+
+            var restarted = _worker;
+            if (restarted is not null && restarted.RestartCount > restartsBefore)
+            {
+                envelope = envelope with
+                {
+                    Warnings = envelope.Warnings.Concat(new[]
+                    {
+                        "Во время этого вызова Worker перезапускался: прежние document_id недействительны, "
+                        + "а состояние документов прежнего сеанса НЕИЗВЕСТНО (правки могли остаться "
+                        + "несохранёнными). Прочитайте структуру заново (kompas_list_documents, "
+                        + "kompas_get_context). Освобождение сеанса потребует явного подтверждения "
+                        + "acknowledge_unknown_document_state=true.",
+                    }).ToArray(),
+                };
+            }
+
+            return envelope;
         }
         finally
         {
@@ -309,6 +334,12 @@ public sealed class HostSession : IAsyncDisposable
                 // Разница названа полями, чтобы «Worker есть» не читалось как «Worker работает».
                 ["worker_channel"] = worker is null ? "not_created" : "created",
                 ["worker_pid"] = worker?.WorkerProcessId,
+                // ЛИПКИЙ ПРИЗНАК ВИДЕН В СТАТУСЕ. Иначе «почему освобождение отказывает» приходилось
+                // бы выяснять из текста отказа: неизвестное состояние документов — самостоятельное
+                // состояние сеанса, а не деталь одной команды.
+                ["document_state_unknown"] = worker?.DocumentStateUnknown ?? false,
+                ["document_state_unknown_reason"] = worker?.DocumentStateUnknownReason,
+                ["worker_restarts"] = worker?.RestartCount ?? 0,
                 ["active_calls"] = Volatile.Read(ref _activeCalls),
                 ["releasing"] = Volatile.Read(ref _releasing),
             },
@@ -664,8 +695,29 @@ public sealed class HostSession : IAsyncDisposable
             // НЕСОХРАНЁННЫЕ ДОКУМЕНТЫ — ОТКАЗ ПО УМОЛЧАНИЮ. Никакого неявного сохранения и
             // никакого отказа от правок: закрытие документа документированным ksDocument3D.close()
             // не обещает сохранения, поэтому молча отдать сеанс значило бы потерять модель.
+            //
+            // РЕШЕНИЕ «МОЖНО ЛИ ОСВОБОЖДАТЬ» — ЧИСТАЯ ФУНКЦИЯ (ReleaseGuard). Сюда приходят только
+            // ФАКТЫ: запускался ли Worker, жив ли канал без перезапуска, стоит ли липкий признак
+            // неизвестного состояния документов, подтвердил ли клиент это состояние, прочитана ли
+            // опись и сколько в ней грязных документов. Разложенное по ветвям, это правило один раз
+            // уже пропустило обход (дефект H3): после обрыва промежуточный вызов поднимал новый
+            // Worker, опись была пуста и «честна», и освобождение проходило.
+            var worker = _worker;
+            var acknowledge = JsonScalars.ReadBool(arguments["acknowledge_unknown_document_state"]) == true;
+
             var inventory = await InventoryAsync(cancellationToken).ConfigureAwait(false);
-            if (inventory.Error is not null)
+            var inventoryRead = inventory.Error is null;
+            var dirty = inventoryRead ? DirtyDocuments(inventory.Payload) : new List<JsonObject>();
+
+            var decision = ReleaseGuard.Decide(new ReleaseFacts(
+                WorkerStarted: worker is { HasStarted: true },
+                CanSendWithoutRestart: worker is null || worker.CanSendWithoutRestart,
+                DocumentStateUnknown: worker?.DocumentStateUnknown == true,
+                AcknowledgeUnknownDocumentState: acknowledge,
+                InventoryRead: inventoryRead,
+                DirtyCount: dirty.Count));
+
+            if (!decision.Proceed)
             {
                 _ownership.AbortRelease();
                 lock (_callGate)
@@ -674,46 +726,31 @@ public sealed class HostSession : IAsyncDisposable
                     Monitor.PulseAll(_callGate);
                 }
 
-                _log.Write("warn", "session release refused: inventory unavailable", new { code = inventory.Error.Code });
-                return Refusal(
-                    ErrorCodes.SessionReleaseFailed,
-                    $"Не удалось получить опись документов сеанса: {inventory.Error.Message}. "
-                    + "Освобождение отменено: без описи нельзя утверждать, что правок нет.",
-                    RetryPolicy.AfterReconciliation,
-                    new JsonObject { ["inventory_error"] = inventory.Error.Code },
-                    remedy: "Повторите kompas_release_session; если отказ повторяется, закройте "
-                            + "документы kompas_close_document и повторите.");
-            }
-
-            var dirty = DirtyDocuments(inventory.Payload);
-            if (dirty.Count > 0)
-            {
-                _ownership.AbortRelease();
-                lock (_callGate)
+                _log.Write("warn", "session release refused", new
                 {
-                    _releasing = false;
-                    Monitor.PulseAll(_callGate);
-                }
+                    code = decision.RefusalCode,
+                    inventory_error = inventory.Error?.Code,
+                    dirty = dirty.Count,
+                    document_state_unknown = worker?.DocumentStateUnknown,
+                });
 
-                _log.Write("warn", "session release refused: unsaved documents", new { count = dirty.Count });
-                return Refusal(
-                    ErrorCodes.DocumentDirty,
-                    $"Освобождение отклонено: в сеансе {dirty.Count} документов с несохранёнными "
-                    + "изменениями. Сервер не сохраняет и не отказывается от правок молча.",
-                    RetryPolicy.Never,
-                    new JsonObject
-                    {
-                        ["documents"] = new JsonArray(dirty.Select(d => (JsonNode)d.DeepClone()).ToArray()),
-                        ["document_count"] = dirty.Count,
-                    },
-                    remedy: "Сохраните документы kompas_save_document (или закройте их "
-                            + "kompas_close_document с явной политикой) и повторите kompas_release_session.");
+                return ReleaseRefusal(decision, worker, inventory.Error, dirty);
             }
+
+            // ЯВНОЕ ПОДТВЕРЖДЕНИЕ НЕИЗВЕСТНОГО СОСТОЯНИЯ: клиент взял на себя, что правки прежнего
+            // Worker могли остаться в КОМПАС несохранёнными. Это называется в предупреждении, а не
+            // остаётся молчанием: «освобождено» и «правки могли пропасть» — разные утверждения.
+            var acknowledgedUnknown = acknowledge && worker?.DocumentStateUnknown == true;
+            var unknownReason = worker?.DocumentStateUnknownReason;
 
             // ОЧИСТКА: Worker — очередь, Invoker, журнал. Worker останавливается ПЕРВЫМ, потому что
             // это единственный процесс, который выполняет COM и пишет в журнал операций.
             var stop = await StopWorkerAsync().ConfigureAwait(false);
             await DisposeResourcesAsync().ConfigureAwait(false);
+
+            // Признак снимается ТОЛЬКО теперь — после подтверждённой остановки Worker. Снять его
+            // раньше значило бы объявить состояние известным по одному лишь намерению клиента.
+            worker?.ClearDocumentStateUnknown("освобождение с явным подтверждением неизвестного состояния");
 
             var stopNode = new JsonObject
             {
@@ -792,8 +829,9 @@ public sealed class HostSession : IAsyncDisposable
                 ["session_state"] = "released",
                 ["worker"] = stopNode,
                 ["documents_in_session"] = DocumentCount(inventory.Payload),
+                ["unknown_document_state_acknowledged"] = acknowledgedUnknown,
                 ["next"] = "kompas_acquire_session",
-            }, warnings: BuildReleaseWarnings(stop),
+            }, warnings: BuildReleaseWarnings(stop, acknowledgedUnknown, unknownReason),
             caveats: new[] { "cad_session_ended_documents_closed" }));
         }
         finally
@@ -1120,13 +1158,28 @@ public sealed class HostSession : IAsyncDisposable
     private static long QueueDepth(ToolInvoker invoker) =>
         invoker.QueueStatistics().TryGetValue("queued", out var depth) ? depth : 0;
 
-    private static List<string> BuildReleaseWarnings(WorkerSupervisor.WorkerStopResult stop)
+    private static List<string> BuildReleaseWarnings(
+        WorkerSupervisor.WorkerStopResult stop,
+        bool acknowledgedUnknown = false,
+        string? unknownReason = null)
     {
         var warnings = new List<string>
         {
             "Сеанс КОМПАС завершён: зарегистрированные документы закрыты, следующий сеанс начнётся с "
             + "нового контекста (kompas_connect → kompas_get_context).",
         };
+
+        if (acknowledgedUnknown)
+        {
+            // «ОСВОБОЖДЕНО» И «ПРАВКИ МОГЛИ ПРОПАСТЬ» — РАЗНЫЕ УТВЕРЖДЕНИЯ. Освобождение выполнено по
+            // явному подтверждению клиента, и цена этого подтверждения обязана быть произнесена.
+            warnings.Add(
+                "Освобождение выполнено с acknowledge_unknown_document_state=true: состояние "
+                + "документов прежнего Worker было НЕИЗВЕСТНО"
+                + (unknownReason is null ? string.Empty : $" ({unknownReason})")
+                + ". Правки прежнего Worker могли остаться в КОМПАС несохранёнными — сервер этого не "
+                + "проверял и не проверяет.");
+        }
 
         if (stop.KillUsed)
         {
@@ -1136,6 +1189,69 @@ public sealed class HostSession : IAsyncDisposable
         }
 
         return warnings;
+    }
+
+    /// <summary>
+    /// Отказ освобождения по решению <see cref="ReleaseGuard"/>: код, политика повтора и подробности
+    /// зависят от ПРИЧИНЫ, а не сведены к одной формулировке.
+    /// </summary>
+    /// <remarks>
+    /// Разные причины — разные выходы: неизвестное состояние документов снимается явным
+    /// подтверждением, грязные документы — сохранением или закрытием, недоступная опись — повтором.
+    /// Одна общая формулировка заставила бы клиента угадывать выход, а это ровно тот случай, когда
+    /// «сообщение об ошибке» перестаёт быть инструкцией.
+    /// </remarks>
+    private static ResultEnvelope<JsonNode?> ReleaseRefusal(
+        ReleaseDecision decision,
+        WorkerSupervisor? worker,
+        ErrorDto? inventoryError,
+        List<JsonObject> dirty)
+    {
+        if (decision.RefusalCode == ErrorCodes.DocumentStateUnknown)
+        {
+            return Refusal(
+                ErrorCodes.DocumentStateUnknown,
+                decision.Reason!,
+                RetryPolicy.AfterReconciliation,
+                new JsonObject
+                {
+                    ["reason"] = "document_state_unknown",
+                    ["worker_restarts"] = worker?.RestartCount,
+                    ["worker_state_reason"] = worker?.DocumentStateUnknownReason,
+                    ["may_have_unsaved_edits"] = true,
+                    ["acknowledge_parameter"] = "acknowledge_unknown_document_state",
+                },
+                remedy: "Сверьте модель в КОМПАС с ожиданием (объём, число тел, история признаков) и, "
+                        + "если потеря правок допустима, повторите kompas_release_session с "
+                        + "acknowledge_unknown_document_state=true — это ЕДИНСТВЕННЫЙ документированный "
+                        + "выход: сервер не проверял, сохранились ли правки прежнего Worker.");
+        }
+
+        if (decision.RefusalCode == ErrorCodes.DocumentDirty)
+        {
+            return Refusal(
+                ErrorCodes.DocumentDirty,
+                decision.Reason!,
+                RetryPolicy.Never,
+                new JsonObject
+                {
+                    ["documents"] = new JsonArray(dirty.Select(d => (JsonNode)d.DeepClone()).ToArray()),
+                    ["document_count"] = dirty.Count,
+                },
+                remedy: "Сохраните документы kompas_save_document (или закройте их "
+                        + "kompas_close_document с явной политикой) и повторите kompas_release_session.");
+        }
+
+        return Refusal(
+            ErrorCodes.SessionReleaseFailed,
+            inventoryError is null
+                ? decision.Reason!
+                : $"Не удалось получить опись документов сеанса: {inventoryError.Message}. "
+                  + "Освобождение отменено: без описи нельзя утверждать, что правок нет.",
+            RetryPolicy.AfterReconciliation,
+            new JsonObject { ["inventory_error"] = inventoryError?.Code ?? "inventory_not_read" },
+            remedy: "Повторите kompas_release_session; если отказ повторяется, закройте "
+                    + "документы kompas_close_document и повторите.");
     }
 
     // ---------------------------------------------------------------------------------------------

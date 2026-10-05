@@ -236,6 +236,14 @@ public sealed partial class Api5Session
                 RetryPolicy.ReacquireContext);
         }
 
+        // ТОЖДЕСТВО СВЕРЯЕТСЯ ДО МУТАЦИИ: номер из API5-коллекции применяется к API7-индексатору, и
+        // расхождение или нечитаемость означали бы запись параметра в ЧУЖОЕ сопряжение (дефект M7).
+        var identity = MateIdentityMatches(payload, mate, out var identityNote);
+        if (identity != true)
+        {
+            throw MateIdentityRefusal(document, command.MateRef, payload, identity, identityNote);
+        }
+
         var before = SafeDouble(() => mate.ParamValue);
         try
         {
@@ -315,6 +323,14 @@ public sealed partial class Api5Session
                 $"Сопряжение по номеру {payload.Ordinal} не получено как IMateConstraint3D: " +
                 "признак фиксации этим маршрутом не задаётся.",
                 RetryPolicy.ReacquireContext);
+        }
+
+        // ТОЖДЕСТВО СВЕРЯЕТСЯ ДО МУТАЦИИ — тем же правилом, что у параметра: признак фиксации,
+        // записанный в ЧУЖОЕ сопряжение, — это изменение не той модели (дефект M7 ревью 05.10.2026).
+        var identity = MateIdentityMatches(payload, mate, out var identityNote);
+        if (identity != true)
+        {
+            throw MateIdentityRefusal(document, command.MateRef, payload, identity, identityNote);
         }
 
         var wanted = FixedFromName(command.Fixed);
@@ -498,6 +514,111 @@ public sealed partial class Api5Session
     }
 
     /// <summary>
+    /// То ли это сопряжение: тип и базовые объекты API7 сверяются с API5-коллекцией по тому же номеру.
+    /// </summary>
+    /// <returns>
+    /// <c>true</c> — тождество подтверждено; <c>false</c> — расхождение (номер ведёт в другое
+    /// сопряжение); <c>null</c> — сверить нечем.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <b>Зачем.</b> <c>SetMateParameter</c> и <c>SetMateFixed</c> брали API7-сопряжение
+    /// <c>IMateConstraints3D.MateConstraint3D[ordinal]</c> по номеру из API5-коллекции
+    /// <c>ksDocument3D.MateConstraintCollection</c> без всякой сверки: соответствие порядков API7↔API5
+    /// — ПРЕДПОЛОЖЕНИЕ того же рода, что и у компонентов. Если оно нарушено, параметр записывался бы в
+    /// ЧУЖОЕ сопряжение, а <c>ReadMates</c> читал бы у чужого объекта <c>Valid</c>/<c>Alignment</c>/
+    /// <c>Name</c> (дефект M7 ревью 05.10.2026).
+    /// </para>
+    /// <para>
+    /// <b>Что сверяется и по каким источникам.</b> Тип: API5 <c>ksMateConstraint.constraintType</c>
+    /// против API7 <c>IMateConstraint3D.ConstraintType</c>. Базовые объекты: API5
+    /// <c>ksMateConstraint.GetBaseObj(1|2)</c> против API7 <c>BaseObject1</c>/<c>BaseObject2</c> — по
+    /// НАЛИЧИЮ. Побитовое сравнение самих объектов не делается: перенос API5-объекта в API7 даёт
+    /// обёртку, тождество которой COM-объекту сопряжения живьём не измерялось, и ложное расхождение
+    /// заблокировало бы верную работу. Это названо, а не выдано за полную сверку.
+    /// </para>
+    /// </remarks>
+    private bool? MateIdentityMatches(MatePayload payload, IMateConstraint3D mate7, out string detail)
+    {
+        var type5 = payload.ConstraintType;
+        var type7 = Int(() => (int)mate7.ConstraintType);
+        var base1Api5 = Ref(() => payload.Mate5.GetBaseObj(1)) is not null;
+        var base2Api5 = Ref(() => payload.Mate5.GetBaseObj(2)) is not null;
+        var base1Api7 = Ref(() => mate7.BaseObject1) is not null;
+        var base2Api7 = Ref(() => mate7.BaseObject2) is not null;
+
+        var signals = new List<string>();
+        var confirmed = false;
+        var contradicted = false;
+
+        if (type7 is not null)
+        {
+            var equal = (short)type7.Value == type5;
+            signals.Add(equal
+                ? $"тип сопряжения совпал («{MateTypeName(type7.Value)}»)"
+                : $"тип сопряжения РАСХОДИТСЯ: API5 «{MateTypeName(type5)}» ({(int)type5}), API7 " +
+                  $"«{MateTypeName(type7.Value)}» ({type7.Value})");
+            confirmed |= equal;
+            contradicted |= !equal;
+        }
+        else
+        {
+            signals.Add("тип сопряжения со стороны API7 не прочитан");
+        }
+
+        // Базовые объекты: признак информативен, только если хоть один объект где-то присутствует.
+        // «Оба сопряжения без базовых объектов» — это не подтверждение тождества, а отсутствие
+        // информации, и выдавать его за совпадение запрещено.
+        if (base1Api5 || base2Api5 || base1Api7 || base2Api7)
+        {
+            var equal = base1Api5 == base1Api7 && base2Api5 == base2Api7;
+            signals.Add(equal
+                ? $"базовые объекты совпали по наличию (1: {base1Api5}, 2: {base2Api5})"
+                : $"базовые объекты РАСХОДЯТСЯ: API5 (1: {base1Api5}, 2: {base2Api5}), " +
+                  $"API7 (1: {base1Api7}, 2: {base2Api7})");
+            confirmed |= equal;
+            contradicted |= !equal;
+        }
+        else
+        {
+            signals.Add("базовые объекты не читаются ни с одной стороны — признак не даёт информации");
+        }
+
+        detail = string.Join("; ", signals);
+        if (contradicted)
+        {
+            return false;
+        }
+
+        return confirmed ? true : null;
+    }
+
+    /// <summary>
+    /// Отказ на неподтверждённом тождестве сопряжения: расхождение и «сверить нечем» запрещают мутацию
+    /// одинаково. Общая точка для <c>set_mate_parameter</c> и <c>set_mate_fixed</c>.
+    /// </summary>
+    private KompasContractException MateIdentityRefusal(
+        DocumentEntry document, string mateRef, MatePayload payload, bool? identity, string detail) =>
+        new(
+            ErrorCodes.StaleReference,
+            identity == false
+                ? $"Сопряжение по номеру {payload.Ordinal} — НЕ то, на которое указывает ссылка: {detail}. "
+                  + "Параметр был бы записан в ЧУЖОЕ сопряжение, поэтому мутация не выполняется. "
+                  + "Перечитайте сопряжения kompas_list_mates и возьмите свежую ссылку."
+                : $"Тождество сопряжения по номеру {payload.Ordinal} НЕ подтверждено: {detail}. "
+                  + "Мутация по неподтверждённому адресу не выполняется — перечитайте сопряжения "
+                  + "kompas_list_mates и возьмите свежую ссылку.",
+            RetryPolicy.ReacquireContext,
+            details: new Dictionary<string, object?>
+            {
+                ["mate_ref"] = mateRef,
+                ["ordinal"] = payload.Ordinal,
+                ["identity_check"] = detail,
+                ["identity_confirmed"] = identity is null ? "не сверено" : "расхождение",
+                ["document_id"] = document.Id,
+            });
+
+    /// <summary>
     /// Число сопряжений по документированной API5-коллекции <c>ksDocument3D.MateConstraintCollection</c>.
     /// Непрочитанное число — отказ, а не ноль и не прежнее значение.
     /// </summary>
@@ -664,6 +785,22 @@ public sealed partial class Api5Session
                 MateRefKind, document.Id, document.Revision,
                 new MatePayload(mate, index, (short)typeValue));
 
+            // СООТВЕТСТВИЕ ПОРЯДКОВ API7↔API5 НА ЧТЕНИИ ТОЖЕ НЕ ПОДРАЗУМЕВАЕТСЯ. `Valid`, `Alignment`
+            // и `Name` берутся у ОБЪЕКТА API7 по тому же номеру, и если тип API7 не совпал с типом
+            // API5, эти поля описывают ЧУЖОЕ сопряжение — строка об этом говорит, а не молчит
+            // (дефект M7 ревью 05.10.2026). Чтение отказом не является: строка честно называет
+            // непрочитанное, а мутация по этой ссылке будет отвергнута сверкой в
+            // SetMateParameter/SetMateFixed.
+            var mate7 = Mate7(document, index);
+            var type7 = mate7 is null ? null : Int(() => (int)mate7.ConstraintType);
+            if (typeValue >= 0 && type7 is not null && (short)type7.Value != (short)typeValue)
+            {
+                notes.Add($"mate_{index}_identity_mismatch — тип API7 «{MateTypeName(type7.Value)}» не " +
+                          $"совпал с типом API5 «{MateTypeName(typeValue)}»: Valid/Alignment/Name " +
+                          "прочитаны у объекта API7 по тому же номеру, и их принадлежность этой строке " +
+                          "НЕ подтверждена");
+            }
+
             rows.Add(new MateRowDto
             {
                 MateRef = stored.Id,
@@ -674,11 +811,11 @@ public sealed partial class Api5Session
                 Fixed = FixedName(SafeInt(() => mate.@fixed)),
                 ParamValue = SafeDouble(() => mate.distance),
                 Direction = SafeInt(() => mate.direction),
-                Alignment = AlignmentName(EnumOrNull(() => Mate7(document, index)?.Alignment)),
-                Valid = Bool(() => Mate7(document, index)?.Valid),
+                Alignment = AlignmentName(EnumOrNull(() => mate7?.Alignment)),
+                Valid = Bool(() => mate7?.Valid),
                 BaseObject1 = ObjectTypeName(Ref(() => mate.GetBaseObj(1))),
                 BaseObject2 = ObjectTypeName(Ref(() => mate.GetBaseObj(2))),
-                Name = Ref(() => Mate7(document, index)?.Name),
+                Name = Ref(() => mate7?.Name),
             });
         }
 
@@ -711,16 +848,17 @@ public sealed partial class Api5Session
                 RetryPolicy.ReacquireContext);
         }
 
-        // ТОЖДЕСТВО ПРОВЕРЯЕТСЯ И ЗДЕСЬ: грань берётся у компонента, найденного по номеру, и если
-        // номер ведёт в чужой экземпляр, сопряжение было бы создано между ЧУЖИМИ гранями (дефект M7
-        // ревью 05.10.2026).
+        // ТОЖДЕСТВО ПРОВЕРЯЕТСЯ И ЗДЕСЬ, И ТОЖЕ ОТКАЗЫВАЕТ НА «НЕ СВЕРЕНО»: грань берётся у компонента,
+        // найденного по номеру, и если номер ведёт в чужой экземпляр, сопряжение было бы создано между
+        // ЧУЖИМИ гранями. Нечитаемость (identity == null) — это «мутация по неподтверждённому адресу»,
+        // и она запрещена так же, как расхождение (дефект M7 ревью 05.10.2026).
         var identity = IdentityMatches(part5, payload, out var identityNote);
         notes.Add("component_identity — " + identityNote);
-        if (identity == false)
+        if (identity != true)
         {
             throw new KompasContractException(
                 ErrorCodes.StaleReference,
-                "Грань адресована по номеру, который ведёт в ЧУЖОЙ компонент: " + identityNote +
+                "Грань адресована по номеру, тождество которого НЕ подтверждено: " + identityNote +
                 ". Сопряжение по неподтверждённому адресу не создаётся; перечитайте структуру " +
                 "kompas_list_components и возьмите свежую ссылку.",
                 RetryPolicy.ReacquireContext,
@@ -728,6 +866,7 @@ public sealed partial class Api5Session
                 {
                     ["component_ref"] = componentRef,
                     ["ordinal"] = payload.Ordinal,
+                    ["identity_confirmed"] = identity is null ? "не сверено" : "расхождение",
                 });
         }
 

@@ -72,6 +72,66 @@ public sealed class WorkerSupervisor : IAsyncDisposable
     /// </remarks>
     public bool HasStarted { get; private set; }
 
+    /// <summary>
+    /// ЛИПКИЙ признак «состояние документов сеанса НЕИЗВЕСТНО».
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Зачем он нужен, если канал уже проверяется.</b> Правка H3 (05.10.2026) закрыла прямой путь
+    /// обхода защиты <c>DOCUMENT_DIRTY</c>: освобождение сразу после обрыва канала больше не
+    /// запрашивает опись через перезапуск Worker. Оставался обходной путь: мутация превысила бюджет,
+    /// канал помечен сломанным, затем клиент вызывает ЛЮБОЙ CAD-инструмент, и
+    /// <see cref="EnsureStartedAsync"/> останавливает прежний Worker и поднимает НОВЫЙ, у которого нет
+    /// ни одного документа. Следующий <c>kompas_release_session</c> видит живой канал и пустую опись —
+    /// и освобождение проходит, хотя правки прежнего Worker могли остаться в КОМПАС несохранёнными.
+    /// </para>
+    /// <para>
+    /// Поэтому признак ЛИПКИЙ: он ставится, как только запускавшийся Worker теряется или
+    /// перезапускается (<see cref="MarkBroken"/>, выход процесса, перезапуск в
+    /// <see cref="EnsureStartedAsync"/>), и НЕ снимается сам по себе. Сбрасывается только явным
+    /// действием клиента — освобождением с подтверждением неизвестного состояния.
+    /// </para>
+    /// </remarks>
+    public bool DocumentStateUnknown { get; private set; }
+
+    /// <summary>Почему состояние документов признано неизвестным. Называется, а не подразумевается.</summary>
+    public string? DocumentStateUnknownReason { get; private set; }
+
+    /// <summary>
+    /// Сколько раз Worker перезапускался в этом сеансе (первый запуск не считается).
+    /// </summary>
+    /// <remarks>
+    /// Нужен ответу CAD-вызова: если во время вызова Worker перезапустился, прежние
+    /// <c>document_id</c> недействительны, и это обязано быть сказано клиенту, а не выведено им из
+    /// того, что «инструмент ответил успешно».
+    /// </remarks>
+    public int RestartCount { get; private set; }
+
+    /// <summary>Отметить состояние документов неизвестным. Повторный вызов сохраняет первую причину.</summary>
+    public void MarkDocumentStateUnknown(string reason)
+    {
+        DocumentStateUnknown = true;
+        DocumentStateUnknownReason ??= reason;
+        _log.Write("warn", "document state marked unknown", new { reason, worker_pid = WorkerProcessId });
+    }
+
+    /// <summary>
+    /// Снять признак неизвестного состояния. Вызывается ТОЛЬКО явным действием клиента
+    /// (освобождение с <c>acknowledge_unknown_document_state=true</c>) либо при создании нового
+    /// Worker: новое поколение сеанса — новый контекст.
+    /// </summary>
+    public void ClearDocumentStateUnknown(string reason)
+    {
+        if (!DocumentStateUnknown)
+        {
+            return;
+        }
+
+        DocumentStateUnknown = false;
+        DocumentStateUnknownReason = null;
+        _log.Write("info", "document state unknown acknowledged", new { reason });
+    }
+
     public event Action? WorkerLost;
 
     public WorkerSupervisor(HostOptions options, HostLog log)
@@ -97,6 +157,19 @@ public sealed class WorkerSupervisor : IAsyncDisposable
             if (IsConnected)
             {
                 return;
+            }
+
+            // ПЕРЕЗАПУСК ЗАПУСКАВШЕГОСЯ WORKER — ЭТО ПОТЕРЯ СОСТОЯНИЯ ДОКУМЕНТОВ.
+            //
+            // Новый Worker не знает ни одного документа прежнего: его опись пуста независимо от
+            // того, что было открыто и не сохранено. Пока признак не снят явно, освобождение
+            // отказывает (дефект H3 ревью 05.10.2026 — обход через промежуточный вызов).
+            if (HasStarted)
+            {
+                RestartCount++;
+                MarkDocumentStateUnknown(
+                    "Worker перезапущен: прежний экземпляр остановлен, документы прежнего сеанса " +
+                    "новому Worker не известны");
             }
 
             await StopAsync().ConfigureAwait(false);
@@ -203,6 +276,13 @@ public sealed class WorkerSupervisor : IAsyncDisposable
         _process.EnableRaisingEvents = true;
         _process.Exited += (_, _) =>
         {
+            // ВЫХОД ПРОЦЕССА — ТОЖЕ ПОТЕРЯ СОСТОЯНИЯ ДОКУМЕНТОВ. Процесс мог выйти штатно по
+            // shutdown или упасть; в обоих случаях что стало с открытыми документами, знает только
+            // модель, и признак обязан это назвать.
+            var pid = SafeProcessId(_process);
+            MarkDocumentStateUnknown(
+                "процесс Worker" + (pid is null ? string.Empty : $" (pid {pid})") +
+                " завершился: состояние его документов неизвестно");
             _log.Write("warn", "worker exited", new { exit_code = SafeExitCode(_process) });
             WorkerLost?.Invoke();
         };
@@ -318,6 +398,17 @@ public sealed class WorkerSupervisor : IAsyncDisposable
         var pipe = _pipe;
         _pipe = null;
 
+        // СЛОМАННЫЙ КАНАЛ — ЭТО ПОТЕРЯ СВЯЗИ С ДОКУМЕНТАМИ, А НЕ «ПРАВОК НЕТ».
+        //
+        // Worker мог быть внутри COM-вызова в момент обрыва: что именно он успел применить, знает
+        // только модель. Поэтому признак ставится ДО того, как кто-либо успеет спросить опись, и
+        // остаётся до явного подтверждения клиента.
+        if (HasStarted)
+        {
+            MarkDocumentStateUnknown(
+                "канал к Worker сломан: связь с открытыми документами потеряна, правки могли не сохраниться");
+        }
+
         if (pipe is null)
         {
             return;
@@ -353,6 +444,19 @@ public sealed class WorkerSupervisor : IAsyncDisposable
         try
         {
             return process is { HasExited: true } ? process.ExitCode : null;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>PID процесса, если он ещё жив и читается; иначе null. Не бросает на снятом процессе.</summary>
+    private static int? SafeProcessId(Process? process)
+    {
+        try
+        {
+            return process is { HasExited: false } ? process.Id : null;
         }
         catch (InvalidOperationException)
         {

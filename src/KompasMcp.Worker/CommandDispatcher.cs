@@ -418,11 +418,27 @@ public sealed class CommandDispatcher
         }
         catch (Exception ex)
         {
-            // СБОЙ: файл возвращается к состоянию до мутации. Модель в памяти НЕ откатывается —
-            // это названо и в ответе, и в причине, а не выдано за полный откат.
-            var restoreFailure = copy.Made ? _controlCopies.Restore(document.Path, copy.Path) : null;
-            throw Reclassify(ex, copy, restoreFailure);
+            // СБОЙ: файл возвращается к состоянию до мутации — НО ТОЛЬКО ТОГДА, КОГДА ЭТО ОСМЫСЛЕННО.
+            //
+            // Решение принимает чистая функция (ControlCopyRestorePolicy): документ, открытый
+            // access=read_only, не перезаписывается, а отказ, который приходит до COM и модель не
+            // менял, не заслуживает записи в файл пользователя. Прежде восстановление шло по одному
+            // признаку «файл открывается на запись» и перезаписывало документ из корня «только
+            // чтение» (дефект H4 ревью 05.10.2026).
+            var contract = ex as KompasContractException;
+            var decision = ControlCopyRestorePolicy.Decide(
+                copy.Made, document.Access, contract?.Code, contract?.PartialEffects ?? false);
+            var restoreFailure = decision.Restore
+                ? _controlCopies.Restore(document.Path, copy.Path, document.Access)
+                : null;
+            throw Reclassify(ex, copy, decision, restoreFailure);
         }
+
+        // УСПЕХ: КОПИЯ УДАЛЯЕТСЯ. Она нужна была на случай отказа; оставленная, она копила бы по
+        // целому файлу документа на каждую правку (дефект H4 ревью 05.10.2026). Неудачное удаление
+        // НАЗЫВАЕТСЯ в ответе, а не проглатывается: «каталог не растёт» и «копию убрать не удалось» —
+        // разные утверждения.
+        var copyCleanupFailure = _controlCopies.DeleteAfterSuccess(copy.Path);
 
         var node = Tagged(documentId, document.Revision, outcome) ?? new JsonObject();
         // Копия называется и СТРОКОЙ, и ПОЛЯМИ. Строка читается человеком, поля — прибором: разбор
@@ -430,6 +446,12 @@ public sealed class CommandDispatcher
         node["control_copy"] = DocumentControlCopies.Describe(copy);
         node["control_copy_made"] = copy.Made;
         node["control_copy_path"] = copy.Path;
+        node["control_copy_deleted_after_success"] = copy.Made && copyCleanupFailure is null;
+        if (copyCleanupFailure is not null)
+        {
+            node["control_copy_cleanup_failure"] = copyCleanupFailure;
+        }
+
         return node;
     }
 
@@ -443,14 +465,20 @@ public sealed class CommandDispatcher
     /// она теперь «после согласования», а не «тем же operation_id»: partialEffects=true означает, что
     /// модель могла измениться, и повтор как есть применил бы мутацию второй раз.
     /// </remarks>
-    private static Exception Reclassify(Exception ex, ControlCopyResult copy, string? restoreFailure)
+    private static Exception Reclassify(
+        Exception ex, ControlCopyResult copy, RestoreDecision decision, string? restoreFailure)
     {
         var details = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             ["control_copy"] = DocumentControlCopies.Describe(copy),
             ["control_copy_made"] = copy.Made,
             ["control_copy_path"] = copy.Path,
-            ["restored"] = copy.Made && restoreFailure is null,
+            // ПОЧЕМУ ФАЙЛ НЕ ВОССТАНОВЛЕН — НАЗВАНО. «Не восстановлено» без причины неотличимо от
+            // «забыли восстановить», а причина здесь содержательная: read_only-документ или отказ,
+            // который до COM не дошёл.
+            ["restore_attempted"] = decision.Restore,
+            ["restore_decision"] = decision.Reason,
+            ["restored"] = decision.Restore && restoreFailure is null,
             ["restore_failure"] = restoreFailure,
             ["rollback_scope"] = "файл документа; модель в памяти КОМПАСа не откатывается",
         };

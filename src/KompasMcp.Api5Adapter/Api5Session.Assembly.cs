@@ -169,6 +169,11 @@ public partial class Api5Session
             ReferenceNumber = reference,
             Fixed = Bool(() => part.Fixed),
             LoadState = Safe(() => part.LoadState).ToString(),
+            // ТЕЛА И ГРАНИ КОМПОНЕНТА — документированным ksPart.BodyCollection() →
+            // ksBody.FaceCollection(). Без этих чисел «компонент вставлен» неотличимо от «вставлен
+            // пустой компонент»: именно так и было на маршруте CreatePartInAssembly.
+            BodyCount = BodyCountOf(ComponentPart5At(document, ordinal)),
+            FaceCount = FaceCountOf(ComponentPart5At(document, ordinal)),
             Matrix = PlacementMatrixByOrdinal(document, ordinal),
         };
     }
@@ -185,6 +190,51 @@ public partial class Api5Session
             return parent is Part7 typedParent && child is Part7 typedChild
                 ? parent.InstanceCount[typedChild]
                 : null;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>API5-представление компонента по порядковому номеру (адрес измерен в C1).</summary>
+    private static ksPart? ComponentPart5At(DocumentEntry document, int ordinal)
+    {
+        try
+        {
+            var parts = ComponentParts5(document);
+            return ordinal >= 0 && ordinal < parts.Count ? parts[ordinal] : null;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Число тел компонента по документированному <c>ksPart.BodyCollection()</c>.</summary>
+    private static int? BodyCountOf(ksPart? component)
+    {
+        try
+        {
+            return component?.BodyCollection() is ksBodyCollection bodies ? bodies.GetCount() : null;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Число граней первого тела компонента по <c>ksBody.FaceCollection()</c>.</summary>
+    private static int? FaceCountOf(ksPart? component)
+    {
+        try
+        {
+            return component?.BodyCollection() is ksBodyCollection bodies
+                && bodies.GetCount() > 0
+                && bodies.GetByIndex(0) is ksBody body
+                && body.FaceCollection() is ksFaceCollection faces
+                    ? faces.GetCount()
+                    : null;
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException)
         {
@@ -315,82 +365,91 @@ public partial class Api5Session
 
         var before = CountComponents(document);
 
-        // ПЕРВЫЙ экземпляр — CreatePartInAssembly, ВТОРОЙ И ПОСЛЕДУЮЩИЕ — CopyPart.
+        // ВСТАВКА КОМПОНЕНТА — ДОКУМЕНТИРОВАННЫЙ IParts7.AddFromFile.
         //
-        // ИЗМЕРЕНО 04.10.2026 живым прогоном: повторная CreatePartInAssembly ТОГО ЖЕ файла возвращает
-        // null (GEOMETRY_FAILED), тогда как вставка ДРУГОГО файла проходит. То есть отказ специфичен
-        // для повторной вставки одной детали, а не для «второй вставки вообще». Документированный
-        // маршрут копии компонента — ksDocument3D.CopyPart(sourcePart, newPlacement).
+        // ИЗМЕРЕНО 05.10.2026 живым прогоном (проба M, tools/KompasMcp.Api7Probe, флаг --mate):
+        // прежний маршрут CreatePartInAssembly давал компонент БЕЗ ГЕОМЕТРИИ — 0 тел, 0 граней.
+        // Справка объясняет это дословно: ksdDocument3d_createpartinassembly.html — «fileName — имя
+        // файла детали СОЗДАВАЕМОЙ в сборке», «plane — плоскость, к которой ПРИКЛЕИВАЕТСЯ деталь»,
+        // то есть это СОЗДАНИЕ новой (пустой) детали, а НЕ вставка существующей.
         //
-        // Плоскость приклейки обязательна (документация: «плоский объект ksEntity или IEntity, к
-        // которому приклеивается деталь»); берётся документированный GetDefaultEntity(o3d_planeXOY=1).
-        // Передача null вместо плоскости тоже даёт GEOMETRY_FAILED — заглушка не проходит молча.
-        var existing = FindPart5BySource(document, command.SourcePath);
-        object? created;
+        // Документированная ВСТАВКА — iparts7_addfromfile.html: IPart7.Parts → IParts7.AddFromFile
+        // (FileName, ExternalFile, Redraw) → Part7, где «FileName — имя файла, из которого будет
+        // ВСТАВЛЕН компонент», «ExternalFile — TRUE — вставка СО ССЫЛКОЙ на внешний файл»,
+        // «Redraw — признак перестроения документа после вставки». Замерено на том же прогоне:
+        // компонентов 2, у КАЖДОГО тело = 1 и граней 6, и геометрия переживает save→close→reopen.
+        //
+        // Повторная вставка того же файла идёт ТЕМ ЖЕ вызовом: отдельный CopyPart больше не нужен
+        // (он был следствием ошибочного маршрута).
+        var bridge = BridgeFor(document);
+        if (bridge.TransferTo7(document.Document) is not IKompasDocument3D document7)
+        {
+            throw new KompasContractException(
+                ErrorCodes.CapabilityUnavailable,
+                "Документ-сборка не переносится в API7 как IKompasDocument3D: коллекция компонентов " +
+                "IPart7.Parts недостижима, вставка не выполнена.",
+                RetryPolicy.ReacquireContext);
+        }
+
+        var parts7 = document7.TopPart?.Parts;
+        if (parts7 is null)
+        {
+            throw new KompasContractException(
+                ErrorCodes.CapabilityUnavailable,
+                "IPart7.Parts не вернул IParts7: вставлять нечем, компонент не создан.",
+                RetryPolicy.ReacquireContext);
+        }
+
+        Part7? inserted7;
         try
         {
-            if (existing is not null)
-            {
-                created = document.Document.CopyPart(existing, BuildPlacement(document, command.Transform));
-            }
-            else
-            {
-                var plane = document.PartNow().GetDefaultEntity(KompasObjectTypes.PlaneXoy);
-                if (plane is null)
-                {
-                    throw new KompasContractException(
-                        ErrorCodes.CapabilityUnavailable,
-                        "GetDefaultEntity(o3d_planeXOY) не вернул плоскость приклейки: без неё " +
-                        "CreatePartInAssembly не вызывается, компонент не создан.",
-                        RetryPolicy.ReacquireContext);
-                }
-
-                created = document.Document.CreatePartInAssembly(command.SourcePath, plane);
-            }
+            inserted7 = parts7.AddFromFile(command.SourcePath, ExternalFile: true, Redraw: true);
         }
         catch (COMException ex)
         {
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
-                $"Вставка компонента прервалась: {ex.Message}. Компонент не вставлен.",
+                $"IParts7.AddFromFile прервался: {ex.Message}. Компонент не вставлен.",
                 RetryPolicy.SameOperationId,
                 partialEffects: true);
         }
 
-        if (created is null)
+        if (inserted7 is null)
         {
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
-                (existing is not null
-                    ? "CopyPart вернул null: копия компонента не создана."
-                    : "CreatePartInAssembly вернул null: компонент не создан.") +
-                " Файл-источник и тип сборки не меняются; повтор с тем же operation_id допустим " +
-                "после проверки файла.",
+                "IParts7.AddFromFile вернул null: компонент не вставлен. Файл-источник и тип сборки " +
+                "не меняются; повтор с тем же operation_id допустим после проверки файла.",
                 RetryPolicy.SameOperationId,
-                details: new Dictionary<string, object?>
-                {
-                    ["source_path"] = command.SourcePath,
-                    ["route"] = existing is not null ? "CopyPart" : "CreatePartInAssembly",
-                });
+                details: new Dictionary<string, object?> { ["source_path"] = command.SourcePath });
         }
 
-        // Размещение первого экземпляра: CreatePartInAssembly плоскости не принимает, поэтому
-        // заданное преобразование применяется к созданному компоненту ПОСЛЕ создания.
-        if (existing is null && command.Transform is not null && created is ksPart firstPart)
+        // API5-представление вставленного компонента: AddFromFile отдаёт Part7, а размещение и
+        // фиксация пишутся через ksPart. Вставленный компонент — ПОСЛЕДНИЙ в документированном
+        // массиве компонентов ksDocument3D.PartCollection (ksdocument3d_partcollection.html).
+        ksPart? createdPart = null;
+        if (document.Document.PartCollection(true) is ksPartCollection insertedParts
+            && insertedParts.GetCount() > 0)
+        {
+            createdPart = insertedParts.GetByIndex(insertedParts.GetCount() - 1) as ksPart;
+        }
+
+        // Размещение: заданное преобразование применяется к вставленному компоненту.
+        if (command.Transform is not null && createdPart is not null)
         {
             try
             {
-                if (BuildPlacement(document, command.Transform) is { } firstPlacement)
+                if (BuildPlacement(document, command.Transform) is { } placement)
                 {
-                    firstPart.SetPlacement(firstPlacement);
-                    firstPart.UpdatePlacement();
+                    createdPart.SetPlacement(placement);
+                    createdPart.UpdatePlacement();
                 }
             }
             catch (COMException ex)
             {
                 throw new KompasContractException(
                     ErrorCodes.GeometryFailed,
-                    $"Компонент создан, но размещение не записалось: {ex.Message}. Размещение не " +
+                    $"Компонент вставлен, но размещение не записалось: {ex.Message}. Размещение не " +
                     "подтверждено.",
                     RetryPolicy.AfterReconciliation,
                     partialEffects: true);
@@ -398,9 +457,8 @@ public partial class Api5Session
         }
 
         // Параметр Fixed обязан быть ПРИМЕНЁН, а не объявлен: «объявлено и проглочено» — тот же
-        // дефект, что «не поддержано, но обещано». Фиксация ставится на созданный компонент
-        // (CreatePartInAssembly отдаёт ksPart).
-        if (created is ksPart createdPart)
+        // дефект, что «не поддержано, но обещано».
+        if (createdPart is not null)
         {
             try
             {
@@ -410,7 +468,7 @@ public partial class Api5Session
             {
                 throw new KompasContractException(
                     ErrorCodes.GeometryFailed,
-                    $"Компонент создан, но фиксация (fixedComponent={command.Fixed}) не записалась: " +
+                    $"Компонент вставлен, но фиксация (fixedComponent={command.Fixed}) не записалась: " +
                     $"{ex.Message}. Состояние фиксации не подтверждено.",
                     RetryPolicy.AfterReconciliation,
                     partialEffects: true);

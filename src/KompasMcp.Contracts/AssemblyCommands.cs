@@ -106,6 +106,17 @@ public sealed record ComponentRowDto
     public int? InstanceCount { get; init; }
 
     /// <summary>
+    /// Число тел компонента — <c>ksPart.BodyCollection()</c>
+    /// (<c>kspart_bodycollection.html</c>). Названо наружу потому, что «компонент есть» и «у
+    /// компонента есть геометрия» — разные утверждения: вставка методом
+    /// <c>CreatePartInAssembly</c> давала компонент с НУЛЁМ тел (измерено 05.10.2026).
+    /// </summary>
+    public int? BodyCount { get; init; }
+
+    /// <summary>Число граней первого тела компонента — <c>ksBody.FaceCollection()</c>.</summary>
+    public int? FaceCount { get; init; }
+
+    /// <summary>
     /// Номер компонента в документе (<c>IPart7.Reference</c>) — он же аргумент
     /// <c>ksPart.GetPart</c>. Назван наружу, потому что адресация компонента держится на нём, и
     /// «ссылка есть, а номера нет» — это ровно то, что делает адрес непроверяемым.

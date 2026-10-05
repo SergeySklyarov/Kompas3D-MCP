@@ -605,6 +605,20 @@ def assembly_checks(client, rep, app_id, workdir):
                 f"is_detail={first.get('is_detail')} instance_count={first.get('instance_count')} "
                 f"ref_number={first.get('reference_number')} matrix={first.get('matrix')}")
 
+    # ГЕОМЕТРИЯ КОМПОНЕНТА. Без этой строки «компонент вставлен» неотличимо от «вставлен ПУСТОЙ
+    # компонент»: именно так и было, пока вставка шла методом CreatePartInAssembly, который по
+    # справке СОЗДАЁТ деталь в сборке, а не вставляет существующую. Числа читаются документированным
+    # ksPart.BodyCollection() → ksBody.FaceCollection() и приходят в строке компонента.
+    if rows:
+        body_count = rows[0].get("body_count")
+        face_count = rows[0].get("face_count")
+        rep.add("ASM.02.component_geometry",
+                "у вставленного компонента ЕСТЬ геометрия (тела и грани), а не пустая деталь",
+                "PASS" if (body_count is not None and body_count >= 1
+                           and face_count is not None and face_count >= 1) else "FAIL",
+                f"тел={body_count} граней={face_count} (источник — плита 100×80×10, ожидается 1 тело "
+                "и 6 граней)")
+
     # вторая вставка ТОЙ ЖЕ детали: кратность 2, уникальных 1 — СРАЗУ после первой, пока других
     # компонентов нет (иначе «уникальных» считает и посторонние).
     env, code = call("kompas_insert_component", {

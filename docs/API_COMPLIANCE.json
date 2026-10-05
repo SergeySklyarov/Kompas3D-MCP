@@ -29,9 +29,9 @@
   },
   "delivery": {
    "dir": "artifacts/publish-assemblies-20261004",
-   "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-   "worker_dll_sha256": "bd555c7a018f2ba0608dd526416429d7e45152fe6970a978fbbdb1a459a1cb34",
-   "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+   "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+   "worker_dll_sha256": "23f92376a6bca26cd3b9b62d7b24f218ab824422fcc0533d727c4471b7da32a0",
+   "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
    "tools_count": 58,
    "rows_complete_run": 1095,
    "failed": 0,
@@ -53,13 +53,13 @@
     "Не реализовано"
    ]
   },
-  "scope": "Все опубликованные инструменты на проводе (58), все строки матрицы покрытия (86), 324 COM-маршрутов с установленным типом получателя (API5 150 / API7 174) и 35 числовых идентификаторов типов объектов. Обращения, у которых тип получателя не установлен, перечислены отдельно и в подтверждённые не отнесены.",
+  "scope": "Все опубликованные инструменты на проводе (58), все строки матрицы покрытия (86), 324 COM-маршрутов с установленным типом получателя (API5 148 / API7 176) и 35 числовых идентификаторов типов объектов. Обращения, у которых тип получателя не установлен, перечислены отдельно и в подтверждённые не отнесены.",
   "completeness": {
    "tools_on_wire": 58,
    "com_snapshot_fresh": true,
-   "com_snapshot_lag_seconds": -691.4829235076904,
+   "com_snapshot_lag_seconds": -469.9304780960083,
    "inventory_fresh": true,
-   "inventory_lag_seconds": -581.8320243358612,
+   "inventory_lag_seconds": -405.09714579582214,
    "inventory_negative_control_proved": true,
    "reports_with_argument_mode": 2,
    "report_route_guard_required": true,
@@ -921,20 +921,20 @@
    "rows_actions_without_required_calls": 12,
    "rows_without_mode_named_evidence": 12,
    "rows_status_lowered_by_unsupported_actions": 12,
-   "acceptance_rows_with_call_window": 1108,
+   "acceptance_rows_with_call_window": 1109,
    "acceptance_calls_journal": 10479,
    "acceptance_document_epochs": 491,
    "com_routes": 324,
-   "com_routes_api5": 150,
-   "com_routes_api7": 174,
-   "com_routes_documented": 261,
-   "com_routes_not_confirmed": 63,
+   "com_routes_api5": 148,
+   "com_routes_api7": 176,
+   "com_routes_documented": 260,
+   "com_routes_not_confirmed": 64,
    "com_routes_inherited": 9,
    "com_routes_indexed": 7,
-   "non_com_receivers": 938,
+   "non_com_receivers": 939,
    "reflected_members": 1,
-   "receivers_without_type": 1295,
-   "receivers_without_type_member_already_routed": 366,
+   "receivers_without_type": 1298,
+   "receivers_without_type_member_already_routed": 369,
    "object_types_matched": 35,
    "object_types_not_in_table": 0,
    "documentation_confirmed": 70,
@@ -2175,8 +2175,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "BG19",
@@ -2293,8 +2293,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "F08.07.create",
@@ -2408,8 +2408,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "F08.21.create",
@@ -2517,8 +2517,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "F08.16.create",
@@ -2612,8 +2612,8 @@
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [],
     "acceptance_verdicts": []
@@ -2682,8 +2682,8 @@
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "AUXS.01.edit",
@@ -2801,8 +2801,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "EX33",
@@ -2906,8 +2906,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "EX31",
@@ -3009,8 +3009,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "EX35",
@@ -3115,8 +3115,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "EX35",
@@ -3219,8 +3219,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "EX39",
@@ -3324,8 +3324,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "EX43",
@@ -3429,8 +3429,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "EX42",
@@ -3523,8 +3523,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "F08.10.create",
@@ -3640,8 +3640,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "F08.11.create",
@@ -3758,8 +3758,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "F08.12.create",
@@ -3877,8 +3877,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "F08.13.create",
@@ -4014,8 +4014,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "F08.14.create",
@@ -4154,8 +4154,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "B5.01",
@@ -4282,8 +4282,8 @@
     "catalog_level_claim": "metadata_found",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [],
     "acceptance_verdicts": []
@@ -4376,8 +4376,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "B5.02",
@@ -4470,8 +4470,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "F08.15.create",
@@ -4579,8 +4579,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "F08.17.create",
@@ -4684,8 +4684,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "F08.18.create",
@@ -4790,8 +4790,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "F08.19.create",
@@ -4885,8 +4885,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "F08.20.create",
@@ -4983,8 +4983,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "F08.22.create",
@@ -5074,8 +5074,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "F08.23.create",
@@ -5162,8 +5162,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "F08.24.create",
@@ -5282,8 +5282,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "CH02",
@@ -5385,8 +5385,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "CH13",
@@ -5487,8 +5487,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "CH04",
@@ -5592,8 +5592,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "B5.04",
@@ -5692,8 +5692,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "B5.04",
@@ -5779,8 +5779,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "B3.02",
@@ -5870,8 +5870,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "B3.03",
@@ -5961,8 +5961,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "B3.04",
@@ -6048,8 +6048,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "B3.05",
@@ -6127,8 +6127,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "B3.09",
@@ -6217,8 +6217,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "B3.10",
@@ -6342,8 +6342,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "B3.12",
@@ -6467,8 +6467,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "B3.13",
@@ -6584,8 +6584,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "B4.00",
@@ -6688,8 +6688,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "B4.00",
@@ -6792,8 +6792,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "B4.00",
@@ -6893,8 +6893,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "B4.00",
@@ -6994,8 +6994,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "B4.00",
@@ -7096,8 +7096,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "B4.00",
@@ -7198,8 +7198,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "B4.00",
@@ -7298,8 +7298,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "B4.00",
@@ -7399,8 +7399,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "B4.00",
@@ -7507,8 +7507,8 @@
     "catalog_level_claim": "metadata_found",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [],
     "acceptance_verdicts": []
@@ -7586,8 +7586,8 @@
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "DEP.DSE.01.discover",
@@ -7692,8 +7692,8 @@
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "DEP.DPL.01.discover",
@@ -7786,8 +7786,8 @@
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "DEP.DAX.01.discover",
@@ -7879,8 +7879,8 @@
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "DEP.DPT.01.create",
@@ -7968,8 +7968,8 @@
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "DEP.DPF.01.discover",
@@ -8061,8 +8061,8 @@
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "DEP.DEF.01.discover",
@@ -8172,8 +8172,8 @@
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "DEP.DPA.01.create",
@@ -8275,8 +8275,8 @@
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "DEP.DSU.01.discover",
@@ -8369,8 +8369,8 @@
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "DEP.DLC.01.read",
@@ -8488,8 +8488,8 @@
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "DEP.DMB.01.read",
@@ -8587,8 +8587,8 @@
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "B4.08",
@@ -8734,8 +8734,8 @@
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "DEP.DUN.01.geometry_validation"
@@ -8825,8 +8825,8 @@
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "DEP.DAP.01.discover",
@@ -8934,8 +8934,8 @@
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "DEP.DFN.01.read",
@@ -9023,8 +9023,8 @@
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "DEP.DPU.01.read",
@@ -9123,8 +9123,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "B5.01",
@@ -9238,8 +9238,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "B5.02",
@@ -9340,8 +9340,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "B5.04",
@@ -9426,8 +9426,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "B3.01",
@@ -9507,8 +9507,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "B3.08",
@@ -9615,8 +9615,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "B4.00",
@@ -9685,8 +9685,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "IMG.01.create",
@@ -9764,8 +9764,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "ASM.01.create",
@@ -9831,8 +9831,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "ASM.01.discover",
@@ -9901,8 +9901,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "ASM.03.fields",
@@ -9969,8 +9969,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "ASM.02.rebuild",
@@ -10040,8 +10040,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "ASM.02.rebuild",
@@ -10109,8 +10109,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "ASM.06.discover",
@@ -10173,8 +10173,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "ASM.01.discover",
@@ -10239,8 +10239,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "ASM.01.create",
@@ -10308,8 +10308,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "ASM.01.discover",
@@ -10380,8 +10380,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "ASM.03.fields",
@@ -10452,8 +10452,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "ASM.01.read",
@@ -10519,8 +10519,8 @@
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
     "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "a680c09246f492ce1c5776ce41899c2b83d058201dbb086468a2a0a7742b201c",
-    "adapter_sha256": "f114e47066609507dfde30d20ad324eaa5685e820ee9549027a47dd1f64ad2e9",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
     "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
     "acceptance_rows": [
      "ASM.02.create",
@@ -13524,7 +13524,7 @@
    "access": "read",
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:151",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:698",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:783",
     "src/KompasMcp.Api5Adapter/Api5Session.FilletEdit.cs:1333"
    ],
    "receivers": [
@@ -13639,6 +13639,34 @@
    },
    "conditions": null,
    "conclusion": "применяется в коде: 1 мест; доступ — call"
+  },
+  {
+   "route": "IKompasDocument3D.TopPart",
+   "assembly": "api7",
+   "interface": "IKompasDocument3D",
+   "declared_on": "IKompasDocument3D",
+   "receiver_type": "IKompasDocument3D",
+   "inherited": false,
+   "member": "TopPart",
+   "kind": "property",
+   "signature": "IPart7 TopPart {get;}",
+   "type": "IPart7",
+   "indexed": false,
+   "access": "read",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:394"
+   ],
+   "receivers": [
+    "document7"
+   ],
+   "documentation": {
+    "status": "Не подтверждено",
+    "found_on": null,
+    "source": [],
+    "note": "страницы в зеркале нет — не проверено (отсутствие в зеркале не есть доказанное отсутствие)"
+   },
+   "conditions": null,
+   "conclusion": "применяется в коде: 1 мест; доступ — read"
   },
   {
    "route": "ILinearPattern.Angle1",
@@ -15007,7 +15035,7 @@
    "access": "write",
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:158",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:701",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:786",
     "src/KompasMcp.Api5Adapter/Api5Session.Loft.cs:340",
     "src/KompasMcp.Api5Adapter/Api7/Api7AuxGeometry.cs:156",
     "src/KompasMcp.Api5Adapter/Api7/Api7AuxGeometry.cs:241",
@@ -15205,7 +15233,7 @@
    "access": "write",
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:158",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:696"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:781"
    ],
    "receivers": [
     "part",
@@ -15266,7 +15294,7 @@
    "indexed": true,
    "access": "read",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:186"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:191"
    ],
    "receivers": [
     "parent"
@@ -15294,10 +15322,10 @@
    "signature": "int LoadState {get;}",
    "type": "int",
    "indexed": false,
-   "access": "write",
+   "access": "read",
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:168",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:701"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:786"
    ],
    "receivers": [
     "part",
@@ -15313,7 +15341,7 @@
     "note": "источник называет тот же интерфейс и тот же член: IPart7. Сигнатура снята с interop установленной версии."
    },
    "conditions": null,
-   "conclusion": "применяется в коде: 2 мест; доступ — write"
+   "conclusion": "применяется в коде: 2 мест; доступ — read"
   },
   {
    "route": "IPart7.Marking",
@@ -15344,6 +15372,36 @@
    },
    "conditions": null,
    "conclusion": "применяется в коде: 1 мест; доступ — write"
+  },
+  {
+   "route": "IPart7.Parts",
+   "assembly": "api7",
+   "interface": "IPart7",
+   "declared_on": "IPart7",
+   "receiver_type": "IPart7",
+   "inherited": false,
+   "member": "Parts",
+   "kind": "property",
+   "signature": "IParts7 Parts {get;}",
+   "type": "IParts7",
+   "indexed": false,
+   "access": "read",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:394"
+   ],
+   "receivers": [
+    "document7.TopPart?"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "found_on": "IPart7",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ipart7_props.html"
+    ],
+    "note": "источник называет тот же интерфейс и тот же член: IPart7. Сигнатура снята с interop установленной версии."
+   },
+   "conditions": null,
+   "conclusion": "применяется в коде: 1 мест; доступ — read"
   },
   {
    "route": "IPart7.RebuildModel",
@@ -17259,6 +17317,7 @@
    "indexed": false,
    "access": "call",
    "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:235",
     "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:379",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2763",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2962",
@@ -17269,8 +17328,8 @@
     "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs:778"
    ],
    "receivers": [
-    "(ksFaceCollection)body",
-    "body"
+    "body",
+    "(ksFaceCollection)body"
    ],
    "documentation": {
     "status": "Подтверждено",
@@ -17281,7 +17340,7 @@
     "note": "источник называет тот же интерфейс и тот же член: ksBody. Сигнатура снята с interop установленной версии."
    },
    "conditions": null,
-   "conclusion": "применяется в коде: 8 мест; доступ — call"
+   "conclusion": "применяется в коде: 9 мест; доступ — call"
   },
   {
    "route": "ksBodyCollection.Add",
@@ -17327,6 +17386,7 @@
    "indexed": false,
    "access": "call",
    "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:234",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:1534",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:1654",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2921",
@@ -17346,7 +17406,7 @@
     "note": "источник называет тот же интерфейс и тот же член: ksBodyCollection. Сигнатура снята с interop установленной версии."
    },
    "conditions": "Правка набора рёбер и радиуса идёт ТОЛЬКО маршрутом API7 (IFillet.BaseObjects — полная замена набора; IFillet.Radius1) с обязательным Update() и перестроением; маршрут API5 (ksFilletDefinition.Array → Clear → Add) правку набора не даёт — измерено и названо. Расширение набора не выражается ни одной из двух валют.",
-   "conclusion": "применяется в коде: 4 мест; доступ — call"
+   "conclusion": "применяется в коде: 5 мест; доступ — call"
   },
   {
    "route": "ksBodyCollection.GetCount",
@@ -17362,6 +17422,8 @@
    "indexed": false,
    "access": "call",
    "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:219",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:233",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:1531",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:1648",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2090",
@@ -17381,7 +17443,7 @@
     "note": "источник называет тот же интерфейс и тот же член: ksBodyCollection. Сигнатура снята с interop установленной версии."
    },
    "conditions": "Правка набора рёбер и радиуса идёт ТОЛЬКО маршрутом API7 (IFillet.BaseObjects — полная замена набора; IFillet.Radius1) с обязательным Update() и перестроением; маршрут API5 (ksFilletDefinition.Array → Clear → Add) правку набора не даёт — измерено и названо. Расширение набора не выражается ни одной из двух валют.",
-   "conclusion": "применяется в коде: 5 мест; доступ — call"
+   "conclusion": "применяется в коде: 7 мест; доступ — call"
   },
   {
    "route": "ksBodyCollection.refresh",
@@ -18331,36 +18393,6 @@
    "conclusion": "применяется в коде: 2 мест; доступ — call"
   },
   {
-   "route": "ksDocument3D.CopyPart",
-   "assembly": "api5",
-   "interface": "ksDocument3D",
-   "declared_on": "ksDocument3D",
-   "receiver_type": "ksDocument3D",
-   "inherited": false,
-   "member": "CopyPart",
-   "kind": "method",
-   "signature": "Object CopyPart(Object sourcePart, Object newPlacement)",
-   "type": "Object",
-   "indexed": false,
-   "access": "call",
-   "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:334"
-   ],
-   "receivers": [
-    "document.Document"
-   ],
-   "documentation": {
-    "status": "Подтверждено",
-    "found_on": "ksDocument3D",
-    "source": [
-     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_copypart.html"
-    ],
-    "note": "источник называет тот же интерфейс и тот же член: ksDocument3D. Сигнатура снята с interop установленной версии."
-   },
-   "conditions": null,
-   "conclusion": "применяется в коде: 1 мест; доступ — call"
-  },
-  {
    "route": "ksDocument3D.Create",
    "assembly": "api5",
    "interface": "ksDocument3D",
@@ -18393,36 +18425,6 @@
    "conclusion": "применяется в коде: 2 мест; доступ — call"
   },
   {
-   "route": "ksDocument3D.CreatePartInAssembly",
-   "assembly": "api5",
-   "interface": "ksDocument3D",
-   "declared_on": "ksDocument3D",
-   "receiver_type": "ksDocument3D",
-   "inherited": false,
-   "member": "CreatePartInAssembly",
-   "kind": "method",
-   "signature": "Object CreatePartInAssembly(String fileName, Object plane)",
-   "type": "Object",
-   "indexed": false,
-   "access": "call",
-   "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:348"
-   ],
-   "receivers": [
-    "document.Document"
-   ],
-   "documentation": {
-    "status": "Подтверждено",
-    "found_on": "ksDocument3D",
-    "source": [
-     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_createpartinassembly.html"
-    ],
-    "note": "источник называет тот же интерфейс и тот же член: ksDocument3D. Сигнатура снята с interop установленной версии."
-   },
-   "conditions": null,
-   "conclusion": "применяется в коде: 1 мест; доступ — call"
-  },
-  {
    "route": "ksDocument3D.DefaultPlacement",
    "assembly": "api5",
    "interface": "ksDocument3D",
@@ -18436,7 +18438,7 @@
    "indexed": false,
    "access": "call",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:285"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:335"
    ],
    "receivers": [
     "document.Document"
@@ -18559,7 +18561,8 @@
    "indexed": false,
    "access": "call",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:257"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:307",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:431"
    ],
    "receivers": [
     "document.Document"
@@ -18573,7 +18576,7 @@
     "note": "источник называет тот же интерфейс и тот же член: ksDocument3D. Сигнатура снята с interop установленной версии."
    },
    "conditions": null,
-   "conclusion": "применяется в коде: 1 мест; доступ — call"
+   "conclusion": "применяется в коде: 2 мест; доступ — call"
   },
   {
    "route": "ksDocument3D.RasterFormatParam",
@@ -18619,9 +18622,9 @@
    "indexed": false,
    "access": "call",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:420",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:523",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:603",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:478",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:581",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:688",
     "src/KompasMcp.Api5Adapter/Api5Session.Chamfer.cs:688",
     "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:199",
     "src/KompasMcp.Api5Adapter/Api5Session.FeatureEdit.B5.cs:1351",
@@ -19732,6 +19735,7 @@
    "indexed": false,
    "access": "call",
    "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:236",
     "src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs:382",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2764",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2963",
@@ -19757,7 +19761,7 @@
     "note": "источник называет тот же интерфейс и тот же член: ksFaceCollection. Сигнатура снята с interop установленной версии."
    },
    "conditions": "Правка набора рёбер и радиуса идёт ТОЛЬКО маршрутом API7 (IFillet.BaseObjects — полная замена набора; IFillet.Radius1) с обязательным Update() и перестроением; маршрут API5 (ksFilletDefinition.Array → Clear → Add) правку набора не даёт — измерено и названо. Расширение набора не выражается ни одной из двух валют.",
-   "conclusion": "применяется в коде: 11 мест; доступ — call"
+   "conclusion": "применяется в коде: 12 мест; доступ — call"
   },
   {
    "route": "ksFaceDefinition.EdgeCollection",
@@ -20323,7 +20327,7 @@
    "indexed": false,
    "access": "call",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:501"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:559"
    ],
    "receivers": [
     "part5"
@@ -20353,11 +20357,11 @@
    "indexed": false,
    "access": "call",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:385",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:511"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:444",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:569"
    ],
    "receivers": [
-    "firstPart",
+    "createdPart",
     "part5"
    ],
    "documentation": {
@@ -20385,7 +20389,7 @@
    "indexed": false,
    "access": "call",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:590",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:665",
     "src/KompasMcp.Api5Adapter/Api5Session.cs:470"
    ],
    "receivers": [
@@ -20417,11 +20421,11 @@
    "indexed": false,
    "access": "call",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:386",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:512"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:445",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:570"
    ],
    "receivers": [
-    "firstPart",
+    "createdPart",
     "part5"
    ],
    "documentation": {
@@ -20449,9 +20453,10 @@
    "indexed": false,
    "access": "write",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:572",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:589",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:608"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:630",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:653",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:667",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:693"
    ],
    "receivers": [
     "part5",
@@ -20466,7 +20471,7 @@
     "note": "источник называет тот же интерфейс и тот же член: ksPart. Сигнатура снята с interop установленной версии."
    },
    "conditions": null,
-   "conclusion": "применяется в коде: 3 мест; доступ — write"
+   "conclusion": "применяется в коде: 4 мест; доступ — write"
   },
   {
    "route": "ksPart.fixedComponent",
@@ -20482,7 +20487,7 @@
    "indexed": false,
    "access": "write",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:407"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:465"
    ],
    "receivers": [
     "createdPart"
@@ -20572,10 +20577,12 @@
    "indexed": false,
    "access": "call",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:265"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:315",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:434"
    ],
    "receivers": [
-    "collection"
+    "collection",
+    "insertedParts"
    ],
    "documentation": {
     "status": "Подтверждено",
@@ -20586,7 +20593,7 @@
     "note": "источник называет тот же интерфейс и тот же член: ksPartCollection. Сигнатура снята с interop установленной версии."
    },
    "conditions": "Правка набора рёбер и радиуса идёт ТОЛЬКО маршрутом API7 (IFillet.BaseObjects — полная замена набора; IFillet.Radius1) с обязательным Update() и перестроением; маршрут API5 (ksFilletDefinition.Array → Clear → Add) правку набора не даёт — измерено и названо. Расширение набора не выражается ни одной из двух валют.",
-   "conclusion": "применяется в коде: 1 мест; доступ — call"
+   "conclusion": "применяется в коде: 2 мест; доступ — call"
   },
   {
    "route": "ksPartCollection.GetCount",
@@ -20602,10 +20609,13 @@
    "indexed": false,
    "access": "call",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:262"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:312",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:431",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:434"
    ],
    "receivers": [
-    "collection"
+    "collection",
+    "insertedParts"
    ],
    "documentation": {
     "status": "Подтверждено",
@@ -20616,7 +20626,7 @@
     "note": "источник называет тот же интерфейс и тот же член: ksPartCollection. Сигнатура снята с interop установленной версии."
    },
    "conditions": "Правка набора рёбер и радиуса идёт ТОЛЬКО маршрутом API7 (IFillet.BaseObjects — полная замена набора; IFillet.Radius1) с обязательным Update() и перестроением; маршрут API5 (ksFilletDefinition.Array → Clear → Add) правку набора не даёт — измерено и названо. Расширение набора не выражается ни одной из двух валют.",
-   "conclusion": "применяется в коде: 1 мест; доступ — call"
+   "conclusion": "применяется в коде: 3 мест; доступ — call"
   },
   {
    "route": "ksPlacement.GetMatrix3D",
@@ -20632,8 +20642,8 @@
    "indexed": false,
    "access": "call",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:210",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:852"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:260",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:937"
    ],
    "receivers": [
     "placement"
@@ -20724,8 +20734,8 @@
    "indexed": false,
    "access": "call",
    "sites": [
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:300",
-    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:510"
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:350",
+    "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:568"
    ],
    "receivers": [
     "typed",
@@ -21485,7 +21495,7 @@
   "fresh": true,
   "reason": "свеж",
   "newest_source": "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs",
-  "lag_seconds": -691.4829235076904,
+  "lag_seconds": -469.9304780960083,
   "refresh_requested": false,
   "refreshed_rc": null,
   "negative_control": {
@@ -21512,7 +21522,7 @@
   "fresh": true,
   "reason": "свеж",
   "newest_input": "artifacts/publish-assemblies-20261004/KompasMcp.Host.dll",
-  "lag_seconds": -581.8320243358612,
+  "lag_seconds": -405.09714579582214,
   "refresh_requested": false,
   "refreshed_rc": null,
   "negative_control": {
@@ -21577,20 +21587,20 @@
   "note": "отражение и позднее связывание рассмотрены ОТДЕЛЬНО именно потому, что фильтр по interop-метаданным их не видит: прежняя инвентаризация не нашла ни одного такого обращения и не могла показать, что ветка `IsSaved` была мёртвой"
  },
  "receivers_without_type": {
-  "total": 1295,
+  "total": 1298,
   "by_kind": {
-   "unknown": 1132,
-   "unknown-member": 149,
+   "unknown": 1134,
+   "unknown-member": 150,
    "unparsed": 14
   },
-  "member_already_routed": 366,
+  "member_already_routed": 369,
   "note": "получатель не типизирован — это НЕ доказательство отсутствия маршрута; перечислено честно, чтобы пробел прибора не читался как полнота"
  },
  "indexer_routes": [
   {
    "interface": "IPart7",
    "member": "InstanceCount",
-   "site": "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:186",
+   "site": "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs:191",
    "index_params": [
     {
      "name": "Part",
@@ -22575,7 +22585,7 @@
     ]
    }
   ],
-  "acceptance_rows_with_call_window": 1108,
+  "acceptance_rows_with_call_window": 1109,
   "calls_journal": 10479,
   "document_epochs": 491,
   "guard_control": {
@@ -22814,7 +22824,7 @@
    "statement": "Строка матрицы заявляет десять действий и их статусы, а отчёт приёмки объявляет имена строк и вердикты; прямой сверки между ними не было, и `implementation.status` выводился из `catalog_level` и наличия хотя бы одного PASS. Связь «действие → проверка» записана по действиям только у семейства B3 (строки `B3M.<режим>.<действие>`, 10 из 10 на режим); у остальных семейств она записана «предметно» (`G01`, `HO.1`, `FL01`), и по имени строки действие не восстанавливается.",
    "code": "scripts/mcp-smoke.py — журнал вызовов и окна строк (`CALL_LOG`, `calls_window`); scratch/_build_api_compliance.py — verify_claimed_actions(), derive_actions(), calls_calibration(); scratch/_f08_link_gap.py, scratch/_f08_candidate_ownership.py — разбор остатка; coverage/solid-v24/matrix.json",
    "documentation": [],
-   "evidence": "scratch/mcp-smoke/delivery-assemblies-20261004/*.json — журнал вызовов ПО КАТАЛОГУ ОТЧЁТОВ: 10479 вызовов, 1108 строк приёмки с окном, 491 эпох документа. Полный прогон: 1095 строк, 10392 вызовов, отказов 0 — на бинарях поставки `publish-assemblies-20261004`. Групповые отчёты каталога — ПОДМНОЖЕСТВА полного прогона, поэтому их вызовы с ним не складываются: сумма по каталогу (10479) больше полного прогона (10392) ровно на вызовы повторно снятых групп",
+   "evidence": "scratch/mcp-smoke/delivery-assemblies-20261004/*.json — журнал вызовов ПО КАТАЛОГУ ОТЧЁТОВ: 10479 вызовов, 1109 строк приёмки с окном, 491 эпох документа. Полный прогон: 1095 строк, 10392 вызовов, отказов 0 — на бинарях поставки `publish-assemblies-20261004`. Групповые отчёты каталога — ПОДМНОЖЕСТВА полного прогона, поэтому их вызовы с ним не складываются: сумма по каталогу (10479) больше полного прогона (10392) ровно на вызовы повторно снятых групп",
    "expected": "заявленное действие строки подтверждается строкой приёмки, которую можно найти по имени, а не по сходству",
    "observed": "сверка ведётся ТРЕМЯ независимыми способами, и все три числа измерены на одной поставке: (1) ПО ИМЕНИ РЕЖИМА, как искал бы рецензент: из 41 строки, заявившей `verified`, у 31 ни одна строка приёмки не называет режим ни идентификатором, ни описанием — находятся только 10 режимов B3; (2) ПО ПРИВЯЗКЕ И ВЫЗОВАМ: у 22 строк есть действие, которого нет в вызовах привязанных проверок; (3) ПО ИМЕНИ СТРОКИ: у 10 строк все действия названы одноимённой строкой, у 31 — нет. Приписок (ни одной разрешившейся ссылки) 0, противоречий (`verified` рядом с FAIL) 0. Числа НАЗВАНЫ отдельными ключами `claimed_actions_check.*`, а не растворены в числе PASS: «ноль отказов» не доказывает непроверенное действие. ОСТАТОК РАЗОБРАН ДО КОНЦА, и это главное измерение наряда: у 23 строк он выглядел как «недостающая привязка», но разбор показал, что привязка недостаёт РОВНО У ОДНОЙ — `SM-02.base_extrusion.blind`, где `G03i` и `G03r` читают признак ТОГО ЖЕ режима (базовое глухое выдавливание 10 мм) и до правки не были привязаны ни к одной строке. У остальных 22 проверки-кандидаты уже принадлежат ДРУГИМ режимам (измерено: 2712 пар «строка × действие» указывают на проверку, привязанную к другой строке; например `edit` скругления лежит в `FL04` у `SM-09.fillet.change_radius_in_place`, а `SM-09.fillet.read_radius_back` его не привязывает), поэтому приписать их значило бы выдать чужое доказательство за своё. Это РАБОТА (проверки для этих режимов либо честное понижение заявленных действий), а не правка отчёта, и она названа, а не закрыта",
    "affected_tools": [

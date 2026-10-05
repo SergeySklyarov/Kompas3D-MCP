@@ -8,55 +8,41 @@ using KompasMcp.Contracts;
 
 namespace KompasMcp.Domain.Journaling;
 
-/// <summary>Состояние владельца сеанса, как его видит ЛЮБОЙ Хост с этим <c>journal_path</c>.</summary>
+/// <summary>Session-owner state as seen by ANY Host sharing this <c>journal_path</c>.</summary>
 /// <remarks>
-/// <para>
-/// ДВА ВОПРОСА, КОТОРЫЕ РАЗДЕЛЕНЫ НАМЕРЕННО. Прежняя модель отвечала одним состоянием на оба:
-/// «владелец есть, но уже снимается» (<c>draining</c>) читалось вторым Хостом как «можно брать».
-/// Измерено 04.10.2026: владение, помеченное <c>draining</c> до подтверждённого конца очистки,
-/// означало, что второй Хост начинает работать, пока первый ещё держит Worker, журнал и открытые
-/// документы. Здесь это два разных состояния, и разница названа:
-/// <list type="bullet">
-/// <item><see cref="Releasing"/> и <see cref="Draining"/> — «не готов принимать работу, но ещё
-/// очищает ресурсы»;</item>
-/// <item><see cref="Released"/> и <see cref="Free"/> — «можно захватить».</item>
-/// </list>
-/// </para>
+/// INVARIANT: "not ready to take work, but still releasing" (<see cref="Releasing"/>,
+/// <see cref="Draining"/>) is a separate state from "may be taken" (<see cref="Released"/>,
+/// <see cref="Free"/>). One state for both made a second Host start while the first still held the
+/// Worker (MEASURED 04.10.2026). History: docs/decisions/journaling.md#ownership-model
 /// </remarks>
 public enum HostOwnerState
 {
-    /// <summary>Владение взято, но владелец ещё не обслужил ни одного запроса клиента.</summary>
+    /// <summary>Ownership taken, but the owner has not yet served a client request.</summary>
     Starting,
 
-    /// <summary>Владелец ведёт сеанс: держит Worker, журнал и право на CAD-вызовы.</summary>
+    /// <summary>The owner runs the session: it holds the Worker, the journal and the right to CAD calls.</summary>
     Serving,
 
-    /// <summary>
-    /// Владелец освобождает сеанс: новых CAD-вызовов он не принимает, но ресурсы ещё не отпущены.
-    /// Исключительное право сохраняется за ним: другой Хост захватить сеанс НЕ может.
-    /// </summary>
+    /// <summary>The owner is releasing the session: no new CAD calls, resources not yet freed. The exclusive
+    /// right stays with it — another Host can NOT take the session.</summary>
     Releasing,
 
     /// <summary>
-    /// Транспорт завершён либо Хост снимается аварийно: очистка НЕ подтверждена. Отличается от
-    /// <see cref="Releasing"/> только инициатором, а не правами: захват тоже запрещён.
+    /// Transport finished or the Host is shutting down abnormally: cleanup NOT confirmed. Differs from
+    /// <see cref="Releasing"/> only in who initiated it, not in rights.
     /// </summary>
     Draining,
 
-    /// <summary>
-    /// Владение снято ЯВНЫМ <c>kompas_release_session</c>, очистка подтверждена. Сеанс свободно занять,
-    /// но обычный CAD-вызов владение НЕ берёт — нужен явный <c>kompas_acquire_session</c>.
-    /// </summary>
+    /// <summary>Ownership removed by an EXPLICIT <c>kompas_release_session</c>, cleanup confirmed. An ordinary
+    /// CAD call does NOT take ownership — an explicit <c>kompas_acquire_session</c> is required.</summary>
     Released,
 
-    /// <summary>
-    /// Владения нет, очистка подтверждена (транспорт завершён штатно). Обычный CAD-вызов владение
-    /// берёт: это согласованный допуск реальной операции, а не обнаружение каталога.
-    /// </summary>
+    /// <summary>No owner, cleanup confirmed (transport finished cleanly). An ordinary CAD call takes ownership:
+    /// a coordinated admission of a real operation, not catalog discovery.</summary>
     Free,
 }
 
-/// <summary>Запись владельца. Лежит рядом с журналом; читается и пишется под именованной блокировкой.</summary>
+/// <summary>The owner record. Lives next to the journal; read and written under the named lock.</summary>
 public sealed record HostOwnerRecord(
     int Pid,
     string Generation,
@@ -66,51 +52,47 @@ public sealed record HostOwnerRecord(
     int? TookOverFromPid,
     DateTimeOffset? ReleasedUtc);
 
-/// <summary>Исход попытки ЗАХВАТА владения.</summary>
+/// <summary>Outcome of an ACQUIRE attempt.</summary>
 public enum OwnershipOutcome
 {
-    /// <summary>Владение взято этим вызовом; создано новое поколение.</summary>
+    /// <summary>Ownership taken by this call; a new generation was created.</summary>
     Acquired,
 
-    /// <summary>Этот Хост уже владелец: второго Worker и второго поколения нет.</summary>
+    /// <summary>This Host is already the owner: no second Worker, no second generation.</summary>
     AlreadyOwned,
 
-    /// <summary>Сеансом владеет другой ЖИВОЙ Хост (serving/releasing/draining/starting).</summary>
+    /// <summary>Another LIVE Host owns the session (serving/releasing/draining/starting).</summary>
     RefusedActiveOwner,
 
-    /// <summary>
-    /// Сеанс свободен, но захвачен обычным CAD-вызовом быть не может: прежний владелец снял
-    /// владение ЯВНО, и требуется явный <c>kompas_acquire_session</c>.
-    /// </summary>
+    /// <summary>The session is free but cannot be taken by an ordinary CAD call: the previous owner released
+    /// EXPLICITLY, so an explicit <c>kompas_acquire_session</c> is required.</summary>
     RefusedExplicitAcquireRequired,
 
-    /// <summary>Состояние владельца определить не удалось (запись не читается). Свободой это не считается.</summary>
+    /// <summary>The owner state could not be determined (record unreadable). Not treated as free.</summary>
     RefusedStateUnknown,
 
-    /// <summary>Именованную блокировку или запись получить не удалось.</summary>
+    /// <summary>The named lock or the record could not be obtained.</summary>
     RecordUnavailable,
 }
 
-/// <summary>Исход попытки ОСВОБОЖДЕНИЯ владения.</summary>
+/// <summary>Outcome of a RELEASE attempt.</summary>
 public enum ReleaseOutcome
 {
-    /// <summary>Владение снято этим вызовом, состояние <see cref="HostOwnerState.Released"/> записано.</summary>
+    /// <summary>Ownership removed by this call, state <see cref="HostOwnerState.Released"/> written.</summary>
     Released,
 
-    /// <summary>Владения у этого Хоста не было: повторный release безопасен и чужую запись не трогает.</summary>
+    /// <summary>This Host had no ownership: a repeated release is safe and touches no foreign record.</summary>
     AlreadyReleased,
 
-    /// <summary>Мы владелец, но не в состоянии <see cref="HostOwnerState.Serving"/>: освобождать нечего.</summary>
+    /// <summary>We are the owner but not in <see cref="HostOwnerState.Serving"/>: nothing to release.</summary>
     NotOwner,
 
-    /// <summary>Запись владельца не удалось обновить. Успехом это НЕ считается.</summary>
+    /// <summary>The owner record could not be updated. NOT counted as success.</summary>
     RecordUnavailable,
 }
 
-/// <summary>
-/// Наблюдение владения без его захвата: то, что отвечает <c>kompas_session_status</c> и на что
-/// опирается решение об отказе.
-/// </summary>
+/// <summary>Observation of ownership without taking it: what <c>kompas_session_status</c> answers and what the
+/// refusal decision rests on.</summary>
 public sealed record SessionProbe(
     bool RecordExists,
     bool RecordUnreadable,
@@ -127,10 +109,8 @@ public sealed record SessionProbe(
     string Reason,
     string? RefusalCode)
 {
-    /// <summary>
-    /// Чем владелец, мешающий захвату, отличается от отсутствующего: «освобождается» называется
-    /// отдельно от «ведёт сеанс», потому что remedies у них разные.
-    /// </summary>
+    /// <summary>How the owner blocking the take differs from a missing one: "releasing" is named separately from
+    /// "serving", because their remedies differ.</summary>
     public string Describe() => State switch
     {
         HostOwnerState.Releasing => "releasing",
@@ -141,7 +121,7 @@ public sealed record SessionProbe(
     };
 }
 
-/// <summary>Результат попытки захвата.</summary>
+/// <summary>Result of an acquire attempt.</summary>
 public sealed record Acquisition(
     OwnershipOutcome Outcome,
     string? Generation,
@@ -153,57 +133,20 @@ public sealed record Acquisition(
     int? TookOverFromPid,
     bool TookOverFromLiveOwner);
 
-/// <summary>Результат попытки освобождения.</summary>
+/// <summary>Result of a release attempt.</summary>
 public sealed record Release(
     ReleaseOutcome Outcome,
     string? ErrorMessage,
     SessionProbe? Probe);
 
-/// <summary>
-/// Единственный владелец CAD-сеанса на один <c>journal_path</c>.
-/// </summary>
-/// <remarks>
-/// <para>
-/// ЗАЧЕМ ЭТО ЗДЕСЬ. Два Хоста с ОДНИМ конфигом делят один экземпляр КОМПАС и один журнал.
-/// Пока журнал держал ручку на запись всю жизнь процесса, второй Хост падал на старте
-/// необработанным <c>IOException</c>, и клиент видел «Connection closed» — то есть терял ВСЕ
-/// инструменты молча (дефект <c>JOURNAL-REPLAY-SHARING-VIOLATION</c>, измерен 21.09.2026).
-/// </para>
-/// <para>
-/// ЧТО ИЗМЕНИЛОСЬ 04.10.2026. Прежняя модель захватывала владение на СТАРТЕ транспорта и
-/// отмечала владельцем всякий <c>tools/list</c>. Измерено 04.10.2026: вспомогательное
-/// обнаружение инструментов клиентом заняло владение одним вызовом <c>tools/list</c>, и основной
-/// чат получил <c>SESSION_OWNER_ACTIVE</c>. Отсюда три правила, которые здесь выполнены:
-/// <list type="bullet">
-/// <item>старт транспорта владения НЕ берёт — только явный <c>acquire</c> либо допуск РЕАЛЬНОЙ
-/// CAD-операции;</item>
-/// <item><c>tools/list</c>, <c>initialize</c> и диагностический <c>health</c> владения НЕ берут;
-/// </item>
-/// <item>владелец опознаётся pid И поколением: запоздалый callback старого поколения не обновляет
-/// состояние нового.</item>
-/// </list>
-/// </para>
-/// <para>
-/// ПОКОЛЕНИЕ. Каждый захват создаёт новый <see cref="Guid"/>. Все обновления записи сверяют pid И
-/// поколение; несовпадение — отказ обновить, а не «вернуть себе владение одной строкой». Это и
-/// есть механизм исключительности, общий для освобождения, завершения транспорта и аварийного
-/// восстановления: старый <c>finally</c> не вправе освободить чужое поколение.
-/// </para>
-/// <para>
-/// ЖИВОСТЬ. Владелец считается живым, если процесс с его pid существует И стартовал не позже
-/// момента записи (иначе номер переиспользован). Если определить не удалось — считается ЖИВЫМ:
-/// цена ошибки несимметрична — лишний отказ виден и назван, а принятый за мёртвого живой владелец
-/// дал бы два Хоста, ведущих операции одновременно.
-/// </para>
-/// <para>
-/// СРОК БЕЗДЕЙСТВИЯ НЕ ОТБИРАЕТ ВЛАДЕНИЕ у живого владельца: автоматический таймаут передачи и
-/// удалённое принудительное освобождение в это задание не входят.
-/// </para>
-/// <para>
-/// БЛОКИРОВКА НЕ ДЕРЖИТСЯ ВО ВРЕМЯ COM. Именованная межпроцессная блокировка берётся только на
-/// чтение и запись записи владельца; ни один CAD-вызов под ней не выполняется.
-/// </para>
-/// </remarks>
+/// <summary>The single owner of the CAD session per <c>journal_path</c>.</summary>
+/// <remarks>INVARIANT: transport start takes NO ownership — only an explicit <c>acquire</c> or the admission of
+/// a REAL CAD operation does (<c>tools/list</c>, <c>initialize</c>, <c>health</c> never do).
+/// INVARIANT: the owner is identified by pid AND generation; a mismatch refuses the update.
+/// INVARIANT: liveness — a process with the pid that started no later than the record; undeterminable
+/// counts as ALIVE (a live owner taken for dead gives two Hosts). LIMIT: idleness never strips
+/// ownership from a live owner. INVARIANT: the lock is not held during COM.
+/// History: docs/decisions/journaling.md#ownership-model</remarks>
 public sealed class HostOwnership : IDisposable
 {
     private static readonly JsonSerializerOptions Json = new()
@@ -212,7 +155,7 @@ public sealed class HostOwnership : IDisposable
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower) },
     };
 
-    /// <summary>Сколько ждать именованную блокировку при разборе владения.</summary>
+    /// <summary>How long to wait for the named lock when inspecting ownership.</summary>
     private static readonly TimeSpan GateTimeout = TimeSpan.FromSeconds(5);
 
     private readonly Mutex _gate;
@@ -227,31 +170,26 @@ public sealed class HostOwnership : IDisposable
         JournalPath = journalPath;
     }
 
-    /// <summary>Путь журнала, владение которым разбирается. Нужен для читаемых текстов отказа.</summary>
+    /// <summary>Path of the journal whose ownership is being decided. Used for readable refusal texts.</summary>
     public string JournalPath { get; }
 
-    /// <summary>Путь записи владельца — рядом с журналом, а не в каталоге по умолчанию.</summary>
+    /// <summary>Path of the owner record — next to the journal, not in the default directory.</summary>
     public string RecordPath { get; }
 
-    /// <summary>
-    /// Поколение текущего захвата. <c>null</c> — этот Хост владения не держит.
-    /// </summary>
+    /// <summary>Generation of the current acquisition. <c>null</c> — this Host holds no ownership.</summary>
     public string? Generation => Volatile.Read(ref _generation);
 
     private string? _generation;
 
-    /// <summary>Держит ли этот Хост владение прямо сейчас.</summary>
+    /// <summary>Whether this Host currently holds ownership.</summary>
     public bool IsOwner => Generation is not null;
 
-    /// <summary>Сколько запросов клиента обслужил этот Хост в текущем поколении.</summary>
+    /// <summary>How many client requests this Host served in the current generation.</summary>
     public int RequestsServed => Volatile.Read(ref _requestsServed);
 
     public static string RecordPathFor(string journalPath) => journalPath + ".owner.json";
 
-    /// <summary>
-    /// Открыть владение БЕЗ захвата. Старт транспорта владения не берёт — это отдельное решение,
-    /// принятое 04.10.2026 (см. remarks класса).
-    /// </summary>
+    /// <summary>Open ownership WITHOUT taking it. Transport start takes no ownership — see the class remarks.</summary>
     public static HostOwnership Open(string journalPath)
     {
         var full = Path.GetFullPath(journalPath);
@@ -260,9 +198,7 @@ public sealed class HostOwnership : IDisposable
         return new HostOwnership(mutex, recordPath, full);
     }
 
-    /// <summary>
-    /// Прочитать состояние владения, ничего не захватывая и не освобождая.
-    /// </summary>
+    /// <summary>Read the ownership state without taking or releasing anything.</summary>
     public SessionProbe Probe()
     {
         var taken = EnterGate(out var lockProblem);
@@ -287,15 +223,12 @@ public sealed class HostOwnership : IDisposable
         }
     }
 
-    /// <summary>
-    /// Попытаться взять владение. Атомарно под именованной блокировкой: чтение записи, решение и
-    /// запись нового состояния происходят внутри одного захвата, поэтому два одновременных запроса
-    /// (даже из одного процесса) не могут оба получить право работы.
-    /// </summary>
+    /// <summary>Try to take ownership. Atomic under the named lock: reading the record, deciding and writing the
+    /// new state happen inside one acquisition, so two concurrent requests cannot both get the right to
+    /// work.</summary>
     /// <param name="explicitRequest">
-    /// <c>true</c> — явный <c>kompas_acquire_session</c>; <c>false</c> — согласованный допуск
-    /// реальной CAD-операции. Допуск после ЯВНОГО release запрещён: это и есть отличие
-    /// <see cref="HostOwnerState.Released"/> от <see cref="HostOwnerState.Free"/>.
+    /// <c>true</c> — an explicit <c>kompas_acquire_session</c>; <c>false</c> — the coordinated admission
+    /// of a real CAD operation. Admission after an EXPLICIT release is forbidden.
     /// </param>
     public Acquisition TryAcquire(bool explicitRequest)
     {
@@ -314,8 +247,8 @@ public sealed class HostOwnership : IDisposable
             var (previous, unreadable) = ReadRecord(RecordPath);
             var probe = Classify((previous, unreadable));
 
-            // УЖЕ ВЛАДЕЛЕЦ: второго Worker и второго поколения не создаём. Проверка по поколению,
-            // а не только по pid: pid мог быть переиспользован.
+            // ALREADY OWNER: no second Worker, no second generation. Checked by generation, not pid
+            // alone — the pid may have been reused.
             if (previous is not null && previous.Pid == Environment.ProcessId && Generation is { } mine
                 && string.Equals(previous.Generation, mine, StringComparison.Ordinal)
                 && previous.State is HostOwnerState.Serving)
@@ -324,10 +257,8 @@ public sealed class HostOwnership : IDisposable
                     TookOverFromPid: null, TookOverFromLiveOwner: false);
             }
 
-            // НЕЗАВЕРШЁННОЕ ОСВОБОЖДЕНИЕ — НЕ ПОВОД НАЧАТЬ ЗАНОВО. Если очистка не подтверждена
-            // (состояние `releasing`/`draining` НАШЕГО поколения), новый захват создал бы второе
-            // поколение и второго Worker'а поверх, возможно, ещё живого прежнего — то есть ровно то,
-            // от чего защищает единственный владелец. Захват обязан упереться и назвать причину.
+            // AN UNFINISHED RELEASE IS NO REASON TO START OVER: a new acquisition would create a second
+            // generation and a second Worker on top of a possibly still-live previous one.
             if (previous is not null && IsOurGeneration(previous)
                 && previous.State is HostOwnerState.Releasing or HostOwnerState.Draining)
             {
@@ -351,11 +282,8 @@ public sealed class HostOwnership : IDisposable
                     + "повторите kompas_session_status и захват.");
             }
 
-            // ЧУЖОЙ ВЛАДЕЛЕЦ — ЭТО НЕ ТОЛЬКО ЧУЖОЙ PID. Запись с НАШИМ pid, но другим поколением,
-            // принадлежит другому владельцу: тот же процесс может держать несколько «личностей»
-            // Хоста (именно так ведут себя два чата в одном процессе в тестах), а в промышленном
-            // случае — переиспользованный pid. Проверка по одному pid пропустила бы второго
-            // владельца, и оба получили бы право работы.
+            // A FOREIGN OWNER IS NOT JUST A FOREIGN PID: a record with OUR pid but a different generation
+            // belongs to another owner (several Host "identities" in one process, or a reused pid).
             if (previous is not null && !IsOurGeneration(previous)
                 && previous.State is not HostOwnerState.Released and not HostOwnerState.Free
                 && (previous.Pid == Environment.ProcessId || probe.OwnerAlive))
@@ -428,10 +356,8 @@ public sealed class HostOwnership : IDisposable
         }
     }
 
-    /// <summary>
-    /// Начать освобождение: <see cref="HostOwnerState.Serving"/> → <see cref="HostOwnerState.Releasing"/>.
-    /// Исключительное право сохраняется за владельцем: другой Хост сеанс захватить не может.
-    /// </summary>
+    /// <summary>Begin the release: <see cref="HostOwnerState.Serving"/> → <see cref="HostOwnerState.Releasing"/>.
+    /// The exclusive right stays with the owner — another Host cannot take the session.</summary>
     public bool BeginRelease()
     {
         var taken = EnterGate(out _);
@@ -464,9 +390,9 @@ public sealed class HostOwnership : IDisposable
     }
 
     /// <summary>
-    /// Подтвердить освобождение: <see cref="HostOwnerState.Releasing"/> →
-    /// <see cref="HostOwnerState.Released"/>. Вызывается ПОСЛЕ подтверждённой остановки Worker и
-    /// освобождения очереди, журнала и Invoker — раньше владение свободным не объявляется.
+    /// Confirm the release: <see cref="HostOwnerState.Releasing"/> →
+    /// <see cref="HostOwnerState.Released"/>. Called AFTER the Worker is confirmed stopped and the queue,
+    /// journal and Invoker are released.
     /// </summary>
     public bool CompleteRelease()
     {
@@ -504,11 +430,8 @@ public sealed class HostOwnership : IDisposable
         }
     }
 
-    /// <summary>
-    /// Отменить освобождение: <see cref="HostOwnerState.Releasing"/> →
-    /// <see cref="HostOwnerState.Serving"/>. Вызывается, когда проверка до очистки отказала:
-    /// владелец остаётся владельцем, а не «почти свободным».
-    /// </summary>
+    /// <summary>Abort the release: <see cref="HostOwnerState.Releasing"/> → <see cref="HostOwnerState.Serving"/>.
+    /// Called when the pre-cleanup check failed: the owner stays the owner, not "almost free".</summary>
     public bool AbortRelease()
     {
         var taken = EnterGate(out _);
@@ -535,10 +458,8 @@ public sealed class HostOwnership : IDisposable
         }
     }
 
-    /// <summary>
-    /// Транспорт завершён: <see cref="HostOwnerState.Serving"/> → <see cref="HostOwnerState.Draining"/>.
-    /// Освобождением это НЕ считается: ресурсы ещё не отпущены.
-    /// </summary>
+    /// <summary>Transport finished: <see cref="HostOwnerState.Serving"/> → <see cref="HostOwnerState.Draining"/>.
+    /// This is NOT a release: resources are not yet freed.</summary>
     public bool BeginDrain()
     {
         var taken = EnterGate(out _);
@@ -566,8 +487,8 @@ public sealed class HostOwnership : IDisposable
     }
 
     /// <summary>
-    /// Подтвердить конец очистки после завершения транспорта: <see cref="HostOwnerState.Draining"/>
-    /// → <see cref="HostOwnerState.Free"/>. Обычный CAD-вызов владение после этого берёт.
+    /// Confirm the end of cleanup after transport shutdown: <see cref="HostOwnerState.Draining"/> →
+    /// <see cref="HostOwnerState.Free"/>. An ordinary CAD call takes ownership after this.
     /// </summary>
     public bool CompleteDrain()
     {
@@ -605,14 +526,10 @@ public sealed class HostOwnership : IDisposable
         }
     }
 
-    /// <summary>
-    /// Отметить, что Хост ОБСЛУЖИЛ запрос клиента. Возвращает <c>false</c>, если владение уже не
-    /// наше: тогда вызывающий обязан отказать ИМЕНОВАННО и до обращения к КОМПАС.
-    /// </summary>
-    /// <remarks>
-    /// Запоздалый вызов СТАРОГО поколения (pid совпал, поколение — нет) обновления не делает: это
-    /// и есть защита от «поздний callback старого захвата не обновляет состояние нового».
-    /// </remarks>
+    /// <summary>Record that the Host SERVED a client request. Returns <c>false</c> if ownership is no longer
+    /// ours: the caller must then refuse BY NAME and before calling KOMPAS.</summary>
+    /// <remarks>A late call from an OLD generation (pid matches, generation does not) makes no update — a late
+    /// callback of the old acquisition must not update the new state.</remarks>
     public bool MarkServing()
     {
         Interlocked.Increment(ref _requestsServed);
@@ -637,9 +554,8 @@ public sealed class HostOwnership : IDisposable
                 return false;
             }
 
-            // ОТСУТСТВИЕ ЗАПИСИ ПОТЕРЕЙ НЕ СЧИТАЕТСЯ: цена несимметрична — принять сбой записи за
-            // потерю владения значило бы превратить живые вызовы в отказы из-за одной ошибки диска.
-            // Запись переписывается заново, а проблема называется (<see cref="LastWriteProblem"/>).
+            // A MISSING RECORD IS NOT COUNTED AS LOSS: one disk error would otherwise turn live calls
+            // into refusals. The record is rewritten and the problem is named (LastWriteProblem).
             LastWriteProblem = WriteRecord((current ?? new HostOwnerRecord(
                 Environment.ProcessId, mine, HostOwnerState.Serving, _startedUtc, 0, null, null)) with
             {
@@ -657,13 +573,11 @@ public sealed class HostOwnership : IDisposable
         }
     }
 
-    /// <summary>Почему не удалось обновить запись владельца. Пусто — удалось.</summary>
+    /// <summary>Why the owner record could not be updated. Empty — it succeeded.</summary>
     public string? LastWriteProblem { get; private set; }
 
-    /// <summary>
-    /// Забрать проблему записи, чтобы назвать её РОВНО ОДИН раз: одна и та же беда на каждый вызов
-    /// инструмента перестала бы читаться.
-    /// </summary>
+    /// <summary>Take the write problem so it is named EXACTLY ONCE: the same trouble on every tool call would
+    /// stop being read.</summary>
     public string? TakeWriteProblem()
     {
         var problem = LastWriteProblem;
@@ -671,11 +585,8 @@ public sealed class HostOwnership : IDisposable
         return problem;
     }
 
-    /// <summary>
-    /// Всё ещё наш ли сеанс. Положительное доказательство потери — чужой pid ИЛИ чужое поколение
-    /// в записи; отсутствие или нечитаемость записи потерей НЕ считается, иначе сбой записи
-    /// превращался бы в отказ всех вызовов.
-    /// </summary>
+    /// <summary>Whether the session is still ours. Positive proof of loss is a foreign pid OR a foreign
+    /// generation; a missing or unreadable record is NOT counted as loss.</summary>
     public bool StillOwned()
     {
         if (!IsOwner)
@@ -692,7 +603,7 @@ public sealed class HostOwnership : IDisposable
         return IsOurGeneration(record);
     }
 
-    /// <summary>Читаемый текст отказа «владение потеряно» для вызова, который уже начался.</summary>
+    /// <summary>Readable "ownership lost" refusal text for a call already in progress.</summary>
     public string LostOwnershipMessage()
     {
         var (record, _) = ReadRecord(RecordPath);
@@ -703,10 +614,8 @@ public sealed class HostOwnership : IDisposable
               + "kompas_acquire_session и нового kompas_get_context.";
     }
 
-    /// <summary>
-    /// Разобрать запись в наблюдение. Решения «можно ли захватить» и «нужен ли явный захват»
-    /// принимаются ЗДЕСЬ и нигде больше: два места, отвечающих на один вопрос, разошлись бы.
-    /// </summary>
+    /// <summary>Turn a record into an observation. The decisions "may be taken" and "explicit acquire required"
+    /// are made HERE and nowhere else: two places answering one question would diverge.</summary>
     private SessionProbe Classify((HostOwnerRecord? Record, bool Unreadable) read)
     {
         var (record, unreadable) = read;
@@ -757,8 +666,8 @@ public sealed class HostOwnership : IDisposable
                 RefusalCode: null);
         }
 
-        // Free и Released означают «владения нет» независимо от живости прежнего pid: состояние
-        // записывается только после подтверждённой очистки.
+        // Free and Released mean "no ownership" regardless of the previous pid's liveness: the state is
+        // written only after confirmed cleanup.
         var free = record.State is HostOwnerState.Released or HostOwnerState.Free;
 
         return new SessionProbe(
@@ -805,7 +714,7 @@ public sealed class HostOwnership : IDisposable
         }
         catch (AbandonedMutexException)
         {
-            // Прежний владелец умер, не освободив блокировку: владение разбираем заново.
+            // The previous owner died without releasing the lock: ownership is re-decided.
             problem = null;
             return true;
         }
@@ -819,7 +728,7 @@ public sealed class HostOwnership : IDisposable
         }
         catch (ApplicationException)
         {
-            // Блокировка не наша (снята по AbandonedMutexException):_release не требуется.
+            // The lock is not ours (dropped via AbandonedMutexException): no release needed.
         }
     }
 
@@ -828,8 +737,8 @@ public sealed class HostOwnership : IDisposable
         var temp = RecordPath + "." + Environment.ProcessId + ".tmp";
         try
         {
-            // Атомарность через переименование: запись владельца читают другие процессы, и
-            // половина строки читалась бы как «владельца нет» — то есть как разрешение работать.
+            // Atomicity via rename: other processes read the owner record, and half a line would read as
+            // "no owner" — i.e. as permission to work.
             File.WriteAllText(temp, JsonSerializer.Serialize(record, Json), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             File.Move(temp, RecordPath, overwrite: true);
             return null;
@@ -880,7 +789,7 @@ public sealed class HostOwnership : IDisposable
             var started = process.StartTime.ToUniversalTime();
             if (started > record.StartedUtc.UtcDateTime.AddSeconds(2))
             {
-                // Номер переиспользован: процесс с этим pid стартовал ПОСЛЕ записи владельца.
+                // Pid reused: a process with this pid started AFTER the owner record was written.
                 reason = $"pid {record.Pid} переиспользован процессом, стартовавшим позже записи";
                 return false;
             }
@@ -900,7 +809,7 @@ public sealed class HostOwnership : IDisposable
         }
         catch (Exception ex) when (ex is Win32Exception or UnauthorizedAccessException or NotSupportedException)
         {
-            // Определить не удалось — считаем живым. Цена ошибки несимметрична (см. remarks класса).
+            // Could not be determined — counts as alive: the cost is asymmetric (see the class remarks).
             reason = $"живость pid {record.Pid} определить не удалось ({ex.GetType().Name}); "
                      + "владелец считается живым";
             return true;

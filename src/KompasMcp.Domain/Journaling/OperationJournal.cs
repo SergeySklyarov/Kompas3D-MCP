@@ -29,62 +29,39 @@ public sealed record JournalRecord(
     DateTimeOffset? FinishedUtc,
     bool NeedsReconciliation);
 
-/// <summary>
-/// Durable, append-only journal of mutations, and the source of idempotency decisions.
-/// </summary>
-/// <remarks>
-/// The ordering is the whole point and is not negotiable: a record is appended and flushed
-/// <b>before</b> the command reaches COM, and the terminal state is appended afterwards. A crash
-/// between the two leaves an <see cref="JournalOutcome.InFlight"/> entry, and the next start
-/// reclassifies it as <see cref="JournalOutcome.OutcomeUnknown"/> — because the process died at a
-/// moment when КОМПАС may already have applied the change. Reconstructing the record in memory
-/// after the fact would make every retry after a crash look safe, which is exactly the failure the
-/// spec forbids.
-///
-/// Replay rules for the same <c>operation_id</c>:
-/// <list type="bullet">
-/// <item>same arguments → return the recorded state (no second COM call, so a repeated
-/// <c>kompas_extrude</c> cannot create a second feature);</item>
-/// <item>different arguments → OPERATION_ID_CONFLICT;</item>
-/// <item>unknown outcome → never auto-retried; the caller must reconcile against the model.</item>
-/// </list>
-/// </remarks>
+/// <summary>Durable, append-only journal of mutations, and the source of idempotency decisions.</summary>
+/// <remarks>INVARIANT: the intent record is appended and flushed BEFORE the command reaches COM; the terminal
+/// state after. A crash in between leaves an InFlight entry that the next start reclassifies as
+/// OutcomeUnknown. Replay for one <c>operation_id</c>: same arguments → recorded state; different →
+/// OPERATION_ID_CONFLICT; unknown outcome → never auto-retried.</remarks>
 public sealed class OperationJournal : IDisposable
 {
-    /// <summary>
-    /// Назначение именованной блокировки журнала. Вынесено в константу, потому что тем же
-    /// именем обязан пользоваться ИНСТРУМЕНТ, проверяющий поведение при удержанной блокировке:
-    /// без общей константы проверка держала бы «свою» блокировку и измеряла бы не то.
-    /// </summary>
+    /// <summary>Purpose string of the journal's named lock. A constant because the tool verifying behaviour
+    /// under a HELD lock must use the SAME name.</summary>
     public const string FileLockPurpose = "journal";
 
     private readonly object _gate = new();
     private readonly Dictionary<string, JournalRecord> _byOperation = new(StringComparer.Ordinal);
 
-    /// <summary>Межпроцессная блокировка ЗАПИСИ по пути журнала. Чтение она не запрещает.</summary>
+    /// <summary>Cross-process lock over the journal path, WRITES only. Reading is not blocked.</summary>
     private readonly NamedFileLock _fileGate;
 
-    /// <summary>Сколько ждать межпроцессную блокировку при записи строки.</summary>
+    /// <summary>How long to wait for the cross-process lock when appending a line.</summary>
     private readonly TimeSpan _appendLockTimeout;
 
-    /// <summary>Сколько ждать межпроцессную блокировку при чтении журнала.</summary>
+    /// <summary>How long to wait for the cross-process lock when reading the journal.</summary>
     private readonly TimeSpan _replayLockTimeout;
 
     public string Path { get; }
 
     public int RecoveredInFlight { get; private set; }
 
-    /// <summary>
-    /// Сколько строк журнала не разобралось при <see cref="Replay"/>. Печатается вызывающим, а не
-    /// проглатывается: «журнал прочитан» и «журнал прочитан не весь» — разные утверждения.
-    /// </summary>
+    /// <summary>Lines that did not parse during <see cref="Replay"/>. Printed, not swallowed: "read" and "read
+    /// in full" are different claims.</summary>
     public int SkippedLines { get; private set; }
 
-    /// <summary>
-    /// Последняя строка файла оборвана (файл не кончается переводом строки, и эта строка не
-    /// разбирается). Это ожидаемое состояние после жёсткого убийства процесса, и оно называется
-    /// отдельно от прочих неразобранных строк: у них разные причины.
-    /// </summary>
+    /// <summary>The file's last line is cut off (no trailing newline and it does not parse). Expected after a
+    /// hard kill; reported separately from other unparsed lines — different causes.</summary>
     public bool TornTail { get; private set; }
 
     public event Action<JournalRecord>? RecoveredAsUnknown;
@@ -105,33 +82,19 @@ public sealed class OperationJournal : IDisposable
         AssertWritable();
     }
 
-    /// <summary>
-    /// Проверить, что журнал ВООБЩЕ можно писать, — ДО того, как сервер начнёт принимать вызовы.
-    ///
-    /// Нужна потому, что ручки на запись журнал больше не держит (см. <see cref="Append"/>): без
-    /// этой проверки недоступный журнал обнаружился бы на первой же мутации, то есть уже после
-    /// того, как клиент получил инструменты и решил, что сервер работает. Ошибка пробрасывается
-    /// наверх, и <c>Program</c> называет её `JOURNAL_UNAVAILABLE` — молча работать без журнала
-    /// безопасности запрещено.
-    ///
-    /// Открытие в режиме добавления ничего не пишет и содержимого не меняет.
-    /// </summary>
+    /// <summary>Verify the journal can be written AT ALL, BEFORE the server accepts calls. INVARIANT: no
+    /// long-lived write handle is held, so an unwritable journal would otherwise surface on the first
+    /// mutation; the error propagates and <c>Program</c> names it `JOURNAL_UNAVAILABLE`.</summary>
     private void AssertWritable()
     {
         using var stream = OpenAppend();
     }
 
     /// <summary>
-    /// Дескриптор на одну запись: открыть-дописать-закрыть.
-    ///
-    /// Ручка на запись НЕ держится всю жизнь процесса — и это не оптимизация, а требование
-    /// совместности: пока писатель жил вместе с Хостом, второй Хост с тем же конфигом не мог даже
-    /// прочитать журнал, потому что проверка режима совместного доступа идёт в обе стороны.
-    /// Стоимость — один системный вызов на запись; цена пожизненной ручки — отказ второго сеанса.
-    ///
-    /// <c>FileShare.ReadWrite</c> объявлен на обеих сторонах — и на чтении (<see cref="Replay"/>), и
-    /// на записи. СОВМЕСТНОСТЬ ЗАПИСИ ЭТО НЕ ОБЕСПЕЧИВАЕТ: она обеспечивается именованной
-    /// блокировкой в <see cref="Append"/> — измерено, что без неё записи двух писателей теряются.
+    /// Handle for one append: open-append-close. INVARIANT: no write handle is held for the process
+    /// lifetime — a second Host on the same config must still be able to READ the journal. LIMIT:
+    /// <c>FileShare.ReadWrite</c> gives no write concurrency; the named lock does (see
+    /// <see cref="TryAppend"/>).
     /// </summary>
     private FileStream OpenAppend() =>
         new(Path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite, bufferSize: 1, FileOptions.None);
@@ -143,15 +106,10 @@ public sealed class OperationJournal : IDisposable
             return;
         }
 
-        // НЕ File.ReadLines: он открывает файл с FileShare.Read, то есть запрещает запись живому
-        // писателю, и второй Хост падал на этом необработанным IOException (дефект
-        // JOURNAL-REPLAY-SHARING-VIOLATION, измерен 21.09.2026). Тот же FileShare.ReadWrite, что
-        // и на записи, — тогда объявленное комментарием намерение выполняется на обеих сторонах.
-        //
-        // Чтение идёт под ТОЙ ЖЕ межпроцессной блокировкой, что и запись. Это не про целостность
-        // файла, а про ЧЕСТНОСТЬ ЧИСЛА: без блокировки прибор, читающий живой журнал, мог бы
-        // поймать половину строки и назвать её рваным хвостом — то есть доложить о порче там, где
-        // шла обычная запись.
+        // NOT File.ReadLines: it opens with FileShare.Read and forbids a live writer (defect
+        // JOURNAL-REPLAY-SHARING-VIOLATION). Reading runs under the same lock as writing, so a probe
+        // cannot catch half a line and call it a torn tail.
+        // History: docs/decisions/journaling.md#replay-sharing
         var locked = _fileGate.Enter(_replayLockTimeout);
         if (!locked)
         {
@@ -162,21 +120,10 @@ public sealed class OperationJournal : IDisposable
         {
             ReplayCore();
 
-            // РВАНЫЙ ХВОСТ ЧИНИТСЯ ЗДЕСЬ, А НЕ ЖДЁТ СЛЕДУЮЩЕЙ ЗАПИСИ.
-            //
-            // До 05.10.2026 журнал лишь ОТМЕЧАЛ обрыв (TornTail=true) и ничего не делал. Первая же
-            // запись нового процесса дописывала `{…B…}\n` в режиме Append прямо за обрывком, и
-            // строка становилась `{"operation_id":"trunc{…B…}` — то есть намерение B терялось
-            // полностью: следующий Replay не разбирал эту строку, журнал не знал операцию вообще, и
-            // повтор с тем же operation_id выполнял мутацию ВТОРОЙ раз. Ровно тот сценарий, ради
-            // которого журнал заведён, был сломан.
-            //
-            // ПОЧИНКА — ТОЛЬКО ПОД ПОЛУЧЕННОЙ БЛОКИРОВКОЙ. Прежде она шла и тогда, когда блокировку
-            // взять не удалось (ReplayRanUnlocked): перевод строки дописывался в файл, который в этот
-            // момент писал ДРУГОЙ Хост, и `\n` ложился в СЕРЕДИНУ его строки — то есть починка одного
-            // обрыва портила чужую целую запись (находка §4 задания 05.10.2026). Без блокировки хвост
-            // НЕ чинится: факт называется (TornTailRepairSkippedUnlocked), а починку выполняет первая
-            // же запись — под своей блокировкой, см. TryAppend.
+            // INVARIANT: a torn tail is repaired HERE, under the lock just acquired, never unlocked —
+            // unlocked repair wrote "\n" into the middle of another Host's line. Without the lock the
+            // tail is not repaired: the fact is named and the first append does it (see TryAppend).
+            // History: docs/decisions/journaling.md#torn-tail
             if (locked)
             {
                 RepairTornTail();
@@ -193,22 +140,15 @@ public sealed class OperationJournal : IDisposable
         }
     }
 
-    /// <summary>
-    /// Рваный хвост НЕ починен при открытии, потому что межпроцессную блокировку взять не удалось.
-    /// Печатается вызывающим: молчание об этом неотличимо от «обрывов не было», а починка чужой
-    /// строки под чужим писателем — от «файл цел».
-    /// </summary>
+    /// <summary>The torn tail was NOT repaired on open because the lock could not be taken. Printed: silence is
+    /// indistinguishable from "there was no tear".</summary>
     public bool TornTailRepairSkippedUnlocked { get; private set; }
 
-    /// <summary>
-    /// Хвост ждёт починки: обрыв найден, но блокировки при открытии не было. Сбрасывается первой же
-    /// удачной записью, которая чинит хвост под СВОЕЙ блокировкой (см. <see cref="TryAppend"/>).
-    /// </summary>
+    /// <summary>The tail awaits repair: a tear was found but no lock was held. Cleared by the first successful
+    /// append, which repairs it under ITS OWN lock (see <see cref="TryAppend"/>).</summary>
     private bool _tornTailRepairPending;
 
-    /// <summary>
-    /// Дописать перевод строки, если файл им не кончается. Ничего не делает на целом файле.
-    /// </summary>
+    /// <summary>Append a newline if the file does not end with one. No-op on an intact file.</summary>
     private void RepairTornTail()
     {
         try
@@ -225,24 +165,23 @@ public sealed class OperationJournal : IDisposable
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
         {
-            // Починка не удалась — это НАЗЫВАЕТСЯ, а не проглатывается: при следующей записи без
-            // перевода строки потеря строки повторится, и молчание здесь сделало бы её
-            // неотличимой от «обрывов не было».
+            // Repair failed — NAMED, not swallowed: otherwise the next append loses a line again and
+            // silence hides it.
             TornTailRepairFailures++;
             LastRepairFailure = $"{ex.GetType().Name}: {ex.Message}";
         }
     }
 
-    /// <summary>Сколько рваных хвостов починено при открытии (дописан перевод строки).</summary>
+    /// <summary>Number of torn tails repaired on open (a newline was appended).</summary>
     public int RepairedTornTails { get; private set; }
 
-    /// <summary>Сколько раз починка рваного хвоста не удалась. Печатается, а не молчит.</summary>
+    /// <summary>Number of failed torn-tail repairs. Printed, not silenced.</summary>
     public int TornTailRepairFailures { get; private set; }
 
-    /// <summary>Причина последней неудавшейся починки; null, если починок не было или все удались.</summary>
+    /// <summary>Reason of the last failed repair; null if none ran or all succeeded.</summary>
     public string? LastRepairFailure { get; private set; }
 
-    /// <summary>Чтение журнала прошло без межпроцессной блокировки: числа пропусков не гарантированы.</summary>
+    /// <summary>The journal was read WITHOUT the cross-process lock: skip counts are not guaranteed.</summary>
     public bool ReplayRanUnlocked { get; private set; }
 
     private static readonly TimeSpan ReplayLockTimeout = TimeSpan.FromSeconds(10);
@@ -270,9 +209,8 @@ public sealed class OperationJournal : IDisposable
                 }
                 catch (JsonException)
                 {
-                    // Рваный хвост после жёсткого убийства процесса ожидаем; он пропускается, а не
-                    // «ремонтируется». Существующая ветка сохранена, но теперь она ещё и
-                    // ПОДСЧИТЫВАЕТСЯ: пропуск называется числом, а не молчит.
+                    // A torn tail after a hard kill is expected; it is skipped and COUNTED, so the skip
+                    // is named by a number instead of staying silent.
                     SkippedLines++;
                     lastNonEmptyLineWasSkipped = true;
                     continue;
@@ -289,10 +227,8 @@ public sealed class OperationJournal : IDisposable
 
                 if (record.Outcome == JournalOutcome.InFlight)
                 {
-                    // A record left in flight means the process died at a moment when КОМПАС may
-                    // already have applied the change. It is reported with an explicit code and retry
-                    // policy so no caller has to infer them, and so a client that only reads
-                    // envelope.error still cannot mistake this for a clean failure to retry.
+                    // INVARIANT: an in-flight record means the process died when KOMPAS may already have
+                    // applied the change; it is reported with an explicit code and retry policy.
                     record = record with
                     {
                         Outcome = JournalOutcome.OutcomeUnknown,
@@ -307,17 +243,13 @@ public sealed class OperationJournal : IDisposable
             }
         }
 
-        // Оборванный хвост — это НЕ «файл кончается переводом строки» и не любая неразобранная
-        // строка: обрыв — это последняя НЕПУСТАЯ строка, которая не разобралась, и за которой нет
-        // перевода строки. Неразобранная строка В СЕРЕДИНЕ файла называется обрывом неправильно:
-        // у неё другая причина, и смешав их, отчёт назвал бы порчу журнала рваным хвостом.
+        // A tear is the last NON-EMPTY line that failed to parse with no newline after it. An unparsed
+        // line in the MIDDLE is not a tear — it has another cause.
         TornTail = SkippedLines > 0 && lastNonEmptyLineWasSkipped && !endsWithNewline;
     }
 
-    /// <summary>
-    /// Кончается ли файл переводом строки. Читается последний байт, а не весь файл: журнал растёт
-    /// до сотен тысяч строк.
-    /// </summary>
+    /// <summary>Whether the file ends with a newline. Reads the last byte, not the whole file: the journal grows
+    /// to hundreds of thousands of lines.</summary>
     private static bool FileEndsWithNewline(string path)
     {
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
@@ -337,19 +269,15 @@ public sealed class OperationJournal : IDisposable
         Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower) },
     };
 
-    /// <summary>
-    /// Result of asking to start a mutation. The caller must handle every case explicitly;
-    /// there is no "just run it" boolean, because that is where double-application hides.
-    /// </summary>
+    /// <summary>Result of asking to start a mutation. The caller must handle every case; there is no "just run
+    /// it" boolean, because that is where double-application hides.</summary>
     public sealed record StartDecision(bool Proceed, JournalRecord? Existing)
     {
         public bool IsReplay => Existing is not null && Proceed == false;
     }
 
-    /// <summary>
-    /// Record the intent to mutate, or decide that this call is a replay. Appends and flushes
-    /// before returning, so the durable record exists no matter what happens next.
-    /// </summary>
+    /// <summary>Record the intent to mutate, or decide this call is a replay. INVARIANT: appends and flushes
+    /// before returning, so the durable record exists no matter what happens next.</summary>
     public StartDecision TryBegin(string operationId, string tool, string canonicalArguments, string? documentId, long? baseRevision)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(operationId);
@@ -374,24 +302,11 @@ public sealed class OperationJournal : IDisposable
                         });
                 }
 
-                // ЗАПИСЬ — ЭТО И ЕСТЬ ЗАПОР. «Уже выполняется» НЕ означает «можно начать ещё раз»:
-                // прежде здесь возвращалось Proceed=true, и вызывающий, вызвав ExecuteAsync до
-                // проверки своей таблицы незавершённых задач, отправлял в КОМПАС ВТОРУЮ команду с тем
-                // же operation_id. Измерено 04.10.2026 на прогоне передачи сеанса: повтор
-                // kompas_create_document во время выполнения создал ДВА документа (54640bdb… и
-                // 3a487677… в одном экземпляре), то есть «повтор не повторяет мутацию» было ложью
-                // ровно в том окне, ради которого повтор и разрешён.
-                //
-                // ЧИСТЫЙ ОТКАЗ РАЗРЕШАЕТ НОВУЮ ПОПЫТКУ С ТЕМ ЖЕ operation_id.
-                //
-                // Политика `SameOperationId` ЗАПИСАННОГО отказа была НЕВЫПОЛНИМА: любая уже
-                // записанная запись `failed` (QUEUE_FULL, RequireSourceFile, AddFromFile=null,
-                // замена не применилась) воспроизводилась ВСЕГДА, и «повторите тем же
-                // operation_id» из текста ошибки не работало — клиент был вынужден брать новый id,
-                // а для отказа с частичным эффектом новый id означает повторную мутацию. Теперь
-                // различие проведено по существу: отказ без частичных эффектов — ничто не
-                // применено, повтор безопасен; отказ с частичными эффектами или неизвестным
-                // исходом — повтор воспроизведением, как прежде.
+                // INVARIANT: the record IS the barrier — "already running" does not mean "may start
+                // again" (MEASURED 04.10.2026: a repeated create during execution made TWO documents).
+                // INVARIANT: a CLEAN failure allows a new attempt with the same operation_id; a failure
+                // with partial effects or an unknown outcome is replayed as before.
+                // History: docs/decisions/journaling.md#same-operation-id
                 if (IsCleanFailure(existing))
                 {
                     var restart = existing with
@@ -413,9 +328,9 @@ public sealed class OperationJournal : IDisposable
                     return new StartDecision(Proceed: true, restart);
                 }
 
-                // Proceed=false означает: повторное обращение к КОМПАС не безопасно. Запись
-                // воспроизводится — незавершённая отвечает `running`, частичный эффект и
-                // неизвестный исход требуют согласования.
+                // Proceed=false: a second KOMPAS call is not safe. The record is replayed — an
+                // unfinished one answers `running`; a partial effect or unknown outcome needs
+                // reconciliation.
                 return new StartDecision(Proceed: false, existing);
             }
 
@@ -432,16 +347,10 @@ public sealed class OperationJournal : IDisposable
                 null,
                 NeedsReconciliation: false);
 
-            // ЗАПИСЬ НАМЕРЕНИЯ ОБЯЗАНА БЫТЬ ДОЛГОВЕЧНОЙ И ПОД БЛОКИРОВКОЙ, ИНАЧЕ КОМАНДА НЕ УХОДИТ.
-            //
-            // Прежде результат `_fileGate.Enter(...)` здесь не проверялся: строка писалась и без
-            // блокировки, а факт назывался диагностическим флагом `AppendRanUnlocked`. Это заменяло
-            // ГАРАНТИЮ журналирования диагностикой: потерянная запись означает, что повтор после
-            // перезапуска выглядит как «не выполнялось», то есть мутация может быть применена
-            // ВТОРОЙ раз (измерено в пробе scratch/_append_probe: 381 запись из 400 без блокировки).
-            // Теперь при недоступной блокировке запись НЕ делается, в `_byOperation` НЕ остаётся
-            // фиктивной начатой операции, и вызывающий получает именованный отказ — до того, как
-            // что-либо уйдёт в Worker.
+            // INVARIANT: the intent record MUST be durable and locked, else the command does NOT leave —
+            // a lost record makes a replay look like "never ran" (MEASURED: 381/400 without the lock).
+            // With no lock nothing is appended and the caller gets JOURNAL_UNAVAILABLE.
+            // History: docs/decisions/journaling.md#append-atomicity
             if (!TryAppend(record))
             {
                 throw JournalUnavailable();
@@ -452,19 +361,17 @@ public sealed class OperationJournal : IDisposable
         }
     }
 
-    /// <summary>
-    /// Записанный отказ, после которого повтор с тем же operation_id НИЧЕГО не применяет второй
-    /// раз: исхода «применено частично» нет, согласование не требуется.
-    /// </summary>
+    /// <summary>A recorded failure after which a replay with the same operation_id applies nothing a second
+    /// time: no partial effect, so no reconciliation is required.</summary>
     private static bool IsCleanFailure(JournalRecord record) =>
         record.Outcome == JournalOutcome.Failed
         && !record.NeedsReconciliation
         && record.Error?.PartialEffects != true;
 
     /// <summary>
-    /// Отказ «журнал недоступен»: намерение НЕ записано, команда НЕ уходила. Одна формулировка на
-    /// две причины (блокировка не получена / запись не удалась), потому что для вызывающего это
-    /// одно и то же состояние, а причина названа в <c>details</c>, а не спрятана.
+    /// The "journal unavailable" refusal: the intent was NOT recorded and the command did NOT leave.
+    /// One wording for two causes (lock not acquired / append failed), with the cause named in
+    /// <c>details</c>.
     /// </summary>
     private KompasContractException JournalUnavailable() =>
         new(
@@ -487,10 +394,8 @@ public sealed class OperationJournal : IDisposable
     private static string Explain(string? failure) =>
         failure is null ? string.Empty : $": {failure}";
 
-    /// <summary>
-    /// Сколько раз записанный ЧИСТЫЙ отказ был начат заново тем же operation_id. Печатается:
-    /// «повтор разрешён» и «повтор ни разу не происходил» — разные утверждения.
-    /// </summary>
+    /// <summary>Number of times a recorded CLEAN failure was restarted with the same operation_id. Printed:
+    /// "restart allowed" and "restart never happened" are different claims.</summary>
     public int RestartsAfterCleanFailure { get; private set; }
 
     public bool Complete(string operationId, string? resultJson) => Finish(operationId, JournalOutcome.Succeeded, resultJson, null, needsReconciliation: false);
@@ -499,18 +404,13 @@ public sealed class OperationJournal : IDisposable
 
     public bool Cancel(string operationId) => Finish(operationId, JournalOutcome.Cancelled, null, null, needsReconciliation: false);
 
-    /// <summary>
-    /// Record that the outcome cannot be known. Used on a budget timeout, a worker death, or a
-    /// disconnect mid-call.
-    /// </summary>
+    /// <summary>Record that the outcome cannot be known. Used on a budget timeout, a worker death, or a
+    /// disconnect mid-call.</summary>
     public bool MarkUnknown(string operationId, string reason) =>
         Finish(operationId, JournalOutcome.OutcomeUnknown, null, ReconcileError(reason), needsReconciliation: true);
 
-    /// <summary>
-    /// The error shape for an unknown outcome. Shared with crash recovery so a command that died
-    /// with the server and one that merely timed out are reported identically — they are the same
-    /// state as far as a caller is concerned.
-    /// </summary>
+    /// <summary>The error shape for an unknown outcome. Shared with crash recovery so a command that died with
+    /// the server and one that timed out are reported identically.</summary>
     private static ErrorDto ReconcileError(string reason) => new(
         ErrorCodes.OutcomeUnknown,
         reason,
@@ -543,15 +443,10 @@ public sealed class OperationJournal : IDisposable
                 return true;
             }
 
-            // ТЕРМИНАЛЬНАЯ ЗАПИСЬ НЕ УДАЛАСЬ ПОСЛЕ ВЫПОЛНЕННОЙ МУТАЦИИ.
-            //
-            // Строка «намерение» уже долговечна и говорит `in_flight`; терминальная строка — нет.
-            // Поэтому исход этой операции нельзя объявлять ЗАПИСАННЫМ: после перезапуска журнал
-            // прочитает `in_flight` и потребует согласования, то есть повтор НЕ безопасен. Здесь это
-            // названо в памяти явно (`NeedsReconciliation`), а вызывающий получает `false` и обязан
-            // сообщить клиенту, что терминальная запись не долговечна, а не молча отдать успех.
-            // Сама мутация уже выполнена — поэтому исход в памяти СОХРАНЯЕТСЯ (он известен в этом
-            // процессе), но помечается как требующий согласования, а не как чисто записанный.
+            // INVARIANT: a failed TERMINAL write after a completed mutation is not a success — the
+            // intent line is durable and says `in_flight`, so after a restart the journal demands
+            // reconciliation. Named NeedsReconciliation; the caller gets `false`.
+            // History: docs/decisions/journaling.md#terminal-write
             TerminalWriteFailures++;
             _byOperation[operationId] = updated with
             {
@@ -591,57 +486,31 @@ public sealed class OperationJournal : IDisposable
         }
     }
 
-    /// <summary>
-    /// Одна запись — одна атомарная запись байтов ПОД межпроцессной блокировкой: строка с переводом
-    /// строки уходит одним <c>Write</c> в дескриптор, открытый в режиме добавления, и всё это
-    /// (открыть-записать-закрыть) закрыто именованной блокировкой по пути журнала.
-    /// </summary>
+    /// <summary>One record is one atomic byte write UNDER the cross-process lock: the line plus its newline go
+    /// out in a single <c>Write</c> to an append-mode handle, wrapped in the named lock.</summary>
     /// <returns>
-    /// <c>true</c> — строка записана под блокировкой; <c>false</c> — блокировка не получена за
-    /// <see cref="_appendLockTimeout"/> и НИЧЕГО не записано. Отказ называется вызывающим, а не
-    /// подменяется записью без блокировки.
+    /// <c>true</c> — written under the lock; <c>false</c> — the lock was not acquired within
+    /// <see cref="_appendLockTimeout"/> and NOTHING was written.
     /// </returns>
-    /// <remarks>
-    /// <para>
-    /// Блокировка обязательна, и это измерено, а не подстраховано: <c>FileMode.Append</c> с одной
-    /// записью байтов теряет записи при двух писателях (381 из 400 в пробе
-    /// <c>scratch/_append_probe</c>), потому что позиция конца файла запоминается при ОТКРЫТИИ.
-    /// Для журнала безопасности потерянная запись означает, что повтор после перезапуска выглядит
-    /// как «не выполнялось», — то есть мутация может быть применена второй раз. Заодно не остаётся
-    /// пожизненной ручки, из-за которой второй Хост не мог даже прочитать журнал.
-    /// </para>
-    /// <para>
-    /// <b>ГРАНИЦЫ ДОЛГОВЕЧНОСТИ НАЗВАНЫ ТОЧНО.</b> <c>Flush()</c> на <see cref="FileStream"/>
-    /// сбрасывает буферы управляемого потока в ОС — он НЕ обещает, что байты легли на носитель.
-    /// Поэтому гарантия здесь — «строка ушла в ОС и видна другим читателям через файловую систему
-    /// раньше, чем команда уйдёт в Worker», а НЕ «строка переживёт отключение питания»: для второго
-    /// нужен <c>Flush(true)</c> либо запись через <c>FileOptions.WriteThrough</c>, и ни того, ни
-    /// другого здесь нет. Это осознанная граница: цена долговечности при потере питания — запись на
-    /// диск на каждой мутации, а потеря питания не является сценарием, ради которого журнал заведён
-    /// (он заведён против ПОВТОРНОЙ ОТПРАВКИ после падения процесса).
-    /// </para>
-    /// </remarks>
+    /// <remarks>MEASURED: the lock is mandatory — <c>FileMode.Append</c> loses records with two writers
+    /// (381/400, <c>scratch/_append_probe</c>). LIMIT: <c>Flush()</c> reaches the OS, not the medium;
+    /// the journal guards against a process crash, not power loss.</remarks>
     private bool TryAppend(JournalRecord record)
     {
         var line = JsonSerializer.Serialize(record, JournalOptions) + "\n";
 
         if (!_fileGate.Enter(_appendLockTimeout))
         {
-            // Блокировка не получена — ПИСАТЬ НЕЛЬЗЯ. Прежняя редакция писала и лишь выставляла
-            // диагностический флаг: гарантия подменялась наблюдением.
+            // Lock not acquired — WRITING IS FORBIDDEN; an earlier revision wrote anyway and only set a
+            // diagnostic flag, replacing the guarantee with an observation.
             RefusedAppends++;
             return false;
         }
 
         try
         {
-            // ПОЧИНКА РВАНОГО ХВОСТА, ОТЛОЖЕННАЯ ПРИ ОТКРЫТИИ, ДЕЛАЕТСЯ ЗДЕСЬ — ПОД ЭТОЙ БЛОКИРОВКОЙ.
-            //
-            // Открытие журнала могло не получить блокировку (ReplayRanUnlocked) и тогда хвост не
-            // чинило: дописать `\n` без блокировки значило бы вставить перевод строки в середину
-            // строки, которую в этот момент пишет ДРУГОЙ Хост. Здесь блокировка уже наша, поэтому
-            // починка безопасна, и перевод строки идёт ПЕРЕД нашей записью — одной операцией Write,
-            // чтобы между ними не влез третий писатель.
+            // A torn-tail repair deferred at open is done HERE, under this lock; the newline goes before
+            // our record in one Write, so a third writer cannot slip in.
             var prefix = string.Empty;
             if (_tornTailRepairPending)
             {
@@ -663,15 +532,9 @@ public sealed class OperationJournal : IDisposable
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
             or NotSupportedException or ObjectDisposedException)
         {
-            // ЗАПИСЬ НЕ УДАЛАСЬ ПО ПРИЧИНЕ НОСИТЕЛЯ (диск полон, антивирус удержал файл, путь
-            // исчез). До 05.10.2026 такой исход вообще не рассматривался: блокировка получена, а
-            // сама запись бросала IOException наружу — либо операция оставалась `in_flight` в
-            // памяти при НЕзаписанной строке намерения (повторы в этом процессе вечно отвечали
-            // `running`, а после перезапуска журнал операции не знал вовсе), либо вызов падал
-            // необработанным исключением там, где ожидался конверт.
-            //
-            // Смысл отказа тот же, что у недоступной блокировки: ДОЛГОВЕЧНОЙ СТРОКИ НЕТ. Поэтому
-            // возвращается false, а причина называется числом и текстом.
+            // The append failed for a MEDIUM cause. Until 05.10.2026 this threw IOException out; the
+            // meaning is the same as an unavailable lock: there is NO durable line. Named by number and
+            // text. History: docs/decisions/journaling.md#append-io-failure
             AppendIoFailures++;
             LastAppendFailure = $"{ex.GetType().Name}: {ex.Message}";
             return false;
@@ -682,33 +545,27 @@ public sealed class OperationJournal : IDisposable
         }
     }
 
-    /// <summary>
-    /// Сколько раз САМА запись строки не удалась (блокировка была получена, носитель — нет).
-    /// </summary>
+    /// <summary>Number of times the line WRITE itself failed (lock held, medium refused).</summary>
     public int AppendIoFailures { get; private set; }
 
-    /// <summary>Причина последней неудавшейся записи; null, если неудач не было.</summary>
+    /// <summary>Reason of the last failed append; null if none failed.</summary>
     public string? LastAppendFailure { get; private set; }
 
-    /// <summary>
-    /// Сколько раз запись журнала была ОТКАЗАНА, потому что межпроцессная блокировка не получена.
-    /// Печатается вызывающим: молчание об отказе неотличимо от «отказов не было».
-    /// </summary>
+    /// <summary>Number of appends REFUSED because the cross-process lock was not acquired. Printed: silence is
+    /// indistinguishable from "there were no refusals".</summary>
     public int RefusedAppends { get; private set; }
 
-    /// <summary>
-    /// Сколько раз терминальная запись не удалась ПОСЛЕ выполненной мутации. Такая операция
-    /// остаётся в журнале как требующая согласования: её исход известен только этому процессу.
-    /// </summary>
+    /// <summary>Number of terminal writes that failed AFTER a completed mutation. Such an operation stays in the
+    /// journal as needing reconciliation.</summary>
     public int TerminalWriteFailures { get; private set; }
 
-    /// <summary>Сколько ждать межпроцессную блокировку журнала при записи (значение по умолчанию).</summary>
+    /// <summary>How long to wait for the journal's cross-process lock when appending (default).</summary>
     private static readonly TimeSpan AppendLockTimeout = TimeSpan.FromSeconds(5);
 
     /// <summary>
-    /// Освободить межпроцессную блокировку. Ручки на файл журнал не держит (см.
-    /// <see cref="OpenAppend"/>), поэтому закрывать больше нечего; метод сохранён, потому что
-    /// вызывающие владеют журналом через <c>using</c>.
+    /// Release the cross-process lock. The journal holds no file handle (see
+    /// <see cref="OpenAppend"/>); the method is kept because callers own the journal through
+    /// <c>using</c>.
     /// </summary>
     public void Dispose() => _fileGate.Dispose();
 }

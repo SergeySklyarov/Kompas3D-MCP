@@ -3,28 +3,13 @@ using System.Text;
 
 namespace KompasMcp.Domain.Journaling;
 
-/// <summary>
-/// Именованная межпроцессная блокировка, привязанная к ПУТИ ФАЙЛА.
-/// </summary>
+/// <summary>Named cross-process mutex keyed to a FILE PATH; serialises journal WRITES only.</summary>
 /// <remarks>
-/// <para>
-/// ЗАЧЕМ, ЕСЛИ ЗАПИСЬ ИДЁТ ОДНИМ ВЫЗОВОМ. Измерено 21.09.2026 пробой
-/// <c>scratch/_append_probe</c> на двух процессах по 200 записей: <c>FileMode.Append</c> с одной
-/// записью байтов НЕ атомарен — <b>381 запись из 400</b>. Потерянные записи не рвут строки: каждая
-/// из них цела, но 19 из них перезаписаны, потому что дескриптор запоминает позицию конца файла в
-/// момент ОТКРЫТИЯ. Один вызов <c>Write</c> без блокировки проблему не решает — <c>openhandle</c>
-/// дал 1 запись из 400. С блокировкой: 400/400, и то же на 3 и 4 процессах (6 прогонов, 0 потерь).
-/// </para>
-/// <para>
-/// ЦЕНА МОЛЧАНИЯ ЗДЕСЬ НЕСИММЕТРИЧНА. Журнал операций — механизм безопасности: потерянная запись
-/// означает, что повтор после перезапуска выглядит как «не выполнялось», то есть мутация может быть
-/// применена ВТОРОЙ раз. Поэтому запись журнала идёт под блокировкой, а не «почти всегда целой».
-/// </para>
-/// <para>
-/// ПОЧЕМУ ИМЯ, А НЕ БЛОКИРОВКА ФАЙЛА. Блокировка файла на запись запретила бы читать журнал
-/// работающему серверу и прибору — именно этот дефект и разбирается нарядом. Именованная блокировка
-/// сериализует ЗАПИСЬ, оставляя ЧТЕНИЕ свободным.
-/// </para>
+/// MEASURED: <c>FileMode.Append</c> is NOT atomic with two writers (381/400 survived, probe
+/// <c>scratch/_append_probe</c>, 21.09.2026); under this lock 400/400. History:
+/// docs/decisions/journaling.md#append-atomicity
+/// INVARIANT: writes are serialised, reads stay free — a lost record would let a replay re-apply the
+/// mutation. LIMIT: a named mutex, not a file lock — a file lock would also block readers.
 /// </remarks>
 public sealed class NamedFileLock : IDisposable
 {
@@ -33,10 +18,8 @@ public sealed class NamedFileLock : IDisposable
 
     private NamedFileLock(Mutex mutex) => _mutex = mutex;
 
-    /// <summary>
-    /// Блокировка для файла. Имя выводится из ПОЛНОГО пути (регистр не важен: Windows), поэтому два
-    /// процесса с одним файлом получают одну блокировку, а с разными — разные.
-    /// </summary>
+    /// <summary>Lock for <paramref name="filePath"/>. The name comes from the FULL path (case-insensitive on
+    /// Windows), so one file yields one lock and different files yield different locks.</summary>
     public static NamedFileLock For(string filePath, string purpose)
     {
         var normalized = Path.GetFullPath(filePath).ToLowerInvariant();
@@ -44,10 +27,8 @@ public sealed class NamedFileLock : IDisposable
         return new NamedFileLock(new Mutex(initiallyOwned: false, name: $"Local\\kompas-mcp-{purpose}-{hash}"));
     }
 
-    /// <summary>
-    /// Взять блокировку. Заброшенная блокировка (владелец убит) считается взятой: иначе один
-    /// упавший процесс запретил бы писать журнал навсегда.
-    /// </summary>
+    /// <summary>Acquire the lock. INVARIANT: an abandoned mutex (owner killed) counts as acquired — otherwise
+    /// one crashed process would block journal writes forever.</summary>
     public bool Enter(TimeSpan timeout)
     {
         try
@@ -62,7 +43,8 @@ public sealed class NamedFileLock : IDisposable
         return _held;
     }
 
-    /// <summary>Отпустить блокировку, если она наша. Молчание здесь — не признак успеха: не наша блокировка не отпускается.</summary>
+    /// <summary>Release only if we hold it. LIMIT: a named mutex is owned by a THREAD, so a mutex taken on
+    /// another thread is not released here; the refusal is swallowed, not read as success.</summary>
     public void Exit()
     {
         if (!_held)
@@ -77,7 +59,7 @@ public sealed class NamedFileLock : IDisposable
         }
         catch (ApplicationException)
         {
-            // Блокировка принадлежит другому потоку — отпускать её нельзя и не нужно.
+            // Owned by another thread — must not and need not be released.
         }
     }
 

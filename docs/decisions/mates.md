@@ -1,0 +1,30 @@
+# Mates — решения и измерения
+
+Модуль: `src/KompasMcp.Api5Adapter/Api5Session.Mate.cs`. Здесь — история правок, вынесенная из кода.
+Действующие правила остались в коде под метками `DOC:` / `MEASURED:` / `ASSUMPTION:`.
+
+## <a id="api5-addmateconstraint"></a>Отказ от ksDocument3D.AddMateConstraint (05.10.2026)
+
+**Что было.** Рассматривался документированный API5-метод `ksDocument3D.AddMateConstraint`
+(`ksdocument3d_addmateconstraint.html`) как метод ПОСТОЯННОГО сопряжения.
+
+**Что измерено.** На гранях, полученных документированным путём, метод вернул `False` при ВСЕХ
+документированных сочетаниях (`direction` 0/−1/1, `fixed` 0/1, `mc_Coincidence`/`mc_Distance`/
+`mc_Parallel`).
+
+**Что решено.** Причина не установлена; вопрос закрыт РЕШЕНИЕМ заказчика 05.10.2026 (формулировка
+«метод не работает» без причины запрещена). Используется документированный API7-путь:
+`IPart7.MateConstraints` → `IMateConstraints3D.Add(MateConstraintType)` → `BaseObject1/2` → `Update()`;
+подтверждение — `Valid`, а не `Update()=true`. Подтверждено живым прогоном (проба M,
+`tools/KompasMcp.Api7Probe --mate`): `Update()=True`, `Valid=True`, сопряжений 0 → 1.
+
+## <a id="mate-identity"></a>Тождество сопряжения по номеру (05.10.2026)
+
+**Что было.** `SetMateParameter` и `SetMateFixed` брали API7-сопряжение
+`IMateConstraints3D.MateConstraint3D[ordinal]` по номеру из API5-коллекции без всякой сверки;
+`ReadMates` брал `Valid`/`Alignment`/`Name` у объекта API7 по тому же номеру.
+
+**Что решено.** Соответствие порядков API7↔API5 — ПРЕДПОЛОЖЕНИЕ. Перед мутацией тип и базовые
+объекты сверяются (`MateIdentityMatches`); расхождение и «сверить нечем» отвергают мутацию
+(`STALE_REFERENCE`) одинаково. На чтении расхождение типов называется примечанием, а не молчанием
+(дефект M7 ревью 05.10.2026).

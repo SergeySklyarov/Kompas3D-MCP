@@ -8,40 +8,26 @@ using KompasMcp.Contracts;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>
-/// Домен сопряжений — блок C2, профиль <c>mates-minimal-v1</c>, режимы <c>MATE-01…MATE-06</c>.
-/// </summary>
+/// <summary>Mates domain — block C2, profile <c>mates-minimal-v1</c>, modes <c>MATE-01…MATE-06</c>.</summary>
 /// <remarks>
-/// <para>
-/// <b>Маршрут — решение заказчика 05.10.2026: документированный API7-путь.</b>
-/// <c>IPart7.MateConstraints</c> → <c>IMateConstraints3D.Add(MateConstraintType)</c> →
-/// <c>BaseObject1</c>/<c>BaseObject2</c> → <c>Update()</c>. Подтверждено живым прогоном
-/// (проба M, <c>tools/KompasMcp.Api7Probe --mate</c>): <c>Update()=True</c>, <c>Valid=True</c>,
-/// сопряжений 0 → 1.
-/// </para>
-/// <para>
-/// <b><c>ksDocument3D.AddMateConstraint</c> здесь НЕ применяется.</b> Он документирован как метод
-/// ПОСТОЯННОГО сопряжения (<c>ksdocument3d_addmateconstraint.html</c>), но на гранях, полученных
-/// документированным путём, вернул <c>False</c> при ВСЕХ документированных сочетаниях
-/// (<c>direction</c> 0/−1/1, <c>fixed</c> 0/1, <c>mc_Coincidence</c>/<c>mc_Distance</c>/
-/// <c>mc_Parallel</c>). Причина не установлена; вопрос закрыт решением заказчика, а не выводом
-/// «метод не работает».
-/// </para>
-/// <para>
-/// <b>Грань компонента.</b> Документированный <c>ksPart.BodyCollection() → ksBody.FaceCollection()</c>
-/// (<c>kspart_bodycollection.html</c>), затем перенос в API7 как <c>IModelObject</c>. Компонент
-/// адресуется порядковым номером (измерено в блоке C1).
-/// </para>
+/// ROUTE — customer decision 05.10.2026, the documented API7 path: <c>IPart7.MateConstraints</c> →
+/// <c>IMateConstraints3D.Add(MateConstraintType)</c> → <c>BaseObject1/2</c> → <c>Update()</c>;
+/// confirmation is <c>Valid</c>, not <c>Update()=true</c>. LIMIT: <c>ksDocument3D.AddMateConstraint</c>
+/// is NOT used — DOC documents it as a constant-mate method, but it returned <c>False</c> under every
+/// documented combination; cause not established, closed by customer decision.
+/// DOC: a component face is <c>ksPart.BodyCollection() → ksBody.FaceCollection()</c>
+/// (<c>kspart_bodycollection.html</c>), then transferred to API7 as <c>IModelObject</c>.
+/// History: docs/decisions/mates.md#api5-addmateconstraint
 /// </remarks>
 public sealed partial class Api5Session
 {
     private const string MateRefKind = "mate";
 
-    /// <summary>Полезная нагрузка ссылки на сопряжение: API5-объект, номер и тип.</summary>
+    /// <summary>Payload of a mate reference: the API5 object, its ordinal and type.</summary>
     private sealed record MatePayload(ksMateConstraint Mate5, int Ordinal, short ConstraintType);
 
     // ===================================================================================== MATE-02
-    /// <summary>Перечисление сопряжений сборки.</summary>
+    /// <summary>Enumerate the assembly's mates.</summary>
     public ListMatesResult ListMates(ListMatesCommand command)
     {
         var document = RequireAssembly(command.DocumentId);
@@ -57,7 +43,7 @@ public sealed partial class Api5Session
     }
 
     // ===================================================================================== MATE-01
-    /// <summary>Создать сопряжение между гранями двух компонентов.</summary>
+    /// <summary>Create a mate between faces of two components.</summary>
     public CreateMateResult CreateMate(CreateMateCommand command)
     {
         var document = RequireAssembly(command.DocumentId);
@@ -71,10 +57,9 @@ public sealed partial class Api5Session
 
         var mates7 = RequireMateConstraints(document);
 
-        // СЧЁТЧИК НЕ ПОДМЕНЯЕТСЯ НУЛЁМ. `?? 0` означало «сопряжений нет» там, где число просто не
-        // прочиталось; `?? before` — «число не изменилось» там же. Оба подменяли НЕИЗВЕСТНОЕ
-        // ИЗВЕСТНЫМ (дефект L9 ревью 05.10.2026): ложное «сопряжение не создано» и ложный отказ
-        // удаления, которое фактически прошло.
+        // THE COUNTER IS NOT REPLACED BY ZERO: `?? 0` meant "no mates" where the number was not read, and
+        // `?? before` meant "the number did not change" in the same place — both replaced the UNKNOWN
+        // with the KNOWN (defect L9, review 05.10.2026).
         var before = RequireMateCount(document, mates7, "до создания");
         var beforeRows = ReadMates(document, notes);
 
@@ -104,8 +89,9 @@ public sealed partial class Api5Session
         }
         catch (COMException ex)
         {
-            // Объект сопряжения УЖЕ создан вызовом Add: частичный эффект обязан поднять ревизию и
-            // отозвать ссылки, иначе модель изменилась, а ревизия и ссылки прежние (дефект M4).
+            // The mate object ALREADY exists (Add created it): a partial effect must bump the
+            // revision and revoke references, otherwise the model changed while the revision and
+            // references stay old (defect M4).
             BumpRevision(document, "mate.create.partial", invalidateAll: true);
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
@@ -133,12 +119,12 @@ public sealed partial class Api5Session
         var valid = Bool(() => mate.Valid);
         var after = RequireMateCount(document, mates7, "после создания");
 
-        // ПОДТВЕРЖДЕНИЕ — это Valid, а не «Update()=true»: измерено 05.10.2026, что сопряжение с
-        // двумя объектами ОДНОГО компонента тоже дало Update()=true, но Valid=false.
+        // CONFIRMATION IS Valid, not "Update()=true": MEASURED 05.10.2026 that a mate between two
+        // objects of the SAME component also gave Update()=true but Valid=false.
         if (updated != true || valid != true)
         {
-            // Недействительное сопряжение УЖЕ лежит в сборке: модель изменилась, и ревизия обязана
-            // это показать (дефект M4 ревью 05.10.2026).
+            // An invalid mate ALREADY lies in the assembly: the model changed, and the revision must
+            // show it (defect M4, review 05.10.2026).
             BumpRevision(document, "mate.create.partial", invalidateAll: true);
             throw new KompasContractException(
                 ErrorCodes.VerificationFailed,
@@ -160,13 +146,10 @@ public sealed partial class Api5Session
 
         var rows = ReadMates(document, notes);
 
-        // НОВОЕ СОПРЯЖЕНИЕ ИЩЕТСЯ РАЗНОСТЬЮ МНОЖЕСТВ, А НЕ «ПОСЛЕДНЕЙ СТРОКОЙ».
-        //
-        // `rows.LastOrDefault()` молча предполагает, что новое сопряжение добавлено в конец и что
-        // порядок коллекции совпадает с порядком API7-индексатора — то же непроверенное
-        // соответствие порядков, что и у компонентов (дефект M7 ревью 05.10.2026). Разность
-        // считается по МУЛЬТИМНОЖЕСТВУ подписей: два одинаковых сопряжения до создания дают два
-        // вхождения, и третье после — ровно одно новое.
+        // THE NEW MATE IS FOUND BY SET DIFFERENCE, NOT BY "THE LAST ROW": `rows.LastOrDefault()` assumes
+        // the new mate was appended and that the collection order matches the API7 indexer — the same
+        // unverified order correspondence as for components. The difference is over the MULTISET of
+        // signatures, so two identical mates before creation still yield exactly one new one.
         var created = FindNewMate(beforeRows, rows, out var createdNote);
         notes.Add(createdNote);
         if (created is null)
@@ -181,8 +164,8 @@ public sealed partial class Api5Session
 
         if (after <= before)
         {
-            // Число сопряжений не выросло, а результат уже выдан как успешный: это тот же дефект,
-            // что «успех при проваленной проверке» (M5 ревью 05.10.2026).
+            // The mate count did not grow while the result was already returned as success: the same
+            // defect as "success on a failed check" (M5, review 05.10.2026).
             throw new KompasContractException(
                 ErrorCodes.VerificationFailed,
                 $"Сопряжение НЕ создано: число сопряжений {before} → {after} при Update()={updated} " +
@@ -219,7 +202,7 @@ public sealed partial class Api5Session
     }
 
     // ===================================================================================== MATE-03
-    /// <summary>Изменить параметр сопряжения (расстояние или угол).</summary>
+    /// <summary>Change a mate parameter (distance or angle).</summary>
     public SetMateParameterResult SetMateParameter(SetMateParameterCommand command)
     {
         var document = RequireAssembly(command.DocumentId);
@@ -236,8 +219,9 @@ public sealed partial class Api5Session
                 RetryPolicy.ReacquireContext);
         }
 
-        // ТОЖДЕСТВО СВЕРЯЕТСЯ ДО МУТАЦИИ: номер из API5-коллекции применяется к API7-индексатору, и
-        // расхождение или нечитаемость означали бы запись параметра в ЧУЖОЕ сопряжение (дефект M7).
+        // IDENTITY IS CHECKED BEFORE THE MUTATION: the ordinal from the API5 collection is applied to
+        // the API7 indexer, and a mismatch or unreadability would write the parameter into a FOREIGN
+        // mate (defect M7).
         var identity = MateIdentityMatches(payload, mate, out var identityNote);
         if (identity != true)
         {
@@ -272,8 +256,8 @@ public sealed partial class Api5Session
                 Expected: command.ParamValue.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)),
         };
 
-        // ПРОВАЛ ОБЯЗАТЕЛЬНОЙ ПРОВЕРКИ — ЭТО НЕ УСПЕХ: перечитанный параметр не совпал с заданным
-        // (или не прочитан), а результат «выполнено» был бы ложью (дефект M5 ревью 05.10.2026).
+        // A FAILED MANDATORY CHECK IS NOT SUCCESS: the re-read parameter did not match the requested
+        // one (or was not read), and a result of "done" would be a lie (defect M5, review 05.10.2026).
         if (!matched)
         {
             throw new KompasContractException(
@@ -308,7 +292,7 @@ public sealed partial class Api5Session
     }
 
     // ===================================================================================== MATE-04
-    /// <summary>Задать признак фиксации компонентов сопряжением.</summary>
+    /// <summary>Set the component-fixing flag of a mate.</summary>
     public SetMateFixedResult SetMateFixed(SetMateFixedCommand command)
     {
         var document = RequireAssembly(command.DocumentId);
@@ -325,8 +309,8 @@ public sealed partial class Api5Session
                 RetryPolicy.ReacquireContext);
         }
 
-        // ТОЖДЕСТВО СВЕРЯЕТСЯ ДО МУТАЦИИ — тем же правилом, что у параметра: признак фиксации,
-        // записанный в ЧУЖОЕ сопряжение, — это изменение не той модели (дефект M7 ревью 05.10.2026).
+        // IDENTITY IS CHECKED BEFORE THE MUTATION — by the same rule as the parameter: a fixing flag
+        // written into a FOREIGN mate changes the wrong model (defect M7, review 05.10.2026).
         var identity = MateIdentityMatches(payload, mate, out var identityNote);
         if (identity != true)
         {
@@ -334,9 +318,9 @@ public sealed partial class Api5Session
         }
 
         var wanted = FixedFromName(command.Fixed);
-        // Чтение признака фиксации — ЯВНОЕ: непрочитанное значение не подменяется первым значением
-        // перечисления (прежний `Safe` давал `default(ksMateFixedTypeEnum)` = `ksMFixedUnknown`, то
-        // есть «снятие фиксации» там, где COM-чтение не состоялось).
+        // The fixing flag is read EXPLICITLY: an unread value is not replaced by the first enum value
+        // (the former `Safe` gave `default(ksMateFixedTypeEnum)` = `ksMFixedUnknown`, i.e. "unfix" where
+        // the COM read did not happen).
         var beforeRead = TryRead(() => mate.Fixed);
         try
         {
@@ -356,14 +340,13 @@ public sealed partial class Api5Session
         var afterRead = TryRead(() => mate.Fixed);
         BumpRevision(document, "mate.set_fixed");
 
-        // Совпадение подтверждается ТОЛЬКО прочитанным значением: `afterRead.Ok == false` — это «не
-        // прочитано», а не «совпало».
+        // A match is confirmed ONLY by a read value: `afterRead.Ok == false` is "not read", not "matched".
         var matched = afterRead.Ok && afterRead.Value == wanted;
         var before = beforeRead.Ok ? beforeRead.Value : (ksMateFixedTypeEnum?)null;
         var after = afterRead.Ok ? afterRead.Value : (ksMateFixedTypeEnum?)null;
 
-        // ПРОВАЛ ОБЯЗАТЕЛЬНОЙ ПРОВЕРКИ — ЭТО НЕ УСПЕХ (дефект M5 ревью 05.10.2026): признак
-        // фиксации записан, но перечитанное значение не совпало с заданным или не прочитано.
+        // A FAILED MANDATORY CHECK IS NOT SUCCESS (defect M5, review 05.10.2026): the fixing flag was
+        // written, but the re-read value did not match the requested one or was not read.
         if (!matched)
         {
             throw new KompasContractException(
@@ -399,7 +382,7 @@ public sealed partial class Api5Session
     }
 
     // ===================================================================================== MATE-05
-    /// <summary>Удалить сопряжение.</summary>
+    /// <summary>Delete a mate.</summary>
     public DeleteMateResult DeleteMate(DeleteMateCommand command)
     {
         var document = RequireAssembly(command.DocumentId);
@@ -408,9 +391,9 @@ public sealed partial class Api5Session
         var payload = RequireMate(document, command.MateRef);
         var before = MateConstraintCount(document, "до удаления");
 
-        // Удаление — документированный ksDocument3D.RemoveMateConstraint(constraintType, obj1, obj2)
-        // (ksdocument3d_removemateconstraint.html). Объекты берутся у самого сопряжения тем же
-        // документированным GetBaseObj(1|2) — «первый попавшийся» здесь был бы подменой адреса.
+        // Deletion is the documented ksDocument3D.RemoveMateConstraint(constraintType, obj1, obj2)
+        // (ksdocument3d_removemateconstraint.html). The objects are taken from the mate itself by the
+        // same documented GetBaseObj(1|2) — "the first one found" would be an address substitution.
         var first = Ref(() => payload.Mate5.GetBaseObj(1));
         var second = Ref(() => payload.Mate5.GetBaseObj(2));
         if (first is null || second is null)
@@ -441,8 +424,8 @@ public sealed partial class Api5Session
 
         if (!removed || after >= before)
         {
-            // Удаление, которое КОМПАС подтвердил, а перечитанное число — нет, означает: модель
-            // изменилась, а ревизия и ссылки об этом не знают (дефект M4 ревью 05.10.2026).
+            // A deletion that KOMPAS confirmed but the re-read count did not means: the model changed
+            // while the revision and references do not know about it (defect M4, review 05.10.2026).
             if (removed)
             {
                 BumpRevision(document, "mate.delete.partial", invalidateAll: true);
@@ -460,9 +443,10 @@ public sealed partial class Api5Session
                 });
         }
 
-        // DTO собирается ДО отзыва ссылок: `InvalidateDocument` снимает ВСЕ ссылки документа, и
-        // вызов `Require` после него отверг бы ту самую ссылку, которой удаляли. Это был дефект
-        // первой редакции: он выглядел как «ссылка не найдена» и уводил поиск в чужую сторону.
+        // The DTO is built BEFORE references are revoked: `InvalidateDocument` drops ALL references of
+        // the document, and a `Require` after it would reject the very reference used for deletion.
+        // This was a defect of the first revision: it looked like "reference not found" and sent the
+        // search the wrong way.
         var dto = ToDto(References.Require(command.MateRef, document.Id, document.Revision), "mate");
 
         References.InvalidateDocument(document.Id);
@@ -482,9 +466,9 @@ public sealed partial class Api5Session
                 new List<string>()));
     }
 
-    // ==================================================================================== помощники
+    // ==================================================================================== helpers
 
-    /// <summary>Сопряжения сборки как <c>IMateConstraints3D</c> (API7).</summary>
+    /// <summary>The assembly's mates as <c>IMateConstraints3D</c> (API7).</summary>
     private IMateConstraints3D RequireMateConstraints(DocumentEntry document)
     {
         var notes = new List<string>();
@@ -500,7 +484,7 @@ public sealed partial class Api5Session
         return mates;
     }
 
-    /// <summary>Сопряжение по порядковому номеру как <c>IMateConstraint3D</c> (API7).</summary>
+    /// <summary>A mate by ordinal as <c>IMateConstraint3D</c> (API7).</summary>
     private IMateConstraint3D? Mate7(DocumentEntry document, int ordinal)
     {
         try
@@ -513,30 +497,19 @@ public sealed partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// То ли это сопряжение: тип и базовые объекты API7 сверяются с API5-коллекцией по тому же номеру.
-    /// </summary>
+    /// <summary>Whether this is the same mate: the API7 type and base objects are compared against the API5
+    /// collection at the same ordinal.</summary>
     /// <returns>
-    /// <c>true</c> — тождество подтверждено; <c>false</c> — расхождение (номер ведёт в другое
-    /// сопряжение); <c>null</c> — сверить нечем.
+    /// <c>true</c> — identity confirmed; <c>false</c> — mismatch (the ordinal leads to another mate);
+    /// <c>null</c> — nothing to compare.
     /// </returns>
     /// <remarks>
-    /// <para>
-    /// <b>Зачем.</b> <c>SetMateParameter</c> и <c>SetMateFixed</c> брали API7-сопряжение
-    /// <c>IMateConstraints3D.MateConstraint3D[ordinal]</c> по номеру из API5-коллекции
-    /// <c>ksDocument3D.MateConstraintCollection</c> без всякой сверки: соответствие порядков API7↔API5
-    /// — ПРЕДПОЛОЖЕНИЕ того же рода, что и у компонентов. Если оно нарушено, параметр записывался бы в
-    /// ЧУЖОЕ сопряжение, а <c>ReadMates</c> читал бы у чужого объекта <c>Valid</c>/<c>Alignment</c>/
-    /// <c>Name</c> (дефект M7 ревью 05.10.2026).
-    /// </para>
-    /// <para>
-    /// <b>Что сверяется и по каким источникам.</b> Тип: API5 <c>ksMateConstraint.constraintType</c>
-    /// против API7 <c>IMateConstraint3D.ConstraintType</c>. Базовые объекты: API5
-    /// <c>ksMateConstraint.GetBaseObj(1|2)</c> против API7 <c>BaseObject1</c>/<c>BaseObject2</c> — по
-    /// НАЛИЧИЮ. Побитовое сравнение самих объектов не делается: перенос API5-объекта в API7 даёт
-    /// обёртку, тождество которой COM-объекту сопряжения живьём не измерялось, и ложное расхождение
-    /// заблокировало бы верную работу. Это названо, а не выдано за полную сверку.
-    /// </para>
+    /// WHY: the API7 mate is taken by the ordinal from the API5 collection, and the API7↔API5 order
+    /// correspondence is an ASSUMPTION of the same kind as for components; if violated, the parameter
+    /// would be written into a FOREIGN mate. WHAT IS COMPARED: type (API5 <c>constraintType</c> vs API7
+    /// <c>ConstraintType</c>) and base objects by PRESENCE. Bitwise comparison of the objects is NOT
+    /// done — the wrapper's identity to the COM mate was not MEASURED live, and a false mismatch would
+    /// block correct work. History: docs/decisions/mates.md#mate-identity
     /// </remarks>
     private bool? MateIdentityMatches(MatePayload payload, IMateConstraint3D mate7, out string detail)
     {
@@ -566,9 +539,9 @@ public sealed partial class Api5Session
             signals.Add("тип сопряжения со стороны API7 не прочитан");
         }
 
-        // Базовые объекты: признак информативен, только если хоть один объект где-то присутствует.
-        // «Оба сопряжения без базовых объектов» — это не подтверждение тождества, а отсутствие
-        // информации, и выдавать его за совпадение запрещено.
+        // Base objects: the signal is informative only if at least one object is present somewhere.
+        // "Both mates without base objects" is not a confirmation of identity but an absence of
+        // information, and passing it off as a match is forbidden.
         if (base1Api5 || base2Api5 || base1Api7 || base2Api7)
         {
             var equal = base1Api5 == base1Api7 && base2Api5 == base2Api7;
@@ -593,10 +566,8 @@ public sealed partial class Api5Session
         return confirmed ? true : null;
     }
 
-    /// <summary>
-    /// Отказ на неподтверждённом тождестве сопряжения: расхождение и «сверить нечем» запрещают мутацию
-    /// одинаково. Общая точка для <c>set_mate_parameter</c> и <c>set_mate_fixed</c>.
-    /// </summary>
+    /// <summary>Refusal on an unconfirmed mate identity: a mismatch and "nothing to compare" forbid the
+    /// mutation equally. Shared point for <c>set_mate_parameter</c> and <c>set_mate_fixed</c>.</summary>
     private KompasContractException MateIdentityRefusal(
         DocumentEntry document, string mateRef, MatePayload payload, bool? identity, string detail) =>
         new(
@@ -619,8 +590,9 @@ public sealed partial class Api5Session
             });
 
     /// <summary>
-    /// Число сопряжений по документированной API5-коллекции <c>ksDocument3D.MateConstraintCollection</c>.
-    /// Непрочитанное число — отказ, а не ноль и не прежнее значение.
+    /// The mate count from the documented API5 collection
+    /// <c>ksDocument3D.MateConstraintCollection</c>. An unread count is a refusal, not zero and not the
+    /// previous value.
     /// </summary>
     private static int MateConstraintCount(DocumentEntry document, string stage)
     {
@@ -638,10 +610,8 @@ public sealed partial class Api5Session
             details: new Dictionary<string, object?> { ["document_id"] = document.Id });
     }
 
-    /// <summary>
-    /// Число сопряжений, ПРОЧИТАННОЕ. Непрочитанное число — отказ, а не ноль: подтвердить создание
-    /// или удаление «по непрочитанному счётчику» нельзя.
-    /// </summary>
+    /// <summary>The mate count, READ. An unread count is a refusal, not zero: creation or deletion cannot be
+    /// confirmed "by an unread counter".</summary>
     private static int RequireMateCount(DocumentEntry document, IMateConstraints3D mates, string stage)
     {
         var count = SafeInt(() => mates.Count);
@@ -658,9 +628,7 @@ public sealed partial class Api5Session
             details: new Dictionary<string, object?> { ["document_id"] = document.Id });
     }
 
-    /// <summary>
-    /// Подпись строки сопряжения для сравнения двух снимков коллекции.
-    /// </summary>
+    /// <summary>A mate row signature for comparing two collection snapshots.</summary>
     private static string MateSignature(MateRowDto row) => string.Join('|',
         row.ConstraintType ?? "?",
         row.Fixed ?? "?",
@@ -671,13 +639,10 @@ public sealed partial class Api5Session
         row.BaseObject2 ?? "?",
         row.Valid?.ToString() ?? "?");
 
-    /// <summary>
-    /// Выделить сопряжение, которого не было в снимке <paramref name="before"/>.
-    /// </summary>
-    /// <remarks>
-    /// Сравнение идёт по МУЛЬТИМНОЖЕСТВУ подписей: два одинаковых сопряжения до создания дают два
-    /// вхождения, и третье после — ровно одно новое. «Последняя строка» такого не различает.
-    /// </remarks>
+    /// <summary>Pick the mate that was absent from the <paramref name="before"/> snapshot.</summary>
+    /// <remarks>Comparison is over the MULTISET of signatures: two identical mates before creation give two
+    /// occurrences, and a third after gives exactly one new one. "The last row" does not tell them
+    /// apart.</remarks>
     private static MateRowDto? FindNewMate(List<MateRowDto> before, List<MateRowDto> after, out string note)
     {
         var remaining = new List<string>(before.Select(MateSignature));
@@ -739,7 +704,7 @@ public sealed partial class Api5Session
         return payload;
     }
 
-    /// <summary>Чтение всех сопряжений сборки документированным <c>MateConstraintCollection</c>.</summary>
+    /// <summary>Read all assembly mates via the documented <c>MateConstraintCollection</c>.</summary>
     private List<MateRowDto> ReadMates(DocumentEntry document, List<string> notes)
     {
         var rows = new List<MateRowDto>();
@@ -760,9 +725,9 @@ public sealed partial class Api5Session
             return rows;
         }
 
-        // НЕПРОЧИТАННОЕ ЧИСЛО — ЭТО ОТКАЗ ЧТЕНИЯ, А НЕ «СОПРЯЖЕНИЙ НЕТ». Прежде `?? 0` давал
-        // пустой перечень, и «сопряжений нет» было неотличимо от «коллекция не ответила»
-        // (дефект L9 ревью 05.10.2026).
+        // AN UNREAD COUNT IS A READ FAILURE, NOT "NO MATES". The former `?? 0` gave an empty list, and
+        // "no mates" was indistinguishable from "the collection did not answer" (defect L9, review
+        // 05.10.2026).
         var count = SafeInt(() => mates.GetCount());
         if (count is null)
         {
@@ -785,11 +750,11 @@ public sealed partial class Api5Session
                 MateRefKind, document.Id, document.Revision,
                 new MatePayload(mate, index, (short)typeValue));
 
-            // СООТВЕТСТВИЕ ПОРЯДКОВ API7↔API5 НА ЧТЕНИИ ТОЖЕ НЕ ПОДРАЗУМЕВАЕТСЯ. `Valid`, `Alignment`
-            // и `Name` берутся у ОБЪЕКТА API7 по тому же номеру, и если тип API7 не совпал с типом
-            // API5, эти поля описывают ЧУЖОЕ сопряжение — строка об этом говорит, а не молчит
-            // (дефект M7 ревью 05.10.2026). Чтение отказом не является: строка честно называет
-            // непрочитанное, а мутация по этой ссылке будет отвергнута сверкой в
+            // THE API7↔API5 ORDER CORRESPONDENCE IS NOT ASSUMED ON READ EITHER. `Valid`, `Alignment`
+            // and `Name` are taken from the API7 object at the same ordinal, and if the API7 type did
+            // not match the API5 type, these fields describe a FOREIGN mate — the row says so instead of
+            // staying silent (defect M7, review 05.10.2026). The read is not a refusal: the row honestly
+            // names the unread part, and a mutation via this reference will be rejected by the check in
             // SetMateParameter/SetMateFixed.
             var mate7 = Mate7(document, index);
             var type7 = mate7 is null ? null : Int(() => (int)mate7.ConstraintType);
@@ -806,8 +771,8 @@ public sealed partial class Api5Session
                 MateRef = stored.Id,
                 Ordinal = index,
                 ConstraintType = MateTypeName(typeValue),
-                // `fixed` — ключевое слово C#, поэтому свойство берётся экранированным именем
-                // `@fixed` (ksmateconstraint_fixed.html: «fixed — признак фиксации»).
+                // `fixed` is a C# keyword, so the property is taken by its escaped name `@fixed`.
+                // DOC: ksmateconstraint_fixed.html — «fixed — признак фиксации».
                 Fixed = FixedName(SafeInt(() => mate.@fixed)),
                 ParamValue = SafeDouble(() => mate.distance),
                 Direction = SafeInt(() => mate.direction),
@@ -823,8 +788,8 @@ public sealed partial class Api5Session
     }
 
     /// <summary>
-    /// Грань компонента как <c>IModelObject</c>: документированный
-    /// <c>ksPart.BodyCollection() → ksBody.FaceCollection()</c> и перенос в API7.
+    /// A component face as <c>IModelObject</c>: the documented
+    /// <c>ksPart.BodyCollection() → ksBody.FaceCollection()</c>, then transfer to API7.
     /// </summary>
     private IModelObject FaceObject7(
         DocumentEntry document, string componentRef, int faceIndex, List<string> notes)
@@ -848,13 +813,10 @@ public sealed partial class Api5Session
                 RetryPolicy.ReacquireContext);
         }
 
-        // ТОЖДЕСТВО ПРОВЕРЯЕТСЯ И ЗДЕСЬ, И ТОЖЕ ОТКАЗЫВАЕТ НА «НЕ СВЕРЕНО»: грань берётся у компонента,
-        // найденного по номеру, и если номер ведёт в чужой экземпляр, сопряжение было бы создано между
-        // ЧУЖИМИ гранями. Решение — та же ЧИСТАЯ функция ComponentIdentity: отказ решает ИСТОЧНИК,
-        // нечитаемость источника (identity == null) запрещена так же, как расхождение. Имя и матрица
-        // размещения — примечания (см. IdentityMatches): снимок матрицы из ссылки устаревал от
-        // собственной мутации, и `create_mate` после смещения компонента сопряжением отвергался бы
-        // (регрессия п. 1 задания 05.10.2026).
+        // IDENTITY IS CHECKED HERE TOO, and it also refuses on "not compared": the face comes from the
+        // component found by ordinal, so a foreign ordinal would mate FOREIGN faces. The decision is the
+        // same PURE ComponentIdentity — the SOURCE decides, and an unreadable source (null) is forbidden
+        // like a mismatch. Name and matrix are notes (see IdentityMatches).
         var identity = IdentityMatches(part5, payload, out var identityNote);
         notes.Add("component_identity — " + identityNote);
         if (identity != true)
@@ -942,10 +904,8 @@ public sealed partial class Api5Session
             RetryPolicy.Never),
     };
 
-    /// <summary>
-    /// Имя типа сопряжения по документированному <c>MateConstraintType</c>; неизвестное значение
-    /// называется числом, а не подменяется ближайшим известным.
-    /// </summary>
+    /// <summary>Mate type name by the documented <c>MateConstraintType</c>; an unknown value is named by number,
+    /// not replaced by the nearest known one.</summary>
     private static string MateTypeName(int value) => value switch
     {
         -1 => "unknown",
@@ -964,14 +924,11 @@ public sealed partial class Api5Session
         _ => $"unknown_{value}",
     };
 
-    /// <summary>
-    /// Признак фиксации по имени. Отображение опирается на ДВА документированных источника, и их
-    /// расхождение названо, а не сглажено: <c>ksmatefixedtypeenum.html</c> — «ksMFixedUnknown = 0,
-    /// Неопределено; ksMFixedPart1 = 1; ksMFixedPart2 = 2», <c>mateconstraintfixed.html</c> —
-    /// «0 нет фиксации, 1 фиксировать деталь 1, 2 фиксировать деталь 2». То есть значение 0 в
-    /// перечислении API5 названо «Неопределено», а в константах API7 — «нет фиксации»; публичное имя
-    /// <c>none</c> следует ВТОРОМУ источнику, потому что оно описывает смысл, а не имя константы.
-    /// </summary>
+    /// <summary>Fixing flag by name. DOC: <c>ksmatefixedtypeenum.html</c> — «ksMFixedUnknown = 0, Неопределено;
+    /// ksMFixedPart1 = 1; ksMFixedPart2 = 2»; DOC: <c>mateconstraintfixed.html</c> — «0 нет фиксации,
+    /// 1 фиксировать деталь 1, 2 фиксировать деталь 2». The two sources diverge and the divergence is
+    /// named: value 0 is "Неопределено" in the API5 enum but "no fixing" in the API7 constants, and the
+    /// public name <c>none</c> follows the SECOND source.</summary>
     private static ksMateFixedTypeEnum FixedFromName(string name) => name switch
     {
         "none" => ksMateFixedTypeEnum.ksMFixedUnknown,
@@ -993,8 +950,8 @@ public sealed partial class Api5Session
     };
 
     /// <summary>
-    /// Имя по СЫРОМУ числовому значению (поле <c>ksMateConstraint.fixed</c>). Та же нумерация, что и
-    /// у <see cref="FixedFromName"/>: 0 — «нет фиксации» по <c>mateconstraintfixed.html</c>.
+    /// Name by the RAW numeric value (field <c>ksMateConstraint.fixed</c>). Same numbering as
+    /// <see cref="FixedFromName"/>: 0 is "no fixing" per <c>mateconstraintfixed.html</c>.
     /// </summary>
     private static string? FixedName(int? value) => value switch
     {
@@ -1027,7 +984,7 @@ public sealed partial class Api5Session
         _ => $"enum_{(int)value.Value}",
     };
 
-    /// <summary>Имя типа базового объекта — как его называет сам КОМПАС, без догадок.</summary>
+    /// <summary>Base-object type name — as KOMPAS itself calls it, no guessing.</summary>
     private static string? ObjectTypeName(object? value)
         => value is null ? null : value.GetType().Name;
 }

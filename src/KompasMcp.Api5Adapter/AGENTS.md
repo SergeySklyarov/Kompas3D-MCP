@@ -28,15 +28,29 @@ API7. One `Api5Session` partial class, one file per domain.
 - DOC: `ksdocument3d_addmateconstraint.html`, `ksmateconstraint_fixed.html`,
   `ksdocument3d_removemateconstraint.html`.
 
-### solid ops
+### solid ops (`Api5Session.SolidOps.cs`, `SolidRead.cs`, `Features.cs`, `FeatureEdit.B5.cs`, `FeatureRead.B5.cs`)
 
-TODO — section pending the module cleanup.
+- ROUTE: body operations go through the documented API7 bridge; `Create()/Update() = true` means
+  "accepted", never "applied" — the geometry is re-read (volume, body count, topology).
+- INVARIANT: the document comes from the TARGET-BODY reference, and the named `document_id` is checked
+  against it; a foreign reference is rejected, not "reduced" to the named document.
+- INVARIANT: an unread value is `null`, never zero or the previous value (fix M6, review 05.10.2026).
+- LIMIT: feature type numbers are measured, not guessed — a hole feature lives at `583`, not `52`.
 
-### sketch
+### sketch (`Api5Session.SketchEntities.cs`, `SketchPlane.cs`, `SketchStatus.cs`, `AuxGeometry.cs`)
 
-TODO — section pending the module cleanup.
+- INVARIANT: entering a sketch to read it is read-only (`BeginEditEx(true)`), so the revision is
+  returned but NOT bumped — declaring a read as a change would invalidate the caller's references.
+- INVARIANT: a plane is built by three model points so that `(P2−P1)×(P3−P1)` equals the REQUESTED
+  normal, not a random rotation of it in the plane.
+- DOC: `ksdocument3d_partcollection.html`, `kspart_bodycollection.html`, `ipart7_getsummmatrix.html`.
 
 ## History
 
+- `docs/decisions/adapter-core.md`
+- `docs/decisions/adapter-solid.md`
+- `docs/decisions/adapter-features.md`
+- `docs/decisions/adapter-sketch.md`
+- `docs/decisions/adapter-api7.md`
 - `docs/decisions/assembly.md`
 - `docs/decisions/mates.md`

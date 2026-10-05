@@ -9,78 +9,61 @@ using KompasMcp.Domain.Geometry;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>
-/// Родное отверстие (docs/05 SM-07): три измеренных режима и позиция вне начала координат.
-/// </summary>
+/// <summary>Native hole (docs/05 SM-07): three measured modes and a position away from the origin.</summary>
 /// <remarks>
-/// <para>
-/// Основание — проба M от 16.09.2026 (<c>docs/acceptance/api7/hole-modes.md</c>), а не имена методов:
-/// <list type="bullet">
-/// <item>M.2 — цековка: пилот Ø10 насквозь, выточка Ø18 глубиной 4. Снято 703.7167544041131 мм³
-/// СВЕРХ сквозного отверстия, что есть π/4·(18²−10²)·4 = 703.7167544041137 — кольцо, а не второй
-/// полный цилиндр. Первый набросок формулы складывал пилот с целым цилиндром Ø18 и тем самым
-/// считал пилот дважды;</item>
-/// <item>M.3 — зенковка: правило <c>π·h/3·(rM² + rP·rM − 2·rP²)</c> прочитано с таблицы из 11 строк
-/// (3 угла × 3 входные глубины × 6 диаметров), а приёмка отказывается проходить, пока не сойдётся
-/// ВСЯ таблица. Ключевое наблюдение — <c>CountersinkDepth</c> ПРОИЗВОДНА: запись 2, 4 и 6 не
-/// меняет ничего, объект возвращает <c>(rM − rP)/tan(угол/2)</c>, и судить надо по возвращённому
-/// числу. Первая редакция этого текста называла закон <c>4/tan(угол/2)</c> — константа была
-/// подогнана под единственную строку таблицы, где <c>rM − rP = 4</c>; проба N.2 от 17.09.2026
-/// развела устье при неизменных пилоте и угле (Ø14/16/18/20/24 → h = 2/3/4/5/7) и тем самым
-/// показала, что «4» — это разность радиусов той строки, а не постоянная;</item>
-/// <item>M.4 — глухое с плоским дном: снято 471.238898038471 против аналитических π·5²·6 =
-/// 471.238898038469. Члена <c>ksDTBlind</c> в вендорском перечислении нет вовсе — глухое
-/// выражается <c>ksDTValue</c>;</item>
-/// <item>M.5 — позиция вне начала координат: из пяти маршрутов сдвинуло ровно один,
+/// Basis — probe M of 16.09.2026 (<c>docs/acceptance/api7/hole-modes.md</c>), not method names:
+/// TEST: M.2 — counterbore: a Ø10 pilot through, a Ø18 recess 4 deep. Removed 703.7167544041131 mm³
+/// OVER the through hole, which is π/4·(18²−10²)·4 = 703.7167544041137 — a ring, not a second full
+/// cylinder. A first draft of the formula added the pilot to a full Ø18 cylinder and thereby counted
+/// the pilot twice.
+/// TEST: M.3 — countersink: the rule <c>π·h/3·(rM² + rP·rM − 2·rP²)</c> was read from an 11-row
+/// table (3 angles × 3 entry depths × 6 diameters), and acceptance refuses to pass until the WHOLE
+/// table agrees. Key observation — <c>CountersinkDepth</c> is DERIVED: writing 2, 4 and 6 changes
+/// nothing, the object returns <c>(rM − rP)/tan(angle/2)</c>, and one must judge by the returned
+/// number. Probe N.2 of 17.09.2026 separated the mouth with the pilot and angle unchanged
+/// (Ø14/16/18/20/24 → h = 2/3/4/5/7), showing "4" was the radius difference of that row, not a
+/// constant.
+/// TEST: M.4 — blind with a flat bottom: removed 471.238898038471 vs the analytic π·5²·6 =
+/// 471.238898038469. The member <c>ksDTBlind</c> does not exist in the vendor enum at all — blind is
+/// expressed by <c>ksDTValue</c>.
+/// TEST: M.5 — position away from the origin: of five routes exactly one shifted it,
 /// <c>Point3DParamSurface</c> + <c>OffsetType=ksOffsetByCoords</c> + <c>Offset1</c>/<c>Offset2</c>.
-/// Отверстие Ø10 встало точно в (25, 15). <c>AssociationVertex</c> и <c>DirectionObject</c> дали
-/// DISP_E_TYPEMISMATCH, эскиз со смещённой окружностью до API7 не доехал, <c>DepthVertex</c> и
-/// <c>DepthFace</c> читаются как null, <c>Axis</c> как False.</item>
-/// </list>
-/// </para>
-/// <para>
-/// Почему маршрут API7, а не API5. Отверстие в API5 есть (<c>NewEntity(o3d_hole=52)</c>), но
-/// параметров режима в его определении нет физически: проба M трижды отвергла попытку записать
-/// режимные числа в сам <c>IHole3D</c>, пока не выяснилось, что они живут на <c>HoleParameters</c>,
-/// приведённом к интерфейсу СВОЕГО режима. Это структурная причина, а не удобство: «цековка»
-/// и «зенковка» отличаются не значением перечисления, а интерфейсом параметров.
-/// </para>
-/// <para>
-/// Объём читается только по ГЛАВНОМУ телу — <c>ReadVolume</c>, как у скругления и фаски. Ожидание
-/// дельты задаёт вызывающий: без него подтверждается лишь чтение параметров обратно, и результат
-/// честно помечается недоказанной геометрией, а не выдаётся за подтверждённый.
-/// </para>
+/// A Ø10 hole landed exactly at (25, 15). <c>AssociationVertex</c> and <c>DirectionObject</c> gave
+/// DISP_E_TYPEMISMATCH, a sketch with an offset circle did not reach API7, <c>DepthVertex</c> and
+/// <c>DepthFace</c> read as null, <c>Axis</c> as False.
+/// ROUTE — API7, not API5: a hole exists in API5 (<c>NewEntity(o3d_hole=52)</c>), but its definition
+/// physically has no mode parameters — probe M three times rejected writing mode numbers into
+/// <c>IHole3D</c> itself until it turned out they live on <c>HoleParameters</c> cast to the interface
+/// of ITS OWN mode. This is a structural cause, not convenience: "counterbore" and "countersink"
+/// differ not by an enum value but by the parameter interface.
+/// INVARIANT: volume is read only on the MAIN body — <c>ReadVolume</c>, as for fillet and chamfer. The
+/// delta expectation is set by the caller; without it only the parameter read-back is confirmed, and
+/// the result is honestly marked unproven geometry rather than presented as confirmed.
+/// History: docs/decisions/adapter-features.md#hole-route
 /// </remarks>
 public partial class Api5Session
 {
-    /// <summary>Имя семейства отверстия в ответах сервера.</summary>
+    /// <summary>Hole family name in server responses.</summary>
     private const string HoleFamily = "hole";
 
-    /// <summary>Допуск сопоставления тела с отверстием по радиусу цилиндрической грани, мм.</summary>
+    /// <summary>Tolerance for matching a body to a hole by the cylindrical-face radius, mm.</summary>
     private const double HoleRadiusToleranceMm = 0.01d;
 
-    /// <summary>
-    /// Допуск сверки ЗАПИСАННОГО числа с перечитанным на правке, мм.
-    /// </summary>
-    /// <remarks>
-    /// <c>1e-6</c> — тот же допуск, которым сверяется записанное с перечитанным при СОЗДАНИИ
-    /// (<c>HoleParametersMatch</c>), и он не «на глаз»: зонд <c>scratch/_hole_edit_probe.py</c>
-    /// прочитал записанные 10, 12, 20, 24, 5, 4 и 90 БЕЗ расхождения вовсе, а производная глубина
-    /// зенковки вернулась как <c>7.000000000000001</c> — то есть собственный шум ядра лежит далеко
-    /// за пределами этого допуска, и он не маскирует «не применилось».
-    /// </remarks>
+    /// <summary>Tolerance for comparing the WRITTEN number with the read-back one on edit, mm.</summary>
+    /// <remarks><c>1e-6</c> is the same tolerance used on CREATION (<c>HoleParametersMatch</c>), and it
+    /// is not "by eye": the probe <c>scratch/_hole_edit_probe.py</c> read back 10, 12, 20, 24, 5, 4 and
+    /// 90 with no divergence at all, while the derived countersink depth returned as
+    /// <c>7.000000000000001</c> — the kernel's own noise is far beyond this tolerance and does not mask
+    /// "not applied".</remarks>
     private const double HoleEditToleranceMm = 1e-6d;
 
-    /// <summary>
-    /// Создание родного отверстия измеренного режима. Отказ моста отдаётся
-    /// <c>CAPABILITY_UNAVAILABLE</c> с причиной, а не молчаливым null: вызывающий обязан отличать
-    /// «API7 недоступен» от «КОМПАС отверг параметр».
-    /// </summary>
-    /// <remarks>
-    /// Опорная грань берётся по явной ссылке <c>face:</c>, а не «верхней гранью тела». Проба M
-    /// выбирала самую большую грань по площади, но это был приём пробы: <c>BaseSurface</c> — это
-    /// решение клиента о том, где сверлить, и подменять его догадкой сервер не вправе.
-    /// </remarks>
+    /// <summary>Create a native hole of a measured mode. A bridge refusal is returned as
+    /// <c>CAPABILITY_UNAVAILABLE</c> with a cause, not a silent null: the caller must tell "API7
+    /// unavailable" from "KOMPAS rejected the parameter".</summary>
+    /// <remarks>The base face is taken by an explicit <c>face:</c> reference, not "the top face of the
+    /// body". Probe M chose the largest face by area, but that was a probe technique: <c>BaseSurface</c>
+    /// is the client's decision where to drill, and the server may not substitute a guess for
+    /// it.</remarks>
     public HoleResult Hole(HoleCommand command)
     {
         if (!References.TryGet(command.FaceRef, out var anchor) || anchor is null)
@@ -118,8 +101,8 @@ public partial class Api5Session
                 RetryPolicy.ReacquireContext);
         }
 
-        // IChamfer.BaseObjects и IHoleDisposal.BaseSurface принимают объект API7, поэтому грань
-        // обязана пересечь мост: непереданная грань — это значение, которое API7 не примет.
+        // IChamfer.BaseObjects and IHoleDisposal.BaseSurface take an API7 object, so the face must
+        // cross the bridge: an untransferred face is a value API7 will not accept.
         var baseSurface = bridge.TransferTo7(face) as IModelObject;
         if (baseSurface is null)
         {
@@ -145,9 +128,9 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["api7_failure"] = failure });
         }
 
-        // Без RebuildModel запись в API7 остаётся представлением: это измерено пробой E на
-        // IExtrusion.Sketch и повторено на фаске F.10 и скруглении. Порядок вызовов — часть
-        // контракта, а не стиль.
+        // Without RebuildModel the API7 write stays a representation: MEASURED by probe E on
+        // IExtrusion.Sketch and repeated on the chamfer F.10 and the fillet. The call order is part of
+        // the contract, not style.
         Api7Bridge.Rebuild(container, document.Document);
         BumpRevision(document, "hole." + command.Mode.ToString().ToLowerInvariant());
 
@@ -157,9 +140,9 @@ public partial class Api5Session
 
         var count = Api7Hole.Count(container);
         var readBack = count is int n and > 0 ? Api7Hole.Read(container, n - 1) : null;
-        // Читаются ВСЕ оси подходящего радиуса, а не первая: при нескольких отверстиях одного
-        // диаметра «первое совпадение» — это ось соседа, и координата созданного признака была бы
-        // приписана ему. Ниже запрошенная позиция сверяется со списком отдельно.
+        // ALL axes of the matching radius are read, not the first: with several holes of one diameter
+        // "the first match" is a neighbour's axis, and the created feature's coordinate would be
+        // attributed to it. Below, the requested position is compared against the list separately.
         var axisOrigins = Api7Hole.FindCylinderOrigins(
             document.PartNow(), command.DiameterMm / 2d, HoleRadiusToleranceMm);
         var center = axisOrigins.Count > 0 ? axisOrigins[0] : null;
@@ -183,9 +166,9 @@ public partial class Api5Session
         {
             var wantedX = command.OffsetXMm ?? 0d;
             var wantedY = command.OffsetYMm ?? 0d;
-            // Ищется СРЕДИ ВСЕХ осей, а не у первой: запрос «сдвинь в (25, 15)» удовлетворён, если
-            // ось с такими координатами есть на теле, и не удовлетворён, если её нет, даже когда
-            // рядом стоит чужая ось подходящего радиуса.
+            // It is searched AMONG ALL axes, not at the first: the request "shift to (25, 15)" is
+            // satisfied if an axis with those coordinates exists on the body, and not satisfied if it
+            // does not, even when a foreign axis of the matching radius stands nearby.
             var matching = axisOrigins.FirstOrDefault(o =>
                 Math.Abs(o[0] - wantedX) <= 0.5d && Math.Abs(o[1] - wantedY) <= 0.5d);
             checks.Add(new NamedCheck(
@@ -243,10 +226,10 @@ public partial class Api5Session
 
         if (command.Mode == HoleMode.ThroughCountersink)
         {
-            // Производная глубина — измеренная особенность, а не оговорка: при способе
-            // «диаметр + угол» запись в CountersinkDepth не действует, и объект возвращает
-            // своё число. Поэтому в ответе публикуется возвращённое, и здесь сказано, почему
-            // оно может отличаться от запрошенного.
+            // The derived depth is a MEASURED feature, not a caveat: with the "diameter + angle" method
+            // writing to CountersinkDepth has no effect and the object returns its own number. The
+            // returned value is therefore published, and it is stated here why it may differ from the
+            // requested one.
             unverified.Add(
                 "countersink_depth_derived — при способе «диаметр + угол» глубина зенковки " +
                 "производна от угла (измерено M.3: запись 2/4/6 не меняет ничего, объект " +
@@ -261,8 +244,8 @@ public partial class Api5Session
         var reference = FindHoleEntity(document);
         if (reference is null)
         {
-            // Ссылку на признак, которого дерево API5 не показывает, выдавать нельзя: правка по
-            // ней всё равно упала бы, а вызывающий узнал бы об этом позже.
+            // A reference to a feature the API5 tree does not show must not be issued: an edit through
+            // it would fail anyway, and the caller would learn of it later.
             unverified.Add("feature_ref_withheld — признак не найден в дереве API5, ссылка не выдана");
             return new HoleResult(
                 null,
@@ -294,11 +277,9 @@ public partial class Api5Session
             string.Join(", ", placementNotes));
     }
 
-    /// <summary>
-    /// Один режим — одна ветка. Возвращается (создано, причина отказа, возвращённая глубина
-    /// зенковки): тройка, а не пара, потому что у зенковки есть поле, которое объект считает сам,
-    /// и потерять его значило бы выдать записанное число за действующее.
-    /// </summary>
+    /// <summary>One mode — one branch. Returns (created, failure cause, reported countersink depth): a
+    /// triple, not a pair, because the countersink has a field the object computes itself, and losing
+    /// it would pass a written number off as the effective one.</summary>
     private static (bool Created, string? Failure, double? ReportedDepth) CreateHoleMode(
         Api7Bridge bridge,
         IModelContainer container,
@@ -306,12 +287,13 @@ public partial class Api5Session
         IModelObject baseSurface,
         List<string> placementNotes)
     {
-        // Позиция — ОБЩИЙ шаг для всех трёх режимов, а не особенность глухого. Прежняя редакция
-        // поддерживала смещение только в ветке blind_flat: приёмка HO.6 показала, что сквозная
-        // цековка с offset_x_mm=-20 при этом МОЛЧА оставалась в начале координат и возвращала
-        // err=None, то есть неверная позиция выдавалась за выполненную. Поэтому смещение
-        // оформлено вставным шагом, который каждый режим выполняет между Add() и Update() на СВОЁМ
-        // же объекте: отдельный Add() завёл бы второй признак, а первый остался бы недостроенным.
+        // The position is a COMMON step for all three modes, not a blind-specific one. An earlier
+        // revision supported the offset only in the blind_flat branch: acceptance HO.6 showed that a
+        // through counterbore with offset_x_mm=-20 SILENTLY stayed at the origin and returned err=None,
+        // passing a wrong position off as done. The offset is therefore an injected step each mode runs
+        // between Add() and Update() on ITS OWN object: a separate Add() would create a second feature
+        // and leave the first unfinished.
+        // History: docs/decisions/adapter-features.md#hole-offset-common
         var wantsOffset = command.OffsetXMm is not null || command.OffsetYMm is not null;
         Func<IHoleDisposal, PlacementOutcome>? place = wantsOffset
             ? disposal =>
@@ -353,8 +335,8 @@ public partial class Api5Session
                     command.DiameterMm,
                     command.CountersinkDiameterMm!.Value,
                     command.CountersinkAngleDeg!.Value,
-                    // Глубина записывается нулём и не притворяется значимой: при способе
-                    // «диаметр + угол» она производна, и запись в неё не действует (M.3).
+                    // The depth is written as zero and does not pretend to be meaningful: with the
+                    // "diameter + angle" method it is derived and writing to it has no effect (M.3).
                     depthMm: 0d,
                     place);
                 return (countersink.Created, countersink.Failure, countersink.ReportedDepthMm);
@@ -364,12 +346,11 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Правила «поля ↔ режим». Отклоняются до COM: режимные числа разных режимов живут в разных
-    /// интерфейсах, и «применили, что смогли, остальное проигнорировали» здесь было бы молча неверной
-    /// геометрией. Наличие проверки оплачено измерением — цена ошибки в этом месте не симметрична:
-    /// лишний отказ виден сразу, а принятое и проигнорированное число доживает до приёмки.
-    /// </summary>
+    /// <summary>"Field ↔ mode" rules. Refused before COM: mode numbers of different modes live in
+    /// different interfaces, and "applied what we could, ignored the rest" would be silently wrong
+    /// geometry here. The check is paid for by measurement — the cost of a mistake here is asymmetric:
+    /// a spurious refusal is seen at once, while an accepted-and-ignored number survives to
+    /// acceptance.</summary>
     private static void ValidateHoleMode(HoleCommand command)
     {
         if (command.DiameterMm <= 0d)
@@ -422,8 +403,9 @@ public partial class Api5Session
 
                 if (bore <= command.DiameterMm)
                 {
-                    // Выточка уже пилота не снимает ничего: измеренная формула M.2 даёт ноль или
-                    // отрицательное кольцо, то есть признак построится «успешно» без геометрии.
+                    // A recess narrower than the pilot removes nothing: the MEASURED formula M.2 gives
+                    // zero or a negative ring, so the feature would build "successfully" with no
+                    // geometry.
                     throw new KompasContractException(
                         ErrorCodes.InvalidArgument,
                         "Диаметр выточки обязан быть больше диаметра пилота: выточка уже пилота не " +
@@ -486,8 +468,9 @@ public partial class Api5Session
                     RetryPolicy.Never);
         }
 
-        // Смещение задаётся парой или не задаётся вовсе: одно число из двух оставило бы вторую
-        // координату на усмотрение сервера, то есть в ответе оказалась бы не та позиция, что просили.
+        // The offset is given as a pair or not at all: one number of the two would leave the other
+        // coordinate to the server's discretion, so the response would carry a different position than
+        // requested.
         if ((command.OffsetXMm is null) != (command.OffsetYMm is null))
         {
             throw new KompasContractException(
@@ -510,31 +493,20 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Последний элемент операции с <c>type = 52</c> (<c>o3d_hole</c>) в дереве API5. Поиск по типу
-    /// и порядку, а не по имени: имя, данное в API5, читается из API7 иначе — измерено на фаске
-    /// (F.8: «f-ch2» → «Фаска:1») — имя идентификатором признака не является.
-    /// </summary>
-    /// <summary>
-    /// Последний элемент операции, который и есть признак отверстия. Поиск идёт по
-    /// <see cref="KompasObjectTypes.Hole3D"/> (583, <c>o3d_Hole3D</c>), а НЕ по
-    /// <see cref="KompasObjectTypes.HoleOperation"/> (52).
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Это исправление измеренного дефекта, а не переименование. Первая версия искала 52 —
-    /// <c>o3d_holeOperation</c>, то есть номер, под которым признак СОЗДАЁТСЯ через
-    /// <c>NewEntity(52)</c>. Проба N.1 от 17.09.2026 напечатала обе коллекции дерева до и после
-    /// создания и обе стороны вопроса: <c>NewEntity(52).type = 52 (o3d_holeOperation)</c>, а живой
-    /// <c>IHoles3D[0].ModelObjectType = 583 (o3d_Hole3D)</c>; в дереве при этом появилась ровно одна
-    /// запись — <c>OperationElement(110)[1] type=583 («Отверстие:1»)</c>. Номера 52 в дереве не
-    /// появилось ни разу. Поэтому поиск по 52 не находил созданное API7 отверстие никогда,
-    /// <c>feature_ref</c> не выдавался, и причина списывалась на «признак не виден в дереве».
-    /// </para>
-    /// <para>
-    /// Обе коллекции просматриваются намеренно: «OperationElement = 110» — лишь одна из них, и
-    /// отсутствие признака в одной не означало бы отсутствия в дереве вообще.
-    /// </para>
+    /// <summary>The last operation element, which is the hole feature. The search is by
+    /// <see cref="KompasObjectTypes.Hole3D"/> (583, <c>o3d_Hole3D</c>), NOT by
+    /// <see cref="KompasObjectTypes.HoleOperation"/> (52).</summary>
+    /// <remarks>This corrects a MEASURED defect, not a rename. An earlier version searched 52 —
+    /// <c>o3d_holeOperation</c>, the number the feature is CREATED with via <c>NewEntity(52)</c>. Probe
+    /// N.1 of 17.09.2026 printed both tree collections before and after creation: <c>NewEntity(52).type
+    /// = 52 (o3d_holeOperation)</c>, while the live <c>IHoles3D[0].ModelObjectType = 583
+    /// (o3d_Hole3D)</c>; exactly one entry appeared in the tree — <c>OperationElement(110)[1] type=583
+    /// («Отверстие:1»)</c>. The number 52 never appeared in the tree. So the search by 52 never found
+    /// the API7-created hole, <c>feature_ref</c> was not issued, and the cause was blamed on "the
+    /// feature is not visible in the tree".
+    /// Both collections are scanned deliberately: "OperationElement = 110" is only one of them, and a
+    /// feature's absence from one would not mean absence from the tree at all.
+    /// History: docs/decisions/adapter-features.md#hole-tree-type
     /// </remarks>
     private static ksEntity? FindHoleEntity(DocumentEntry document)
     {
@@ -570,11 +542,9 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Сверка записанного с перечитанным. Сравниваются только те поля, которые режим действительно
-    /// читает: у зенковки глубина НЕ сравнивается с запрошенной, потому что она производна, и
-    /// требовать совпадения значило бы приёмке заведомо ложное утверждение.
-    /// </summary>
+    /// <summary>Compare the written with the read-back. Only the fields the mode actually reads are
+    /// compared: for the countersink the depth is NOT compared with the requested one because it is
+    /// derived, and demanding a match would give acceptance a knowingly false claim.</summary>
     private static bool HoleParametersMatch(HoleReadDto? read, HoleCommand command)
     {
         if (read is null)
@@ -624,27 +594,17 @@ public partial class Api5Session
     private static string Fmt(double? value) =>
         value?.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture) ?? "не читается";
 
-    /// <summary>
-    /// Что сервер видит по отверстию: тип, диаметр, глубина и параметры режима.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Читается ТОЛЬКО из API7, и это измеренный факт, а не выбор: в вендорской обёртке
-    /// <c>Interop.Kompas6API5</c> типа <c>ksHoleDefinition</c> НЕ СУЩЕСТВУЕТ вовсе — среди 67
-    /// объявленных определений (<c>ksChamferDefinition</c> и <c>ksFilletDefinition</c> есть,
-    /// отверстия нет). Отверстие описывается признаком с <c>type = 52</c> (<c>o3d_hole</c>), но
-    /// определения у него в API5 нет, а значит и читать его параметры оттуда нечем. Ровно поэтому
-    /// SM-07 и ушёл на маршрут API7 (ADR-004 §3): не «удобнее», а «в API5 не выражено».
-    /// </para>
-    /// <para>
-    /// Признак адресуется ИНДЕКСОМ в <c>IModelContainer.Holes3D</c>. Если отверстий несколько, а
-    /// вызывающий назвал не то, — числа были бы чужими, поэтому сопоставление однозначное:
-    /// при неоднозначности возвращается null, и уровень подтверждения падает честно.
-    /// </para>
-    /// <para>
-    /// Пустое поле означает «не прочитано», а не «ноль».
-    /// </para>
-    /// </remarks>
+    /// <summary>What the server sees of a hole: type, diameter, depth and mode parameters.</summary>
+    /// <remarks>Read ONLY from API7, and this is a MEASURED fact, not a choice: in the vendor wrapper
+    /// <c>Interop.Kompas6API5</c> the type <c>ksHoleDefinition</c> does NOT EXIST at all — among 67
+    /// declared definitions (<c>ksChamferDefinition</c> and <c>ksFilletDefinition</c> are there, the
+    /// hole is not). A hole is described by a feature with <c>type = 52</c> (<c>o3d_hole</c>), but it
+    /// has no definition in API5, so its parameters cannot be read from there. This is exactly why
+    /// SM-07 took the API7 route (ADR-004 §3): not "more convenient" but "not expressible in API5".
+    /// The feature is addressed by INDEX in <c>IModelContainer.Holes3D</c>; with several holes and the
+    /// caller naming the wrong one the numbers would be foreign, so the match is unambiguous — on
+    /// ambiguity null is returned and the confirmation level honestly drops.
+    /// An empty field means "not read", not "zero".</remarks>
     private HoleDto? ReadHole(DocumentEntry document, int index)
     {
         var bridge = BridgeFor(document);
@@ -676,25 +636,17 @@ public partial class Api5Session
                 : null);
     }
 
-    /// <summary>
-    /// Параметры отверстия для СУЩЕСТВУЮЩЕГО признака дерева — тот же <see cref="ReadHole"/>, но
-    /// без индекса от вызывающего: вызывающий назвал признак, и сопоставление обязано быть
-    /// однозначным, иначе числа были бы чужими.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Сопоставление идёт по ЧИСЛУ отверстий в контейнере API7: одно отверстие — одна связь. Если
-    /// их несколько, соответствие «признак дерева ↔ запись Holes3D» ничем не доказано (имя признака
-    /// не переживает переход API5↔API7 — измерено пробой F), и возвращается null: пустое поле
-    /// честнее чужого числа. Тогда <c>family</c> остаётся распознанным, но уровень подтверждения
-    /// честно падает до <c>call_returned</c>.
-    /// </para>
-    /// <para>
-    /// Индексом 0 ограничиваться нельзя: <c>Holes3D[0]</c> — это «первое отверстие документа», а не
-    /// «отверстие того признака, который спросили». На документе с одним отверстием это одно и то
-    /// же, и потому строка приёмки HD.25 сначала создаёт РОВНО одно отверстие.
-    /// </para>
-    /// </remarks>
+    /// <summary>Hole parameters for an EXISTING tree feature — the same <see cref="ReadHole"/> but
+    /// without a caller-supplied index: the caller named the feature, and the match must be
+    /// unambiguous, otherwise the numbers would be foreign.</summary>
+    /// <remarks>The match is by the NUMBER of holes in the API7 container: one hole, one link. With
+    /// several, the "tree feature ↔ Holes3D entry" correspondence is unproven (the feature name does
+    /// not survive the API5↔API7 transition — MEASURED by probe F) and null is returned: an empty
+    /// field is more honest than a foreign number. Then <c>family</c> stays recognised but the
+    /// confirmation level honestly drops to <c>call_returned</c>.
+    /// Index 0 is not enough: <c>Holes3D[0]</c> is "the document's first hole", not "the hole of the
+    /// feature asked about". On a document with one hole they are the same, which is why acceptance row
+    /// HD.25 first creates EXACTLY one hole.</remarks>
     private HoleDto? ReadHoleFeature(DocumentEntry document)
     {
         var bridge = BridgeFor(document);
@@ -707,39 +659,28 @@ public partial class Api5Session
         return ReadHole(document, 0);
     }
 
-    /// <summary>
-    /// Правка параметров СУЩЕСТВУЮЩЕГО родного отверстия по <c>kompas_update_feature</c>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Маршрут измерен 20.09.2026</b> (зонд <c>scratch/_hole_edit_probe.py</c>, нога 2 — сырой
-    /// помощник <c>scratch/hole-edit-raw</c>; отчёт <c>docs/acceptance/api7/hole-modes.md</c>, раздел
-    /// M.6). Признак берётся ДОКУМЕНТИРОВАННЫМ членом <c>IHoles3D.Hole3D[index]</c> — тем же
-    /// маршрутом, которым читает <c>kompas_get_feature</c>, — в него пишутся члены СВОЕГО режима,
-    /// применяется <c>IModelObject.Update()</c>, затем перестроение. Объём меняется ровно на
-    /// аналитику во всех трёх режимах, а контроли (б) и (в) показывают, что изменение даёт именно
-    /// <c>Update()</c>: без него объём не двигается, а интерфейс параметров чужого режима на объекте
-    /// НЕДОСТИЖИМ.
-    /// </para>
-    /// <para>
-    /// <b>Адрес признака — тот же, что у чтения, и НЕ угадывается.</b> Соответствие «признак дерева ↔
-    /// запись <c>Holes3D</c>» доказывается единственностью отверстия в документе: при <c>count != 1</c>
-    /// соответствие ничем не подтверждено, и вызов отвергается <c>CAPABILITY_UNAVAILABLE</c> до COM.
-    /// Подбирать адрес по списку тел или по порядку в дереве запрещено уроком F-11: адрес
-    /// обеспечивается постановкой, а не догадкой.
-    /// </para>
-    /// <para>
-    /// <b>Режим правкой НЕ меняется.</b> Режим существующего признака читается из модели
-    /// (<c>IHole3D.HoleType</c>) и служит рамкой: поля чужого режима отвергаются по имени до COM, а
-    /// записываются члены СВОЕГО. Смена режима (<c>blind_flat</c> → <c>through_counterbore</c> и
-    /// обратно) не измерялась и здесь не выполняется — «принято и построено иначе» неотличимо потом
-    /// от «применено».
-    /// </para>
-    /// <para>
-    /// <b>Глубина зенковки не утверждается.</b> При <c>ksCTDiameterAngle</c> она производна
-    /// (M.3/N.2), поэтому проверка <c>countersink_depth_derived</c> публикует ПРОЧИТАННОЕ число и
-    /// говорит прямо, что записанное не проверяется.
-    /// </para>
+    /// <summary>Edit the parameters of an EXISTING native hole via <c>kompas_update_feature</c>.</summary>
+    /// <remarks>ROUTE — MEASURED 20.09.2026 (probe <c>scratch/_hole_edit_probe.py</c>; report
+    /// <c>docs/acceptance/api7/hole-modes.md</c>, section M.6): the feature is taken by the DOCUMENTED
+    /// member <c>IHoles3D.Hole3D[index]</c> — the same route <c>kompas_get_feature</c> reads — the
+    /// members of ITS OWN mode are written, <c>IModelObject.Update()</c> applied, then the rebuild. The
+    /// volume changes exactly by the analytic value in all three modes, and controls (b) and (c) show
+    /// that the change is caused by <c>Update()</c> itself: without it the volume does not move, and
+    /// the parameter interface of a foreign mode is UNREACHABLE on the object.
+    /// INVARIANT: the feature address is the same as for the read and is NOT guessed — the "tree feature
+    /// ↔ <c>Holes3D</c> entry" correspondence is proven by the hole being unique in the document: at
+    /// <c>count != 1</c> the correspondence is unproven and the call is refused
+    /// <c>CAPABILITY_UNAVAILABLE</c> before COM. Picking an address by a body list or tree order is
+    /// forbidden by lesson F-11: the address is ensured by the setup, not by a guess.
+    /// LIMIT: the mode is NOT changed by the edit — the existing feature's mode is read from the model
+    /// (<c>IHole3D.HoleType</c>) and frames it: foreign-mode fields are refused by name before COM, and
+    /// its own members are written. Mode change (<c>blind_flat</c> → <c>through_counterbore</c> and
+    /// back) was not measured and is not performed here — "accepted and built differently" is
+    /// afterwards indistinguishable from "applied".
+    /// INVARIANT: the countersink depth is not asserted — at <c>ksCTDiameterAngle</c> it is derived
+    /// (M.3/N.2), so the <c>countersink_depth_derived</c> check publishes the READ number and states
+    /// plainly that the written one is not checked.
+    /// History: docs/decisions/adapter-features.md#hole-edit-route
     /// </remarks>
     private UpdateFeatureResult UpdateHole(
         DocumentEntry document,
@@ -749,22 +690,22 @@ public partial class Api5Session
         int featuresBefore,
         FeatureState stateBefore)
     {
-        // Поля ЧУЖИХ семейств — до COM, и это не осторожность, а измеренный класс дефекта: принятое
-        // и не применённое число доживает до приёмки, выглядя как выполненная правка. Перечень
-        // строится по общей таблице семейственных полей плюс явный список неприменимых к признакам
-        // (см. RejectForeignSolidFields), поэтому новое поле контракта обязано получить роль — иначе
-        // его уронит SolidFeatureClassificationTests, а не приёмка.
+        // Fields of FOREIGN families — before COM, and this is not caution but a MEASURED defect class:
+        // an accepted and unapplied number survives to acceptance looking like a completed edit. The
+        // list is built from the common family-field table plus an explicit list of fields inapplicable
+        // to features (see RejectForeignSolidFields), so a new contract field must get a role —
+        // otherwise SolidFeatureClassificationTests drops it, not acceptance.
         RejectForeignSolidFields(
             command,
             HoleFamily,
             "diameter_mm, depth_mm (только режим blind_flat), counterbore_diameter_mm и " +
             "counterbore_depth_mm (только through_counterbore), countersink_diameter_mm и " +
             "countersink_angle_deg (только through_countersink), expected_volume_delta_mm3",
-            // depth_mm — СВОЁ поле этого семейства, хотя таблица ролей отдаёт его выдавливанию:
-            // у глухого отверстия глубина задаётся именно им. Чужой ли он ДЛЯ РЕЖИМА (у цековки и
-            // зенковки глубина производна или задаётся выточкой) решает ValidateHoleEdit по
-            // прочитанному режиму — там это и измерено. Без этой строки правка глухого отверстия
-            // отвергалась до COM: измерено строками F08.15/16/19/20.edit 20.09.2026.
+            // depth_mm is this family's OWN field, although the role table gives it to extrusion: a
+            // blind hole's depth is set by it. Whether it is foreign FOR THE MODE (for counterbore and
+            // countersink the depth is derived or set by the recess) is decided by ValidateHoleEdit from
+            // the read mode — that is where it is MEASURED. Without this line editing a blind hole was
+            // refused before COM: MEASURED by rows F08.15/16/19/20.edit 20.09.2026.
             ownFields: new[] { "depth_mm" });
 
         var bridge = BridgeFor(document);
@@ -779,9 +720,9 @@ public partial class Api5Session
                 RetryPolicy.ReacquireContext);
         }
 
-        // Адрес: ИНДЕКС в IHoles3D — тот же маршрут, что у чтения (ReadHoleFeature). Единственность
-        // отверстия и есть доказательство соответствия; при нескольких отверстиях «нулевой» элемент
-        // коллекции — это чужое отверстие, и запись в него изменила бы не тот признак.
+        // Address: the INDEX in IHoles3D — the same route as the read (ReadHoleFeature). The hole's
+        // uniqueness is the proof of correspondence; with several holes the "zeroth" collection element
+        // is a foreign hole, and writing to it would change the wrong feature.
         var count = Api7Hole.Count(container);
         if (count != 1)
         {
@@ -860,8 +801,9 @@ public partial class Api5Session
                 });
         }
 
-        // Порядок «запись → Update() → перестроение» — часть контракта, а не стиль: без RebuildModel
-        // запись в API7 остаётся представлением (измерено пробой E и повторено на фаске и скруглении).
+        // The order "write → Update() → rebuild" is part of the contract, not style: without
+        // RebuildModel the API7 write stays a representation (MEASURED by probe E and repeated on the
+        // chamfer and fillet).
         Api7Bridge.Rebuild(container, document.Document);
         BumpRevision(document, "hole.update");
 
@@ -881,9 +823,9 @@ public partial class Api5Session
                 Expected: readBefore?.HoleType ?? "не читается"),
         };
 
-        // Каждому ЗАПРОШЕННОМУ числу отвечает своя проверка чтения обратно: «Update() вернул true»
-        // применением не является, а сводная проверка «параметры совпали» не отличила бы применённое
-        // поле от неприменённого.
+        // Each REQUESTED number gets its own read-back check: "Update() returned true" is not
+        // application, and a common "parameters matched" check would not tell an applied field from an
+        // unapplied one.
         if (command.DiameterMm is double wantedDiameter)
         {
             checks.Add(new NamedCheck(
@@ -934,9 +876,9 @@ public partial class Api5Session
 
         if (mode.Value == HoleMode.ThroughCountersink)
         {
-            // Производное число ПУБЛИКУЕТСЯ, но не утверждается записанным: при способе «диаметр +
-            // угол» запись в CountersinkDepth не действует (M.3), и сверять её с запрошенным числом
-            // значило бы требовать от приёмки заведомо ложного совпадения.
+            // The derived number is PUBLISHED but not asserted as written: with the "diameter + angle"
+            // method writing to CountersinkDepth has no effect (M.3), and comparing it with the
+            // requested number would demand a knowingly false match from acceptance.
             checks.Add(new NamedCheck(
                 "countersink_depth_derived",
                 reportedCountersinkDepth is not null,
@@ -944,10 +886,11 @@ public partial class Api5Session
                 Expected: "производна от угла и устья; записанное число не утверждается"));
         }
 
-        // Знак дельты — часть определения величины: объём уменьшается, когда правка снимает материал,
-        // и РАСТЁТ, когда глубина уменьшается. Поэтому сверяется «снято» = до − после, а не модуль:
-        // первая редакция зонда сравнивала разноимённые числа и давала ложное «не совпало» на верной
-        // геометрии (дефект прибора, а не факт о продукте).
+        // The delta sign is part of the quantity's definition: volume decreases when the edit removes
+        // material and GROWS when the depth decreases. So "removed" = before − after is compared, not
+        // the absolute value: a first draft of the probe compared numbers of opposite sign and gave a
+        // false "did not match" on correct geometry (an instrument defect, not a fact about the
+        // product).
         var removedDelta = volumeBefore is double beforeVolume && volumeAfter is double afterVolume
             ? beforeVolume - afterVolume
             : (double?)null;
@@ -1027,14 +970,10 @@ public partial class Api5Session
                 unverified));
     }
 
-    /// <summary>
-    /// Режим существующего отверстия по прочитанному <c>IHole3D.HoleType</c>.
-    /// </summary>
-    /// <remarks>
-    /// Неизвестное значение возвращает <c>null</c>, а не «похожий» режим: правка в чужом режиме
-    /// записала бы числа в интерфейс, которого объект не читает, и объём не изменился бы — то есть
-    /// отказ выглядел бы как выполненная правка.
-    /// </remarks>
+    /// <summary>The mode of an existing hole by the read <c>IHole3D.HoleType</c>.</summary>
+    /// <remarks>An unknown value returns <c>null</c>, not a "similar" mode: an edit in a foreign mode
+    /// would write numbers into an interface the object does not read and the volume would not change —
+    /// i.e. the refusal would look like a completed edit.</remarks>
     private static HoleMode? HoleModeOfRead(HoleReadDto? read) => read?.HoleType switch
     {
         "ksHTBase" => HoleMode.BlindFlat,
@@ -1043,16 +982,13 @@ public partial class Api5Session
         _ => null,
     };
 
-    /// <summary>
-    /// «Поля ↔ режим» на ПРАВКЕ: у режима свой набор, и чужое поле отвергается по имени до COM.
-    /// </summary>
-    /// <remarks>
-    /// То же правило, что при создании (<see cref="ValidateHoleMode"/>), и по той же причине:
-    /// режимные числа разных режимов живут в РАЗНЫХ интерфейсах параметров, поэтому «приняли, что
-    /// смогли, остальное проигнорировали» — это молча неверная геометрия. Положительность
-    /// проверяется по измеренному основанию: нулевой диаметр КОМПАС принимает и строит признак без
-    /// материала при неизменном объёме (тот же дефект, что у нулевого катета фаски, F.12).
-    /// </remarks>
+    /// <summary>"Fields ↔ mode" on EDIT: each mode has its own set, and a foreign field is refused by
+    /// name before COM.</summary>
+    /// <remarks>The same rule as on creation (<see cref="ValidateHoleMode"/>) and for the same reason:
+    /// mode numbers of different modes live in DIFFERENT parameter interfaces, so "accepted what we
+    /// could, ignored the rest" is silently wrong geometry. Positivity is checked on a MEASURED basis:
+    /// KOMPAS accepts a zero diameter and builds a feature with no material at unchanged volume (the
+    /// same defect as a zero chamfer leg, F.12).</remarks>
     private static void ValidateHoleEdit(UpdateFeatureCommand command, HoleMode mode)
     {
         switch (mode)
@@ -1153,13 +1089,11 @@ public partial class Api5Session
     }
 }
 
-/// <summary>
-/// Результат родного отверстия. Диаметр и глубина возвращаются перечитанными из модели, а не
-/// переданными: «мы вызвали Update()» геометрическим фактом не является. <c>feature_ref</c> пуст,
-/// когда признак создан, но не виден в дереве API5: ссылка, по которой правка всё равно упала бы,
-/// честнее предупреждения. <c>countersink_depth_mm</c> — то, что вернул объект, а не то, что
-/// записали: при способе «диаметр + угол» это свойство производное (M.3).
-/// </summary>
+/// <summary>Result of a native hole. Diameter and depth are returned read back from the model, not
+/// passed in: "we called Update()" is not a geometric fact. <c>feature_ref</c> is empty when the
+/// feature is created but not visible in the API5 tree: a reference an edit would fail through anyway
+/// is more honest than a warning. <c>countersink_depth_mm</c> is what the object returned, not what was
+/// written: with the "diameter + angle" method this property is derived (M.3).</summary>
 public sealed record HoleResult(
     ReferenceDto? FeatureRef,
     string Mode,

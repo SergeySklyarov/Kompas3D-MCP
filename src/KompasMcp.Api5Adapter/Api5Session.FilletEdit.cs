@@ -9,46 +9,32 @@ using KompasMcp.Domain.References;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>
-/// Правка радиуса существующего скругления (docs/05 SM-09, режим <c>edit</c>).
-/// </summary>
+/// <summary>Fillet radius edit (docs/05 SM-09, mode <c>edit</c>).</summary>
 /// <remarks>
-/// <para>
-/// <b>Почему маршрут API7, а не API5.</b> У <c>ksFilletDefinition</c> радиус объявлен и читается
-/// (<c>get_radius</c>/<c>set_radius</c>, проверено по метаданным P0.2), поэтому первая версия этого
-/// маршрута писала именно в него — и не применилась. Измерено 16.09.2026 (строка FL04r, документ
-/// пластины 100×80×10 со скруглением R3 по четырём вертикальным рёбрам):
-/// <c>definition.radius = 5</c> вернуло управление без ошибки, <c>entity.Update()</c> вернул true,
-/// <c>RebuildDocument()</c> прошёл, определение перечитало радиус 5 — а объём остался прежним
-/// 79922.74333882307, то есть геометрия не изменилась. Сеттер принял значение, признак его читает,
-/// и модель его игнорирует: это ровно тот случай, который v1 обязан называть отказом, а не
-/// успехом. Поэтому радиус пишется в <c>IFillet.Radius1</c> на живой модели — как угол фаски
-/// (см. <see cref="Api5Session.UpdateChamferByAngle"/>).
-/// </para>
-/// <para>
-/// <b>Сопоставление признака.</b> Имя в API5 и API7 не совпадает (F.8: «f-ch2» → «Фаска:1»),
-/// поэтому признак API5 отыскивается в <c>IModelContainer.Fillets</c> по СОВПАДЕНИЮ РАДИУСА —
-/// единственного скаляра, который обе стороны описывают одинаково. Неоднозначное совпадение
-/// (ни одного либо несколько) — отказ <c>CAPABILITY_UNAVAILABLE</c> до мутации: записать радиус в
-/// чужое скругление означает молча испортить чужую геометрию.
-/// </para>
+/// INVARIANT: the radius is written to <c>IFillet.Radius1</c> on the live model, as the chamfer angle is
+/// (see <see cref="Api5Session.UpdateChamferByAngle"/>). MEASURED 16.09.2026 (row FL04r, a 100×80×10
+/// plate with R3 on four vertical edges): <c>definition.radius = 5</c> returned without error,
+/// <c>entity.Update()</c> returned true, <c>RebuildDocument()</c> passed, the definition re-read radius 5 —
+/// and the volume stayed 79922.74333882307, i.e. the geometry did not change. The setter accepts, the
+/// getter reads it, the model ignores it: v1 must call that a refusal, not a success.
+/// History: docs/decisions/adapter-features.md#fillet-radius-api7
+/// INVARIANT: the API5 feature is matched to <c>IModelContainer.Fillets</c> by its OWN INPUTS, with the
+/// radius kept only as a fallback. The name differs between API5 and API7 (F.8: «f-ch2» → «Фаска:1»), so
+/// it is not a key. An ambiguous match (none or several) is a <c>CAPABILITY_UNAVAILABLE</c> refusal BEFORE
+/// mutation: writing a radius into a foreign fillet means silently corrupting foreign geometry.
 /// </remarks>
 public partial class Api5Session
 {
-    /// <summary>Имя семейства скругления в ответах сервера.</summary>
+    /// <summary>Fillet family name in server responses.</summary>
     private const string FilletFamily = "fillet";
 
-    /// <summary>
-    /// Вид ссылки на СОБСТВЕННЫЙ вход признака. Держится здесь, а не берётся из реестра напрямую,
-    /// чтобы строковая форма ссылки была объявлена рядом с тем, кто её разбирает: расхождение
-    /// «минтим одно, читаем другое» иначе не поймать ни компилятором, ни приёмкой.
-    /// </summary>
+    /// <summary>Reference kind of a feature's OWN input. Kept here rather than taken from the registry directly,
+    /// so the string form is declared next to whoever parses it: the divergence "mint one thing, read
+    /// another" is otherwise caught by neither the compiler nor acceptance.</summary>
     private const string InputReferenceKind = ReferenceRegistry.InputKind;
 
-    /// <summary>
-    /// Что сервер видит по скруглению: радиус и способ читаются из API7, если к тому же документу
-    /// строится мост и сопоставление однозначно. Пустое поле означает «не прочитано», а не «ноль».
-    /// </summary>
+    /// <summary>What the server sees for a fillet: radius and mode are read from API7 when a bridge to the same
+    /// document is built and the match is unambiguous. An empty field means "not read", not "zero".</summary>
     private FilletDto? ReadFillet(DocumentEntry document, object definition)
     {
         if (definition is not ksFilletDefinition fillet)
@@ -56,7 +42,7 @@ public partial class Api5Session
             return null;
         }
 
-        // Радиус определения API5 читается всегда — он и есть запасной ключ сопоставления.
+        // The API5 definition radius is always read — it is the fallback match key.
         var api5Radius = fillet.radius;
         var api7 = ReadFilletRadius(document, api5Radius, fillet);
         return new FilletDto(
@@ -70,27 +56,23 @@ public partial class Api5Session
     }
 
     /// <summary>
-    /// Издать реестровые ссылки <c>input:&lt;hex&gt;</c> на собственные входы признака — по одной на
-    /// элемент <c>BaseObjects</c>, в том же порядке, что <c>BaseObjectReferences</c>.
+    /// Mint registry references <c>input:&lt;hex&gt;</c> for a feature's own inputs — one per
+    /// <c>BaseObjects</c> element, in the same order as <c>BaseObjectReferences</c>.
     /// </summary>
     /// <remarks>
-    /// Зачем это здесь, а не в правке набора. Собственный вход признака — не ребро тела: строки
-    /// реестра <c>edge:</c> у него нет и быть не может, потому что реестр выдаёт их рёбрам ТЕЛА.
-    /// Числа <c>IModelObject.Reference</c> в контракт правки не подставляются по типу. Значит
-    /// строку для входа должен издать СЕРВЕР, и делает он это в том единственном месте, где числа
-    /// входа вообще становятся известны наружу, — при чтении признака. Тот же принцип, что и у
-    /// <c>edge:</c>-ссылок: клиент не сочиняет идентификаторы, а подставляет выданные.
-    /// <para>
-    /// Привязка к РЕВИЗИИ документа (а не к состоянию признака) — намеренная и та же, что у прочих
-    /// ссылок: после мутации ссылки прошлой ревизии отсекаются <c>Require</c>, и клиент обязан
-    /// перечитать контекст. Иначе правку можно было бы предъявить по устаревшему составу.
-    /// </para>
-    /// <para>
-    /// Когда ссылки не выдаются: мост API7 не построен, скруглений с тем же радиусом несколько
-    /// (входы не прочитаны — <c>null</c>) или входов нет вовсе (пустой список). Порядок ссылок
-    /// совпадает с порядком <c>BaseObjectReferences</c>, потому что оба строятся из одного обхода
-    /// <c>BaseObjects</c>.
-    /// </para>
+    /// Why here and not in the edge-set edit. A feature's own input is not a body edge: it has no
+    /// <c>edge:</c> registry string and cannot have one, because the registry issues those to BODY edges.
+    /// <c>IModelObject.Reference</c> numbers are not substituted into the edit contract by type. So the
+    /// SERVER must mint the input string, and it does so at the only place where the input numbers become
+    /// visible outside — when the feature is read. Same principle as <c>edge:</c> references: the client
+    /// does not invent identifiers, it substitutes issued ones.
+    /// INVARIANT: the minting is bound to the document REVISION (not to the feature state), like other
+    /// references: after a mutation, references of the previous revision are cut off by <c>Require</c>,
+    /// and the client must re-read the context. Otherwise an edit could be presented against a stale
+    /// composition.
+    /// References are not issued when: the API7 bridge is not built, several fillets share the radius
+    /// (inputs not read — <c>null</c>), or there are no inputs at all (empty list). The reference order
+    /// matches <c>BaseObjectReferences</c>, because both come from one walk of <c>BaseObjects</c>.
     /// </remarks>
     private IReadOnlyList<string>? MintInputReferences(DocumentEntry document, FilletReadDto? api7)
     {
@@ -102,8 +84,9 @@ public partial class Api5Session
         var minted = new List<string>(numbers.Count);
         foreach (var number in numbers)
         {
-            // Идентификатор — САМ адрес входа, а не свежий uuid: смысл ссылки здесь в том, чтобы
-            // донести число IModelObject.Reference до правки набора, и uuid этого не делал бы.
+            // The identifier is the input ADDRESS itself, not a fresh uuid: the point of the reference
+            // here is to carry the IModelObject.Reference number into the edge-set edit, which a uuid
+            // would not do.
             var id = $"{InputReferenceKind}:{number:x}";
             References.RegisterDeterministic(
                 id, InputReferenceKind, document.Id, document.Revision, payload: number);
@@ -113,26 +96,19 @@ public partial class Api5Session
         return minted;
     }
 
-    /// <summary>
-    /// Радиус и способ из API7 — по СВОИМ ВХОДАМ признака, а радиус остаётся запасным путём.
-    /// </summary>
+    /// <summary>Radius and mode from API7 — by the feature's OWN INPUTS, with the radius kept as a fallback.</summary>
     /// <remarks>
-    /// <para>
-    /// <b>Почему опознание по входам, а не по радиусу.</b> Радиус — не ключ: на модели законно
-    /// живут два скругления одного радиуса, и опыт адресации приёмки (два R3, «изменение
-    /// выбранного, сохранение второго») ставится именно на такую модель. Опознание по радиусу
-    /// возвращало при этом <c>null</c> — и признак оставался без параметров API7, а вместе с ним
-    /// без <c>base_object_input_refs</c>: клиент не получал ссылок ни на один из двух признаков и
-    /// не мог адресовать ни один. Это не «нет данных», а отказ в обслуживании поддерживаемого
-    /// сценария, поэтому источником ключа сделаны СВОИ ВХОДЫ признака — та же мера состава, по
-    /// которой работает и маршрут записи (<c>FindIndexByInputReferences</c>).
-    /// </para>
-    /// <para>
-    /// <b>Радиус остаётся запасным путём</b> и употребляется ровно тогда, когда состав прочитать
-    /// не удалось (измеренное свойство API5 на существующем скруглении — определение входов не
-    /// отдаёт). Тогда и только тогда вступает прежнее правило: однозначное совпадение по радиусу
-    /// или <c>null</c>.
-    /// </para>
+    /// INVARIANT: identify by inputs, not by radius. The radius is not a key: two fillets of one radius
+    /// may legitimately live on a model, and the acceptance addressing experiment (two R3, "change the
+    /// selected one, keep the second") is built on exactly such a model. Identification by radius returned
+    /// <c>null</c> there — the feature stayed without API7 parameters and without
+    /// <c>base_object_input_refs</c>: the client got no reference to either of the two features and could
+    /// address neither. That is a denial of a supported scenario, so the key source is the feature's OWN
+    /// INPUTS — the same composition measure the write route uses
+    /// (<c>FindIndexByInputReferences</c>).
+    /// The radius remains a FALLBACK and is used exactly when the composition could not be read
+    /// (MEASURED: on an existing fillet the API5 definition does not return its inputs). Then, and only
+    /// then, the old rule applies: an unambiguous radius match or <c>null</c>.
     /// </remarks>
     private FilletReadDto? ReadFilletRadius(DocumentEntry document, double api5Radius, object? definition = null)
     {
@@ -143,8 +119,8 @@ public partial class Api5Session
             return null;
         }
 
-        // Основной путь: признак опознаётся по составу СВОИХ входов. Он различает два скругления
-        // одного радиуса, чего радиус не может по построению.
+        // Primary route: the feature is identified by the composition of its OWN inputs. It tells two
+        // fillets of one radius apart, which the radius cannot by construction.
         if (definition is ksFilletDefinition source
             && source.array() is ksEntityCollection array)
         {
@@ -168,16 +144,16 @@ public partial class Api5Session
             }
         }
 
-        // Запасной путь — только когда состав прочитать не удалось. Неоднозначность по радиусу
-        // означает «опознать нечем», и возвращается null, а не «первое попавшееся».
+        // Fallback — only when the composition could not be read. Radius ambiguity means "nothing to
+        // identify by", and null is returned rather than "the first one found".
         var matches = Api7Fillet.FindIndexesByIdenticalRadius(container, api5Radius);
         return matches.Count == 1 ? Api7Fillet.Read(container, matches[0]) : null;
     }
 
     /// <summary>
-    /// Правка радиуса скругления. Геометрия подтверждается измерением объёма: клиент обязан задать
-    /// <c>expected_volume_mm3</c> (для четырёх угловых рёбер пластины 100×80×10 это
-    /// 80000 − 4·(1−π/4)·r²·10), иначе уровень остаётся <c>call_returned</c>.
+    /// Fillet radius edit. The geometry is confirmed by a volume measurement: the client must supply
+    /// <c>expected_volume_mm3</c> (for the four corner edges of a 100×80×10 plate it is
+    /// 80000 − 4·(1−π/4)·r²·10), otherwise the level stays <c>call_returned</c>.
     /// </summary>
     private UpdateFeatureResult UpdateFilletRadius(
         DocumentEntry document,
@@ -205,8 +181,8 @@ public partial class Api5Session
                 RetryPolicy.Never);
         }
 
-        // Текущий радиус — из определения API5. Он нужен как КЛЮЧ СОПОСТАВЛЕНИЯ, а не как источник
-        // истины: писать мы в него не будем (см. remark к классу).
+        // The current radius comes from the API5 definition. It is needed as a MATCH KEY, not as a
+        // source of truth: we will not write into it (see the class remark).
         var currentSource = entity.GetDefinition() as ksFilletDefinition;
         var currentRadius = currentSource?.radius;
         if (currentRadius is not double radiusNow)
@@ -270,8 +246,8 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["api7_failure"] = written.Failure });
         }
 
-        // Без перестроения запись в IFillet остаётся представлением: тот же порядок, что при
-        // создании скругления и при правке угла фаски (F.10 + проба E).
+        // Without a rebuild the IFillet write stays a representation: the same order as on fillet
+        // creation and on chamfer-angle edit (F.10 + probe E).
         Api7Bridge.Rebuild(container, document.Document);
         BumpRevision(document, "fillet.update.radius");
 
@@ -281,8 +257,9 @@ public partial class Api5Session
         var featuresAfter = CountFeatures(document);
         var stateAfter = ReadFeatureState(entity);
 
-        // Радиус перечитывается с определения API5 тоже: если API7 принял запись, а определение
-        // отдаёт прежнее число, то признак API5 и живая модель разошлись, и это надо назвать.
+        // The radius is re-read from the API5 definition too: if API7 accepted the write while the
+        // definition returns the old number, the API5 feature and the live model have diverged, and that
+        // must be named.
         var definitionAfter = entity.GetDefinition() as ksFilletDefinition;
         var api5Radius = definitionAfter?.radius;
 
@@ -359,101 +336,68 @@ public partial class Api5Session
             featuresAfter,
             volumeBefore,
             volumeAfter,
-            // Глубины и условия конца у скругления нет: эти поля относятся к выдавливанию.
+            // A fillet has no depth or end condition: those fields belong to extrusion.
             DepthReadBackMm: null,
             EndConditionReadBack: null,
             new VerificationDto(
                 geometryConfirmed ? VerificationLevel.GeometryChecked : VerificationLevel.CallReturned,
                 checks,
                 unverified),
-            // Радиус, перечитанный из модели. Отдельным хвостовым параметром — как угол фаски.
+            // The radius re-read from the model. As a separate trailing parameter — like the chamfer
+            // angle.
             RadiusReadBackMm: after?.RadiusMm);
     }
 
     /// <summary>
-    /// Правка НАБОРА рёбер скругления: какие рёбра остаются скруглёнными. Набор заменяется целиком
-    /// одним присваиванием <c>IFillet.BaseObjects</c> — это протокол маршрута, а не удобство.
+    /// Edge-set edit: which edges stay filleted. The set is replaced as a whole by one assignment to
+    /// <c>IFillet.BaseObjects</c> — this is the route protocol, not a convenience. The PRESENTATION
+    /// CURRENCY is chosen from what the client sent.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// <b>Маршрут — API7, и он измерен.</b> Проба H-2 (<c>docs/acceptance/api7/fillet-base-objects.md</c>,
-    /// 14 PASS / 0 FAIL / 0 UNKNOWN, четыре прогона подряд, собственный <c>run_id</c>):
-    /// </para>
+    /// INVARIANT: the route is API7 and is MEASURED. Probe H-2
+    /// (<c>docs/acceptance/api7/fillet-base-objects.md</c>, 14 PASS / 0 FAIL / 0 UNKNOWN, four consecutive
+    /// runs, own <c>run_id</c>):
     /// <code>
     /// IModelContainer.Fillets[i]        → IFillet
-    /// IFillet.BaseObjects               → System.Object[] из IModelObject (чтение)
-    /// IFillet.BaseObjects = IModelObject[] (запись, полная замена)
-    /// IFillet.Update()                  (обязателен)
+    /// IFillet.BaseObjects               → System.Object[] of IModelObject (read)
+    /// IFillet.BaseObjects = IModelObject[] (write, full replacement)
+    /// IFillet.Update()                  (mandatory)
     /// </code>
-    /// <para>
-    /// Все объекты берутся с ЖИВОЙ модели — после <c>save → close → reopen</c>, — и ни один объект,
-    /// захваченный при создании скругления, не используется. В этом и была ошибка пробы H.
-    /// </para>
-    /// <para>
-    /// <b>ОТРИЦАТЕЛЬНЫЙ РЕЗУЛЬТАТ ПО МАРШРУТУ API5 ОСТАЁТСЯ ВЕРНЫМ.</b> Он измерен 16.09.2026 восемью
-    /// пробами, и с появлением рабочего маршрута не отменяется: <c>ksFilletDefinition.array()</c>
-    /// (<c>Clear()</c>, затем <c>Add()</c>) правку набора на существующем признаке НЕ даёт. После
-    /// скругления углы заняты цилиндрическими гранями, и «угловых вертикальных» рёбер в топологии
-    /// 0 из 4: (а) исходные угловые рёбра отзывает само создание скругления — предъявление даёт
-    /// <c>STALE_REFERENCE</c> до всякой правки; (б) существующие вертикальные рёбра скруглённых углов
-    /// признак НЕ УДЕРЖИВАЕТ — любой набор из них схлопывает определение, <c>edges_read_back = 0</c>,
-    /// объём возвращается к пластине (проверено на 1, 2, 4 и 8 рёбрах). Ненулевой
-    /// <c>edges_read_back</c> даёт только ВТОРОЙ вызов подряд, и это destroy-and-rebuild, а не правка
-    /// набора. Поэтому прежний маршрут из этого метода удалён, а не оставлен веткой.
-    /// </para>
-    /// <para>
-    /// <b>Сопоставление признака API5 с IFillet — НЕ по имени, НЕ по индексу и НЕ по радиусу.</b>
-    /// Имя между API5 и API7 не совпадает (F.8: «f-ch2» → «Фаска:1»); индекс в коллекции произволен;
-    /// радиус не различает два скругления одного радиуса, а опыт адресации (H2.7) как раз на такой
-    /// модели и ставился. Признак опознаётся по СВОИМ ТЕКУЩИМ входам: <c>ksFilletDefinition.array()</c>
-    /// даёт рёбра API5, они переносятся в API7 и сравниваются по устойчивому
-    /// <c>IModelObject.Reference</c> с входами каждого <c>IFillet</c>. Совпадение множеств — признак
-    /// найден; при нуле или нескольких совпадениях вызов отвергается ДО мутации, потому что записать
-    /// набор в чужое скругление означает молча испортить чужую геометрию.
-    /// </para>
-    /// <para>
-    /// <b>Опознание и ПРЕДЪЯВЛЕНИЕ — разные вопросы, и ключи у них разные.</b> Опознание признака
-    /// делается по его собственным входам (выше). Предъявление нового набора делается объектами,
-    /// добытыми переносом <c>ksAPI7Dual</c>, — так измерен решающий контроль H2.4: признаку было
-    /// предъявлено ребро тела, которого среди его собственных входов ЗАВЕДОМО не было, и КОМПАС
-    /// состав принял.
-    /// </para>
-    /// <para>
-    /// <b>Ранее здесь стоял запрет, опиравшийся на догадку, — и он был снят измерением (17.09.2026).</b>
-    /// Набор разрешалось только ОТБИРАТЬ из собственных входов признака по совпадению <c>Reference</c>,
-    /// а несовпадающие рёбра отвергались. Обоснованием служило наблюдение H2.7, прочитанное как
-    /// «ссылки входов признака и рёбра тела лежат в РАЗНЫХ контекстах и несопоставимы». Замер на
-    /// <c>FL10x</c> (1→1) это опроверг: полосы СОСЕДНИЕ — перенесённое ребро
-    /// <c>1073742309</c> против входа признака <c>1073742308</c>, тип у обоих <c>ksObjectEdge</c>,
-    /// обе ссылки устойчивы при повторном переносе и повторном чтении, а адресные привязки разные.
-    /// Двойственность API5/API7 (два COM-объекта про одно ребро) была принята за непроходимую границу.
-    /// Проба H-2 такой сверки не делала никогда, поэтому запрет не был измерением. Запрет снят;
-    /// подмножество собственных входов осталось ОТДЕЛЬНОЙ веткой — для него это строго измеренный
-    /// путь H2.3/H2.5.
-    /// </para>
-    /// <para>
-    /// <b>Границы, не переносимые на общий вывод:</b> расширение набора на эталоне 100×80×10 не
-    /// измерено (у пластины ровно четыре вертикальных угла); измерены сокращение (4→3, 4→2) и замена
-    /// при неизменном размере (1→1).
-    /// </para>
-    /// <para>
-    /// <b>СОСТОЯНИЕ: маршрут РЕАЛИЗОВАН; подтверждение приёмкой продукта — по <c>FL10…FL10x</c>.</b>
-    /// Правка 17.09.2026 сняла запрет на предъявление перенесённых объектов (см. выше). Прежнее
-    /// состояние было PASS 34 · FAIL 4 (<c>FL10</c>, <c>FL10s</c>, <c>FL10b</c>, <c>FL10x</c> красные),
-    /// и это записано здесь как история, а не как текущее утверждение: актуальный приговор —
-    /// в <c>docs/acceptance/INDEX.md</c> и <c>docs/STATUS.md</c>. Не считать метод подтверждённым,
-    /// пока <c>FL10</c> красная.
-    /// </para>
-    /// </remarks>
-    /// <summary>
-    /// Правка набора: выбирает ВАЛЮТУ предъявления по тому, что прислал клиент.
-    /// </summary>
-    /// <remarks>
-    /// Различие валют измерено, а не выбрано для удобства: сокращение набора выражается только
-    /// собственными входами признака (H2.3 4→3, H2.5 4→2 — проба брала объекты ИЗ BaseObjects и не
-    /// искала рёбер тела), а замена состава — рёбрами тела (FL10x 1→1, level=geometry_checked).
-    /// Поэтому ветка не «предпочтительная», а обязательная: у каждой операции своя валюта, и
-    /// смешение их в одном вызове неотличимо потом от «применилось одно из двух».
+    /// All objects are taken from the LIVE model — after <c>save → close → reopen</c> — and none captured
+    /// at fillet creation is reused. That was the defect of probe H.
+    /// History: docs/decisions/adapter-features.md#fillet-edge-set-route
+    /// LIMIT (still-valid negative result on the API5 route): MEASURED 16.09.2026 by eight probes —
+    /// <c>ksFilletDefinition.array()</c> (<c>Clear()</c> then <c>Add()</c>) does NOT edit the set of an
+    /// existing feature. After a fillet the corners are occupied by cylindrical faces and there are 0 of 4
+    /// "corner vertical" edges in the topology: (a) the original corner edges are withdrawn by the fillet
+    /// creation itself — presenting them gives <c>STALE_REFERENCE</c> before any edit; (b) the existing
+    /// vertical edges of filleted corners are NOT HELD by the feature — any set of them collapses the
+    /// definition, <c>edges_read_back = 0</c>, and the volume returns to the plate (checked at 1, 2, 4 and
+    /// 8 edges). A non-zero <c>edges_read_back</c> comes only from a SECOND consecutive call, and that is
+    /// destroy-and-rebuild, not a set edit. Hence the old route was removed from this method, not kept as a
+    /// branch.
+    /// INVARIANT: match the API5 feature to <c>IFillet</c> NOT by name, NOT by index and NOT by radius.
+    /// The name differs between API5 and API7 (F.8: «f-ch2» → «Фаска:1»); the collection index is
+    /// arbitrary; the radius does not tell two fillets of one radius apart, and the addressing experiment
+    /// (H2.7) was built on exactly such a model. The feature is identified by its OWN CURRENT inputs:
+    /// <c>ksFilletDefinition.array()</c> yields API5 edges, they are transferred to API7 and compared by
+    /// the stable <c>IModelObject.Reference</c> against the inputs of each <c>IFillet</c>. Set equality
+    /// finds the feature; at zero or several matches the call is rejected BEFORE mutation, because writing
+    /// a set into a foreign fillet means silently corrupting foreign geometry.
+    /// INVARIANT: identification and PRESENTATION are different questions with different keys.
+    /// Identification uses the feature's own inputs (above). Presentation of the new set uses objects
+    /// obtained by the <c>ksAPI7Dual</c> transfer — so the decisive control H2.4 was measured: a body edge
+    /// that was definitely not among the feature's own inputs was presented to it, and KOMPAS accepted the
+    /// composition. History: docs/decisions/adapter-features.md#fillet-edge-set-ban-lifted
+    /// LIMIT: extension on the 100×80×10 reference is not measured (the plate has exactly four vertical
+    /// corners); reduction (4→3, 4→2) and replacement at unchanged size (1→1) are. The currency differs by
+    /// operation and is mandatory, not preferred: reduction is expressed only by the feature's own inputs
+    /// (H2.3 4→3, H2.5 4→2 — the probe took objects FROM BaseObjects and did not seek body edges),
+    /// replacement by body edges (FL10x 1→1, level=geometry_checked). Mixing them in one call would later
+    /// be indistinguishable from "one of the two applied".
+    /// STATE: the route is IMPLEMENTED; product acceptance confirmation is by <c>FL10…FL10x</c>. Do not
+    /// treat the method as confirmed while <c>FL10</c> is red (the current verdict is in
+    /// <c>docs/acceptance/INDEX.md</c> and <c>docs/STATUS.md</c>).
     /// </remarks>
     private UpdateFeatureResult UpdateFilletEdgeSet(
         DocumentEntry document,
@@ -472,9 +416,10 @@ public partial class Api5Session
                 RetryPolicy.Never);
         }
 
-        // Пустой набор ОТЛИЧАЕТСЯ от «не задан» и обязан отказывать своим ответом: иначе
-        // base_object_refs=[] провалился бы в ветку edge_refs и клиент прочитал бы «ни edge_refs,
-        // ни base_object_refs не задан», хотя он их задал. Отказ до мутации, как и требует контракт.
+        // An EMPTY set DIFFERS from "not supplied" and must refuse with its own answer: otherwise
+        // base_object_refs=[] would fall through to the edge_refs branch and the client would read
+        // "neither edge_refs nor base_object_refs supplied", although it supplied them. Refusal before
+        // mutation, as the contract requires.
         if (command.BaseObjectRefs is { Count: 0 })
         {
             throw new KompasContractException(
@@ -513,21 +458,15 @@ public partial class Api5Session
             document, entity, command, edgeRefs, volumeBefore, featuresBefore, stateBefore);
     }
 
-    /// <summary>
-    /// Правка набора по СОБСТВЕННЫМ входам признака: запрашиваются адреса входов, которые признак
-    /// сам отдал, и пишется подмножество ЕГО ЖЕ объектов.
-    /// </summary>
-    /// <remarks>
-    /// Это измеренно строгий путь сокращения (проба H-2, опыты H2.3 4→3 и H2.5 4→2): проба писала
-    /// в <c>IFillet.BaseObjects</c> массив, собранный из прочитанных ею же элементов
-    /// (<c>ElementAt(raw, i)</c>), <c>Clear()</c> НЕ вызывала и рёбер конечного тела НЕ искала.
-    /// Её собственные слова: «Пишем подмножество из N объектов, прочитанных из BaseObjects».
-    /// <para>
-    /// Отличие от пути через <c>edge_refs</c> не в удобстве, а в предмете: там предъявляются рёбра
-    /// ТЕЛА (годно для замены состава, негодно для сокращения — FL10 схлопывает признак), здесь —
-    /// собственные входы. Это и есть та валюта, которой не хватало.
-    /// </para>
-    /// </remarks>
+    /// <summary>Edge-set edit by the feature's OWN INPUTS: the input addresses the feature itself returned are
+    /// requested, and a subset of ITS OWN objects is written.</summary>
+    /// <remarks>This is the measurably strict reduction path (probe H-2, experiments H2.3 4→3 and H2.5 4→2): the
+    /// probe wrote into <c>IFillet.BaseObjects</c> an array assembled from elements it had itself read
+    /// (<c>ElementAt(raw, i)</c>), did NOT call <c>Clear()</c> and did NOT seek body edges. Its own words:
+    /// it writes a subset of N objects read from BaseObjects.
+    /// The difference from the <c>edge_refs</c> path is the subject, not convenience: there BODY edges are
+    /// presented (good for replacing the composition, bad for reduction — FL10 collapses the feature),
+    /// here the feature's own inputs are. This is the currency that was missing.</remarks>
     private UpdateFeatureResult UpdateFilletEdgeSetByOwnInputs(
         DocumentEntry document,
         ksEntity entity,
@@ -598,16 +537,16 @@ public partial class Api5Session
                 RetryPolicy.Never);
         }
 
-        // Признак ищется по совпадению ЕГО входов с запрошенными, а не по радиусу: два скругления
-        // одного радиуса на модели — обычное дело (измерено опытом H2.7). Совпадение должно быть
-        // ровно у одного, иначе подмножество уйдёт в чужое скругление.
+        // The feature is found by matching ITS inputs against the requested ones, not by radius: two
+        // fillets of one radius on a model are ordinary (MEASURED, experiment H2.7). The match must be
+        // exactly one, otherwise the subset would go into a foreign fillet.
         var liveInputs = Api7Fillet.ReadBaseObjectsAll(container);
         var owner = -1;
         for (var i = 0; i < liveInputs.Count; i++)
         {
-            // null означает «набор этого скругления не прочитался» — это не «входов нет» и не
-            // кандидат на запись: пропустить его обязательно, иначе «не прочитано» станет
-            // совпадением, и набор уйдёт в признак, которого мы не читали.
+            // null means "this fillet's set was not read" — that is neither "no inputs" nor a write
+            // candidate: skipping it is mandatory, otherwise "not read" would become a match and the set
+            // would go into a feature we never read.
             if (liveInputs[i] is not { } candidateInputs)
             {
                 continue;
@@ -640,24 +579,24 @@ public partial class Api5Session
                 RetryPolicy.ReacquireContext);
         }
 
-        // Пишутся объекты, ПРОЧИТАННЫЕ У САМОГО ПРИЗНАКА, а не собранные заново: в этом весь
-        // измеренный смысл пути. Объект, добытый иначе, признак не удерживает (измерено FL10).
-        // Владелец уже проверен на «прочитан» при опознании, поэтому здесь разыменование безопасно,
-        // но берётся оно один раз — и в сверке, и в записи участвует ОДИН И ТОТ ЖЕ список.
+        // The objects written are those READ FROM THE FEATURE ITSELF, not reassembled: that is the whole
+        // measured point of the path. An object obtained otherwise is not held by the feature (MEASURED
+        // FL10). The owner was already checked as "read" during identification, so dereferencing is safe
+        // here, but it is taken once — and ONE AND THE SAME list participates in both the check and the
+        // write.
         var own = liveInputs[owner]!;
         var ownRefs = Api7Fillet.ReferencesOf(own);
 
-        // ОБЯЗАТЕЛЬНАЯ СВЕРКА ВЛАДЕЛЬЦА С ЗАПРОШЕННЫМ ПРИЗНАКОМ. Опознание по составу входов
-        // отвечает на вопрос «кто удерживает эти входы», а не «тот ли это признак, который просили».
-        // Передача входов скругления B вместе с feature_ref скругления A прошла бы эту проверку
-        // молча и исправила бы B, отчитавшись про A, — то есть выдала бы правку одного признака за
-        // правку другого. Поэтому владелец обязан совпасть с запрошенным признаком, и отказ идёт
-        // ДО мутации.
+        // MANDATORY CROSS-CHECK OF THE OWNER AGAINST THE REQUESTED FEATURE. Identification by input
+        // composition answers "who holds these inputs", not "is this the feature that was requested".
+        // Passing fillet B's inputs together with fillet A's feature_ref would pass this check silently
+        // and edit B while reporting A — i.e. present one feature's edit as another's. So the owner must
+        // equal the requested feature, and the refusal fires BEFORE mutation.
         //
-        // Сверяются собственные входы ЗАПРОШЕННОГО признака (те, что он отдаёт в API5 через
-        // определение) с входами найденного владельца: у скругления A и скругления B входы разные
-        // по определению — иначе их не различить и на чтении. Перенос идёт тем же ksAPI7Dual, что и
-        // при опознании.
+        // The requested feature's own inputs (the ones it returns in API5 via the definition) are
+        // compared with the found owner's inputs: fillet A and fillet B have different inputs by
+        // definition — otherwise they could not be told apart on read either. The transfer uses the same
+        // ksAPI7Dual as identification.
         var requestedOwnInputs = new List<int>();
         if (entity.GetDefinition() is ksFilletDefinition requestedSource
             && requestedSource.array() is ksEntityCollection requestedArray)
@@ -672,9 +611,9 @@ public partial class Api5Session
             }
         }
 
-        // Пустой список означает «определение входов не отдало» — это измеренное свойство API5 на
-        // СУЩЕСТВУЮЩЕМ скруглении, а не доказательство чужого признака. Поэтому сверка делается
-        // только когда входы прочитались: непрочитанное не должно превращаться в ложный отказ.
+        // An empty list means "the definition returned no inputs" — a MEASURED property of API5 on an
+        // EXISTING fillet, not proof of a foreign feature. So the check runs only when the inputs were
+        // read: an unread value must not turn into a false refusal.
         if (requestedOwnInputs.Count > 0)
         {
             var requestedSet = requestedOwnInputs.OrderBy(x => x).ToArray();
@@ -740,7 +679,7 @@ public partial class Api5Session
         var featuresAfter = CountFeatures(document);
         var stateAfter = ReadFeatureState(entity);
 
-        // Набор перечитывается С ЖИВОЙ МОДЕЛИ: запись без эффекта не должна выглядеть применённой.
+        // The set is re-read FROM THE LIVE MODEL: a write without effect must not look applied.
         var after = Api7Fillet.ReadBaseObjects(container, owner);
         var afterRefs = after is null ? null : Api7Fillet.ReferencesOf(after);
         var inputsSet = afterRefs is not null && SameSet(afterRefs, targetRefs);
@@ -813,15 +752,11 @@ public partial class Api5Session
             EdgesReadBack: afterRefs?.Count);
     }
 
-    /// <summary>
-    /// Правка набора по рёбрам ТЕЛА (<c>edge_refs</c>) — измеренно годная валюта ЗАМЕНЫ состава и
-    /// негодная для СОКРАЩЕНИЯ.
-    /// </summary>
-    /// <remarks>
-    /// Сохраняется отдельным путём, а не веткой общего: у него своя валюта, свой измеренный опыт
-    /// (H2.4, 1→1) и своя граница (сокращение схлопывает признак — FL10). Слить оба пути значило бы
-    /// снова потерять различие, из-за которого строки стоят раздельно.
-    /// </remarks>
+    /// <summary>Edge-set edit by BODY edges (<c>edge_refs</c>) — the measurably valid currency for REPLACING the
+    /// composition and invalid for REDUCING it.</summary>
+    /// <remarks>Kept as a separate path rather than a shared branch: it has its own currency, its own measured
+    /// experience (H2.4, 1→1) and its own limit (reduction collapses the feature — FL10). Merging the two
+    /// paths would lose the distinction again, which is why the rows stand apart.</remarks>
     private UpdateFeatureResult UpdateFilletEdgeSetByBodyEdges(
         DocumentEntry document,
         ksEntity entity,
@@ -841,17 +776,16 @@ public partial class Api5Session
                 RetryPolicy.Never);
         }
 
-        // Текущий набор — ДЛЯ СОПОСТАВЛЕНИЯ признака API5 с IFillet, а не для решения о мутации.
-        // Разворачивается тем же путём, что и при создании: реестр ссылок + три маршрута
-        // разворачивания ребра в entity (измерено P2.2). Второй копии этого разбора здесь не надо.
+        // The current set is FOR MATCHING the API5 feature to IFillet, not for deciding on mutation. It
+        // is expanded the same way as on creation: the reference registry plus three routes of unwrapping
+        // an edge into an entity (MEASURED P2.2). A second copy of this parsing is not needed here.
         //
-        // ВАЖНО ПО ИСТОЧНИКУ. Определение API5 (ksFilletDefinition.array()) на СУЩЕСТВУЮЩЕМ
-        // скруглении рёбер не отдаёт вовсе — измерено (0 из 4 после скругления, строка FL10,
-        // отрицательный результат, сохранённый в gap), и это ровно то же свойство, из-за которого
-        // маршрут правки лежит в API7, а не в API5. Опираться на него при ОПОЗНАНИИ значило бы
-        // зависеть от того самого механизма, который признан неработающим. Поэтому основной
-        // источник — собственные входы живого признака в API7 (IFillet.BaseObjects), а определение
-        // API5 остаётся запасным путём.
+        // IMPORTANT ON THE SOURCE. The API5 definition (ksFilletDefinition.array()) returns no edges at
+        // all on an EXISTING fillet — MEASURED (0 of 4 after a fillet, row FL10, a negative result kept in
+        // gap), the same property that puts the edit route in API7 rather than API5. Relying on it for
+        // IDENTIFICATION would depend on the very mechanism deemed non-working. So the primary source is
+        // the live feature's own inputs in API7 (IFillet.BaseObjects), and the API5 definition stays a
+        // fallback.
         var bridge = BridgeFor(document);
         var container = bridge.ContainerFor(document.Document, document.Id, document.Revision);
         if (container is null)
@@ -879,9 +813,9 @@ public partial class Api5Session
             }
         }
 
-        // Ссылки ТЕКУЩИХ входов признака — ключ опознания. Ребро API5 переносится в API7 и
-        // сравнивается по Reference: индекс произволен, имя между API5 и API7 не совпадает,
-        // радиус не различает два скругления одного радиуса.
+        // The references of the feature's CURRENT inputs are the identification key. An API5 edge is
+        // transferred to API7 and compared by Reference: the index is arbitrary, the name differs between
+        // API5 and API7, and the radius does not tell two fillets of one radius apart.
         var currentRefs = new List<int>(currentEdges.Count);
         foreach (var edge in currentEdges)
         {
@@ -895,15 +829,15 @@ public partial class Api5Session
         string identifiedBy;
         if (currentRefs.Count > 0 && currentRefs.Count == currentEdges.Count)
         {
-            // Основной путь: признак опознаётся по СОСТАВУ собственных входов.
+            // Primary route: the feature is identified by the COMPOSITION of its own inputs.
             index = Api7Fillet.FindIndexByInputReferences(container, currentRefs);
             identifiedBy = "состав входов";
         }
         else
         {
-            // Запасной путь: определение API5 входов не отдало (измерено), либо перенеслись не все.
-            // Радиус определения — единственный скаляр, который обе стороны описывают одинаково.
-            // Число входов берётся у IFillet (он его отдаёт всегда), а не у определения API5.
+            // Fallback: the API5 definition returned no inputs (MEASURED), or not all transferred. The
+            // definition radius is the only scalar both sides describe alike. The input count is taken
+            // from IFillet (it always returns it), not from the API5 definition.
             identifiedBy = "радиус и число входов (определение API5 входов не отдало)";
             if (beforeSource?.radius is double radiusKey)
             {
@@ -933,17 +867,17 @@ public partial class Api5Session
                 });
         }
 
-        // Новый набор строится как ПОДМНОЖЕСТВО СОБСТВЕННЫХ ВХОДОВ признака, а не как набор
-        // заново добытых из тела объектов. Это не приём реализации, а измеренное требование:
-        // проба H-2 (H2.3/H2.5) принимает признак назад ТОЛЬКО те объекты, которые сама у него
-        // прочитала, — её собственные слова: «Пишем подмножество из N объектов, прочитанных из
-        // BaseObjects… Clear() НЕ вызывается, рёбра конечного тела НЕ ищутся».
+        // The new set is built as a SUBSET OF THE FEATURE'S OWN INPUTS, not as a set of objects newly
+        // obtained from the body. This is not an implementation trick but a measured requirement: probe
+        // H-2 (H2.3/H2.5) accepts back ONLY the objects it itself read from the feature — its own words:
+        // a subset of N objects read from BaseObjects is written, Clear() is NOT called, body edges are
+        // NOT sought.
         //
-        // Здесь это первое время было сделано иначе: ссылки клиента разрешались в рёбра тела и
-        // переносились в API7 заново. Такой набор признак не принимает — измерено приёмкой
-        // (FL10: level=call_returned, V=80000 при err=None, то есть вызов прошёл, а набор не
-        // применился). Отсюда правило: требуемый набор ОТБИРАЕТСЯ из входов признака, а ссылки
-        // клиента лишь ГОВОРЯТ, какие из них оставить.
+        // Here it was done differently at first: the client's references were resolved into body edges and
+        // re-transferred to API7. The feature does not accept such a set — MEASURED by acceptance (FL10:
+        // level=call_returned, V=80000 with err=None, i.e. the call passed but the set did not apply).
+        // Hence the rule: the required set is SELECTED from the feature's inputs, and the client's
+        // references only SAY which of them to keep.
         var requested = new List<ksEntity>(edgeRefs.Count);
         var routes = new HashSet<string>(StringComparer.Ordinal);
         foreach (var reference in edgeRefs)
@@ -963,10 +897,10 @@ public partial class Api5Session
             requested.Add(unwrapped.Entity);
         }
 
-        // Опознание запрошенных рёбер в терминах API7. Ребро тела приходит из API5 и требует
-        // переноса <c>ksAPI7Dual</c>; вход признака приходит из BaseObjects уже объектом API7.
-        // Обе стороны приводятся к <c>int</c>, но разными путями — это и есть та асимметрия,
-        // из-за которой совпадение по Reference НЕ является универсальным ключом.
+        // Identification of the requested edges in API7 terms. A body edge comes from API5 and needs the
+        // ksAPI7Dual transfer; a feature input comes from BaseObjects already as an API7 object. Both
+        // sides are reduced to int, but by different paths — that is the asymmetry that makes a Reference
+        // match NOT a universal key.
         var liveInputs = Api7Fillet.ReadBaseObjects(container, index.Value);
         IReadOnlyList<IModelObject> targets;
         string selectionRoute;
@@ -1008,35 +942,35 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["unresolved"] = unresolved });
         }
 
-        // Новый набор ПРЕДЪЯВЛЯЕТСЯ объектами, добытыми переносом, — ровно так, как это измерено
-        // в решающем контроле пробы H-2 (H2.4). Проба писала в IFillet.BaseObjects массив из ОДНОГО
-        // ребра тела, перенесённого ksAPI7Dual, которого среди собственных входов признака ЗАВЕДОМО
-        // не было (свободный угол), и КОМПАС это принял: состав переехал на другой угол при
-        // неизменном размере набора. Значит продукт принимает перенесённые объекты и НЕ требует,
-        // чтобы они совпадали с тем, что признак уже держит.
+        // The new set is PRESENTED with objects obtained by transfer — exactly as measured in the
+        // decisive control of probe H-2 (H2.4). The probe wrote into IFillet.BaseObjects an array of ONE
+        // body edge transferred by ksAPI7Dual that was definitely not among the feature's own inputs (a
+        // free corner), and KOMPAS accepted it: the composition moved to another corner at an unchanged
+        // set size. So the product accepts transferred objects and does NOT require them to match what the
+        // feature already holds.
         //
-        // Здесь стояло СТРОЖЕ: набор отбирался только из собственных входов признака по совпадению
-        // Reference, и всё остальное отвергалось. Это правило было введено по недоразумению —
-        // оно опиралось на наблюдение H2.7 («входы 1073742065–67 против ребра тела 1073742080»),
-        // прочитанное как «контексты несопоставимы». Измерено 17.09.2026 на FL10x: полосы СОСЕДНИЕ
-        // (перенесённое ребро 1073742309 против входа признака 1073742308), тип у обоих
-        // ksObjectEdge, обе ссылки устойчивы при повторном чтении, а адресные привязки разные.
-        // То есть это не «чужое пространство нумерации», а обычная двойственность API5/API7:
-        // ksEntity тела и IModelObject признака — два разных COM-объекта про одно ребро. Проба
-        // такую сверку НЕ делала никогда, поэтому запрет был не измерением, а догадкой.
+        // This used to be STRICTER: the set was selected only from the feature's own inputs by Reference
+        // match, and everything else was rejected. That rule came from a misunderstanding — it rested on
+        // observation H2.7 ("inputs 1073742065–67 against body edge 1073742080") read as "the contexts
+        // are incomparable". MEASURED 17.09.2026 on FL10x: the bands are ADJACENT (transferred edge
+        // 1073742309 against feature input 1073742308), both are ksObjectEdge, both references are stable
+        // across re-read, and the address bindings differ. So this is not "a foreign numbering space" but
+        // the ordinary API5/API7 duality: a body ksEntity and a feature IModelObject are two different
+        // COM objects for one edge. The probe never made such a check, so the ban was a guess, not a
+        // measurement.
         //
-        // Что осталось от прежнего правила и почему: признак по-прежнему надо ОПОЗНАТЬ (см. выше,
-        // FindIndexByInputReferences), и для этого нужны его собственные входы. Совпадающие ссылки
-        // означают, что клиент просит оставить часть того, что уже есть, — тогда берутся ТЕ ЖЕ
-        // объекты признака (не пересозданные), потому что для подмножества это строго измеренный
-        // путь H2.3/H2.5. НЕсовпадающие — предъявляются перенесёнными, как в H2.4.
+        // What remains of the old rule and why: the feature must still be IDENTIFIED (see above,
+        // FindIndexByInputReferences), and that needs its own inputs. Matching references mean the client
+        // asks to keep part of what already exists — then the SAME feature objects are taken (not
+        // recreated), because for a subset that is the strictly measured H2.3/H2.5 path. NON-matching
+        // ones are presented transferred, as in H2.4.
         var overlapping = wantedRefs.Count(w => inputRefs.Contains(w));
         var targetsByOwn = overlapping > 0 && overlapping == wantedRefs.Count;
 
         if (targetsByOwn)
         {
-            // Все запрошенные рёбра — среди собственных входов признака: строго измеренный путь
-            // сокращения (H2.3 4→3, H2.5 4→2). Пишутся объекты ИЗ BaseObjects, Clear() не зовётся.
+            // All requested edges are among the feature's own inputs: the strictly measured reduction
+            // path (H2.3 4→3, H2.5 4→2). Objects FROM BaseObjects are written, Clear() is not called.
             var ownKept = new List<IModelObject>(wantedRefs.Count);
             for (var i = 0; i < liveInputs.Count; i++)
             {
@@ -1051,14 +985,14 @@ public partial class Api5Session
         }
         else
         {
-            // Хотя бы одно запрошенное ребро признак не держит: предъявляются ПЕРЕНЕСЁННЫЕ объекты
-            // (H2.4). Перенос обязателен именно здесь: `requested` — это `ksEntity` API5, а
-            // `BaseObjects` принимает `IModelObject`. Тот же режим ksAPI7Dual, что и в опознании.
+            // At least one requested edge is not held by the feature: TRANSFERRED objects are presented
+            // (H2.4). The transfer is mandatory here: `requested` are API5 `ksEntity`, while
+            // `BaseObjects` takes `IModelObject`. The same ksAPI7Dual mode as in identification.
             //
-            // Разворачивание берётся из `requested` в ТОМ ЖЕ порядке, что и `wantedRefs`: ссылка
-            // каждого объекта уже добыта выше и стоит в `wantedRefs` под тем же индексом, поэтому
-            // повторный перенос не нужен — и не делается, чтобы объект, попавший в набор, был
-            // буквально тем же, чья ссылка измерена.
+            // The unwrapping is taken from `requested` in the SAME order as `wantedRefs`: each object's
+            // reference was already obtained above and stands in `wantedRefs` at the same index, so a
+            // second transfer is not needed — and is not done, so that the object that lands in the set
+            // is literally the one whose reference was measured.
             var transferredTargets = new List<IModelObject>(requested.Count);
             var transferFailed = new List<string>();
             for (var i = 0; i < requested.Count; i++)
@@ -1084,11 +1018,11 @@ public partial class Api5Session
                     details: new Dictionary<string, object?> { ["unresolved_on_transfer"] = transferFailed });
             }
 
-            // Отдельно оговорено и НЕ проверяется здесь: расширяет ли это набор или заменяет его.
-            // Проба измерила замену (1→1) и сокращение (4→3, 4→2); чистого расширения на эталоне
-            // из четырёх углов поставить нельзя — у пластины ровно четыре вертикальных угла.
-            // Поэтому ответ не утверждает «добавилось N», он сообщает измеренный состав после
-            // Update, а предикат подтверждения (объём + перечитанный набор) решает сам.
+            // Separately stated and NOT checked here: whether this extends or replaces the set. The probe
+            // measured replacement (1→1) and reduction (4→3, 4→2); a pure extension cannot be staged on
+            // the four-corner reference — the plate has exactly four vertical corners. So the answer does
+            // not claim "N added", it reports the measured composition after Update, and the confirmation
+            // predicate (volume + re-read set) decides for itself.
             targets = transferredTargets;
             selectionRoute =
                 $"предъявлены перенесённые объекты (H2.4): {transferredTargets.Count} из запрошенных, " +
@@ -1109,8 +1043,8 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["api7_failure"] = write.Failure });
         }
 
-        // Без перестроения запись в IFillet остаётся представлением: тот же порядок, что при создании
-        // скругления и при правке радиуса (F.10 + проба E).
+        // Without a rebuild the IFillet write stays a representation: the same order as on fillet
+        // creation and on radius edit (F.10 + probe E).
         Api7Bridge.Rebuild(container, document.Document);
         BumpRevision(document, "fillet.update.edges");
 
@@ -1118,8 +1052,8 @@ public partial class Api5Session
         var featuresAfter = CountFeatures(document);
         var stateAfter = ReadFeatureState(entity);
 
-        // Набор перечитывается С ЖИВОЙ МОДЕЛИ, а не с того объекта, в который писали: запись без
-        // эффекта (как ksFilletDefinition.radius на FL04r) не должна выглядеть применённой.
+        // The set is re-read FROM THE LIVE MODEL, not from the object written into: a write without
+        // effect (like ksFilletDefinition.radius on FL04r) must not look applied.
         var afterInputs = Api7Fillet.ReadBaseObjects(container, index.Value);
         var afterRefs = afterInputs is null ? null : Api7Fillet.ReferencesOf(afterInputs);
 
@@ -1184,31 +1118,30 @@ public partial class Api5Session
 
         var geometryConfirmed = edgesSet && sameFeature && volumeMatched;
 
-        // ИСЧЕЗНОВЕНИЕ ПРИЗНАКА — ЭТО ОТКАЗ, А НЕ «УСПЕХ С ПОНИЖЕННЫМ УРОВНЕМ».
+        // FEATURE ERASURE IS A REFUSAL, NOT A "SUCCESS AT A LOWER LEVEL".
         //
-        // Измерено 17.09.2026 (FL25, Г-образная пластина 100×80 с вырезом 40×30, шесть вертикальных
-        // углов). Признаку был предъявлен набор [дуга скруглённого угла + вертикальное ребро
-        // свободного угла] — обе части рёбра ТЕЛА. Запись прошла, перестроение прошло, ответ вернул
-        // err=None и level=call_returned, а объём оказался равен 68000, то есть Г-ПЛАСТИНЕ БЕЗ
-        // СКРУГЛЕНИЙ: набор не «не применился», он СХЛОПНУЛ признак, стерев уже сделанное
-        // скругление. Клиент, читающий только err и level, принял бы это за успешную правку.
+        // MEASURED 17.09.2026 (FL25, an L-shaped plate 100×80 with a 40×30 cut-out, six vertical corners).
+        // A set [arc of a filleted corner + vertical edge of a free corner] was presented to the feature —
+        // both parts body edges. The write passed, the rebuild passed, the answer returned err=None and
+        // level=call_returned, and the volume came out 68000, i.e. the L-PLATE WITHOUT FILLETS: the set
+        // did not "fail to apply", it COLLAPSED the feature, erasing the fillet already made. A client
+        // reading only err and level would take this for a successful edit.
         //
-        // Причина не в валюте как таковой, а в её границе: рёбра ТЕЛА описывают углы, которых
-        // признак СЕЙЧАС не держит, и предъявление такого набора означает «построй скругление
-        // заново по этим рёбрам», а не «оставь прежнее и добавь». Для сокращения и замены это
-        // безразлично (там все предъявленные рёбра признаку уже принадлежат — FL10/FL10s/FL10b/
-        // FL10x), а при РАСШИРЕНИИ предъявляется угол, которым признак не владеет, и прежний
-        // состав теряется целиком.
+        // The cause is not the currency as such but its limit: BODY edges describe corners the feature
+        // does NOT hold right now, and presenting such a set means "build the fillet anew on these edges",
+        // not "keep the old one and add". For reduction and replacement this is immaterial (all presented
+        // edges already belong to the feature — FL10/FL10s/FL10b/FL10x), but on EXTENSION a corner the
+        // feature does not own is presented, and the previous composition is lost entirely.
         //
-        // Поэтому случай «признак перестал читаться как скругление ИЛИ признак не выжил» объявляется
-        // отказом ДО возврата успеха. Это не ослабление ожидания (объём по-прежнему сверяется с
-        // аналитикой) и не подмена исхода: мутация уже произошла, поэтому отказ несёт
-        // partial_effects=true — клиент обязан узнать, что модель изменена.
+        // So the case "the feature stopped reading as a fillet OR the feature did not survive" is declared
+        // a refusal BEFORE returning success. This is not a weakening of the expectation (the volume is
+        // still checked against analytics) and not a substitution of the outcome: the mutation already
+        // happened, so the refusal carries partial_effects=true — the client must learn the model changed.
         //
-        // Объём родителя берётся как объём ДО правки плюс снятое правкой: если признак стёрт,
-        // геометрия возвращается ровно к «до», а не к «до минус скругления». Поэтому критерий —
-        // «после правки признак не читается как скругление», а не арифметика по объёму: она
-        // зависела бы от числа углов и повторила бы ошибку подгонки.
+        // The parent volume is taken as the volume BEFORE the edit plus what the edit removed: if the
+        // feature was erased, the geometry returns exactly to "before", not to "before minus the fillet".
+        // Hence the criterion is "after the edit the feature does not read as a fillet", not volume
+        // arithmetic: that would depend on the number of corners and repeat the fitting error.
         if (afterRefs is null || !sameFeature)
         {
             throw new KompasContractException(
@@ -1237,24 +1170,25 @@ public partial class Api5Session
                 });
         }
 
-        // ЗАПИСЬ БЕЗ ЭФФЕКТА — ТОЖЕ ОТКАЗ, А НЕ «УСПЕХ С ПОНИЖЕННЫМ УРОВНЕМ».
+        // A WRITE WITHOUT EFFECT IS ALSO A REFUSAL, NOT A "SUCCESS AT A LOWER LEVEL".
         //
-        // Измерено 18.09.2026 (FL25, Г-образная пластина 100×80 с вырезом 40×30). Признаку был
-        // предъявлен набор [дуга скруглённого угла + вертикальное ребро СВОБОДНОГО угла] — обе части
-        // рёбра ТЕЛА. Запись прошла, перестроение прошло, ответ вернул err=None и
-        // level=call_returned, edges_read_back=1 при предъявленных 2, а объём остался на ОДНОМ угле
-        // (67980.68583470576). Клиент, читающий status и err, принял бы это за выполненное
-        // расширение — ровно тот порок, ради которого строка FL25 и заведена.
+        // MEASURED 18.09.2026 (FL25, an L-shaped plate 100×80 with a 40×30 cut-out). A set [arc of a
+        // filleted corner + vertical edge of a FREE corner] was presented to the feature — both parts
+        // body edges. The write passed, the rebuild passed, the answer returned err=None and
+        // level=call_returned, edges_read_back=1 against 2 presented, and the volume stayed on ONE corner
+        // (67980.68583470576). A client reading status and err would take this for a completed extension —
+        // exactly the defect row FL25 exists for.
         //
-        // Прежняя редакция ниже ловила только ИСЧЕЗНОВЕНИЕ признака (схлопывание). Между
-        // «признак стёрт» и «набор записан» есть третий исход — «не произошло ничего», и он обязан
-        // быть отказом по той же причине: правку просили именно потому, что она что-то меняет.
-        // Ответ, в котором сработала проверка edges_read_back=false, не вправе называться успехом.
+        // The earlier revision below caught only feature ERASURE (collapse). Between "the feature was
+        // erased" and "the set was written" there is a third outcome — "nothing happened" — and it must
+        // be a refusal for the same reason: the edit was requested precisely because it changes something.
+        // An answer in which the edges_read_back=false check fired cannot be called a success.
         //
-        // Критерий — ПЕРЕЧИТАННЫЙ СОСТАВ, а не объём: объём зависит от числа и вида углов
-        // (скругление входящего угла ДОБАВЛЯЕТ материал), и арифметика по нему повторила бы ошибку
-        // подгонки. partial_effects отличает «модель изменена не тем, чем просили» от «модель не
-        // тронута»: он сравнивает объём с объёмом ДО правки, а не с ожиданием клиента.
+        // The criterion is the RE-READ COMPOSITION, not the volume: the volume depends on the number and
+        // kind of corners (fillet of a concave corner ADDS material), and arithmetic on it would repeat
+        // the fitting error. partial_effects distinguishes "the model changed into something other than
+        // requested" from "the model was untouched": it compares the volume with the volume BEFORE the
+        // edit, not with the client's expectation.
         if (!edgesSet)
         {
             var modelChanged = volumeAfter is double volumeNow && volumeBefore is double volumeWas
@@ -1299,13 +1233,13 @@ public partial class Api5Session
                 geometryConfirmed ? VerificationLevel.GeometryChecked : VerificationLevel.CallReturned,
                 checks,
                 unverified),
-            // Радиус не трогали: набор рёбер и радиус — разные предметы правки, и ответ не должен
-            // выглядеть так, будто изменилось и то, и другое.
+            // The radius was not touched: the edge set and the radius are different edit subjects, and the
+            // answer must not look as if both changed.
             RadiusReadBackMm: null,
             EdgesReadBack: afterRefs?.Count);
     }
 
-    /// <summary>Сравнение составов как множеств: порядок выдачи коллекции недетерминирован.</summary>
+    /// <summary>Compare compositions as sets: the collection's output order is non-deterministic.</summary>
     private static bool SameSet(IReadOnlyList<int> left, IReadOnlyList<int> right)
     {
         if (left.Count != right.Count)
@@ -1318,14 +1252,10 @@ public partial class Api5Session
         return a.SequenceEqual(b);
     }
 
-    /// <summary>
-    /// Устойчивая ссылка ребра API5 (<c>ksEntity</c>), перенесённого в API7.
-    /// </summary>
-    /// <remarks>
-    /// Переносится тем же режимом <c>ksAPI7Dual</c>, что и всё остальное: проба E измерила, что
-    /// неверный режим переноса даёт не ошибку, а объект, который «читается», но представляет другую
-    /// сущность. null означает «не перенеслось» — это ответ, а не ноль.
-    /// </remarks>
+    /// <summary>A stable reference of an API5 edge (<c>ksEntity</c>) transferred to API7.</summary>
+    /// <remarks>Transferred by the same <c>ksAPI7Dual</c> mode as everything else: probe E measured that a wrong
+    /// transfer mode gives not an error but an object that "reads" yet represents a different entity.
+    /// null means "did not transfer" — an answer, not a zero.</remarks>
     private static int? ReferenceOfApi7(Api7Bridge bridge, ksEntity edge)
     {
         try
@@ -1338,15 +1268,13 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Тождество COM-объекта, не зависящее от его собственных свойств: две ссылки на один объект
-    /// дают одно число, даже если <c>Reference</c> у них разный или не читается.
-    /// </summary>
+    /// <summary>Identity of a COM object independent of its own properties: two references to one object give one
+    /// number, even if their <c>Reference</c> differs or does not read.</summary>
     /// <remarks>
-    /// Нужно ровно для одного различия, которое иначе нечем разрешить: «ссылка входов признака и
-    /// ссылка ребра тела не совпали» может означать либо ДВА РАЗНЫХ объекта с разными полосами
-    /// нумерации, либо ОДИН объект, чей <c>Reference</c> вычисляется в контексте чтения. Свойство
-    /// <c>Reference</c> эти два случая не различает, адресная привязка RCW — различает.
+    /// Needed for exactly one distinction that cannot otherwise be resolved: "the feature-input reference
+    /// and the body-edge reference did not match" may mean either TWO DIFFERENT objects with different
+    /// numbering bands, or ONE object whose <c>Reference</c> is computed in the reading context. The
+    /// <c>Reference</c> property does not tell these two apart; the RCW address binding does.
     /// </remarks>
     private static string AddressOf(object instance)
     {

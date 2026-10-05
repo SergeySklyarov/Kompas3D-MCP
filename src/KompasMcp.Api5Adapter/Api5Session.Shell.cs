@@ -6,55 +6,44 @@ using KompasMcp.Domain.References;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>
-/// Оболочка — тонкостенный элемент (docs/05 SM-13, очередь B5).
-/// </summary>
+/// <summary>Shell — a thin-walled element (docs/05 SM-13, queue B5).</summary>
 /// <remarks>
-/// <para>
-/// <b>Маршрут — документированный API5, и он же измерен числом.</b> Страница
-/// <c>ksshelldefinition.html</c> («Тонкостенная оболочка (Интерфейсы ksShellDefinition,
-/// IShellDefinition)») описывает интерфейс, который «можно получить, используя метод интерфейса
-/// элемента модели <c>ksEntity::GetDefinition</c>»; состав — свойства <c>thickness</c> и
-/// <c>thinType</c> и метод <c>FaceArray()</c>, возвращающий «динамический массив удаляемых граней
-/// <c>ksEntityCollection</c>». Тип объекта — <c>o3d_shellOperation = 43</c> (<c>obj3dtype.html</c>).
-/// </para>
-/// <para>
-/// <b>Направление стенки: документация и измерение согласны.</b>
-/// <c>ksshelldefinition_thintype.html</c> задаёт буквально: «<c>TRUE</c> — внутрь, <c>FALSE</c> —
-/// наружу». Измерено на коробе 100×80×10 с удалённой верхней гранью при <c>t = 2</c>:
-/// <c>thinType = true</c> → <c>21631.999999999996</c> мм³ (полость 96×76×8),
-/// <c>thinType = false</c> → <c>24832.000000000022</c> мм³ (тело 104×84×12 минус 100×80×10).
-/// Оба числа совпадают с аналитикой, поэтому соответствие установлено дважды — страницей и объёмом.
-/// </para>
-/// <para>
-/// <b>Пустой список удаляемых граней отвергается ДО COM, и это измеренный отказ, а не запрет по
-/// вкусу.</b> Ожидание «пустой список даёт замкнутую оболочку <c>36224</c>» не подтвердилось
-/// <b>ни на одном из двух API</b>: API5 (шаг B5.6) дал <c>80000</c>, API7 (шаг B5.10, четыре
-/// постановки) — <c>79999.99999999999</c> при <b>6 гранях</b>, ровно как у исходного короба, тогда
-/// как открытая оболочка даёт <c>21632</c> при <b>11</b> гранях. То есть <c>Create()/Update()</c>
-/// возвращают <c>true</c> («принято»), а тело не меняется («не применено»). Выдавать такой исход за
-/// построенную оболочку запрещено, поэтому вызов с пустым списком граней именованно отвергается.
-/// </para>
-/// <para>
-/// <b>Что считается доказательством.</b> <c>Create() = true</c> и <c>Update() = true</c> — это
-/// «принято». Геометрия подтверждается объёмом против аналитического ожидания вызывающего и числом
-/// граней; без ожидания уровень честно остаётся <c>call_returned</c>.
-/// </para>
+/// ROUTE — documented API5, and MEASURED by number as well. DOC: <c>ksshelldefinition.html</c>
+/// («Тонкостенная оболочка (Интерфейсы ksShellDefinition, IShellDefinition)»): the interface «можно
+/// получить, используя метод интерфейса элемента модели <c>ksEntity::GetDefinition</c>»; its members
+/// are <c>thickness</c>, <c>thinType</c> and <c>FaceArray()</c>, returning «динамический массив
+/// удаляемых граней <c>ksEntityCollection</c>». Object type <c>o3d_shellOperation = 43</c>
+/// (<c>obj3dtype.html</c>).
+/// DOC: <c>ksshelldefinition_thintype.html</c> — «<c>TRUE</c> — внутрь, <c>FALSE</c> — наружу».
+/// MEASURED 20.09.2026 on a 100×80×10 box with the top face removed at <c>t = 2</c>:
+/// <c>thinType=true</c> → <c>21631.999999999996</c> mm³ (cavity 96×76×8); <c>thinType=false</c> →
+/// <c>24832.000000000022</c> mm³ (body 104×84×12 minus 100×80×10). Both match the analytic values, so
+/// the correspondence is established twice — by the help page and by volume.
+/// LIMIT: an empty face list is refused BEFORE COM — a MEASURED refusal, not a taste-based ban.
+/// MEASURED 20.09.2026 on BOTH APIs: API5 (step B5.6) gave <c>80000</c>, API7 (step B5.10, four
+/// setups) gave <c>79999.99999999999</c> at <b>6 faces</b>, exactly as the source box, while an open
+/// shell gives <c>21632</c> at <b>11</b> faces. <c>Create()/Update()</c> return <c>true</c>
+/// ("accepted") while the body does not change ("not applied"); passing that off as a built shell is
+/// forbidden.
+/// INVARIANT: geometry is confirmed by volume against the caller's analytic expectation and by face
+/// count; <c>Create()/Update()=true</c> is only "accepted", and with no expectation the level honestly
+/// stays <c>call_returned</c>.
+/// History: docs/decisions/adapter-features.md#shell-empty-faces
 /// </remarks>
 public partial class Api5Session
 {
-    /// <summary>Оболочка — <c>o3d_shellOperation</c>.</summary>
+    /// <summary>Shell — <c>o3d_shellOperation</c>.</summary>
     private const short ShellOperation = 43;
 
-    /// <summary>Оболочка: постоянная толщина стенки по удаляемым граням (SM-13).</summary>
+    /// <summary>Shell: constant wall thickness over the removed faces (SM-13).</summary>
     public ShellResult Shell(ShellCommand command)
     {
         ValidateShellCommand(command);
 
         var document = RequireDocument(command.DocumentId);
 
-        // Грани обязаны принадлежать ТОЙ ЖЕ детали: ссылка из чужого документа дала бы либо отказ
-        // ядра, либо — хуже — молчаливо чужую геометрию, а этого здесь не проверял никто.
+        // INVARIANT: faces must belong to the SAME part — a reference from a foreign document would
+        // give either a kernel refusal or, worse, silently foreign geometry.
         var faces = new List<ksFaceDefinition>(command.FaceRefs.Count);
         foreach (var faceRef in command.FaceRefs)
         {
@@ -172,17 +161,16 @@ public partial class Api5Session
                 "тел " + bodiesBefore + " → " + bodiesAfter),
         };
 
-        // Число граней — ВТОРОЙ независимый признак рядом с объёмом, и он важен именно потому, что
-        // измеренный отказ «пустой список граней» выглядел как успех по одному объёму: тело не
-        // менялось, но Create/Update отвечали true. Здесь признак применён, и граней стало больше.
+        // Face count is a SECOND independent signal next to volume: the MEASURED empty-face-list
+        // refusal looked like success by volume alone (the body did not change while Create/Update
+        // answered true). Here the feature was applied and the face count grew.
         checks.Add(new NamedCheck("face_count_grew", facesAfter > facesBefore,
             Observed: facesBefore + " → " + facesAfter,
             Expected: "у оболочки появились внутренние грани полости"));
 
-        // Оболочка УМЕНЬШАЕТ объём: материал снимается с внутренней стороны (внутрь) или тело
-        // остаётся снаружи (наружу). Направление «наружу» при удалённой грани объём увеличивает,
-        // поэтому проверка формулируется как «объём изменился», а не «уменьшился»: иначе честный
-        // результат направления «наружу» читался бы как отказ.
+        // Shell CHANGES volume: material is removed inside (inward) or added outside (outward). The
+        // "outward" direction with a removed face INCREASES volume, so the check reads "volume
+        // changed", not "decreased" — otherwise an honest "outward" result would read as a refusal.
         var volumeChanged = volumeBefore is double before && volumeAfter is double after
                             && Math.Abs(after - before) > 1e-6;
         checks.Add(new NamedCheck("volume_changed", volumeChanged,
@@ -230,10 +218,8 @@ public partial class Api5Session
             new List<string>());
     }
 
-    /// <summary>
-    /// Присоединить удаляемые грани к определению. Возвращает число присоединённых: меньше
-    /// запрошенного означает, что маршрут не построился, и это отказ, а не «часть граней».
-    /// </summary>
+    /// <summary>Attach the removed faces to the definition. Returns the attached count: fewer than
+    /// requested means the route did not build, and that is a refusal, not "some of the faces".</summary>
     private static int AttachFaces(ksShellDefinition definition, IReadOnlyList<ksFaceDefinition> faces)
     {
         object? holder;
@@ -263,11 +249,9 @@ public partial class Api5Session
         return attached;
     }
 
-    /// <summary>
-    /// Правила «поле ↔ возможность», отвергающие вызов ДО обращения к COM. Цена ошибки здесь
-    /// несимметрична: лишний отказ виден сразу, а принятое и проигнорированное число доживает до
-    /// приёмки, выглядя как выполненная операция.
-    /// </summary>
+    /// <summary>"Field ↔ capability" rules that reject the call BEFORE COM. The cost of a mistake is
+    /// asymmetric: a spurious refusal is seen at once, while an accepted-and-ignored number survives
+    /// to acceptance looking like a completed operation.</summary>
     private static void ValidateShellCommand(ShellCommand command)
     {
         if (string.IsNullOrWhiteSpace(command.DocumentId))
@@ -290,10 +274,10 @@ public partial class Api5Session
 
         if (command.FaceRefs.Count == 0)
         {
-            // Отказ ОСНОВАН НА ИЗМЕРЕНИИ, а не на осторожности: пустой список граней не даёт
-            // замкнутой оболочки ни на API5 (B5.6: 80000), ни на API7 (B5.10: 80000 при 6 гранях),
-            // хотя Create()/Update() отвечают true. Принять такой вызов значило бы вернуть
-            // вызывающему «оболочка построена» там, где тело не изменилось.
+            // The refusal is MEASURED, not cautious: an empty face list yields no closed shell on
+            // either API5 (B5.6: 80000) or API7 (B5.10: 80000 at 6 faces), though Create()/Update()
+            // return true. Accepting it would tell the caller "shell built" where the body did not
+            // change.
             throw new KompasContractException(
                 ErrorCodes.InvalidArgument,
                 "Список удаляемых граней пуст. Измерено 20.09.2026 на обоих API: при пустом списке " +
@@ -322,10 +306,10 @@ public partial class Api5Session
 
         if (command.TangentFaces)
         {
-            // Параметр ОБЪЯВЛЕН в схеме (иначе он был бы невидим для продукта), но ЗДЕСЬ не
-            // выполняется: члена «касательные грани» у API5 ksShellDefinition нет вовсе, а этот
-            // инструмент идёт маршрутом API5. Принять true и промолчать значило бы вернуть успех
-            // за работу, которой не было, — ровно тот дефект, который контракт запрещает.
+            // The parameter IS declared in the schema (otherwise it would be invisible to the
+            // product) but is NOT executed here: API5 <c>ksShellDefinition</c> has no "tangent faces"
+            // member at all, and this tool takes the API5 route. Accepting true silently would return
+            // success for work that never happened — exactly the defect the contract forbids.
             throw new KompasContractException(
                 ErrorCodes.CapabilityUnavailable,
                 "tangent_faces = true не выполняется: у API5 ksShellDefinition члена «касательные " +

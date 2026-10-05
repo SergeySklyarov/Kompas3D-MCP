@@ -10,55 +10,36 @@ using KompasMcp.Domain.References;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>
-/// Правка трёх семейств очереди B5 — кинематической операции, элемента по сечениям и оболочки —
-/// по <c>kompas_update_feature</c>.
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Почему правка вообще существует, а не «удалить и создать заново».</b> Наряд B5 §11 требует
-/// менять параметры СУЩЕСТВУЮЩЕГО признака: пересоздание даёт другой признак дерева, другое имя и
-/// другую позицию среди односемейных, а для признаков, у которых ниже по дереву стоят зависимые,
-/// ещё и другой набор зависимостей. Поэтому у каждого семейства измерен маршрут «запись в тот же
-/// признак → <c>Update()</c> → пересборка», и правка подтверждается ГЕОМЕТРИЕЙ, а не ответом
-/// <c>Update()</c>.
-/// </para>
-/// <para>
-/// <b>Что измерено и каким шагом</b> (проба <c>--b5</c>, отчёт
-/// <c>docs/acceptance/api7/b5-sweep-loft-shell.json</c>):
-/// </para>
-/// <list type="bullet">
-/// <item><b>B5.13</b> — режим кинематики <c>24674.011002723353 → 15707.963267948984 →
-/// 24674.011002723353</c>; толщина и направление оболочки <c>21632 → 40256 → 53056 → 21632</c>;
-/// перепривязка сечений <c>28000 → 48000 → 28000</c>;</item>
-/// <item><b>B5.14</b> — набор удаляемых граней оболочки <c>21632 → 7040 → 21632</c> при
-/// <c>11 → 10 → 11</c> гранях, с отрицательным контролем (повторная запись того же набора объём не
-/// двигает);</item>
-/// <item><b>B5.15</b> — ВХОДЫ кинематики: <c>SetSketch</c> и перепривязка траектории принимаются
-/// (<c>Update = true</c>) и НЕ применяются при положительном контроле на том же признаке.</item>
-/// </list>
-/// <para>
-/// <b>Чего здесь нет и почему.</b> <c>closed</c> у элемента по сечениям не объявлен правимым: запись
-/// <c>ILoft.Closed</c> на построенном признаке возвращает <c>Update() = True</c>, читается обратно
-/// <c>False</c>, объём не меняется (B5.13) — «принято» не означает «применено». Входы кинематики
-/// (<c>sketch_ref</c>, траектория) отвергаются по имени: маршрут измеренно не применяется (B5.15),
-/// а принять и проигнорировать эскиз значило бы отчитаться о правке, которой не было.
-/// </para>
-/// <para>
-/// <b>Поля других семейств отвергаются, а не игнорируются.</b> Цена ошибки здесь несимметрична:
-/// лишний отказ виден сразу, а принятое и проигнорированное число доживает до приёмки, выглядя как
-/// выполненная операция.
-/// </para>
-/// </remarks>
+/// <summary>Editing the three B5 families — sweep, loft and shell — via
+/// <c>kompas_update_feature</c>.</summary>
+/// <remarks>INVARIANT: the edit exists rather than "delete and re-create" — order B5 §11 requires
+/// changing the parameters of an EXISTING feature: re-creation yields a different tree feature, a
+/// different name and a different position among same-family ones, and for features with dependents
+/// below them in the tree, a different dependency set too. Each family therefore has a measured "write
+/// to the same feature → <c>Update()</c> → rebuild" route, and the edit is confirmed by GEOMETRY, not by
+/// the <c>Update()</c> answer.
+/// MEASURED (probe <c>--b5</c>, report <c>docs/acceptance/api7/b5-sweep-loft-shell.json</c>): B5.13 —
+/// sweep mode <c>24674.011002723353 → 15707.963267948984 → 24674.011002723353</c>, shell thickness and
+/// direction <c>21632 → 40256 → 53056 → 21632</c>, section retargeting <c>28000 → 48000 → 28000</c>;
+/// B5.14 — shell removed-face set <c>21632 → 7040 → 21632</c> at <c>11 → 10 → 11</c> faces, with a
+/// negative control (re-writing the same set moves no volume); B5.15 — sweep INPUTS: <c>SetSketch</c>
+/// and path retargeting are accepted (<c>Update = true</c>) and NOT applied under a positive control on
+/// the same feature.
+/// LIMIT: <c>closed</c> of a loft is not declared editable — writing <c>ILoft.Closed</c> on a built
+/// feature returns <c>Update() = True</c>, reads back <c>False</c>, the volume does not change (B5.13):
+/// "accepted" does not mean "applied"; sweep inputs (<c>sketch_ref</c>, path) are rejected by name
+/// because the route measurably does not apply (B5.15).
+/// INVARIANT: fields of other families are rejected, not ignored — the cost of error is asymmetric: a
+/// superfluous refusal is seen at once, while an accepted-and-ignored number survives to acceptance
+/// looking like a completed operation.
+/// History: docs/decisions/adapter-solid.md#b5-edit</remarks>
 public partial class Api5Session
 {
-    /// <summary>Поле правки, его семейство-владелец и способ прочитать значение из команды.</summary>
+    /// <summary>An edit field, its owning family and how to read the value from the command.</summary>
     private sealed record EditField(string Name, string Family, Func<UpdateFeatureCommand, object?> Read);
 
-    /// <summary>
-    /// Поля, принадлежащие семействам B5. Одна таблица на два вопроса — «кто владеет» и «что лежит»:
-    /// разойтись этим двум ответам не с чем.
-    /// </summary>
+    /// <summary>Fields belonging to the B5 families. One table for two questions — "who owns it" and
+    /// "what is in it": the two answers have no way to diverge.</summary>
     private static readonly EditField[] B5EditFields =
     {
         new("shift_mode", EvolutionFamily, c => c.ShiftMode),
@@ -69,17 +50,13 @@ public partial class Api5Session
         new("face_refs", ShellFamily, c => c.FaceRefs),
     };
 
-    /// <summary>
-    /// Поля правки, НЕ принадлежащие B5: выдавливание, фаска, скругление, вращение, семейства B3 и
-    /// массив. Перечислены явно и полностью — этим и отвергаются.
-    /// </summary>
-    /// <remarks>
-    /// <b>Почему перечень, а не «список запрещённого».</b> Перечень того, что бывает в команде,
-    /// меняется вместе с контрактом, а умолчание обязано быть «не отвергай»: поле, не приписанное
-    /// ни одному семейству, отвергается не здесь, а своим семейством. Разница видна на цене ошибки:
-    /// пропущенное в перечне поле принимается и не применяется — ровно тот класс дефекта, ради
-    /// которого написано правило «объявленное, но проглоченное» (§9.1 П4, с другой стороны).
-    /// </remarks>
+    /// <summary>Edit fields NOT belonging to B5: extrusion, chamfer, fillet, rotation, the B3 families
+    /// and pattern. Listed explicitly and completely — that is how they are rejected.</summary>
+    /// <remarks>INVARIANT: a list of what exists, not a "forbidden list" — it changes with the contract,
+    /// and the default must be "do not reject": a field assigned to no family is rejected by its own
+    /// family, not here. The difference shows in the cost of error: a field missed from the list is
+    /// accepted and not applied — exactly the defect class the "declared but swallowed" rule (§9.1 P4)
+    /// was written for.</remarks>
     private static readonly EditField[] NonB5EditFields =
     {
         new("depth_mm", "extrusion", c => c.DepthMm),
@@ -106,10 +83,10 @@ public partial class Api5Session
         new("expected_part_volumes_mm3", "split", c => c.ExpectedPartVolumesMm3),
         new("operation", "boolean", c => c.Operation),
         new("pattern", "pattern", c => c.Pattern),
-        // Поля семейства ОТВЕРСТИЯ (наряд SM07 §3.2). Дописаны 20.09.2026 вместе с появлением самой
-        // правки отверстия: до неё этих полей в контракте не было вовсе, а с их появлением перечень
-        // чужих полей обязан был их получить — иначе вызов «shift_mode + diameter_mm» на
-        // кинематической операции был бы принят, режим применён, а диаметр проглочен.
+        // Fields of the HOLE family (order SM07 §3.2). Added 20.09.2026 together with the hole edit
+        // itself: before it these fields did not exist in the contract at all, and with their appearance
+        // the foreign-field list had to receive them — otherwise a "shift_mode + diameter_mm" call on a
+        // sweep would be accepted, the mode applied, and the diameter swallowed.
         new("diameter_mm", "hole", c => c.DiameterMm),
         new("counterbore_diameter_mm", "hole", c => c.CounterboreDiameterMm),
         new("counterbore_depth_mm", "hole", c => c.CounterboreDepthMm),
@@ -118,9 +95,7 @@ public partial class Api5Session
         new("expected_volume_delta_mm3", "hole", c => c.ExpectedVolumeDeltaMm3),
     };
 
-    /// <summary>
-    /// Отвергнуть поля, не принадлежащие этому семейству B5. Отвергаются ДО обращения к COM.
-    /// </summary>
+    /// <summary>Reject fields not belonging to this B5 family. Rejected BEFORE any COM call.</summary>
     private static void RejectForeignB5EditFields(UpdateFeatureCommand command, string family, string allowed)
     {
         var foreign = NonB5EditFields
@@ -150,31 +125,23 @@ public partial class Api5Session
             });
     }
 
-    // ══════════════════════════════════════════════════════════ кинематика ══
+    // ══════════════════════════════════════════════════════════ sweep ══
 
-    /// <summary>
-    /// Правка режима движения сечения СУЩЕСТВУЮЩЕЙ кинематической операции.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Маршрут измерен 20.09.2026</b> (проба <c>--b5</c>, шаг B5.13): на ОДНОМ признаке смена
-    /// <c>sketchShiftType</c> <c>orthogonal → parallel → orthogonal</c> дала объёмы
-    /// <c>24674.011002723353 → 15707.963267948984 → 24674.011002723353</c>. Постановка различающая
-    /// только на ДУГЕ: на прямой траектории оба режима дают одно тело (B5.2, B5.8).
-    /// </para>
-    /// <para>
-    /// <b>Порядок «запись → <c>Update()</c> → пересборка» — часть контракта</b>: без <c>Update()</c>
-    /// сеттер возвращает успех, а модель остаётся прежней. Ответ <c>Update() = true</c> при этом
-    /// доказательством не считается — объём читается с модели и сверяется с аналитическим ожиданием
-    /// вызывающего.
-    /// </para>
-    /// <para>
-    /// <b>Входы признака этим вызовом не меняются, и это измеренный отказ, а не осторожность.</b>
-    /// Шаг B5.15: <c>SetSketch</c> на существующем признаке и перепривязка <c>PathPartArray()</c>
-    /// принимаются (<c>Update = true</c>) и НЕ применяются — объём остаётся прежним, тогда как смена
-    /// РЕЖИМА на том же признаке его меняет. Поэтому <c>sketch_ref</c> отвергается по имени.
-    /// </para>
-    /// </remarks>
+    /// <summary>Edit the section-shift mode of an EXISTING sweep.</summary>
+    /// <remarks>MEASURED 20.09.2026 (probe <c>--b5</c>, step B5.13): on ONE feature, changing
+    /// <c>sketchShiftType</c> <c>orthogonal → parallel → orthogonal</c> gave volumes
+    /// <c>24674.011002723353 → 15707.963267948984 → 24674.011002723353</c>; the setup discriminates only
+    /// on an ARC — on a straight path both modes give one body (B5.2, B5.8).
+    /// INVARIANT: the order "write → <c>Update()</c> → rebuild" is part of the contract — without
+    /// <c>Update()</c> the setter returns success while the model stays as before; the <c>Update() =
+    /// true</c> answer is not taken as proof — the volume is read from the model and compared with the
+    /// caller's analytical expectation.
+    /// LIMIT: the feature's inputs are not changed by this call, and that is a measured refusal, not
+    /// caution — step B5.15: <c>SetSketch</c> on an existing feature and retargeting
+    /// <c>PathPartArray()</c> are accepted (<c>Update = true</c>) and NOT applied (the volume stays),
+    /// while changing the MODE on the same feature does change it; <c>sketch_ref</c> is therefore
+    /// rejected by name.
+    /// History: docs/decisions/adapter-solid.md#b5-sweep-edit</remarks>
     private UpdateFeatureResult UpdateSweepFeature(
         DocumentEntry document,
         ksEntity entity,
@@ -250,8 +217,8 @@ public partial class Api5Session
         document.Document.RebuildDocument();
         BumpRevision(document, "sweep.update");
 
-        // Перечитывается С МОДЕЛИ: определение берётся у признака заново, а не пересказывается
-        // запрошенное значение.
+        // Re-read FROM THE MODEL: the definition is taken from the feature afresh, not the requested
+        // value retold.
         var after = ReadSweepFeature(DefinitionOf(entity) ?? definition);
         var volumeAfter = ReadVolume(document);
         var featuresAfter = CountFeatures(document);
@@ -266,13 +233,13 @@ public partial class Api5Session
             new("feature_identity_preserved", sameFeature,
                 Observed: stateAfter.Name + ", признаков " + featuresAfter,
                 Expected: stateBefore.Name + ", признаков " + featuresBefore),
-            // Сравнение БЕЗ учёта регистра, и это исправленный дефект, а не стилистика: модель
-            // отдаёт имя режима строчными («parallel»), а `mode.ToString()` — имя члена
-            // перечисления («Parallel»), поэтому порядковое сравнение объявляло ПРОВАЛЬНОЙ проверку
-            // при верно прочитанном режиме. Измерено 20.09.2026 на приёмке B5: строки B5K.01/B5K.02
-            // проходили по своему правилу, тогда как ответ продукта нёс `shift_mode_read_back: false`
-            // при `observed = parallel` и `expected = Parallel` — то есть продукт сам себя объявлял
-            // неисправным, и это видел только тот, кто читает ПОЛЯ, а не вердикт.
+            // Case-INSENSITIVE comparison — a corrected defect, not style: the model returns the mode
+            // name in lower case ("parallel") while `mode.ToString()` gives the enum member name
+            // ("Parallel"), so an ordinal comparison declared the check FAILED on a correctly read mode.
+            // MEASURED 20.09.2026 at the B5 acceptance: rows B5K.01/B5K.02 passed by their rule while
+            // the product's answer carried `shift_mode_read_back: false` with `observed = parallel` and
+            // `expected = Parallel` — the product declared itself faulty, and only a reader of FIELDS
+            // rather than the verdict saw it.
             new("shift_mode_read_back",
                 string.Equals(after?.ShiftMode, mode.ToString(), StringComparison.OrdinalIgnoreCase),
                 Observed: after?.ShiftMode ?? "не прочитано",
@@ -326,7 +293,7 @@ public partial class Api5Session
             featuresAfter,
             volumeBefore,
             volumeAfter,
-            // Глубины у кинематической операции нет: поле относится к выдавливанию, поэтому null.
+            // A sweep has no depth: the field belongs to extrusion, so null.
             null,
             null,
             new VerificationDto(
@@ -335,11 +302,10 @@ public partial class Api5Session
                 unverified));
     }
 
-    /// <summary>
-    /// Записать режим движения сечения в определение, ответившее одним из двух интерфейсов. Ветка
-    /// обязательна, а не удобна: общего интерфейса с этим членом у двух определений нет, а измерено,
-    /// что признак, созданный <c>NewEntity(45)</c>, отвечает <c>ksBossEvolutionDefinition</c>.
-    /// </summary>
+    /// <summary>Write the section-shift mode into the definition that answered one of the two interfaces.
+    /// The branch is mandatory, not convenient: the two definitions share no interface for this member,
+    /// and it is MEASURED that a feature created by <c>NewEntity(45)</c> answers
+    /// <c>ksBossEvolutionDefinition</c>.</summary>
     private static bool WriteSweepShiftMode(object definition, short value)
     {
         try
@@ -364,33 +330,23 @@ public partial class Api5Session
         return false;
     }
 
-    // ══════════════════════════════════════════════════════════ по сечениям ══
+    // ══════════════════════════════════════════════════════════ loft ══
 
-    /// <summary>
-    /// Правка набора сечений СУЩЕСТВУЮЩЕГО элемента по сечениям.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Правится ВХОД, и это измерено.</b> Шаг B5.13: перепривязка <c>ILoft.Sketchs</c> на уже
-    /// построенном признаке меняет геометрию — <c>40×40 + 20×20</c> дают <c>28000</c>,
-    /// <c>40×40 + 40×40</c> дают призму <c>h/3·(A₁ + A₂ + √(A₁A₂)) = 10·(1600+1600+1600) =
-    /// 48000</c>, возврат к прежнему набору возвращает <c>28000</c>.
-    /// </para>
-    /// <para>
-    /// <b>Замкнутость (<c>closed</c>) правимым параметром не объявлена, и это измеренный факт.</b>
-    /// Запись <c>ILoft.Closed</c> на построенном признаке возвращает <c>Update() = True</c>, читается
-    /// обратно <c>False</c>, объём остаётся <c>28000</c>: «принято» не означает «применено».
-    /// Замкнутость задаётся только при создании (<c>kompas_loft.closed</c>).
-    /// </para>
-    /// <para>
-    /// <b>Адрес элемента берётся по порядку среди односемейных, и порядок проверяется.</b> И дерево,
-    /// и коллекция API7 перечисляют признаки в порядке создания, поэтому позиция — устойчивый адрес
-    /// (имя для этого не годится: разные типы носят одно отображаемое имя). Но соответствие
-    /// «позиция в дереве = индекс в коллекции» доказано только при РАВНОМ числе элементов: если
-    /// деревьевых признаков больше или меньше, чем элементов в <c>ILofts</c>, сопоставление не
-    /// доказано, и вызов отвергается по имени, а не правит элемент «наугад».
-    /// </para>
-    /// </remarks>
+    /// <summary>Edit the section set of an EXISTING loft.</summary>
+    /// <remarks>MEASURED (step B5.13): the INPUT is edited — retargeting <c>ILoft.Sketchs</c> on an
+    /// already-built feature changes the geometry: <c>40×40 + 20×20</c> give <c>28000</c>,
+    /// <c>40×40 + 40×40</c> give the prism <c>h/3·(A₁ + A₂ + √(A₁A₂)) = 10·(1600+1600+1600) = 48000</c>,
+    /// returning to the previous set returns <c>28000</c>.
+    /// LIMIT: closedness (<c>closed</c>) is not declared an editable parameter — writing
+    /// <c>ILoft.Closed</c> on a built feature returns <c>Update() = True</c>, reads back <c>False</c>, the
+    /// volume stays <c>28000</c>: "accepted" does not mean "applied"; closedness is set only at creation
+    /// (<c>kompas_loft.closed</c>).
+    /// INVARIANT: the element address is taken by order among same-family ones, and the order is checked
+    /// — both the tree and the API7 collection enumerate features in creation order, so the position is a
+    /// stable address (a name will not do: different types share one display name), but "tree position =
+    /// collection index" is proved only with an EQUAL element count; otherwise the call is rejected by
+    /// name rather than editing an element "at random".
+    /// History: docs/decisions/adapter-solid.md#b5-loft-edit</remarks>
     private UpdateFeatureResult UpdateLoftFeature(
         DocumentEntry document,
         ksEntity entity,
@@ -446,8 +402,8 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["code"] = "loft_not_matched" });
         }
 
-        // Соответствие «позиция в дереве = индекс в коллекции» доказано только при равном числе
-        // элементов. Расхождение означает, что адрес не доказан, и правка отвергается по имени.
+        // "Tree position = collection index" is proved only with an equal element count. A divergence
+        // means the address is unproven, and the edit is rejected by name.
         if (inTree != inCollection)
         {
             throw new KompasContractException(
@@ -490,8 +446,9 @@ public partial class Api5Session
         var transferred = new List<object>(requested.Count);
         var editTargets = new List<SketchTarget>(requested.Count);
         var transferTrace = new List<string>(requested.Count);
-        // Свежие адреса сечений — те, что ДОКАЗАНЫ деревом. Нужны отдельно от `transferred`:
-        // в определение API5 записывается адрес (ksEntity), в ILoft — перенесённый объект API7.
+        // Fresh section addresses — those PROVEN by the tree. Needed separately from `transferred`: the
+        // API5 definition is written with an address (ksEntity), the ILoft with the transferred API7
+        // object.
         var freshEntities = new List<ksEntity>(requested.Count);
         foreach (var sectionRef in requested)
         {
@@ -510,10 +467,10 @@ public partial class Api5Session
                     });
             }
 
-            // Эскиз переадресуется С ДЕРЕВА в момент правки: указатель из реестра в ILoft.Sketchs
-            // не принимается (измерено, строка B5S.01 — см. ReAddressFromTree). Отказ здесь —
-            // ИМЕНОВАННЫЙ: адрес не доказан, и правка по недоказанному адресу изменила бы не тот
-            // объект, а «не тот объект» здесь неотличим от «тот же самый» по объёму.
+            // The sketch is re-addressed FROM THE TREE at edit time: a registry pointer is not accepted
+            // in ILoft.Sketchs (MEASURED, row B5S.01 — see ReAddressFromTree). A refusal here is NAMED:
+            // the address is unproven, and an edit by an unproven address would change the wrong object —
+            // which is indistinguishable from "the same one" by volume.
             var fresh = ReAddressFromTree(part, target.Sketch, out var readdressNote);
             if (fresh is null)
             {
@@ -545,9 +502,9 @@ public partial class Api5Session
             editTargets.Add(target);
             freshEntities.Add(fresh);
 
-            // ЧТО ИМЕННО ПЕРЕДАНО — публикуется по каждому сечению. Без этого «перепривязка не
-            // применилась» неотличимо от «применилась перепривязка на другую сущность»: число
-            // сечений в обоих исходах одно и то же, а имя — единственное, чем они различаются.
+            // WHAT WAS TRANSFERRED is published per section. Without this "the retarget did not apply"
+            // is indistinguishable from "it applied to another entity": the section count is the same in
+            // both outcomes, and the name is the only thing that tells them apart.
             var freshName = ReadEntityName(fresh);
             transferTrace.Add(
                 $"'{ReadEntityName(target.Sketch)}' → свежее имя '{freshName}' [{readdressNote}]"
@@ -556,9 +513,9 @@ public partial class Api5Session
                     : " — ИМЯ РАЗОШЛОСЬ С ЗАПРОШЕННЫМ"));
         }
 
-        // ── Параллельность плоскостей сечений: та же обязанность, что и при создании (§9.2) ──
-        // Правка набором сечений на непараллельных плоскостях описала бы другое тело так же, как и
-        // создание, поэтому отказ обязан стоять здесь ДО записи, а не после неё.
+        // ── Section-plane parallelism: the same duty as at creation (§9.2) ──
+        // An edit by a section set on non-parallel planes would describe a different body just as at
+        // creation, so the refusal must stand here BEFORE the write, not after it.
         var editPlaneAxes = ReadSectionPlaneAxes(editTargets);
         if (editPlaneAxes.DistinctAxes.Count > 1)
         {
@@ -577,27 +534,26 @@ public partial class Api5Session
                 });
         }
 
-        // ── Цепочки соответствия: сначала ЧТЕНИЕ и решение, потом запись ──
-        // Измерено 20.09.2026 (проба --b5, шаг B5.19): присваивание ILoft.Sketchs СБРАСЫВАЕТ цепочки —
-        // CouplingsCount читался 1, а после повторного присваивания ТОГО ЖЕ набора сечений стал 0, и
-        // объём вернулся с 20000 к 28000 (автоматическое соответствие). Поэтому проверка обязана
-        // стоять ДО записи сечений: после неё «признак нёс цепочки» стало бы неотличимо от «не нёс»,
-        // и молчаливая потеря соответствия выглядела бы как нормальный проход.
+        // ── Coupling chains: READ and decide first, then write ──
+        // MEASURED 20.09.2026 (probe --b5, step B5.19): assigning ILoft.Sketchs RESETS the chains —
+        // CouplingsCount read 1, and after re-assigning the SAME section set became 0, with the volume
+        // returning from 20000 to 28000 (automatic coupling). The check must therefore stand BEFORE the
+        // section write: after it, "the feature carried chains" would be indistinguishable from "it did
+        // not", and a silent loss of coupling would look like a normal pass.
         var couplingsBefore = Api7Loft.CouplingsCount(loft);
 
-        // ── НЕПУСТЫЕ ЦЕПОЧКИ НА СУЩЕСТВУЮЩЕМ ПРИЗНАКЕ ОТВЕРГАЮТСЯ ДО ЗАПИСИ ──
-        // Измерено 20.09.2026 (приёмка B5, строки B5S.01/B5S.02): на ПОСТРОЕННОМ признаке
-        // ILoft.AddCoupling() возвращает ICoupling, PositionOffset принимает смещения, и
-        // CouplingsCount читается 1 СРАЗУ ПОСЛЕ записи — но построение цепочку не несёт: после
-        // Update() в модели 0 цепочек, и объём соответствует телу БЕЗ соответствия. Воспроизведено
-        // в ДВУХ порядках записи (одно построение; и «построение набора сечений, затем перечитывание
-        // ILoft по ILofts::Loft и задание соответствия»), то есть это не порядок нашей записи.
-        // При СОЗДАНИИ та же последовательность цепочку сохраняет (проба B5.18: CouplingsCount = 1,
-        // объём 20000 против 28000). Документированные члены (iloft_addcoupling.html,
-        // iloft_clearcouplings.html, iloft_deletecoupling.html) такого ограничения не объявляют —
-        // значит это ИЗМЕРЕНИЕ поведения реализации, и оно названо здесь, а не умолчано.
-        // Принять такой запрос значило бы пообещать соответствие, которого модель не получит, и
-        // вернуть «выполнено» на теле без него; поэтому отказ стоит ДО записи, а признак не изменён.
+        // ── NON-EMPTY CHAINS ON AN EXISTING FEATURE ARE REJECTED BEFORE THE WRITE ──
+        // MEASURED 20.09.2026 (B5 acceptance, rows B5S.01/B5S.02): on a BUILT feature ILoft.AddCoupling()
+        // returns ICoupling, PositionOffset accepts offsets, and CouplingsCount reads 1 RIGHT AFTER the
+        // write — but the build does not carry the chain: after Update() the model has 0 chains, and the
+        // volume matches a body WITHOUT coupling. Reproduced in TWO write orders (one build; and "build
+        // the section set, then re-read ILoft via ILofts::Loft and set the coupling"), so it is not our
+        // write order. At CREATION the same sequence keeps the chain (probe B5.18: CouplingsCount = 1,
+        // volume 20000 vs 28000). The documented members (iloft_addcoupling.html,
+        // iloft_clearcouplings.html, iloft_deletecoupling.html) declare no such limit — so this is a
+        // MEASUREMENT of the implementation's behaviour, named here and not silenced. Accepting such a
+        // request would promise a coupling the model never gets and return "done" on a body without it;
+        // the refusal therefore stands BEFORE the write, and the feature is unchanged.
         if (command.Couplings is { Count: > 0 })
         {
             throw new KompasContractException(
@@ -644,22 +600,22 @@ public partial class Api5Session
                 });
         }
 
-        // ── ЗАПИСЬ НАБОРА СЕЧЕНИЙ: В ОБА ХРАНИЛИЩА ВХОДА — ОПРЕДЕЛЕНИЕ API5 И ILoft ──
-        // Вход «набор сечений» живёт в ДВУХ местах: в определении API5 (ksBase/BossLoftDefinition
-        // .Sketchs() → ksEntityCollection) и в объекте операции API7 (ILoft.Sketchs). Измерено
-        // 20.09.2026 (проба --b5, шаг B5.21, признак, созданный на трёх сечениях, сводится к двум):
-        //   • пока определения НИКТО НЕ ЧИТАЛ, запись в ILoft.Sketchs применяется — «до записи 3,
-        //     после присваивания 2, после Update() 2, объём 48000» — и повторяется четыре раза подряд;
-        //   • после ОДНОГО чтения ksBaseLoftDefinition.Sketchs() — тем же членом, которым читает
-        //     LoftSectionRefs и, значит, kompas_get_feature, — владельцем ЧИСЛА сечений становится
-        //     определение, и та же запись отменяется первым же обновлением: «после присваивания 2,
-        //     после ksEntity.Update() 3, объём прежний 16114.2858257129»;
-        //   • запись набора В ОБА ХРАНИЛИЩА (сначала определение: «до Clear() 3, Clear=True,
-        //     добавлено 2, стало 2»; затем ILoft.Sketchs; затем Update()) отмену снимает — прочитано
-        //     2, объём 48000.
-        // Поэтому пишутся оба. Отказ от чтения определения был бы отказом от kompas_get_feature:
-        // ссылки на сечения берутся именно оттуда, и без него вход правки не выражается вовсе.
-        // Прежняя редакция писала только в ILoft и потому работала лишь до первого чтения признака.
+        // ── WRITING THE SECTION SET: INTO BOTH INPUT STORES — THE API5 DEFINITION AND ILoft ──
+        // The "section set" input lives in TWO places: in the API5 definition
+        // (ksBase/BossLoftDefinition.Sketchs() → ksEntityCollection) and in the API7 operation object
+        // (ILoft.Sketchs). MEASURED 20.09.2026 (probe --b5, step B5.21, a feature created on three
+        // sections reduced to two):
+        //   • while NOBODY HAS READ the definition, writing to ILoft.Sketchs applies — "3 before, 2 after
+        //     assignment, 2 after Update(), volume 48000" — and repeats four times in a row;
+        //   • after ONE read of ksBaseLoftDefinition.Sketchs() — the very member LoftSectionRefs and
+        //     hence kompas_get_feature reads through — the definition becomes the OWNER of the section
+        //     COUNT, and the same write is cancelled by the first update: "2 after assignment, 3 after
+        //     ksEntity.Update(), volume still 16114.2858257129";
+        //   • writing the set INTO BOTH STORES (definition first: "3 before Clear(), Clear=True, 2 added,
+        //     now 2"; then ILoft.Sketchs; then Update()) lifts the cancellation — read 2, volume 48000.
+        // Both are therefore written. Dropping the definition read would drop kompas_get_feature: the
+        // section refs come exactly from there, and without it the edit input is not expressed at all.
+        // The former revision wrote only to ILoft and so worked only until the first read of the feature.
         var definitionBeforeWrite = DefinitionOf(entity);
         var definitionWrite = WriteLoftSectionsToDefinition(definitionBeforeWrite, freshEntities);
         var sectionsInDefinitionAfterWrite = definitionBeforeWrite is { } definitionWritten
@@ -676,9 +632,9 @@ public partial class Api5Session
                 partialEffects: true);
         }
 
-        // ЧИТАЕТСЯ СРАЗУ ПОСЛЕ ЗАПИСИ, ДО Update(), и это разные утверждения: «запись принята» и
-        // «запись легла». Без этого чтения исход «запись не легла» и исход «запись легла, а
-        // перестроение её не взяло» неотличимы, а лечатся они по-разному.
+        // READ RIGHT AFTER THE WRITE, BEFORE Update() — different claims: "the write was accepted" and
+        // "the write landed". Without this read, "the write did not land" and "the write landed but the
+        // rebuild did not take it" are indistinguishable, and they are treated differently.
         var sectionsAfterWrite = Api7Loft.SectionCount(loft);
 
         if (command.Couplings is not null)
@@ -701,22 +657,23 @@ public partial class Api5Session
             }
         }
 
-        // ПРИМЕНЕНИЕ ВХОДА — ksEntity.Update(). Выбор измерен, и его ОБОСНОВАНИЕ ИСПРАВЛЕНО 20.09.2026.
-        // Прежняя редакция этого места приписывала отмену записи самому вызову: «ILoft.Update() = true,
-        // и после него в ILoft снова 3 — значит Update() записанный вход не применяет». Это оказалось
-        // НЕВЕРНО, и вот измеренное различие (проба --b5, шаг B5.21, признак, созданный на трёх
-        // сечениях, сводится к двум):
-        //   • ПОКА ОПРЕДЕЛЕНИЯ НИКТО НЕ ЧИТАЛ, применяется и ILoft.Update(), и ksEntity.Update() —
-        //     «после присваивания 2, после Update() 2, объём 48000», четыре раза подряд;
-        //   • владельцем ЧИСЛА сечений определение становится от ОДНОГО ЧТЕНИЯ
-        //     ksBaseLoftDefinition.Sketchs() — того самого члена, которым читает LoftSectionRefs
-        //     (а значит, и kompas_get_feature): после такого чтения ТА ЖЕ запись отменяется первым же
-        //     обновлением, каким бы оно ни было — «после присваивания 2, после ksEntity.Update() 3».
-        //     То есть отменяло не обновление, а несогласованность двух хранилищ входа.
-        //   • запись набора В ОБА ХРАНИЛИЩА (см. WriteLoftSectionsToDefinition выше) отмену снимает.
-        // Поэтому применяет ksEntity.Update() — тот же вызов, которым применяется запись определения у
-        // оболочки, — но полагаться на один вызов здесь нельзя: существенно, что записаны ОБА
-        // хранилища. Отказ от чтения определения был бы отказом от kompas_get_feature.
+        // APPLYING THE INPUT — ksEntity.Update(). The choice is measured, and its RATIONALE WAS
+        // CORRECTED 20.09.2026. The former revision attributed the cancellation to the call itself:
+        // "ILoft.Update() = true, and after it ILoft holds 3 again — so Update() does not apply the
+        // written input". This turned out FALSE; the measured difference (probe --b5, step B5.21, a
+        // feature created on three sections reduced to two):
+        //   • WHILE NOBODY HAS READ the definition, both ILoft.Update() and ksEntity.Update() apply —
+        //     "2 after assignment, 2 after Update(), volume 48000", four times in a row;
+        //   • the definition becomes the OWNER of the section COUNT from ONE read of
+        //     ksBaseLoftDefinition.Sketchs() — the very member LoftSectionRefs reads through (and hence
+        //     kompas_get_feature): after such a read the SAME write is cancelled by the first update,
+        //     whatever it is — "2 after assignment, 3 after ksEntity.Update()". So it was not the update
+        //     that cancelled but the inconsistency of the two input stores.
+        //   • writing the set INTO BOTH STORES (see WriteLoftSectionsToDefinition above) lifts the
+        //     cancellation.
+        // ksEntity.Update() therefore applies — the same call that applies the definition write for the
+        // shell — but one call must not be relied on here: what matters is that BOTH stores are written.
+        // Dropping the definition read would drop kompas_get_feature.
         var updated = SafeBool(entity.Update) == true;
         var sectionsAfterEntityUpdate = Api7Loft.SectionCount(loft);
         if (!updated)
@@ -730,13 +687,13 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["named_code"] = "GEOMETRY_FAILED" });
         }
 
-        // ПЕРЕСБОРКА: СНАЧАЛА API5, ПОТОМ API7, и оба числа публикуются. Проба B5.13 после правки
-        // вызывала ksPart.RebuildModel() + ksDocument3D.RebuildDocument() — то есть ПЕРЕСБОРКУ API5, —
-        // а здешний маршрут когда-то ограничивался part7.RebuildModel(true). Какая из двух пересборок
-        // переносит записанный вход в тело, различимо только чтением между ними, поэтому читается
-        // после каждой. Измерено 20.09.2026 (шаг B5.21): обе пересборки дают ОДНО тело, то есть
-        // переносит вход применение (Update()), а не какая-то из пересборок; прежнее чтение «28000
-        // вместо 37000» объясняется несогласованностью хранилищ, а не порядком пересборок.
+        // REBUILD: API5 FIRST, THEN API7, and both numbers are published. Probe B5.13 after the edit
+        // called ksPart.RebuildModel() + ksDocument3D.RebuildDocument() — an API5 REBUILD — while this
+        // route once limited itself to part7.RebuildModel(true). Which of the two rebuilds carries the
+        // written input into the body is distinguishable only by reading between them, so it is read
+        // after each. MEASURED 20.09.2026 (step B5.21): both rebuilds give ONE body, i.e. the
+        // APPLICATION (Update()) carries the input, not either rebuild; the earlier read "28000 instead
+        // of 37000" is explained by the store inconsistency, not by the rebuild order.
         part.RebuildModel();
         var sectionsAfterApi5Rebuild = Api7Loft.SectionCount(loft);
         document.Document.RebuildDocument();
@@ -745,10 +702,10 @@ public partial class Api5Session
 
         Api7Bridge.Rebuild(container, document.Document);
         BumpRevision(document, "loft.update");
-        // Сечения читаются ДВУМЯ путями, и публикуются ОБА числа: в ILoft (куда записано) и в
-        // определении признака (оттуда же их читает kompas_get_feature). Расхождение двух чтений
-        // должно быть видно, а не скрыто выбором удобного из них; судит строка по тому месту, куда
-        // записано.
+        // Sections are read by TWO routes, and BOTH numbers are published: in ILoft (where it was
+        // written) and in the feature definition (from where kompas_get_feature reads them). A divergence
+        // of the two reads must be visible, not hidden by choosing the convenient one; the row judges by
+        // the place written to.
         var sectionsAfterApi7 = Api7Loft.SectionCount(loft);
         var sectionsAfterDefinition = DefinitionOf(entity) is { } definitionAfter
             ? LoftSectionCount5(definitionAfter)
@@ -767,8 +724,9 @@ public partial class Api5Session
             new("feature_identity_preserved", sameFeature,
                 Observed: stateAfter.Name + ", признаков " + featuresAfter,
                 Expected: stateBefore.Name + ", признаков " + featuresBefore),
-            // ЗАПИСЬ ОБЯЗАНА БЫТЬ ДЕЙСТВИЕМ, А НЕ ОТЧЁТОМ О НЁМ: «присваивание прошло» и «набор
-            // сечений в операции стал другим» — разные утверждения, и между ними стоит ЧТЕНИЕ.
+            // INVARIANT: the write must be an ACTION, not a report about it — "the assignment passed"
+            // and "the section set in the operation became different" are different claims, and a READ
+            // sits between them.
             new("sections_write_reaches_operation", sectionsAfterWrite == requested.Count,
                 Observed: "до записи " + Num(sectionsBefore) + ", после присваивания ILoft.Sketchs "
                     + Num(sectionsAfterWrite) + ", после ksEntity.Update() " + Num(sectionsAfterEntityUpdate)
@@ -776,14 +734,15 @@ public partial class Api5Session
                     + ", после RebuildDocument() " + Num(sectionsAfterDocumentRebuild)
                     + ", в конце " + Num(sectionsAfter),
                 Expected: requested.Count.ToString(CultureInfo.InvariantCulture)),
-            // ЧТО ПЕРЕДАНО — по каждому сечению. Число сечений одинаково и при «передал то, что
-            // просили», и при «передал другую сущность с тем же именем», поэтому опознание обязано
-            // стоять РЯДОМ с числом, а не вместо него.
+            // WHAT WAS TRANSFERRED — per section. The section count is the same whether "the requested
+            // entity was transferred" or "another entity with the same name was", so the identification
+            // must stand BESIDE the number, not instead of it.
             new("sections_transferred_named", transferTrace.Count == requested.Count,
                 Observed: string.Join("; ", transferTrace),
                 Expected: "по каждому сечению: имя запрошенного = имя свежего, коллекция названа"),
-            // ВХОД ПИШЕТСЯ В ОБА ХРАНИЛИЩА, и оба чтения публикуются: без этого «запись отменена
-            // обновлением» неотличимо от «запись не дошла до владельца», а лечатся они по-разному.
+            // INVARIANT: the input is written into BOTH STORES, and both reads are published — without
+            // this "the write was cancelled by the update" is indistinguishable from "the write did not
+            // reach the owner", and they are treated differently.
             new("sections_written_to_definition", definitionWrite.Ok,
                 Observed: definitionWrite.Note + "; сечений в определении после записи "
                     + Num(sectionsInDefinitionAfterWrite),
@@ -794,9 +753,9 @@ public partial class Api5Session
                     + (sectionsAfterDefinition?.ToString(CultureInfo.InvariantCulture) ?? "не прочитано")
                     + " (определение признака)",
                 Expected: requested.Count.ToString(CultureInfo.InvariantCulture)),
-            // ПЕРЕСБОРКА НЕ ОБЯЗАНА МЕНЯТЬ ТЕЛО. Расхождение двух чисел означает, что записанный
-            // вход переносит в тело одна из пересборок, а не другая, и тогда «правка применена» —
-            // выдача пересборки за правку.
+            // A REBUILD NEED NOT CHANGE THE BODY. A divergence of the two numbers means one of the
+            // rebuilds carries the written input into the body and the other does not, and then "the edit
+            // was applied" is passing a rebuild off as the edit.
             new("body_stable_across_rebuild",
                 volumeAfterApi5Rebuild is null || volumeAfter is null
                 || Math.Abs(volumeAfterApi5Rebuild.Value - volumeAfter.Value)
@@ -808,8 +767,8 @@ public partial class Api5Session
 
         if (command.Couplings is { } requestedCouplings)
         {
-            // Читается МОДЕЛЬ: сколько цепочек и какие смещения стоят на каждом сечении. Число
-            // цепочек без содержимого доказывало бы только существование объекта.
+            // The MODEL is read: how many chains and what offsets stand on each section. A chain count
+            // without content would prove only that the object exists.
             var couplingsInModel = ReadCouplingContent(loft);
             var chainsInModel = couplingsInModel?.Count;
             checks.Add(new NamedCheck("coupling_chains_replaced", chainsInModel == requestedCouplings.Count,
@@ -889,36 +848,21 @@ public partial class Api5Session
                 unverified));
     }
 
-    /// <summary>Записать набор сечений в <c>ILoft.Sketchs</c> — SAFEARRAY указателей IDispatch.</summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Маршрут записи — тот же объект, которым признак создан.</b> Признак создаётся
-    /// <c>IModelContainer.Lofts.Add(o3d_bossLoft)</c>, то есть <c>ILoft</c> и есть та операция, что
-    /// владеет признаком, поэтому и вход пишется, и <c>Update()</c> берётся у неё же. Проба B5.13
-    /// этим маршрутом получила на УЖЕ ПОСТРОЕННОМ признаке 48000 (перепривязка сечений S5+S6 →
-    /// S5+S7), то есть маршрут исполняющийся, а не теоретический.
-    /// </para>
-    /// <para>
-    /// <b>Запись через коллекцию определения ОБЯЗАТЕЛЬНА, и её роль ИСПРАВЛЕНА 20.09.2026.</b>
-    /// Прежняя редакция этого места объявляла запись через <c>ksBaseLoftDefinition.Sketchs()</c> /
-    /// <c>ksBossLoftDefinition.Sketchs()</c> «не исполняющейся» и удалила её из кода: измерялось, что
-    /// <c>Clear()</c> отчитывается успехом (коллекция читается 0), <c>Add()</c> её наполняет
-    /// (читается 2), <c>ksEntity.Update()</c> = true, обе пересборки выполнены — и тело прежнее. Это
-    /// наблюдение было ВЕРНЫМ, а вывод из него — неверным: там запись шла ТОЛЬКО в определение, а
-    /// тело строится по <c>ILoft</c>, и «не исполняется» означало «одного определения недостаточно».
-    /// Измерено 20.09.2026 пробой <c>--b5</c> (шаг B5.21): достаточно ОДНОГО ЧТЕНИЯ определения, чтобы
-    /// владельцем ЧИСЛА сечений стало ОНО, и тогда запись только в <c>ILoft</c> отменяется первым же
-    /// обновлением. Поэтому пишутся ОБА хранилища, и порядок — сначала определение, затем
-    /// <c>ILoft.Sketchs</c>: см. <see cref="WriteLoftSectionsToDefinition"/>.
-    /// </para>
-    /// <para>
-    /// <b>Чего эта запись НЕ делает:</b> не проверяет, что сечение стоит в дереве ВЫШЕ признака.
-    /// Измерено тогда же: эскиз, созданный ПОСЛЕ признака, признак в себя не берёт — запись
-    /// принимается, <c>Update()</c> = true, сечений читается 2, тело прежнее. Признак ссылается
-    /// только на то, что стоит выше него; проверить это на стороне прибора, а не сервера, — потому
-    /// что «выше» определяется порядком дерева, а не полем запроса.
-    /// </para>
-    /// </remarks>
+    /// <summary>Write the section set into <c>ILoft.Sketchs</c> — a SAFEARRAY of IDispatch pointers.</summary>
+    /// <remarks>INVARIANT: the write route is the very object the feature was created by — the feature is
+    /// created by <c>IModelContainer.Lofts.Add(o3d_bossLoft)</c>, so <c>ILoft</c> is the operation owning
+    /// the feature, and both the input is written and <c>Update()</c> taken from it. Probe B5.13 by this
+    /// route got 48000 on an ALREADY BUILT feature (retargeting S5+S6 → S5+S7), so the route executes.
+    /// INVARIANT: writing through the definition collection is MANDATORY — a single read of the
+    /// definition makes IT the owner of the section COUNT, and then a write only to <c>ILoft</c> is
+    /// cancelled by the first update; both stores are therefore written, definition first, then
+    /// <c>ILoft.Sketchs</c> (see <see cref="WriteLoftSectionsToDefinition"/>).
+    /// LIMIT: this write does NOT check that a section stands ABOVE the feature in the tree — MEASURED at
+    /// the same time: a sketch created AFTER the feature is not taken in by the feature (the write is
+    /// accepted, <c>Update()</c> = true, 2 sections read, the body unchanged). A feature references only
+    /// what stands above it, and that must be checked on the instrument's side, not the server's, because
+    /// "above" is defined by tree order, not by a request field.
+    /// History: docs/decisions/adapter-solid.md#b5-loft-both-stores</remarks>
     private static bool WriteLoftSections(ILoft loft, object[] sections)
     {
         try
@@ -932,32 +876,21 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Запись набора сечений В ОПРЕДЕЛЕНИЕ API5 — во ВТОРОЕ хранилище того же входа.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Зачем, если запись идёт в <c>ILoft</c>.</b> Измерено 20.09.2026 (проба <c>--b5</c>, шаг
-    /// B5.21): признак, созданный на ТРЁХ сечениях, сводится к ДВУМ записью в <c>ILoft.Sketchs</c> —
-    /// и это повторяется, пока определения никто не читал («до записи 3, после присваивания 2,
-    /// после <c>Update()</c> 2, объём 48000» — четыре раза подряд). Но стоит ОДИН раз прочитать
-    /// <c>ksBaseLoftDefinition.Sketchs()</c> — тем самым членом, которым читает
-    /// <see cref="LoftSectionRefs"/> и, значит, <c>kompas_get_feature</c>, — как владельцем ЧИСЛА
-    /// сечений становится определение, и следующая ТА ЖЕ запись отменяется первым же обновлением:
-    /// «после присваивания 2, после <c>Update()</c> 3, объём прежний 16114.2858257129».
-    /// </para>
-    /// <para>
-    /// <b>И обратное измерено на том же объекте.</b> Та же правка, у которой набор записан В ОБА
-    /// ХРАНИЛИЩА — сначала определение («до <c>Clear()</c> 3, <c>Clear</c>=True, добавлено 2, стало
-    /// 2»), затем <c>ILoft.Sketchs</c>, затем <c>Update()</c>, — снова применяется: прочитано 2,
-    /// объём <c>48000</c>. Поэтому вход пишется в оба места, а не в одно.
-    /// </para>
-    /// <para>
-    /// <b>Чтение определения при этом не «портит» признак — оно делает определение владельцем
-    /// входа.</b> Различие существенное: отказ от чтения был бы отказом от <c>kompas_get_feature</c>,
-    /// а не исправлением, и он не выразил бы вход правки вовсе (ссылки на сечения берутся оттуда).
-    /// </para>
-    /// </remarks>
+    /// <summary>Writing the section set INTO THE API5 DEFINITION — the SECOND store of the same input.</summary>
+    /// <remarks>INVARIANT: why, if the write goes into <c>ILoft</c> — MEASURED 20.09.2026 (probe
+    /// <c>--b5</c>, step B5.21): a feature created on THREE sections is reduced to TWO by a write to
+    /// <c>ILoft.Sketchs</c>, and this repeats while nobody has read the definition ("3 before, 2 after
+    /// assignment, 2 after <c>Update()</c>, volume 48000" — four times in a row). But a single read of
+    /// <c>ksBaseLoftDefinition.Sketchs()</c> — the member <see cref="LoftSectionRefs"/> and hence
+    /// <c>kompas_get_feature</c> reads through — makes the definition the OWNER of the section COUNT, and
+    /// the next SAME write is cancelled by the first update: "2 after assignment, 3 after <c>Update()</c>,
+    /// volume still 16114.2858257129". Conversely, the same edit with the set written INTO BOTH STORES —
+    /// definition first ("3 before <c>Clear()</c>, <c>Clear</c>=True, 2 added, now 2"), then
+    /// <c>ILoft.Sketchs</c>, then <c>Update()</c> — applies again: read 2, volume <c>48000</c>. The input
+    /// is therefore written to both places. INVARIANT: reading the definition does not "spoil" the
+    /// feature — it makes the definition the owner of the input; dropping the read would drop
+    /// <c>kompas_get_feature</c>.
+    /// History: docs/decisions/adapter-solid.md#b5-loft-both-stores</remarks>
     private static (bool Ok, string Note) WriteLoftSectionsToDefinition(
         object? definition, IReadOnlyList<ksEntity> sections)
     {
@@ -1000,10 +933,9 @@ public partial class Api5Session
             + (after?.ToString(CultureInfo.InvariantCulture) ?? "не прочитано"));
     }
 
-    /// <summary>
-    /// Имя сущности для отчёта. <c>null</c> — «не прочитано», а не пустое имя: пустое неотличимо от
-    /// «забыли прочитать», и именно на этом различии стоит опознание переданного сечения.
-    /// </summary>
+    /// <summary>Entity name for the report. <c>null</c> means "not read", not an empty name: empty is
+    /// indistinguishable from "forgot to read", and the identification of a transferred section rests on
+    /// exactly that difference.</summary>
     private static string? ReadEntityName(ksEntity? entity)
     {
         if (entity is null)
@@ -1021,34 +953,18 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Переадресовать эскиз-сечение С ДЕРЕВА в момент правки, по имени.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Зачем, если указатель уже есть.</b> Причина ИСПРАВЛЕНА 20.09.2026 по измерению (проба
-    /// <c>--b5</c>, шаг B5.21). Прежняя редакция объясняла это так: «указатель <c>ksEntity</c> из
-    /// реестра в <c>ILoft.Sketchs</c> не принимается — записано 2 из 3, прочитано 3». Наблюдение
-    /// было верным, а причина названа неверно: запись отменяло не происхождение указателя, а то, что
-    /// определения к тому моменту УЖЕ ПРОЧИТАЛИ (сечения читаются через
-    /// <c>ksBaseLoftDefinition.Sketchs()</c>), и владельцем числа сечений стало оно. Отмену снимает
-    /// запись в ОБА хранилища, а не свежесть указателя.
-    /// </para>
-    /// <para>
-    /// <b>Переадресация при этом остаётся нужной, и по другой причине:</b> указатель из реестра
-    /// живёт на ревизию, в которой зарегистрирован, а правка приходит в следующей. Дерево даёт адрес
-    /// В МОМЕНТ правки, и он доказан — тем же перечислением, каким его берёт проба
+    /// <summary>Re-address a sketch-section FROM THE TREE at edit time, by name.</summary>
+    /// <remarks>INVARIANT: the re-addressing is needed because a registry pointer lives against the
+    /// revision it was registered in, while the edit arrives in the next one; the tree gives an address AT
+    /// EDIT TIME, and it is proven by the same enumeration the probe uses
     /// (<c>ksPart.EntityCollection(0).refresh()</c>).
-    /// </para>
-    /// <para>
-    /// <b>Имя принимается только ОДНОЗНАЧНОЕ.</b> Имя — не адрес: разные сущности носят одно
-    /// отображаемое имя. Поэтому перебираются коллекции дерева по очереди, и берётся первая, где
-    /// нашлось совпадение; если совпадений в ней больше одного, адрес НЕ ДОКАЗАН, и вызывающий
-    /// обязан отказать по имени, а не править признак «наугад». Совпадение описывается в
-    /// <c>note</c> и при успехе: без описания «переадресовано» неотличимо от «переадресовано на
-    /// другую сущность с тем же именем», и различие коллекций (0 / 110 / −1) исчезает из отчёта.
-    /// </para>
-    /// </remarks>
+    /// INVARIANT: a name is accepted only if UNAMBIGUOUS — a name is not an address (different entities
+    /// share one display name), so the tree collections are tried in turn and the first with a match is
+    /// taken; if it has more than one match, the address is NOT PROVEN and the caller must refuse by name
+    /// rather than edit the feature "at random". A match is described in <c>note</c> on success too:
+    /// without it "re-addressed" is indistinguishable from "re-addressed to another entity with the same
+    /// name", and the collection difference (0 / 110 / −1) disappears from the report.
+    /// History: docs/decisions/adapter-solid.md#b5-readdress</remarks>
     private static ksEntity? ReAddressFromTree(ksPart part, ksEntity section, out string note)
     {        note = string.Empty;
         string name;
@@ -1105,15 +1021,15 @@ public partial class Api5Session
                     return null;
                 }
 
-                // Описание УДАЧНОГО совпадения тоже обязательно: без него «переадресовано» неотличимо
-                // от «переадресовано на другую сущность с тем же именем», и различие коллекций
-                // (0 / 110 / −1) исчезает из отчёта.
+                // Describing a SUCCESSFUL match is mandatory too: without it "re-addressed" is
+                // indistinguishable from "re-addressed to another entity with the same name", and the
+                // collection difference (0 / 110 / −1) disappears from the report.
                 note = "коллекция " + kind + ", совпадение по имени '" + name + "', совпадений 1";
                 return matches[0];
             }
             catch (Exception ex) when (ex is COMException or InvalidCastException)
             {
-                // Коллекция не читается — это не приговор: просматриваются и остальные.
+                // The collection does not read — not a verdict: the rest are still scanned.
             }
         }
 
@@ -1121,12 +1037,10 @@ public partial class Api5Session
         return null;
     }
 
-    /// <summary>
-    /// Число сечений в признаке, прочитанное ЧЕРЕЗ ОПРЕДЕЛЕНИЕ — оттуда же, откуда их читает
-    /// <see cref="LoftSectionRefs"/> и <c>kompas_get_feature</c>. Публикуется РЯДОМ с числом из
-    /// <c>ILoft</c>: расхождение двух чтений одного признака должно быть видно. <c>null</c> —
-    /// «не прочитано», а не ноль.
-    /// </summary>
+    /// <summary>Section count in the feature, read THROUGH THE DEFINITION — from where
+    /// <see cref="LoftSectionRefs"/> and <c>kompas_get_feature</c> read them. Published BESIDE the count
+    /// from <c>ILoft</c>: a divergence of the two reads of one feature must be visible. <c>null</c> means
+    /// "not read", not zero.</summary>
     private static int? LoftSectionCount5(object definition)
     {
         try
@@ -1145,7 +1059,7 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>Правила набора сечений на ПРАВКЕ — те же, что на создании, и по той же причине.</summary>
+    /// <summary>Section-set rules on EDIT — the same as at creation, for the same reason.</summary>
     private static void ValidateLoftSectionRefs(IReadOnlyList<string> refs)
     {
         if (refs.Count < 2)
@@ -1177,32 +1091,23 @@ public partial class Api5Session
         }
     }
 
-    // ══════════════════════════════════════════════════════════ оболочка ══
+    // ══════════════════════════════════════════════════════════ shell ══
 
-    /// <summary>
-    /// Правка толщины, направления и набора удаляемых граней СУЩЕСТВУЮЩЕЙ оболочки.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Толщина и направление пишутся ВМЕСТЕ, и это не удобство, а требование к постановке.</b>
-    /// Режим оболочки — пара (толщина, направление). Если писать только изменяемую половину, «изменилось
-    /// ровно запрошенное» становится неотличимо от «изменилось ещё и это». Недостающая половина берётся
-    /// с МОДЕЛИ (не из умалчиваемого значения): измерено (B5.13), что <c>thinType</c> читается обратно
-    /// верно после каждой правки.
-    /// </para>
-    /// <para>
-    /// <b>Маршрут измерен 20.09.2026.</b> Шаг B5.13: <c>t = 2 внутрь → 4 внутрь → 4 наружу → 2 внутрь</c>
-    /// на одном признаке дал <c>21632 → 40256 → 53056 → 21632</c>. Шаг B5.14: набор удаляемых граней
-    /// правится тем же признаком — добавление второй грани даёт <c>7040</c> при <c>10</c> гранях,
-    /// возврат к прежнему набору — <c>21632</c> при <c>11</c>; повторная запись того же набора объём
-    /// не двигает (отрицательный контроль).
-    /// </para>
-    /// <para>
-    /// <b>Пустой список граней отвергается и здесь.</b> Измерено на обоих API (B5.6, B5.10): при
-    /// пустом списке операция принимается (<c>Create/Update = true</c>), а тело не меняется. Принять
-    /// такой вызов значило бы вернуть «оболочка построена» там, где ничего не произошло.
-    /// </para>
-    /// </remarks>
+    /// <summary>Edit the thickness, direction and removed-face set of an EXISTING shell.</summary>
+    /// <remarks>INVARIANT: thickness and direction are written TOGETHER — not a convenience but a
+    /// requirement of the setup: the shell mode is a (thickness, direction) pair, and writing only the
+    /// changed half makes "exactly what was requested changed" indistinguishable from "this changed too";
+    /// the missing half is taken FROM THE MODEL (not from a defaulted value) — MEASURED (B5.13) that
+    /// <c>thinType</c> reads back correctly after each edit.
+    /// MEASURED 20.09.2026. Step B5.13: <c>t = 2 inward → 4 inward → 4 outward → 2 inward</c> on one
+    /// feature gave <c>21632 → 40256 → 53056 → 21632</c>. Step B5.14: the removed-face set is edited by
+    /// the same feature — adding a second face gives <c>7040</c> at <c>10</c> faces, returning to the
+    /// previous set <c>21632</c> at <c>11</c>; re-writing the same set moves no volume (negative
+    /// control).
+    /// LIMIT: an empty face list is rejected here too — MEASURED on both APIs (B5.6, B5.10): with an
+    /// empty list the operation is accepted (<c>Create/Update = true</c>) but the body does not change;
+    /// accepting such a call would return "the shell was built" where nothing happened.
+    /// History: docs/decisions/adapter-solid.md#b5-shell-edit</remarks>
     private UpdateFeatureResult UpdateShellFeature(
         DocumentEntry document,
         ksEntity entity,
@@ -1231,7 +1136,8 @@ public partial class Api5Session
         var currentThickness = SafeDouble(() => definition.thickness);
         var currentThinType = SafeBool(() => definition.thinType);
 
-        // Режим собирается ЦЕЛИКОМ: запрошенное берётся из команды, недостающая половина — с модели.
+        // The mode is assembled WHOLE: the requested part comes from the command, the missing half from
+        // the model.
         var thickness = command.ThicknessMm ?? currentThickness;
         var thinInward = command.ThinInward ?? currentThinType;
 
@@ -1266,8 +1172,8 @@ public partial class Api5Session
 
         var facesBefore = FaceArrayCount(definition);
 
-        // Набор удаляемых граней — ПОЛНАЯ замена, а не добавление: передаётся то, что должно
-        // остаться снятым. Так же устроена правка набора рёбер скругления.
+        // The removed-face set is a FULL replacement, not an addition: what must stay removed is passed.
+        // The fillet edge-set edit is arranged the same way.
         List<ksFaceDefinition>? faces = null;
         if (command.FaceRefs is { Count: > 0 } faceRefs)
         {
@@ -1351,7 +1257,7 @@ public partial class Api5Session
         document.Document.RebuildDocument();
         BumpRevision(document, "shell.update");
 
-        // Перечитывается С МОДЕЛИ: определение берётся у признака заново.
+        // Re-read FROM THE MODEL: the definition is taken from the feature afresh.
         var after = entity.GetDefinition() as ksShellDefinition;
         var readThickness = after is null ? null : SafeDouble(() => after.thickness);
         var readThinType = after is null ? null : SafeBool(() => after.thinType);
@@ -1384,8 +1290,9 @@ public partial class Api5Session
                 Expected: faces.Count.ToString(CultureInfo.InvariantCulture)));
         }
 
-        // Второй независимый признак рядом с объёмом: у оболочки меняется и число граней. Именно он
-        // поймал бы исход «принято и не применено», который по одному объёму выглядит как успех.
+        // A second independent signal beside the volume: a shell also changes its face count. It is
+        // exactly what would catch the "accepted and not applied" outcome, which looks like success by
+        // volume alone.
         if (facesAfter is int afterCount && facesBefore is int beforeCount && faces is not null)
         {
             checks.Add(new NamedCheck("face_count_changed", afterCount != beforeCount,
@@ -1438,10 +1345,9 @@ public partial class Api5Session
                 unverified));
     }
 
-    /// <summary>
-    /// Записать ОБА параметра режима оболочки. Пишутся вместе намеренно: режим — пара, и запись
-    /// одной половины сделала бы «изменилось ровно запрошенное» неотличимым от «изменилось ещё и это».
-    /// </summary>
+    /// <summary>Write BOTH shell mode parameters. Written together on purpose: the mode is a pair, and
+    /// writing one half would make "exactly what was requested changed" indistinguishable from "this
+    /// changed too".</summary>
     private static bool WriteShellMode(ksShellDefinition definition, double thickness, bool thinType)
     {
         try
@@ -1456,15 +1362,12 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Записать набор удаляемых граней как ПОЛНУЮ замену: <c>Clear()</c>, затем <c>Add()</c> по каждой.
-    /// Возвращает число записанных граней; меньше запрошенного — отказ маршрута.
-    /// </summary>
-    /// <remarks>
-    /// Маршрут <c>Clear() + Add()</c> у СКРУГЛЕНИЯ измеренно не работал (строка <c>FL04r</c>), поэтому
-    /// он проверен отдельно на оболочке, а не перенесён по аналогии: шаг B5.14 дал <c>21632 → 7040 →
-    /// 21632</c> при <c>11 → 10 → 11</c> гранях и отрицательный контроль на повторную запись.
-    /// </remarks>
+    /// <summary>Write the removed-face set as a FULL replacement: <c>Clear()</c>, then <c>Add()</c> per
+    /// face. Returns the number of faces written; fewer than requested is a route failure.</summary>
+    /// <remarks>The <c>Clear() + Add()</c> route measurably did not work for a FILLET (row
+    /// <c>FL04r</c>), so it was checked separately on the shell rather than carried over by analogy: step
+    /// B5.14 gave <c>21632 → 7040 → 21632</c> at <c>11 → 10 → 11</c> faces, with a negative control on
+    /// re-writing.</remarks>
     private static int WriteShellFaces(ksShellDefinition definition, IReadOnlyList<ksFaceDefinition> faces)
     {
         object? holder;
@@ -1499,10 +1402,8 @@ public partial class Api5Session
         return written;
     }
 
-    /// <summary>
-    /// Грань по ссылке реестра — с проверкой документа и ревизии, как при создании оболочки. Правка
-    /// набора граней из чужой детали или устаревшей ссылкой отвергается до COM.
-    /// </summary>
+    /// <summary>A face by registry reference — with document and revision checks, as at shell creation.
+    /// An edit of a face set from a foreign part or with a stale reference is rejected before COM.</summary>
     private ksFaceDefinition RequireFace(DocumentEntry document, string faceRef)
     {
         if (!References.TryGet(faceRef, out var stored) || stored is null)
@@ -1552,10 +1453,8 @@ public partial class Api5Session
         return face;
     }
 
-    /// <summary>
-    /// Число признаков этого семейства в дереве. <c>null</c> — «не прочитано», и это отличается от
-    /// нуля: на нуле сопоставление «позиция в дереве = индекс в коллекции» не доказывается.
-    /// </summary>
+    /// <summary>Number of features of this family in the tree. <c>null</c> means "not read", which
+    /// differs from zero: at zero the "tree position = collection index" matching is not proved.</summary>
     private static int? CountAmong(ksPart part, Func<ksEntity, bool> isKind)
     {
         try

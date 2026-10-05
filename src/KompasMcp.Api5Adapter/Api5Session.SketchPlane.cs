@@ -4,54 +4,43 @@ using KompasMcp.Contracts.Ipc;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>
-/// Смена ОПОРНОЙ плоскости существующего эскиза (<c>kompas_set_sketch_plane</c>) — вторая половина
-/// действия <c>edit</c> строки <c>AUX-SKETCH.plane_and_profile_lifecycle</c>.
-/// </summary>
+/// <summary>Change the SUPPORT plane of an existing sketch (<c>kompas_set_sketch_plane</c>) — the second
+/// half of the <c>edit</c> action of the row <c>AUX-SKETCH.plane_and_profile_lifecycle</c>.</summary>
 /// <remarks>
-/// <para>
-/// <b>Документированный маршрут.</b> <c>ksSketchDefinition.SetPlane(LPENTITY plane)</c> —
-/// «Изменить базовую плоскость эскиза» (<c>kssketchdefinition_setplane.html</c>); чтение обратно —
-/// <c>LPENTITY GetPlane()</c> (<c>kssketchdefinition_getplane.html</c>). Оба члена — API5; маршрут
-/// API7 (<c>ISketch.Plane</c>) на поставленной сборке НЕ отвечает: измерено «эскиз не приводится к
-/// <c>ISketch</c>» (проба <c>--sketch-plane</c>, шаг SP.3), поэтому правка идёт API5-членом, а не
-/// приведением к API7.
-/// </para>
-/// <para>
-/// <b>Почему после записи обязателен <c>sketch.Update()</c>, и почему это ИЗМЕРЕНО, а не выбрано.</b>
-/// Первый прогон пробы дал <c>SetPlane(xz) = True</c> и неизменившийся габарит — то есть «принято и
-/// не применено». Это ровно тот случай, когда дефект прибора и граница продукта выглядят одинаково,
-/// поэтому вопрос был задан лестницей ступеней с чтением габарита ПОСЛЕ КАЖДОЙ:
-/// <c>definition.EndEdit()</c> — не применяет; <b><c>sketch.Update()</c> — применяет</b>;
-/// <c>part.RebuildModel()</c> и <c>document.RebuildDocument()</c> после него не добавляют ничего
-/// (<c>moved_by_this_route = false</c> у обеих). Лестница живёт в приборе; здесь вызывается
-/// измеренно-достаточная ступень, и её имя возвращается в ответе полем <c>apply_route</c>, а не
-/// подразумевается.
-/// </para>
-/// <para>
-/// <b>Отказ не-плоскости — ДО COM и по виду ссылки из реестра.</b> Измерено шагами SP.8/SP.9: ядро
-/// ПРИНИМАЕТ в опору плоскую грань (<c>SetPlane = True</c>, и все шесть граней коробки
-/// перепривязывают зависимое тело) и ОТВЕРГАЕТ ребро и тело (<c>SetPlane = False</c>). Продукт этот
-/// ответ не наследует в обе стороны: <c>reference</c>, ведущая не на плоскость, отвергается по
-/// ВИДУ из реестра, без единого обращения к COM. Иначе «грань» стала бы плоскостью по факту
-/// принятия её ядром.
-/// </para>
+/// DOC: <c>ksSketchDefinition.SetPlane(LPENTITY plane)</c> — «Изменить базовую плоскость эскиза»
+/// (<c>kssketchdefinition_setplane.html</c>); read back via <c>LPENTITY GetPlane()</c>
+/// (<c>kssketchdefinition_getplane.html</c>). Both members are API5; the API7 route
+/// (<c>ISketch.Plane</c>) does NOT answer on the shipped build: MEASURED "the sketch does not cast to
+/// <c>ISketch</c>" (probe <c>--sketch-plane</c>, step SP.3), so the edit goes through the API5 member
+/// rather than an API7 cast.
+/// MEASURED: <c>sketch.Update()</c> is mandatory after the write, and this is measured, not chosen.
+/// The first probe run gave <c>SetPlane(xz) = True</c> with an unchanged bounding box — i.e. "accepted
+/// but not applied". This is exactly the case where a probe defect and a product limit look alike, so
+/// the question was asked with a ladder of steps, reading the box AFTER EACH:
+/// <c>definition.EndEdit()</c> — does not apply; <c>sketch.Update()</c> — applies;
+/// <c>part.RebuildModel()</c> and <c>document.RebuildDocument()</c> add nothing after it
+/// (<c>moved_by_this_route = false</c> for both). The ladder lives in the probe; here the
+/// measured-sufficient step is called, and its name is returned in the response field
+/// <c>apply_route</c> rather than implied.
+/// INVARIANT: a non-plane support is refused BEFORE COM, by the reference kind in the registry.
+/// MEASURED (steps SP.8/SP.9): the kernel ACCEPTS a planar FACE as support (<c>SetPlane = True</c>, and
+/// all six faces of a box re-anchor the dependent body) and REJECTS an edge and a body
+/// (<c>SetPlane = False</c>). The product does not inherit that answer in either direction: a
+/// <c>reference</c> not leading to a plane is refused by its KIND from the registry, with no COM call
+/// at all. Otherwise a "face" would become a plane by the mere fact that the kernel accepted it.
 /// </remarks>
 public sealed partial class Api5Session
 {
-    /// <summary>Виды реестра, несущие плоскость как ОБЪЕКТ модели.</summary>
-    /// <remarks>
-    /// Отбор идёт по виду, записанному в реестр при выдаче ссылки, а не по номеру типа, прочитанному
-    /// из COM: именно это делает отказ ДО обращения к COM возможным. Номера типов названы рядом
-    /// только для диагностики — <c>o3d_planeXOY/XOZ/YOZ</c> = 1/2/3, <c>o3d_planeOffset</c> = 14.
-    /// </remarks>
+    /// <summary>Registry kinds that carry a plane as a MODEL OBJECT.</summary>
+    /// <remarks>Selection is by the kind recorded in the registry when the reference was issued, not by
+    /// the type number read from COM — that is what makes a refusal BEFORE COM possible. The type
+    /// numbers are named alongside for diagnostics only: <c>o3d_planeXOY/XOZ/YOZ</c> = 1/2/3,
+    /// <c>o3d_planeOffset</c> = 14.</remarks>
     private static readonly string[] PlaneKinds = ["plane"];
 
-    /// <summary>Виды реестра, по которым опора эскиза НЕ меняется, — названы для отказа.</summary>
-    /// <remarks>
-    /// Грань и ребро стоят здесь потому, что ядро принимает грань: без этого перечня отказ по грани
-    /// выглядел бы как «вид не опознан», а не как «грань — не плоскость».
-    /// </remarks>
+    /// <summary>Registry kinds for which the sketch support is NOT changed — named for the refusal.</summary>
+    /// <remarks>A face and an edge are listed here because the kernel accepts a face: without this list
+    /// a face refusal would look like "kind not recognised" rather than "a face is not a plane".</remarks>
     private static readonly string[] NonPlaneKinds = ["face", "edge", "body", "body_unresolved", "axis", "point"];
 
     public SetSketchPlaneResult SetSketchPlane(SetSketchPlaneCommand command)
@@ -76,8 +65,9 @@ public sealed partial class Api5Session
 
         if (!definition.SetPlane(planeEntity))
         {
-            // Отказ ядра НАЗЫВАЕТСЯ, а не смягчается: это факт о вызове, и он не выдаётся ни за
-            // успех, ни за границу продукта — граница проверена ДО COM (вид ссылки).
+            // The kernel's refusal is NAMED, not softened: it is a fact about the call, and it is
+            // passed off neither as success nor as a product limit — the limit was checked BEFORE COM
+            // (the reference kind).
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
                 "SetPlane не принят ядром: смена опоры не выполнена.",
@@ -86,8 +76,8 @@ public sealed partial class Api5Session
                 details: new Dictionary<string, object?> { ["support_before"] = supportBefore });
         }
 
-        // Измеренно-достаточная ступень применения. Имя возвращается в ответе, потому что «какой
-        // маршрут применил правку» — измеренная величина, а не деталь реализации.
+        // The measured-sufficient apply step. Its name is returned in the response because "which
+        // route applied the edit" is a measured quantity, not an implementation detail.
         var applyRoute = "sketch.Update()";
         var updated = TryUpdate(sketch, diagnostics);
 
@@ -114,7 +104,8 @@ public sealed partial class Api5Session
             diagnostics);
     }
 
-    /// <summary>Эскиз по ссылке: вид проверяется по реестру, номер типа — у самого объекта.</summary>
+    /// <summary>Sketch by reference: the kind is checked against the registry, the type number against
+    /// the object itself.</summary>
     private ksEntity ResolveSketchForPlaneChange(
         DocumentEntry document, string sketchRef, List<string> diagnostics)
     {
@@ -145,15 +136,15 @@ public sealed partial class Api5Session
         return entity;
     }
 
-    /// <summary>Опора запроса: готовая ссылка ЛИБО базовая плоскость со смещением.</summary>
+    /// <summary>Request support: a ready reference OR a base plane with an offset.</summary>
     private ksEntity ResolveSupportPlane(
         DocumentEntry document, PlaneRefDto plane, List<string> diagnostics)
     {
         var hasReference = plane.Reference is { Length: > 0 };
         var hasBase = plane.Base is not null;
 
-        // «Одновременно одно» — и это отказ, а не приоритет одного поля над другим: принятое и
-        // проигнорированное поле доживает до приёмки, выглядя как выполненная правка.
+        // "Both at once" is refused rather than giving one field priority over the other: an accepted
+        // and ignored field survives to acceptance looking like a completed edit.
         if (hasReference && hasBase)
         {
             throw new KompasContractException(
@@ -190,9 +181,9 @@ public sealed partial class Api5Session
             return ResolvePlaneEntity(document, plane);
         }
 
-        // Смещение относится к БАЗОВОЙ плоскости, а не к готовой ссылке. При создании эскиза такое
-        // поле молча игнорируется; здесь оно отвергается, и разница названа прямо: принимаемое и
-        // проигнорированное смещение читалось бы как выполненная перепривязка на другое расстояние.
+        // The offset belongs to the BASE plane, not to a ready reference. When a sketch is created such
+        // a field is silently ignored; here it is refused, and the difference is stated plainly: an
+        // accepted-and-ignored offset would read as a completed re-anchor to a different distance.
         if (Math.Abs(plane.OffsetMm) > 1e-9)
         {
             throw new KompasContractException(
@@ -208,9 +199,9 @@ public sealed partial class Api5Session
 
         var stored = References.Require(plane.Reference!, document.Id, document.Revision);
 
-        // ОТКАЗ ДО COM. Вид ссылки известен из реестра, поэтому не-плоскость отвергается здесь, а
-        // не ответом ядра: измерено, что ядро принимает плоскую ГРАНЬ (SP.9), и наследовать этот
-        // ответ нельзя — грань не является плоскостью.
+        // REFUSAL BEFORE COM. The reference kind is known from the registry, so a non-plane is refused
+        // here rather than by the kernel's answer: MEASURED that the kernel accepts a planar FACE
+        // (SP.9), and that answer must not be inherited — a face is not a plane.
         if (!PlaneKinds.Contains(stored.Kind, StringComparer.Ordinal))
         {
             var known = NonPlaneKinds.Contains(stored.Kind, StringComparer.Ordinal)
@@ -243,7 +234,7 @@ public sealed partial class Api5Session
         return planeEntity;
     }
 
-    /// <summary>Вызов <c>sketch.Update()</c> — измеренно-достаточная ступень применения правки.</summary>
+    /// <summary>Call <c>sketch.Update()</c> — the measured-sufficient step that applies the edit.</summary>
     private static bool TryUpdate(ksEntity sketch, List<string> diagnostics)
     {
         try
@@ -254,8 +245,8 @@ public sealed partial class Api5Session
         }
         catch (Exception ex)
         {
-            // Исключение на ступени НЕ объявляется применением: запись уже сделана, а перестроение
-            // не подтверждено — это разные утверждения, и они называются раздельно.
+            // An exception at the step is NOT declared an application: the write is already done while
+            // the rebuild is unconfirmed — these are different claims and are named separately.
             diagnostics.Add("Ступень «sketch.Update()» бросила " + ex.GetType().Name + ": " + ex.Message);
             return false;
         }
@@ -296,7 +287,8 @@ public sealed partial class Api5Session
         volume is null ? "не прочитан" : volume.Value.ToString("0.####",
             System.Globalization.CultureInfo.InvariantCulture);
 
-    /// <summary>Габарит и объём главного тела — то, чем «принято» отличается от «применено».</summary>
+    /// <summary>Bounding box and volume of the main body — what distinguishes "accepted" from
+    /// "applied".</summary>
     private (string Gabarit, double? Volume) DescribeBody(DocumentEntry document)
     {
         var rows = ReadBodySnapshots(document.PartNow());

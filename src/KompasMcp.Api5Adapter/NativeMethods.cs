@@ -2,11 +2,9 @@ using System.Runtime.InteropServices;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>
-/// The few Win32 calls the adapter needs. COM gives no way to ask an object which process serves
+/// <summary>The few Win32 calls the adapter needs. COM gives no way to ask an object which process serves
 /// it (proved in P0.4: <c>KompasObject</c> exposes no PID, path or version-of-process member), so
-/// the main window handle that <c>ksGetHWindow()</c> returns is converted to a PID here.
-/// </summary>
+/// the main window handle that <c>ksGetHWindow()</c> returns is converted to a PID here.</summary>
 internal static class NativeMethods
 {
     [DllImport("user32.dll", SetLastError = true)]
@@ -15,11 +13,10 @@ internal static class NativeMethods
     [DllImport("kernel32.dll", SetLastError = true)]
     public static extern IntPtr GetCurrentProcess();
 
-    /// <summary>
-    /// Показывает ли Windows окно на экране. Нужно потому, что COM-объект приложения existence
-    /// окна не отличает от его видимости: измерено, что скрытое окно КОМПАСа даёт валидный
-    /// <c>ksGetHWindow()</c>, то есть «PID достаётся по HWND» о видимости не говорит ничего.
-    /// </summary>
+    /// <summary>Whether Windows shows the window on screen. Needed because the application's COM object
+    /// does not distinguish a window's existence from its visibility: MEASURED — a hidden KOMPAS window
+    /// still yields a valid <c>ksGetHWindow()</c>, so "a PID is obtained from the HWND" says nothing
+    /// about visibility.</summary>
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool IsWindowVisible(IntPtr hWnd);
@@ -32,15 +29,14 @@ internal static class NativeMethods
 
     public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
-    /// <summary>Дочерние окна (в MDI это окна документов) — чтобы проверять видимость документа, а не только рамки приложения.</summary>
+    /// <summary>Child windows (in MDI these are document windows) — so a document's visibility can be
+    /// checked, not only the application frame.</summary>
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool EnumChildWindows(IntPtr hWndParent, EnumWindowsProc lpEnumFunc, IntPtr lParam);
 
-    /// <summary>
-    /// Заголовки видимых дочерних окон данного окна. Пустой список — это наблюдение «видимых
-    /// дочерних окон нет», а не «проверка не сработала»: ошибка перечисления возвращает null.
-    /// </summary>
+    /// <summary>Titles of the visible child windows of this window. An empty list is the observation
+    /// "there are no visible child windows", not "the check failed": an enumeration error returns null.</summary>
     public static List<string>? VisibleChildWindowTitles(IntPtr parent)
     {
         if (parent == IntPtr.Zero)
@@ -86,9 +82,7 @@ internal static class NativeMethods
     public static string CurrentProcessBitness() => Environment.Is64BitProcess ? "x64" : "x86";
 }
 
-/// <summary>
-/// Unit selectors for the measurement calls, and the one conversion the server performs.
-/// </summary>
+/// <summary>Unit selectors for the measurement calls, and the one conversion the server performs.</summary>
 /// <remarks>
 /// In API5 the unit is an <b>argument</b>, not a property of the model:
 /// <c>GetLength(bitVector)</c>, <c>GetArea(bitVector)</c>,

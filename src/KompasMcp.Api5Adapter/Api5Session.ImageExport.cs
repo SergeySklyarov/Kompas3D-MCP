@@ -8,51 +8,34 @@ using KompasMcp.Domain.Imaging;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>
-/// Растровый снимок модели документированным маршрутом API5 (наряд
-/// <c>KOMPAS_EXPORT_IMAGE_DEVELOPER_PROMPT.md</c> §4).
-/// </summary>
-/// <remarks>
-/// <b>Маршрут.</b> <c>ksDocument3D.RasterFormatParam()</c> (страница
-/// <c>ksdocument3d_rasterformatparam.html</c>) → <c>ksRasterFormatParam</c>
-/// (<c>ksrasterformatparam_props.html</c>) → <c>Init()</c> → запись <c>format</c>, <c>colorBPP</c>,
-/// при необходимости <c>extResolution</c>/<c>extScale</c> и <c>returnResultAsArrayBytes</c> →
-/// <c>ksDocument3D.SaveAsToRasterFormat(fileName, rasterPar)</c>
+/// <summary>Raster snapshot of the model via the documented API5 route (order
+/// <c>KOMPAS_EXPORT_IMAGE_DEVELOPER_PROMPT.md</c> §4).</summary>
+/// <remarks>Route: <c>ksDocument3D.RasterFormatParam()</c> (<c>ksdocument3d_rasterformatparam.html</c>)
+/// → <c>ksRasterFormatParam</c> (<c>ksrasterformatparam_props.html</c>) → <c>Init()</c> → set
+/// <c>format</c>, <c>colorBPP</c>, optionally <c>extResolution</c>/<c>extScale</c> and
+/// <c>returnResultAsArrayBytes</c> → <c>ksDocument3D.SaveAsToRasterFormat(fileName, rasterPar)</c>
 /// (<c>ksdocument3d_saveastorasterformat.html</c>).
-/// <para>
-/// <b>Два режима и их взаимная исключительность — ИЗМЕРЕНО, а не предположено</b> (проба P2b
-/// наряда, поставка <c>publish-deproutes-r2-20260921</c>, сборка 24.0.0.2799):
-/// </para>
-/// <list type="bullet">
-/// <item>непустое имя файла → файл записан (PNG 8639 байт, 328×448), а <c>resultArrayBytes</c>
-/// остаётся <c>null</c>; шесть форм вызова (пустой предварительно подставленный массив, другой
-/// метод записи растра, повторное чтение свойства, свежий объект параметров после записи) все дали
-/// <c>null</c>;</item>
-/// <item>ПУСТОЕ имя файла → <c>resultArrayBytes</c> = <c>System.Byte[]</c>, 8639 байт, магия PNG
-/// <c>89504e47…</c>, и файла на диске НЕ появляется вовсе (снимок каталога до/после).</item>
-/// </list>
-/// <para>
-/// Отсюда и устройство метода: «вернуть картинку» и «записать файл» — РАЗНЫЕ вызовы маршрута.
-/// Когда нужны оба, рендер делается ОДИН раз байтовым режимом, а файл пишется из тех же байтов:
-/// второй рендер мог бы дать другой результат, а обещание «файл и ответ — одно и то же» без этого
-/// не проверяемо.
-/// </para>
-/// <para>
-/// <b>Чего этот метод не делает.</b> Не управляет проекцией (<c>IViewProjection7</c>
-/// документирован, но оставлен отдельным нарядом и назван остатком), не ужимает картинку молча и
-/// не выдаёт «успех» без байтов. Снимок — текущий вид окна сервера; состояние камеры не
-/// фиксируется и в ответе названо неподтверждённым.
-/// </para>
-/// </remarks>
+/// MEASURED (probe P2b, delivery <c>publish-deproutes-r2-20260921</c>, build 24.0.0.2799): the two modes
+/// are mutually exclusive, not assumed. A NON-EMPTY file name writes the file (PNG 8639 bytes, 328×448)
+/// while <c>resultArrayBytes</c> stays <c>null</c> — six call shapes (a pre-filled empty array, another
+/// raster write method, re-reading the property, a fresh parameter object after writing) all gave
+/// <c>null</c>. An EMPTY file name gives <c>resultArrayBytes</c> = <c>System.Byte[]</c>, 8639 bytes, PNG
+/// magic <c>89504e47…</c>, and NO file appears on disk (directory snapshot before/after).
+/// Hence the method's design: "return an image" and "write a file" are DIFFERENT route calls. When both
+/// are wanted, the render is done ONCE in byte mode and the file is written from those same bytes — a
+/// second render could give a different frame, and "the file and the response are the same" would then
+/// be unverifiable.
+/// LIMIT: this method does not control the projection (<c>IViewProjection7</c> is documented but left to
+/// a separate order and named as a remainder), does not silently downscale, and does not report
+/// "success" without bytes. The snapshot is the server window's current view; camera state is not
+/// captured and is named unverified in the response.</remarks>
 public sealed partial class Api5Session
 {
-    /// <summary>Глубина цвета снимка. 24 бита — то, что измерено в пробах P1–P6.</summary>
+    /// <summary>Snapshot colour depth. 24 bits is what probes P1–P6 measured.</summary>
     private const short RasterColorBitsPerPixel = 24;
 
-    /// <summary>
-    /// Снять растр документа. Один рендер на вызов; носитель выбирается по запросу, а не по
-    /// удобству: байтовый режим — пустое имя файла, файловый — непустое.
-    /// </summary>
+    /// <summary>Take a raster of the document. One render per call; the carrier is chosen by the request,
+    /// not by convenience: byte mode — empty file name, file mode — non-empty.</summary>
     public ExportImageResultDto ExportImage(ExportImageCommand command)
     {
         var document = RequireDocument(command.DocumentId);
@@ -71,10 +54,10 @@ public sealed partial class Api5Session
 
         if (!RasterFormats.TryResolve(command.Format, out var format))
         {
-            // Перечень проверяется ДО COM и здесь, а не только схемой: измерено (проба P5), что
-            // ядро значение вне перечня НЕ отвергает — оно принимается и даёт другой формат
-            // (значение 99 дало BMP 440886 байт при запросе PNG). Молчаливая подмена формата
-            // неотличима для вызывающего от исполнения просьбы.
+            // The list is checked BEFORE COM, here and not only in the schema: MEASURED (probe P5) — the
+            // kernel does NOT reject a value outside the list; it accepts it and gives a different format
+            // (the value 99 produced a 440886-byte BMP for a PNG request). A silent format substitution is
+            // indistinguishable to the caller from honouring the request.
             throw new KompasContractException(
                 ErrorCodes.InvalidArgument,
                 $"Формат '{command.Format}' не входит в опубликованный перечень: " +
@@ -100,9 +83,9 @@ public sealed partial class Api5Session
         var fileName = bytesRoute ? string.Empty : command.SavePath!;
         if (!bytesRoute)
         {
-            // Файловый режим: каталог создаётся заранее, потому что измерено (проба P4), что ядро
-            // создаёт его само и пишет файл — то есть «путь не существует» не является отказом,
-            // и полагаться на это как на защиту нельзя. Проверка каталога — забота Хоста.
+            // File mode: the directory is created ahead of time because MEASURED (probe P4) — the kernel
+            // creates it itself and writes the file, so "the path does not exist" is not a refusal, and it
+            // cannot be relied on as a guard. Directory checking is the Host's concern.
             var directory = Path.GetDirectoryName(command.SavePath!);
             if (!string.IsNullOrEmpty(directory))
             {
@@ -222,8 +205,9 @@ public sealed partial class Api5Session
                 });
         }
 
-        // Файл из ТЕХ ЖЕ байтов: один рендер, не два. Второй вызов ядра мог бы дать другой кадр,
-        // и тогда «в ответе и в файле одно и то же» перестало бы быть проверяемым утверждением.
+        // The file comes from the SAME bytes: one render, not two. A second kernel call could give a
+        // different frame, and then "the response and the file are the same" would stop being a
+        // verifiable claim.
         bool? savePathFromMemory = null;
         if (bytesRoute && command.SavePath is { Length: > 0 } savePath)
         {
@@ -272,10 +256,8 @@ public sealed partial class Api5Session
         };
     }
 
-    /// <summary>
-    /// Ограничения контекста ответа. Превышение — ИМЕНОВАННЫЙ отказ с подсказкой, а не молчаливое
-    /// ужатие: уменьшение картинки сервером было бы подменой результата, а не его доставкой.
-    /// </summary>
+    /// <summary>Response context limits. Exceeding them is a NAMED refusal with a hint, not silent
+    /// downscaling: shrinking the image server-side would substitute the result, not deliver it.</summary>
     private static void EnforceLimits(RasterImageFacts facts, byte[] data, RasterFormatSpec format)
     {
         if (facts.PixelWidth is int width && facts.PixelHeight is int height)
@@ -299,7 +281,7 @@ public sealed partial class Api5Session
             }
         }
 
-        // 4/3 — отношение длины base64 к длине исходных байтов (каждые 3 байта дают 4 символа).
+        // 4/3 — the ratio of base64 length to source byte length (every 3 bytes give 4 characters).
         var base64Length = 4 * ((data.Length + 2L) / 3);
         if (base64Length > RasterLimits.MaxBase64Characters)
         {
@@ -318,11 +300,10 @@ public sealed partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Прочитать <c>resultArrayBytes</c>. Тип члена в interop — <c>Object</c> (VARIANT), поэтому
-    /// ветвей несколько: SAFEARRAY байт маршалится и как <c>byte[]</c>, и как <c>Array</c>.
-    /// «Не привелось» отличается от «пусто» — первое отказ прибора, второе факт о ядре.
-    /// </summary>
+    /// <summary>Read <c>resultArrayBytes</c>. The member's interop type is <c>Object</c> (VARIANT), so there
+    /// are several branches: a byte SAFEARRAY marshals both as <c>byte[]</c> and as <c>Array</c>. "Did not
+    /// cast" differs from "empty" — the former is an instrument failure, the latter a fact about the
+    /// kernel.</summary>
     private static byte[]? ReadArrayBytes(ksRasterFormatParam parameter)
     {
         object? raw;

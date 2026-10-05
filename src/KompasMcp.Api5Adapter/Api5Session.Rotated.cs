@@ -9,93 +9,62 @@ using KompasMcp.Domain.Geometry;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>
-/// Вращение (docs/05 SM-03): создание признака прямой фабрикой API7.
-/// </summary>
+/// <summary>Rotation (docs/05 SM-03): feature creation via the API7 factory directly.</summary>
 /// <remarks>
-/// <para>
-/// <b>Основание — измерение, а не имена методов.</b> Прогон
-/// <c>95fa844107ce41609d6278f8f6c5759f</c> от 17.09.2026 (<c>docs/acceptance/api7/rotation.json</c>,
-/// запись в <c>docs/acceptance/INDEX.md</c>), шаги <c>R.24</c>, <c>R.25</c>, <c>R.26</c>:
-/// <list type="bullet">
-/// <item>R.24 — перебор фабрики: все три вида операции (<c>o3d_baseRotated</c> 27,
-/// <c>o3d_bossRotated</c> 28, <c>o3d_cutRotated</c> 29) дали тело с аналитическим объёмом
-/// 50265.4824574366 против π·r²·h = 50265.4824574367 при r=20, h=40;</item>
-/// <item>R.25 — эталон задания: тот же результат воспроизведён с нуля на новом документе, форма
-/// проверена независимо от объёма (одна цилиндрическая грань r=20 h=40, габарит 40×40×40), и
-/// признак пережил <c>save → close → reopen</c> с повторно полученными <c>Axis</c> и
-/// <c>Profile</c>; смена угла 360°→180° на ТОМ ЖЕ признаке дала 25132.7412287183.</item>
-/// <item>R.26 — что операция делает с уже существующим телом: разрез снял 25132.7412287183 с
-/// плиты 120×120×40, а <c>boss</c> с записанным <c>OperationResult = ksOperationCut</c> изменил
-/// объём на 0.</item>
-/// </list>
-/// </para>
-/// <para>
-/// <b>Поправка от 18.09.2026: прежнее «насыщение на 180°» опровергнуто.</b> Из шага
-/// <c>R.26.angles</c> был сделан вывод «развёртка останавливается на половине оборота, запись 360
-/// даёт ту же половину». Этот вывод был ошибкой ИЗМЕРЕНИЯ: шаг менял <c>CutOffByPoint</c>, а не
-/// угол, и ни в одной строке не записывал <c>Angle[true] = 360</c> с полным набором параметров
-/// развёртки. Проба <c>tools/KompasMcp.Api7Probe/FullTurnProbe.cs</c> (F.1…F.5) и независимое
-/// чтение сохранённого <c>.m3d</c> пробой <c>M3dVerificationProbe</c> показали иное:
-/// <b><c>Angle[true]</c> несёт запрошенный угол напрямую</b> (360→360°, 180→180°, 90→90°), а
-/// вторая половина пары, равная первой, развёртку удваивает. Полный оборот строится одним
-/// вызовом. Таблица измерений и разбор трёх дефектов прежнего эксперимента —
-/// <c>docs/acceptance/api7/full-turn-findings.md</c>.
-/// </para>
-/// <para>
-/// <b>Прежняя блокировка снята, и её причина названа.</b> До 17.09.2026 вращение считалось
-/// невыразимым: API5-путь создавал оболочку <c>NewEntity(27)</c> и завершал её <c>Create()</c>,
-/// которая возвращала <c>true</c>, объект появлялся в дереве, объём не менялся. Это был СМЕШАННЫЙ
-/// жизненный цикл — оболочка API5 вокруг объекта фабрики API7, — а не свойство вращения. Поэтому
-/// здесь нет ни одного вызова <c>NewEntity</c> и ни одного <c>Create()</c>.
-/// </para>
-/// <para>
-/// <b>Границы, которые переносятся как отказы, а не как оговорки.</b>
+/// INVARIANT: the route rests on measurement, not on method names. Run
+/// <c>95fa844107ce41609d6278f8f6c5759f</c> of 17.09.2026 (<c>docs/acceptance/api7/rotation.json</c>),
+/// steps R.24/R.25/R.26, established the factory route and its shape.
+/// MEASURED: 17.09.2026 — (R.24) all three factory operations (<c>o3d_baseRotated</c> 27,
+/// <c>o3d_bossRotated</c> 28, <c>o3d_cutRotated</c> 29) build a body whose analytical volume is
+/// 50265.4824574366 against π·r²·h = 50265.4824574367 at r=20, h=40; (R.25) the same result
+/// reproduces from scratch on a fresh document, shape verified independently of volume (one
+/// cylindrical face r=20 h=40, bounds 40×40×40), and the feature survives save → close → reopen;
+/// (R.26) a cut removes 25132.7412287183 from a 120×120×40 plate, while a boss writing
+/// <c>OperationResult = ksOperationCut</c> changes the volume by 0.
+/// MEASURED: 18.09.2026 (FullTurnProbe F.1…F.5, independently re-read from the saved <c>.m3d</c> by
+/// M3dVerificationProbe) — <c>Angle[true]</c> carries the requested angle directly (360→360°,
+/// 180→180°, 90→90°); the second slot of the pair, equal to the first, doubles the sweep. A full
+/// turn is built by a single call. This disproved the earlier "saturation at 180°" claim, which
+/// came from a step that changed <c>CutOffByPoint</c> instead of the angle
+/// (<c>docs/acceptance/api7/full-turn-findings.md</c>).
+/// INVARIANT: no <c>NewEntity</c> and no <c>Create()</c> appear here. The old API5 shell around an
+/// API7 factory object was a MIXED lifecycle — <c>Create()</c> returned <c>true</c>, the object
+/// appeared in the tree and the volume did not change — not a property of rotation.
+/// LIMIT: carried as refusals, not as caveats.
 /// <list type="number">
-/// <item><b>Угол больше полного оборота не принимается.</b> Полный оборот (360°) строится одним
-/// вызовом — это измерено 18.09.2026 и заменило прежнюю (опровергнутую) гипотезу о насыщении на
-/// 180°. Граница здесь — 360°, то есть потолок самой развёртки: сектор не может занять больше
-/// целого оборота. Значение больше 360 отсекается ДО мутации.</item>
-/// <item><b><c>dtReverse</c> не строит ничего.</b> Измерено (R.26.sector): <c>Update()</c> = False,
-/// тел 0. Отвергается до мутации.</item>
-/// <item><b>Ось обязательна.</b> Вращение без оси не строится вовсе. Отсутствие оси — отказ, а не
-/// попытка «построить как получится».</item>
-/// <item><b>Тонкая стенка не измерена.</b> Маршрут измерен на СПЛОШНОМ теле. Заданная тонкая стенка
-/// отвергается CAPABILITY_UNAVAILABLE, а не записывается незмеренным числом.</item>
-/// <item><b>Приклейка к существующему телу ПРОИСХОДИТ.</b> Измерено 18.09.2026 (проба F.10 —
-/// управляемый опыт на одной геометрии, менялся только <c>OperationResult</c>): <c>Union</c> даёт
-/// сращивание (тел 1→1, прирост равен объёму тела минус пересечение), <c>NewBody</c> — второе тело
-/// (тел 1→2, прирост равен всему цилиндру). Прежний отказ <c>boss</c> опирался на прогон, который
-/// писал <c>NewBody</c>, то есть просил ровно то, что и получил. Вид операции выводится из вида
-/// фабрики: base→<c>NewBody</c>, boss→<c>Union</c>, cut→<c>Cut</c>.
-/// </item>
-/// <item><b>Целевое тело операция выбирает ПО ГЕОМЕТРИИ, и это измерено.</b> Проба F.11: в детали
-/// из двух тел, где инструмент пересекает только одно, тронуто ровно ПЕРЕСЕКАЕМОЕ тело, а не
-/// первое в коллекции (КОМПАС переставляет тела, поэтому индекс — не адрес). Следствие: операция
-/// не выбирает тело за клиента молча — число тел и поимённое изменение читаются и возвращаются,
-/// а объявленный <c>target_body_ref</c> проверяется после операции.
-/// </item>
+/// <item>An angle beyond a full turn is not accepted: 360° is the sweep's own ceiling (measured
+/// 18.09.2026), and a value above it is cut off BEFORE the mutation.</item>
+/// <item><c>dtReverse</c> builds nothing (measured R.26.sector: <c>Update()</c> = False, 0 bodies);
+/// rejected before the mutation.</item>
+/// <item>The axis is mandatory; rotation without an axis is not built at all.</item>
+/// <item>A thin wall is unmeasured: the route was measured on a SOLID body, so a requested thin
+/// wall is refused with CAPABILITY_UNAVAILABLE rather than written as an unmeasured number.</item>
+/// <item>Attachment to an existing body DOES happen (measured 18.09.2026, probe F.10: <c>Union</c>
+/// fuses, <c>NewBody</c> adds a second body). The operation kind is derived from the factory kind:
+/// base→<c>NewBody</c>, boss→<c>Union</c>, cut→<c>Cut</c>.</item>
+/// <item>The target body is chosen BY GEOMETRY (probe F.11): only the INTERSECTED body is touched,
+/// not the first in the collection (KOMPAS reorders bodies, so an index is not an address). The
+/// declared <c>target_body_ref</c> is therefore verified AFTER the operation.</item>
 /// </list>
-/// </para>
+/// History: docs/decisions/adapter-features.md#rotated-route
 /// </remarks>
 public partial class Api5Session
 {
-    /// <summary>Допуск сопоставления цилиндрической грани с ожидаемым радиусом вращения, мм.</summary>
+    /// <summary>Tolerance for matching a cylindrical face against the expected rotation radius, mm.</summary>
     private const double RotationRadiusToleranceMm = 0.01d;
 
-    /// <summary>Имя семейства вращения в ответах сервера.</summary>
+    /// <summary>Rotation family name in server responses.</summary>
     private const string RotationFamily = "rotation";
 
-    /// <summary>Точность, с которой сверяется читаемый обратно угол: он лежит в модели в градусах.</summary>
+    /// <summary>Tolerance for comparing the angle read back; it lives in the model in degrees.</summary>
     private const double RotationAngleToleranceDeg = 1e-6d;
 
-    /// <summary>
-    /// Создание вращения. Отказ моста отдаётся <c>CAPABILITY_UNAVAILABLE</c> с причиной, а не
-    /// молчаливым null: вызывающий обязан отличать «API7 недоступен» от «КОМПАС отверг параметр».
-    /// </summary>
+    /// <summary>Rotation creation. A bridge refusal is returned as <c>CAPABILITY_UNAVAILABLE</c> with a
+    /// reason rather than a silent null: the caller must tell "API7 unavailable" from "KOMPAS
+    /// rejected the parameter".</summary>
     public RotatedResult Rotated(RotatedCommand command)
     {
-        // ── до COM: правила, цена ошибки в которых несимметрична ─────────────────────────────────
+        // ── before COM: validation rules whose cost of error is asymmetric ──────────────────────
         ValidateRotatedCommand(command);
 
         var target = RequireSketch(command.SketchRef);
@@ -107,11 +76,11 @@ public partial class Api5Session
         var facesBefore = CountFaces(document);
         var bodiesBefore = CountBodies(document);
 
-        // Поимённые снимки тел — объём и габарит каждого. Нужны затем, чтобы ответить на вопрос
-        // «какое тело тронуто» числом, а не предположением, и чтобы проверить объявленное
-        // target_body_ref ПОСЛЕ операции. Индекс телом не является: измерено (F.11), что КОМПАС
-        // переставляет тела в коллекции ([144000; 16000] → [16000; 181699.111843077]), поэтому
-        // снимки сопоставляются по центру габарита, а не по позиции.
+        // Named body snapshots — each body's volume and bounds. They let the answer to "which body
+        // was touched" be a number, not a guess, and let the declared target_body_ref be verified
+        // AFTER the operation. An index is not an address: KOMPAS reorders bodies (measured F.11,
+        // [144000; 16000] → [16000; 181699.111843077]), so snapshots are matched by bounds centre,
+        // not by position.
         var bodiesBeforeSnapshot = ReadBodySnapshots(part);
         var bodyTarget = command.TargetBodyRef is null
             ? null
@@ -130,29 +99,22 @@ public partial class Api5Session
                 RetryPolicy.ReacquireContext);
         }
 
-        // ── многтельность: поведение ИЗМЕРЕНО, поэтому больше не отказ ──────────────────────────
+        // ── multi-body: behaviour is MEASURED, so the former refusal is gone ─────────────────────
         //
-        // Здесь стоял отказ для boss и cut в детали с более чем одним телом. Основание было
-        // честным («какое тело резать — не измерялось»), но с 18.09.2026 вопрос измерен, и отказ
-        // снят по измерению, а не по удобству.
+        // MEASURED: 18.09.2026 (FullTurnProbe F.11) — in a two-body part, boss/Union (bodies 2→2,
+        // volumes [144000; 16000] → [16000; 181699.111843077]) and cut/Cut (bodies 2→2, volumes
+        // [144000; 16000] → [131433.629385641; 16000]) each touched EXACTLY ONE body — the
+        // INTERSECTED one, not the first in the collection (KOMPAS swapped the bodies,
+        // [144000; 16000] → [16000; …]).
         //
-        // Проба FullTurnProbe, шаг F.11: деталь из ДВУХ тел — плита x,y∈[−60,60], z∈[0,10]
-        // (V=144000) и посторонний блок x,y∈[40,80], z∈[0,10] (V=16000). Инструмент (ось Z в
-        // начале координат, R20) пересекает ТОЛЬКО плиту. Измерено:
-        //   * boss/Union — тела 2→2, объёмы [144000; 16000] → [16000; 181699.111843077]: плита
-        //     выросла ровно на 37699.1118430774 (пересечение), постороннее тело не тронуто;
-        //   * cut/Cut — тела 2→2, объёмы [144000; 16000] → [131433.629385641; 16000]: с плиты снято
-        //     ровно 12566.3706143592 (пересечение), постороннее тело не тронуто.
-        // В обоих случаях тронуто РОВНО ОДНО тело и именно ПЕРЕСЕКАЕМОЕ, а не первое в коллекции:
-        // КОМПАС переставил тела местами ([144000; 16000] → [16000; …]), и операция ушла за
-        // геометрией, а не за индексом.
-        //
-        // Отсюда правило: операция НЕ выбирает тело за клиента молча. Число тел до и после и
-        // поимённое изменение читаются и возвращаются вызывающему, а расхождение с объявленным
-        // target_body_ref — отказ с partialEffects, а не тихое «наверное, то».
+        // Hence the rule: the operation does NOT silently pick a body for the caller. Body counts
+        // before/after and the named change are read and returned; a mismatch with the declared
+        // target_body_ref is a refusal with partialEffects, not a silent "probably that one".
+        // History: docs/decisions/adapter-features.md#rotated-multi-body
 
-        // Профиль — объект API7. Непереданный профиль это значение, которое API7 не примет, и
-        // подменять его «эскизом вообще» нельзя: у вращения профиль есть тело развёртки.
+        // The profile is an API7 object. An un-transferred profile is a value API7 will not accept,
+        // and it must not be substituted with "a sketch in general": for a rotation the profile is
+        // the body being swept.
         var profile = bridge.TransferTo7(target.Sketch) as IModelObject;
         if (profile is null)
         {
@@ -164,10 +126,11 @@ public partial class Api5Session
                 partialEffects: true);
         }
 
-        // ── ось: обязательна, и строится в ЭТОЙ ЖЕ детали ────────────────────────────────────────
+        // ── axis: mandatory, and built in THIS very part ─────────────────────────────────────────
         //
-        // Проверка «точки различны» стоит здесь, а не только в валидации: совпадающие точки дали бы
-        // вырожденную ось, а отказ вращения на вырожденной оси не был бы фактом о вращении.
+        // The "points are distinct" check sits here, not only in validation: coincident points
+        // would give a degenerate axis, and a rotation refusal on a degenerate axis would not be a
+        // fact about rotation.
         var axisHandle = Api7Rotated.TryBuildAxisBy2Points(
             bridge, part, command.AxisPoint1Mm.ToArray(), command.AxisPoint2Mm.ToArray());
         if (axisHandle is null)
@@ -181,7 +144,7 @@ public partial class Api5Session
                 partialEffects: true);
         }
 
-        // ── создание ─────────────────────────────────────────────────────────────────────────────
+        // ── creation ─────────────────────────────────────────────────────────────────────────────
         var (rotation, failure) = Api7Rotated.TryCreate(
             container,
             command.Operation,
@@ -201,9 +164,9 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["api7_failure"] = failure });
         }
 
-        // Без перестроения запись в API7 остаётся представлением — измерено пробой E на
-        // IExtrusion.Sketch и повторено здесь: порядок «запись → Update() → Rebuild()» есть часть
-        // контракта, а не стиль.
+        // Without a rebuild the API7 write stays a representation — measured by probe E on
+        // IExtrusion.Sketch and repeated here: the order "write → Update() → Rebuild()" is part of
+        // the contract, not a style.
         Api7Bridge.Rebuild(container, document.Document);
         BumpRevision(document, "rotated." + operationName);
 
@@ -217,11 +180,11 @@ public partial class Api5Session
         var count = Api7Rotated.Count(container);
         var readBack = count is int n and > 0 ? Api7Rotated.Read(container, n - 1) : null;
 
-        // ── независимая проверка формы, а не второй раз объём ────────────────────────────────────
+        // ── independent shape check, not the volume a second time ───────────────────────────────
         //
-        // Объём не отличает цилиндр R20 H40 от плиты того же объёма. Поэтому рядом читаются
-        // цилиндрические грани тела (радиус и высота через ksCylinderParam) и габарит: у цилиндра
-        // R20 H40 габарит 40×40×40, у полуцилиндра 40×40×20.
+        // Volume does not tell a cylinder R20 H40 from a plate of the same volume. So the body's
+        // cylindrical faces (radius and height via ksCylinderParam) and the bounding box are read
+        // alongside: for a cylinder R20 H40 the box is 40×40×40, for a half-cylinder 40×40×20.
         var cylinders = SafeCylinders(part);
         var bounds = SafeBounds(part);
 
@@ -240,8 +203,8 @@ public partial class Api5Session
                     : "число тел не уменьшилось"),
         };
 
-        // Цилиндрическая грань обязана появиться: развёртка плоского профиля вокруг оси даёт
-        // поверхность вращения. Её отсутствие — прямое противоречие геометрии, даже если объём сошёлся.
+        // A cylindrical face MUST appear: sweeping a flat profile around an axis yields a surface
+        // of revolution. Its absence is a direct contradiction of the geometry, even if the volume matched.
         checks.Add(new NamedCheck(
             "cylindrical_face_present",
             cylinders.Count > 0,
@@ -251,17 +214,17 @@ public partial class Api5Session
                     $"r={Num(c.Radius)} h={Num(c.Height)}")),
             Expected: "хотя бы одна поверхность вращения"));
 
-        // ── какое тело тронуто: ИЗМЕРЕНО, а не выбрано ───────────────────────────────────────────
+        // ── which body was touched: MEASURED, not chosen ────────────────────────────────────────
         //
-        // Для boss и cut операция обязана лечь на существующее тело, и «на какое» — вопрос, на
-        // который здесь отвечает измерение, а не индекс. Измерено (F.11) на детали из двух тел:
-        // тронуто ПЕРЕСЕКАЕМОЕ тело, а не первое в коллекции. Поэтому проверка идёт по снимкам.
+        // For boss and cut the operation must land on an existing body, and "which one" is a question
+        // answered here by measurement, not by an index. MEASURED (F.11) on a two-body part: the
+        // INTERSECTED body was touched, not the first in the collection. So the check runs on snapshots.
         if (command.Operation != RotationOperation.Base)
         {
-            // «Затронуто» — изменился объём ИЛИ габарит: переехавшее тело тоже затронуто, и требование
-            // «ровно одно тело» относится к составу, а не к материалу. Требование к материалу
-            // проверяется ОТДЕЛЬНОЙ строкой ниже (target_body_is_the_one_touched), поэтому смешивать
-            // их в одном вердикте нельзя — это и есть предмет наряда §4.
+            // "Touched" means volume OR bounds changed: a body that merely moved is touched too, and
+            // the "exactly one body" requirement concerns the body set, not the material. The material
+            // requirement is checked by a SEPARATE line below (target_body_is_the_one_touched), so the
+            // two must not be merged into one verdict — that is exactly the point of order §4.
             checks.Add(new NamedCheck(
                 "body_target_measured",
                 bodyComparison.Touched.Count == 1,
@@ -272,11 +235,12 @@ public partial class Api5Session
                 Expected: "ровно одно тело изменилось — то, которое пересекает инструмент"));
         }
 
-        // Объявленное тело проверяется ПОСЛЕ операции: маршрута, который назначает целевое тело
-        // вращению, в API нет — IRotated и IRotated1 не объявляют ни chooseType, ни ChooseBodies
-        // (проверено по интероп-сборке; они есть только у API5-определений ksBossRotatedDefinition
-        // и ksCutRotatedDefinition). Значит подменить цель нельзя, а можно проверить, что ядро
-        // тронуло именно её. Несовпадение — отказ с partialEffects, а не молчаливое согласие.
+        // The declared body is verified AFTER the operation: the API has no route that assigns a
+        // target body to a rotation — neither IRotated nor IRotated1 declares chooseType or
+        // ChooseBodies (checked against the interop assembly; they exist only on the API5 definitions
+        // ksBossRotatedDefinition and ksCutRotatedDefinition). So the target cannot be substituted;
+        // what can be done is to verify the kernel touched it. A mismatch is a refusal with
+        // partialEffects, not silent consent.
         if (bodyTarget is not null)
         {
             var targetDelta = bodyComparison.DeltaOf(bodyTarget.Index);
@@ -315,9 +279,9 @@ public partial class Api5Session
             }
         }
 
-        // Знак — то, что отличает приклейку от разреза, и он проверяется отдельно от величины.
-        // Для boss он ВЫЧИСЛЯЕТСЯ из пары измерений, а не постулируется: приклейка обязана добавить
-        // материал, разрез — снять.
+        // The sign is what distinguishes a boss from a cut, and it is checked separately from the
+        // magnitude. For boss it is COMPUTED from a pair of measurements, not postulated: a boss must
+        // add material, a cut must remove it.
         var isCut = command.Operation == RotationOperation.Cut;
         var isBase = command.Operation == RotationOperation.Base;
         var change = volumeAfter is double a && volumeBefore is double b ? a - b : (double?)null;
@@ -347,9 +311,9 @@ public partial class Api5Session
                 Expected: Num(expected)));
         }
 
-        // Геометрия подтверждается, когда параметры читаются обратно, поверхность вращения
-        // действительно появилась, знак материала верен и — если вызывающий задал ожидание —
-        // объём совпал. Чего-то меньшего достаточно для call_returned, но не для geometry_checked.
+        // Geometry is confirmed when the parameters read back, the surface of revolution actually
+        // appeared, the material sign is right and — if the caller supplied an expectation — the volume
+        // matched. Anything less is enough for call_returned, but not for geometry_checked.
         var geometryConfirmed = readBack is not null
             && checks.Exists(c => c.Name == "parameters_read_back" && c.Passed)
             && checks.Exists(c => c.Name == "cylindrical_face_present" && c.Passed)
@@ -371,13 +335,10 @@ public partial class Api5Session
                 "численного доказательства нет");
         }
 
-        // Прежде здесь стояла запись angle_saturates_at_180 — «развёртка линейна до 180° и дальше не
-        // растёт». Она СНЯТА 18.09.2026: измерение FullTurnProbe (F.1…F.5) и независимое чтение
-        // .m3d (M3dVerificationProbe) показали, что угол равен построенному вплоть до 360°, а
-        // прежний вывод происходил из шага, менявшего CutOffByPoint вместо угла. Держать здесь
-        // опровергнутое утверждение значило бы сообщать клиенту неверный предел при каждом вызове.
-        //
-        // Вместо него — то, что действительно осталось непроверенным в ЭТОМ вызове.
+        // The former angle_saturates_at_180 entry ("the sweep is linear up to 180° and stops growing")
+        // was REMOVED 18.09.2026 — see History. What follows is only what really remained unverified
+        // in THIS call.
+        // History: docs/decisions/adapter-features.md#angle-saturation-refuted
 
         if (command.Operation != RotationOperation.Base)
         {
@@ -400,22 +361,23 @@ public partial class Api5Session
                 "dtMiddlePlane — единственное направление, двигающее сектор; dtReverse не строит ничего");
         }
 
-        // ── ссылка на признак ────────────────────────────────────────────────────────────────────
+        // ── feature reference ───────────────────────────────────────────────────────────────────
         var reference = FindRotatedEntity(document);
         if (reference is null)
         {
-            // Ссылку на признак, которого дерево API5 не показывает, выдавать нельзя: правка по ней
-            // всё равно упала бы, а вызывающий узнал бы об этом позже.
+            // A reference to a feature the API5 tree does not show must not be issued: an edit through
+            // it would fail anyway, and the caller would learn about it later.
             //
-            // Уровень здесь НЕ понижается до call_returned. Отсутствие ссылки и подтверждённость
-            // геометрии — два независимых утверждения, и первое не ослабляет второе: объём сошёлся
-            // с аналитическим, параметры перечитаны, поверхность вращения найдена — всё это
-            // измерено и остаётся измеренным независимо от того, видно ли признак в дереве API5.
-            // Первая редакция возвращала здесь CallReturned всегда, и это была настоящая ошибка
-            // приёмки: строка RO.4 падала «уровень=call_returned» на вызове, у которого ВСЕ пять
-            // проверок прошли, включая численное совпадение объёма. Номер дерева у вращения не
-            // измерялся (в отличие от пары 52→583 у отверстия), поэтому неадресуемость здесь —
-            // ожидаемое состояние, а не признак неудавшейся геометрии.
+            // The level is NOT lowered to call_returned here. The missing reference and the confirmed
+            // geometry are two independent claims, and the first does not weaken the second: the volume
+            // matched the analytical one, the parameters were re-read, the surface of revolution was
+            // found — all of that is measured and stays measured regardless of whether the feature is
+            // visible in the API5 tree. The first revision always returned CallReturned here, and that
+            // was a genuine acceptance defect: line RO.4 failed with "level=call_returned" on a call
+            // where ALL five checks passed, including the numeric volume match. The tree number for a
+            // rotation was never measured (unlike the 52→583 pair for a hole), so non-addressability
+            // here is the expected state, not a sign of failed geometry.
+            // History: docs/decisions/adapter-features.md#feature-ref-withheld
             unverified.Add("feature_ref_withheld — признак не найден в дереве API5, ссылка не выдана");
             return new RotatedResult(
                 null,
@@ -450,23 +412,19 @@ public partial class Api5Session
             axisHandle.Notes);
     }
 
-    /// <summary>
-    /// Прочитать параметры СУЩЕСТВУЮЩЕГО признака вращения для <c>kompas_get_feature</c>.
-    /// </summary>
+    /// <summary>Read the parameters of an EXISTING rotation feature for <c>kompas_get_feature</c>.</summary>
     /// <remarks>
-    /// <para>
-    /// <b>Индекс берётся сопоставлением того же признака, а не первым попавшимся.</b> У вращения нет
-    /// определения API5, по которому признак можно было бы узнать, поэтому сопоставление идёт по
-    /// СОСТАВУ: сущность дерева, приведённая к <c>IRotated</c>, ищется среди элементов
-    /// <c>IModelContainer.Rotateds</c> по совпадению угла И направления. Угол как признак тождества
-    /// слаб (два полуоборота вокруг разных осей совпадут), поэтому при нескольких кандидатах
-    /// возвращается <c>null</c> — «не прочитано», а не «вот первый»: выдать чужой параметр за
-    /// параметр адресованного признака значило бы соврать про модель.
-    /// </para>
-    /// <para>
-    /// Чтение НЕ мутация: <c>BeginEdit</c>/<c>EndEdit</c>/<c>Update</c> не вызываются, ревизия не
-    /// поднимается.
-    /// </para>
+    /// <b>The index is taken by matching the same feature, not by taking the first one.</b> A rotation
+    /// has no API5 definition by which the feature could be recognised, so matching runs on
+    /// COMPOSITION: a tree entity cast to <c>IRotated</c> is searched among the
+    /// <c>IModelContainer.Rotateds</c> elements by a match of the angle. The angle as an identity token
+    /// is weak (two half-turns around different axes would match), so with several candidates
+    /// <c>null</c> is returned — "not read", not "here is the first": passing a foreign parameter off
+    /// as the addressed feature's parameter would be lying about the model.
+    /// NOTE: the code compares the angle ONLY; the direction is not part of the match (the earlier
+    /// wording said "angle AND direction", which the code does not do — corrected 05.10.2026).
+    /// Reading is NOT mutation: <c>BeginEdit</c>/<c>EndEdit</c>/<c>Update</c> are not called, the
+    /// revision is not bumped.
     /// </remarks>
     private RotatedDto? ReadRotatedFeature(DocumentEntry document, ksEntity entity)
     {
@@ -480,17 +438,17 @@ public partial class Api5Session
                 return null;
             }
 
-            // Собственный угол адресованного признака читается через API5-сущность: она и есть тот
-            // объект, на который выдана ссылка. Его сравнение с кандидатами API7 и даёт сопоставление.
+            // The addressed feature's own angle is read through the API5 entity: it is the very object
+            // the reference was issued for. Comparing it with the API7 candidates is the matching.
             var entityAngle = entity is IRotated rotatedDirect
                 ? SafeReadAngle(rotatedDirect, true)
                 : null;
 
-            // Когда сущность из дерева не отвечает на IRotated (сырой __ComObject — измерено
-            // 18.09.2026), сопоставлять по углу нечем. Тогда адресация идёт ПО ПОРЯДКУ: признак
-            // занимает свою позицию среди вращений в дереве API5, и та же позиция в коллекции
-            // Rotateds API7. Порядок здесь — измеренное свойство, а не догадка: и дерево, и
-            // коллекция перечисляют признаки в порядке создания.
+            // When the tree entity does not answer to IRotated (a raw __ComObject — MEASURED
+            // 18.09.2026), there is nothing to match by angle. Then addressing goes BY ORDINAL: the
+            // feature holds its position among the rotations in the API5 tree, and the same position in
+            // the API7 Rotateds collection. The order here is a measured property, not a guess: both
+            // the tree and the collection enumerate features in creation order.
             var entityOrdinal = entityAngle is null ? RotatedOrdinal(part, entity) : null;
             if (entityAngle is null && entityOrdinal is not int)
             {
@@ -520,8 +478,8 @@ public partial class Api5Session
 
                 if (entityAngle is null)
                 {
-                    // Угол адресованного признака не прочитался — сопоставлять нечем, и тогда
-                    // единственный кандидат принимается, а несколько отвергаются.
+                    // The addressed feature's angle was not read — there is nothing to match, so a
+                    // single candidate is accepted and several are rejected.
                     matches.Add(i);
                     continue;
                 }
@@ -537,16 +495,12 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Позиция признака вращения среди ВСЕХ вращений дерева API5, в порядке создания. <c>null</c>,
-    /// если адресованный признак в дереве не найден.
-    /// </summary>
-    /// <remarks>
-    /// Нужна потому, что сущность, прочитанная из дерева, не отвечает на <c>QI(IRotated)</c>, а
-    /// коллекция API7 <c>Rotateds</c> индексируется в порядке создания. Позиция — это
-    /// ДЕТЕРМИНИРОВАННЫЙ адрес: она не зависит от того, читается ли угол, и не путает два признака
-    /// с одинаковым углом (чего сопоставление по углу не умеет по построению).
-    /// </remarks>
+    /// <summary>The position of a rotation feature among ALL API5 tree rotations, in creation order. <c>null</c>
+    /// if the addressed feature is not found in the tree.</summary>
+    /// <remarks>Needed because an entity read from the tree does not answer to <c>QI(IRotated)</c>, while the
+    /// API7 <c>Rotateds</c> collection is indexed in creation order. The position is a DETERMINISTIC
+    /// address: it does not depend on whether the angle is readable and does not confuse two features
+    /// with the same angle (which matching by angle cannot do by construction).</remarks>
     private static int? RotatedOrdinal(ksPart part, ksEntity target)
     {
         try
@@ -582,8 +536,8 @@ public partial class Api5Session
 
                 if (ordinal > 0)
                 {
-                    // Вращения найдены, но не среди них — второго прохода по другому типу быть не
-                    // должно: это значило бы, что признак лежит в другой коллекции.
+                    // Rotations were found, but not among them — there must be no second pass over
+                    // another type: that would mean the feature lies in a different collection.
                     return null;
                 }
             }
@@ -596,23 +550,17 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Правка угла СУЩЕСТВУЮЩЕГО признака вращения по <c>kompas_update_feature</c>.
-    /// </summary>
+    /// <summary>Edit the angle of an EXISTING rotation feature via <c>kompas_update_feature</c>.</summary>
     /// <remarks>
-    /// <para>
-    /// <b>Маршрут измерен 18.09.2026</b> (проба <c>FullTurnProbe</c>, шаг <c>F.2</c>): на одном
-    /// признаке смена угла 360 → 180 → 360 дала объёмы
-    /// <c>50265.4824574366 → 25132.7412287183 → 50265.4824574366</c> при габарите
-    /// <c>z[−20,20] → z[−0,20] → z[−20,20]</c> — изменение геометрическое, а не только записанное
-    /// число. Порядок «запись угла → <c>Update()</c> → перестроение» — часть контракта, как и при
-    /// создании: без <c>Update()</c> сеттер возвращает успех, а модель остаётся прежней.
-    /// </para>
-    /// <para>
-    /// Пишется ТОЛЬКО угол (и, если задано, направление). Профиль и ось существующего вращения
-    /// этим вызовом не меняются: эти маршруты на вращении не измерялись, и принимать
-    /// <c>sketch_ref</c> значило бы обещать перепривязку, которой нет.
-    /// </para>
+    /// <b>MEASURED: 18.09.2026</b> (probe <c>FullTurnProbe</c>, step <c>F.2</c>): on a single feature
+    /// changing the angle 360 → 180 → 360 gave volumes
+    /// <c>50265.4824574366 → 25132.7412287183 → 50265.4824574366</c> with bounds
+    /// <c>z[−20,20] → z[−0,20] → z[−20,20]</c> — a geometric change, not merely a written number. The
+    /// order "write angle → <c>Update()</c> → rebuild" is part of the contract, as on creation:
+    /// without <c>Update()</c> the setter returns success while the model stays as it was.
+    /// ONLY the angle is written (and the direction, if given). The profile and axis of an existing
+    /// rotation are not changed by this call: those routes were not measured on a rotation, and
+    /// accepting <c>sketch_ref</c> would promise a re-binding that does not exist.
     /// </remarks>
     private UpdateFeatureResult UpdateRotated(
         DocumentEntry document,
@@ -657,19 +605,21 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["family"] = RotationFamily });
         }
 
-        // Поля очереди B5 (кинематика, сечения, оболочка) — тоже чужие этому семейству. Отвергаются
-        // ЗДЕСЬ, а не «дойдут до своей ветки»: ветка B5 выбирается по самому полю, и без этой
-        // проверки вызов с rotation_angle_deg и shift_mode одновременно ушёл бы в кинематику, где
-        // rotation_angle_deg просто не читается, — то есть был бы принят и проигнорирован.
-        // `couplings` дописан 20.09.2026 тем же порядком, что и в SolidOps.cs: перечень полей B5 был
-        // неполон на одно поле, и правка вращения с couplings принималась, а цепочки не применялись.
+        // B5 queue fields (kinematics, sections, shell) are foreign to this family too. They are
+        // rejected HERE, not "left to reach their own branch": the B5 branch is chosen by the field
+        // itself, and without this check a call with both rotation_angle_deg and shift_mode would go to
+        // kinematics, where rotation_angle_deg is simply not read — i.e. it would be accepted and
+        // ignored. `couplings` was added 20.09.2026 in the same way as in SolidOps.cs: the B5 field
+        // list was one field short, so a rotation edit carrying couplings was accepted while the chains
+        // were not applied.
+        // History: docs/decisions/adapter-features.md#foreign-field-list
         if (command.ShiftMode is not null || command.SectionRefs is not null
             || command.Couplings is not null
             || command.ThicknessMm is not null || command.ThinInward is not null
             || command.FaceRefs is not null
-            // Поля семейства ОТВЕРСТИЯ (наряд SM07 §3.2) — тоже чужие вращению. Дописаны тем же
-            // порядком, что и couplings 20.09.2026: перечень чужих полей обязан получать каждое
-            // новое поле контракта, иначе поле принимается и не применяется.
+            // HOLE family fields (order SM07 §3.2) are foreign to rotation too. Added in the same way
+            // as couplings on 20.09.2026: the foreign-field list must receive every new contract field,
+            // otherwise the field is accepted and not applied.
             || command.DiameterMm is not null || command.CounterboreDiameterMm is not null
             || command.CounterboreDepthMm is not null || command.CountersinkDiameterMm is not null
             || command.CountersinkAngleDeg is not null || command.ExpectedVolumeDeltaMm3 is not null)
@@ -696,9 +646,9 @@ public partial class Api5Session
                 RetryPolicy.ReacquireContext);
         }
 
-        // Адрес известен заранее, когда признак отвечает на QI(IRotated): тогда сопоставление идёт
-        // по составу. Если не отвечает (сырой __ComObject из дерева — измерено 18.09.2026), адрес
-        // берётся по позиции среди вращений, и FindIndexFor его принимает как knownIndex.
+        // The address is known in advance when the feature answers to QI(IRotated): then matching runs
+        // on composition. If it does not (a raw __ComObject from the tree — MEASURED 18.09.2026), the
+        // address is taken by position among the rotations, and FindIndexFor accepts it as knownIndex.
         var ordinal = entity is IRotated ? null : RotatedOrdinal(part, entity);
         var index = Api7Rotated.FindIndexFor(container, entity, ordinal);
         if (index is not int found)
@@ -788,7 +738,7 @@ public partial class Api5Session
                 unverified));
     }
 
-    /// <summary>Прочитать один слот пары <c>IRotated.Angle</c>, не роняя чтение.</summary>
+    /// <summary>Read one slot of the <c>IRotated.Angle</c> pair without failing the read.</summary>
     private static double? SafeReadAngle(IRotated rotation, bool normal)
     {
         try
@@ -801,11 +751,9 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Правила «поле ↔ возможность». Все они отвергают вызов ДО обращения к COM, и цена ошибки тут
-    /// несимметрична: лишний отказ виден сразу, а принятое и проигнорированное число доживает до
-    /// приёмки, выглядя как выполненная операция.
-    /// </summary>
+    /// <summary>"Field ↔ capability" rules. All of them reject the call BEFORE any COM access, and the cost of
+    /// an error here is asymmetric: a spurious refusal is seen at once, whereas an accepted-and-ignored
+    /// number survives until acceptance, looking like a performed operation.</summary>
     private static void ValidateRotatedCommand(RotatedCommand command)
     {
         if (command.AngleDeg <= 0d)
@@ -818,21 +766,10 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["angle_deg"] = command.AngleDeg });
         }
 
-        // ПРЕЖНЕЕ ограничение «не больше 180» снято 18.09.2026, и причина названа.
-        //
-        // Здесь стоял отказ на угол > 180 со ссылкой на R.26.angles: «развёртка насыщается на 180°,
-        // запись 360 даёт ту же половину цилиндра». Утверждение происходило из шага, который менял
-        // CutOffByPoint, а не угол, и ни в одной строке не записывал Angle[true] = 360 с полным
-        // набором параметров. Проба FullTurnProbe (шаги F.1…F.5) и независимое чтение
-        // сохранённого .m3d пробой M3dVerificationProbe дали иную картину: Angle[true] несёт
-        // запрошенный угол напрямую (360→360°, 180→180°, 90→90°), а вторая половина пары, равная
-        // первой, развёртку удваивает. Полный оборот одним вызовом ВЫРАЖАЕТСЯ — он измерен объёмом
-        // 50265.4824574366 (π·r²·h при r=20, h=40), одной цилиндрической гранью r=20 h=40 и
-        // габаритом 40×40×40. Верхняя граница здесь — не «свойство продукта», а 360° развёртки:
-        // больше полного оборота сектор не занимает.
-        //
-        // Класс ошибки сохранён как число в details, но это уже отказ по существу, а не по
-        // прежнему неверному пределу: 360 — это потолок развёртки, а не 180.
+        // The former "no more than 180" limit was REMOVED 18.09.2026 — see History. The ceiling here is
+        // the sweep itself: a full turn is 360°, and a sector cannot exceed it. The error class is kept
+        // as a number in details, but this is now a refusal on the merits, not on the old wrong limit.
+        // History: docs/decisions/adapter-features.md#angle-saturation-refuted
         if (command.AngleDeg > 360d)
         {
             throw new KompasContractException(
@@ -850,8 +787,8 @@ public partial class Api5Session
                 });
         }
 
-        // Измерено (R.26.sector): dtReverse не строит ничего — Update()=False, тел 0. Это факт о
-        // значении перечисления, и сообщать «построено» по коду возврата здесь нельзя.
+        // MEASURED (R.26.sector): dtReverse builds nothing — Update()=False, 0 bodies. This is a fact
+        // about the enum value, so reporting "built" from a return code is not allowed here.
         if (command.Direction == RotationDirection.Reverse)
         {
             throw new KompasContractException(
@@ -893,8 +830,8 @@ public partial class Api5Session
                 RetryPolicy.Never);
         }
 
-        // Маршрут измерен на СПЛОШНОМ теле (IThinParameters.Thin = false). Записывать незмеренное
-        // число в признак — значит выдать непроверенную конфигурацию за проверенную.
+        // The route was measured on a SOLID body (IThinParameters.Thin = false). Writing an unmeasured
+        // number into a feature would pass off an unverified configuration as a verified one.
         if (command.ThinWallMm is not null)
         {
             throw new KompasContractException(
@@ -910,13 +847,13 @@ public partial class Api5Session
                 });
         }
 
-        // Целевое тело ПРИНИМАЕТСЯ, но не назначается: селектора тела у вращения в API нет (см.
-        // комментарий в Rotated()), поэтому ссылка проверяется ПОСЛЕ операции по поимённым снимкам
-        // тел. Отвергать её значило бы отказать вызывающему в единственном способе выразить
-        // намерение — а принять и не проверить значило бы сообщить, что выбор учтён.
+        // The target body is ACCEPTED but not assigned: a rotation has no body selector in the API
+        // (see the comment in Rotated()), so the reference is verified AFTER the operation against the
+        // named body snapshots. Rejecting it would deny the caller the only way to express intent,
+        // while accepting and not checking it would report that the choice was honoured.
     }
-    /// <summary>Совпали ли прочитанные параметры с запрошенными. Вынесено, чтобы чтение и ожидание
-    /// описывались в отчёте одним и тем же способом.</summary>
+    /// <summary>Whether the read-back parameters match the requested ones. Extracted so the read and
+    /// the expectation are described in the report the same way.</summary>
     private static bool RotatedParametersMatch(RotatedDto? readBack, RotatedCommand command)
     {
         if (readBack is null)
@@ -924,10 +861,10 @@ public partial class Api5Session
             return false;
         }
 
-        // Угол сверяется с записанным напрямую: измерено (F.1…F.5), что модель возвращает ровно
-        // тот угол, каким он построен, вплоть до 360°. Прежняя оговорка про «насыщение на 180°»
-        // была следствием ОШИБКИ ЧТЕНИЯ: читалась половина пары, а не угол. Допуск остаётся
-        // строгим — расхождение здесь означало бы, что построено не то, что просили.
+        // The angle is compared directly with the written one: MEASURED (F.1…F.5) that the model
+        // returns exactly the angle it was built with, up to 360°. The former "saturation at 180°"
+        // caveat was a READING BUG: half of the pair was read, not the angle. The tolerance stays
+        // strict — a discrepancy here would mean something other than requested was built.
         var angleOk = readBack.AngleDeg is double angle
             && Math.Abs(angle - command.AngleDeg) <= RotationAngleToleranceDeg;
 
@@ -947,10 +884,8 @@ public partial class Api5Session
     private static string DescribeRotatedCommand(RotatedCommand command) =>
         $"угол={Num(command.AngleDeg)}°, направление={command.Direction}, ось=есть";
 
-    /// <summary>
-    /// Цилиндрические грани главного тела: радиус и высота из <c>ksCylinderParam</c>. Пустой список
-    /// и «не читается» здесь различимы вызывающим по наличию проверки, а не смешиваются.
-    /// </summary>
+    /// <summary>Cylindrical faces of the main body: radius and height from <c>ksCylinderParam</c>. An empty
+    /// list and "not read" are distinguishable by the caller via the check, not conflated.</summary>
     private static List<CylinderReadout> SafeCylinders(ksPart part)
     {
         var found = new List<CylinderReadout>();
@@ -980,28 +915,27 @@ public partial class Api5Session
                 }
                 catch (Exception ex) when (ex is COMException)
                 {
-                    // Грань, параметры которой КОМПАС не отдал, — не повод бросить обход остальных.
+                    // A face whose parameters KOMPAS did not return is no reason to abandon the walk.
                 }
             }
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException)
         {
-            // Пустой список — честный ответ «прочитать не удалось»; проверка ниже сравнит его с нулём.
+            // An empty list is the honest answer "could not read"; the check below compares it with zero.
         }
 
         return found;
     }
 
-    /// <summary>
-    /// Габарит главного тела: у цилиндра R20 H40 это 40×40×40, у полуцилиндра — 40×40×20. Это
-    /// независимая от объёма проверка формы, поэтому бокс читается, а не подставляется нулём.
-    /// </summary>
+    /// <summary>Bounding box of the main body: for a cylinder R20 H40 it is 40×40×40, for a half-cylinder
+    /// 40×40×20. This is a volume-independent shape check, so the box is read, not substituted with
+    /// zero.</summary>
     /// <remarks>
-    /// <c>null</c> означает «не прочитано» и НЕ равен нулевому боксу. Разница существенна: нулевой бокс
-    /// при сравнении с ожидаемым габаритом выглядел бы как расхождение геометрии, то есть отсутствие
-    /// чтения превратилось бы в утверждение о модели. Здесь то же различие, что у <c>MeasureVolume</c>
-    /// и <c>BoundingBoxDto.Empty</c>: <c>GetGabarit</c> вернул <c>false</c> или бросил — это факт о
-    /// ЧТЕНИИ, а не о теле.
+    /// <c>null</c> means "not read" and is NOT equal to a zero box. The difference matters: a zero box
+    /// compared against the expected bounds would look like a geometry mismatch, i.e. a failed read
+    /// would turn into a claim about the model. This is the same distinction as with
+    /// <c>MeasureVolume</c> and <c>BoundingBoxDto.Empty</c>: <c>GetGabarit</c> returning <c>false</c>
+    /// or throwing is a fact about the READ, not about the body.
     /// </remarks>
     private static BoundingBoxDto? SafeBounds(ksPart part)
     {
@@ -1012,8 +946,8 @@ public partial class Api5Session
                 return null;
             }
 
-            // ksBody.GetGabarit, а не GetBoundingBoxEx: последнего у тела нет вовсе (CS1061),
-            // и именно GetGabarit читает ReadBodyBox в Api5Session.Geometry.cs.
+            // ksBody.GetGabarit, not GetBoundingBoxEx: the body has the latter not at all (CS1061),
+            // and it is GetGabarit that ReadBodyBox reads in Api5Session.Geometry.cs.
             return body.GetGabarit(out var x1, out var y1, out var z1, out var x2, out var y2, out var z2)
                 ? new BoundingBoxDto(new[] { x1, y1, z1 }, new[] { x2, y2, z2 })
                 : null;
@@ -1024,27 +958,23 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Последний элемент дерева API5, который и есть созданный признак вращения.
-    /// </summary>
+    /// <summary>The last API5 tree element, which is the created rotation feature.</summary>
     /// <remarks>
-    /// <para>
-    /// <b>Почему сначала по номерам, а потом перебором.</b> У отверстия дефект «признак не
-    /// находился никогда» стоил отдельного разбирательства: адаптер искал 52 (номер фабрики
-    /// <c>o3d_holeOperation</c>) вместо 583 (номер дерева <c>o3d_Hole3D</c>), измеренного пробой N.1.
-    /// У вращения измерение сделано приёмкой SM-03: строка RO.10t напечатала типы дерева после
-    /// разреза вращением — <c>['25', '29']</c>, то есть разрез виден под <b>29</b>, тем же числом,
-    /// каким он создавался фабрикой. Поэтому проверяются все три вида (27/28/29), а не одно число:
-    /// вид операции выбирает клиент, и искать только <c>cut</c> значило бы не найти <c>base</c>.
-    /// </para>
-    /// <para>
-    /// <b>Почему перебор не может выдать чужое.</b> Отбор идёт не по имени и не по индексу, а по
-    /// наличию у сущности профиля и оси (<c>IRotated</c> отвечает на приведение). Имя здесь
-    /// идентификатором не является — измерено на фаске (F.8: «f-ch2» → «Фаска:1»), — а индекс
-    /// «последний элемент» без такой проверки указал бы на что угодно, если операция упала.
-    /// Отсутствие осмысленного кандидата даёт <c>null</c>, и вызывающий получает
-    /// <c>feature_ref_withheld</c> вместо ссылки, по которой правка всё равно не сработала бы.
-    /// </para>
+    /// <b>Why by numbers first, then by enumeration.</b> For a hole, the "feature was never found"
+    /// defect cost a separate investigation: the adapter searched for 52 (the factory number
+    /// <c>o3d_holeOperation</c>) instead of 583 (the tree number <c>o3d_Hole3D</c>) measured by probe
+    /// N.1. For rotation the measurement was done by acceptance SM-03: line RO.10t printed the tree
+    /// types after a rotation cut — <c>['25', '29']</c>, i.e. the cut is visible as <b>29</b>, the same
+    /// number it was created with by the factory. So all three kinds (27/28/29) are checked, not one
+    /// number: the client chooses the operation kind, and searching only for <c>cut</c> would miss
+    /// <c>base</c>.
+    /// <b>Why enumeration cannot return a foreign feature.</b> Selection runs not by name and not by
+    /// index but by the entity having a profile and an axis (<c>IRotated</c> answers the cast). A name
+    /// here is not an identifier — measured on a chamfer (F.8: <c>f-ch2</c> was replaced by the
+    /// localised feature name) — and the "last element" index without such a check would point at
+    /// anything if the operation failed. The absence of a meaningful candidate yields <c>null</c>, and
+    /// the caller gets <c>feature_ref_withheld</c> instead of a reference an edit would not have worked
+    /// through anyway.
     /// </remarks>
     private static ksEntity? FindRotatedEntity(DocumentEntry document)
     {
@@ -1063,7 +993,7 @@ public partial class Api5Session
                 KompasObjectTypes.CutRotated,
             };
 
-            // 1) По измеренным номерам — узкая проверка, а не догадка.
+            // 1) By the measured numbers — a narrow check, not a guess.
             ksEntity? byType = null;
             foreach (var kind in kinds)
             {
@@ -1087,11 +1017,11 @@ public partial class Api5Session
                 return byType;
             }
 
-            // 2) Номер не подтвердился — признак ищется по своей природе, а не по числу. Это
-            // запасной путь для случая, когда нумерация дерева окажется иной на другой сборке.
-            // На объекте из дерева он, как правило, ничего не найдёт (QI на __ComObject отвечает
-            // отказом, и IsRotatedEntity здесь падает на номер), поэтому найденное «по природе»
-            // берётся как ЕДИНСТВЕННЫЙ кандидат, а не как «последний подходящий».
+            // 2) The number did not confirm — the feature is searched by its nature, not by a number.
+            // This is a fallback for the case where the tree numbering turns out different on another
+            // build. On a tree object it usually finds nothing (QI on a __ComObject refuses, and
+            // IsRotatedEntity falls back to the number here), so whatever is found "by nature" is
+            // taken as the ONLY candidate, not as "the last matching one".
             foreach (var kind in kinds)
             {
                 if (part.EntityCollection(kind) is not ksEntityCollection collection)
@@ -1123,34 +1053,29 @@ public partial class Api5Session
     }
 
     /// <summary>
-    /// Признак ли это вращения. Основной маршрут — измеренный номер дерева: 27
-    /// (<c>o3d_baseRotated</c>), 28 (<c>o3d_bossRotated</c>), 29 (<c>o3d_cutRotated</c>). Это тот
-    /// же приём, которым опознаётся родное отверстие (<c>entity.type == 583</c>, измерено пробой
-    /// N.1), и он работает на признаке, ПРОЧИТАННОМ ИЗ ДЕРЕВА. Запасной маршрут — ответ на
-    /// <c>QI(IRotated)</c>, он нужен для сущности, ПРОЧИТАННОЙ ИЗ РЕГИСТРА ССЫЛОК.
+    /// Whether this is a rotation feature. The primary route is the measured tree number: 27
+    /// (<c>o3d_baseRotated</c>), 28 (<c>o3d_bossRotated</c>), 29 (<c>o3d_cutRotated</c>). This is the
+    /// same technique that recognises a native hole (<c>entity.type == 583</c>, MEASURED by probe
+    /// N.1), and it works on a feature READ FROM THE TREE. The fallback route is the answer to
+    /// <c>QI(IRotated)</c>, needed for an entity READ FROM THE REFERENCE REGISTRY.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// Почему одного QI недостаточно — измерено при приёмке SM-03 18.09.2026. Сущность, взятая из
-    /// дерева через <c>EntityCollection</c>, приходит сырым <c>__ComObject</c>, и проверка
-    /// <c>entity is IRotated</c> на ней отвечает <c>false</c>, хотя <c>entity.type</c> равен 29, а
-    /// признак читается из модели. Первая редакция опиралась только на QI и потому молча теряла
-    /// признак: имя ветки («по QI») выдавалось за результат опознания.
-    /// </para>
-    /// <para>
-    /// Номер типа — это именно маршрут ПРИЗНАКА ИЗ ДЕРЕВА, а не идентификатор: он меняется между
-    /// моментом создания и деревом (у выдавливания 24 → 25, измерено P2.3), поэтому опознавать
-    /// следует по НАБОРУ номеров трёх видов вращения, а не по одному числу, запомненному при создании.
-    /// </para>
-    /// <para>
-    /// <b>Второй маршрут (QI) на объекте из дерева недостижим, и это не оправдание, а измеренная
-    /// граница.</b> Вопрос «отвечает ли <c>ksEntity</c> из дерева на QI(IRotated)» проверялся
-    /// 18.09.2026 тремя способами: приведением <c>is</c>, приведением runtime-типа к интерфейсу и
-    /// прямым вызовом члена <c>Angle</c> с перехватом — все три ОТКАЗАЛИ на признаке, который
-    /// заведомо читается из модели (угол 360, тип 29, UpdateStamp живой). Поэтому ветка QI здесь
-    /// оставлена как запасной путь для payload из регистра ссылок, но ОПОРА — на номер дерева:
-    /// иначе опознание возвращалось бы к средству, которому объект из дерева не отвечает.
-    /// </para>
+    /// Why QI alone is not enough — MEASURED at acceptance SM-03 on 18.09.2026. An entity taken from
+    /// the tree via <c>EntityCollection</c> arrives as a raw <c>__ComObject</c>, and the check
+    /// <c>entity is IRotated</c> answers <c>false</c> on it, even though <c>entity.type</c> is 29 and
+    /// the feature reads from the model. The first revision relied on QI alone and thus silently lost
+    /// the feature: the branch name ("by QI") was passed off as the recognition result.
+    /// The type number is the route for a FEATURE FROM THE TREE, not an identifier: it changes between
+    /// creation time and the tree (for an extrusion 24 → 25, MEASURED P2.3), so recognition must use
+    /// the SET of numbers of the three rotation kinds, not a single number remembered at creation.
+    /// <b>The second route (QI) is unreachable on a tree object, and that is not an excuse but a
+    /// measured boundary.</b> The question "does a <c>ksEntity</c> from the tree answer to
+    /// QI(IRotated)" was tested on 18.09.2026 in three ways: an <c>is</c> cast, a runtime-type cast to
+    /// the interface, and a direct call of the <c>Angle</c> member with interception — all three
+    /// REFUSED on a feature that demonstrably reads from the model (angle 360, type 29, live
+    /// UpdateStamp). So the QI branch is kept here as a fallback for a payload from the reference
+    /// registry, but the RELIANCE is on the tree number: otherwise recognition would fall back to a
+    /// means the tree object does not answer.
     /// </remarks>
     private static bool IsRotatedEntity(ksEntity entity)
     {
@@ -1165,7 +1090,7 @@ public partial class Api5Session
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException)
         {
-            // Номер не прочитался — остаётся второй маршрут, и он решает.
+            // The number was not read — the second route remains, and it decides.
         }
 
         try
@@ -1178,7 +1103,7 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>Читаемые параметры вращения: радиус и высота цилиндрической грани.</summary>
+    /// <summary>Rotation readout: radius and height of a cylindrical face.</summary>
     private sealed record CylinderReadout(double Radius, double Height);
 
     private static string Num(double? value) =>
@@ -1186,15 +1111,13 @@ public partial class Api5Session
         ?? "не прочитано";
 }
 
-/// <summary>
-/// Результат создания вращения.
-/// </summary>
-/// <param name="FeatureRef">Ссылка на признак; null, когда дерево API5 его не показывает.</param>
-/// <param name="Operation">Вид выполненной операции словом контракта (base/boss/cut).</param>
-/// <param name="AngleReadBackDeg">Угол, ПРОЧИТАННЫЙ из модели, а не записанный.</param>
-/// <param name="DirectionReadBack">Направление, прочитанное из модели.</param>
-/// <param name="AxisState">Состояние оси: «есть»/«нет»/«не прочитано».</param>
-/// <param name="AxisNotes">Ход построения оси: заметки маршрута, включая случай Valid ≠ True.</param>
+/// <summary>Result of creating a rotation.</summary>
+/// <param name="FeatureRef">Reference to the feature; null when the API5 tree does not show it.</param>
+/// <param name="Operation">Kind of the performed operation as the contract word (base/boss/cut).</param>
+/// <param name="AngleReadBackDeg">Angle READ from the model, not the one written.</param>
+/// <param name="DirectionReadBack">Direction read from the model.</param>
+/// <param name="AxisState">Axis state as the contract word (present / absent / unread).</param>
+/// <param name="AxisNotes">Axis build trace: route notes, including the Valid ≠ True case.</param>
 public sealed record RotatedResult(
     ReferenceDto? FeatureRef,
     string Operation,

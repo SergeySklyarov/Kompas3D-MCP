@@ -8,33 +8,25 @@ using KompasAPI7;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>
-/// Вспомогательная геометрия детали как ОБЪЕКТЫ МОДЕЛИ: плоскости, оси, точки
-/// (<c>kompas_create_aux_geometry</c>, <c>kompas_list_aux_geometry</c>).
-/// </summary>
+/// <summary>Auxiliary geometry of a part as MODEL OBJECTS: planes, axes, points
+/// (<c>kompas_create_aux_geometry</c>, <c>kompas_list_aux_geometry</c>).</summary>
 /// <remarks>
-/// <para>
-/// <b>Зачем это отдельный инструмент, а не поле чужой операции.</b> Зависимости
-/// <c>dep.refs.planes</c>, <c>dep.refs.axes</c> и <c>dep.refs.points_axes</c> требуют, чтобы
-/// плоскость, ось и точка существовали в модели КАК ОБЪЕКТЫ, которые можно перечислить, прочитать
-/// и пережить цикл сохранения. Прежние маршруты выражали их числами в аргументах чужого вызова
-/// (ось вращения — двумя точками, опора эскиза — именем базовой плоскости), и это ИЗМЕРЕНО
-/// записанными отказами: строка <c>DEP.DAX.01.discover</c> прежнего прогона прямо называет
-/// положительный контроль — «ось задаётся двумя ЧИСЛОВЫМИ точками в аргументах, объекта нет».
-/// Число в аргументе перечислению недоступно, поэтому требование перечислением и закрывается.
-/// </para>
-/// <para>
-/// <b>Всё построение — документированный API7</b> (шаг 0 наряда продуктовых маршрутов, отчёт
-/// <c>DEPENDENCIES_PRODUCT_ROUTES_STEP0_REPORT_20260921.md</c> §6.1–6.3); имена членов взяты
-/// прибором <c>tools/KompasMcp.InteropScan</c> из поставленного interop'а целевой сборки, а не из
-/// памяти. Расхождения справки с interop'ом перечислены в <see cref="Api7SketchEntities"/> и
+/// INVARIANT: this is a separate tool rather than a field of a foreign operation because dependencies
+/// <c>dep.refs.planes</c>, <c>dep.refs.axes</c> and <c>dep.refs.points_axes</c> require a plane, an
+/// axis and a point to exist in the model AS OBJECTS that can be enumerated, read and survive a save
+/// cycle. A number in an argument is not available to enumeration, so the requirement is closed by
+/// enumeration.
+/// History: docs/decisions/adapter-sketch.md#aux-geometry
+/// DOC: all construction is the documented API7 (step 0 of the product-routes order, report
+/// <c>DEPENDENCIES_PRODUCT_ROUTES_STEP0_REPORT_20260921.md</c> §6.1–6.3); member names were taken by
+/// the <c>tools/KompasMcp.InteropScan</c> probe from the shipped interop of the target build, not
+/// from memory. Help-vs-interop divergences are listed in <see cref="Api7SketchEntities"/> and
 /// <see cref="Api7AuxEnumeration"/>.
-/// </para>
 /// </remarks>
 public sealed partial class Api5Session
 {
-    /// <summary>Поля, законные для каждого способа. Набор объявлен здесь, а не выведен из «не null»:
-    /// поле, объявленное в контракте и не применённое, доживает до приёмки, выглядя как работа.</summary>
+    /// <summary>Fields legitimate for each mode. The set is declared here, not derived from "not null":
+    /// a field declared in the contract but not applied survives to acceptance looking like work.</summary>
     private static readonly Dictionary<string, string[]> AuxAllowedFields = new(StringComparer.Ordinal)
     {
         ["plane/offset"] = ["document_id", "expected_revision", "kind", "mode", "offset_mm",
@@ -58,27 +50,22 @@ public sealed partial class Api5Session
         ["yz"] = ksObj3dTypeEnum.o3d_planeYOZ,
     };
 
-    /// <summary>
-    /// Типы ДЛЯ <c>ksPart.GetDefaultEntity</c> — тот же набор имён, но адресованный по типу
-    /// стандартного объекта, а не по позиции в коллекции.
-    /// </summary>
+    /// <summary>Types for <c>ksPart.GetDefaultEntity</c> — the same set of names, but addressed by the
+    /// type of a standard object rather than by its position in the collection.</summary>
     /// <remarks>
-    /// <para>
-    /// <b>ПОЧЕМУ ИМЕНОВАННАЯ ОПОРА БЕРЁТСЯ ЭТИМ МАРШРУТОМ, А НЕ ПЕРЕЧИСЛЕНИЕМ API7.</b> Измерено
-    /// 21.09.2026 пробой <c>scratch/_probe_dpl_offset.py</c> на бинарях поставки
-    /// <c>artifacts/publish-deproutes-20260921-b</c>: в детали, у которой уже есть тело
-    /// (ревизия 4, плита 40×40×10 построена), <c>IAuxiliaryGeomContainer.GetPlanes3D</c> отдаёт
-    /// <b>Count = 0</b> — стандартных плоскостей в коллекции <c>IPlanes3D</c> НЕТ вовсе, тогда как
-    /// созданные инструментом плоскости в ней появляются (<c>plane_count</c>=1 после опоры на
-    /// грань). Поэтому «найти xy перечислением» — не маршрут, а ожидание: перечислять нечего.
-    /// </para>
-    /// <para>
-    /// Документированный маршрут к стандартной плоскости как ОБЪЕКТУ — <c>ksPart.GetDefaultEntity</c>
-    /// по типу <c>o3d_planeXOY/XOZ/YOZ</c>; им уже пользуется создание эскиза
-    /// (<c>Api5Session.Geometry.cs:ResolvePlaneEntity</c>), и этот маршрут измерен приёмкой на
-    /// строках <c>DEP.DPL.01.discover</c> и всех режимах эскиза. Полученный объект переносится в
-    /// API7 штатным <c>Api7Bridge.TransferTo7</c> и подставляется в <c>IPlane3DBy*.BasePlane</c>.
-    /// </para>
+    /// MEASURED: a named support is taken by this route, not by API7 enumeration. 21.09.2026, probe
+    /// <c>scratch/_probe_dpl_offset.py</c> on the shipped binaries
+    /// <c>artifacts/publish-deproutes-20260921-b</c>: in a part that already has a body (revision 4,
+    /// a 40×40×10 plate built), <c>IAuxiliaryGeomContainer.GetPlanes3D</c> reports <c>Count = 0</c> —
+    /// there are NO standard planes in the <c>IPlanes3D</c> collection at all, while tool-created
+    /// planes do appear in it (<c>plane_count</c>=1 after a face support). So "find xy by enumeration"
+    /// is not a route but a wish: there is nothing to enumerate.
+    /// DOC: the documented route to a standard plane as an OBJECT is <c>ksPart.GetDefaultEntity</c> by
+    /// type <c>o3d_planeXOY/XOZ/YOZ</c>; sketch creation already uses it
+    /// (<c>Api5Session.Geometry.cs:ResolvePlaneEntity</c>), and this route is measured by acceptance
+    /// on rows <c>DEP.DPL.01.discover</c> and all sketch modes. The obtained object is transferred to
+    /// API7 by the standard <c>Api7Bridge.TransferTo7</c> and substituted into
+    /// <c>IPlane3DBy*.BasePlane</c>.
     /// </remarks>
     private static readonly Dictionary<string, int> DefaultPlaneEntities = new(StringComparer.Ordinal)
     {
@@ -87,10 +74,9 @@ public sealed partial class Api5Session
         ["yz"] = KompasObjectTypes.PlaneYoz,
     };
 
-    /// <summary>
-    /// Создать плоскость, ось либо точку как объект детали. Возвращает ПРОЧИТАННОЕ ИЗ МОДЕЛИ, а не
-    /// пересказ запроса: числа берутся тем же маршрутом чтения, которым их увидит клиент.
-    /// </summary>
+    /// <summary>Create a plane, axis or point as a part object. Returns what was READ FROM THE MODEL,
+    /// not a retelling of the request: the numbers are taken by the same read route the client will
+    /// use.</summary>
     public AuxGeometryResult CreateAuxGeometry(CreateAuxGeometryCommand command)
     {
         var document = RequireDocument(command.DocumentId);
@@ -331,8 +317,8 @@ public sealed partial class Api5Session
                     details: new Dictionary<string, object?> { ["key"] = key });
         }
 
-        // Перестроение обязательно: без него объект остаётся в контейнере, но модель его не знает
-        // — измерено на соседних маршрутах (без Update() не меняется ни один режим отверстия).
+        // The rebuild is mandatory: without it the object stays in the container but the model does not
+        // know it — MEASURED on neighbouring routes (without Update() no hole mode changes).
         Api7Bridge.Rebuild(model, document.Document);
         BumpRevision(document, "aux." + key.Replace('/', '.'));
 
@@ -358,21 +344,13 @@ public sealed partial class Api5Session
             Diagnostics: diagnostics);
     }
 
-    /// <summary>
-    /// Правка существующей плоскости как объекта детали: смещение, угол, знак, опора.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Поле обязано соответствовать ВИДУ плоскости, и это проверяется по прочитанному виду, а не
-    /// по запросу.</b> У смещённой плоскости нет угла, у наклонной нет смещения; попытка записать
-    /// чужое поле отвергается <c>INVALID_ARGUMENT</c> с перечнем допустимых. Молчаливое игнорирование
-    /// дало бы ровно тот дефект, который этот наряд устраняет: принятое и не применённое поле.
-    /// </para>
-    /// <para>
-    /// <b>Признак применения выводится из ПОВТОРНОГО ЧТЕНИЯ</b> тем же маршрутом, которым значение
-    /// увидит клиент. Успешный код <c>Update()</c> применением не объявляется.
-    /// </para>
-    /// </remarks>
+    /// <summary>Edit an existing plane as a part object: offset, angle, sign, support.</summary>
+    /// <remarks>INVARIANT: a field must match the plane's KIND, checked against the kind READ BACK, not the
+    /// request. An offset plane has no angle and an angled plane has no offset; writing a foreign field
+    /// is refused with <c>INVALID_ARGUMENT</c> and the list of allowed ones. Silent ignoring would
+    /// give exactly the defect this order removes: an accepted-and-unapplied field.
+    /// INVARIANT: the application sign is derived from a RE-READ by the same route the client will use.
+    /// A successful <c>Update()</c> code is not declared an application.</remarks>
     public PlaneUpdateResult UpdatePlane(UpdatePlaneCommand command)
     {
         var document = RequireDocument(command.DocumentId);
@@ -401,7 +379,7 @@ public sealed partial class Api5Session
         var before = Api7AuxGeometry.ReadPlane(plane, -1);
         diagnostics.AddRange(before.Notes);
 
-        // Вид берётся ИЗ МОДЕЛИ: строка запроса видом не является.
+        // The kind is taken FROM THE MODEL: the request string is not a kind.
         var allowed = before.Kind switch
         {
             "offset" => new[] { "offset_mm", "direction", "base_plane" },
@@ -468,8 +446,8 @@ public sealed partial class Api5Session
                 details: new Dictionary<string, object?> { ["failure"] = failure });
         }
 
-        // Перестроение обязательно: без него объект изменён в контейнере, но модель его не знает
-        // (измерено на соседних маршрутах: без Update() не меняется ни один режим отверстия).
+        // The rebuild is mandatory: without it the object is changed in the container but the model
+        // does not know it (MEASURED on neighbouring routes: without Update() no hole mode changes).
         var (model, _, containersFailure) = Api7AuxGeometry.Containers(bridge, document.PartNow());
         if (model is null)
         {
@@ -553,15 +531,13 @@ public sealed partial class Api5Session
         }
     }
 
-    /// <summary>Базовая плоскость ПО ИМЕНИ: единственная именованная опора, которую можно задать
-    /// строкой. Вынесено отдельно, потому что этим пользуются и создание, и правка.</summary>
-    /// <remarks>
-    /// Берётся ДОКУМЕНТИРОВАННЫМ <c>ksPart.GetDefaultEntity</c>, а не перечислением
-    /// <c>IPlanes3D</c>: измерено 21.09.2026 (<c>scratch/_probe_dpl_offset.py</c>), что стандартных
-    /// плоскостей в этой коллекции нет — <c>Count</c>=0 в детали с готовым телом. Перечисление
-    /// вернуло бы «не найдено» на исправном документе, то есть отказ прибора, выданный за отказ
-    /// продукта. Другой объект вместо запрошенной опоры не подставляется.
-    /// </remarks>
+    /// <summary>Base plane BY NAME: the only named support that can be set as a string. Extracted
+    /// because both creation and editing use it.</summary>
+    /// <remarks>DOC: taken via <c>ksPart.GetDefaultEntity</c>, not by enumerating <c>IPlanes3D</c>:
+    /// MEASURED 21.09.2026 (<c>scratch/_probe_dpl_offset.py</c>) that there are no standard planes in
+    /// that collection — <c>Count</c>=0 in a part with a built body. Enumeration would return "not
+    /// found" on a healthy document, i.e. a probe refusal passed off as a product refusal. A different
+    /// object is never substituted for the requested support.</remarks>
     private IModelObject ResolveNamedBasePlane(
         DocumentEntry document, Api7Bridge bridge, string wanted, List<string> diagnostics)
     {
@@ -617,7 +593,7 @@ public sealed partial class Api5Session
         return plane;
     }
 
-    /// <summary>Перечислить и прочитать объекты вспомогательной геометрии.</summary>
+    /// <summary>Enumerate and read auxiliary-geometry objects.</summary>
     public AuxGeometryListResult ListAuxGeometry(ListAuxGeometryCommand command)
     {
         var document = RequireDocument(command.DocumentId);
@@ -692,9 +668,9 @@ public sealed partial class Api5Session
             }
         }
 
-        // Адресация ИМЕНЕМ: справка документирует GetAxis3DByName/GetPoint3DByName, но в поставке
-        // члена с подстрокой ByName НЕТ НИ ОДНОГО, поэтому имя разрешается перечислением. Отказ
-        // «имени нет» и «имя не уникально» различаются, а не сливаются в пустой ответ.
+        // DOC: the help documents GetAxis3DByName/GetPoint3DByName, but the shipped build has NO member
+        // containing ByName, so the name is resolved by enumeration. The refusals "no such name" and
+        // "the name is not unique" are distinguished, not merged into an empty answer.
         if (command.Name is { Length: > 0 } wanted)
         {
             var named = rows.Where(r => string.Equals(r.Name, wanted, StringComparison.Ordinal)).ToList();
@@ -765,10 +741,8 @@ public sealed partial class Api5Session
         return axes;
     }
 
-    /// <summary>
-    /// Опора плоскости: базовая плоскость ПО ИМЕНИ либо ПЛОСКАЯ ГРАНЬ по ссылке. Ровно одна из
-    /// двух: обе сразу — отказ, потому что «и то и то» не имеет определённого смысла.
-    /// </summary>
+    /// <summary>Plane support: a base plane BY NAME or a PLANAR FACE by reference. Exactly one of the
+    /// two: both at once is refused because "both" has no definite meaning.</summary>
     private IModelObject ResolvePlaneSupport(
         DocumentEntry document, Api7Bridge bridge, CreateAuxGeometryCommand command, List<string> diagnostics)
     {
@@ -794,10 +768,9 @@ public sealed partial class Api5Session
         return ResolveNamedBasePlane(document, bridge, command.BasePlane ?? "xy", diagnostics);
     }
 
-    /// <summary>
-    /// Ссылка на объект модели (грань, ребро, вершина) → объект API7. Вид ссылки проверяется: ссылка
-    /// на эскиз вместо грани — это <c>INVALID_ARGUMENT</c>, а не «грань не подошла».
-    /// </summary>
+    /// <summary>A model-object reference (face, edge, vertex) → API7 object. The reference kind is
+    /// checked: a sketch reference instead of a face is <c>INVALID_ARGUMENT</c>, not "the face did not
+    /// fit".</summary>
     private IModelObject RequireModelObject(
         DocumentEntry document, Api7Bridge bridge, string? reference, string expectedKind, string field)
     {
@@ -831,7 +804,7 @@ public sealed partial class Api5Session
         return model;
     }
 
-    /// <summary>Ссылка на ОСЬ → объект API7. Базовая прямая наклонной плоскости — это ось.</summary>
+    /// <summary>An AXIS reference → API7 object. The base line of an angled plane is an axis.</summary>
     private IModelObject? ResolveAxisObject(
         DocumentEntry document, Api7Bridge bridge, string? reference, List<string> diagnostics)
     {
@@ -844,7 +817,7 @@ public sealed partial class Api5Session
         return RequireModelObject(document, bridge, reference, "axis", "base_axis_ref");
     }
 
-    /// <summary>Отказ на поле чужого способа. Перечисляет и присланное, и допустимое.</summary>
+    /// <summary>Refusal for a field of a foreign mode. Lists both what was sent and what is allowed.</summary>
     private static void RejectForeignFields(CreateAuxGeometryCommand command, string[] allowed)
     {
         var sent = new List<string>();

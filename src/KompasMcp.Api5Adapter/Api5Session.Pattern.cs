@@ -8,46 +8,36 @@ using KompasMcp.Contracts.Ipc;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>
-/// Массивы по сетке и по концентрической сетке, зеркальный массив (docs/05 SM-18 / SM-19 / SM-23).
-/// </summary>
+/// <summary>Grid and concentric-grid patterns, mirror pattern (docs/05 SM-18 / SM-19 / SM-23).</summary>
 /// <remarks>
-/// <para>
-/// <b>Маршрут один и он опубликован.</b> <c>IModelContainer.FeaturePatterns.Add(ksObj3dTypeEnum)</c>
-/// → <c>QI(ILinearPattern | ICircularPattern | IMirrorPattern)</c> → запись параметров →
-/// <c>Update()</c> → <c>Rebuild</c>. Соответствие «тип → интерфейс» взято со страницы справки SDK
-/// <c>copytype.html</c>, открытой по проводу в этой работе, а не выведено по аналогии с вращением.
-/// </para>
-/// <para>
-/// <b>Ось строится в ТОЙ ЖЕ детали по двум точкам модели.</b> Массивы принимают
-/// <c>IModelObject</c>, а не ссылку, и ссылка из чужого документа сюда не протаскивается. Маршрут
-/// построения оси — <c>IAuxiliaryGeomContainer.Axes3D.Add(o3d_axis2Points)</c> — уже измерен
-/// вращением (SM-03) и здесь переиспользуется как ИЗМЕРЕННЫЙ, а не как предположенный.
-/// </para>
-/// <para>
-/// <b>Что здесь считается доказательством.</b> Возврат <c>Update() = true</c> — это «принято», а не
-/// «применено». Поэтому после перестроения модель ЧИТАЕТСЯ обратно: параметры признака, число
-/// экземпляров (<c>GetExemplarsCounts</c>), объём документа, число тел и — для массивов отверстий —
-/// ПОИМЁННЫЙ набор цилиндрических граней с координатами их осей. Последнее и есть проверка «по
-/// каждому экземпляру»: объём не отличает четыре отверстия от трёх плюс одно наложенное.
-/// </para>
-/// <para>
-/// <b>Соотнесение направлений кругового массива взято со страницы справки.</b>
-/// <c>icircularpattern_props.html</c> называет <c>Count1</c>/<c>Step1</c> РАДИАЛЬНЫМИ, а
-/// <c>Count2</c>/<c>Step2</c> — КОЛЬЦЕВЫМИ, причём <c>Step2</c> подписан как «Угловой шаг
-/// (градусы)». Это закрывает OQ-B-02 и опровергает ожидание, записанное в наряде (§6.3, §8), где
-/// кольцевым считалось первое направление. Под сомнение поставлено ОЖИДАНИЕ, а не измерение.
-/// </para>
+/// ROUTE — single and published: <c>IModelContainer.FeaturePatterns.Add(ksObj3dTypeEnum)</c> →
+/// <c>QI(ILinearPattern | ICircularPattern | IMirrorPattern)</c> → write parameters → <c>Update()</c> →
+/// <c>Rebuild</c>. The "type → interface" correspondence is taken from the SDK help page
+/// <c>copytype.html</c>, opened on the wire in this work, not inferred by analogy with rotation.
+/// INVARIANT: the axis is built in the SAME part from two model points — patterns take an
+/// <c>IModelObject</c>, not a reference, so a reference from a foreign document does not get through.
+/// The axis route <c>IAuxiliaryGeomContainer.Axes3D.Add(o3d_axis2Points)</c> was already MEASURED by
+/// rotation (SM-03) and is reused here as MEASURED, not assumed.
+/// INVARIANT: <c>Update()=true</c> is "accepted", not "applied", so after the rebuild the model is READ
+/// BACK: feature parameters, instance counts (<c>GetExemplarsCounts</c>), document volume, body count
+/// and — for hole patterns — a NAMED set of cylindrical faces with their axis coordinates. The last is
+/// the "per instance" check: volume does not tell four holes from three plus one overlapping.
+/// DOC: <c>icircularpattern_props.html</c> calls <c>Count1</c>/<c>Step1</c> RADIAL and
+/// <c>Count2</c>/<c>Step2</c> ANNULAR, with <c>Step2</c> labelled «Угловой шаг (градусы)». This closes
+/// OQ-B-02 and refutes the expectation recorded in the work order (§6.3, §8), where the first
+/// direction was considered annular. It is the EXPECTATION that is called into question, not the
+/// measurement.
+/// History: docs/decisions/adapter-features.md#pattern-route
 /// </remarks>
 public partial class Api5Session
 {
-    /// <summary>Допуск сопоставления цилиндрической грани с ожидаемым радиусом отверстия, мм.</summary>
+    /// <summary>Tolerance for matching a cylindrical face to the expected hole radius, mm.</summary>
     private const double PatternHoleRadiusToleranceMm = 0.01d;
 
-    /// <summary>Допуск сопоставления высоты цилиндра с толщиной пластины, мм.</summary>
+    /// <summary>Tolerance for matching the cylinder height to the plate thickness, mm.</summary>
     private const double PatternHoleHeightToleranceMm = 0.01d;
 
-    /// <summary>Массив по сетке (SM-18).</summary>
+    /// <summary>Grid pattern (SM-18).</summary>
     public PatternResult PatternGrid(PatternGridCommand command)
     {
         ValidatePatternGridCommand(command);
@@ -133,7 +123,7 @@ public partial class Api5Session
             axisNotes);
     }
 
-    /// <summary>Массив по концентрической сетке (SM-19).</summary>
+    /// <summary>Concentric-grid pattern (SM-19).</summary>
     public PatternResult PatternCircular(PatternCircularCommand command)
     {
         ValidatePatternCircularCommand(command);
@@ -196,7 +186,7 @@ public partial class Api5Session
             axis.Notes);
     }
 
-    /// <summary>Зеркальный массив (SM-23).</summary>
+    /// <summary>Mirror pattern (SM-23).</summary>
     public PatternResult PatternMirror(PatternMirrorCommand command)
     {
         ValidatePatternMirrorCommand(command);
@@ -211,13 +201,14 @@ public partial class Api5Session
         var bodiesBeforeSnapshot = ReadBodySnapshots(part);
         var holesBefore = ReadHoleAxes(part, command.ExpectedHoleRadiusMm, command.ExpectedHoleHeightMm);
 
-        // ЧТО ИМЕННО ИСХОДНИК — ЗАВИСИТ ОТ РЕЖИМА, и это измерено прогоном строки B4M.10:
-        // selected_operations отражает ОПЕРАЦИИ, all_bodies — ТЕЛА. Пока вид был один и тот же
-        // (Operations), режим «по всем телам» был неисполним ДВУМЯ разными способами: пустой список
-        // создавал признак, но не отражал ни одного тела (тел остаётся 2, объём 8000), а явные
-        // body:-ссылки отвергались STALE_REFERENCE с сообщением «указывает на __ComObject вместо
-        // признака» — потому что ссылки на тела разбирались как ссылки на признаки. Контракт
-        // инструмента при этом с самого начала обещал для all_bodies именно body:-ссылки.
+        // WHAT IS THE SOURCE DEPENDS ON THE MODE, and this is MEASURED by running row B4M.10:
+        // selected_operations reflects OPERATIONS, all_bodies reflects BODIES. While the kind was the
+        // same (Operations), the "all bodies" mode was unexecutable in TWO ways: an empty list created
+        // the feature but reflected no body (bodies stay 2, volume 8000), and explicit body: references
+        // were rejected STALE_REFERENCE with "points to __ComObject instead of a feature" — because
+        // body references were parsed as feature references. The tool contract, however, promised
+        // body: references for all_bodies from the start.
+        // History: docs/decisions/adapter-features.md#mirror-all-bodies
         var sources7 = ResolvePatternSources(
             bridge, document, part, command.SourceRefs,
             command.Mode == PatternMirrorMode.AllBodies
@@ -265,9 +256,9 @@ public partial class Api5Session
             command.ExpectedHoleCentersMm,
             notes);
 
-        // Сохранность постороннего тела: тело, не выбранное ни исходником, ни зеркалом, обязано
-        // остаться неизменным по объёму и габариту. «Суммарный объём вырос вдвое» этого не
-        // доказывает — оно не отличает удвоение тел от удвоения одного тела (§9.3 наряда).
+        // Preservation of a bystander body: a body chosen neither as a source nor as a mirror must
+        // stay unchanged in volume and bounding box. "Total volume doubled" does not prove this — it
+        // does not tell doubling the bodies from doubling one body (work order §9.3).
         var bodiesAfterSnapshot = ReadBodySnapshots(part);
         var comparison = CompareBodySnapshots(bodiesBeforeSnapshot, bodiesAfterSnapshot);
         var touched = comparison.Touched.ToHashSet();
@@ -283,7 +274,7 @@ public partial class Api5Session
         };
     }
 
-    /// <summary>Перечитать параметры массива либо зеркала по ссылке на признак.</summary>
+    /// <summary>Re-read the parameters of a pattern or mirror by a feature reference.</summary>
     public PatternReadResult PatternRead(PatternReadCommand command)
     {
         var (document, entity) = RequireFeatureEntity(command.FeatureRef);
@@ -327,11 +318,9 @@ public partial class Api5Session
                 : Array.Empty<string>());
     }
 
-    /// <summary>
-    /// Сопоставление признака дерева с элементом коллекции массивов по <c>Owner.Name</c> и
-    /// <c>UpdateStamp</c>: индекс коллекции адресом не является (КОМПАС переставляет элементы), а
-    /// совпадение имени без штампа не различает два одноимённых признака.
-    /// </summary>
+    /// <summary>Match a tree feature with a pattern-collection element by <c>Owner.Name</c> and
+    /// <c>UpdateStamp</c>: the collection index is not an address (KOMPAS reorders elements), and a
+    /// name match without the stamp does not tell two same-named features apart.</summary>
     private bool MatchesEntity(Api7Bridge bridge, IModelContainer container, int index, ksEntity entity, DocumentEntry document)
     {
         try
@@ -347,8 +336,8 @@ public partial class Api5Session
                 return false;
             }
 
-            // Имя признака читается из ОБОЛОЧКИ дерева: ksFeature.Name не существует
-            // (ошибка компиляции, пойманная сборкой), а имя лежит у ksEntity.name.
+            // The feature name is read from the tree WRAPPER: ksFeature.Name does not exist (a
+            // compile error caught by the build), while the name lives at ksEntity.name.
             var treeName = entity.name ?? (entity.GetFeature() as ksFeature)?.name;
             return !string.IsNullOrEmpty(treeName)
                 && string.Equals(name, treeName, StringComparison.Ordinal);
@@ -359,14 +348,10 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Общий хвост создания массива: перестроение, перечитывание, проверки и сборка ответа.
-    /// </summary>
-    /// <remarks>
-    /// Хвост вынесен потому, что три семейства отличаются ТОЛЬКО постановкой, а доказательство у
-    /// них общее: <c>Update() = true</c> — это «принято», и без перечитывания модели ответ не
-    /// отличал бы «построено» от «записано».
-    /// </remarks>
+    /// <summary>Common tail of pattern creation: rebuild, read-back, checks and response assembly.</summary>
+    /// <remarks>The tail is factored out because the three families differ ONLY in the setup while the
+    /// proof is common: <c>Update()=true</c> is "accepted", and without reading the model back the
+    /// response would not tell "built" from "written".</remarks>
     private PatternResult FinishPattern(
         DocumentEntry document,
         ksPart part,
@@ -395,8 +380,8 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["api7_failure"] = failure });
         }
 
-        // Без перестроения запись в API7 остаётся представлением: порядок «запись → Update() →
-        // Rebuild()» измерен на вращении и здесь тот же.
+        // Without the rebuild the API7 write stays a representation: the order "write → Update() →
+        // Rebuild()" was MEASURED on rotation and is the same here.
         Api7Bridge.Rebuild(container, document.Document);
         BumpRevision(document, "pattern." + family);
 
@@ -421,8 +406,8 @@ public partial class Api5Session
                 Expected: "GetExemplarsCounts отдал число экземпляров"),
         };
 
-        // Число тел: массив ОПЕРАЦИЙ новых тел не создаёт (справка
-        // 48_2_osobennoiti_postroeniy_massiviv_v_mnogotelnoy_detali), массив ТЕЛ — создаёт.
+        // Body count: a pattern of OPERATIONS creates no new bodies (help
+        // 48_2_osobennoiti_postroeniy_massiviv_v_mnogotelnoy_detali), a pattern of BODIES does.
         if (expectedBodies is int wanted)
         {
             checks.Add(new NamedCheck(
@@ -432,8 +417,8 @@ public partial class Api5Session
                 Expected: $"после операции тел ровно {wanted} (счётная величина, допуск не применяется)"));
         }
 
-        // Объём документа. Сравнение — с аналитическим ожиданием, а не с предыдущим состоянием:
-        // «стало больше» не отличает верную сетку от неверной.
+        // Document volume. Comparison is with the analytic expectation, not the previous state:
+        // "became larger" does not tell a correct grid from a wrong one.
         if (expectedVolume is double target && volumeAfter is double actual)
         {
             var delta = Math.Abs(actual - target);
@@ -444,8 +429,8 @@ public partial class Api5Session
                 Expected: $"{Num(target)} мм³ в допуске {Num(VolumeToleranceMm3(target))}"));
         }
 
-        // ПОИМЁННАЯ проверка экземпляров: набор осей цилиндрических граней. Объём не отличает
-        // четыре отверстия от трёх плюс одно наложенное, а этот набор отличает.
+        // NAMED per-instance check: the set of cylindrical-face axes. Volume does not tell four holes
+        // from three plus one overlapping, while this set does.
         if (expectedHoles is int holesWanted)
         {
             checks.Add(new NamedCheck(
@@ -496,18 +481,14 @@ public partial class Api5Session
             UnverifiedAspects: unverified);
     }
 
-    /// <summary>
-    /// Общий допуск объёма из <c>tolerance_classes</c> профиля: 0,01 мм³ абсолютный и 1e-6
-    /// относительный, берётся БОЛЬШИЙ из двух. Допуск не подбирается после неудачи.
-    /// </summary>
+    /// <summary>Common volume tolerance from the profile's <c>tolerance_classes</c>: 0.01 mm³ absolute
+    /// and 1e-6 relative, the LARGER of the two. The tolerance is not tuned after a failure.</summary>
     private static double VolumeToleranceMm3(double target) =>
         Math.Max(0.01d, Math.Abs(target) * 1e-6);
 
-    /// <summary>
-    /// Сопоставить измеренные оси отверстий с аналитическим набором. Возвращаются три числа:
-    /// сколько совпало, что не найдено и что лишнее — «совпало» без «лишнего» не отличает верную
-    /// сетку от сетки с добавочным экземпляром.
-    /// </summary>
+    /// <summary>Match the measured hole axes with the analytic set. Three numbers are returned: how
+    /// many matched, what is missing and what is extra — "matched" without "extra" does not tell a
+    /// correct grid from one with an added instance.</summary>
     private static (int Matched, List<string> Missing, List<string> Extra) MatchCenters(
         IReadOnlyList<HoleAxis> measured,
         IReadOnlyList<IReadOnlyList<double>> expected)
@@ -559,11 +540,9 @@ public partial class Api5Session
         return (matched, missing, extra);
     }
 
-    /// <summary>
-    /// Разрешить исходные объекты массива: <c>feature:</c>-ссылки для операций, <c>body:</c> — для
-    /// тел. Смешивать виды в одном вызове нельзя: числовой тип фабрики выбирается один, и «массив
-    /// тел из операций» не собирается.
-    /// </summary>
+    /// <summary>Resolve the pattern's source objects: <c>feature:</c> references for operations,
+    /// <c>body:</c> for bodies. Kinds must not be mixed in one call: the factory's numeric type is
+    /// chosen once, and a "body pattern from operations" does not assemble.</summary>
     private object[] ResolvePatternSources(
         Api7Bridge bridge,
         DocumentEntry document,
@@ -576,9 +555,9 @@ public partial class Api5Session
         {
             if (allowEmpty)
             {
-                // Пустой список здесь — НЕ отсутствие входа, а сам режим: «зеркально отразить все»
-                // отражает все тела детали, и выбирать их поимённо не требуется. Это записано в
-                // контракте (PatternMirrorCommand.SourceRefs), а не выведено из пустоты.
+                // An empty list here is NOT a missing input but the mode itself: "mirror all" reflects
+                // every body of the part, and they need not be chosen by name. This is written in the
+                // contract (PatternMirrorCommand.SourceRefs), not inferred from emptiness.
                 return Array.Empty<object>();
             }
 
@@ -646,18 +625,12 @@ public partial class Api5Session
         return container;
     }
 
-    /// <summary>
-    /// Оси цилиндрических граней главного тела с ожидаемыми радиусом и высотой.
-    /// </summary>
-    /// <remarks>
-    /// Это и есть измерение «по каждому экземпляру»: <c>ksCylinderParam.GetPlacement()</c> отдаёт
-    /// размещение поверхности, а <c>ksPlacement.GetOrigin</c> — точку оси. Без координат проверка
-    /// свелась бы к объёму, а объём не отличает N отверстий от N−1 отверстий и одного наложенного.
-    /// <para>
-    /// Радиус и высота фильтруются, а не берутся «все цилиндры»: иначе посторонняя цилиндрическая
-    /// геометрия попала бы в счёт экземпляров и проверка стала бы неразличающей.
-    /// </para>
-    /// </remarks>
+    /// <summary>Axes of the main body's cylindrical faces with the expected radius and height.</summary>
+    /// <remarks>This is the "per instance" measurement: <c>ksCylinderParam.GetPlacement()</c> gives the
+    /// surface placement and <c>ksPlacement.GetOrigin</c> the axis point. Without coordinates the check
+    /// would reduce to volume, and volume does not tell N holes from N−1 holes and one overlapping.
+    /// Radius and height are FILTERED, not "all cylinders" taken: otherwise foreign cylindrical
+    /// geometry would enter the instance count and the check would become non-discriminating.</remarks>
     private static List<HoleAxis> ReadHoleAxes(ksPart part, double? radius, double? height)
     {
         var found = new List<HoleAxis>();
@@ -704,13 +677,13 @@ public partial class Api5Session
                 }
                 catch (Exception ex) when (ex is COMException)
                 {
-                    // Грань, параметры которой КОМПАС не отдал, — не повод бросить обход остальных.
+                    // A face whose parameters KOMPAS did not give is no reason to abandon the rest.
                 }
             }
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException)
         {
-            // Пустой список — честный ответ «прочитать не удалось»; проверка сравнивает его с нулём.
+            // An empty list is the honest answer "could not read"; the check compares it with zero.
         }
 
         return found;
@@ -836,17 +809,14 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Геометрическое копирование отвергается до COM.
-    /// </summary>
-    /// <remarks>
-    /// Маршрут B4 измеряется на <c>GeometryPattern = false</c>. Документировано оно страницей SDK
-    /// <c>ifeaturepattern_geometrypattern.html</c> и пользовательской справкой
-    /// <c>48_3_3_geometricheskiy_massiv</c>, но у него свои ограничения (замкнутость поверхности,
-    /// непересечение экземпляров, одинаковый вид операций) и свой режим — <c>SM-18.grid.operations.geometry</c>,
-    /// который в обязательный объём B4 НЕ входит. Поэтому <c>true</c> — отказ
-    /// <c>CAPABILITY_UNAVAILABLE</c> с причиной, а не тихая запись незмеренного числа.
-    /// </remarks>
+    /// <summary>Geometric copy is refused before COM.</summary>
+    /// <remarks>Route B4 is measured at <c>GeometryPattern = false</c>. It is documented by SDK page
+    /// <c>ifeaturepattern_geometrypattern.html</c> and user help
+    /// <c>48_3_3_geometricheskiy_massiv</c>, but has its own constraints (surface closure,
+    /// non-intersection of instances, same operation kind) and its own mode —
+    /// <c>SM-18.grid.operations.geometry</c>, which is NOT in the mandatory B4 scope. So <c>true</c>
+    /// is a <c>CAPABILITY_UNAVAILABLE</c> refusal with a cause, not a silent write of an unmeasured
+    /// number.</remarks>
     private static void RejectUnmeasuredGeometryPattern(bool geometryPattern, string what)
     {
         if (!geometryPattern)
@@ -885,18 +855,16 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Число словом «не прочитано» вместо нуля. <c>Num(double?)</c> уже объявлен в части вращения
-    /// и переиспользуется здесь: два одноимённых члена в одной частичной части — ошибка компиляции,
-    /// и это поймано сборкой, а не глазами.
-    /// </summary>
+    /// <summary>A number, or the "not read" wording instead of zero. <c>Num(double?)</c> is already
+    /// declared in the rotation part and is reused here: two same-named members in one partial part is
+    /// a compile error, caught by the build rather than by eye.</summary>
     private static string Num(int? value) =>
         value?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "не прочитано";
 
-    /// <summary>Допустимые слова способа построения — по страницам перечислений, а не по догадке.</summary>
+    /// <summary>Allowed build-method words — from the enum pages, not by guess.</summary>
     private static class PatternBuildingTypes
     {
-        /// <summary>ksLinearPatternBuildingTypeEnum, прочитано из интероп-сборки констант.</summary>
+        /// <summary>ksLinearPatternBuildingTypeEnum, read from the interop constants assembly.</summary>
         public static readonly string[] Linear =
         {
             "save_all", "save_along_perimeter", "save_along_axially",
@@ -917,22 +885,20 @@ public partial class Api5Session
     }
 }
 
-/// <summary>Ось цилиндрической грани: точка оси в координатах модели, радиус и высота.</summary>
+/// <summary>Cylindrical-face axis: the axis point in model coordinates, radius and height.</summary>
 internal sealed record HoleAxis(double[] CenterMm, double Radius, double Height);
 
-/// <summary>Ось отверстия-экземпляра, как её отдаёт сервер.</summary>
+/// <summary>Hole-instance axis as the server returns it.</summary>
 public sealed record PatternHoleDto(
     IReadOnlyList<double> CenterMm,
     double RadiusMm,
     double HeightMm);
 
-/// <summary>
-/// Результат создания массива либо зеркала.
-/// </summary>
-/// <param name="FeatureRef">Ссылка на признак для последующей правки и чтения.</param>
-/// <param name="Readout">Параметры, ПРОЧИТАННЫЕ из модели, а не записанные.</param>
-/// <param name="HoleAxes">Оси цилиндрических граней — поимённое доказательство «по каждому экземпляру».</param>
-/// <param name="UnverifiedAspects">Что именно этот прогон НЕ проверил, поимённо.</param>
+/// <summary>Result of creating a pattern or mirror.</summary>
+/// <param name="FeatureRef">Reference to the feature for later edit and read.</param>
+/// <param name="Readout">Parameters READ from the model, not written ones.</param>
+/// <param name="HoleAxes">Cylindrical-face axes — the named "per instance" proof.</param>
+/// <param name="UnverifiedAspects">What exactly this run did NOT check, named.</param>
 public sealed record PatternResult(
     ReferenceDto FeatureRef,
     string Family,
@@ -945,20 +911,18 @@ public sealed record PatternResult(
     IReadOnlyList<string> RouteNotes,
     IReadOnlyList<string> UnverifiedAspects)
 {
-    /// <summary>Снимки тел до/после: заполняются зеркалом, где важно «какое тело тронуто».</summary>
+    /// <summary>Body snapshots before/after: filled by the mirror, where "which body was touched" matters.</summary>
     public IReadOnlyList<string>? BodyRows { get; init; }
 
-    /// <summary>Индексы тел, не тронутых ни исходником, ни отражением.</summary>
+    /// <summary>Indexes of bodies touched neither by a source nor by the mirror.</summary>
     public IReadOnlyList<int>? UntouchedBodyIndexes { get; init; }
 }
 
-/// <summary>Результат чтения параметров массива по ссылке на признак.</summary>
-/// <param name="DeletedInstancesApplicable">
-/// <c>false</c> для зеркального массива: пользовательская справка
-/// <c>glava_48_obzhie_svedeniy</c> прямо говорит, что исключение экземпляров недоступно для
-/// зеркального массива и массива по образцу. Это предметная неприменимость с источником, а не
-/// незакрытое действие.
-/// </param>
+/// <summary>Result of reading pattern parameters by a feature reference.</summary>
+/// <param name="DeletedInstancesApplicable"><c>false</c> for a mirror pattern: the user help
+/// <c>glava_48_obzhie_svedeniy</c> states directly that excluding instances is unavailable for a
+/// mirror pattern and a pattern-by-sample. This is a domain inapplicability with a source, not an
+/// unclosed action.</param>
 public sealed record PatternReadResult(
     string Family,
     int? PatternIndex,

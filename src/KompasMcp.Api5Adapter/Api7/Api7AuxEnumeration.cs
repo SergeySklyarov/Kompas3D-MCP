@@ -3,37 +3,27 @@ using KompasAPI7;
 
 namespace KompasMcp.Api5Adapter.Api7;
 
-/// <summary>
-/// Перечисление вспомогательной геометрии детали: плоскости, оси, точки — как ОБЪЕКТЫ с индексом
-/// коллекции. Это то, чего продукту не хватало для действий <c>discover</c> и <c>read</c>
-/// зависимостей <c>dep.refs.planes</c>, <c>dep.refs.axes</c> и <c>dep.refs.points_axes</c>.
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Про устойчивый адрес — прямо и без подмены.</b> Справка документирует
-/// <c>IAxes3D.GetAxis3DByName</c>, <c>IPoints3D.GetPoint3DByName</c> и
-/// <c>ISketchs.GetSketchByName</c>, но в поставленном <c>Interop.KompasAPI7.dll</c> целевой сборки
-/// <b>нет ни одного члена с подстрокой <c>ByName</c></b> — измерено прибором
-/// <c>tools/KompasMcp.InteropScan</c> 21.09.2026. Поэтому имя разрешается ПЕРЕЧИСЛЕНИЕМ коллекции
-/// со сравнением <c>Name</c>, и это составлено только из документированных членов
-/// (<c>Count</c>, индексированное свойство, <c>Name</c>). Возвращаемый <c>Index</c> — позиция в
-/// коллекции, и он НЕ объявляется устойчивым: перестроение его сдвигает, поэтому адресом он не
-/// называется ни в ответе, ни в документации инструмента.
-/// </para>
-/// <para>
-/// <b>Предел перечисления задан числом, а не умолчанием.</b> Цена одной строки — вызов COM на
-/// каждый прочитанный член; без предела документ с сотнями объектов подвесил бы сеанс на одном
-/// запросе. Усечение не молчит: оно попадает в примечания строки.
-/// </para>
-/// </remarks>
+/// <summary>Enumeration of a part's auxiliary geometry — planes, axes, points — as OBJECTS with a
+/// collection index. This is what the product lacked for the <c>discover</c> and <c>read</c> actions
+/// of the <c>dep.refs.planes</c>, <c>dep.refs.axes</c> and <c>dep.refs.points_axes</c> dependencies.</summary>
+/// <remarks>DOC: the help documents <c>IAxes3D.GetAxis3DByName</c>, <c>IPoints3D.GetPoint3DByName</c>
+/// and <c>ISketchs.GetSketchByName</c>. MEASURED (InteropScan, 21.09.2026): the shipped
+/// <c>Interop.KompasAPI7.dll</c> has NO member whose name contains <c>ByName</c>, so a name is
+/// resolved by ENUMERATING the collection and comparing <c>Name</c> — built only from documented
+/// members (<c>Count</c>, the indexed property, <c>Name</c>). LIMIT: the returned <c>Index</c> is a
+/// position in the collection and is NOT stable — a rebuild shifts it — so it is never called an
+/// address, neither in the response nor in the tool documentation. LIMIT: the enumeration limit is a
+/// number, not a default — each row costs a COM call per member, and a document with hundreds of
+/// objects would hang the session on one request; truncation is not silent, it lands in the row notes.
+/// History: docs/decisions/adapter-api7.md#aux-enumeration</remarks>
 internal static class Api7AuxEnumeration
 {
-    /// <summary>Строка маршрута перечисления — одна на ответ и на доказательства приёмки.</summary>
+    /// <summary>Enumeration-route string — one for both the response and the acceptance evidence.</summary>
     public const string Route =
         "IAuxiliaryGeomContainer.GetPlanes3D/GetAxes3D, IModelContainer.GetPoints3D → " +
         "Count + индексированное свойство (ByName в поставке отсутствует)";
 
-    /// <summary>Плоскости детали. Плоскость читается тем же методом, что и одиночная.</summary>
+    /// <summary>The part's planes. A plane is read by the same method as a single one.</summary>
     public static (List<AuxGeomRow> Rows, string? Failure) Planes(IPlanes3D planes, int limit)
     {
         var rows = new List<AuxGeomRow>();
@@ -72,7 +62,7 @@ internal static class Api7AuxEnumeration
         return (rows, null);
     }
 
-    /// <summary>Оси детали.</summary>
+    /// <summary>The part's axes.</summary>
     public static (List<AuxGeomRow> Rows, string? Failure) Axes(IAxes3D axes, int limit)
     {
         var rows = new List<AuxGeomRow>();
@@ -106,7 +96,7 @@ internal static class Api7AuxEnumeration
         return (rows, null);
     }
 
-    /// <summary>Точки детали.</summary>
+    /// <summary>The part's points.</summary>
     public static (List<AuxGeomRow> Rows, string? Failure) Points(IPoints3D points, int limit)
     {
         var rows = new List<AuxGeomRow>();
@@ -144,11 +134,9 @@ internal static class Api7AuxEnumeration
         return (rows, null);
     }
 
-    /// <summary>
-    /// Найти плоскость ПО ИМЕНИ. Возвращает объект либо названную причину, в которой различаются
-    /// «такого имени нет» и «имя не уникально»: молчаливый выбор первой из нескольких сделал бы
-    /// адрес неоднозначным.
-    /// </summary>
+    /// <summary>Find a plane BY NAME. Returns the object or a named reason that distinguishes "no
+    /// such name" from "the name is not unique": silently taking the first of several would make the
+    /// address ambiguous.</summary>
     public static (IModelObject? Plane, string? Failure) PlaneByName(IPlanes3D planes, string name)
     {
         var matches = new List<IModelObject>();
@@ -165,8 +153,9 @@ internal static class Api7AuxEnumeration
             }
             catch (Exception ex) when (ex is COMException or InvalidCastException)
             {
-                // Причина чтения одного элемента не отменяет поиск: нечитаемый элемент просто не
-                // участвует в сравнении имён, и это не выдаётся за «имени нет».
+                // A failure to read ONE element does not abort the search: an unreadable element
+                // simply takes no part in the name comparison, and that is not passed off as "there
+                // is no such name".
             }
         }
 

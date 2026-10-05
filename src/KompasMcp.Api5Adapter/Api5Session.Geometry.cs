@@ -9,9 +9,7 @@ using KompasMcp.Domain.References;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>
-/// Geometry: sketches, features, measurement, final topology.
-/// </summary>
+/// <summary>Geometry: sketches, features, measurement, final topology.</summary>
 /// <remarks>
 /// Signatures here are taken from <c>docs/compatibility/kompas-api5-metadata.json</c> (dumped from
 /// the installed interop by P0.2), not from memory. Three consequences worth stating:
@@ -113,7 +111,8 @@ public sealed partial class Api5Session
         // XY, XZ and YZ alike (XY z=+15, XZ y=+15, YZ x=−15 because the YOZ normal points to −X).
         // The YZ negation that used to sit here was not an API inconsistency being worked around —
         // it silently redefined the field as "along the model axis", contradicting the published
-        // description ("смещение вдоль нормали базовой плоскости"). Semantics are now uniform, and
+        // description — DOC: <c>ksplaneoffsetdefinition_props.html</c>, «смещение вдоль нормали базовой
+        // плоскости». Semantics are now uniform, and
         // a caller who needs the model axis gets it from the plane description, not from a sign flip.
         definition.offset = Math.Abs(plane.OffsetMm);
         definition.direction = plane.OffsetMm >= 0;
@@ -137,48 +136,36 @@ public sealed partial class Api5Session
             ? $"sketch on {plane.Reference}"
             : $"{plane.Base?.ToString().ToUpperInvariant() ?? "plane"}{(Math.Abs(plane.OffsetMm) > 1e-9 ? $" +{plane.OffsetMm:0.###} mm" : string.Empty)}";
 
-    /// <summary>
-    /// The contours this server drew into each sketch, in mm. Filled when the server itself drew the
+    /// <summary>The contours this server drew into each sketch, in mm. Filled when the server itself drew the
     /// primitives, and read by <see cref="Extrude"/> as the expected volume target: without it the
-    /// extrusion could only report "КОМПАС said yes", which spec 1.11 explicitly forbids as proof.
-    /// </summary>
-    /// <remarks>
-    /// The contour list is kept rather than the area, because the area of a profile is not the sum of
+    /// extrusion could only report "KOMPAS said yes", which spec 1.11 explicitly forbids as proof.</summary>
+    /// <remarks>The contour list is kept rather than the area, because the area of a profile is not the sum of
     /// its primitives: a contour inside another one is a hole in it. Measured 24.09.2026 — while the
     /// entry was a running sum, a sketch built by appending a circle inside another gave
     /// π·125 = 392.699081699 against the annulus' π·75 = 235.619449019, and the extrusion of a
     /// correct ring was reported as an unconfirmed geometry change. One number cannot carry nesting,
-    /// so the number is derived from the contours instead of accumulated next to them.
-    /// </remarks>
+    /// so the number is derived from the contours instead of accumulated next to them.</remarks>
     private readonly Dictionary<string, SketchProfile> _sketchProfiles = new(StringComparer.Ordinal);
 
-    /// <summary>
-    /// Points lying on the primitives this server drew into each sketch. API5 gives no way to
+    /// <summary>Points lying on the primitives this server drew into each sketch. API5 gives no way to
     /// enumerate sketch objects (no ksFirstObj/ksGetObjCount/GetSegmentContainer in this interop),
     /// so a remembered coordinate is the only handle that makes replace and delete_entities real
-    /// instead of a silent append.
-    /// </summary>
+    /// instead of a silent append.</summary>
     private readonly Dictionary<string, List<double[]>> _sketchProbePoints = new(StringComparer.Ordinal);
 
-    /// <summary>
-    /// Extent of everything this server drew into each sketch, in sketch coordinates. It is what
+    /// <summary>Extent of everything this server drew into each sketch, in sketch coordinates. It is what
     /// lets a declared target body be checked against the contour before anything is mutated
-    /// (<see cref="TargetBodyGuard.ProfileMayAffectBody"/>) — КОМПАС itself offers no way to ask a
-    /// sketch where its profile lies, and a contradiction it swallows without an error.
-    /// </summary>
-    /// <remarks>
-    /// Kept alongside <see cref="_sketchProfiles"/> for the same reason and with the same rule: an
+    /// (<see cref="TargetBodyGuard.ProfileMayAffectBody"/>) — KOMPAS itself offers no way to ask a
+    /// sketch where its profile lies, and a contradiction it swallows without an error.</summary>
+    /// <remarks>Kept alongside <see cref="_sketchProfiles"/> for the same reason and with the same rule: an
     /// unknown shape or an incompletely cleared sketch drops the entry rather than leaving a stale
     /// extent behind, because a box that is wrong is worse than no box — it would refuse, or allow,
-    /// a mutation on a figure the server never drew.
-    /// </remarks>
+    /// a mutation on a figure the server never drew.</remarks>
     private readonly Dictionary<string, ProfileBox> _sketchProfileBox = new(StringComparer.Ordinal);
 
-    /// <summary>
-    /// Which base plane each sketch sits on, when the server was the one that chose it. A sketch
+    /// <summary>Which base plane each sketch sits on, when the server was the one that chose it. A sketch
     /// built on a referenced plane has no entry: the mapping from sketch axes to model axes for
-    /// that case is not measured, so the target check reports "not checked" instead of assuming it.
-    /// </summary>
+    /// that case is not measured, so the target check reports "not checked" instead of assuming it.</summary>
     private readonly Dictionary<string, PlaneBase> _sketchPlaneBase = new(StringComparer.Ordinal);
 
     public EditSketchResult EditSketch(EditSketchCommand command)
@@ -418,10 +405,8 @@ public sealed partial class Api5Session
             ProbePointsFromModel: derivedFrom is not null);
     }
 
-    /// <summary>
-    /// Which base plane a sketch sits on: from memory when the server chose it, otherwise read back
-    /// out of the model.
-    /// </summary>
+    /// <summary>Which base plane a sketch sits on: from memory when the server chose it, otherwise read back
+    /// out of the model.</summary>
     /// <remarks>
     /// The memory entry only exists for a sketch this server created. A sketch that arrived with a
     /// reopened document has none, and without a plane the derivation cannot be allowed at all —
@@ -462,23 +447,15 @@ public sealed partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Refuses a sketch edit that destroyed a dependent body, instead of reporting it as applied.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Closes the question probe G opened (Q-SKETCH-EDIT-ZERO). Measured in G.9: replacing a Ø20 hole
-    /// with R90 on a 100×80 plate makes the profile larger than the material, and КОМПАС answers
+    /// <summary>Refuses a sketch edit that destroyed a dependent body, instead of reporting it as applied.</summary>
+    /// <remarks>Closes the question probe G opened (Q-SKETCH-EDIT-ZERO). Measured in G.9: replacing a Ø20 hole
+    /// with R90 on a 100×80 plate makes the profile larger than the material, and KOMPAS answers
     /// success to every individual call while the body disappears — V = 0, 0 faces, 0 bodies. The
     /// vendor's return codes are therefore not a verification of anything, and the only honest
     /// evidence is the body measurement.
-    /// </para>
-    /// <para>
     /// The refusal is reported as <see cref="ErrorCodes.GeometryFailed"/> with <c>partialEffects:
     /// true</c>: the model really did change, and saying otherwise would be its own lie. A general
-    /// rollback is not claimed — nothing in this adapter can restore a body КОМПАС consumed.
-    /// </para>
-    /// </remarks>
+    /// rollback is not claimed — nothing in this adapter can restore a body KOMPAS consumed.</remarks>
     private void GuardDependentBodySurvived(DocumentEntry document, EditSketchCommand command, List<BodySnapshot> bodiesBefore)
     {
         var bodiesAfter = ReadBodySnapshots(document.PartNow());
@@ -519,25 +496,19 @@ public sealed partial class Api5Session
             });
     }
 
-    /// <summary>
-    /// Coordinates for <c>ksFindObj</c> taken from the model itself, for a sketch this server did
-    /// not draw and therefore cannot remember.
-    /// </summary>
+    /// <summary>Coordinates for <c>ksFindObj</c> taken from the model itself, for a sketch this server did
+    /// not draw and therefore cannot remember.</summary>
     /// <remarks>
-    /// <para>
     /// Route measured by probe G (<c>docs/acceptance/api7/sketch-geometry-reopen.md</c>, 11 steps
     /// PASS) on a reopened document: the through cut is found in the tree by type, its sketch via
     /// <c>GetSketch()</c>, and the coordinate comes from the cylindrical face the cut left behind —
     /// <c>GetSurfaceParam() → ksCylinderParam</c> gives centre and radius, and the point
     /// <c>(cx + r; cy)</c> lies on the sketch circle. Two control points that find nothing were part
     /// of the measurement, so the point is known to select this primitive rather than a neighbour.
-    /// </para>
-    /// <para>
     /// Guarded by <see cref="SketchPointDerivation.Verdict"/>: only a base-XY sketch with a circular
     /// profile qualifies. An inclined plane needs a 3D→2D transport that was never measured, and a
     /// segment/arc/rectangle profile has no primitive a cylinder-derived point provably lies on.
     /// Both cases refuse here with the reason stated, instead of extrapolating from one measurement.
-    /// </para>
     /// </remarks>
     private List<double[]> DeriveProbePointsFromModel(
         EditSketchCommand command,
@@ -644,16 +615,12 @@ public sealed partial class Api5Session
         return SketchPointDerivation.PointsOnCircle(center, radius).ToList();
     }
 
-    /// <summary>
-    /// Centre, radius and axis of the hole wall left by the feature that consumes a sketch.
-    /// </summary>
-    /// <remarks>
-    /// Returns the first cylindrical face whose axis is normal to the XY plane — the configuration
+    /// <summary>Centre, radius and axis of the hole wall left by the feature that consumes a sketch.</summary>
+    /// <remarks>Returns the first cylindrical face whose axis is normal to the XY plane — the configuration
     /// probe G measured. The lateral-area cross-check the probe performed belongs to acceptance, not
     /// to the product: here the radius and axis are what the point needs, and the geometry is
     /// confirmed afterwards by measuring the dependent body, which is the only evidence the probe
-    /// found to be trustworthy at all (G.9: every call answered success while the body vanished).
-    /// </remarks>
+    /// found to be trustworthy at all (G.9: every call answered success while the body vanished).</remarks>
     private static bool FaceOfSketchHole(
         ksPart part,
         out double[]? center,
@@ -699,11 +666,9 @@ public sealed partial class Api5Session
         return false;
     }
 
-    /// <summary>
-    /// Whether two COM wrappers point at the same object. Used instead of a name comparison because
-    /// probe F measured that names do not survive the API5↔API7 transition (a feature named "f-ch2"
-    /// answers "Фаска:1" through API7), so any identity built on a name is a latent defect.
-    /// </summary>
+    /// <summary>Whether two COM wrappers point at the same object. Used instead of a name comparison because
+    /// probe F measured that names do not survive the API5↔API7 transition (a feature named "f-ch2" answers
+    /// "Chamfer:1" through API7), so any identity built on a name is a latent defect.</summary>
     private static bool SameComObject(object left, object right)
     {
         if (ReferenceEquals(left, right))
@@ -737,12 +702,10 @@ public sealed partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Points that provably lie on the drawn primitives — what ksFindObj needs to find them again.
+    /// <summary>Points that provably lie on the drawn primitives — what ksFindObj needs to find them again.
     /// Midpoints of rectangle sides and of a segment, and a point on the circumference for a circle
     /// (its centre lies on nothing). Anything without such a point contributes none, which keeps
-    /// "we remember the sketch" honest rather than optimistic.
-    /// </summary>
+    /// "we remember the sketch" honest rather than optimistic.</summary>
     private static List<double[]> ProbePointsOf(IEnumerable<SketchEntityDto> entities)
     {
         var points = new List<double[]>();
@@ -808,60 +771,22 @@ public sealed partial class Api5Session
                 return "circle";
 
             case SketchEntityKind.Arc:
-                // ЗНАК sweep_deg ОБЯЗАН ДОЙТИ ДО КОНЕЧНОГО УГЛА, И ЭТО ИЗМЕРЕНО, А НЕ ВЫВЕДЕНО.
-                //
-                // ДЕФЕКТ ПРОДУКТА, найденный 20.09.2026 сценарием «Скоба Model Mania 2021» (наряд
-                // §3.3/§3.5). Здесь стояло `start_deg + Math.Abs(sweep)`: для ОТРИЦАТЕЛЬНОГО sweep
-                // конечный угол уезжал на ДРУГУЮ сторону от начального, и ядро рисовало дугу,
-                // отражённую относительно луча start_deg, — то есть совсем не ту. Схема при этом
-                // объявляет «Знак задаёт направление», и комментарий рядом обещал, что знак
-                // «must survive the call (spec 2.6)»: обещание было объявлено и не выполнено —
-                // это дефект, а не граница возможностей.
-                //
-                // ИЗМЕРЕНО (зонд scratch/_mania_contour_probe.py, бинари поставки):
-                //   * четверть диска R30: дуга (start 0°, sweep +90°) + два отрезка → объём
-                //     14137.166941154068 = 20·π·30²/4 — верно;
-                //   * ТА ЖЕ четверть, дуга (start 90°, sweep −90°) + ТЕ ЖЕ отрезки → GEOMETRY_FAILED
-                //     («Entity.Create() выдавливания вернул false») — концы дуги не там, где их
-                //     ждёт контур;
-                //   * различающая постановка T6 (дуга (90°, −90°) и отрезки (−30,0)→(0,0)→(0,30),
-                //     где обе гипотезы замыкают контур, но дают разную площадь) дала
-                //     14137.166941154068 = 20·225π, то есть дугу ВТОРОЙ четверти [90°,180°] вместо
-                //     первой [0°,90°] — конечный угол действительно был взят как start+|sweep|;
-                //   * контур Model Mania: восемь касательных дуг с ЗНАКОМ → GEOMETRY_FAILED; та же
-                //     геометрия, выраженная дугами с ПОЛОЖИТЕЛЬНЫМ sweep, → объём 174799.7403608485
-                //     против аналитического 174799.740134 (расхождение 1.3·10⁻¹²).
-                // Почему дефект дожил до сих пор: во всей приёмке `sweep_deg` встречался РОВНО ОДИН
-                // раз и всегда положительным (scripts/mcp-smoke.py, строка пути sweep B5.2), поэтому
-                // отрицательная ветвь не измерялась ни одной строкой.
+                // INVARIANT: the end angle must be start_deg + sweep_deg WITH its sign, so a NEGATIVE sweep
+                // goes to the other side of start_deg. MEASURED 20.09.2026 by the "Model Mania 2021 bracket"
+                // scenario and probe scratch/_mania_contour_probe.py (delivery binaries): a quarter disc R30
+                // (start 0°, sweep +90°) gives 14137.166941154068 = 20·π·30²/4, the SAME quarter written
+                // (90°, −90°) gives GEOMETRY_FAILED, and the discriminating case T6 landed in the SECOND
+                // quarter [90°,180°], proving the end angle was taken as start+|sweep|.
+                // History: docs/decisions/adapter-core.md#arc-sign
                 var sweep = Required(entity.SweepDeg, "sweep_deg");
                 var start = Required(entity.StartDeg, "start_deg");
-                // ДЕФЕКТ ПРОДУКТА №2, найденный тем же сценарием (наряд §3.5). Схема объявляет
-                // `start_deg` и `sweep_deg` в диапазоне [−720, 720], а ядро принимает ДВА УГЛА, и
-                // вызов ОТКАЗЫВАЕТ, когда конечный угол покидает [−360°, 360°]. Измерено зондом
-                // `scratch/_arc_angle_range_probe.py` на поставке `publish-mania-20260920`: тот же
-                // сектор R30, записанный двумя способами, — ОТКАЗ против успеха:
-                //   R2 (старт 360°, sweep +90°, конец  450°) → GEOMETRY_FAILED   ↔ R1 (0°, +90°) → 14137.166941
-                //   R5 (старт 315°, sweep +90°, конец  405°) → GEOMETRY_FAILED   ↔ R6 (−45°, +90°) → 14137.166941
-                //   R7 (старт −350°, sweep −90°, конец −440°) → GEOMETRY_FAILED ↔ R8 (10°, −90°) → 14137.166941
-                // Разделяющие случаи: R3 (старт РОВНО 360°, конец 270°) и R4 (конец РОВНО 360°) —
-                // ОБА проходят, то есть триггер не «старт 360» и не «конец 360», а ВЫХОД ЗА ±360°.
-                // Приведение углов не переистолковывает большие дуги: измерено зондом контура,
-                // вариант G — дуга (0°, +270°) даёт 42411.500823 = 20·(270/360)·π·30², то есть ядро
-                // соблюдает размах больше 180°, а не берёт меньшую дугу.
-                //
-                // ПРАВКА СТРОГО АДДИТИВНАЯ — НО ТОЛЬКО ПОСЛЕ ВОЗВРАТА ПОРЯДКА АРГУМЕНТОВ.
-                //
-                // ПЕРВАЯ РЕДАКЦИЯ ЭТОЙ ПРАВКИ БЫЛА НЕ АДДИТИВНОЙ, И ЭТО ПОЙМАЛ КОНТРОЛЬ ЗОНДА, А НЕ
-                // РАССУЖДЕНИЕ. Я передал в ядро `first, second` (начало, конец) вместо прежних
-                // `Min, Max` — и пробы с ОБОИМИ углами внутри диапазона, которых правка не должна
-                // касаться, поменяли результат: R8 (старт 10°, sweep −90°) дал 42411.500823 вместо
-                // 14137.166941 на прежней поставке, R3 — то же. То есть ПОРЯДОК ДВУХ УГЛОВ НЕСУЩИЙ,
-                // а не косметический: при отрицательном sweep прежний код подавал меньший угол
-                // первым, и именно это ядро и ожидает. Утверждение «правка аддитивна» было в
-                // комментарии ДО того, как стало верным; верным его сделал возврат `Min`/`Max`.
-                // Правило: аддитивность доказывается контролем на ВХОДАХ, которых правка не
-                // касается, а не рассуждением о её ветках.
+                // INVARIANT: the kernel takes TWO angles and REFUSES when the end leaves [−360°, 360°],
+                // though the schema allows [−720, 720]; the two angles' ORDER is load-bearing — with a
+                // negative sweep the SMALLER angle goes first, so the caller must pass Min/Max. MEASURED by
+                // probe scratch/_arc_angle_range_probe.py on delivery publish-mania-20260920: R2/R5/R7 (end
+                // outside) refuse while R1/R6/R8 pass, R3/R4 (exactly ±360°) pass, and variant G (0°, +270°)
+                // gives 42411.500823, so a sweep beyond 180° is honoured.
+                // History: docs/decisions/adapter-core.md#arc-sign
                 var (first, second) = ArcEndpoints(start, sweep);
                 editor.ksArcByAngle(
                     Point(entity.CenterMm, 0),
@@ -1036,7 +961,7 @@ public sealed partial class Api5Session
 
         // Necessary-not-sufficient, and stated that way: agreement of two bounding boxes is not
         // geometric containment. A disagreement is still worth refusing on, because it is exactly
-        // the configuration КОМПАС swallows without an error.
+        // the configuration KOMPAS swallows without an error.
         var agreement = TargetBodyGuard.ProfileMayAffectBody(
             _sketchProfileBox.TryGetValue(command.SketchRef, out var profileBox) ? profileBox : null,
             _sketchPlaneBase.TryGetValue(command.SketchRef, out var planeBase) ? planeBase : null,
@@ -1087,7 +1012,7 @@ public sealed partial class Api5Session
         //   cut   o=10 negative     -> NO_GEOMETRY_CHANGE (asks for material at z>10, where none is)
         //   boss  o=10 positive     -> +9000 (30x30x10)
         //   boss  o=0  negative     -> +9000
-        // A direction pointing away from the body is NOT an error: КОМПАС creates the feature and
+        // A direction pointing away from the body is NOT an error: KOMPAS creates the feature and
         // changes nothing, which the Host surfaces as NO_GEOMETRY_CHANGE. That is why the choice of
         // sketch plane is part of the caller's contract, not a detail this adapter may paper over.
         var direction = command.Direction switch
@@ -1156,16 +1081,16 @@ public sealed partial class Api5Session
 
         var changes = CompareBodySnapshots(bodiesBefore, bodiesAfter);
 
-        // ТРИ РАЗНЫЕ ВЕЛИЧИНЫ, которые раньше были одним числом, — и именно это смешение дало
-        // 13 ложных сомнений в клиентской приёмке B3 (дефект EXTRUDE-VOLUME-DELTA-ON-MULTIBODY):
-        //   * documentVolume*  — СУММА объёмов всех тел документа (`volume_mm3` — это «после»);
-        //   * объём тела, о котором операция: объявленная цель (boss/cut) либо НОВОЕ тело (base);
-        //   * ПРИРАЩЕНИЕ материала этим признаком — единственная величина, которую можно сверять с
-        //     `profile_area × depth`.
-        // На многотельном документе первая и третья различаются на объём всего, что уже стояло
-        // (49 000 против 1 000), и сверка их объявляет расхождение, которого в геометрии нет.
-        // Сумма индивидуальных объёмов — ещё и не объём пространственного объединения: у двух
-        // перекрывающихся тел 36 000 + 24 000 = 60 000 против 36 000 у объединения.
+        // THREE DIFFERENT QUANTITIES that used to be one number — that conflation produced 13 false doubts
+        // in client acceptance B3 (defect EXTRUDE-VOLUME-DELTA-ON-MULTIBODY):
+        //   * documentVolume*  — the SUM of all document bodies' volumes (`volume_mm3` is the "after");
+        //   * the volume of the body the operation concerns: the declared target (boss/cut) or the NEW body
+        //     (base);
+        //   * the MATERIAL ADDED by this feature — the only quantity comparable with `profile_area × depth`.
+        // On a multi-body document the first and third differ by the volume of everything already present
+        // (49 000 versus 1 000), and comparing them declares a discrepancy that is not in the geometry. The
+        // sum of individual volumes is also not the volume of the spatial union: two overlapping bodies give
+        // 36 000 + 24 000 = 60 000 against 36 000 for the union.
         var documentVolumeBefore = SumVolumesOrNull(bodiesBefore);
         var documentVolumeAfter = SumVolumesOrNull(bodiesAfter);
 
@@ -1189,13 +1114,11 @@ public sealed partial class Api5Session
         }
         else
         {
-            // «До» и «после» приращения — измеренные суммы по документу, ни одно число здесь не
-            // выдумано. Какую именно величину несёт приращение, называет volume_delta_basis.
-
-            // Куда именно ушёл материал: ровно в одно тело, и это тело обязано быть названо. Одной
-            // правильной суммы недостаточно — ошибка в одном теле может быть уравновешена ошибкой в
-            // другом. Принимается и новое тело, и изменившееся прежнее: непроходимым обязан быть
-            // ответ «что-то где-то изменилось».
+            // The "before" and "after" of the delta are measured document sums; no number here is invented.
+            // Which quantity the delta carries is named by volume_delta_basis.
+            // Where the material went: into exactly one body, and that body must be named. One correct sum is
+            // not enough — an error in one body can be balanced by an error in another. Both a new body and a
+            // changed existing one are accepted: the answer "something changed somewhere" must be a failure.
             var priorMoved = bodiesBefore
                 .Select(s => s.Index)
                 .Where(i => changes.DeltaOf(i) is double moved && Math.Abs(moved) > VolumeChangeFloorMm3)
@@ -1303,9 +1226,8 @@ public sealed partial class Api5Session
         }
         else if (measuredDelta is not double measured)
         {
-            // Непрочитанное приращение — это «не подтверждено», а не ноль: подстановка нуля выдала бы
-            // непроверенное за измеренное, а отсутствие единственного изменившегося тела — за
-            // отсутствие изменений.
+            // An unread delta is "not confirmed", not zero: substituting zero would pass off the unverified
+            // as measured, and the absence of a single changed body as the absence of changes.
             checks.Add(new NamedCheck(
                 "volume_delta",
                 false,
@@ -1324,9 +1246,9 @@ public sealed partial class Api5Session
                 Expected: expectedDelta.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)));
         }
 
-        // Атрибуция обязательна ровно там, где она считалась: у base цели нет, и без неё «прирост
-        // 1000» мог бы прийти из любого тела документа. У boss/cut адресность несут
-        // selector_choose_type / target_body_affected / nontarget_bodies_unchanged ниже.
+        // Attribution is required exactly where it was computed: base has no target, and without it "a delta
+        // of 1000" could come from any body in the document. For boss/cut the addressing is carried by
+        // selector_choose_type / target_body_affected / nontarget_bodies_unchanged below.
         geometryConfirmed &= attribution.All(c => c.Passed);
 
         var unverified = new List<string>();
@@ -1363,7 +1285,7 @@ public sealed partial class Api5Session
                 Expected: "ΔV = 0 вне заявленного тела"));
             geometryConfirmed &= others.Count == 0;
 
-            // A no-op is not a result. КОМПАС reports no error for a declaration that contradicts
+            // A no-op is not a result. KOMPAS reports no error for a declaration that contradicts
             // where the profile actually lies (P2.6): Create and RebuildDocument say true, the
             // document is rebuilt, and no body loses or gains anything. Only an explicit failure
             // keeps that from being read as success by anything looking at the call alone. A
@@ -1413,8 +1335,8 @@ public sealed partial class Api5Session
 
         if (bodyTarget is null && attribution.Any(c => !c.Passed))
         {
-            // Приращение не приписано ни одному телу — значит и сравнивать с аналитикой нечего:
-            // «изменилось на 1000 где-то в документе» доказательством признака не является.
+            // The delta is not attributed to any body, so there is nothing to compare with the analytic
+            // figure: "changed by 1000 somewhere in the document" is not proof of the feature.
             unverified.Add(
                 "body_change_attribution_failed — приращение материала не приписано ровно одному телу "
                 + "(новому или прежнему): одна правильная сумма не заменяет адресности, потому что "
@@ -1433,10 +1355,10 @@ public sealed partial class Api5Session
         return new ExtrudeResult(
             ToDto(reference, hint),
             bodyCount,
-            // volume_mm3 — СУММА объёмов всех тел документа после операции. Одно и то же поле несло
-            // разные величины (у base — сумму по документу, у boss/cut — объём цели), и это
-            // заставляло читателя догадываться. Величина теперь одна и названа в volume_note;
-            // приращение признака едет отдельным полем с названным основанием.
+            // volume_mm3 — the SUM of all document bodies' volumes after the operation. The same field used
+            // to carry different quantities (base — the document sum, boss/cut — the target's volume), forcing
+            // the reader to guess. There is now one quantity, named in volume_note; the feature's delta
+            // travels in a separate field with a named basis.
             documentVolumeAfter,
             verification,
             bodyTarget?.Index,
@@ -1460,12 +1382,10 @@ public sealed partial class Api5Session
         null => "not_checked",
     };
 
-    /// <summary>
-    /// Short invariant rendering of a number or a triple of coordinates. Round-trip format on
+    /// <summary>Short invariant rendering of a number or a triple of coordinates. Round-trip format on
     /// purpose: the acceptance evidence compares a measured volume with an analytic one, and
     /// printing 79999.99999999999 as "80000" would make the report claim a match the kernel did not
-    /// produce. The check itself is done on the raw doubles; this is only about not dressing them up.
-    /// </summary>
+    /// produce. The check itself is done on the raw doubles; this is only about not dressing them up.</summary>
     private static string Range(double? value) =>
         value?.ToString("R", System.Globalization.CultureInfo.InvariantCulture) ?? "нет";
 
@@ -1474,24 +1394,18 @@ public sealed partial class Api5Session
             ? "нет"
             : string.Join(", ", values.Select(v => v.ToString("R", System.Globalization.CultureInfo.InvariantCulture)));
 
-    /// <summary>
-    /// How much a body's volume must move for it to count as "the body that changed", in mm³. It is
+    /// <summary>How much a body's volume must move for it to count as "the body that changed", in mm³. It is
     /// the floor of docs/03 §3.3's volume tolerance and the threshold probe P2.6 used to call a ΔV
     /// zero, so this server and the measurement that justified it agree on what "nothing happened"
-    /// means. Matching an analytic expectation stays on <see cref="ProfileArea.Tolerance"/>.
-    /// </summary>
+    /// means. Matching an analytic expectation stays on <see cref="ProfileArea.Tolerance"/>.</summary>
     private const double VolumeChangeFloorMm3 = 0.01d;
 
-    /// <summary>
-    /// The body an extrusion was told to act on: where it sits in <c>BodyCollection</c> right now,
+    /// <summary>The body an extrusion was told to act on: where it sits in <c>BodyCollection</c> right now,
     /// the raw collection element <c>ksBodyCollection.Add</c> accepts, and its state before the
-    /// mutation.
-    /// </summary>
-    /// <remarks>
-    /// The index is resolved at mutation time by pointer rather than taken from the reference,
+    /// mutation.</summary>
+    /// <remarks>The index is resolved at mutation time by pointer rather than taken from the reference,
     /// because nothing here proves the collection keeps its order across a rebuild; the raw element
-    /// comes from that same enumeration so index and element cannot disagree.
-    /// </remarks>
+    /// comes from that same enumeration so index and element cannot disagree.</remarks>
     private sealed record BodyTarget(int Index, object RawElement, ksBody Body, BodySnapshot Snapshot);
 
     /// <summary>One body as a snapshot reader saw it: volume in mm³ and its gabarit.</summary>
@@ -1633,11 +1547,9 @@ public sealed partial class Api5Session
         return new BodyTarget(index.Value, rawElement, body, bodiesBefore[index.Value]);
     }
 
-    /// <summary>
-    /// Position of <paramref name="wanted"/> inside <c>part.BodyCollection()</c>, compared by
+    /// <summary>Position of <paramref name="wanted"/> inside <c>part.BodyCollection()</c>, compared by
     /// IUnknown. Every pointer acquired here is released at once: <c>GetIUnknownForObject</c> adds a
-    /// reference, and one leaked pointer per call is a slow leak of the whole model.
-    /// </summary>
+    /// reference, and one leaked pointer per call is a slow leak of the whole model.</summary>
     private static int? MatchBodyIndexByPointer(ksPart part, object wanted, out object? rawElement)
     {
         rawElement = null;
@@ -1679,12 +1591,10 @@ public sealed partial class Api5Session
         return null;
     }
 
-    /// <summary>
-    /// Per-body before/after comparison. Bodies are matched by the position of their box centre
+    /// <summary>Per-body before/after comparison. Bodies are matched by the position of their box centre
     /// rather than by collection order, because order across a rebuild is not something measured
     /// here — and matching by position is what turns "the plate lost nothing" into a number instead
-    /// of an assumption.
-    /// </summary>
+    /// of an assumption.</summary>
     private static BodyComparison CompareBodySnapshots(List<BodySnapshot> before, List<BodySnapshot> after)
     {
         var report = new BodyComparison();
@@ -1748,23 +1658,16 @@ public sealed partial class Api5Session
             + (a[2] - b[2]) * (a[2] - b[2]));
     }
 
-    /// <summary>
-    /// Насколько должен сдвинуться габарит тела, чтобы это считалось изменением положения, в мм.
-    /// </summary>
-    /// <remarks>
-    /// Порог существует потому, что «тело изменилось» — НЕ то же самое, что «у тела изменился объём».
-    /// Измерено на наряде §4.1 (B3.25 новой поставки 19.09.2026): на эталоне булевой правки объём
-    /// РАЗНОСТИ и объём ПЕРЕСЕЧЕНИЯ равны (12 000 мм³), различает их только положение габарита
-    /// (0,0,0)…(20,30,20) против (20,0,0)…(40,30,20). Пока признаком изменения был только объём,
-    /// корректно применённая правка `intersect` выглядела как «ни одно тело не изменилось» и
-    /// отвергалась собственным прибором — то есть вердикт опирался на поле, которое его не
-    /// поддерживает (дефект CHECK-FIELDS-DO-NOT-SUPPORT-THE-VERDICT, наряд §4.1).
-    /// <para>
-    /// Величина порога — 1 нм: габарит читается как точные координаты B-Rep, поэтому у тела, не
-    /// тронутого операцией, все шесть чисел совпадают побитово, а любой настоящий сдвиг на много
-    /// порядков больше. Порог ловит шум пересчёта, а не геометрию.
-    /// </para>
-    /// </remarks>
+    /// <summary>How far a body's bounding box must move to count as a position change, in mm.</summary>
+    /// <remarks>The threshold exists because "the body changed" is NOT the same as "the body's volume
+    /// changed". MEASURED on order §4.1 (B3.25 of the 19.09.2026 delivery): on the boolean-edit reference the
+    /// DIFFERENCE volume and the INTERSECTION volume are equal (12 000 mm³), and only the box position tells
+    /// them apart ((0,0,0)…(20,30,20) versus (20,0,0)…(40,30,20)). While volume was the only change signal, a
+    /// correctly applied `intersect` edit looked like "no body changed" and was rejected by the instrument
+    /// itself — the verdict rested on a field that does not support it (defect
+    /// CHECK-FIELDS-DO-NOT-SUPPORT-THE-VERDICT, order §4.1). The threshold is 1 nm: the box is read as exact
+    /// B-Rep coordinates, so an untouched body's six numbers match bit-for-bit while any real shift is orders
+    /// of magnitude larger. The threshold catches solver noise, not geometry.</remarks>
     private const double BoxChangeFloorMm = 1e-6d;
 
     /// <summary>The comparison itself: what moved, what did not, and the rows that say so.</summary>
@@ -1780,30 +1683,22 @@ public sealed partial class Api5Session
 
         public List<string> Rows { get; } = new();
 
-        /// <summary>
-        /// Тела, у которых изменился ОБЪЁМ. Это признак «здесь поработал материал», и он остаётся
-        /// отдельным от положения: у булевой правки вид `intersect` объём не меняет вовсе.
-        /// </summary>
+        /// <summary>Bodies whose VOLUME changed. This is the "material worked here" signal, kept separate
+        /// from position: a boolean edit of kind `intersect` does not change volume at all.</summary>
         public List<int> Changed { get; } = new();
 
-        /// <summary>
-        /// Тела, у которых изменился ТОЛЬКО габарит, а объём остался прежним. Отдельный список, а не
-        /// добавка к <see cref="Changed"/>, потому что «тело переехало» и «тело потеряло материал» —
-        /// разные наблюдения, и вызывающий вправе требовать именно второе.
-        /// </summary>
+        /// <summary>Bodies whose box changed but volume stayed the same. A separate list rather than an
+        /// addition to <see cref="Changed"/>, because "the body moved" and "the body lost material" are
+        /// different observations, and the caller may require exactly the latter.</summary>
         public List<int> Moved { get; } = new();
 
-        /// <summary>
-        /// Тела, состояние которых ИЗМЕНИЛОСЬ в наблюдаемом смысле: изменился объём ИЛИ габарит.
-        /// Это и есть правильный предикат для «результат этой операции» — он не подбирается под
-        /// ожидание и не зависит от вида операции.
-        /// </summary>
+        /// <summary>Bodies whose state changed in an observable sense: volume OR box changed. This is the
+        /// correct predicate for "the result of this operation" — it is not fitted to an expectation and does
+        /// not depend on the operation kind.</summary>
         public List<int> Touched { get; } = new();
 
-        /// <summary>
-        /// Тела, появившиеся ПОСЛЕ операции и не сопоставленные ни одному «до». Пустой список —
-        /// измеренный факт «новых тел нет», а не «не считали».
-        /// </summary>
+        /// <summary>Bodies that appeared AFTER the operation and were matched to no "before". An empty list is
+        /// the measured fact "there are no new bodies", not "we did not count".</summary>
         public List<BodySnapshot> NewBodies { get; } = new();
 
         public void RecordNewBodies(IEnumerable<BodySnapshot> rows) => NewBodies.AddRange(rows);
@@ -1814,7 +1709,7 @@ public sealed partial class Api5Session
 
         public bool BoxChangedOf(int index) => _boxChanged.TryGetValue(index, out var changed) && changed;
 
-        /// <summary>Наибольшее расхождение координат габарита этого тела, в мм.</summary>
+        /// <summary>Largest difference in this body's box coordinates, in mm.</summary>
         public double? BoxShiftOf(int index) => _boxShift.TryGetValue(index, out var shift) ? shift : null;
 
         public void Record(BodySnapshot before, BodySnapshot? after, double? delta)
@@ -1845,7 +1740,7 @@ public sealed partial class Api5Session
             }
         }
 
-        /// <summary>Наибольшее расхождение шести координат габарита, либо <c>null</c>, если габарита нет.</summary>
+        /// <summary>Largest difference across the six box coordinates, or <c>null</c> if there is no box.</summary>
         public static double? BoxShift(BodySnapshot before, BodySnapshot? after)
         {
             if (after is null
@@ -1865,11 +1760,9 @@ public sealed partial class Api5Session
             return worst;
         }
 
-        /// <summary>
-        /// Посторонние тела, состояние которых изменилось. Проверка «посторонние не тронуты» обязана
-        /// видеть и переезд: тело, уехавшее в сторону с прежним объёмом, — такое же нарушение
-        /// объявленной адресности, как тело, потерявшее материал, и прежняя редакция его не видела.
-        /// </summary>
+        /// <summary>Foreign bodies whose state changed. The "foreign bodies untouched" check must also see a
+        /// move: a body that shifted aside with the same volume violates the declared addressing just as one
+        /// that lost material does.</summary>
         public List<string> UnchangedViolations(int exceptIndex)
         {
             var offenders = new List<string>();
@@ -1896,12 +1789,10 @@ public sealed partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Order follows the sequence proven against v24 in P0.7 and in the historical scripts:
+    /// <summary>Order follows the sequence proven against v24 in P0.7 and in the historical scripts:
     /// attach the sketch, then set directionType, then the side parameters. Reporting which of the
     /// three refused matters: "SetSketch returned false" and "SetSideParam returned false" are
-    /// different defects with different causes (empty profile vs bad parameters).
-    /// </summary>
+    /// different defects with different causes (empty profile vs bad parameters).</summary>
     private static bool ConfigureBase(ksBaseExtrusionDefinition definition, ksEntity sketch, short direction, ExtrudeCommand command)
     {
         if (!definition.SetSketch(sketch))
@@ -2040,7 +1931,7 @@ public sealed partial class Api5Session
     /// <remarks>
     /// Three things this call is not, all of them measured:
     /// <list type="bullet">
-    /// <item>Not optional. With no declaration КОМПАС cuts whatever body the contour happens to lie
+    /// <item>Not optional. With no declaration KOMPAS cuts whatever body the contour happens to lie
     /// over, which for a single-body part is indistinguishable from success.</item>
     /// <item>Not decorative. <c>chooseType = 2</c> (parts only, and the part has none) produced
     /// <c>Create = true</c> and no volume change at all.</item>
@@ -2112,10 +2003,8 @@ public sealed partial class Api5Session
             ["code"] = "target_body_selector_refused",
         });
 
-    /// <summary>
-    /// Depth for the blind condition. The Host enforces the mode rule before COM; this guard keeps
-    /// a hand-built IPC frame from silently extruding by zero.
-    /// </summary>
+    /// <summary>Depth for the blind condition. The Host enforces the mode rule before COM; this guard keeps
+    /// a hand-built IPC frame from silently extruding by zero.</summary>
     private static double DepthOf(ExtrudeCommand command) =>
         command.DepthMm ?? throw new KompasContractException(
             ErrorCodes.InvalidArgument,
@@ -2139,12 +2028,10 @@ public sealed partial class Api5Session
     private static string FormatDepth(ExtrudeCommand command) =>
         command.DepthMm is double depth ? $"{depth:0.###} мм" : "не задана (насквозь)";
 
-    /// <summary>
-    /// Extent of the material a through operation traverses, in mm, along the axis the sketch is
+    /// <summary>Extent of the material a through operation traverses, in mm, along the axis the sketch is
     /// normal to. Null when the plane does not resolve to one of the three model axes: then the
     /// expectation stays "not_computable" rather than comparing a measurement with a number that
-    /// was invented on the way.
-    /// </summary>
+    /// was invented on the way.</summary>
     /// <remarks>
     /// <paramref name="material"/> is the body the caller declared. Falling back to
     /// <c>GetMainBody()</c> is kept for the operations that name no target, and it is the reason a
@@ -2181,11 +2068,9 @@ public sealed partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Model axis a plane entity is normal to: o3d_planeXOY→z, o3d_planeXOZ→y, o3d_planeYOZ→x; an
-    /// offset plane is resolved through its base plane. A constructed plane or a face carrier
-    /// deliberately returns null — guessing its axis would silently redefine what "насквозь" means.
-    /// </summary>
+    /// <summary>Model axis a plane entity is normal to: o3d_planeXOY→z, o3d_planeXOZ→y, o3d_planeYOZ→x; an
+    /// offset plane is resolved through its base plane. A constructed plane or a face carrier deliberately
+    /// returns null — guessing its axis would silently redefine what "through" means.</summary>
     private static int? PlaneNormalAxis(ksEntity plane)
     {
         var entity = plane;
@@ -2229,15 +2114,11 @@ public sealed partial class Api5Session
     /// Success is not the HRESULT: the radius is read back from a fresh definition object and the
     /// face count is required to grow by the number of filleted edges.
     /// </summary>
-    /// <summary>
-    /// Разворачивает ребро из реестра ссылок в <c>ksEntity</c> — то, что принимает коллекция
-    /// скругления. Какие из трёх маршрутов работают, измерено (проба P2.2), а не предположено;
-    /// маршрут возвращается вместе с сущностью, чтобы ответ называл, как ребро добыто.
-    /// </summary>
-    /// <remarks>
-    /// Вынесено общим помощником, потому что этим путём ходят и создание скругления, и правка его
-    /// набора рёбер: две копии одного разбора расходятся при первой же правке одной из них.
-    /// </remarks>
+    /// <summary>Unwraps an edge from the reference registry into a <c>ksEntity</c> — what the fillet
+    /// collection accepts. Which of the three routes works is MEASURED (probe P2.2), not assumed; the route
+    /// is returned with the entity so the answer names how the edge was obtained.</summary>
+    /// <remarks>Extracted as a shared helper because both creating a fillet and editing its edge set take
+    /// this path: two copies of one unwrapping diverge on the first edit of either.</remarks>
     private static (ksEntity Entity, string Route) UnwrapEdgeToEntity(ksEdgeDefinition edge, string reference)
     {
         if (edge is ksEntity asEntity)
@@ -2444,30 +2325,20 @@ public sealed partial class Api5Session
             string.Join(", ", unwrapRoutes));
     }
 
-    /// <summary>
-    /// Фаска по явными ссылками заданным рёбрам конечного тела (docs/05 SM-11).
-    /// </summary>
-    /// <remarks>
-    /// Маршрут измерен пробой F от 12.09.2026 на v24 и повторён здесь вызов в вызов:
-    /// <c>NewEntity(o3d_chamfer=33)</c> → <c>GetDefinition()</c> как <c>ksChamferDefinition</c> →
-    /// <c>SetChamferParam(transfer, d1, d2)</c> → <c>array()</c> как <c>ksEntityCollection</c> →
-    /// <c>Add(ребро)</c> → <c>Create()</c> → <c>RebuildDocument()</c>. На пластине 100×80×10 четыре
-    /// вертикальных угловых ребра с катетами 2×2 сняли ровно 20·d₁·d₂ = 80 мм³ (F.2), правка на 3×3
-    /// сняла 180 (F.3), а после save→close→reopen признак нашёлся по дереву и был отредактирован
-    /// снова (F.5).
-    /// <para>
-    /// Рёбра берутся из <c>kompas_read_topology</c> (конечное тело), а не из
-    /// <c>EntityCollection(o3d_edge)</c>: в той коллекции лежат и эскизные контуры — тот самый
-    /// дефект, который docs/04 §4.5 записывает для исторического помощника скругления.
-    /// </para>
-    /// <para>
-    /// Успехом считается не <c>Create()</c>: параметр перечитывается с нового объекта определения,
-    /// грани обязаны вырасти ровно на число рёбер, а объём — измениться согласно аналитическому
-    /// ожиданию, если вызывающий его задал. Нулевой катет отклоняется до обращения в COM, потому что
-    /// КОМПАС его принимает и создаёт признак с четырьмя нулевыми гранями при неизменном объёме
-    /// (F.12) — выдать такое за успех означало бы наврать про геометрию.
-    /// </para>
-    /// </remarks>
+    /// <summary>Chamfer over the explicitly referenced edges of the final body (docs/05 SM-11).</summary>
+    /// <remarks>Route MEASURED by probe F on 12.09.2026 on v24 and repeated here call for call:
+    /// <c>NewEntity(o3d_chamfer=33)</c> → <c>GetDefinition()</c> as <c>ksChamferDefinition</c> →
+    /// <c>SetChamferParam(transfer, d1, d2)</c> → <c>array()</c> as <c>ksEntityCollection</c> →
+    /// <c>Add(edge)</c> → <c>Create()</c> → <c>RebuildDocument()</c>. On a 100×80×10 plate four vertical
+    /// corner edges with 2×2 legs removed exactly 20·d₁·d₂ = 80 mm³ (F.2), an edit to 3×3 removed 180 (F.3),
+    /// and after save→close→reopen the feature was found in the tree and edited again (F.5). Edges come from
+    /// <c>kompas_read_topology</c> (final body), not from <c>EntityCollection(o3d_edge)</c>: that collection
+    /// also holds sketch contours — the very defect docs/04 §4.5 records for the historical fillet helper.
+    /// Success is not <c>Create()</c>: the parameter is re-read from a fresh definition object, the face count
+    /// must grow by exactly the number of edges, and the volume must change per the analytic expectation if
+    /// the caller supplied one. A zero leg is refused before COM because KOMPAS accepts it and creates a
+    /// feature with four zero faces at unchanged volume (F.12) — passing that off as success would lie about
+    /// the geometry.</remarks>
     public ChamferResult Chamfer(ChamferCommand command)
     {
         if (command.EdgeRefs is not { Count: > 0 } edgeRefs)
@@ -2505,9 +2376,9 @@ public sealed partial class Api5Session
                     details: new Dictionary<string, object?> { ["kind"] = stored.Kind });
             }
 
-            // Так же, как у скругления: коллекция признака принимает entity, а не интерфейс
-            // определения, и каким из трёх разворачиваний она получается — измерено (P2.2), а не
-            // предполагается. Каждый путь именуется в ответе.
+            // As with the fillet: the feature collection accepts an entity, not a definition interface, and
+            // which of the three unwrappings yields one is MEASURED (P2.2), not assumed. Each route is named
+            // in the answer.
             var unwrapped = UnwrapEdgeToEntity(edge, reference);
             entities.Add(unwrapped.Entity);
             unwrapRoutes.Add(unwrapped.Route);
@@ -2515,8 +2386,8 @@ public sealed partial class Api5Session
 
         if (command.Mode == ChamferMode.DistanceAngle)
         {
-            // Угла у ksChamferDefinition нет физически (замерено пробой F), поэтому этот способ
-            // идёт единственным известным маршрутом — IChamfer.Angle в API7 того же сеанса.
+            // ksChamferDefinition has no angle at all (MEASURED by probe F), so this mode goes by the only
+            // known route — IChamfer.Angle in API7 of the same session.
             return ChamferByAngle(
                 document, entities, command, volumeBefore, facesBefore, bodiesBefore, unwrapRoutes);
         }
@@ -2575,9 +2446,9 @@ public sealed partial class Api5Session
 
         if (!feature.Create())
         {
-            // Число ошибки признака — то, что КОМПАС сообщает о причине отказа именно этого
-            // создания (objectError измерен пробой L как читаемое поле состояния признака);
-            // молча отдать «Create()=false» без него означало бы оставить вызывающего гадать.
+            // The feature's error number is what KOMPAS reports for the reason this very creation failed
+            // (objectError was MEASURED by probe L as a readable feature-state field); returning
+            // "Create()=false" silently without it would leave the caller guessing.
             var objectError = (feature.GetFeature() as ksFeature)?.objectError;
             ComApartment.Release(feature);
             throw new KompasContractException(
@@ -2596,9 +2467,9 @@ public sealed partial class Api5Session
         var facesAfter = CountFaces(document);
         var bodiesAfter = CountBodies(document);
 
-        // Перечитывание с НОВОГО объекта определения: тот, чем писали, может быть кэшированным
-        // представлением, а «мы вызвали SetChamferParam» доказательством того, что модель сохранила,
-        // не является (тот же стандарт, что у G03 и у правки опоры в L11).
+        // Re-read from a NEW definition object: the one written through may be a cached view, and "we called
+        // SetChamferParam" is not evidence that the model stored it (the same standard as G03 and the support
+        // edit in L11).
         var readBack = (feature.GetDefinition() as ksChamferDefinition) is var fresh && fresh is not null
             ? ReadChamferParam(fresh)
             : null;
@@ -2683,11 +2554,9 @@ public sealed partial class Api5Session
             string.Join(", ", unwrapRoutes));
     }
 
-    /// <summary>
-    /// Правила «поля ↔ способ». Отклоняются до COM: КОМПАС принимает нулевой катет и создаёт
-    /// признак с нулевыми гранями при прежнем объёме (проба F.12), поэтому «неверный параметр»
-    /// обязан долетать до нас, а не превращаться в молча применённую геометрию.
-    /// </summary>
+    /// <summary>"Field ↔ mode" rules. Rejected before COM: KOMPAS accepts a zero leg and creates a feature
+    /// with zero faces at unchanged volume (probe F.12), so an "invalid parameter" must reach us rather than
+    /// become silently applied geometry.</summary>
     private static void ValidateChamferMode(ChamferCommand command)
     {
         if (command.Distance1Mm <= 0d || command.Distance2Mm is <= 0d)
@@ -2720,9 +2589,9 @@ public sealed partial class Api5Session
                     "либо вырождается в грань, либо не строится вовсе.",
                     RetryPolicy.Never);
             case ChamferMode.DistanceAngle when command.Distance2Mm is not null:
-                // Второй катет при этом способе нечем выразить: API7 берёт Distance1 и Angle.
-                // Принять число и проигнорировать его — значит выдать за применённый параметр
-                // тот, который запросили и не получили.
+                // The second leg cannot be expressed in this mode: API7 takes Distance1 and Angle. Accepting a
+                // number and ignoring it would pass off as applied a parameter that was requested and not
+                // obtained.
                 throw new KompasContractException(
                     ErrorCodes.InvalidArgument,
                     "При mode=distance_angle поле distance2_mm запрещено: сторону задаёт angle_deg " +
@@ -2731,10 +2600,8 @@ public sealed partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Катеты и признак стороны, перечитанные из определения. Запись, а не кортеж: «не прочиталось»
-    /// обязано отличаться от «прочиталось как ноль», и nullable-кортеж здесь не выражается.
-    /// </summary>
+    /// <summary>Legs and side flag re-read from the definition. A record, not a tuple: "did not read" must
+    /// differ from "read as zero", and a nullable tuple cannot express that.</summary>
     private sealed record ChamferParam(bool Transfer, double Distance1Mm, double Distance2Mm);
 
     private static ChamferParam? ReadChamferParam(ksChamferDefinition definition)
@@ -2779,12 +2646,10 @@ public sealed partial class Api5Session
         VerificationDto Verification,
         string EdgeUnwrapRoute);
 
-    /// <summary>
-    /// Результат фаски. Катеты возвращаются перечитанными из модели, а не теми, что передали:
-    /// «мы вызвали SetChamferParam» геометрическим фактом не является. <c>feature_ref</c> пуст,
-    /// когда признак создан, но не виден в дереве API5: ссылка, по которой правка всё равно
-    /// упала бы, честнее предупреждения.
-    /// </summary>
+    /// <summary>Chamfer result. The legs are returned re-read from the model, not as passed: "we called
+    /// SetChamferParam" is not a geometric fact. <c>feature_ref</c> is empty when the feature was created but
+    /// is not visible in the API5 tree: a reference the edit would fail on anyway is more honest than a
+    /// warning.</summary>
     public sealed record ChamferResult(
         ReferenceDto? FeatureRef,
         int EdgeCount,
@@ -2845,18 +2710,14 @@ public sealed partial class Api5Session
         return rows;
     }
 
-    /// <summary>
-    /// Reference to the sketch an extrusion is built on, or null when the feature has none or the
-    /// read-back fails.
-    /// </summary>
-    /// <remarks>
-    /// Always a freshly minted reference against the current revision: a handle stored from before a
+    /// <summary>Reference to the sketch an extrusion is built on, or null when the feature has none or the
+    /// read-back fails.</summary>
+    /// <remarks>Always a freshly minted reference against the current revision: a handle stored from before a
     /// rebuild is dropped by the registry, and minting here rather than reusing a remembered one is
     /// what makes the row usable on a document that was reopened. A failure to read the sketch is
     /// reported as null instead of an error — <c>kompas_list_features</c> must keep listing a
     /// document whose features it cannot fully describe, which is the same rule the rest of the row
-    /// already follows.
-    /// </remarks>
+    /// already follows.</remarks>
     private string? SketchRefOfFeature(DocumentEntry document, ksEntity entity)
     {
         try
@@ -3014,10 +2875,9 @@ public sealed partial class Api5Session
         {
             if (face.IsPlanar())
             {
-                // normalOrientation tells which way the surface normal points relative to the
-                // face; without resolving it the sign of the normal would be a guess. Неудачное
-                // чтение нормали тоже означает «неоднозначно»: отдать null при
-                // normalAmbiguous=false значило бы объявить несостоявшееся чтение достоверным.
+                // normalOrientation tells which way the surface normal points relative to the face; without
+                // resolving it the sign of the normal would be a guess. A failed normal read also means
+                // "ambiguous": returning null with normalAmbiguous=false would declare a failed read reliable.
                 normal = SurfaceNormalAtMiddle(face);
                 normalAmbiguous = normal is null;
             }
@@ -3085,7 +2945,7 @@ public sealed partial class Api5Session
         }
         catch (COMException)
         {
-            // Parameters КОМПАС did not give stay absent; the face remains a usable reference.
+            // Parameters KOMPAS did not give stay absent; the face remains a usable reference.
             return (null, null, null, null);
         }
     }
@@ -3379,8 +3239,8 @@ public sealed partial class Api5Session
             }
 
             var area = SafeDouble(() => face.GetArea((uint)KompasUnits.LengthMm)) ?? double.NaN;
-            // Нечитаемая нормаль остаётся отсутствием значения, а не нулевым вектором: (0,0,0)
-            // прошёл бы по нормали как «не совпало» и был бы неотличим от измеренной нормали.
+            // An unreadable normal stays an absent value, not a zero vector: (0,0,0) would pass the normal
+            // test as "did not match" and be indistinguishable from a measured normal.
             var normal = SurfaceNormalAtMiddle(face);
             candidates.Add((
                 ToDto(References.Register("face", document.Id, document.Revision, face), $"area {area:0.####} mm2"),
@@ -3448,9 +3308,9 @@ public sealed partial class Api5Session
         {
             if (normal is null)
             {
-                // Отбор по нормали грань не подтверждает и не опровергает: нормаль не прочитана.
-                // Выдуманный вектор здесь дал бы «не совпало», то есть отказ, неотличимый от
-                // измерения, — а не названное отсутствие данных.
+                // A normal-based selection neither confirms nor refutes the face: the normal was not read. An
+                // invented vector here would give "did not match", i.e. a refusal indistinguishable from a
+                // measurement, rather than a named absence of data.
                 return false;
             }
 
@@ -3483,25 +3343,22 @@ public sealed partial class Api5Session
             ? throw new KompasContractException(ErrorCodes.InvalidArgument, $"Ожидается координата [{index}] из двух значений.")
             : values[index];
 
-    /// <summary>
-    /// Конечные углы дуги для <c>ksArcByAngle</c>, приведённые в диапазон, который ядро принимает.
-    /// </summary>
+    /// <summary>Arc end angles for <c>ksArcByAngle</c>, brought into the range the kernel accepts.</summary>
     /// <remarks>
-    /// Измерено 20.09.2026 на поставке <c>publish-mania-20260920</c> зондом
-    /// <c>scratch/_arc_angle_range_probe.py</c>: вызов отказывает тогда и только тогда, когда
-    /// <c>start_deg + sweep_deg</c> покидает [−360°, 360°]. Старт ровно 360° и конец ровно 360°
-    /// допустимы (R3, R4 зонда). Поэтому углы сдвигаются на целое число оборотов — ровно на столько,
-    /// чтобы конец вошёл в диапазон; размах при сдвиге НЕ меняется, то есть дуга остаётся той же.
-    /// Если конечный угол уже внутри диапазона, значения возвращаются КАК ЕСТЬ: вызов остаётся
-    /// прежним. Но АДДИТИВНОСТЬ ДЕРЖИТСЯ ТОЛЬКО ВМЕСТЕ С ПОРЯДКОМ `Min`/`Max` У ВЫЗЫВАЮЩЕГО —
-    /// см. комментарий в ветке `SketchEntityKind.Arc`: передача «начало, конец» вместо «меньший,
-    /// больший» изменила результат на входах, которых правка не касалась (измерено контролем R8).
-    /// <para>
-    /// НЕ ИЗМЕРЕНО и потому НЕ трогается: случай <c>|sweep_deg| &gt; 360</c> с конечным углом ВНУТРИ
-    /// диапазона (например старт −180°, sweep +400°). Такой размах одной дугой не выражается
-    /// (два угла задают не более оборота), но что делает ядро сегодня — не измерялось, поэтому
-    /// поведение оставлено прежним, а не заменено догадкой.
-    /// </para>
+    /// MEASURED 20.09.2026 on the <c>publish-mania-20260920</c> delivery by probe
+    /// <c>scratch/_arc_angle_range_probe.py</c>: the call fails if and only if
+    /// <c>start_deg + sweep_deg</c> leaves [−360°, 360°]. A start of exactly 360° and an end of exactly
+    /// 360° are accepted (R3, R4 of the probe). The angles are therefore shifted by a whole number of
+    /// turns — exactly enough for the end to enter the range; the sweep does NOT change under the
+    /// shift, i.e. the arc stays the same. If the end angle is already inside the range, the values
+    /// are returned AS IS: the call stays as before. But ADDITIVITY HOLDS ONLY TOGETHER WITH THE
+    /// CALLER'S `Min`/`Max` ORDER — see the comment in the `SketchEntityKind.Arc` branch: passing
+    /// "start, end" instead of "smaller, larger" changed the result on inputs the edit did not touch
+    /// (measured by control R8).
+    /// LIMIT: NOT MEASURED and therefore NOT touched — the case <c>|sweep_deg| &gt; 360</c> with the end
+    /// angle INSIDE the range (e.g. start −180°, sweep +400°). Such a sweep cannot be expressed by one
+    /// arc (two angles define at most one turn), but what the kernel does today was not measured, so
+    /// the behaviour is left as before rather than replaced by a guess.
     /// </remarks>
     private static (double First, double Second) ArcEndpoints(double startDeg, double sweepDeg)
     {
@@ -3524,10 +3381,8 @@ public sealed partial class Api5Session
     private static double Required(double? value, string field) =>
         value ?? throw new KompasContractException(ErrorCodes.InvalidArgument, $"Поле '{field}' обязательно.");
 
-    /// <summary>
-    /// A collection element is exposed as <c>object</c>; it is either the definition interface
-    /// directly or an <c>ksEntity</c> that has to be unwrapped (both shapes occur — spec 4.5).
-    /// </summary>
+    /// <summary>A collection element is exposed as <c>object</c>; it is either the definition interface
+    /// directly or an <c>ksEntity</c> that has to be unwrapped (both shapes occur — spec 4.5).</summary>
     private static TInterface? AsInterface<TInterface>(object? element)
         where TInterface : class
     {
@@ -3628,10 +3483,8 @@ public sealed partial class Api5Session
         return area;
     }
 
-    /// <summary>
-    /// Mass-centre properties with an explicit unit selector: millimetres for length, kilograms
-    /// for mass, so <c>v</c> is mm³, <c>F</c> mm² and <c>m</c> kg.
-    /// </summary>
+    /// <summary>Mass-centre properties with an explicit unit selector: millimetres for length, kilograms
+    /// for mass, so <c>v</c> is mm³, <c>F</c> mm² and <c>m</c> kg.</summary>
     private static ksMassInertiaParam? MassProperties(ksBody body, uint unitBits)
     {
         try
@@ -3708,17 +3561,15 @@ public sealed partial class Api5Session
     };
 }
 
-/// <summary>
-/// Результат правки эскиза. <see cref="DeletedEntities"/> считает то, что действительно удалилось
-/// (по соглашению вендора 1 = успех, и удаление идёт объектом, найденным по сохранённой
-/// координате), а <see cref="ExpectedDeleted"/> — сколько ожидалось. Разница наружу не
-/// сглаживается: частичная очистка означает грязный профиль, а не удалённую правку.
-/// </summary>
+/// <summary>Result of a sketch edit. <see cref="DeletedEntities"/> counts what was actually deleted (by the
+/// vendor convention 1 = success, and deletion goes by the object found at the stored coordinate),
+/// while <see cref="ExpectedDeleted"/> is how many were expected. The difference is not smoothed
+/// away: a partial cleanup means a dirty profile, not a deleted edit.</summary>
 /// <param name="ProbePointsFromModel">
-/// True, когда координаты для поиска удаляемых объектов выведены из геометрии зависимого тела,
-/// а не взяты из памяти сеанса. Вызывающему это нужно знать: маршрут работает для эскиза, которого
-/// сервер не рисовал, но ограничен измеренной конфигурацией (основная XY, окружность в профиле,
-/// сквозное вырезание) — см. <c>SketchPointDerivation</c>.
+/// True when the coordinates for finding the objects to delete are derived from the geometry of the
+/// dependent body rather than taken from session memory. The caller needs to know: the route works
+/// for a sketch the server did not draw, but is limited to the measured configuration (base XY, a
+/// circle in the profile, through-cut) — see <c>SketchPointDerivation</c>.
 /// </param>
 public sealed record EditSketchResult(
     int EntityCount,
@@ -3732,11 +3583,11 @@ public sealed record EditSketchResult(
 public sealed record FinishSketchResult(bool ProfileClosedConfirmed, IReadOnlyList<string> UnverifiedAspects);
 
 /// <summary>
-/// Результат выдавливания. <see cref="TargetBodyIndex"/> — индекс того тела, которое вызывающий
-/// объявил целью (null, когда цель не объявлялась), а <see cref="BodyChanges"/> — чем на самом
-/// деле закончились измерения для каждого тела до и после. Оба поля существуют потому, что
-/// <c>Create() == true</c> ничего не доказывает: проба P2.6 измерила, что при противоречии заявленной
-/// цели и расположения контура КОМПАС отвечает true на всех вызовах и не меняет ни одного тела.
+/// Result of an extrusion. <see cref="TargetBodyIndex"/> is the index of the body the caller declared
+/// as the target (null when no target was declared), and <see cref="BodyChanges"/> is what the
+/// measurements for each body before and after actually ended up being. Both fields exist because
+/// <c>Create() == true</c> proves nothing: probe P2.6 measured that, when the declared target and the
+/// contour's location contradict each other, KOMPAS answers true on every call and changes no body.
 /// </summary>
 public sealed record ExtrudeResult(
     ReferenceDto FeatureRef,
@@ -3745,15 +3596,15 @@ public sealed record ExtrudeResult(
     VerificationDto Verification,
     int? TargetBodyIndex = null,
     IReadOnlyList<string>? BodyChanges = null,
-    /// <summary>Сумма объёмов всех тел документа ДО операции. null — не прочитана.</summary>
+    /// <summary>Sum of the volumes of all bodies in the document BEFORE the operation. null — not read.</summary>
     double? DocumentVolumeBeforeMm3 = null,
-    /// <summary>Сумма объёмов всех тел документа ПОСЛЕ операции — та же величина, что <see cref="VolumeMm3"/>.</summary>
+    /// <summary>Sum of the volumes of all bodies in the document AFTER the operation — the same quantity as <see cref="VolumeMm3"/>.</summary>
     double? DocumentVolumeAfterMm3 = null,
-    /// <summary>Приращение материала ЭТИМ признаком (у cut — снятое). null — не измерено, не ноль.</summary>
+    /// <summary>Material increment by THIS feature (for cut — removed). null — not measured, not zero.</summary>
     double? VolumeDeltaMm3 = null,
-    /// <summary>Основание приращения: <c>target_body_N</c>, <c>new_body_volume</c>, <c>existing_body_N_delta</c> или <c>not_attributable</c>.</summary>
+    /// <summary>Basis of the increment: <c>target_body_N</c>, <c>new_body_volume</c>, <c>existing_body_N_delta</c> or <c>not_attributable</c>.</summary>
     string? VolumeDeltaBasis = null,
-    /// <summary>Что означает <see cref="VolumeMm3"/>. Названо, потому что раньше поле несло две разные величины.</summary>
+    /// <summary>What <see cref="VolumeMm3"/> means. Named because the field used to carry two different quantities.</summary>
     string? VolumeNote = null);
 
 public sealed record RebuildResult(long NewRevision, DocumentContextDto Context);

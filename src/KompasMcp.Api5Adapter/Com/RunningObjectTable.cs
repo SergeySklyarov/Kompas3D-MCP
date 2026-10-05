@@ -6,16 +6,12 @@ namespace KompasMcp.Api5Adapter.Com;
 
 public sealed record RotEntry(string DisplayName, object? Object, string? Error);
 
-/// <summary>
-/// Reads the running object table so <c>attach</c> can say how many КОМПАС instances are
+/// <summary>Reads the running object table so <c>attach</c> can say how many KOMPAS instances are
 /// reachable instead of grabbing whichever object COM hands back first (spec 1.6: several
-/// instances that cannot be disambiguated must produce AMBIGUOUS_APPLICATION).
-/// </summary>
-/// <remarks>
-/// The ROT is the only place that lists *existing* out-of-process servers without starting a new
+/// instances that cannot be disambiguated must produce AMBIGUOUS_APPLICATION).</summary>
+/// <remarks>The ROT is the only place that lists *existing* out-of-process servers without starting a new
 /// one. Note what it does NOT give us: a display name is a moniker string, not a process id, so
-/// PID attribution still has to be proved separately (see P0 step P0.4).
-/// </remarks>
+/// PID attribution still has to be proved separately (see P0 step P0.4).</remarks>
 public static class RunningObjectTable
 {
     [DllImport("ole32.dll", PreserveSig = false)]
@@ -26,13 +22,11 @@ public static class RunningObjectTable
     [DllImport("ole32.dll", PreserveSig = false)]
     private static extern void GetRunningObjectTable(int reserved, out IRunningObjectTable prot);
 
-    /// <summary>
-    /// ROT entries for one specific КОМПАС ProgID (default <c>KOMPAS.Application.5</c>), plus any
-    /// entry whose display name mentions КОМПАС by text.
-    /// </summary>
+    /// <summary>ROT entries for one specific KOMPAS ProgID (default <c>KOMPAS.Application.5</c>), plus any
+    /// entry whose display name mentions KOMPAS by text.</summary>
     /// <param name="progId">
     /// The ProgID whose CLSID identifies the instance we can actually use. Scoping to one ProgID is
-    /// deliberate: one running КОМПАС registers <b>both</b> the API5 and the API7 CLSIDs, so
+    /// deliberate: one running KOMPAS registers <b>both</b> the API5 and the API7 CLSIDs, so
     /// matching every known CLSID reports a single instance as two candidates — and the API7 object
     /// cannot be cast to <c>KompasObject</c> anyway, so it can never be a valid attach target.
     /// </param>
@@ -99,16 +93,12 @@ public static class RunningObjectTable
         return result;
     }
 
-    /// <summary>
-    /// Every entry in the ROT, unfiltered, up to <paramref name="max"/>.
-    /// </summary>
-    /// <remarks>
-    /// Exists because "0 КОМПАС entries" means one of two completely different things: the table
+    /// <summary>Every entry in the ROT, unfiltered, up to <paramref name="max"/>.</summary>
+    /// <remarks>Exists because "0 KOMPAS entries" means one of two completely different things: the table
     /// really has none, or this enumerator cannot see any. Without this count the two are
-    /// indistinguishable, and a broken filter would be reported as a property of КОМПАС. A desktop
+    /// indistinguishable, and a broken filter would be reported as a property of KOMPAS. A desktop
     /// with Explorer running normally has at least a few entries (Shell.Windows and similar), so a
-    /// total of zero points at the enumerator, not at the CAD application.
-    /// </remarks>
+    /// total of zero points at the enumerator, not at the CAD application.</remarks>
     public static (int Total, IReadOnlyList<string> Names) EnumerateAllEntries(int max = 40)
     {
         var names = new List<string>();
@@ -158,16 +148,12 @@ public static class RunningObjectTable
         return (total, names);
     }
 
-    /// <summary>
-    /// Recognises a КОМПАС ROT entry.
-    /// </summary>
-    /// <remarks>
-    /// КОМПАС registers in the ROT under its <b>CLSID</b> — display name <c>!{6B0B5194-…}</c> —
-    /// not under any readable name. Matching on "kompas"/"КОМПАС"/"ascon" therefore finds nothing
+    /// <summary>Recognises a KOMPAS ROT entry.</summary>
+    /// <remarks>KOMPAS registers in the ROT under its <b>CLSID</b> — display name <c>!{6B0B5194-…}</c> —
+    /// not under any readable name. Matching on "kompas"/"KOMPAS"/"ascon" therefore finds nothing
     /// and makes a working attach look impossible: that false negative was reported as a property
-    /// of КОМПАС until the unfiltered ROT dump exposed it. The friendly-name test is kept only as a
-    /// secondary, for instances that register by ProgID.
-    /// </remarks>
+    /// of KOMPAS until the unfiltered ROT dump exposed it. The friendly-name test is kept only as a
+    /// secondary, for instances that register by ProgID.</remarks>
     private static bool MatchesProgId(string name, string? clsid)
     {
         if (clsid is not null && name.Contains(clsid, StringComparison.OrdinalIgnoreCase))

@@ -5,16 +5,12 @@ using KompasMcp.Api5Adapter.Com;
 
 namespace KompasMcp.Api5Adapter.Api7;
 
-/// <summary>
-/// Сущность эскиза как ОБЪЕКТ с АДРЕСОМ. Пустое поле означает «не прочитано», а не ноль; причина
-/// называется в <see cref="Notes"/>.
-/// </summary>
-/// <remarks>
-/// <see cref="Address"/> — не «N-й нарисованный сервером» и не координата: это строка, которую
-/// выдаёт <c>IKompasDocument1.GetObjectId</c>, и которую <c>IKompasDocument1.FindObjectById</c>
-/// принимает обратно. Именно поэтому адрес годится как вход правки, а сохранённая координата —
-/// нет (приёмочное требование <c>dep.sketch.entities</c>).
-/// </remarks>
+/// <summary>A sketch entity as an OBJECT with an ADDRESS. An empty field means "not read", not zero;
+/// the reason is named in <see cref="Notes"/>.</summary>
+/// <remarks>INVARIANT: <see cref="Address"/> is neither "the N-th drawn by the server" nor a
+/// coordinate — it is the string that <c>IKompasDocument1.GetObjectId</c> issues and
+/// <c>IKompasDocument1.FindObjectById</c> accepts back. That is why the address is usable as an edit
+/// input and a saved coordinate is not (acceptance requirement <c>dep.sketch.entities</c>).</remarks>
 internal sealed record SketchEntityRow(
     int Index,
     string? Address,
@@ -23,73 +19,53 @@ internal sealed record SketchEntityRow(
     int? TypeCode,
     IReadOnlyList<string> Notes);
 
-/// <summary>Итог перечисления сущностей эскиза: строки, маршрут и счётчики по коллекциям.</summary>
+/// <summary>Result of enumerating sketch entities: rows, route and per-collection counts.</summary>
 internal sealed record SketchEntitiesRead(
     IReadOnlyList<SketchEntityRow> Rows,
     IReadOnlyDictionary<string, int?> CollectionCounts,
     string Route,
     IReadOnlyList<string> Notes);
 
-/// <summary>
-/// Сущности эскиза: вход в СУЩЕСТВУЮЩИЙ эскиз, перечисление объектов вида и устойчивый адрес
-/// объекта (<c>dep.sketch.entities</c>, шаг 0 наряда продуктовых маршрутов).
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Маршрут — из официальной справки v24, а не из догадки</b> (отчёт
-/// <c>DEPENDENCIES_PRODUCT_ROUTES_STEP0_REPORT_20260921.md</c> §6.4):
-/// <c>ISketch.BeginEdit</c> → <c>IFragmentDocument</c> → <c>IViewsAndLayersManager.Views</c> →
-/// <c>IView</c> → <c>IDrawingContainer.GetObjects</c>; адрес — <c>IKompasDocument1.GetObjectId</c>;
-/// выход — <c>ISketch.EndEdit</c>.
-/// </para>
-/// <para>
-/// <b>Четыре расхождения справки с поставленным interop'ом, и все четыре ИЗМЕРЕНЫ</b>
-/// (прибор <c>tools/KompasMcp.InteropScan</c> по
-/// <c>Libs/PolynomLib/Bin/Client/Interop.KompasAPI7.dll</c> целевой сборки 24.0.0.2799):
-/// </para>
-/// <list type="number">
-/// <item>Страница называет <c>BeginEdit(bool readOnly)</c>; в interop это ДВА члена —
-/// <c>BeginEdit()</c> и <c>BeginEditEx(Boolean ReadOnly)</c>. Режим «только чтение» берётся
-/// <c>BeginEditEx(true)</c>; вызов <c>BeginEdit()</c> открыл бы эскиз на запись, то есть чтение
-/// получило бы право менять модель. Поэтому здесь вызывается только <c>BeginEditEx(true)</c>.</item>
-/// <item>Страница называет адрес членом <c>IKompasDocument.GetObjectId</c>; в поставке он объявлен
-/// на <c>IKompasDocument1</c> (IID <c>{58890FE8-E671-4561-994A-600DD29032E4}</c>), и у
-/// <c>IKompasDocument</c> его НЕТ вовсе. Требуется QI, и он здесь делается явно.</item>
-/// <item>Страница называет <c>IDrawingContainer.GetObjects(std::vector&lt;int32_t&gt;)</c>; в
-/// interop параметр объявлен как <c>Object</c> (SAFEARRAY), поэтому передаётся массив
-/// <c>int[]</c>. Коллекция <c>IView</c> при этом НЕ несёт <c>Objects</c>: приведение
-/// <c>IView</c> → <c>IDrawingContainer</c> обязательно и делается QI.</item>
-/// <item><c>FragmentDocument</c> в interop — co-class с НУЛЁМ членов; члены живут на
-/// <c>IFragmentDocument</c> (тот же IID <c>{E19CE626-DF9C-48C4-A83D-3E3BC7F0DACA}</c>). Поэтому
-/// приведение к <c>IFragmentDocument</c> — часть маршрута, а не украшение.</item>
-/// </list>
-/// <para>
-/// <b>Чего в поставке НЕТ вовсе, и это тоже измерено:</b> члена с подстрокой <c>ByName</c> в
-/// <c>Interop.KompasAPI7.dll</c> — <b>ноль</b>, тогда как справка документирует
-/// <c>IAxes3D.GetAxis3DByName</c>, <c>IPoints3D.GetPoint3DByName</c> и
-/// <c>ISketchs.GetSketchByName</c>. Поэтому «имя как устойчивый адрес» реализуется ПЕРЕЧИСЛЕНИЕМ
-/// коллекции со сравнением <c>Name</c> — составленным из документированных членов
-/// (<c>Count</c>, индексированное свойство, <c>Name</c>), а не недокументированным обходом.
-/// </para>
-/// </remarks>
+/// <summary>Sketch entities: entering an EXISTING sketch, enumerating the view's objects and a stable
+/// object address (<c>dep.sketch.entities</c>, step 0 of the product-routes order).</summary>
+/// <remarks>DOC: the route is from the official v24 help, not a guess
+/// (<c>DEPENDENCIES_PRODUCT_ROUTES_STEP0_REPORT_20260921.md</c> §6.4): <c>ISketch.BeginEdit</c> →
+/// <c>IFragmentDocument</c> → <c>IViewsAndLayersManager.Views</c> → <c>IView</c> →
+/// <c>IDrawingContainer.GetObjects</c>; the address is <c>IKompasDocument1.GetObjectId</c>; the exit is
+/// <c>ISketch.EndEdit</c>.
+/// MEASURED (InteropScan over <c>Libs/PolynomLib/Bin/Client/Interop.KompasAPI7.dll</c>, build
+/// 24.0.0.2799): four divergences between the help and the shipped interop. (1) The page names
+/// <c>BeginEdit(bool readOnly)</c>, the interop has TWO members <c>BeginEdit()</c> and
+/// <c>BeginEditEx(Boolean ReadOnly)</c>, so read-only mode is <c>BeginEditEx(true)</c> and a bare
+/// <c>BeginEdit()</c> would open the sketch for writing. (2) The page puts the address on
+/// <c>IKompasDocument.GetObjectId</c>, but it is declared on <c>IKompasDocument1</c>
+/// (IID <c>{58890FE8-E671-4561-994A-600DD29032E4}</c>) and absent from <c>IKompasDocument</c> — a QI
+/// is required and is done explicitly. (3) The page names
+/// <c>IDrawingContainer.GetObjects(std::vector&lt;int32_t&gt;)</c>, but the interop parameter is
+/// declared <c>Object</c> (SAFEARRAY), so an <c>int[]</c> is passed; <c>IView</c> does not itself
+/// carry <c>Objects</c>, so a QI to <c>IDrawingContainer</c> is mandatory. (4) <c>FragmentDocument</c>
+/// is a co-class with ZERO members; its members live on <c>IFragmentDocument</c> (same IID
+/// <c>{E19CE626-DF9C-48C4-A83D-3E3BC7F0DACA}</c>), so that cast is part of the route.
+/// MEASURED: the shipped assembly has ZERO members containing <c>ByName</c>, whereas the help
+/// documents <c>IAxes3D.GetAxis3DByName</c>, <c>IPoints3D.GetPoint3DByName</c> and
+/// <c>ISketchs.GetSketchByName</c>; therefore "name as a stable address" is implemented by
+/// ENUMERATING the collection and comparing <c>Name</c>, assembled only from documented members
+/// (<c>Count</c>, the indexed property, <c>Name</c>).
+/// History: docs/decisions/adapter-api7.md#sketch-entities</remarks>
 internal static class Api7SketchEntities
 {
-    /// <summary>Маршрут перечисления. Строка уходит в ответ клиенту и в доказательства приёмки,
-    /// поэтому она одна на оба места: расхождение сделало бы записи несравнимыми.</summary>
+    /// <summary>Enumeration route. The string goes to the client response and to the acceptance
+    /// evidence, so it is one for both: a divergence would make the records incomparable.</summary>
     public const string Route =
         "ISketch.BeginEditEx(true) → IFragmentDocument.ViewsAndLayersManager.Views → " +
         "IView(QI IDrawingContainer).GetObjects(ksAllObj) → IKompasDocument1.GetObjectId → " +
         "ISketch.EndEdit()";
 
-    /// <summary>
-    /// Документ, которому принадлежит объект: подъём по <c>Parent</c> до <c>IKompasDocument</c>.
-    /// </summary>
-    /// <remarks>
-    /// Почему не <c>IApplication.ActiveDocument</c>: «активный документ» — это состояние окна, а не
-    /// свойство объекта. Эскиз в неактивном документе читался бы адресом ЧУЖОГО документа, и это
-    /// был бы не отказ, а тихо неверный ответ. Подъём по <c>Parent</c> идёт от самого объекта и
-    /// потому от активности окна не зависит.
-    /// </remarks>
+    /// <summary>The document the object belongs to: walking up <c>Parent</c> to <c>IKompasDocument</c>.</summary>
+    /// <remarks>Why not <c>IApplication.ActiveDocument</c>: "the active document" is window state, not
+    /// a property of the object. A sketch in an inactive document would be read with a FOREIGN
+    /// document's address — a silently wrong answer, not a refusal. The <c>Parent</c> walk starts from
+    /// the object itself and so does not depend on window activity.</remarks>
     private static IKompasDocument? DocumentOf(IKompasAPIObject? start)
     {
         var node = start;
@@ -118,10 +94,8 @@ internal static class Api7SketchEntities
         }
     }
 
-    /// <summary>
-    /// Перечислить сущности эскиза с адресами. Возвращает либо строки, либо НАЗВАННУЮ причину,
-    /// почему перечисление не состоялось: пустой список и «не прочитано» — разные состояния.
-    /// </summary>
+    /// <summary>Enumerate the sketch entities with addresses. Returns either the rows or a NAMED reason
+    /// why enumeration did not happen: an empty list and "not read" are different states.</summary>
     public static (SketchEntitiesRead? Read, string? Failure) Read(
         Api7Bridge bridge, object sketch5, int limit)
     {
@@ -130,7 +104,7 @@ internal static class Api7SketchEntities
             return (null, "эскиз не переносится в API7 как ISketch");
         }
 
-        // Адрес выдаёт ДОКУМЕНТ, поэтому он нужен до входа в редактирование.
+        // The DOCUMENT issues the address, so it is needed before entering edit mode.
         var document = DocumentOf(sketch as IKompasAPIObject);
         if (document is null)
         {
@@ -147,8 +121,9 @@ internal static class Api7SketchEntities
         FragmentDocument? fragment;
         try
         {
-            // BeginEditEx(true) — ТОЛЬКО ЧТЕНИЕ. BeginEdit() открыл бы эскиз на запись, и чтение
-            // получило бы право менять модель: это разные члены, а не перегрузки с умолчанием.
+            // BeginEditEx(true) is READ-ONLY. BeginEdit() would open the sketch for writing, giving a
+            // read the right to change the model: these are different members, not overloads with a
+            // default.
             fragment = sketch.BeginEditEx(true);
         }
         catch (COMException ex)
@@ -181,20 +156,15 @@ internal static class Api7SketchEntities
             var rows = new List<SketchEntityRow>();
             var notes = new List<string>();
 
-            // АДРЕС ВЫДАЁТ ДОКУМЕНТ ФРАГМЕНТА, А НЕ ДОКУМЕНТ ДЕТАЛИ. Измерено 21.09.2026
-            // (scratch/_probe_dse_dpt.py, различающий замер по получателю и родителю, бинари
-            // publish-deproutes-20260921-e):
-            //   A: часть,    parent=null        → «» (пусто)
-            //   B: фрагмент, parent=null        → {"version":"402653244","type":"1",
-            //                                       "data":{"type2D":"2","viewId":"1","objId":"1"}}
-            //   C: фрагмент, parent=фрагмент    → тот же адрес
-            //   D: фрагмент, parent=родитель    → тот же адрес
-            //   E/F/G: часть, parent=фрагмент/эскиз/родитель → «»
-            // Причина: справка объявляет parent как «родительский документ объекта (nullptr —
-            // текущий документ)», а текущий документ при BeginEditEx — фрагмент эскиза; сущность
-            // живёт в нём, поэтому документ детали не может её адресовать. Фрагмент отвечает
-            // QI(IKompasDocument1) (измерено там же: True), хотя IFragmentDocument этого члена не
-            // объявляет: у него свои 44 члена и IID {E19CE626-DF9C-48C4-A83D-3E3BC7F0DACA}.
+            // THE FRAGMENT DOCUMENT ISSUES THE ADDRESS, NOT THE PART DOCUMENT. MEASURED 21.09.2026
+            // (scratch/_probe_dse_dpt.py, discriminating probe over receiver and parent, binaries
+            // publish-deproutes-20260921-e): only a FRAGMENT receiver yields a non-empty address,
+            // while a part receiver yields "" for every parent. DOC: the help declares parent as
+            // «родительский документ объекта (nullptr — текущий документ)», and under BeginEditEx the
+            // current document is the sketch fragment, where the entity lives. The fragment answers
+            // QI(IKompasDocument1) (measured: True) even though IFragmentDocument does not declare
+            // that member.
+            // History: docs/decisions/adapter-api7.md#sketch-address
             var fragmentAsDocument = fragment as IKompasDocument1;
             notes.Add(fragmentAsDocument is not null
                 ? "Адрес выдаёт документ фрагмента эскиза: он отвечает QI(IKompasDocument1), и " +
@@ -224,8 +194,8 @@ internal static class Api7SketchEntities
                     continue;
                 }
 
-                // Счётчики по типам читаются с САМОГО ВИДА, потому что он и есть контейнер
-                // графических объектов; IView при этом не несёт Objects — нужен QI.
+                // Per-type counts are read from the VIEW itself, because it is the container of
+                // graphic objects; IView does not itself carry Objects — a QI is needed.
                 var container = view as IDrawingContainer;
                 if (container is null)
                 {
@@ -241,9 +211,9 @@ internal static class Api7SketchEntities
                 counts[$"view{v}.rectangles"] = SafeI(() => container.Rectangles?.Count);
                 counts[$"view{v}.points"] = SafeI(() => container.Points?.Count);
 
-                // ksAllObj = 0 — «все типы» из официального перечисления DrawingObjectTypeEnum
-                // (Interop.Kompas6Constants). Передаётся МАССИВОМ: в interop параметр объявлен
-                // Object (SAFEARRAY), а не отдельным числом.
+                // DOC: ksAllObj = 0 means "all types" in the official DrawingObjectTypeEnum
+                // (Interop.Kompas6Constants). It is passed AS AN ARRAY: in the interop the parameter
+                // is declared Object (SAFEARRAY), not a single number.
                 var objects = ReadObjects(container, notes, v);
                 foreach (var item in objects)
                 {
@@ -261,16 +231,16 @@ internal static class Api7SketchEntities
         }
         finally
         {
-            // Выход из редактирования обязателен и в ветке отказа: открытый на чтение фрагмент
-            // держал бы эскиз в режиме правки, и следующий вызов получил бы занятую модель.
+            // Leaving edit mode is mandatory on the failure path too: a fragment left open for
+            // reading would keep the sketch in edit mode, and the next call would find the model busy.
             try
             {
                 sketch.EndEdit();
             }
             catch (Exception ex) when (ex is COMException or InvalidCastException)
             {
-                // Выход не удался — это не повод вернуть ложный успех, но и не повод потерять
-                // прочитанное: причина останется в журнале вызовов.
+                // A failed exit is no reason to return a false success, nor to lose what was read:
+                // the reason stays in the call journal.
             }
         }
     }
@@ -316,32 +286,19 @@ internal static class Api7SketchEntities
         {
             try
             {
-                // ПОЛУЧАТЕЛЬ АДРЕСА — ДОКУМЕНТ ФРАГМЕНТА, А НЕ ДОКУМЕНТ ДЕТАЛИ, и это ИЗМЕРЕНО, а
-                // не выведено. Справка целевой версии (ksapi_ikompasdocument_getobjectid.html)
-                // объявляет: `std::wstring GetObjectId(const IKompasAPIObjectPtr & object,
-                // const IKompasAPIObjectPtr & parent)`, «parent — родительский документ объекта
-                // (nullptr - текущий документ)». При `ISketch.BeginEditEx(true)` текущим документом
-                // становится фрагмент эскиза, и сущность принадлежит ему.
-                //
-                // Различающий замер 21.09.2026 (scratch/_probe_dse_dpt.py по бинарям
-                // publish-deproutes-20260921-e, семь кандидатов, исход каждого назван):
-                //   A: часть,    parent=null      → «»
-                //   B: фрагмент, parent=null      → непустой адрес (победитель)
-                //   C: фрагмент, parent=фрагмент  → тот же адрес
-                //   D: фрагмент, parent=родитель  → тот же адрес
-                //   E: часть, parent=фрагмент     → «»
-                //   F: часть, parent=эскиз        → «»
-                //   G: часть, parent=родитель     → «»
-                // Отказ был МОЛЧАЛИВЫМ: пустая строка без исключения. Прежняя редакция передавала
-                // вторым параметром `apiObject.Parent` (вид) и получала «» на всех четырёх
-                // сущностях; затем `null` — тоже «», потому что получателем оставался документ
-                // детали. Оба отказа записаны в дневном журнале, а не стёрты.
-                //
-                // Второй параметр — `null`, и это ЕДИНСТВЕННАЯ выразимая форма: в поставленном
-                // Interop.KompasAPI7.dll `IKompasDocument1` НЕ является `IKompasAPIObject`
-                // (измерено компиляцией: `CS1503: cannot convert from 'IKompasDocument1' to
-                // 'IKompasAPIObject'`). Поэтому «текущий документ» выражается отсутствием родителя,
-                // а документ-получатель назван явно.
+                // THE ADDRESS RECEIVER IS THE FRAGMENT DOCUMENT, NOT THE PART DOCUMENT — MEASURED,
+                // not derived. DOC (ksapi_ikompasdocument_getobjectid.html): GetObjectId(object,
+                // parent), «parent — родительский документ объекта (nullptr - текущий документ)».
+                // Under BeginEditEx(true) the current document is the sketch fragment, and the
+                // entity belongs to it. MEASURED 21.09.2026 (scratch/_probe_dse_dpt.py,
+                // publish-deproutes-20260921-e, seven candidates): a fragment receiver yields a
+                // non-empty address, a part receiver yields "" (a SILENT refusal — empty string, no
+                // exception). The second parameter is `null`, the ONLY expressible form: in the
+                // shipped Interop.KompasAPI7.dll `IKompasDocument1` is NOT an `IKompasAPIObject`
+                // (CS1503: cannot convert from 'IKompasDocument1' to 'IKompasAPIObject'), so "the
+                // current document" is expressed by the absence of a parent while the receiver
+                // document is named explicitly.
+                // History: docs/decisions/adapter-api7.md#sketch-address
                 var addressDocument = fragmentDocument ?? document;
                 address = addressDocument.GetObjectId(apiObject, null);
                 if (fragmentDocument is null)
@@ -356,9 +313,9 @@ internal static class Api7SketchEntities
                 local.Add($"адрес не выдан: {ex.GetType().Name}");
             }
 
-            // Тип объекта модели читается у IKompasAPIObject — это единственный член перечисления,
-            // который несёт ВСЯКИЙ объект API7 (у IKompasAPIObject их всего четыре: Application,
-            // Parent, Reference, Type).
+            // The model-object type is read from IKompasAPIObject — the only enumeration member EVERY
+            // API7 object carries (IKompasAPIObject has just four: Application, Parent, Reference,
+            // Type).
             typeCode = ReadInt(() => (int)apiObject.Type, local, "тип объекта модели");
             kind = ReadString(() => apiObject.Type.ToString(), local, "вид объекта модели");
         }
@@ -369,9 +326,9 @@ internal static class Api7SketchEntities
 
         if (item is IDrawingObject drawing)
         {
-            // Вид примитива берётся из IDrawingObject.DrawingObjectType: это и есть «отрезок /
-            // окружность / дуга / полилиния» из приёмочного перечня типов. Номер типа публикуется
-            // ЧИСЛОМ, а не подменяется именем, если значение вне объявленного перечисления.
+            // The primitive kind comes from IDrawingObject.DrawingObjectType — the "segment / circle /
+            // arc / polyline" of the acceptance type list. The type number is published AS A NUMBER
+            // and is not replaced by a name if the value falls outside the declared enumeration.
             var drawingKind = ReadString(
                 () => drawing.DrawingObjectType.ToString(), local, "вид графического объекта");
             var drawingCode = ReadInt(
@@ -387,10 +344,11 @@ internal static class Api7SketchEntities
             }
         }
 
-        // ИМЯ ГРАФИЧЕСКОГО ОБЪЕКТА В API НЕТ, и это измерено: у IDrawingObject члены — Application,
-        // Delete, DrawingObjectParamType, DrawingObjectType, LayerNumber, Parent, Reference, Temp,
-        // Type, Update, Valid; члена «имя» среди них нет. Поэтому пустое имя здесь означает
-        // «не публикуется маршрутом», а не «объект без имени»: идентичность несёт адрес.
+        // MEASURED: a graphic object has NO NAME in the API — IDrawingObject's members are
+        // Application, Delete, DrawingObjectParamType, DrawingObjectType, LayerNumber, Parent,
+        // Reference, Temp, Type, Update, Valid, with no name member. An empty name here therefore
+        // means "not published by the route", not "an object without a name": identity is carried by
+        // the address.
         if (item is IModelObject model)
         {
             name = ReadString(() => model.Name, local, "имя объекта модели");
@@ -438,24 +396,13 @@ internal static class Api7SketchEntities
         }
     }
 
-    /// <summary>
-    /// Опорная плоскость СУЩЕСТВУЮЩЕГО эскиза: <c>ISketch.Plane</c>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Это и есть маршрут действий <c>DEP.DPL.03.read</c> и <c>DEP.DPL.04.edit</c></b>
-    /// (отчёт шага 0 §6.1 п. 7): чтение и смена опоры существующего эскиза. Прежняя правка признака
-    /// полем <c>plane</c> ПРИНИМАЛАСЬ и геометрию не меняла — измерено строкой <c>DEP.DPL.04.edit</c>
-    /// прежнего прогона; там же записано, что смены опоры нет. Здесь она появляется отдельным
-    /// маршрутом, а не расширением чужого поля.
-    /// </para>
-    /// <para>
-    /// <b>Справка называет члены <c>GetPlane</c>/<c>SetPlane</c>, в interop это свойство.</b>
-    /// Измерено: <c>IModelObject get_Plane()</c> и <c>Void set_Plane(IModelObject)</c> — то есть
-    /// чтение и запись одного свойства, а не два метода. Запись в C# выглядит как присваивание, и
-    /// это ровно тот же вызов, что описан страницей.
-    /// </para>
-    /// </remarks>
+    /// <summary>The datum plane of an EXISTING sketch: <c>ISketch.Plane</c>.</summary>
+    /// <remarks>The route of actions <c>DEP.DPL.03.read</c> and <c>DEP.DPL.04.edit</c> (step-0 report
+    /// §6.1 item 7): reading and changing the datum of an existing sketch.
+    /// MEASURED: the help names members <c>GetPlane</c>/<c>SetPlane</c>, but the interop declares ONE
+    /// property — <c>IModelObject get_Plane()</c> and <c>Void set_Plane(IModelObject)</c>; a C#
+    /// assignment is exactly the call the page describes.
+    /// History: docs/decisions/adapter-api7.md#sketch-plane</remarks>
     public static (string? Kind, string? Name, string? Failure) ReadPlane(ISketch sketch)
     {
         try
@@ -466,8 +413,8 @@ internal static class Api7SketchEntities
                 return (null, null, "ISketch.Plane → null: у эскиза нет опорной плоскости");
             }
 
-            // Вид опоры берётся по ТИПУ объекта модели (o3d_planeXOY=11 и т. д. из obj3dtype.html),
-            // а не по имени: имя плоскости пользователь может переименовать, тип — нет.
+            // The datum kind comes from the MODEL OBJECT TYPE (o3d_planeXOY=11 etc. from
+            // obj3dtype.html), not from the name: a user can rename a plane, but not its type.
             var kind = SafeS(() => plane.ModelObjectType.ToString());
             var name = SafeS(() => plane.Name);
             return (kind, name, null);
@@ -482,17 +429,13 @@ internal static class Api7SketchEntities
         }
     }
 
-    /// <summary>
-    /// Сменить опорную плоскость существующего эскиза: <c>ISketch.Plane = объект</c>, затем
-    /// <c>Update()</c>. Возвращает <c>null</c> при успехе либо названную причину отказа.
-    /// </summary>
-    /// <remarks>
-    /// <b>Успешный код не равен применённой правке</b> — это правило проекта, и здесь оно
-    /// соблюдено вызовом: без <c>Update()</c> присваивание принимается и модель не меняется
-    /// (измерено на соседних маршрутах: без <c>Update()</c> не меняется ни один режим отверстия,
-    /// см. <c>docs/acceptance/api7/hole-modes.md</c>). Поэтому подтверждение берётся ОТДЕЛЬНО — на
-    /// вызывающем уровне, чтением габарита и объёма после правки, а не из этого возврата.
-    /// </remarks>
+    /// <summary>Change the datum plane of an existing sketch: <c>ISketch.Plane = object</c>, then
+    /// <c>Update()</c>. Returns <c>null</c> on success or a named reason for refusal.</summary>
+    /// <remarks>INVARIANT: a successful return is not an applied edit — without <c>Update()</c> the
+    /// assignment is accepted and the model does not change (MEASURED on neighbouring routes: no hole
+    /// mode changes without <c>Update()</c>, <c>docs/acceptance/api7/hole-modes.md</c>). Confirmation
+    /// is therefore taken SEPARATELY at the caller, by re-reading the bounding box and volume.
+    /// History: docs/decisions/adapter-api7.md#sketch-plane</remarks>
     public static string? SetPlane(ISketch sketch, IModelObject plane)
     {
         try
@@ -536,10 +479,8 @@ internal static class Api7SketchEntities
         }
     }
 
-    /// <summary>
-    /// Разрешить адрес обратно в объект модели. Возвращает объект либо названную причину:
-    /// «адрес не найден» и «адрес не разобран» — разные состояния.
-    /// </summary>
+    /// <summary>Resolve an address back to a model object. Returns the object or a named reason:
+    /// "address not found" and "address not parsed" are different states.</summary>
     public static (IKompasAPIObject? Object, string? Failure) ResolveAddress(
         IKompasDocument1 document, string address)
     {

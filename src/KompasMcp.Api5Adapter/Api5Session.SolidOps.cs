@@ -10,30 +10,21 @@ using KompasMcp.Domain.Geometry;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>
-/// Операции над телами B3: булевы (SM-15), разделение и отсечение (SM-16), перенос и поворот (SM-17).
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Основание — измерение, а не имена методов.</b> Три изолированные пробы от 18.09.2026
-/// (<c>--boolean</c>, <c>--split</c>, <c>--reposition</c>; журналы в <c>docs/acceptance/api7/</c>)
-/// подтвердили маршруты и, что важнее, их ГРАНИЦЫ. Ниже перенесено ровно то, что измерено;
-/// непроверенное названо непроверенным.
-/// </para>
-/// <para>
-/// <b>Проверки до вызова COM.</b> Ядро не отвергает повтор ссылки и не проверяет, что цель не входит
-/// в набор инструментов (измерено, шаг BO.9: повтор принят молча, тела 3→2). Поэтому обе проверки
-/// стоят здесь и до COM, а не полагаются на ядро.
-/// </para>
-/// <para>
-/// <b>Успешный Update() не является доказательством.</b> На переносе три маршрута из четырёх вернули
-/// <c>true</c> и не двинули тело (шаг RP.2). Поэтому каждый обработчик перечитывает модель после
-/// вызова и возвращает ФАКТИЧЕСКОЕ состояние, а не обещанное.
-/// </para>
-/// </remarks>
+/// <summary>B3 body operations: boolean (SM-15), split and cut (SM-16), reposition and rotation
+/// (SM-17).</summary>
+/// <remarks>INVARIANT: the basis is measurement, not member names — three isolated probes of
+/// 18.09.2026 (<c>--boolean</c>, <c>--split</c>, <c>--reposition</c>; logs in
+/// <c>docs/acceptance/api7/</c>) confirmed the routes and, more importantly, their LIMITS; only what
+/// is measured is carried over below, and the unverified is named unverified.
+/// INVARIANT: the checks run before the COM call — the kernel neither rejects a repeated reference
+/// nor checks that the target is not among the tools (MEASURED, step BO.9: a repeat is accepted
+/// silently, bodies 3→2), so both checks live here, before COM, rather than relying on the kernel.
+/// INVARIANT: a successful <c>Update()</c> is not proof — on reposition three routes out of four
+/// returned <c>true</c> and did not move the body (step RP.2), so every handler re-reads the model
+/// after the call and returns the ACTUAL state, not the promised one.</remarks>
 public sealed partial class Api5Session
 {
-    /// <summary>Имя семейства булевых операций в ссылках и ответах.</summary>
+    /// <summary>Name of the boolean-operation family in references and responses.</summary>
     private const string BooleanRefKind = "solid_boolean";
 
     private const string SplitRefKind = "solid_split";
@@ -44,10 +35,8 @@ public sealed partial class Api5Session
 
     // ══════════════════════════════════════════════════════════════════════════════════ SM-15 ══
 
-    /// <summary>
-    /// Булева операция над телами: явная цель, явный набор инструментов, вид операции и политика
-    /// сохранения инструментов.
-    /// </summary>
+    /// <summary>A boolean operation on bodies: explicit target, explicit tool set, operation kind
+    /// and tool-preservation policy.</summary>
     public BooleanResultDto SolidBoolean(BooleanCommand command)
     {
         if (command.ToolBodyRefs is not { Count: > 0 })
@@ -73,8 +62,8 @@ public sealed partial class Api5Session
             var tool = ResolveBodyTarget(document, part, toolRef, bodiesBefore);
             if (tool.Index == target.Index)
             {
-                // Ядро такой случай отвергает (шаг BO.9), но отвергает ПОСЛЕ попытки; проверка здесь
-                // даёт вызывающему имя виновника, а не «Update() вернул false».
+                // The kernel rejects this case (step BO.9), but only AFTER the attempt; the check
+                // here gives the caller the culprit's name rather than "Update() returned false".
                 throw new KompasContractException(
                     ErrorCodes.InvalidArgument,
                     $"Тело '{toolRef}' указано и целью, и инструментом.",
@@ -118,8 +107,9 @@ public sealed partial class Api5Session
 
         if (created.Feature is null)
         {
-            // Отказ ядра — это ФАКТ о геометрии, а не сбой адаптера, и состояние модели после него
-            // сообщается фактическое: «принято» и «отвергнуто, но модель изменилась» — разные вещи.
+            // A kernel refusal is a FACT about the geometry, not an adapter fault, and the model
+            // state after it is reported as it is: "accepted" and "refused, but the model changed"
+            // are different things.
             var after = ReadBodySnapshots(document.PartNow());
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
@@ -151,8 +141,8 @@ public sealed partial class Api5Session
         var unverified = new List<string>();
         if (command.ExpectedVolumeMm3 is double expected && !VolumeMatches(totalVolume, expected))
         {
-            // Ожидание названо, но не подтверждено. Это НЕ повод ослабить проверку и не повод
-            // объявить успех: расхождение попадает в ответ как неподтверждённый аспект.
+            // The expectation is named but not confirmed. This is NOT a reason to weaken the check
+            // nor to declare success: the mismatch goes into the response as an unverified aspect.
             unverified.Add("expected_volume_mismatch");
         }
 
@@ -172,13 +162,11 @@ public sealed partial class Api5Session
         };
     }
 
-    /// <summary>
-    /// Проверки адресации, которые ядро не делает: цель не среди инструментов и нет повторов.
-    /// </summary>
-    /// <remarks>
-    /// Повтор ссылки ядро ПРИНИМАЕТ молча (измерено 18.09.2026, шаг BO.9: тела 3→2, суммарный объём
-    /// 49 000→37 000), поэтому обнаружение повтора обязано жить в контракте.
-    /// </remarks>
+    /// <summary>Addressing checks the kernel does not make: the target is not among the tools and
+    /// there are no repeats.</summary>
+    /// <remarks>MEASURED 18.09.2026 (step BO.9): the kernel ACCEPTS a repeated reference silently
+    /// (bodies 3→2, total volume 49 000→37 000), so repeat detection must live in the
+    /// contract.</remarks>
     private static void GuardBooleanRefs(string targetBodyRef, IReadOnlyList<string> toolBodyRefs)
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -217,14 +205,11 @@ public sealed partial class Api5Session
 
     // ══════════════════════════════════════════════════════════════════════════════════ SM-16 ══
 
-    /// <summary>
-    /// Разделение тела плоскостью. Возвращаются ВСЕ полученные части, каждая со своей ссылкой.
-    /// </summary>
-    /// <remarks>
-    /// Отдельного выбора «какие части сохранить» не требуется: разделение сохраняет все части по
-    /// построению (измерено, шаг SP.2: брусок 24 000 → 6 000 и 18 000, сумма 24 000). Именно это
-    /// измерение сняло блокировку OQ-A18, а не найденный член.
-    /// </remarks>
+    /// <summary>Splitting a body by a plane. ALL resulting parts are returned, each with its own
+    /// reference.</summary>
+    /// <remarks>MEASURED (step SP.2): no separate "which parts to keep" choice is needed — the split
+    /// keeps all parts by construction (a 24 000 bar → 6 000 and 18 000, sum 24 000). It is this
+    /// measurement that lifted blocker OQ-A18, not a discovered member.</remarks>
     public SplitResultDto SolidSplit(SplitCommand command)
     {
         var document = RequireDocument(command.DocumentId);
@@ -268,19 +253,12 @@ public sealed partial class Api5Session
         var address = RequireCreatedFeatureAddress(document, featureTreeBefore, KompasObjectTypes.SplitSolid, "solid.split");
         var featureRef = References.Register(SplitRefKind, document.Id, document.Revision, address.Entity).Id;
 
-        // Части — тела, которых до операции не было; нетронутые — те, что были и остались.
-        // Опознание идёт по ГЕОМЕТРИИ (габарит И объём), а не по месту в коллекции.
-        //
-        // Прежняя редакция отбирала части как rows.Skip(bodiesBefore.Count) — «всё, что вышло за
-        // границы прежнего списка». Это неверно: разделение ЗАМЕНЯЕТ тело на месте, поэтому одна из
-        // частей занимает индекс цели и в «хвост» не попадает, а нетронутое тело, наоборот, уезжает
-        // в части. Измерено 18.09.2026 строками B3.08/B3.09 приёмки: в документе лежали обе части
-        // 6000 и 18000, а ответ отдавал одну часть 18000 и сумму 18000 вместо 24000. Прибор это
-        // заметил сам (unverified_aspects: parts_less_than_two) — то есть честность отчёта
-        // работала, а отбор тел был неверен.
-        //
-        // Тело-цель из сопоставления ИСКЛЮЧАЕТСЯ: операция его потребила, поэтому совпадение с ним
-        // ничего не доказывает и лишь вернуло бы цель в список нетронутых.
+        // INVARIANT: parts are the bodies that did not exist before the operation; untouched are
+        // those that existed and remain. Identification is by GEOMETRY (bounding box AND volume),
+        // not by position in the collection. INVARIANT: the target body is EXCLUDED from the
+        // matching — the operation consumed it, so matching it proves nothing and would only put
+        // the target back into the untouched list.
+        // History: docs/decisions/adapter-solid.md#split-parts-selection
         var parts = new List<SolidBodyDto>();
         var untouched = new List<SolidBodyDto>();
         var claimed = new HashSet<int>();
@@ -329,13 +307,10 @@ public sealed partial class Api5Session
         };
     }
 
-    /// <summary>
-    /// Отсечение тела по одну сторону плоскости. Сторона названа знаком <c>s = n·(p − p₀)</c>.
-    /// </summary>
-    /// <remarks>
-    /// Соответствие измерено (шаг SP.7): <c>ICut.Direction = true</c> оставляет сторону в направлении
-    /// нормали, то есть <c>s &gt; 0</c>.
-    /// </remarks>
+    /// <summary>Cutting a body to one side of a plane. The side is named by the sign
+    /// <c>s = n·(p − p₀)</c>.</summary>
+    /// <remarks>MEASURED (step SP.7): <c>ICut.Direction = true</c> keeps the side in the direction of
+    /// the normal, i.e. <c>s &gt; 0</c>.</remarks>
     public CutByPlaneResultDto SolidCutByPlane(CutByPlaneCommand command)
     {
         var keepPositive = command.KeepSide switch
@@ -411,12 +386,10 @@ public sealed partial class Api5Session
         var address = RequireCreatedFeatureAddress(document, featureTreeBefore, KompasObjectTypes.CutByPlane, "solid.cut_by_plane");
         var featureRef = References.Register(CutRefKind, document.Id, document.Revision, address.Entity).Id;
 
-        // Остаток опознаётся СОПОСТАВЛЕНИЕМ СОСТАВА ТЕЛ, а не «первым, чей объём не равен цели».
-        // Прежняя редакция искала тело через FirstOrDefault(!IsUntouched(...)), а IsUntouched
-        // сравнивал объём кандидата с объёмом ЦЕЛИ до операции: постороннее тело этим не
-        // опознаётся вовсе, и все остальные тела объявлялись UntouchedBodies без доказательства.
-        // Сопоставление снимков видит и ИСЧЕЗНУВШИЕ тела — а именно их прежняя проверка не видела
-        // (клиентский дефект CUT-PLANE-APPLIED-TO-UNNAMED-BODIES, 19.09.2026).
+        // INVARIANT: the remainder is identified by MATCHING THE BODY COMPOSITION, not by "the first
+        // whose volume differs from the target". INVARIANT: snapshot matching also sees VANISHED
+        // bodies — exactly what the former check missed.
+        // History: docs/decisions/adapter-solid.md#cut-remainder-identification
         var afterSnapshots = ReadBodySnapshots(document.PartNow());
         var changes = CompareBodySnapshots(bodiesBefore, afterSnapshots);
         var remainingSnapshot = changes.MatchedOf(targetIndex);
@@ -444,8 +417,8 @@ public sealed partial class Api5Session
                 });
         }
 
-        // АДРЕСНОСТЬ — ПРЕДМЕТ ЭТОГО ВЫЗОВА, и она проверяется, а не предполагается: названо ОДНО
-        // тело, значит ни одно другое не имеет права измениться, исчезнуть или появиться.
+        // ADDRESSING IS THE SUBJECT OF THIS CALL, and it is checked, not assumed: ONE body was
+        // named, so no other body has the right to change, vanish or appear.
         if (vanished.Count > 0 || otherMoved.Count > 0 || createdBodies.Count > 0)
         {
             var parts = new List<string>();
@@ -548,10 +521,8 @@ public sealed partial class Api5Session
 
     // ══════════════════════════════════════════════════════════════════════════════════ SM-17 ══
 
-    /// <summary>
-    /// Перенос тела на вектор или поворот вокруг оси. Объём и число тел сохраняются, положение
-    /// меняется только у выбранного тела.
-    /// </summary>
+    /// <summary>Repositioning a body by a vector or rotating it about an axis. The volume and the
+    /// number of bodies are preserved; only the selected body's placement changes.</summary>
     public RepositionResultDto SolidReposition(RepositionCommand command)
     {
         var document = RequireDocument(command.DocumentId);
@@ -601,10 +572,11 @@ public sealed partial class Api5Session
         var address = RequireCreatedFeatureAddress(document, featureTreeBefore, KompasObjectTypes.BodyRepositionFeature, "solid.reposition");
         var featureRef = References.Register(RepositionRefKind, document.Id, document.Revision, address.Entity).Id;
 
-        // Успешный Update() здесь НЕ доказательство: три маршрута из четырёх вернули true и тело не
-        // двинули (шаг RP.2). Поэтому положение перечитывается, и «не сдвинулось» — это отказ, а не
-        // успех с нулевым результатом. Сравнение идёт с габаритом, посчитанным по ТОЙ ЖЕ матрице:
-        // объём при переносе не меняется, и по нему «сдвинулось» и «осталось» неразличимы.
+        // INVARIANT: a successful Update() here is NOT proof — three routes out of four returned
+        // true and did not move the body (step RP.2), so the placement is re-read and "did not
+        // move" is a refusal, not a success with a zero result. INVARIANT: comparison uses the
+        // bounding box computed by the SAME matrix — volume does not change on a translation, so by
+        // volume alone "moved" and "stayed" are indistinguishable.
         var after = rows.FirstOrDefault(r => MatchesMoved(r, matrix, before));
         if (after is null)
         {
@@ -698,9 +670,9 @@ public sealed partial class Api5Session
                 "Поворот требует axis_point_mm — точку на оси, в модельных координатах, мм.");
         }
 
-        // Ось задаётся ЛИБО направлением, ЛИБО второй точкой. Обе сразу или ни одной — отказ:
-        // «взяли то, что показалось» здесь означало бы поворот вокруг не той оси, а КОМПАС на это
-        // не ошибается.
+        // INVARIANT: the axis is set by EITHER a direction OR a second point. Both at once or
+        // neither is a refusal: "took whatever looked right" here would mean rotating about the
+        // wrong axis, and KOMPAS does not err on that.
         var hasDirection = command.AxisDirectionMm is { Count: 3 };
         var hasSecondPoint = command.AxisPoint2Mm is { Count: 3 };
         if (hasDirection == hasSecondPoint)
@@ -750,29 +722,21 @@ public sealed partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Записанное размещение перечитывается обратно и сверяется с заданным ПО МАТРИЦЕ, а не по числам.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Зачем сверка вообще.</b> Успешный <c>IBodyReposition.Update()</c> означает «принято», а не
-    /// «применено»: измерено (шаг RP.2), что три маршрута из четырёх вернули <c>true</c> и тело не
-    /// двинули. Поэтому создание подтверждается ещё и тем, что записанные параметры читаются назад.
-    /// </para>
-    /// <para>
-    /// <b>Почему по матрице, а не по тройке чисел.</b> Параметризация углами Эйлера неоднозначна
-    /// (при нутации 0 или 180° сумма прецессии и вращения определена с точностью до
-    /// перераспределения), поэтому требование равенства чисел отвергло бы ВЕРНУЮ запись. Собирается
-    /// матрица из прочитанной тройки, и она сравнивается с заданной: <see cref="EulerOrientation"/>
-    /// держит порядок спряжения в одном месте, и подмена этого порядка разойдётся здесь сразу —
-    /// измеренное расхождение при чужом порядке равно 1, при верном — 0 либо 2,2·10⁻¹⁶.
-    /// </para>
-    /// <para>
-    /// <b>Допуск 10⁻⁶.</b> Он на шесть порядков ниже расхождения, которое даёт неверный порядок
-    /// (1), и на десять порядков выше измеренной невязки верного разложения (2,2·10⁻¹⁶). Допуск
-    /// шире машинной точности намеренно: он не должен превращать округление в отказ.
-    /// </para>
-    /// </remarks>
+    /// <summary>A written placement is read back and compared with the requested one BY MATRIX, not
+    /// by numbers.</summary>
+    /// <remarks>INVARIANT: a successful <c>IBodyReposition.Update()</c> means "accepted", not
+    /// "applied" — MEASURED (step RP.2) that three routes out of four returned <c>true</c> and did
+    /// not move the body, so creation is additionally confirmed by reading the written parameters
+    /// back. INVARIANT: comparison is by matrix, not by the number triple — the Euler-angle
+    /// parameterisation is ambiguous (at nutation 0 or 180° the sum of precession and rotation is
+    /// defined up to redistribution), so requiring equal numbers would reject a CORRECT write. A
+    /// matrix is assembled from the read triple and compared with the requested one:
+    /// <see cref="EulerOrientation"/> keeps the conjugation order in one place, and swapping that
+    /// order diverges here at once — MEASURED divergence with a foreign order is 1, with the correct
+    /// one 0 or 2.2·10⁻¹⁶. LIMIT: the tolerance 10⁻⁶ is six orders below the divergence a wrong
+    /// order produces (1) and ten orders above the measured residual of the correct decomposition
+    /// (2.2·10⁻¹⁶); it is deliberately wider than machine precision so that rounding is not turned
+    /// into a refusal.</remarks>
     private static void RequirePlacementRoundTrip(
         IBodyReposition feature, double[] matrix, RepositionKind kind)
     {
@@ -825,15 +789,12 @@ public sealed partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Расхождение между заданной матрицей и размещением, СОБРАННЫМ из прочитанных параметров.
-    /// <c>null</c> — прочитать не удалось либо прочитано не тем маршрутом (а не «ноль»).
-    /// </summary>
-    /// <remarks>
-    /// <c>null</c> и <c>0</c> здесь РАЗНЫЕ ответы, и это не придирка: ноль означает «прочитанное
-    /// воспроизводит заданное», а <c>null</c> — «параметров этого маршрута у признака нет». Слить их
-    /// значило бы принять отсутствие данных за совпадение.
-    /// </remarks>
+    /// <summary>The divergence between the requested matrix and the placement ASSEMBLED from the
+    /// read parameters. <c>null</c> — the read failed or used a different route (not
+    /// "zero").</summary>
+    /// <remarks>INVARIANT: <c>null</c> and <c>0</c> are DIFFERENT answers here — zero means "the
+    /// read reproduces the requested", <c>null</c> means "the feature has no parameters of this
+    /// route"; merging them would take missing data for a match.</remarks>
     private static double? PlacementDifference(
         Api7SolidReposition.PlacementReading? reading, double[] matrix)
     {
@@ -853,15 +814,15 @@ public sealed partial class Api5Session
         return EulerOrientation.MaxDifference(restored, matrix);
     }
 
-    /// <summary>Допуск сверки «записано → прочитано» по матрице; обоснование — в докстроке выше.</summary>
+    /// <summary>Tolerance of the "written → read" matrix check; the rationale is in the doc comment
+    /// above.</summary>
     private const double PlacementRoundTripTolerance = 1e-6;
 
     // ═══════════════════════════════════════════════════════════════════════════════ helpers ══
 
-    /// <summary>
-    /// Мост API7 или явный <c>CAPABILITY_UNAVAILABLE</c> с причиной. Молчаливый null недопустим:
-    /// вызывающий обязан отличать «API7 недоступен» от «КОМПАС отверг геометрию».
-    /// </summary>
+    /// <summary>The API7 bridge or an explicit <c>CAPABILITY_UNAVAILABLE</c> with a reason. A silent
+    /// null is not allowed: the caller must tell "API7 unavailable" from "KOMPAS rejected the
+    /// geometry".</summary>
     private IModelContainer RequireContainer(Api7Bridge bridge, DocumentEntry document, string tool)
     {
         var container = bridge.ContainerFor(document.Document, document.Id, document.Revision);
@@ -877,36 +838,29 @@ public sealed partial class Api5Session
             RetryPolicy.ReacquireContext);
     }
 
-    /// <summary>
-    /// ФОРМА постановки плоскости: взаимоисключение способов, <c>offset_mm</c> без <c>base</c> и
-    /// объявленный отказ на <c>base</c>. Проверяется до всякой работы с моделью, у обоих маршрутов —
-    /// и у создания, и у правки.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Зачем отдельный шаг.</b> Измерено клиентской приёмкой B3 (19.09.2026, три строки FAIL):
-    /// объявленный в схеме <c>CAPABILITY_UNAVAILABLE</c> на <c>plane.base</c> был НЕДОСТИЖИМ — форма
-    /// поля в DTO расходилась с опубликованной, вызов падал на разборе payload с
-    /// <c>JsonException</c> и кодом <c>VERIFICATION_FAILED</c>. Форма приведена к опубликованной
-    /// (<c>CutPlaneDto</c>), а эта проверка делает объявленный исход исполняемым и общим для
-    /// <c>kompas_split</c>, <c>kompas_cut_by_plane</c> и применимого <c>kompas_update_feature</c>.
-    /// </para>
-    /// <para>
-    /// <b>Приоритет проверок объявлен и не зависит от порядка полей в JSON.</b>
+    /// <summary>The FORM of a plane specification: mutually exclusive modes, <c>offset_mm</c> without
+    /// <c>base</c>, and the declared refusal on <c>base</c>. Checked before any work with the model,
+    /// on both routes — creation and edit.</summary>
+    /// <remarks>MEASURED by the B3 client acceptance (19.09.2026, three FAIL rows): the schema's
+    /// declared <c>CAPABILITY_UNAVAILABLE</c> on <c>plane.base</c> was UNREACHABLE — the DTO field
+    /// shape differed from the published one, and the call failed while parsing the payload with
+    /// <c>JsonException</c> and code <c>VERIFICATION_FAILED</c>. The shape is brought in line with
+    /// the published one (<c>CutPlaneDto</c>), and this check makes the declared outcome executable
+    /// and shared by <c>kompas_split</c>, <c>kompas_cut_by_plane</c> and the applicable
+    /// <c>kompas_update_feature</c>. INVARIANT: the check priority is declared and does not depend
+    /// on field order in JSON.
     /// <list type="number">
-    /// <item><c>base</c> назван ВМЕСТЕ с другим способом (<c>plane_ref</c> или точка с нормалью) —
-    /// <c>INVALID_ARGUMENT</c>: запрос противоречив, и ответить на него объявленным отказом
-    /// возможности значило бы спрятать от клиента, что он назвал два способа сразу;</item>
-    /// <item><c>base</c> назван один (со смещением или без) — <c>CAPABILITY_UNAVAILABLE</c>:
-    /// ровно то, что обещает описание поля;</item>
-    /// <item><c>offset_mm</c> без <c>base</c> — <c>INVALID_ARGUMENT</c>: смещение без базовой
-    /// плоскости не выражает плоскость, а принять параметр и промолчать значило бы объявить его
-    /// принятым;</item>
-    /// <item><c>plane_ref</c> вместе с точкой или нормалью — <c>INVALID_ARGUMENT</c> (проверяется
-    /// вызывающим маршрутом, потому что правка ссылку отвергает по своей причине).</item>
-    /// </list>
-    /// </para>
-    /// </remarks>
+    /// <item><c>base</c> named TOGETHER with another mode (<c>plane_ref</c> or point with normal) —
+    /// <c>INVALID_ARGUMENT</c>: the request is contradictory, and answering it with the declared
+    /// capability refusal would hide from the client that it named two modes at once;</item>
+    /// <item><c>base</c> named alone (with or without an offset) — <c>CAPABILITY_UNAVAILABLE</c>:
+    /// exactly what the field description promises;</item>
+    /// <item><c>offset_mm</c> without <c>base</c> — <c>INVALID_ARGUMENT</c>: an offset without a base
+    /// plane does not express a plane, and accepting the parameter silently would declare it
+    /// accepted;</item>
+    /// <item><c>plane_ref</c> together with a point or normal — <c>INVALID_ARGUMENT</c> (checked by
+    /// the calling route, because edit refuses a reference for its own reason).</item>
+    /// </list></remarks>
     private static void GuardCutPlaneForm(CutPlaneDto plane)
     {
         switch (CutPlaneForm.Validate(plane))
@@ -931,9 +885,9 @@ public sealed partial class Api5Session
                     });
 
             case CutPlaneFormVerdict.BaseUnsupported:
-                // Объявлено в схеме как неподдержанное — тем же кодом и отказывает. Смещение названо
-                // в details: объявленный параметр либо учитывается, либо о его роли сообщается, а не
-                // молча теряется.
+                // Declared unsupported in the schema — refuses with the same code. The offset is
+                // named in details: a declared parameter is either honoured or its role is
+                // reported, never silently dropped.
                 throw new KompasContractException(
                     ErrorCodes.CapabilityUnavailable,
                     "Способ «базовая плоскость + смещение» не измерен на API7 (вспомогательная плоскость "
@@ -971,29 +925,27 @@ public sealed partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Плоскость операции: существующая опора либо точка + нормаль.
-    /// </summary>
+    /// <summary>The plane of the operation: an existing support or a point + normal.</summary>
+    /// <remarks>The "base plane + offset" mode is refused with <c>CAPABILITY_UNAVAILABLE</c> and a reason, not
+    /// filled in by a guess: the offset auxiliary-plane route of API7 was not measured in a single
+    /// run, and the sign of the base plane's normal is exactly what decides which side the operation
+    /// cuts away.</remarks>
     /// <remarks>
-    /// Способ «базовая плоскость + смещение» отвергается <c>CAPABILITY_UNAVAILABLE</c> с причиной, а
-    /// не подставляется догадкой: маршрут смещённой вспомогательной плоскости API7 не измерен ни
-    /// одним прогоном, а знак нормали базовой плоскости — это ровно то, что определяет, какую
-    /// сторону отсечёт операция.
-    /// </remarks>
-    /// <remarks>
-    /// Здесь разделены ТРИ разных исхода, и раньше они были свалены в один <c>GEOMETRY_FAILED</c>:
+    /// THREE different outcomes are separated here, and previously they were lumped into one
+    /// <c>GEOMETRY_FAILED</c>:
     /// <list type="bullet">
-    /// <item>постановка невыразима (обе формы сразу, ни одной формы, нулевая или нечисловая
-    /// нормаль) — <c>INVALID_ARGUMENT</c>, чинится клиентом;</item>
-    /// <item>постановка выразима, но маршрут не поддержан («базовая плоскость + смещение») —
-    /// <c>CAPABILITY_UNAVAILABLE</c>, как и обещано в описании поля схемы;</item>
-    /// <item>ядро не построило плоскость по корректным данным — <c>GEOMETRY_FAILED</c>, и только
-    /// этот исход остаётся возвратом <c>null</c> с причиной в <paramref name="failure"/>.</item>
+    /// <item>the specification is inexpressible (both forms at once, neither form, a zero or
+    /// non-numeric normal) — <c>INVALID_ARGUMENT</c>, fixed by the client;</item>
+    /// <item>the specification is expressible but the route is unsupported ("base plane + offset") —
+    /// <c>CAPABILITY_UNAVAILABLE</c>, exactly as promised in the schema field description;</item>
+    /// <item>the kernel did not build the plane from correct data — <c>GEOMETRY_FAILED</c>, and only
+    /// this outcome remains a <c>null</c> return with the reason in <paramref name="failure"/>.</item>
     /// </list>
-    /// Измерено 18.09.2026 строкой B3.17 приёмки: до этого разделения нулевая нормаль и плоскость
-    /// без нормали отвечали <c>GEOMETRY_FAILED</c>, то есть «ядро не смогло» вместо «запрос
-    /// невыразим». Для клиента это разные приглашения: повторить операцию против исправить аргумент.
-    /// </remarks>
+    /// MEASURED 18.09.2026 by acceptance row B3.17: before this separation a zero normal and a plane
+    /// without a normal answered <c>GEOMETRY_FAILED</c>, i.e. "the kernel failed" instead of "the
+    /// request is inexpressible". For the client these are different invitations: repeat the operation
+    /// versus fix the argument.
+    /// History: docs/decisions/adapter-solid.md#plane-form</remarks>
     private (IPlane3D? Plane, double[]? UnitNormal, double[]? Point) ResolveCutPlane(
         DocumentEntry document,
         Api7Bridge bridge,
@@ -1038,8 +990,8 @@ public sealed partial class Api5Session
                     details: new Dictionary<string, object?> { ["plane_ref"] = reference });
             }
 
-            // Нормаль существующей плоскости не пересчитывается: она принадлежит модели, и
-            // объявлять её своей означало бы отчитываться о числе, которого не измеряли.
+            // The normal of an existing plane is NOT recomputed: it belongs to the model, and claiming
+            // it as our own would mean reporting a number that was never measured.
             return (transferred, null, null);
         }
 
@@ -1066,8 +1018,9 @@ public sealed partial class Api5Session
             }
         }
 
-        // Нулевая нормаль отвергается ДО COM: проверка берётся у PlaneBasis, а не пишется заново —
-        // иначе правило «нормаль ненулевая» жило бы в двух местах и разошлось бы при первой правке.
+        // A zero normal is refused BEFORE COM: the check is taken from PlaneBasis rather than written
+        // again — otherwise the "normal is non-zero" rule would live in two places and diverge at the
+        // first edit.
         try
         {
             _ = PlaneBasis.FromNormal(normal);
@@ -1083,7 +1036,7 @@ public sealed partial class Api5Session
         var created = Api7SolidPlane.TryCreateByPointNormal(container, point, normal, name: null);
         if (created.Plane is null)
         {
-            // Данные корректны, а плоскость не построилась — вот это уже отказ ядра.
+            // The data are correct but the plane was not built — this is now a kernel refusal.
             failure = created.Failure ?? "плоскость не построена";
             return (null, created.UnitNormal, new[] { point[0], point[1], point[2] });
         }
@@ -1091,14 +1044,12 @@ public sealed partial class Api5Session
         return (created.Plane, created.UnitNormal, new[] { point[0], point[1], point[2] });
     }
 
-    /// <summary>
-    /// Тела документа с объёмом, габаритом, числом граней и признаком многокусочности.
-    /// </summary>
+    /// <summary>Document bodies with volume, bounding box, face count and a multi-piece flag.</summary>
     /// <remarks>
-    /// Читается тем же маршрутом, что и <c>ReadBodySnapshots</c> (<c>refresh()</c> перед обходом,
-    /// <c>CalcMassInertiaProperties(ST_MIX_MM|ST_MIX_KG).v()</c>, <c>GetGabarit</c>), но с двумя
-    /// дополнительными полями, которых приёмке B3 не хватает: <c>MultiBodyParts</c> отличает «одно
-    /// тело из двух кусков» от «одно тело целое», а <c>FaceCount</c> даёт независимый признак того же.
+    /// Read by the same route as <c>ReadBodySnapshots</c> (<c>refresh()</c> before the walk,
+    /// <c>CalcMassInertiaProperties(ST_MIX_MM|ST_MIX_KG).v()</c>, <c>GetGabarit</c>), but with two
+    /// extra fields that B3 acceptance lacks: <c>MultiBodyParts</c> tells "one body made of two
+    /// pieces" from "one whole body", and <c>FaceCount</c> gives an independent sign of the same.
     /// </remarks>
     private List<SolidBodyDto> ReadSolidBodies(DocumentEntry document)
     {
@@ -1112,8 +1063,8 @@ public sealed partial class Api5Session
                 ?? (i == 0 ? AsInterface<ksBody>(document.PartNow().GetMainBody()) : null);
             if (element is null)
             {
-                // Тело, которое не отвечает как ksBody, не пропускается: пропуск сдвинул бы нумерацию
-                // и позволил бы принять чужое тело за результат.
+                // A body that does not answer as ksBody is NOT skipped: skipping would shift the
+                // numbering and let a foreign body pass for the result.
                 rows.Add(new SolidBodyDto
                 {
                     BodyRef = References.Register("body_unresolved", document.Id, document.Revision, bodies.GetByIndex(i)).Id,
@@ -1144,11 +1095,9 @@ public sealed partial class Api5Session
         return rows;
     }
 
-    /// <summary>
-    /// Совпадает ли тело с результатом преобразования: сравнивается габарит, посчитанный ДО опыта по
-    /// той же матрице. Сравнение по положению, а не по объёму: объём при переносе не меняется, и по
-    /// нему «сдвинулось» и «осталось» неразличимы.
-    /// </summary>
+    /// <summary>Whether the body matches the result of the transformation: the bounding box computed BEFORE the
+    /// attempt by the SAME matrix is compared. Comparison by position, not by volume: volume does not
+    /// change on a translation, so by it "moved" and "stayed" are indistinguishable.</summary>
     private static bool MatchesMoved(SolidBodyDto row, double[] matrix, BodySnapshot? before)
     {
         if (before?.Min is not { Length: 3 } min || before.Max is not { Length: 3 } max)
@@ -1188,43 +1137,35 @@ public sealed partial class Api5Session
         return true;
     }
 
-    /// <summary>
-    /// Состав дерева признаков НА МОМЕНТ СЪЁМКИ — то, чем «новый» отличается от «уже был».
-    /// </summary>
+    /// <summary>The composition of the feature tree AT SNAPSHOT TIME — what makes "new" different from "was
+    /// already there".</summary>
     /// <remarks>
-    /// <para>
-    /// <b>Почему не по имени.</b> Прежнее правило «новый = имя, которого не было в снимке» опиралось
-    /// на уникальность ОТОБРАЖАЕМОГО имени. Клиентская приёмка 19.09.2026 измерила обратное: КОМПАС
-    /// присваивает двум последовательным признакам изменения положения ОДНО И ТО ЖЕ имя
-    /// «Изменение положения : Тело 1», поэтому второй признак отбрасывался фильтром, и
-    /// <c>solid.reposition</c> отвечал <c>GEOMETRY_FAILED</c> при ВЕРНО построенной геометрии.
-    /// </para>
-    /// <para>
-    /// <b>Что измерено вместо догадки</b> (проба I, <c>--identity</c>, 19.09.2026, прогон
-    /// <c>c90961c6a3ba478697da5bc243040719</c>, отчёт <c>docs/acceptance/api7/feature-identity.json</c>):
-    /// </para>
+    /// <b>Why not by name.</b> The former rule "new = a name absent from the snapshot" relied on the
+    /// uniqueness of the DISPLAYED name. Client acceptance on 19.09.2026 measured the opposite: KOMPAS
+    /// gives two consecutive reposition features the SAME name
+    /// «Изменение положения : Тело 1», so the second feature was dropped by the filter, and
+    /// <c>solid.reposition</c> answered <c>GEOMETRY_FAILED</c> with the geometry built CORRECTLY.
+    /// <b>What was measured instead of a guess</b> (probe I, <c>--identity</c>, 19.09.2026, run
+    /// <c>c90961c6a3ba478697da5bc243040719</c>, report <c>docs/acceptance/api7/feature-identity.json</c>):
     /// <list type="number">
-    /// <item>адрес элемента устойчив: два последовательных обхода коллекции 110 отдают в одном и том
-    /// же индексе один и тот же COM-объект;</item>
-    /// <item><c>ksEntityCollection.FindIt(entity)</c> отдаёт индекс элемента с нуля и <c>−1</c> для
-    /// объекта, которого в коллекции нет;</item>
-    /// <item>коллекция, взятая ДО операции, мутацию НЕ отслеживает: после двух операций она
-    /// по-прежнему сообщает исходное число элементов и <c>FindIt = −1</c> для обоих новых признаков.
-    /// Это и делает её снимком «что было до», а не вторым видом текущего состояния.</item>
+    /// <item>the element address is stable: two consecutive walks of collection 110 return the same
+    /// COM object at the same index;</item>
+    /// <item><c>ksEntityCollection.FindIt(entity)</c> returns the element index from zero and <c>−1</c>
+    /// for an object not in the collection;</item>
+    /// <item>a collection taken BEFORE the operation does NOT track mutation: after two operations it
+    /// still reports the original element count and <c>FindIt = −1</c> for both new features.
+    /// That is what makes it a snapshot of "what was before", not a second view of the current
+    /// state.</item>
     /// </list>
-    /// <para>
-    /// Отсюда правило адресации: элемент НОВЫЙ тогда и только тогда, когда удерживаемый снимок его
-    /// не знает. Ни первого, ни последнего совпадения, ни фиксированного индекса, ни переименования
-    /// здесь нет; при совпадающих именах различает идентичность COM-объекта, а не строка.
-    /// </para>
-    /// <para>
-    /// <b>Отрицательный контроль.</b> Снимок, не знающий элемента, обязан отвечать <c>−1</c>, а
-    /// знающий — его индекс. Оба исхода измерены в одном прогоне: элементы, существовавшие до
-    /// операции, дали <c>0</c> и <c>1</c>, оба новых признака — <c>−1</c>. Если бы <c>FindIt</c>
-    /// отвечал <c>−1</c> на всё, разность множеств объявила бы новыми все элементы и адрес был бы
-    /// отвергнут как неоднозначный, а не выдан наугад.
-    /// </para>
-    /// </remarks>
+    /// Hence the addressing rule: an element is NEW if and only if the retained snapshot does not know
+    /// it. There is no first or last match, no fixed index and no rename here; when names coincide, it
+    /// is the identity of the COM object that distinguishes, not the string.
+    /// <b>Negative control.</b> A snapshot that does not know an element must answer <c>−1</c>, and one
+    /// that knows it — its index. Both outcomes were measured in one run: elements that existed before
+    /// the operation gave <c>0</c> and <c>1</c>, both new features — <c>−1</c>. Had <c>FindIt</c>
+    /// answered <c>−1</c> to everything, the set difference would have declared all elements new and the
+    /// address would have been rejected as ambiguous rather than handed out at random.
+    /// History: docs/decisions/adapter-solid.md#identity</remarks>
     private sealed class FeatureTreeSnapshot
     {
         private readonly ksEntityCollection? _collection;
@@ -1259,7 +1200,7 @@ public sealed partial class Api5Session
             return new FeatureTreeSnapshot(collection, elements);
         }
 
-        /// <summary>Индекс элемента в снимке или <c>−1</c>, если снимок его не знает.</summary>
+        /// <summary>Index of the element in the snapshot, or <c>−1</c> if the snapshot does not know it.</summary>
         public int IndexOf(ksEntity entity)
         {
             if (_collection is null)
@@ -1273,9 +1214,9 @@ public sealed partial class Api5Session
             }
             catch (Exception ex) when (ex is COMException or InvalidCastException)
             {
-                // Отказ поиска — это «не знаю», а не «знаю»: элемент считается новым, и адрес
-                // либо опознается по типу, либо вызов честно отказывает. Тихий 0 здесь выдал бы
-                // существующий элемент за новый.
+                // A failed lookup is "I do not know", not "I know": the element is treated as new, and
+                // the address is either recognised by type or the call honestly refuses. A silent 0
+                // here would pass an existing element off as new.
                 return -1;
             }
         }
@@ -1285,44 +1226,34 @@ public sealed partial class Api5Session
         public string[] Names => Elements.Select(e => e.Name).ToArray();
     }
 
-    /// <summary>
-    /// Адрес только что созданного признака — ЭЛЕМЕНТ ДЕРЕВА API5, а не объект API7.
-    /// </summary>
+    /// <summary>The address of the just-created feature — an API5 TREE ELEMENT, not an API7 object.</summary>
     /// <remarks>
-    /// <para>
-    /// Проба T (шаги TL.2, TL.6, TL.7, TL.9; прогон <c>1c111eff3cd94007b436c5a3862e48bc</c>) измерила:
-    /// признак, созданный фабрикой API7, в дереве API5 ЕСТЬ, и именно он отвечает на подавление
-    /// (<c>ksFeature.excluded</c>, объём 37 000 → 49 000 и обратно) и удаление (<c>DeleteObject</c>,
-    /// тела 2 → 3). Но сам объект API7 — <c>IBoolean</c>, <c>ISplitSolid</c>, <c>ICut</c>,
-    /// <c>IBodyReposition</c> — признаком API5 не является, и <c>RequireFeatureEntity</c> его
-    /// отвергает. Ссылка на объект API7 сделала бы <c>discover</c>, <c>suppress_restore</c> и
-    /// <c>delete_dependencies</c> невыполнимыми для всех одиннадцати строк — то есть четыре из
-    /// десяти действий по каждой строке пришлось бы закрывать как «нет API».
-    /// </para>
-    /// <para>
-    /// <b>Опознание — разностью множеств по идентичности COM-объекта</b> относительно
-    /// <see cref="FeatureTreeSnapshot"/>, взятого до операции, плюс фильтр по ТИПУ признака. Ни
-    /// порядок коллекции, ни отображаемое имя адресом не являются: имена у двух последовательных
-    /// признаков одного вида СОВПАДАЮТ (измерено 19.09.2026, проба I), поэтому имя не различает
-    /// ничего, а порядок не обещан.
-    /// </para>
-    /// <para>
-    /// Кандидат обязан отвечать на <c>GetFeature()</c> как <c>ksFeature</c> (это отсекает
-    /// вспомогательную геометрию — плоскость и точку, которые разделение и отсечение создают вместе
-    /// с признаком) и быть РОВНО ОДНИМ. Ноль или несколько — честный отказ со списком, а не ссылка
-    /// «на что-нибудь похожее»: подавить чужой признак означало бы молча испортить чужую геометрию.
-    /// </para>
-    /// <para>
-    /// ПОЧЕМУ ФИЛЬТР ПО ТИПУ, А НЕ ПО СЧЁТУ. Первая редакция правила требовала «ровно один новый
-    /// элемент», и на режиме <c>save_tools</c> это дало отказ при УСПЕШНО выполненной операции:
-    /// <c>keep_tools=true</c> создаёт ДВА признака — саму операцию и вспомогательную «Копию тела»
-    /// (измерено: <c>type=69 «Булева операция:1»</c> и <c>type=79 «Копия тела : Тело 1»</c>). Оба
-    /// новых, оба отвечают <c>ksFeature</c>, и различить их счётом невозможно — различает тип
-    /// операции. Числа взяты из измерения (<c>scratch/b3-measure-feature-types.py</c>,
-    /// <c>kompas_list_features</c>), а не по аналогии: 69 — булева, 633 — разделение, 50 —
-    /// отсечение, 79 — изменение положения.
-    /// </para>
-    /// </remarks>
+    /// Probe T (steps TL.2, TL.6, TL.7, TL.9; run <c>1c111eff3cd94007b436c5a3862e48bc</c>) measured: a
+    /// feature created by an API7 factory IS present in the API5 tree, and it is exactly the one that
+    /// answers suppression (<c>ksFeature.excluded</c>, volume 37 000 → 49 000 and back) and deletion
+    /// (<c>DeleteObject</c>, bodies 2 → 3). But the API7 object itself — <c>IBoolean</c>,
+    /// <c>ISplitSolid</c>, <c>ICut</c>, <c>IBodyReposition</c> — is not an API5 feature, and
+    /// <c>RequireFeatureEntity</c> rejects it. A reference to the API7 object would make
+    /// <c>discover</c>, <c>suppress_restore</c> and <c>delete_dependencies</c> impossible for all
+    /// eleven rows — that is, four of the ten actions per row would have to be closed as "no API".
+    /// <b>Recognition is by set difference on COM-object identity</b> relative to the
+    /// <see cref="FeatureTreeSnapshot"/> taken before the operation, plus a filter by feature TYPE.
+    /// Neither the collection order nor the displayed name is an address: names of two consecutive
+    /// features of one kind COINCIDE (MEASURED 19.09.2026, probe I), so the name distinguishes
+    /// nothing, and the order is not promised.
+    /// A candidate must answer <c>GetFeature()</c> as <c>ksFeature</c> (this cuts off auxiliary
+    /// geometry — the plane and point that split and cut create together with the feature) and be
+    /// EXACTLY ONE. Zero or several is an honest refusal with a list, not a reference "to something
+    /// similar": suppressing a foreign feature would mean silently spoiling foreign geometry.
+    /// WHY A FILTER BY TYPE AND NOT BY COUNT. The first edition of the rule required "exactly one new
+    /// element", and on the <c>save_tools</c> mode this gave a refusal with a SUCCESSFULLY performed
+    /// operation: <c>keep_tools=true</c> creates TWO features — the operation itself and the auxiliary
+    /// «Копия тела» (MEASURED: <c>type=69 «Булева операция:1»</c> and <c>type=79 «Копия тела :
+    /// Тело 1»</c>). Both are new, both answer <c>ksFeature</c>, and counting cannot tell them apart —
+    /// the operation type does. The numbers are taken from measurement
+    /// (<c>scratch/b3-measure-feature-types.py</c>, <c>kompas_list_features</c>), not by analogy:
+    /// 69 — boolean, 633 — split, 50 — cut, 79 — reposition.
+    /// History: docs/decisions/adapter-solid.md#feature-address</remarks>
     private (ksEntity Entity, string Name) RequireCreatedFeatureAddress(
         DocumentEntry document, FeatureTreeSnapshot before, int expectedTreeType, string tool)
     {
@@ -1339,7 +1270,7 @@ public sealed partial class Api5Session
                     continue;
                 }
 
-                // «Был до» — по идентичности COM-объекта, а не по строке имени.
+                // "Was before" — by COM-object identity, not by the name string.
                 if (before.WasPresent(entity) || entity.GetFeature() is not ksFeature)
                 {
                     continue;
@@ -1381,16 +1312,13 @@ public sealed partial class Api5Session
             });
     }
 
-    /// <summary>
-    /// Совпадает ли прочитанное тело со снимком «до»: объём по допуску профиля И габарит по каждой
-    /// оси. Одного объёма мало: у разных тел объём может совпасть (в эталоне B3 объём цели и объём
-    /// инструмента одинаковы — 24 000), и тогда «нетронутое» и «часть» перепутались бы.
-    /// </summary>
-    /// <remarks>
-    /// Отсутствие габарита в снимке — это «сравнить нечем», а не «совпало»: возвращается
-    /// <c>false</c>, и вызывающий увидит тело как неопознанное. Тихий <c>true</c> здесь означал бы
-    /// тело, причисленное к нетронутым по одному лишь объёму.
-    /// </remarks>
+    /// <summary>Whether the read body matches the "before" snapshot: volume within the profile tolerance AND
+    /// bounding box on each axis. Volume alone is not enough: different bodies can share a volume (in
+    /// the B3 reference the target's volume and the tool's volume are equal — 24 000), and then
+    /// "untouched" and "part" would be mixed up.</summary>
+    /// <remarks>A missing bounding box in the snapshot is "nothing to compare with", not "matched": <c>false</c>
+    /// is returned and the caller sees the body as unrecognised. A silent <c>true</c> here would mean a
+    /// body counted as untouched on volume alone.</remarks>
     private static bool MatchesSnapshot(SolidBodyDto row, BodySnapshot snapshot)
     {
         if (snapshot.Volume is double volume
@@ -1422,16 +1350,12 @@ public sealed partial class Api5Session
         return true;
     }
 
-    /// <summary>
-    /// УСТАРЕЛО 19.09.2026. Прежний признак «тело не тронуто» для отсечения: сравнение объёма
-    /// кандидата с объёмом ЦЕЛИ до операции. Этим постороннее тело не опознаётся вовсе (у него
-    /// другой объём), поэтому все остальные тела объявлялись нетронутыми БЕЗ доказательства, а
-    /// исчезнувшее тело в список кандидатов не попадало. Заменено сопоставлением состава тел
-    /// (<c>CompareBodySnapshots</c> + <c>UnchangedViolations</c> + <c>NewBodies</c>) в
-    /// <c>SolidCutByPlane</c>. Оставлено как запись о прежнем маршруте; ни один вызов на него не
-    /// ссылается — если ссылка появится, это возврат дефекта
-    /// <c>CUT-PLANE-APPLIED-TO-UNNAMED-BODIES</c>.
-    /// </summary>
+    /// <summary>OBSOLETE 19.09.2026. The former "body untouched" sign for cutting: it compared the
+    /// candidate's volume with the TARGET's, so a foreign body was never recognised (different volume),
+    /// every other body was declared untouched WITHOUT proof, and a vanished body was not listed.
+    /// Superseded by body-composition matching in <c>SolidCutByPlane</c>; kept as a record, nothing
+    /// calls it — a call would be a regression of <c>CUT-PLANE-APPLIED-TO-UNNAMED-BODIES</c>.
+    /// History: docs/decisions/adapter-solid.md#cut-untouched</summary>
     private static bool IsUntouched(SolidBodyDto row, List<BodySnapshot> before, int targetIndex)
     {
         var snapshot = before.FirstOrDefault(b => b.Index == targetIndex);
@@ -1443,10 +1367,8 @@ public sealed partial class Api5Session
         return VolumeMatches(actual, volume);
     }
 
-    /// <summary>
-    /// Совпадает ли тело хотя бы с одним снимком «до» — по ГАБАРИТУ И ОБЪЁМУ, а не по месту в
-    /// коллекции: тело-цель операция потребляет, и часть занимает её индекс.
-    /// </summary>
+    /// <summary>Whether the body matches at least one "before" snapshot — by BOUNDING BOX AND VOLUME, not by its
+    /// place in the collection: the operation consumes the target body, and a part takes its index.</summary>
     private static bool MatchesAnySnapshot(SolidBodyDto row, List<BodySnapshot> before) =>
         before.Any(b => MatchesSnapshot(row, b));
 
@@ -1458,12 +1380,9 @@ public sealed partial class Api5Session
             ? new BoundingBoxDto(min, max)
             : BoundingBoxDto.Empty;
 
-    /// <summary>
-    /// Совпадает ли прочитанный габарит с объявленным аналитически. Допуск — допуск профиля по
-    /// длине: 0,01 мм абсолютно или 1e-6 относительно. Отсутствие любой из сторон — «сравнить
-    /// нечем», а не «совпало»: тихий <c>true</c> здесь выдал бы непроверенное положение за
-    /// проверенное.
-    /// </summary>
+    /// <summary>Whether the read bounding box matches the analytically declared one. The tolerance is the profile
+    /// length tolerance: 0.01 mm absolute or 1e-6 relative. A missing side is "nothing to compare with",
+    /// not "matched": a silent <c>true</c> here would pass an unverified position off as verified.</summary>
     private static bool BoxMatches(BoundingBoxDto? actual, BoundingBoxDto expected)
     {
         if (actual?.MinMm is not { Count: 3 } actualMin || actual.MaxMm is not { Count: 3 } actualMax
@@ -1490,7 +1409,7 @@ public sealed partial class Api5Session
         return true;
     }
 
-    /// <summary>Габарит текстом — для сообщений об отказе и полей проверок.</summary>
+    /// <summary>Bounding box as text — for refusal messages and check fields.</summary>
     private static string BoxText(BoundingBoxDto? box)
     {
         if (box?.MinMm is not { Count: 3 } min || box.MaxMm is not { Count: 3 } max)
@@ -1507,9 +1426,7 @@ public sealed partial class Api5Session
     private static double? SumVolumesOrNull(List<BodySnapshot> snapshots) =>
         snapshots.Any(s => s.Volume is null) ? null : snapshots.Sum(s => s.Volume ?? 0d);
 
-    /// <summary>
-    /// Сравнение объёмов по допуску профиля: 0,01 мм³ абсолютно или 1e-6 относительно.
-    /// </summary>
+    /// <summary>Volume comparison within the profile tolerance: 0.01 mm³ absolute or 1e-6 relative.</summary>
     private static bool VolumeMatches(double actual, double expected)
     {
         var delta = Math.Abs(actual - expected);
@@ -1519,8 +1436,8 @@ public sealed partial class Api5Session
     private static List<SolidBodyDto> MatchSavedTools(
         List<SolidBodyDto> rows, List<BodyTarget> tools)
     {
-        // Сохранённые инструменты ищутся по габариту ДО операции: они остаются на прежнем месте, и
-        // «тот же объём» их не отличает от результата, когда результат совпал по объёму с телом.
+        // Saved tools are looked up by the bounding box BEFORE the operation: they stay in place, and
+        // "the same volume" does not tell them from the result when the result's volume matches a body.
         var matched = new List<SolidBodyDto>();
         foreach (var tool in tools)
         {
@@ -1560,11 +1477,9 @@ public sealed partial class Api5Session
         return true;
     }
 
-    /// <summary>
-    /// Логический флаг тела, где «не прочитано» честно превращается в <c>false</c> только потому, что
-    /// поле обязательное. Отсутствие чтения здесь не искажает приёмку: <c>MultiBodyParts</c> —
-    /// ДОПОЛНИТЕЛЬНЫЙ признак, а основной (<c>FaceCount</c>) читается отдельно и независимо.
-    /// </summary>
+    /// <summary>A body's boolean flag, where "not read" honestly becomes <c>false</c> only because the field is
+    /// required. A missing read does not distort acceptance here: <c>MultiBodyParts</c> is an ADDITIONAL
+    /// sign, while the main one (<c>FaceCount</c>) is read separately and independently.</summary>
     private static bool SafeFlag(Func<bool> reader)
     {
         try
@@ -1578,7 +1493,7 @@ public sealed partial class Api5Session
     }
 
     // =============================================================================================
-    // Правка признаков B3 (наряд §5, §7: действие edit)
+    // Editing B3 features (order §5, §7: action edit)
     // =============================================================================================
 
     private const string RepositionFamily = "reposition";
@@ -1589,36 +1504,30 @@ public sealed partial class Api5Session
 
     private const string BooleanFamily = "boolean";
 
-    /// <summary>
-    /// Позиция элемента дерева среди признаков ТОГО ЖЕ ТИПА и общее число таких признаков в дереве.
-    /// </summary>
-    /// <param name="Ordinal">Сколько признаков этого типа стоит в дереве до цели; <c>null</c> — цель
-    /// среди них не найдена. Ноль и «не найдено» — разные исходы, и смешивать их нельзя.</param>
-    /// <param name="Count">Сколько всего признаков этого типа в дереве; <c>-1</c> — прочитать не
-    /// удалось.</param>
+    /// <summary>The position of a tree element among features OF THE SAME TYPE, and the total number of such
+    /// features in the tree.</summary>
+    /// <param name="Ordinal">How many features of this type stand in the tree before the target;
+    /// <c>null</c> — the target was not found among them. Zero and "not found" are different outcomes
+    /// and must not be mixed.</param>
+    /// <param name="Count">How many features of this type are in the tree in total; <c>-1</c> — could
+    /// not be read.</param>
     private readonly record struct SameTypeScan(int? Ordinal, int Count);
 
-    /// <summary>
-    /// Позиция элемента дерева среди признаков ТОГО ЖЕ ТИПА — сколько таких признаков стоит в дереве
-    /// до него. Это адрес элемента в коллекции API7 той же операции.
-    /// </summary>
+    /// <summary>The position of a tree element among features OF THE SAME TYPE — how many such features stand in
+    /// the tree before it. This is the element's address in the API7 collection of the same operation.</summary>
     /// <remarks>
-    /// <para>
-    /// <b>Почему позиция, а не имя.</b> Имя в API5 и имя в API7 для одного и того же объекта
-    /// расходятся — это измерено на скруглении (F.8: имя, заданное в API5, в API7 читается иначе),
-    /// и по той же причине <c>Api7Fillet.FindIndexesByIdenticalRadius</c> и
-    /// <c>Api7Rotated.FindIndexFor</c> сопоставляют по ЗНАЧЕНИЮ, а не по имени. У признаков B3
-    /// значения-идентификатора, известного до правки, нет вовсе (операнды булевой операции после
-    /// объединения потреблены, плоскость разделения — вспомогательный объект), поэтому адрес берётся
-    /// по позиции. Это тот же приём, которым правится вращение, когда сущность дерева не отвечает
-    /// на <c>QI(IRotated)</c> (<c>RotatedOrdinal</c>), и он проверяется геометрией в приёмке:
-    /// правка не того признака не даст ожидаемого объёма и габарита.
-    /// </para>
-    /// <para>
-    /// Число признаков возвращается ВМЕСТЕ с позицией, а не отдельным обходом: два обхода одной
-    /// коллекции могли бы разойтись между собой, а решение о пригодности адреса принимается по обоим
-    /// числам сразу (<see cref="RequireSameTypeIndex"/>).
-    /// </para>
+    /// <b>Why position, not name.</b> The name in API5 and the name in API7 for one and the same object
+    /// diverge — this is MEASURED on a fillet (F.8: a name set in API5 reads differently in API7), and
+    /// for the same reason <c>Api7Fillet.FindIndexesByIdenticalRadius</c> and
+    /// <c>Api7Rotated.FindIndexFor</c> match by VALUE, not by name. For B3 features there is no
+    /// identifier value known before the edit at all (the boolean operands are consumed after the
+    /// union, the split plane is an auxiliary object), so the address is taken by position. This is the
+    /// same technique used to edit a rotation when the tree entity does not answer <c>QI(IRotated)</c>
+    /// (<c>RotatedOrdinal</c>), and it is checked by geometry in acceptance: editing the wrong feature
+    /// will not give the expected volume and bounding box.
+    /// The feature count is returned TOGETHER with the position, not by a separate walk: two walks of
+    /// one collection could diverge, and the decision on address suitability is made from both numbers
+    /// at once (<see cref="RequireSameTypeIndex"/>).
     /// </remarks>
     private static SameTypeScan ScanSameType(ksPart part, ksEntity target, int type)
     {
@@ -1659,8 +1568,8 @@ public sealed partial class Api5Session
 
                 if (seen > 0)
                 {
-                    // Признаки этого типа найдены; если цели среди них нет — второго прохода по
-                    // другой коллекции быть не должно: это значило бы, что цель лежит в другом месте.
+                    // Features of this type were found; if the target is not among them, there must be
+                    // no second pass over another collection: that would mean the target lies elsewhere.
                     return new SameTypeScan(found, seen);
                 }
             }
@@ -1673,26 +1582,22 @@ public sealed partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Индекс признака в коллекции API7 той же операции — или честный отказ, если сопоставление не
-    /// доказано.
-    /// </summary>
+    /// <summary>The index of a feature in the API7 collection of the same operation — or an honest refusal if the
+    /// match is not proven.</summary>
     /// <remarks>
-    /// <para>
-    /// <b>Почему мало «позиция меньше числа элементов».</b> Позиция в дереве и индекс в коллекции
-    /// API7 — это два РАЗНЫХ списка, и совпадают они только тогда, когда признаков этого типа в
-    /// дереве ровно столько же, сколько элементов в коллекции. У изменения положения это условие
-    /// нарушается измеренно: номер <c>79</c> носит не только «Изменение положения», но и
-    /// вспомогательная «Копия тела», которую создаёт режим сохранения инструментов булевой операции
-    /// (<c>scratch/b3-measure-feature-types.py</c>, 18.09.2026). В документе с копией позиция
-    /// «Изменение положения» перестаёт быть индексом в <c>BodyRepositions</c>, и запись ушла бы в
-    /// ЧУЖОЙ признак. Поэтому при расхождении чисел вызов отвергается до мутации.
-    /// </para>
-    /// <para>
-    /// Цена отказа: правка признака, рядом с которым живёт признак того же номера, но другой
-    /// операции, не выполняется. Это выбранная сторона — отказ предпочтён записи не в тот объект,
-    /// потому что «применилось не туда» по ответу неотличимо от «применилось».
-    /// </para>
+    /// <b>Why "position less than the element count" is not enough.</b> The position in the tree and the
+    /// index in the API7 collection are two DIFFERENT lists, and they coincide only when there are
+    /// exactly as many features of this type in the tree as there are elements in the collection. For
+    /// reposition this condition is violated by measurement: the number <c>79</c> is carried not only by
+    /// "Изменение положения" but also by the auxiliary «Копия тела» that the boolean tool-preservation
+    /// mode creates (<c>scratch/b3-measure-feature-types.py</c>, 18.09.2026). In a document with a copy
+    /// the position of "Изменение положения" stops being an index into <c>BodyRepositions</c>, and the
+    /// write would land in a FOREIGN feature. Therefore, when the numbers diverge, the call is refused
+    /// before mutation.
+    /// The price of the refusal: editing a feature next to which lives a feature of the same number but
+    /// a different operation is not performed. This is the chosen side — refusal is preferred to writing
+    /// into the wrong object, because "applied in the wrong place" is indistinguishable in the response
+    /// from "applied".
     /// </remarks>
     private static int RequireSameTypeIndex(
         DocumentEntry document,
@@ -1730,30 +1635,23 @@ public sealed partial class Api5Session
         return index;
     }
 
-    /// <summary>
-    /// Правка СУЩЕСТВУЮЩЕГО признака изменения положения по <c>kompas_update_feature</c>.
-    /// </summary>
+    /// <summary>Editing an EXISTING reposition feature via <c>kompas_update_feature</c>.</summary>
     /// <remarks>
-    /// <para>
-    /// <b>Маршрут измерен 18.09.2026</b> (проба <c>--reposition</c>, шаг RP.6): правка признака[0]
-    /// повторной записью того же вектора оставляет габарит <c>(17,−11,13)…(37,−1,18)</c>, а возврат
-    /// вектора в ноль возвращает тело домой — параметр применяется к ИСХОДНЫМ входам, а не к
-    /// текущему положению. Это и есть требование наряда §5, и повторный <c>kompas_reposition</c> ему
-    /// не удовлетворяет: он создаёт второй признак и накапливает смещение.
-    /// </para>
-    /// <para>
-    /// <b>Успешный <c>Update()</c> доказательством не является.</b> Шаг RP.2 измерил три маршрута из
-    /// четырёх, которые вернули <c>true</c> и тело не двинули. Поэтому перенос ЧИТАЕТСЯ ОБРАТНО
-    /// (<c>Position.X/Y/Z</c>) и сверяется с матрицей, которую просили записать: при накоплении
-    /// смещения чтение дало бы удвоенное значение. Объём при жёстком преобразовании обязан
-    /// сохраниться, и это тоже проверяется — по нему «сдвинулось» и «осталось» неразличимы, но
-    /// «преобразование осталось жёстким» видно.
-    /// </para>
-    /// <para>
-    /// Проверки «поля других семейств отвергаются» здесь те же, что у остальных правимых семейств:
-    /// молча применить половину запроса хуже отказа.
-    /// </para>
-    /// </remarks>
+    /// <b>The route is MEASURED 18.09.2026</b> (probe <c>--reposition</c>, step RP.6): editing feature[0]
+    /// by rewriting the same vector leaves the bounding box <c>(17,−11,13)…(37,−1,18)</c>, and resetting
+    /// the vector to zero brings the body home — the parameter is applied to the ORIGINAL inputs, not to
+    /// the current position. This is exactly what order §5 requires, and a repeated
+    /// <c>kompas_reposition</c> does not satisfy it: it creates a second feature and accumulates the
+    /// offset.
+    /// <b>A successful <c>Update()</c> is not proof.</b> Step RP.2 measured three routes out of four that
+    /// returned <c>true</c> and did not move the body. So the translation is READ BACK
+    /// (<c>Position.X/Y/Z</c>) and compared with the matrix that was requested: if the offset accumulated,
+    /// the read would give a doubled value. Volume under a rigid transformation must be preserved, and
+    /// that is checked too — by it "moved" and "stayed" are indistinguishable, but "the transformation
+    /// stayed rigid" is visible.
+    /// The checks "fields of other families are rejected" are the same here as for the other editable
+    /// families: silently applying half a request is worse than refusing.
+    /// History: docs/decisions/adapter-solid.md#edit-reposition</remarks>
     private UpdateFeatureResult UpdateSolidReposition(
         DocumentEntry document,
         ksEntity entity,
@@ -1779,10 +1677,10 @@ public sealed partial class Api5Session
                 details: new Dictionary<string, object?> { ["family"] = RepositionFamily });
         }
 
-        // Проверки состава полей переиспользуются ДОСЛОВНО из маршрута создания: те же имена, те же
-        // правила (вектор — три конечных числа; ось — либо направление, либо вторая точка, но не обе
-        // и не ни одной; угол обязателен). Дублировать их здесь значило бы завести второе место, где
-        // они могут разойтись.
+        // Field-composition checks are reused VERBATIM from the creation route: the same names, the same
+        // rules (a vector — three finite numbers; an axis — either a direction or a second point, but not
+        // both and not neither; an angle is required). Duplicating them here would create a second place
+        // where they could diverge.
         var synthetic = new RepositionCommand
         {
             DocumentId = document.Id,
@@ -1839,10 +1737,10 @@ public sealed partial class Api5Session
 
         var wanted = new[] { matrix[12], matrix[13], matrix[14] };
 
-        // ПРАВКА ЧИТАЕТСЯ ОБРАТНО И СВЕРЯЕТСЯ ПО МАТРИЦЕ — тем же основанием, что и создание
-        // (см. RequirePlacementRoundTrip). Здесь это ещё и прямая проверка наряда §5: параметр обязан
-        // применяться к ИСХОДНЫМ входам признака, а не накапливаться. Накопление дало бы расхождение
-        // ровно на величину предыдущего преобразования, то есть обнаружимо по матрице.
+        // THE EDIT IS READ BACK AND COMPARED BY MATRIX — on the same basis as creation
+        // (see RequirePlacementRoundTrip). Here it is also a direct check of order §5: the parameter must
+        // be applied to the ORIGINAL inputs of the feature, not accumulated. Accumulation would give a
+        // divergence exactly equal to the previous transformation, i.e. detectable by matrix.
         var readBackDifference = PlacementDifference(readBack.Reading, matrix);
         if (readBackDifference is double readBackGap && readBackGap > PlacementRoundTripTolerance)
         {
@@ -1865,8 +1763,8 @@ public sealed partial class Api5Session
                 });
         }
 
-        // Жёсткое преобразование объём не меняет. Это не «ожидание из наряда», а инвариант: если
-        // объём изменился, записанное положение не является преобразованием положения.
+        // A rigid transformation does not change volume. This is not an "expectation from the order" but
+        // an invariant: if the volume changed, the written placement is not a reposition.
         var volumePreserved = volumeBefore is double v0 && volumeAfter is double v1
             && Math.Abs(v1 - v0) <= ProfileArea.Tolerance(v0);
         var featureCountPreserved = featuresAfter == featuresBefore;
@@ -1905,9 +1803,9 @@ public sealed partial class Api5Session
         var unverified = new List<string>();
         if (command.ExpectedVolumeMm3 is null)
         {
-            // Формулировка не должна противоречить уровню: при объявленном габарите правка
-            // подтверждена геометрически, но подтверждено ИМЕННО ПОЛОЖЕНИЕ, а не неизменность
-            // объёма. Сказать «не подтверждена геометрически» значило бы соврать в другую сторону.
+            // The wording must not contradict the level: with a declared bounding box the edit is
+            // confirmed geometrically, but what is confirmed is the POSITION, not the invariance of the
+            // volume. Saying "not confirmed geometrically" would lie the other way.
             unverified.Add(command.ExpectedBboxMm is null
                 ? "expected_volume_not_supplied — без аналитического ожидания объёма правка не может "
                   + "быть подтверждена геометрически"
@@ -1929,9 +1827,9 @@ public sealed partial class Api5Session
         }
         else if (readBackDifference is null)
         {
-            // Прочиталось, но НЕ тем маршрутом: у признака нет параметрического представления
-            // (OrientationType ≠ ksEulerCorners либо перенос записан не смещением). Это не «нет
-            // данных», а названная причина, и она отличается от отказа чтения.
+            // It read back, but NOT by that route: the feature has no parametric representation
+            // (OrientationType ≠ ksEulerCorners, or the translation is not written as a displacement).
+            // This is not "no data" but a named reason, and it differs from a read failure.
             unverified.Add("position_read_back_not_parametric — параметры размещения прочитаны не "
                 + "маршрутом углов Эйлера: OrientationType=" + readBack.Reading.OrientationType
                 + ", ParameterType=" + readBack.Reading.ParameterType);
@@ -1939,7 +1837,8 @@ public sealed partial class Api5Session
 
         if (command.ExpectedBboxMm is not null && moved is null)
         {
-            // Габарит объявлен вызывающим, и он не совпал — это отказ, а не «не проверено».
+            // The bounding box is declared by the caller and did not match — this is a refusal, not "not
+            // checked".
             throw new KompasContractException(
                 ErrorCodes.NoGeometryChange,
                 "Правка выполнена, но тело не встало в объявленный габарит. Просили перенос "
@@ -1961,9 +1860,9 @@ public sealed partial class Api5Session
                 });
         }
 
-        // Объявленное ожидание не совпало — это отказ, а не «не проверено». Вернуть «успех с
-        // пониженным уровнем» значило бы выдать недостигнутое за достигнутое: у правки есть
-        // вызывающий, который объявил число, и он вправе узнать, что число не получено.
+        // A declared expectation did not match — this is a refusal, not "not checked". Returning "success
+        // at a lower level" would pass the unreached off as reached: the edit has a caller who declared
+        // the number, and he is entitled to learn that the number was not obtained.
         if (command.ExpectedVolumeMm3 is double declared
             && (volumeAfter is not double measuredAfter
                 || Math.Abs(measuredAfter - declared) > ProfileArea.Tolerance(declared)))
@@ -1986,13 +1885,14 @@ public sealed partial class Api5Session
                 });
         }
 
-        // Уровень «геометрия проверена» означает ровно одно: объявленное вызывающим ожидание СРАВНЕНО
-        // с моделью и совпало. Требовать при этом именно объём — дефект, и он измерен: у жёсткого
-        // преобразования объём ИНВАРИАНТ, и положение подтверждает ГАБАРИТ (это же сказано строкой
-        // выше в unverified), а первая редакция требовала ExpectedVolumeMm3, поэтому вызов, объявивший
-        // ОДИН габарит и получивший его, отвечал level=call_returned. То есть совпавшее свидетельство
-        // объявлялось необъявленным, и вызывающий не мог отличить «проверено и совпало» от «не
-        // проверялось». Найдено строкой B3.27 приёмки (наряд §6.6), исправлено здесь.
+        // The level "geometry checked" means exactly one thing: the expectation declared by the caller
+        // was COMPARED with the model and matched. Requiring specifically the volume here is a defect, and
+        // it is MEASURED: under a rigid transformation the volume is an INVARIANT, and the position is
+        // confirmed by the BOUNDING BOX (this is also said above in unverified), while the first edition
+        // required ExpectedVolumeMm3, so a call that declared ONE bounding box and got it answered
+        // level=call_returned. That is, matching evidence was declared undeclared, and the caller could
+        // not tell "checked and matched" from "not checked". Found by acceptance row B3.27 (order §6.6),
+        // fixed here.
         var declaredExpectation = DeclaresExpectation(command);
         var geometryConfirmed = declaredExpectation && checks.TrueForAll(c => c.Passed);
 
@@ -2012,45 +1912,37 @@ public sealed partial class Api5Session
     }
 
     // =============================================================================================
-    // Правка семейств SM-16 (разделение и отсечение) — действие edit наряда §7
+    // Editing the SM-16 families (split and cut) — action edit of order §7
     // =============================================================================================
 
-    /// <summary>
-    /// Поле контракта, принадлежащее семействам B3: имя как в схеме, семейства-владельцы и чтение
-    /// значения из команды.
-    /// </summary>
-    /// <param name="Name">Имя поля в схеме инструмента (snake_case), а не имя свойства C#.</param>
-    /// <param name="Owners">Семейства, которым поле разрешено. Их может быть несколько: опора
-    /// <c>plane</c> принадлежит и разделению, и отсечению.</param>
-    /// <param name="Read">Чтение значения: <c>null</c> означает «поле не передано», и это отличается
-    /// от «передано и отвергнуто».</param>
+    /// <summary>A contract field belonging to the B3 families: its name as in the schema, its owning families and
+    /// how its value is read from the command.</summary>
+    /// <param name="Name">The field name in the tool schema (snake_case), not the C# property name.</param>
+    /// <param name="Owners">The families the field is allowed to. There may be several: the support
+    /// <c>plane</c> belongs to both split and cut.</param>
+    /// <param name="Read">Reading the value: <c>null</c> means "the field was not passed", and this
+    /// differs from "passed and rejected".</param>
     private sealed record SolidField(string Name, string[] Owners, Func<UpdateFeatureCommand, object?> Read);
 
-    /// <summary>
-    /// Все поля <see cref="UpdateFeatureCommand"/>, принадлежащие семействам B3, — ОДНА таблица на
-    /// два вопроса: «кто владеет полем» и «что в нём лежит».
-    /// </summary>
+    /// <summary>All fields of <see cref="UpdateFeatureCommand"/> belonging to the B3 families — ONE table for two
+    /// questions: "who owns the field" and "what lies in it".</summary>
     /// <remarks>
-    /// <para>
-    /// <b>Почему одна таблица, а не две.</b> Первая редакция держала владельцев в словаре, а значения
-    /// — в отдельном перечислителе, и эти две структуры могли разойтись. Разошлись бы они молча:
-    /// поле, добавленное в перечислитель без записи в словаре, не отвергалось НИКОГДА, потому что
-    /// <c>TryGetValue</c> возвращал <c>false</c> и условие «поле чужое» коротко замыкалось в
-    /// <c>false</c>. Это ровно тот же класс дефекта, что П5 (объявленное, но проглоченное поле),
-    /// только с другой стороны: там поле забыли внести в список запрещённых, здесь — в список
-    /// известных, а исход один — поле принимается и не применяется. Теперь разойтись нечему:
-    /// перечислитель ходит по этой же таблице.
-    /// </para>
-    /// <para>
-    /// <b>Почему перечень, а не «список запрещённого».</b> Перечень того, что бывает в команде,
-    /// меняется вместе с контрактом, и умолчание здесь обязано быть «не отвергай»: поле, не
-    /// приписанное ни одному семейству, отвергается не здесь, а своим семейством или проверкой
-    /// неприменимых параметров ниже. Поэтому полнота таблицы проверяется отдельно — тестом
-    /// <c>SolidFeatureClassificationTests</c>, который сверяет её с самим контрактом: новое поле
-    /// команды не пройдёт, пока не будет отнесено к семейству, к неприменимым, к адресации или к
-    /// ожиданиям геометрии.
-    /// </para>
-    /// </remarks>
+    /// <b>Why one table and not two.</b> The first edition kept owners in a dictionary and values in a
+    /// separate enumerator, and these two structures could diverge. They would have diverged silently: a
+    /// field added to the enumerator without an entry in the dictionary was NEVER rejected, because
+    /// <c>TryGetValue</c> returned <c>false</c> and the "field is foreign" condition short-circuited to
+    /// <c>false</c>. This is exactly the same class of defect as P5 (a declared but swallowed field),
+    /// only from the other side: there the field was forgotten in the forbidden list, here — in the known
+    /// list, and the outcome is one — the field is accepted and not applied. Now there is nothing to
+    /// diverge: the enumerator walks this same table.
+    /// <b>Why an enumeration, not a "forbidden list".</b> The enumeration of what occurs in the command
+    /// changes together with the contract, and the default here must be "do not reject": a field not
+    /// assigned to any family is rejected not here, but by its family or by the check of inapplicable
+    /// parameters below. Therefore the completeness of the table is checked separately — by the test
+    /// <c>SolidFeatureClassificationTests</c>, which verifies it against the contract itself: a new
+    /// command field will not pass until it is assigned to a family, to the inapplicable, to addressing
+    /// or to geometry expectations.
+    /// History: docs/decisions/adapter-solid.md#field-classification</remarks>
     private static readonly SolidField[] SolidFields =
     {
         new("operation", new[] { BooleanFamily }, c => c.Operation),
@@ -2064,82 +1956,70 @@ public sealed partial class Api5Session
         new("reposition_axis_direction_mm", new[] { RepositionFamily }, c => c.RepositionAxisDirectionMm),
         new("reposition_axis_point2_mm", new[] { RepositionFamily }, c => c.RepositionAxisPoint2Mm),
         new("reposition_angle_deg", new[] { RepositionFamily }, c => c.RepositionAngleDeg),
-        // Поле семейства МАССИВА (очередь B4) — приписано своему семейству, а не «неприменимым».
-        // Это исправление НАЙДЕННОГО дефекта, а не украшение: поле pattern добавлено в контракт
-        // очередью B4, но ни в одну таблицу ролей не попало, поэтому проверка полноты
-        // SolidFeatureClassificationTests.EveryCommandProperty_IsClassifiedExactlyOnce падала на нём
-        // — и падала, судя по дате последнего прогона, с момента появления поля. Здесь оно получает
-        // роль «семейственное»: ветка массива возвращается РАНЬШЕ всех остальных, поэтому признак B3
-        // до неё не доходит, а признак массива с чужим полем отвергает ForeignFamilyFields.
+        // A field of the ARRAY family (queue B4) — assigned to its own family, not to "inapplicable".
+        // This is the fix of a FOUND defect, not decoration: the pattern field was added to the contract
+        // by queue B4 but was assigned to no role table, so the completeness check
+        // SolidFeatureClassificationTests.EveryCommandProperty_IsClassifiedExactlyOnce failed on it —
+        // and, judging by the last run date, had failed since the field appeared. Here it gets the role
+        // "family": the array branch returns EARLIER than all others, so a B3 feature never reaches it,
+        // and an array feature with a foreign field is rejected by ForeignFamilyFields.
         new("pattern", new[] { PatternFamily }, c => c.Pattern),
-        // Поля семейства ОТВЕРСТИЯ (наряд SM07 §3.2, очередь B2). Приписаны своему семейству по тому
-        // же основанию, что и pattern: признак отверстия их ЧИТАЕТ (своей веткой по типу дерева 583),
-        // а признаки остальных семейств обязаны их отвергнуть — и отвергают, потому что перечень
-        // строится по этой же таблице. Прежде эти поля не были объявлены НИГДЕ: вызов с ними на
-        // чужом признаке был бы принят и проглочен, а на отверстии — отвергнут
-        // CAPABILITY_UNAVAILABLE с текстом «этот признак — null (type=583)», что и измерено строкой
-        // F08.16.edit до этой правки (docs/STATUS.md).
+        // Fields of the HOLE family (order SM07 §3.2, queue B2). Assigned to their family on the same
+        // basis as pattern: a hole feature READS them (its own branch by tree type 583), and features of
+        // other families must reject them — and do, because the enumeration is built from this same
+        // table. Previously these fields were declared NOWHERE: a call with them on a foreign feature
+        // would be accepted and swallowed, and on a hole it was rejected CAPABILITY_UNAVAILABLE with the
+        // text «этот признак — null (type=583)», which is what row F08.16.edit measured before this fix
+        // (docs/STATUS.md).
         new("diameter_mm", new[] { HoleFamily }, c => c.DiameterMm),
         new("counterbore_diameter_mm", new[] { HoleFamily }, c => c.CounterboreDiameterMm),
         new("counterbore_depth_mm", new[] { HoleFamily }, c => c.CounterboreDepthMm),
         new("countersink_diameter_mm", new[] { HoleFamily }, c => c.CountersinkDiameterMm),
         new("countersink_angle_deg", new[] { HoleFamily }, c => c.CountersinkAngleDeg),
-        // Ожидание дельты объёма — тоже поле ЭТОГО семейства, а не общее: его читает только ветка
-        // отверстия. Объявить его «общим ожиданием» значило бы принять его на переносе и булевой
-        // операции и молча не применить — тот самый класс дефекта, что у keep_side (П5).
+        // The volume-delta expectation is also a field of THIS family, not a common one: only the hole
+        // branch reads it. Declaring it a "common expectation" would mean accepting it on reposition and
+        // boolean operations and silently not applying it — the same class of defect as keep_side (P5).
         new("expected_volume_delta_mm3", new[] { HoleFamily }, c => c.ExpectedVolumeDeltaMm3),
     };
 
-    /// <summary>
-    /// Объявлено ли вызывающим аналитическое ожидание геометрии — объём и/или габарит.
-    /// </summary>
-    /// <remarks>
-    /// Правило вынесено в одно место потому, что им определяются ДВА разных исхода: булева правка БЕЗ
-    /// ожидания отвергается сразу, а правка переноса С ожиданием получает уровень «геометрия
-    /// проверена». Пока это условие стояло записанным дважды, оно уже разошлось — и разошлось ровно
-    /// настолько, чтобы объявленный и совпавший габарит отчитывался как необъявленный (дефект П6,
-    /// найден строкой B3.27 приёмки). Разница была в одном слове: в переносе уровень требовал именно
-    /// объём, хотя габарит подтверждает положение не хуже.
-    /// </remarks>
+    /// <summary>Whether the caller declared an analytical geometry expectation — volume and/or bounding box.</summary>
+    /// <remarks>The rule is moved into one place because it decides TWO different outcomes: a boolean edit WITHOUT
+    /// an expectation is refused at once, while a reposition edit WITH an expectation gets the level
+    /// "geometry checked". While this condition stood written twice it had already diverged — and
+    /// diverged just enough that a declared and matching bounding box was reported as undeclared (defect
+    /// P6, found by acceptance row B3.27). The difference was one word: in reposition the level required
+    /// specifically the volume, although the bounding box confirms the position no worse.</remarks>
     private static bool DeclaresExpectation(UpdateFeatureCommand command) =>
         command.ExpectedVolumeMm3 is not null || command.ExpectedBboxMm is not null;
 
-    /// <summary>
-    /// Отказ на поля ЧУЖИХ семейств B3: определение признака перечисляется ПОЛНОСТЬЮ.
-    /// </summary>
+    /// <summary>Refusal on fields of FOREIGN B3 families: the definition of the feature is enumerated IN FULL.</summary>
     /// <remarks>
-    /// <para>
-    /// <b>Почему перечень, а не «список запрещённого».</b> Первая редакция перечисляла запрещённые
-    /// поля руками, и от этого уже пострадала: <c>keep_side</c> в перечень не попал, поэтому вызов
-    /// <c>plane + keep_side</c> на признаке РАЗДЕЛЕНИЯ принимался, а <c>keep_side</c> молча
-    /// игнорировался — ровно тот класс дефекта, против которого написано правило «параметр, не
-    /// объявленный в схеме, до COM не доходит» (§9.1 П4), только с другой стороны: объявленный, но
-    /// проглоченный. Здесь каждое семейственное поле обязано быть ПРИПИСАНО семейству
-    /// (<see cref="SolidFields"/>), и поле, переданное не своему семейству, отвергается.
-    /// </para>
-    /// <para>
-    /// <b>Чего эта проверка не обещает.</b> Она отвергает переданное поле, но НЕ доказывает, что
-    /// перечень семейственных полей полон: полноту держит тест <c>SolidFeatureClassificationTests</c>,
-    /// сверяющий таблицу с самим контрактом. Раньше здесь стояло утверждение, что таблица и
-    /// перечислитель «сверяются при отказе»; это было неверно — они не сверялись нигде, и расхождение
-    /// между ними было молчаливым. Строка заменена на описание того, что проверка действительно
-    /// делает.
-    /// </para>
-    /// <para>
-    /// Поля, не принадлежащие ни одному семейству B3 (выдавливание, фаска, скругление, вращение),
-    /// проверяются отдельно ниже: они не «чужое семейство», а просто не применимы к признаку B3.
-    /// </para>
+    /// <b>Why an enumeration, not a "forbidden list".</b> The first edition listed the forbidden fields
+    /// by hand, and it already suffered from this: <c>keep_side</c> did not make it into the list, so a
+    /// call <c>plane + keep_side</c> on a SPLIT feature was accepted and <c>keep_side</c> was silently
+    /// ignored — exactly the class of defect the rule "a parameter not declared in the schema does not
+    /// reach COM" was written against (§9.1 P4), only from the other side: declared but swallowed. Here
+    /// every family field must be ASSIGNED to a family (<see cref="SolidFields"/>), and a field passed to
+    /// a family that does not own it is rejected.
+    /// <b>What this check does not promise.</b> It rejects a passed field but does NOT prove that the
+    /// list of family fields is complete: completeness is held by the test
+    /// <c>SolidFeatureClassificationTests</c>, which verifies the table against the contract itself.
+    /// Earlier there stood here a claim that the table and the enumerator "are verified on refusal"; that
+    /// was wrong — they were verified nowhere, and the divergence between them was silent. The line is
+    /// replaced with a description of what the check actually does.
+    /// Fields belonging to no B3 family (extrude, chamfer, fillet, rotation) are checked separately
+    /// below: they are not "a foreign family" but simply inapplicable to a B3 feature.
     /// </remarks>
     /// <param name="ownFields">
-    /// Имена полей, которые ЭТО семейство читает, хотя таблица ролей отдаёт их другому ведомству.
-    /// Заведено 20.09.2026 нарядом SM07 §3.2 ради одного измеренного случая: <c>depth_mm</c> —
-    /// поле ВЫДАВЛИВАНИЯ в таблице и одновременно СВОЁ поле глухого отверстия (<c>blind_flat</c>).
-    /// Без этого списка правка глухого отверстия отвергалась INVALID_ARGUMENT ещё до COM — и это
-    /// ИЗМЕРЕНО на первой поставке с веткой отверстия (строки F08.15/16/19/20.edit, прогон
-    /// 20.09.2026): глубина читается как чужое поле, хотя её читает ветка отверстия. Длину списка
-    /// держит не «здравый смысл», а приёмка: с ним глухое отверстие правится, а цековка и зенковка
-    /// с <c>depth_mm</c> по-прежнему отвергаются — но уже ПО РЕЖИМУ (<c>ValidateHoleEdit</c>), где
-    /// это и измерено (HO.13/HO.16).
+    /// Names of fields that THIS family reads, even though the role table gives them to another
+    /// department. Introduced 20.09.2026 by order SM07 §3.2 for one measured case: <c>depth_mm</c> is an
+    /// EXTRUDE field in the table and at the same time an OWN field of a blind hole (<c>blind_flat</c>).
+    /// Without this list, editing a blind hole was rejected INVALID_ARGUMENT before COM — and this is
+    /// MEASURED on the first delivery with the hole branch (rows F08.15/16/19/20.edit, run 20.09.2026):
+    /// the depth is read as a foreign field, although the hole branch reads it. The length of the list is
+    /// held not by "common sense" but by acceptance: with it a blind hole is edited, while counterbore
+    /// and countersink with <c>depth_mm</c> are still rejected — but now BY MODE
+    /// (<c>ValidateHoleEdit</c>), where that is measured (HO.13/HO.16).
     /// </param>
     private static void RejectForeignSolidFields(
         UpdateFeatureCommand command,
@@ -2177,13 +2057,13 @@ public sealed partial class Api5Session
             || command.Direction is not null || command.RadiusMm is not null || command.EdgeRefs is not null
             || command.BaseObjectRefs is not null || command.RotationAngleDeg is not null
             || command.RotationDirection is not null
-            // Очередь B5 (кинематика, сечения, оболочка) — тоже чужие поля для признаков B3.
-            // `couplings` дописан 20.09.2026: очередь B5 добавила ШЕСТЬ правимых полей, и пять из
-            // них попали в перечни чужих полей, а шестое — нет. Нашёл это unit-тест
-            // SolidFeatureClassificationTests (поле без роли = поле, которое адаптер примет и
-            // проглотит), а зонд scratch/_couplings_scope_probe.py измерил сам проглатывание:
-            // вызов «правка признака + couplings» возвращал успех, геометрия менялась, а цепочки не
-            // применялись. Отвергается ДО COM, как и остальные пять.
+            // Queue B5 (kinematics, sections, shell) — also foreign fields for B3 features. `couplings`
+            // was added 20.09.2026: queue B5 added SIX editable fields, and five of them made it into the
+            // foreign-field lists while the sixth did not. This was found by the unit test
+            // SolidFeatureClassificationTests (a field with no role = a field the adapter will accept and
+            // swallow), and the probe scratch/_couplings_scope_probe.py measured the swallowing itself:
+            // a call "edit a feature + couplings" returned success, the geometry changed, and the
+            // couplings were not applied. It is rejected BEFORE COM, like the other five.
             || command.ShiftMode is not null || command.SectionRefs is not null
             || command.Couplings is not null
             || command.ThicknessMm is not null || command.ThinInward is not null
@@ -2199,31 +2079,23 @@ public sealed partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Постановка опоры для ПРАВКИ признака SM-16: та же валидация, что у создания, но БЕЗ создания
-    /// объекта плоскости.
-    /// </summary>
+    /// <summary>Specifying the support for EDITING an SM-16 feature: the same validation as for creation, but
+    /// WITHOUT creating a plane object.</summary>
     /// <remarks>
-    /// <para>
-    /// <b>Почему без создания.</b> Измерено 18.09.2026 (проба <c>--split</c>, шаг SP.9, шаг E-B —
-    /// отрицательный контроль): подстановка ДРУГОЙ, только что созданной плоскости в существующий
-    /// признак результата НЕ меняет — <c>Update()</c> возвращает <c>true</c>, а части остаются
-    /// прежними. Работает другой маршрут (E-A для разделения, E-C для отсечения): перенос ТРЁХ ТОЧЕК
-    /// ПОСТРОЕНИЯ СОБСТВЕННОЙ опоры признака. Поэтому здесь считаются три точки, а объект плоскости не
-    /// создаётся вовсе — иначе в документе оставался бы неиспользованный объект на каждую правку.
-    /// </para>
-    /// <para>
-    /// <b><c>plane_ref</c> на правке отвергается.</b> Маршрут измерен для СОБСТВЕННОЙ опоры признака,
-    /// а доказать, что предъявленная ссылка и есть эта опора, нечем: сравнение ссылок плоскостей не
-    /// измерялось, а подстановка чужой плоскости результата не даёт (E-B). Сдвинуть чужую плоскость и
-    /// отчитаться о правке значило бы выдать недостигнутое за достигнутое, поэтому исход честный —
-    /// отказ с указанием, что опора описывается точкой и нормалью.
-    /// </para>
-    /// <para>
-    /// Проверки точки и нормали не дублируются, а берутся у тех же правил, что и при создании:
-    /// конечность здесь, ненулевая нормаль — у <c>PlaneBasis.FromNormal</c>, три точки построения — у
-    /// <c>PlaneBasis.ThreePoints</c>.
-    /// </para>
+    /// <b>Why without creation.</b> MEASURED 18.09.2026 (probe <c>--split</c>, step SP.9, step E-B —
+    /// negative control): substituting ANOTHER, just-created plane into an existing feature does NOT
+    /// change the result — <c>Update()</c> returns <c>true</c> and the parts stay as they were. A
+    /// different route works (E-A for split, E-C for cut): transferring the THREE CONSTRUCTION POINTS of
+    /// the feature's OWN support. Therefore three points are computed here and no plane object is created
+    /// at all — otherwise an unused object would remain in the document on every edit.
+    /// <b><c>plane_ref</c> is refused on edit.</b> The route is measured for the feature's OWN support,
+    /// and there is no way to prove that the presented reference is that support: comparing plane
+    /// references was not measured, and substituting a foreign plane gives no result (E-B). Moving a
+    /// foreign plane and reporting an edit would mean passing the unreached off as reached, so the
+    /// outcome is honest — a refusal stating that the support is described by a point and a normal.
+    /// The point and normal checks are not duplicated but taken from the same rules as at creation:
+    /// finiteness here, a non-zero normal — from <c>PlaneBasis.FromNormal</c>, three construction points —
+    /// from <c>PlaneBasis.ThreePoints</c>.
     /// </remarks>
     private (double[] P1, double[] P2, double[] P3, double[] UnitNormal, double[] Point) ResolveSupportPlane(
         CutPlaneDto plane,
@@ -2293,33 +2165,27 @@ public sealed partial class Api5Session
         return (three.P1, three.P2, three.P3, three.UnitNormal, new[] { point[0], point[1], point[2] });
     }
 
-    /// <summary>
-    /// Правка СУЩЕСТВУЮЩЕГО признака разделения: новая опора, записанная в тот же признак.
-    /// </summary>
+    /// <summary>Editing an EXISTING split feature: a new support written into the same feature.</summary>
     /// <remarks>
-    /// <para>
-    /// <b>Маршрут измерен 18.09.2026</b> (проба <c>--split</c>, шаг SP.9, прогон
-    /// <c>c9cd7660468c44aa97b410e253ee2cb1</c>): перенос трёх точек построения СОБСТВЕННОЙ опоры
-    /// признака переводит части <c>6 000 / 18 000</c> при <c>x = 10</c> в <c>9 000 / 15 000</c> при
-    /// <c>x = 15</c>, число признаков остаётся <c>1 → 1</c>, сумма <c>24 000</c> не меняется.
-    /// Отрицательный контроль того же шага (E-B) показал, что «очевидный» маршрут — подстановка
-    /// другой плоскости в <c>CutObjects</c> — результата не меняет, и он в правке не используется.
-    /// </para>
-    /// <para>
-    /// <b>Определение перечисляется целиком, а не «изменяемое поле».</b> Опоры у разделения два вида
-    /// (существующая плоскость либо точка с нормалью). Прочитать опору обратно МОЖНО — это измерено
-    /// 18.09.2026 шагом SP.10 (<c>CutObjects</c> отдаёт три точки построения и нормаль, и разные опоры
-    /// читаются по-разному), и именно это публикует <c>kompas_get_feature</c> в блоке
-    /// <c>solid.plane</c>. Требование полноты запроса сохранено не из-за невозможности чтения, а
-    /// потому что ответ на частичный запрос не отличил бы «изменилось ровно то, что просили» от
-    /// «изменилось заодно и то, о чём промолчали».
-    /// </para>
-    /// <para>
-    /// <b>Подтверждение — только состав частей.</b> Сумма объёмов при правке разделения не меняется,
-    /// поэтому <c>expected_volume_mm3</c> здесь не принимается вовсе (отвергается с указанием на
-    /// <c>expected_part_volumes_mm3</c>): строка, сверяющая сумму, прошла бы на полном бездействии.
-    /// </para>
-    /// </remarks>
+    /// <b>The route is MEASURED 18.09.2026</b> (probe <c>--split</c>, step SP.9, run
+    /// <c>c9cd7660468c44aa97b410e253ee2cb1</c>): transferring the three construction points of the
+    /// feature's OWN support turns the parts <c>6 000 / 18 000</c> at <c>x = 10</c> into
+    /// <c>9 000 / 15 000</c> at <c>x = 15</c>, the feature count stays <c>1 → 1</c>, the sum
+    /// <c>24 000</c> does not change. The negative control of the same step (E-B) showed that the
+    /// "obvious" route — substituting another plane into <c>CutObjects</c> — does not change the result,
+    /// and it is not used in the edit.
+    /// <b>The definition is enumerated in full, not "the field being changed".</b> A split has two kinds
+    /// of support (an existing plane or a point with a normal). Reading the support back IS possible —
+    /// this is MEASURED 18.09.2026 by step SP.10 (<c>CutObjects</c> returns three construction points and
+    /// a normal, and different supports read differently), and this is exactly what
+    /// <c>kompas_get_feature</c> publishes in the <c>solid.plane</c> block. The requirement of request
+    /// completeness is kept not because reading is impossible, but because an answer to a partial request
+    /// would not tell "exactly what was asked changed" from "what was not mentioned changed too".
+    /// <b>Confirmation is only the composition of parts.</b> The sum of volumes does not change when a
+    /// split is edited, so <c>expected_volume_mm3</c> is not accepted here at all (it is rejected with a
+    /// pointer to <c>expected_part_volumes_mm3</c>): a row checking the sum would pass on complete
+    /// inaction.
+    /// History: docs/decisions/adapter-solid.md#edit-split</remarks>
     private UpdateFeatureResult UpdateSolidSplit(
         DocumentEntry document,
         ksEntity entity,
@@ -2405,15 +2271,15 @@ public sealed partial class Api5Session
         var featuresAfter = CountFeatures(document);
         var sameFeature = string.Equals(stateBefore.Name, stateAfter.Name, StringComparison.Ordinal);
 
-        // ЧАСТИ ОПОЗНАЮТСЯ ПО ИЗМЕНЕНИЮ, а не по совпадению с ожиданием. Прежняя редакция подавала в
-        // UnmatchedVolume список ВСЕХ тел документа и публиковала в observed их же объёмы: ожидание
-        // искалось ГДЕ УГОДНО в документе, поэтому постороннее тело с объёмом, случайно совпавшим с
-        // объявленной частью, закрывало объявление; лишняя часть пройти не мешала; а несовпадение
-        // состава нельзя было отличить от неверной арифметики (дефект
-        // CHECK-FIELDS-DO-NOT-SUPPORT-THE-VERDICT, наряд §4.2). Здесь набор частей берётся из
-        // СОПОСТАВЛЕНИЯ СОСТАВА тел и от объявленного ожидания не зависит вовсе. Предикат —
-        // changes.Touched (изменился объём ИЛИ габарит), а не changes.Changed: часть, уехавшая с
-        // прежним объёмом, тоже часть этого разделения, и выпасть из набора она не должна.
+        // PARTS ARE RECOGNISED BY CHANGE, not by matching the expectation. The former edition fed ALL
+        // document bodies into UnmatchedVolume and published their volumes as observed: the expectation
+        // was sought ANYWHERE in the document, so a foreign body whose volume accidentally matched a
+        // declared part closed the declaration; an extra part did not prevent a pass; and a composition
+        // mismatch could not be told from bad arithmetic (defect
+        // CHECK-FIELDS-DO-NOT-SUPPORT-THE-VERDICT, order §4.2). Here the set of parts is taken from
+        // BODY-COMPOSITION MATCHING and does not depend on the declared expectation at all. The predicate
+        // is changes.Touched (volume OR bounding box changed), not changes.Changed: a part that moved
+        // with the same volume is still a part of this split and must not drop out of the set.
         var afterSnapshots = ReadBodySnapshots(document.PartNow());
         var changes = CompareBodySnapshots(bodiesBefore, afterSnapshots);
         var vanished = bodiesBefore.Where(b => changes.MatchedOf(b.Index) is null).ToList();
@@ -2451,18 +2317,18 @@ public sealed partial class Api5Session
             }
         }
 
-        // Части опознаны только тогда, когда операция оставила ВИДИМЫЙ след. Если не изменилось и не
-        // появилось ничего, набор частей ИМЕННО ЭТОГО разделения из изменения не выводится, и
-        // подставлять вместо него все тела документа нельзя — это и был дефект.
+        // Parts are recognised only when the operation left a VISIBLE trace. If nothing changed and
+        // nothing appeared, the set of parts of THIS split cannot be derived from the change, and
+        // substituting all document bodies for it is not allowed — that was the defect.
         var partsIdentified = partSnapshots.Count > 0;
         var declaredCount = expectedParts?.Count ?? 0;
 
         string? volumeMiss = null;
         if (expectedParts is not null && partsIdentified)
         {
-            // Сравнивается ПООБЪЁМНОЕ МУЛЬТИМНОЖЕСТВО: равная мощность плюс инъективное сопоставление
-            // каждого объявления своей части — это и есть равенство мультимножеств. Кратность учтена,
-            // часть не закрывает два объявления и не подменяется посторонним телом.
+            // A MULTISET COMPARISON BY VOLUME is done: equal cardinality plus an injective match of each
+            // declaration to its own part — this is multiset equality. Multiplicity is accounted for, a
+            // part does not close two declarations and is not substituted by a foreign body.
             volumeMiss = parts.Count != declaredCount
                 ? $"частей {parts.Count}, а объявлено {declaredCount}"
                 : UnmatchedVolume(parts, expectedParts);
@@ -2518,10 +2384,11 @@ public sealed partial class Api5Session
                            + ": разделение ЗАМЕНЯЕТ тело на части и ничего не удаляет");
         }
 
-        // Ни один габарит и объём не изменился: признак мог уже иметь такую опору. Это не отказ (и
-        // объявленное ожидание проверено выше — оно сверяется с САМОЙ моделью), но и не молчание:
-        // отличить «опора уже была такой» от «запись не применилась» чтением опоры обратно этот
-        // вызов не может — маршрут чтения опоры на живом признаке не измерялся.
+        // Neither a bounding box nor a volume changed: the feature may already have had such a support.
+        // This is not a refusal (and the declared expectation is checked above — it is compared with the
+        // MODEL itself), but neither is it silence: this call cannot tell "the support was already like
+        // this" from "the write was not applied" by reading the support back — the support-read route on
+        // a live feature was not measured.
         if (!partsIdentified && vanished.Count == 0)
         {
             unverified.Add("geometry_unchanged_by_edit — ни один габарит и объём тела не изменились: "
@@ -2571,23 +2438,18 @@ public sealed partial class Api5Session
                 unverified));
     }
 
-    /// <summary>
-    /// Правка СУЩЕСТВУЮЩЕГО признака отсечения: новая опора и новая оставляемая сторона.
-    /// </summary>
+    /// <summary>Editing an EXISTING cut feature: a new support and a new kept side.</summary>
     /// <remarks>
-    /// <para>
-    /// <b>Маршрут измерен 18.09.2026</b> (проба <c>--split</c>, шаг SP.9, прогон
-    /// <c>c9cd7660468c44aa97b410e253ee2cb1</c>), двумя отдельными опытами: E-C — перенос точек опоры
-    /// на +5 по X меняет остаток с 6000 на 9000; E-D — смена ТОЛЬКО <c>Direction</c> на том же
-    /// признаке меняет остаток с 9000 на 15000. Прежняя редакция этого обработчика подставляла в
-    /// признак ДРУГУЮ плоскость, и это измеренно не работает (отрицательный контроль E-B).
-    /// </para>
-    /// <para>
-    /// <b>Определение перечисляется целиком.</b> Требуются И опора, И сторона: прочитать текущую
-    /// опору и сторону с живого признака и дополнить недостающее не измерено, а выполнить половину
-    /// запроса молча — значит отчитаться о правке, которой не было.
-    /// </para>
-    /// </remarks>
+    /// <b>The route is MEASURED 18.09.2026</b> (probe <c>--split</c>, step SP.9, run
+    /// <c>c9cd7660468c44aa97b410e253ee2cb1</c>), by two separate experiments: E-C — transferring the
+    /// support points by +5 along X changes the remainder from 6000 to 9000; E-D — changing ONLY
+    /// <c>Direction</c> on the same feature changes the remainder from 9000 to 15000. The former edition
+    /// of this handler substituted ANOTHER plane into the feature, and this is measured not to work
+    /// (negative control E-B).
+    /// <b>The definition is enumerated in full.</b> BOTH the support AND the side are required: reading
+    /// the current support and side from a live feature and filling in the missing part was not measured,
+    /// and silently performing half the request means reporting an edit that did not happen.
+    /// History: docs/decisions/adapter-solid.md#edit-cut</remarks>
     private UpdateFeatureResult UpdateSolidCutByPlane(
         DocumentEntry document,
         ksEntity entity,
@@ -2660,10 +2522,10 @@ public sealed partial class Api5Session
             CutByPlaneFamily,
             "Cuts");
 
-        // Область применения восстанавливается на правке так же, как назначается на создании
-        // (наряд §3.2). Без target_body_ref она читается обратно до мутации и незаадресованный
-        // признак отвергается — иначе перенос опоры снял бы материал у посторонних тел, потому что
-        // умолчание области применения «Все объекты» (справка rezultat_oper_v_zavisimosti_ot_s_o.html).
+        // The application scope is restored on edit just as it is assigned on creation (order §3.2).
+        // Without target_body_ref it is read back before mutation and an unaddressed feature is rejected
+        // — otherwise moving the support would remove material from foreign bodies, because the scope
+        // default is «Все объекты» (help rezultat_oper_v_zavisimosti_ot_s_o.html).
         IKompasAPIObject? targetBody = null;
         if (command.TargetBodyRef is string targetRef)
         {
@@ -2714,20 +2576,21 @@ public sealed partial class Api5Session
         var featuresAfter = CountFeatures(document);
         var sameFeature = string.Equals(stateBefore.Name, stateAfter.Name, StringComparison.Ordinal);
 
-        // Остаток опознаётся ПО ИЗМЕНЕНИЮ: это тело, не совпавшее ни с одним снимком «до». Прежняя
-        // редакция искала его как «тело с объёмом, отличным от объёма цели», но цели в правке уже
-        // нет — её потребило СОЗДАНИЕ признака, поэтому отождествлять остаток с ней нечем. Здесь
-        // отбор структурный и от объявленного ожидания НЕ зависит: подбирать тело под ожидание
-        // значило бы проверять ожидание им же самим.
+        // The remainder is recognised BY CHANGE: it is the body that matched none of the "before"
+        // snapshots. The former edition sought it as "the body whose volume differs from the target's",
+        // but there is no target in the edit — CREATING the feature consumed it, so there is nothing to
+        // identify the remainder with. Here the selection is structural and does NOT depend on the
+        // declared expectation: fitting a body to the expectation would mean checking the expectation by
+        // itself.
         var afterSnapshots = ReadBodySnapshots(document.PartNow());
         var changes = CompareBodySnapshots(bodiesBefore, afterSnapshots);
         var vanished = bodiesBefore.Where(b => changes.MatchedOf(b.Index) is null).ToList();
         var createdBodies = changes.NewBodies;
         var changed = changes.Changed;
 
-        // «Затронуто» — шире, чем «изменился объём»: переехавшее тело тоже затронуто, и проверка
-        // адресности обязана его видеть. Пока здесь стоял только объём, отсечение, сдвинувшее
-        // посторонний брусок, проходило как «затронуто ровно одно тело».
+        // "Touched" is wider than "volume changed": a body that moved is touched too, and the addressing
+        // check must see it. While only the volume stood here, a cut that shifted a foreign bar passed as
+        // "exactly one body touched".
         var touched = changes.Touched;
 
         var checks = new List<NamedCheck>
@@ -2740,14 +2603,14 @@ public sealed partial class Api5Session
         var declaredVolume = command.ExpectedVolumeMm3;
         var unverified = new List<string>();
 
-        // АДРЕСНОСТЬ — ПРЕДМЕТ ЭТОГО ВЫЗОВА. Отсечение оставляет РОВНО одно тело-остаток, поэтому
-        // «затронуто ровно одно тело, ни одно не исчезло и ни одно не появилось» не украшение
-        // ответа, а то, что вызов обязан подтвердить. Раньше здесь стояло
-        // changed = rows.Where(r => !MatchesAnySnapshot(r, bodiesBefore)): обход шёл ТОЛЬКО по телам
-        // ПОСЛЕ операции, поэтому исчезнувшее тело в список не попадало вовсе, и правка, снёсшая
-        // посторонний брусок, выглядела как «изменилось ровно одно тело» и проходила как
-        // geometry_checked — это и есть ложное подтверждение из клиентской приёмки 19.09.2026
-        // (дефект CUT-PLANE-APPLIED-TO-UNNAMED-BODIES, наряд §3.1).
+        // ADDRESSING IS THE SUBJECT OF THIS CALL. A cut leaves EXACTLY one remainder body, so "exactly
+        // one body touched, none vanished and none appeared" is not decoration of the response but what
+        // the call must confirm. Previously there stood here
+        // changed = rows.Where(r => !MatchesAnySnapshot(r, bodiesBefore)): the walk went ONLY over bodies
+        // AFTER the operation, so a vanished body never entered the list, and an edit that swept away a
+        // foreign bar looked like "exactly one body changed" and passed as geometry_checked — this is the
+        // false confirmation from client acceptance 19.09.2026 (defect
+        // CUT-PLANE-APPLIED-TO-UNNAMED-BODIES, order §3.1).
         var addressingOk = touched.Count == 1 && vanished.Count == 0 && createdBodies.Count == 0;
 
         if (!addressingOk && (touched.Count > 0 || vanished.Count > 0 || createdBodies.Count > 0))
@@ -2907,19 +2770,21 @@ public sealed partial class Api5Session
                     unverified));
         }
 
-        // Сюда попадают только два случая: изменилось ровно одно тело (разобрано выше) либо НИ ОДНО
-        // тело не изменилось, не исчезло и не появилось. Ветка «изменилось больше одного» выше стала
-        // недостижимой намеренно: она была отдельным отказом ровно на тот же предмет, что и проверка
-        // адресности, а две проверки одного случая разошлись бы — прежняя редакция именно поэтому и
-        // пропускала исчезнувшее тело: ветка `changed.Count > 1` считала только тела ПОСЛЕ операции.
+        // Only two cases land here: exactly one body changed (handled above), or NO body changed,
+        // vanished or appeared. The "more than one changed" branch above became unreachable on purpose:
+        // it was a separate refusal for exactly the same subject as the addressing check, and two checks
+        // of one case would diverge — that is precisely why the former edition missed a vanished body:
+        // the `changed.Count > 1` branch counted only bodies AFTER the operation.
         //
-        // Ни одно тело не изменилось — это НЕ отказ: признак мог уже иметь такие опору и сторону.
-        // Но и не подтверждение: отличить «параметры уже были такими» от «запись не применилась»
-        // этим вызовом нельзя — чтение опоры и стороны обратно на живом признаке не измерялось.
-        // Поэтому исход честный: вызов прошёл, уровень — «вызов вернулся», а причина названа.
+        // No body changed — this is NOT a refusal: the feature may already have had such support and
+        // side. But neither is it confirmation: this call cannot tell "the parameters were already like
+        // this" from "the write was not applied" — reading the support and side back on a live feature
+        // was not measured. So the outcome is honest: the call passed, the level is "call returned", and
+        // the reason is named.
         //
-        // Отдельно назван случай «тело переехало, а объём не изменился»: отсечение материал уносит,
-        // поэтому остаток без ΔV — не остаток, и объявленное ожидание к нему не применяется.
+        // The case "the body moved but the volume did not change" is named separately: a cut removes
+        // material, so a remainder without ΔV is not a remainder, and a declared expectation is not
+        // applied to it.
         var movedOnly = touched.Count == 1 && changed.Count == 0;
         checks.Add(new NamedCheck(
             "geometry_changed",
@@ -2948,31 +2813,25 @@ public sealed partial class Api5Session
             new VerificationDto(VerificationLevel.CallReturned, checks, unverified));
     }
 
-    /// <summary>
-    /// Правка ВИДА существующей булевой операции (наряд §7, действие <c>edit</c>).
-    /// </summary>
+    /// <summary>Editing the KIND of an existing boolean operation (order §7, action <c>edit</c>).</summary>
     /// <remarks>
-    /// <para>
-    /// <b>Маршрут измерен</b> пробой <c>--boolean</c>, шаг <c>BO.11</c>, прогон
-    /// <c>a2f5cf0a2ad342c59c36807101a65d51</c>: перезапись <c>IBoolean.BooleanType</c> на
-    /// СУЩЕСТВУЮЩЕМ признаке + <c>Update()</c> + пересборка меняет геометрию (E-A
-    /// <c>36 000 → 12 000</c> в габарите <c>x ≤ 20</c>; E-D <c>12 000 → 36 000</c>). Опыт E-E
-    /// подтвердил, что применяет именно ПАРА «запись → <c>Update()</c>»: запись без <c>Update()</c>,
-    /// но с пересборкой геометрию не меняет.
-    /// </para>
-    /// <para>
-    /// <b>Почему габарит, а не только объём.</b> Объём разности и объём пересечения на эталоне §6.1
-    /// РАВНЫ (12 000), поэтому сверка одного объёма подтвердила бы и полное бездействие. Различает
-    /// габарит: разность лежит в <c>x ≤ 20</c>, пересечение — в <c>x ∈ [20,40]</c>. Это тот же урок,
-    /// что и в строке <c>B3L.04</c> (у переноса объём до и после равен 1 000, и строка, сверяющая одни
-    /// объёмы, прошла бы на бездействии), и он повторён здесь на своём семействе, а не перенесён.
-    /// </para>
-    /// <para>
-    /// <b>Чего правка не делает.</b> Опорные тела (<c>BaseObject</c>, <c>ModifyObjects</c>) и политика
-    /// сохранения инструментов НЕ перезаписываются: правка набора инструментов не измерялась, а
-    /// перезапись неиспытанного маршрута выдала бы недостигнутое за достигнутое.
-    /// </para>
-    /// </remarks>
+    /// <b>The route is MEASURED</b> by probe <c>--boolean</c>, step <c>BO.11</c>, run
+    /// <c>a2f5cf0a2ad342c59c36807101a65d51</c>: rewriting <c>IBoolean.BooleanType</c> on an EXISTING
+    /// feature + <c>Update()</c> + rebuild changes the geometry (E-A <c>36 000 → 12 000</c> in the
+    /// bounding box <c>x ≤ 20</c>; E-D <c>12 000 → 36 000</c>). Experiment E-E confirmed that it is the
+    /// PAIR "write → <c>Update()</c>" that applies: a write without <c>Update()</c> but with a rebuild
+    /// does not change the geometry.
+    /// <b>Why the bounding box and not only the volume.</b> The volume of the difference and the volume
+    /// of the intersection on the reference of §6.1 are EQUAL (12 000), so checking one volume alone
+    /// would also confirm complete inaction. The bounding box distinguishes: the difference lies in
+    /// <c>x ≤ 20</c>, the intersection — in <c>x ∈ [20,40]</c>. This is the same lesson as in row
+    /// <c>B3L.04</c> (for a translation the volume before and after is 1 000, and a row checking only
+    /// volumes would pass on inaction), and it is repeated here on its own family rather than carried
+    /// over.
+    /// <b>What the edit does not do.</b> The operand bodies (<c>BaseObject</c>, <c>ModifyObjects</c>) and
+    /// the tool-preservation policy are NOT rewritten: editing the tool set was not measured, and
+    /// rewriting an untested route would pass the unreached off as reached.
+    /// History: docs/decisions/adapter-solid.md#edit-boolean</remarks>
     private UpdateFeatureResult UpdateSolidBoolean(
         DocumentEntry document,
         ksEntity entity,
@@ -3012,8 +2871,8 @@ public sealed partial class Api5Session
         var bridge = BridgeFor(document);
         var container = RequireContainer(bridge, document, "solid.boolean.update");
 
-        // Состав тел ДО правки — не для адресности (у булевой операции входы потребляются
-        // намеренно), а чтобы результат опознавался независимо от объявленного ожидания.
+        // The body composition BEFORE the edit — not for addressing (a boolean operation's inputs are
+        // consumed on purpose), but so the result is recognised independently of the declared expectation.
         var bodiesBefore = ReadBodySnapshots(document.PartNow());
 
         var index = RequireSameTypeIndex(
@@ -3054,22 +2913,23 @@ public sealed partial class Api5Session
         var featureCountPreserved = featuresAfter == featuresBefore;
         var operationPreserved = operationAfter == operation;
 
-        // ПРЕДМЕТ ДОКАЗАТЕЛЬСТВА. Результат булевой операции — это ИЗМЕНИВШЕЕСЯ (или появившееся)
-        // тело, а НЕ «любое тело документа, чей габарит совпал с объявленным». Прежняя редакция
-        // искала тело по совпадению с ОЖИДАНИЕМ:
+        // SUBJECT OF PROOF. The result of a boolean operation is the CHANGED (or newly appeared) body,
+        // NOT "any document body whose bounding box matched the declared one". The former edition sought
+        // the body by matching the EXPECTATION:
         //   rowsAfter.FirstOrDefault(r => BoxMatches(r.Bbox, command.ExpectedBboxMm))
-        // и публиковала в observed объёмы ВСЕХ тел документа — то есть сверяла габарит с числами
-        // другого рода и другого предмета. Отдельно: тело, найденное ТАКИМ поиском, может быть
-        // посторонним — совпадение габарита с ожиданием не делает тело результатом ЭТОЙ операции,
-        // поэтому «подтверждение» держалось на подборе под ожидание (дефект
-        // CHECK-FIELDS-DO-NOT-SUPPORT-THE-VERDICT, наряд §4.1).
+        // and published the volumes of ALL document bodies as observed — that is, it compared a bounding
+        // box with numbers of another kind and another subject. Separately: a body found by SUCH a search
+        // may be foreign — a bounding box matching the expectation does not make the body the result of
+        // THIS operation, so the "confirmation" rested on fitting to the expectation (defect
+        // CHECK-FIELDS-DO-NOT-SUPPORT-THE-VERDICT, order §4.1).
         //
-        // Второй заход в тот же дефект (измерен 19.09.2026 на поставке publish-b3-20260919-targeting,
-        // строка B3.25): опознание шло по changes.Changed, а это список тел с изменившимся ОБЪЁМОМ.
-        // На эталоне объём разности и объём пересечения РАВНЫ (12 000 мм³), различает их только
-        // положение габарита, поэтому корректно применённая правка `intersect` попадала в
-        // resultBodies.Count == 0 и отвергалась как NO_GEOMETRY_CHANGE. Предикат «результат
-        // изменился» обязан покрывать и переезд тела: changes.Touched = изменился объём ИЛИ габарит.
+        // A second foray into the same defect (MEASURED 19.09.2026 on delivery
+        // publish-b3-20260919-targeting, row B3.25): recognition went by changes.Changed, which is the
+        // list of bodies with a changed VOLUME. On the reference the volume of the difference and the
+        // volume of the intersection are EQUAL (12 000 mm³), only the bounding box position
+        // distinguishes them, so a correctly applied `intersect` edit landed in resultBodies.Count == 0
+        // and was rejected as NO_GEOMETRY_CHANGE. The predicate "the result changed" must also cover a
+        // body that moved: changes.Touched = volume OR bounding box changed.
         var afterSnapshots = ReadBodySnapshots(document.PartNow());
         var changes = CompareBodySnapshots(bodiesBefore, afterSnapshots);
         var resultBodies = changes.Touched
@@ -3105,9 +2965,10 @@ public sealed partial class Api5Session
 
         if (command.ExpectedBboxMm is not null)
         {
-            // Ожидание, наблюдение и вердикт относятся к ОДНОМУ предмету — габариту ОДНОГО тела,
-            // опознанного по изменению, а не по совпадению с ожиданием. Тип наблюдаемого тот же, что
-            // и у ожидаемого: габарит против габарита, а не список объёмов против габарита.
+            // Expectation, observation and verdict refer to ONE subject — the bounding box of ONE body,
+            // recognised by change, not by matching the expectation. The observed type is the same as the
+            // expected one: a bounding box against a bounding box, not a list of volumes against a
+            // bounding box.
             checks.Add(new NamedCheck(
                 "bbox_expected", bboxMatched,
                 Observed: resultBody is null ? "<результат не опознан: " + resultIdentity + ">"
@@ -3121,10 +2982,10 @@ public sealed partial class Api5Session
 
         if (command.ExpectedVolumeMm3 is double expected)
         {
-            // Объём ДОКУМЕНТА и объём РЕЗУЛЬТАТА — разные величины, и смешивать их нельзя. Здесь
-            // объявлено ожидание объёма документа (так его и объявляет вызывающий у булевой
-            // операции), поэтому и наблюдается объём документа; объём результата публикуется
-            // отдельной проверкой, а не подставляется в ту же строку.
+            // The DOCUMENT volume and the RESULT volume are different quantities, and they must not be
+            // mixed. Here the document-volume expectation is declared (that is how the caller declares it
+            // for a boolean operation), so the document volume is what is observed; the result volume is
+            // published by a separate check, not substituted into the same row.
             checks.Add(new NamedCheck(
                 "volume_expected",
                 volumeAfter is double measured && Math.Abs(measured - expected) <= ProfileArea.Tolerance(expected),
@@ -3148,9 +3009,10 @@ public sealed partial class Api5Session
 
         if (!volumeMatched || !bboxOk)
         {
-            // Наряд §5: при частичной мутации вернуть ошибку с фактическим состоянием. Здесь мутация
-            // уже произошла (вид перезаписан и применён), поэтому отказ обязан нести и ревизию, и
-            // фактическую геометрию — иначе следующий вызов клиента упадёт REVISION_CONFLICT.
+            // Order §5: on a partial mutation, return an error with the actual state. Here the mutation
+            // has already happened (the kind is rewritten and applied), so the refusal must carry both the
+            // revision and the actual geometry — otherwise the client's next call fails
+            // REVISION_CONFLICT.
             throw new KompasContractException(
                 ErrorCodes.NoGeometryChange,
                 "Вид операции переписан, но геометрия не совпала с объявленной: "
@@ -3184,11 +3046,11 @@ public sealed partial class Api5Session
                            + "полного бездействия");
         }
 
-        // ГРАНИЦА ОПОЗНАНИЯ, названная явно. Опознание результата опирается на наблюдаемые величины —
-        // объём и габарит. Тело, у которого изменилась форма, но совпали и объём, и все шесть
-        // координат габарита, от бездействия этими измерениями неотличимо, и объявлять его
-        // опознанным нельзя. Формулировка стоит здесь потому, что молчание об этом читалось бы как
-        // «любое изменение результата обнаруживается».
+        // THE LIMIT OF RECOGNITION, named explicitly. Recognising the result rests on observable
+        // quantities — volume and bounding box. A body whose shape changed but whose volume and all six
+        // bounding-box coordinates matched is indistinguishable from inaction by these measurements, and
+        // it must not be declared recognised. The wording stands here because silence about it would read
+        // as "any change of the result is detected".
         unverified.Add("result_identity_by_observables — результат опознаётся по изменению объёма или "
                        + "габарита; тело, изменившее форму при совпавших объёме и габарите, этим "
                        + "сравнением не обнаруживается");
@@ -3205,12 +3067,10 @@ public sealed partial class Api5Session
             new VerificationDto(VerificationLevel.GeometryChecked, checks, unverified));
     }
 
-    /// <summary>
-    /// Почему тело попало в набор «результат операции»: изменился объём, сдвинулся только габарит,
-    /// или тело появилось. Строка нужна вызывающему, чтобы отличить «правка поработала материалом»
-    /// от «правка переставила тело» — эти два наблюдения требуют разных выводов, и различать их
-    /// по одному лишь факту попадания в список нельзя.
-    /// </summary>
+    /// <summary>Why the body landed in the "result of the operation" set: its volume changed, only its bounding
+    /// box shifted, or the body appeared. The string is needed by the caller to tell "the edit worked
+    /// with material" from "the edit moved the body" — these two observations require different
+    /// conclusions, and they cannot be told apart by the mere fact of being in the list.</summary>
     private static string ChangeKind(BodyComparison changes, int index)
     {
         if (changes.NewBodies.Any(n => n.Index == index))
@@ -3235,14 +3095,11 @@ public sealed partial class Api5Session
         return "изменение не подтверждено";
     }
 
-    /// <summary>
-    /// Проверка объявленных объёмов частей: каждому ожиданию — своё тело, порядок не важен.
-    /// </summary>
-    /// <remarks>
-    /// Возвращается ПРИЧИНА несовпадения, а не <c>bool</c>: в отказе нужно назвать, какого объёма не
-    /// нашлось, иначе вызывающему нечего исправлять. Тело, уже закрывшее одно ожидание, второму не
-    /// засчитывается — иначе список <c>[6000, 6000]</c> подтверждался бы одним телом на 6 000.
-    /// </remarks>
+    /// <summary>Checking the declared part volumes: each expectation gets its own body, order does not matter.</summary>
+    /// <remarks>The REASON for the mismatch is returned, not a <c>bool</c>: the refusal needs to name which volume
+    /// was not found, otherwise the caller has nothing to fix. A body that has already closed one
+    /// expectation is not counted towards a second one — otherwise the list <c>[6000, 6000]</c> would be
+    /// confirmed by a single body of 6 000.</remarks>
     private static string? UnmatchedVolume(IReadOnlyList<SolidBodyDto> rows, IReadOnlyList<double> expected)
     {
         var used = new bool[rows.Count];
@@ -3274,7 +3131,7 @@ public sealed partial class Api5Session
         return null;
     }
 
-    /// <summary>Объёмы объявленных частей: минимум две (разделение даёт не меньше двух частей).</summary>
+    /// <summary>Volumes of the declared parts: at least two (a split yields no fewer than two parts).</summary>
     private static IReadOnlyList<double>? RequirePartVolumes(IReadOnlyList<double>? declared)
     {
         if (declared is null)
@@ -3315,6 +3172,6 @@ public sealed partial class Api5Session
     private static string NumberListText(IReadOnlyList<double> values) =>
         "[" + string.Join(", ", values.Select(v => Num(v))) + "]";
 
-    /// <summary>Число или честное «не прочитано» — для <c>details</c> и проверок.</summary>
+    /// <summary>A number or an honest "not read" — for <c>details</c> and checks.</summary>
     private static string Describe(int? value) => value is int number ? number.ToString() : "<не прочитано>";
 }

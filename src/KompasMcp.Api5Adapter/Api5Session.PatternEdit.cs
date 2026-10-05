@@ -8,43 +8,31 @@ using KompasMcp.Domain.Geometry;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>
-/// Правка параметров СУЩЕСТВУЮЩЕГО признака массива (очередь B4, действие <c>edit</c>).
-/// </summary>
+/// <summary>Edit the parameters of an EXISTING pattern feature (queue B4, action <c>edit</c>).</summary>
 /// <remarks>
-/// <para>
-/// <b>Почему отдельный файл, а не ветка внутри <c>UpdateFeature</c>.</b> Ветка там выбирается по
-/// <c>entity.type</c> — измеренному номеру признака в дереве. Для массива этот номер в сеансе B4 не
-/// измерялся, и выдумывать его нельзя: ошибка здесь означала бы, что правка «не находит» признак
-/// ровно так же, как это было у отверстия (искали по 52, а признак лежит под 583). Поэтому
-/// признак массива опознаётся НЕ по номеру, а тем же прибором, что и чтение
-/// (<see cref="Api5Session.PatternRead"/>): сопоставлением с элементом
-/// <c>IModelContainer.FeaturePatterns</c> по имени оболочки дерева и штампу обновления.
-/// </para>
-/// <para>
-/// <b>Что считается доказательством.</b> <c>Update() = true</c> — «принято», а не «применено».
-/// Поэтому после перестроения признак ЧИТАЕТСЯ ОБРАТНО (<c>Api7Pattern.ReadPattern</c>), и каждому
-/// запрошенному члену соответствует отдельная проверка <c>read_back_&lt;член&gt;</c>, сверяющая
-/// записанное число с тем, что модель отдаёт. Сверх этого — объём документа и число тел, если
-/// вызывающий дал аналитическое ожидание: объём подтверждает применение геометрически, а не по
-/// возврату сеттера.
-/// </para>
-/// <para>
-/// <b>Смена опоры не выполняется.</b> <c>Axis1/Axis2</c>, <c>Axis</c> и <c>Plane</c> принимают
-/// <c>IModelObject</c>, а не ссылку сервера; ни один прогон B4 смену опоры существующего массива не
-/// измерял. Вызов, где такая смена подразумевалась бы, отвергается до мутации, а не выполняется
-/// частично.
-/// </para>
+/// WHY A SEPARATE FILE, not a branch inside <c>UpdateFeature</c>: that branch is chosen by
+/// <c>entity.type</c> — the measured feature number in the tree. For a pattern this number was not
+/// measured in session B4 and must not be invented: an error here would mean the edit "does not find"
+/// the feature exactly as happened with the hole (searched by 52, the feature lies under 583). The
+/// pattern feature is therefore identified NOT by number but by the same instrument as the read
+/// (<see cref="Api5Session.PatternRead"/>): matching against an
+/// <c>IModelContainer.FeaturePatterns</c> element by the tree-wrapper name and update stamp.
+/// INVARIANT: <c>Update()=true</c> is "accepted", not "applied" — after the rebuild the feature is READ
+/// BACK (<c>Api7Pattern.ReadPattern</c>), each requested member gets its own
+/// <c>read_back_&lt;member&gt;</c> check, and document volume and body count confirm application
+/// geometrically if the caller gave an analytic expectation.
+/// LIMIT: support change is not performed — <c>Axis1/Axis2</c>, <c>Axis</c>, <c>Plane</c> take an
+/// <c>IModelObject</c>, not a server reference, and no B4 run measured a support change of an existing
+/// pattern; a call implying one is refused before the mutation.
+/// History: docs/decisions/adapter-features.md#pattern-edit
 /// </remarks>
 public partial class Api5Session
 {
-    /// <summary>Имя семейства правки для признаков массивов.</summary>
+    /// <summary>Edit-family name for pattern features.</summary>
     private const string PatternFamily = "pattern";
 
-    /// <summary>
-    /// Правка признака массива: перезапись запрошенных членов в ЖИВОЙ объект коллекции, затем
-    /// <c>Update()</c>, перестроение и чтение модели обратно.
-    /// </summary>
+    /// <summary>Edit a pattern feature: overwrite the requested members on the LIVE collection object,
+    /// then <c>Update()</c>, rebuild and read the model back.</summary>
     private UpdateFeatureResult UpdatePattern(
         DocumentEntry document,
         ksEntity entity,
@@ -59,9 +47,9 @@ public partial class Api5Session
                 "Ветка правки массива выбрана без поля pattern: это внутреннее противоречие вызова.",
                 RetryPolicy.Never);
 
-        // Смешение семейств отвергается ДО мутации: «применилось одно из двух» неотличимо потом от
-        // «применилось и то, и другое». Массив не имеет ни глубины, ни радиуса, ни эскиза, ни
-        // плоскости, поэтому любое из этих полей в одном вызове с pattern — ошибка вызывающего.
+        // Family mixing is refused BEFORE the mutation: "one of the two applied" is afterwards
+        // indistinguishable from "both applied". A pattern has neither depth, radius, sketch nor
+        // plane, so any such field in a call together with pattern is a caller error.
         var foreign = ForeignFamilyFields(command);
         if (foreign.Count > 0)
         {
@@ -81,8 +69,8 @@ public partial class Api5Session
 
         var (index, before) = MatchPatternForEdit(bridge, container, entity, document, command.FeatureRef);
 
-        // Семейство берётся с ЖИВОГО объекта (ответ на QI), а не из памяти вызывающего: «каким его
-        // создавали» — не факт о том, чем объект отвечает сейчас.
+        // The family is taken from the LIVE object (a QI answer), not from the caller's memory: "what
+        // it was created as" is not a fact about what the object answers now.
         ValidatePatternEditForFamily(edit, before.Family);
 
         var written = Api7Pattern.TryEdit(PatternAt(container, index), edit);
@@ -97,8 +85,8 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["api7_failure"] = written.Failure });
         }
 
-        // Порядок «запись → Update() → Rebuild» — часть контракта маршрута: без перестроения запись
-        // в API7 остаётся представлением (тот же урок, что у вращения и у скругления).
+        // The order "write → Update() → Rebuild" is part of the route contract: without the rebuild
+        // the API7 write stays a representation (the same lesson as with rotation and fillet).
         Api7Bridge.Rebuild(container, document.Document);
         BumpRevision(document, "pattern.update");
 
@@ -131,8 +119,9 @@ public partial class Api5Session
         }
         else
         {
-            // Отсутствие ожидания не «проходит по умолчанию»: без аналитики правка подтверждена
-            // только чтением параметров, и это сказано прямо, а не спрятано в пустое поле.
+            // A missing expectation does not "pass by default": without analytics the edit is
+            // confirmed by the parameter read-back alone, said plainly instead of hidden in an empty
+            // field.
             checks.Add(new NamedCheck(
                 "volume_after_update",
                 false,
@@ -191,7 +180,7 @@ public partial class Api5Session
             featuresAfter,
             volumeBefore,
             volumeAfter,
-            // Глубины и условия конца у массива нет: эти поля относятся к выдавливанию.
+            // A pattern has no depth or end condition: those fields belong to extrusion.
             DepthReadBackMm: null,
             EndConditionReadBack: null,
             new VerificationDto(
@@ -200,14 +189,10 @@ public partial class Api5Session
                 unverified));
     }
 
-    /// <summary>
-    /// Живой объект массива по индексу коллекции.
-    /// </summary>
-    /// <remarks>
-    /// Объект НЕ кэшируется между вызовами: адрес COM-объекта не переживает перестроения, и
-    /// сохранённый объект правил бы уже не тот признак. Индекс берётся из сопоставления, сделанного в
-    /// этом же вызове, до записи, — коллекция между сопоставлением и записью не менялась.
-    /// </remarks>
+    /// <summary>The live pattern object by collection index.</summary>
+    /// <remarks>The object is NOT cached between calls: a COM object address does not survive a rebuild,
+    /// and a saved object would edit the wrong feature. The index comes from the match made in this
+    /// same call, before the write — the collection did not change between match and write.</remarks>
     private static IFeaturePattern PatternAt(IModelContainer container, int index) =>
         container.FeaturePatterns?.FeaturePattern[index] as IFeaturePattern
         ?? throw new KompasContractException(
@@ -215,15 +200,12 @@ public partial class Api5Session
             $"Элемент FeaturePatterns[{index}] не читается как признак массива.",
             RetryPolicy.ReacquireContext);
 
-    /// <summary>
-    /// Сопоставить признак дерева с элементом коллекции массивов — тем же прибором, что и чтение.
-    /// </summary>
-    /// <remarks>
-    /// Несопоставление — это НЕ «признак не найден», а отказ с названной причиной: ссылка может
-    /// указывать на признак, который коллекция массивов не показывает (например, признак был
-    /// откатан, или ссылка выдана другому документу). Различать эти исходы обязан вызывающий, а
-    /// молчаливая запись «в первый попавшийся» изменила бы чужой признак.
-    /// </remarks>
+    /// <summary>Match a tree feature with a pattern-collection element — the same instrument as the
+    /// read.</summary>
+    /// <remarks>A non-match is NOT "feature not found" but a refusal with a named cause: the reference
+    /// may point to a feature the pattern collection does not show (e.g. the feature was rolled back,
+    /// or the reference was issued for another document). The caller must tell these outcomes apart,
+    /// while a silent write "into the first one found" would change a foreign feature.</remarks>
     private (int Index, PatternReadout Readout) MatchPatternForEdit(
         Api7Bridge bridge,
         IModelContainer container,
@@ -257,19 +239,15 @@ public partial class Api5Session
             details: new Dictionary<string, object?> { ["pattern_count"] = count });
     }
 
-    /// <summary>
-    /// Проверки чтения обратно: каждому ЗАПРОШЕННОМУ члену — своя проверка, а не одна общая.
-    /// </summary>
-    /// <remarks>
-    /// Общая проверка «параметры совпали» не различала бы, какой именно член не применился, и
-    /// строка приёмки не могла бы назвать причину. Сверяются только запрошенные члены: незаданный
-    /// член остаётся прежним, и требовать от него нового значения было бы требованием к тому, чего
-    /// вызов не просил.
-    /// </remarks>
+    /// <summary>Read-back checks: each REQUESTED member gets its own check, not one common one.</summary>
+    /// <remarks>A common "parameters matched" check would not tell which member failed to apply, and
+    /// the acceptance row could not name the cause. Only requested members are compared: an unset
+    /// member stays as it was, and demanding a new value from it would demand what the call did not
+    /// ask for.</remarks>
     private static IEnumerable<NamedCheck> ReadBackChecks(PatternEditDto edit, PatternReadout? after)
     {
-        // Локальные функции НЕ перегружаются по типу параметра (ошибка CS0128, поймана сборкой):
-        // поэтому у трёх видов величины три разных имени, а не одно.
+        // Local functions are NOT overloaded by parameter type (error CS0128, caught by the build):
+        // so the three value kinds have three different names, not one.
         static string SD(double? v) => v?.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)
             ?? "не читается";
 
@@ -374,7 +352,7 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>Поля других семейств, заданные в одном вызове с <c>pattern</c>.</summary>
+    /// <summary>Fields of other families set in the same call as <c>pattern</c>.</summary>
     private static List<string> ForeignFamilyFields(UpdateFeatureCommand command)
     {
         var names = new List<string>();
@@ -493,10 +471,11 @@ public partial class Api5Session
             names.Add("target_body_ref");
         }
 
-        // Поля последней очереди B5. Без них вызов «pattern + shift_mode» был бы ПРИНЯТ, а
-        // shift_mode проглочен: ветка B5 выбирается по самому полю, но ветка массива стоит раньше и
-        // уводит вызов в себя. `couplings` дописан 20.09.2026: очередь B5 добавила шесть правимых
-        // полей, и здесь были перечислены пять из них — шестое проходило молча.
+        // Fields of the latest queue B5. Without them a call "pattern + shift_mode" would be ACCEPTED
+        // with shift_mode swallowed: the B5 branch is chosen by the field itself, but the pattern
+        // branch comes first and diverts the call into itself. `couplings` was added 20.09.2026:
+        // queue B5 added six editable fields and only five were listed here — the sixth passed
+        // silently.
         if (command.ShiftMode is not null)
         {
             names.Add("shift_mode");
@@ -527,9 +506,9 @@ public partial class Api5Session
             names.Add("face_refs");
         }
 
-        // Поля семейства ОТВЕРСТИЯ (наряд SM07 §3.2). Перечислены здесь по той же причине, что и
-        // поля B5: ветка массива стоит РАНЬШЕ ветки отверстия, поэтому «pattern + diameter_mm» был бы
-        // уведён в массив, а диаметр проглочен — принятое и не применённое число.
+        // HOLE-family fields (work order SM07 §3.2). Listed here for the same reason as the B5
+        // fields: the pattern branch comes BEFORE the hole branch, so "pattern + diameter_mm" would be
+        // diverted into the pattern and the diameter swallowed — an accepted and unapplied number.
         if (command.DiameterMm is not null)
         {
             names.Add("diameter_mm");
@@ -563,7 +542,7 @@ public partial class Api5Session
         return names;
     }
 
-    /// <summary>Значения правки, не зависящие от семейства: счётные величины и знаки шагов.</summary>
+    /// <summary>Edit values independent of family: counts and step signs.</summary>
     private static void ValidatePatternEdit(PatternEditDto edit)
     {
         var any = edit.Count1 is not null || edit.Count2 is not null || edit.Step1Mm is not null
@@ -633,16 +612,12 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Члены, которых у ЭТОГО семейства нет, отвергаются до мутации.
-    /// </summary>
-    /// <remarks>
-    /// Разные семейства массивов — разные интерфейсы API7, и часть имён между ними совпадает только
-    /// по виду. Отдать сетке <c>save_initial_orientation</c> и промолчать о том, что член не
-    /// применён, — значит соврать про правку; записать <c>step2_deg</c> в <c>ILinearPattern.Step2</c>
-    /// (где это МИЛЛИМЕТРЫ) — значит изменить геометрию другой величиной, чем названа в запросе.
-    /// Поэтому проверка называет конкретный неподходящий член.
-    /// </remarks>
+    /// <summary>Members this family does NOT have are refused before the mutation.</summary>
+    /// <remarks>Different pattern families are different API7 interfaces, and some names coincide only
+    /// in appearance. Handing <c>save_initial_orientation</c> to a mesh and staying silent about the
+    /// member not being applied would lie about the edit; writing <c>step2_deg</c> into
+    /// <c>ILinearPattern.Step2</c> (where it is MILLIMETRES) would change geometry by a different
+    /// quantity than the request names. So the check names the specific inapplicable member.</remarks>
     private static void ValidatePatternEditForFamily(PatternEditDto edit, string family)
     {
         var bad = new List<string>();

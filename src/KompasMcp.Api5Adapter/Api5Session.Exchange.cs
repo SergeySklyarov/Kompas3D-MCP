@@ -10,19 +10,17 @@ using KompasMcp.Domain.Files;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>
-/// Exchange formats: STEP export/import and raster. Import is implemented as an explicit
+/// <summary>Exchange formats: STEP export/import and raster. Import is implemented as an explicit
 /// three-route attempt because the historical attempt (spec 4.6) failed and its cause was never
 /// established: the result of an import may land in the document that was called, in a component
 /// tree, or in a brand-new document. Each possibility is checked, and the answer that comes back
-/// says which one happened.
-/// </summary>
+/// says which one happened.</summary>
 public sealed partial class Api5Session
 {
     /// <summary>D3FormatConvType.format_STEP — write-side selector.</summary>
     private const short FormatStep = 3;
 
-    /// <summary>D3FormatConvType.load_format_STEP — read-side selector («Для открытия документов»).</summary>
+    /// <summary>D3FormatConvType.load_format_STEP — read-side selector — DOC: <c>d3formatconvtype.html</c>, «формат STEP, для открытия документов».</summary>
     private const short LoadFormatStep = -3;
 
     public ExportResultDto ExportStep(ExportStepCommand command)
@@ -267,11 +265,9 @@ public sealed partial class Api5Session
         return ids;
     }
 
-    /// <summary>
-    /// In-product copy of the P0.7 measurement: build known geometry, read every quantity back
+    /// <summary>In-product copy of the P0.7 measurement: build known geometry, read every quantity back
     /// with each unit selector, and refuse to publish anything whose scale is not confirmed.
-    /// Integration tests assert on this instead of trusting the constants.
-    /// </summary>
+    /// Integration tests assert on this instead of trusting the constants.</summary>
     public UnitProbeResult UnitProbe(UnitProbeCommand command)
     {
         var application = RequireApplication(command.ApplicationId);
@@ -421,10 +417,8 @@ public sealed partial class Api5Session
     }
 }
 
-/// <summary>
-/// Minimal, dependency-free structural read of a STEP file: enough to report the schema token and
-/// entity counts without claiming any geometric validation (spec 1.11 levels).
-/// </summary>
+/// <summary>Minimal, dependency-free structural read of a STEP file: enough to report the schema token and
+/// entity counts without claiming any geometric validation (spec 1.11 levels).</summary>
 public static class StepFileInspector
 {
     public sealed record StepFacts(long ByteLength, bool HeaderParsed, string? Schema, int EntityStatements, IReadOnlyList<string> UnverifiedAspects);

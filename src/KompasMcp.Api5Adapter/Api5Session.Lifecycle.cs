@@ -6,37 +6,29 @@ using Kompas6API5;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>
-/// Подавление, восстановление и удаление признака (docs/05 §4.4, §7; SM-30 в каталоге).
-///
-/// Оба маршрута измерены пробой L от 12.09.2026 на живом v24 (docs/acceptance/api7/sketch-lifecycle.md),
-/// а не выведены из names:
-/// * L.7 — <c>ksFeature.excluded = true</c> снимает тело выдавливания (V становится объёмом
-///   пластины), <c>false</c> возвращает; число признаков при этом не меняется. Одного
-///   <c>RebuildDocument()</c> достаточно: в отличие от правки параметров (P2.3) здесь
-///   <c>ksEntity.Update()</c> не требуется;
-/// * L.8 — <c>ksDocument3D.DeleteObject(entity)</c> удаляет признак: возврат true, число признаков
-///   минус один.
-///
-/// Члена «зависимые признаки» нет ни в API5, ни в API7 — это проверено рефлексией по обеим сборкам
-/// (0 совпадений по Dependent*/Preceding*/UsedBy*), а не предположение. Поэтому API на вопрос
-/// «что отвалится вместе с этим признаком» не отвечает, и сервер не притворяется, что отвечает:
-/// возвращаются кандидаты — признаки, стоящие в дереве после удаляемого, — а их наличие блокирует
-/// удаление, пока вызывающий не согласится явно.
-/// </summary>
+/// <summary>Suppress, restore and delete a feature (docs/05 §4.4, §7; SM-30 in the catalog).
+/// MEASURED by probe L on 12.09.2026 on live v24 (docs/acceptance/api7/sketch-lifecycle.md), not inferred
+/// from names: L.7 — <c>ksFeature.excluded = true</c> removes the extrusion body (V becomes the plate's
+/// volume), <c>false</c> restores it, and the feature count does not change. One <c>RebuildDocument()</c>
+/// suffices: unlike a parameter edit (P2.3), <c>ksEntity.Update()</c> is not required here. L.8 —
+/// <c>ksDocument3D.DeleteObject(entity)</c> deletes the feature: returns true, feature count minus one.
+/// INVARIANT: there is no "dependent features" member in API5 or API7 — verified by reflection over both
+/// assemblies (0 matches for Dependent*/Preceding*/UsedBy*), not assumed. So the API does not answer
+/// "what will fall away with this feature", and the server does not pretend it does: it returns
+/// candidates — features standing after the deleted one in the tree — and their presence blocks deletion
+/// until the caller explicitly agrees.</summary>
 public partial class Api5Session
 {
     public SuppressFeatureResult SetFeatureSuppressed(SuppressFeatureCommand command)
     {
         var (document, entity) = RequireFeatureEntity(command.FeatureRef);
 
-        // Та же пред-проверка, что и у удаления: мёртвый объект надо отклонять как устаревшую
-        // ссылку, а не как «не тот тип» (строка L10: подавление уже удалённого признака давало
-        // CAPABILITY_UNAVAILABLE, что правдоподобно, но неверно по существу).
-        // Исключённый признак в коллекции 110 не показывается — поэтому он и спрашивается напрямую.
-        // Проверка присутствия — ПО ИДЕНТИЧНОСТИ, а не по имени: измерено 19.09.2026 (проба I), что
-        // два последовательных признака одного вида носят ОДНО имя, поэтому «имя есть в дереве»
-        // отвечало бы «да» и про мёртвый объект, у которого остался одноимённый сосед.
+        // The same pre-check as for deletion: a dead object must be rejected as a stale reference, not as
+        // "the wrong type" (row L10: suppressing an already-deleted feature gave CAPABILITY_UNAVAILABLE,
+        // plausible but wrong in substance). A suppressed feature is not shown in collection 110, so it is
+        // asked about directly. Presence is checked BY IDENTITY, not by name: MEASURED 19.09.2026 (probe I)
+        // that two consecutive features of one kind carry the SAME name, so "the name is in the tree" would
+        // answer "yes" for a dead object whose same-named neighbour remains.
         var presentInTree = TreePositionOf(document, entity) >= 0;
         if (!presentInTree && !SafeIsCreated(entity))
         {
@@ -63,36 +55,21 @@ public partial class Api5Session
         document.Document.RebuildDocument();
         BumpRevision(document, command.Suppressed ? "feature.suppress" : "feature.restore");
 
-        // Перечитывается с нового объекта признака: тот, что держали во время записи, может быть
-        // кэшированным представлением, а «мы записали» доказательством того, что модель приняла, не является.
+        // Re-read from a fresh feature object: the one held during the write may be a cached view, and
+        // "we wrote it" is not evidence that the model accepted it.
         var stateAfter = ReadFeatureState(entity);
         var volumeAfter = ReadVolume(document);
         var countAfter = CountFeatures(document);
 
         var readBack = stateAfter.Excluded == command.Suppressed;
 
-        // Измерено этим прогоном (L04/L05, 12.09.2026): подавленный признак ИСЧЕЗАЕТ из
-        // EntityCollection(o3d_operationElement=110) — kompas_list_features его не показывает, и
-        // счётчик падает на единицу. Прежнее предположение «число признаков обязано остаться»
-        // было поэтому неверным: оно меряло не гибель признака, а то, что исключённый признак
-        // перестал попадать в эту коллекцию. Выживание доказывается самим объектом: имя то же,
-        // состояние перечитывается.
-        //
-        // ЧТО ИЗМЕРЕНО 19.09.2026 (проба I, шаги E1–E6, прогон c90961c6a3ba478697da5bc243040719,
-        // отчёт docs/acceptance/api7/feature-identity.json) И ЧЕГО ЗДЕСЬ БОЛЬШЕ НЕТ. Прежняя
-        // редакция требовала `GetDefinition() is not null` как признака выживания и объявляла
-        // потерю идентичности при ЛЮБОМ другом изменении счётчика. Оба требования оказались
-        // дефектом прибора, а не фактом о продукте:
-        // * у признаков B3 определения API5 НЕТ вовсе (§4.10.6: 69/633/50/79 — это номера в дереве,
-        //   а `GetDefinition()` у них null), поэтому `survived` был ЛОЖНО false на каждом
-        //   подавлении признака B3 и тянул за собой `feature_identity_lost`. «Определение
-        //   читается» и «объект жив» — разные утверждения, и второе из первого не следует;
-        // * подавление КАСКАДНО: подавление ПЕРВОГО из двух последовательных признаков изменения
-        //   положения убрало из коллекции 110 ДВА элемента (4→2), а снятие подавления вернуло
-        //   только один (2→3) — состояние ПОСЛЕ ОБОИХ достигается только снятием подавления с
-        //   ОБОИХ (E4→E5). Это измеренный факт о зависимостях, а не потеря признака.
-        // Поэтому счётчик больше не «объясняется единицей»: он измеряется, а превышение единицы
-        // называется отдельным неподтверждённым аспектом, а не молчанием.
+        // INVARIANT: the counter is measured, not "explained by one"; a deviation beyond one is named as a
+        // separate unverified aspect, not silence. MEASURED (L04/L05 12.09.2026; probe I 19.09.2026, run
+        // c90961c6a3ba478697da5bc243040719, report docs/acceptance/api7/feature-identity.json): a suppressed
+        // feature DISAPPEARS from EntityCollection(o3d_operationElement=110), and suppression CASCADES —
+        // suppressing the first of two consecutive reposition features took collection 110 from 4 to 2 while
+        // restoring returned one (2→3).
+        // History: docs/decisions/adapter-core.md#feature-suppression
         var survived = stateAfter.Name == stateBefore.Name && SafeIsCreated(entity);
         var definitionReadable = entity.GetDefinition() is not null;
         var countDelta = countAfter - countBefore;
@@ -140,10 +117,10 @@ public partial class Api5Session
                 Expected: "не задано"));
         }
 
-        // Подавление приклейки объём уменьшает, подавление вырезания — увеличивает (измерено
-        // пробой L.7: excluded=true на сквозном окне 40×20 вернуло пластине её 80000 мм³).
-        // Направление поэтому не утверждается: наблюдаемый факт — что объём ИЗМЕНИЛСЯ, а каким
-        // именно он обязан быть, заявляет вызывающий через expected_volume_mm3.
+        // Suppressing a boss decreases the volume, suppressing a cut increases it (MEASURED by probe L.7:
+        // excluded=true on a 40×20 through hole gave the plate back its 80000 mm³). The direction is
+        // therefore not asserted: the observed fact is that the volume CHANGED, and what it must be is
+        // declared by the caller via expected_volume_mm3.
         var effectObserved = volumeBefore is double && volumeAfter is double
                              && Math.Abs(volumeAfter.Value - volumeBefore.Value) > VolumeChangeFloorMm3;
         checks.Add(new NamedCheck(
@@ -151,9 +128,9 @@ public partial class Api5Session
             effectObserved,
             Observed: $"{volumeBefore?.ToString("0.####") ?? "нет"} → {volumeAfter?.ToString("0.####") ?? "нет"}"));
 
-        // Уровень подтверждения держится на проверяемых утверждениях: состояние перечиталось,
-        // объект признака жив, геометрия или эффект измерены. Счётчик в него не входит: каскад —
-        // это свойство зависимостей, а не потеря доказательства (E3, проба I).
+        // The verification level rests on checkable claims: the state re-read, the feature object alive,
+        // the geometry or effect measured. The counter is not part of it: a cascade is a property of the
+        // dependencies, not a loss of evidence (E3, probe I).
         var level = readBack && survived && (geometryConfirmed || effectObserved)
             ? geometryConfirmed ? VerificationLevel.GeometryChecked : VerificationLevel.StructureChecked
             : VerificationLevel.CallReturned;
@@ -172,10 +149,10 @@ public partial class Api5Session
         }
         if (cascadeSuspected)
         {
-            // Не «ошибка», а измеренное свойство зависимостей: счётчик изменился сильнее, чем на
-            // один элемент, потому что подавление признака уносит и стоящие после него зависимые
-            // (E3: 4→2). Перечня зависимых в API нет (проба L.8), поэтому сервер называет
-            // наблюдённое число и не выдаёт его ни за потерю признака, ни за полный откат.
+            // Not an "error" but a measured property of the dependencies: the counter changed by more than
+            // one element because suppressing a feature also takes its dependents (E3: 4→2). There is no
+            // dependent list in the API (probe L.8), so the server names the observed number and does not
+            // pass it off as a feature loss or a full rollback.
             unverified.Insert(0, $"dependent_features_suppressed_together — число признаков изменилось на " +
                                  $"{countDelta} вместо одного: подавление уносит и зависимые признаки, " +
                                  "а перечислить их API не умеет. Состояние ПОСЛЕ достигается снятием " +
@@ -209,16 +186,14 @@ public partial class Api5Session
         var (document, entity) = RequireFeatureEntity(command.FeatureRef);
         var name = entity.name ?? string.Empty;
 
-        // Пред-проверка: признак обязан быть в модели. Без неё повторное удаление по уже
-        // использованной ссылке возвращало «успех», ничего не удалив (строка L09 прогона
-        // 12.09.2026: DeleteObject на мёртвом объекте отвечает true, дерево не меняется).
-        // Исключённый признак в коллекции 110 тоже не показывается, поэтому отказа «не найден»
-        // недостаточно: объект спрашивается напрямую, жив ли он.
+        // Pre-check: the feature must be in the model. Without it, a repeated deletion by an already-used
+        // reference returned "success" while deleting nothing (row L09, run 12.09.2026: DeleteObject on a
+        // dead object answers true, the tree is unchanged). A suppressed feature is also not shown in
+        // collection 110, so "not found" is not enough: the object is asked directly whether it is alive.
         //
-        // Присутствие и позиция берутся ПО ИДЕНТИЧНОСТИ (FindIt), а не по имени: два
-        // последовательных признака одного вида носят одно имя (измерено 19.09.2026, проба I),
-        // поэтому IndexOf(имя) вернул бы позицию ЧУЖОГО одноимённого признака и объявил бы
-        // зависимыми не тех, кто стоит после удаляемого.
+        // Presence and position are taken BY IDENTITY (FindIt), not by name: two consecutive features of
+        // one kind carry one name (MEASURED 19.09.2026, probe I), so IndexOf(name) would return the position
+        // of a FOREIGN same-named feature and declare the wrong dependents.
         var tree = FeatureTreeElements(document);
         var identityPosition = TreePositionOf(document, entity);
         if (identityPosition < 0 && !SafeIsCreated(entity))
@@ -230,20 +205,15 @@ public partial class Api5Session
                 RetryPolicy.ReacquireContext);
         }
 
-        // Позиция нужна ровно для одного: перечислить то, что стоит в дереве ПОСЛЕ удаляемого.
-        //
-        // ИДЕНТИЧНОСТЬ COM-объекта — первое и лучшее основание, но она НЕ переживает перестроение.
-        // Измерено 19.09.2026 приёмкой: подавление и восстановление базового выдавливания (BG19/BG20)
-        // пересоздают элемент дерева, и FindIt по прежнему объекту отвечает −1 — хотя объект жив и
-        // отвечает IsCreated. На этом строка BG21 впервые за прогон удалила плиту вместо отказа:
-        // позиция стала неизвестной, список зависимых вышел пустым, и «пусто» было прочитано как
-        // «зависимых нет». Это НЕВЕРНЫЙ ЗНАЧОК ПО УМОЛЧАНИЮ: не знать, что стоит после признака, —
-        // не то же самое, что знать, что после него ничего не стоит.
-        //
-        // Поэтому источников два, и они названы. Имя берётся ТОЛЬКО когда оно однозначно: два
-        // последовательных признака одного вида носят одно имя (проба I), и «первое совпадение»
-        // объявило бы зависимыми не тех. Неоднозначно — позиция НЕИЗВЕСТНА, и тогда кандидатами
-        // объявляется всё дерево: удаление без явного согласия становится невозможным, а не свободным.
+        // The position is needed for exactly one thing: to enumerate what stands AFTER the deleted feature.
+        // INVARIANT: COM identity is the first and best basis, but it does NOT survive a rebuild — MEASURED
+        // 19.09.2026: suppressing and restoring a base extrusion (BG19/BG20) recreates the tree element and
+        // FindIt on the old object answers −1 even though the object is alive and IsCreated. An unknown
+        // position must not default to "no dependents": not knowing what stands after a feature is not the
+        // same as knowing nothing does. So there are two sources, both named — the name is taken ONLY when
+        // it is unambiguous (two consecutive features of one kind share a name, probe I); when ambiguous the
+        // position is UNKNOWN and the whole tree is offered as candidates, making deletion without explicit
+        // consent impossible rather than free. History: docs/decisions/adapter-core.md#delete-position
         var nameMatches = tree.Where(e => e.Name == name).ToList();
         var position = identityPosition >= 0
             ? identityPosition
@@ -290,7 +260,7 @@ public partial class Api5Session
         }
         catch (COMException ex)
         {
-            // Отказ во время мутации — исход неизвестен, а не «чисто не получилось».
+            // A failure during the mutation — the outcome is unknown, not "it cleanly did not work".
             throw new KompasContractException(
                 ErrorCodes.OutcomeUnknown,
                 $"DeleteObject прервался: {ex.Message}. Сверьте фактическое состояние модели, " +
@@ -305,21 +275,17 @@ public partial class Api5Session
         var treeAfter = FeatureTreeElements(document);
         var volumeAfter = ReadVolume(document);
 
-        // «Удалён» — по идентичности: объект-признак больше не находится в дереве. Проверка по
-        // имени была бы ЛОЖНО отрицательной, если в модели остался одноимённый сосед (измерено
-        // 19.09.2026, проба I: два признака «Изменение положения : Тело 1»).
-        //
-        // ТРИ УТВЕРЖДЕНИЯ РАЗДЕЛЕНЫ (наряд §6). Прежде здесь стояло
-        //   gone = deleted && !stillPresent && treeAfter.Count == countBefore - 1;
-        // Строгое «ровно на один меньше» делало ЛОЖНО отрицательным КАСКАД: клиентская приёмка
-        // увидела дерево 5→3 (ушли целевой признак и его зависимые) и получила
-        // feature_removed=false, хотя цель удалена. Замена == на <= сама по себе неверна в другую
-        // сторону — она скрыла бы удаление ЛИШНИХ объектов. Поэтому:
-        //   1) feature_removed              — удалён ли ЦЕЛЕВОЙ признак (по идентичности объекта);
-        //   2) cascade_within_candidates    — ушли ли ТОЛЬКО он и объявленные кандидаты;
-        //   3) independent_objects_preserved — целы ли объекты, стоявшие в дереве ДО него.
-        // «Удалён целевой признак» и «каскад прошёл как ожидалось» — РАЗНЫЕ утверждения, и ни одно
-        // из них не выводится из изменения общего числа признаков.
+        // "Deleted" is by identity: the feature object is no longer in the tree. A name check would be
+        // FALSELY negative if a same-named neighbour remains (MEASURED 19.09.2026, probe I: two features
+        // named "Change of position : Body 1").
+        // INVARIANT: three claims are kept separate. A strict "exactly one fewer" made a CASCADE falsely
+        // negative (a 5→3 tree gave feature_removed=false although the target was gone), while replacing
+        // == with <= would hide deletion of EXTRA objects. So: 1) feature_removed — was the TARGET feature
+        // removed (by object identity); 2) cascade_within_candidates — did ONLY it and the declared
+        // candidates go; 3) independent_objects_preserved — are the objects that stood BEFORE it intact.
+        // "The target was removed" and "the cascade went as expected" are DIFFERENT claims, neither
+        // derivable from the change in the total feature count.
+        // History: docs/decisions/adapter-core.md#delete-position
         var stillPresent = TreePositionOf(document, entity) >= 0;
         var featureRemoved = deleted && !stillPresent;
 
@@ -333,8 +299,9 @@ public partial class Api5Session
         var outsideCandidates = vanished.Where(n => !allowed.Contains(n)).ToList();
         var cascadeWithinCandidates = vanished.Count > 0 && outsideCandidates.Count == 0;
 
-        // Независимые объекты — те, что стояли в дереве ДО цели. Проверяются ТОЛЬКО когда позиция
-        // известна: при positionSource=unknown «до него» не определено, и утверждать нечего.
+        // Independent objects are those that stood in the tree BEFORE the target. They are checked ONLY
+        // when the position is known: with positionSource=unknown "before it" is undefined, and there is
+        // nothing to assert.
         var independent = position >= 0
             ? tree.Take(position).Select(e => e.Name).ToList()
             : new List<string>();
@@ -402,12 +369,11 @@ public partial class Api5Session
             unverified.Add("expected_volume_not_supplied — без ожидания объёма геометрия не подтверждена");
         }
 
-        // Уровень проверки отвечает на вопрос «что именно доказано». Удаление целевого признака —
-        // это структура; геометрия добавляется только тогда, когда подтверждён и каскад, и
-        // сохранность независимых объектов. При удалённой цели и несостоявшемся каскаде уровень
-        // остаётся структурным, а причина названа в unverified — понижать его до CallReturned
-        // значило бы отрицать измеренное удаление, а повышать до geometry_checked — приписывать
-        // себе проверку состава, которой не было.
+        // The verification level answers "what exactly was proved". Removing the target feature is
+        // structure; geometry is added only when both the cascade and the preservation of independent
+        // objects are confirmed. With the target removed and the cascade failed the level stays structural
+        // and the reason is named in unverified — lowering it to CallReturned would deny the measured
+        // deletion, raising it to geometry_checked would claim a composition check that did not happen.
         return new DeleteFeatureResult(
             name,
             deleted,
@@ -424,18 +390,13 @@ public partial class Api5Session
                 unverified));
     }
 
-    /// <summary>
-    /// Имена объектов, которые БЫЛИ в дереве до операции и которых нет после.
-    /// </summary>
-    /// <remarks>
-    /// Сравнение по имени — единственное доступное: COM-идентичность элемента дерева пересоздаётся
-    /// перестроением (измерено 19.09.2026: после подавления и восстановления базового выдавливания
-    /// <c>FindIt</c> по прежнему объекту отвечает −1), поэтому «тот же объект» по ней не
-    /// восстанавливается. Имя даёт СОСТАВ ушедшего, а состав — ровно то, что нужно, чтобы отделить
-    /// «удалён целевой признак» от «каскад прошёл как ожидалось» и от «ушло лишнее».
-    /// Одноимённые элементы снимаются по одному: два одноимённых признака не закрываются одним
-    /// ушедшим.
-    /// </remarks>
+    /// <summary>Names of objects that WERE in the tree before the operation and are gone after.</summary>
+    /// <remarks>Comparison by name is the only one available: a tree element's COM identity is recreated by
+    /// a rebuild (MEASURED 19.09.2026: after suppressing and restoring a base extrusion, <c>FindIt</c> on
+    /// the old object answers −1), so "the same object" cannot be recovered from it. The name gives the
+    /// COMPOSITION of what left, which is exactly what is needed to separate "the target was removed" from
+    /// "the cascade went as expected" and from "something extra went". Same-named elements are removed one
+    /// by one: two same-named features are not closed by a single departure.</remarks>
     private static List<string> VanishedNames(
         List<(int Index, ksEntity Entity, string Name)> before,
         List<(int Index, ksEntity Entity, string Name)> after)
@@ -478,16 +439,11 @@ public partial class Api5Session
         double? VolumeAfterMm3,
         VerificationDto Verification);
 
-    /// <summary>
-    /// Элементы дерева признаков в порядке обхода <c>EntityCollection(110)</c> — вместе с их
-    /// индексом и объектом.
-    /// </summary>
-    /// <remarks>
-    /// Порядок здесь — наблюдаемый факт (порядок обхода коллекции), а не обещание, что КОМПАС
-    /// перестраивает историю именно так. Поэтому позиция признака берётся не по номеру в этом
-    /// списке, а через <see cref="TreePositionOf"/>: список служит для перечисления кандидатов, а
-    /// не для адресации.
-    /// </remarks>
+    /// <summary>Feature tree elements in the walk order of <c>EntityCollection(110)</c>, with their index
+    /// and object.</summary>
+    /// <remarks>The order here is an observed fact (the collection's walk order), not a promise that KOMPAS
+    /// rebuilds history that way. So a feature's position is taken not from its number in this list but via
+    /// <see cref="TreePositionOf"/>: the list serves to enumerate candidates, not to address them.</remarks>
     private List<(int Index, ksEntity Entity, string Name)> FeatureTreeElements(DocumentEntry document)
     {
         var elements = new List<(int, ksEntity, string)>();
@@ -509,17 +465,12 @@ public partial class Api5Session
         return elements;
     }
 
-    /// <summary>
-    /// Позиция признака в дереве — ПО ИДЕНТИЧНОСТИ COM-объекта (<c>ksEntityCollection.FindIt</c>),
-    /// а не по отображаемому имени.
-    /// </summary>
-    /// <remarks>
-    /// Измерено 19.09.2026 (проба I, прогон <c>c90961c6a3ba478697da5bc243040719</c>): два
-    /// последовательных признака изменения положения носят ОДНО имя
-    /// «Изменение положения : Тело 1», поэтому поиск по имени указывает на первый из них всегда.
-    /// <c>FindIt</c> отдаёт индекс с нуля и <c>−1</c> для объекта, которого в коллекции нет; оба
-    /// исхода измерены на одном прогоне.
-    /// </remarks>
+    /// <summary>A feature's position in the tree — BY COM OBJECT IDENTITY (<c>ksEntityCollection.FindIt</c>),
+    /// not by its display name.</summary>
+    /// <remarks>MEASURED 19.09.2026 (probe I, run <c>c90961c6a3ba478697da5bc243040719</c>): two consecutive
+    /// reposition features carry ONE name ("Change of position : Body 1"), so a name search always points at
+    /// the first of them. <c>FindIt</c> returns a zero-based index and <c>−1</c> for an object not in the
+    /// collection; both outcomes were measured in one run.</remarks>
     private int TreePositionOf(DocumentEntry document, ksEntity entity)
     {
         try

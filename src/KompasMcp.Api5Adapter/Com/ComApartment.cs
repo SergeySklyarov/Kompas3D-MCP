@@ -2,11 +2,9 @@ using System.Runtime.InteropServices;
 
 namespace KompasMcp.Api5Adapter.Com;
 
-/// <summary>
-/// The COM HRESULTs this project reasons about, written as the published literals rather than
+/// <summary>The COM HRESULTs this project reasons about, written as the published literals rather than
 /// remembered decimals. Anything not listed here is reported verbatim and treated as an
-/// unknown outcome — an unrecognised HRESULT must never be laundered into a retryable error.
-/// </summary>
+/// unknown outcome — an unrecognised HRESULT must never be laundered into a retryable error.</summary>
 public static class ComHResult
 {
     public const int S_OK = 0;
@@ -76,11 +74,9 @@ public static class ComHResult
     };
 }
 
-/// <summary>
-/// Declaration of <c>IOleMessageFilter</c> exactly as published in oleidl.h: five methods in
+/// <summary>Declaration of <c>IOleMessageFilter</c> exactly as published in oleidl.h: five methods in
 /// this order, IUnknown-derived, no IDispatch. The order is part of the contract — a wrong
-/// vtable layout does not fail to compile, it misroutes the next call COM makes on us.
-/// </summary>
+/// vtable layout does not fail to compile, it misroutes the next call COM makes on us.</summary>
 [ComImport]
 [Guid("00000016-0000-0000-C000-000000000046")]
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -102,11 +98,9 @@ public interface IOleMessageFilter
     int MessagePending(IntPtr hwnd, uint ulPendingType, out uint ulReject);
 }
 
-/// <summary>
-/// Message filter installed on the Worker's STA thread so a busy КОМПАС is handled by COM's own
+/// <summary>Message filter installed on the Worker's STA thread so a busy KOMPAS is handled by COM's own
 /// retry mechanism — and every retry is counted. Unbounded silent retry would turn a wedged
-/// КОМПАС into an unresponsive Worker, which spec 1.6 forbids.
-/// </summary>
+/// KOMPAS into an unresponsive Worker, which spec 1.6 forbids.</summary>
 /// <remarks>
 /// Return values follow the documented convention: <c>RetryRejectedCall</c> returns a delay in
 /// milliseconds to retry, 0 to cancel the call, or -1 to let the default (fail) apply.
@@ -192,10 +186,8 @@ public sealed class ComMessageFilter : IOleMessageFilter
     };
 }
 
-/// <summary>
-/// COM apartment bootstrap for the Worker's single STA thread: initialise the apartment, install
-/// the message filter, and release RCWs only where this layer owns them.
-/// </summary>
+/// <summary>COM apartment bootstrap for the Worker's single STA thread: initialise the apartment, install
+/// the message filter, and release RCWs only where this layer owns them.</summary>
 public static class ComApartment
 {
     private const uint COINIT_APARTMENTTHREADED = 0x2;
@@ -219,11 +211,9 @@ public static class ComApartment
         return new StaCookie(previous);
     }
 
-    /// <summary>
-    /// Decrement one RCW's refcount. Only for objects this layer created and has dropped;
-    /// never for an object still present in the reference registry (spec 1.6: "не освобождать
-    /// совместно используемую RCW до окончания операции").
-    /// </summary>
+    /// <summary>Decrement one RCW's refcount. Only for objects this layer created and has dropped; never for an
+    /// object still present in the reference registry (spec 1.6: do not release a shared RCW before the
+    /// operation ends).</summary>
     public static int Release(object? comObject)
     {
         if (comObject is null)

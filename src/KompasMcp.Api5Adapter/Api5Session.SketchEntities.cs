@@ -6,32 +6,25 @@ using KompasAPI7;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>
-/// Сущности эскиза как объекты с УСТОЙЧИВЫМ АДРЕСОМ: перечисление, адресное чтение и адресная
-/// правка (<c>kompas_list_sketch_entities</c>, <c>kompas_edit_sketch_entity</c>).
-/// </summary>
+/// <summary>Sketch entities as objects with a STABLE ADDRESS: enumeration, addressed read and
+/// addressed edit (<c>kompas_list_sketch_entities</c>, <c>kompas_edit_sketch_entity</c>).</summary>
 /// <remarks>
-/// <para>
-/// <b>Что здесь измеряется, а не утверждается.</b> Действия <c>discover</c>, <c>read</c> и
-/// <c>edit</c> зависимости <c>dep.sketch.entities</c> до этого наряда стояли отказами, и причина
-/// была названа прямо: перечисления сущностей эскиза в продукте нет, адреса, по которому читать
-/// одну сущность, тоже нет, а схема правки эскиза принимает режим и НОВЫЙ НАБОР примитивов
-/// целиком — то есть пересоздаёт контур, а не правит сущность.
-/// </para>
-/// <para>
-/// <b>Адрес.</b> Это строка, которую выдаёт <c>IKompasDocument1.GetObjectId</c> и принимает обратно
-/// <c>IKompasDocument1.FindObjectById</c>. Индекс коллекции адресом не объявляется: перестроение
-/// его сдвигает, и «N-й объект» перестал бы указывать на ту же сущность после первой же мутации.
-/// </para>
-/// <para>
-/// <b>Правка подтверждается ПОВТОРНЫМ РАЗРЕШЕНИЕМ АДРЕСА</b>, а не кодом возврата: у
-/// <c>delete</c> подтверждением служит то, что адрес больше НЕ разрешается, у <c>set_layer</c> —
-/// прочитанный номер слоя. Код «не отказал» применением не объявляется.
-/// </para>
+/// INVARIANT: the ADDRESS is the string returned by <c>IKompasDocument1.GetObjectId</c> and accepted
+/// back by <c>IKompasDocument1.FindObjectById</c>. A collection index is NOT declared an address:
+/// a rebuild shifts it, and "the N-th object" would stop pointing at the same entity after the very
+/// first mutation.
+/// INVARIANT: an edit is confirmed by RE-RESOLVING THE ADDRESS, not by a return code — for
+/// <c>delete</c> the confirmation is that the address no longer resolves, for <c>set_layer</c> it is
+/// the layer number read back. A code that "did not fail" is not declared an application.
+/// LIMIT: the sketch edit schema of other operations takes a mode and a WHOLE NEW SET of primitives,
+/// i.e. it recreates the contour rather than editing an entity. Hence <c>delete</c> here removes
+/// EXACTLY ONE entity named by an address, and the rest stay in place — that is the discriminating
+/// sign of addressability.
+/// History: docs/decisions/adapter-sketch.md#sketch-entities
 /// </remarks>
 public sealed partial class Api5Session
 {
-    /// <summary>Перечислить сущности существующего эскиза; при заданном адресе — прочитать одну.</summary>
+    /// <summary>Enumerate the entities of an existing sketch; with a given address, read one.</summary>
     public SketchEntitiesResult ListSketchEntities(ListSketchEntitiesCommand command)
     {
         var target = RequireSketch(command.SketchRef);
@@ -112,21 +105,14 @@ public sealed partial class Api5Session
             notes);
     }
 
-    /// <summary>
-    /// Адресная правка одной существующей сущности эскиза.
-    /// </summary>
+    /// <summary>Addressed edit of one existing sketch entity.</summary>
     /// <remarks>
-    /// <para>
-    /// <b>Почему режим <c>delete</c> — не то же самое, что <c>delete_entities</c> чужой схемы.</b>
-    /// <c>delete_entities</c> пересобирает контур целиком, а здесь удаляется РОВНО ОДНА сущность,
-    /// названная адресом, и остальные остаются на своих местах — это и есть различающий признак
-    /// адресности.
-    /// </para>
-    /// <para>
-    /// <b>Вход в редактирование — на ЗАПИСЬ.</b> <c>BeginEdit()</c>, а не
-    /// <c>BeginEditEx(true)</c>: правка обязана менять модель, и брать на это режим «только
-    /// чтение» значило бы получить отказ, выглядящий как отсутствие возможности.
-    /// </para>
+    /// INVARIANT: the edit entry is for WRITING — <c>BeginEdit()</c>, not <c>BeginEditEx(true)</c>:
+    /// the edit must change the model, and taking a "read-only" mode for it would produce a refusal
+    /// that looks like a missing capability.
+    /// LIMIT: unlike a <c>delete_entities</c> schema that rebuilds the whole contour, mode
+    /// <c>delete</c> here removes EXACTLY ONE entity named by an address, leaving the others in place.
+    /// History: docs/decisions/adapter-sketch.md#sketch-entity-delete
     /// </remarks>
     public SketchEntityEditResult EditSketchEntity(EditSketchEntityCommand command)
     {
@@ -175,7 +161,7 @@ public sealed partial class Api5Session
                 });
         }
 
-        // Перечисление ДО правки: счётчик сущностей нужен как измеренная величина, а не как оценка.
+        // Enumeration BEFORE the edit: the entity count is needed as a measured quantity, not an estimate.
         var (beforeRead, beforeFailure) = Api7SketchEntities.Read(bridge, target.Sketch, 500);
         if (beforeRead is null)
         {
@@ -215,19 +201,13 @@ public sealed partial class Api5Session
                 RetryPolicy.ReacquireContext);
         }
 
-        // ПРЕЖНЯЯ РЕДАКЦИЯ БРАЛА ЗДЕСЬ `DocumentOf(sketch7)` — документ ДЕТАЛИ — и разрешала адрес
-        // на нём. Это была неверная посылка: `FindObjectById` объявлен на `IKompasDocument1`, но
-        // адрес принадлежит документу ФРАГМЕНТА эскиза, и документ детали по любому адресу отвечает
-        // отказом. Измерено 21.09.2026 (scratch/_probe_dse_dpt.py, бинари
-        // publish-deproutes-20260921-e): документ детали — «» на всех кандидатах, документ
-        // фрагмента — непустой адрес. Поэтому документ-получатель берётся внутри сеанса правки,
-        // ниже, из `BeginEdit()`.
-        // РАЗРЕШЕНИЕ АДРЕСА ИДЁТ ВНУТРИ СЕАНСА ПРАВКИ. Адрес принадлежит документу ФРАГМЕНТА
-        // эскиза, а не документу детали: измерено 21.09.2026 различающим замером по получателю и
-        // родителю (scratch/_probe_dse_dpt.py, бинари publish-deproutes-20260921-e) — документ
-        // детали отвечает пустой строкой на все четыре сущности, документ фрагмента выдаёт адрес.
-        // Фрагмент существует только между BeginEdit() и EndEdit(), поэтому и разрешение адреса,
-        // и подтверждение правки повторным разрешением живут внутри ApplySketchEntityEdit.
+        // INVARIANT: address resolution happens INSIDE the edit session. The address belongs to the
+        // sketch's FRAGMENT document, not to the part document: MEASURED 21.09.2026 by a discriminating
+        // receiver/parent probe (scratch/_probe_dse_dpt.py, binaries publish-deproutes-20260921-e) —
+        // the part document answers an empty string for all four entities, the fragment document yields
+        // the address. The fragment exists only between BeginEdit() and EndEdit(), so both the address
+        // resolution and the edit confirmation by re-resolution live inside ApplySketchEntityEdit.
+        // History: docs/decisions/adapter-sketch.md#fragment-document
         var outcome = ApplySketchEntityEdit(sketch7, command, notes);
         if (outcome.ArgumentFailure is not null)
         {
@@ -274,8 +254,9 @@ public sealed partial class Api5Session
         Api7Bridge.Rebuild(model, target.Document.Document);
         BumpRevision(target.Document, "sketch.entity_edit");
 
-        // ПОДТВЕРЖДЕНИЕ — ПОВТОРНОЕ РАЗРЕШЕНИЕ ТОГО ЖЕ АДРЕСА, а не код возврата. Оно уже снято
-        // ВНУТРИ сеанса правки (там же, где адрес разрешался), и здесь только переносится в отчёт.
+        // CONFIRMATION — re-resolving the SAME address, not a return code. It was already taken
+        // INSIDE the edit session (where the address was resolved), and here it is only copied into
+        // the report.
         var resolvedAfter = outcome.ResolvedAfter;
         int? layerAfter = outcome.LayerAfter;
         string? kindAfter = outcome.KindAfter;
@@ -309,14 +290,12 @@ public sealed partial class Api5Session
             Notes: notes);
     }
 
-    /// <summary>
-    /// Итог сеанса правки: адрес разрешён и правка применена ВНУТРИ одного входа в эскиз.
-    /// </summary>
-    /// <remarks>
-    /// Три поля отказа РАЗЛИЧАЮТСЯ, а не сливаются в одно: «объект по адресу не графический»
-    /// (<c>INVALID_ARGUMENT</c>), «адрес не разрешился» (<c>STALE_REFERENCE</c>) и «правка не
-    /// применилась» (<c>GEOMETRY_FAILED</c>) — разные состояния с разными кодами.
-    /// </remarks>
+    /// <summary>Outcome of the edit session: the address resolved and the edit applied WITHIN one entry
+    /// into the sketch.</summary>
+    /// <remarks>The three failure fields are DISTINGUISHED, not merged: "the object at the address is
+    /// not graphical" (<c>INVALID_ARGUMENT</c>), "the address did not resolve"
+    /// (<c>STALE_REFERENCE</c>) and "the edit did not apply" (<c>GEOMETRY_FAILED</c>) are different
+    /// states with different codes.</remarks>
     private sealed record SketchEntityEditOutcome(
         string? ResolveFailure,
         string? ArgumentFailure,
@@ -326,24 +305,20 @@ public sealed partial class Api5Session
         string? KindAfter,
         string? AfterResolveFailure = null);
 
-    /// <summary>
-    /// Вход в редактирование, РАЗРЕШЕНИЕ АДРЕСА, правка, ПОДТВЕРЖДЕНИЕ и ВЫХОД — в одном сеансе.
-    /// </summary>
-    /// <remarks>
-    /// Адрес принадлежит документу ФРАГМЕНТА эскиза, а фрагмент живёт только между
-    /// <c>BeginEdit()</c> и <c>EndEdit()</c>. Поэтому и <c>FindObjectById</c>, и повторное
-    /// разрешение адреса как подтверждение берутся ЗДЕСЬ, а не у вызывающего: вне сеанса документ
-    /// детали на тот же адрес отвечает пустой строкой (измерено 21.09.2026,
-    /// <c>scratch/_probe_dse_dpt.py</c>, бинари <c>publish-deproutes-20260921-e</c>).
-    /// </remarks>
+    /// <summary>Edit entry, ADDRESS RESOLUTION, edit, CONFIRMATION and EXIT — in one session.</summary>
+    /// <remarks>INVARIANT: the address belongs to the sketch's FRAGMENT document, and the fragment
+    /// exists only between <c>BeginEdit()</c> and <c>EndEdit()</c>. Hence both <c>FindObjectById</c>
+    /// and the re-resolution used as confirmation are taken HERE, not by the caller: outside the
+    /// session the part document answers an empty string for the same address (MEASURED 21.09.2026,
+    /// <c>scratch/_probe_dse_dpt.py</c>, binaries <c>publish-deproutes-20260921-e</c>).</remarks>
     private static SketchEntityEditOutcome ApplySketchEntityEdit(
         ISketch sketch, EditSketchEntityCommand command, List<string> notes)
     {
         FragmentDocument? fragment;
         try
         {
-            // BeginEdit() — НА ЗАПИСЬ. BeginEditEx(true) открыл бы эскиз только для чтения, и
-            // правка получила бы отказ, неотличимый от отсутствия возможности.
+            // BeginEdit() — FOR WRITING. BeginEditEx(true) would open the sketch read-only, and the
+            // edit would get a refusal indistinguishable from a missing capability.
             fragment = sketch.BeginEdit();
         }
         catch (System.Runtime.InteropServices.COMException ex)
@@ -389,13 +364,13 @@ public sealed partial class Api5Session
                 case "set_layer":
                     var wantedLayer = command.LayerNumber!.Value;
                     drawing.LayerNumber = wantedLayer;
-                    // ВОЗВРАТ Update() ЗАПИСЫВАЕТСЯ, НО ПРИГОВОРОМ НЕ ЯВЛЯЕТСЯ. Правило проекта:
-                    // «успешный код не равен применённой правке», и обратное тоже верно — неуспешный
-                    // код не доказывает, что правка не применилась. Измерено 21.09.2026
-                    // (scratch/_probe_dse_edit.py по бинарям publish-deproutes-20260921-f):
-                    // IDrawingObject.LayerNumber = 7 принимается, а Update() возвращает не-true —
-                    // прежняя редакция объявляла это отказом правки и получала GEOMETRY_FAILED при
-                    // живом объекте. Признак применения берётся ЧТЕНИЕМ ОБРАТНО, ниже.
+                    // The Update() return is RECORDED BUT IS NOT THE VERDICT. Project rule: "a
+                    // successful code does not equal an applied edit", and the converse holds too — an
+                    // unsuccessful code does not prove the edit was not applied. MEASURED 21.09.2026
+                    // (scratch/_probe_dse_edit.py on binaries publish-deproutes-20260921-f):
+                    // IDrawingObject.LayerNumber = 7 is accepted while Update() returns non-true, so
+                    // the application sign is taken by READING BACK below, not from this return.
+                    // History: docs/decisions/adapter-sketch.md#update-return
                     updateReturned = SafeUpdate(drawing);
                     notes.Add($"Действие: IDrawingObject.LayerNumber = {wantedLayer}; " +
                         $"IDrawingObject.Update() вернул " +
@@ -413,8 +388,8 @@ public sealed partial class Api5Session
                         false, null, null);
             }
 
-            // ПОДТВЕРЖДЕНИЕ — ПОВТОРНОЕ РАЗРЕШЕНИЕ ТОГО ЖЕ АДРЕСА И ЧТЕНИЕ ЗНАЧЕНИЯ ОБРАТНО В ТОЙ ЖЕ
-            // СЕССИИ, а не код возврата.
+            // CONFIRMATION — re-resolving the SAME address and reading the value back in the SAME
+            // session, not a return code.
             var (afterObject, afterFailure) = Api7SketchEntities.ResolveAddress(
                 fragmentDocument, command.Address);
             var resolvedAfter = afterObject is not null;
@@ -454,8 +429,8 @@ public sealed partial class Api5Session
         }
         finally
         {
-            // Выход обязателен и в ветке отказа: открытый фрагмент держал бы эскиз в режиме правки,
-            // и следующий вызов получил бы занятую модель.
+            // The exit is mandatory even on the failure branch: an open fragment would hold the sketch
+            // in edit mode and the next call would find the model busy.
             try
             {
                 sketch.EndEdit();
@@ -463,16 +438,14 @@ public sealed partial class Api5Session
             catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException
                 or InvalidCastException)
             {
-                // Выход не удался — это причина для журнала, а не повод вернуть ложный успех.
+                // A failed exit is a reason for the journal, not grounds to return a false success.
             }
         }
     }
 
-    /// <summary>
-    /// Возврат <c>IDrawingObject.Update()</c> как ПОКАЗАНИЕ, а не как приговор: <c>null</c> — вызов
-    /// бросил, <c>false</c> — вернул не-true. Решение о применении правки принимается чтением
-    /// значения обратно (см. <c>ApplySketchEntityEdit</c>).
-    /// </summary>
+    /// <summary>The <c>IDrawingObject.Update()</c> return as EVIDENCE, not as a verdict: <c>null</c> —
+    /// the call threw, <c>false</c> — it returned non-true. The decision on whether the edit applied is
+    /// taken by reading the value back (see <c>ApplySketchEntityEdit</c>).</summary>
     private static bool? SafeUpdate(IDrawingObject drawing)
     {
         try
@@ -513,11 +486,9 @@ public sealed partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Документ, которому принадлежит объект API7: подъём по <c>Parent</c>. Не
-    /// <c>IApplication.ActiveDocument</c> — «активный документ» есть состояние ОКНА, и в неактивном
-    /// документе адрес был бы выдан ЧУЖИМ документом, то есть молча неверным.
-    /// </summary>
+    /// <summary>The document that owns an API7 object: climb up via <c>Parent</c>. NOT
+    /// <c>IApplication.ActiveDocument</c> — "active document" is a WINDOW state, and in an inactive
+    /// document the address would be issued by a FOREIGN document, i.e. silently wrong.</summary>
     private static IKompasDocument? DocumentOf(IKompasAPIObject? start)
     {
         var node = start;

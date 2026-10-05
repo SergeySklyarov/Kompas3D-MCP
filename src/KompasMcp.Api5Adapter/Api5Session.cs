@@ -11,11 +11,9 @@ using KompasMcp.Domain.Paths;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>
-/// One КОМПАС instance the Worker owns or is attached to, plus the documents registered against
+/// <summary>One KOMPAS instance the Worker owns or is attached to, plus the documents registered against
 /// it. Every method here must be called on the Worker's single STA thread; nothing in this class
-/// is thread-safe by design, because the COM objects behind it are not.
-/// </summary>
+/// is thread-safe by design, because the COM objects behind it are not.</summary>
 /// <remarks>
 /// Identity rules that the contract depends on:
 /// <list type="bullet">
@@ -23,7 +21,7 @@ namespace KompasMcp.Api5Adapter;
 /// a factory (proved in P0.5: two calls give different IUnknowns), so there is no ambient document
 /// to misuse.</item>
 /// <item>Revisions are server-side counters bumped on mutation, rebuild, reload and restore.
-/// External edits made in the КОМПАС UI cannot be trusted to raise events here, so a cheap
+/// External edits made in the KOMPAS UI cannot be trusted to raise events here, so a cheap
 /// fingerprint is compared before every mutation and the document is marked
 /// <c>conservative</c> — the limitation is reported, not hidden.</item>
 /// <item>COM references are held only in this object and released exactly when the document is
@@ -80,11 +78,9 @@ public sealed partial class Api5Session : IDisposable
     // Connection
     // ---------------------------------------------------------------------------------------------
 
-    /// <summary>
-    /// Attach to an existing instance or launch a new one, and prove which process the returned
+    /// <summary>Attach to an existing instance or launch a new one, and prove which process the returned
     /// object belongs to (spec 1.6). A launch that cannot be attributed to exactly one new PID is
-    /// refused rather than adopted.
-    /// </summary>
+    /// refused rather than adopted.</summary>
     public ApplicationEntry Connect(ConnectCommand command)
     {
         if (command.Mode == ConnectMode.Launch)
@@ -95,21 +91,14 @@ public sealed partial class Api5Session : IDisposable
         return Attach(command);
     }
 
-    /// <summary>
-    /// Применяет запрошенную видимость и записывает режим документов по НАБЛЮДЁННОМУ результату.
-    /// </summary>
-    /// <remarks>
-    /// Семантика различается по происхождению экземпляра, и это согласовано с требованием не
-    /// трогать чужое окно:
-    /// <list type="bullet">
-    /// <item><c>launch</c> — экземпляр наш, поэтому применяется любое из двух значений:
-    /// make_visible=true показывает, false явно прячет (так же, как это делал P0.4b).</item>
-    /// <item><c>attach</c> — экземпляр пользовательский. true показывает его; false — заявка
-    /// «невидимо», к чужому окну не применяемая: сервер не скрывает уже видимое окно. Документы
-    /// тогда наследуют фактическую видимость приложения, а не «скрыто по умолчанию»: открывать
-    /// файл в невидимом окне пользовательского КОМПАСа означало бы прятать результат его работы.</item>
-    /// </list>
-    /// </remarks>
+    /// <summary>Applies the requested visibility and records the document mode from the OBSERVED result.</summary>
+    /// <remarks>The semantics differ by the instance's origin, in line with the requirement not to touch
+    /// another user's window: <c>launch</c> — the instance is ours, so either value applies (make_visible=true
+    /// shows, false explicitly hides, as P0.4b did); <c>attach</c> — the instance is the user's. true shows
+    /// it; false is a request for "invisible" that is not applied to another's window: the server does not
+    /// hide an already visible window. Documents then inherit the application's actual visibility, not
+    /// "hidden by default": opening a file in an invisible window of the user's KOMPAS would hide the result
+    /// of their work.</remarks>
     private ApplicationEntry WithVisibility(ApplicationEntry entry, ConnectMode mode, bool makeVisible)
     {
         if (mode == ConnectMode.Attach && !makeVisible)
@@ -173,7 +162,7 @@ public sealed partial class Api5Session : IDisposable
 
     private ApplicationEntry Attach(ConnectCommand command)
     {
-        // Scoped to the ProgID this adapter can actually drive: one running КОМПАС also registers
+        // Scoped to the ProgID this adapter can actually drive: one running KOMPAS also registers
         // its API7 CLSID, which is not a usable attach target and would look like a second instance.
         //
         // Every matching ROT entry is a candidate, including ones whose COM object failed to bind
@@ -187,8 +176,8 @@ public sealed partial class Api5Session : IDisposable
 
         if (candidates.Count == 0)
         {
-            // Report the unfiltered ROT total too: "no КОМПАС entries" and "the enumerator returned
-            // nothing at all" are different diagnoses — the first is a property of КОМПАС, the
+            // Report the unfiltered ROT total too: "no KOMPAS entries" and "the enumerator returned
+            // nothing at all" are different diagnoses — the first is a property of KOMPAS, the
             // second is a bug of ours. Without this the refusal is unfalsifiable.
             var (total, names) = RunningObjectTable.EnumerateAllEntries();
             var reason = total == 0
@@ -268,10 +257,8 @@ public sealed partial class Api5Session : IDisposable
         return ProcessIdOf(kompasObject);
     }
 
-    /// <summary>
-    /// PID behind the application's main window. Returns null while the instance is headless,
-    /// which is exactly when the process-diff route has to carry the attribution.
-    /// </summary>
+    /// <summary>PID behind the application's main window. Returns null while the instance is headless,
+    /// which is exactly when the process-diff route has to carry the attribution.</summary>
     public static int? ProcessIdOf(object kompasObject)
     {
         try
@@ -367,17 +354,12 @@ public sealed partial class Api5Session : IDisposable
     // Documents
     // ---------------------------------------------------------------------------------------------
 
-    /// <summary>
-    /// Опись сеанса: экземпляры и документы, которые держит этот адаптер, с признаком
-    /// несохранённости. Ничего не меняет — читает реестр и отпечаток документа.
-    /// </summary>
-    /// <remarks>
-    /// Признак несохранённости берётся ТОЛЬКО из <see cref="SaveStateOf"/>, то есть из отпечатка и
-    /// состояния, которое ведёт сам сервер: документированного свойства «документ изменён» у
-    /// целевой версии нет, и выдавать за него видимое в UI было бы выдумкой (см.
-    /// <see cref="SaveStateOf"/>). Именно поэтому опись идёт на CAD-полосу: читать отпечаток
-    /// приходится через COM.
-    /// </remarks>
+    /// <summary>Session inventory: the instances and documents this adapter holds, with their unsaved flag.
+    /// Changes nothing — it reads the registry and the document fingerprint.</summary>
+    /// <remarks>The unsaved flag comes ONLY from <see cref="SaveStateOf"/>, i.e. from the fingerprint and the
+    /// state the server itself keeps: the target version has no documented "document modified" property, and
+    /// passing off what is visible in the UI as one would be a fabrication (see <see cref="SaveStateOf"/>).
+    /// That is why the inventory runs on the CAD lane: the fingerprint has to be read through COM.</remarks>
     public object Inventory()
     {
         var documents = Documents.Select(document =>
@@ -440,9 +422,8 @@ public sealed partial class Api5Session : IDisposable
 
         var document = (ksDocument3D)application.Application.Document3D();
 
-        // Create(invisible, isDetail): первый аргумент — именно невидимость (P0.4b). Ранее здесь
-        // стоял неизменный true, поэтому документ не мог появиться на экране даже после показа
-        // приложения. Теперь режим берётся от экземпляра: скрытый сеанс остаётся скрытым.
+        // Create(invisible, isDetail): the first argument is exactly the invisibility flag (P0.4b), taken
+        // from the instance's observed mode, so a hidden session stays hidden.
         var isPart = command.Kind == DocumentKind.Part;
         if (!document.Create(!application.DocumentsVisible, isPart))
         {
@@ -505,19 +486,18 @@ public sealed partial class Api5Session : IDisposable
 
         if (kind == DocumentKind.Part && command.Access == DocumentAccess.Edit && IsReadOnlyHint(command.Path))
         {
-            // Nothing to enforce here beyond reporting; КОМПАС itself refuses the write later.
+            // Nothing to enforce here beyond reporting; KOMPAS itself refuses the write later.
         }
 
         var part = (ksPart)document.GetPart(-1);
         var entry = RegisterDocument(document, part, application, kind, command.Path, kindVerified: isDetail is not null);
 
-        // ДОСТУП ЗАПОМИНАЕТСЯ, ПОТОМУ ЧТО ОН РЕШАЕТ ИСХОД ПОЗДНЕЙ ЗАПИСИ.
-        //
-        // Документ, открытый `read_only`, нельзя сохранить «на месте»: поле пути в вызове
-        // kompas_save_document отсутствует, и Хосту проверять нечего — его политика судит ПОЛЯ
-        // вызова, а не путь документа. Так `kompas_open_document(path в read_only_roots)` +
-        // `kompas_save_document` без target_path писал прямо в корень, объявленный «только
-        // чтение» (дефект H4 ревью 05.10.2026). Признак доступа — то, чем эта запись закрывается.
+        // ACCESS IS REMEMBERED BECAUSE IT DECIDES THE OUTCOME OF A LATER WRITE.
+        // A document opened `read_only` must not be saved "in place": the save call carries no path field
+        // and the Host has nothing to check — its policy judges the CALL's fields, not the document's path.
+        // So `kompas_open_document(path under read_only_roots)` + `kompas_save_document` without target_path
+        // wrote straight into a root declared "read-only" (defect H4, review 05.10.2026). The access flag is
+        // what closes that write.
         entry.Access = command.Access;
         return entry;
     }
@@ -568,19 +548,18 @@ public sealed partial class Api5Session : IDisposable
             DocumentsVisible = application.DocumentsVisible,
         };
 
-        // Документ может быть создан «невидимо» и всё равно оказаться на экране (и наоборот),
-        // поэтому состояние перечитывается у него самого, а показ применяется только когда
-        // экземпляр работает в видимом режиме.
+        // A document can be created "invisibly" and still end up on screen (and vice versa), so its state
+        // is re-read from the document itself, and presentation is applied only when the instance runs in
+        // visible mode.
         var (activated, _) = PresentDocument(application.Application, document, application.DocumentsVisible);
         entry.ActiveReported = activated;
         entry.Visible = application.DocumentsVisible ? ObserveDocumentVisible(document) : false;
 
         entry.Fingerprint = ComputeFingerprint(entry);
 
-        // Открытие файла: КОМПАС прочитал его с диска, поэтому модель совпадает с файлом.
-        // Создание: документ существует только в памяти и ни разу не записан — это изменение,
-        // которое закрытие обязано заметить (иначе «refuse» на новом документе пропускал бы
-        // потерю всей построенной модели).
+        // Open: KOMPAS read it from disk, so the model matches the file. Create: the document exists only
+        // in memory and was never written — a change the close must notice (otherwise "refuse" on a new
+        // document would let the loss of the whole built model through).
         entry.SaveState = entry.Path is null
             ? DocumentSaveTracking.AfterCreate()
             : DocumentSaveTracking.AfterOpen();
@@ -593,11 +572,9 @@ public sealed partial class Api5Session : IDisposable
     public string? OwningDocumentId(string referenceId) =>
         References.TryGet(referenceId, out var stored) && stored is not null ? stored.DocumentId : null;
 
-    /// <summary>
-    /// Document owning a reference, for commands addressed by reference rather than by document id.
+    /// <summary>Document owning a reference, for commands addressed by reference rather than by document id.
     /// An unknown handle is the same STALE_REFERENCE the resolution path would report, so a caller
-    /// cannot learn the owner of a handle that is already dead.
-    /// </summary>
+    /// cannot learn the owner of a handle that is already dead.</summary>
     public DocumentEntry DocumentForReference(string referenceId)
     {
         var documentId = OwningDocumentId(referenceId)
@@ -626,11 +603,9 @@ public sealed partial class Api5Session : IDisposable
         }
     }
 
-    /// <summary>
-    /// File name КОМПАС reports for a component, or null. It is read defensively because an
+    /// <summary>File name KOMPAS reports for a component, or null. It is read defensively because an
     /// unsaved document reports an empty string and some interop versions expose the member as a
-    /// property rather than a getter.
-    /// </summary>
+    /// property rather than a getter.</summary>
     private static string SafeFileName(ksPart part)
     {
         try
@@ -661,12 +636,12 @@ public sealed partial class Api5Session : IDisposable
             UnitSystem = "mm",
             Origin = new double[] { 0, 0, 0 },
             Fingerprint = document.Fingerprint,
-            // Видимость документа — отдельный ответ, не производная от видимости приложения:
-            // приложение можно показать, а документ оставить в невидимом режиме.
+            // Document visibility is a separate answer, not derived from the application's: the application
+            // can be shown while the document stays in invisible mode.
             DocumentVisible = document.Visible,
             DocumentsVisibleMode = document.DocumentsVisible,
             DocumentActiveReported = document.ActiveReported,
-            // КОМПАС events are not wired in this build, so an edit made by hand in the UI can
+            // KOMPAS events are not wired in this build, so an edit made by hand in the UI can
             // only be caught by the pre-mutation fingerprint check. Saying so beats implying more.
             ExternalChangeDetection = ExternalChangeDetection.Conservative,
         };
@@ -674,18 +649,14 @@ public sealed partial class Api5Session : IDisposable
 
     public bool IsDirty(DocumentEntry document) => DocumentSaveTracking.IsDirty(SaveStateOf(document));
 
-    /// <summary>
-    /// Состояние сохранённости документа: на диске лежит ли именно та модель, которую держит
-    /// КОМПАС. Ведётся сервером, потому что документированного признака «документ изменён» у
-    /// целевой версии нет (см. <see cref="DocumentSaveTracking"/>).
-    /// </summary>
-    /// <remarks>
-    /// Отпечаток здесь отвечает ровно на один вопрос — менял ли модель кто-то помимо нас: правка
-    /// в UI не проходит через <see cref="BumpRevision"/>, и заметить её больше нечем. Нечитаемый
-    /// отпечаток неизменность НЕ доказывает и даёт «неизвестно», а не «чисто»: прежде
-    /// отражённый <c>IsSaved</c> и сравнение отпечатков вместе выдавали
-    /// <c>dirty=false</c> сразу после мутации, то есть обе защиты закрытия обходились.
-    /// </remarks>
+    /// <summary>Document save state: whether the model KOMPAS holds is exactly what is on disk. Kept by the
+    /// server because the target version has no documented "document modified" flag (see
+    /// <see cref="DocumentSaveTracking"/>).</summary>
+    /// <remarks>The fingerprint answers exactly one question — did anyone other than us change the model: a
+    /// UI edit does not pass through <see cref="BumpRevision"/> and there is nothing else to notice it. An
+    /// unreadable fingerprint does NOT prove immutability and yields "unknown", not "clean": previously the
+    /// reflected <c>IsSaved</c> and the fingerprint comparison together reported <c>dirty=false</c> right
+    /// after a mutation, defeating both close guards.</remarks>
     public DocumentSaveState SaveStateOf(DocumentEntry document)
     {
         var observed = ComputeFingerprint(document);
@@ -696,21 +667,19 @@ public sealed partial class Api5Session : IDisposable
 
         if (document.Fingerprint is not null && observed != document.Fingerprint)
         {
-            // Базовую линию не сдвигаем: пока документ не сохранён или не изменён через MCP,
-            // замеченное расхождение остаётся замеченным, а не «забытым» после первого чтения.
+            // The baseline is not moved: until the document is saved or changed via MCP, a noticed
+            // discrepancy stays noticed rather than being "forgotten" after the first read.
             return DocumentSaveTracking.AfterExternalChange();
         }
 
         return document.SaveState;
     }
 
-    /// <summary>
-    /// Cheap state digest used because КОМПАС change events are not subscribed in this build.
+    /// <summary>Cheap state digest used because KOMPAS change events are not subscribed in this build.
     /// It is deliberately coarse: its job is to catch "the user changed the model", not to
     /// identify which feature moved. It is NOT evidence that the file on disk is current — that
     /// question is answered by <see cref="DocumentSaveState"/>, and conflating the two is exactly
-    /// the defect this pair replaced.
-    /// </summary>
+    /// the defect this pair replaced.</summary>
     public string ComputeFingerprint(DocumentEntry document)
     {
         try
@@ -718,9 +687,9 @@ public sealed partial class Api5Session : IDisposable
             var bodies = CountBodies(document);
             if (bodies < 0)
             {
-                // Коллекция тел не ответила. Отпечаток «0:0:…» читался бы как пустой документ и
-                // превратил бы отказ чтения в наблюдённое расхождение — то есть в выдуманную
-                // внешнюю правку. Отказ чтения называется отказом чтения.
+                // The body collection did not answer. A fingerprint of "0:0:…" would read as an empty
+                // document and turn a read failure into an observed discrepancy — i.e. an invented external
+                // edit. A read failure is named a read failure.
                 return DocumentSaveTracking.UnreadableFingerprint;
             }
 
@@ -783,22 +752,15 @@ public sealed partial class Api5Session : IDisposable
         }
     }
 
-    /// <summary>
-    /// Число компонентов сборки — по СТРУКТУРЕ (<c>IPart7.PartsEx</c>), а не по коллекции API5.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>ИЗМЕРЕНО 04.10.2026 живым прогоном и опровергло прежний маршрут.</b> Коллекция API5
-    /// <c>EntityCollection(o3d_part = 104)</c> на сборке с ОДНИМ вставленным компонентом отдала
-    /// <b>7</b> — это не число компонентов. Число компонентов даёт структура API7:
-    /// <c>IAssemblyDocument.TopPart</c> → <c>IPart7.PartsEx(ksAllParts)</c>, рекурсивно по
-    /// подсборкам. Ошибка была видна только на живой сборке: до неё инструментов сборки не было.
-    /// </para>
-    /// <para>
-    /// Обход ограничен глубиной: циклическая ссылка подсборок на себя (если она возможна) не должна
-    /// зациклить сервер. Ограничение названо числом, а не «разумным» — 64 уровня.
-    /// </para>
-    /// </remarks>
+    /// <summary>Assembly component count — from the STRUCTURE (<c>IPart7.PartsEx</c>), not the API5
+    /// collection.</summary>
+    /// <remarks>MEASURED 04.10.2026 by a live run, refuting the former route: the API5 collection
+    /// <c>EntityCollection(o3d_part = 104)</c> on an assembly with ONE inserted component returned <b>7</b>
+    /// — not a component count. The count comes from the API7 structure:
+    /// <c>IAssemblyDocument.TopPart</c> → <c>IPart7.PartsEx(ksAllParts)</c>, recursively over subassemblies.
+    /// The error was visible only on a live assembly: before it there were no assembly tools.
+    /// LIMIT: the walk is bounded by depth — a subassembly cycle (if possible) must not loop the server. The
+    /// limit is named as a number, not "reasonable": 64 levels.</remarks>
     public int CountComponents(DocumentEntry document)
     {
         var notes = new List<string>();
@@ -829,9 +791,8 @@ public sealed partial class Api5Session : IDisposable
             var isDetail = Bool(() => child.Detail);
             if (isDetail is null)
             {
-                // Непрочитанный признак «деталь/сборка» не подменяется ни `true`, ни `false`: обход
-                // под неизвестным узлом НЕ продолжается, и это называется. Прежний `Safe` давал
-                // здесь `false` («не деталь»), то есть непрочитанное значение РАЗРЕШАЛО обход.
+                // An unread "detail/assembly" flag is not replaced by `true` or `false`: the walk under an
+                // unknown node is NOT continued, and that is named. An unread value must not PERMIT the walk.
                 notes.Add("component_detail_unread — признак «деталь/сборка» не прочитан: обход под " +
                           "этим узлом не продолжен, число компонентов может быть неполным");
                 continue;
@@ -844,9 +805,7 @@ public sealed partial class Api5Session : IDisposable
         }
     }
 
-    /// <summary>
-    /// Raise the revision and move the document's references with it.
-    /// </summary>
+    /// <summary>Raise the revision and move the document's references with it.</summary>
     /// <param name="reason">Recorded for diagnostics ("extrude", "rebuild", …).</param>
     /// <param name="invalidateAll">
     /// True when the model was re-read or rebuilt rather than edited by this server: then handles
@@ -858,9 +817,9 @@ public sealed partial class Api5Session : IDisposable
         document.Revision++;
         References.RevisionForward(document.Id, document.Revision, invalidateAll);
 
-        // Единственная точка, через которую проходят все мутации, — поэтому перерисовка не
-        // зависит от того, какая операция меняла модель, и не заводится в каждом вызове отдельно.
-        // В скрытом режиме она не делает ничего (см. RefreshViewAfterMutation).
+        // The single point every mutation passes through — so the redraw does not depend on which operation
+        // changed the model and is not wired into each call separately. In hidden mode it does nothing (see
+        // RefreshViewAfterMutation).
         RefreshViewAfterMutation(document);
 
         if (invalidateAll)
@@ -888,10 +847,9 @@ public sealed partial class Api5Session : IDisposable
         document.Fingerprint = ComputeFingerprint(document);
         document.LastRevisionReason = reason;
 
-        // Обновление ревизии сохранённости НЕ подтверждает: единственное место, где документ
-        // объявляется сохранённым, — подтверждённая запись в файл (SaveDocument). Прежняя
-        // редакция писала сюда же отпечаток и тем самым после каждой мутации делала документ
-        // «неизменённым», обходя и отказ, и сохранение при закрытии.
+        // Bumping the revision does NOT confirm savedness: the only place a document is declared saved is a
+        // confirmed write to file (SaveDocument). Writing a fingerprint here too would make the document
+        // "unchanged" after every mutation, defeating both the refusal and the save on close.
         document.SaveState = DocumentSaveTracking.AfterMutation();
     }
 
@@ -912,8 +870,8 @@ public sealed partial class Api5Session : IDisposable
                     });
 
             case CloseAction.SaveThenClose:
-                // Отказ сохранения бросает исключение — и тогда документ остаётся открытым и
-                // по-прежнему изменённым, а не «закрытым с потерей правки».
+                // A failed save throws — the document then stays open and still modified, not "closed with
+                // the edit lost".
                 SaveDocument(document, targetPath: null);
                 break;
         }
@@ -945,9 +903,9 @@ public sealed partial class Api5Session : IDisposable
         var path = targetPath is null ? document.Path : NormalizePath(targetPath);
         if (path is null)
         {
-            // Имя файла документу не задано: Save() по документации пишет «в файл с заданным
-            // ранее именем», и вызывать его без имени значит получить либо запрос имени, либо
-            // false. Новый документ без пути поэтому отказывает явно, а не «сохраняется» молча.
+            // The document has no file name: per the docs Save() writes "to the file with the previously set
+            // name", and calling it without a name yields either a name prompt or false. A new document with
+            // no path therefore refuses explicitly rather than "saving" silently.
             throw new KompasContractException(
                 ErrorCodes.SaveFailed,
                 "Сохранить документ без имени нельзя: путь не задан ни документом, ни вызовом.",
@@ -955,13 +913,12 @@ public sealed partial class Api5Session : IDisposable
                 details: new Dictionary<string, object?> { ["document_id"] = document.Id });
         }
 
-        // ЗАПИСЬ В ФАЙЛ ДОКУМЕНТА, ОТКРЫТОГО ТОЛЬКО ДЛЯ ЧТЕНИЯ.
-        //
-        // Вызов без target_path не несёт поля пути, поэтому политика Хоста его не проверяет:
-        // `kompas_open_document(path, access=read_only)` + `kompas_save_document` писали прямо в
-        // исходный файл — в том числе в корень, объявленный «только чтение» (дефект H4 ревью
-        // 05.10.2026). Сохранение «на место» поэтому закрывается здесь, а «сохранить как» по
-        // названному пути — по-прежнему разрешено: такой путь судит Хост.
+        // WRITING TO THE FILE OF A DOCUMENT OPENED READ-ONLY.
+        // A call without target_path carries no path field, so the Host's policy does not check it:
+        // `kompas_open_document(path, access=read_only)` + `kompas_save_document` wrote straight into the
+        // source file — including into a root declared "read-only" (defect H4, review 05.10.2026). Saving
+        // "in place" is therefore closed here, while "save as" to a named path stays allowed: the Host judges
+        // such a path.
         if (targetPath is null && document.Access == DocumentAccess.ReadOnly)
         {
             throw new KompasContractException(
@@ -990,7 +947,7 @@ public sealed partial class Api5Session : IDisposable
 
         if (!ok)
         {
-            // Отказ сохранения состояние не очищает: документ остаётся изменённым.
+            // A failed save does not clear the state: the document stays modified.
             throw new KompasContractException(
                 ErrorCodes.SaveFailed,
                 $"Сохранение не подтверждено возвращаемым значением ({(targetPath is null ? "Save" : "SaveAs")}).",
@@ -1011,9 +968,9 @@ public sealed partial class Api5Session : IDisposable
 
         document.Path = path;
         document.Document.UpdateDocumentParam();
-        // «Сохранить как» по названному пути проверен Хостом как записываемый, поэтому с этого
-        // момента запись в файл документа разрешена: признак доступа следует за путём, а не
-        // остаётся навсегда от открытия.
+        // "Save as" to a named path was checked by the Host as writable, so from now on writing to the
+        // document's file is allowed: the access flag follows the path rather than staying forever from the
+        // open.
         if (targetPath is not null)
         {
             document.Access = DocumentAccess.Edit;
@@ -1021,9 +978,9 @@ public sealed partial class Api5Session : IDisposable
 
         BumpRevision(document, "save");
 
-        // Единственное место, где сохранённость объявляется подтверждённой: операция вернула
-        // успех И файл перечитан с диска. Сбрасывать признак внутри CAD ради зелёного прогона
-        // здесь нечем и не нужно — читается именно файл.
+        // The only place savedness is declared confirmed: the operation returned success AND the file was
+        // re-read from disk. There is no way, and no need, to clear the flag inside CAD for a green run —
+        // it is the file that is read.
         document.SaveState = DocumentSaveTracking.AfterConfirmedSave();
         document.SavedFileSha256 = written.Value.Sha256;
         document.SavedFileByteLength = written.Value.ByteLength;
@@ -1038,11 +995,8 @@ public sealed partial class Api5Session : IDisposable
             document.Revision);
     }
 
-    /// <summary>
-    /// Перечитать сохранённый файл: существование, размер, хеш и время записи. Это и есть
-    /// «последующее чтение», которым подтверждается сохранность, — в отличие от смены признака
-    /// внутри CAD, которое ничего о файле не говорит.
-    /// </summary>
+    /// <summary>Re-read the saved file: existence, size, hash and write time. This is the "subsequent read"
+    /// that confirms savedness, unlike a flag change inside CAD, which says nothing about the file.</summary>
     private static (long ByteLength, string Sha256, DateTime WrittenUtc)? ReadBackSavedFile(string path)
     {
         try
@@ -1088,15 +1042,14 @@ public sealed record ApplicationEntry(
     string ConnectedAs,
     string Version)
 {
-    /// <summary>
-    /// Режим, в котором этому экземпляру следует создавать и открывать документы. Выведен из
-    /// наблюдённой видимости приложения после применения make_visible — а не из того, что
-    /// попросили: показать приложение не значит показать уже открытые документы, и прятать
-    /// пользовательское окно при attach с make_visible=false тоже не входило в намерение.
-    /// </summary>
+    /// <summary>The mode in which this instance should create and open documents. Derived from the observed
+    /// application visibility after make_visible is applied — not from what was requested: showing the
+    /// application does not mean showing already open documents, and hiding a user's window on attach with
+    /// make_visible=false was not intended either.</summary>
     public bool DocumentsVisible { get; set; }
 
-    /// <summary>Последнее наблюдение окна: и COM-свойство, и ответ Windows, и заголовки окон документов.</summary>
+    /// <summary>The latest window observation: the COM property, the Windows answer, and the document window
+    /// titles.</summary>
     public Api5Session.WindowObservation? Window { get; set; }
 
     public Api5Session.WindowObservation Observe() =>
@@ -1104,8 +1057,8 @@ public sealed record ApplicationEntry(
 
     public ApplicationInfoDto ToDto(int openDocuments)
     {
-        // Наблюдение берётся заново: состояние окна может измениться вне сеанса (пользователь
-        // свернул или закрыл окно), а ответ обязан отражать фактическое положение дел.
+        // The observation is taken afresh: the window state can change outside the session (the user
+        // minimised or closed it), and the response must reflect the actual state.
         var observed = Observe();
         return new ApplicationInfoDto
         {
@@ -1116,9 +1069,9 @@ public sealed record ApplicationEntry(
             ConnectedAs = ConnectedAs,
             ExecutablePath = KompasInteropResolver.LocalServerPath(Api5Session.KompasProgId),
 
-            // Было: Visible = ProcessIdOf(Application) is not null — то есть «по HWND достаётся
-            // PID». Скрытое окно HWND имеет, поэтому поле было ложноположительным по построению.
-            // Стало: видно тогда, когда и COM-свойство, и Windows согласны.
+            // Was: Visible = ProcessIdOf(Application) is not null — i.e. "a PID is obtained from the HWND".
+            // A hidden window has an HWND, so the field was falsely positive by construction. Now: visible
+            // when both the COM property and Windows agree.
             Visible = observed.Visible,
             ApplicationVisibleByCom = observed.ComProperty,
             ApplicationWindowVisibleByWindows = observed.WindowVisible,
@@ -1154,66 +1107,56 @@ public sealed class DocumentEntry
 
     public string? Path { get; internal set; }
 
-    /// <summary>
-    /// Режим доступа, в котором документ открыт. Решает, можно ли писать в ЕГО файл: вызов
-    /// сохранения без <c>target_path</c> не содержит поля пути, и политика Хоста его не судит
-    /// (см. комментарий в <c>OpenDocument</c>). По умолчанию <see cref="DocumentAccess.Edit"/> —
-    /// созданный документ своего файла ещё не имеет.
-    /// </summary>
+    /// <summary>The access mode the document is open in. It decides whether ITS file may be written: a save
+    /// call without <c>target_path</c> carries no path field and the Host's policy does not judge it (see the
+    /// comment in <c>OpenDocument</c>). Defaults to <see cref="DocumentAccess.Edit"/> — a created document has
+    /// no file of its own yet.</summary>
     public DocumentAccess Access { get; set; } = DocumentAccess.Edit;
 
     public ksDocument3D Document { get; }
 
     public ksPart Part { get; }
 
-    /// <summary>
-    /// Режим видимости, в котором этот документ был создан или открыт: наследуется от экземпляра
-    /// приложения. Отдельно от <see cref="Visible"/>: то, что мы попросили, и то, что документ о
-    /// себе сообщает, — разные величины, и смешение этих двух как раз и дало ложный visible=true.
-    /// </summary>
+    /// <summary>The visibility mode this document was created or opened in: inherited from the application
+    /// instance. Separate from <see cref="Visible"/>: what was requested and what the document reports about
+    /// itself are different quantities, and conflating the two is what produced a false visible=true.</summary>
     public bool DocumentsVisible { get; set; }
 
-    /// <summary>Перечитанное состояние документа (<c>!ksDocument3D.invisibleMode</c>), null — не удалось.</summary>
+    /// <summary>Re-read document state (<c>!ksDocument3D.invisibleMode</c>), null — could not be read.</summary>
     public bool? Visible { get; set; }
 
-    /// <summary>Что ответил <c>SetActive()</c>: показ документа отдельно от показа приложения.</summary>
+    /// <summary>What <c>SetActive()</c> answered: document presentation separate from application
+    /// presentation.</summary>
     public bool? ActiveReported { get; set; }
 
-    /// <summary>
-    /// Current root part of the document.
-    /// </summary>
+    /// <summary>Current root part of the document.</summary>
     /// <remarks>
     /// The handle captured at creation goes stale once a feature is created: measured on v24, a
     /// cached <c>ksPart</c> started returning an empty <c>BodyCollection</c> and a null
     /// <c>GetMainBody()</c> for a document that demonstrably had a solid body and saved it to disk.
     /// Re-acquiring from the document per operation is therefore not a micro-optimisation to skip —
-    /// it is what makes reads agree with what КОМПАС actually holds. <see cref="Part"/> is kept for
+    /// it is what makes reads agree with what KOMPAS actually holds. <see cref="Part"/> is kept for
     /// identity checks and release bookkeeping only.
     /// </remarks>
     public ksPart PartNow() => (ksPart)Document.GetPart(-1);
 
     public long Revision { get; set; }
 
-    /// <summary>
-    /// Отпечаток последнего НАБЛЮДЕНИЯ модели: им ловится правка, сделанная помимо MCP. Он не
-    /// является признаком сохранённости — этим занят <see cref="SaveState"/>.
-    /// </summary>
+    /// <summary>Fingerprint of the last OBSERVATION of the model: it catches an edit made outside MCP. It is
+    /// not a savedness flag — <see cref="SaveState"/> handles that.</summary>
     public string? Fingerprint { get; set; }
 
-    /// <summary>
-    /// Состояние сохранённости: подтверждено ли записью в файл, что на диске лежит текущая
-    /// модель. Ведётся сервером, потому что документированного признака «документ изменён» у
-    /// целевой версии нет.
-    /// </summary>
+    /// <summary>Savedness state: whether a write to file confirmed that the current model is on disk. Kept by
+    /// the server because the target version has no documented "document modified" flag.</summary>
     public DocumentSaveState SaveState { get; set; } = DocumentSaveState.Unknown;
 
-    /// <summary>Хеш файла, перечитанного после последнего подтверждённого сохранения.</summary>
+    /// <summary>Hash of the file re-read after the last confirmed save.</summary>
     public string? SavedFileSha256 { get; set; }
 
-    /// <summary>Размер того же файла в байтах.</summary>
+    /// <summary>Size of the same file in bytes.</summary>
     public long? SavedFileByteLength { get; set; }
 
-    /// <summary>Время записи того же файла по часам машины (UTC).</summary>
+    /// <summary>Write time of the same file by the machine clock (UTC).</summary>
     public DateTime? SavedAtUtc { get; set; }
 
     public string LastRevisionReason { get; set; } = "create";
@@ -1238,42 +1181,30 @@ public static class KompasObjectTypes
     public const int BossExtrusion = 25;
     public const int CutExtrusion = 26;
 
-    /// <summary>
-    /// <c>o3d_baseRotated</c> — номер, под которым вращение СОЗДАЁТСЯ через фабрику
-    /// <c>IModelContainer.Rotateds.Add</c> (измерено R.24: <c>(int)ksObj3dTypeEnum.o3d_baseRotated = 27</c>).
-    /// </summary>
-    /// <remarks>
-    /// Как и у отверстия, здесь две разные системы нумерации, и путать их нельзя. 27/28/29 — номера
-    /// ФАБРИКИ (аргумент <c>Add</c>); в дереве API5 созданный признак виден под собственным номером
-    /// <see cref="Rotated3D"/> = 584. Поиск признака по 27/28/29 не нашёл бы его никогда, и это был бы
-    /// тот же дефект, что и поиск отверстия по 52 — исправленный ровно так же.
-    /// </remarks>
+    /// <summary><c>o3d_baseRotated</c> — the number a rotation is CREATED under through the factory
+    /// <c>IModelContainer.Rotateds.Add</c> (MEASURED R.24: <c>(int)ksObj3dTypeEnum.o3d_baseRotated = 27</c>).</summary>
+    /// <remarks>As with a hole, there are two different numbering systems here and they must not be confused.
+    /// 27/28/29 are FACTORY numbers (the <c>Add</c> argument); in the API5 tree the created feature appears
+    /// under its own number <see cref="Rotated3D"/> = 29. Searching for the feature by 27/28/29 would never
+    /// find it — the same defect as searching for a hole by 52, fixed the same way.</remarks>
     public const int BaseRotated = 27;
 
-    /// <summary><c>o3d_bossRotated</c> — приклейка вращением, номер фабрики (измерено R.24: 28).</summary>
+    /// <summary><c>o3d_bossRotated</c> — boss by rotation, factory number (MEASURED R.24: 28).</summary>
     public const int BossRotated = 28;
 
-    /// <summary><c>o3d_cutRotated</c> — вырезание вращением, номер фабрики (измерено R.24: 29).</summary>
+    /// <summary><c>o3d_cutRotated</c> — cut by rotation, factory number (MEASURED R.24: 29).</summary>
     public const int CutRotated = 29;
 
-    /// <summary>
-    /// <c>o3d_Rotated3D</c> — номер, под которым готовый признак вращения лежит в дереве API5.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>ИЗМЕРЕНО 17.09.2026 приёмкой SM-03 (строка RO.10t), и измерение опровергло ожидание.</b>
-    /// Ожидалось, что дерево, как у отверстия, отстаёт от фабрики на 531 (52→583), и вращение
-    /// покажется под 584. Строка RO.10t напечатала типы дерева после разреза вращением:
-    /// <c>признаков=2 типы=['25', '29']</c> — то есть базовая пластина видна под 25
-    /// (<c>o3d_bossExtrusion</c>) и разрез вращением — под <b>29</b>.
-    /// </para>
-    /// <para>
-    /// Значит, у вращения ФАБРИЧНЫЙ номер и номер дерева СОВПАДАЮТ (29 = <c>o3d_cutRotated</c>),
-    /// в отличие от отверстия. Вывод не «номер такой же», а «две системы нумерации ведут себя
-    /// по-разному в разных семействах, и предполагать по аналогии нельзя» — это и есть причина,
-    /// по которой значение здесь стоит измеренное, а не выведенное.
-    /// </para>
-    /// </remarks>
+    /// <summary><c>o3d_Rotated3D</c> — the number under which a finished rotation feature lies in the API5
+    /// tree.</summary>
+    /// <remarks>MEASURED 17.09.2026 by acceptance SM-03 (row RO.10t), and the measurement refuted the
+    /// expectation: the tree was expected to lag the factory by 531 as with a hole (52→583), showing the
+    /// rotation under 584. Row RO.10t printed the tree types after a cut by rotation:
+    /// <c>features=2 types=['25', '29']</c> — the base plate under 25 (<c>o3d_bossExtrusion</c>) and the cut
+    /// by rotation under <b>29</b>. So for a rotation the FACTORY number and the tree number COINCIDE
+    /// (29 = <c>o3d_cutRotated</c>), unlike a hole. The conclusion is not "the number is the same" but "the
+    /// two numbering systems behave differently across families, and analogy must not be assumed" — which is
+    /// why the value here is measured, not derived.</remarks>
     public const int Rotated3D = 29;
     public const int BaseLoft = 30;
     public const int BossLoft = 31;
@@ -1281,72 +1212,51 @@ public static class KompasObjectTypes
     public const int Fillet = 34;
     public const int Chamfer = 33;
     public const int BaseEvolution = 45;
-    /// <summary>
-    /// <c>o3d_holeOperation</c> — номер, под которым признак отверстия СОЗДАЁТСЯ через
-    /// <c>ksPart.NewEntity</c>. Это НЕ номер, под которым он виден в дереве после создания.
-    /// </summary>
+    /// <summary><c>o3d_holeOperation</c> — the number a hole feature is CREATED under via
+    /// <c>ksPart.NewEntity</c>. This is NOT the number under which it appears in the tree after
+    /// creation.</summary>
     public const int HoleOperation = 52;
 
-    /// <summary>
-    /// <c>o3d_Hole3D</c> — номер, под которым готовый признак отверстия лежит в дереве API5.
-    /// </summary>
-    /// <remarks>
-    /// Измерено пробой N.1 от 17.09.2026, и это исправление реального дефекта: адаптер искал
-    /// признак по <see cref="HoleOperation"/> = 52 и потому не находил его НИКОГДА, когда отверстие
-    /// создавалось маршрутом API7, — <c>feature_ref</c> не выдавался, и правка была недостижима.
-    /// Проба напечатала обе коллекции дерева до и после создания:
-    /// <c>NewEntity(52).type = 52 (o3d_holeOperation)</c>, а
-    /// <c>IHoles3D[0].ModelObjectType = 583 (o3d_Hole3D)</c>, и в дереве появилась ровно одна
-    /// запись — <c>OperationElement(110)[1] type=583 («Отверстие:1»)</c>. 52 в дереве не появилось
-    /// ни разу. Две разные системы нумерации, и путать их нельзя.
-    /// </remarks>
+    /// <summary><c>o3d_Hole3D</c> — the number under which a finished hole feature lies in the API5
+    /// tree.</summary>
+    /// <remarks>MEASURED by probe N.1 on 17.09.2026, fixing a real defect: the adapter searched for the
+    /// feature by <see cref="HoleOperation"/> = 52 and so NEVER found it when the hole was created by the
+    /// API7 route — no <c>feature_ref</c> was issued and editing was unreachable. The probe printed both tree
+    /// collections before and after creation: <c>NewEntity(52).type = 52 (o3d_holeOperation)</c> while
+    /// <c>IHoles3D[0].ModelObjectType = 583 (o3d_Hole3D)</c>, and exactly one entry appeared in the tree —
+    /// <c>OperationElement(110)[1] type=583 ("Hole:1")</c>. 52 never appeared in the tree. Two different
+    /// numbering systems, and they must not be confused.</remarks>
     public const int Hole3D = 583;
 
-    /// <summary>
-    /// Тип, под которым признак БУЛЕВОЙ ОПЕРАЦИИ виден в дереве API5 (<c>o3d_aggregate</c>).
-    /// </summary>
-    /// <remarks>
-    /// Измерено 18.09.2026 прибором <c>scratch/b3-measure-feature-types.py</c> через
-    /// <c>kompas_list_features</c> (там же напечатано <c>entity.type</c>): после
-    /// <c>kompas_boolean</c> в дереве появляется ровно одна запись —
-    /// <c>type=69 «Булева операция:1»</c>. Тот же номер, что и у <c>ksObj3dTypeEnum.o3d_aggregate</c>.
-    /// </remarks>
+    /// <summary>The type a BOOLEAN OPERATION feature is seen under in the API5 tree
+    /// (<c>o3d_aggregate</c>).</summary>
+    /// <remarks>MEASURED 18.09.2026 with the instrument <c>scratch/b3-measure-feature-types.py</c> via
+    /// <c>kompas_list_features</c> (which also printed <c>entity.type</c>): after <c>kompas_boolean</c>
+    /// exactly one entry appears in the tree — <c>type=69 "Boolean operation:1"</c>. The same number as
+    /// <c>ksObj3dTypeEnum.o3d_aggregate</c>.</remarks>
     public const int BooleanOperation = 69;
 
-    /// <summary>Тип признака разделения в дереве API5 (<c>o3d_SplitSolid</c>): измерено 633.</summary>
-    /// <remarks>
-    /// После <c>kompas_split</c> в дереве ровно одна новая запись — <c>type=633 «Разрезать:1»</c>.
-    /// </remarks>
+    /// <summary>The split feature type in the API5 tree (<c>o3d_SplitSolid</c>): MEASURED 633.</summary>
+    /// <remarks>After <c>kompas_split</c> exactly one new entry appears in the tree —
+    /// <c>type=633 "Cut:1"</c>.</remarks>
     public const int SplitSolid = 633;
 
-    /// <summary>Тип признака отсечения плоскостью в дереве API5 (<c>o3d_cutByPlane</c>): измерено 50.</summary>
-    /// <remarks>
-    /// После <c>kompas_cut_by_plane</c> в дереве ровно одна новая запись — <c>type=50 «Сечение:1»</c>.
-    /// </remarks>
+    /// <summary>The cut-by-plane feature type in the API5 tree (<c>o3d_cutByPlane</c>): MEASURED 50.</summary>
+    /// <remarks>After <c>kompas_cut_by_plane</c> exactly one new entry appears in the tree —
+    /// <c>type=50 "Section:1"</c>.</remarks>
     public const int CutByPlane = 50;
 
-    /// <summary>
-    /// Тип признака изменения положения в дереве API5: измерено <b>79</b>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// После <c>kompas_reposition</c> в дереве ровно одна новая запись —
-    /// <c>type=79 «Изменение положения : Тело 1»</c>.
-    /// </para>
-    /// <para>
-    /// <b>79 — это НЕ 569.</b> Число 569 (<c>o3d_BodyReposition</c>) относится к созданию
-    /// объекта, а в дереве признак лежит под 79. Ровно тот же урок, что и с отверстием
-    /// (<see cref="HoleOperation"/> = 52 против <see cref="Hole3D"/> = 583): сторона создания и
-    /// сторона дерева нумеруются по-разному, и брать одно вместо другого нельзя.
-    /// </para>
-    /// <para>
-    /// Тот же номер 79 носит вспомогательный признак «Копия тела», которым реализовано
-    /// <c>keep_tools=true</c>. Совпадение номеров безвредно только потому, что фильтр применяется
-    /// ВНУТРИ одной операции: у булевой операции ожидаемый тип — 69, и копия (79) в кандидаты не
-    /// попадает; у изменения положения ожидаемый тип — 79, и новых записей этого типа ровно одна.
-    /// Опираться на «79 — это изменение положения» вне контекста операции нельзя.
-    /// </para>
-    /// </remarks>
+    /// <summary>The reposition feature type in the API5 tree: MEASURED <b>79</b>.</summary>
+    /// <remarks>After <c>kompas_reposition</c> exactly one new entry appears in the tree —
+    /// <c>type=79 "Change of position : Body 1"</c>. <b>79 is NOT 569.</b> The number 569
+    /// (<c>o3d_BodyReposition</c>) belongs to creating the object, while in the tree the feature lies under
+    /// 79. Exactly the same lesson as with a hole (<see cref="HoleOperation"/> = 52 versus
+    /// <see cref="Hole3D"/> = 583): the creation side and the tree side are numbered differently, and one
+    /// must not be taken for the other. The same number 79 is also carried by the auxiliary feature "Body
+    /// copy", which implements <c>keep_tools=true</c>. The collision is harmless only because the filter is
+    /// applied WITHIN one operation: for a boolean operation the expected type is 69 and the copy (79) never
+    /// becomes a candidate; for a reposition the expected type is 79 and there is exactly one new entry of
+    /// that type. One must not rely on "79 means reposition" outside the operation's context.</remarks>
     public const int BodyRepositionFeature = 79;
 
     public const int Polyline3d = 53;

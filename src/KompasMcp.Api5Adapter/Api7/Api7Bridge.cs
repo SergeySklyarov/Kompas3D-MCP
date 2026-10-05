@@ -10,30 +10,21 @@ using KompasMcp.Domain.Geometry;
 
 namespace KompasMcp.Api5Adapter.Api7;
 
-/// <summary>
-/// Мост API5→API7 внутри одного сеанса (ADR-004 §1, §5).
-/// </summary>
-/// <remarks>
-/// <para>
-/// Класс существует потому, что часть режимов практического выпуска физически недоступна из API5,
-/// и это измерено, а не предполагано: у <c>ksChamferDefinition</c> нет угла, он есть только у
-/// <c>IChamfer.Angle</c> (проба F.10). Второй экземпляр КОМПАСа для этого не запускается —
-/// <c>ksGetApplication7()</c> на том же API5-объекте отдаёт приложение с тем же PID
-/// (api7-findings §3), поэтому мост живёт рядом с API5-сессией и пользуется её STA-очередью.
-/// </para>
-/// <para>
-/// <b>Типизированные интерфейсы, не IDispatch.</b> Каждый вызов здесь — вызов через vtable
-/// сгенерированной вендором обёртки. Аварийный путь позднего связывания остаётся в
-/// <c>tools/KompasMcp.Api7Probe</c> (изолированный процесс) и в продукт не переносится: проба E
-/// измерила, что запись через <c>IDispatch</c> в общем процессе роняла его кодом 0xC0000409, а
-/// молча не сохранившее значение свойство читалось бы как «успех».
-/// </para>
-/// <para>
-/// <b>Кэш перенесённых документов.</b> Ключом служит не только идентификатор документа, но и его
-/// ревизия: после любой мутации кэш по этому документу негоден, иначе из кэша достали бы
-/// представление уже перестроенной модели.
-/// </para>
-/// </remarks>
+/// <summary>The API5→API7 bridge within a single session (ADR-004 §1, §5).</summary>
+/// <remarks>The class exists because some practical-release modes are physically unreachable from
+/// API5 — MEASURED, not assumed: <c>ksChamferDefinition</c> has no angle, only <c>IChamfer.Angle</c>
+/// does (probe F.10). A second KOMPAS instance is not started for this — <c>ksGetApplication7()</c>
+/// on the same API5 object returns the application with the same PID (api7-findings §3), so the
+/// bridge lives beside the API5 session and uses its STA queue.
+/// INVARIANT: typed interfaces, not IDispatch. Every call here goes through the vtable of the
+/// vendor-generated wrapper. The late-binding fallback stays in <c>tools/KompasMcp.Api7Probe</c>
+/// (isolated process) and is not carried into the product: probe E MEASURED that writing via
+/// <c>IDispatch</c> in the shared process crashed it with 0xC0000409, while a property that silently
+/// failed to save would read as "success".
+/// INVARIANT: the transferred-document cache is keyed by document id AND revision — after any mutation
+/// the cache for that document is invalid, otherwise it would hand out a view of an already-rebuilt
+/// model.
+/// History: docs/decisions/adapter-api7.md#bridge</remarks>
 internal sealed class Api7Bridge
 {
     private readonly KompasObject _application5;
@@ -43,14 +34,12 @@ internal sealed class Api7Bridge
 
     public Api7Bridge(KompasObject application5) => _application5 = application5;
 
-    /// <summary>Почему мост не построился (для честного CAPABILITY_UNAVAILABLE вместо null-тишины).</summary>
+    /// <summary>Why the bridge failed to build (for an honest CAPABILITY_UNAVAILABLE instead of null silence).</summary>
     public string? BridgeFailure => _bridgeFailure;
 
-    /// <summary>
-    /// API7-представление того же приложения. null — мост недоступен, причина в
-    /// <see cref="BridgeFailure"/>; вызов не бросает, потому что отсутствие API7 не должно ломать
-    /// маршруты API5, работающие без него.
-    /// </summary>
+    /// <summary>The API7 view of the same application. null — the bridge is unavailable, the reason is
+    /// in <see cref="BridgeFailure"/>; the call does not throw, because a missing API7 must not break
+    /// the API5 routes that work without it.</summary>
     public IApplication? Application()
     {
         if (_application7 is not null)
@@ -60,8 +49,8 @@ internal sealed class Api7Bridge
 
         try
         {
-            // Типизированный QI на IApplication: то, что interop-обёртка объявляет этот интерфейс,
-            // не означает, что объект ему отвечает, поэтому ответ проверяется приведением.
+            // A typed QI to IApplication: the interop wrapper declaring the interface does not mean
+            // the object answers it, so the answer is checked by a cast.
             _application7 = _application5.ksGetApplication7() as IApplication;
             _bridgeFailure = _application7 is null ? "ksGetApplication7() вернул null" : null;
         }
@@ -74,7 +63,7 @@ internal sealed class Api7Bridge
         return _application7;
     }
 
-    /// <summary>Контейнер модельных объектов API7 для документа; null — представления нет.</summary>
+    /// <summary>The API7 model-object container for a document; null — no view.</summary>
     public IModelContainer? ContainerFor(ksDocument3D document, string documentId, long revision)
     {
         if (Application() is null)
@@ -108,11 +97,9 @@ internal sealed class Api7Bridge
         }
     }
 
-    /// <summary>
-    /// Режим переноса объектов API5 → API7. Берётся из константы вендорского перечисления, а не
-    /// числом: проба E показала, что неверный режим переноса даёт не ошибку, а объект, который
-    /// «читается», но представляет другую сущность.
-    /// </summary>
+    /// <summary>The API5 → API7 transfer mode. Taken from a vendor enum constant, not a literal: probe E
+    /// showed that a wrong transfer mode does not error but yields an object that "reads" yet represents
+    /// a different entity.</summary>
     private const int Api7DualTransfer = (int)ksAPITypeEnum.ksAPI7Dual;
 
     public object? TransferTo7(object source)
@@ -128,11 +115,9 @@ internal sealed class Api7Bridge
         }
     }
 
-    /// <summary>
-    /// Массив перенесённых объектов для <c>BaseObjects</c>. Массив, а не коллекция: документация
-    /// <c>IChamfer.BaseObjects</c> требует SAFEARRAY указателей IDispatch, и проба F.9 подтвердила
-    /// это числом — фаска по <c>object[]</c> из четырёх рёбер сняла ровно 20·d₁·d₂.
-    /// </summary>
+    /// <summary>An array of transferred objects for <c>BaseObjects</c>. An array, not a collection: DOC
+    /// <c>IChamfer.BaseObjects</c> requires a SAFEARRAY of IDispatch pointers, and probe F.9 confirmed it
+    /// with a number — a chamfer over an <c>object[]</c> of four edges removed exactly 20·d₁·d₂.</summary>
     public object[]? TransferAllTo7(IReadOnlyList<object> sources)
     {
         var transferred = new object[sources.Count];
@@ -149,11 +134,9 @@ internal sealed class Api7Bridge
         return transferred;
     }
 
-    /// <summary>
-    /// Перестроение после записи в признак API7. <c>RebuildModel</c> принадлежит
-    /// <see cref="IPart7"/> (измерено пробой E — не <c>IKompasDocument3D</c>), а API5-перестроение
-    /// остаётся обязательным: без него объём, который читает API5, отстаёт.
-    /// </summary>
+    /// <summary>Rebuild after writing to an API7 feature. MEASURED (probe E): <c>RebuildModel</c> belongs
+    /// to <see cref="IPart7"/>, not <c>IKompasDocument3D</c>, and the API5 rebuild remains mandatory —
+    /// without it the volume read by API5 lags.</summary>
     public static void Rebuild(IModelContainer container, ksDocument3D document5)
     {
         if (container is IPart7 part7)
@@ -164,7 +147,7 @@ internal sealed class Api7Bridge
         document5.RebuildDocument();
     }
 
-    /// <summary>Сброс кэша: документ закрыли, перестроили извне или сменилась ревизия.</summary>
+    /// <summary>Invalidate the cache: the document was closed, rebuilt externally, or the revision changed.</summary>
     public void Invalidate(string documentId) => _containers.Remove(documentId);
 
     public void ReleaseAll()
@@ -184,11 +167,9 @@ internal sealed class Api7Bridge
         (ComHResult.From(ex) is int code ? $" [{ComHResult.Name(code)}]" : string.Empty);
 }
 
-/// <summary>
-/// Параметры фаски, перечитанные из модели. Отдельная запись потому, что часть полей берётся из
-/// API5 (<c>GetChamferParam</c>), а часть — только из API7 (<c>Angle</c>, <c>BuildingType</c>), и
-/// «чего сервер не прочитал» обязано быть различимо от «прочитал ноль».
-/// </summary>
+/// <summary>Chamfer parameters re-read from the model. A separate record because some fields come from
+/// API5 (<c>GetChamferParam</c>) and some only from API7 (<c>Angle</c>, <c>BuildingType</c>), and
+/// "what the server did not read" must be distinguishable from "read as zero".</summary>
 public sealed record ChamferReadDto(
     bool? Transfer,
     double? Distance1Mm,
@@ -200,16 +181,12 @@ public sealed record ChamferReadDto(
     int? BaseObjectCount,
     IReadOnlyList<string> ReadRoutes);
 
-/// <summary>
-/// Типизированные операции API7 над фаской (SM-11). Всё, что здесь происходит, измерено пробой F
-/// на v24 и повторяется вызов в вызов; ни один шаг не объявлен «поддержанным» по наличию типа.
-/// </summary>
+/// <summary>Typed API7 operations over the chamfer (SM-11). Everything here is MEASURED by probe F on
+/// v24 and repeats call to call; no step is declared "supported" merely because a type exists.</summary>
 internal static class Api7Chamfer
 {
-    /// <summary>
-    /// Создать фаску «расстояние + угол». Возвращает пару (создано, причина), а не исключение:
-    /// вызывающий обязан отличить отказ КОМПАСа от падения адаптера.
-    /// </summary>
+    /// <summary>Create a "distance + angle" chamfer. Returns (created, reason), not an exception: the
+    /// caller must distinguish a KOMPAS refusal from an adapter crash.</summary>
     public static (bool Created, string? Failure) TryCreateDistanceAngle(
         IModelContainer container,
         object[] baseObjects,
@@ -226,8 +203,9 @@ internal static class Api7Chamfer
                 chamfer.Name = name;
             }
 
-            // ksChamferSideAngle = «по стороне и углу»: Distance1 задаёт катет на опорной стороне,
-            // Angle — угол фаски в градусах (измерено F.10: 30 при d=2 дало 20·d·(d·tg 30°) мм³).
+            // DOC: ksChamferSideAngle means "by side and angle": Distance1 sets the leg on the
+            // reference side, Angle is the chamfer angle in degrees (MEASURED F.10: 30 at d=2 gave
+            // 20·d·(d·tg 30°) mm³).
             chamfer.BuildingType = ksChamferBuildingTypeEnum.ksChamferSideAngle;
             chamfer.BaseObjects = baseObjects;
             chamfer.Distance1 = distanceMm;
@@ -242,7 +220,8 @@ internal static class Api7Chamfer
         }
     }
 
-    /// <summary>Число фасок в коллекции API7. null — не прочитано (не «ноль», и это разные ответы).</summary>
+    /// <summary>The number of chamfers in the API7 collection. null — not read (not "zero"; these are
+    /// different answers).</summary>
     public static int? Count(IModelContainer container)
     {
         try
@@ -255,27 +234,17 @@ internal static class Api7Chamfer
         }
     }
 
-    /// <summary>
-    /// Записать параметры в СУЩЕСТВУЮЩИЙ признак через <c>IChamfer</c> — маршрут, которым
-    /// правится угол (в API5 члена «угол» нет вовсе, поэтому нужен он).
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Пишутся только те поля, что заданы: незаданное поле остаётся тем, что лежит в модели, и
-    /// это принципиально. При способе «расстояние и угол» второй катет ПРОИЗВОДЕН от угла
-    /// (<c>d₂ = d₁·tg α</c>); записать в него «прежнее число» значило бы закрепить устаревшую
-    /// производную и потерять связь с углом.
-    /// </para>
-    /// <para>
-    /// Порядок «запись → Update() → RebuildModel()» — часть контракта, а не стиль: без
-    /// <c>Update()</c> сеттеры возвращают успех, но модель остаётся прежней (то же измерено на
-    /// <c>IExtrusion.Sketch</c> пробой E и на создании фаски F.10).
-    /// </para>
-    /// <para>
-    /// Возвращается пара (записано, причина), а не исключение: вызывающий обязан отличить отказ
-    /// КОМПАСа от падения адаптера, и «не смогли» не должно выглядеть как «записали».
-    /// </para>
-    /// </remarks>
+    /// <summary>Write parameters into an EXISTING feature via <c>IChamfer</c> — the route that edits the
+    /// angle (API5 has no angle member at all, hence this one).</summary>
+    /// <remarks>INVARIANT: only supplied fields are written — an unsupplied field keeps what is in the
+    /// model. In the "distance and angle" method the second leg is DERIVED from the angle
+    /// (<c>d₂ = d₁·tg α</c>); writing a "previous number" into it would freeze a stale derivative and
+    /// lose the link to the angle.
+    /// INVARIANT: the order "write → Update() → RebuildModel()" is part of the contract, not style —
+    /// without <c>Update()</c> the setters return success while the model stays as before (also
+    /// MEASURED on <c>IExtrusion.Sketch</c> by probe E and on chamfer creation F.10).
+    /// Returns (written, reason), not an exception: the caller must distinguish a KOMPAS refusal from an
+    /// adapter crash, and "could not" must not look like "wrote".</remarks>
     public static (bool Written, string? Failure) TryWrite(
         IModelContainer container,
         int index,
@@ -306,9 +275,10 @@ internal static class Api7Chamfer
                 chamfer.Direction = side;
             }
 
-            // Второй катет пишется ПОСЛЕ угла: при способе «расстояние и угол» он производный, и
-            // если клиент задал и угол, и катет явно, честнее применить явно запрошенное значение,
-            // чем оставить производную от нового угла. Это осознанный порядок, а не случайный.
+            // The second leg is written AFTER the angle: in the "distance and angle" method it is
+            // derived, and if the client supplied both an angle and a leg explicitly, it is more honest
+            // to apply the explicitly requested value than to leave the derivative of the new angle.
+            // This order is deliberate.
             if (distance2Mm is double d2)
             {
                 chamfer.Distance2 = d2;
@@ -327,11 +297,9 @@ internal static class Api7Chamfer
         }
     }
 
-    /// <summary>
-    /// Индексы фасок в коллекции API7, совпавших с признаком API5 по первому катету.
-    /// Сопоставление по катету, а не по имени: F.8 измерила, что имя, данное в API5, читается из
-    /// API7 иначе («f-ch2» → «Фаска:1»), — имя идентификатором не является.
-    /// </summary>
+    /// <summary>Indices of chamfers in the API7 collection that match the API5 feature by the first leg.
+    /// Matching by leg, not by name: F.8 MEASURED that a name given in API5 reads differently from API7,
+    /// so a name is not an identifier.</summary>
     public static IReadOnlyList<int> FindIndexesByIdenticalFirstLeg(IModelContainer container, double distance1Mm)
     {
         var found = new List<int>();
@@ -351,7 +319,7 @@ internal static class Api7Chamfer
         return found;
     }
 
-    /// <summary>Прочитать параметры фаски типизированно, по индексу коллекции API7.</summary>
+    /// <summary>Read chamfer parameters typed, by API7 collection index.</summary>
     public static ChamferReadDto? Read(IModelContainer container, int index)
     {
         try
@@ -407,12 +375,10 @@ internal static class Api7Chamfer
     }
 }
 
-/// <summary>
-/// Что именно прочиталось из родного отверстия. Отдельная запись, а не голая пара чисел, потому
-/// что у трёх режимов SM-07 параметры живут в ТРЁХ разных интерфейсах, полученных приведением
-/// одного и того же <c>IHole3D.HoleParameters</c>, и «чего сервер не прочитал» обязано быть
-/// различимо от «прочитал ноль».
-/// </summary>
+/// <summary>What exactly was read from a native hole. A separate record, not a bare pair of numbers,
+/// because the three SM-07 modes keep their parameters in THREE different interfaces obtained by
+/// casting the same <c>IHole3D.HoleParameters</c>, and "what the server did not read" must be
+/// distinguishable from "read as zero".</summary>
 public sealed record HoleReadDto(
     string? HoleType,
     double? DiameterMm,
@@ -427,58 +393,38 @@ public sealed record HoleReadDto(
     string? CountersinkType,
     IReadOnlyList<string> ReadRoutes);
 
-/// <summary>
-/// Типизированные операции API7 над родными отверстиями (SM-07). Каждый маршрут измерен пробой M
-/// на v24 (<c>docs/acceptance/api7/hole-modes.md</c>), и ни один не объявлен поддержанным по
-/// наличию типа: три попытки записать режимные параметры в сам <c>IHole3D</c> были отвергнуты
-/// измерением, потому что режимные числа живут не там.
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Где лежат параметры режима.</b> Не на <c>IHole3D</c> (13 членов, dispids 1…12; режимных
-/// чисел среди них нет), а на <c>HoleParameters</c> — объекте, доступном только на чтение, который
-/// приводится к интерфейсу СВОЕГО режима:
-/// <list type="bullet">
-/// <item>цековка — <c>ISpotfacingHoleParameters</c> (<c>SpotfacingDiameter</c>, <c>SpotfacingDepth</c>);</item>
-/// <item>зенковка — <c>ICountersinkHoleParameters</c> (<c>CountersinkType</c>, <c>CountersinkDiameter</c>,
-/// <c>CountersinkAngle</c>, <c>CountersinkDepth</c>).</item>
-/// </list>
-/// </para>
-/// <para>
-/// <b>Глубина зенковки производна.</b> При <c>CountersinkType = ksCTDiameterAngle (0)</c> запись в
-/// <c>CountersinkDepth</c> чисел 2, 4 и 6 не меняет НИЧЕГО: все три дают одинаковый снятый материал,
-/// потому что глубина следует из диаметра и угла, и объект возвращает <c>(rM − rP)/tan(угол/2)</c>,
-/// где <c>rM</c> — радиус устья, <c>rP</c> — радиус пилота. Раньше здесь стояло <c>4/tan(угол/2)</c>:
-/// это была подгонка под единственную строку M.3, в которой <c>rM − rP</c> оказалось равным 4
-/// (устье Ø18, пилот Ø10), и потому «4» выглядело константой. Проба N.2 от 17.09.2026 развела
-/// устье при неизменных пилоте и угле и сняла серию Ø14/16/18/20/24 → h = 2/3/4/5/7, что совпало с
-/// <c>(rM − rP)/tan(45°)</c> во всех пяти строках и разошлось с константой в четырёх из пяти.
-/// Поэтому <c>TryCreateCountersink</c> не считает запись глубины доказательством геометрии, а читает
-/// её обратно и возвращает вызывающему — сверять надо то, что вернул объект, а не то, что записали.
-/// </para>
-/// <para>
-/// <b>Слепое отверстие — это ksDTValue.</b> Члена <c>ksDTBlind</c> в вендорском перечислении не
-/// существует вовсе (измерено чтением TLB; <c>ksDepthTypeEnum</c> = ksDTValue 0, ksDTReachThrough 1,
-/// ksDTObject 2), поэтому «глухое» выражается первым. Дно задаётся <c>ksEndFaceTypeEnum.ksEFFlat</c>.
-/// </para>
-/// <para>
-/// <b>Позиция вне начала координат</b> задаётся <c>IHoleDisposal.Point3DParamSurface</c>, приведённым
-/// к <c>IPoint3DParamSurface</c>, вместе с <c>OffsetType = ksOffsetByCoords (3)</c> и смещениями
-/// <c>Offset1</c> (X) и <c>Offset2</c> (Y). Из пяти проверенных маршрутов этот — единственный
-/// сдвинувший отверстие; <c>AssociationVertex</c> и <c>DirectionObject</c> дали DISP_E_TYPEMISMATCH,
-/// эскиз со смещённой окружностью до API7 не доехал, а <c>DepthVertex</c>/<c>DepthFace</c> читаются
-/// как null и <c>Axis</c> как False. <c>SetSurfaceObject(BaseSurface)</c> вернул False — это
-/// записано как есть и маршрут не отменяет: отверстие двигают именно три записи смещения.
-/// </para>
-/// </remarks>
-/// <summary>
-/// Итог позиционирования: применено ли смещение, причина отказа и заметки о ходе маршрута.
-/// Отдельный тип, а не тройка, потому что этой формой описывается <em>вставной шаг</em>: он
-/// передаётся в <c>TryCreateBlindFlat</c>/<c>TryCreateCounterbore</c>/<c>TryCreateCountersink</c>
-/// и выполняется между <c>Add()</c> и <c>Update()</c>, на том же объекте. Позиция поддерживается
-/// всеми тремя режимами — это измерено приёмкой HO.6, где без такой ветки сквозная цековка молча
-/// оставалась в начале координат при ошибке=None.
-/// </summary>
+/// <summary>Typed API7 operations over native holes (SM-07). Every route is MEASURED by probe M on v24
+/// (<c>docs/acceptance/api7/hole-modes.md</c>), and none is declared supported by the mere existence of
+/// a type: three attempts to write mode parameters into <c>IHole3D</c> itself were refuted by
+/// measurement, because the mode numbers live elsewhere.</summary>
+/// <remarks>INVARIANT: mode parameters live not on <c>IHole3D</c> (13 members, dispids 1…12, no mode
+/// numbers among them) but on <c>HoleParameters</c> — a read-only object cast to the interface of ITS
+/// OWN mode: counterbore — <c>ISpotfacingHoleParameters</c> (<c>SpotfacingDiameter</c>,
+/// <c>SpotfacingDepth</c>); countersink — <c>ICountersinkHoleParameters</c> (<c>CountersinkType</c>,
+/// <c>CountersinkDiameter</c>, <c>CountersinkAngle</c>, <c>CountersinkDepth</c>).
+/// INVARIANT: the countersink depth is DERIVED. With <c>CountersinkType = ksCTDiameterAngle (0)</c>,
+/// writing 2, 4 or 6 into <c>CountersinkDepth</c> changes NOTHING — the depth follows from diameter and
+/// angle, and the object returns <c>(rM − rP)/tan(angle/2)</c>, where <c>rM</c> is the mouth radius and
+/// <c>rP</c> the pilot radius. MEASURED 17.09.2026 (probe N.2): varying the mouth with pilot and angle
+/// fixed gave Ø14/16/18/20/24 → h = 2/3/4/5/7, matching <c>(rM − rP)/tan(45°)</c> in all five rows and
+/// diverging from a constant in four of five. Therefore <c>TryCreateCountersink</c> does not treat the
+/// depth write as proof of geometry but reads it back and returns it to the caller — compare what the
+/// object returned, not what was written.
+/// MEASURED (TLB read): a blind hole is <c>ksDTValue</c> — the member <c>ksDTBlind</c> does not exist
+/// in the vendor enum at all (<c>ksDepthTypeEnum</c> = ksDTValue 0, ksDTReachThrough 1, ksDTObject 2),
+/// so "blind" is expressed by the first; the bottom is set by <c>ksEndFaceTypeEnum.ksEFFlat</c>.
+/// MEASURED (M.5): a position off the origin is set by <c>IHoleDisposal.Point3DParamSurface</c> cast to
+/// <c>IPoint3DParamSurface</c>, with <c>OffsetType = ksOffsetByCoords (3)</c> and offsets
+/// <c>Offset1</c> (X) and <c>Offset2</c> (Y) — of five routes tried this is the only one that moved the
+/// hole; <c>SetSurfaceObject(BaseSurface)</c> returned False, recorded as is and not cancelling the
+/// route, since the three offset writes are what move the hole.
+/// History: docs/decisions/adapter-api7.md#hole</remarks>
+/// <summary>The result of positioning: whether the offset was applied, the refusal reason and notes on
+/// the route. A separate type, not a triple, because this shape describes an <em>interstitial step</em>
+/// passed into <c>TryCreateBlindFlat</c>/<c>TryCreateCounterbore</c>/<c>TryCreateCountersink</c> and run
+/// between <c>Add()</c> and <c>Update()</c> on the same object. MEASURED (acceptance HO.6): all three
+/// modes support positioning — without this branch a through counterbore silently stayed at the origin
+/// with error=None.</summary>
 internal sealed record PlacementOutcome(
     bool Applied,
     string? Failure,
@@ -486,22 +432,22 @@ internal sealed record PlacementOutcome(
 
 internal static class Api7Hole
 {
-    /// <summary>Глухое отверстие: значение глубины, а не ссылка на объект-ограничитель.</summary>
+    /// <summary>A blind hole: a depth value, not a reference to a limiting object.</summary>
     private const ksDepthTypeEnum DepthByValue = ksDepthTypeEnum.ksDTValue;
 
-    /// <summary>Сквозное отверстие насквозь — измерено на каждой строке M.2/M.3.</summary>
+    /// <summary>A through hole — MEASURED on every row of M.2/M.3.</summary>
     private const ksDepthTypeEnum DepthReachThrough = ksDepthTypeEnum.ksDTReachThrough;
 
-    /// <summary>Плоское дно: единственный режим, подтверждённый числом в M.4 (π·r²·h, 471.238898038471).</summary>
+    /// <summary>A flat bottom: the only mode confirmed by a number in M.4 (π·r²·h, 471.238898038471).</summary>
     private const ksEndFaceTypeEnum EndFaceFlat = ksEndFaceTypeEnum.ksEFFlat;
 
-    /// <summary>Зенковка «диаметр + угол»: при нём глубина производна от угла.</summary>
+    /// <summary>A "diameter + angle" countersink: with it the depth is derived from the angle.</summary>
     private const ksCountersinkTypeEnum CountersinkDiameterAngle = ksCountersinkTypeEnum.ksCTDiameterAngle;
 
-    /// <summary>Позиция по координатам на базовой поверхности (измерено в M.5).</summary>
+    /// <summary>A position by coordinates on the base surface (MEASURED in M.5).</summary>
     private const ksPoint3DSurfaceParamTypeEnum OffsetByCoords = ksPoint3DSurfaceParamTypeEnum.ksOffsetByCoords;
 
-    /// <summary>Число родных отверстий в коллекции API7. null — не прочитано (не «ноль»).</summary>
+    /// <summary>The number of native holes in the API7 collection. null — not read (not "zero").</summary>
     public static int? Count(IModelContainer container)
     {
         try
@@ -514,11 +460,9 @@ internal static class Api7Hole
         }
     }
 
-    /// <summary>
-    /// Прочитать отверстие типизированно, по индексу коллекции API7. Поля режимов заполняются
-    /// только тогда, когда объект действительно отвечает на интерфейс этого режима: у сквозного
-    /// отверстия основного типа оба режимных набора останутся null, и это правильный ответ.
-    /// </summary>
+    /// <summary>Read a hole typed, by API7 collection index. Mode fields are filled only when the object
+    /// actually answers that mode's interface: for a through hole of the base type both mode sets stay
+    /// null, which is the correct answer.</summary>
     public static HoleReadDto? Read(IModelContainer container, int index)
     {
         try
@@ -551,30 +495,19 @@ internal static class Api7Hole
         }
     }
 
-    /// <summary>
-    /// Правка СУЩЕСТВУЮЩЕГО глухого отверстия с плоским дном (режим <c>blind_flat</c>).
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Маршрут измерен 20.09.2026</b> (зонд <c>scratch/_hole_edit_probe.py</c>, нога 2 — сырой
-    /// помощник <c>scratch/hole-edit-raw</c>): существующее отверстие берётся документированным
-    /// членом <c>IHoles3D.Hole3D[index]</c> (страница <c>iholes3d_hole3d.html</c>), в него
-    /// записываются члены СВОЕГО режима, применяется <c>IModelObject.Update()</c> (страница
-    /// <c>imodelobject_update.html</c>), и объём меняется ровно на аналитику: Ø10 6 → 8 мм сняло
-    /// <c>157.079632679</c> мм³ = π·r²·2 (снято 628.318530718 против 471.238898038 до правки).
-    /// </para>
-    /// <para>
-    /// Пишутся только члены ЭТОГО режима. <c>HoleType</c>, <c>DepthType</c> и <c>EndFaceType</c> —
-    /// часть опознания режима, а не параметр вызывающего: у глухого это <c>ksHTBase</c>,
-    /// <c>ksDTValue</c> и <c>ksEFFlat</c>, и оставить их «как прочиталось» значило бы править
-    /// признак, режим которого задан не вызывающим.
-    /// </para>
-    /// <para>
-    /// Незаданный числовой член НЕ записывается: вызывающий, меняющий только глубину, не должен
-    /// получать перезапись диаметра «прежним» числом — прочитанное значение производно от модели и
-    /// закреплять его как вход нельзя.
-    /// </para>
-    /// </remarks>
+    /// <summary>Edit an EXISTING flat-bottomed blind hole (mode <c>blind_flat</c>).</summary>
+    /// <remarks>MEASURED 20.09.2026 (probe <c>scratch/_hole_edit_probe.py</c> leg 2): the hole is taken
+    /// by the documented <c>IHoles3D.Hole3D[index]</c> (<c>iholes3d_hole3d.html</c>), its own-mode
+    /// members are written, <c>IModelObject.Update()</c> is applied (<c>imodelobject_update.html</c>),
+    /// and the volume changes exactly analytically — Ø10, 6 → 8 mm removed <c>157.079632679</c> mm³ =
+    /// π·r²·2.
+    /// INVARIANT: only members of THIS mode are written; <c>HoleType</c>, <c>DepthType</c> and
+    /// <c>EndFaceType</c> are part of mode identification, not a caller parameter (for blind they are
+    /// <c>ksHTBase</c>, <c>ksDTValue</c> and <c>ksEFFlat</c>), and leaving them "as read" would edit a
+    /// feature whose mode was not set by the caller. INVARIANT: an unsupplied numeric member is NOT
+    /// written — a caller changing only depth must not get the diameter overwritten with a "previous"
+    /// number, since a read value is derived from the model and must not be frozen as input.
+    /// History: docs/decisions/adapter-api7.md#hole</remarks>
     public static (bool Written, string? Failure) TryWriteBlindFlat(
         IModelContainer container,
         int index,
@@ -611,16 +544,12 @@ internal static class Api7Hole
         }
     }
 
-    /// <summary>
-    /// Правка СУЩЕСТВУЮЩЕЙ сквозной цековки (режим <c>through_counterbore</c>).
-    /// </summary>
-    /// <remarks>
-    /// <b>Маршрут измерен 20.09.2026</b> (зонд <c>scratch/_hole_edit_probe.py</c>, нога 2): выточка
-    /// Ø18×4 → Ø20×5 сняла <c>474.380490692</c> мм³ сверх прежнего, что есть разность колец
-    /// π/4·(D²−d²)·h — 1178.097244573 против 703.716754404 (M.2). Пишутся <c>Diameter</c> пилота,
-    /// <c>DepthType = ksDTReachThrough</c> и члены <c>ISpotfacingHoleParameters</c>; незаданные не
-    /// записываются.
-    /// </remarks>
+    /// <summary>Edit an EXISTING through counterbore (mode <c>through_counterbore</c>).</summary>
+    /// <remarks>MEASURED 20.09.2026 (probe <c>scratch/_hole_edit_probe.py</c> leg 2): bore Ø18×4 → Ø20×5
+    /// removed <c>474.380490692</c> mm³ beyond the previous, the ring difference π/4·(D²−d²)·h —
+    /// 1178.097244573 versus 703.716754404 (M.2). Writes the pilot <c>Diameter</c>,
+    /// <c>DepthType = ksDTReachThrough</c> and the <c>ISpotfacingHoleParameters</c> members; unsupplied
+    /// ones are not written. History: docs/decisions/adapter-api7.md#hole</remarks>
     public static (bool Written, string? Failure) TryWriteCounterbore(
         IModelContainer container,
         int index,
@@ -649,8 +578,9 @@ internal static class Api7Hole
                     : (false, "IHole3D.Update() вернул false — числа записаны, но признак не перестроен");
             }
 
-            // Интерфейс параметров СВОЕГО режима: у чужого режима он недостижим — измерено контролем
-            // (в) зонда (на глухом и на зенковке ISpotfacingHoleParameters не отвечает вовсе).
+            // The parameter interface of ITS OWN mode: for a foreign mode it is unreachable — MEASURED by
+            // the probe's control (c) (on a blind hole and on a countersink, ISpotfacingHoleParameters
+            // does not answer at all).
             if (hole.HoleParameters is not ISpotfacingHoleParameters spotfacing)
             {
                 return (false,
@@ -678,23 +608,15 @@ internal static class Api7Hole
         }
     }
 
-    /// <summary>
-    /// Правка СУЩЕСТВУЮЩЕЙ сквозной зенковки (режим <c>through_countersink</c>).
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Маршрут измерен 20.09.2026</b> (зонд <c>scratch/_hole_edit_probe.py</c>, нога 2): устье
-    /// Ø20 → Ø24 при 90° сняло <c>605.280184592</c> мм³ сверх прежнего — разность
-    /// <c>π·h/3·(rM² + rP·rM − 2·rP²)</c> при производной <c>h = (rM − rP)/tan(угол/2)</c>
-    /// (1128.878960190 против 523.598775598). Оба устья лежат в таблице M.3/N.2.
-    /// </para>
-    /// <para>
-    /// <b>Глубина зенковки НЕ записывается</b> — при <c>ksCTDiameterAngle</c> она производна
-    /// (M.3: запись 2, 4 и 6 не меняет ничего), поэтому запись в неё была бы числом, которое
-    /// объект не читает. Возвращается прочитанное ПОСЛЕ <c>Update()</c>: до перестроения у
-    /// производного свойства ещё прежнее значение.
-    /// </para>
-    /// </remarks>
+    /// <summary>Edit an EXISTING through countersink (mode <c>through_countersink</c>).</summary>
+    /// <remarks>MEASURED 20.09.2026 (probe <c>scratch/_hole_edit_probe.py</c> leg 2): mouth Ø20 → Ø24 at
+    /// 90° removed <c>605.280184592</c> mm³ beyond the previous — the difference
+    /// <c>π·h/3·(rM² + rP·rM − 2·rP²)</c> with derived <c>h = (rM − rP)/tan(angle/2)</c>
+    /// (1128.878960190 versus 523.598775598).
+    /// INVARIANT: the countersink depth is NOT written — under <c>ksCTDiameterAngle</c> it is derived
+    /// (M.3: writing 2, 4 or 6 changes nothing), so writing it would be a number the object does not
+    /// read; the value is read back AFTER <c>Update()</c>, since a derived property still holds its
+    /// previous value before the rebuild. History: docs/decisions/adapter-api7.md#hole</remarks>
     public static (bool Written, string? Failure, double? ReportedDepthMm) TryWriteCountersink(
         IModelContainer container,
         int index,
@@ -748,30 +670,24 @@ internal static class Api7Hole
         }
     }
 
-    /// <summary>
-    /// Позиция и ось отверстия, прочитанные с ТЕЛА: у самого <c>IHole3D</c> координат нет —
-    /// <c>Axis</c> читается как False, <c>DepthVertex</c>/<c>DepthFace</c> как null (измерено M.5).
-    /// Маршрут тот же, что у топологии: <c>GetMainBody() → FaceCollection → GetSurfaceParam() →
-    /// ksCylinderParam.GetPlacement()</c>. Возвращается начало оси найденной цилиндрической грани
-    /// радиуса <paramref name="radiusMm"/> либо null, если такой грани на теле нет.
-    /// </summary>
+    /// <summary>The hole's position and axis read from the BODY: <c>IHole3D</c> itself has no
+    /// coordinates — <c>Axis</c> reads False, <c>DepthVertex</c>/<c>DepthFace</c> read null (MEASURED
+    /// M.5). The route is the same as for topology: <c>GetMainBody() → FaceCollection →
+    /// GetSurfaceParam() → ksCylinderParam.GetPlacement()</c>. Returns the axis origin of the found
+    /// cylindrical face of radius <paramref name="radiusMm"/>, or null if the body has no such face.</summary>
     public static double[]? FindCylinderOrigin(ksPart part, double radiusMm, double toleranceMm)
     {
         var all = FindCylinderOrigins(part, radiusMm, toleranceMm);
         return all.Count > 0 ? all[0] : null;
     }
 
-    /// <summary>
-    /// ВСЕ начала осей цилиндрических граней радиуса <paramref name="radiusMm"/>, в порядке обхода
-    /// граней.
-    /// </summary>
-    /// <remarks>
-    /// Нужен там, где одного значения недостаточно. В документе с несколькими отверстиями одного
-    /// диаметра «первое совпадение» — это чужая ось, и выдать её за ось созданного отверстия значило
-    /// бы приписать признаку координаты соседа. Вызывающий, знающий ЗАПРОШЕННУЮ позицию, обязан
-    /// сверить её со списком и отличить «нашли то, что просили» от «нашли что-то подходящее по
-    /// радиусу».
-    /// </remarks>
+    /// <summary>ALL axis origins of cylindrical faces of radius <paramref name="radiusMm"/>, in
+    /// face-traversal order.</summary>
+    /// <remarks>Needed where one value is not enough: in a document with several holes of one diameter
+    /// the "first match" is a foreign axis, and passing it off as the created hole's axis would
+    /// attribute a neighbour's coordinates to the feature. A caller who knows the REQUESTED position
+    /// must compare it against the list and tell "found what was asked" from "found something matching
+    /// by radius".</remarks>
     public static IReadOnlyList<double[]> FindCylinderOrigins(ksPart part, double radiusMm, double toleranceMm)
     {
         var found = new List<double[]>();
@@ -808,23 +724,21 @@ internal static class Api7Hole
             }
             catch (Exception ex) when (ex is COMException)
             {
-                // Грань, параметры которой КОМПАС не отдал, — не повод бросить поиск остальных.
+                // A face whose parameters KOMPAS did not return is no reason to abandon the search for
+                // the rest.
             }
         }
 
         return found;
     }
 
-    /// <summary>
-    /// Создать сквозную цековку: пилотное отверстие насквозь плюс выточка. Возвращает пару
-    /// (создано, причина), а не исключение: вызывающий обязан отличить отказ КОМПАСа от падения
-    /// адаптера, и «не смогли» не должно выглядеть как «создали».
-    /// </summary>
-    /// <remarks>
-    /// Материал снимается ровно как <c>π·r²·h</c> пилота плюс <c>π/4·(D²−d²)·h_выточки</c> —
-    /// кольцо, а не второй полный цилиндр: с пилотом Ø10, выточкой Ø18 глубиной 4 проба сняла
-    /// 703.7167544041131 мм³ сверх сквозного, и π/4·(18²−10²)·4 = 703.7167544041137 (M.2).
-    /// </remarks>
+    /// <summary>Create a through counterbore: a through pilot hole plus a bore. Returns (created,
+    /// reason), not an exception: the caller must distinguish a KOMPAS refusal from an adapter crash,
+    /// and "could not" must not look like "created".</summary>
+    /// <remarks>Material is removed exactly as the pilot's <c>π·r²·h</c> plus the bore's
+    /// <c>π/4·(D²−d²)·h</c> — a ring, not a second full cylinder: with pilot Ø10 and bore Ø18, depth 4,
+    /// the probe removed 703.7167544041131 mm³ beyond the through hole, and π/4·(18²−10²)·4 =
+    /// 703.7167544041137 (M.2).</remarks>
     public static (bool Created, string? Failure) TryCreateCounterbore(
         IModelContainer container,
         IModelObject baseSurface,
@@ -851,11 +765,10 @@ internal static class Api7Hole
             disposal.BaseSurface = baseSurface;
             disposal.Perpendicular = true;
 
-            // Смещение пишется ДО Update() и на ЭТОМ ЖЕ объекте: после Update() признак построен, и
-            // запись осталась бы представлением. Позиция поддерживается всеми тремя режимами, а не
-            // только глухим: приёмка HO.6 показала, что без этой ветки сквозная цековка молча
-            // оставалась в начале координат при ошибке=None — то есть неверная позиция выдавалась
-            // за выполненную.
+            // The offset is written BEFORE Update() and on THIS SAME object: after Update() the feature
+            // is built and the write would remain a mere view. All three modes support positioning, not
+            // just blind: acceptance HO.6 showed that without this branch a through counterbore
+            // silently stayed at the origin with error=None — a wrong position passed off as done.
             if (place is not null)
             {
                 var outcome = place(disposal);
@@ -881,23 +794,14 @@ internal static class Api7Hole
         }
     }
 
-    /// <summary>
-    /// Создать сквозную зенковку: пилотное отверстие насквозь плюс коническая фаска.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Снятый сверх пилота материал равен <c>π·h/3 · (rM² + rP·rM − 2·rP²)</c>, где <c>h</c> —
-    /// глубина, которую вернул САМ объект, <c>rM</c> — радиус устья, <c>rP</c> — радиус пилота.
-    /// Правило прочитано с таблицы из 11 строк (3 угла × 3 входные глубины × 6 диаметров) в M.3, а
-    /// не подобрано под одну точку.
-    /// </para>
-    /// <para>
-    /// <paramref name="depthMm"/> передаётся в <c>CountersinkDepth</c> для полноты контракта, но при
-    /// <c>CountersinkType = ksCTDiameterAngle</c> это свойство ПРОИЗВОДНОЕ: запись 2, 4 или 6 не
-    /// меняет ничего. Поэтому возвращаемая глубина читается обратно, и судить о геометрии следует
-    /// по ней, а не по записанному числу.
-    /// </para>
-    /// </remarks>
+    /// <summary>Create a through countersink: a through pilot hole plus a conical bevel.</summary>
+    /// <remarks>Material removed beyond the pilot equals <c>π·h/3 · (rM² + rP·rM − 2·rP²)</c>, where
+    /// <c>h</c> is the depth the OBJECT itself returned, <c>rM</c> the mouth radius and <c>rP</c> the
+    /// pilot radius — a rule read from an 11-row table (3 angles × 3 input depths × 6 diameters) in
+    /// M.3, not fitted to one point. <paramref name="depthMm"/> is passed to <c>CountersinkDepth</c>
+    /// for contract completeness, but under <c>CountersinkType = ksCTDiameterAngle</c> that property is
+    /// DERIVED (writing 2, 4 or 6 changes nothing), so the returned depth is read back and geometry
+    /// should be judged by it, not by the written number.</remarks>
     public static (bool Created, string? Failure, double? ReportedDepthMm) TryCreateCountersink(
         IModelContainer container,
         IModelObject baseSurface,
@@ -925,7 +829,7 @@ internal static class Api7Hole
             disposal.BaseSurface = baseSurface;
             disposal.Perpendicular = true;
 
-            // Смещение пишется ДО Update() и на ЭТОМ ЖЕ объекте (см. TryCreateCounterbore).
+            // The offset is written BEFORE Update() and on THIS SAME object (see TryCreateCounterbore).
             if (place is not null)
             {
                 var outcome = place(disposal);
@@ -950,8 +854,8 @@ internal static class Api7Hole
                 return (false, "IHole3D.Update() вернул false", null);
             }
 
-            // Глубина читается ПОСЛЕ Update(): у производного свойства до перестроения ещё
-            // прежнее значение, и выдать его за результат значило бы соврать про геометрию.
+            // The depth is read AFTER Update(): a derived property still holds its previous value
+            // before the rebuild, and passing that off as the result would lie about the geometry.
             double? reported = Safe(() => countersink.CountersinkDepth);
             return (true, null, reported);
         }
@@ -961,11 +865,9 @@ internal static class Api7Hole
         }
     }
 
-    /// <summary>
-    /// Создать глухое отверстие с плоским дном: <c>ksDTValue</c> (члена <c>ksDTBlind</c> в
-    /// вендорском перечислении нет) плюс <c>ksEFFlat</c>. Снятый материал равен <c>π·r²·h</c>:
-    /// Ø10 глубиной 6 сняли 471.238898038471 против аналитических 471.238898038469 (M.4).
-    /// </summary>
+    /// <summary>Create a flat-bottomed blind hole: <c>ksDTValue</c> (there is no <c>ksDTBlind</c> member
+    /// in the vendor enum) plus <c>ksEFFlat</c>. Material removed equals <c>π·r²·h</c>: Ø10, depth 6
+    /// removed 471.238898038471 versus the analytic 471.238898038469 (M.4).</summary>
     public static (bool Created, string? Failure) TryCreateBlindFlat(
         IModelContainer container,
         IModelObject baseSurface,
@@ -993,7 +895,7 @@ internal static class Api7Hole
             disposal.BaseSurface = baseSurface;
             disposal.Perpendicular = true;
 
-            // Смещение пишется ДО Update() и на ЭТОМ ЖЕ объекте (см. TryCreateCounterbore).
+            // The offset is written BEFORE Update() and on THIS SAME object (see TryCreateCounterbore).
             if (place is not null)
             {
                 var outcome = place(disposal);
@@ -1011,23 +913,14 @@ internal static class Api7Hole
         }
     }
 
-    /// <summary>
-    /// Сдвинуть отверстие с начала координат: <c>Point3DParamSurface</c> плюс
-    /// <c>OffsetType = ksOffsetByCoords</c> и смещения по X и Y.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Возвращается (применено, причина, заметки о ходе маршрута): <c>SetSurfaceObject</c> вернул
-    /// False в измерении, и это записано как есть, а не выдано за успех. Маршрут от этого не
-    /// ломается — отверстие двигают три записи смещения, и проба M.5 поставила его ровно в
-    /// запрошенные (25, 15).
-    /// </para>
-    /// <para>
-    /// Если объект не отвечает на <c>IPoint3DParamSurface</c>, это ОТКАЗ, а не «вызвали и
-    /// промолчали»: принять смещения и оставить отверстие в начале координат означало бы выдать
-    /// невыполненное позиционирование за выполненное.
-    /// </para>
-    /// </remarks>
+    /// <summary>Move a hole off the origin: <c>Point3DParamSurface</c> plus
+    /// <c>OffsetType = ksOffsetByCoords</c> and X/Y offsets.</summary>
+    /// <remarks>Returns (applied, reason, route notes): MEASURED that <c>SetSurfaceObject</c> returned
+    /// False, recorded as is and not passed off as success — the route is not broken by it, since the
+    /// three offset writes move the hole, and probe M.5 placed it exactly at the requested (25, 15).
+    /// INVARIANT: if the object does not answer <c>IPoint3DParamSurface</c>, that is a REFUSAL, not
+    /// "called and stayed silent" — accepting the offsets and leaving the hole at the origin would pass
+    /// off unperformed positioning as done.</remarks>
     public static PlacementOutcome TryPlaceByCoordinates(
         IHoleDisposal disposal,
         double offsetXmm,
@@ -1060,8 +953,8 @@ internal static class Api7Hole
                 $"OffsetType={OffsetByCoords} (ksOffsetByCoords), Offset1={offsetXmm}, Offset2={offsetYmm}");
             if (surface.SetSurfaceObject(disposal.BaseSurface) is { } accepted)
             {
-                // Измерено: False. Записано как есть — этот факт и есть причина, по которой
-                // маршрут описывается тремя записями смещения, а не этой привязкой.
+                // MEASURED: False. Recorded as is — this fact is why the route is described by the
+                // three offset writes rather than by this binding.
                 notes.Add("SetSurfaceObject(BaseSurface) → " + accepted);
             }
 
@@ -1100,15 +993,11 @@ internal static class Api7Hole
     }
 }
 
-/// <summary>
-/// Ось вращения, построенная в детали по двум точкам и перечитанная оттуда же.
-/// </summary>
-/// <remarks>
-/// Возвращается и объект оси (для <c>IRotated.Axis</c>), и то, что удалось с него прочитать:
-/// «ось построена» без чтения её состояния — это код возврата, а не факт. <see cref="Valid"/>
-/// отделён от null: <c>null</c> здесь означает «состояние прочитать не удалось», <c>false</c> —
-/// «КОМПАС считает ось негодной», и это разные ответы.
-/// </remarks>
+/// <summary>A rotation axis built in the part from two points and re-read from there.</summary>
+/// <remarks>Both the axis object (for <c>IRotated.Axis</c>) and what could be read from it are returned:
+/// "the axis is built" without reading its state is a return code, not a fact. <see cref="Valid"/> is
+/// kept distinct from null — <c>null</c> means "the state could not be read", <c>false</c> means "KOMPAS
+/// considers the axis invalid", and these are different answers.</remarks>
 internal sealed record AxisHandle(
     IAxis3D Axis,
     IAxis3DBy2Points By2Points,
@@ -1118,47 +1007,28 @@ internal sealed record AxisHandle(
     int? AxesAfter,
     IReadOnlyList<string> Notes);
 
-/// <summary>
-/// Типизированные операции API7 над вращением (SM-03).
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Что здесь воспроизведено и чем доказано.</b> Прогон <c>95fa844107ce41609d6278f8f6c5759f</c>
-/// от 17.09.2026, шаги <c>R.24</c> (перебор всех трёх видов операции), <c>R.25</c> (эталон задания
-/// с осью из своей детали), <c>R.26</c> (что операция делает с уже существующим телом). Все шаги
-/// SM-03 в том прогоне — PASS; PASS 31 · FAIL 21 · UNKNOWN 6 по всему прогону.
-/// </para>
-/// <para>
-/// <b>Чего здесь СОЗНАТЕЛЬНО нет.</b> Ни <c>NewEntity</c>, ни <c>Create()</c>. Прежняя блокировка
-/// была ровно в этом: оболочка API5 вокруг объекта фабрики API7 — смешанный жизненный цикл, при
-/// котором <c>Create()</c> возвращает <c>true</c> на пустой операции, объект появляется в дереве,
-/// <c>Update()</c> читается как True, и ничего не строится. Поэтому маршрут здесь — только
-/// <c>Rotateds.Add → IRotated → Update()</c>, и он один принимает <c>Profile</c> и <c>Axis</c>.
-/// </para>
-/// <para>
-/// <b>Почему <c>OperationResult</c> всё-таки записывается.</b> Не потому, что он что-то решает —
-/// измерено (R.26), что он НЕ решает: <c>boss</c> с записанным и прочитанным обратно
-/// <c>ksOperationCut</c> изменил объём на 0. Он записывается ради согласованности модели с тем,
-/// что КОМПАС показывает в дереве, и читается обратно, чтобы расхождение было видно. Вызывающий не
-/// должен на него полагаться, и вид операции приходит из <see cref="RotationOperation"/>.
-/// </para>
-/// <para>
-/// <b>Закон угла, установленный 18.09.2026 и заменивший прежнюю гипотезу.</b> Прежнее
-/// утверждение «угол насыщается на 180°, запись 360 даёт половину оборота» происходило из шага
-/// <c>R.26.angles</c>, который менял <c>CutOffByPoint</c>, а не угол, и ни в одной своей строке не
-/// записывал <c>Angle[true] = 360</c> с полным набором параметров развёртки. Проба
-/// <c>tools/KompasMcp.Api7Probe/FullTurnProbe.cs</c> (шаги F.1…F.5) и независимое чтение
-/// сохранённого <c>.m3d</c> пробой <c>M3dVerificationProbe</c> дали иное: <c>Angle[true]</c> несёт
-/// запрошенный угол НАПРЯМУЮ, а вторая половина пары, равная первой, удваивает развёртку. Значит
-/// <c>(360, 0) → 360°</c> (полный цилиндр, <c>V = 50265.4824574366</c>), <c>(180, 0) → 180°</c>
-/// (<c>25132.7412287183</c>), <c>(90, 0) → 90°</c>, <c>(180, 180) → 360°</c>. Полный оборот
-/// выражается одним вызовом, и вид операции (<c>base</c>/<c>boss</c>/<c>cut</c>) на закон не
-/// влияет. Разбор и таблица — <c>docs/acceptance/api7/full-turn-findings.md</c>.
-/// </para>
-/// </remarks>
+/// <summary>Typed API7 operations over rotation (SM-03).</summary>
+/// <remarks>MEASURED (run <c>95fa844107ce41609d6278f8f6c5759f</c>, 17.09.2026, steps R.24/R.25/R.26):
+/// all SM-03 steps PASS.
+/// INVARIANT: neither <c>NewEntity</c> nor <c>Create()</c>. An API5 wrapper around an API7 factory
+/// object is a mixed lifetime in which <c>Create()</c> returns <c>true</c> on an empty operation, the
+/// object appears in the tree, <c>Update()</c> reads True, and nothing is built; the route is therefore
+/// only <c>Rotateds.Add → IRotated → Update()</c>, the one that accepts <c>Profile</c> and <c>Axis</c>.
+/// MEASURED (R.26): <c>OperationResult</c> decides nothing — a <c>boss</c> with a written and read-back
+/// <c>ksOperationCut</c> changed the volume by 0; it is written for consistency with the tree and read
+/// back so a divergence is visible, and the caller must not rely on it (the operation kind comes from
+/// <see cref="RotationOperation"/>).
+/// INVARIANT (angle law, 18.09.2026): <c>Angle[true]</c> carries the REQUESTED sweep angle directly,
+/// and the second half of the pair, if equal to the first, DOUBLES the sweep — hence
+/// <c>(360, 0) → 360°</c> (full cylinder, <c>V = 50265.4824574366</c>), <c>(180, 0) → 180°</c>
+/// (<c>25132.7412287183</c>), <c>(90, 0) → 90°</c>, <c>(180, 180) → 360°</c>. A full turn is expressed
+/// by one call, and the operation kind (<c>base</c>/<c>boss</c>/<c>cut</c>) does not affect the law.
+/// MEASURED (FullTurnProbe F.1…F.5 and independent M3dVerificationProbe reading of the saved
+/// <c>.m3d</c>; table in <c>docs/acceptance/api7/full-turn-findings.md</c>).
+/// History: docs/decisions/adapter-api7.md#rotated</remarks>
 internal static class Api7Rotated
 {
-    /// <summary>Вид операции → вендорский тип. Числа измерены в R.24 (27/28/29).</summary>
+    /// <summary>Operation kind → vendor type. The numbers are MEASURED in R.24 (27/28/29).</summary>
     public static ksObj3dTypeEnum TypeOf(RotationOperation operation) => operation switch
     {
         RotationOperation.Base => ksObj3dTypeEnum.o3d_baseRotated,
@@ -1167,7 +1037,7 @@ internal static class Api7Rotated
         _ => ksObj3dTypeEnum.o3d_bossRotated,
     };
 
-    /// <summary>Направление → вендорское перечисление. <c>dtReverse</c> отсекается вызывающим.</summary>
+    /// <summary>Direction → vendor enum. <c>dtReverse</c> is rejected by the caller.</summary>
     public static ksDirectionTypeEnum DirectionOf(RotationDirection direction) => direction switch
     {
         RotationDirection.Normal => ksDirectionTypeEnum.dtNormal,
@@ -1177,10 +1047,8 @@ internal static class Api7Rotated
         _ => ksDirectionTypeEnum.dtNormal,
     };
 
-    /// <summary>
-    /// <c>OperationResult</c>, соответствующий виду операции. Записывается для согласованности с
-    /// деревом, не для переключения действия: измерено, что этот член не влияет ни на что (R.26).
-    /// </summary>
+    /// <summary>The <c>OperationResult</c> matching the operation kind. Written for consistency with the
+    /// tree, not to switch behaviour: MEASURED that this member affects nothing (R.26).</summary>
     public static ksOperationResultEnum OperationResultOf(RotationOperation operation) => operation switch
     {
         RotationOperation.Base => ksOperationResultEnum.ksOperationNewBody,
@@ -1189,11 +1057,11 @@ internal static class Api7Rotated
         _ => ksOperationResultEnum.ksOperationNewBody,
     };
 
-    /// <summary>Код операции в ответе — то же слово, что в контракте, а не перечисление вендора.</summary>
+    /// <summary>The operation code in the response — the same word as in the contract, not the vendor enum.</summary>
     public static string NameOf(RotationOperation operation) =>
         operation.ToString().ToLowerInvariant();
 
-    /// <summary>Число вращений в коллекции API7. null — не прочитано (не «ноль»).</summary>
+    /// <summary>The number of rotations in the API7 collection. null — not read (not "zero").</summary>
     public static int? Count(IModelContainer container)
     {
         try
@@ -1206,29 +1074,18 @@ internal static class Api7Rotated
         }
     }
 
-    /// <summary>
-    /// Построить ось вращения по двум точкам МОДЕЛИ в собственной детали.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Путь к коллекции осей нетривиален и это измерено.</b> <c>Axes3D</c> объявлен на
-    /// <c>IAuxiliaryGeomContainer</c> (IID <c>{950FEBE2-F916-4E77-A37D-B061E5C22FA8}</c>), а НЕ на
-    /// <c>IModelContainer</c>: обычное приведение контейнера даёт <c>null</c>, работает только QI
-    /// на живом объекте детали. <c>part</c> переносится тем же мостом (<c>ksAPI7Dual</c>), что и
-    /// документ, — второй экземпляр КОМПАСа для этого не нужен (ADR-004 §1).
-    /// </para>
-    /// <para>
-    /// <b><c>Update()</c> вызывается ПОСЛЕ обеих точек</b> и это не стиль: измерено (R.13), что ось,
-    /// обновлённая до подачи точек, читается <c>Valid=False</c> и в дерево не входит. Тот же порядок
-    /// у вращения: <c>Update()</c> после всех записей.
-    /// </para>
-    /// <para>
-    /// <b>Негодная ось не отбрасывается, а называется.</b> Если <c>Valid</c> не True, это
-    /// записывается в заметки и возвращается вызывающему: отказ вращения на негодной оси не был бы
-    /// фактом о вращении, и подменять причину отказом нельзя. Возвращается <c>null</c> только когда
-    /// ось построить не удалось вовсе — это отдельный исход.
-    /// </para>
-    /// </remarks>
+    /// <summary>Build a rotation axis from two MODEL points in the part itself.</summary>
+    /// <remarks>MEASURED: the path to the axes collection is non-trivial — <c>Axes3D</c> is declared on
+    /// <c>IAuxiliaryGeomContainer</c> (IID <c>{950FEBE2-F916-4E77-A37D-B061E5C22FA8}</c>), NOT on
+    /// <c>IModelContainer</c>, so a plain cast of the container gives <c>null</c> and only a QI on the
+    /// live part object works; <c>part</c> is transferred by the same bridge (<c>ksAPI7Dual</c>) as the
+    /// document, so no second KOMPAS instance is needed (ADR-004 §1).
+    /// INVARIANT: <c>Update()</c> is called AFTER both points — MEASURED (R.13) that an axis updated
+    /// before the points reads <c>Valid=False</c> and does not enter the tree; rotation follows the same
+    /// order. INVARIANT: an invalid axis is named, not discarded — if <c>Valid</c> is not True it is
+    /// recorded in the notes and returned, since a rotation failure on an invalid axis would not be a
+    /// fact about rotation; <c>null</c> is returned only when the axis could not be built at all.
+    /// History: docs/decisions/adapter-api7.md#rotated</remarks>
     public static AxisHandle? TryBuildAxisBy2Points(
         Api7Bridge bridge,
         object part,
@@ -1250,8 +1107,8 @@ internal static class Api7Rotated
                 return null;
             }
 
-            // QI, а не приведение контейнера: Axes3D объявлен на ДРУГОМ интерфейсе того же
-            // объекта, и это измерено (см. remarks).
+            // A QI, not a container cast: Axes3D is declared on a DIFFERENT interface of the same
+            // object, and this is MEASURED (see remarks).
             if (part7 is not IAuxiliaryGeomContainer auxiliary)
             {
                 notes.Add("перенесённая деталь не отвечает QI(IAuxiliaryGeomContainer) " +
@@ -1282,7 +1139,7 @@ internal static class Api7Rotated
             by2.Point1 = p1;
             by2.Point2 = p2;
 
-            // Update() только здесь, с обеими точками уже поданными (измерено R.13).
+            // Update() only here, with both points already supplied (MEASURED R.13).
             var updated = SafeBool(by2.Update);
             var valid = SafeBool(() => by2.Valid);
             var after = SafeInt(() => axes.Count);
@@ -1305,33 +1162,17 @@ internal static class Api7Rotated
         }
     }
 
-    /// <summary>
-    /// Создать вращение и записать в него параметры, затем <c>Update()</c>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Возвращается (объект, причина отказа): вызывающий обязан отличить отказ КОМПАСа от падения
-    /// адаптера, и «не смогли» не должно выглядеть как «создали». Объект отдаётся наружу, потому
-    /// что после <c>Update()</c> его надо прочитать обратно — а прочитанное и есть доказательство.
-    /// </para>
-    /// <para>
-    /// <b>Порядок записей — часть контракта.</b> <c>Profile</c> и <c>Axis</c> до остальных: у
-    /// вращения без оси развёртки не существует вовсе, и запись угла в такой объект ничего не
-    /// значит.
-    /// </para>
-    /// <para>
-    /// <b>Угол пишется в первую половину пары, вторая — ноль. Это измерено 18.09.2026, и прежнее
-    /// обоснование было другим («вторая половина — состояние ядра»).</b> Измеренный закон
-    /// (<c>docs/acceptance/api7/full-turn-findings.md</c>, проба
-    /// <c>tools/KompasMcp.Api7Probe/FullTurnProbe.cs</c>, шаги F.1/F.1a…F.1e, независимая проверка —
-    /// <c>M3dVerificationProbe</c>): <c>Angle[true]</c> несёт ЗАПРОШЕННЫЙ угол развёртки напрямую,
-    /// а вторая половина пары, будучи равной первой, развёртку УДВАИВАЕТ. Отсюда
-    /// <c>(360, 0) → 360°</c> (полный цилиндр, <c>V = 50265.4824574366</c>), <c>(180, 0) → 180°</c>
-    /// (полуцилиндр, <c>25132.7412287183</c>), <c>(90, 0) → 90°</c>, но <c>(180, 180) → 360°</c>.
-    /// Ноль во второй половине — не «пустое поле», а условие «поворот равен запрошенному углу».
-    /// Вид операции (<c>base</c>/<c>boss</c>/<c>cut</c>) на закон не влияет.
-    /// </para>
-    /// </remarks>
+    /// <summary>Create a rotation, write its parameters, then <c>Update()</c>.</summary>
+    /// <remarks>Returns (object, refusal reason): the caller must distinguish a KOMPAS refusal from an
+    /// adapter crash, and "could not" must not look like "created". The object is handed out because
+    /// after <c>Update()</c> it must be read back — and what is read back is the proof.
+    /// INVARIANT: the write order is part of the contract — <c>Profile</c> and <c>Axis</c> before the
+    /// rest, because a rotation without an axis has no sweep at all and writing an angle into such an
+    /// object means nothing. INVARIANT: the angle is written into the first half of the pair, the second
+    /// is zero — MEASURED 18.09.2026 (FullTurnProbe F.1/F.1a…F.1e, independent M3dVerificationProbe):
+    /// the second half equal to the first DOUBLES the sweep, so zero there is the condition "the turn
+    /// equals the requested angle", not an empty field.
+    /// History: docs/decisions/adapter-api7.md#rotated</remarks>
     public static (IRotated? Rotation, string? Failure) TryCreate(
         IModelContainer container,
         RotationOperation operation,
@@ -1357,36 +1198,31 @@ internal static class Api7Rotated
             rotation.Profile = profile;
             rotation.Axis = axis;
 
-            // Индексированные свойства: и геттер, и сеттер принимают Boolean Normal. Запись без
-            // индекса не компилируется (CS0856) — компилятор здесь дешевле, чем молчаливая запись
-            // в член, которого у объекта нет.
+            // Indexed properties: both getter and setter take Boolean Normal. A write without the index
+            // does not compile (CS0856) — the compiler is cheaper here than a silent write to a member
+            // the object lacks.
             //
-            // Угол пишется В ПЕРВУЮ половину пары, а вторая — НОЛЬ. Это измерено, а не выбрано по
-            // симметрии (FullTurnProbe, шаги F.1/F.1a…F.1e, docs/acceptance/api7/full-turn-findings.md):
-            //   Angle[true]=360, Angle[false]=0 → ПОЛНЫЙ цилиндр (50265.4824574366), читается 360;
-            //   Angle[true]=180, Angle[false]=0 → ПОЛОВИНА     (25132.7412287183), читается 180;
-            //   Angle[true]=90,  Angle[false]=0 → ЧЕТВЕРТЬ;
-            //   Angle[true]=180, Angle[false]=180 → ПОЛНЫЙ цилиндр.
-            // Отсюда: Angle[true] несёт ЗАПРОШЕННЫЙ угол развёртки напрямую, а вторая половина
-            // пары, будучи равной первой, развёртку УДВАИВАЕТ. Поэтому ноль во второй половине —
-            // это условие «угол поворота равен запрошенному», а не «пустое поле»: поставив туда
-            // же число, мы получили бы двойной сектор и выдали бы его за запрошенный.
+            // The angle goes into the FIRST half of the pair, the second is ZERO. MEASURED, not chosen by
+            // symmetry (FullTurnProbe F.1/F.1a…F.1e, docs/acceptance/api7/full-turn-findings.md):
+            // Angle[true] carries the REQUESTED sweep angle directly, while the second half equal to the
+            // first DOUBLES the sweep, so zero there is the condition "the turn equals the requested
+            // angle"; writing the same number there would give a double sector passed off as requested.
             rotation.Angle[true] = angleDeg;
             rotation.Angle[false] = 0d;
             rotation.Direction = DirectionOf(direction);
             rotation.RotatedType[true] = ksRotatedTypeEnum.ksRTAngle;
             rotation.ToroidShapeType = false;
 
-            // Записывается для согласованности с деревом и читается обратно вызывающим. Измерено
-            // (R.26): на действие этот член НЕ влияет — boss с ksOperationCut изменил объём на 0.
+            // Written for consistency with the tree and read back by the caller. MEASURED (R.26): this
+            // member does NOT affect behaviour — a boss with ksOperationCut changed the volume by 0.
             if (rotation is IRotated1 rotated1)
             {
                 rotated1.OperationResult = OperationResultOf(operation);
             }
 
-            // Тонкая стенка: маршрут измерен на СПЛОШНОМ теле. Значение true сюда не доходит —
-            // вызывающий отвергает заданную тонкую стенку до COM, — но и здесь оно не «на всякий
-            // случай»: false есть измеренная настройка, а не значение по умолчанию.
+            // Thin wall: the route was MEASURED on a SOLID body. A true value never reaches here — the
+            // caller rejects a requested thin wall before COM — and even here it is not a "just in
+            // case": false is a measured setting, not a default.
             if (rotation is IThinParameters thinParameters)
             {
                 thinParameters.Thin = thin;
@@ -1402,7 +1238,7 @@ internal static class Api7Rotated
         }
     }
 
-    /// <summary>Прочитать вращение типизированно, по индексу коллекции API7.</summary>
+    /// <summary>Read a rotation typed, by API7 collection index.</summary>
     public static RotatedDto? Read(IModelContainer container, int index)
     {
         try
@@ -1418,9 +1254,9 @@ internal static class Api7Rotated
                 AngleDeg: Read(() => rotation.Angle[true]),
                 Direction: Text(() => rotation.Direction.ToString()),
                 AxisState: axisState,
-                // Профиль у вращения — ОДИН объект (IModelObject), а не массив, как BaseObjects у
-                // скругления. Поэтому «число входов» здесь либо 1, либо null, и выдавать за него
-                // длину массива нельзя — это разные типы. null означает «профиль не читается».
+                // A rotation's profile is ONE object (IModelObject), not an array like a fillet's
+                // BaseObjects. So "input count" here is either 1 or null, and an array length must not be
+                // passed off as it — different types. null means "the profile is not read".
                 ProfileInputCount: Safe(() => rotation.Profile) is null ? null : 1);
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException)
@@ -1429,17 +1265,11 @@ internal static class Api7Rotated
         }
     }
 
-    /// <summary>
-    /// Индексы вращений, у которых прочитался заданный угол. Опознание по углу — ЗАПАСНОЕ, и это
-    /// надо называть вслух: угол не является признаком тождества объекта. Раньше здесь стояло
-    /// обоснование «развёртка насыщается на 180°, поэтому у вращения на 180° и на 360° угол в
-    /// модели одинаков» — оно ОПРОВЕРГНУТО измерением 18.09.2026
-    /// (<c>docs/acceptance/api7/full-turn-findings.md</c>): насыщения нет, а угол читается тем,
-    /// каким построен. Причина осторожности осталась, но другая и более простая: два признака с
-    /// одинаковым углом существуют как угодно часто (два полуоборота вокруг разных осей), и
-    /// «взять первый» означало бы править не тот признак. Поэтому два кандидата — это «опознать
-    /// нечем», а не «взять первый».
-    /// </summary>
+    /// <summary>Indices of rotations whose angle read as the given one. Matching by angle is a FALLBACK,
+    /// and that must be said aloud: an angle is not an identity token. Two features with the same angle
+    /// exist arbitrarily often (two half-turns about different axes), so "take the first" would edit the
+    /// wrong feature, and two candidates mean "nothing to identify with", not "take the first".
+    /// History: docs/decisions/adapter-api7.md#rotated</summary>
     public static IReadOnlyList<int> FindIndexesByAngle(IModelContainer container, double angleDeg)
     {
         var found = new List<int>();
@@ -1459,27 +1289,17 @@ internal static class Api7Rotated
         return found;
     }
 
-    /// <summary>
-    /// Индекс вращения, соответствующего сущности API5, по СОСТАВУ (угол и направление). Возвращает
-    /// <c>null</c>, если совпадений нет или их больше одного: «взять первый» здесь означает
-    /// записать угол в чужой признак.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Сопоставление по углу слабо — два полуоборота вокруг разных осей дадут одинаковую пару, — и
-    /// именно поэтому неоднозначность разрешается ОТКАЗОМ, а не выбором. Это тот же принцип, что и
-    /// у <c>FindIndexesByIdenticalRadius</c> у скругления, но с тем отличием, что здесь
-    /// сопоставляются ещё и направление, поэтому на практике кандидат обычно один.
-    /// </para>
-    /// <para>
-    /// <b>Когда состав не читается, вызывающий передаёт <paramref name="knownIndex"/>.</b> Сущность,
-    /// взятая из дерева API5, приходит сырым <c>__ComObject</c> и на приведение к <c>IRotated</c>
-    /// отвечает отказом (измерено 18.09.2026), поэтому эталона для сравнения не существует. Тогда
-    /// адрес известен ЗАРАНЕЕ — это позиция признака среди вращений дерева (см.
-    /// <c>RotatedOrdinal</c>), и пересопоставлять по составу, которого нет, значило бы отказать
-    /// адресуемому признаку.
-    /// </para>
-    /// </remarks>
+    /// <summary>The index of the rotation matching an API5 entity by COMPOSITION (angle and direction).
+    /// Returns <c>null</c> if there is no match or more than one: "take the first" here would write the
+    /// angle into a foreign feature.</summary>
+    /// <remarks>Matching by angle is weak — two half-turns about different axes give the same pair — so
+    /// ambiguity is resolved by REFUSAL, not by choice; the same principle as
+    /// <c>FindIndexesByIdenticalRadius</c> for a fillet, except direction is also compared, so in
+    /// practice there is usually one candidate. When the composition cannot be read, the caller passes
+    /// <paramref name="knownIndex"/>: an entity taken from the API5 tree arrives as a raw
+    /// <c>__ComObject</c> and refuses the cast to <c>IRotated</c> (MEASURED 18.09.2026), so there is no
+    /// reference to compare against and the address is known in advance as the feature's position among
+    /// the tree's rotations (see <c>RotatedOrdinal</c>).</remarks>
     public static int? FindIndexFor(IModelContainer container, ksEntity entity, int? knownIndex = null)
     {
         if (Count(container) is not int count || count <= 0)
@@ -1492,8 +1312,8 @@ internal static class Api7Rotated
             return known >= 0 && known < count ? known : null;
         }
 
-        // Угол и направление адресованной сущности: сущность дерева API5 отвечает на IRotated тем же
-        // объектом модели, поэтому её значения и есть эталон для сопоставления.
+        // The addressed entity's angle and direction: the API5 tree entity answers IRotated as the same
+        // model object, so its values are the reference for matching.
         double? wantAngle = null;
         string? wantDirection = null;
         if (entity is IRotated rotated)
@@ -1530,17 +1350,13 @@ internal static class Api7Rotated
         return matches.Count == 1 ? matches[0] : null;
     }
 
-    /// <summary>
-    /// Записать угол и направление в СУЩЕСТВУЮЩЕЕ вращение и выполнить <c>Update()</c>. Возвращает
-    /// пару (записано, причина), а не исключение: вызывающий обязан отличить отказ КОМПАСа от
-    /// падения адаптера.
-    /// </summary>
-    /// <remarks>
-    /// Пишутся только заданные поля: незаданное остаётся тем, что лежит в модели. <c>Angle[false]</c>
-    /// сбрасывается в ноль ВСЕГДА, когда пишется угол, — измерено (F.1a против F.1c), что вторая
-    /// половина пары, равная первой, удваивает развёртку, поэтому «оставить как есть» здесь значило
-    /// бы получить двойной сектор при, казалось бы, точечной правке угла.
-    /// </remarks>
+    /// <summary>Write angle and direction into an EXISTING rotation and call <c>Update()</c>. Returns
+    /// (written, reason), not an exception: the caller must distinguish a KOMPAS refusal from an adapter
+    /// crash.</summary>
+    /// <remarks>INVARIANT: only supplied fields are written — an unsupplied one keeps what is in the
+    /// model. <c>Angle[false]</c> is reset to zero ALWAYS when the angle is written — MEASURED (F.1a
+    /// versus F.1c) that the second half of the pair equal to the first doubles the sweep, so "leave as
+    /// is" would give a double sector on an apparently point edit of the angle.</remarks>
     public static (bool Written, string? Failure) TryWriteAngleAndDirection(
         IModelContainer container,
         int index,
@@ -1575,10 +1391,9 @@ internal static class Api7Rotated
         }
     }
 
-    /// <summary>
-    /// Точка модели из массива координат. Проверяется и длина, и что объект создался: «принял
-    /// массив из двух чисел» дало бы точку в начале координат, и ось встала бы не туда.
-    /// </summary>
+    /// <summary>A model point from a coordinate array. Both the length and creation are checked:
+    /// "accepted an array of two numbers" would give a point at the origin, and the axis would land in
+    /// the wrong place.</summary>
     private static IPoint3D? MakePoint(IModelContainer container, IReadOnlyList<double> coordinates)
     {
         if (coordinates.Count != 3)
@@ -1637,12 +1452,10 @@ internal static class Api7Rotated
     private static string Raw(object? value) => value?.ToString() ?? "не прочитано";
 }
 
-/// <summary>
-/// Параметры скругления, перечитанные из API7. Радиус читается только оттуда: у API5
-/// <c>ksFilletDefinition.radius</c> есть и читается, но запись в него на существующем признаке
-/// НЕ применяется — измерено 16.09.2026 (строка FL04r). Поэтому авторитетным источником радиуса
-/// здесь служит <c>IFillet.Radius1</c>, а не определение API5.
-/// </summary>
+/// <summary>Fillet parameters re-read from API7. The radius is read only from there: API5 has
+/// <c>ksFilletDefinition.radius</c> and it reads, but writing to it on an existing feature is NOT
+/// applied — MEASURED 16.09.2026 (row FL04r); the authoritative source of the radius here is
+/// <c>IFillet.Radius1</c>, not the API5 definition.</summary>
 public sealed record FilletReadDto(
     double? RadiusMm,
     double? Radius2Mm,
@@ -1652,18 +1465,14 @@ public sealed record FilletReadDto(
     IReadOnlyList<int>? BaseObjectReferences,
     IReadOnlyList<string> ReadRoutes);
 
-/// <summary>
-/// Типизированные операции API7 над скруглением (SM-09). Отличий от <see cref="Api7Chamfer"/> два,
-/// и оба измерены, а не выведены из сходства имён:
-/// <list type="number">
-/// <item>радиус живёт в <c>IFillet.Radius1</c> (dispid 3), а не в <c>IChamfer.Distance1</c>;</item>
-/// <item>в API5 запись радиуса на существующем признаке не применяется, поэтому маршрут API7 здесь
-/// не «альтернатива», а единственный работающий — см. <c>Api5Session.UpdateFilletRadius</c>.</item>
-/// </list>
-/// </summary>
+/// <summary>Typed API7 operations over the fillet (SM-09). Two differences from
+/// <see cref="Api7Chamfer"/>, both MEASURED, not inferred from name similarity: the radius lives in
+/// <c>IFillet.Radius1</c> (dispid 3), not <c>IChamfer.Distance1</c>; and in API5 writing the radius on
+/// an existing feature is not applied, so the API7 route here is not an "alternative" but the only
+/// working one (see <c>Api5Session.UpdateFilletRadius</c>).</summary>
 internal static class Api7Fillet
 {
-    /// <summary>Число скруглений в коллекции API7. null — не прочитано (не «ноль»).</summary>
+    /// <summary>The number of fillets in the API7 collection. null — not read (not "zero").</summary>
     public static int? Count(IModelContainer container)
     {
         try
@@ -1676,7 +1485,7 @@ internal static class Api7Fillet
         }
     }
 
-    /// <summary>Прочитать параметры скругления типизированно, по индексу коллекции API7.</summary>
+    /// <summary>Read fillet parameters typed, by API7 collection index.</summary>
     public static FilletReadDto? Read(IModelContainer container, int index)
     {
         try
@@ -1686,9 +1495,9 @@ internal static class Api7Fillet
                 return null;
             }
 
-            // Входы читаются тем же вызовом, что и счётчик: счётчик без ссылок бесполезен для
-            // адресации (правка набора идёт по составу входов, а не по их числу), а разница между
-            // «не прочитано» и «пустой набор» обязана быть видна вызывающему.
+            // The inputs are read by the same call as the counter: a counter without references is
+            // useless for addressing (a set edit goes by the composition of inputs, not their number),
+            // and the difference between "not read" and "empty set" must be visible to the caller.
             var inputs = ReadBaseObjects(container, index);
             return new FilletReadDto(
                 RadiusMm: Read(() => fillet.Radius1),
@@ -1705,11 +1514,9 @@ internal static class Api7Fillet
         }
     }
 
-    /// <summary>
-    /// Индексы скруглений в коллекции API7, совпавших с признаком API5 по радиусу. Сопоставление
-    /// по числу, а не по имени: F.8 измерила, что имя, данное в API5, читается из API7 иначе, —
-    /// имя идентификатором не является.
-    /// </summary>
+    /// <summary>Indices of fillets in the API7 collection that match the API5 feature by radius.
+    /// Matching by number, not by name: F.8 MEASURED that a name given in API5 reads differently from
+    /// API7, so a name is not an identifier.</summary>
     public static IReadOnlyList<int> FindIndexesByIdenticalRadius(IModelContainer container, double radiusMm)
     {
         var found = new List<int>();
@@ -1729,22 +1536,14 @@ internal static class Api7Fillet
         return found;
     }
 
-    /// <summary>
-    /// Записать радиус в СУЩЕСТВУЮЩЕЕ скругление через <c>IFillet</c> — маршрут, которым правится
-    /// радиус, потому что запись через API5 на существующем признаке не применяется.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Пишутся только заданные поля: незаданное остаётся тем, что лежит в модели. Порядок
-    /// «запись → Update() → RebuildModel()» — часть контракта, а не стиль: без <c>Update()</c>
-    /// сеттеры возвращают успех, а модель остаётся прежней (измерено на <c>IChamfer</c> пробой
-    /// F.10 и на <c>IExtrusion.Sketch</c> пробой E).
-    /// </para>
-    /// <para>
-    /// Возвращается пара (записано, причина), а не исключение: вызывающий обязан отличить отказ
-    /// КОМПАСа от падения адаптера, и «не смогли» не должно выглядеть как «записали».
-    /// </para>
-    /// </remarks>
+    /// <summary>Write the radius into an EXISTING fillet via <c>IFillet</c> — the route that edits the
+    /// radius, because the API5 write on an existing feature is not applied.</summary>
+    /// <remarks>INVARIANT: only supplied fields are written — an unsupplied one keeps what is in the
+    /// model; the order "write → Update() → RebuildModel()" is part of the contract, not style — without
+    /// <c>Update()</c> the setters return success while the model stays as before (MEASURED on
+    /// <c>IChamfer</c> by probe F.10 and on <c>IExtrusion.Sketch</c> by probe E). Returns (written,
+    /// reason), not an exception: the caller must distinguish a KOMPAS refusal from an adapter crash, and
+    /// "could not" must not look like "wrote".</remarks>
     public static (bool Written, string? Failure) TryWriteRadius(
         IModelContainer container,
         int index,
@@ -1787,12 +1586,10 @@ internal static class Api7Fillet
         }
     }
 
-    /// <summary>
-    /// Индексы скруглений, у которых МНОЖЕСТВО ссылок входов совпадает с заданным. Опознание
-    /// признака по составу, а не по имени (F.8: имя в API5 и API7 не совпадает), не по индексу
-    /// (порядок выдачи произволен) и не по радиусу (два скругления одного радиуса неразличимы —
-    /// именно на такой модели и ставился опыт адресации H2.7).
-    /// </summary>
+    /// <summary>Indices of fillets whose SET of input references equals the given one. Feature
+    /// identification by composition, not by name (F.8: a name differs between API5 and API7), not by
+    /// index (issuance order is arbitrary) and not by radius (two fillets of one radius are
+    /// indistinguishable — the H2.7 addressing experiment was run on exactly such a model).</summary>
     public static IReadOnlyList<int> FindIndexesByInputReferences(
         IModelContainer container,
         IReadOnlyList<int> references)
@@ -1822,11 +1619,9 @@ internal static class Api7Fillet
         return found;
     }
 
-    /// <summary>
-    /// Единственное скругление с заданным составом входов. Возвращается <c>null</c> и при нуле, и
-    /// при нескольких совпадениях: «взять первое попавшееся» означало бы записать набор в чужой
-    /// признак и молча испортить чужую геометрию.
-    /// </summary>
+    /// <summary>The only fillet with the given input composition. Returns <c>null</c> both for zero and
+    /// for several matches: "take the first one" would write the set into a foreign feature and silently
+    /// spoil foreign geometry.</summary>
     public static int? FindIndexByInputReferences(
         IModelContainer container,
         IReadOnlyList<int> references)
@@ -1835,24 +1630,16 @@ internal static class Api7Fillet
         return matches.Count == 1 ? matches[0] : null;
     }
 
-    /// <summary>
-    /// Индексы скруглений, у которых прочитался заданный радиус. Это запасное опознание для
-    /// случая, когда состав входов прочитать неоткуда: определение API5 на существующем признаке
-    /// рёбер не отдаёт (измерено — 0 из 4 после скругления, строка FL10).
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Почему это не заменяет опознание по составу.</b> Радиус не различает два скругления
-    /// одного радиуса — измерено (H2.7), что именно такая модель и ставилась. Поэтому вызывающий
-    /// обязан отвергнуть неоднозначный ответ: два кандидата — это не «взять первый», а «опознать
-    /// нечем».
-    /// </para>
-    /// <para>
-    /// <b>Зачем всё-таки нужен.</b> Маршрут определения API5 умеет прочитать радиус признака
-    /// всегда, а вот состав входов — не всегда. Сужение по радиусу вместе с последующей проверкой
-    /// состава после записи даёт рабочее опознание там, где основной путь недоступен.
-    /// </para>
-    /// </remarks>
+    /// <summary>Indices of fillets whose radius read as the given one. A fallback identification for
+    /// when the input composition cannot be read: the API5 definition does not give edges on an existing
+    /// feature (MEASURED — 0 of 4 after a fillet, row FL10).</summary>
+    /// <remarks>LIMIT: this does not replace identification by composition — the radius does not
+    /// distinguish two fillets of one radius (MEASURED H2.7, and exactly such a model was used), so the
+    /// caller must reject an ambiguous answer: two candidates mean "nothing to identify with", not "take
+    /// the first". It is still needed because the API5 definition route can always read a feature's
+    /// radius while the input composition is not always available; narrowing by radius together with a
+    /// post-write composition check gives working identification where the main path is
+    /// unavailable.</remarks>
     public static IReadOnlyList<int> FindIndexesByRadius(IModelContainer container, double radiusMm)
     {
         var found = new List<int>();
@@ -1873,18 +1660,14 @@ internal static class Api7Fillet
         return found;
     }
 
-    /// <summary>
-    /// Входы живого скругления — <c>IFillet.BaseObjects</c> как список объектов, пригодных к
-    /// предъявлению обратно. Возвращается <c>null</c>, когда член не читается, и пустой список,
-    /// когда признак не удерживает ни одного входа: «не прочитано» и «ноль» — разные ответы.
-    /// </summary>
-    /// <remarks>
-    /// Элементы берутся как <see cref="IModelObject"/>, а не как <c>ksEntity</c>: измерено пробой H-2
-    /// (шаг H2.2), что <c>BaseObjects</c> отдаёт <c>System.Object[]</c> из <c>System.__ComObject</c>,
-    /// которые приводятся к <c>IModelObject</c> (4 из 4) и НЕ приводятся к <c>ksEntity</c>. Писать
-    /// надо именно те объекты, которые признак отдал: обратный перенос в <c>ksEntity</c> теряет
-    /// контекст, в котором ссылка осмысленна.
-    /// </remarks>
+    /// <summary>The inputs of a live fillet — <c>IFillet.BaseObjects</c> as a list of objects fit to be
+    /// presented back. Returns <c>null</c> when the member does not read and an empty list when the
+    /// feature holds no inputs: "not read" and "zero" are different answers.</summary>
+    /// <remarks>MEASURED by probe H-2 (step H2.2): elements are taken as <see cref="IModelObject"/>, not
+    /// <c>ksEntity</c> — <c>BaseObjects</c> gives a <c>System.Object[]</c> of <c>System.__ComObject</c>
+    /// that cast to <c>IModelObject</c> (4 of 4) and NOT to <c>ksEntity</c>; write exactly the objects
+    /// the feature gave, since a reverse transfer into <c>ksEntity</c> loses the context in which the
+    /// reference is meaningful.</remarks>
     public static IReadOnlyList<IModelObject>? ReadBaseObjects(IModelContainer container, int index)
     {
         try
@@ -1916,17 +1699,12 @@ internal static class Api7Fillet
         }
     }
 
-    /// <summary>
-    /// Входы КАЖДОГО живого скругления — по списку на признак, в порядке коллекции
-    /// <c>IModelContainer.Fillets</c>. Нужны там, где признак надо ОПОЗНАТЬ по составу, а не
-    /// прочитать по индексу: уменьшать набор можно только у того скругления, которое само удерживает
-    /// запрошенные входы.
-    /// </summary>
-    /// <remarks>
-    /// «Не прочиталось» отличимо от «входов нет»: не читающееся скругление даёт в списке
-    /// <c>null</c>, а удерживающее ноль входов — пустой список. Смешать их значило бы принять
-    /// «не прочитано» за «признак пуст» и записать набор не туда.
-    /// </remarks>
+    /// <summary>The inputs of EVERY live fillet — one list per feature, in <c>IModelContainer.Fillets</c>
+    /// order. Needed where a feature must be IDENTIFIED by composition rather than read by index: a set
+    /// can only be reduced on the fillet that itself holds the requested inputs.</summary>
+    /// <remarks>INVARIANT: "did not read" is distinguishable from "no inputs" — an unreadable fillet
+    /// gives <c>null</c> in the list while one holding zero inputs gives an empty list; mixing them would
+    /// take "not read" for "the feature is empty" and write the set in the wrong place.</remarks>
     public static IReadOnlyList<IReadOnlyList<IModelObject>?> ReadBaseObjectsAll(IModelContainer container)
     {
         int count;
@@ -1948,25 +1726,17 @@ internal static class Api7Fillet
         return all;
     }
 
-    /// <summary>
-    /// Устойчивые ссылки входов — <c>IModelObject.Reference</c>. Служат мерой СОСТАВА признака:
-    /// не зависят от порядка выдачи коллекции и перечитываются после мутации.
-    /// </summary>
-    /// <remarks>
-    /// <b>Чего эти ссылки не делают.</b> Здесь стояло утверждение, что они «не связывают вход
-    /// признака с ребром конечного тела: измерено (H2.7), что у входов ссылки 1073742065–2067, а у
-    /// уцелевшего углового ребра тела — 1073742080, это разные контексты». <b>Утверждение
-    /// опровергнуто замером 17.09.2026 и снято.</b> Полосы ссылок СОСЕДНИЕ: в решающем контроле
-    /// <c>FL10x</c> перенесённое ребро тела получило <c>1073742309</c> при входе признака
-    /// <c>1073742308</c>; тип у обоих <c>ksObjectEdge</c>, обе ссылки устойчивы к повторному
-    /// чтению, различаются лишь адресные привязки RCW. Это обычная двойственность API5/API7 —
-    /// <c>ksEntity</c> тела и <c>IModelObject</c> признака суть два разных COM-объекта про одно
-    /// ребро, — а не непроходимая граница. Различие <c>…065-67</c> против <c>…080</c> было
-    /// разностью ЗНАЧЕНИЙ, и вывод о контекстах из него не следовал. Отсюда и снятие запрета в
-    /// <c>UpdateFilletEdgeSetByBodyEdges</c>: предъявлять рёбра тела можно, и <c>FL10x</c> это
-    /// подтверждает. Ссылки по-прежнему употребляются для сравнения состава признака с самим собой,
-    /// но это вопрос удобства, а не запрета.
-    /// </remarks>
+    /// <summary>Stable references of the inputs — <c>IModelObject.Reference</c>. They measure the
+    /// feature's COMPOSITION: independent of collection issuance order and re-read after a
+    /// mutation.</summary>
+    /// <remarks>MEASURED 17.09.2026 (decisive control <c>FL10x</c>): reference bands are ADJACENT — a
+    /// transferred body edge got <c>1073742309</c> while the feature input was <c>1073742308</c>, both of
+    /// type <c>ksObjectEdge</c>, both stable to re-reading and differing only in RCW address bindings.
+    /// This is the ordinary API5/API7 duality (<c>ksEntity</c> of the body and <c>IModelObject</c> of the
+    /// feature are two different COM objects for one edge), not an impassable boundary, so presenting
+    /// body edges is allowed (and <c>FL10x</c> confirms it). The references are still used to compare a
+    /// feature's composition with itself, but that is convenience, not a prohibition.
+    /// History: docs/decisions/adapter-api7.md#fillet</remarks>
     public static IReadOnlyList<int> ReferencesOf(IReadOnlyList<IModelObject> inputs)
     {
         var refs = new List<int>(inputs.Count);
@@ -1978,43 +1748,30 @@ internal static class Api7Fillet
             }
             catch (Exception ex) when (ex is COMException or InvalidCastException)
             {
-                // Элемент без читаемой ссылки пропускается: это ответ, а не падение.
+                // An element without a readable reference is skipped: that is an answer, not a crash.
             }
         }
 
         return refs;
     }
 
-    /// <summary>
-    /// Записать НОВЫЙ набор входов в существующее скругление через <c>IFillet.BaseObjects</c> —
-    /// маршрут, которым правится набор рёбер, потому что через определение API5 он не применяется.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Как найден и чем доказан.</b> Проба H-2 (<c>docs/acceptance/api7/fillet-base-objects.md</c>,
-    /// 14 PASS / 0 FAIL, четыре прогона подряд). Решающий контроль — замена при НЕИЗМЕННОМ размере
-    /// набора (H2.4): состав сместился <c>(50,40) → (50,-40)</c>, а объём остался буквально прежним
-    /// <c>79980.6858347058</c>. Сценарию «пересчитай то, чем ты обязан быть» двигать нечего, поэтому
-    /// объём здесь не различает ничего — различает именно состав. Адресация проверена на модели с
-    /// ДВУМЯ скруглениями одного радиуса (H2.7): правка <c>Fillets[1]</c> не задела свидетель
-    /// <c>Fillets[0]</c>.
-    /// </para>
-    /// <para>
-    /// <b>Почему не <c>Clear()</c> и не поиск рёбер тела.</b> Набор заменяется ЦЕЛИКОМ одной
-    /// присваиванием: предварительное опустошение подменило бы предмет опыта, а рёбра конечного тела
-    /// для углов скругления в топологии отсутствуют (0 из 4 — углы заняты цилиндрическими гранями).
-    /// Предъявляются объекты, прочитанные ИЗ <c>BaseObjects</c> того же признака.
-    /// </para>
-    /// <para>
-    /// <b>Порядок.</b> Запись → <c>IFillet.Update()</c> → перестроение модели вызывающим. Без
-    /// <c>Update()</c> сеттер возвращает успех, а модель остаётся прежней — тот же контракт, что у
-    /// радиуса (F.10, проба E).
-    /// </para>
-    /// <para>
-    /// Возвращается пара (записано, причина), а не исключение: вызывающий обязан отличить отказ
-    /// КОМПАСа от падения адаптера, и «не смогли» не должно выглядеть как «записали».
-    /// </para>
-    /// </remarks>
+    /// <summary>Write a NEW input set into an existing fillet via <c>IFillet.BaseObjects</c> — the route
+    /// that edits the edge set, because the API5 definition route does not apply it.</summary>
+    /// <remarks>MEASURED by probe H-2 (<c>docs/acceptance/api7/fillet-base-objects.md</c>, 14 PASS / 0
+    /// FAIL, four runs in a row). Decisive control — replacement at an UNCHANGED set size (H2.4): the
+    /// composition shifted <c>(50,40) → (50,-40)</c> while the volume stayed literally the same
+    /// <c>79980.6858347058</c> — a "recompute what you already are" scenario has nothing to move, so the
+    /// volume distinguishes nothing here and the composition does; addressing was checked on a model with
+    /// TWO fillets of one radius (H2.7): editing <c>Fillets[1]</c> left the witness <c>Fillets[0]</c>
+    /// alone. INVARIANT: the set is replaced WHOLE by one assignment (a preliminary emptying would
+    /// substitute the subject of the experiment, and the final body's edges for fillet corners are absent
+    /// from the topology, 0 of 4, since the corners are occupied by cylindrical faces); the objects
+    /// presented are read FROM <c>BaseObjects</c> of the same feature. Order: write →
+    /// <c>IFillet.Update()</c> → model rebuild by the caller — without <c>Update()</c> the setter returns
+    /// success while the model stays as before, the same contract as for the radius (F.10, probe E).
+    /// Returns (written, reason), not an exception: the caller must distinguish a KOMPAS refusal from an
+    /// adapter crash, and "could not" must not look like "wrote".
+    /// History: docs/decisions/adapter-api7.md#fillet</remarks>
     public static (bool Written, string? Failure) TryWriteBaseObjects(
         IModelContainer container,
         int index,
@@ -2032,8 +1789,9 @@ internal static class Api7Fillet
                 return (false, "новый набор входов пуст: пустой набор — это удаление признака, а не правка набора");
             }
 
-            // Присваивается массив тех же элементов, что признак отдал: подмена типа (например,
-            // ksEntity) потеряла бы контекст ссылки и дала бы отказ, неотличимый от отказа КОМПАСа.
+            // The array assigned holds the very elements the feature gave: a type substitution (e.g.
+            // ksEntity) would lose the reference context and give a refusal indistinguishable from a
+            // KOMPAS refusal.
             var payload = new object[inputs.Count];
             for (var i = 0; i < inputs.Count; i++)
             {
@@ -2084,23 +1842,17 @@ internal static class Api7Fillet
     }
 }
 
-/// <summary>
-/// Булевы операции над телами (SM-15). Маршрут измерен 18.09.2026 пробой <c>--boolean</c>
-/// (прогон <c>b10ffb70b7d24b6497417bc6639581b1</c>, PASS 13 · FAIL 0).
-/// </summary>
-/// <remarks>
-/// Возвращается пара (признак, причина), а не исключение: вызывающий обязан отличить отказ КОМПАСа
-/// от падения адаптера. Отказ здесь — обычный исход: ядро отвергает несвязные тела, касание по
-/// ребру и касание в точке (измерено, шаг BO.7), и «не смогли построить» не должно выглядеть как
-/// «построили».
-/// </remarks>
+/// <summary>Boolean operations over bodies (SM-15). Route MEASURED 18.09.2026 by probe
+/// <c>--boolean</c> (run <c>b10ffb70b7d24b6497417bc6639581b1</c>, PASS 13 · FAIL 0).</summary>
+/// <remarks>Returns (feature, reason), not an exception: the caller must distinguish a KOMPAS refusal
+/// from an adapter crash. A refusal is an ordinary outcome here — the kernel rejects disjoint bodies,
+/// edge contact and point contact (MEASURED, step BO.7) — and "could not build" must not look like
+/// "built".</remarks>
 internal static class Api7SolidBoolean
 {
-    /// <summary>
-    /// Вид операции для API7. Значения берутся из <c>Kompas6Constants.ksBooleanType</c>, а не из
-    /// каталога: каталог называл объединение нулём и ошибался, а перечисление даёт
-    /// <c>ksIntersect = 1</c>, <c>ksDifference = 2</c>, <c>ksUnion = 3</c>.
-    /// </summary>
+    /// <summary>The operation kind for API7. Values come from <c>Kompas6Constants.ksBooleanType</c>, not
+    /// a catalogue: the catalogue called union zero and was wrong, whereas the enum gives
+    /// <c>ksIntersect = 1</c>, <c>ksDifference = 2</c>, <c>ksUnion = 3</c>.</summary>
     public static ksBooleanType ToKs(BooleanOperation operation) => operation switch
     {
         BooleanOperation.Union => ksBooleanType.ksUnion,
@@ -2133,9 +1885,9 @@ internal static class Api7SolidBoolean
             boolean.ModifyObjects = tools7;
             boolean.BooleanType = ToKs(operation);
 
-            // Копия цели не поддерживается: это отдельный режим SM-15.union.mode_save_base_copy с
-            // приоритетом next, вне обязательного объёма выпуска. Поле выставляется явно, чтобы
-            // поведение не зависело от значения по умолчанию.
+            // Copying the target is not supported: that is a separate mode
+            // SM-15.union.mode_save_base_copy with priority next, outside the mandatory release scope.
+            // The field is set explicitly so behaviour does not depend on a default.
             boolean.SaveCopyBaseObject = false;
             boolean.SaveCopyModifyObjects = keepTools;
 
@@ -2150,7 +1902,7 @@ internal static class Api7SolidBoolean
         }
     }
 
-    /// <summary>Число признаков объединения в коллекции. null — не прочитано (не «ноль»).</summary>
+    /// <summary>The number of boolean features in the collection. null — not read (not "zero").</summary>
     public static int? Count(IModelContainer container)
     {
         try
@@ -2163,46 +1915,23 @@ internal static class Api7SolidBoolean
         }
     }
 
-    /// <summary>
-    /// Правка ВИДА существующей булевой операции: перезапись <c>IBoolean.BooleanType</c> и
-    /// <c>Update()</c>. Опорные тела (<c>BaseObject</c>, <c>ModifyObjects</c>) и политика сохранения
-    /// инструментов НЕ перезаписываются — этот маршрут не измерялся.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Маршрут измерен 18.09.2026</b> пробой <c>--boolean</c>, шаг <c>BO.11</c>, прогон
-    /// <c>a2f5cf0a2ad342c59c36807101a65d51</c> (журнал <c>docs/acceptance/api7/boolean-ops.json</c>).
-    /// Эталон §6.1: <c>A ∪ B</c> даёт 36 000 в габарите <c>(0,0,0)…(60,30,20)</c>, <c>A − B</c> —
-    /// 12 000 в <c>x ≤ 20</c>, <c>A ∩ B</c> — 12 000 в <c>x ∈ [20,40]</c>.
-    /// </para>
-    /// <para>
-    /// <b>Опыты и их исходы.</b> E-A: объединение → разность на ТОМ ЖЕ признаке даёт 36 000 → 12 000
-    /// в габарите <c>x ≤ 20</c>, признаков <c>1 → 1</c>. E-C: разность → пересечение даёт 12 000 →
-    /// 12 000, но габарит меняется на <c>x ∈ [20,40]</c> — это различающий контроль, без него прибор,
-    /// сверяющий только объём, не отличил бы правку от полного бездействия. E-D: пересечение →
-    /// объединение даёт 12 000 → 36 000.
-    /// </para>
-    /// <para>
-    /// <b>E-E, контроль маршрута: <c>Update()</c> в паре обязателен.</b> Запись <c>ksDifference</c> БЕЗ
-    /// вызова <c>Update()</c>, но С пересборкой оставляет геометрию прежней (36 000); та же запись С
-    /// <c>Update()</c> даёт 12 000. То есть применяет именно пара «перезапись члена → <c>Update()</c>»,
-    /// и <c>Update()</c> здесь не украшение.
-    /// </para>
-    /// <para>
-    /// <b>E-B, измеренный смысл значения <c>ksBooleanUnknown</c>.</b> Запись <c>ksBooleanUnknown</c>
-    /// переводит признак в объединение, и член читается обратно как <c>ksUnion</c> — сеттер
-    /// НОРМАЛИЗУЕТ неизвестное значение в объединение. Клиент, записавший <c>0</c>, получит
-    /// объединение, а не отказ. Первая редакция шага объявляла здесь контроль «неиспользуемое
-    /// значение геометрию не меняет», и это ожидание было опровергнуто прогоном
-    /// <c>f70c555f22394ad1a050eaf96c83dd04</c>; ослаблять утверждение под наблюдённый результат
-    /// запрещено, поэтому опыт переименован в измерение, а роль контроля передана E-E.
-    /// </para>
-    /// <para>
-    /// <b>Чего этот маршрут не делает.</b> Смена ОПЕРАНДОВ существующей булевой операции не
-    /// измерялась: <c>BaseObject</c> и <c>ModifyObjects</c> здесь не перезаписываются, хотя и
-    /// доступны на запись. Правка набора инструментов — отдельный опыт, которого пока нет.
-    /// </para>
-    /// </remarks>
+    /// <summary>Edit the KIND of an existing boolean operation: overwrite <c>IBoolean.BooleanType</c>
+    /// and call <c>Update()</c>. The operand bodies (<c>BaseObject</c>, <c>ModifyObjects</c>) and the
+    /// tool-keep policy are NOT overwritten — that route was not measured.</summary>
+    /// <remarks>MEASURED 18.09.2026 by probe <c>--boolean</c>, step BO.11 (run
+    /// <c>a2f5cf0a2ad342c59c36807101a65d51</c>, log <c>docs/acceptance/api7/boolean-ops.json</c>).
+    /// Reference §6.1: <c>A ∪ B</c> gives 36 000 within <c>(0,0,0)…(60,30,20)</c>, <c>A − B</c> —
+    /// 12 000 at <c>x ≤ 20</c>, <c>A ∩ B</c> — 12 000 at <c>x ∈ [20,40]</c>.
+    /// INVARIANT: <c>Update()</c> is mandatory in the pair — writing <c>ksDifference</c> WITHOUT
+    /// <c>Update()</c> but WITH a rebuild leaves the geometry unchanged (36 000), while the same write
+    /// WITH <c>Update()</c> gives 12 000 (control E-E). MEASURED (E-B): writing
+    /// <c>ksBooleanUnknown</c> turns the feature into a union and reads back as <c>ksUnion</c> — the
+    /// setter NORMALISES an unknown value to union, so a client writing <c>0</c> gets a union, not a
+    /// refusal.
+    /// LIMIT: changing the OPERANDS of an existing boolean is not measured — <c>BaseObject</c> and
+    /// <c>ModifyObjects</c> are not overwritten here although writable; editing the tool set is a
+    /// separate experiment not yet done.
+    /// History: docs/decisions/adapter-api7.md#boolean</remarks>
     public static (bool Written, string? Failure) TryWriteOperation(
         IModelContainer container,
         int index,
@@ -2226,7 +1955,7 @@ internal static class Api7SolidBoolean
         }
     }
 
-    /// <summary>Вид операции, прочитанный с существующего признака. null — не прочитан.</summary>
+    /// <summary>Operation kind read back from an existing feature. <c>null</c> — not read.</summary>
     public static BooleanOperation? ReadOperation(IModelContainer container, int index)
     {
         try
@@ -2255,16 +1984,13 @@ internal static class Api7SolidBoolean
         (ComHResult.From(ex) is int code ? $" [{ComHResult.Name(code)}]" : string.Empty);
 }
 
-/// <summary>
-/// Вспомогательные плоскости API7 (SM-16). Маршрут измерен 18.09.2026 пробой <c>--split</c>,
-/// шаг SP.1: <c>Planes3D.Add(o3d_plane3Points)</c> → <c>IPlane3DBy3Points</c> с тремя точками МОДЕЛИ.
-/// </summary>
-/// <remarks>
-/// Нормаль построенной плоскости равна <c>(P2−P1)×(P3−P1)</c> — это измерено на перестановке двух
-/// точек: она инвертирует нормаль, не мешая построению (шаг SP.5). Поэтому три точки строятся из
-/// ортонормированного базиса заданной нормали, а не «примерно вокруг точки»: знак стороны — это
-/// выбор стороны, а не мелочь.
-/// </remarks>
+/// <summary>API7 auxiliary planes (SM-16). Route MEASURED 18.09.2026 by probe <c>--split</c>, step
+/// SP.1: <c>Planes3D.Add(o3d_plane3Points)</c> → <c>IPlane3DBy3Points</c> with three MODEL points.</summary>
+/// <remarks>MEASURED: the normal of the built plane equals <c>(P2−P1)×(P3−P1)</c> — swapping two of the
+/// points inverts the normal without breaking the build (step SP.5). So the three points are built from
+/// an orthonormal basis of the given normal rather than "roughly around the point": the side sign is a
+/// choice of side, not a detail.
+/// History: docs/decisions/adapter-api7.md#solid-plane</remarks>
 internal static class Api7SolidPlane
 {
     public static (IPlane3D? Plane, double[]? UnitNormal, string? Failure) TryCreateByPointNormal(
@@ -2331,7 +2057,7 @@ internal static class Api7SolidPlane
         }
     }
 
-    /// <summary>Перенести в API7 существующую плоскость документа, адресованную ссылкой.</summary>
+    /// <summary>Transfer an existing document plane addressed by reference into API7.</summary>
     public static (IPlane3D? Plane, string? Failure) TryTransfer(object source, Api7Bridge bridge)
     {
         try
@@ -2375,16 +2101,13 @@ internal static class Api7SolidPlane
         (ComHResult.From(ex) is int code ? $" [{ComHResult.Name(code)}]" : string.Empty);
 }
 
-/// <summary>
-/// Разделение тела плоскостью (SM-16). Маршрут измерен 18.09.2026 пробой <c>--split</c>
-/// (прогон <c>124682af57a242728ea765f1aae4816c</c>, PASS 11 · FAIL 0), шаг SP.2.
-/// </summary>
-/// <remarks>
-/// У <c>ISplitSolid</c> содержательный член ОДИН — <c>CutObjects</c>. Отдельного «набора
-/// сохраняемых частей» не существует, и он не нужен: разделение сохраняет все части по построению
-/// (измерено: брусок 24 000 → тела 6 000 и 18 000, сумма 24 000). Именно это измерение сняло
-/// блокировку OQ-A18, а не найденный член.
-/// </remarks>
+/// <summary>Splitting a body by a plane (SM-16). Route MEASURED 18.09.2026 by probe <c>--split</c>
+/// (run <c>124682af57a242728ea765f1aae4816c</c>, PASS 11 · FAIL 0), step SP.2.</summary>
+/// <remarks>INVARIANT: <c>ISplitSolid</c> has ONE substantive member — <c>CutObjects</c>. There is no
+/// separate "set of parts to keep" and none is needed: splitting keeps all parts by construction
+/// (MEASURED: a 24 000 bar → bodies 6 000 and 18 000, sum 24 000). That measurement — not the member
+/// found — cleared the OQ-A18 blocker.
+/// History: docs/decisions/adapter-api7.md#solid-split</remarks>
 internal static class Api7SolidSplit
 {
     public static (ISplitSolid? Feature, string? Failure) TryCreate(
@@ -2428,33 +2151,25 @@ internal static class Api7SolidSplit
         }
     }
 
-    /// <summary>
-    /// Переписать опору СУЩЕСТВУЮЩЕГО признака разделения — маршрут правки (действие <c>edit</c>).
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Маршрут измерен 18.09.2026</b> пробой <c>--split</c>, шаг SP.9 (прогон
-    /// <c>c9cd7660468c44aa97b410e253ee2cb1</c>), и измерен ВМЕСТЕ с отрицательным контролем, потому
-    /// что первый, «очевидный» маршрут оказался неверным:
-    /// </para>
+    /// <summary>Overwrite the support of an EXISTING split feature — the edit route (action <c>edit</c>).</summary>
+    /// <remarks>Route MEASURED 18.09.2026 by probe <c>--split</c>, step SP.9 (run
+    /// <c>c9cd7660468c44aa97b410e253ee2cb1</c>), and measured TOGETHER with a negative control, because
+    /// the first, "obvious" route turned out to be wrong:
     /// <list type="bullet">
-    /// <item><b>E-A — работает:</b> опора читается обратно с существующего признака
-    /// (<c>CutObjects</c> отдаёт один объект), отвечает <c>IPlane3DBy3Points</c>, и перенос её ТРЁХ
-    /// ТОЧЕК ПОСТРОЕНИЯ на +5 по X с <c>Update()</c> каждой и перестроением даёт части 9000 и 15000
-    /// при неизменном числе признаков разделения <c>1 → 1</c>;</item>
-    /// <item><b>E-B — НЕ работает (отрицательный контроль):</b> запись ВТОРОЙ, только что созданной
-    /// плоскости (<c>x = 20</c>) в <c>CutObjects</c> того же признака с <c>Update() = true</c> и
-    /// перестроением результат НЕ меняет — части остались 9000 и 15000. То есть <c>Update() = true</c>
-    /// здесь означает «принято», а не «применено»: признак продолжает резать по СВОЕЙ прежней
-    /// опоре.</item>
+    /// <item><b>E-A — works:</b> the support is read back from an existing feature (<c>CutObjects</c>
+    /// returns one object), answers <c>IPlane3DBy3Points</c>, and moving its THREE BUILD POINTS by +5 in
+    /// X with an <c>Update()</c> each and a rebuild yields parts 9000 and 15000 with the split-feature
+    /// count unchanged at <c>1 → 1</c>;</item>
+    /// <item><b>E-B — does NOT work (negative control):</b> writing a SECOND, just-created plane
+    /// (<c>x = 20</c>) into <c>CutObjects</c> of the same feature with <c>Update() = true</c> and a
+    /// rebuild does NOT change the result — the parts stayed 9000 and 15000. So <c>Update() = true</c>
+    /// here means "accepted", not "applied": the feature keeps cutting by ITS OWN former support.</item>
     /// </list>
-    /// <para>
-    /// Поэтому правка опоры — это перенос точек САМОЙ опоры, а не подстановка другой плоскости.
-    /// Подстановка остаётся рабочей только при СОЗДАНИИ признака (шаг SP.2) и в правке не
-    /// используется. Ссылка на объект плоскости не сохраняется между вызовами (ревизия документа
-    /// инвалидирует ссылки), поэтому опора каждый раз читается с ЖИВОЙ модели.
-    /// </para>
-    /// </remarks>
+    /// <para>Hence editing the support means moving the build points of the support ITSELF, not
+    /// substituting another plane. Substitution works only on CREATE (step SP.2) and is not used on
+    /// edit. The plane object reference is not kept between calls (a document revision invalidates
+    /// references), so the support is re-read from the LIVE model every time.</para>
+    /// History: docs/decisions/adapter-api7.md#solid-split</remarks>
     public static (bool Moved, string? Failure) TryMoveSupport(
         IModelContainer container,
         int index,
@@ -2486,21 +2201,17 @@ internal static class Api7SolidSplit
         (ComHResult.From(ex) is int code ? $" [{ComHResult.Name(code)}]" : string.Empty);
 }
 
-/// <summary>
-/// Опоры признаков SM-16 при ПРАВКЕ: чтение опоры с живого признака и перенос её точек построения.
-/// </summary>
-/// <remarks>
-/// Вынесено отдельно, потому что оба семейства — разделение и отсечение — правятся ОДНИМ маршрутом
-/// (шаг SP.9: E-A для разделения, E-C для отсечения), и второй экземпляр тех же правил разошёлся бы
-/// с первым при первой же правке. Здесь же лежит объяснение, почему маршрут именно такой.
-/// </remarks>
+/// <summary>Supports of SM-16 features on EDIT: reading the support from a live feature and moving its
+/// build points.</summary>
+/// <remarks>Kept separate because both families — split and cut — are edited by ONE route (step SP.9:
+/// E-A for split, E-C for cut), and a second copy of the same rules would drift from the first at the
+/// first edit. The rationale for the route also lives here.
+/// History: docs/decisions/adapter-api7.md#plane-support</remarks>
 internal static class Api7PlaneSupport
 {
-    /// <summary>
-    /// Первый элемент прочитанного набора <c>CutObjects</c>. Интероп отдаёт его то массивом, то одним
-    /// объектом, и предполагать одно из двух значило бы гадать о типе: измерено (шаг SP.9), что при
-    /// одной опоре приходит один объект, а не массив.
-    /// </summary>
+    /// <summary>First element of a read-back <c>CutObjects</c> set. Interop returns it sometimes as an
+    /// array and sometimes as a single object; assuming one of the two would be guessing at the type —
+    /// MEASURED (step SP.9) that with one support it comes back as a single object, not an array.</summary>
     public static object? FirstOf(object? readBack) => readBack switch
     {
         Array array when array.Length > 0 => array.GetValue(0),
@@ -2509,14 +2220,12 @@ internal static class Api7PlaneSupport
         _ => readBack,
     };
 
-    /// <summary>
-    /// Перенести три точки построения опоры в заданные координаты, затем перестроить опору.
-    /// </summary>
-    /// <remarks>
-    /// Точки адресуются ПО ПОРЯДКУ (<c>Point1..Point3</c>), потому что порядок и задаёт нормаль
-    /// (<c>(p2−p1)×(p3−p1)</c>) — измерено шагом SP.5: перестановка двух точек нормаль инвертирует.
-    /// Поэтому перенос идёт в те же три точки, а не «в ближайшие».
-    /// </remarks>
+    /// <summary>Move the three build points of a support to the given coordinates, then rebuild the
+    /// support.</summary>
+    /// <remarks>INVARIANT: the points are addressed IN ORDER (<c>Point1..Point3</c>) because the order is
+    /// what defines the normal (<c>(p2−p1)×(p3−p1)</c>) — MEASURED by step SP.5: swapping two points
+    /// inverts the normal. So the move goes to the same three points, not "to the nearest".
+    /// History: docs/decisions/adapter-api7.md#plane-support</remarks>
     public static (bool Moved, string? Failure) MovePoints(
         IPlane3D support,
         (double[] P1, double[] P2, double[] P3) points)
@@ -2553,60 +2262,49 @@ internal static class Api7PlaneSupport
     }
 }
 
-/// <summary>
-/// Отсечение тела по одну сторону плоскости (SM-16). Маршрут измерен 18.09.2026 пробой
-/// <c>--split</c>, шаг SP.7.
-/// </summary>
-/// <remarks>
-/// Соответствие знака измерено: при нормали <c>(1,0,0)</c> и плоскости <c>x = 10</c>
-/// <c>Direction = true</c> оставляет сторону <b>в направлении нормали</b> (<c>s &gt; 0</c>,
-/// V = 18 000), <c>false</c> — противоположную (<c>s &lt; 0</c>, V = 6 000). Поэтому «оставить
-/// положительную сторону» и «Direction = true» — одно и то же, и это единственное место, где
-/// знак превращается в параметр.
-/// </remarks>
+/// <summary>Cutting a body to one side of a plane (SM-16). Route MEASURED 18.09.2026 by probe
+/// <c>--split</c>, step SP.7.</summary>
+/// <remarks>MEASURED sign mapping: with normal <c>(1,0,0)</c> and plane <c>x = 10</c>,
+/// <c>Direction = true</c> keeps the side <b>along the normal</b> (<c>s &gt; 0</c>, V = 18 000) and
+/// <c>false</c> the opposite one (<c>s &lt; 0</c>, V = 6 000). So "keep the positive side" and
+/// "Direction = true" are the same thing, and this is the only place where the sign becomes a
+/// parameter.
+/// History: docs/decisions/adapter-api7.md#solid-cut</remarks>
 internal static class Api7SolidCut
 {
-    /// <summary>
-    /// Создать признак отсечения по плоскости, направив его на ВЫБРАННОЕ тело.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Область применения — не украшение.</b> Установленная справка v24
-    /// (<c>rezultat_oper_v_zavisimosti_ot_s_o.html</c>) называет умолчание прямо: «По умолчанию
-    /// область применения операции Сечение — Все объекты», и для плоского секущего объекта в неё
-    /// входит и то, что плоскость пересекает, и то, что ЦЕЛИКОМ лежит со стороны отсечения. Поэтому
-    /// вызов без задания области применения снимает материал у посторонних тел, и это поведение
-    /// продукта, а не сбой.
-    /// </para>
-    /// <para>
-    /// <b>Маршрут измерен 19.09.2026</b> пробой <c>--cut-area</c> (прогон
-    /// <c>9e7599ce6e2448bb9ef983326eb16439</c>, 10 PASS · 0 FAIL), отчёт
-    /// <c>docs/acceptance/api7/cut-area.json</c>, шаги CA.1–CA.7:
+    /// <summary>Create a cut feature by a plane, aimed at a CHOSEN body.</summary>
+    /// <remarks><b>The application scope is not decoration.</b> The installed v24 help
+    /// (<c>rezultat_oper_v_zavisimosti_ot_s_o.html</c>) states the default plainly: «По умолчанию
+    /// область применения операции Сечение — Все объекты» (by default the cut operation's scope is All
+    /// objects), and for a flat cutting object that includes both what the plane crosses and what lies
+    /// ENTIRELY on the cut side. So a call without setting the scope removes material from unrelated
+    /// bodies, and that is product behaviour, not a failure.
+    /// <para>Route MEASURED 19.09.2026 by probe <c>--cut-area</c> (run
+    /// <c>9e7599ce6e2448bb9ef983326eb16439</c>, 10 PASS · 0 FAIL), report
+    /// <c>docs/acceptance/api7/cut-area.json</c>, steps CA.1–CA.7:
     /// <list type="bullet">
-    /// <item><b>CA.1</b> — установленная библиотека типов <c>Bin\kAPI7.tlb</c> объявляет у
-    /// <c>ICut</c> ровно четыре члена области применения: <c>ChooseType</c> (dispid 3),
-    /// <c>ChoosePartsType</c> (4), <c>ChooseBodies</c> (5), <c>ChooseParts</c> (6);</item>
-    /// <item><b>CA.2</b> — живой признак отвечает всеми четырьмя; до записи он сообщает
+    /// <item><b>CA.1</b> — the installed type library <c>Bin\kAPI7.tlb</c> declares exactly four scope
+    /// members on <c>ICut</c>: <c>ChooseType</c> (dispid 3), <c>ChoosePartsType</c> (4),
+    /// <c>ChooseBodies</c> (5), <c>ChooseParts</c> (6);</item>
+    /// <item><b>CA.2</b> — a live feature answers all four; before writing it reports
     /// <c>ChooseType=ksChBodiesAndParts</c>, <c>ChoosePartsType=ksChAutomaticDefinition</c>;</item>
-    /// <item><b>CA.3</b> — без задания области применения постороннее тело исчезает (A=12000,
-    /// S исчезло) — клиентский дефект воспроизведён на пробе;</item>
-    /// <item><b>CA.4</b> — принятая форма значения: <c>ChooseType = ksChBodies</c>,
-    /// <c>ChoosePartsType = ksChManualEditing</c>, <c>ChooseBodies = object[] { перенесённое в API7
-    /// тело }</c>. Результат адресный: A=12000, S=1000;</item>
-    /// <item><b>CA.5</b> — отрицательный контроль: та же форма с ДРУГИМ телом даёт ДРУГОЙ результат
-    /// (A=18000 нетронуто, S=500), то есть форма действительно адресует, а не «принимается молча»;</item>
-    /// <item><b>CA.6</b> — правка опоры адресность сохраняет (A=6000, S=1000);</item>
-    /// <item><b>CA.7</b> — после <c>save → close → open</c> адресность сохраняется, и область
-    /// читается с переоткрытого файла как <c>ChooseType=ksChBodies</c> с непустым
+    /// <item><b>CA.3</b> — without setting the scope an unrelated body disappears (A=12000, S gone) —
+    /// the client defect is reproduced on the probe;</item>
+    /// <item><b>CA.4</b> — the accepted value form: <c>ChooseType = ksChBodies</c>,
+    /// <c>ChoosePartsType = ksChManualEditing</c>, <c>ChooseBodies = object[] { body transferred to
+    /// API7 }</c>. The result is targeted: A=12000, S=1000;</item>
+    /// <item><b>CA.5</b> — negative control: the same form with a DIFFERENT body gives a DIFFERENT
+    /// result (A=18000 untouched, S=500), i.e. the form really addresses rather than being "silently
+    /// accepted";</item>
+    /// <item><b>CA.6</b> — editing the support preserves the targeting (A=6000, S=1000);</item>
+    /// <item><b>CA.7</b> — after <c>save → close → open</c> the targeting survives, and the scope reads
+    /// back from the reopened file as <c>ChooseType=ksChBodies</c> with a non-empty
     /// <c>ChooseBodies</c>.</item>
-    /// </list>
-    /// </para>
-    /// <para>
-    /// <b>Проверка ДО мутации.</b> Значения читаются обратно ДО <c>Update()</c>: если продукт не
-    /// принял область применения, признак не создаётся вовсе. Создать признак с незапрошенной
-    /// областью — значит снять материал у посторонних тел, и КОМПАС об этом не сообщит.
-    /// </para>
-    /// </remarks>
+    /// </list></para>
+    /// <para><b>Check BEFORE mutation.</b> The values are read back BEFORE <c>Update()</c>: if the
+    /// product did not accept the scope, the feature is not created at all. Creating a feature with an
+    /// unrequested scope means removing material from unrelated bodies, and KOMPAS will not report it.</para>
+    /// History: docs/decisions/adapter-api7.md#solid-cut</remarks>
     public static (ICut? Feature, string? Failure) TryCreateByPlane(
         IModelContainer container,
         IPlane3D plane,
@@ -2654,10 +2352,8 @@ internal static class Api7SolidCut
         }
     }
 
-    /// <summary>
-    /// Прочитать обратно область применения живого признака — ДО мутации. Отсутствие тела в списке
-    /// и отказ члена — разные ответы, и оба отличаются от «прочитано и совпало».
-    /// </summary>
+    /// <summary>Read back the application scope of a live feature — BEFORE mutation. A missing body in
+    /// the list and a member refusal are different answers, and both differ from "read and matched".</summary>
     public static (string? Type, int? Bodies, string? Failure) ReadBodyChoice(ICut cut)
     {
         try
@@ -2698,45 +2394,36 @@ internal static class Api7SolidCut
         }
     }
 
-    /// <summary>
-    /// Переписать опору и сторону СУЩЕСТВУЮЩЕГО признака отсечения — маршрут правки (действие
-    /// <c>edit</c>).
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Маршрут измерен 18.09.2026</b> пробой <c>--split</c>, шаг SP.9 (прогон
-    /// <c>c9cd7660468c44aa97b410e253ee2cb1</c>), двумя отдельными опытами:
-    /// </para>
+    /// <summary>Overwrite the support and side of an EXISTING cut feature — the edit route (action
+    /// <c>edit</c>).</summary>
+    /// <remarks>Route MEASURED 18.09.2026 by probe <c>--split</c>, step SP.9 (run
+    /// <c>c9cd7660468c44aa97b410e253ee2cb1</c>), in two separate experiments:
     /// <list type="bullet">
-    /// <item><b>E-C — опора:</b> <c>ICut.CutObject</c> читается обратно, отвечает
-    /// <c>IPlane3DBy3Points</c>, и перенос его трёх точек на +5 по X (<c>x = 10 → 15</c>) с
-    /// перестроением меняет остаток с 6000 на 9000;</item>
-    /// <item><b>E-D — сторона:</b> смена ТОЛЬКО <c>Direction</c> на том же существующем признаке
-    /// меняет остаток с 9000 на 15000. То есть сторону править можно, а опору — только переносом
-    /// точек её построения: подстановка другой плоскости не работает (отрицательный контроль E-B на
-    /// разделении, тот же объект и тот же маршрут).</item>
+    /// <item><b>E-C — support:</b> <c>ICut.CutObject</c> is read back, answers
+    /// <c>IPlane3DBy3Points</c>, and moving its three points by +5 in X (<c>x = 10 → 15</c>) with a
+    /// rebuild changes the remainder from 6000 to 9000;</item>
+    /// <item><b>E-D — side:</b> changing ONLY <c>Direction</c> on the same existing feature changes the
+    /// remainder from 9000 to 15000. So the side can be edited, but the support only by moving its
+    /// build points: substituting another plane does not work (negative control E-B on split, same
+    /// object and same route).</item>
     /// </list>
-    /// <para>
-    /// Порядок «опора, затем сторона, затем <c>Update()</c>» взят у измеренных опытов: E-C менял
-    /// опору без записи стороны, E-D — сторону без переноса опоры. Общая правка делает обе записи
-    /// подряд; это и проверяется приёмкой, а не предполагается.
-    /// </para>
-    /// <para>
-    /// <c>BuildingType</c> и <c>CutObject</c> НЕ переписываются: маршрут стороны измерен без них, а
-    /// запись способа построения в существующий признак — отдельный опыт, которого не было. Признак,
-    /// опора которого не отвечает <c>IPlane3DBy3Points</c>, отвергается, а не правится наугад.
-    /// </para>
-    /// <para>
-    /// <b>Область применения при правке — измерено 19.09.2026</b> пробой <c>--cut-area</c>, шаг CA.6
-    /// (прогон <c>9e7599ce6e2448bb9ef983326eb16439</c>): перенос опоры на существующем признаке
-    /// адресность СОХРАНЯЕТ (A=6000, S=1000), а шаг CA.7 — что она переживает и
-    /// <c>save → close → open</c>. Поэтому <paramref name="targetBody"/> здесь НЕ обязателен: без него
-    /// область применения читается обратно ДО <c>Update()</c> и незаадресованный признак отвергается;
-    /// с ним — переназначается тем же маршрутом, что и на создании. Переназначение без чтения обратно
-    /// не делается: продукт принимает <c>ChooseBodies</c> молча и в форме, которая ничего не адресует
-    /// (отрицательный контроль CA.5 отличается от положительного только телом).
-    /// </para>
-    /// </remarks>
+    /// <para>The order "support, then side, then <c>Update()</c>" is taken from the measured
+    /// experiments: E-C changed the support without writing the side, E-D the side without moving the
+    /// support. The combined edit makes both writes in a row; this is what acceptance checks, not
+    /// assumes.</para>
+    /// <para><c>BuildingType</c> and <c>CutObject</c> are NOT overwritten: the side route was measured
+    /// without them, and writing the build type into an existing feature is a separate experiment that
+    /// was not run. A feature whose support does not answer <c>IPlane3DBy3Points</c> is rejected, not
+    /// edited at random.</para>
+    /// <para><b>Scope on edit — MEASURED 19.09.2026</b> by probe <c>--cut-area</c>, step CA.6 (run
+    /// <c>9e7599ce6e2448bb9ef983326eb16439</c>): moving the support on an existing feature PRESERVES
+    /// the targeting (A=6000, S=1000), and step CA.7 shows it also survives <c>save → close → open</c>.
+    /// So <paramref name="targetBody"/> is NOT required here: without it the scope is read back BEFORE
+    /// <c>Update()</c> and an untargeted feature is rejected; with it, the scope is reassigned by the
+    /// same route as on create. Reassignment is never done without reading back: the product accepts
+    /// <c>ChooseBodies</c> silently and in a form that addresses nothing (negative control CA.5 differs
+    /// from the positive only by the body).</para>
+    /// History: docs/decisions/adapter-api7.md#solid-cut</remarks>
     public static (bool Updated, string? Failure) TryMoveSupportAndSide(
         IModelContainer container,
         int index,
@@ -2804,95 +2491,68 @@ internal static class Api7SolidCut
         (ComHResult.From(ex) is int code ? $" [{ComHResult.Name(code)}]" : string.Empty);
 }
 
-/// <summary>
-/// Перенос и поворот тела (SM-17). Маршрут измерен 18.09.2026 пробой <c>--reposition</c>
-/// (прогон <c>929f08886f1348fe921943052a4026b0</c>, PASS 10 · FAIL 0).
-/// </summary>
-/// <remarks>
-/// <para>
-/// Положение пишет <b>только</b> <c>Position.InitByMatrix3D</c> с однородной матрицей 4×4 (OQ-A19).
-/// Маршруты из 12 чисел и <c>SetDisplacementByAxis</c> принимаются с <c>Update() = true</c> и тело
-/// не двигают — поэтому <c>Update() = true</c> здесь НЕ является доказательством, и адаптер обязан
-/// проверять положение после вызова, а не доверять возвращённому значению.
-/// </para>
-/// <para>
-/// Отрицательный контроль встроен: <c>Update() = false</c> без цели и без положения (шаг RP.1) —
-/// это то, что отличает «операция выполнена» от «операция принята молча».
-/// </para>
-/// </remarks>
-/// <summary>
-/// Признак изменения положения: запись и чтение размещения ДОКУМЕНТИРОВАННЫМ ПАРАМЕТРИЧЕСКИМ
-/// маршрутом — ориентация углами Эйлера, перенос смещением.
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Почему матричный маршрут заменён, а не дополнен.</b> Прежняя редакция писала размещение
-/// однородной матрицей 4×4 (<c>ILocalCoordinateSystem.InitByMatrix3D</c>) и на этом же основании
-/// пыталась его читать. Измерено (проба <c>--reposition-params</c>, шаги RP.14–RP.23): документ
-/// хранит не матрицу, а ПАРАМЕТРЫ ориентации, поэтому матричный вид переоткрытие НЕ переживает —
-/// у записанного поворота на 90° вокруг Z после сохранения, закрытия и открытия
-/// <c>GetVector(OX)</c> отдаёт <c>(1,0,0)</c> при габарите <c>(−5,−5,0)…(5,15,5)</c>, который
-/// поворот подтверждает (RP.16), <c>WriteToFile</c> отдаёт единичную матрицу (RP.18), а верное
-/// чтение живёт ровно до следующего открытия (RP.20). Отличить «записано» от «не восстановлено»
-/// НЕЧЕМ: <c>Valid</c> читается <c>True</c> в обоих состояниях, а документированная
-/// последовательность <c>Update()</c> и сборки чтение не восстанавливает (RP.23).
-/// </para>
-/// <para>
-/// <b>Замена измерена целиком, а не выбрана по удобству</b> (проба <c>--reposition-params</c>,
-/// прогон <c>a336120926fc4652a8bf737562568271</c>, шаг RP.25). Документированный параметрический
-/// маршрут переоткрытие ПЕРЕЖИВАЕТ и в ориентации, и в переносе:
+/// <summary>Body reposition (SM-17): writes and reads placement through the DOCUMENTED PARAMETRIC route
+/// — orientation by Euler angles, translation by displacement. Route MEASURED 18.09.2026 by probe
+/// <c>--reposition</c> (run <c>929f08886f1348fe921943052a4026b0</c>, PASS 10 · FAIL 0).</summary>
+/// <remarks>MEASURED: only <c>Position.InitByMatrix3D</c> (homogeneous 4×4 matrix) writes the placement
+/// (OQ-A19); the 12-number routes and <c>SetDisplacementByAxis</c> are accepted with <c>Update() = true</c>
+/// yet do not move the body — so <c>Update() = true</c> is NOT proof here, and the adapter must verify
+/// the placement after the call rather than trust the returned value. Negative control built in:
+/// <c>Update() = false</c> with no target and no placement (step RP.1) — this is what separates
+/// "operation performed" from "operation silently accepted".
+/// <para><b>Why the matrix route was replaced, not supplemented.</b> The former revision wrote the
+/// placement as a homogeneous 4×4 matrix (<c>ILocalCoordinateSystem.InitByMatrix3D</c>) and read it back
+/// on the same basis. MEASURED (probe <c>--reposition-params</c>, steps RP.14–RP.23): the document stores
+/// orientation PARAMETERS, not a matrix, so the matrix view does NOT survive a reopen — for a recorded
+/// 90° rotation about Z, after save/close/open <c>GetVector(OX)</c> returns <c>(1,0,0)</c> while the
+/// bounding box <c>(−5,−5,0)…(5,15,5)</c> confirms the rotation (RP.16), <c>WriteToFile</c> returns the
+/// identity matrix (RP.18), and the correct read survives exactly until the next open (RP.20). There is
+/// NO WAY to tell "written" from "not restored": <c>Valid</c> reads <c>True</c> in both states, and the
+/// documented <c>Update()</c> + build sequence does not restore the read (RP.23).</para>
+/// <para><b>The replacement was measured in full, not chosen for convenience</b> (probe
+/// <c>--reposition-params</c>, run <c>a336120926fc4652a8bf737562568271</c>, step RP.25). The documented
+/// parametric route SURVIVES a reopen in both orientation and translation:
 /// <c>Position.OrientationType = ksEulerCorners</c> + <c>LocalCSParameters →
-/// ILocalCSEulerParam.PrecessionAngle/NutationAngle/RotationAngle</c> — тройка углов читается с
-/// переоткрытого документа ДО сборки и ДО всякой записи (<c>angles_kept_D1 = true</c>,
+/// ILocalCSEulerParam.PrecessionAngle/NutationAngle/RotationAngle</c> — the angle triple is read from
+/// the reopened document BEFORE assembly and BEFORE any write (<c>angles_kept_D1 = true</c>,
 /// <c>angles_kept_D2 = true</c>); <c>Position.ParameterType = ksPDisplace</c> +
-/// <c>Parameters → IPoint3DParamDisplace.DX/DY/DZ</c> — перенос читается там же и различает две
-/// постановки различающей пары (<c>displacement_after_D1 = (7,−11,13)</c>,
-/// <c>displacement_after_D2 = (1,2,3)</c>), тогда как отрицательный контроль D0, у которого
-/// смещение НЕ записывалось, даёт <c>ParameterType = 1 (ksPParamCoord)</c> и <c>(?,?,?)</c> —
-/// то есть чтение различает, а не отдаёт постоянное.
-/// </para>
-/// <para>
-/// <b>Порядок членов обязателен и измерен, а не выбран по вкусу:</b> сначала
-/// <c>OrientationType</c>, потом интерфейс параметров ЭТОГО режима у <c>LocalCSParameters</c>;
-/// затем <c>ParameterType</c>, потом интерфейс ЭТОГО типа у <c>Parameters</c>
+/// <c>Parameters → IPoint3DParamDisplace.DX/DY/DZ</c> — the translation is read there too and
+/// distinguishes the two settings of a discriminating pair (<c>displacement_after_D1 = (7,−11,13)</c>,
+/// <c>displacement_after_D2 = (1,2,3)</c>), whereas negative control D0, whose displacement was NOT
+/// written, gives <c>ParameterType = 1 (ksPParamCoord)</c> and <c>(?,?,?)</c> — i.e. the read
+/// discriminates rather than returning a constant.</para>
+/// <para><b>The member order is mandatory and measured, not chosen by taste:</b> first
+/// <c>OrientationType</c>, then the parameter interface of THAT mode on <c>LocalCSParameters</c>; then
+/// <c>ParameterType</c>, then the interface of THAT type on <c>Parameters</c>
 /// (<c>ilocalcoordinatesystem_localcsparameters.html</c>, <c>ilocalcoordinatesystem_parametertype.html</c>).
-/// Обратный порядок даёт объект ЧУЖОГО режима, и запись в него молча не применяется.
-/// </para>
-/// <para>
-/// <b>Единицы — ГРАДУСЫ</b> (измерено: угол 30 дал поворот на 30°, <c>angle_deg_for_30 =
-/// 29.99999999999998</c>), порядок спряжения тройки — <c>PNR</c> (измерен по совпадению со всеми
-/// шестью произведениями; у остальных пяти расхождение 1). Разложение и сборка тройки живут в
-/// <see cref="EulerOrientation"/> — единственном месте, где записан этот порядок.
-/// </para>
-/// <para>
-/// <b>Успешный <c>Update()</c> доказательством не является</b> (шаг RP.2: три маршрута из четырёх
-/// вернули <c>true</c> и тело не двинули), поэтому и запись, и чтение обязаны подтверждаться
-/// отдельно: геометрией — в вызывающем коде, параметрами — <see cref="ReadPlacement"/>.
-/// </para>
-/// </remarks>
+/// The reverse order yields an object of a FOREIGN mode, and writing to it is silently ignored.</para>
+/// <para><b>Units are DEGREES</b> (MEASURED: an angle of 30 produced a 30° rotation, <c>angle_deg_for_30
+/// = 29.99999999999998</c>); the triple conjugation order is <c>PNR</c> (measured by matching against
+/// all six products; the other five differ by 1). Decomposition and assembly of the triple live in
+/// <see cref="EulerOrientation"/> — the only place where this order is recorded.</para>
+/// <para><b>A successful <c>Update()</c> is not proof</b> (step RP.2: three routes out of four returned
+/// <c>true</c> and did not move the body), so both write and read must be confirmed separately:
+/// geometry by the caller, parameters by <see cref="ReadPlacement"/>.</para>
+/// History: docs/decisions/adapter-api7.md#reposition</remarks>
 internal static class Api7SolidReposition
 {
-    /// <summary>
-    /// Параметрическое представление размещения, прочитанное из документа КАК ЕСТЬ: без подстановок,
-    /// без вывода из матрицы и без значений по умолчанию.
-    /// </summary>
-    /// <param name="OrientationType">Режим ориентации, прочитанный из документа (не предположенный).</param>
-    /// <param name="ParameterType">Тип параметров точки, прочитанный из документа.</param>
-    /// <param name="AnglesDeg">Тройка <c>(прецессия, нутация, вращение)</c> либо <c>null</c>, если интерфейс режима не подтверждён.</param>
-    /// <param name="DisplacementMm">Смещение <c>(DX, DY, DZ)</c> либо <c>null</c>, если параметры точки не подтверждают интерфейс смещения.</param>
+    /// <summary>Parametric view of the placement, read from the document AS IS: no substitutions, no
+    /// inference from a matrix, no default values.</summary>
+    /// <param name="OrientationType">Orientation mode read from the document (not assumed).</param>
+    /// <param name="ParameterType">Point parameter type read from the document.</param>
+    /// <param name="AnglesDeg">Triple <c>(precession, nutation, rotation)</c> or <c>null</c> if the mode interface is not confirmed.</param>
+    /// <param name="DisplacementMm">Displacement <c>(DX, DY, DZ)</c> or <c>null</c> if the point parameters do not confirm the displacement interface.</param>
     internal sealed record PlacementReading(
         int OrientationType,
         int ParameterType,
         double[]? AnglesDeg,
         double[]? DisplacementMm)
     {
-        /// <summary>
-        /// Признак записан документированным режимом углов Эйлера. Ложь означает, что размещение
-        /// писалось ЧУЖИМ маршрутом (матрицей) и параметрического представления у него нет.
-        /// </summary>
+        /// <summary>The feature was written in the documented Euler-angle mode. False means the
+        /// placement was written by a FOREIGN route (a matrix) and has no parametric view.</summary>
         public bool IsEuler => OrientationType == (int)ksOrientationTypeEnum.ksEulerCorners;
 
-        /// <summary>Перенос записан документированным смещением, а не координатами точки.</summary>
+        /// <summary>The translation was written as a documented displacement, not as point coordinates.</summary>
         public bool HasDisplacement => ParameterType == (int)ksPoint3DTypeEnum.ksPDisplace;
     }
 
@@ -2950,11 +2610,9 @@ internal static class Api7SolidReposition
         }
     }
 
-    /// <summary>
-    /// Записать положение в СУЩЕСТВУЮЩИЙ признак — маршрут правки. Измерено (шаг RP.6): повторная
-    /// запись того же вектора оставляет положение прежним, а возврат вектора в ноль возвращает тело
-    /// домой, то есть параметр применяется к ИСХОДНЫМ входам, а не к текущему положению.
-    /// </summary>
+    /// <summary>Write the placement into an EXISTING feature — the edit route. MEASURED (step RP.6):
+    /// re-writing the same vector leaves the placement unchanged, and returning the vector to zero brings
+    /// the body home — i.e. the parameter applies to the ORIGINAL inputs, not to the current placement.</summary>
     public static (bool Written, string? Failure) TryWrite(
         IModelContainer container,
         int index,
@@ -2982,25 +2640,18 @@ internal static class Api7SolidReposition
         }
     }
 
-    /// <summary>
-    /// Записать размещение параметрическим маршрутом: ориентацию — тройкой углов Эйлера, перенос —
-    /// документированным смещением. <c>null</c> — записано; иначе причина отказа.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Матрица раскладывается, а не подменяется: поворот берётся из <c>matrix[0…10]</c> через
-    /// <see cref="EulerOrientation.AnglesFromRotation"/>, перенос — из <c>matrix[12…14]</c>, то есть
-    /// ровно оттуда, куда его кладут <see cref="RepositionMatrix.Translate"/> и
-    /// <see cref="RepositionMatrix.RotateAboutAxis"/> (<c>t = c − R·c</c>). Второй раскладки матрицы
-    /// здесь не заводится намеренно.
-    /// </para>
-    /// <para>
-    /// <b>Перенос пишется ВСЕГДА, даже нулевой.</b> У поворота вокруг оси через начало координат
-    /// <c>t = 0</c>, и пропуск записи оставил бы у признака ЧУЖОЙ тип параметров точки
-    /// (<c>ksPParamCoord</c>), то есть прочитанное значение зависело бы от того, писал ли кто-то
-    /// перенос, — а это уже не чтение модели, а чтение истории сеанса.
-    /// </para>
-    /// </remarks>
+    /// <summary>Write the placement through the parametric route: orientation as an Euler-angle triple,
+    /// translation as a documented displacement. <c>null</c> — written; otherwise the reason for refusal.</summary>
+    /// <remarks>The matrix is decomposed, not substituted: the rotation is taken from <c>matrix[0…10]</c>
+    /// via <see cref="EulerOrientation.AnglesFromRotation"/> and the translation from
+    /// <c>matrix[12…14]</c>, exactly where <see cref="RepositionMatrix.Translate"/> and
+    /// <see cref="RepositionMatrix.RotateAboutAxis"/> put it (<c>t = c − R·c</c>). A second matrix
+    /// decomposition is deliberately not introduced here.
+    /// <para><b>The translation is ALWAYS written, even a zero one.</b> For a rotation about an axis
+    /// through the origin <c>t = 0</c>, and skipping the write would leave the feature with a FOREIGN
+    /// point parameter type (<c>ksPParamCoord</c>), so the read value would depend on whether anyone had
+    /// written a translation — that is reading session history, not reading the model.</para>
+    /// History: docs/decisions/adapter-api7.md#reposition</remarks>
     private static string? WritePlacement(ILocalCoordinateSystem position, double[] matrix16)
     {
         position.OrientationType = ksOrientationTypeEnum.ksEulerCorners;
@@ -3028,24 +2679,18 @@ internal static class Api7SolidReposition
         return null;
     }
 
-    /// <summary>
-    /// Прочитать размещение из признака ПАРАМЕТРИЧЕСКИМ маршрутом — как есть, без записи.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Ничего не записывается перед чтением, и это требование, а не стиль.</b> Измерено (RP.20):
-    /// повторная запись возвращает верное чтение матричного вида на один шаг, поэтому запись перед
-    /// чтением маскирует дефект. Здесь не вызывается ни один сеттер: только <c>OrientationType</c>,
-    /// <c>LocalCSParameters</c>, <c>ParameterType</c> и <c>Parameters</c> на чтение.
-    /// </para>
-    /// <para>
-    /// <b>Интерфейсы берутся БЕЗ приведения режима.</b> <c>LocalCSParameters</c> отдаёт параметры
-    /// ТЕКУЩЕГО режима, и на переоткрытом документе режим уже прочитан из файла: у признака,
-    /// записанного продуктом, это <c>ILocalCSEulerParam</c>, у признака, записанного матрицей, —
-    /// интерфейс ДРУГОГО режима. Подставлять режим присваиванием здесь значило бы создавать
-    /// параметрическое представление там, где его нет, и выдавать его за прочитанное.
-    /// </para>
-    /// </remarks>
+    /// <summary>Read the placement from a feature through the PARAMETRIC route — as is, without
+    /// writing.</summary>
+    /// <remarks><b>Nothing is written before the read, and that is a requirement, not a style choice.</b>
+    /// MEASURED (RP.20): a repeated write restores a correct read of the matrix view for one step, so
+    /// writing before reading would mask the defect. No setter is called here: only <c>OrientationType</c>,
+    /// <c>LocalCSParameters</c>, <c>ParameterType</c> and <c>Parameters</c>, all for reading.
+    /// <para><b>The interfaces are taken WITHOUT forcing the mode.</b> <c>LocalCSParameters</c> returns
+    /// the parameters of the CURRENT mode, and on a reopened document the mode is already read from the
+    /// file: for a feature written by the product it is <c>ILocalCSEulerParam</c>, for a feature written
+    /// by a matrix it is the interface of a DIFFERENT mode. Forcing the mode by assignment here would
+    /// mean creating a parametric view where there is none and passing it off as read.</para>
+    /// History: docs/decisions/adapter-api7.md#reposition</remarks>
     public static (PlacementReading? Reading, string? Failure) ReadPlacement(
         IModelContainer container,
         int index)
@@ -3065,7 +2710,7 @@ internal static class Api7SolidReposition
         }
     }
 
-    /// <summary>То же для уже полученного признака — маршрут создания читает его до сборки.</summary>
+    /// <summary>Same for an already obtained feature — the create route reads it before the build.</summary>
     public static (PlacementReading? Reading, string? Failure) ReadPlacement(IBodyReposition reposition)
     {
         try
@@ -3094,19 +2739,16 @@ internal static class Api7SolidReposition
         (ComHResult.From(ex) is int code ? $" [{ComHResult.Name(code)}]" : string.Empty);
 }
 
-/// <summary>
-/// Чтение элемента по сечениям из коллекции API7 — того самого маршрута, которым признак и создан.
-/// Ни одна величина не берётся из ответа создания: коллекция читается заново.
-/// </summary>
-/// <remarks>
-/// Измерено 20.09.2026 (проба <c>--b5</c>, шаг B5.12): <c>IModelContainer.Lofts</c> отвечает
-/// <c>KompasAPI7.LoftsClass</c>, <c>Count</c> = 1 после создания одного признака, элемент по индексу
-/// отдаёт <c>KompasAPI7.LoftClass</c>, с которого читаются <c>Sketchs</c> (2 элемента),
-/// <c>Closed</c> (False), <c>CouplingsCount</c> (0) и <c>BuildingType(true)</c> (0 = <c>ksLoftAuto</c>).
-/// </remarks>
+/// <summary>Reading a loft from the API7 collection — the very route the feature was created by. No
+/// value is taken from the create response: the collection is read afresh.</summary>
+/// <remarks>MEASURED 20.09.2026 (probe <c>--b5</c>, step B5.12): <c>IModelContainer.Lofts</c> answers
+/// <c>KompasAPI7.LoftsClass</c>, <c>Count</c> = 1 after creating one feature, the element by index
+/// returns <c>KompasAPI7.LoftClass</c>, from which are read <c>Sketchs</c> (2 elements), <c>Closed</c>
+/// (False), <c>CouplingsCount</c> (0) and <c>BuildingType(true)</c> (0 = <c>ksLoftAuto</c>).
+/// History: docs/decisions/adapter-api7.md#loft</remarks>
 internal static class Api7Loft
 {
-    /// <summary>Число элементов по сечениям. <c>null</c> — «не прочитано», а не ноль.</summary>
+    /// <summary>Number of lofts. <c>null</c> — "not read", not zero.</summary>
     public static int? Count(IModelContainer container)
     {
         try
@@ -3119,7 +2761,7 @@ internal static class Api7Loft
         }
     }
 
-    /// <summary>Элемент по индексу. <c>null</c> — «не прочитано», а не «параметров нет».</summary>
+    /// <summary>Element by index. <c>null</c> — "not read", not "no parameters".</summary>
     public static ILoft? Read(IModelContainer container, int index)
     {
         try
@@ -3132,7 +2774,7 @@ internal static class Api7Loft
         }
     }
 
-    /// <summary>Число сечений в признаке. <c>null</c> — «не прочитано».</summary>
+    /// <summary>Number of sections in the feature. <c>null</c> — "not read".</summary>
     public static int? SectionCount(ILoft loft)
     {
         try
@@ -3145,7 +2787,7 @@ internal static class Api7Loft
         }
     }
 
-    /// <summary>Цепочки соответствия сечений — <c>CouplingsCount</c>. <c>null</c> — «не прочитано».</summary>
+    /// <summary>Section correspondence chains — <c>CouplingsCount</c>. <c>null</c> — "not read".</summary>
     public static int? CouplingsCount(ILoft loft)
     {
         try
@@ -3158,7 +2800,7 @@ internal static class Api7Loft
         }
     }
 
-    /// <summary>Замкнута ли траектория соединения — <c>ILoft.Closed</c>. <c>null</c> — «не прочитано».</summary>
+    /// <summary>Whether the junction trajectory is closed — <c>ILoft.Closed</c>. <c>null</c> — "not read".</summary>
     public static bool? Closed(ILoft loft)
     {
         try
@@ -3171,13 +2813,10 @@ internal static class Api7Loft
         }
     }
 
-    /// <summary>
-    /// Способ построения у крайнего сечения — <c>ILoft.BuildingType(BeginSection)</c>. Свойство
-    /// С ИНДЕКСОМ: в C#-поверхности interop индекс объявлен <c>bool</c>, тогда как отражение по
-    /// <c>get_BuildingType</c> находит <c>short</c> — две разные половины одного члена, и обе
-    /// измерены (B5.9, B5.11). Какой индекс какому концу соответствует, измеряется, а не выводится
-    /// из имени.
-    /// </summary>
+    /// <summary>Build type at the extreme section — <c>ILoft.BuildingType(BeginSection)</c>. An INDEXED
+    /// property: in the C# interop surface the index is declared <c>bool</c>, whereas reflection over
+    /// <c>get_BuildingType</c> finds <c>short</c> — two different halves of one member, both MEASURED
+    /// (B5.9, B5.11). Which index maps to which end is measured, not inferred from the name.</summary>
     public static int? BuildingType(ILoft loft, bool beginSection)
     {
         try
@@ -3191,20 +2830,17 @@ internal static class Api7Loft
     }
 }
 
-/// <summary>
-/// Чтение оболочки из коллекции API7 — вторая половина той же постановки, что и чтение с
-/// определения API5. Нужна затем, чтобы «прочитано» подтверждалось двумя независимыми маршрутами.
-/// </summary>
-/// <remarks>
-/// Измерено 20.09.2026 (шаг B5.12): <c>IModelContainer.Shells</c> отвечает
-/// <c>KompasAPI7.ShellsClass</c>, <c>Count</c> = 1, элемент отдаёт <c>IShell</c> с
-/// <c>Thickness</c> = 2, <c>ThinType</c> = <c>dt_reverse</c> (это «внутрь», подтверждено объёмом
-/// 21632) и <c>DeletedFaces</c> = 1. Те же три величины, прочитанные с API5-определения:
+/// <summary>Reading a shell from the API7 collection — the second half of the same setup as reading
+/// from the API5 definition. Needed so that "read" is confirmed by two independent routes.</summary>
+/// <remarks>MEASURED 20.09.2026 (step B5.12): <c>IModelContainer.Shells</c> answers
+/// <c>KompasAPI7.ShellsClass</c>, <c>Count</c> = 1, the element returns <c>IShell</c> with
+/// <c>Thickness</c> = 2, <c>ThinType</c> = <c>dt_reverse</c> (this is "inward", confirmed by volume
+/// 21632) and <c>DeletedFaces</c> = 1. The same three values read from the API5 definition:
 /// <c>thickness</c> = 2, <c>thinType</c> = true, <c>FaceArray</c> = 1.
-/// </remarks>
+/// History: docs/decisions/adapter-api7.md#shell</remarks>
 internal static class Api7Shell
 {
-    /// <summary>Число оболочек. <c>null</c> — «не прочитано».</summary>
+    /// <summary>Number of shells. <c>null</c> — "not read".</summary>
     public static int? Count(IModelContainer container)
     {
         try
@@ -3217,7 +2853,7 @@ internal static class Api7Shell
         }
     }
 
-    /// <summary>Оболочка по индексу. <c>null</c> — «не прочитано».</summary>
+    /// <summary>Shell by index. <c>null</c> — "not read".</summary>
     public static IShell? Read(IModelContainer container, int index)
     {
         try
@@ -3230,9 +2866,7 @@ internal static class Api7Shell
         }
     }
 
-    /// <summary>
-    /// Толщина стенки. <c>null</c> — «не прочитано».
-    /// </summary>
+    /// <summary>Wall thickness. <c>null</c> — "not read".</summary>
     public static double? Thickness(IShell shell)
     {
         try
@@ -3245,11 +2879,9 @@ internal static class Api7Shell
         }
     }
 
-    /// <summary>
-    /// Направление толщины. В COM это <c>c_long</c>, в interop объявлено
-    /// <c>ksDirectionTypeEnum</c> — типизация обёртки, а не факт о продукте. Значение отдаётся
-    /// ЧИСЛОМ, чтобы не зависеть от имени перечисления.
-    /// </summary>
+    /// <summary>Thickness direction. In COM this is <c>c_long</c>; in interop it is declared
+    /// <c>ksDirectionTypeEnum</c> — wrapper typing, not a fact about the product. The value is returned
+    /// as a NUMBER so as not to depend on the enum name.</summary>
     public static int? ThinType(IShell shell)
     {
         try
@@ -3262,7 +2894,7 @@ internal static class Api7Shell
         }
     }
 
-    /// <summary>Число снятых граней — <c>DeletedFaces</c>. <c>null</c> — «не прочитано».</summary>
+    /// <summary>Number of removed faces — <c>DeletedFaces</c>. <c>null</c> — "not read".</summary>
     public static int? DeletedFaceCount(IShell shell)
     {
         try
@@ -3276,20 +2908,17 @@ internal static class Api7Shell
     }
 }
 
-/// <summary>
-/// Чтение кинематической операции из коллекции API7. Нужно ради ОДНОГО члена, которого в API5 нет
-/// вовсе: <c>IEvolution.OperationResult</c> — документированного ответа о виде операции
-/// (<c>ksOperationNewBody</c> и т. д.).
-/// </summary>
-/// <remarks>
-/// Измерено 20.09.2026 (проба <c>--b5</c>, шаг B5.12): <c>IModelContainer.Evolutions</c> отвечает
-/// <c>KompasAPI7.EvolutionsClass</c>, <c>Count</c> = 1 после создания одного признака, а
-/// <c>OperationResult</c> прочитан значением <b>1</b> (<c>ksOperationNewBody</c>) — то есть новое
-/// тело, как и объявлено обязанной строкой <c>SM-04.base.single_profile_flat_path</c>.
-/// </remarks>
+/// <summary>Reading a kinematic operation from the API7 collection. Needed for ONE member that API5
+/// lacks entirely: <c>IEvolution.OperationResult</c> — a documented answer about the operation kind
+/// (<c>ksOperationNewBody</c> etc.).</summary>
+/// <remarks>MEASURED 20.09.2026 (probe <c>--b5</c>, step B5.12): <c>IModelContainer.Evolutions</c>
+/// answers <c>KompasAPI7.EvolutionsClass</c>, <c>Count</c> = 1 after creating one feature, and
+/// <c>OperationResult</c> was read as <b>1</b> (<c>ksOperationNewBody</c>) — i.e. a new body, exactly as
+/// declared by the mandatory line <c>SM-04.base.single_profile_flat_path</c>.
+/// History: docs/decisions/adapter-api7.md#evolution</remarks>
 internal static class Api7Evolution
 {
-    /// <summary>Число кинематических операций. <c>null</c> — «не прочитано», а не ноль.</summary>
+    /// <summary>Number of kinematic operations. <c>null</c> — "not read", not zero.</summary>
     public static int? Count(IModelContainer container)
     {
         try
@@ -3302,7 +2931,7 @@ internal static class Api7Evolution
         }
     }
 
-    /// <summary>Элемент по индексу. <c>null</c> — «не прочитано».</summary>
+    /// <summary>Element by index. <c>null</c> — "not read".</summary>
     public static IEvolution? Read(IModelContainer container, int index)
     {
         try
@@ -3315,10 +2944,8 @@ internal static class Api7Evolution
         }
     }
 
-    /// <summary>
-    /// <c>IEvolution.OperationResult</c>. <c>null</c> — «не прочитано», а не ноль: ноль здесь значил
-    /// бы конкретный вид операции, которого никто не измерял.
-    /// </summary>
+    /// <summary><c>IEvolution.OperationResult</c>. <c>null</c> — "not read", not zero: zero here would
+    /// mean a specific operation kind that nobody has measured.</summary>
     public static int? OperationResult(IModelContainer container, int index)
     {
         try

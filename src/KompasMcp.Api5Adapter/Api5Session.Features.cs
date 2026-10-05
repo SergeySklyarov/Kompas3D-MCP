@@ -30,28 +30,28 @@ public partial class Api5Session
     {
         var (document, entity) = RequireFeatureEntity(command.FeatureRef);
         var definition = entity.GetDefinition();
-        // Семейство отверстия опознаётся по ТИПУ СУЩНОСТИ, а не по определению: в вендорской
-        // обёртке ksHoleDefinition не существует вовсе (измерено 16.09.2026 — среди 67 объявленных
-        // определений есть ksChamferDefinition и ksFilletDefinition, отверстия нет), поэтому
-        // параметры режима живут только в API7 и читаются оттуда. Тип — 583 (o3d_Hole3D), а не 52:
-        // 52 (o3d_holeOperation) это номер, под которым признак СОЗДАЁТСЯ через NewEntity, и в
-        // дереве он не появляется (измерено пробой N.1 от 17.09.2026, см. FindHoleEntity).
+        // The hole family is recognised by the ENTITY TYPE, not by the definition: the vendor wrapper
+        // has no ksHoleDefinition at all (MEASURED 16.09.2026 — of 67 declared definitions there are
+        // ksChamferDefinition and ksFilletDefinition, but no hole), so the mode parameters live only
+        // in API7 and are read from there. The type is 583 (o3d_Hole3D), not 52: 52 (o3d_holeOperation)
+        // is the number the feature is CREATED under via NewEntity and never appears in the tree
+        // (MEASURED by probe N.1 of 17.09.2026, see FindHoleEntity).
         var isHole = entity.type == KompasObjectTypes.Hole3D;
-        // Вращение опознаётся так же, как его находит FindRotatedEntity, — по НОМЕРУ ПРИЗНАКА В
-        // ДЕРЕВЕ (27/28/29), а не по ответу на QI(IRotated): сущность из дерева приходит сырым
-        // __ComObject и на QI отвечает отказом (измерено при приёмке SM-03 18.09.2026).
+        // Rotation is recognised the same way FindRotatedEntity finds it — by the FEATURE NUMBER IN THE
+        // TREE (27/28/29), not by the QI(IRotated) answer: a tree entity arrives as a raw __ComObject
+        // and refuses QI (MEASURED at the SM-03 acceptance 18.09.2026).
         var isRotated = IsRotatedEntity(entity);
-        // Признаки B3 опознаются по НОМЕРУ В ДЕРЕВЕ (69 / 633 / 50 / 79) по той же причине, что и
-        // вращение: определения API5 у них нет вовсе, GetDefinition() возвращает null, а объект API7
-        // признаком API5 не является, поэтому ни определение, ни QI здесь не годятся. Номера измерены
-        // 18.09.2026 прибором scratch/b3-measure-feature-types.py.
+        // B3 features are recognised by the TREE NUMBER (69 / 633 / 50 / 79) for the same reason as
+        // rotation: they have no API5 definition at all, GetDefinition() returns null, and the API7
+        // object is not an API5 feature, so neither the definition nor QI will do. MEASURED 18.09.2026
+        // by the instrument scratch/b3-measure-feature-types.py.
         var solidFamily = SolidFamilyOf(entity.type);
-        // B5: три семейства очереди B5 опознаются ПО ИНТЕРФЕЙСУ ОПРЕДЕЛЕНИЯ, а не по номеру типа.
-        // Измерено 20.09.2026 (проба --b5, шаг B5.12): признак, созданный NewEntity(45)
-        // (o3d_baseEvolution), виден в дереве под номером 46 (o3d_bossEvolution), а его определение
-        // отвечает ksBossEvolutionDefinition — НЕ ksBaseEvolutionDefinition. Опознание по номеру из
-        // ответа создания не нашло бы его никогда: тот же дефект уже измерен у отверстия (52 → 583) и
-        // у вращения (27 → 584). Поэтому принимаются оба интерфейса каждого семейства.
+        // B5: the three B5 families are recognised BY THE DEFINITION INTERFACE, not by the type number.
+        // MEASURED 20.09.2026 (probe --b5, step B5.12): a feature created by NewEntity(45)
+        // (o3d_baseEvolution) shows in the tree as 46 (o3d_bossEvolution) and its definition answers
+        // ksBossEvolutionDefinition — NOT ksBaseEvolutionDefinition. Recognition by the
+        // creation-response number would never find it: the same defect was measured at the hole
+        // (52 → 583) and at rotation (27 → 584). Both interfaces of each family are therefore accepted.
         var isEvolution = IsEvolutionDefinition(definition);
         var isLoft = IsLoftDefinition(definition);
         var isShell = IsShellDefinition(definition);
@@ -76,27 +76,28 @@ public partial class Api5Session
             thin = read.Value.Thin;
         }
 
-        // Фаска читается отдельно: у неё нет сторон и тонкой стенки, зато есть катеты, признак
-        // стороны, а угол — только в API7. Пустое поле здесь означает «не прочитано», а не 0.
+        // A chamfer is read separately: it has no sides or thin wall, but it has the leg lengths and a
+        // side flag, while the angle lives only in API7. An empty field here means "not read", not 0.
         var chamfer = definition is ksChamferDefinition ? ReadChamfer(document, definition) : null;
-        // Скругление — по той же логике: радиус читается из API7, потому что запись в определение
-        // API5 на существующем признаке не применяется (FL04r).
+        // A fillet follows the same logic: the radius is read from API7, because a write to the API5
+        // definition is not applied on an existing feature (FL04r).
         var fillet = definition is ksFilletDefinition ? ReadFillet(document, definition) : null;
-        // Отверстие — целиком из API7: определение API5 его режимных чисел не хранит физически.
+        // A hole comes entirely from API7: the API5 definition does not physically store its mode
+        // numbers.
         var hole = isHole ? ReadHoleFeature(document) : null;
-        // Вращение — тоже из API7, и по той же причине: набор параметров живёт на IRotated, а
-        // определения API5 у него нет вовсе (entity.GetDefinition() возвращает null, измерено при
-        // приёмке SM-03). Индекс признака берётся сопоставлением по составу, а не по углу: угол не
-        // идентификатор, и FindIndexesByAngle остаётся запасным средством.
+        // Rotation also comes from API7, for the same reason: the parameter set lives on IRotated, and
+        // it has no API5 definition at all (entity.GetDefinition() returns null, MEASURED at the SM-03
+        // acceptance). The feature index is taken by matching on composition, not by angle: an angle is
+        // not an identifier, and FindIndexesByAngle remains a fallback.
         var rotated = isRotated ? ReadRotatedFeature(document, entity) : null;
-        // Признаки B3 (boolean/split/cut_by_plane/reposition) — целиком из API7: определения API5 у
-        // них нет, а читаются они с ЖИВОЙ модели по маршрутам, измеренным пробами BO.2–BO.11, SP.10 и
-        // RP.8–RP.12. Часть параметров у семейства изменения положения не читается вовсе, и причина
-        // называется в solid.unreadable_parameters, а не подставляется нулём.
+        // B3 features (boolean/split/cut_by_plane/reposition) come entirely from API7: they have no API5
+        // definition and are read from the LIVE model by routes measured in probes BO.2–BO.11, SP.10 and
+        // RP.8–RP.12. Some reposition-family parameters do not read at all, and the reason is named in
+        // solid.unreadable_parameters rather than substituted with a zero.
         var solid = solidFamily is null ? null : ReadSolidFeature(document, entity, solidFamily);
-        // B5: кинематика, сечения и оболочка читаются ИЗ МОДЕЛИ. Причина неудачи НАЗЫВАЕТСЯ, а не
-        // остаётся пустым полем: «не прочитано» и «ноль» обязаны быть различимы — молчание тоже
-        // утверждение, и пустое поле неотличимо от «забыли заполнить».
+        // B5: sweep, loft and shell are read FROM THE MODEL. A failure reason is NAMED rather than left
+        // as an empty field: "not read" and "zero" must be distinguishable — silence is a claim too, and
+        // an empty field is indistinguishable from "forgot to fill it in".
         string? sweepNote = null;
         string? loftNote = null;
         string? shellNote = null;
@@ -116,8 +117,8 @@ public partial class Api5Session
                     ? rotated is not null
                     : family == HoleFamily
                         ? hole is not null
-                        // «Прочитано» у B5 означает «прочитан содержательный параметр», а не «метод
-                        // вернулся»: DTO непустой уже тогда, когда определение опознано.
+                        // For B5 "read" means "a substantive parameter was read", not "the method
+                        // returned": the DTO is already non-empty once the definition is recognised.
                         : family == EvolutionFamily
                             ? sweep?.ShiftMode is not null && sweep.PathPartCount is not null
                             : family == LoftFamily
@@ -127,9 +128,9 @@ public partial class Api5Session
                                     : sides.Count > 0;
         if (solidFamily is not null)
         {
-            // У семейств B3 «прочитано» означает «прочитан хоть один содержательный параметр»: у
-            // переноса вида операции нет, у булевой операции нет опоры, и требовать общее поле
-            // значило бы объявить исправное чтение неудавшимся.
+            // For B3 families "read" means "at least one substantive parameter was read": a translation
+            // has no operation kind, a boolean has no support, and requiring a common field would declare
+            // a healthy read failed.
             parametersRead = solid is not null
                 && (solid.Operation is not null || solid.Plane is not null || solid.RepositionKind is not null);
         }
@@ -207,8 +208,8 @@ public partial class Api5Session
         }
         else if (family == EvolutionFamily && sweepNote is not null)
         {
-            // Причина называется ИМЕНЕМ, а не пустым полем: OperationResult живёт только в API7, и
-            // его отсутствие — это граница маршрута, а не ноль.
+            // The reason is named, not left as an empty field: OperationResult lives only in API7, and
+            // its absence is a route boundary, not a zero.
             unverified.Add(sweepNote);
         }
         else if (family == LoftFamily && loftNote is not null)
@@ -221,10 +222,10 @@ public partial class Api5Session
         }
         else if (solid?.UnreadableParameters is { Count: > 0 })
         {
-            // Одна строка на всё семейство, а не по строке на поле: имена и ИЗМЕРЕННЫЕ причины уже
-            // лежат в solid.unreadable_parameters, и дублировать их здесь значило бы сделать сводку
-            // нечитаемой. Важно другое — что вызывающий узнаёт о границе чтения из сводки, а не
-            // отсутствием поля.
+            // One line for the whole family, not one per field: the names and MEASURED reasons already
+            // sit in solid.unreadable_parameters, and duplicating them here would make the summary
+            // unreadable. What matters is that the caller learns the read boundary from the summary, not
+            // from a missing field.
             unverified.Add("solid_params_partly_unreadable — часть параметров признака B3 не читается "
                 + "из модели; имена полей и измеренные причины — в solid.unreadable_parameters");
         }
@@ -291,36 +292,34 @@ public partial class Api5Session
         var splitRequested = command.Plane is not null || command.ExpectedPartVolumesMm3 is not null;
         var cutRequested = command.KeepSide is not null;
         var booleanRequested = command.Operation is not null;
-        // Правка массива (очередь B4) выбирается по САМОМУ ПОЛЮ pattern, а не по номеру типа в дереве:
-        // у остальных семейств номер измерен, а для массива — нет, и угадывать его нельзя. См.
-        // Api5Session.PatternEdit.cs.
+        // A pattern edit (queue B4) is chosen by the pattern FIELD itself, not by the tree type number:
+        // for the other families the number is measured, for a pattern it is not, and it must not be
+        // guessed. See Api5Session.PatternEdit.cs.
         var patternRequested = command.Pattern is not null;
 
-        // Правка трёх семейств последней очереди B5 (наряд §11). Семейство выбирается по САМОМУ ПОЛЮ,
-        // а не по номеру типа в дереве: у кинематической операции номер СОЗДАНИЯ и номер ДЕРЕВА
-        // расходятся (45 → 46, измерено шагом B5.12), и адресовать по номеру значило бы править не
-        // тот признак. См. Api5Session.FeatureEdit.B5.cs.
+        // Edit of the three families of the last queue B5 (order §11). The family is chosen by the FIELD
+        // itself, not by the tree type number: for a sweep the CREATION number and the TREE number
+        // diverge (45 → 46, MEASURED in step B5.12), and addressing by number would edit the wrong
+        // feature. See Api5Session.FeatureEdit.B5.cs.
         var sweepRequested = command.ShiftMode is not null;
         var loftRequested = command.SectionRefs is not null;
         var shellRequested = command.ThicknessMm is not null || command.ThinInward is not null
                              || command.FaceRefs is not null;
 
-        // `couplings` — ВТОРОЙ ВХОД СЕМЕЙСТВА «ЭЛЕМЕНТ ПО СЕЧЕНИЯМ», И ОН НЕ ВЫБИРАЕТ СЕМЕЙСТВО.
-        // Различие существенное, поэтому оно названо отдельным признаком, а не подмешано в
-        // loftRequested: цепочки соответствия описывают соответствие точек УЖЕ ЗАДАННОГО набора
-        // сечений, поэтому сами по себе они семейство не выбирают — без section_refs менять нечего
-        // (UpdateLoftFeature отвергает такой вызов по имени), и ветку выбирать по ним значило бы
-        // увести вызов «couplings к выдавливанию» в ветку сечений, где он получил бы неверный текст
-        // отказа. Но в перечнях ЧУЖИХ полей couplings обязан стоять: без этого он был принят и
-        // проглочен. Измерено 20.09.2026 зондом scratch/_couplings_scope_probe.py: вызов
-        // «distance1_mm + couplings» на фаске вернул успех и объём 79840 → 79955 (правка применилась,
-        // цепочки — нет), тогда как соседние shift_mode и section_refs в том же вызове отвергнуты
-        // INVALID_ARGUMENT. Нашёл пропуск unit-тест SolidFeatureClassificationTests.
+        // INVARIANT: `couplings` is a SECOND INPUT of the loft family and does NOT select the family —
+        // the coupling chains describe point correspondence of an ALREADY SET section set, so without
+        // section_refs there is nothing to change (UpdateLoftFeature rejects such a call by name), and
+        // choosing the branch by them would route a "couplings to extrusion" call into the loft branch.
+        // But couplings MUST stand in the foreign-field lists: otherwise it was accepted and swallowed.
+        // MEASURED 20.09.2026 by probe scratch/_couplings_scope_probe.py: a "distance1_mm + couplings"
+        // call on a chamfer returned success and volume 79840 → 79955 (the edit applied, the chains did
+        // not), while sibling shift_mode and section_refs in the same call were rejected
+        // INVALID_ARGUMENT. Found by unit test SolidFeatureClassificationTests.
         var couplingsRequested = command.Couplings is not null;
 
-        // Отверстие (SM-07): поля режима. Признак выбирается НЕ этими полями, а типом сущности в
-        // дереве (583) — как и в чтении; признак ниже нужен для проверки «поля отверстия пришли не
-        // на признак отверстия» и для проверки «не указано ни одного параметра».
+        // Hole (SM-07): mode fields. The feature is selected NOT by these fields but by the tree entity
+        // type (583), as in the read; the flag below serves the checks "hole fields arrived on a non-hole
+        // feature" and "no parameter given".
         var holeRequested = command.DiameterMm is not null
                             || command.CounterboreDiameterMm is not null
                             || command.CounterboreDepthMm is not null
@@ -361,23 +360,24 @@ public partial class Api5Session
         var featuresBefore = CountFeatures(document);
         var stateBefore = ReadFeatureState(entity);
 
-        // Массив — девятое правимое семейство B4 (наряд §7: действие edit). Ветка стоит ДО чтения
-        // определения API5: у признака массива определения API5 нет вовсе (объект создан фабрикой
-        // API7), поэтому ниже он попал бы в «этот признак — null» и правка была бы недостижима.
+        // A pattern is the ninth editable family B4 (order §7: action edit). The branch stands BEFORE the
+        // API5 definition read: a pattern feature has no API5 definition at all (the object is created by
+        // the API7 factory), so below it would fall into "this feature is null" and the edit would be
+        // unreachable.
         if (patternRequested)
         {
             return UpdatePattern(document, entity, command, volumeBefore, featuresBefore, stateBefore);
         }
 
-        // Отверстие — десятое правимое семейство (наряд SM07 §3.2, очередь B2). Ветка стоит ЗДЕСЬ, а
-        // не среди ветвей по определению API5: определения у родного отверстия НЕТ ВОВСЕ — типа
-        // ksHoleDefinition в вендорском интеропе не существует среди 67 объявленных определений
-        // (измерено 16.09.2026 и записано в docs/04), и `kompas_get_feature` читает отверстие тем же
-        // путём, минуя определение (definition_interface = null, измерено зондом
-        // scratch/_hole_edit_probe.py). Опознание — по ТИПУ СУЩНОСТИ В ДЕРЕВЕ, ровно как в чтении:
-        // 583 (o3d_Hole3D), а не 52 (o3d_holeOperation, номер ФАБРИКИ создания) — проба N.1
-        // напечатала обе стороны: NewEntity(52).type = 52, а живой IHoles3D[0].ModelObjectType = 583,
-        // и в дереве появилась ровно одна запись под 583. Поиск по 52 не нашёл бы признак никогда.
+        // A hole is the tenth editable family (order SM07 §3.2, queue B2). The branch stands HERE, not
+        // among the branches by API5 definition: a native hole has NO definition at all — the type
+        // ksHoleDefinition does not exist among the 67 declared definitions of the vendor interop
+        // (MEASURED 16.09.2026, recorded in docs/04), and `kompas_get_feature` reads a hole the same way,
+        // bypassing the definition (definition_interface = null, MEASURED by probe
+        // scratch/_hole_edit_probe.py). Recognition is by the ENTITY TYPE IN THE TREE, exactly as in the
+        // read: 583 (o3d_Hole3D), not 52 (o3d_holeOperation, the creation FACTORY number) — probe N.1
+        // printed both sides: NewEntity(52).type = 52, while a live IHoles3D[0].ModelObjectType = 583,
+        // and exactly one tree entry appeared under 583. A search by 52 would never find the feature.
         if (entity.type == KompasObjectTypes.Hole3D)
         {
             return UpdateHole(document, entity, command, volumeBefore, featuresBefore, stateBefore);
@@ -387,8 +387,8 @@ public partial class Api5Session
 
         if (definition is ksChamferDefinition)
         {
-            // Семейство определяет, какие поля вообще имеют смысл: отдать фаске depth_mm и
-            // промолчать о том, что он не применён, — значит соврать про правку.
+            // The family decides which fields make sense at all: giving a chamfer depth_mm and staying
+            // silent that it was not applied would lie about the edit.
             if (command.DepthMm is not null || command.EndCondition is not null || command.SketchRef is not null
                 || sweepRequested || loftRequested || couplingsRequested || shellRequested || holeRequested)
             {
@@ -405,10 +405,9 @@ public partial class Api5Session
             return UpdateChamfer(document, entity, command, volumeBefore, featuresBefore, stateBefore);
         }
 
-        // Скругление — третье правимое семейство. Радиус у ksFilletDefinition объявлен, но запись
-        // в него на существующем признаке НЕ применяется (измерено строкой FL04r), поэтому идёт
-        // маршрут API7; поля других семейств к скруглению не применяются и отвергаются здесь, а не
-        // игнорируются.
+        // A fillet is the third editable family. ksFilletDefinition declares a radius, but a write to it
+        // on an existing feature is NOT applied (MEASURED by row FL04r), so the API7 route is used;
+        // fields of other families do not apply to a fillet and are rejected here rather than ignored.
         if (definition is ksFilletDefinition)
         {
             if (command.DepthMm is not null || command.EndCondition is not null || command.SketchRef is not null
@@ -425,9 +424,9 @@ public partial class Api5Session
                     details: new Dictionary<string, object?> { ["family"] = FilletFamily });
             }
 
-            // Радиус и набор рёбер — разные маршруты (радиус идёт через API7, набор — через
-            // определение API5) и разные предметы правки. Смешивать их в одном вызове нельзя:
-            // «поменял и то, и другое» не отличимо потом от «применилось одно из двух».
+            // Radius and edge set are different routes (radius via API7, set via the API5 definition) and
+            // different edit subjects. They must not be mixed in one call: "changed both" would be
+            // indistinguishable from "one of the two applied".
             if (command.EdgeRefs is not null || command.BaseObjectRefs is not null)
             {
                 return UpdateFilletEdgeSet(document, entity, command, volumeBefore, featuresBefore, stateBefore);
@@ -436,33 +435,33 @@ public partial class Api5Session
             return UpdateFilletRadius(document, entity, command, volumeBefore, featuresBefore, stateBefore);
         }
 
-        // Вращение — четвёртое правимое семейство, и оно опознаётся по НОМЕРУ ПРИЗНАКА В ДЕРЕВЕ
-        // (27/28/29), а не по определению: определения API5 у вращения нет вовсе, GetDefinition()
-        // возвращает null, а QI(IRotated) на сущности из дерева отвечает отказом (измерено 18.09.2026).
-        // Правка вращения — только угол и направление; перепривязка профиля и оси не измерялась, и
-        // поля других семейств отвергаются здесь, а не игнорируются.
+        // Rotation is the fourth editable family, recognised by the FEATURE NUMBER IN THE TREE
+        // (27/28/29), not by definition: rotation has no API5 definition at all, GetDefinition() returns
+        // null, and QI(IRotated) on a tree entity refuses (MEASURED 18.09.2026). A rotation edit changes
+        // only angle and direction; profile and axis retargeting was not measured, and fields of other
+        // families are rejected here rather than ignored.
         if (IsRotatedEntity(entity))
         {
             return UpdateRotated(document, entity, command, volumeBefore, featuresBefore, stateBefore);
         }
 
-        // Изменение положения тела — пятое правимое семейство (наряд B3 §5, §7: действие edit).
-        // Опознаётся по НОМЕРУ ПРИЗНАКА В ДЕРЕВЕ (79), как и вращение: определения API5 у него нет
-        // вовсе (GetDefinition() возвращает null), а объект API7 признаком API5 не является —
-        // поэтому ни определение, ни QI здесь не годятся. Номер 79 измерен 18.09.2026 прибором
-        // scratch/b3-measure-feature-types.py; 569 (o3d_BodyReposition) — сторона СОЗДАНИЯ, в дереве
-        // признак лежит под 79.
+        // Body reposition is the fifth editable family (order B3 §5, §7: action edit). It is recognised
+        // by the FEATURE NUMBER IN THE TREE (79), like rotation: it has no API5 definition at all
+        // (GetDefinition() returns null), and the API7 object is not an API5 feature — so neither the
+        // definition nor QI will do. Number 79 MEASURED 18.09.2026 by the instrument
+        // scratch/b3-measure-feature-types.py; 569 (o3d_BodyReposition) is the CREATION side, the feature
+        // lies under 79 in the tree.
         if (entity.type == KompasObjectTypes.BodyRepositionFeature)
         {
             return UpdateSolidReposition(document, entity, command, volumeBefore, featuresBefore, stateBefore);
         }
 
-        // Разделение и отсечение — шестое и седьмое правимые семейства B3 (наряд §5, §7: действие
-        // edit). Опознаются по НОМЕРУ ПРИЗНАКА В ДЕРЕВЕ (633 и 50) по той же причине, что и
-        // изменение положения: определения API5 у них нет, а объект API7 (ISplitSolid, ICut) признаком
-        // API5 не является. Номера измерены 18.09.2026 прибором scratch/b3-measure-feature-types.py;
-        // 633 — это o3d_SplitSolid, 50 — o3d_cutByPlane, и оба числа читаются с ДЕРЕВА, а не с
-        // фабрики создания (у разделения фабрика и дерево расходятся так же, как у отверстия 52/583).
+        // Split and cut are the sixth and seventh editable B3 families (order §5, §7: action edit). They
+        // are recognised by the FEATURE NUMBER IN THE TREE (633 and 50) for the same reason as
+        // reposition: they have no API5 definition, and the API7 object (ISplitSolid, ICut) is not an API5
+        // feature. Numbers MEASURED 18.09.2026 by the instrument scratch/b3-measure-feature-types.py; 633
+        // is o3d_SplitSolid, 50 is o3d_cutByPlane, and both numbers are read from the TREE, not from the
+        // creation factory (for a split the factory and tree diverge just like the hole 52/583).
         if (entity.type == KompasObjectTypes.SplitSolid)
         {
             return UpdateSolidSplit(document, entity, command, volumeBefore, featuresBefore, stateBefore);
@@ -473,23 +472,23 @@ public partial class Api5Session
             return UpdateSolidCutByPlane(document, entity, command, volumeBefore, featuresBefore, stateBefore);
         }
 
-        // Булева операция — восьмое правимое семейство B3. Опознаётся по номеру 69 (o3d_aggregate) в
-        // дереве, а не по определению API5: маршрут через ksAggregateDefinition измеренно не работает
-        // (у него есть записываемый BooleanType и НЕТ ни одного способа задать тела — §4.10.5,
-        // OQ-A16). Правка вида операции маршрутом API7 измерена 18.09.2026 пробой --boolean, шаг
-        // BO.11: перезапись IBoolean.BooleanType на существующем признаке меняет геометрию, а пара
-        // «запись + Update()» подтверждена контролем E-E.
+        // A boolean is the eighth editable B3 family. It is recognised by number 69 (o3d_aggregate) in
+        // the tree, not by the API5 definition: the route through ksAggregateDefinition measurably does
+        // not work (it has a writable BooleanType and NO way to set bodies — §4.10.5, OQ-A16). The
+        // operation-kind edit by the API7 route was MEASURED 18.09.2026 by probe --boolean, step BO.11:
+        // rewriting IBoolean.BooleanType on an existing feature changes the geometry, and the
+        // "write + Update()" pair was confirmed by control E-E.
         if (entity.type == KompasObjectTypes.BooleanOperation)
         {
             return UpdateSolidBoolean(document, entity, command, volumeBefore, featuresBefore, stateBefore);
         }
 
-        // Три семейства последней обязательной очереди B5 (наряд §11). Ветка стоит ЗДЕСЬ, а не раньше:
-        // выше семейства с определениями API5 уже отвергли чужие поля по имени, и «shift_mode к
-        // фаске» читается вызывающему понятнее, чем «признак не отвечает интерфейсу кинематики».
-        // Опознание — по САМОМУ ПОЛЮ, а не по номеру типа в дереве: у кинематической операции номер
-        // создания и номер дерева расходятся (45 → 46, шаг B5.12), и адресовать по номеру значило бы
-        // править не тот признак. См. Api5Session.FeatureEdit.B5.cs.
+        // The three families of the last mandatory queue B5 (order §11). The branch stands HERE, not
+        // earlier: above, families with API5 definitions have already rejected foreign fields by name,
+        // and "shift_mode to a chamfer" reads clearer to the caller than "the feature does not answer the
+        // sweep interface". Recognition is by the FIELD itself, not by the tree type number: for a sweep
+        // the creation number and the tree number diverge (45 → 46, step B5.12), and addressing by number
+        // would edit the wrong feature. See Api5Session.FeatureEdit.B5.cs.
         if (sweepRequested)
         {
             return UpdateSweepFeature(document, entity, command, volumeBefore, featuresBefore, stateBefore);
@@ -583,8 +582,8 @@ public partial class Api5Session
             }
         }
 
-        // Смена опорного эскиза того же признака. Это правка опоры (docs/05 §4.3), а не пересоздание:
-        // признак остаётся тем же объектом дерева с тем же именем.
+        // Changing the reference sketch of the same feature. This is a support edit (docs/05 §4.3), not a
+        // re-creation: the feature stays the same tree object with the same name.
         ksEntity? newSketch = null;
         string? expectedSketchName = null;
         if (command.SketchRef is not null)
@@ -604,13 +603,13 @@ public partial class Api5Session
                     });
             }
 
-            // Общего интерфейса выдавливания в interop нет: SetSketch объявлен у каждого
-            // конкретного определения, поэтому ветвление обязательное, а не удобство.
-            // Пишем в свежий объект определения (та же дисциплина, что и для чтения — P2.3).
-            // ОТРИЦАТЕЛЬНЫЙ РЕЗУЛЬТАТ, измерен 12.09.2026 (строка L11): SetSketch возвращает true,
-            // но GetSketch() перечитывает ПРЕЖНИЙ эскиз и объём не меняется — то есть смена опоры
-            // этим маршрутом не применяется. Гипотеза про кэшированный RCW не подтвердилась:
-            // запись в свежий объект даёт тот же исход. Режим остаётся заблокированным, а не «готовым».
+            // The extrusion interop has no common interface: SetSketch is declared on each concrete
+            // definition, so the branching is mandatory, not a convenience. Write to a fresh definition
+            // object (the same discipline as for the read — P2.3). NEGATIVE RESULT, MEASURED 12.09.2026
+            // (row L11): SetSketch returns true, but GetSketch() reads back the PREVIOUS sketch and the
+            // volume does not change — the support change is not applied by this route. The cached-RCW
+            // hypothesis was not confirmed: writing to a fresh object gives the same outcome. The mode
+            // stays blocked, not "ready".
             var writeTarget = entity.GetDefinition() ?? definition!;
             var accepted = writeTarget switch
             {
@@ -637,9 +636,10 @@ public partial class Api5Session
         var updated = entity.Update();
         document.Document.RebuildDocument();
 
-        // Отказ обязан случиться ДО повышения ревизии. Измерено строкой L12 прогона 12.09.2026:
-        // когда отказ шёл после BumpRevision, документ получал новую ревизию при неизменной модели,
-        // и все выданные ссылки устарели из-за операции, которая ничего не сделала.
+        // INVARIANT: the refusal must happen BEFORE the revision bump. MEASURED by row L12 of the
+        // 12.09.2026 run: when the refusal came after BumpRevision, the document got a new revision with
+        // an unchanged model, and all issued references went stale because of an operation that did
+        // nothing.
         // Read back through a NEW definition object — the instance held during the write may be a
         // cached view, and "we set it" is not evidence the model stored it.
         var after = ReadExtrusion(entity.GetDefinition() ?? definition!);
@@ -680,8 +680,8 @@ public partial class Api5Session
                 Expected: $"признаков {featuresBefore}, имя «{stateBefore.Name}»"),
         };
 
-        // Перечитывается с НОВОГО объекта определения: тот, чем писали, может быть кэшированным
-        // представлением, а «мы вызвали SetSketch» доказательством того, что модель приняла, не является.
+        // Read back from a NEW definition object: the one written through may be a cached view, and "we
+        // called SetSketch" is not evidence that the model accepted it.
         var sketchConfirmed = true;
         var sketchIdentityByReadBack = true;
         if (command.SketchRef is not null)
@@ -756,9 +756,9 @@ public partial class Api5Session
             && volumeBefore is double vb && volumeAfter is double va
             && Math.Abs(va - vb) <= ProfileArea.Tolerance(vb))
         {
-            // КОМПАС принял SetSketch и не изменил модель. Отдать это как «успех» — значит наврать
-            // вызывающему про факт правки опоры, поэтому маршрут отказывает честно и уже после
-            // перечитывания: признак цел, объём прежний, изменения нет.
+            // KOMPAS accepted SetSketch and did not change the model. Reporting this as "success" would
+            // lie to the caller about the support edit, so the route refuses honestly and after the
+            // read-back: the feature is intact, the volume unchanged, nothing happened.
             throw new KompasContractException(
                 ErrorCodes.CapabilityUnavailable,
                 "Смена опорного эскиза существующего признака не применена: GetSketch() перечитал " +
@@ -808,24 +808,18 @@ public partial class Api5Session
         double? DepthReadBackMm,
         short? EndConditionReadBack,
         VerificationDto Verification,
-        /// <summary>
-        /// Угол фаски, перечитанный из модели после правки (градусы). Отдельным хвостовым
-        /// параметром, чтобы не сдвигать позиционные аргументы выдачивания: поле относится только
-        /// к семейству <c>chamfer</c> и у остальных семейств остаётся null.
-        /// </summary>
+        /// <summary>Chamfer angle read back from the model after the edit (degrees). A trailing parameter
+        /// so as not to shift the extrusion positional arguments: the field belongs only to the
+        /// <c>chamfer</c> family and stays null for the others.</summary>
         double? AngleReadBackDeg = null,
-        /// <summary>
-        /// Радиус скругления, перечитанный из модели после правки (мм). Тот же принцип, что у
-        /// <see cref="AngleReadBackDeg"/>: поле относится только к семейству <c>fillet</c> и у
-        /// остальных семейств остаётся null, а не «ноль».
-        /// </summary>
+        /// <summary>Fillet radius read back from the model after the edit (mm). Same principle as
+        /// <see cref="AngleReadBackDeg"/>: the field belongs only to the <c>fillet</c> family and stays
+        /// null for the others, not "zero".</summary>
         double? RadiusReadBackMm = null,
-        /// <summary>
-        /// Сколько рёбер в наборе скругления после правки <c>edge_refs</c>. Тот же принцип: поле
-        /// относится только к правке НАБОРА у семейства <c>fillet</c> и у остальных случаев
-        /// остаётся null, а не «ноль». При правке радиуса тоже null — радиус и набор рёбер правятся
-        /// разными маршрутами, и ответ не должен намекать, будто изменилось и второе.
-        /// </summary>
+        /// <summary>How many edges are in the fillet set after an <c>edge_refs</c> edit. Same principle:
+        /// the field belongs only to a SET edit of the <c>fillet</c> family and stays null for the others,
+        /// not "zero". It is null for a radius edit too — radius and edge set are edited by different
+        /// routes, and the response must not hint that the other changed.</summary>
         int? EdgesReadBack = null);
 
     private (DocumentEntry Document, ksEntity Entity) RequireFeatureEntity(string featureRef)
@@ -990,7 +984,7 @@ public partial class Api5Session
         }
         catch (COMException)
         {
-            // A state КОМПАС refuses to report stays reported as unreadable, not as healthy.
+            // A state KOMPAS refuses to report stays reported as unreadable, not as healthy.
             isValid = null;
         }
 

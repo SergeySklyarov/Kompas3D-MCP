@@ -7,53 +7,45 @@ using KompasMcp.Domain.Geometry;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>
-/// Фаска (docs/05 SM-11): создание вторым способом, чтение и правка параметров.
-/// </summary>
+/// <summary>Chamfer (docs/05 SM-11): creation by a second method, read and parameter edit.</summary>
 /// <remarks>
-/// <para>
-/// Основание — проба F от 12.09.2026 (<c>docs/acceptance/api7/chamfer.md</c>), а не имена методов:
-/// <list type="bullet">
-/// <item>F.2 — маршрут API5 работает: <c>NewEntity(o3d_chamfer=33)</c> →
-/// <c>ksChamferDefinition.SetChamferParam(transfer, d1, d2)</c> → <c>array()</c> как
-/// <c>ksEntityCollection</c> → <c>Add(ребро)</c> → <c>Create()</c> → <c>RebuildDocument()</c>;
-/// четыре вертикальных ребра пластины 100×80×10 с катетами 2×2 сняли ровно 20·d₁·d₂ = 80 мм³;</item>
-/// <item>F.3/F.5 — правка катетов применяется на месте и до, и после save→close→reopen, значение
-/// перечитывается (<c>ok=True transfer=False d1=3 d2=3</c>);</item>
-/// <item>F.4/F.11 — <c>transfer</c> (он же <c>IChamfer.Direction</c>) меняет, какой катет ложится
-/// на какую грань; объём этого не различает, различают площади боковых граней;</item>
-/// <item>F.8 — фаска API5 видна из API7 как <c>IChamfer</c> и её параметры читаются типизированно,
-/// но имя в API7 читается другое («f-ch2» → «Фаска:1»), поэтому признак опознаётся по объекту
-/// реестра и типу, а не по имени;</item>
-/// <item>F.9/F.10 — способом «расстояние и угол» фаска строится только через
-/// <c>IChamfer.Angle = ksChamferSideAngle</c>, причём угол — в ГРАДУСАХ: 30 при катете 2 снял
-/// 46.188021535141 мм³, что есть 20·d·(d·tg 30°), а радианная гипотеза дала бы отрицательное
-/// число и была отвергнута измерением.</item>
-/// </list>
-/// </para>
-/// <para>
-/// Пра́вка параметров фаски — НЕ то же самое, что перепривязка опорного эскиза выдавливания
-/// (Q-EDIT-SKETCH, <c>edit = blocked_api</c>): там отказ измерен на маршруте смены профиля, а здесь
-/// измерена и работает смена числа. И наоборот: правка угла существующего признака этой пробой НЕ
-/// измерена и потому отказана явно, а не «по наличию свойства».
-/// </para>
+/// Basis — probe F of 12.09.2026 (<c>docs/acceptance/api7/chamfer.md</c>), not method names.
+/// TEST: F.2 — the API5 route works: <c>NewEntity(o3d_chamfer=33)</c> →
+/// <c>ksChamferDefinition.SetChamferParam(transfer, d1, d2)</c> → <c>array()</c> as
+/// <c>ksEntityCollection</c> → <c>Add(edge)</c> → <c>Create()</c> → <c>RebuildDocument()</c>; four
+/// vertical edges of a 100×80×10 plate with 2×2 legs removed exactly 20·d₁·d₂ = 80 mm³.
+/// TEST: F.3/F.5 — editing the legs applies in place both before and after save→close→reopen, and the
+/// value is read back (<c>ok=True transfer=False d1=3 d2=3</c>).
+/// TEST: F.4/F.11 — <c>transfer</c> (aka <c>IChamfer.Direction</c>) changes which leg lands on which
+/// face; volume does not distinguish this, the side-face areas do.
+/// TEST: F.8 — an API5 chamfer is visible from API7 as <c>IChamfer</c> and its parameters read typed,
+/// but the name reads differently in API7 («f-ch2» → «Фаска:1»), so the feature is identified by
+/// registry object and type, not by name.
+/// TEST: F.9/F.10 — with the "distance and angle" method the chamfer is built only via
+/// <c>IChamfer.Angle = ksChamferSideAngle</c>, the angle in DEGREES: 30 with a 2-mm leg removed
+/// 46.188021535141 mm³, which is 20·d·(d·tg 30°); the radian hypothesis would have given a negative
+/// number and was refuted by measurement.
+/// LIMIT: editing chamfer parameters is NOT the same as re-binding the extrusion's base sketch
+/// (Q-EDIT-SKETCH, <c>edit = blocked_api</c>): there the refusal was measured on the profile-change
+/// route, while here a number change is measured and works. Conversely, editing the angle of an
+/// existing feature was NOT measured by this probe and is therefore explicitly refused, not "by
+/// property presence".
+/// History: docs/decisions/adapter-features.md#chamfer-route
 /// </remarks>
 public partial class Api5Session
 {
-    /// <summary>Имя семейства фаски в ответах сервера.</summary>
+    /// <summary>Chamfer family name in server responses.</summary>
     private const string ChamferFamily = "chamfer";
 
-    /// <summary>
-    /// Способ построения фаски, при котором второй катет производен от угла. Имена — это то, что
-    /// <c>IChamfer.BuildingType.ToString()</c> отдаёт из API7 (в API5 способа нет вовсе).
-    /// Нужны, чтобы отличить признак, для которого маршрут записи API5 теряет способ построения.
-    /// </summary>
+    /// <summary>Chamfer build method where the second leg is derived from the angle. The names are what
+    /// <c>IChamfer.BuildingType.ToString()</c> returns from API7 (API5 has no method at all). Needed to
+    /// recognise the feature for which the API5 write route loses the build method.</summary>
     private const string SideAngleBuildingType = "ksChamferSideAngle";
 
-    /// <summary>Способ «два катета» — единственный, который умеет писать <c>SetChamferParam</c>.</summary>
+    /// <summary>The "two legs" method — the only one <c>SetChamferParam</c> can write.</summary>
     private const string TwoSidesBuildingType = "ksChamferTwoSides";
 
-    /// <summary>Мосты API7 — по одному на экземпляр: второй мост значил бы второе представление сеанса.</summary>
+    /// <summary>API7 bridges — one per instance: a second bridge would mean a second session view.</summary>
     private readonly Dictionary<string, Api7Bridge> _api7Bridges = new(StringComparer.Ordinal);
 
     private Api7Bridge BridgeFor(DocumentEntry document)
@@ -68,11 +60,9 @@ public partial class Api5Session
         return bridge;
     }
 
-    /// <summary>
-    /// Создание фаски «расстояние + угол» — единственного режима SM-11, которого в API5 нет
-    /// физически. Отказ моста отдётся <c>CAPABILITY_UNAVAILABLE</c> с причиной, а не молчаливым
-    /// null: вызывающий обязан отличать «API7 недоступен» от «КОМПАС отверг параметр».
-    /// </summary>
+    /// <summary>Create a "distance + angle" chamfer — the only SM-11 mode API5 physically lacks. A
+    /// bridge refusal is returned as <c>CAPABILITY_UNAVAILABLE</c> with a cause, not a silent null: the
+    /// caller must tell "API7 unavailable" from "KOMPAS rejected the parameter".</summary>
     private ChamferResult ChamferByAngle(
         DocumentEntry document,
         IReadOnlyList<ksEntity> entities,
@@ -117,8 +107,8 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["api7_failure"] = created.Failure });
         }
 
-        // Без RebuildModel запись в IChamfer остаётся представлением: это измерено пробой E на
-        // IExtrusion.Sketch, и для фаски тот же порядок вызовов обязателен.
+        // Without RebuildModel the IChamfer write stays a representation: MEASURED by probe E on
+        // IExtrusion.Sketch, and the same call order is mandatory for the chamfer.
         Api7Bridge.Rebuild(container, document.Document);
         BumpRevision(document, "chamfer.angle");
 
@@ -201,8 +191,8 @@ public partial class Api5Session
 
         if (api5Feature is null)
         {
-            // Ссылку на признак, который API5 не видит, выдавать нельзя: правка по ней всё равно
-            // упала бы, а вызывающий узнал бы об этом позже.
+            // A reference to a feature API5 does not see must not be issued: an edit through it would
+            // fail anyway, and the caller would learn of it later.
             unverified.Add("feature_ref_withheld — признак не найден в дереве API5, ссылка не выдана");
             return new ChamferResult(
                 null,
@@ -232,11 +222,9 @@ public partial class Api5Session
             string.Join(", ", unwrapRoutes));
     }
 
-    /// <summary>
-    /// Последний элемент операции с <c>type = 33</c> в дереве API5. Поиск по типу и порядку, а не
-    /// по имени: F.8 измерила, что имя, данное в API5, в API7 читается иначе, — имя не является
-    /// идентификатором признака.
-    /// </summary>
+    /// <summary>The last operation element with <c>type = 33</c> in the API5 tree. Search by type and
+    /// order, not by name: F.8 MEASURED that a name given in API5 reads differently in API7 — the name
+    /// is not a feature identifier.</summary>
     private static ksEntity? FindChamferEntity(DocumentEntry document)
     {
         try
@@ -264,13 +252,11 @@ public partial class Api5Session
         }
     }
 
-    // ─── read и edit ────────────────────────────────────────────────────────────────────────
+    // ─── read and edit ──────────────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Что сервер видит по фаске: катеты и сторона — из API5; если к тому же документу строится
-    /// мост API7 и фаска в нём одна, добавляются угол и способ. Пустое поле означает «не
-    /// прочитано», а не «ноль».
-    /// </summary>
+    /// <summary>What the server sees of a chamfer: legs and side from API5; if an API7 bridge is also
+    /// built to the same document and there is one chamfer in it, angle and method are added. An empty
+    /// field means "not read", not "zero".</summary>
     private ChamferDto? ReadChamfer(DocumentEntry document, object definition)
     {
         if (definition is not ksChamferDefinition chamfer)
@@ -291,18 +277,17 @@ public partial class Api5Session
             Distance2Mm: api5.Distance2Mm,
             AngleDeg: api7?.AngleDeg,
             BuildingType: api7?.BuildingType,
-            // При двух катетах «сторона» в API7 перечитывается как Direction; если моста нет,
-            // остаётся значение transfer из API5 — тот же параметр того же признака (F.4/F.11
-            // измерили, что оба меняют геометрию одинаково).
+            // With two legs, "side" is read back from API7 as Direction; if there is no bridge, the
+            // API5 transfer value remains — the same parameter of the same feature (F.4/F.11 MEASURED
+            // that both change geometry identically).
             Direction: api7?.Direction ?? api5.Transfer,
             BaseObjectCount: api7?.BaseObjectCount);
     }
 
-    /// <summary>
-    /// Угол и способ из API7 — только когда сопоставление однозначно. Мерить угол «первой фаски
-    /// подряд» при нескольких фасках означало бы приписать признаку чужое число, поэтому при
-    /// неоднозначности сервер возвращает null и объясняет причину в <c>unverified</c>.
-    /// </summary>
+    /// <summary>Angle and method from API7 — only when the match is unambiguous. Measuring the angle of
+    /// "the first chamfer in a row" with several chamfers would attribute a foreign number to the
+    /// feature, so on ambiguity the server returns null and explains the cause in
+    /// <c>unverified</c>.</summary>
     private ChamferReadDto? ReadChamferAngle(DocumentEntry document, ChamferParam api5)
     {
         var bridge = BridgeFor(document);
@@ -316,8 +301,8 @@ public partial class Api5Session
         for (var i = 0; i < count; i++)
         {
             var read = Api7Chamfer.Read(container, i);
-            // Сопоставление по первому катету: он отличает фаски друг от друга в эталонных
-            // случаях приёмки и точно описывает то, что записывал API5 (F.8: D1=2, D2=2, Angle=45).
+            // Matching by the first leg: it distinguishes chamfers from one another in the reference
+            // acceptance cases and describes exactly what API5 wrote (F.8: D1=2, D2=2, Angle=45).
             if (read?.Distance1Mm is double d && Math.Abs(d - api5.Distance1Mm) <= 1e-6)
             {
                 matches.Add(read);
@@ -327,29 +312,19 @@ public partial class Api5Session
         return matches.Count == 1 ? matches[0] : null;
     }
 
-    /// <summary>
-    /// Правка угловой фаски маршрутом API7: <c>IChamfer</c> на живой модели, запись → <c>Update()</c>
-    /// → <c>RebuildModel()</c>. Это единственный маршрут, умеющий писать угол: в API5 его нет.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Отличия от маршрута API5 (<see cref="UpdateChamfer"/>), которые важно не потерять:
-    /// <list type="bullet">
-    /// <item>признак адресуется ИНДЕКСОМ в <c>IModelContainer.Chamfers</c>, а сопоставление с
-    /// признаком API5 идёт по первому катету (имя идентификатором не является — F.8);</item>
-    /// <item>второй катет при этом способе ПРОИЗВОДЕН от угла, поэтому он не записывается вовсе,
-    /// если клиент не задал его явно: запись «прежнего» числа закрепила бы устаревшую производную
-    /// и потеряла связь с углом;</item>
-    /// <item>уровень подтверждения требует пересчёта производного катета: успехом считается не
-    /// «Update() вернул true», а то, что модель отдаёт новый угол и катет <c>d₁·tg α</c>.</item>
-    /// </list>
-    /// </para>
-    /// <para>
-    /// Неоднозначное сопоставление (несколько фасок с тем же первым катетом либо ни одной) —
-    /// это отказ, а не «взяли первую»: записать угол не в тот признак означает молча испортить
-    /// чужую геометрию.
-    /// </para>
-    /// </remarks>
+    /// <summary>Edit an angular chamfer by the API7 route: <c>IChamfer</c> on the live model, write →
+    /// <c>Update()</c> → <c>RebuildModel()</c>. The only route able to write an angle: API5 has
+    /// none.</summary>
+    /// <remarks>Differences from the API5 route (<see cref="UpdateChamfer"/>) that must not be lost:
+    /// the feature is addressed by INDEX in <c>IModelContainer.Chamfers</c> and matched to the API5
+    /// feature by the first leg (the name is not an identifier — F.8); the second leg is DERIVED from
+    /// the angle, so it is not written at all unless the client set it explicitly (writing the
+    /// "previous" number would pin a stale derivative and lose the link to the angle); the
+    /// confirmation level requires the derived leg to be recomputed — success is not "Update()
+    /// returned true" but that the model gives the new angle and the leg <c>d₁·tg α</c>.
+    /// INVARIANT: an ambiguous match (several chamfers with the same first leg, or none) is a refusal,
+    /// not "took the first": writing the angle into the wrong feature silently spoils foreign
+    /// geometry.</remarks>
     private UpdateFeatureResult UpdateChamferByAngle(
         DocumentEntry document,
         ksEntity entity,
@@ -406,7 +381,7 @@ public partial class Api5Session
         var index = matches[0];
         var before = Api7Chamfer.Read(container, index);
 
-        // Второй катет пишется, только если клиент задал его явно: иначе он производный.
+        // The second leg is written only if the client set it explicitly: otherwise it is derived.
         var distance1 = command.Distance1Mm;
         var distance2 = command.Distance2Mm;
         var angle = command.AngleDeg;
@@ -424,8 +399,8 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["api7_failure"] = written.Failure });
         }
 
-        // Без перестроения запись в IChamfer остаётся представлением (тот же порядок, что при
-        // создании: F.10 + проба E на IExtrusion.Sketch).
+        // Without the rebuild the IChamfer write stays a representation (the same order as on
+        // creation: F.10 + probe E on IExtrusion.Sketch).
         Api7Bridge.Rebuild(container, document.Document);
         BumpRevision(document, "chamfer.update.angle");
 
@@ -436,8 +411,8 @@ public partial class Api5Session
 
         var expectedDistance1 = distance1 ?? current.Distance1Mm;
         var expectedAngle = angle ?? before?.AngleDeg;
-        // Производный катет — это d₁·tg α, и именно этим проверка отличается от «значение
-        // перечиталось»: если ядро не пересчитало второй катет, угол не применён по-настоящему.
+        // The derived leg is d₁·tg α, and this is what makes the check differ from "the value was
+        // read back": if the kernel did not recompute the second leg, the angle was not truly applied.
         var expectedDerived = expectedAngle is double a && a > 0d && a < 90d
             ? expectedDistance1 * Math.Tan(a * Math.PI / 180d)
             : (double?)null;
@@ -540,7 +515,7 @@ public partial class Api5Session
             featuresAfter,
             volumeBefore,
             volumeAfter,
-            // Глубины у фаски нет: поле относится к выдавливанию, поэтому null, а не «ноль».
+            // A chamfer has no depth: the field belongs to extrusion, so null rather than "zero".
             DepthReadBackMm: null,
             EndConditionReadBack: null,
             new VerificationDto(
@@ -550,10 +525,9 @@ public partial class Api5Session
             AngleReadBackDeg: after?.AngleDeg);
     }
 
-    /// <summary>
-    /// Правка катетов и стороны существующей фаски. Значение перечитывается с нового объекта
-    /// определения, признак обязан остаться тем же, а геометрия подтверждается измерением объёма.
-    /// </summary>
+    /// <summary>Edit the legs and side of an existing chamfer. The value is read back from the new
+    /// definition object, the feature must stay the same, and geometry is confirmed by volume
+    /// measurement.</summary>
     private UpdateFeatureResult UpdateChamfer(
         DocumentEntry document,
         ksEntity entity,
@@ -581,22 +555,21 @@ public partial class Api5Session
                 RetryPolicy.Never);
         }
 
-        // ─── маршрут API7: единственный, который умеет писать угол ──────────────────────────
-        //
-        // Угол в API5 не выразим физически (у ksChamferDefinition члена «угол» не объявлено),
-        // поэтому при наличии angle_deg пишет IChamfer. Маршрут измерен пробой 16.09.2026:
-        // запись Angle с последующим Update() применяется к модели, способ построения остаётся
-        // ksChamferSideAngle, а второй катет пересчитывается ядром как d₂ = d₁·tg α.
+        // ─── API7 route: the only one able to write an angle ─────────────────────────────────
+        // An angle is not physically expressible in API5 (ksChamferDefinition declares no "angle"
+        // member), so with angle_deg present IChamfer writes. MEASURED 16.09.2026: writing Angle
+        // followed by Update() applies to the model, the build method stays ksChamferSideAngle, and
+        // the kernel recomputes the second leg as d₂ = d₁·tg α.
         if (command.AngleDeg is not null)
         {
             return UpdateChamferByAngle(document, entity, command, volumeBefore, featuresBefore,
                 stateBefore);
         }
 
-        // ─── маршрут API5: два катета и сторона ─────────────────────────────────────────────
-        // Сюда попадают только вызовы без angle_deg. Если способ признака — «расстояние и угол»,
-        // запись API5 потеряла бы угол (измерено: 30° → 45°, V 79896.07695154587 → 79820), поэтому
-        // такой вызов отклоняется ДО мутации с объяснением, что делать вместо него.
+        // ─── API5 route: two legs and side ───────────────────────────────────────────────────
+        // Only calls without angle_deg land here. If the feature's method is "distance and angle", the
+        // API5 write would lose the angle (MEASURED: 30° → 45°, V 79896.07695154587 → 79820), so such
+        // a call is refused BEFORE the mutation with an explanation of what to do instead.
 
         var currentSource = entity.GetDefinition() as ksChamferDefinition;
         var current = currentSource is null ? null : ReadChamferParam(currentSource);
@@ -608,25 +581,17 @@ public partial class Api5Session
                 RetryPolicy.ReacquireContext);
         }
 
-        // ИЗМЕРЕННЫЙ ЗАПРЕТ ТИХОЙ ПОДМЕНЫ СПОСОБА (проба 16.09.2026, scratch/_probe_angle_edit2.py).
-        //
-        // Фаска, построенная способом «расстояние и угол», живёт как ksChamferSideAngle, и её
-        // второй катет — ПРОИЗВОДНОЕ от угла (d₂ = d₁·tg α). Маршрут записи API5
-        // (SetChamferParam) умеет только ksChamferTwoSides: он пишет два катета и способ построения
-        // НЕ сохраняет. Измерено на пластине 100×80×10, фаска d=2, α=30° (V = 79953.81197846486):
-        //
-        //   правка distance1_mm = 3 без angle_deg → УСПЕХ, но способ стал ksChamferTwoSides,
-        //   угол 30° превратился в 45°, второй катет 1.1547005383792515 → 3,
-        //   V = 79820 вместо 79896.07695154587 (то есть при сохранённом угле), расхождение 76.08 мм³.
-        //
-        // Это тихий неверный результат, а не граница возможностей: клиент просил поменять катет,
-        // а получил другую фаску, и вернуть угол нельзя — правка angle_deg отвергается ниже.
-        // Поэтому запись отклоняется ДО мутации с указанием, чем именно мерить эту фаску: удалить
-        // и пересоздать в нужном способе. Молчаливое «применили как смогли» здесь запрещено.
-        //
-        // Способ читается из API7 (в API5 его нет вовсе): при неоднозначном сопоставлении
-        // ReadChamferAngle возвращает null, и тогда запись НЕ отклоняется — «не прочитали способ»
-        // это не «способ угловой», и запрещать правку по незнанию означало бы выдумать отказ.
+        // ─── MEASURED ban on silent method substitution (probe 16.09.2026) ───────────────────
+        // A "distance and angle" chamfer lives as ksChamferSideAngle with a DERIVED second leg
+        // (d₂ = d₁·tg α). The API5 write route (SetChamferParam) only knows ksChamferTwoSides and does
+        // NOT preserve the build method: MEASURED on a 100×80×10 plate, d=2, α=30°, editing
+        // distance1_mm=3 without angle_deg changed the method, turned 30° into 45° and gave V=79820
+        // instead of 79896.07695154587. That is a silent wrong result, so the write is refused BEFORE
+        // the mutation, naming "delete and recreate" instead.
+        // The method is read from API7 (API5 has none at all): on an ambiguous match
+        // ReadChamferAngle returns null and the write is NOT refused — "method not read" is not
+        // "method is angular".
+        // History: docs/decisions/adapter-features.md#chamfer-method-substitution
         var existingApi7 = ReadChamferAngle(document, current);
         if (existingApi7?.BuildingType == SideAngleBuildingType && command.AngleDeg is null)
         {
@@ -649,8 +614,8 @@ public partial class Api5Session
         }
 
         var distance1 = command.Distance1Mm ?? current.Distance1Mm;
-        // Второй катет меняется только вместе с первым либо явно: иначе правка «одного катета»
-        // молча превратилась бы в правку обоих.
+        // The second leg changes only together with the first or explicitly: otherwise editing "one
+        // leg" would silently become editing both.
         var distance2 = command.Distance2Mm ?? (command.Distance1Mm is not null && command.Direction is null
             ? command.Distance1Mm.Value
             : current.Distance2Mm);
@@ -673,8 +638,9 @@ public partial class Api5Session
                 Expected: $"transfer={transfer} d1={distance1:0.####} d2={distance2:0.####}"),
         };
 
-        // Порядок «запись → Update() → RebuildDocument()» — часть контракта: без Update() модель
-        // остаётся прежней, хотя все сеттеры вернули true (P2.3 для выдачиваний, F.3 для фаски).
+        // The order "write → Update() → RebuildDocument()" is part of the contract: without Update()
+        // the model stays as it was although every setter returned true (P2.3 for extrusions, F.3 for
+        // the chamfer).
         if (!entity.Update())
         {
             throw new KompasContractException(

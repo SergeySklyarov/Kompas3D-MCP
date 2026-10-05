@@ -6,69 +6,49 @@ using KompasMcp.Domain.References;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>
-/// Кинематическая операция — «Элемент по траектории» (docs/05 SM-04, очередь B5).
-/// </summary>
+/// <summary>Kinematic operation — "Element along a path" (docs/05 SM-04, queue B5).</summary>
 /// <remarks>
-/// <para>
-/// <b>Маршрут — документированный API5, и это проверено по справке, а не по аналогии с вращением.</b>
-/// <c>ksbaseevolutiondefinition.html</c> («Основание — кинематический элемент (Интерфейсы
-/// ksBaseEvolutionDefinition, IBaseEvolutionDefinition)») описывает интерфейс, который «можно
-/// получить, используя метод интерфейса элемента модели <c>ksEntity::GetDefinition</c>», и
-/// перечисляет ровно те члены, что здесь используются: <c>sketchShiftType</c>, <c>SetSketch</c>,
-/// <c>PathPartArray</c>, <c>GetPathLength(bitVector)</c>. Тип объекта — <c>o3d_baseEvolution = 45</c>
-/// (<c>obj3dtype.html</c>). При этом <c>ievolutions_add.html</c> перечисляет допустимыми значениями
-/// <c>IEvolutions::Add</c> только <c>o3d_bossEvolution</c> (46) и <c>o3d_cutEvolution</c> (47) —
-/// <b>базового типа 45 в списке нет</b>. Измерено 20.09.2026 (шаг B5.7): <c>IEvolutions.Add(45)</c>
-/// возвращает <c>KompasAPI7.EvolutionClass</c>, то есть объект ВЫДАЁТСЯ, — но валидность тела по
-/// этому пути не измерялась, и «выдан объект» не то же самое, что «документированный маршрут».
-/// Поэтому создание идёт <c>ksPart.NewEntity(45)</c> + <c>ksBaseEvolutionDefinition</c>, а не через
-/// фабрику API7.
-/// </para>
-/// <para>
-/// <b>Справка объявляет этот интерфейс устаревшим — и это записано, а не спрятано.</b>
-/// «Данный интерфейс устарел. Рекомендуется использовать вместо него интерфейс
-/// ksBossLoftDefinition» (в тексте страницы именно так, хотя для кинематического элемента
-/// естественен <c>ksBossEvolutionDefinition</c> — расхождение внутри самой справки). Приклеенный
-/// маршрут <c>NewEntity(46)</c> измерен отдельно (шаг B5.8) и строит ТО ЖЕ тело:
-/// <c>31415.92653589775</c> против <c>31415.926535897932</c> на эталоне «окружность Ø20 по отрезку
-/// 100». Обязательные строки этапа описаны как <b>базовые</b>, поэтому здесь используется тип 45.
-/// </para>
-/// <para>
-/// <b>Режимы движения сечения документированы и совпали с измерением.</b>
-/// <c>ksbaseevolutiondefinition_sketchshifttype.html</c>: 0 — «образующая переносится параллельно
-/// самой себе», 1 — «сохраняет исходный угол с направляющей», 2 — «плоскость образующей
-/// выставляется и сохраняется ортогональной направляющей». Измерено (шаг B5.2): на дуге R50/90°
-/// ортогональный режим дал <c>S × L = 24674.011002723397</c>, параллельный отличается на
-/// <c>8966.04773477437</c> мм³ — то есть режим различает.
-/// </para>
-/// <para>
-/// <b>Траектория присоединяется к <c>ksEntityCollection</c>, и это измерено.</b> Шаг B5.1:
-/// <c>PathPartArray()</c> возвращает <c>System.__ComObject</c>, который успешно приводится к
-/// <c>ksEntityCollection</c>, и <c>Add(эскиз)</c> возвращает <c>True</c>. Рефлексия по
-/// <c>__ComObject</c> членов не даёт и как способ разведки непригодна — приведение типа работает,
-/// отражение нет.
-/// </para>
-/// <para>
-/// <b>Что здесь считается доказательством.</b> <c>Create() = true</c> и <c>Update() = true</c> — это
-/// «принято», а не «применено»: объём читается обратно с модели и сравнивается с аналитическим
-/// ожиданием вызывающего. Без ожидания уровень честно остаётся <c>call_returned</c>.
-/// </para>
-/// <para>
-/// <b>Чего здесь нет и почему.</b> Тонкая стенка (<c>SetThinParam</c>) не задаётся: маршрут измерен
-/// на сплошном теле, и ставить неизмеренное число значило бы выдать желаемое за проверенное.
-/// Вырезание телом (<c>SM-04.cut</c>, OQ-A2) вне обязательного объёма и не реализуется.
-/// </para>
+/// ROUTE — documented API5, verified against the help rather than by analogy with rotation.
+/// DOC: <c>ksbaseevolutiondefinition.html</c> («Основание — кинематический элемент (Интерфейсы
+/// ksBaseEvolutionDefinition, IBaseEvolutionDefinition)») — an interface «можно получить, используя
+/// метод интерфейса элемента модели <c>ksEntity::GetDefinition</c>», with exactly the members used
+/// here: <c>sketchShiftType</c>, <c>SetSketch</c>, <c>PathPartArray</c>, <c>GetPathLength(bitVector)</c>.
+/// Object type <c>o3d_baseEvolution = 45</c> (<c>obj3dtype.html</c>).
+/// MEASURED 20.09.2026 (step B5.7): <c>IEvolutions.Add(45)</c> returns a
+/// <c>KompasAPI7.EvolutionClass</c>, i.e. an object IS handed out, but body validity by that path was
+/// not measured; DOC: <c>ievolutions_add.html</c> lists only <c>o3d_bossEvolution</c> (46) and
+/// <c>o3d_cutEvolution</c> (47) as valid for <c>IEvolutions::Add</c> — base type 45 is absent. Creation
+/// therefore goes <c>ksPart.NewEntity(45)</c> + <c>ksBaseEvolutionDefinition</c>, not through the API7
+/// factory.
+/// DOC: the help declares this interface obsolete — «Данный интерфейс устарел. Рекомендуется
+/// использовать вместо него интерфейс ksBossLoftDefinition» (a divergence inside the help itself).
+/// MEASURED separately (step B5.8): the glued route <c>NewEntity(46)</c> builds the SAME body —
+/// <c>31415.92653589775</c> vs <c>31415.926535897932</c> on the reference "Ø20 circle along a 100-mm
+/// segment"; the stage's mandatory rows are described as BASE, so type 45 is used here.
+/// DOC: <c>ksbaseevolutiondefinition_sketchshifttype.html</c> — 0 «образующая переносится параллельно
+/// самой себе», 1 «сохраняет исходный угол с направляющей», 2 «плоскость образующей выставляется и
+/// сохраняется ортогональной направляющей». MEASURED (step B5.2): on an R50/90° arc the orthogonal
+/// mode gave <c>S × L = 24674.011002723397</c>; the parallel mode differs by <c>8966.04773477437</c>
+/// mm³ — the mode discriminates.
+/// MEASURED (step B5.1): <c>PathPartArray()</c> returns <c>System.__ComObject</c> that successfully
+/// casts to <c>ksEntityCollection</c> and <c>Add(sketch)</c> returns <c>True</c>; reflection over
+/// <c>__ComObject</c> yields no members, so the cast works and reflection does not.
+/// INVARIANT: <c>Create()/Update()=true</c> is "accepted", not "applied" — volume is read back and
+/// compared with the caller's analytic expectation; with no expectation the level stays
+/// <c>call_returned</c>.
+/// LIMIT: thin wall (<c>SetThinParam</c>) is not set (the route was measured on a solid body), and
+/// cutting by a body (<c>SM-04.cut</c>, OQ-A2) is out of scope and not implemented.
+/// History: docs/decisions/adapter-features.md#sweep-route
 /// </remarks>
 public partial class Api5Session
 {
-    /// <summary>Базовое тело кинематической операции — <c>o3d_baseEvolution</c>.</summary>
+    /// <summary>Base body of the kinematic operation — <c>o3d_baseEvolution</c>.</summary>
     private const short BaseEvolution = 45;
 
-    /// <summary>Единица длины для <c>GetPathLength</c>: <c>ST_MIX_LENGTH_MM</c>.</summary>
+    /// <summary>Length unit for <c>GetPathLength</c>: <c>ST_MIX_LENGTH_MM</c>.</summary>
     private const uint PathLengthMillimetres = 1u;
 
-    /// <summary>Кинематическая операция: профиль по траектории (SM-04).</summary>
+    /// <summary>Kinematic operation: a profile along a path (SM-04).</summary>
     public SweepResult Sweep(SweepCommand command)
     {
         ValidateSweepCommand(command);
@@ -77,8 +57,8 @@ public partial class Api5Session
         var document = target.Document;
         var part = document.PartNow();
 
-        // Траектория обязана лежать в ТОЙ ЖЕ детали. Разные документы дали бы либо отказ ядра, либо
-        // — хуже — молчаливо подставленную чужую геометрию, а этого здесь не проверял никто.
+        // INVARIANT: the path must lie in the SAME part — different documents would give either a
+        // kernel refusal or, worse, silently substituted foreign geometry.
         var path = RequireSketch(command.PathRef);
         if (!string.Equals(path.Document.Id, document.Id, StringComparison.Ordinal))
         {
@@ -107,11 +87,11 @@ public partial class Api5Session
                 RetryPolicy.ReacquireContext);
         }
 
-        // Ответы входных вызовов СОБИРАЮТСЯ, а не отбрасываются. Измерено 20.09.2026: на геометрии,
-        // которую проба строит тем же маршрутом и получает тело (окружность R10 по отрезку 100 —
-        // 31415.92653589775), через MCP Create() отвечал false на ШЕСТИ разных постановках подряд.
-        // Отказ без этих чисел неразличим с «ядру не понравилась геометрия», и разбирать его
-        // пришлось бы заново. Поэтому SetSketch и содержимое держателя траектории читаются обратно.
+        // Input-call answers are COLLECTED, not discarded. MEASURED 20.09.2026: on geometry the probe
+        // builds by the same route and gets a body for (R10 circle along a 100-mm segment —
+        // 31415.92653589775), Create() via MCP answered false in SIX different setups in a row.
+        // Without these numbers the refusal is indistinguishable from "the kernel disliked the
+        // geometry", so SetSketch and the path holder are read back.
         var sketchAccepted = SafeBool(() => definition.SetSketch(target.Sketch));
         definition.sketchShiftType = ShiftValue(command.ShiftMode);
         var sketchReadBack = SafeBool(() => definition.GetSketch() is not null);
@@ -158,8 +138,8 @@ public partial class Api5Session
         part.RebuildModel();
         document.Document.RebuildDocument();
 
-        // Длина траектории читается ПОСЛЕ построения: первый прогон пробы читал её до Create() и
-        // получал 0 — это был дефект прибора, а не факт о продукте (шаг B5.3).
+        // Path length is read AFTER the build: the probe's first run read it before Create() and got
+        // 0 — a defect of the instrument, not a fact about the product (step B5.3).
         var pathLength = SafeDouble(() => definition.GetPathLength(PathLengthMillimetres));
 
         var reference = References.Register("feature", document.Id, document.Revision, entity);
@@ -179,18 +159,16 @@ public partial class Api5Session
 
         var unverified = new List<string>();
 
-        // Признак «материал добавлен» отделён от численного совпадения: кинематическая операция
-        // базового типа обязана УВЕЛИЧИТЬ объём, и это проверяется без всякого аналитического
-        // ожидания. Иначе «операция не применилась» выглядело бы как «применилась, но ожидание
-        // не задано».
-        //
-        // Измерено 20.09.2026: на ПЕРВОМ теле объём до операции не читается вовсе — ReadVolume()
-        // отдаёт null, потому что главного тела ещё нет. Это не ноль и не «не выросло»: величины до
-        // операции не существует. Прежняя редакция (volumeBefore is double before) объявляла на этом
-        // ложный отказ «не прочитано → 31415.9265358978 мм³» на КАЖДОЙ операции, создающей первое
-        // тело. Состояния различаются тем, ЧТО ИЗМЕРЕНО: тел 0 — материала до операции не было по
-        // определению модели, и «вырос» означает «стало больше нуля»; тел больше нуля, а объём не
-        // прочитан — величина НЕ ПРОЧИТАНА, и проверка обязана называться непрочитанной, а не ложной.
+        // INVARIANT: "material added" is separated from a numeric match — a base-type kinematic
+        // operation must INCREASE volume, checked with no analytic expectation; otherwise "the
+        // operation was not applied" would look like "applied, but no expectation was given".
+        // MEASURED 20.09.2026: on the FIRST body the pre-operation volume is not read at all —
+        // ReadVolume() returns null because the main body does not exist yet. That is not zero and not
+        // "did not grow": the pre-operation quantity does not exist. The states differ by WHAT WAS
+        // MEASURED — 0 bodies means there was no material before the operation by the model's
+        // definition and "grew" means "became greater than zero"; bodies > 0 with an unread volume
+        // means the value is NOT READ, and the check must be named unread, not false.
+        // History: docs/decisions/adapter-features.md#sweep-first-body
         if (volumeAfter is not double volumeAfterValue)
         {
             unverified.Add("material_added_not_measured — объём после операции не прочитан, поэтому " +
@@ -257,11 +235,9 @@ public partial class Api5Session
             new List<string>());
     }
 
-    /// <summary>
-    /// Вызвать булев COM-член, не роняя чтение. <c>null</c> означает «вызов не состоялся» и
-    /// отличается от <c>false</c> («вызов состоялся и вернул false»): смешивать их — значит выдавать
-    /// отказ вызова за отказ продукта.
-    /// </summary>
+    /// <summary>Invoke a boolean COM member without failing the read. <c>null</c> means "the call did
+    /// not happen" and differs from <c>false</c> ("the call happened and returned false"): mixing them
+    /// passes a call failure off as a product refusal.</summary>
     private static bool? SafeBool(Func<bool> call)
     {
         try
@@ -274,10 +250,8 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Присоединить эскиз-траекторию к определению. Возвращает число присоединённых элементов:
-    /// ноль означает, что маршрут не построился, и это отказ, а не «ноль траектории».
-    /// </summary>
+    /// <summary>Attach the path sketch to the definition. Returns the attached count: zero means the
+    /// route did not build, and that is a refusal, not "an empty path".</summary>
     private static int AttachPath(ksBaseEvolutionDefinition definition, ksEntity pathSketch)
     {
         object? holder;
@@ -298,10 +272,8 @@ public partial class Api5Session
         return SafeBool(() => collection.Add(pathSketch)) == true ? 1 : 0;
     }
 
-    /// <summary>
-    /// Числовое значение типа движения сечения — <c>ksEvolutionShiftSketchTypeEnum</c>, прочитанное
-    /// со страницы официальной справки v24 <c>ksevolutionshiftsketchtypeenum.html</c>.
-    /// </summary>
+    /// <summary>Numeric value of the section-motion type — <c>ksEvolutionShiftSketchTypeEnum</c>, read
+    /// from the official v24 help page <c>ksevolutionshiftsketchtypeenum.html</c>.</summary>
     private static short ShiftValue(SweepShiftMode mode) => mode switch
     {
         SweepShiftMode.Parallel => 0,   // ksEvShiftParallel
@@ -313,11 +285,9 @@ public partial class Api5Session
             RetryPolicy.Never),
     };
 
-    /// <summary>
-    /// Правила «поле ↔ возможность», отвергающие вызов ДО обращения к COM. Цена ошибки здесь
-    /// несимметрична: лишний отказ виден сразу, а принятое и проигнорированное число доживает до
-    /// приёмки, выглядя как выполненная операция.
-    /// </summary>
+    /// <summary>"Field ↔ capability" rules that reject the call BEFORE COM. The cost of a mistake is
+    /// asymmetric: a spurious refusal is seen at once, while an accepted-and-ignored number survives
+    /// to acceptance looking like a completed operation.</summary>
     private static void ValidateSweepCommand(SweepCommand command)
     {
         if (string.IsNullOrWhiteSpace(command.SketchRef))

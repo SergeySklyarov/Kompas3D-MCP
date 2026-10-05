@@ -10,63 +10,53 @@ using KompasMcp.Domain.References;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>
-/// Элемент по сечениям (docs/05 SM-05, очередь B5).
-/// </summary>
+/// <summary>Loft — a body from an ordered set of sections (docs/05 SM-05, queue B5).</summary>
 /// <remarks>
-/// <para>
-/// <b>Маршрут — API7, и это следует из состава обязательных строк, а не из удобства.</b>
-/// Обязательная строка <c>SM-05.base.mode_couplings</c> требует <b>цепочек соответствия сечений</b>,
-/// а в API5 их нет вовсе: ни <c>ksBaseLoftDefinition</c>, ни <c>ksBossLoftDefinition</c> не
-/// объявляют ни <c>AddCoupling</c>, ни <c>Coupling</c>. В API7 они документированы —
-/// <c>iloft_propers.html</c> перечисляет <c>Coupling</c> и <c>CouplingsCount</c>,
-/// <c>iloft_addcoupling.html</c> описывает <c>AddCoupling()</c> → <c>ICoupling</c>. Измерено
-/// (шаг B5.9): <c>AddCoupling()</c> вернул <c>KompasAPI7.CouplingClass</c>, <c>CouplingsCount = 1</c>.
-/// Поэтому семейство ведётся одним маршрутом, на котором выразимы ВСЕ его обязательные строки.
-/// </para>
-/// <para>
-/// <b>Фабрика документирована для приклеенного типа.</b> <c>ilofts_add.html</c>: «Допустимыми
-/// значениями <c>LoftType</c> являются <c>o3d_bossLoft</c>, <c>o3d_cutLoft</c> для коллекции
-/// операций <c>IModelContainer::Lofts</c>»; «после получения нового интерфейса нужно задать
-/// параметры операции и вызвать метод <c>IModelObject::Update</c>». Сечения задаются свойством
-/// <c>ILoft.Sketchs</c> типа <c>VARIANT</c> — «массив <c>SAFEARRAY</c> объектов <c>LPDISPATCH</c>»
-/// (<c>iloft_sketchs.html</c>). Измерено: присваивание массива дало чтение <c>System.Object[]</c>
-/// из 2 элементов, <c>Update() = True</c>, объём <c>28000</c> — тот же эталон, что у API5-маршрута
-/// <c>NewEntity(30)</c> (шаг B5.4).
-/// </para>
-/// <para>
-/// <b>Что здесь НЕ утверждается.</b> Порядок сечений объёмом не доказывается: концентрические
-/// параллельные сечения дают <c>28000</c> в любом порядке, поэтому «порядок соблюдён» требует
-/// различающей постановки и здесь не выдаётся за проверенное. Параллельность плоскостей сечений —
-/// обязанность проверяющей стороны (§6.3 п. 7 наряда); в этой редакции она НЕ проверяется и названа
-/// открытым аспектом, а не замолчана. Содержимое цепочек соответствия (какие точки сечений
-/// сопоставлены) не задаётся: измерено существование цепочки, а не её настройка.
-/// </para>
+/// ROUTE — API7, and this follows from the mandatory rows, not from convenience. The mandatory row
+/// <c>SM-05.base.mode_couplings</c> requires section correspondence CHAINS, and API5 has none at all:
+/// neither <c>ksBaseLoftDefinition</c> nor <c>ksBossLoftDefinition</c> declares <c>AddCoupling</c> or
+/// <c>Coupling</c>. API7 documents them — <c>iloft_propers.html</c> lists <c>Coupling</c> and
+/// <c>CouplingsCount</c>, <c>iloft_addcoupling.html</c> describes <c>AddCoupling()</c> →
+/// <c>ICoupling</c>. MEASURED (step B5.9): <c>AddCoupling()</c> returned
+/// <c>KompasAPI7.CouplingClass</c>, <c>CouplingsCount = 1</c>. The family is therefore driven by one
+/// route on which ALL its mandatory rows are expressible.
+/// DOC: <c>ilofts_add.html</c> — «Допустимыми значениями <c>LoftType</c> являются <c>o3d_bossLoft</c>,
+/// <c>o3d_cutLoft</c> для коллекции операций <c>IModelContainer::Lofts</c>»; «после получения нового
+/// интерфейса нужно задать параметры операции и вызвать метод <c>IModelObject::Update</c>». Sections
+/// are set by the <c>ILoft.Sketchs</c> property of type <c>VARIANT</c> — «массив <c>SAFEARRAY</c>
+/// объектов <c>LPDISPATCH</c>» (<c>iloft_sketchs.html</c>). MEASURED: assigning the array gave a
+/// read-back of <c>System.Object[]</c> of 2 elements, <c>Update() = True</c>, volume <c>28000</c> —
+/// the same reference as the API5 route <c>NewEntity(30)</c> (step B5.4).
+/// LIMIT: section ORDER is not proved by volume — concentric parallel sections give <c>28000</c> in
+/// any order, so "the order was honoured" needs a discriminating setup and is not presented as
+/// verified here. Parallelism of section planes is the checker's duty (work order §6.3 item 7); this
+/// revision does NOT check it and names it an open aspect rather than staying silent. The content of
+/// correspondence chains (which section points are matched) is not set: the chain's existence was
+/// measured, not its configuration.
+/// History: docs/decisions/adapter-features.md#loft-route
 /// </remarks>
 public partial class Api5Session
 {
-    /// <summary>Приклеенный элемент по сечениям — <c>o3d_bossLoft</c>.</summary>
+    /// <summary>Glued loft — <c>o3d_bossLoft</c>.</summary>
     private const int BossLoft = 31;
 
-    /// <summary>Наибольшее число цепочек соответствия в одном вызове.</summary>
+    /// <summary>Maximum number of correspondence chains in one call.</summary>
     private const int MaxLoftCouplings = 64;
 
-    /// <summary>
-    /// Допуск сверки смещения точки вдоль контура, мм. Взят из класса допусков профиля для ДЛИН
-    /// (0,01 мм), а не подобран после неудачи: измеренная сходимость round-trip'а на шаге B5.17 —
-    /// записано 5 мм, прочитано 5 мм, то есть совпадение точное.
-    /// </summary>
+    /// <summary>Comparison tolerance for the point offset along the contour, mm. Taken from the
+    /// profile tolerance class for LENGTHS (0.01 mm), not tuned after a failure: MEASURED round-trip
+    /// agreement at step B5.17 — wrote 5 mm, read 5 mm, an exact match.</summary>
     private const double CouplingOffsetToleranceMm = 0.01d;
 
-    /// <summary>Элемент по сечениям: тело по упорядоченному набору сечений (SM-05).</summary>
+    /// <summary>Loft: a body from an ordered set of sections (SM-05).</summary>
     public LoftResult Loft(LoftCommand command)
     {
         ValidateLoftCommand(command);
 
         var document = RequireDocument(command.DocumentId);
 
-        // Сечения обязаны принадлежать ТОЙ ЖЕ детали и одной ревизии: ссылка из чужого документа
-        // дала бы либо отказ ядра, либо молчаливо чужую геометрию.
+        // INVARIANT: sections must belong to the SAME part and the same revision — a reference from a
+        // foreign document would give either a kernel refusal or silently foreign geometry.
         var sections = new List<ksEntity>(command.SectionRefs.Count);
         var targets = new List<SketchTarget>(command.SectionRefs.Count);
         foreach (var sectionRef in command.SectionRefs)
@@ -90,12 +80,12 @@ public partial class Api5Session
             sections.Add(target.Sketch);
         }
 
-        // ── Параллельность плоскостей сечений — ОБЯЗАННОСТЬ ВЫЗЫВАЮЩЕЙ СТОРОНЫ, и наряд B5 §9.2
-        // требует на непараллельные плоскости ИМЕНОВАННЫЙ отказ. Сам ILoft её не требует и не
-        // запрещает: измерено (шаг B5.11), что на непараллельных плоскостях он либо отказывает
-        // безлико, либо строит тело, описывающее не то, что просили. Отказ выносится ТОЛЬКО на
-        // измеренном расхождении осей нормалей: нечитаемая плоскость отказа не даёт, а называется
-        // непрочитанной — молчаливое «наверное, параллельны» было бы утверждением без измерения.
+        // ── Parallelism of section planes is the CALLER's duty, and work order B5 §9.2 requires a
+        // NAMED refusal on non-parallel planes. ILoft itself neither requires nor forbids it:
+        // MEASURED (step B5.11) that on non-parallel planes it either refuses facelessly or builds a
+        // body describing something other than requested. The refusal fires ONLY on a MEASURED
+        // divergence of normal axes: an unreadable plane does not refuse but is named unread — a
+        // silent "probably parallel" would be a claim without measurement.
         var planeAxes = ReadSectionPlaneAxes(targets);
         if (planeAxes.DistinctAxes.Count > 1)
         {
@@ -159,9 +149,9 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["api7_failure"] = creationFailure });
         }
 
-        // Сечения переносятся в API7: Sketchs принимает SAFEARRAY указателей IDispatch, и
-        // непереданный объект — это значение, которого API7 не увидит. Тот же приём, что измерен на
-        // IChamfer.BaseObjects (transfer + присваивание object[]).
+        // Sections are transferred to API7: Sketchs takes a SAFEARRAY of IDispatch pointers, and an
+        // untransferred object is a value API7 will not see. The same technique MEASURED on
+        // IChamfer.BaseObjects (transfer + assignment of object[]).
         var transferred = new List<object>(sections.Count);
         foreach (var section in sections)
         {
@@ -202,17 +192,18 @@ public partial class Api5Session
                 partialEffects: true);
         }
 
-        // ── Цепочки соответствия сечений: задаются ДО первого Update() ──
-        // Порядок документирован фабрикой («задать параметры операции и вызвать IModelObject::Update»,
-        // ilofts_add.html) и измерен шагом B5.18: цепочка, заданная до первого Update(), применяется
-        // в одном построении (CouplingsCount = 1, объём 20000 при смещении 20 мм из 80 — то же
-        // значение, что и у цепочки, добавленной после построения).
+        // ── Section correspondence chains are set BEFORE the first Update() ──
+        // The order is documented by the factory («задать параметры операции и вызвать
+        // IModelObject::Update», ilofts_add.html) and MEASURED at step B5.18: a chain set before the
+        // first Update() is applied in one build (CouplingsCount = 1, volume 20000 at a 20 mm offset
+        // out of 80 — the same value as a chain added after the build).
         var chainFailures = new List<string>();
         var chainsWritten = AttachCouplings(loft, command.Couplings, chainFailures);
         if (chainFailures.Count > 0)
         {
-            // Запрошенное соответствие — часть запроса, а не украшение: построенное тело с другим
-            // соответствием было бы другим телом. Поэтому отказ приходит ДО построения, а не после.
+            // The requested correspondence is part of the request, not decoration: a built body with
+            // a different correspondence would be a different body. The refusal therefore comes
+            // BEFORE the build, not after.
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
                 "Цепочки соответствия сечений не заданы: " + string.Join("; ", chainFailures) +
@@ -252,9 +243,9 @@ public partial class Api5Session
         var bodiesAfter = CountBodies(document);
         var facesAfter = CountFaces(document);
 
-        // Цепочки читаются ИЗ МОДЕЛИ и целиком: сколько их, сколько сечений в каждой и какие смещения
-        // стоят на каждом сечении. Число цепочек без содержимого доказывало бы только существование
-        // объекта, тогда как обязательная строка требует ОПРЕДЕЛЁННОГО соответствия сечений.
+        // Chains are read FROM THE MODEL and in full: how many, how many sections in each, and which
+        // offsets stand on each section. A chain count without content would prove only the object's
+        // existence, whereas the mandatory row requires a DEFINITE section correspondence.
         var couplingsInModel = ReadCouplingContent(loft);
 
         var checks = new List<NamedCheck>
@@ -280,8 +271,8 @@ public partial class Api5Session
                 Expected: offsets.Expected));
         }
 
-        // Сечения читаются ОБРАТНО из модели: сколько их принял признак. Это проверка того, что
-        // набор дошёл целиком, а не того, что порядок соблюдён.
+        // Sections are read BACK from the model: how many the feature accepted. This checks that the
+        // set arrived in full, not that the order was honoured.
         var sectionsInModel = ReadSectionCount(loft);
         checks.Add(new NamedCheck("sections_read_back", sectionsInModel == sections.Count,
             Observed: sectionsInModel?.ToString() ?? "не прочитано",
@@ -314,8 +305,8 @@ public partial class Api5Session
 
         if (command.Couplings.Count == 0)
         {
-            // Молчание — тоже утверждение: вызов без цепочек не подтверждает «соответствие
-            // определено», и это названо, а не оставлено пустым местом.
+            // Silence is a claim too: a call without chains does not confirm "correspondence
+            // defined", and that is named rather than left blank.
             unverified.Add("couplings_not_requested — цепочки соответствия в этом вызове не задавались, " +
                 "поэтому этим вызовом подтверждается существование признака и его геометрия, но НЕ " +
                 "определённое соответствие сечений");
@@ -362,15 +353,13 @@ public partial class Api5Session
             });
     }
 
-    /// <summary>Результат чтения осей нормалей плоскостей сечений.</summary>
+    /// <summary>Result of reading the normal axes of the section planes.</summary>
     private sealed record SectionPlaneAxes(
         IReadOnlyList<int> Read, IReadOnlyList<int> DistinctAxes, int Unreadable);
 
-    /// <summary>
-    /// Оси нормалей плоскостей сечений, прочитанные с определений ЭСКИЗОВ. Ось — не знак: она
-    /// отвечает на вопрос «параллельна ли плоскость XOY / XOZ / YOZ», а не «куда смотрит нормаль».
-    /// Для параллельности этого достаточно и не требуется.
-    /// </summary>
+    /// <summary>Normal axes of the section planes, read from the SKETCH definitions. An axis is not a
+    /// sign: it answers "is the plane parallel to XOY / XOZ / YOZ", not "where the normal points".
+    /// That is enough for parallelism and no more is required.</summary>
     private static SectionPlaneAxes ReadSectionPlaneAxes(IReadOnlyList<SketchTarget> targets)
     {
         var read = new List<int>(targets.Count);
@@ -400,7 +389,7 @@ public partial class Api5Session
         return new SectionPlaneAxes(read, read.Distinct().ToList(), unreadable);
     }
 
-    /// <summary>Имя плоскости по оси её нормали — для сообщения отказа, а не для вывода.</summary>
+    /// <summary>Plane name by its normal axis — for a refusal message, not for output.</summary>
     private static string AxisName(int axis) => axis switch
     {
         0 => "YOZ (нормаль X)",
@@ -409,11 +398,9 @@ public partial class Api5Session
         _ => "ось " + axis.ToString(CultureInfo.InvariantCulture),
     };
 
-    /// <summary>
-    /// Правила «поле ↔ возможность» для цепочек соответствия, общие для создания и правки: число
-    /// точек в цепочке равно числу сечений, значения конечны, цепочек не больше
-    /// <see cref="MaxLoftCouplings"/>. Отвергается ДО обращения к COM.
-    /// </summary>
+    /// <summary>"Field ↔ capability" rules for correspondence chains, shared by create and edit: the
+    /// number of points in a chain equals the number of sections, values are finite, chains do not
+    /// exceed <see cref="MaxLoftCouplings"/>. Refused BEFORE COM.</summary>
     private static void ValidateLoftCouplings(IReadOnlyList<LoftCoupling> chains, int sectionCount)
     {
         if (chains.Count > MaxLoftCouplings)
@@ -461,11 +448,9 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Полная замена цепочек на существующем признаке: <c>ClearCouplings()</c>, затем по цепочке на
-    /// каждую запрошенную. Возвращает <c>false</c> и причину, если замена не состоялась целиком —
-    /// «часть цепочек» это другое соответствие, а не половина успеха.
-    /// </summary>
+    /// <summary>Full replacement of chains on an existing feature: <c>ClearCouplings()</c>, then one
+    /// chain per request. Returns <c>false</c> and a reason if the replacement did not happen in full
+    /// — "some of the chains" is a different correspondence, not half a success.</summary>
     private static bool WriteLoftCouplings(
         ILoft loft, IReadOnlyList<LoftCoupling> chains, out string failure)
     {
@@ -495,15 +480,11 @@ public partial class Api5Session
         return true;
     }
 
-    /// <summary>
-    /// Задать цепочки соответствия сечений: <c>ILoft.AddCoupling()</c> → <c>ICoupling</c>, затем
-    /// <c>ICoupling.PositionOffset(Index)</c> на каждое сечение в порядке сечений.
-    /// </summary>
-    /// <remarks>
-    /// Возвращается число ПОЛНОСТЬЮ заданных цепочек, а причины отказов складываются в
-    /// <paramref name="failures"/>: частично заданная цепочка — это другое соответствие, и молча
-    /// считать её успехом значило бы выдать чужое тело за запрошенное.
-    /// </remarks>
+    /// <summary>Set the section correspondence chains: <c>ILoft.AddCoupling()</c> → <c>ICoupling</c>,
+    /// then <c>ICoupling.PositionOffset(Index)</c> for each section in section order.</summary>
+    /// <remarks>Returns the number of FULLY set chains, while failure reasons accumulate in
+    /// <paramref name="failures"/>: a partially set chain is a different correspondence, and silently
+    /// counting it a success would pass a foreign body off as the requested one.</remarks>
     private static int AttachCouplings(
         ILoft loft, IReadOnlyList<LoftCoupling> chains, List<string> failures)
     {
@@ -557,11 +538,9 @@ public partial class Api5Session
         return written;
     }
 
-    /// <summary>
-    /// Цепочки соответствия, прочитанные <b>ИЗ МОДЕЛИ</b>: <c>CouplingsCount</c>, затем по каждой
-    /// <c>Coupling(Index)</c> → <c>ICoupling</c> → <c>Count</c> и <c>PositionOffset(Index)</c>.
-    /// <c>null</c> — «не прочитано» и отличается от пустого списка.
-    /// </summary>
+    /// <summary>Correspondence chains read <b>FROM THE MODEL</b>: <c>CouplingsCount</c>, then for each
+    /// <c>Coupling(Index)</c> → <c>ICoupling</c> → <c>Count</c> and <c>PositionOffset(Index)</c>.
+    /// <c>null</c> is "not read" and differs from an empty list.</summary>
     private static IReadOnlyList<LoftCouplingDto>? ReadCouplingContent(ILoft loft)
     {
         int? total;
@@ -617,10 +596,9 @@ public partial class Api5Session
         return result;
     }
 
-    /// <summary>
-    /// Сверка «запрошено ↔ прочитано ИЗ МОДЕЛИ» по всем цепочкам и всем их точкам. Допуск —
-    /// длинный (0,01 мм, как для длин в профиле выпуска); числа цепочек и сечений сверяются точно.
-    /// </summary>
+    /// <summary>Comparison "requested ↔ read FROM THE MODEL" over all chains and all their points.
+    /// The tolerance is the length one (0.01 mm, as for lengths in the profile release); chain and
+    /// section counts are compared exactly.</summary>
     private static (bool Ok, string Observed, string Expected) CouplingOffsetsMatch(
         IReadOnlyList<LoftCouplingDto>? model, IReadOnlyList<LoftCoupling> requested)
     {
@@ -666,17 +644,15 @@ public partial class Api5Session
         return (ok, string.Join("; ", observed), expected);
     }
 
-    /// <summary>Запрошенные цепочки одной строкой — вторая половина сверки.</summary>
+    /// <summary>Requested chains on one line — the other half of the comparison.</summary>
     private static string DescribeRequestedCouplings(IReadOnlyList<LoftCoupling> requested) =>
         string.Join("; ", requested.Select((chain, index) =>
             "цепочка " + index + " (сечений " + chain.OffsetsMm.Count.ToString(CultureInfo.InvariantCulture) +
             "): " + string.Join(" / ", chain.OffsetsMm.Select(offset => Num(offset))) + " мм"));
 
-    /// <summary>
-    /// Число сечений, принятых признаком, — чтение <b>ИЗ МОДЕЛИ</b>, а не пересказ запроса. Массив
-    /// приходит как <c>SAFEARRAY</c> объектов; <c>null</c> означает «не прочитано» и отличается от
-    /// нуля.
-    /// </summary>
+    /// <summary>Number of sections accepted by the feature — a read <b>FROM THE MODEL</b>, not a
+    /// retelling of the request. The array arrives as a <c>SAFEARRAY</c> of objects; <c>null</c> means
+    /// "not read" and differs from zero.</summary>
     private static int? ReadSectionCount(ILoft loft)
     {
         try
@@ -689,7 +665,7 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>Чтение целого без падения: <c>null</c> — «не прочитано», а не ноль.</summary>
+    /// <summary>Read an integer without failing: <c>null</c> is "not read", not zero.</summary>
     private static int? SafeInt(Func<int> read)
     {
         try
@@ -702,9 +678,7 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Правила «поле ↔ возможность», отвергающие вызов ДО обращения к COM.
-    /// </summary>
+    /// <summary>"Field ↔ capability" rules that reject the call BEFORE COM.</summary>
     private static void ValidateLoftCommand(LoftCommand command)
     {
         if (string.IsNullOrWhiteSpace(command.DocumentId))
@@ -743,19 +717,19 @@ public partial class Api5Session
                 RetryPolicy.Never);
         }
 
-        // Цепочки соответствия: число точек в цепочке обязано совпасть с числом сечений. Это не
-        // придирка: PositionOffset(Index) адресуется «индексом сечения в цепочке»
-        // (icoupling_positionoffset.html), и цепочка короче набора сечений задаёт соответствие не для
-        // всех сечений — то есть другое тело, чем запрошено.
+        // Correspondence chains: the number of points in a chain must match the number of sections.
+        // This is not pedantry: PositionOffset(Index) is addressed by "the section index in the
+        // chain" (icoupling_positionoffset.html), and a chain shorter than the section set defines a
+        // correspondence not for all sections — i.e. a different body than requested.
         ValidateLoftCouplings(command.Couplings, command.SectionRefs.Count);
 
         if (command.Building != LoftBuilding.Auto)
         {
-            // Способ построения у крайних сечений выражается членом ILoft.BuildingType(BeginSection).
-            // Измерено значение ТОЛЬКО авто-режима: у только что созданного признака и для начала, и
-            // для конца прочитан 0 (ksLoftAuto). Значения 1/2/3 (по нормали, по объекту, купол) на
-            // этом маршруте НЕ измерялись, поэтому они не принимаются молча — иначе «принято и
-            // проигнорировано» дожило бы до приёмки, выглядя как выполненный режим.
+            // The build method at the end sections is expressed by ILoft.BuildingType(BeginSection).
+            // ONLY the auto mode's value was MEASURED: on a freshly created feature both the start and
+            // the end read 0 (ksLoftAuto). Values 1/2/3 (by normal, by object, dome) were NOT measured
+            // on this route, so they are not accepted silently — otherwise "accepted and ignored"
+            // would survive to acceptance looking like a performed mode.
             throw new KompasContractException(
                 ErrorCodes.InvalidArgument,
                 "Способ построения у крайних сечений '" + command.Building + "' на этом маршруте не " +

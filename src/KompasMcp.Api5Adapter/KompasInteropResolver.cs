@@ -6,9 +6,7 @@ using Microsoft.Win32;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>
-/// Loads the vendor КОМПАС interop assemblies from the user's installation at run time.
-/// </summary>
+/// <summary>Loads the vendor KOMPAS interop assemblies from the user's installation at run time.</summary>
 /// <remarks>
 /// Why this exists (a P0 finding, not a hypothetical): the interop references are declared with
 /// <c>Private=false</c>, so nothing from the ASCON installation is copied into our build output or
@@ -33,7 +31,7 @@ public static class KompasInteropResolver
 
     public static IReadOnlyList<string> LoadedAssemblies { get; private set; } = Array.Empty<string>();
 
-    /// <summary>Assembly names we are willing to satisfy from the КОМПАС installation.</summary>
+    /// <summary>Assembly names we are willing to satisfy from the KOMPAS installation.</summary>
     private static readonly string[] OwnedPrefixes =
     {
         "Interop.Kompas",
@@ -45,10 +43,8 @@ public static class KompasInteropResolver
         "KAPITypes",
     };
 
-    /// <summary>
-    /// Install the resolver. Returns false when no candidate directory contains the API5 interop,
-    /// in which case the caller must report KOMPAS_NOT_INSTALLED rather than continue.
-    /// </summary>
+    /// <summary>Install the resolver. Returns false when no candidate directory contains the API5 interop,
+    /// in which case the caller must report KOMPAS_NOT_INSTALLED rather than continue.</summary>
     public static bool TryInstall(out string? failureReason)
     {
         lock (Gate)
@@ -122,10 +118,8 @@ public static class KompasInteropResolver
         return loaded;
     }
 
-    /// <summary>
-    /// Candidate interop directories, most explicit first: environment override, then the
-    /// installation located through COM registration, then the historically observed path.
-    /// </summary>
+    /// <summary>Candidate interop directories, most explicit first: environment override, then the
+    /// installation located through COM registration, then the historically observed path.</summary>
     public static IReadOnlyList<string> CandidateDirectories()
     {
         var list = new List<string>();
@@ -166,11 +160,9 @@ public static class KompasInteropResolver
         return list;
     }
 
-    /// <summary>
-    /// CLSID a ProgID resolves to in HKCR, or null. Needed to recognise a running instance in the
-    /// ROT: КОМПАС registers there as <c>!{CLSID}</c>, not under a readable name, so matching by
-    /// "kompas" in the display name silently finds nothing and a working attach looks impossible.
-    /// </summary>
+    /// <summary>CLSID a ProgID resolves to in HKCR, or null. Needed to recognise a running instance in the
+    /// ROT: KOMPAS registers there as <c>!{CLSID}</c>, not under a readable name, so matching by
+    /// "kompas" in the display name silently finds nothing and a working attach looks impossible.</summary>
     public static string? ProgIdToClsid(string progId)
     {
         try
@@ -223,10 +215,8 @@ public static class KompasInteropResolver
         }
     }
 
-    /// <summary>
-    /// Bitness self-check, run before any COM call: a 32-bit Worker against a 64-bit КОМПАС
-    /// produces failures with no useful message, so it is diagnosed here instead (spec 1.3).
-    /// </summary>
+    /// <summary>Bitness self-check, run before any COM call: a 32-bit Worker against a 64-bit KOMPAS
+    /// produces failures with no useful message, so it is diagnosed here instead (spec 1.3).</summary>
     public static string DescribeProcessBitness() => Environment.Is64BitProcess ? "x64" : "x86";
 
     public static string DescribeServerBitness(string executable)

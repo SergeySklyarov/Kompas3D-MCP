@@ -9,74 +9,44 @@ using KompasMcp.Contracts.Ipc;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>
-/// Чтение трёх семейств очереди B5 — кинематической операции, элемента по сечениям и оболочки —
-/// ИЗ МОДЕЛИ, а не из ответа создания.
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Почему это отдельный файл, а не продолжение <c>GetFeature</c>.</b> Наряд требует читать
-/// параметры ИЗ ДЕРЕВА: на пересказе ответа создания уже провалились десять строк B4, и отказ был
-/// прав. Поэтому у каждого семейства свой маршрут перечитывания, и он измерен, а не выведен.
-/// </para>
-/// <para>
-/// <b>Главное измерение этого маршрута — номер типа в дереве НЕ равен номеру создания.</b> Измерено
-/// 20.09.2026 (проба <c>--b5</c>, шаг B5.12):
-/// </para>
-/// <list type="bullet">
-/// <item>признак, созданный <c>NewEntity(45)</c> (<c>o3d_baseEvolution</c>), виден в дереве под
-/// номером <b>46</b> (<c>o3d_bossEvolution</c>), а определение отвечает
-/// <c>ksBossEvolutionDefinition</c>;</item>
-/// <item>признак, созданный <c>ILofts.Add(31)</c>, виден под <b>31</b>, определение отвечает
-/// <c>ksBossLoftDefinition</c>;</item>
-/// <item>признак, созданный <c>NewEntity(43)</c>, виден под <b>43</b>, определение отвечает
-/// <c>ksShellDefinition</c>.</item>
-/// </list>
-/// <para>
-/// Поэтому семейство опознаётся <b>по интерфейсу определения</b>, а не по номеру типа из ответа
-/// создания: у отверстия это расхождение уже стоило отдельного дефекта (создаётся 52, в дереве
-/// 583), у вращения — второго (27 против 584).
-/// </para>
-/// <para>
-/// <b>Имя управляемого типа здесь не является доказательством.</b> <c>GetType().Name</c> у
-/// COM-объекта всегда <c>__ComObject</c> — первая редакция отчёта показывала «__ComObject» и для
-/// определения оболочки, которое на самом деле приводится к <c>ksShellDefinition</c> и читается.
-/// Проверять надо ВОПРОСОМ «отвечает ли интерфейс», а не именем класса.
-/// </para>
-/// </remarks>
+/// <summary>Reading the three B5 families — sweep, loft and shell — FROM THE MODEL, not from the
+/// creation response.</summary>
+/// <remarks>INVARIANT: a family is recognised BY THE DEFINITION INTERFACE, not by the type number.
+/// MEASURED 20.09.2026 (probe <c>--b5</c>, step B5.12): the tree number differs from the creation
+/// number — <c>NewEntity(45)</c> (<c>o3d_baseEvolution</c>) shows in the tree as <b>46</b>
+/// (<c>o3d_bossEvolution</c>) and answers <c>ksBossEvolutionDefinition</c>, while <c>ILofts.Add(31)</c>
+/// shows as <b>31</b> (<c>ksBossLoftDefinition</c>) and <c>NewEntity(43)</c> as <b>43</b>
+/// (<c>ksShellDefinition</c>). The same divergence already cost a defect at the hole (52 → 583) and at
+/// the rotation (27 → 584). MEASURED: <c>GetType().Name</c> of a COM object is always <c>__ComObject</c>,
+/// so a class name proves nothing — ask whether the object answers the interface.
+/// History: docs/decisions/adapter-solid.md#b5-read</remarks>
 public partial class Api5Session
 {
     private const string EvolutionFamily = "sweep";
     private const string LoftFamily = "loft";
     private const string ShellFamily = "shell";
 
-    /// <summary>
-    /// Единица длины траектории — <c>ST_MIX_*</c>. Значение 1 измерено на отрезке 100 мм:
-    /// <c>GetPathLength(1)</c> вернул ровно 100 (шаг B5.3), поэтому миллиметры подтверждены числом,
-    /// а не предположением.
-    /// </summary>
+    /// <summary>Path-length unit — <c>ST_MIX_*</c>. MEASURED (step B5.3): <c>GetPathLength(1)</c> on a
+    /// 100 mm segment returned exactly 100, so millimetres are confirmed by a number, not a guess.</summary>
     private const uint PathLengthUnitMillimetres = 1u;
 
-    /// <summary>Отвечает ли определение на интерфейс кинематической операции. Оба принимаются.</summary>
+    /// <summary>Whether the definition answers the sweep interface. Both are accepted.</summary>
     private static bool IsEvolutionDefinition(object? definition) =>
         definition is ksBaseEvolutionDefinition or ksBossEvolutionDefinition;
 
-    /// <summary>Отвечает ли определение на интерфейс элемента по сечениям. Оба принимаются.</summary>
+    /// <summary>Whether the definition answers the loft interface. Both are accepted.</summary>
     private static bool IsLoftDefinition(object? definition) =>
         definition is ksBaseLoftDefinition or ksBossLoftDefinition;
 
-    /// <summary>Отвечает ли определение на интерфейс оболочки.</summary>
+    /// <summary>Whether the definition answers the shell interface.</summary>
     private static bool IsShellDefinition(object? definition) => definition is ksShellDefinition;
 
-    /// <summary>
-    /// Кинематическая операция, прочитанная с определения, взятого из дерева. Ни одна величина не
-    /// берётся из ответа создания.
-    /// </summary>
-    /// <remarks>
-    /// Ветка выбирается ПО ОТВЕТУ интерфейса, а не по номеру типа: измерено, что <c>NewEntity(45)</c>
-    /// даёт признак, отвечающий <c>ksBossEvolutionDefinition</c>. Аксессоры передаются в общий
-    /// считыватель делегатами, потому что общего интерфейса с этими членами у двух определений нет.
-    /// </remarks>
+    /// <summary>Sweep operation read from the definition taken from the tree. No value comes from the
+    /// creation response.</summary>
+    /// <remarks>INVARIANT: the branch is chosen BY THE INTERFACE ANSWER, not by the type number
+    /// (MEASURED: <c>NewEntity(45)</c> yields a feature answering <c>ksBossEvolutionDefinition</c>).
+    /// Accessors are passed to the shared reader as delegates because the two definitions share no
+    /// interface for these members.</remarks>
     private static SweepDto? ReadSweepFeature(object? definition)
     {
         if (definition is ksBaseEvolutionDefinition baseEvolution)
@@ -100,12 +70,10 @@ public partial class Api5Session
         return null;
     }
 
-    /// <summary>
-    /// <c>IEvolution.OperationResult</c> — документированный ответ о виде операции. Живёт ТОЛЬКО в
-    /// API7: у API5-определения этого члена нет. Признак сопоставляется с элементом коллекции
-    /// <c>Evolutions</c> ПО ПОРЯДКУ среди односемейных, а не по имени: измерено на этапе B4, что
-    /// разные типы носят одно отображаемое имя.
-    /// </summary>
+    /// <summary><c>IEvolution.OperationResult</c> — the documented operation-kind answer, present ONLY
+    /// in API7 (the API5 definition has no such member). INVARIANT: the feature is matched to an
+    /// <c>Evolutions</c> element BY ORDER among same-family ones, not by name (MEASURED in B4: different
+    /// types share one display name).</summary>
     private int? ReadEvolutionOperationResult(DocumentEntry document, ksEntity entity, out string? reason)
     {
         reason = null;
@@ -140,10 +108,8 @@ public partial class Api5Session
         return value;
     }
 
-    /// <summary>
-    /// Элемент по сечениям, прочитанный из КОЛЛЕКЦИИ документа — того самого маршрута, которым он и
-    /// создан. Ручка создания не используется: её ответ и есть то, что запрещено пересказывать.
-    /// </summary>
+    /// <summary>Loft read from the document COLLECTION — the very route it was created by. The creation
+    /// handle is not used: its response is exactly what must not be retold.</summary>
     private LoftDto? ReadLoftFeature(DocumentEntry document, ksEntity entity, out string? reason)
     {
         reason = null;
@@ -176,12 +142,11 @@ public partial class Api5Session
             return null;
         }
 
-        // Цепочки читаются ЦЕЛИКОМ — сколько их, сколько сечений в каждой и какие смещения стоят на
-        // каждом сечении. Одного CouplingsCount мало: «соответствие существует» и «соответствие
-        // такое-то» — разные утверждения, и второе без содержимого не проверяется.
-        // Ссылки на сечения выводятся из определения и сверяются С ТЕМ ЖЕ числом сечений, которое
-        // публикует `section_count`: расхождение — это неполный вывод ссылок, и оно называется, а не
-        // выдаётся за «сечений меньше».
+        // INVARIANT: couplings are read IN FULL — how many, how many sections each has and what
+        // offsets stand on each section; a bare CouplingsCount cannot tell "a coupling exists" from
+        // "this coupling". Section refs are derived from the definition and checked against the SAME
+        // section count published as `section_count`: a mismatch is an incomplete derivation, named
+        // and not passed off as "fewer sections".
         var sectionCount = Api7Loft.SectionCount(loft);
         var sectionRefs = LoftSectionRefs(document, entity);
         if (sectionRefs is not null && sectionCount is int declaredSections
@@ -203,10 +168,9 @@ public partial class Api5Session
             sectionRefs);
     }
 
-    /// <summary>
-    /// Оболочка, прочитанная с определения из дерева. Вторая половина — чтение тех же трёх величин
-    /// из API7 (<c>IShells</c> → <c>IShell</c>); расхождение половин не замалчивается, а называется.
-    /// </summary>
+    /// <summary>Shell read from the tree definition. The second half reads the same three values from
+    /// API7 (<c>IShells</c> → <c>IShell</c>); a disagreement between the halves is named, not
+    /// silenced.</summary>
     private ShellDto? ReadShellFeature(
         DocumentEntry document,
         ksEntity entity,
@@ -227,8 +191,8 @@ public partial class Api5Session
                 + (faces is null ? "FaceArray" : string.Empty);
         }
 
-        // Вторая половина той же постановки: те же три величины из API7. Измерено (B5.12), что
-        // оба маршрута дают согласованные значения, и это записано как отдельная проверка.
+        // The second half of the same setup: the same three values from API7. MEASURED (B5.12) that
+        // both routes agree, recorded as a separate check.
         var container = TryContainerFor(document);
         if (container is null)
         {
@@ -252,9 +216,9 @@ public partial class Api5Session
             }
             else
             {
-                // Согласованность половин: толщина обязана совпасть, число снятых граней — тоже.
-                // Направление сверяется по ЗНАЧЕНИЮ: API5 thinType=true соответствует API7 ThinType,
-                // равному значению «внутрь» (измерено: dt_reverse = 1, объём 21632).
+                // Half agreement: thickness must match, so must the removed-face count. Direction is
+                // compared BY VALUE: API5 thinType=true corresponds to API7 ThinType "inward"
+                // (MEASURED: dt_reverse = 1, volume 21632).
                 var api7Thickness = Api7Shell.Thickness(shell);
                 var api7Faces = Api7Shell.DeletedFaceCount(shell);
                 if (api7Thickness is double t2 && thickness is double t1 && Math.Abs(t1 - t2) > 1e-6)
@@ -271,9 +235,9 @@ public partial class Api5Session
             }
         }
 
-        // Ссылки на снятые грани: считаются ИЗ ТОЙ ЖЕ коллекции, что и `removed_face_count`, поэтому
-        // расхождение этих двух чисел — не «снято меньше», а неполный вывод ссылок, и оно обязано
-        // быть названо. Иначе пустой список рядом с ненулевым счётчиком выглядел бы фактом о модели.
+        // Removed-face refs are derived FROM THE SAME collection as `removed_face_count`, so a mismatch
+        // is not "fewer removed" but an incomplete derivation, and it must be named; otherwise an empty
+        // list beside a non-zero counter would look like a fact about the model.
         var removedFaceRefs = ShellRemovedFaceRefs(document, definition);
         if (removedFaceRefs is not null && faces is int faceCount && removedFaceRefs.Count != faceCount)
         {
@@ -291,33 +255,19 @@ public partial class Api5Session
             removedFaceRefs);
     }
 
-    /// <summary>
-    /// СЕЧЕНИЯ элемента по сечениям КАК ССЫЛКИ, выведенные из определения признака.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Маршрут документирован: <c>ksbaseloftdefinition_sketches.html</c> и
-    /// <c>ksbossloftdefinition_sketches.html</c> описывают член «Sketches» — «Получить указатель на
-    /// интерфейс массива эскизов элемента по сечениям», возвращаемое значение
-    /// <c>ksEntityCollection</c>, и примечание «Эскизы из данного массива используются для
-    /// построения элемента по сечениям». В interop тот же член объявлен как <c>Object Sketchs()</c>
-    /// (перечень прочитан из <c>docs/compatibility/kompas-api5-metadata.json</c>): имя члена в
-    /// справке и в interop расходятся на одну букву, и это названо, а не сглажено.
-    /// </para>
-    /// <para>
-    /// <b>Почему ссылки выводятся заново, а не запоминаются.</b> Вход правки элемента по сечениям —
-    /// это <c>section_refs</c>, и другой валюты у правки нет. Ссылка, выданная при создании, умирает
-    /// на первой мутации документа (реестр хранит её против ревизии), а <c>kompas_rebuild</c> отзывает
-    /// ВСЕ ссылки документа; перечисления эскизов отдельным инструментом продукт не имеет —
-    /// <c>kompas_list_features</c> отдаёт только <c>EntityCollection(o3d_operationElement)</c>.
-    /// Поэтому «получить свежую ссылку» можно только из самого определения, и это ровно тот приём,
-    /// которым уже выводится ссылка на эскиз выдавливания (<c>SketchRefOfFeature</c>).
-    /// </para>
-    /// <para>
-    /// <c>null</c> — «не прочитано» (определение не опознано, коллекция не привелась, COM отказал),
-    /// пустой список — «в определении сечений нет». Состояния не сливаются.
-    /// </para>
-    /// </remarks>
+    /// <summary>Loft SECTIONS AS REFERENCES, derived from the feature definition.</summary>
+    /// <remarks>DOC: <c>ksbaseloftdefinition_sketches.html</c> and <c>ksbossloftdefinition_sketches.html</c>
+    /// describe the member «Sketches»: «Получить указатель на интерфейс массива эскизов элемента по
+    /// сечениям», returning <c>ksEntityCollection</c>, with the note «Эскизы из данного массива
+    /// используются для построения элемента по сечениям». In interop the same member is declared as
+    /// <c>Object Sketchs()</c> (read from <c>docs/compatibility/kompas-api5-metadata.json</c>) — the help
+    /// and interop spellings differ by one letter, and that is named, not smoothed over.
+    /// INVARIANT: refs are derived afresh, never remembered — a creation-time reference dies on the first
+    /// document mutation and <c>kompas_rebuild</c> revokes ALL document references, while the product has
+    /// no separate sketch-enumeration tool, so a fresh reference can only come from the definition itself.
+    /// <c>null</c> means "not read" (definition unrecognised, cast failed, COM refused); an empty list
+    /// means "no sections in the definition" — the states are not merged.
+    /// History: docs/decisions/adapter-solid.md#b5-section-refs</remarks>
     private IReadOnlyList<string>? LoftSectionRefs(DocumentEntry document, ksEntity entity)
     {
         try
@@ -337,10 +287,10 @@ public partial class Api5Session
             var ids = new List<string>(sections.GetCount());
             for (var i = 0; i < sections.GetCount(); i++)
             {
-                // `AsInterface`, а не голое `is`: элемент коллекции отдаётся как `object` и бывает
-                // ДВУХ видов — сам интерфейс либо `ksEntity`, который надо развернуть через
-                // `GetDefinition()`. Тот же приём, что и во всех прочих чтениях коллекций этого
-                // адаптера; голое приведение здесь уже один раз дало пустой список (см. ниже).
+                // INVARIANT: use `AsInterface`, not a bare `is` — a collection element comes as `object`
+                // and is of TWO kinds: the interface itself or a `ksEntity` that must be unwrapped via
+                // `GetDefinition()`. The same technique as in every other collection read of this
+                // adapter.
                 if (AsInterface<ksEntity>(sections.GetByIndex(i)) is ksEntity section)
                 {
                     ids.Add(References.Register("sketch", document.Id, document.Revision, section).Id);
@@ -355,24 +305,15 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// СНЯТЫЕ ГРАНИ оболочки КАК ССЫЛКИ, выведенные из <c>ksShellDefinition.FaceArray()</c>.
-    /// </summary>
-    /// <remarks>
-    /// Тот же довод, что и у <see cref="LoftSectionRefs"/>, но с более жёсткой причиной: снятые
-    /// оболочкой грани в топологии тела ОТСУТСТВУЮТ, поэтому из <c>kompas_read_topology</c> их взять
-    /// нечем вовсе, а набор удаляемых граней — вход правки. Без вывода ссылок из определения признака
-    /// повторная правка набора невыразима ни после мутации, ни после переоткрытия документа.
-    /// <c>null</c> — «не прочитано», пустой список — «снятых граней нет».
-    /// <para>
-    /// ДЕФЕКТ ПРИБОРА, измеренный 20.09.2026 первым прогоном с этим полем: голое приведение
-    /// <c>is ksFaceDefinition</c> дало ПУСТОЙ список при <c>removed_face_count = 1</c> — элемент
-    /// <c>FaceArray()</c> приходит как <c>ksEntity</c> и требует разворота через
-    /// <c>GetDefinition()</c>. Число граней и список ссылок читались из ОДНОЙ коллекции и
-    /// расходились, то есть прибор молча не измерял то, что объявил измеряющим. Лечится
-    /// <c>AsInterface</c> — тем же приёмом, что и остальные чтения коллекций адаптера.
-    /// </para>
-    /// </remarks>
+    /// <summary>Shell REMOVED FACES AS REFERENCES, derived from <c>ksShellDefinition.FaceArray()</c>.</summary>
+    /// <remarks>Same rationale as <see cref="LoftSectionRefs"/>, with a harder reason: faces removed by
+    /// the shell are ABSENT from the body topology, so <c>kompas_read_topology</c> cannot yield them at
+    /// all, while the removed-face set is the edit input — without deriving refs from the definition,
+    /// re-editing the set is inexpressible after a mutation or a reopen. <c>null</c> means "not read"; an
+    /// empty list means "no removed faces". INVARIANT: use <c>AsInterface</c> — a bare
+    /// <c>is ksFaceDefinition</c> yields an EMPTY list while <c>removed_face_count = 1</c>, because a
+    /// <c>FaceArray()</c> element comes as <c>ksEntity</c> and must be unwrapped via <c>GetDefinition()</c>.
+    /// History: docs/decisions/adapter-solid.md#b5-removed-faces</remarks>
     private IReadOnlyList<string>? ShellRemovedFaceRefs(DocumentEntry document, ksShellDefinition definition)
     {
         try
@@ -399,15 +340,11 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Порядковый номер признака СРЕДИ ОДНОСЕМЕЙНЫХ — по позиции в дереве, а не по имени.
-    /// </summary>
-    /// <remarks>
-    /// Тем же приёмом, что измерен для вращения: и дерево, и коллекция API7 перечисляют признаки в
-    /// порядке создания, поэтому позиция среди односемейных — устойчивый адрес. Имя для этого не
-    /// годится: измерено на этапе B4, что разные типы носят одно отображаемое имя. <c>null</c>
-    /// означает «не сопоставлено», а не «нулевой».
-    /// </remarks>
+    /// <summary>Feature ORDINAL AMONG SAME-FAMILY ones — by tree position, not by name.</summary>
+    /// <remarks>Same technique as measured for rotation: both the tree and the API7 collection enumerate
+    /// features in creation order, so the position among same-family ones is a stable address. A name will
+    /// not do (MEASURED in B4: different types share one display name). <c>null</c> means "not matched",
+    /// not "zero".</remarks>
     private static int? OrdinalAmong(ksPart part, ksEntity target, Func<ksEntity, bool> isKind)
     {
         try
@@ -463,7 +400,8 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>Мост API7 для документа. <c>null</c> — «недоступен», и причина называется вызывающим.</summary>
+    /// <summary>The API7 bridge for the document. <c>null</c> means "unavailable"; the caller names the
+    /// reason.</summary>
     private IModelContainer? TryContainerFor(DocumentEntry document)
     {
         try
@@ -476,10 +414,8 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Число контуров-профилей у кинематической операции: 1, если профиль привязан, 0 — если нет,
-    /// <c>null</c> — если прочитать не удалось. Ноль и «не прочитано» здесь разные вещи.
-    /// </summary>
+    /// <summary>Profile-contour count of a sweep: 1 if a profile is bound, 0 if not, <c>null</c> if the
+    /// read failed. Zero and "not read" are different here.</summary>
     private static int? ProfileCount(Func<object?> getSketch)
     {
         try
@@ -492,7 +428,7 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>Число частей траектории. <c>null</c> — «не прочитано», а не ноль частей.</summary>
+    /// <summary>Path-part count. <c>null</c> means "not read", not zero parts.</summary>
     private static int? PathPartCount(Func<object?> pathPartArray)
     {
         try
@@ -505,7 +441,7 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>Число граней в <c>FaceArray()</c> оболочки. <c>null</c> — «не прочитано».</summary>
+    /// <summary>Face count in the shell's <c>FaceArray()</c>. <c>null</c> means "not read".</summary>
     private static int? FaceArrayCount(ksShellDefinition definition)
     {
         try
@@ -518,12 +454,9 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Имя режима движения сечения. Значения документированы страницей
-    /// <c>ksbaseevolutiondefinition_sketchshifttype.html</c> (0 / 1 / 2) и подтверждены чтением
-    /// обратно. Значение вне объявленного набора отдаётся ЧИСЛОМ, а не подменяется именем и не
-    /// превращается в <c>null</c>: «модель говорит 7» — это факт, и скрывать его нельзя.
-    /// </summary>
+    /// <summary>Name of the section-shift mode. DOC: <c>ksbaseevolutiondefinition_sketchshifttype.html</c>
+    /// (0 / 1 / 2), confirmed by read-back. A value outside the declared set is returned AS A NUMBER, not
+    /// renamed or turned into <c>null</c>: "the model says 7" is a fact and must not be hidden.</summary>
     private static string? ShiftModeName(short? value) => value switch
     {
         null => null,
@@ -533,11 +466,8 @@ public partial class Api5Session
         _ => value.Value.ToString(CultureInfo.InvariantCulture),
     };
 
-    /// <summary>
-    /// Способ построения у крайнего сечения. Значения документированы страницей
-    /// <c>ksloftbuildingtype.html</c>: 0 auto, 1 by_normal, 2 by_object, 3 cupola. Незнакомое число
-    /// отдаётся числом.
-    /// </summary>
+    /// <summary>Build mode at the end section. DOC: <c>ksloftbuildingtype.html</c> — 0 auto, 1 by_normal,
+    /// 2 by_object, 3 cupola. An unknown number is returned as a number.</summary>
     private static string? BuildingName(int? value) => value switch
     {
         null => null,
@@ -548,11 +478,9 @@ public partial class Api5Session
         _ => value.Value.ToString(CultureInfo.InvariantCulture),
     };
 
-    /// <summary>
-    /// Направление тонкой стенки. Соответствие измерено, а не выведено: API5 <c>thinType = true</c>
-    /// даёт 21632 (внутрь), <c>false</c> — 24832 (наружу); на API7 те же величины читаются как
-    /// <c>ThinType = 1</c> (внутрь) и <c>0</c> (наружу).
-    /// </summary>
+    /// <summary>Thin-wall direction. MEASURED, not derived: API5 <c>thinType = true</c> gives 21632
+    /// (inward), <c>false</c> — 24832 (outward); in API7 the same read as <c>ThinType = 1</c> (inward)
+    /// and <c>0</c> (outward).</summary>
     private static string? ThinDirectionName(bool? thinType) => thinType switch
     {
         null => null,

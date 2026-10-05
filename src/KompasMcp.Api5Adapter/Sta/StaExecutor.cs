@@ -5,14 +5,12 @@ using KompasMcp.Api5Adapter.Com;
 
 namespace KompasMcp.Api5Adapter.Sta;
 
-/// <summary>
-/// One dedicated STA thread with a real Win32 message pump, plus the single work queue that all
-/// COM access must go through (spec 1.6: «Все COM-ссылки создаются, используются и освобождаются
-/// в одном выделенном STA… Message pump обязателен»).
-/// </summary>
+/// <summary>One dedicated STA thread with a real Win32 message pump, plus the single work queue that all
+/// COM access must go through (spec 1.6: all COM references are created, used and released in one
+/// dedicated STA … the message pump is mandatory).</summary>
 /// <remarks>
-/// Why a pump and not <c>BlockingCollection.Take</c>: КОМПАС is an out-of-process local server.
-/// While this thread blocks inside an outgoing call, КОМПАС can call back into the apartment
+/// Why a pump and not <c>BlockingCollection.Take</c>: KOMPAS is an out-of-process local server.
+/// While this thread blocks inside an outgoing call, KOMPAS can call back into the apartment
 /// (events, aggregation, the message filter). Without a message loop those callbacks are never
 /// delivered, which is how a «hung COM call» usually starts. The loop drains posted work, then
 /// waits on work <em>and</em> window messages together via <c>MsgWaitForMultipleObjectsEx</c>, so
@@ -61,7 +59,7 @@ public sealed class StaExecutor : IDisposable
         _waitHandlesRaw = new[] { _shutdown.SafeWaitHandle.DangerousGetHandle(), _workArrived.SafeWaitHandle.DangerousGetHandle() };
     }
 
-    /// <summary>Managed thread id of the only thread allowed to touch КОМПАС (0 before Start).</summary>
+    /// <summary>Managed thread id of the only thread allowed to touch KOMPAS (0 before Start).</summary>
     public int StaThreadId => (int)Interlocked.Read(ref _threadId);
 
     public bool IsOnStaThread => Volatile.Read(ref _threadId) == Environment.CurrentManagedThreadId;
@@ -85,10 +83,8 @@ public sealed class StaExecutor : IDisposable
         _thread.Start();
     }
 
-    /// <summary>
-    /// Queue <paramref name="work"/> for the STA thread and await its result. The returned task
-    /// carries the original exception so the caller can inspect its HRESULT.
-    /// </summary>
+    /// <summary>Queue <paramref name="work"/> for the STA thread and await its result. The returned task
+    /// carries the original exception so the caller can inspect its HRESULT.</summary>
     public Task<T> Run<T>(Func<T> work, string label = "work", CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(work);
@@ -203,10 +199,8 @@ public sealed class StaExecutor : IDisposable
         }
     }
 
-    /// <summary>
-    /// Non-blocking message pump. Also services cross-apartment calls addressed to this thread,
-    /// which is the whole reason it is here.
-    /// </summary>
+    /// <summary>Non-blocking message pump. Also services cross-apartment calls addressed to this thread,
+    /// which is the whole reason it is here.</summary>
     private void PumpMessages()
     {
         while (Native.PeekMessage(out var msg, IntPtr.Zero, 0, 0, Native.PM_REMOVE))

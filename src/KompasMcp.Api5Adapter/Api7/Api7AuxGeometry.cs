@@ -4,9 +4,8 @@ using KompasAPI7;
 
 namespace KompasMcp.Api5Adapter.Api7;
 
-/// <summary>Строка перечисления объекта вспомогательной геометрии. Поля, которые прочитать не
-/// удалось, остаются <c>null</c> и называются в <c>Notes</c>: пустое поле означает «не прочитано»,
-/// а не ноль.</summary>
+/// <summary>A row of an auxiliary-geometry enumeration. Fields that could not be read stay
+/// <c>null</c> and are named in <c>Notes</c>: an empty field means "not read", not zero.</summary>
 internal sealed record AuxGeomRow(
     string Kind,
     int Index,
@@ -21,46 +20,33 @@ internal sealed record AuxGeomRow(
     string? LineName,
     IReadOnlyList<string> Notes);
 
-/// <summary>
-/// Вспомогательная геометрия детали как ОБЪЕКТЫ МОДЕЛИ: плоскости, оси, точки.
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Маршрут взят из официальной справки v24, а не из догадки</b> (шаг 0 наряда
-/// <c>DEPENDENCIES_PRODUCT_ROUTES_DEVELOPER_PROMPT.md</c>, отчёт
+/// <summary>A part's auxiliary geometry as MODEL OBJECTS: planes, axes, points.</summary>
+/// <remarks>DOC: the route is from the official v24 help, not a guess (step 0 of
+/// <c>DEPENDENCIES_PRODUCT_ROUTES_DEVELOPER_PROMPT.md</c>, report
 /// <c>DEPENDENCIES_PRODUCT_ROUTES_STEP0_REPORT_20260921.md</c>):
-/// <c>IAuxiliaryGeomContainer.GetPlanes3D/GetAxes3D</c> (<c>ksapi_iauxiliarygeomcontainer_getplanes3d.html</c>,
-/// <c>…getaxes3d.html</c>), <c>IPlanes3D.Add(ksObj3dTypeEnum)</c> (<c>ksapi_iplanes3d_add.html</c>),
+/// <c>IAuxiliaryGeomContainer.GetPlanes3D/GetAxes3D</c>
+/// (<c>ksapi_iauxiliarygeomcontainer_getplanes3d.html</c>, <c>…getaxes3d.html</c>),
+/// <c>IPlanes3D.Add(ksObj3dTypeEnum)</c> (<c>ksapi_iplanes3d_add.html</c>),
 /// <c>IAxes3D.Add(ksObj3dTypeEnum)</c> (<c>ksapi_iaxes3d_add.html</c>),
 /// <c>IModelContainer.GetPoints3D</c> (<c>ksapi_imodelcontainer_getpoints3d.html</c>),
-/// <c>IPoints3D.Add</c> (<c>ksapi_ipoints3d_add.html</c>), <c>IPlane3DByAngle</c> / <c>IPlane3DByOffset</c>,
-/// <c>IAxis3DBy2Points</c> / <c>IAxis3DByConeface</c> / <c>IAxis3DByEdge</c>, <c>IPoint3D</c>.
-/// </para>
-/// <para>
-/// <b>Типы объектов — из официальной таблицы <c>obj3dtype.html</c></b>, а не подобраны:
-/// <c>o3d_planeAngle</c> = 15 «плоскость под углом» → <c>IPlane3DByAngle</c>,
-/// <c>o3d_planeOffset</c> = 14 «смещённая плоскость» → <c>IPlane3DByOffset</c>,
-/// <c>o3d_axis2Points</c> = 10, <c>o3d_axisConeFace</c> = 11, <c>o3d_axisEdge</c> = 12,
-/// <c>o3d_point3D</c> = 70.
-/// </para>
-/// <para>
-/// <b>Плоскости и оси живут на ДРУГОМ интерфейсе, чем точки, и это измерено.</b>
-/// <c>Planes3D</c>/<c>Axes3D</c> объявлены на <c>IAuxiliaryGeomContainer</c>
-/// (IID <c>{950FEBE2-F916-4E77-A37D-B061E5C22FA8}</c>), а <c>Points3D</c> — на
-/// <c>IModelContainer</c>. Обычное приведение контейнера к <c>IAuxiliaryGeomContainer</c> даёт
-/// <c>null</c>, работает только QI на живом объекте детали (измерено R.13, см. также
-/// <c>Api7Bridge.TryBuildAxisBy2Points</c>).
-/// </para>
-/// <para>
-/// <b>Чего здесь намеренно НЕТ.</b> Ни одна величина не выводится из индекса коллекции и не
-/// подбирается по геометрии: адрес — только ссылка, выданная перечислением. Стандартные плоскости
-/// (<c>o3d_planeXOY/XOZ/YOZ</c>) ищутся в коллекции ПО ТИПУ объекта, а не по позиции; если их в
-/// коллекции нет, это называется отказом, а не подменяется другим объектом.
-/// </para>
-/// </remarks>
+/// <c>IPoints3D.Add</c> (<c>ksapi_ipoints3d_add.html</c>), <c>IPlane3DByAngle</c> /
+/// <c>IPlane3DByOffset</c>, <c>IAxis3DBy2Points</c> / <c>IAxis3DByConeface</c> / <c>IAxis3DByEdge</c>,
+/// <c>IPoint3D</c>. Object types come from the official <c>obj3dtype.html</c> table:
+/// <c>o3d_planeAngle</c> = 15 → <c>IPlane3DByAngle</c>, <c>o3d_planeOffset</c> = 14 →
+/// <c>IPlane3DByOffset</c>, <c>o3d_axis2Points</c> = 10, <c>o3d_axisConeFace</c> = 11,
+/// <c>o3d_axisEdge</c> = 12, <c>o3d_point3D</c> = 70.
+/// MEASURED: planes and axes live on a DIFFERENT interface than points — <c>Planes3D</c>/<c>Axes3D</c>
+/// are declared on <c>IAuxiliaryGeomContainer</c> (IID <c>{950FEBE2-F916-4E77-A37D-B061E5C22FA8}</c>),
+/// while <c>Points3D</c> is on <c>IModelContainer</c>; a plain cast of the container to
+/// <c>IAuxiliaryGeomContainer</c> gives <c>null</c>, and only a QI on the live part object works
+/// (R.13; see also <c>Api7Bridge.TryBuildAxisBy2Points</c>).
+/// INVARIANT: no value is derived from a collection index or guessed from geometry — an address is
+/// only a reference issued by the enumeration; standard planes (<c>o3d_planeXOY/XOZ/YOZ</c>) are
+/// found by object TYPE, not position, and their absence is a refusal, not a substitute.
+/// History: docs/decisions/adapter-api7.md#aux-geometry</remarks>
 internal static class Api7AuxGeometry
 {
-    /// <summary>Обёртка чтения: COM-отказ даёт <c>null</c> («не прочитано»), а не исключение.</summary>
+    /// <summary>Read wrapper: a COM failure yields <c>null</c> ("not read"), not an exception.</summary>
     private static T? Safe<T>(Func<T> read)
     {
         try
@@ -79,8 +65,9 @@ internal static class Api7AuxGeometry
 
     private static int? SafeI(Func<int> read) => Safe(read);
 
-    /// <summary>Чтение строки. Принимает и заведомо nullable-выражения (<c>obj?.Name</c>): COM-свойство
-    /// объявлено не-nullable, но объект может быть null, и это не ошибка вызывающего.</summary>
+    /// <summary>Read a string. Also accepts explicitly nullable expressions (<c>obj?.Name</c>): the COM
+    /// property is declared non-nullable, but the object may be null, and that is not the caller's
+    /// error.</summary>
     private static string? SafeS(Func<string?> read)
     {
         try
@@ -93,10 +80,8 @@ internal static class Api7AuxGeometry
         }
     }
 
-    /// <summary>
-    /// Контейнеры API7 перенесённой детали. Возвращаются оба: <c>IModelContainer</c> — для точек,
-    /// <c>IAuxiliaryGeomContainer</c> — для плоскостей и осей. Причина отказа называется по имени.
-    /// </summary>
+    /// <summary>API7 containers of the transferred part. Both are returned: <c>IModelContainer</c> for
+    /// points, <c>IAuxiliaryGeomContainer</c> for planes and axes. A refusal reason is named.</summary>
     public static (IModelContainer? Model, IAuxiliaryGeomContainer? Auxiliary, string? Failure)
         Containers(Api7Bridge bridge, object part)
     {
@@ -127,10 +112,10 @@ internal static class Api7AuxGeometry
         }
     }
 
-    // ---------------------------------------------------------------- точки
+    // ----------------------------------------------------------------- points
 
-    /// <summary>Точка модели по координатам. Проверяется, что объект создался: «принял массив из
-    /// трёх чисел» без проверки дало бы точку в начале координат.</summary>
+    /// <summary>A model point by coordinates. Creation is verified: "accepted an array of three
+    /// numbers" without a check would give a point at the origin.</summary>
     public static (IPoint3D? Point, string? Failure) CreatePointByCoordinates(
         IModelContainer container, double x, double y, double z, string? name = null)
     {
@@ -146,11 +131,11 @@ internal static class Api7AuxGeometry
                 return (null, "IPoints3D.Add() не отдал IPoint3D");
             }
 
-            // ИМЯ ЗАДАЁТСЯ ДО Update(), как у плоскостей и осей. Измерено 21.09.2026 на бинарях
-            // publish-deproutes-20260921-d: имя НЕ присваивалось вовсе, и модель возвращала
-            // автоимя «Точка:1» при запрошенном «PROBE-point» — строка DEP.DPT.02.read искала
-            // точку по имени и находила 0 объектов. Сеттер в поставке есть:
-            // IPoint3D.set_Name(String) (Interop.KompasAPI7.dll, IID {D71AEDBE-01D4-4C7D-96DC-94981F2A1C37}).
+            // The NAME is set BEFORE Update(), as for planes and axes. MEASURED 21.09.2026
+            // (publish-deproutes-20260921-d): without the assignment the model returned an
+            // auto-generated name instead of the requested "PROBE-point", and row DEP.DPT.02.read
+            // looking a point up by name found 0 objects. The setter exists in the shipped assembly:
+            // IPoint3D.set_Name(String) (IID {D71AEDBE-01D4-4C7D-96DC-94981F2A1C37}).
             if (name is { Length: > 0 })
             {
                 point.Name = name;
@@ -172,12 +157,11 @@ internal static class Api7AuxGeometry
         }
     }
 
-    /// <summary>
-    /// Точка смещением от опорной вершины: <c>IPoint3D.ParameterType = ksPDisplace</c> и параметры
-    /// через <c>IPoint3DParamDisplace</c> (<c>ksapi_ipoint3dparamdisplace.html</c>,
-    /// <c>…setassociationvertex.html</c>). Порядок записей обязателен: сначала способ построения и
-    /// опора, только затем смещения — точка без опоры не имеет начала отсчёта.
-    /// </summary>
+    /// <summary>A point by displacement from a reference vertex: <c>IPoint3D.ParameterType = ksPDisplace</c>
+    /// with parameters via <c>IPoint3DParamDisplace</c> (<c>ksapi_ipoint3dparamdisplace.html</c>,
+    /// <c>…setassociationvertex.html</c>). INVARIANT: the write order is mandatory — construction
+    /// method and reference first, offsets only after, since a point without a reference has no
+    /// origin.</summary>
     public static (IPoint3D? Point, string? Failure) CreatePointByDisplace(
         IModelContainer container, IModelObject associationVertex, double dx, double dy, double dz)
     {
@@ -194,8 +178,8 @@ internal static class Api7AuxGeometry
             }
 
             point.ParameterType = ksPoint3DTypeEnum.ksPDisplace;
-            // У IPoint3D.AssociationObject НЕТ сеттера в interop — есть только метод
-            // SetAssociationObject(IModelObject), поэтому присваивание свойства не собралось бы.
+            // MEASURED: IPoint3D.AssociationObject has NO setter in the interop — only the method
+            // SetAssociationObject(IModelObject) — so a property assignment would not compile.
             point.SetAssociationObject(associationVertex);
 
             if (point.Parameters is not IPoint3DParamDisplace parameters)
@@ -221,7 +205,7 @@ internal static class Api7AuxGeometry
         }
     }
 
-    /// <summary>Чтение точки: координаты, способ построения и опорный объект.</summary>
+    /// <summary>Read a point: coordinates, construction method and reference object.</summary>
     public static (double[]? Coordinates, string? ParameterType, string? AssociationName,
         IReadOnlyList<string> Notes) ReadPoint(IPoint3D point)
     {
@@ -247,13 +231,11 @@ internal static class Api7AuxGeometry
         return (coordinates, parameterType, association, notes);
     }
 
-    // ------------------------------------------------------------- плоскости
+    // ----------------------------------------------------------------- planes
 
-    /// <summary>
-    /// Смещённая плоскость: <c>o3d_planeOffset</c> → <c>IPlane3DByOffset</c>.
-    /// <c>BasePlane</c> принимает «базовую плоскость ИЛИ ПЛОСКУЮ ГРАНЬ»
-    /// (<c>ksapi_iplane3dbyoffset_setbaseplane.html</c>) — поэтому опорой может быть и грань.
-    /// </summary>
+    /// <summary>An offset plane: <c>o3d_planeOffset</c> → <c>IPlane3DByOffset</c>. DOC: <c>BasePlane</c>
+    /// accepts «базовая плоскость ИЛИ ПЛОСКАЯ ГРАНЬ» (<c>ksapi_iplane3dbyoffset_setbaseplane.html</c>),
+    /// so the reference may also be a face.</summary>
     public static (IPlane3D? Plane, string? Failure) CreatePlaneByOffset(
         IPlanes3D planes, IModelObject baseObject, double offsetMm, bool direction, string? name)
     {
@@ -290,12 +272,10 @@ internal static class Api7AuxGeometry
         }
     }
 
-    /// <summary>
-    /// Наклонная плоскость: <c>o3d_planeAngle</c> → <c>IPlane3DByAngle</c>
-    /// (<c>ksapi_iplane3dbyangle.html</c>). Угол задаётся ОТНОСИТЕЛЬНО базовой плоскости
+    /// <summary>An angled plane: <c>o3d_planeAngle</c> → <c>IPlane3DByAngle</c>
+    /// (<c>ksapi_iplane3dbyangle.html</c>). DOC: the angle is relative to the base plane
     /// (<c>…setangle.html</c>: «угол наклона плоскости относительно базовой плоскости (в градусах)»),
-    /// а <c>BaseLine</c> — базовая прямая, то есть ось наклона (<c>…setbaseline.html</c>).
-    /// </summary>
+    /// and <c>BaseLine</c> is the base line, i.e. the tilt axis (<c>…setbaseline.html</c>).</summary>
     public static (IPlane3D? Plane, string? Failure) CreatePlaneByAngle(
         IPlanes3D planes, IModelObject basePlane, IModelObject? baseLine, double angleDeg, bool direction,
         string? name)
@@ -338,22 +318,18 @@ internal static class Api7AuxGeometry
         }
     }
 
-    // FindBasePlane (поиск стандартной плоскости в IPlanes3D по ModelObjectType) УДАЛЁН 21.09.2026:
-    // маршрут измерен как несуществующий. Проба scratch/_probe_dpl_offset.py на бинарях поставки
-    // publish-deproutes-20260921-b показала, что в детали с готовым телом (ревизия 4)
-    // IAuxiliaryGeomContainer.GetPlanes3D отдаёт Count = 0 — стандартных плоскостей в коллекции
-    // IPlanes3D нет вовсе, тогда как созданные инструментом плоскости в ней появляются. Функция
-    // искала объект, которого в коллекции не бывает, и её отказ («не найдено») был отказом
-    // прибора, выданным за отказ продукта. Именованная опора берётся документированным
-    // ksPart.GetDefaultEntity — см. Api5Session.AuxGeometry.cs:ResolveNamedBasePlane.
+    // FindBasePlane (searching IPlanes3D for a standard plane by ModelObjectType) was REMOVED
+    // 21.09.2026: the route was MEASURED non-existent — a probe showed GetPlanes3D returns Count = 0
+    // on a part with a finished body, i.e. IPlanes3D holds no standard planes at all, so the search
+    // failed for a reason of the instrument, not of the product. A named datum is obtained via the
+    // documented ksPart.GetDefaultEntity (see Api5Session.AuxGeometry.cs:ResolveNamedBasePlane).
+    // History: docs/decisions/adapter-api7.md#aux-geometry
 
-    /// <summary>
-    /// Чтение плоскости: вид, угол либо смещение, знак, опора и НОРМАЛЬ СО ЗНАКОМ.
-    /// Нормаль берётся из математической поверхности в НАЧАЛЕ параметрической области
-    /// (<c>ParamUMin</c>, <c>ParamVMin</c>), а не в произвольной точке: <c>GetNormal(u, v, …)</c>
-    /// документирован как функция параметров поверхности
-    /// (<c>IMathSurface3D.GetNormal</c>), и «взять u = 0» было бы догадкой о допустимой области.
-    /// </summary>
+    /// <summary>Read a plane: kind, angle or offset, direction, reference and a SIGNED NORMAL. DOC: the
+    /// normal is taken from the mathematical surface at the START of the parametric domain
+    /// (<c>ParamUMin</c>, <c>ParamVMin</c>), not at an arbitrary point — <c>GetNormal(u, v, …)</c> is
+    /// documented as a function of the surface parameters (<c>IMathSurface3D.GetNormal</c>), and
+    /// "take u = 0" would be a guess about the valid domain.</summary>
     public static AuxGeomRow ReadPlane(IPlane3D plane, int index)
     {
         var notes = new List<string>();
@@ -444,27 +420,15 @@ internal static class Api7AuxGeometry
         }
     }
 
-    /// <summary>
-    /// Правка УЖЕ СОЗДАННОЙ плоскости: документированные сеттеры <c>IPlane3DByOffset.Offset</c>,
-    /// <c>IPlane3DByAngle.Angle</c> и <c>IPlane3DBy*.BasePlane</c>, затем <c>Update()</c>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Задаётся только то, что пришло.</b> Поле <c>null</c> означает «не менять», и это не то же
-    /// самое, что «поставить ноль»: подстановка нуля вместо «не задано» переписала бы смещение
-    /// плоскости, о котором клиент не просил.
-    /// </para>
-    /// <para>
-    /// <b>Соответствие вида и поля проверяется ДО вызова</b> — вызывающим уровнем, по прочитанному
-    /// виду плоскости. Здесь стоит вторая, страховочная проверка: сеттер чужого вида недостижим по
-    /// типу, и попытка привела бы к <c>InvalidCastException</c>, а не к понятному отказу.
-    /// </para>
-    /// <para>
-    /// <b>Успех не равен применённой правке.</b> <c>Update()</c> возвращает признак, но
-    /// подтверждением служит ПОВТОРНОЕ ЧТЕНИЕ (<see cref="ReadPlane"/>), которое делает вызывающий
-    /// уровень. Здесь возвращается только названная причина отказа.
-    /// </para>
-    /// </remarks>
+    /// <summary>Edit an ALREADY CREATED plane: the documented setters <c>IPlane3DByOffset.Offset</c>,
+    /// <c>IPlane3DByAngle.Angle</c> and <c>IPlane3DBy*.BasePlane</c>, then <c>Update()</c>.</summary>
+    /// <remarks>INVARIANT: only what was supplied is set — a <c>null</c> field means "do not change",
+    /// not "set to zero", since substituting zero would rewrite an offset the client did not ask about.
+    /// INVARIANT: kind/field correspondence is checked at the caller BEFORE the call; the check here is
+    /// a second safety net — the setter of a foreign kind is unreachable by type and would raise
+    /// <c>InvalidCastException</c> instead of a clear refusal. INVARIANT: success is not an applied edit
+    /// — confirmation is a RE-READ (<see cref="ReadPlane"/>) done by the caller; only a named refusal
+    /// reason is returned here.</remarks>
     public static string? UpdatePlane(
         IPlane3D plane, double? offsetMm, double? angleDeg, bool? direction, IModelObject? basePlane)
     {
@@ -550,13 +514,11 @@ internal static class Api7AuxGeometry
         }
     }
 
-    // ------------------------------------------------------------------ оси
+    // ------------------------------------------------------------------- axes
 
-    /// <summary>
-    /// Ось по двум точкам модели: <c>o3d_axis2Points</c> → <c>IAxis3DBy2Points</c>.
-    /// <c>Update()</c> вызывается ПОСЛЕ подачи обеих точек — измерено (R.13): ось, обновлённая до
-    /// подачи точек, читается <c>Valid=False</c> и в дерево не входит.
-    /// </summary>
+    /// <summary>An axis through two model points: <c>o3d_axis2Points</c> → <c>IAxis3DBy2Points</c>.
+    /// MEASURED (R.13): <c>Update()</c> is called AFTER both points are supplied — an axis updated
+    /// before the points reads <c>Valid=False</c> and does not enter the tree.</summary>
     public static (IAxis3D? Axis, string? Failure) CreateAxisBy2Points(
         IAxes3D axes, IModelContainer container, double[] point1, double[] point2, string? name)
     {
@@ -604,7 +566,7 @@ internal static class Api7AuxGeometry
         }
     }
 
-    /// <summary>Ось по цилиндрической либо конической поверхности: <c>o3d_axisConeFace</c> →
+    /// <summary>An axis through a cylindrical or conical face: <c>o3d_axisConeFace</c> →
     /// <c>IAxis3DByConeface</c> (<c>ksapi_iaxis3dbyconeface_setface.html</c>).</summary>
     public static (IAxis3D? Axis, string? Failure) CreateAxisByFace(IAxes3D axes, IModelObject face, string? name)
     {
@@ -639,7 +601,7 @@ internal static class Api7AuxGeometry
         }
     }
 
-    /// <summary>Ось по ребру: <c>o3d_axisEdge</c> → <c>IAxis3DByEdge</c>.</summary>
+    /// <summary>An axis through an edge: <c>o3d_axisEdge</c> → <c>IAxis3DByEdge</c>.</summary>
     public static (IAxis3D? Axis, string? Failure) CreateAxisByEdge(IAxes3D axes, IModelObject edge, string? name)
     {
         try
@@ -673,11 +635,9 @@ internal static class Api7AuxGeometry
         }
     }
 
-    /// <summary>
-    /// Чтение оси. Вид определяется QI, координаты — по вершинам (<c>Point1</c>/<c>Point2</c>) там,
-    /// где они есть; <c>MathCurve</c> читается отдельно и его отсутствие называется, а не
-    /// подменяется нулём.
-    /// </summary>
+    /// <summary>Read an axis. The kind is determined by QI; coordinates come from the vertices
+    /// (<c>Point1</c>/<c>Point2</c>) where present; <c>MathCurve</c> is read separately and its
+    /// absence is named, not replaced by zero.</summary>
     public static AuxGeomRow ReadAxis(IAxis3D axis, int index)
     {
         var notes = new List<string>();
@@ -724,13 +684,11 @@ internal static class Api7AuxGeometry
             null, notes);
     }
 
-    // ---------------------------------------------------------------- перечисление вспомогательной геометрии
+    // ------------------------------------------------------- auxiliary-geometry enumeration
 
-    /// <summary>
-    /// Число элементов коллекции либо <c>null</c>, если прочитать не удалось. Публичная, потому что
-    /// ею пользуются и оба инструмента вспомогательной геометрии: «не прочитано» обязано выглядеть
-    /// одинаково во всех ответах, иначе одно и то же состояние называлось бы по-разному.
-    /// </summary>
+    /// <summary>The collection's element count, or <c>null</c> if it could not be read. Public because
+    /// both auxiliary-geometry tools use it: "not read" must look the same in every response, otherwise
+    /// one and the same state would be named differently.</summary>
     public static int? SafeCount(object? collection) => collection switch
     {
         IPlanes3D planes => SafeI(() => planes.Count),
@@ -747,7 +705,7 @@ internal static class Api7AuxGeometry
             return null;
         }
 
-        // Вершина читается как IPoint3D: точка модели и вершина — один и тот же объект модели.
+        // A vertex is read as an IPoint3D: a model point and a vertex are the same model object.
         if (vertex is IPoint3D point)
         {
             var x = SafeD(() => point.X);

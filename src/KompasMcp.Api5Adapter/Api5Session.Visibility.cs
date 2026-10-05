@@ -3,35 +3,17 @@ using Kompas6API5;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>
-/// Видимость экземпляра КОМПАС и его документов.
-/// </summary>
-/// <remarks>
-/// Файл появился после измеренного дефекта: <c>kompas_connect(mode=launch, make_visible=true)</c>
-/// отвечал <c>visible=true</c>, а окно оставалось скрытым. Причин было три, и все они про
-/// подмену проверки, а не про COM:
-/// <list type="number">
-/// <item><c>MakeVisible</c> доходил из контракта до адаптера и нигде не применялся;</item>
-/// <item>поле <c>Visible</c> в ответе вычислялось как <c>ProcessIdOf(Application) is not null</c>,
-/// то есть как «по HWND удаётся достать PID». Скрытое окно HWND имеет, поэтому проверка
-/// была ложноположительной по построению;</item>
-/// <item>создание и открытие документов жёстко просили невидимый режим
-/// (<c>Create(true,…)</c>, <c>Open(path, true)</c>), так что показ приложения сам по себе
-/// ничего не делал бы видимым.</item>
-/// </list>
-///
-/// Правило, которое здесь действует: о показе сообщается только по наблюдению, а не по факту
-/// вызова. Значит видимость проверяется двумя независимыми способами — свойством COM
-/// (<c>KompasObject.Visible</c>) и Windows (<c>IsWindowVisible</c> по главному окну), — а режим
-/// документа перечитывается у самого документа (<c>ksDocument3D.invisibleMode</c>), а не
-/// выводится из того, что мы попросили.
-/// </remarks>
+/// <summary>Visibility of a KOMPAS instance and its documents.</summary>
+/// <remarks>INVARIANT: showing is reported by OBSERVATION, never by the fact of the call. Visibility is
+/// therefore checked two independent ways — the COM property (<c>KompasObject.Visible</c>) and Windows
+/// (<c>IsWindowVisible</c> on the main window) — and the document mode is re-read from the document
+/// itself (<c>ksDocument3D.invisibleMode</c>), not inferred from what was requested.
+/// History: docs/decisions/adapter-core.md#visibility</remarks>
 public sealed partial class Api5Session
 {
-    /// <summary>
-    /// Наблюдённое состояние окна приложения: что говорит COM, что говорит Windows, и досталось ли
-    /// вообще окно. Поля разделены намеренно — сведение их в одно «visible» и породило дефект.
-    /// </summary>
+    /// <summary>Observed state of the application window: what COM says, what Windows says, and whether a
+    /// window was obtained at all. The fields are kept separate on purpose — collapsing them into one
+    /// "visible" is what produced the defect.</summary>
     public sealed record WindowObservation(
         bool? ComProperty,
         long WindowHandle,
@@ -39,13 +21,13 @@ public sealed partial class Api5Session
         IReadOnlyList<string> VisibleChildTitles,
         string? Error)
     {
-        /// <summary>Видимо тогда и только тогда, когда оба независимых наблюдения говорят «да».</summary>
+        /// <summary>Visible if and only if both independent observations say "yes".</summary>
         public bool Visible => ComProperty == true && WindowVisible == true;
 
         public bool Observed => ComProperty is not null || WindowVisible is not null;
     }
 
-    /// <summary>Опрашивает приложение, не полагаясь ни на одно из подтверждений косвенно.</summary>
+    /// <summary>Interrogates the application without deriving either confirmation from the other.</summary>
     public static WindowObservation ObserveApplicationWindow(KompasObject application)
     {
         bool? com = null;
@@ -77,8 +59,8 @@ public sealed partial class Api5Session
             var hwnd = new IntPtr(handle);
             try
             {
-                // Отдельно и независимо от COM-свойства: именно эта пара не даёт «PID есть»
-                // выдать за «окно видно».
+                // Separate and independent of the COM property: this pair is what keeps "there is a PID"
+                // from being passed off as "the window is visible".
                 win32 = NativeMethods.IsWindowVisible(hwnd);
                 titles = NativeMethods.VisibleChildWindowTitles(hwnd) ?? new List<string>();
             }
@@ -91,15 +73,11 @@ public sealed partial class Api5Session
         return new WindowObservation(com, handle, win32, titles, error);
     }
 
-    /// <summary>
-    /// Просит показать или скрыть экземпляр и проверяет, что получилось. Ничего не предполагает
-    /// о результате: возвращает наблюдение после попытки, а не признак «мы вызвали set».
-    /// </summary>
-    /// <remarks>
-    /// После показа окно может ещё не успеть перестроиться, поэтому наблюдение берётся с
-    /// небольшим ожиданием: без него первый же запуск давал бы visible=false на корректном
-    /// действии (состояние гонки вместо дефекта).
-    /// </remarks>
+    /// <summary>Asks to show or hide the instance and checks what happened. Assumes nothing about the
+    /// result: it returns the observation after the attempt, not a "we called set" flag.</summary>
+    /// <remarks>After showing, the window may not have redrawn yet, so the observation is taken with a
+    /// short wait: without it the very first launch reported visible=false for a correct action (a race,
+    /// not a defect).</remarks>
     private static WindowObservation ApplyApplicationVisibility(KompasObject application, bool wantVisible)
     {
         try
@@ -108,8 +86,8 @@ public sealed partial class Api5Session
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException)
         {
-            // Отказ показа не отменяет сеанс: пользователь получит фактическое состояние и код
-            // ошибки в ответе, а не «успех» с другим смыслом.
+            // A failed show does not cancel the session: the user gets the actual state and the error
+            // code in the response, not a "success" meaning something else.
             return new WindowObservation(null, 0, null, Array.Empty<string>(),
                 "set_Visible: " + ex.GetType().Name + ": " + ex.Message);
         }
@@ -128,13 +106,9 @@ public sealed partial class Api5Session
         return ObserveApplicationWindow(application);
     }
 
-    /// <summary>
-    /// Режим видимости документа: то, что документ действительно сообщает о себе.
-    /// </summary>
-    /// <remarks>
-    /// <c>ksDocument3D.invisibleMode</c> — только чтение; это единственный доступный способ
-    /// спросить сам документ, а не вспомнить, что мы просили при Create/Open.
-    /// </remarks>
+    /// <summary>The document's visibility mode: what the document actually reports about itself.</summary>
+    /// <remarks>DOC: <c>ksDocument3D.invisibleMode</c> is read-only; it is the only available way to ask
+    /// the document itself rather than recall what was requested at Create/Open.</remarks>
     private static bool? ObserveDocumentVisible(ksDocument3D document)
     {
         try
@@ -147,17 +121,12 @@ public sealed partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Делает документ активным и, только если он видим, обновляет изображение.
-    /// </summary>
-    /// <remarks>
-    /// Возвращает коды наблюдений, а не «успех»: <c>SetActive()</c> отвечает Boolean, а соглашение
-    /// о возвращаемом значении <c>ksRefreshActiveWindow()</c> (Int32) не калибровано, поэтому он
-    /// записывается как есть и не участвует в решении о том, показан документ или нет.
-    /// Камера не трогается намеренно: <c>ZoomPrevNextOrAll</c> в этом коде не вызывается ни при
-    /// каких условиях (см. Api5SessionVisibilityGuardTests), потому что сброс вида после каждой
-    /// операции — это ровно то, что запрещено требованием.
-    /// </remarks>
+    /// <summary>Makes the document active and, only if it is visible, refreshes the view.</summary>
+    /// <remarks>Returns observation codes, not "success": <c>SetActive()</c> answers Boolean, and the
+    /// return convention of <c>ksRefreshActiveWindow()</c> (Int32) is uncalibrated, so it is recorded
+    /// as-is and does not decide whether the document is shown. The camera is deliberately untouched:
+    /// <c>ZoomPrevNextOrAll</c> is never called in this code (see Api5SessionVisibilityGuardTests),
+    /// because resetting the view after every operation is exactly what the requirement forbids.</remarks>
     private static (bool? Activated, object? Refresh) PresentDocument(
         KompasObject application, ksDocument3D document, bool documentVisible)
     {
@@ -189,17 +158,15 @@ public sealed partial class Api5Session
         return (activated, refresh);
     }
 
-    /// <summary>
-    /// Обновление вида после мутации над видимым документом. Вызывается из общего потока
-    /// <see cref="BumpRevision"/>, поэтому не зависит от того, какая именно операция меняла модель.
-    /// </summary>
+    /// <summary>View refresh after a mutation on a visible document. Called from the shared
+    /// <see cref="BumpRevision"/> path, so it does not depend on which operation changed the model.</summary>
     private void RefreshViewAfterMutation(DocumentEntry document)
     {
         if (!document.DocumentsVisible)
         {
-            // Скрытый режим остаётся ровно как был: никакого оконного трафика. Это и регресс-защита
-            // (число вызовов в скрытом режиме не меняется), и смысл требования «скрытый режим
-            // сохраняется и проверяется отдельно».
+            // Hidden mode stays exactly as it was: no window traffic. This is both regression protection
+            // (the call count in hidden mode does not change) and the point of the requirement "hidden
+            // mode is preserved and verified separately".
             return;
         }
 
@@ -214,8 +181,8 @@ public sealed partial class Api5Session
         }
         catch (Exception)
         {
-            // Вид — не результат модели: неудача перерисовки не должна превращать успешную
-            // геометрическую операцию в ошибку.
+            // The view is not the model's result: a failed redraw must not turn a successful geometric
+            // operation into an error.
         }
     }
 }

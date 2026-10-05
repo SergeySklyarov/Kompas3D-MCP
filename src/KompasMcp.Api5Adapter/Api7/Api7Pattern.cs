@@ -6,50 +6,35 @@ using KompasMcp.Contracts.Ipc;
 
 namespace KompasMcp.Api5Adapter.Api7;
 
-/// <summary>
-/// Типизированные операции API7 над массивами и зеркальным массивом (SM-18 / SM-19 / SM-23).
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Основание — опубликованная страница справки, а не имя, найденное в интерфейсе.</b> Соответствие
-/// «числовой тип → интерфейс» взято со страницы SDK <c>copytype.html</c>, открытой по проводу
-/// (<c>https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/copytype.html</c>, HTTP 200):
+/// <summary>Typed API7 operations over patterns and the mirror pattern (SM-18 / SM-19 / SM-23).</summary>
+/// <remarks>DOC: the basis is a published help page, not a name found in the interface. The
+/// "numeric type → interface" mapping is taken from SDK page <c>copytype.html</c> fetched over the
+/// wire (<c>https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/copytype.html</c>, HTTP 200):
 /// <c>o3d_meshCopy 35 ILinearPattern</c>, <c>o3d_circularCopy 36 ICircularPattern</c>,
 /// <c>o3d_mirrorOperation 48 IMirrorPattern</c>, <c>o3d_mirrorAllOperation 49 IMirrorPattern</c>,
 /// <c>o3d_BodiesMeshCopy 528 ILinearPattern</c>, <c>o3d_BodiesCircularCopy 529 ICircularPattern</c>.
-/// Сами числа прочитаны из <c>Interop.Kompas6Constants3D.dll</c> прибором
-/// <c>KompasMcp.InteropScan</c>, а не пересказаны.
-/// </para>
-/// <para>
-/// <b>Члены взяты со страницы свойств интерфейса, а не из соображений симметрии.</b>
-/// <c>ilinearpattern_props.html</c> перечисляет <c>Angle1/2</c>, <c>Axis1/2</c>,
+/// The numbers themselves were read from <c>Interop.Kompas6Constants3D.dll</c> by
+/// <c>KompasMcp.InteropScan</c>, not paraphrased. Members are taken from the interface property page,
+/// not by symmetry: <c>ilinearpattern_props.html</c> lists <c>Angle1/2</c>, <c>Axis1/2</c>,
 /// <c>BoundaryInstancesStepFactor1/2</c>, <c>BuildingType</c>, <c>Count1/2</c>, <c>Direction1/2</c>,
 /// <c>Step1/2</c>, <c>Vector1/2</c>; <c>icircularpattern_props.html</c> — <c>Axis</c>,
 /// <c>BoundaryInstancesStepFactor1/2</c>, <c>BuildingType</c>, <c>Count1/2</c>,
 /// <c>ReverseDirection</c>, <c>SaveInitialOrientation</c>, <c>Step1/2</c>, <c>StepByAxis</c>;
-/// <c>imirrorpattern_props.html</c> — только <c>Plane</c> и <c>SaveInitialObjects</c>.
-/// </para>
-/// <para>
-/// <b>Чего здесь нет и почему.</b> <c>Vector1/Vector2</c> не пишутся: в <c>kAPI7.tlb</c> у них
-/// объявлены только геттеры, а в вендорской интероп-сборке они не объявлены вовсе (измерено
-/// <c>InteropScan --type-members ILinearPattern</c>: 39 членов, ни <c>Vector1</c>, ни
-/// <c>Vector2</c>). Направление задаётся осью. Это открытый вопрос OQ-B-03, названный, а не
-/// обойдённый молчанием.
-/// </para>
-/// <para>
-/// <b>Ни одного <c>NewEntity</c> и ни одного <c>Create()</c>.</b> Урок вращения (SM-03): оболочка
-/// API5 вокруг объекта фабрики API7 — смешанный жизненный цикл, при котором <c>Create()</c>
-/// возвращает <c>true</c> на пустой операции и ничего не строится. Массивы создаются ТОЛЬКО
-/// фабрикой <c>IModelContainer.FeaturePatterns.Add</c>.
-/// </para>
-/// </remarks>
+/// <c>imirrorpattern_props.html</c> — only <c>Plane</c> and <c>SaveInitialObjects</c>.
+/// LIMIT: <c>Vector1/Vector2</c> are not written — in <c>kAPI7.tlb</c> they have getters only and in
+/// the vendor interop they are not declared at all (MEASURED <c>InteropScan --type-members
+/// ILinearPattern</c>: 39 members, neither <c>Vector1</c> nor <c>Vector2</c>); direction is set by an
+/// axis. This is open question OQ-B-03, named, not silently bypassed.
+/// INVARIANT: no <c>NewEntity</c> and no <c>Create()</c>. The rotation lesson (SM-03): an API5 wrapper
+/// around an API7 factory object is a mixed lifetime in which <c>Create()</c> returns <c>true</c> on
+/// an empty operation and nothing is built; patterns are created ONLY by
+/// <c>IModelContainer.FeaturePatterns.Add</c>.
+/// History: docs/decisions/adapter-api7.md#pattern</remarks>
 internal static class Api7Pattern
 {
-    /// <summary>Числовой тип фабрики для сетки либо кругового массива.</summary>
-    /// <remarks>
-    /// Массив ТЕЛ — отдельный тип, а не флаг: <c>o3d_BodiesMeshCopy=528</c> /
-    /// <c>o3d_BodiesCircularCopy=529</c> против <c>o3d_meshCopy=35</c> / <c>o3d_circularCopy=36</c>.
-    /// </remarks>
+    /// <summary>The factory numeric type for a grid or circular pattern.</summary>
+    /// <remarks>A pattern OF BODIES is a separate type, not a flag: <c>o3d_BodiesMeshCopy=528</c> /
+    /// <c>o3d_BodiesCircularCopy=529</c> versus <c>o3d_meshCopy=35</c> / <c>o3d_circularCopy=36</c>.</remarks>
     public static ksObj3dTypeEnum LinearType(PatternCopyKind kind) => kind switch
     {
         PatternCopyKind.Bodies => ksObj3dTypeEnum.o3d_BodiesMeshCopy,
@@ -68,12 +53,10 @@ internal static class Api7Pattern
         _ => ksObj3dTypeEnum.o3d_mirrorOperation,
     };
 
-    /// <summary>
-    /// Способ построения массива по сетке. Значения прочитаны из интероп-сборки констант
+    /// <summary>The grid-pattern building method. Values read from the interop constants assembly
     /// (<c>ksLinearPatternBuildingTypeEnum</c>: <c>ksLPSaveAll=0</c>, <c>ksLPSaveAlongPerimeter=1</c>,
     /// <c>ksLPSaveAlongAxially=2</c>, <c>ksLPChessOrderByAxis1=3</c>, <c>ksLPChessOrderByAxis2=4</c>).
-    /// Неизвестное слово отвергается вызывающим до COM, здесь — значение по умолчанию.
-    /// </summary>
+    /// An unknown word is rejected by the caller before COM; here it is a default.</summary>
     public static ksLinearPatternBuildingTypeEnum LinearBuilding(string name) => name switch
     {
         "save_all" => ksLinearPatternBuildingTypeEnum.ksLPSaveAll,
@@ -92,11 +75,9 @@ internal static class Api7Pattern
         _ => ksCircularPatternBuildingTypeEnum.ksCPSaveAll,
     };
 
-    /// <summary>
-    /// Тип действия над телами для <c>IChooseBodies7.ChooseBodiesType</c>. Значения прочитаны из
-    /// интероп-сборки констант (<c>ksChooseBodiesType</c>: <c>ksNewBody=0</c>,
-    /// <c>ksAutomaticDefinition=1</c>, <c>ksManualEditing=2</c>, <c>ksAllBodies=3</c>).
-    /// </summary>
+    /// <summary>The body action type for <c>IChooseBodies7.ChooseBodiesType</c>. Values read from the
+    /// interop constants assembly (<c>ksChooseBodiesType</c>: <c>ksNewBody=0</c>,
+    /// <c>ksAutomaticDefinition=1</c>, <c>ksManualEditing=2</c>, <c>ksAllBodies=3</c>).</summary>
     public static ksChooseBodiesType ChooseBodies(string name) => name switch
     {
         "new_body" => ksChooseBodiesType.ksNewBody,
@@ -106,7 +87,7 @@ internal static class Api7Pattern
         _ => ksChooseBodiesType.ksAllBodies,
     };
 
-    /// <summary>Число признаков массивов в коллекции API7. null — не прочитано (не «ноль»).</summary>
+    /// <summary>The number of pattern features in the API7 collection. null — not read (not "zero").</summary>
     public static int? Count(IModelContainer container)
     {
         try
@@ -119,13 +100,11 @@ internal static class Api7Pattern
         }
     }
 
-    /// <summary>Создать массив по сетке и записать параметры, затем <c>Update()</c>.</summary>
-    /// <remarks>
-    /// Возвращается (объект, причина отказа): вызывающий обязан отличить отказ КОМПАСа от падения
-    /// адаптера, и «не смогли» не должно выглядеть как «создали». Порядок записей — часть контракта:
-    /// <c>InitialObjects</c> и оси пишутся ДО шагов и количеств, потому что массив без исходных
-    /// объектов и без оси не существует как признак.
-    /// </remarks>
+    /// <summary>Create a grid pattern, write its parameters, then <c>Update()</c>.</summary>
+    /// <remarks>Returns (object, refusal reason): the caller must distinguish a KOMPAS refusal from an
+    /// adapter crash, and "could not" must not look like "created". INVARIANT: the write order is part
+    /// of the contract — <c>InitialObjects</c> and the axes are written BEFORE steps and counts,
+    /// because a pattern without source objects and an axis does not exist as a feature.</remarks>
     public static (ILinearPattern? Pattern, string? Failure) TryCreateLinear(
         IModelContainer container,
         PatternCopyKind kind,
@@ -162,11 +141,10 @@ internal static class Api7Pattern
 
             linear.Step1 = step1;
             linear.Count1 = count1;
-            // УГОЛ ПИШЕТСЯ ТОЛЬКО КОГДА ОН ЗАДАН. Измерено прогоном: запись Angle2 = 0 (значение по
-            // умолчанию обязательного поля) совмещала второе направление с первым, и прямоугольная
-            // сетка вырождалась в линию — копии продолжали первую ось (x = 20, 40, 60, 50, 70, 90
-            // при y = 20). Угол между направлениями в модели по умолчанию 90°, и незаданное поле
-            // обязано оставить это значение, а не переписать его нулём.
+            // THE ANGLE IS WRITTEN ONLY WHEN SUPPLIED. MEASURED by a run: writing Angle2 = 0 (the
+            // default of a mandatory field) merged the second direction with the first, degenerating
+            // the rectangular grid into a line. The model's default angle between directions is 90°,
+            // and an unsupplied field must leave that value, not overwrite it with zero.
             if (angle1 is double a1)
             {
                 linear.Angle1 = a1;
@@ -175,8 +153,8 @@ internal static class Api7Pattern
             linear.Direction1 = direction1;
             linear.BoundaryInstancesStepFactor1 = boundary1;
 
-            // Второе направление пишется ТОЛЬКО когда оно участвует: Count2 = 1 с незаданной осью
-            // оставило бы в модели поле, которого в постановке не было.
+            // The second direction is written ONLY when it takes part: Count2 = 1 with an unsupplied
+            // axis would leave in the model a field that the request did not have.
             if (axis2 is not null && count2 > 1)
             {
                 linear.Axis2 = axis2;
@@ -208,7 +186,7 @@ internal static class Api7Pattern
         }
     }
 
-    /// <summary>Создать массив по концентрической сетке и записать параметры, затем <c>Update()</c>.</summary>
+    /// <summary>Create a circular pattern, write its parameters, then <c>Update()</c>.</summary>
     public static (ICircularPattern? Pattern, string? Failure) TryCreateCircular(
         IModelContainer container,
         PatternCopyKind kind,
@@ -265,16 +243,12 @@ internal static class Api7Pattern
         }
     }
 
-    /// <summary>
-    /// Создать зеркальный массив и записать параметры, затем <c>Update()</c>.
-    /// </summary>
-    /// <remarks>
-    /// Для вида <c>all_bodies</c> дополнительно ставится <c>IChooseBodies7</c>: измерено прибором
-    /// <c>InteropScan</c>, что объект зеркального массива отвечает на этот интерфейс (то же
-    /// утверждает страница <c>copytype.html</c>: «Дополнительно имеет интерфейс выбора тел
-    /// IChooseBodies7»). Отсутствие интерфейса — названная заметка, а не молчание: без него выбор
-    /// тел не выражается, и это видно вызывающему.
-    /// </remarks>
+    /// <summary>Create a mirror pattern, write its parameters, then <c>Update()</c>.</summary>
+    /// <remarks>For the <c>all_bodies</c> kind, <c>IChooseBodies7</c> is also set: MEASURED
+    /// (<c>InteropScan</c>) that the mirror-pattern object answers this interface (DOC
+    /// <c>copytype.html</c> agrees: «Дополнительно имеет интерфейс выбора тел IChooseBodies7»). A
+    /// missing interface is a named note, not silence: without it the body choice is not expressed, and
+    /// the caller sees that.</remarks>
     public static (IMirrorPattern? Pattern, string? Failure, IReadOnlyList<string> Notes) TryCreateMirror(
         IModelContainer container,
         PatternMirrorMode mode,
@@ -296,9 +270,9 @@ internal static class Api7Pattern
                 return (null, "FeaturePatterns.Add не отдал объект, отвечающий на QI(IMirrorPattern)", notes);
             }
 
-            // InitialObjects ставится только когда список НЕ пуст: у «зеркально отразить все»
-            // входом служит сама деталь, и запись пустого массива была бы утверждением «выбрано
-            // ничего», которого постановка не делала.
+            // InitialObjects is set only when the list is NOT empty: for "mirror all bodies" the input
+            // is the part itself, and writing an empty array would assert "nothing chosen", which the
+            // request did not do.
             if (sources7.Length > 0)
             {
                 mirror.InitialObjects = sources7;
@@ -306,21 +280,21 @@ internal static class Api7Pattern
 
             mirror.Plane = plane;
             mirror.SaveInitialObjects = saveInitialObjects;
-            // ЗАПИСЬ И НЕМЕДЛЕННОЕ ЧТЕНИЕ — ОДНОЙ СТРОКОЙ. Без чтения сразу после записи нельзя
-            // отличить «свойство не принято COM» от «принято и потеряно при построении», а это
-            // разные дефекты.
+            // WRITE AND IMMEDIATE READ-BACK IN ONE PLACE. Without a read right after the write one
+            // cannot distinguish "the property was not accepted by COM" from "accepted and lost during
+            // build", which are different defects.
             var flagReadBack = SafeBool(() => mirror.SaveInitialObjects);
             notes.Add($"save_initial_objects: записано {saveInitialObjects}, " +
                 $"прочитано сразу после записи {flagReadBack}");
             if (flagReadBack is bool readBack && readBack != saveInitialObjects)
             {
-                // ОТКАЗ НАЗВАН, А НЕ СПРЯТАН, и назван ВМЕСТЕ С ПРИЧИНОЙ ИЗ СПРАВКИ. Страница
-                // imirrorpattern_saveinitialobjects.html ограничивает свойство только
+                // THE REFUSAL IS NAMED, NOT HIDDEN, and named together with the help's reason. DOC
+                // (imirrorpattern_saveinitialobjects.html) restricts the property to
                 // o3d_mirrorAllOperation: «у других операций зеркального копирования возможность
-                // скрыть экземпляры отсутствует». Измерено на обеих операциях: у 49 запись false
-                // читается обратно как false и тела заменяются отражёнными, у 48 — читается как
-                // true и геометрия не меняется. Запрос принимается, но его непринятие моделью
-                // объявляется здесь, а не выдаётся за сработавшее свойство.
+                // скрыть экземпляры отсутствует». MEASURED on both operations: for 49, writing false
+                // reads back false and bodies are replaced by reflections; for 48, it reads back true
+                // and geometry does not change. The request is accepted, but the model's non-acceptance
+                // is declared here rather than passed off as an applied property.
                 notes.Add($"save_initial_objects НЕ принято моделью для {MirrorType(mode)}: " +
                     "справка ограничивает свойство только o3d_mirrorAllOperation, и измерение это " +
                     "подтверждает");
@@ -356,30 +330,19 @@ internal static class Api7Pattern
         }
     }
 
-    /// <summary>
-    /// Перезаписать параметры СУЩЕСТВУЮЩЕГО признака массива и вызвать <c>Update()</c>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Правка — это запись в ТОТ ЖЕ объект и <c>Update()</c>, а не создание похожего.</b> Объект
-    /// берётся из живой коллекции <c>IModelContainer.FeaturePatterns</c> по сопоставлению с
-    /// признаком дерева, а не сохраняется между вызовами: адрес COM-объекта между вызовами не
-    /// переживает перестроения, и «сохранённый» объект правил бы уже не тот признак.
-    /// </para>
-    /// <para>
-    /// <b>Пишутся только те члены, которые заданы.</b> Незаданный член остаётся прежним — иначе
-    /// «изменилось ровно запрошенное» было бы неотличимо от «сброшено в умолчание». Набор
-    /// допустимых членов у каждого семейства свой, и проверяет его вызывающий ДО мутации:
-    /// <c>save_initial_orientation</c> есть только у кругового, <c>save_initial_objects</c> — только
-    /// у зеркального, <c>step2_deg</c> — только у кругового, <c>step2_mm</c>, <c>angle1/2</c> и
-    /// <c>direction1/2</c> — только у сетки.
-    /// </para>
-    /// <para>
-    /// <b><c>Update() = true</c> здесь — «принято», а не «применено».</b> Поэтому проверки
-    /// называются <c>set_&lt;член&gt;</c> и говорят именно о записи; применение подтверждается
-    /// отдельным чтением модели ПОСЛЕ перестроения, а не этим возвратом.
-    /// </para>
-    /// </remarks>
+    /// <summary>Overwrite the parameters of an EXISTING pattern feature and call <c>Update()</c>.</summary>
+    /// <remarks>INVARIANT: editing is writing to the SAME object and calling <c>Update()</c>, not
+    /// creating a similar one — the object is taken from the live <c>IModelContainer.FeaturePatterns</c>
+    /// by matching the tree feature, not kept between calls, since a COM object address does not survive
+    /// a rebuild and a "saved" object would edit a different feature.
+    /// INVARIANT: only members that were supplied are written — an unsupplied member keeps its value,
+    /// otherwise "exactly what was requested changed" would be indistinguishable from "reset to
+    /// default"; each family has its own set of allowed members, checked by the caller BEFORE mutation
+    /// (<c>save_initial_orientation</c> only for circular, <c>save_initial_objects</c> only for mirror,
+    /// <c>step2_deg</c> only for circular, <c>step2_mm</c>, <c>angle1/2</c> and <c>direction1/2</c> only
+    /// for grid). LIMIT: <c>Update() = true</c> here means "accepted", not "applied", so the checks are
+    /// named <c>set_&lt;member&gt;</c> and speak of the write; application is confirmed by a separate
+    /// read of the model AFTER the rebuild.</remarks>
     public static (bool Applied, string? Failure, IReadOnlyList<NamedCheck> Writes) TryEdit(
         IFeaturePattern pattern,
         PatternEditDto edit)
@@ -512,10 +475,10 @@ internal static class Api7Pattern
                         writes.Add(Write("save_initial_objects",
                             SafeBool(() => mirror.SaveInitialObjects)?.ToString(), mso.ToString()));
                         mirror.SaveInitialObjects = mso;
-                        // ЧТЕНИЕ СРАЗУ ПОСЛЕ ЗАПИСИ: правка обязана быть видна здесь же, иначе
-                        // «записано, но моделью не принято» неотличимо от «записано и применено».
-                        // Измерено на операции 48: запись false читается обратно как true, и это
-                        // согласуется со справкой, ограничивающей свойство o3d_mirrorAllOperation.
+                        // READ-BACK RIGHT AFTER THE WRITE: the edit must be visible here, otherwise
+                        // "written but not accepted by the model" is indistinguishable from "written
+                        // and applied". MEASURED on operation 48: writing false reads back true, which
+                        // agrees with the help restricting the property to o3d_mirrorAllOperation.
                         var mirrorReadBack = SafeBool(() => mirror.SaveInitialObjects);
                         var mirrorRejected = mirrorReadBack is bool mrb && mrb != mso;
                         writes.Add(new NamedCheck(
@@ -558,14 +521,14 @@ internal static class Api7Pattern
         }
     }
 
-    /// <summary>Инвариантная культура для чисел в тексте проверок: запятая вместо точки читалась бы как другое число.</summary>
+    /// <summary>Invariant culture for numbers in check text: a comma instead of a dot would read as a
+    /// different number.</summary>
     private static readonly System.Globalization.CultureInfo Inv =
         System.Globalization.CultureInfo.InvariantCulture;
 
-    /// <summary>
-    /// Прочитать параметры массива по индексу коллекции. Вид определяется по ответу на QI, а не по
-    /// записанному типу: «чем объект отвечает» — факт, «каким его создавали» — память вызывающего.
-    /// </summary>
+    /// <summary>Read a pattern's parameters by collection index. The kind is determined by the QI
+    /// answer, not by the recorded type: "what the object answers" is a fact, "what it was created as"
+    /// is the caller's memory.</summary>
     public static PatternReadout? Read(IModelContainer container, int index)
     {
         try
@@ -589,7 +552,7 @@ internal static class Api7Pattern
         }
     }
 
-    /// <summary>Прочитать конкретный признак массива.</summary>
+    /// <summary>Read a specific pattern feature.</summary>
     public static PatternReadout ReadPattern(IFeaturePattern pattern)
     {
         var (count1, count2) = ExemplarCounts(pattern);
@@ -712,11 +675,9 @@ internal static class Api7Pattern
             UpdateStamp: SafeInt(() => pattern.Owner?.UpdateStamp));
     }
 
-    /// <summary>
-    /// Число экземпляров по двум индексам. <c>GetExemplarsCounts(out, out)</c> возвращает
-    /// <c>false</c>, когда признак ещё не построен, поэтому <c>false</c> — это «не прочитано»,
-    /// а не «ноль экземпляров»: различить их обязан вызывающий, и здесь они и различены.
-    /// </summary>
+    /// <summary>The instance counts by two indices. <c>GetExemplarsCounts(out, out)</c> returns
+    /// <c>false</c> when the feature is not yet built, so <c>false</c> means "not read", not "zero
+    /// instances": the caller must tell them apart, and here they are told apart.</summary>
     public static (int? Count1, int? Count2) ExemplarCounts(IFeaturePattern pattern)
     {
         try
@@ -729,10 +690,8 @@ internal static class Api7Pattern
         }
     }
 
-    /// <summary>
-    /// Экземпляр по индексам. Индексация у сетки ДВУМЕРНАЯ (<c>Exemplar(Index1, Index2)</c>),
-    /// поэтому вызывающий перебирает обе координаты, а не одну.
-    /// </summary>
+    /// <summary>An instance by indices. The grid indexing is TWO-DIMENSIONAL
+    /// (<c>Exemplar(Index1, Index2)</c>), so the caller iterates both coordinates, not one.</summary>
     public static IModelObject? Exemplar(IFeaturePattern pattern, int index1, int index2)
     {
         try
@@ -757,12 +716,10 @@ internal static class Api7Pattern
         }
     }
 
-    /// <summary>
-    /// Число удалённых экземпляров. У зеркального массива пропусков экземпляров не существует
-    /// (пользовательская справка <c>glava_48_obzhie_svedeniy</c>: исключение экземпляров недоступно
-    /// для зеркального массива и массива по образцу), поэтому там поле читается, но объявляется
-    /// неприменимым вызывающим, а не выдаётся за ноль пропусков.
-    /// </summary>
+    /// <summary>The number of deleted instances. A mirror pattern has no instance gaps (user help
+    /// <c>glava_48_obzhie_svedeniy</c>: excluding instances is unavailable for a mirror pattern and a
+    /// pattern by sample), so there the field is read but declared inapplicable by the caller, not
+    /// passed off as zero gaps.</summary>
     private static int? DeletedInstanceCount(IFeaturePattern pattern)
     {
         try
@@ -828,12 +785,11 @@ internal static class Api7Pattern
         : $"{ex.GetType().Name}: {ex.Message}";
 }
 
-/// <summary>
-/// Прочитанные параметры признака массива. Поле <c>null</c> означает «не прочитано», а не «ноль»:
-/// пустое поле и ноль — разные ответы, и смешивать их здесь нельзя так же, как у measure.
-/// </summary>
-/// <param name="Family">linear | circular | mirror | unknown — по ответу на QI, а не по памяти.</param>
-/// <param name="DeletedInstanceCount">Число записей <c>InstanceDeletedIndexes</c>; у зеркала неприменимо.</param>
+/// <summary>Read pattern-feature parameters. A <c>null</c> field means "not read", not "zero": an
+/// empty field and zero are different answers, and they must not be mixed here any more than in
+/// measure.</summary>
+/// <param name="Family">linear | circular | mirror | unknown — by the QI answer, not by memory.</param>
+/// <param name="DeletedInstanceCount">Number of <c>InstanceDeletedIndexes</c> entries; inapplicable for mirror.</param>
 public sealed record PatternReadout(
     string Family,
     string? TypeName,

@@ -40,8 +40,7 @@ public sealed class ToolListingTests
     }
 
     [Theory]
-    [InlineData("KOMPAS3D_MCP.md")]
-    [InlineData("README.md")]
+    [InlineData("docs/TOOLS.md")]
     public void GeneratedBlock_MatchesTheCatalog(string document)
     {
         var expected = ToolListing.Markdown(ToolCatalog.All).TrimEnd('\n');
@@ -52,7 +51,7 @@ public sealed class ToolListingTests
     [Fact]
     public void GeneratedBlock_NamesEveryToolExactlyOnce()
     {
-        var names = Regex.Matches(BlockBody("KOMPAS3D_MCP.md"), "`(kompas_[a-z_]+)`")
+        var names = Regex.Matches(BlockBody("docs/TOOLS.md"), "`(kompas_[a-z_]+)`")
             .Select(m => m.Groups[1].Value).ToList();
 
         Assert.Equal(ToolCatalog.All.Count, names.Count);

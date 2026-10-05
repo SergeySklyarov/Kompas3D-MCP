@@ -18,9 +18,9 @@
 её затрёт, поэтому между метками ничего, кроме сгенерированных строк, быть не должно.
 
 Запуск:
-    python scripts/update-tool-listing.py            # обновить KOMPAS3D_MCP.md и README.md
+    python scripts/update-tool-listing.py            # обновить docs/TOOLS.md
     python scripts/update-tool-listing.py --check     # только проверить, ничего не писать
-    python scripts/update-tool-listing.py KOMPAS3D_MCP.md
+    python scripts/update-tool-listing.py docs/TOOLS.md
 
 Хост берётся из сборки Release x64. Если его нет, прибор называет это, а не догадывается:
     src/KompasMcp.Host/bin/x64/Release/net10.0-windows/KompasMcp.Host.exe
@@ -46,7 +46,7 @@ HOST = os.path.join(
     "KompasMcp.Host.exe",
 )
 
-DEFAULT_DOCS = ("KOMPAS3D_MCP.md", "README.md")
+DEFAULT_DOCS = ("docs/TOOLS.md",)
 
 for stream in (sys.stdout, sys.stderr):
     try:
@@ -97,7 +97,7 @@ def current_block(text: str) -> str | None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("documents", nargs="*", default=list(DEFAULT_DOCS),
-                        help="документы с метками (по умолчанию KOMPAS3D_MCP.md и README.md)")
+                        help="документы с метками (по умолчанию docs/TOOLS.md)")
     parser.add_argument("--check", action="store_true",
                         help="только проверить расхождение, ничего не записывать")
     args = parser.parse_args()

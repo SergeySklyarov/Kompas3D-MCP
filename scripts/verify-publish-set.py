@@ -1100,10 +1100,10 @@ def main() -> int:
         registry = {name for _, name in re.findall(
             r'^\s{12}([A-Za-z_]\w*)\("(kompas_[a-z_]+)"', registry_text, re.MULTILINE
         )}
-        listing_docs = [rel for rel in files if rel in ("KOMPAS3D_MCP.md", "README.md")]
+        listing_docs = [rel for rel in files if rel == "docs/TOOLS.md"]
         if not listing_docs:
             listing_issues.append(
-                "ни `KOMPAS3D_MCP.md`, ни `README.md` нет в наборе — генерируемый список "
+                "`docs/TOOLS.md` нет в наборе — генерируемый список "
                 "инструментов публиковать негде"
             )
         for rel in listing_docs:

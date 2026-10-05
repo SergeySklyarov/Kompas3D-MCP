@@ -14,24 +14,27 @@ public static class ToolListing
     public const string BeginMarker = "<!-- BEGIN TOOL LISTING -->";
     public const string EndMarker = "<!-- END TOOL LISTING -->";
 
-    /// <summary>One line per tool: <c>- `name`: **Title**. First sentence.</c> No trailing blank line
-    /// beyond the block itself, so the surrounding Markdown controls spacing.</summary>
+    /// <summary>A Markdown table, one row per tool: name, title, first sentence of the description.
+    /// No trailing blank line beyond the block itself, so the surrounding Markdown controls spacing.</summary>
     /// <remarks>INVARIANT: the published documents carry no em dash, so the listing prints a hyphen in
-    /// its place. Only the rendered text changes: the catalog descriptions and schemas stay as they are.
+    /// its place, and a pipe inside a cell is escaped so it cannot split the row. Only the rendered text
+    /// changes: the catalog descriptions and schemas stay as they are.
     /// TEST: ToolListingTests.GeneratedBlock_HasNoEmDash.</remarks>
     public static string Markdown(IReadOnlyList<ToolDefinition> tools)
     {
         var sb = new StringBuilder();
+        sb.Append("Всего инструментов: ").Append(tools.Count).Append(".\n\n");
+        sb.Append("| Инструмент | Назначение | Что делает |\n|---|---|---|\n");
         foreach (var tool in tools)
         {
-            sb.Append("- `").Append(tool.Name).Append("`: **").Append(NoEmDash(tool.Title)).Append("**. ");
-            sb.Append(NoEmDash(Summary(tool.Description))).Append('\n');
+            sb.Append("| `").Append(tool.Name).Append("` | ").Append(Cell(tool.Title)).Append(" | ");
+            sb.Append(Cell(Summary(tool.Description))).Append(" |\n");
         }
 
         return sb.ToString();
     }
 
-    private static string NoEmDash(string text) => text.Replace('—', '-');
+    private static string Cell(string text) => text.Replace('—', '-').Replace("|", "\\|");
 
     /// <summary>The first sentence of a description, capped at <see cref="SummaryLimit"/> characters.
     /// MEASURED: some descriptions open with a 500-character enumeration; printing it verbatim would

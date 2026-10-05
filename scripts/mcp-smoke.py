@@ -22640,6 +22640,16 @@ def image_checks(client, rep, app_id, workdir):
     # него «вид применён» было бы утверждением по возврату SetCurrent, а возврат не является
     # результатом (наряд п.1). Сравнивается ГАБАРИТ И БАЙТЫ двух проекций на несимметричной
     # пластине: одинаковые снимки у разных проекций означали бы, что проекция не применена.
+    #
+    # ЧТО ИЗМЕНИЛОСЬ ПОСЛЕ ПУБЛИКАЦИИ `dimetric` (п. 2 наряда). Прежняя редакция закрепляла вид
+    # (`keep_view=true`) ПЕРВЫМ вызовом, потому что прежняя проекция свежего документа — диметрия —
+    # не имела опубликованного имени и первый `view` без `keep_view` отказывал. Теперь диметрия
+    # опубликована и восстановима, поэтому первый вызов БЕЗ `keep_view` обязан отработать. Он и стоит
+    # здесь первым, без `keep_view`: это ЕЩЁ ОДНО измерение того же решения. Закрепление оставлено
+    # перед сравнением, чтобы вид на входе сравнения был ИЗВЕСТЕН (`front`, читаемый), а не зависел от
+    # того, что оставила предыдущая строка.
+    first = export(doc, rev, format="png", resolution=100, view="front")
+    export(doc, rev, format="png", resolution=100, view="front", keep_view=True)
     front = export(doc, rev, format="png", resolution=100, view="front")
     rear = export(doc, rev, format="png", resolution=100, view="rear")
     rf = png_facts(front["data"])
@@ -22647,63 +22657,162 @@ def image_checks(client, rep, app_id, workdir):
     differs_bytes = (len(front["data"]) > 0 and len(rear["data"]) > 0
                      and hashlib.sha256(front["data"]).hexdigest()
                      != hashlib.sha256(rear["data"]).hexdigest())
-    passed = (front["code"] is None and rear["code"] is None
+    passed = (first["code"] is None
+              and first["result"].get("previous_view") == "dimetric"
+              and first["result"].get("view_restored") is True
+              and front["code"] is None and rear["code"] is None
               and rf is not None and rr is not None
               and (rf != rr or differs_bytes)
               and front["result"].get("applied_view") == "front"
               and rear["result"].get("applied_view") == "rear")
     rep.add("IMG.17.geometry_validation",
-            "AUX-IMAGE.raster_export: смена проекции меняет снимок (front против rear)",
+            "AUX-IMAGE.raster_export: смена проекции меняет снимок (front против rear); первый "
+            "вызов без keep_view на свежем документе возвращает dimetric",
             "PASS" if passed else "FAIL",
+            f"первый_без_keep код={first['code']} прежнее={first['result'].get('previous_view')!r} "
+            f"возвращено={first['result'].get('view_restored')} "
             f"код_front={front['code']} код_rear={rear['code']} "
             f"габарит_front={rf and (rf['width'], rf['height'])} "
             f"габарит_rear={rr and (rr['width'], rr['height'])} "
             f"байты_различаются={differs_bytes} "
             f"применено={front['result'].get('applied_view')}/{rear['result'].get('applied_view')}",
-            details={"front": front["result"], "rear": rear["result"]})
+            details={"first_without_keep": first["result"], "front": front["result"],
+                     "rear": rear["result"]})
 
     # IMG.18 — применённая проекция ПОДТВЕРЖДАЕТСЯ обратным чтением, а не возвратом SetCurrent.
+    #
+    # ПОЧЕМУ ЗДЕСЬ ПРОВЕРЯЕТСЯ ЕЩЁ И ОТСУТСТВИЕ ПРИМЕЧАНИЯ (п. 3 наряда). При `keep_view=true` вид не
+    # возвращается ПО СОГЛАСИЮ вызывающего, и проверять тут нечего. Прежний код всё равно звал возврат,
+    # и в `unverified_aspects` попадало ложное «previous_view_not_restored», а `view_restored` был
+    # `false` — то есть ответ сообщал о невыполненной работе, которую никто не заказывал. Ожидание
+    # строки: `view_restored` НЕ `true` (остаётся `null`) И такого примечания в ответе НЕТ.
     iso_one = export(doc, rev, format="png", resolution=100, view="isometric", keep_view=True)
     iso_two = export(doc, rev, format="png", resolution=100, view="isometric")
     res_one = iso_one["result"]
     res_two = iso_two["result"]
+    note_one = " ".join(res_one.get("unverified_aspects") or [])
+    false_restore_note = "previous_view_not_restored" in note_one
     passed = (iso_one["code"] is None and iso_two["code"] is None
               and res_one.get("applied_view") == "isometric"
               and res_one.get("requested_view") == "isometric"
               and res_one.get("view_restored") is not True
+              and not false_restore_note
               and res_two.get("applied_view") == "isometric"
               and res_two.get("view_projection_scheme") is not None)
     rep.add("IMG.18.read",
-            "AUX-IMAGE.raster_export: применённая проекция прочитана обратно, схема ориентаций возвращена",
+            "AUX-IMAGE.raster_export: применённая проекция прочитана обратно, схема возвращена; "
+            "при keep_view нет ложного «не возвращено»",
             "PASS" if passed else "FAIL",
             f"код={iso_one['code']} применено={res_one.get('applied_view')} "
             f"запрошено={res_one.get('requested_view')} "
             f"в_restored={res_one.get('view_restored')} "
+            f"ложное_примечание={false_restore_note} "
             f"схема={res_two.get('view_projection_scheme')}",
             details={"keep_view_true": res_one, "keep_view_false": res_two})
 
     # IMG.19 — прежний вид ВОЗВРАЩАЕТСЯ после снимка (по умолчанию), и это подтверждено чтением.
     #
-    # Контроль обязателен: строка, которая только проверяет «applied_view совпал», прошла бы и в
-    # случае, когда вид не вернули вовсе. Поэтому берётся текущая проекция ДО вызова (по умолчанию
-    # isometric — так документ создан), запрашивается ДРУГАЯ, и после вызова вид читается снова.
-    before_view = export(doc, rev, format="png", resolution=100)
-    before_type = before_view["result"].get("applied_view") or before_view["result"].get("previous_view")
+    # Известное состояние создаётся ЯВНО, потому что прежде строка держалась на пустом сравнении:
+    # `before_view` и `after_view` вызывались БЕЗ `view`, поэтому `applied_view` и `previous_view` в
+    # них были `null`, и `after_type == before_type` сравнивало `None == None` — то есть не
+    # сравнивало ничего. Строка проходила только за счёт `view_restored is True`, а оно было истинно
+    # лишь потому, что предыдущая строка IMG.18 оставила изометрию (`keep_view=true`). Здесь:
+    #
+    #   1) X = isometric, keep_view=true  — известное состояние, вид ЗАКРЕПЛЁН;
+    #   2) Y = up, keep_view по умолчанию — снимок с возвратом;
+    #   3) Z = front, keep_view=true      — третий вызов ЧИТАЕТ прежний вид.
+    #
+    # Доказательство возврата — `previous_view` ТРЕТЬЕГО вызова: он обязан равняться X. Третий
+    # вызов берёт вид, ОТЛИЧНЫЙ от X, поэтому `previous_view = X` может получиться только возвратом
+    # после второго вызова, а не совпадением запрошенного с текущим. `None` не участвует ни как
+    # «до», ни как «после»: оба сравниваемых значения обязаны быть НЕПУСТЫМИ именами.
+    pinned = export(doc, rev, format="png", resolution=100, view="isometric", keep_view=True)
+    pinned_view = pinned["result"].get("applied_view")
     swap = export(doc, rev, format="png", resolution=100, view="up")
-    after_view = export(doc, rev, format="png", resolution=100)
+    probe_z = export(doc, rev, format="png", resolution=100, view="front", keep_view=True)
     restored_flag = swap["result"].get("view_restored")
-    after_type = after_view["result"].get("applied_view") or after_view["result"].get("previous_view")
-    passed = (swap["code"] is None and after_view["code"] is None
+    restore_note = swap["result"].get("view_note")
+    read_back = probe_z["result"].get("previous_view")
+    passed = (pinned["code"] is None and swap["code"] is None and probe_z["code"] is None
+              and pinned_view == "isometric"
               and swap["result"].get("applied_view") == "up"
               and restored_flag is True
-              and after_type == before_type)
+              and read_back is not None and read_back != ""
+              and read_back == pinned_view)
     rep.add("IMG.19.edit",
             "AUX-IMAGE.raster_export: прежний вид возвращён после снимка (умолчание keep_view=false)",
             "PASS" if passed else "FAIL",
-            f"код={swap['code']} применено={swap['result'].get('applied_view')} "
-            f"возвращено={restored_flag} вид_до={before_type} вид_после={after_type}",
-            details={"before": before_view["result"], "swap": swap["result"],
-                     "after": after_view["result"]})
+            f"код={swap['code']} закреплено={pinned_view} применено={swap['result'].get('applied_view')} "
+            f"возвращено={restored_flag} прочитано_третьим_вызовом={read_back!r} "
+            f"(обязано быть НЕПУСТЫМ и равно {pinned_view!r})",
+            details={"pin_isometric": pinned["result"], "swap_up": swap["result"],
+                     "read_back_by_third_call": probe_z["result"], "restore_note": restore_note})
+
+    # IMG.22 — прежний вид свежего документа ВОССТАНОВИМ (диметрия опубликована как `dimetric`), и
+    # отказ `view` без `keep_view` на непрочитанной прежней проекции доказывается чтением.
+    #
+    # ЧТО ИЗМЕНЕНО ПО НАРЯДУ `BLENDER_IDEAS_VIEW_POLISH_DEVELOPER_PROMPT.md` п. 1. Прежняя редакция
+    # принимала ОБА исхода (A: отказ; B: снимок с возвратом) и этим не могла упасть, если отказ
+    # пропадёт вовсе. Требование наряда: строка ожидает ОДИН заранее названный исход.
+    #
+    # ИЗМЕРENИЕ, НА КОТОРОМ СТОИТ ОЖИДАНИЕ (проверяется ниже, а не предполагается). Свежий документ
+    # сервера показывает диметрию (`ksViewProjectionType` 8): она ЧИТАЕТСЯ обратным чтением и, после
+    # публикации имени `dimetric`, ВОССТАНОВИМА. Значит первый `view` без `keep_view` на свежем
+    # документе обязан УСПЕШНО снять снимок и вернуть диметрию — это и есть ожидаемый исход.
+    #
+    # НЕПОДВИЖНОСТЬ ОКНА ДОКАЗЫВАЕТСЯ ЧТЕНИЕМ, а не сравнением двух непрочитанных значений (прежний
+    # дефект: `before_state`/`after_state` без `view` давали `applied_view = null`, и сравнение
+    # `None == None` было истинно всегда). Здесь оба сравнения НЕПУСТЫЕ:
+    #
+    #   * первый вызов `view="up"` без `keep_view` — снимок с возвратом. `previous_view` этого вызова
+    #     обязан быть НЕПУСТЫМ именем прежнего вида (`dimetric`): так подтверждается, что прежний вид
+    #     был ПРОЧИТАН и ВОЗВРАЩЁН, а не подменён;
+    #   * затем `view="front", keep_view=true` — читает прежний вид. Он обязан равняться `dimetric`:
+    #     это доказывает, что окно стоит на диметрии, то есть вызов `up` её действительно вернул.
+    fresh_doc, fresh_rev = build_plate()
+    refusals = {}
+    if fresh_doc:
+        # Первый в СЕАНСЕ запрос вида на этом документе, БЕЗ keep_view. `previous_view` — доказательство,
+        # что прежний вид (диметрия) прочитан и возвращён штатным путём.
+        fresh_attempt = export(fresh_doc, fresh_rev, format="png", resolution=100, view="up")
+        fresh_prev = fresh_attempt["result"].get("previous_view")
+        fresh_restored = fresh_attempt["result"].get("view_restored")
+        # Чтение состояния окна ПОСЛЕ возврата: берём вид, ОТЛИЧНЫЙ от прочитанного, и читаем прежний.
+        window_read = export(fresh_doc, fresh_rev, format="png", resolution=100,
+                             view="front", keep_view=True)
+        window_prev = window_read["result"].get("previous_view")
+        refusals["first_view_without_keep"] = fresh_attempt["result"]
+        refusals["window_state_after_restore"] = window_read["result"]
+        # ОЖИДАЕМЫЙ ИСХОД — ОДИН: снимок снят, прежний вид (dimetric) прочитан и возвращён, а чтение
+        # окна после этого называет ту же диметрию. Непустота обоих значений — часть ожидания:
+        # `None` не может быть ни «прежним видом», ни доказательством неподвижности.
+        passed = (fresh_attempt["code"] is None and fresh_attempt["block"] is not None
+                  and fresh_attempt["result"].get("applied_view") == "up"
+                  and fresh_prev is not None and fresh_prev != ""
+                  and fresh_restored is True
+                  and window_read["code"] is None
+                  and window_prev is not None and window_prev != ""
+                  and window_prev == fresh_prev)
+        outcome = ("снимок_с_возвратом_подтверждён_чтением" if passed
+                   else "исход_не_совпал_с_названным")
+        rep.add("IMG.22.negative_tests",
+                "AUX-IMAGE.raster_export: прежний вид свежего документа (dimetric) возвращён и "
+                "прочитан обратно — окно не сдвинуто",
+                "PASS" if passed else "FAIL",
+                f"исход={outcome} код={fresh_attempt['code']} "
+                f"применено={fresh_attempt['result'].get('applied_view')} "
+                f"прочитано_прежнее={fresh_prev!r} возвращено={fresh_restored} "
+                f"окно_после_возврата={window_prev!r} (обязано быть НЕПУСТЫМ и равно {fresh_prev!r})",
+                details=refusals)
+        client.tool("kompas_close_document",
+                    {"document_id": fresh_doc, "dirty_policy": "discard"}, timeout=180)
+    else:
+        # Без документа строку объявить нельзя: молчание прибора — тоже утверждение, и здесь оно
+        # было бы ложным PASS. Строка называется неисполнимой вместе с причиной.
+        rep.add("IMG.22.negative_tests",
+                "AUX-IMAGE.raster_export: прежний вид свежего документа (dimetric) возвращён и "
+                "прочитан обратно — окно не сдвинуто",
+                "FAIL", "второй документ не создан — случай п. 1 не проверен")
 
     # ══ negative_tests: проекция ════════════════════════════════════════════════════════════════
     # IMG.20 — проекция вне перечня отвергается ДО COM, как и формат.

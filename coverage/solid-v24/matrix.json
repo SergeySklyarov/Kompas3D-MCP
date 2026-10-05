@@ -5890,7 +5890,7 @@
    "context": "assembly",
    "catalog_ref": "MATE",
    "parameters_schema": null,
-   "adapter_route": "IPart7.MateConstraints → IMateConstraints3D.Add(MateConstraintType) → BaseObject1/BaseObject2 → Update() (imateconstraints3d_add.html, imateconstraint3d_baseobject1/2.html)",
+   "adapter_route": "kompas_create_mate: IPart7.MateConstraints → IMateConstraints3D.Add(MateConstraintType) → BaseObject1/BaseObject2 → Update() (imateconstraints3d_add.html, imateconstraint3d_baseobject1/2.html)",
    "actions": {
     "discover": "verified",
     "create": "verified",
@@ -5920,7 +5920,7 @@
    ],
    "limitations": [
     "живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов",
-    "Приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "Приёмка на бинарях поставки ВЫПОЛНЕНА: `publish-mates-20261005` — Host.dll `5ba127bb…`, Worker.dll `6fecb3fe…`, Api5Adapter.dll `157c9dbb…`; группа MATE снята ИМЕННО на них. `client_acceptance` — шаг заказчика и остаётся `not_run`: отсутствие проверки не PASS.",
     "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
    ],
    "not_applicable_reasons": {
@@ -5935,7 +5935,7 @@
    "context": "assembly",
    "catalog_ref": "MATE",
    "parameters_schema": null,
-   "adapter_route": "ksDocument3D.MateConstraintCollection → GetCount/GetByIndex → ksMateConstraint.GetBaseObj(1|2), constraintType, ParamValue, Alignment (ksmateconstraintcollection_getcount.html, ksmateconstraint_getbaseobj.html)",
+   "adapter_route": "kompas_list_mates: ksDocument3D.MateConstraintCollection → GetCount/GetByIndex → ksMateConstraint.GetBaseObj(1|2), constraintType, ParamValue, Alignment (ksmateconstraintcollection_getcount.html, ksmateconstraint_getbaseobj.html)",
    "actions": {
     "discover": "verified",
     "create": "not_applicable",
@@ -5962,7 +5962,7 @@
    ],
    "limitations": [
     "живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов",
-    "Приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "Приёмка на бинарях поставки ВЫПОЛНЕНА: `publish-mates-20261005` — Host.dll `5ba127bb…`, Worker.dll `6fecb3fe…`, Api5Adapter.dll `157c9dbb…`; группа MATE снята ИМЕННО на них. `client_acceptance` — шаг заказчика и остаётся `not_run`: отсутствие проверки не PASS.",
     "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
    ],
    "not_applicable_reasons": {
@@ -5980,7 +5980,7 @@
    "context": "assembly",
    "catalog_ref": "MATE",
    "parameters_schema": null,
-   "adapter_route": "IMateConstraint3D.ParamValue = … → IMateConstraint3D.Update() (imateconstraint3d_paramvalue.html)",
+   "adapter_route": "kompas_set_mate_parameter: IMateConstraint3D.ParamValue = … → IMateConstraint3D.Update() (imateconstraint3d_paramvalue.html)",
    "actions": {
     "discover": "verified",
     "create": "not_applicable",
@@ -6000,15 +6000,16 @@
     "MATE.03.create_distance",
     "MATE.03.rebuild",
     "MATE.03.save_reopen",
-    "MATE.03.negative_tests"
+    "MATE.03.negative_tests",
+    "MATE.03.geometry_validation"
    ],
    "evidence": [
     "docs/acceptance/mates/mate-acceptance.json",
     "scripts/mcp-smoke.py"
    ],
    "limitations": [
-    "живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов",
-    "Приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "живой прогон 05.10.2026, группа MATE: 34 строки, 0 отказов (бинари поставки publish-mates-20261005)",
+    "Приёмка на бинарях поставки ВЫПОЛНЕНА: `publish-mates-20261005` — Host.dll `5ba127bb…`, Worker.dll `6fecb3fe…`, Api5Adapter.dll `157c9dbb…`; группа MATE снята ИМЕННО на них. `client_acceptance` — шаг заказчика и остаётся `not_run`: отсутствие проверки не PASS.",
     "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
    ],
    "not_applicable_reasons": {
@@ -6023,7 +6024,7 @@
    "context": "assembly",
    "catalog_ref": "MATE",
    "parameters_schema": null,
-   "adapter_route": "IMateConstraint3D.Fixed = ksMateFixedTypeEnum (ksmatefixedtypeenum.html)",
+   "adapter_route": "kompas_set_mate_fixed: IMateConstraint3D.Fixed = ksMateFixedTypeEnum (ksmatefixedtypeenum.html)",
    "actions": {
     "discover": "verified",
     "create": "not_applicable",
@@ -6050,7 +6051,7 @@
    ],
    "limitations": [
     "живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов",
-    "Приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "Приёмка на бинарях поставки ВЫПОЛНЕНА: `publish-mates-20261005` — Host.dll `5ba127bb…`, Worker.dll `6fecb3fe…`, Api5Adapter.dll `157c9dbb…`; группа MATE снята ИМЕННО на них. `client_acceptance` — шаг заказчика и остаётся `not_run`: отсутствие проверки не PASS.",
     "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
    ],
    "not_applicable_reasons": {
@@ -6066,7 +6067,7 @@
    "context": "assembly",
    "catalog_ref": "MATE",
    "parameters_schema": null,
-   "adapter_route": "ksDocument3D.RemoveMateConstraint(constraintType, obj1, obj2) (ksdocument3d_removemateconstraint.html)",
+   "adapter_route": "kompas_delete_mate: ksDocument3D.RemoveMateConstraint(constraintType, obj1, obj2) (ksdocument3d_removemateconstraint.html)",
    "actions": {
     "discover": "verified",
     "create": "not_applicable",
@@ -6085,15 +6086,16 @@
     "MATE.05.rebuild",
     "MATE.05.save_reopen",
     "MATE.05.delete",
-    "MATE.05.negative_tests"
+    "MATE.05.negative_tests",
+    "MATE.05.delete_dependencies"
    ],
    "evidence": [
     "docs/acceptance/mates/mate-acceptance.json",
     "scripts/mcp-smoke.py"
    ],
    "limitations": [
-    "живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов",
-    "Приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "живой прогон 05.10.2026, группа MATE: 34 строки, 0 отказов (бинари поставки publish-mates-20261005)",
+    "Приёмка на бинарях поставки ВЫПОЛНЕНА: `publish-mates-20261005` — Host.dll `5ba127bb…`, Worker.dll `6fecb3fe…`, Api5Adapter.dll `157c9dbb…`; группа MATE снята ИМЕННО на них. `client_acceptance` — шаг заказчика и остаётся `not_run`: отсутствие проверки не PASS.",
     "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
    ],
    "not_applicable_reasons": {
@@ -6109,7 +6111,7 @@
    "context": "assembly",
    "catalog_ref": "MATE",
    "parameters_schema": null,
-   "adapter_route": "ksPlacement.GetMatrix3D по компоненту после Update() сопряжения (маршрут чтения измерен в блоке C1)",
+   "adapter_route": "kompas_list_components: ksPlacement.GetMatrix3D по компоненту после Update() сопряжения (маршрут чтения измерен в блоке C1)",
    "actions": {
     "discover": "verified",
     "create": "not_applicable",
@@ -6136,7 +6138,7 @@
    ],
    "limitations": [
     "живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов",
-    "Приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "Приёмка на бинарях поставки ВЫПОЛНЕНА: `publish-mates-20261005` — Host.dll `5ba127bb…`, Worker.dll `6fecb3fe…`, Api5Adapter.dll `157c9dbb…`; группа MATE снята ИМЕННО на них. `client_acceptance` — шаг заказчика и остаётся `not_run`: отсутствие проверки не PASS.",
     "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
    ],
    "not_applicable_reasons": {
@@ -6180,8 +6182,8 @@
     "scripts/mcp-smoke.py"
    ],
    "limitations": [
-    "живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов",
-    "Приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "живой прогон 05.10.2026, группа MATE: 34 строки, 0 отказов (бинари поставки publish-mates-20261005)",
+    "Приёмка на бинарях поставки ВЫПОЛНЕНА: `publish-mates-20261005` — Host.dll `5ba127bb…`, Worker.dll `6fecb3fe…`, Api5Adapter.dll `157c9dbb…`; группа MATE снята ИМЕННО на них. `client_acceptance` — шаг заказчика и остаётся `not_run`: отсутствие проверки не PASS.",
     "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
    ],
    "kind": "common_dependency",
@@ -6237,7 +6239,7 @@
    ],
    "limitations": [
     "живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов",
-    "Приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "Приёмка на бинарях поставки ВЫПОЛНЕНА: `publish-mates-20261005` — Host.dll `5ba127bb…`, Worker.dll `6fecb3fe…`, Api5Adapter.dll `157c9dbb…`; группа MATE снята ИМЕННО на них. `client_acceptance` — шаг заказчика и остаётся `not_run`: отсутствие проверки не PASS.",
     "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
    ],
    "kind": "common_dependency",
@@ -6293,7 +6295,7 @@
    ],
    "limitations": [
     "живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов",
-    "Приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "Приёмка на бинарях поставки ВЫПОЛНЕНА: `publish-mates-20261005` — Host.dll `5ba127bb…`, Worker.dll `6fecb3fe…`, Api5Adapter.dll `157c9dbb…`; группа MATE снята ИМЕННО на них. `client_acceptance` — шаг заказчика и остаётся `not_run`: отсутствие проверки не PASS.",
     "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
    ],
    "kind": "common_dependency",
@@ -6349,7 +6351,7 @@
    ],
    "limitations": [
     "живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов",
-    "Приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "Приёмка на бинарях поставки ВЫПОЛНЕНА: `publish-mates-20261005` — Host.dll `5ba127bb…`, Worker.dll `6fecb3fe…`, Api5Adapter.dll `157c9dbb…`; группа MATE снята ИМЕННО на них. `client_acceptance` — шаг заказчика и остаётся `not_run`: отсутствие проверки не PASS.",
     "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
    ],
    "kind": "common_dependency",
@@ -6403,7 +6405,7 @@
    ],
    "limitations": [
     "живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов",
-    "Приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "Приёмка на бинарях поставки ВЫПОЛНЕНА: `publish-mates-20261005` — Host.dll `5ba127bb…`, Worker.dll `6fecb3fe…`, Api5Adapter.dll `157c9dbb…`; группа MATE снята ИМЕННО на них. `client_acceptance` — шаг заказчика и остаётся `not_run`: отсутствие проверки не PASS.",
     "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
    ],
    "kind": "common_dependency",

@@ -28,17 +28,17 @@
    }
   },
   "delivery": {
-   "dir": "artifacts/publish-assemblies-20261004",
-   "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-   "worker_dll_sha256": "23f92376a6bca26cd3b9b62d7b24f218ab824422fcc0533d727c4471b7da32a0",
-   "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-   "tools_count": 58,
+   "dir": "artifacts/publish-mates-20261005",
+   "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+   "worker_dll_sha256": "6fecb3feca8680d97c9633c089e3932844e5a6abaf7862352905676b38c86269",
+   "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+   "tools_count": 63,
    "rows_complete_run": 1095,
    "failed": 0,
-   "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
-   "passport": null,
-   "passport_note": "паспорт не издан осознанно: наряд §0.4 запрещает издавать его до повторной клиентской приёмки; опознание поставки взято из scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
-   "row_counts_from": "scratch/mcp-smoke/delivery-assemblies-20261004/full.json"
+   "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
+   "passport": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
+   "passport_note": null,
+   "row_counts_from": "scratch/mcp-smoke/delivery-mates-20261005/full.json"
   },
   "verdict_vocabulary": {
    "documentation": [
@@ -53,21 +53,21 @@
     "Не реализовано"
    ]
   },
-  "scope": "Все опубликованные инструменты на проводе (58), все строки матрицы покрытия (97), 324 COM-маршрутов с установленным типом получателя (API5 148 / API7 176) и 35 числовых идентификаторов типов объектов. Обращения, у которых тип получателя не установлен, перечислены отдельно и в подтверждённые не отнесены.",
+  "scope": "Все опубликованные инструменты на проводе (63), все строки матрицы покрытия (97), 335 COM-маршрутов с установленным типом получателя (API5 152 / API7 183) и 35 числовых идентификаторов типов объектов. Обращения, у которых тип получателя не установлен, перечислены отдельно и в подтверждённые не отнесены.",
   "completeness": {
-   "tools_on_wire": 58,
+   "tools_on_wire": 63,
    "com_snapshot_fresh": true,
-   "com_snapshot_lag_seconds": -899.80837225914,
+   "com_snapshot_lag_seconds": -826.2145659923553,
    "inventory_fresh": true,
-   "inventory_lag_seconds": -18.21444058418274,
+   "inventory_lag_seconds": -6.310054540634155,
    "inventory_negative_control_proved": true,
-   "reports_with_argument_mode": 2,
+   "reports_with_argument_mode": 3,
    "report_route_guard_required": true,
    "report_route_guard_ok": true,
    "report_route_guard_control_proved": true,
-   "tools_with_schema": 58,
-   "schemas_matching_wire_by_property_names": 58,
-   "schemas_matching_wire_by_shape": 58,
+   "tools_with_schema": 63,
+   "schemas_matching_wire_by_property_names": 63,
+   "schemas_matching_wire_by_shape": 63,
    "tools_without_matrix_presence": [
     "kompas_acquire_session",
     "kompas_release_session",
@@ -123,7 +123,9 @@
     "kompas_close_document",
     "kompas_create_aux_geometry",
     "kompas_create_document",
+    "kompas_create_mate",
     "kompas_delete_feature",
+    "kompas_delete_mate",
     "kompas_edit_sketch_entity",
     "kompas_export_image",
     "kompas_get_context",
@@ -131,6 +133,7 @@
     "kompas_insert_component",
     "kompas_list_aux_geometry",
     "kompas_list_components",
+    "kompas_list_mates",
     "kompas_list_sketch_entities",
     "kompas_measure",
     "kompas_open_document",
@@ -140,6 +143,8 @@
     "kompas_save_document",
     "kompas_set_component_placement",
     "kompas_set_feature_suppressed",
+    "kompas_set_mate_fixed",
+    "kompas_set_mate_parameter",
     "kompas_set_sketch_plane",
     "kompas_update_feature",
     "kompas_update_plane"
@@ -149,11 +154,14 @@
     "kompas_close_document",
     "kompas_create_aux_geometry",
     "kompas_create_document",
+    "kompas_create_mate",
     "kompas_delete_feature",
+    "kompas_delete_mate",
     "kompas_edit_sketch_entity",
     "kompas_get_feature",
     "kompas_insert_component",
     "kompas_list_components",
+    "kompas_list_mates",
     "kompas_list_sketch_entities",
     "kompas_open_document",
     "kompas_read_topology",
@@ -161,17 +169,24 @@
     "kompas_save_document",
     "kompas_set_component_placement",
     "kompas_set_feature_suppressed",
+    "kompas_set_mate_fixed",
+    "kompas_set_mate_parameter",
     "kompas_update_feature",
     "kompas_update_plane"
    ],
    "tools_only_in_adapter_route": [
     "kompas_check_component_links",
     "kompas_create_aux_geometry",
+    "kompas_create_mate",
+    "kompas_delete_mate",
     "kompas_edit_sketch_entity",
     "kompas_insert_component",
     "kompas_list_components",
+    "kompas_list_mates",
     "kompas_replace_component",
     "kompas_set_component_placement",
+    "kompas_set_mate_fixed",
+    "kompas_set_mate_parameter",
     "kompas_update_plane"
    ],
    "adapter_route_field_names_found": [
@@ -275,6 +290,15 @@
       ]
      ]
     },
+    "kompas_create_mate": {
+     "own_row": [],
+     "declared_route": [
+      [
+       "MATE-01.mate.create",
+       "route"
+      ]
+     ]
+    },
     "kompas_create_sketch": {
      "own_row": [
       "AUX-SKETCH.plane_and_profile_lifecycle",
@@ -301,6 +325,15 @@
      "declared_route": [
       [
        "dep.lifecycle.feature_cycle",
+       "route"
+      ]
+     ]
+    },
+    "kompas_delete_mate": {
+     "own_row": [],
+     "declared_route": [
+      [
+       "MATE-05.mate.delete",
        "route"
       ]
      ]
@@ -524,6 +557,10 @@
       [
        "dep.assembly.idempotency",
        "route"
+      ],
+      [
+       "MATE-06.mate.placement_effect",
+       "route"
       ]
      ]
     },
@@ -543,6 +580,15 @@
       "dep.refs.planar_face"
      ],
      "declared_route": []
+    },
+    "kompas_list_mates": {
+     "own_row": [],
+     "declared_route": [
+      [
+       "MATE-02.mate.read",
+       "route"
+      ]
+     ]
     },
     "kompas_list_sketch_entities": {
      "own_row": [],
@@ -780,6 +826,24 @@
       ]
      ]
     },
+    "kompas_set_mate_fixed": {
+     "own_row": [],
+     "declared_route": [
+      [
+       "MATE-04.mate.fixed",
+       "route"
+      ]
+     ]
+    },
+    "kompas_set_mate_parameter": {
+     "own_row": [],
+     "declared_route": [
+      [
+       "MATE-03.mate.param_edit",
+       "route"
+      ]
+     ]
+    },
     "kompas_set_sketch_plane": {
      "own_row": [],
      "declared_route": [
@@ -869,14 +933,19 @@
     "route_only_tools": [
      "kompas_check_component_links",
      "kompas_create_aux_geometry",
+     "kompas_create_mate",
+     "kompas_delete_mate",
      "kompas_edit_sketch_entity",
      "kompas_export_image",
      "kompas_insert_component",
      "kompas_list_aux_geometry",
      "kompas_list_components",
+     "kompas_list_mates",
      "kompas_list_sketch_entities",
      "kompas_replace_component",
      "kompas_set_component_placement",
+     "kompas_set_mate_fixed",
+     "kompas_set_mate_parameter",
      "kompas_set_sketch_plane",
      "kompas_update_plane"
     ],
@@ -897,7 +966,7 @@
     "note": "(а) синтетический инструмент без единого упоминания; (б) инструмент, названный только `mcp_support` каталога и не опубликованный; (в) снятие объявленного маршрута у инструмента, присутствующего только им. Поля маршрутов читаются ПО ПРИЗНАКУ ИМЕНИ, поэтому (в) проверяет и новый `edit_route`, а не только три прежних имени (дефекты №19 = №23 = №29)"
    },
    "catalog_support_without_wire": {},
-   "catalog_support_names_count": 28,
+   "catalog_support_names_count": 33,
    "catalog_support_shapes": {
     "строка": 69,
     "словарь": 36
@@ -909,41 +978,42 @@
    "rows_total": 97,
    "rows_without_schema_link": 40,
    "rows_without_schema_shared_named": 12,
-   "rows_without_schema_planned": 9,
-   "rows_without_schema_unexplained": 7,
+   "rows_without_schema_planned": 3,
+   "rows_without_schema_unexplained": 13,
    "rows_dependency_without_required_of": 12,
    "required_of_mismatches_matrix_vs_profile": 0,
-   "rows_claiming_verified_actions": 83,
-   "rows_actions_all_named_by_dedicated_row": 83,
-   "rows_action_without_dedicated_row": 0,
+   "rows_claiming_verified_actions": 94,
+   "rows_actions_all_named_by_dedicated_row": 93,
+   "rows_action_without_dedicated_row": 1,
    "rows_verified_contradicted_by_fail": 0,
    "rows_verified_without_any_linked_row": 0,
-   "rows_actions_without_required_calls": 12,
-   "rows_without_mode_named_evidence": 12,
-   "rows_status_lowered_by_unsupported_actions": 12,
-   "acceptance_rows_with_call_window": 1109,
-   "acceptance_calls_journal": 10479,
-   "acceptance_document_epochs": 491,
-   "com_routes": 324,
-   "com_routes_api5": 148,
-   "com_routes_api7": 176,
-   "com_routes_documented": 260,
-   "com_routes_not_confirmed": 64,
+   "rows_actions_without_required_calls": 23,
+   "rows_without_mode_named_evidence": 23,
+   "rows_status_lowered_by_unsupported_actions": 23,
+   "acceptance_rows_with_call_window": 1143,
+   "acceptance_calls_journal": 10551,
+   "acceptance_document_epochs": 494,
+   "com_routes": 335,
+   "com_routes_api5": 152,
+   "com_routes_api7": 183,
+   "com_routes_documented": 263,
+   "com_routes_not_confirmed": 72,
    "com_routes_inherited": 9,
    "com_routes_indexed": 7,
-   "non_com_receivers": 939,
+   "non_com_receivers": 955,
    "reflected_members": 1,
-   "receivers_without_type": 1298,
-   "receivers_without_type_member_already_routed": 369,
+   "receivers_without_type": 1323,
+   "receivers_without_type_member_already_routed": 371,
    "object_types_matched": 35,
    "object_types_not_in_table": 0,
    "documentation_confirmed": 70,
    "implementation_confirmed": 56,
-   "planned_rows": 9,
-   "acceptance_rows_referenced": 983,
+   "planned_rows": 3,
+   "acceptance_rows_referenced": 1013,
    "acceptance_groups": [
     "assembly.json",
-    "full.json"
+    "full.json",
+    "mate.json"
    ],
    "acceptance_verdicts": [
     "PASS"
@@ -1112,6 +1182,26 @@
    ]
   },
   {
+   "name": "kompas_create_mate",
+   "description_len": 323,
+   "properties_on_wire": 11,
+   "required_on_wire": [
+    "constraint_type",
+    "document_id",
+    "expected_revision",
+    "first_component_ref",
+    "first_face_index",
+    "operation_id",
+    "second_component_ref",
+    "second_face_index"
+   ],
+   "additional_properties": false,
+   "schema_file": "schemas/kompas_create_mate.json",
+   "schema_property_names_match_wire": true,
+   "schema_shape_matches_wire": true,
+   "modes": []
+  },
+  {
    "name": "kompas_create_sketch",
    "description_len": 96,
    "properties_on_wire": 6,
@@ -1173,6 +1263,22 @@
     "dep.foundation",
     "dep.preserve_unknown"
    ]
+  },
+  {
+   "name": "kompas_delete_mate",
+   "description_len": 182,
+   "properties_on_wire": 5,
+   "required_on_wire": [
+    "document_id",
+    "expected_revision",
+    "mate_ref",
+    "operation_id"
+   ],
+   "additional_properties": false,
+   "schema_file": "schemas/kompas_delete_mate.json",
+   "schema_property_names_match_wire": true,
+   "schema_shape_matches_wire": true,
+   "modes": []
   },
   {
    "name": "kompas_disconnect",
@@ -1573,6 +1679,19 @@
    ]
   },
   {
+   "name": "kompas_list_mates",
+   "description_len": 238,
+   "properties_on_wire": 2,
+   "required_on_wire": [
+    "document_id"
+   ],
+   "additional_properties": false,
+   "schema_file": "schemas/kompas_list_mates.json",
+   "schema_property_names_match_wire": true,
+   "schema_shape_matches_wire": true,
+   "modes": []
+  },
+  {
    "name": "kompas_list_sketch_entities",
    "description_len": 1117,
    "properties_on_wire": 4,
@@ -1960,6 +2079,40 @@
    ]
   },
   {
+   "name": "kompas_set_mate_fixed",
+   "description_len": 122,
+   "properties_on_wire": 6,
+   "required_on_wire": [
+    "document_id",
+    "expected_revision",
+    "fixed",
+    "mate_ref",
+    "operation_id"
+   ],
+   "additional_properties": false,
+   "schema_file": "schemas/kompas_set_mate_fixed.json",
+   "schema_property_names_match_wire": true,
+   "schema_shape_matches_wire": true,
+   "modes": []
+  },
+  {
+   "name": "kompas_set_mate_parameter",
+   "description_len": 101,
+   "properties_on_wire": 6,
+   "required_on_wire": [
+    "document_id",
+    "expected_revision",
+    "mate_ref",
+    "operation_id",
+    "param_value"
+   ],
+   "additional_properties": false,
+   "schema_file": "schemas/kompas_set_mate_parameter.json",
+   "schema_property_names_match_wire": true,
+   "schema_shape_matches_wire": true,
+   "modes": []
+  },
+  {
    "name": "kompas_set_sketch_plane",
    "description_len": 1649,
    "properties_on_wire": 6,
@@ -2174,10 +2327,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "BG19",
      "BG19p",
@@ -2292,10 +2445,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "F08.07.create",
      "F08.07.delete_dependencies",
@@ -2407,10 +2560,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "F08.21.create",
      "F08.21.delete_dependencies",
@@ -2516,10 +2669,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "F08.16.create",
      "F08.16.delete_dependencies",
@@ -2611,10 +2764,10 @@
     "status_basis": "ни одно действие строки не начато",
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [],
     "acceptance_verdicts": []
    },
@@ -2681,10 +2834,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "AUXS.01.edit",
      "AUXS.02.negative_tests",
@@ -2800,10 +2953,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "EX33",
      "EX33t",
@@ -2905,10 +3058,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "EX31",
      "EX31r",
@@ -3008,10 +3161,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "EX35",
      "EX36",
@@ -3114,10 +3267,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "EX35",
      "EX43",
@@ -3218,10 +3371,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "EX39",
      "EX40",
@@ -3323,10 +3476,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "EX43",
      "EX44",
@@ -3428,10 +3581,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "EX42",
      "F08.08.create",
@@ -3522,10 +3675,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "F08.10.create",
      "F08.10.delete_dependencies",
@@ -3639,10 +3792,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "F08.11.create",
      "F08.11.delete_dependencies",
@@ -3757,10 +3910,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "F08.12.create",
      "F08.12.delete_dependencies",
@@ -3876,10 +4029,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "F08.13.create",
      "F08.13.delete_dependencies",
@@ -4013,10 +4166,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "F08.14.create",
      "F08.14.delete_dependencies",
@@ -4153,10 +4306,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "B5.01",
      "B5.06",
@@ -4281,10 +4434,10 @@
     "status_basis": "ни одно действие строки не начато",
     "catalog_level_claim": "metadata_found",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [],
     "acceptance_verdicts": []
    },
@@ -4375,10 +4528,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "B5.02",
      "B5.03",
@@ -4469,10 +4622,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "F08.15.create",
      "F08.15.delete_dependencies",
@@ -4578,10 +4731,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "F08.17.create",
      "F08.17.delete_dependencies",
@@ -4683,10 +4836,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "F08.18.create",
      "F08.18.delete_dependencies",
@@ -4789,10 +4942,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "F08.19.create",
      "F08.19.delete_dependencies",
@@ -4884,10 +5037,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "F08.20.create",
      "F08.20.delete_dependencies",
@@ -4982,10 +5135,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "F08.22.create",
      "F08.22.delete_dependencies",
@@ -5073,10 +5226,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "F08.23.create",
      "F08.23.delete_dependencies",
@@ -5161,10 +5314,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "F08.24.create",
      "F08.24.delete_dependencies",
@@ -5281,10 +5434,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "CH02",
      "CH03",
@@ -5384,10 +5537,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "CH13",
      "CH14",
@@ -5486,10 +5639,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "CH04",
      "CH16b",
@@ -5591,10 +5744,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "B5.04",
      "B5.05",
@@ -5691,10 +5844,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "B5.04",
      "B5.05",
@@ -5778,10 +5931,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "B3.02",
      "B3.25",
@@ -5869,10 +6022,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "B3.03",
      "B3.25",
@@ -5960,10 +6113,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "B3.04",
      "B3.32",
@@ -6047,10 +6200,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "B3.05",
      "B3.33",
@@ -6126,10 +6279,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "B3.09",
      "B3.22a",
@@ -6216,10 +6369,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "B3.10",
      "B3.11",
@@ -6341,10 +6494,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "B3.12",
      "B3.38",
@@ -6466,10 +6619,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "B3.13",
      "B3.14",
@@ -6583,10 +6736,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "B4.00",
      "B4.01",
@@ -6687,10 +6840,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "B4.00",
      "B4.01",
@@ -6791,10 +6944,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "B4.00",
      "B4.01",
@@ -6892,10 +7045,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "B4.00",
      "B4.01",
@@ -6993,10 +7146,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "B4.00",
      "B4.02",
@@ -7095,10 +7248,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "B4.00",
      "B4.02",
@@ -7197,10 +7350,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "B4.00",
      "B4.02",
@@ -7297,10 +7450,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "B4.00",
      "B4.02",
@@ -7398,10 +7551,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "B4.00",
      "B4.03",
@@ -7506,10 +7659,10 @@
     "status_basis": "ни одно действие строки не начато",
     "catalog_level_claim": "metadata_found",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [],
     "acceptance_verdicts": []
    },
@@ -7585,10 +7738,10 @@
     "status_basis": "общая зависимость: ВСЕ её обязательные действия закрыты (7 из 7: discover, create, read, edit, save_reopen, negative_tests, geometry_validation). Статус «Подтверждено» к зависимости не применяется: она не реализуется, а покрывается проверками",
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "DEP.DSE.01.discover",
      "DEP.DSE.02.create",
@@ -7691,10 +7844,10 @@
     "status_basis": "общая зависимость: ВСЕ её обязательные действия закрыты (6 из 6: discover, create, read, edit, save_reopen, negative_tests). Статус «Подтверждено» к зависимости не применяется: она не реализуется, а покрывается проверками",
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "DEP.DPL.01.discover",
      "DEP.DPL.02.create",
@@ -7785,10 +7938,10 @@
     "status_basis": "общая зависимость: ВСЕ её обязательные действия закрыты (5 из 5: discover, create, read, save_reopen, negative_tests). Статус «Подтверждено» к зависимости не применяется: она не реализуется, а покрывается проверками",
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "DEP.DAX.01.discover",
      "DEP.DAX.02.create",
@@ -7878,10 +8031,10 @@
     "status_basis": "общая зависимость: ВСЕ её обязательные действия закрыты (3 из 3: create, read, save_reopen). Статус «Подтверждено» к зависимости не применяется: она не реализуется, а покрывается проверками",
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "DEP.DPT.01.create",
      "DEP.DPT.02.read",
@@ -7967,10 +8120,10 @@
     "status_basis": "общая зависимость: ВСЕ её обязательные действия закрыты (4 из 4: discover, read, negative_tests, geometry_validation). Статус «Подтверждено» к зависимости не применяется: она не реализуется, а покрывается проверками",
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "DEP.DPF.01.discover",
      "DEP.DPF.02.read",
@@ -8060,10 +8213,10 @@
     "status_basis": "общая зависимость: ВСЕ её обязательные действия закрыты (3 из 3: discover, read, negative_tests). Статус «Подтверждено» к зависимости не применяется: она не реализуется, а покрывается проверками",
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "DEP.DEF.01.discover",
      "DEP.DEF.02.read",
@@ -8171,10 +8324,10 @@
     "status_basis": "общая зависимость: ВСЕ её обязательные действия закрыты (3 из 3: create, read, negative_tests). Статус «Подтверждено» к зависимости не применяется: она не реализуется, а покрывается проверками",
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "DEP.DPA.01.create",
      "DEP.DPA.02.read",
@@ -8274,10 +8427,10 @@
     "status_basis": "общая зависимость: ВСЕ её обязательные действия закрыты (3 из 3: discover, read, negative_tests). Статус «Подтверждено» к зависимости не применяется: она не реализуется, а покрывается проверками",
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "DEP.DSU.01.discover",
      "DEP.DSU.02.read",
@@ -8368,10 +8521,10 @@
     "status_basis": "общая зависимость: ВСЕ её обязательные действия закрыты (7 из 7: read, edit, rebuild, save_reopen, suppress_restore, delete_dependencies, negative_tests). Статус «Подтверждено» к зависимости не применяется: она не реализуется, а покрывается проверками",
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "DEP.DLC.01.read",
      "DEP.DLC.02.edit",
@@ -8487,10 +8640,10 @@
     "status_basis": "общая зависимость: ВСЕ её обязательные действия закрыты (3 из 3: read, geometry_validation, negative_tests). Статус «Подтверждено» к зависимости не применяется: она не реализуется, а покрывается проверками",
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "DEP.DMB.01.read",
      "DEP.DMB.02.geometry_validation",
@@ -8586,10 +8739,10 @@
     "status_basis": "общая зависимость: ВСЕ её обязательные действия закрыты (4 из 4: edit, rebuild, save_reopen, geometry_validation). Статус «Подтверждено» к зависимости не применяется: она не реализуется, а покрывается проверками",
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "B4.08",
      "B4M.01.edit",
@@ -8733,10 +8886,10 @@
     "status_basis": "общая зависимость: ВСЕ её обязательные действия закрыты (1 из 1: geometry_validation). Статус «Подтверждено» к зависимости не применяется: она не реализуется, а покрывается проверками",
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "DEP.DUN.01.geometry_validation"
     ],
@@ -8824,10 +8977,10 @@
     "status_basis": "общая зависимость: ВСЕ её обязательные действия закрыты (4 из 4: discover, read, edit, save_reopen). Статус «Подтверждено» к зависимости не применяется: она не реализуется, а покрывается проверками",
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "DEP.DAP.01.discover",
      "DEP.DAP.02.read",
@@ -8933,10 +9086,10 @@
     "status_basis": "общая зависимость: ВСЕ её обязательные действия закрыты (2 из 2: read, negative_tests). Статус «Подтверждено» к зависимости не применяется: она не реализуется, а покрывается проверками",
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "DEP.DFN.01.read",
      "DEP.DFN.02.negative_tests"
@@ -9022,10 +9175,10 @@
     "status_basis": "общая зависимость: ВСЕ её обязательные действия закрыты (4 из 4: read, edit, save_reopen, geometry_validation). Статус «Подтверждено» к зависимости не применяется: она не реализуется, а покрывается проверками",
     "catalog_level_claim": null,
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "DEP.DPU.01.read",
      "DEP.DPU.02.edit",
@@ -9122,10 +9275,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "B5.01",
      "B5.06",
@@ -9237,10 +9390,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "B5.02",
      "B5.03",
@@ -9339,10 +9492,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "B5.04",
      "B5.05",
@@ -9425,10 +9578,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "B3.01",
      "B3.29",
@@ -9506,10 +9659,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "B3.08",
      "B3.22a",
@@ -9614,10 +9767,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "B4.00",
      "B4.03",
@@ -9684,10 +9837,10 @@
     "status_basis": "все действия строки закрыты (verified/not_applicable), привязанные строки приёмки дают PASS и вызовы этих строк содержат каждое заявленное действие",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "IMG.01.create",
      "IMG.02.create",
@@ -9763,10 +9916,10 @@
     "status_basis": "все действия строки закрыты, но заявление не поддержано вызовами привязанных строк приёмки: discover, create, read. Закрытость по ярлыку не заменяет доказательство (наряд §4.5)",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "ASM.01.create",
      "ASM.01.discover",
@@ -9830,10 +9983,10 @@
     "status_basis": "все действия строки закрыты, но заявление не поддержано вызовами привязанных строк приёмки: create, read, geometry_validation. Закрытость по ярлыку не заменяет доказательство (наряд §4.5)",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "ASM.01.discover",
      "ASM.02.create",
@@ -9900,10 +10053,10 @@
     "status_basis": "все действия строки закрыты, но заявление не поддержано вызовами привязанных строк приёмки: discover, read, save_reopen. Закрытость по ярлыку не заменяет доказательство (наряд §4.5)",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "ASM.03.fields",
      "ASM.03.multiplicity",
@@ -9968,10 +10121,10 @@
     "status_basis": "все действия строки закрыты, но заявление не поддержано вызовами привязанных строк приёмки: discover, read, edit, save_reopen, geometry_validation. Закрытость по ярлыку не заменяет доказательство (наряд §4.5)",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "ASM.02.rebuild",
      "ASM.03.fields",
@@ -10039,10 +10192,10 @@
     "status_basis": "все действия строки закрыты, но заявление не поддержано вызовами привязанных строк приёмки: discover, read, edit, save_reopen, geometry_validation. Закрытость по ярлыку не заменяет доказательство (наряд §4.5)",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "ASM.02.rebuild",
      "ASM.03.read",
@@ -10108,10 +10261,10 @@
     "status_basis": "все действия строки закрыты, но заявление не поддержано вызовами привязанных строк приёмки: discover, read, save_reopen, negative_tests. Закрытость по ярлыку не заменяет доказательство (наряд §4.5)",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "ASM.06.discover",
      "ASM.06.negative_tests",
@@ -10172,10 +10325,10 @@
     "status_basis": "все действия строки закрыты, но заявление не поддержано вызовами привязанных строк приёмки: discover, read, geometry_validation. Закрытость по ярлыку не заменяет доказательство (наряд §4.5)",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "ASM.01.discover",
      "ASM.04.save_reopen",
@@ -10238,10 +10391,10 @@
     "status_basis": "общая зависимость: обязательные действия профиль не объявил — судить не по чему, и это названо, а не заполнено догадкой. НО заявление не поддержано вызовами привязанных строк приёмки: discover, create, read. Закрытость по ярлыку не заменяет доказательство (наряд §4.5)",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "ASM.01.create",
      "ASM.01.discover",
@@ -10307,10 +10460,10 @@
     "status_basis": "общая зависимость: обязательные действия профиль не объявил — судить не по чему, и это названо, а не заполнено догадкой. НО заявление не поддержано вызовами привязанных строк приёмки: read. Закрытость по ярлыку не заменяет доказательство (наряд §4.5)",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "ASM.01.discover",
      "ASM.02.create",
@@ -10379,10 +10532,10 @@
     "status_basis": "общая зависимость: обязательные действия профиль не объявил — судить не по чему, и это названо, а не заполнено догадкой. НО заявление не поддержано вызовами привязанных строк приёмки: discover, read, save_reopen, geometry_validation. Закрытость по ярлыку не заменяет доказательство (наряд §4.5)",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "ASM.03.fields",
      "ASM.03.multiplicity",
@@ -10451,10 +10604,10 @@
     "status_basis": "общая зависимость: обязательные действия профиль не объявил — судить не по чему, и это названо, а не заполнено догадкой. НО заявление не поддержано вызовами привязанных строк приёмки: discover, read, edit, save_reopen. Закрытость по ярлыку не заменяет доказательство (наряд §4.5)",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "ASM.01.read",
      "ASM.02.rebuild",
@@ -10518,10 +10671,10 @@
     "status_basis": "общая зависимость: обязательные действия профиль не объявил — судить не по чему, и это названо, а не заполнено догадкой. НО заявление не поддержано вызовами привязанных строк приёмки: discover, create, read. Закрытость по ярлыку не заменяет доказательство (наряд §4.5)",
     "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
     "acceptance_rows": [
      "ASM.02.create",
      "ASM.02.idempotency",
@@ -10543,373 +10696,405 @@
    "operation_id": "MATE-01.mate.create",
    "queue": null,
    "kind": null,
-   "catalog_level": null,
+   "catalog_level": "mcp_verified",
    "tool": null,
    "family": "MATE-01",
    "schema": null,
-   "schema_note": "схема не применима: инструмент для этой строки не опубликован. Существующий инструмент к плановой функции НЕ приписывается",
+   "schema_note": "причина отсутствия схемы не установлена — названо прямо, а не заполнено чем попало",
    "shared_schemas": [],
    "code": [],
-   "declared_route": "IPart7.MateConstraints → IMateConstraints3D.Add(MateConstraintType) → BaseObject1/BaseObject2 → Update() (imateconstraints3d_add.html, imateconstraint3d_baseobject1/2.html)",
+   "declared_route": "kompas_create_mate: IPart7.MateConstraints → IMateConstraints3D.Add(MateConstraintType) → BaseObject1/BaseObject2 → Update() (imateconstraints3d_add.html, imateconstraint3d_baseobject1/2.html)",
    "com": [],
    "documentation": {
     "status": "Не подтверждено",
-    "note": "семейство не реализовано; маршрут в коде отсутствует",
+    "note": "строка не отнесена к проверенному семейству: маршрут в коде не заявлен, поэтому документированность МАРШРУТА не подтверждена и не опровергнута",
     "planned_documented_interfaces": []
    },
    "conditions": null,
    "actions": {
-    "discover": "not_started",
-    "create": "not_started",
-    "read": "not_started",
-    "edit": "not_started",
-    "rebuild": "not_started",
-    "save_reopen": "not_started",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "verified",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "verified",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
    },
-   "actions_verified": 0,
-   "actions_open": [
+   "actions_verified": 10,
+   "actions_open": [],
+   "actions_without_call_evidence": [
     "discover",
     "create",
     "read",
-    "edit",
-    "rebuild",
-    "save_reopen",
-    "suppress_restore",
-    "delete_dependencies",
-    "negative_tests",
     "geometry_validation"
    ],
-   "actions_without_call_evidence": [],
    "implementation": {
-    "status": "Не реализовано",
-    "status_basis": "ни одно действие строки не начато",
-    "catalog_level_claim": null,
+    "status": "Недостаточно проверки",
+    "status_basis": "все действия строки закрыты, но заявление не поддержано вызовами привязанных строк приёмки: discover, create, read, geometry_validation. Закрытость по ярлыку не заменяет доказательство (наряд §4.5)",
+    "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
-    "acceptance_rows": [],
-    "acceptance_verdicts": []
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
+    "acceptance_rows": [
+     "MATE.01.create",
+     "MATE.01.face_range",
+     "MATE.01.negative_tests",
+     "MATE.01.rebuild",
+     "MATE.01.save_reopen",
+     "MATE.02.discover",
+     "MATE.02.fields",
+     "MATE.02.read",
+     "MATE.06.geometry_validation"
+    ],
+    "acceptance_verdicts": [
+     "PASS"
+    ]
    },
    "limitations": [
-    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+    "живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов",
+    "Приёмка на бинарях поставки ВЫПОЛНЕНА: `publish-mates-20261005` — Host.dll `5ba127bb…`, Worker.dll `6fecb3fe…`, Api5Adapter.dll `157c9dbb…`; группа MATE снята ИМЕННО на них. `client_acceptance` — шаг заказчика и остаётся `not_run`: отсутствие проверки не PASS.",
+    "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
    ]
   },
   {
    "operation_id": "MATE-02.mate.read",
    "queue": null,
    "kind": null,
-   "catalog_level": null,
+   "catalog_level": "mcp_verified",
    "tool": null,
    "family": "MATE-02",
    "schema": null,
-   "schema_note": "схема не применима: инструмент для этой строки не опубликован. Существующий инструмент к плановой функции НЕ приписывается",
+   "schema_note": "причина отсутствия схемы не установлена — названо прямо, а не заполнено чем попало",
    "shared_schemas": [],
    "code": [],
-   "declared_route": "ksDocument3D.MateConstraintCollection → GetCount/GetByIndex → ksMateConstraint.GetBaseObj(1|2), constraintType, ParamValue, Alignment (ksmateconstraintcollection_getcount.html, ksmateconstraint_getbaseobj.html)",
+   "declared_route": "kompas_list_mates: ksDocument3D.MateConstraintCollection → GetCount/GetByIndex → ksMateConstraint.GetBaseObj(1|2), constraintType, ParamValue, Alignment (ksmateconstraintcollection_getcount.html, ksmateconstraint_getbaseobj.html)",
    "com": [],
    "documentation": {
     "status": "Не подтверждено",
-    "note": "семейство не реализовано; маршрут в коде отсутствует",
+    "note": "строка не отнесена к проверенному семейству: маршрут в коде не заявлен, поэтому документированность МАРШРУТА не подтверждена и не опровергнута",
     "planned_documented_interfaces": []
    },
    "conditions": null,
    "actions": {
-    "discover": "not_started",
-    "create": "not_started",
-    "read": "not_started",
-    "edit": "not_started",
-    "rebuild": "not_started",
-    "save_reopen": "not_started",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
    },
-   "actions_verified": 0,
-   "actions_open": [
+   "actions_verified": 10,
+   "actions_open": [],
+   "actions_without_call_evidence": [
     "discover",
-    "create",
-    "read",
-    "edit",
-    "rebuild",
-    "save_reopen",
-    "suppress_restore",
-    "delete_dependencies",
-    "negative_tests",
-    "geometry_validation"
+    "read"
    ],
-   "actions_without_call_evidence": [],
    "implementation": {
-    "status": "Не реализовано",
-    "status_basis": "ни одно действие строки не начато",
-    "catalog_level_claim": null,
+    "status": "Недостаточно проверки",
+    "status_basis": "все действия строки закрыты, но заявление не поддержано вызовами привязанных строк приёмки: discover, read. Закрытость по ярлыку не заменяет доказательство (наряд §4.5)",
+    "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
-    "acceptance_rows": [],
-    "acceptance_verdicts": []
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
+    "acceptance_rows": [
+     "MATE.02.discover",
+     "MATE.02.fields",
+     "MATE.02.read",
+     "MATE.03.negative_tests",
+     "MATE.05.read",
+     "MATE.05.save_reopen"
+    ],
+    "acceptance_verdicts": [
+     "PASS"
+    ]
    },
    "limitations": [
-    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+    "живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов",
+    "Приёмка на бинарях поставки ВЫПОЛНЕНА: `publish-mates-20261005` — Host.dll `5ba127bb…`, Worker.dll `6fecb3fe…`, Api5Adapter.dll `157c9dbb…`; группа MATE снята ИМЕННО на них. `client_acceptance` — шаг заказчика и остаётся `not_run`: отсутствие проверки не PASS.",
+    "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
    ]
   },
   {
    "operation_id": "MATE-03.mate.param_edit",
    "queue": null,
    "kind": null,
-   "catalog_level": null,
+   "catalog_level": "mcp_verified",
    "tool": null,
    "family": "MATE-03",
    "schema": null,
-   "schema_note": "схема не применима: инструмент для этой строки не опубликован. Существующий инструмент к плановой функции НЕ приписывается",
+   "schema_note": "причина отсутствия схемы не установлена — названо прямо, а не заполнено чем попало",
    "shared_schemas": [],
    "code": [],
-   "declared_route": "IMateConstraint3D.ParamValue = … → IMateConstraint3D.Update() (imateconstraint3d_paramvalue.html)",
+   "declared_route": "kompas_set_mate_parameter: IMateConstraint3D.ParamValue = … → IMateConstraint3D.Update() (imateconstraint3d_paramvalue.html)",
    "com": [],
    "documentation": {
     "status": "Не подтверждено",
-    "note": "семейство не реализовано; маршрут в коде отсутствует",
+    "note": "строка не отнесена к проверенному семейству: маршрут в коде не заявлен, поэтому документированность МАРШРУТА не подтверждена и не опровергнута",
     "planned_documented_interfaces": []
    },
    "conditions": null,
    "actions": {
-    "discover": "not_started",
-    "create": "not_started",
-    "read": "not_started",
-    "edit": "not_started",
-    "rebuild": "not_started",
-    "save_reopen": "not_started",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "verified",
+    "rebuild": "verified",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
    },
-   "actions_verified": 0,
-   "actions_open": [
+   "actions_verified": 10,
+   "actions_open": [],
+   "actions_without_call_evidence": [
     "discover",
-    "create",
     "read",
     "edit",
-    "rebuild",
-    "save_reopen",
-    "suppress_restore",
-    "delete_dependencies",
-    "negative_tests",
     "geometry_validation"
    ],
-   "actions_without_call_evidence": [],
    "implementation": {
-    "status": "Не реализовано",
-    "status_basis": "ни одно действие строки не начато",
-    "catalog_level_claim": null,
+    "status": "Недостаточно проверки",
+    "status_basis": "все действия строки закрыты, но заявление не поддержано вызовами привязанных строк приёмки: discover, read, edit, geometry_validation. Закрытость по ярлыку не заменяет доказательство (наряд §4.5)",
+    "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
-    "acceptance_rows": [],
-    "acceptance_verdicts": []
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
+    "acceptance_rows": [
+     "MATE.02.discover",
+     "MATE.03.create_distance",
+     "MATE.03.edit",
+     "MATE.03.geometry_validation",
+     "MATE.03.negative_tests",
+     "MATE.03.read",
+     "MATE.03.rebuild",
+     "MATE.03.save_reopen"
+    ],
+    "acceptance_verdicts": [
+     "PASS"
+    ]
    },
    "limitations": [
-    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+    "живой прогон 05.10.2026, группа MATE: 34 строки, 0 отказов (бинари поставки publish-mates-20261005)",
+    "Приёмка на бинарях поставки ВЫПОЛНЕНА: `publish-mates-20261005` — Host.dll `5ba127bb…`, Worker.dll `6fecb3fe…`, Api5Adapter.dll `157c9dbb…`; группа MATE снята ИМЕННО на них. `client_acceptance` — шаг заказчика и остаётся `not_run`: отсутствие проверки не PASS.",
+    "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
    ]
   },
   {
    "operation_id": "MATE-04.mate.fixed",
    "queue": null,
    "kind": null,
-   "catalog_level": null,
+   "catalog_level": "mcp_verified",
    "tool": null,
    "family": "MATE-04",
    "schema": null,
-   "schema_note": "схема не применима: инструмент для этой строки не опубликован. Существующий инструмент к плановой функции НЕ приписывается",
+   "schema_note": "причина отсутствия схемы не установлена — названо прямо, а не заполнено чем попало",
    "shared_schemas": [],
    "code": [],
-   "declared_route": "IMateConstraint3D.Fixed = ksMateFixedTypeEnum (ksmatefixedtypeenum.html)",
+   "declared_route": "kompas_set_mate_fixed: IMateConstraint3D.Fixed = ksMateFixedTypeEnum (ksmatefixedtypeenum.html)",
    "com": [],
    "documentation": {
     "status": "Не подтверждено",
-    "note": "семейство не реализовано; маршрут в коде отсутствует",
+    "note": "строка не отнесена к проверенному семейству: маршрут в коде не заявлен, поэтому документированность МАРШРУТА не подтверждена и не опровергнута",
     "planned_documented_interfaces": []
    },
    "conditions": null,
    "actions": {
-    "discover": "not_started",
-    "create": "not_started",
-    "read": "not_started",
-    "edit": "not_started",
-    "rebuild": "not_started",
-    "save_reopen": "not_started",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "verified",
+    "rebuild": "verified",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
    },
-   "actions_verified": 0,
-   "actions_open": [
+   "actions_verified": 10,
+   "actions_open": [],
+   "actions_without_call_evidence": [
     "discover",
-    "create",
     "read",
-    "edit",
-    "rebuild",
-    "save_reopen",
-    "suppress_restore",
-    "delete_dependencies",
-    "negative_tests",
-    "geometry_validation"
+    "edit"
    ],
-   "actions_without_call_evidence": [],
    "implementation": {
-    "status": "Не реализовано",
-    "status_basis": "ни одно действие строки не начато",
-    "catalog_level_claim": null,
+    "status": "Недостаточно проверки",
+    "status_basis": "все действия строки закрыты, но заявление не поддержано вызовами привязанных строк приёмки: discover, read, edit. Закрытость по ярлыку не заменяет доказательство (наряд §4.5)",
+    "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
-    "acceptance_rows": [],
-    "acceptance_verdicts": []
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
+    "acceptance_rows": [
+     "MATE.02.discover",
+     "MATE.04.edit",
+     "MATE.04.negative_tests",
+     "MATE.04.read",
+     "MATE.04.rebuild",
+     "MATE.04.save_reopen"
+    ],
+    "acceptance_verdicts": [
+     "PASS"
+    ]
    },
    "limitations": [
-    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+    "живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов",
+    "Приёмка на бинарях поставки ВЫПОЛНЕНА: `publish-mates-20261005` — Host.dll `5ba127bb…`, Worker.dll `6fecb3fe…`, Api5Adapter.dll `157c9dbb…`; группа MATE снята ИМЕННО на них. `client_acceptance` — шаг заказчика и остаётся `not_run`: отсутствие проверки не PASS.",
+    "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
    ]
   },
   {
    "operation_id": "MATE-05.mate.delete",
    "queue": null,
    "kind": null,
-   "catalog_level": null,
+   "catalog_level": "mcp_verified",
    "tool": null,
    "family": "MATE-05",
    "schema": null,
-   "schema_note": "схема не применима: инструмент для этой строки не опубликован. Существующий инструмент к плановой функции НЕ приписывается",
+   "schema_note": "причина отсутствия схемы не установлена — названо прямо, а не заполнено чем попало",
    "shared_schemas": [],
    "code": [],
-   "declared_route": "ksDocument3D.RemoveMateConstraint(constraintType, obj1, obj2) (ksdocument3d_removemateconstraint.html)",
+   "declared_route": "kompas_delete_mate: ksDocument3D.RemoveMateConstraint(constraintType, obj1, obj2) (ksdocument3d_removemateconstraint.html)",
    "com": [],
    "documentation": {
     "status": "Не подтверждено",
-    "note": "семейство не реализовано; маршрут в коде отсутствует",
+    "note": "строка не отнесена к проверенному семейству: маршрут в коде не заявлен, поэтому документированность МАРШРУТА не подтверждена и не опровергнута",
     "planned_documented_interfaces": []
    },
    "conditions": null,
    "actions": {
-    "discover": "not_started",
-    "create": "not_started",
-    "read": "not_started",
-    "edit": "not_started",
-    "rebuild": "not_started",
-    "save_reopen": "not_started",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "verified",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "verified",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
    },
-   "actions_verified": 0,
-   "actions_open": [
+   "actions_verified": 10,
+   "actions_open": [],
+   "actions_without_call_evidence": [
     "discover",
-    "create",
     "read",
-    "edit",
-    "rebuild",
-    "save_reopen",
-    "suppress_restore",
-    "delete_dependencies",
-    "negative_tests",
-    "geometry_validation"
+    "delete_dependencies"
    ],
-   "actions_without_call_evidence": [],
    "implementation": {
-    "status": "Не реализовано",
-    "status_basis": "ни одно действие строки не начато",
-    "catalog_level_claim": null,
+    "status": "Недостаточно проверки",
+    "status_basis": "все действия строки закрыты, но заявление не поддержано вызовами привязанных строк приёмки: discover, read, delete_dependencies. Закрытость по ярлыку не заменяет доказательство (наряд §4.5)",
+    "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
-    "acceptance_rows": [],
-    "acceptance_verdicts": []
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
+    "acceptance_rows": [
+     "MATE.02.discover",
+     "MATE.05.delete",
+     "MATE.05.delete_dependencies",
+     "MATE.05.negative_tests",
+     "MATE.05.read",
+     "MATE.05.rebuild",
+     "MATE.05.save_reopen"
+    ],
+    "acceptance_verdicts": [
+     "PASS"
+    ]
    },
    "limitations": [
-    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+    "живой прогон 05.10.2026, группа MATE: 34 строки, 0 отказов (бинари поставки publish-mates-20261005)",
+    "Приёмка на бинарях поставки ВЫПОЛНЕНА: `publish-mates-20261005` — Host.dll `5ba127bb…`, Worker.dll `6fecb3fe…`, Api5Adapter.dll `157c9dbb…`; группа MATE снята ИМЕННО на них. `client_acceptance` — шаг заказчика и остаётся `not_run`: отсутствие проверки не PASS.",
+    "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
    ]
   },
   {
    "operation_id": "MATE-06.mate.placement_effect",
    "queue": null,
    "kind": null,
-   "catalog_level": null,
+   "catalog_level": "mcp_verified",
    "tool": null,
    "family": "MATE-06",
    "schema": null,
-   "schema_note": "схема не применима: инструмент для этой строки не опубликован. Существующий инструмент к плановой функции НЕ приписывается",
+   "schema_note": "причина отсутствия схемы не установлена — названо прямо, а не заполнено чем попало",
    "shared_schemas": [],
    "code": [],
-   "declared_route": "ksPlacement.GetMatrix3D по компоненту после Update() сопряжения (маршрут чтения измерен в блоке C1)",
+   "declared_route": "kompas_list_components: ksPlacement.GetMatrix3D по компоненту после Update() сопряжения (маршрут чтения измерен в блоке C1)",
    "com": [],
    "documentation": {
     "status": "Не подтверждено",
-    "note": "семейство не реализовано; маршрут в коде отсутствует",
+    "note": "строка не отнесена к проверенному семейству: маршрут в коде не заявлен, поэтому документированность МАРШРУТА не подтверждена и не опровергнута",
     "planned_documented_interfaces": []
    },
    "conditions": null,
    "actions": {
-    "discover": "not_started",
-    "create": "not_started",
-    "read": "not_started",
-    "edit": "not_started",
-    "rebuild": "not_started",
-    "save_reopen": "not_started",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "verified",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
    },
-   "actions_verified": 0,
-   "actions_open": [
+   "actions_verified": 10,
+   "actions_open": [],
+   "actions_without_call_evidence": [
     "discover",
-    "create",
     "read",
-    "edit",
-    "rebuild",
     "save_reopen",
-    "suppress_restore",
-    "delete_dependencies",
-    "negative_tests",
     "geometry_validation"
    ],
-   "actions_without_call_evidence": [],
    "implementation": {
-    "status": "Не реализовано",
-    "status_basis": "ни одно действие строки не начато",
-    "catalog_level_claim": null,
+    "status": "Недостаточно проверки",
+    "status_basis": "все действия строки закрыты, но заявление не поддержано вызовами привязанных строк приёмки: discover, read, save_reopen, geometry_validation. Закрытость по ярлыку не заменяет доказательство (наряд §4.5)",
+    "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
-    "acceptance_rows": [],
-    "acceptance_verdicts": []
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
+    "acceptance_rows": [
+     "MATE.02.discover",
+     "MATE.05.negative_tests",
+     "MATE.06.geometry_validation",
+     "MATE.06.read",
+     "MATE.06.rebuild",
+     "MATE.06.save_reopen"
+    ],
+    "acceptance_verdicts": [
+     "PASS"
+    ]
    },
    "limitations": [
-    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+    "живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов",
+    "Приёмка на бинарях поставки ВЫПОЛНЕНА: `publish-mates-20261005` — Host.dll `5ba127bb…`, Worker.dll `6fecb3fe…`, Api5Adapter.dll `157c9dbb…`; группа MATE снята ИМЕННО на них. `client_acceptance` — шаг заказчика и остаётся `not_run`: отсутствие проверки не PASS.",
+    "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
    ]
   },
   {
    "operation_id": "dep.mate.object_address",
    "queue": null,
    "kind": "common_dependency",
-   "catalog_level": null,
+   "catalog_level": "mcp_verified",
    "tool": null,
    "family": null,
    "schema": null,
@@ -10925,52 +11110,52 @@
    },
    "conditions": null,
    "actions": {
-    "discover": "not_started",
-    "create": "not_started",
-    "read": "not_started",
-    "edit": "not_started",
-    "rebuild": "not_started",
-    "save_reopen": "not_started",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
    },
-   "actions_verified": 0,
-   "actions_open": [
+   "actions_verified": 10,
+   "actions_open": [],
+   "actions_without_call_evidence": [
     "discover",
-    "create",
-    "read",
-    "edit",
-    "rebuild",
-    "save_reopen",
-    "suppress_restore",
-    "delete_dependencies",
-    "negative_tests",
-    "geometry_validation"
+    "read"
    ],
-   "actions_without_call_evidence": [],
    "implementation": {
     "status": "Недостаточно проверки",
-    "status_basis": "общая зависимость: обязательные действия профиль не объявил — судить не по чему, и это названо, а не заполнено догадкой",
-    "catalog_level_claim": null,
+    "status_basis": "общая зависимость: обязательные действия профиль не объявил — судить не по чему, и это названо, а не заполнено догадкой. НО заявление не поддержано вызовами привязанных строк приёмки: discover, read. Закрытость по ярлыку не заменяет доказательство (наряд §4.5)",
+    "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
-    "acceptance_rows": [],
-    "acceptance_verdicts": []
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
+    "acceptance_rows": [
+     "MATE.01.face_range",
+     "MATE.02.discover",
+     "MATE.03.read"
+    ],
+    "acceptance_verdicts": [
+     "PASS"
+    ]
    },
    "limitations": [
-    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+    "живой прогон 05.10.2026, группа MATE: 34 строки, 0 отказов (бинари поставки publish-mates-20261005)",
+    "Приёмка на бинарях поставки ВЫПОЛНЕНА: `publish-mates-20261005` — Host.dll `5ba127bb…`, Worker.dll `6fecb3fe…`, Api5Adapter.dll `157c9dbb…`; группа MATE снята ИМЕННО на них. `client_acceptance` — шаг заказчика и остаётся `not_run`: отсутствие проверки не PASS.",
+    "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
    ]
   },
   {
    "operation_id": "dep.mate.component_insert",
    "queue": null,
    "kind": "common_dependency",
-   "catalog_level": null,
+   "catalog_level": "mcp_verified",
    "tool": null,
    "family": null,
    "schema": null,
@@ -10986,52 +11171,53 @@
    },
    "conditions": null,
    "actions": {
-    "discover": "not_started",
-    "create": "not_started",
-    "read": "not_started",
-    "edit": "not_started",
-    "rebuild": "not_started",
-    "save_reopen": "not_started",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "not_applicable",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "not_applicable",
+    "geometry_validation": "verified"
    },
-   "actions_verified": 0,
-   "actions_open": [
-    "discover",
+   "actions_verified": 10,
+   "actions_open": [],
+   "actions_without_call_evidence": [
     "create",
     "read",
-    "edit",
-    "rebuild",
-    "save_reopen",
-    "suppress_restore",
-    "delete_dependencies",
-    "negative_tests",
     "geometry_validation"
    ],
-   "actions_without_call_evidence": [],
    "implementation": {
     "status": "Недостаточно проверки",
-    "status_basis": "общая зависимость: обязательные действия профиль не объявил — судить не по чему, и это названо, а не заполнено догадкой",
-    "catalog_level_claim": null,
+    "status_basis": "общая зависимость: обязательные действия профиль не объявил — судить не по чему, и это названо, а не заполнено догадкой. НО заявление не поддержано вызовами привязанных строк приёмки: create, read, geometry_validation. Закрытость по ярлыку не заменяет доказательство (наряд §4.5)",
+    "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
-    "acceptance_rows": [],
-    "acceptance_verdicts": []
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
+    "acceptance_rows": [
+     "MATE.01.create",
+     "MATE.02.read",
+     "MATE.06.geometry_validation"
+    ],
+    "acceptance_verdicts": [
+     "PASS"
+    ]
    },
    "limitations": [
-    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+    "живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов",
+    "Приёмка на бинарях поставки ВЫПОЛНЕНА: `publish-mates-20261005` — Host.dll `5ba127bb…`, Worker.dll `6fecb3fe…`, Api5Adapter.dll `157c9dbb…`; группа MATE снята ИМЕННО на них. `client_acceptance` — шаг заказчика и остаётся `not_run`: отсутствие проверки не PASS.",
+    "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
    ]
   },
   {
    "operation_id": "dep.mate.revisions",
    "queue": null,
    "kind": "common_dependency",
-   "catalog_level": null,
+   "catalog_level": "mcp_verified",
    "tool": null,
    "family": null,
    "schema": null,
@@ -11047,52 +11233,52 @@
    },
    "conditions": null,
    "actions": {
-    "discover": "not_started",
-    "create": "not_started",
-    "read": "not_started",
-    "edit": "not_started",
-    "rebuild": "not_started",
-    "save_reopen": "not_started",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "not_applicable",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "verified",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
    },
-   "actions_verified": 0,
-   "actions_open": [
-    "discover",
-    "create",
+   "actions_verified": 10,
+   "actions_open": [],
+   "actions_without_call_evidence": [
     "read",
-    "edit",
-    "rebuild",
-    "save_reopen",
-    "suppress_restore",
-    "delete_dependencies",
-    "negative_tests",
-    "geometry_validation"
+    "edit"
    ],
-   "actions_without_call_evidence": [],
    "implementation": {
     "status": "Недостаточно проверки",
-    "status_basis": "общая зависимость: обязательные действия профиль не объявил — судить не по чему, и это названо, а не заполнено догадкой",
-    "catalog_level_claim": null,
+    "status_basis": "общая зависимость: обязательные действия профиль не объявил — судить не по чему, и это названо, а не заполнено догадкой. НО заявление не поддержано вызовами привязанных строк приёмки: read, edit. Закрытость по ярлыку не заменяет доказательство (наряд §4.5)",
+    "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
-    "acceptance_rows": [],
-    "acceptance_verdicts": []
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
+    "acceptance_rows": [
+     "MATE.03.edit",
+     "MATE.03.negative_tests",
+     "MATE.05.read"
+    ],
+    "acceptance_verdicts": [
+     "PASS"
+    ]
    },
    "limitations": [
-    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+    "живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов",
+    "Приёмка на бинарях поставки ВЫПОЛНЕНА: `publish-mates-20261005` — Host.dll `5ba127bb…`, Worker.dll `6fecb3fe…`, Api5Adapter.dll `157c9dbb…`; группа MATE снята ИМЕННО на них. `client_acceptance` — шаг заказчика и остаётся `not_run`: отсутствие проверки не PASS.",
+    "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
    ]
   },
   {
    "operation_id": "dep.mate.idempotency",
    "queue": null,
    "kind": "common_dependency",
-   "catalog_level": null,
+   "catalog_level": "mcp_verified",
    "tool": null,
    "family": null,
    "schema": null,
@@ -11108,52 +11294,52 @@
    },
    "conditions": null,
    "actions": {
-    "discover": "not_started",
-    "create": "not_started",
-    "read": "not_started",
-    "edit": "not_started",
-    "rebuild": "not_started",
-    "save_reopen": "not_started",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "not_applicable",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
    },
-   "actions_verified": 0,
-   "actions_open": [
-    "discover",
+   "actions_verified": 10,
+   "actions_open": [],
+   "actions_without_call_evidence": [
     "create",
-    "read",
-    "edit",
-    "rebuild",
-    "save_reopen",
-    "suppress_restore",
-    "delete_dependencies",
-    "negative_tests",
-    "geometry_validation"
+    "read"
    ],
-   "actions_without_call_evidence": [],
    "implementation": {
     "status": "Недостаточно проверки",
-    "status_basis": "общая зависимость: обязательные действия профиль не объявил — судить не по чему, и это названо, а не заполнено догадкой",
-    "catalog_level_claim": null,
+    "status_basis": "общая зависимость: обязательные действия профиль не объявил — судить не по чему, и это названо, а не заполнено догадкой. НО заявление не поддержано вызовами привязанных строк приёмки: create, read. Закрытость по ярлыку не заменяет доказательство (наряд §4.5)",
+    "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
-    "acceptance_rows": [],
-    "acceptance_verdicts": []
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
+    "acceptance_rows": [
+     "MATE.01.create",
+     "MATE.02.read",
+     "MATE.05.negative_tests"
+    ],
+    "acceptance_verdicts": [
+     "PASS"
+    ]
    },
    "limitations": [
-    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+    "живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов",
+    "Приёмка на бинарях поставки ВЫПОЛНЕНА: `publish-mates-20261005` — Host.dll `5ba127bb…`, Worker.dll `6fecb3fe…`, Api5Adapter.dll `157c9dbb…`; группа MATE снята ИМЕННО на них. `client_acceptance` — шаг заказчика и остаётся `not_run`: отсутствие проверки не PASS.",
+    "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
    ]
   },
   {
    "operation_id": "dep.mate.save_reopen",
    "queue": null,
    "kind": "common_dependency",
-   "catalog_level": null,
+   "catalog_level": "mcp_verified",
    "tool": null,
    "family": null,
    "schema": null,
@@ -11169,45 +11355,43 @@
    },
    "conditions": null,
    "actions": {
-    "discover": "not_started",
-    "create": "not_started",
-    "read": "not_started",
-    "edit": "not_started",
-    "rebuild": "not_started",
-    "save_reopen": "not_started",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "not_applicable",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "not_applicable",
+    "geometry_validation": "not_applicable"
    },
-   "actions_verified": 0,
-   "actions_open": [
-    "discover",
-    "create",
-    "read",
-    "edit",
-    "rebuild",
-    "save_reopen",
-    "suppress_restore",
-    "delete_dependencies",
-    "negative_tests",
-    "geometry_validation"
+   "actions_verified": 10,
+   "actions_open": [],
+   "actions_without_call_evidence": [
+    "read"
    ],
-   "actions_without_call_evidence": [],
    "implementation": {
     "status": "Недостаточно проверки",
-    "status_basis": "общая зависимость: обязательные действия профиль не объявил — судить не по чему, и это названо, а не заполнено догадкой",
-    "catalog_level_claim": null,
+    "status_basis": "общая зависимость: обязательные действия профиль не объявил — судить не по чему, и это названо, а не заполнено догадкой. НО заявление не поддержано вызовами привязанных строк приёмки: read. Закрытость по ярлыку не заменяет доказательство (наряд §4.5)",
+    "catalog_level_claim": "mcp_verified",
     "catalog_level_is_authoritative": false,
-    "delivery": "artifacts/publish-assemblies-20261004",
-    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
-    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
-    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
-    "acceptance_rows": [],
-    "acceptance_verdicts": []
+    "delivery": "artifacts/publish-mates-20261005",
+    "host_dll_sha256": "5ba127bba0ce849cf8b8b77e6df5fbaed5fcc3b7a42b1265960203a5b1b233c1",
+    "adapter_sha256": "157c9dbb408c3fbbd2ab56cc02e43aac439aaa4e50e5bb53c8095f6d2942a328",
+    "identity_source": "docs/acceptance/delivery-mates-20261005/delivery-passport.json",
+    "acceptance_rows": [
+     "MATE.01.save_reopen",
+     "MATE.05.read"
+    ],
+    "acceptance_verdicts": [
+     "PASS"
+    ]
    },
    "limitations": [
-    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+    "живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов",
+    "Приёмка на бинарях поставки ВЫПОЛНЕНА: `publish-mates-20261005` — Host.dll `5ba127bb…`, Worker.dll `6fecb3fe…`, Api5Adapter.dll `157c9dbb…`; группа MATE снята ИМЕННО на них. `client_acceptance` — шаг заказчика и остаётся `not_run`: отсутствие проверки не PASS.",
+    "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
    ]
   }
  ],
@@ -14252,7 +14436,7 @@
    "assembly": "api7",
    "interface": "IKompasCollection",
    "declared_on": "IKompasCollection",
-   "receiver_type": "IPlanes3D",
+   "receiver_type": "IMateConstraints3D",
    "inherited": true,
    "member": "Count",
    "kind": "property",
@@ -14261,6 +14445,8 @@
    "indexed": false,
    "access": "read",
    "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:124",
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:73",
     "src/KompasMcp.Api5Adapter/Api7/Api7AuxEnumeration.cs:113",
     "src/KompasMcp.Api5Adapter/Api7/Api7AuxEnumeration.cs:155",
     "src/KompasMcp.Api5Adapter/Api7/Api7AuxEnumeration.cs:40",
@@ -14269,10 +14455,10 @@
     "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs:1935"
    ],
    "receivers": [
+    "mates7",
     "planes",
     "axes",
-    "points",
-    "container.Fillets"
+    "points"
    ],
    "documentation": {
     "status": "Не подтверждено",
@@ -14281,7 +14467,7 @@
     "note": "страницы в зеркале нет — не проверено (отсутствие в зеркале не есть доказанное отсутствие)"
    },
    "conditions": null,
-   "conclusion": "применяется в коде: 6 мест; доступ — read; член унаследован от базового интерфейса"
+   "conclusion": "применяется в коде: 8 мест; доступ — read; член унаследован от базового интерфейса"
   },
   {
    "route": "IKompasDocument1.FindObjectById",
@@ -15134,6 +15320,183 @@
    "conclusion": "применяется в коде: 1 мест; доступ — call"
   },
   {
+   "route": "IMateConstraint3D.Alignment",
+   "assembly": "api7",
+   "interface": "IMateConstraint3D",
+   "declared_on": "IMateConstraint3D",
+   "receiver_type": "IMateConstraint3D",
+   "inherited": false,
+   "member": "Alignment",
+   "kind": "property",
+   "signature": "int Alignment {get;set;}",
+   "type": "int",
+   "indexed": false,
+   "access": "write",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:91"
+   ],
+   "receivers": [
+    "mate"
+   ],
+   "documentation": {
+    "status": "Не подтверждено",
+    "found_on": null,
+    "source": [],
+    "note": "страницы в зеркале нет — не проверено (отсутствие в зеркале не есть доказанное отсутствие)"
+   },
+   "conditions": null,
+   "conclusion": "применяется в коде: 1 мест; доступ — write"
+  },
+  {
+   "route": "IMateConstraint3D.BaseObject1",
+   "assembly": "api7",
+   "interface": "IMateConstraint3D",
+   "declared_on": "IMateConstraint3D",
+   "receiver_type": "IMateConstraint3D",
+   "inherited": false,
+   "member": "BaseObject1",
+   "kind": "property",
+   "signature": "IModelObject BaseObject1 {get;set;}",
+   "type": "IModelObject",
+   "indexed": false,
+   "access": "write",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:87"
+   ],
+   "receivers": [
+    "mate"
+   ],
+   "documentation": {
+    "status": "Не подтверждено",
+    "found_on": null,
+    "source": [],
+    "note": "страницы в зеркале нет — не проверено (отсутствие в зеркале не есть доказанное отсутствие)"
+   },
+   "conditions": null,
+   "conclusion": "применяется в коде: 1 мест; доступ — write"
+  },
+  {
+   "route": "IMateConstraint3D.BaseObject2",
+   "assembly": "api7",
+   "interface": "IMateConstraint3D",
+   "declared_on": "IMateConstraint3D",
+   "receiver_type": "IMateConstraint3D",
+   "inherited": false,
+   "member": "BaseObject2",
+   "kind": "property",
+   "signature": "IModelObject BaseObject2 {get;set;}",
+   "type": "IModelObject",
+   "indexed": false,
+   "access": "write",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:88"
+   ],
+   "receivers": [
+    "mate"
+   ],
+   "documentation": {
+    "status": "Не подтверждено",
+    "found_on": null,
+    "source": [],
+    "note": "страницы в зеркале нет — не проверено (отсутствие в зеркале не есть доказанное отсутствие)"
+   },
+   "conditions": null,
+   "conclusion": "применяется в коде: 1 мест; доступ — write"
+  },
+  {
+   "route": "IMateConstraint3D.Fixed",
+   "assembly": "api7",
+   "interface": "IMateConstraint3D",
+   "declared_on": "IMateConstraint3D",
+   "receiver_type": "IMateConstraint3D",
+   "inherited": false,
+   "member": "Fixed",
+   "kind": "property",
+   "signature": "int Fixed {get;set;}",
+   "type": "int",
+   "indexed": false,
+   "access": "read",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:259",
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:262",
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:275"
+   ],
+   "receivers": [
+    "mate"
+   ],
+   "documentation": {
+    "status": "Не подтверждено",
+    "found_on": null,
+    "source": [],
+    "note": "страницы в зеркале нет — не проверено (отсутствие в зеркале не есть доказанное отсутствие)"
+   },
+   "conditions": null,
+   "conclusion": "применяется в коде: 3 мест; доступ — read"
+  },
+  {
+   "route": "IMateConstraint3D.ParamValue",
+   "assembly": "api7",
+   "interface": "IMateConstraint3D",
+   "declared_on": "IMateConstraint3D",
+   "receiver_type": "IMateConstraint3D",
+   "inherited": false,
+   "member": "ParamValue",
+   "kind": "property",
+   "signature": "double ParamValue {get;set;}",
+   "type": "double",
+   "indexed": false,
+   "access": "write",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:200",
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:203",
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:216",
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:96"
+   ],
+   "receivers": [
+    "mate"
+   ],
+   "documentation": {
+    "status": "Не подтверждено",
+    "found_on": null,
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/imassinertiapropertiescalculateparam_paramvalue.html"
+    ],
+    "note": "найдены только одноимённые страницы других интерфейсов — не подтверждение"
+   },
+   "conditions": null,
+   "conclusion": "применяется в коде: 4 мест; доступ — write"
+  },
+  {
+   "route": "IMateConstraints3D.Add",
+   "assembly": "api7",
+   "interface": "IMateConstraints3D",
+   "declared_on": "IMateConstraints3D",
+   "receiver_type": "IMateConstraints3D",
+   "inherited": false,
+   "member": "Add",
+   "kind": "method",
+   "signature": "IMateConstraint3D Add(in int Type)",
+   "type": "IMateConstraint3D",
+   "indexed": false,
+   "access": "call",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:78"
+   ],
+   "receivers": [
+    "mates7"
+   ],
+   "documentation": {
+    "status": "Не подтверждено",
+    "found_on": null,
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ibodyrepositions_add.html"
+    ],
+    "note": "найдены только одноимённые страницы других интерфейсов — не подтверждение"
+   },
+   "conditions": "Тип объекта — 27/28/29 по таблице Obj3dType; сечение и ось задаются до Update(); угол — Angle[true] в градусах, при частичном угле Angle[false] обнуляется; вид операции (объединение/вырезание) — OperationResult из ksOperationResultEnum; мост API5→API7 документирован (ksGetApplication7 + TransferInterface).",
+   "conclusion": "применяется в коде: 1 мест; доступ — call"
+  },
+  {
    "route": "IMathSurface3D.GetNormal",
    "assembly": "api7",
    "interface": "IMathSurface3D",
@@ -15795,6 +16158,9 @@
    "access": "call",
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.Loft.cs:233",
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:111",
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:204",
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:263",
     "src/KompasMcp.Api5Adapter/Api7/Api7AuxGeometry.cs:539",
     "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs:1286",
     "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs:1777",
@@ -15814,9 +16180,9 @@
    ],
    "receivers": [
     "loft",
+    "mate",
     "plane",
-    "chamfer",
-    "hole"
+    "chamfer"
    ],
    "documentation": {
     "status": "Подтверждено",
@@ -15827,14 +16193,14 @@
     "note": "источник называет тот же интерфейс и тот же член: IModelObject. Сигнатура снята с interop установленной версии."
    },
    "conditions": "Тип объекта берётся из документированной таблицы Obj3dType (24/25/26); глубина и признак «на всю длину» — параметры SetSideParam(etBlind=0 / etThroughAll=1) из Direction_Type / End_Type; область применения у приклеивания и вырезания задаётся ChooseBodies + BodyCollection; реальный объект появляется после Create, перестроение — RebuildDocument.",
-   "conclusion": "применяется в коде: 17 мест; доступ — call; член унаследован от базового интерфейса"
+   "conclusion": "применяется в коде: 20 мест; доступ — call; член унаследован от базового интерфейса"
   },
   {
    "route": "IModelObject.Valid",
    "assembly": "api7",
    "interface": "IModelObject",
    "declared_on": "IModelObject",
-   "receiver_type": "IAxis3DBy2Points",
+   "receiver_type": "IMateConstraint3D",
    "inherited": true,
    "member": "Valid",
    "kind": "property",
@@ -15843,9 +16209,11 @@
    "indexed": false,
    "access": "read",
    "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:123",
     "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs:1287"
    ],
    "receivers": [
+    "mate",
     "by2"
    ],
    "documentation": {
@@ -15857,7 +16225,7 @@
     "note": "источник называет тот же интерфейс и тот же член: IModelObject. Сигнатура снята с interop установленной версии."
    },
    "conditions": null,
-   "conclusion": "применяется в коде: 1 мест; доступ — read; член унаследован от базового интерфейса"
+   "conclusion": "применяется в коде: 2 мест; доступ — read; член унаследован от базового интерфейса"
   },
   {
    "route": "IPart7.Detail",
@@ -16043,6 +16411,36 @@
    },
    "conditions": null,
    "conclusion": "применяется в коде: 1 мест; доступ — write"
+  },
+  {
+   "route": "IPart7.MateConstraints",
+   "assembly": "api7",
+   "interface": "IPart7",
+   "declared_on": "IPart7",
+   "receiver_type": "IPart7",
+   "inherited": false,
+   "member": "MateConstraints",
+   "kind": "property",
+   "signature": "IMateConstraints3D MateConstraints {get;}",
+   "type": "IMateConstraints3D",
+   "indexed": false,
+   "access": "read",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:379"
+   ],
+   "receivers": [
+    "top?"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "found_on": "IPart7",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ipart7_props.html"
+    ],
+    "note": "источник называет тот же интерфейс и тот же член: IPart7. Сигнатура снята с interop установленной версии."
+   },
+   "conditions": null,
+   "conclusion": "применяется в коде: 1 мест; доступ — read"
   },
   {
    "route": "IPart7.Parts",
@@ -17994,6 +18392,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2962",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:3373",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:3565",
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:521",
     "src/KompasMcp.Api5Adapter/Api5Session.Pattern.cs:671",
     "src/KompasMcp.Api5Adapter/Api5Session.Rotated.cs:959",
     "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs:778"
@@ -18011,7 +18410,7 @@
     "note": "источник называет тот же интерфейс и тот же член: ksBody. Сигнатура снята с interop установленной версии."
    },
    "conditions": null,
-   "conclusion": "применяется в коде: 9 мест; доступ — call"
+   "conclusion": "применяется в коде: 10 мест; доступ — call"
   },
   {
    "route": "ksBodyCollection.Add",
@@ -18061,6 +18460,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:1534",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:1654",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2921",
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:520",
     "src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs:1117"
    ],
    "receivers": [
@@ -18077,7 +18477,7 @@
     "note": "источник называет тот же интерфейс и тот же член: ksBodyCollection. Сигнатура снята с interop установленной версии."
    },
    "conditions": "Правка набора рёбер и радиуса идёт ТОЛЬКО маршрутом API7 (IFillet.BaseObjects — полная замена набора; IFillet.Radius1) с обязательным Update() и перестроением; маршрут API5 (ksFilletDefinition.Array → Clear → Add) правку набора не даёт — измерено и названо. Расширение набора не выражается ни одной из двух валют.",
-   "conclusion": "применяется в коде: 5 мест; доступ — call"
+   "conclusion": "применяется в коде: 6 мест; доступ — call"
   },
   {
    "route": "ksBodyCollection.GetCount",
@@ -18099,6 +18499,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:1648",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2090",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2891",
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:519",
     "src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs:1108"
    ],
    "receivers": [
@@ -18114,7 +18515,7 @@
     "note": "источник называет тот же интерфейс и тот же член: ksBodyCollection. Сигнатура снята с interop установленной версии."
    },
    "conditions": "Правка набора рёбер и радиуса идёт ТОЛЬКО маршрутом API7 (IFillet.BaseObjects — полная замена набора; IFillet.Radius1) с обязательным Update() и перестроением; маршрут API5 (ksFilletDefinition.Array → Clear → Add) правку набора не даёт — измерено и названо. Расширение набора не выражается ни одной из двух валют.",
-   "conclusion": "применяется в коде: 7 мест; доступ — call"
+   "conclusion": "применяется в коде: 8 мест; доступ — call"
   },
   {
    "route": "ksBodyCollection.refresh",
@@ -19188,6 +19589,39 @@
    "conclusion": "применяется в коде: 1 мест; доступ — call"
   },
   {
+   "route": "ksDocument3D.MateConstraintCollection",
+   "assembly": "api5",
+   "interface": "ksDocument3D",
+   "declared_on": "ksDocument3D",
+   "receiver_type": "ksDocument3D",
+   "inherited": false,
+   "member": "MateConstraintCollection",
+   "kind": "method",
+   "signature": "Object MateConstraintCollection()",
+   "type": "Object",
+   "indexed": false,
+   "access": "call",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:303",
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:334",
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:440"
+   ],
+   "receivers": [
+    "(document.Document",
+    "document.Document"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "found_on": "ksDocument3D",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_mateconstraintcollection.html"
+    ],
+    "note": "источник называет тот же интерфейс и тот же член: ksDocument3D. Сигнатура снята с interop установленной версии."
+   },
+   "conditions": null,
+   "conclusion": "применяется в коде: 3 мест; доступ — call"
+  },
+  {
    "route": "ksDocument3D.Open",
    "assembly": "api5",
    "interface": "ksDocument3D",
@@ -19305,6 +19739,10 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2362",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2592",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:2802",
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:122",
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:215",
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:274",
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:333",
     "src/KompasMcp.Api5Adapter/Api5Session.Shell.cs:157",
     "src/KompasMcp.Api5Adapter/Api5Session.Sweep.cs:159",
     "src/KompasMcp.Api5Adapter/Api5Session.cs:471",
@@ -19325,7 +19763,37 @@
     "note": "источник называет тот же интерфейс и тот же член: ksDocument3D. Сигнатура снята с interop установленной версии."
    },
    "conditions": "Тип объекта берётся из документированной таблицы Obj3dType (24/25/26); глубина и признак «на всю длину» — параметры SetSideParam(etBlind=0 / etThroughAll=1) из Direction_Type / End_Type; область применения у приклеивания и вырезания задаётся ChooseBodies + BodyCollection; реальный объект появляется после Create, перестроение — RebuildDocument.",
-   "conclusion": "применяется в коде: 16 мест; доступ — call"
+   "conclusion": "применяется в коде: 20 мест; доступ — call"
+  },
+  {
+   "route": "ksDocument3D.RemoveMateConstraint",
+   "assembly": "api5",
+   "interface": "ksDocument3D",
+   "declared_on": "ksDocument3D",
+   "receiver_type": "ksDocument3D",
+   "inherited": false,
+   "member": "RemoveMateConstraint",
+   "kind": "method",
+   "signature": "Boolean RemoveMateConstraint(Int32 constraintType, Object obj1, Object obj2)",
+   "type": "Boolean",
+   "indexed": false,
+   "access": "call",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:322"
+   ],
+   "receivers": [
+    "document.Document"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "found_on": "ksDocument3D",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_removemateconstraint.html"
+    ],
+    "note": "источник называет тот же интерфейс и тот же член: ksDocument3D. Сигнатура снята с interop установленной версии."
+   },
+   "conditions": null,
+   "conclusion": "применяется в коде: 1 мест; доступ — call"
   },
   {
    "route": "ksDocument3D.Save",
@@ -20374,6 +20842,7 @@
    "indexed": false,
    "access": "call",
    "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:554",
     "src/KompasMcp.Api5Adapter/Api5Session.Pattern.cs:678",
     "src/KompasMcp.Api5Adapter/Api5Session.Rotated.cs:966",
     "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs:785"
@@ -20390,7 +20859,7 @@
     "note": "источник называет тот же интерфейс и тот же член: ksFaceCollection. Сигнатура снята с interop установленной версии."
    },
    "conditions": "Правка набора рёбер и радиуса идёт ТОЛЬКО маршрутом API7 (IFillet.BaseObjects — полная замена набора; IFillet.Radius1) с обязательным Update() и перестроением; маршрут API5 (ksFilletDefinition.Array → Clear → Add) правку набора не даёт — измерено и названо. Расширение набора не выражается ни одной из двух валют.",
-   "conclusion": "применяется в коде: 3 мест; доступ — call"
+   "conclusion": "применяется в коде: 4 мест; доступ — call"
   },
   {
    "route": "ksFaceCollection.GetCount",
@@ -20415,6 +20884,7 @@
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:3566",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:3567",
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:674",
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:539",
     "src/KompasMcp.Api5Adapter/Api5Session.Pattern.cs:676",
     "src/KompasMcp.Api5Adapter/Api5Session.Rotated.cs:964",
     "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs:783"
@@ -20432,7 +20902,7 @@
     "note": "источник называет тот же интерфейс и тот же член: ksFaceCollection. Сигнатура снята с interop установленной версии."
    },
    "conditions": "Правка набора рёбер и радиуса идёт ТОЛЬКО маршрутом API7 (IFillet.BaseObjects — полная замена набора; IFillet.Radius1) с обязательным Update() и перестроением; маршрут API5 (ksFilletDefinition.Array → Clear → Add) правку набора не даёт — измерено и названо. Расширение набора не выражается ни одной из двух валют.",
-   "conclusion": "применяется в коде: 12 мест; доступ — call"
+   "conclusion": "применяется в коде: 13 мест; доступ — call"
   },
   {
    "route": "ksFaceDefinition.EdgeCollection",
@@ -20813,6 +21283,68 @@
    "conclusion": "применяется в коде: 2 мест; доступ — read"
   },
   {
+   "route": "ksMateConstraintCollection.GetByIndex",
+   "assembly": "api5",
+   "interface": "ksMateConstraintCollection",
+   "declared_on": "ksMateConstraintCollection",
+   "receiver_type": "ksMateConstraintCollection",
+   "inherited": false,
+   "member": "GetByIndex",
+   "kind": "method",
+   "signature": "Object GetByIndex(Int32 index)",
+   "type": "Object",
+   "indexed": false,
+   "access": "call",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:409",
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:457"
+   ],
+   "receivers": [
+    "mates"
+   ],
+   "documentation": {
+    "status": "Не подтверждено",
+    "found_on": null,
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksattribute3dcollection_getbyindex.html"
+    ],
+    "note": "найдены только одноимённые страницы других интерфейсов — не подтверждение"
+   },
+   "conditions": "Правка набора рёбер и радиуса идёт ТОЛЬКО маршрутом API7 (IFillet.BaseObjects — полная замена набора; IFillet.Radius1) с обязательным Update() и перестроением; маршрут API5 (ksFilletDefinition.Array → Clear → Add) правку набора не даёт — измерено и названо. Расширение набора не выражается ни одной из двух валют.",
+   "conclusion": "применяется в коде: 2 мест; доступ — call"
+  },
+  {
+   "route": "ksMateConstraintCollection.GetCount",
+   "assembly": "api5",
+   "interface": "ksMateConstraintCollection",
+   "declared_on": "ksMateConstraintCollection",
+   "receiver_type": "ksMateConstraintCollection",
+   "inherited": false,
+   "member": "GetCount",
+   "kind": "method",
+   "signature": "Int32 GetCount()",
+   "type": "Int32",
+   "indexed": false,
+   "access": "call",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:408",
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:454"
+   ],
+   "receivers": [
+    "mates"
+   ],
+   "documentation": {
+    "status": "Не подтверждено",
+    "found_on": null,
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksattribute3dcollection_getcount.html"
+    ],
+    "note": "найдены только одноимённые страницы других интерфейсов — не подтверждение"
+   },
+   "conditions": "Правка набора рёбер и радиуса идёт ТОЛЬКО маршрутом API7 (IFillet.BaseObjects — полная замена набора; IFillet.Radius1) с обязательным Update() и перестроением; маршрут API5 (ksFilletDefinition.Array → Clear → Add) правку набора не даёт — измерено и названо. Расширение набора не выражается ни одной из двух валют.",
+   "conclusion": "применяется в коде: 2 мест; доступ — call"
+  },
+  {
    "route": "ksPart.BodyCollection",
    "assembly": "api5",
    "interface": "ksPart",
@@ -20827,10 +21359,12 @@
    "access": "call",
    "sites": [
     "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:1529",
-    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:1646"
+    "src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs:1646",
+    "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs:519"
    ],
    "receivers": [
-    "(ksBodyCollection)part"
+    "(ksBodyCollection)part",
+    "part5"
    ],
    "documentation": {
     "status": "Подтверждено",
@@ -20841,7 +21375,7 @@
     "note": "источник называет тот же интерфейс и тот же член: ksPart. Сигнатура снята с interop установленной версии."
    },
    "conditions": null,
-   "conclusion": "применяется в коде: 2 мест; доступ — call"
+   "conclusion": "применяется в коде: 3 мест; доступ — call"
   },
   {
    "route": "ksPart.EntityCollection",
@@ -22165,8 +22699,8 @@
   "adapter_sources": "src/KompasMcp.Api5Adapter",
   "fresh": true,
   "reason": "свеж",
-  "newest_source": "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs",
-  "lag_seconds": -899.80837225914,
+  "newest_source": "src/KompasMcp.Api5Adapter/Api5Session.Mate.cs",
+  "lag_seconds": -826.2145659923553,
   "refresh_requested": false,
   "refreshed_rc": null,
   "negative_control": {
@@ -22184,16 +22718,16 @@
   "scanner": "scratch/_audit_inventory.py",
   "inputs": [
    "coverage/solid-v24/matrix.json",
+   "artifacts/publish-mates-20261005/KompasMcp.Host.dll",
+   "artifacts/publish-mates-20261005/KompasMcp.Worker.dll",
+   "artifacts/publish-mates-20261005/KompasMcp.Api5Adapter.dll",
    "coverage/solid-v24/catalog.json",
-   "artifacts/publish-assemblies-20261004/KompasMcp.Host.dll",
-   "artifacts/publish-assemblies-20261004/KompasMcp.Worker.dll",
-   "artifacts/publish-assemblies-20261004/KompasMcp.Api5Adapter.dll",
    "coverage/solid-v24/release-profiles/mechanical-core-v1.json"
   ],
   "fresh": true,
   "reason": "свеж",
   "newest_input": "coverage/solid-v24/matrix.json",
-  "lag_seconds": -18.21444058418274,
+  "lag_seconds": -6.310054540634155,
   "refresh_requested": false,
   "refreshed_rc": null,
   "negative_control": {
@@ -22207,11 +22741,11 @@
   "note": "строки матрицы в аудите берутся из этого инвентаря. Сторож сверяет время правки инвентаря со временем правки САМОЙ НОВОЙ записи покрытия (матрица, каталог, профиль) и бинарей поставки и ОТКАЗЫВАЕТ сборке, если инвентарь старше; отставший инвентарь читался молча 20.09.2026 и дал числа ДО привязки строк F-08 при свежем снапшоте COM-маршрутов"
  },
  "report_route_check": {
-  "source": "scratch/mcp-smoke/delivery-assemblies-20261004/*.json",
+  "source": "scratch/mcp-smoke/delivery-mates-20261005/*.json",
   "required": true,
   "ok": true,
   "routed_rows": 11,
-  "reports_with_argument_mode": 2,
+  "reports_with_argument_mode": 3,
   "reports_without_argument_mode": [],
   "negative_control": {
    "applicable": true,
@@ -22222,8 +22756,8 @@
      "required": true,
      "ok": true,
      "routed_rows": 11,
-     "reports": "scratch/mcp-smoke/delivery-assemblies-20261004",
-     "reports_with_argument_mode": 2,
+     "reports": "scratch/mcp-smoke/delivery-mates-20261005",
+     "reports_with_argument_mode": 3,
      "reports_without_argument_mode": []
     }
    },
@@ -22258,13 +22792,13 @@
   "note": "отражение и позднее связывание рассмотрены ОТДЕЛЬНО именно потому, что фильтр по interop-метаданным их не видит: прежняя инвентаризация не нашла ни одного такого обращения и не могла показать, что ветка `IsSaved` была мёртвой"
  },
  "receivers_without_type": {
-  "total": 1298,
+  "total": 1323,
   "by_kind": {
-   "unknown": 1134,
+   "unknown": 1159,
    "unknown-member": 150,
    "unparsed": 14
   },
-  "member_already_routed": 369,
+  "member_already_routed": 371,
   "note": "получатель не типизирован — это НЕ доказательство отсутствия маршрута; перечислено честно, чтобы пробел прибора не читался как полнота"
  },
  "indexer_routes": [
@@ -22646,8 +23180,8 @@
   "note": "пустой список — матрица и профиль называют одних и тех же потребителей зависимости; null — профиль не прочитан, то есть проверки НЕ БЫЛО, а не «всё сходится»"
  },
  "claimed_actions_check": {
-  "source": "scratch/mcp-smoke/delivery-assemblies-20261004/*.json",
-  "rows_claiming_verified": 83,
+  "source": "scratch/mcp-smoke/delivery-mates-20261005/*.json",
+  "rows_claiming_verified": 94,
   "all_actions_named_by_dedicated_row": [
    "SM-02.base_extrusion.blind",
    "SM-02.cut_extrusion.through",
@@ -22731,9 +23265,40 @@
    "dep.assembly.source_file",
    "dep.assembly.component_address",
    "dep.assembly.revisions",
-   "dep.assembly.idempotency"
+   "dep.assembly.idempotency",
+   "MATE-01.mate.create",
+   "MATE-02.mate.read",
+   "MATE-03.mate.param_edit",
+   "MATE-04.mate.fixed",
+   "MATE-05.mate.delete",
+   "MATE-06.mate.placement_effect",
+   "dep.mate.component_insert",
+   "dep.mate.revisions",
+   "dep.mate.idempotency",
+   "dep.mate.save_reopen"
   ],
-  "action_without_dedicated_row": [],
+  "action_without_dedicated_row": [
+   {
+    "operation_id": "dep.mate.object_address",
+    "claimed": 3,
+    "linked_rows": 3,
+    "linked_rows_with_call_window": 3,
+    "actions_without_dedicated_row": [
+     "negative_tests"
+    ],
+    "mode_named_rows": 0,
+    "actions_without_mode_named_evidence": [
+     "discover",
+     "read",
+     "negative_tests"
+    ],
+    "action_routes": {},
+    "actions_without_required_calls": [
+     "discover",
+     "read"
+    ]
+   }
+  ],
   "verified_contradicted_by_fail": [],
   "verified_without_any_linked_row": [],
   "action_without_required_calls": [
@@ -22992,6 +23557,226 @@
     "actions_without_required_calls": [
      "discover",
      "create",
+     "read"
+    ]
+   },
+   {
+    "operation_id": "MATE-01.mate.create",
+    "claimed": 7,
+    "linked_rows": 9,
+    "linked_rows_with_call_window": 9,
+    "actions_without_dedicated_row": [],
+    "mode_named_rows": 0,
+    "actions_without_mode_named_evidence": [
+     "discover",
+     "create",
+     "read",
+     "save_reopen",
+     "negative_tests",
+     "geometry_validation"
+    ],
+    "action_routes": {},
+    "actions_without_required_calls": [
+     "discover",
+     "create",
+     "read",
+     "geometry_validation"
+    ]
+   },
+   {
+    "operation_id": "MATE-02.mate.read",
+    "claimed": 4,
+    "linked_rows": 6,
+    "linked_rows_with_call_window": 6,
+    "actions_without_dedicated_row": [],
+    "mode_named_rows": 0,
+    "actions_without_mode_named_evidence": [
+     "discover",
+     "read",
+     "save_reopen",
+     "negative_tests"
+    ],
+    "action_routes": {},
+    "actions_without_required_calls": [
+     "discover",
+     "read"
+    ]
+   },
+   {
+    "operation_id": "MATE-03.mate.param_edit",
+    "claimed": 7,
+    "linked_rows": 8,
+    "linked_rows_with_call_window": 8,
+    "actions_without_dedicated_row": [],
+    "mode_named_rows": 0,
+    "actions_without_mode_named_evidence": [
+     "discover",
+     "read",
+     "edit",
+     "save_reopen",
+     "negative_tests",
+     "geometry_validation"
+    ],
+    "action_routes": {},
+    "actions_without_required_calls": [
+     "discover",
+     "read",
+     "edit",
+     "geometry_validation"
+    ]
+   },
+   {
+    "operation_id": "MATE-04.mate.fixed",
+    "claimed": 6,
+    "linked_rows": 6,
+    "linked_rows_with_call_window": 6,
+    "actions_without_dedicated_row": [],
+    "mode_named_rows": 0,
+    "actions_without_mode_named_evidence": [
+     "discover",
+     "read",
+     "edit",
+     "save_reopen",
+     "negative_tests"
+    ],
+    "action_routes": {},
+    "actions_without_required_calls": [
+     "discover",
+     "read",
+     "edit"
+    ]
+   },
+   {
+    "operation_id": "MATE-05.mate.delete",
+    "claimed": 6,
+    "linked_rows": 7,
+    "linked_rows_with_call_window": 7,
+    "actions_without_dedicated_row": [],
+    "mode_named_rows": 0,
+    "actions_without_mode_named_evidence": [
+     "discover",
+     "read",
+     "save_reopen",
+     "delete_dependencies",
+     "negative_tests"
+    ],
+    "action_routes": {},
+    "actions_without_required_calls": [
+     "discover",
+     "read",
+     "delete_dependencies"
+    ]
+   },
+   {
+    "operation_id": "MATE-06.mate.placement_effect",
+    "claimed": 6,
+    "linked_rows": 6,
+    "linked_rows_with_call_window": 6,
+    "actions_without_dedicated_row": [],
+    "mode_named_rows": 0,
+    "actions_without_mode_named_evidence": [
+     "discover",
+     "read",
+     "save_reopen",
+     "negative_tests",
+     "geometry_validation"
+    ],
+    "action_routes": {},
+    "actions_without_required_calls": [
+     "discover",
+     "read",
+     "save_reopen",
+     "geometry_validation"
+    ]
+   },
+   {
+    "operation_id": "dep.mate.object_address",
+    "claimed": 3,
+    "linked_rows": 3,
+    "linked_rows_with_call_window": 3,
+    "actions_without_dedicated_row": [
+     "negative_tests"
+    ],
+    "mode_named_rows": 0,
+    "actions_without_mode_named_evidence": [
+     "discover",
+     "read",
+     "negative_tests"
+    ],
+    "action_routes": {},
+    "actions_without_required_calls": [
+     "discover",
+     "read"
+    ]
+   },
+   {
+    "operation_id": "dep.mate.component_insert",
+    "claimed": 3,
+    "linked_rows": 3,
+    "linked_rows_with_call_window": 3,
+    "actions_without_dedicated_row": [],
+    "mode_named_rows": 0,
+    "actions_without_mode_named_evidence": [
+     "create",
+     "read",
+     "geometry_validation"
+    ],
+    "action_routes": {},
+    "actions_without_required_calls": [
+     "create",
+     "read",
+     "geometry_validation"
+    ]
+   },
+   {
+    "operation_id": "dep.mate.revisions",
+    "claimed": 3,
+    "linked_rows": 3,
+    "linked_rows_with_call_window": 3,
+    "actions_without_dedicated_row": [],
+    "mode_named_rows": 0,
+    "actions_without_mode_named_evidence": [
+     "read",
+     "edit",
+     "negative_tests"
+    ],
+    "action_routes": {},
+    "actions_without_required_calls": [
+     "read",
+     "edit"
+    ]
+   },
+   {
+    "operation_id": "dep.mate.idempotency",
+    "claimed": 3,
+    "linked_rows": 3,
+    "linked_rows_with_call_window": 3,
+    "actions_without_dedicated_row": [],
+    "mode_named_rows": 0,
+    "actions_without_mode_named_evidence": [
+     "create",
+     "read",
+     "negative_tests"
+    ],
+    "action_routes": {},
+    "actions_without_required_calls": [
+     "create",
+     "read"
+    ]
+   },
+   {
+    "operation_id": "dep.mate.save_reopen",
+    "claimed": 2,
+    "linked_rows": 2,
+    "linked_rows_with_call_window": 2,
+    "actions_without_dedicated_row": [],
+    "mode_named_rows": 0,
+    "actions_without_mode_named_evidence": [
+     "read",
+     "save_reopen"
+    ],
+    "action_routes": {},
+    "actions_without_required_calls": [
      "read"
     ]
    }
@@ -23254,16 +24039,236 @@
      "create",
      "read"
     ]
+   },
+   {
+    "operation_id": "MATE-01.mate.create",
+    "claimed": 7,
+    "linked_rows": 9,
+    "linked_rows_with_call_window": 9,
+    "actions_without_dedicated_row": [],
+    "mode_named_rows": 0,
+    "actions_without_mode_named_evidence": [
+     "discover",
+     "create",
+     "read",
+     "save_reopen",
+     "negative_tests",
+     "geometry_validation"
+    ],
+    "action_routes": {},
+    "actions_without_required_calls": [
+     "discover",
+     "create",
+     "read",
+     "geometry_validation"
+    ]
+   },
+   {
+    "operation_id": "MATE-02.mate.read",
+    "claimed": 4,
+    "linked_rows": 6,
+    "linked_rows_with_call_window": 6,
+    "actions_without_dedicated_row": [],
+    "mode_named_rows": 0,
+    "actions_without_mode_named_evidence": [
+     "discover",
+     "read",
+     "save_reopen",
+     "negative_tests"
+    ],
+    "action_routes": {},
+    "actions_without_required_calls": [
+     "discover",
+     "read"
+    ]
+   },
+   {
+    "operation_id": "MATE-03.mate.param_edit",
+    "claimed": 7,
+    "linked_rows": 8,
+    "linked_rows_with_call_window": 8,
+    "actions_without_dedicated_row": [],
+    "mode_named_rows": 0,
+    "actions_without_mode_named_evidence": [
+     "discover",
+     "read",
+     "edit",
+     "save_reopen",
+     "negative_tests",
+     "geometry_validation"
+    ],
+    "action_routes": {},
+    "actions_without_required_calls": [
+     "discover",
+     "read",
+     "edit",
+     "geometry_validation"
+    ]
+   },
+   {
+    "operation_id": "MATE-04.mate.fixed",
+    "claimed": 6,
+    "linked_rows": 6,
+    "linked_rows_with_call_window": 6,
+    "actions_without_dedicated_row": [],
+    "mode_named_rows": 0,
+    "actions_without_mode_named_evidence": [
+     "discover",
+     "read",
+     "edit",
+     "save_reopen",
+     "negative_tests"
+    ],
+    "action_routes": {},
+    "actions_without_required_calls": [
+     "discover",
+     "read",
+     "edit"
+    ]
+   },
+   {
+    "operation_id": "MATE-05.mate.delete",
+    "claimed": 6,
+    "linked_rows": 7,
+    "linked_rows_with_call_window": 7,
+    "actions_without_dedicated_row": [],
+    "mode_named_rows": 0,
+    "actions_without_mode_named_evidence": [
+     "discover",
+     "read",
+     "save_reopen",
+     "delete_dependencies",
+     "negative_tests"
+    ],
+    "action_routes": {},
+    "actions_without_required_calls": [
+     "discover",
+     "read",
+     "delete_dependencies"
+    ]
+   },
+   {
+    "operation_id": "MATE-06.mate.placement_effect",
+    "claimed": 6,
+    "linked_rows": 6,
+    "linked_rows_with_call_window": 6,
+    "actions_without_dedicated_row": [],
+    "mode_named_rows": 0,
+    "actions_without_mode_named_evidence": [
+     "discover",
+     "read",
+     "save_reopen",
+     "negative_tests",
+     "geometry_validation"
+    ],
+    "action_routes": {},
+    "actions_without_required_calls": [
+     "discover",
+     "read",
+     "save_reopen",
+     "geometry_validation"
+    ]
+   },
+   {
+    "operation_id": "dep.mate.object_address",
+    "claimed": 3,
+    "linked_rows": 3,
+    "linked_rows_with_call_window": 3,
+    "actions_without_dedicated_row": [
+     "negative_tests"
+    ],
+    "mode_named_rows": 0,
+    "actions_without_mode_named_evidence": [
+     "discover",
+     "read",
+     "negative_tests"
+    ],
+    "action_routes": {},
+    "actions_without_required_calls": [
+     "discover",
+     "read"
+    ]
+   },
+   {
+    "operation_id": "dep.mate.component_insert",
+    "claimed": 3,
+    "linked_rows": 3,
+    "linked_rows_with_call_window": 3,
+    "actions_without_dedicated_row": [],
+    "mode_named_rows": 0,
+    "actions_without_mode_named_evidence": [
+     "create",
+     "read",
+     "geometry_validation"
+    ],
+    "action_routes": {},
+    "actions_without_required_calls": [
+     "create",
+     "read",
+     "geometry_validation"
+    ]
+   },
+   {
+    "operation_id": "dep.mate.revisions",
+    "claimed": 3,
+    "linked_rows": 3,
+    "linked_rows_with_call_window": 3,
+    "actions_without_dedicated_row": [],
+    "mode_named_rows": 0,
+    "actions_without_mode_named_evidence": [
+     "read",
+     "edit",
+     "negative_tests"
+    ],
+    "action_routes": {},
+    "actions_without_required_calls": [
+     "read",
+     "edit"
+    ]
+   },
+   {
+    "operation_id": "dep.mate.idempotency",
+    "claimed": 3,
+    "linked_rows": 3,
+    "linked_rows_with_call_window": 3,
+    "actions_without_dedicated_row": [],
+    "mode_named_rows": 0,
+    "actions_without_mode_named_evidence": [
+     "create",
+     "read",
+     "negative_tests"
+    ],
+    "action_routes": {},
+    "actions_without_required_calls": [
+     "create",
+     "read"
+    ]
+   },
+   {
+    "operation_id": "dep.mate.save_reopen",
+    "claimed": 2,
+    "linked_rows": 2,
+    "linked_rows_with_call_window": 2,
+    "actions_without_dedicated_row": [],
+    "mode_named_rows": 0,
+    "actions_without_mode_named_evidence": [
+     "read",
+     "save_reopen"
+    ],
+    "action_routes": {},
+    "actions_without_required_calls": [
+     "read"
+    ]
    }
   ],
-  "acceptance_rows_with_call_window": 1109,
-  "calls_journal": 10479,
-  "document_epochs": 491,
+  "acceptance_rows_with_call_window": 1143,
+  "calls_journal": 10551,
+  "document_epochs": 494,
   "guard_control": {
    "must_refuse": "отказал",
    "must_stay_silent": "молчит",
    "guard_proved": true,
-   "rows_refused_on_real_data": 12,
+   "rows_refused_on_real_data": 23,
    "note": "обе половины в одной постановке: строка, чьё доказательство содержит только отвергнутый вызов (`G09`), обязана получить отказ; строка с сохранением (`V07`) и открытием (`V09`) — молчание"
   },
   "note": "сверка идёт ТЕМ ЖЕ правилом сопоставления, что и остальной аудит. `verified_without_any_linked_row` — приписка: статус заявлен, доказательства нет. `action_without_dedicated_row` — названный пробел трассируемости: действие может быть покрыто строкой с предметным именем, и тогда связь «действие → проверка» не записана; это не выдаётся за отсутствие проверки. `action_without_required_calls` — ОТКАЗ, а не пробел записи: окна привязанных строк не содержат ни одного вызова, который действие обязано содержать. Этот отказ ПОНИЖАЕТ `implementation.status` строки до «Недостаточно проверки» и называется причиной понижения: закрытость по ярлыку доказательством не считается (наряд §4.5). `actions_without_mode_named_evidence` — доказательство, которое нельзя найти ПО ИМЕНИ режима, как его искал бы рецензент: ни одна строка приёмки не называет этот режим ни идентификатором, ни описанием. Привязка по документу в аудите не употребляется: `document_id` есть не у всех вызовов, и такая атрибуция молча теряет вызовы (измерено 20.09.2026). Разбор остатка отказа — в `scratch/_f08_link_gap.py` и `scratch/_f08_candidate_ownership.py`: привязка недостаёт там, где проверка ТОГО ЖЕ режима не привязана, а не там, где рядом есть проверка похожего имени"
@@ -23407,7 +24412,7 @@
    "id": "F-03",
    "class": "состояние объёма будущей работы (не дефект)",
    "severity": "—",
-   "statement": "Обязательный объём профиля не закрыт: часть режимов и зависимостей профиля лежит на уровне `metadata_found`. Строки SM-01.primitive_box, SM-04.boss, SM-15.union.mode_save_base_copy, MATE-01.mate.create, MATE-02.mate.read, MATE-03.mate.param_edit, MATE-04.mate.fixed, MATE-05.mate.delete, MATE-06.mate.placement_effect не реализованы — это ПЛАН, а не текущий дефект, и живой проверки в этом аудите они не требуют.",
+   "statement": "Обязательный объём профиля не закрыт: часть режимов и зависимостей профиля лежит на уровне `metadata_found`. Строки SM-01.primitive_box, SM-04.boss, SM-15.union.mode_save_base_copy не реализованы — это ПЛАН, а не текущий дефект, и живой проверки в этом аудите они не требуют.",
    "code": "coverage/solid-v24/matrix.json",
    "documentation": [],
    "expected": "у каждой ОПУБЛИКОВАННОЙ возможности есть приёмочная запись",
@@ -23495,7 +24500,7 @@
    "statement": "Строка матрицы заявляет десять действий и их статусы, а отчёт приёмки объявляет имена строк и вердикты; прямой сверки между ними не было, и `implementation.status` выводился из `catalog_level` и наличия хотя бы одного PASS. Связь «действие → проверка» записана по действиям только у семейства B3 (строки `B3M.<режим>.<действие>`, 10 из 10 на режим); у остальных семейств она записана «предметно» (`G01`, `HO.1`, `FL01`), и по имени строки действие не восстанавливается.",
    "code": "scripts/mcp-smoke.py — журнал вызовов и окна строк (`CALL_LOG`, `calls_window`); scratch/_build_api_compliance.py — verify_claimed_actions(), derive_actions(), calls_calibration(); scratch/_f08_link_gap.py, scratch/_f08_candidate_ownership.py — разбор остатка; coverage/solid-v24/matrix.json",
    "documentation": [],
-   "evidence": "scratch/mcp-smoke/delivery-assemblies-20261004/*.json — журнал вызовов ПО КАТАЛОГУ ОТЧЁТОВ: 10479 вызовов, 1109 строк приёмки с окном, 491 эпох документа. Полный прогон: 1095 строк, 10392 вызовов, отказов 0 — на бинарях поставки `publish-assemblies-20261004`. Групповые отчёты каталога — ПОДМНОЖЕСТВА полного прогона, поэтому их вызовы с ним не складываются: сумма по каталогу (10479) больше полного прогона (10392) ровно на вызовы повторно снятых групп",
+   "evidence": "scratch/mcp-smoke/delivery-mates-20261005/*.json — журнал вызовов ПО КАТАЛОГУ ОТЧЁТОВ: 10551 вызовов, 1143 строк приёмки с окном, 494 эпох документа. Полный прогон: 1095 строк, 10392 вызовов, отказов 0 — на бинарях поставки `publish-mates-20261005`. Групповые отчёты каталога — ПОДМНОЖЕСТВА полного прогона, поэтому их вызовы с ним не складываются: сумма по каталогу (10551) больше полного прогона (10392) ровно на вызовы повторно снятых групп",
    "expected": "заявленное действие строки подтверждается строкой приёмки, которую можно найти по имени, а не по сходству",
    "observed": "сверка ведётся ТРЕМЯ независимыми способами, и все три числа измерены на одной поставке: (1) ПО ИМЕНИ РЕЖИМА, как искал бы рецензент: из 41 строки, заявившей `verified`, у 31 ни одна строка приёмки не называет режим ни идентификатором, ни описанием — находятся только 10 режимов B3; (2) ПО ПРИВЯЗКЕ И ВЫЗОВАМ: у 22 строк есть действие, которого нет в вызовах привязанных проверок; (3) ПО ИМЕНИ СТРОКИ: у 10 строк все действия названы одноимённой строкой, у 31 — нет. Приписок (ни одной разрешившейся ссылки) 0, противоречий (`verified` рядом с FAIL) 0. Числа НАЗВАНЫ отдельными ключами `claimed_actions_check.*`, а не растворены в числе PASS: «ноль отказов» не доказывает непроверенное действие. ОСТАТОК РАЗОБРАН ДО КОНЦА, и это главное измерение наряда: у 23 строк он выглядел как «недостающая привязка», но разбор показал, что привязка недостаёт РОВНО У ОДНОЙ — `SM-02.base_extrusion.blind`, где `G03i` и `G03r` читают признак ТОГО ЖЕ режима (базовое глухое выдавливание 10 мм) и до правки не были привязаны ни к одной строке. У остальных 22 проверки-кандидаты уже принадлежат ДРУГИМ режимам (измерено: 2712 пар «строка × действие» указывают на проверку, привязанную к другой строке; например `edit` скругления лежит в `FL04` у `SM-09.fillet.change_radius_in_place`, а `SM-09.fillet.read_radius_back` его не привязывает), поэтому приписать их значило бы выдать чужое доказательство за своё. Это РАБОТА (проверки для этих режимов либо честное понижение заявленных действий), а не правка отчёта, и она названа, а не закрыта",
    "affected_tools": [
@@ -23518,7 +24523,7 @@
    "documentation": [
     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument2d_ksarcbyangle.html"
    ],
-   "evidence": "ИЗМЕРЕНО ДО И ПОСЛЕ ИСПРАВЛЕНИЯ, на двух разных поставках, одним и тем же зондом `scratch/_mania_contour_probe.py`: ДО — поставка `artifacts/publish-b5f08-20260920`, адаптер `1723bf9eba687c43bacc325afac232181111da2e758b5be441672e68696ef3ad`: контур скобы «как есть», с ЗНАКОМ дуг, → `GEOMETRY_FAILED` («Entity.Create() выдавливания вернул false: признак не появился»); тот же точечный набор, выраженный дугами с углами внутри диапазона, → 174799.7403608485 при аналитическом 174799.740134. ПОСЛЕ — поставка `artifacts/publish-assemblies-20261004`, адаптер `3e656699f8e585eb1e53e50db68e1a2ed7de8ab3a0e1baae35eac59d2fe468c6`: ТОТ ЖЕ знаковый контур → V=174799.74036084852, отказ отсутствует (повторный прогон зонда 20.09.2026, вариант V1). Хеши Host и Worker между поставками НЕ менялись (`dd1d7ffe5ea5587345a9575288ffd6a75e69b9d29164970177bb1e57fbae0c6e` и `b0aba49019dc927a0c1534ddcf337cdc1753695ffa4570cc05799f1cebc7b409`), то есть правка лежит ИМЕННО в адаптере, где и была. В прогоне поставки: `scratch/mcp-smoke/delivery-assemblies-20261004/mania.json` — `MANIA.01.create` площадь контура Грин=8739.987007 против сегментов 8739.987007 (расхождение 0.000e+00) и `MANIA.02.create` V=174799.740361 против площадь×20=174799.740134",
+   "evidence": "ИЗМЕРЕНО ДО И ПОСЛЕ ИСПРАВЛЕНИЯ, на двух разных поставках, одним и тем же зондом `scratch/_mania_contour_probe.py`: ДО — поставка `artifacts/publish-b5f08-20260920`, адаптер `1723bf9eba687c43bacc325afac232181111da2e758b5be441672e68696ef3ad`: контур скобы «как есть», с ЗНАКОМ дуг, → `GEOMETRY_FAILED` («Entity.Create() выдавливания вернул false: признак не появился»); тот же точечный набор, выраженный дугами с углами внутри диапазона, → 174799.7403608485 при аналитическом 174799.740134. ПОСЛЕ — поставка `artifacts/publish-mates-20261005`, адаптер `3e656699f8e585eb1e53e50db68e1a2ed7de8ab3a0e1baae35eac59d2fe468c6`: ТОТ ЖЕ знаковый контур → V=174799.74036084852, отказ отсутствует (повторный прогон зонда 20.09.2026, вариант V1). Хеши Host и Worker между поставками НЕ менялись (`dd1d7ffe5ea5587345a9575288ffd6a75e69b9d29164970177bb1e57fbae0c6e` и `b0aba49019dc927a0c1534ddcf337cdc1753695ffa4570cc05799f1cebc7b409`), то есть правка лежит ИМЕННО в адаптере, где и была. В прогоне поставки: `scratch/mcp-smoke/delivery-mates-20261005/mania.json` — `MANIA.01.create` площадь контура Грин=8739.987007 против сегментов 8739.987007 (расхождение 0.000e+00) и `MANIA.02.create` V=174799.740361 против площадь×20=174799.740134",
    "expected": "дуга с отрицательным `sweep_deg` строит ТОТ ЖЕ точечный набор, что та же дуга с положительным `sweep_deg` при переставленных концах",
    "observed": "ИСПРАВЛЕНО И ПЕРЕПРОВЕРЕНО РАЗЛИЧАЮЩЕЙ ПАРОЙ. Строка `MANIA.17.negative_tests` строит одну и ту же четверть диска R30 двумя способами — дугой (start 0°, sweep +90°) и дугой (start 90°, sweep −90°) — и требует от обеих одного эталона 20·π·30²/4. Измерено: положительный sweep → V=14137.166941154068; отрицательный sweep → V=14137.166941154068; совпадение True. Пара различающая, а не подтверждающая: при дефекте ветвь с отрицательным sweep уходила на другую сторону и совпадения быть не могло. ПОЧЕМУ ДЕФЕКТ ДОЖИЛ ДО СИХ ПОР — измерено, а не предположено: во всей приёмке до появления этой группы `sweep_deg` встречался РОВНО ОДИН раз и всегда положительным (`scripts/mcp-smoke.py`, строка пути sweep B5.2: start −90°, sweep +90°), поэтому отрицательная ветвь не измерялась ни одной строкой. Группа добавила ещё три точки записи, из них четыре дуги контура скобы — с отрицательным sweep. ДАТИРОВАННАЯ ПОМЕТА 20.09.2026, 22:05 — ЧИСЛА ВЫШЕ БЫЛИ ПОЛУЧЕНЫ ЧУЖИМ ИЗМЕРЕНИЕМ. Строка `MANIA.17` в редакции 21:05 строила оба сектора в ОДНОМ документе и читала объём тела `bs[0]`; тела при выдавливании НАКАПЛИВАЮТСЯ, поэтому `bs[0]` оба раза был первым телом, и пара НЕ РАЗЛИЧАЛА НИЧЕГО — она сравнивала тело с самим собой. Значит утверждение «пара различающая» в тот момент было НЕВЕРНО, и подтверждение исправления F-09 этой строкой было приписано. Дефект продукта (F-09) при этом НЕ опровергнут: он измерен ЗОНДОМ `scratch/_mania_contour_probe.py`, который строит по документу на вариант, и там знаковый контур давал `GEOMETRY_FAILED` до правки и 174799.74036084852 после. После исправления прибора (находка F-11, один документ — одно тело) строка измерена заново и даёт РАЗЛИЧИМЫЕ числа: положительный sweep 14137.166941154068, отрицательный 14137.166941154068. Правило: **проверка, читающая «первый элемент» списка, обязана доказать, что элемент ровно один**",
    "affected_tools": [

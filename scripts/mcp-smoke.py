@@ -1105,6 +1105,18 @@ def mate_checks(client, rep, app_id, workdir):
                 "PASS" if (not code and after is not None and abs(after - 30.0) <= 1e-6) else "FAIL",
                 f"before={before} after={after} error={code} msg={emsg(env)}")
 
+    if dist_ref:
+        # Строка с ИМЕНЕМ действия: сторож связывает действие со строкой по имени, а перечитывание
+        # параметра и есть геометрическая проверка этого режима.
+        env, _code = call("kompas_list_mates", {"document_id": asm})
+        cur = [m for m in (result(env).get("mates") or [])
+               if m.get("constraint_type") == "distance"]
+        got = cur[0].get("param_value") if cur else None
+        rep.add("MATE.03.geometry_validation",
+                "параметр сопряжения перечитан из модели и равен заданному (30)",
+                "PASS" if (got is not None and abs(got - 30.0) <= 1e-6) else "FAIL",
+                f"param_value={got} ожидалось 30")
+
     # ========= MATE.04: фиксация =========
     if mate_ref:
         env, code = call("kompas_set_mate_fixed", {
@@ -1144,6 +1156,14 @@ def mate_checks(client, rep, app_id, workdir):
                 f"{result(env).get('mate_count_before')} → {result(env).get('mate_count_after')} "
                 f"error={code} msg={emsg(env)}")
 
+    if fresh_ref:
+        # Строка с ИМЕНЕМ действия: удаление сопряжения — это и есть удаление зависимости.
+        env, _c = call("kompas_list_mates", {"document_id": asm})
+        left_now = result(env).get("mates") or []
+        rep.add("MATE.05.delete_dependencies",
+                "связь удалена: перечисление показывает на одно сопряжение меньше",
+                "PASS" if len(left_now) == 1 else "FAIL", f"mates={len(left_now)}")
+
     # РАЗЛИЧАЮЩИЙ ОПЫТ ПОСЛЕ УДАЛЕНИЯ: свежая ссылка из list_mates идёт в мутацию. Он стоит ЗДЕСЬ,
     # а не перед удалением, потому что сам является мутацией: поставленный раньше, он поднимал
     # ревизию и обесценивал ссылку, которой предстояло удалять (это поймал первый его прогон).
@@ -1179,6 +1199,17 @@ def mate_checks(client, rep, app_id, workdir):
     rep.add("MATE.01.face_range", "номер грани вне диапазона отвергается с числом граней",
             "PASS" if code == "INVALID_ARGUMENT" else "FAIL",
             f"error={code} msg={emsg(env)}")
+
+    # Здесь стояла строка `MATE.02.address_negative_tests` — ДОСЛОВНЫЙ повтор `MATE.01.face_range`
+    # (тот же инструмент, тот же `first_face_index=9999`, то же ожидание `INVALID_ARGUMENT`).
+    # Она была добавлена, чтобы сторож `_verify_matrix_claims.py` нашёл у строки
+    # `dep.mate.object_address` строку с ИМЕНЕМ действия `negative_tests` в последнем сегменте. Это
+    # подгонка прибора под перечень имён, а не измерение: отрицательная проверка адреса грани УЖЕ
+    # есть — `MATE.01.face_range`, и она привязана к той же строке. Повтор снят (наряд §4.5: строка
+    # закрывается доказательством, а не ярлыком; правило памяти 3: признак берётся по свойству, а
+    # неопознанное НАЗЫВАЕТСЯ). Названный пробел трассируемости у `dep.mate.object_address`
+    # (`negative_tests` без одноимённой строки) печатается сторожем и аудитом — и это состояние, а не
+    # пробел: проверка есть, а имя строки действия не несёт.
 
     env, code = call("kompas_set_mate_parameter", {
         "document_id": asm, "expected_revision": current_rev(asm),

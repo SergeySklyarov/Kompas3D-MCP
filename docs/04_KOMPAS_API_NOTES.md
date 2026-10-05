@@ -3388,6 +3388,64 @@ z∈[0,10] (`scratch/_probe_das_dir.py`): `base positive` даёт z∈[0,10]; `
 `scripts/mcp-smoke.py`, группа `--image-only`; они же входят в полный прогон.
 
 
+## 4.30.1. Управление проекцией отображения: маршрут документирован (справка прочитана 05.10.2026, документ/только)
+
+**Найдено в справке SDK v24** (прочитано по проводу из базы `https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/`;
+негативный контроль — выдуманная страница `ksviewprojection_setcurrentXYZ.html` отвечает **404**, поэтому
+страницы ниже читаются по-настоящему, а не приходят заглушкой). Этот раздел — **документация, а не
+измерение на живом КОМПАСе**: живой прогон по маршруту назван отдельно (см. «не сделано» в
+`BLENDER_IDEAS_REPORT_20261005.md`) и в этом разделе не утверждается.
+
+**Объект.** `ksDocument3D.GetViewProjectionCollection()` — «Получить указатель на интерфейс массива
+проекций отображения модели в окне»
+(<https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_getviewprojectioncollection.html>). Возвращает
+`ksViewProjectionCollection` / `IViewProjectionCollection`; «при этом он будет автоматически заполнен
+проекциями, заданными в данном документе».
+
+**Коллекция** (`ksviewprojectioncollection.html`): методы `GetCount`, `GetByIndex(long)`,
+`GetByName(name, testFullName, testIgnoreCase)`, `First/Next/Prev/Last`, `FindIt`,
+`NewViewProjection` (создаёт проекцию с индексом `vp_None`; в массив не добавляет — для этого `Add`),
+`Add(projection)` («добавить можно только проекцию с индексом `vp_None`; после добавления проекция
+становится текущей»), `Refresh` («перезаполняет массив проекциями, заданными в документе»),
+`DetachBy*`, `SetBaseUserOrientation`. Свойство `viewProjectionScheme` — «Текущая схема ориентаций
+модели», тип `ksViewProjectionScheme`, **читается и записывается** (`Get/SetViewProjectionScheme`).
+
+**Проекция** (`ksviewprojection.html`, `IViewProjection`): методы `GetViewProjectonType() → long`
+(тип из `ksViewProjectionType`), `IsCurrent() → BOOL` («`vp_None` — всегда FALSE»), `SetCurrent() → BOOL`
+(«Установить данную проекцию отображения модели в окне текущей»), `SetMatrix3D(VARIANT Matrix3D)` (массив
+SAFEARRAY `VT_ARRAY|VT_R8` из 16 элементов, матрица 4×4; «для отображения надо после установки вызвать
+`SetCurrent`»), `GetPlacement`/`SetPlacement`. Свойства: `name` (BSTR), `UserProjectionIndex`, `scale`.
+
+**Предопределённые типы** — перечисление `ProjectionType`
+(<https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/projectiontype.html>): `vp_None -1`, `vp_NormalTo 0`,
+`vp_Front 1`, `vp_Rear 2`, `vp_Up 3`, `vp_Down 4`, `vp_Left 5`, `vp_Right 6`, `vp_IsoXYZ 7`,
+`vp_IsoYZX 8`, `vp_IsoZXY 9`, `vp_Dio 10`. Тип, читаемый `GetViewProjectonType`, — из родственного
+`ksViewProjectionType` (<https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksviewprojectiontype.html>):
+`ksVPNone -1 … ksVPIsometric 7`, `ksVPDimetric 8`, `ksVPUnfold 9`, `ksVPUser 10` — **числа совпадают
+с `ProjectionType` не полностью**: у API5-варианта три изометрии (7, 8, 9) и диметрия 10, у API7 —
+одна изометрия 7 и диметрия 8. Совпадение чисел между двумя перечислениями **не подразумевается** и
+проверяется живьём, а не выводом.
+
+**Чтение текущего вида и восстановление.** Два документированных пути, и оба — не «показалось»:
+* `IViewProjection.IsCurrent()` по элементам коллекции — найти текущую проекцию; её `GetViewProjectonType()`
+  даёт ТИП (`vp_Front`, `vp_IsoXYZ` и т. д.).
+* `IViewProjectionCollection.viewProjectionScheme` — «текущая схема ориентаций модели», читается и
+  записывается. Это и есть способ прочитать вид перед сменой и вернуть его после.
+
+**Чего справка НЕ обещает** (названо, чтобы не приписать маршруту лишнего): не сказано, что
+`SetCurrent`/`SetMatrix3D` меняют ревизию документа или флаг «изменён» — это проверяется измерением;
+не сказано, что `scale` восстанавливается вместе со схемой; не сказано, что «пользовательская»
+проекция (`vp_None`/`ksVPUser`) переживает сохранение и переоткрытие документа. Ни одно из этих
+трёх не утверждается, пока не измерено.
+
+**Что это меняет для продукта.** Остаток `modes_unverified` у `AUX-IMAGE`, названный «управление видом
+и проекцией документировано, в маршрут v1 не входит и оставлено отдельным нарядом», теперь имеет
+**точную маршрутную карту**: коллекция + `IsCurrent`/`GetViewProjectonType` (чтение) и
+`SetBaseUserOrientation`/`SetMatrix3D` + `SetCurrent` (применение). `modes_unverified` **не снят**:
+документация даёт маршрут, но не заменяет живого измерения, а наряд `BLENDER_IDEAS_DEVELOPER_PROMPT.md`
+требует сначала проверить маршрут живьём.
+
+
 ## 4.31. Площадь профиля — это ОБЛАСТЬ, а не сумма примитивов: вложенный контур есть отверстие (измерено и исправлено 24.09.2026)
 
 **Что было.** Встроенная проверка объёма выдавливания брала `expected = ProfileArea.Of(entities) × depth`,

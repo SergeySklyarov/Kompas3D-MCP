@@ -1081,6 +1081,65 @@ def main() -> int:
            "`coverage/solid-v24/archive/`, но правило держится на имени, а имя гниёт; живой "
            "файл, называющий САМ СЕБЯ, и файл, называющий непубликуемый путь, — не находки")
 
+    # 16. СГЕНЕРИРОВАННЫЙ список инструментов против реестра.
+    #     Класс заведён по измеренному случаю, а не по предположению: 23.09.2026 `KOMPAS3D_MCP.md`
+    #     и `README.md` называли в перечне 50 инструментов, а 05.10.2026 реестр уже содержал 63 —
+    #     документ ни с чем не сверялся и разошёлся молча. Между метками блок генерируется из
+    #     `ToolCatalog.All` командой `KompasMcp.Host.exe --print-tool-listing`; здесь проверяется,
+    #     что набор имён в блоке СОВПАДАЕТ с реестром в исходнике. Формат блока целиком не
+    #     сверяется намеренно: он зависит от вывода Host, которого на индексе нет, а имена —
+    #     то, что читатель принимает за контракт.
+    listing_markers = ("<!-- BEGIN TOOL LISTING -->", "<!-- END TOOL LISTING -->")
+    listing_issues: list[str] = []
+    registry_text = content(catalog_rel) if catalog_rel else None
+    if registry_text is None:
+        listing_issues.append(
+            f"{catalog_rel}  ← реестра нет в наборе: список инструментов сверять не с чем"
+        )
+    else:
+        registry = {name for _, name in re.findall(
+            r'^\s{12}([A-Za-z_]\w*)\("(kompas_[a-z_]+)"', registry_text, re.MULTILINE
+        )}
+        listing_docs = [rel for rel in files if rel in ("KOMPAS3D_MCP.md", "README.md")]
+        if not listing_docs:
+            listing_issues.append(
+                "ни `KOMPAS3D_MCP.md`, ни `README.md` нет в наборе — генерируемый список "
+                "инструментов публиковать негде"
+            )
+        for rel in listing_docs:
+            text = content(rel)
+            if text is None:
+                listing_issues.append(f"{rel}  ← файла нет в наборе")
+                continue
+            begin = text.find(listing_markers[0])
+            end = text.find(listing_markers[1])
+            if begin < 0 or end < 0 or end < begin:
+                listing_issues.append(
+                    f"{rel}  ← нет блока {listing_markers[0]} … {listing_markers[1]}: "
+                    f"список инструментов не генерируется, а ручной перечень гниёт молча"
+                )
+                continue
+            body = text[begin + len(listing_markers[0]):end]
+            in_block = set(re.findall(r"`(kompas_[a-z_]+)`", body))
+            missing = sorted(registry - in_block)
+            extra = sorted(in_block - registry)
+            if missing:
+                listing_issues.append(
+                    f"{rel}  ← блок не называет {len(missing)} инструмент(ов) реестра: "
+                    + ", ".join(missing)
+                    + " — обновить: python scripts/update-tool-listing.py"
+                )
+            if extra:
+                listing_issues.append(
+                    f"{rel}  ← блок называет {len(extra)} имя(ён) вне реестра: " + ", ".join(extra)
+                    + " — инструмент удалён или переименован, а генерация не прогнана"
+                )
+    fail += listing_issues
+    report("16. Генерируемый список инструментов против реестра", "FAIL", listing_issues,
+           "блок между `<!-- BEGIN/END TOOL LISTING -->` генерируется из `ToolCatalog.All`; "
+           "сверяются ИМЕНА, а не формат — формат даёт Host, которого на индексе нет, а имена "
+           "читатель принимает за контракт")
+
     print("─" * 78)
     if fail:
         print(f"ВЕРДИКТ: FAIL — находок уровня ОТКАЗ: {len(fail)}; на решение: {len(review)}")

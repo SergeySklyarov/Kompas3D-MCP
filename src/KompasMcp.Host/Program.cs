@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using KompasMcp.Contracts;
@@ -26,6 +27,18 @@ public static class Program
         var configPath = Argument(args, "--config");
         var showSchemas = args.Contains("--print-schemas");
         var schemaOnlyDirectory = Argument(args, "--emit-schemas");
+        var toolListing = args.Contains("--print-tool-listing");
+
+        // The tool listing is pure catalog output: it needs neither config nor a Worker, so it is
+        // answered before HostOptions is read — the same reason --emit-schemas is.
+        // INVARIANT: the listing is written as UTF-8. The descriptions are Russian, and the console
+        // default code page would mangle them — a generated file the next run cannot match.
+        if (toolListing)
+        {
+            Console.OutputEncoding = Encoding.UTF8;
+            Console.Write(ToolListing.Markdown(ToolCatalog.All));
+            return 0;
+        }
 
         HostOptions options;
         try
@@ -137,7 +150,13 @@ public static class Program
         return 0;
     }
 
-    private const string Instructions = """
+    /// <summary>The server instructions sent in the MCP handshake: call order, session ownership and the
+    /// pitfalls that most often make a call fail. Public so a unit test can assert that every tool name and
+    /// error code it mentions really exists.</summary>
+    /// <remarks>INVARIANT: the text names only tools present in <c>ToolCatalog.All</c> and only codes from
+    /// <c>ErrorCodes</c>; a stale name here would send the model to a tool it cannot call.
+    /// History: docs/decisions/host.md#instructions-pitfalls</remarks>
+    public const string Instructions = """
         Сервер управляет одним экземпляром КОМПАС-3D v24 через COM. Порядок работы:
         kompas_health → kompas_connect → kompas_create_document/kompas_open_document →
         kompas_get_context (получить document_id и revision) → чтение (list/get/measure) →
@@ -151,6 +170,22 @@ public static class Program
         kompas_session_status, освободите сеанс у владельца (kompas_release_session) и займите его
         здесь (kompas_acquire_session). После захвата — новый контекст: kompas_connect и
         kompas_get_context, прежние document_id и revision недействительны.
+
+        Типичные ошибки в этом сервере:
+        - Единицы — миллиметры и мм²/мм³. Другие единицы не принимаются и не пересчитываются.
+        - Ссылки и document_id привязаны к ревизии: любая мутация делает прежние ссылки устаревшими
+          (STALE_REFERENCE). Это защита, а не сбой: перечитайте kompas_get_context и ссылки заново,
+          а не повторяйте вызов с тем же expected_revision.
+        - Грань выбирается предикатом через kompas_resolve_selection, а не «первой» или «текущей».
+          Два подходящих кандидата — отказ AMBIGUOUS_SELECTION; ослабьте предикат, а не угадывайте.
+          Неизвестное серверу поле предиката — тоже отказ INVALID_ARGUMENT, а не молчание.
+        - Обычное объединение требует пересечения или общей поверхности тел (указание заказчика от
+          19.09.2026). Касание ребром, касание точкой и несвязные тела — честный отказ ядра, а не
+          ошибка сервера; не заменяйте это обходными построениями.
+        - verification.level в ответе говорит, что реально проверено. Уровень ниже ожидаемого —
+          повод перечитать модель (kompas_get_context, list/get/measure), а не повторять вызов:
+          повтор не поднимет уровень доказательства.
+        - Снимок (kompas_export_image) — вспомогательный канал, а не доказательство.
         """;
 
     /// <summary>The tool list: the same catalog for the owner and for a waiting Host.</summary>

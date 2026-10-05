@@ -2,21 +2,14 @@ using System.Globalization;
 
 namespace KompasMcp.Domain.Imaging;
 
-/// <summary>
-/// Растровый формат: имя на проводе, код вендорского перечисления и признаки, по которым файл
-/// ОПОЗНАЁТСЯ, а не принимается на слово.
-/// </summary>
-/// <remarks>
-/// Коды взяты из перечисления продукта (<c>ksRasterFormatEnum</c>, страница
-/// <c>ksrasterformatenum.html</c>): BMP = 0, JPG = 2, PNG = 3, TIF = 4. Значения перечисления —
-/// часть контракта с ядром, поэтому они лежат ЗДЕСЬ, а не в адаптере: адаптер не должен уметь
-/// «свой» набор кодов, расходящийся с тем, который проверяют тесты.
-/// <para>
-/// WMF в перечень НЕ входит намеренно. Справка (<c>ksdocument3d_saveastorasterformat.html</c>)
-/// говорит, что сохранение в WMF не поддерживается и файл записывается в EMF; публиковать формат,
-/// который ядро молча подменяет другим, — обещание, которое сервер не выполняет.
-/// </para>
-/// </remarks>
+/// <summary>Raster format: the wire name, the vendor enum code and the traits by which the file is
+/// IDENTIFIED rather than taken on trust.</summary>
+/// <remarks>Codes come from the product enum (<c>ksRasterFormatEnum</c>, page <c>ksrasterformatenum.html</c>):
+/// BMP = 0, JPG = 2, PNG = 3, TIF = 4. The enum values are part of the contract with the kernel, so they
+/// live HERE, not in the adapter — the adapter must not have a "private" code set diverging from the one the
+/// tests check. LIMIT: WMF is deliberately absent — DOC (<c>ksdocument3d_saveastorasterformat.html</c>) says
+/// WMF saving is unsupported and the file is written as EMF; publishing a format the kernel silently swaps
+/// is a promise the server does not keep.</remarks>
 public sealed record RasterFormatSpec(
     string Wire,
     short Code,
@@ -25,7 +18,7 @@ public sealed record RasterFormatSpec(
     byte[] Magic,
     bool MagicIsPrefix);
 
-/// <summary>Перечень публикуемых растровых форматов и их опознавательные признаки.</summary>
+/// <summary>The published raster formats and their identifying traits.</summary>
 public static class RasterFormats
 {
     /// <summary>ksRasterFormatEnum: BMP = 0.</summary>
@@ -58,14 +51,12 @@ public static class RasterFormats
 
     public static readonly IReadOnlyList<RasterFormatSpec> All = new[] { Png, Jpg, Bmp, Tif };
 
-    /// <summary>Имена, публикуемые схемой. Порядок — как в перечне.</summary>
+    /// <summary>Names published by the schema. Order as in the list.</summary>
     public static readonly IReadOnlyList<string> WireNames =
         All.Select(spec => spec.Wire).ToArray();
 
-    /// <summary>
-    /// Разрешить формат по имени. Неизвестное имя — отказ, а не «возьмём PNG по умолчанию»:
-    /// молчаливая подмена формата неотличима для вызывающего от исполнения просьбы.
-    /// </summary>
+    /// <summary>Resolve a format by name. An unknown name is a refusal, not "PNG by default": a silent format
+    /// swap is indistinguishable to the caller from honouring the request.</summary>
     public static bool TryResolve(string? wire, out RasterFormatSpec spec)
     {
         spec = Png;
@@ -86,28 +77,25 @@ public static class RasterFormats
         return false;
     }
 
-    /// <summary>Разрешить формат по коду вендорского перечисления (обратное направление).</summary>
+    /// <summary>Resolve a format by the vendor enum code (the other direction).</summary>
     public static RasterFormatSpec? ByCode(short code) =>
         All.FirstOrDefault(spec => spec.Code == code);
 }
 
-/// <summary>
-/// Ограничения контекста ответа. Названы числами и живут в одном месте: клиент читает картинку
-/// через контекст модели, и «картинка на 40 мегапикселей» — это не удобство, а отказ транспорта.
-/// </summary>
+/// <summary>Response-context limits. Named by numbers and kept in one place: the client reads the image
+/// through the model context, and "a 40-megapixel image" is a transport refusal, not a convenience.</summary>
 public static class RasterLimits
 {
-    /// <summary>Большая сторона снимка в пикселях.</summary>
+    /// <summary>Long side of the image in pixels.</summary>
     public const int MaxLongSidePixels = 1600;
 
-    /// <summary>Предел base64-представления картинки в ответе (2 МиБ).</summary>
+    /// <summary>Limit of the base64 image in the response (2 MiB).</summary>
     public const int MaxBase64Characters = 2 * 1024 * 1024;
 }
 
-/// <summary>
-/// Что удалось прочитать ИЗ САМОГО ФАЙЛА. Габариты берутся разбором заголовка, а не «на глаз» и не
-/// из параметров запроса: параметр говорит, что просили, а заголовок — что получилось.
-/// </summary>
+/// <summary>What could be read FROM THE FILE ITSELF. Dimensions come from parsing the header, not from "by
+/// eye" and not from the request parameters: the parameter says what was asked, the header says what came
+/// out.</summary>
 public sealed record RasterImageFacts(
     bool MagicMatches,
     string MagicHex,
@@ -117,14 +105,11 @@ public sealed record RasterImageFacts(
     int? ColorType,
     string? DimensionNote);
 
-/// <summary>
-/// Разбор заголовков BMP/PNG/JPG/TIF без внешних библиотек.
-/// </summary>
-/// <remarks>
-/// Зачем это в продукте, а не «на глаз». Наряд требует от ответа <c>pixel_width</c> и
-/// <c>pixel_height</c>, прочитанные из IHDR сервером. Габарит, взятый из запроса, был бы
-/// утверждением о НАМЕРЕНИИ; габарит из заголовка — утверждением о ФАЙЛЕ. Второе и публикуется.
-/// </remarks>
+/// <summary>Header parsing for BMP/PNG/JPG/TIF, without external libraries.</summary>
+/// <remarks>Why this is in the product, not "by eye": the order requires the response to carry
+/// <c>pixel_width</c> and <c>pixel_height</c> read from the IHDR by the server. A dimension taken from the
+/// request would be a claim about the INTENT; a dimension from the header is a claim about the FILE — and
+/// the second one is published.</remarks>
 public static class RasterImageReader
 {
     private const int PngSignatureLength = 8;
@@ -150,8 +135,8 @@ public static class RasterImageReader
             return InspectBmp(data, magicMatches, magicHex);
         }
 
-        // JPG и TIF: магия проверяется, габарит — нет. Молчаливый ноль вместо непрочитанного
-        // габарита был бы ложью, поэтому поле остаётся null, а причина названа словами.
+        // JPG and TIF: the magic is checked, the dimensions are not. A silent zero instead of an unread
+        // dimension would be a lie, so the field stays null and the reason is stated in words.
         return new RasterImageFacts(
             magicMatches, magicHex, null, null, null, null,
             spec.Code == RasterFormats.CodeJpg
@@ -161,7 +146,7 @@ public static class RasterImageReader
 
     private static RasterImageFacts InspectPng(byte[] data, bool magicMatches, string magicHex)
     {
-        // IHDR обязан быть первым блоком: подпись (8) + длина (4) + тип (4) + ширина (4) + высота (4).
+        // IHDR must be the first chunk: signature (8) + length (4) + type (4) + width (4) + height (4).
         var headerReadable = data.Length >= PngSignatureLength + 12 + 8
             && data[12] == (byte)'I' && data[13] == (byte)'H' && data[14] == (byte)'D' && data[15] == (byte)'R';
 
@@ -180,7 +165,7 @@ public static class RasterImageReader
 
     private static RasterImageFacts InspectBmp(byte[] data, bool magicMatches, string magicHex)
     {
-        // BITMAPINFOHEADER: смещение 14 — размер заголовка, 18 — ширина, 22 — высота (обе int32 LE).
+        // BITMAPINFOHEADER: offset 14 — header size, 18 — width, 22 — height (both int32 LE).
         if (data.Length < 26)
         {
             return new RasterImageFacts(

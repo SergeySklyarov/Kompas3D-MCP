@@ -2,42 +2,28 @@ using KompasMcp.Contracts;
 
 namespace KompasMcp.Domain.Files;
 
-/// <summary>Решение «восстанавливать ли файл документа из контрольной копии»: да/нет и НАЗВАННАЯ причина.</summary>
+/// <summary>Decision "should the document file be restored from the control copy": yes/no plus a NAMED reason.</summary>
 public sealed record RestoreDecision(bool Restore, string Reason);
 
-/// <summary>
-/// Решение о восстановлении файла документа — ЧИСТАЯ функция от признаков отказа и доступа к документу.
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Зачем отдельная функция.</b> Прежнее восстановление проверяло только файловую возможность записи
-/// (<c>File.Open(..., ReadWrite)</c>), а не доступ документа и не класс отказа. Следствие (дефект H4
-/// ревью 05.10.2026): документ, открытый <c>access=read_only</c> из корня «только чтение», после
-/// отклонённой мутации получал ПЕРЕЗАПИСАННЫЙ файл — восстановление шло в обход политики путей.
-/// Отдельно: восстановление выполнялось и на отказах, которые ГАРАНТИРОВАННО не меняли модель
-/// (<c>REVISION_CONFLICT</c>, <c>INVALID_ARGUMENT</c>, <c>STALE_REFERENCE</c> без частичных эффектов) —
-/// то есть сервер писал в пользовательский файл там, где писать было незачем.
-/// </para>
-/// <para>
-/// <b>Порядок проверок.</b> Доступ проверяется ПЕРЕД частичным эффектом: документ, открытый «только
-/// чтение», не перезаписывается даже тогда, когда мутация применилась частично. Это не «пропустили
-/// откат» — это названная граница: перезапись файла в обход политики путей хуже, чем отсутствие
-/// отката, а причина произносится в ответе.
-/// </para>
-/// </remarks>
+/// <summary>The document-file restore decision — a PURE function of the failure signals and the document
+/// access.</summary>
+/// <remarks>WHY A SEPARATE FUNCTION: the former restore checked only file writability
+/// (<c>File.Open(..., ReadWrite)</c>), not the document access or the failure class. Consequence (defect H4,
+/// review 05.10.2026): a document opened <c>access=read_only</c> from a read-only root got its file
+/// OVERWRITTEN after a rejected mutation, bypassing the path policy. It also restored on failures that
+/// GUARANTEED no model change (<c>REVISION_CONFLICT</c>, <c>INVALID_ARGUMENT</c>, <c>STALE_REFERENCE</c>
+/// without partial effects) — writing to a user file where there was nothing to write.
+/// INVARIANT: access is checked BEFORE the partial effect: a read-only document is not overwritten even when
+/// the mutation applied partially — overwriting around the path policy is worse than no rollback, and the
+/// reason is stated in the response. History: docs/decisions/files.md#restore-policy</remarks>
 public static class ControlCopyRestorePolicy
 {
-    /// <summary>
-    /// Отказы, которые ГАРАНТИРОВАННО не меняли модель: они приходят ДО COM либо из слоя контракта.
-    /// Восстановление файла на них — лишняя запись в пользовательский файл.
-    /// </summary>
-    /// <remarks>
-    /// Перечень — по СВОЙСТВУ «отказ до мутации», а не по списку имён ради списка: сюда попадают коды,
-    /// которые выставляются валидацией аргументов, политикой путей, проверкой ревизии и занятостью
-    /// сеанса. Коды, приходящие ПОСЛЕ обращения к COM (<c>GEOMETRY_FAILED</c>,
-    /// <c>VERIFICATION_FAILED</c>, <c>OUTCOME_UNKNOWN</c>), сюда НЕ входят: по ним модель могла
-    /// измениться, и файл восстанавливается.
-    /// </remarks>
+    /// <summary>Failures that GUARANTEED no model change: they come BEFORE COM or from the contract layer.
+    /// Restoring the file on them would be a pointless write to a user file.</summary>
+    /// <remarks>The set is by the PROPERTY "failure before mutation", not a list of names for its own sake:
+    /// argument validation, path policy, revision check and session busyness. Codes arriving AFTER a COM
+    /// call (<c>GEOMETRY_FAILED</c>, <c>VERIFICATION_FAILED</c>, <c>OUTCOME_UNKNOWN</c>) are NOT here — the
+    /// model may have changed and the file is restored.</remarks>
     private static readonly HashSet<string> NeverTouchedTheModel = new(StringComparer.Ordinal)
     {
         ErrorCodes.RevisionConflict,
@@ -60,13 +46,11 @@ public static class ControlCopyRestorePolicy
         ErrorCodes.FileExists,
     };
 
-    /// <summary>
-    /// Восстанавливать ли файл документа.
-    /// </summary>
-    /// <param name="copyMade">Снята ли контрольная копия (если нет — восстанавливать нечего).</param>
-    /// <param name="access">Режим доступа, в котором открыт документ.</param>
-    /// <param name="errorCode">Код отказа; <c>null</c> — неожиданное исключение (исход неизвестен).</param>
-    /// <param name="partialEffects">Отказ нёс частичный эффект (модель могла измениться).</param>
+    /// <summary>Whether to restore the document file.</summary>
+    /// <param name="copyMade">Whether a control copy was taken (if not, there is nothing to restore).</param>
+    /// <param name="access">The access mode the document is open in.</param>
+    /// <param name="errorCode">The failure code; <c>null</c> — an unexpected exception (unknown outcome).</param>
+    /// <param name="partialEffects">The failure carried a partial effect (the model may have changed).</param>
     public static RestoreDecision Decide(
         bool copyMade, DocumentAccess access, string? errorCode, bool partialEffects)
     {
@@ -75,8 +59,8 @@ public static class ControlCopyRestorePolicy
             return new RestoreDecision(false, "копия не снималась: восстанавливать нечего");
         }
 
-        // ДОКУМЕНТ «ТОЛЬКО ЧТЕНИЕ» НЕ ПЕРЕЗАПИСЫВАЕТСЯ — ДАЖЕ ПРИ ЧАСТИЧНОМ ЭФФЕКТЕ. Восстановление —
-        // это запись в файл документа, а такая запись для этого доступа не разрешена политикой.
+        // A READ-ONLY DOCUMENT IS NOT OVERWRITTEN — even on a partial effect. Restoring is a write to the
+        // document file, and such a write is not allowed for this access by the policy.
         if (access == DocumentAccess.ReadOnly)
         {
             return new RestoreDecision(false,

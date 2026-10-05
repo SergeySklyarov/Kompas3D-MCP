@@ -1,84 +1,50 @@
 namespace KompasMcp.Domain.References;
 
-/// <summary>
-/// Состояние одного признака тождества компонента: прочитан ли он и совпал ли.
-/// </summary>
-/// <remarks>
-/// Три состояния, а не <c>bool</c>: «не прочитано» и «прочитано и совпало» — разные утверждения, и
-/// подмена первого вторым давала бы подтверждение адреса по молчанию COM.
-/// </remarks>
+/// <summary>State of one component-identity signal: whether it was read and whether it matched.</summary>
+/// <remarks>Three states, not <c>bool</c>: "not read" and "read and matched" are different claims, and
+/// substituting the first for the second would confirm an address on COM silence.</remarks>
 public enum ComponentIdentitySignal
 {
-    /// <summary>Признак не прочитан хотя бы с одной стороны — сведения нет.</summary>
+    /// <summary>The signal was not read on at least one side — no information.</summary>
     NotRead,
 
-    /// <summary>Признак прочитан с обеих сторон и совпал.</summary>
+    /// <summary>The signal was read on both sides and matched.</summary>
     Matches,
 
-    /// <summary>Признак прочитан и РАСХОДИТСЯ.</summary>
+    /// <summary>The signal was read and DIFFERS.</summary>
     Differs,
 }
 
-/// <summary>
-/// Вердикт тождества адреса компонента.
-/// </summary>
+/// <summary>Verdict on the component-address identity.</summary>
 /// <param name="Matches">
-/// <c>true</c> — тождество подтверждено; <c>false</c> — адрес ведёт в ЧУЖОЙ компонент;
-/// <c>null</c> — сверить нечем.
+/// <c>true</c> — identity confirmed; <c>false</c> — the address leads to a FOREIGN component;
+/// <c>null</c> — nothing to compare.
 /// </param>
-/// <param name="Detail">Человекочитаемое объяснение: какие признаки читались и что решило вердикт.</param>
+/// <param name="Detail">Human-readable explanation: which signals were read and what decided the verdict.</param>
 public sealed record ComponentIdentityVerdict(bool? Matches, string Detail);
 
-/// <summary>
-/// Правило тождества адреса компонента — ЧИСТАЯ функция от трёх признаков, без КОМПАС.
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Зачем вынесено сюда.</b> Порядковый номер из <c>IPart7.PartsEx</c> применяется как индекс в
-/// плоской <c>ksDocument3D.PartCollection(true)</c> — это ПРЕДПОЛОЖЕНИЕ, и перед мутацией оно
-/// сверяется. Правило сверки жило разложенным по ветвям адаптера, где регрессию нельзя было ни
-/// увидеть тестом, ни назвать одним местом. Здесь оно — таблица, проверяемая без КОМПАС.
-/// </para>
-/// <para>
-/// <b>ОТКАЗ РЕШАЕТ ТОЛЬКО ИСТОЧНИК.</b> Из трёх признаков отказом управляет лишь файл-источник:
-/// это единственный признак, который (а) измерен живьём, (б) не меняется сам по себе — источник
-/// компонента меняет только явная замена. Имя компонента в дереве и матрица размещения — ПРИМЕЧАНИЯ,
-/// а не основание отказа:
-/// </para>
-/// <list type="bullet">
-/// <item><description>
-/// сравнение имён API5 (<c>ksPart.name</c>) и API7 (<c>IPart7.Name</c>) живьём не измерялось, и
-/// систематическое расхождение форматов отвергало бы ВСЕ мутации сборки;
-/// </description></item>
-/// <item><description>
-/// матрица размещения — ИЗМЕНЯЕМОЕ состояние, а не тождество: её меняет и собственная мутация
-/// сервера, и сопряжение. Снимок матрицы, снятый при перечислении структуры, отвергал бы вторую
-/// мутацию по той же ссылке; а раскладка <c>IPart7.GetSummMatrix</c> в справке не описана и живьём
-/// не измерена, поэтому по <c>AGENTS.md</c> она не может быть основанием поведения.
-/// </description></item>
-/// </list>
-/// <para>
-/// Расхождение имени и матрицы НАЗЫВАЕТСЯ в примечании — молчание неотличимо от «не смотрели».
-/// </para>
-/// </remarks>
+/// <summary>The component-address identity rule — a PURE function of three signals, no KOMPAS.</summary>
+/// <remarks>INVARIANT: ONLY THE SOURCE FILE decides the refusal. It is the only signal (a) MEASURED live
+/// and (b) not changing by itself — a component's source changes only by an explicit replacement. The
+/// component name (API5 <c>ksPart.name</c> vs API7 <c>IPart7.Name</c> was never compared live) and the
+/// placement matrix (MUTABLE state: the server's own mutation and a mate both change it, and the
+/// <c>GetSummMatrix</c> layout is neither documented nor measured, so per AGENTS.md it cannot drive
+/// behaviour) are NOTES. A mismatch of name or matrix is NAMED in the note — silence is indistinguishable
+/// from "we did not look". The rule is a table here so it can be tested without KOMPAS.
+/// History: docs/decisions/assembly.md#identity</remarks>
 public static class ComponentIdentity
 {
-    /// <summary>
-    /// Почему имя и матрица не решают отказ. Печатается в примечании, когда оно вообще нужно.
-    /// </summary>
+    /// <summary>Why name and matrix do not decide the refusal. Printed in the note when one is needed.</summary>
     public const string SecondarySignalsAreInformative =
         "Отказ решает только ИСТОЧНИК: имя компонента и матрица размещения — примечания. Сравнение имён "
         + "API5/API7 живьём не измерялось, а матрица размещения — изменяемое состояние (её меняет и "
         + "собственная мутация, и сопряжение), раскладка IPart7.GetSummMatrix не измерена.";
 
-    /// <summary>
-    /// Свести три признака в один вердикт.
-    /// </summary>
-    /// <param name="source">Файл-источник компонента: <c>ksPart.fileName</c> против <c>IPart7.FileName</c>.</param>
-    /// <param name="name">Имя компонента в дереве: <c>ksPart.name</c> против <c>IPart7.Name</c>.</param>
-    /// <param name="placement">
-    /// Матрица размещения: API5 по номеру против API7 <c>GetSummMatrix</c>, снятые НА ОДИН МОМЕНТ.
-    /// </param>
+    /// <summary>Reduce three signals to one verdict.</summary>
+    /// <param name="source">Component source file: <c>ksPart.fileName</c> vs <c>IPart7.FileName</c>.</param>
+    /// <param name="name">Component name in the tree: <c>ksPart.name</c> vs <c>IPart7.Name</c>.</param>
+    /// <param name="placement">Placement matrix: API5 by ordinal vs API7 <c>GetSummMatrix</c>, taken at ONE
+    /// point in time.</param>
     public static ComponentIdentityVerdict Decide(
         ComponentIdentitySignal source,
         ComponentIdentitySignal name,
@@ -99,8 +65,8 @@ public static class ComponentIdentity
 
         if (source == ComponentIdentitySignal.Matches)
         {
-            // Совпадение источника подтверждает адрес. Расхождение имени или матрицы отказом НЕ
-            // управляет, но, если оно есть, о нём честно говорится — вместе с причиной.
+            // A source match confirms the address. A name or matrix mismatch does NOT drive the refusal,
+            // but if present it is stated honestly, together with the reason.
             var secondaryDiffers = name == ComponentIdentitySignal.Differs
                 || placement == ComponentIdentitySignal.Differs;
             return new ComponentIdentityVerdict(true,

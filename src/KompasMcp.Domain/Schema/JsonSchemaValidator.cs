@@ -121,10 +121,8 @@ public static class JsonSchemaValidator
         }
     }
 
-    /// <summary>
-    /// Validate <paramref name="instance"/> against <paramref name="schema"/>, reporting every
-    /// violation found so one round-trip is enough to fix a payload.
-    /// </summary>
+    /// <summary>Validate <paramref name="instance"/> against <paramref name="schema"/>, reporting every
+    /// violation found so one round-trip is enough to fix a payload.</summary>
     public static IReadOnlyList<SchemaViolation> Validate(JsonNode schema, JsonNode? instance)
     {
         var violations = new List<SchemaViolation>();
@@ -230,22 +228,18 @@ public static class JsonSchemaValidator
         var properties = nodeSchema["properties"] as JsonObject;
         var additional = nodeSchema["additionalProperties"];
 
-        // Узел, не описывающий состав ВООБЩЕ (ни properties, ни additionalProperties), — это
-        // обёртка вроде anyOf вокруг $ref. Запрещать в ней члены нечем: решение о составе уже
-        // принято ветвями anyOf/oneOf выше, и оно положительное (иначе сюда бы не дошло).
+        // A node describing NO composition at all (neither properties nor additionalProperties) is a wrapper
+        // such as anyOf around $ref: there is nothing in it to forbid members, because the composition was
+        // already decided by the anyOf/oneOf branches above, and positively (else we would not be here).
         //
-        // «additionalProperties: false по умолчанию» — соглашение о том, КАК ПИШУТСЯ схемы этого
-        // сервера (spec 2.1), а не правило JSON Schema: в самой JSON Schema отсутствующий
-        // additionalProperties означает «разрешено». Первая редакция применяла соглашение как
-        // правило и отвергала КОРРЕКТНЫЙ вызов: значение expected_bbox_mm (объект {min_mm,max_mm})
-        // проходило проверку ветви $ref → #/$defs/bbox и тут же объявлялось «неизвестным полем»
-        // на уровне обёртки. Измерено 18.09.2026: INVALID_ARGUMENT с
-        // violations=[$/expected_bbox_mm/min_mm additionalProperties, …/max_mm additionalProperties]
-        // при том, что схема объявляет оба поля.
-        //
-        // Проявлялось это только на ОБЪЕКТНОМ значении под чистым anyOf: под массивом (vector3,
-        // reference) разбор уходит в ValidateArray, а под объектом до цикла ниже дело доходило
-        // впервые. Поэтому дефект и дожил до B3.
+        // "additionalProperties: false by default" is a convention about HOW this server WRITES schemas
+        // (spec 2.1), not a JSON Schema rule: in JSON Schema an absent additionalProperties means "allowed".
+        // The first revision applied the convention as a rule and rejected a CORRECT call —
+        // expected_bbox_mm ({min_mm,max_mm}) passed the $ref branch and was then called an "unknown field"
+        // at the wrapper level (MEASURED 18.09.2026: INVALID_ARGUMENT with
+        // violations=[$/expected_bbox_mm/min_mm additionalProperties, …/max_mm additionalProperties]).
+        // It showed only on an OBJECT value under a pure anyOf: under an array the parse goes to
+        // ValidateArray, and under an object the loop below was reached for the first time here.
         if (properties is null && additional is null)
         {
             return;

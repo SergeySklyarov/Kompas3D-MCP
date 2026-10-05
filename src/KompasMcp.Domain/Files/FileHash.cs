@@ -3,10 +3,8 @@ using KompasMcp.Contracts;
 
 namespace KompasMcp.Domain.Files;
 
-/// <summary>
-/// Hashing and atomic publication of artefacts (spec 1.12). An export is never "done" because a
-/// file with the right name exists: the caller gets a hash of the bytes that are actually on disk.
-/// </summary>
+/// <summary>Hashing and atomic publication of artefacts (spec 1.12). An export is never "done" because a
+/// file with the right name exists: the caller gets a hash of the bytes that are actually on disk.</summary>
 public static class FileHash
 {
     public static string Sha256(string path)
@@ -27,10 +25,8 @@ public static class FileHash
         Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(canonicalJson))).ToLowerInvariant();
 }
 
-/// <summary>
-/// Writes a file so that a reader can never see a half-written artefact: a temporary file on the
-/// same volume, then a move into place.
-/// </summary>
+/// <summary>Writes a file so that a reader can never see a half-written artefact: a temporary file on the
+/// same volume, then a move into place.</summary>
 /// <remarks>
 /// <c>File.Replace</c> requires the destination to exist and keeps a backup; <c>Move</c> over an
 /// existing target is the documented way to publish. Both stay on the same directory, so the

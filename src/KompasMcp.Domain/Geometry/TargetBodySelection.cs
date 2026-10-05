@@ -2,24 +2,16 @@ using KompasMcp.Contracts;
 
 namespace KompasMcp.Domain.Geometry;
 
-/// <summary>
-/// Axis-aligned box of the primitives the server itself drew into a sketch, in sketch-local
-/// millimetres (<c>u</c> along sketch X, <c>v</c> along sketch Y).
-/// </summary>
-/// <remarks>
-/// <para>
-/// The box is deliberately an <b>over-approximation</b>, never an under-approximation, because the
+/// <summary>Axis-aligned box of the primitives the server itself drew into a sketch, in sketch-local
+/// millimetres (<c>u</c> along sketch X, <c>v</c> along sketch Y).</summary>
+/// <remarks>The box is deliberately an <b>over-approximation</b>, never an under-approximation, because the
 /// only consumer is <see cref="TargetBodyGuard.ProfileMayAffectBody"/>: that test refuses an
 /// operation, so a box that is too small would refuse legitimate work, while a box that is too big
 /// only weakens the refusal. An arc is therefore boxed by its full circle, and a polyline by the
 /// rectangle around its vertices.
-/// </para>
-/// <para>
 /// Null is returned for anything whose extent cannot be stated (a missing coordinate pair, an
 /// unknown kind). Absence is reported as absence — the caller then says "not checked" instead of
-/// treating an empty box as a proof.
-/// </para>
-/// </remarks>
+/// treating an empty box as a proof.</remarks>
 public readonly record struct ProfileBox(double MinU, double MinV, double MaxU, double MaxV)
 {
     /// <summary>Extent of a whole batch of primitives, or null if any of them is unmeasurable.</summary>
@@ -136,13 +128,10 @@ public readonly record struct ProfileBox(double MinU, double MinV, double MaxU, 
     }
 }
 
-/// <summary>
-/// The two decisions about an extrusion's target body that can be made without КОМПАС: whether an
+/// <summary>The two decisions about an extrusion's target body that can be made without KOMPAS: whether an
 /// operation may name a body at all, and whether a drawn profile can plausibly lie over the body
-/// the caller declared.
-/// </summary>
+/// the caller declared.</summary>
 /// <remarks>
-/// <para>
 /// <b>The second test is necessary, not sufficient, and must never be presented as geometric
 /// containment.</b> It compares two rectangles: the over-approximated extent of the profile the
 /// server drew, and the <c>GetGabarit</c> box of the declared body. Agreement says only "these two
@@ -150,38 +139,29 @@ public readonly record struct ProfileBox(double MinU, double MinV, double MaxU, 
 /// pocket, a contour in the concave part of an L). Disagreement says something stronger and is the
 /// reason the test exists: probe P2.6 measured that declaring a body the contour does not sit over
 /// makes <c>SetSketch</c>, <c>Create</c> and <c>RebuildDocument</c> all return true while the
-/// document does not change at all. КОМПАС does not report that contradiction as an error, so a
+/// document does not change at all. KOMPAS does not report that contradiction as an error, so a
 /// no-op would otherwise be delivered as a success.
-/// </para>
-/// <para>
 /// The axis correspondence below is not assumed. It is the mapping measured by probe P2.4 and
 /// asserted by acceptance rows <c>G07_xy</c>/<c>G07_xz</c>/<c>G07_yz</c> in
 /// <c>scripts/mcp-smoke.py</c>, where the same rectangle (u=10..50, v=20..40) with depth 6 produced
 /// exactly the boxes encoded here. A plane the server did not derive from one of the three base
 /// planes has no measured correspondence and yields "unknown", which the caller reports as
 /// unverified rather than guessing a sign — the mistake G07 was left open over.
-/// </para>
-/// <para>
 /// The plane's normal axis is deliberately never constrained. A through cut travels along it in
 /// both directions from the sketch plane, which sits outside the material by construction (the
 /// probe's cut plane was 10 mm above the bodies), so requiring the body to straddle the plane would
 /// refuse the very operation being measured.
-/// </para>
 /// </remarks>
 public static class TargetBodyGuard
 {
-    /// <summary>
-    /// Slack applied when deciding that two intervals are disjoint, in mm. It is the coordinate
+    /// <summary>Slack applied when deciding that two intervals are disjoint, in mm. It is the coordinate
     /// tolerance of docs/03 §3.3, and it only ever widens the boxes — a profile touching a body
-    /// exactly on its boundary counts as agreement.
-    /// </summary>
+    /// exactly on its boundary counts as agreement.</summary>
     public const double ContactToleranceMm = 1e-3;
 
-    /// <summary>
-    /// How sketch axes <c>u</c>/<c>v</c> land on model axes for each base plane: axis index
+    /// <summary>How sketch axes <c>u</c>/<c>v</c> land on model axes for each base plane: axis index
     /// (0=x, 1=y, 2=z) and sign, plus the model axis the plane is normal to. Values are the
-    /// measured ones described in the type remarks.
-    /// </summary>
+    /// measured ones described in the type remarks.</summary>
     private static readonly Dictionary<PlaneBase, (int AxisU, int SignU, int AxisV, int SignV, int NormalAxis)> Frames = new()
     {
         [PlaneBase.Xy] = (0, 1, 1, 1, 2),
@@ -202,11 +182,9 @@ public static class TargetBodyGuard
     public static bool TargetBodyRefusedForOperation(string? operation, bool targetBodyProvided) =>
         targetBodyProvided && !OperationTakesTargetBody(operation);
 
-    /// <summary>
-    /// True when the profile's extent cannot overlap the body's gabarit on the plane's own axes,
+    /// <summary>True when the profile's extent cannot overlap the body's gabarit on the plane's own axes,
     /// false when the two are provably disjoint, null when the comparison cannot be made at all
-    /// (unknown plane, unmeasurable profile, unreadable body box).
-    /// </summary>
+    /// (unknown plane, unmeasurable profile, unreadable body box).</summary>
     public static bool? ProfileMayAffectBody(
         ProfileBox? profile,
         PlaneBase? plane,

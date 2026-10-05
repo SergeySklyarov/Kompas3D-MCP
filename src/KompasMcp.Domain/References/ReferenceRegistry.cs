@@ -16,26 +16,20 @@ public sealed record StoredReference(
         Payload is T typed ? typed : throw new InvalidCastException($"Ссылка {Kind} не содержит {typeof(T).Name}.");
 }
 
-/// <summary>
-/// Server-side handles for topology elements (spec 1.7): every reference carries the document
+/// <summary>Server-side handles for topology elements (spec 1.7): every reference carries the document
 /// revision it was minted against, and resolving a reference from an older revision is an error
-/// rather than a silent re-lookup.
-/// </summary>
-/// <remarks>
-/// Deliberately not a <c>Dictionary&lt;string, object&gt;</c> with an implicit "find something
+/// rather than a silent re-lookup.</summary>
+/// <remarks>Deliberately not a <c>Dictionary&lt;string, object&gt;</c> with an implicit "find something
 /// similar" fallback: re-resolving by geometry on its own would let a stale face reference pick a
 /// different face after a rebuild, which is precisely the failure mode the contract forbids.
-/// Geometric re-search exists only as an explicit, separate operation that returns candidates.
-/// </remarks>
+/// Geometric re-search exists only as an explicit, separate operation that returns candidates.</remarks>
 public sealed class ReferenceRegistry
 {
     private readonly ConcurrentDictionary<string, StoredReference> _byId = new(StringComparer.Ordinal);
 
-    /// <summary>
-    /// Insertion order, kept so that re-stamping walks references in the order they were minted.
+    /// <summary>Insertion order, kept so that re-stamping walks references in the order they were minted.
     /// A ConcurrentDictionary enumerates in arbitrary order, and the log of a rebuild is easier to
-    /// trust when it is deterministic.
-    /// </summary>
+    /// trust when it is deterministic.</summary>
     private readonly ConcurrentDictionary<string, StoredReference> _byOrder = new(StringComparer.Ordinal);
 
     public int Count => _byId.Count;
@@ -62,9 +56,7 @@ public sealed class ReferenceRegistry
 
     public bool TryGet(string id, out StoredReference? reference) => _byId.TryGetValue(id, out reference);
 
-    /// <summary>
-    /// Register a reference whose identifier is DETERMINED BY THE SUBJECT, not by a fresh uuid.
-    /// </summary>
+    /// <summary>Register a reference whose identifier is DETERMINED BY THE SUBJECT, not by a fresh uuid.</summary>
     /// <remarks>
     /// Almost every reference in this server is opaque: the caller is told a uuid and may do nothing
     /// with it but hand it back. A fillet's own input is the exception, and the reason is measured
@@ -74,11 +66,9 @@ public sealed class ReferenceRegistry
     /// Those numbers are what <c>kompas_get_feature</c> already reports as
     /// <c>base_object_references</c>, so the identifier is fixed by the model, not chosen here.
     /// Minting a uuid instead would produce a reference that carries no address at all.
-    /// <para>
     /// Re-registration is idempotent and REFRESHES the revision: the same input read twice is the
     /// same reference, and the later read is the one whose revision must match. Treating it as a
     /// collision would make the second <c>kompas_get_feature</c> fail.
-    /// </para>
     /// </remarks>
     public StoredReference RegisterDeterministic(
         string id, string kind, string documentId, long revision, object? payload,
@@ -98,9 +88,7 @@ public sealed class ReferenceRegistry
         return stored;
     }
 
-    /// <summary>
-    /// Resolve a reference that must still be valid for <paramref name="currentRevision"/>.
-    /// </summary>
+    /// <summary>Resolve a reference that must still be valid for <paramref name="currentRevision"/>.</summary>
     /// <exception cref="Contracts.KompasContractException">
     /// STALE_REFERENCE when the document moved on, DOCUMENT_NOT_FOUND when the reference was never
     /// issued or already dropped. Neither is retried automatically.
@@ -170,18 +158,14 @@ public sealed class ReferenceRegistry
     /// Kind of a reference that addresses a FEATURE'S OWN INPUT (an <c>IModelObject</c> from
     /// <c>IFillet.BaseObjects</c>) rather than an element of the body's topology.
     /// </summary>
-    /// <remarks>
-    /// This kind counts as a topology handle on purpose: an own input is as perishable as a body
+    /// <remarks>This kind counts as a topology handle on purpose: an own input is as perishable as a body
     /// edge — after any mutation the feature may hold a different set — so an ordinary revision
     /// bump must DROP these references rather than re-stamp them. Re-stamping is reserved for the
     /// handles this server just minted for objects it created or edited, which is exactly what an
-    /// input is not: its composition can change under the caller's feet.
-    /// </remarks>
+    /// input is not: its composition can change under the caller's feet.</remarks>
     public const string InputKind = "input";
 
-    /// <summary>
-    /// Move a document's references to a new revision.
-    /// </summary>
+    /// <summary>Move a document's references to a new revision.</summary>
     /// <param name="documentId">Document whose references are affected.</param>
     /// <param name="newRevision">Revision the surviving references are re-stamped to.</param>
     /// <param name="invalidateAll">

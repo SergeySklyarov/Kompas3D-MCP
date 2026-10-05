@@ -1,58 +1,26 @@
 namespace KompasMcp.Domain.Geometry;
 
-/// <summary>
-/// Ориентация размещения в документированном режиме углов Эйлера КОМПАС-3D v24
-/// (<c>ILocalCoordinateSystem.OrientationType = ksEulerCorners</c>).
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Зачем отдельный тип.</b> Положение тела продукт писал матрицей
-/// (<c>ILocalCoordinateSystem.InitByMatrix3D</c>), и это измеренно не переживало переоткрытие:
-/// документ хранит ПАРАМЕТРЫ ориентации, а не матрицу. Проба <c>--reposition-params</c>, прогон
-/// <c>a336120926fc4652a8bf737562568271</c>, шаг <c>RP.25</c> измерил документированный
-/// параметрический маршрут целиком: тройка углов <c>RotationAngle</c>, <c>NutationAngle</c>,
-/// <c>PrecessionAngle</c> переоткрытие ПЕРЕЖИВАЕТ, а переносная часть читается через
-/// <c>ParameterType = ksPDisplace</c> + <c>IPoint3DParamDisplace.DX/DY/DZ</c>. Поэтому матрица
-/// раскладывается на ориентацию и перенос, ориентация выражается углами, а перенос — смещением.
-/// </para>
-/// <para>
-/// <b>Порядок композиции ИЗМЕРЕН, а не подобран.</b> Справка задаёт его РИСУНКОМ
-/// (<c>rotation_pict.html</c> → <c>images/_praezession.jpg</c>: вращение R — вокруг собственной оси
-/// тела, прецессия P — вокруг вертикали, нутация N — наклон), а не текстом. Поэтому шаг <c>RP.25</c>
-/// поставил каждый угол ОДИН (90°, остальные нули), вычислил ось каждого фактора из ИЗМЕРЕННОЙ
-/// матрицы и сравнил три составные постановки со всеми шестью произведениями этих матриц. Совпало
-/// РОВНО ОДНО произведение — <c>PNR</c>, и оно же даёт ноль расхождения на всех трёх постановках
-/// (<c>order_PNR_max_diff = 0</c>; у остальных пяти — 1). Отсюда:
-/// <code>M = Rz(прецессия) · Rx(нутация) · Rz(вращение)</code>
-/// — классические углы Эйлера <c>z-x-z</c>. Оси факторов измерены: P → <c>(0,0,1)</c>,
-/// N → <c>(1,0,0)</c>, R → <c>(0,0,1)</c>.
-/// </para>
-/// <para>
-/// <b>Единицы — ГРАДУСЫ, и это измерено, а не предположено:</b> угол 30 дал поворот на 30°
-/// (<c>angle_deg_for_30 = 29.99999999999998</c>).
-/// </para>
-/// <para>
-/// <b>Раскладка матрицы — ТА ЖЕ, что у <see cref="RepositionMatrix"/>:</b> 16 чисел, три подряд —
-/// образ очередной базисной оси (постолбцово), перенос в 12…14. Отдельной раскладки здесь не
-/// заводится намеренно: вторая раскладка — это второй повод перепутать строки со столбцами, а
-/// такой дефект невидим на переносе и виден только на повороте.
-/// </para>
-/// <para>
-/// <b>Параметризация углами неоднозначна</b> (при нутации 0 или 180° сумма прецессии и вращения
-/// определена с точностью до перераспределения), поэтому годность преобразования доказывается
-/// ЭКВИВАЛЕНТНОСТЬЮ МАТРИЦ, а не совпадением чисел: <see cref="AnglesFromRotation"/> обязан
-/// воспроизводить исходную матрицу при обратной сборке. Это и проверяется модульными тестами.
-/// </para>
-/// </remarks>
+/// <summary>Placement orientation in the documented KOMPAS-3D v24 Euler-angle mode
+/// (<c>ILocalCoordinateSystem.OrientationType = ksEulerCorners</c>).</summary>
+/// <remarks>MEASURED (probe --reposition-params, run a336120926fc4652a8bf737562568271, step RP.25): the
+/// orientation is stored as PARAMETERS, not a matrix — the angle triple survives reopening, and the
+/// translation is read via <c>ksPDisplace</c> + <c>IPoint3DParamDisplace.DX/DY/DZ</c>.
+/// INVARIANT: <c>M = Rz(precession)·Rx(nutation)·Rz(rotation)</c> (z-x-z), MEASURED not guessed — DOC
+/// gives the order only as a picture (<c>rotation_pict.html</c>), so RP.25 tried every product and
+/// exactly ONE matched (PNR, max diff 0; the other five, 1). MEASURED: units are DEGREES.
+/// INVARIANT: the 16-number layout is the one of <see cref="RepositionMatrix"/> — a second layout is a
+/// second way to swap rows and columns, and that defect is invisible on a translation.
+/// LIMIT: the parametrisation is ambiguous at nutation 0/180, so validity is proved by MATRIX
+/// EQUIVALENCE, not by matching numbers. History: docs/decisions/geometry.md#euler</remarks>
 public static class EulerOrientation
 {
-    /// <summary>Допуск сравнения матриц: величины безразмерные, числа порядка единицы.</summary>
+    /// <summary>Matrix comparison tolerance: dimensionless values of order one.</summary>
     public const double MatrixTolerance = 1e-9;
 
-    /// <summary>Допуск, при котором нутация считается вырожденной (полюс параметризации).</summary>
+    /// <summary>Tolerance below which nutation counts as degenerate (a pole of the parametrisation).</summary>
     private const double DegenerateNutation = 1e-9;
 
-    /// <summary>Матрица поворота из трёх углов Эйлера в ИЗМЕРЕННОМ порядке <c>PNR</c>.</summary>
+    /// <summary>Rotation matrix from three Euler angles in the MEASURED <c>PNR</c> order.</summary>
     public static double[] RotationFromAngles(
         double precessionDeg, double nutationDeg, double rotationDeg)
     {
@@ -66,7 +34,7 @@ public static class EulerOrientation
         var cr = Math.Cos(r);
         var sr = Math.Sin(r);
 
-        // M = Rz(P)·Rx(N)·Rz(R), записано построчно:
+        // M = Rz(P)·Rx(N)·Rz(R), written row by row:
         //   [ cp·cr − sp·cn·sr   −cp·sr − sp·cn·cr    sp·sn ]
         //   [ sp·cr + cp·cn·sr   −sp·sr + cp·cn·cr   −cp·sn ]
         //   [ sn·sr               sn·cr               cn   ]
@@ -76,14 +44,11 @@ public static class EulerOrientation
             sn * sr, sn * cr, cn);
     }
 
-    /// <summary>
-    /// Три угла Эйлера из матрицы поворота — обращение <see cref="RotationFromAngles"/>.
-    /// </summary>
-    /// <remarks>
-    /// На полюсе (<c>sn = 0</c>) прецессия и вращение по отдельности не определены; тогда
-    /// прецессия берётся нулевой, а вращение несёт всю сумму. Это НЕ потеря: матрица, собранная из
-    /// возвращённой тройки, равна исходной, и именно так равенство и проверяется.
-    /// </remarks>
+    /// <summary>Three Euler angles from a rotation matrix — the inverse of <see cref="RotationFromAngles"/>.</summary>
+    /// <remarks>At the pole (<c>sn = 0</c>) precession and rotation are not separately defined; precession
+    /// is taken as zero and rotation carries the whole sum. This loses nothing: a matrix rebuilt from the
+    /// returned triple equals the input, and that equality is what the tests check.
+    /// History: docs/decisions/geometry.md#euler-pole</remarks>
     public static (double PrecessionDeg, double NutationDeg, double RotationDeg) AnglesFromRotation(
         IReadOnlyList<double> matrix)
     {
@@ -108,20 +73,11 @@ public static class EulerOrientation
         }
         else
         {
-            // Полюс: nutation = 0 либо 180. Прецессия берётся нулевой, и тогда вращение несёт всю
-            // разность, но ЗНАК ЭТОЙ РАЗНОСТИ У ДВУХ ПОЛЮСОВ РАЗНЫЙ — и это не косметика, а
-            // измеренный дефект: при nutation = 180 знак был взят неверно, и сборка матрицы из
-            // возвращённой тройки давала [[0,−1,0],[−1,0,0],[0,0,−1]] вместо [[0,1,0],[1,0,0],[0,0,−1]]
-            // — расхождение 2 в двух клетках. Поймано строкой приёмки B3.59 (поворот 180° вокруг
-            // оси (1,1,0)): продукт отказал GEOMETRY_FAILED, потому что собственная проверка
-            // RequirePlacementRoundTrip не смогла воспроизвести записанное размещение.
-            //
-            // ВЫВОД ЗНАКА, чтобы это не пришлось перевыводить заново. При nutation = 180 (cb = −1,
-            // sb = 0) элементы матрицы равны m00 = cos(a − c), m01 = sin(a − c), m10 = sin(a − c),
-            // m11 = −cos(a − c). При a := 0 получается cos c = m00 и sin c = −m01, то есть
-            // c = atan2(−m01, m00). Прежняя редакция брала atan2(m01, m00) — формулу, годную для
-            // ПРОТИВОПОЛОЖНОГО соглашения (c := 0), и смешивала два соглашения в одной ветке.
-            // При nutation = 0 знак остаётся прежним: m00 = cos c, m10 = sin c, c = atan2(m10, m00).
+            // Pole: nutation = 0 or 180. Precession is taken as zero, so rotation carries the whole
+            // difference — AND THE SIGN OF THAT DIFFERENCE DIFFERS BETWEEN THE TWO POLES. The sign for
+            // nutation = 180 was wrong and rebuilt the matrix as [[0,−1,0],[−1,0,0],[0,0,−1]] instead of
+            // [[0,1,0],[1,0,0],[0,0,−1]] (acceptance row B3.59). Derivation:
+            // docs/decisions/geometry.md#euler-pole
             precession = 0d;
             rotation = m22 > 0d ? Math.Atan2(m10, m00) : Math.Atan2(-m01, m00);
         }
@@ -129,10 +85,8 @@ public static class EulerOrientation
         return (Degrees(precession), Degrees(nutation), Degrees(rotation));
     }
 
-    /// <summary>
-    /// Ось и угол поворота из матрицы. Ось — собственный вектор с собственным значением 1; при
-    /// 180° кососимметричная часть нулевая, и ось берётся из <c>R + I</c>.
-    /// </summary>
+    /// <summary>Axis and angle from a matrix. The axis is the eigenvector with eigenvalue 1; at 180° the
+    /// skew part is zero and the axis comes from <c>R + I</c>.</summary>
     public static (double[] Axis, double AngleDeg) AxisAngleFromRotation(IReadOnlyList<double> matrix)
     {
         Require(matrix, nameof(matrix));
@@ -153,11 +107,11 @@ public static class EulerOrientation
 
         if (angle < 1e-9)
         {
-            // Поворота нет: ось не определена, и выдумывать её нельзя.
+            // No rotation: the axis is undefined, and inventing one is forbidden.
             return (Array.Empty<double>(), 0d);
         }
 
-        // 180°: R + I симметрична, её столбцы параллельны оси; берётся наибольший по норме.
+        // 180°: R + I is symmetric and its columns are parallel to the axis; take the largest by norm.
         var candidates = new[]
         {
             new[] { Cell(matrix, 0, 0) + 1d, Cell(matrix, 1, 0), Cell(matrix, 2, 0) },
@@ -179,26 +133,12 @@ public static class EulerOrientation
             : (Array.Empty<double>(), Degrees(angle));
     }
 
-    /// <summary>
-    /// Точка на оси поворота, ВЫВЕДЕННАЯ из размещения: <c>c = ((1−cos θ)·t + sin θ·(d × t)) / (2(1−cos θ))</c>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Точка оси не является свойством размещения: поворот вокруг любой точки ОДНОЙ прямой даёт то
-    /// же самое размещение. Поэтому из пары «ориентация + перенос» восстанавливается не «та самая»
-    /// точка, а представитель прямой — и это записано здесь прямо, чтобы вызывающий не принимал его
-    /// за прочитанное значение.
-    /// </para>
-    /// <para>
-    /// Вывод формулы. Для поворота на угол θ вокруг единичного направления <c>d</c> точка <c>c</c>
-    /// переходит в <c>c·cos θ + (d × c)·sin θ + d·(d·c)·(1−cos θ)</c>, поэтому перенос равен
-    /// <c>t = (1−cos θ)·u − sin θ·(d × u)</c>, где <c>u = c − (c·d)·d</c> — составляющая,
-    /// перпендикулярная оси. Умножив векторно на <c>d</c>, получаем <c>d × t = sin θ·u + (1−cos θ)·(d × u)</c>;
-    /// решение этой пары даёт <c>u</c>, откуда и берётся <c>c = u</c> (представитель с нулевой
-    /// составляющей вдоль оси). При θ = 0 перенос точку оси не определяет — возвращается
-    /// <c>null</c>, а не ноль.
-    /// </para>
-    /// </remarks>
+    /// <summary>Point on the rotation axis DERIVED from the placement:
+    /// <c>c = ((1−cos θ)·t + sin θ·(d × t)) / (2(1−cos θ))</c>.</summary>
+    /// <remarks>LIMIT: an axis point is not a property of the placement — rotating about any point of ONE
+    /// line gives the same placement, so what is recovered is a representative of the line, not "that"
+    /// point; at θ = 0 the translation does not determine it and <c>null</c> is returned, not zero.
+    /// History: docs/decisions/geometry.md#axis-point</remarks>
     public static double[]? AxisPointFromPlacement(IReadOnlyList<double> matrix)
     {
         Require(matrix, nameof(matrix));
@@ -227,14 +167,14 @@ public static class EulerOrientation
         };
     }
 
-    /// <summary>Переносная часть размещения — те же 12…14, что читает <see cref="RepositionMatrix.Apply"/>.</summary>
+    /// <summary>Translation part of the placement — the same 12…14 that <see cref="RepositionMatrix.Apply"/> reads.</summary>
     public static double[] TranslationOf(IReadOnlyList<double> matrix)
     {
         Require(matrix, nameof(matrix));
         return new[] { matrix[12], matrix[13], matrix[14] };
     }
 
-    /// <summary>Единичный поворот ли это: тогда вид преобразования — перенос, а не поворот.</summary>
+    /// <summary>Whether the rotation part is the identity (then the transform is a translation).</summary>
     public static bool IsIdentity(IReadOnlyList<double> matrix, double tolerance = MatrixTolerance)
     {
         Require(matrix, nameof(matrix));
@@ -253,7 +193,7 @@ public static class EulerOrientation
         return true;
     }
 
-    /// <summary>Наибольшее расхождение двух матриц — то, чем доказывается эквивалентность.</summary>
+    /// <summary>Largest difference between two matrices — what proves equivalence.</summary>
     public static double MaxDifference(IReadOnlyList<double> left, IReadOnlyList<double> right)
     {
         Require(left, nameof(left));
@@ -267,7 +207,7 @@ public static class EulerOrientation
         return worst;
     }
 
-    /// <summary>Единичное направление оси либо исключение: нулевое направление ось не задаёт.</summary>
+    /// <summary>Unit axis direction, or an exception: a zero direction defines no axis.</summary>
     public static double[] UnitAxis(IReadOnlyList<double> direction)
     {
         if (direction is not { Count: 3 })
@@ -290,7 +230,7 @@ public static class EulerOrientation
     private static double Cell(IReadOnlyList<double> matrix, int row, int column) =>
         matrix[(column * 4) + row];
 
-    /// <summary>Построчная запись 3×3 в раскладку <see cref="RepositionMatrix"/> (постолбцово).</summary>
+    /// <summary>Write a 3x3 row-wise into the <see cref="RepositionMatrix"/> layout (column-major).</summary>
     private static double[] FromRows(
         double r00, double r01, double r02,
         double r10, double r11, double r12,

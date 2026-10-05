@@ -2,29 +2,22 @@ using System.Runtime.InteropServices;
 
 namespace KompasMcp.Domain.Com;
 
-/// <summary>
-/// Результат чтения значения с ЯВНЫМ различением «прочитано» и «не прочитано».
-/// </summary>
-/// <remarks>
-/// Заведён потому, что прежний помощник возвращал <c>default</c>. Для значимых типов это подставляло
-/// ИЗВЕСТНОЕ значение вместо НЕИЗВЕСТНОГО: непрочитанный <c>bool</c> становился <c>false</c> и позже
-/// упаковывался в <c>bool?</c> как «прочитано false», непрочитанный <c>int</c> — нулём, непрочитанный
-/// enum — первым своим значением. Измерено 05.10.2026: непрочитанная фиксация компонента была
-/// неотличима от честно прочитанного «не зафиксирован».
-/// </remarks>
+/// <summary>Result of reading a value with an EXPLICIT distinction between "read" and "not read".</summary>
+/// <remarks>Exists because the former helper returned <c>default</c>, substituting a KNOWN value for an
+/// UNKNOWN one: an unread <c>bool</c> became <c>false</c> (and was later boxed into <c>bool?</c> as "read
+/// false"), an unread <c>int</c> became 0, an unread enum its first value. MEASURED 05.10.2026: an unread
+/// component fixing was indistinguishable from an honestly read "not fixed".</remarks>
 public readonly record struct ReadResult<T>(bool Ok, T Value);
 
-/// <summary>
-/// Безопасное чтение COM-значения: исключение чтения даёт «НЕ ПРОЧИТАНО», а не подставленное
-/// значение. Живёт в Domain (без COM-типов КОМПАСа), поэтому проверяется модульным тестом.
-/// </summary>
+/// <summary>Safe reading of a COM value: an exception yields "NOT READ", not a substituted value. Lives in
+/// Domain (no KOMPAS COM types), so a unit test covers it.</summary>
 public static class SafeRead
 {
-    /// <summary>Исключения, при которых чтение считается несостоявшимся, а не «значение по умолчанию».</summary>
+    /// <summary>Exceptions under which a read counts as failed, not as "the default value".</summary>
     private static bool Recoverable(Exception ex) =>
         ex is COMException or InvalidCastException or InvalidOperationException;
 
-    /// <summary>Прочитать значение, сохранив признак состоявшегося чтения.</summary>
+    /// <summary>Read a value, keeping the flag that the read succeeded.</summary>
     public static ReadResult<T> TryRead<T>(Func<T> read)
     {
         try
@@ -37,20 +30,18 @@ public static class SafeRead
         }
     }
 
-    /// <summary>
-    /// Чтение ССЫЛОЧНОГО значения. <c>null</c> означает и «прочитано null», и «не прочитано» — для
-    /// ссылок это приемлемо, потому что null и есть законное «нечего адресовать». Где различие важно,
-    /// читающий берёт <see cref="TryRead{T}"/> и проверяет <see cref="ReadResult{T}.Ok"/>.
-    /// </summary>
+    /// <summary>Read a REFERENCE value. <c>null</c> means both "read as null" and "not read" — acceptable for
+    /// references, because null is a legitimate "nothing to address". Where the difference matters, use
+    /// <see cref="TryRead{T}"/> and check <see cref="ReadResult{T}.Ok"/>.</summary>
     public static T? Ref<T>(Func<T?> read) where T : class =>
         TryRead(read) is { Ok: true } result ? result.Value : null;
 
     public static string? Text(Func<string?> read) => Ref(read);
 
-    /// <summary>Чтение bool: <c>null</c> — НЕ ПРОЧИТАНО, <c>false</c> — прочитано как false.</summary>
+    /// <summary>Read bool: <c>null</c> — NOT READ, <c>false</c> — read as false.</summary>
     public static bool? Bool(Func<bool> read) => TryRead(read) is { Ok: true } result ? result.Value : null;
 
-    /// <summary>Чтение уже-необязательного bool (напр. <c>obj?.Valid</c>): <c>null</c> — не прочитано.</summary>
+    /// <summary>Read an already-nullable bool (e.g. <c>obj?.Valid</c>): <c>null</c> — not read.</summary>
     public static bool? Bool(Func<bool?> read) => TryRead(read) is { Ok: true } result ? result.Value : null;
 
     public static int? Int(Func<int> read) => TryRead(read) is { Ok: true } result ? result.Value : null;
@@ -60,11 +51,11 @@ public static class SafeRead
     public static double? Double(Func<double> read) =>
         TryRead(read) is { Ok: true } result && double.IsFinite(result.Value) ? result.Value : null;
 
-    /// <summary>Имя значения перечисления; «не прочитано» печатается СЛОВОМ, а не первым значением.</summary>
+    /// <summary>The name of an enum value; "not read" is printed AS A WORD, not as the first enum value.</summary>
     public static string EnumName<T>(Func<T> read) where T : struct, Enum =>
         TryRead(read) is { Ok: true } result ? result.Value.ToString() : "unread";
 
-    /// <summary>Уже-необязательное значение перечисления: <c>null</c> — НЕ прочитано.</summary>
+    /// <summary>An already-nullable enum value: <c>null</c> — NOT read.</summary>
     public static T? EnumOrNull<T>(Func<T?> read) where T : struct, Enum =>
         TryRead(read) is { Ok: true } result ? result.Value : null;
 }

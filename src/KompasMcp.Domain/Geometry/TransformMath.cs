@@ -2,11 +2,9 @@ using KompasMcp.Contracts;
 
 namespace KompasMcp.Domain.Geometry;
 
-/// <summary>
-/// A validated right-handed rigid frame: origin plus orthonormal X, Y and the derived Z = X × Y
+/// <summary>A validated right-handed rigid frame: origin plus orthonormal X, Y and the derived Z = X × Y
 /// (spec 1.10). The public contract never carries Z — it is computed here so a client cannot
-/// send a left-handed triple and get mirrored geometry.
-/// </summary>
+/// send a left-handed triple and get mirrored geometry.</summary>
 public sealed class RigidFrame
 {
     public required double[] OriginMm { get; init; }
@@ -63,10 +61,8 @@ public sealed class RigidFrame
     public static double Norm(double[] v) => Math.Sqrt(Dot(v, v));
 }
 
-/// <summary>
-/// Transform validation and composition. Composition order is fixed and documented because
-/// rotation and translation do not commute (spec 2.3 "указать порядок композиции").
-/// </summary>
+/// <summary>Transform validation and composition. Composition order is fixed and documented because
+/// rotation and translation do not commute (spec 2.3 requires the composition order to be stated).</summary>
 public static class TransformMath
 {
     /// <summary>Unit-length and orthogonality slack for a client-supplied frame.</summary>
@@ -136,15 +132,13 @@ public static class TransformMath
     }
 
     /// <summary>
-    /// Placement to send to КОМПАС so that a child ends up at <paramref name="desiredWorld"/>
+    /// Placement to send to KOMPAS so that a child ends up at <paramref name="desiredWorld"/>
     /// while the parent sits at <paramref name="parentInWorld"/>. Exact inverse of
     /// <see cref="Compose"/>, which is what makes A03 (nested assemblies) checkable.
     /// </summary>
-    /// <remarks>
-    /// With R = [Xp Yp Pz] the parent's rotation (columns are its axes), the child's frame in the
+    /// <remarks>With R = [Xp Yp Pz] the parent's rotation (columns are its axes), the child's frame in the
     /// parent's space is <c>origin = Rᵀ·(Od − Op)</c> and <c>axes = Rᵀ·(child world axes)</c>.
-    /// Rᵀ is used rather than an inverse solve because an orthonormal basis inverts by transpose.
-    /// </remarks>
+    /// Rᵀ is used rather than an inverse solve because an orthonormal basis inverts by transpose.</remarks>
     public static RigidFrame InverseCompose(RigidFrame parentInWorld, RigidFrame desiredWorld)
     {
         var px = parentInWorld.XMm;

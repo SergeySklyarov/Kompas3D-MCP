@@ -2,11 +2,9 @@ using KompasMcp.Contracts;
 
 namespace KompasMcp.Domain.Geometry;
 
-/// <summary>
-/// Argument validation for sketch primitives. Its only job is to guarantee that nothing reaches
-/// COM with a value КОМПАС would either silently misinterpret or reject mid-operation, leaving a
-/// half-applied profile behind (test G09: the failure must happen before any CAD call).
-/// </summary>
+/// <summary>Argument validation for sketch primitives. Its only job is to guarantee that nothing reaches
+/// COM with a value KOMPAS would either silently misinterpret or reject mid-operation, leaving a
+/// half-applied profile behind (test G09: the failure must happen before any CAD call).</summary>
 public static class SketchValidation
 {
     /// <summary>Anything below this is a zero-length segment in engineering terms.</summary>

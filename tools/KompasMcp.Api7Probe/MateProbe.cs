@@ -88,16 +88,24 @@ internal sealed class MateProbe
                 return;
             }
 
-            ReadComponents(assembly.Value.Document, assembly.Value.Part);
+            // ПЕРЕОТКРЫТИЕ — документированная проверка: если тела появляются только после загрузки
+            // документа с диска, то причина «тел нет» названа, и это условие входит в маршрут.
+            var reopened = ReopenAssembly(assembly.Value.Path);
+            if (reopened is null)
+            {
+                return;
+            }
 
-            var objects = ReadComponentFaces(assembly.Value.Document);
+            ReadComponents(reopened.Value.Document, reopened.Value.Part);
+
+            var objects = ReadComponentFaces(reopened.Value.Document);
             if (objects is null)
             {
                 return;
             }
 
-            CreateMate(assembly.Value.Document, objects[0], objects[1]);
-            Negative_SameObjectTwice(assembly.Value.Document, objects[0]);
+            CreateMate(reopened.Value.Document, objects[0], objects[1]);
+            Negative_SameObjectTwice(reopened.Value.Document, objects[0]);
         }
         catch (Exception ex)
         {
@@ -252,7 +260,7 @@ internal sealed class MateProbe
 
     // ═════════════════════════════════════════════════════════════ сборка ══
 
-    private (ksDocument3D Document, ksPart Part, ksPart SourcePart)? BuildAssemblyWithTwoComponents(
+    private (string Path, ksPart Part, ksPart SourcePart)? BuildAssemblyWithTwoComponents(
         string sourcePath)
     {
         var step = _report.Begin("M.2", "Сборка с ДВУМЯ компонентами одной детали",
@@ -362,11 +370,38 @@ internal sealed class MateProbe
 
         if (document.SaveAs(path) != true)
         {
-            step.Observe("SaveAs не дал true — продолжаем без сохранения: сопряжение мерится на живом документе.");
+            step.Fail("SaveAs(" + path + ") не дал true — переоткрытие мерить не на чем.");
+            return null;
         }
 
-        step.Pass("сборка с двумя компонентами готова");
-        return (document, part, _sourcePart!);
+        document.close();
+        step.Observe("сборка сохранена и ЗАКРЫТА: " + path);
+        step.Pass("сборка с двумя компонентами сохранена");
+        return (path, part, _sourcePart!);
+    }
+
+    /// <summary>Открывает сохранённую сборку заново — документированным <c>ksDocument3D.Open</c>.</summary>
+    private (ksDocument3D Document, ksPart Part)? ReopenAssembly(string path)
+    {
+        var step = _report.Begin("M.2b", "Переоткрытие сборки с диска",
+            "Появляются ли тела компонентов после загрузки документа?");
+        _current = step;
+
+        var document = (ksDocument3D)_app.Document3D();
+        var opened = Api5.SafeBool(() => document.Open(path));
+        step.Observe("Open(" + path + ") = " + opened);
+        if (opened != true)
+        {
+            step.Fail("сборка не открылась");
+            return null;
+        }
+
+        var part = (ksPart)document.GetPart(-1);
+        var components = Api5.SafeInt(() => (document.PartCollection(true) as ksPartCollection)!.GetCount());
+        step.Data["components_after_reopen"] = components;
+        step.Observe("компонентов после переоткрытия: " + components);
+        step.Pass("сборка переоткрыта");
+        return (document, part);
     }
 
     private static int CountComponents(ksDocument3D document)
@@ -509,6 +544,34 @@ internal sealed class MateProbe
                         step.Observe("компонент " + index + ": OpenSourceDocument бросил "
                             + ex.GetType().Name + ": " + ex.Message);
                     }
+                }
+
+                // ДОКУМЕНТИРОВАННЫЙ ipart7_islocal.html: «IsLocal — получить И УСТАНОВИТЬ свойство»
+                // (put_IsLocal). Локальный компонент хранит геометрию В СБОРКЕ, а не по ссылке —
+                // если тела появляются отсюда, то причина «тел нет» названа: компонент ссылочный.
+                if (bodyCount == 0 && TransferTo7(component) is IPart7 componentLocal)
+                {
+                    var wasLocal = Api5.SafeBool(() => componentLocal.IsLocal);
+                    var hasLocalResult = Api5.SafeBool(() => componentLocal.IsLocalResultExist(false));
+                    step.Observe("компонент " + index + ": IsLocal до = " + wasLocal
+                        + ", IsLocalResultExist(false) = " + hasLocalResult);
+
+                    bool? madeLocal = null;
+                    try
+                    {
+                        componentLocal.IsLocal = true;
+                        madeLocal = componentLocal.IsLocal;
+                    }
+                    catch (Exception ex)
+                    {
+                        step.Observe("компонент " + index + ": IsLocal=true бросил "
+                            + ex.GetType().Name + ": " + ex.Message);
+                    }
+
+                    document.RebuildDocument();
+                    bodyCount = Api5.SafeInt(() => (component.BodyCollection() as ksBodyCollection)!.GetCount());
+                    step.Observe("компонент " + index + ": IsLocal после = " + madeLocal
+                        + ", BodyCollection().GetCount() = " + bodyCount);
                 }
 
                 if (component.BodyCollection() is not ksBodyCollection bodies || bodies.GetCount() == 0)

@@ -10,20 +10,10 @@ namespace KompasMcp.Api5Adapter;
 
 /// <summary>Edit the parameters of an EXISTING pattern feature (queue B4, action <c>edit</c>).</summary>
 /// <remarks>
-/// WHY A SEPARATE FILE, not a branch inside <c>UpdateFeature</c>: that branch is chosen by
-/// <c>entity.type</c> — the measured feature number in the tree. For a pattern this number was not
-/// measured in session B4 and must not be invented: an error here would mean the edit "does not find"
-/// the feature exactly as happened with the hole (searched by 52, the feature lies under 583). The
-/// pattern feature is therefore identified NOT by number but by the same instrument as the read
-/// (<see cref="Api5Session.PatternRead"/>): matching against an
-/// <c>IModelContainer.FeaturePatterns</c> element by the tree-wrapper name and update stamp.
-/// INVARIANT: <c>Update()=true</c> is "accepted", not "applied" — after the rebuild the feature is READ
-/// BACK (<c>Api7Pattern.ReadPattern</c>), each requested member gets its own
-/// <c>read_back_&lt;member&gt;</c> check, and document volume and body count confirm application
-/// geometrically if the caller gave an analytic expectation.
-/// LIMIT: support change is not performed — <c>Axis1/Axis2</c>, <c>Axis</c>, <c>Plane</c> take an
-/// <c>IModelObject</c>, not a server reference, and no B4 run measured a support change of an existing
-/// pattern; a call implying one is refused before the mutation.
+/// INVARIANT: identified NOT by number but by the read's instrument
+/// (<see cref="Api5Session.PatternRead"/>): matching an <c>IModelContainer.FeaturePatterns</c> element
+/// by tree-wrapper name and update stamp. <c>Update()=true</c> is "accepted", not "applied" — READ BACK
+/// (<c>Api7Pattern.ReadPattern</c>) with a <c>read_back_&lt;member&gt;</c> check; support change refused pre-mutation.
 /// History: docs/decisions/adapter-features.md#pattern-edit
 /// </remarks>
 public partial class Api5Session

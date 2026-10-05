@@ -159,15 +159,12 @@ public partial class Api5Session
 
         var unverified = new List<string>();
 
-        // INVARIANT: "material added" is separated from a numeric match — a base-type kinematic
-        // operation must INCREASE volume, checked with no analytic expectation; otherwise "the
-        // operation was not applied" would look like "applied, but no expectation was given".
-        // MEASURED 20.09.2026: on the FIRST body the pre-operation volume is not read at all —
-        // ReadVolume() returns null because the main body does not exist yet. That is not zero and not
-        // "did not grow": the pre-operation quantity does not exist. The states differ by WHAT WAS
-        // MEASURED — 0 bodies means there was no material before the operation by the model's
-        // definition and "grew" means "became greater than zero"; bodies > 0 with an unread volume
-        // means the value is NOT READ, and the check must be named unread, not false.
+        // INVARIANT: "material added" is separated from a numeric match — a base-type kinematic operation
+        // must INCREASE volume, checked with no analytic expectation. MEASURED 20.09.2026: on the FIRST body
+        // the pre-operation volume is not read at all — ReadVolume() returns null because the main body does
+        // not exist yet, which is not zero. States differ by WHAT WAS MEASURED: 0 bodies means no material
+        // existed before the operation; bodies > 0 with an unread volume means the value is NOT READ, and the
+        // check is named unread, not false.
         // History: docs/decisions/adapter-features.md#sweep-first-body
         if (volumeAfter is not double volumeAfterValue)
         {

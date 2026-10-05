@@ -7,23 +7,14 @@ using Kompas6API5;
 
 namespace KompasMcp.Api5Adapter;
 
-/// <summary>
-/// Reading and editing the parameters of a feature that already exists (docs/05 §4.3, §7).
-///
-/// Everything here rests on what probe P2.3 measured on the real v24 install, not on what the
-/// API5 names suggest:
-/// * the setter is accepted, but the geometry only recomputes after <c>ksEntity.Update()</c> —
-///   <c>RebuildDocument()</c> alone left the volume at its old value, and
-///   <c>ksPart.EndEdit(Rebuild=false)</c> returned False;
-/// * <c>ksFeature.type</c> is 105 (o3d_entity) for every family, so the family is taken from the
-///   definition object, never from that number;
-/// * the entity handed back by <c>NewEntity(24)</c> reports 24 while the same committed feature
-///   read out of the tree reports 25, so a type number captured at creation is not an identity.
-///
-/// The three extrusion definitions share no common interface for these getters, and
-/// <c>GetThinParam</c> is declared <c>out</c> on base/cut but <c>ref</c> on boss, so the families
-/// are branched explicitly instead of being unified by reflection.
-/// </summary>
+/// <summary>Reading and editing the parameters of a feature that already exists (docs/05 §4.3, §7).
+/// Everything here rests on probe P2.3 on the real v24 install, not on API5 names:</summary>
+/// <remarks>
+/// * the setter is accepted, but geometry recomputes only after <c>ksEntity.Update()</c>:
+///   <c>RebuildDocument()</c> alone left the volume unchanged and <c>ksPart.EndEdit(Rebuild=false)</c> returned False;
+/// * <c>ksFeature.type</c> is 105 (o3d_entity) for every family, so the family comes from the definition object.
+/// History: docs/decisions/adapter-features.md#feature-edit-basis
+/// </remarks>
 public partial class Api5Session
 {
     public FeatureReadDto GetFeature(GetFeatureCommand command)
@@ -306,15 +297,13 @@ public partial class Api5Session
         var shellRequested = command.ThicknessMm is not null || command.ThinInward is not null
                              || command.FaceRefs is not null;
 
-        // INVARIANT: `couplings` is a SECOND INPUT of the loft family and does NOT select the family —
-        // the coupling chains describe point correspondence of an ALREADY SET section set, so without
-        // section_refs there is nothing to change (UpdateLoftFeature rejects such a call by name), and
-        // choosing the branch by them would route a "couplings to extrusion" call into the loft branch.
-        // But couplings MUST stand in the foreign-field lists: otherwise it was accepted and swallowed.
-        // MEASURED 20.09.2026 by probe scratch/_couplings_scope_probe.py: a "distance1_mm + couplings"
-        // call on a chamfer returned success and volume 79840 → 79955 (the edit applied, the chains did
-        // not), while sibling shift_mode and section_refs in the same call were rejected
-        // INVALID_ARGUMENT. Found by unit test SolidFeatureClassificationTests.
+        // INVARIANT: `couplings` is a SECOND INPUT of the loft family and does NOT select it — the chains
+        // describe point correspondence of an ALREADY SET section set, so without section_refs there is
+        // nothing to change (UpdateLoftFeature rejects such a call by name). But couplings MUST stand in the
+        // foreign-field lists: otherwise it was accepted and swallowed. MEASURED 20.09.2026 by probe
+        // scratch/_couplings_scope_probe.py: a "distance1_mm + couplings" call on a chamfer returned success
+        // and volume 79840 → 79955, while sibling shift_mode and section_refs were rejected INVALID_ARGUMENT.
+        // Found by unit test SolidFeatureClassificationTests.
         var couplingsRequested = command.Couplings is not null;
 
         // Hole (SM-07): mode fields. The feature is selected NOT by these fields but by the tree entity
@@ -369,15 +358,13 @@ public partial class Api5Session
             return UpdatePattern(document, entity, command, volumeBefore, featuresBefore, stateBefore);
         }
 
-        // A hole is the tenth editable family (order SM07 §3.2, queue B2). The branch stands HERE, not
-        // among the branches by API5 definition: a native hole has NO definition at all — the type
-        // ksHoleDefinition does not exist among the 67 declared definitions of the vendor interop
-        // (MEASURED 16.09.2026, recorded in docs/04), and `kompas_get_feature` reads a hole the same way,
-        // bypassing the definition (definition_interface = null, MEASURED by probe
-        // scratch/_hole_edit_probe.py). Recognition is by the ENTITY TYPE IN THE TREE, exactly as in the
-        // read: 583 (o3d_Hole3D), not 52 (o3d_holeOperation, the creation FACTORY number) — probe N.1
-        // printed both sides: NewEntity(52).type = 52, while a live IHoles3D[0].ModelObjectType = 583,
-        // and exactly one tree entry appeared under 583. A search by 52 would never find the feature.
+        // A hole is the tenth editable family (order SM07 §3.2, queue B2). The branch stands HERE, not among
+        // the branches by API5 definition: a native hole has NO definition — ksHoleDefinition does not exist
+        // among the 67 declared definitions of the vendor interop (MEASURED 16.09.2026, recorded in docs/04),
+        // and `kompas_get_feature` reads a hole the same way (definition_interface = null, MEASURED by probe
+        // scratch/_hole_edit_probe.py). Recognition is by the ENTITY TYPE IN THE TREE: 583 (o3d_Hole3D), not
+        // 52 (o3d_holeOperation, the creation FACTORY number) — probe N.1: NewEntity(52).type = 52, a live
+        // IHoles3D[0].ModelObjectType = 583, and one tree entry appeared under 583.
         if (entity.type == KompasObjectTypes.Hole3D)
         {
             return UpdateHole(document, entity, command, volumeBefore, featuresBefore, stateBefore);

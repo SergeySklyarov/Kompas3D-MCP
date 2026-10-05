@@ -55,24 +55,13 @@ public partial class Api5Session
             BaseObjectInputRefs: MintInputReferences(document, api7));
     }
 
-    /// <summary>
-    /// Mint registry references <c>input:&lt;hex&gt;</c> for a feature's own inputs — one per
-    /// <c>BaseObjects</c> element, in the same order as <c>BaseObjectReferences</c>.
-    /// </summary>
+    /// <summary>Mint <c>input:&lt;hex&gt;</c> references for a feature's own inputs, one per <c>BaseObjects</c> element, ordered as <c>BaseObjectReferences</c>.</summary>
     /// <remarks>
-    /// Why here and not in the edge-set edit. A feature's own input is not a body edge: it has no
-    /// <c>edge:</c> registry string and cannot have one, because the registry issues those to BODY edges.
-    /// <c>IModelObject.Reference</c> numbers are not substituted into the edit contract by type. So the
-    /// SERVER must mint the input string, and it does so at the only place where the input numbers become
-    /// visible outside — when the feature is read. Same principle as <c>edge:</c> references: the client
-    /// does not invent identifiers, it substitutes issued ones.
-    /// INVARIANT: the minting is bound to the document REVISION (not to the feature state), like other
-    /// references: after a mutation, references of the previous revision are cut off by <c>Require</c>,
-    /// and the client must re-read the context. Otherwise an edit could be presented against a stale
-    /// composition.
-    /// References are not issued when: the API7 bridge is not built, several fillets share the radius
-    /// (inputs not read — <c>null</c>), or there are no inputs at all (empty list). The reference order
-    /// matches <c>BaseObjectReferences</c>, because both come from one walk of <c>BaseObjects</c>.
+    /// The SERVER mints the input string at read time: a feature's own input is not a body edge, has no
+    /// <c>edge:</c> registry string (the registry issues those to BODY edges), and <c>IModelObject.Reference</c> numbers are not substituted by type.
+    /// INVARIANT: minting is bound to the document REVISION, not the feature state; <c>Require</c> cuts off
+    /// previous references. Not issued when: no API7 bridge, several fillets share the radius (<c>null</c>), or no inputs.
+    /// History: docs/decisions/adapter-features.md#mint-input-references
     /// </remarks>
     private IReadOnlyList<string>? MintInputReferences(DocumentEntry document, FilletReadDto? api7)
     {
@@ -98,17 +87,11 @@ public partial class Api5Session
 
     /// <summary>Radius and mode from API7 — by the feature's OWN INPUTS, with the radius kept as a fallback.</summary>
     /// <remarks>
-    /// INVARIANT: identify by inputs, not by radius. The radius is not a key: two fillets of one radius
-    /// may legitimately live on a model, and the acceptance addressing experiment (two R3, "change the
-    /// selected one, keep the second") is built on exactly such a model. Identification by radius returned
-    /// <c>null</c> there — the feature stayed without API7 parameters and without
-    /// <c>base_object_input_refs</c>: the client got no reference to either of the two features and could
-    /// address neither. That is a denial of a supported scenario, so the key source is the feature's OWN
-    /// INPUTS — the same composition measure the write route uses
-    /// (<c>FindIndexByInputReferences</c>).
-    /// The radius remains a FALLBACK and is used exactly when the composition could not be read
-    /// (MEASURED: on an existing fillet the API5 definition does not return its inputs). Then, and only
-    /// then, the old rule applies: an unambiguous radius match or <c>null</c>.
+    /// INVARIANT: identify by inputs, not by radius. The radius is not a key: two fillets of one radius may
+    /// legitimately live on a model, and identification by radius returned <c>null</c> on exactly such a model.
+    /// The key source is the feature's OWN INPUTS (<c>FindIndexByInputReferences</c>); the radius is a FALLBACK,
+    /// used only when the composition could not be read (MEASURED: on an existing fillet the API5 definition returns no inputs).
+    /// History: docs/decisions/adapter-features.md#fillet-identify-by-inputs
     /// </remarks>
     private FilletReadDto? ReadFilletRadius(DocumentEntry document, double api5Radius, object? definition = null)
     {
@@ -458,15 +441,13 @@ public partial class Api5Session
             document, entity, command, edgeRefs, volumeBefore, featuresBefore, stateBefore);
     }
 
-    /// <summary>Edge-set edit by the feature's OWN INPUTS: the input addresses the feature itself returned are
-    /// requested, and a subset of ITS OWN objects is written.</summary>
-    /// <remarks>This is the measurably strict reduction path (probe H-2, experiments H2.3 4→3 and H2.5 4→2): the
-    /// probe wrote into <c>IFillet.BaseObjects</c> an array assembled from elements it had itself read
-    /// (<c>ElementAt(raw, i)</c>), did NOT call <c>Clear()</c> and did NOT seek body edges. Its own words:
-    /// it writes a subset of N objects read from BaseObjects.
-    /// The difference from the <c>edge_refs</c> path is the subject, not convenience: there BODY edges are
-    /// presented (good for replacing the composition, bad for reduction — FL10 collapses the feature),
-    /// here the feature's own inputs are. This is the currency that was missing.</remarks>
+    /// <summary>Edge-set edit by the feature's OWN INPUTS: a subset of ITS OWN objects is written.</summary>
+    /// <remarks>Measurably strict reduction path (probe H-2, experiments H2.3 4→3 and H2.5 4→2): the probe
+    /// wrote into <c>IFillet.BaseObjects</c> an array assembled from elements it had itself read
+    /// (<c>ElementAt(raw, i)</c>), did NOT call <c>Clear()</c> and did NOT seek body edges — it writes a
+    /// subset of N objects read from BaseObjects. Unlike the <c>edge_refs</c> path (which presents BODY
+    /// edges: good for replacing the composition, bad for reduction — FL10 collapses the feature), here the
+    /// feature's own inputs are presented.</remarks>
     private UpdateFeatureResult UpdateFilletEdgeSetByOwnInputs(
         DocumentEntry document,
         ksEntity entity,
@@ -588,15 +569,12 @@ public partial class Api5Session
         var ownRefs = Api7Fillet.ReferencesOf(own);
 
         // MANDATORY CROSS-CHECK OF THE OWNER AGAINST THE REQUESTED FEATURE. Identification by input
-        // composition answers "who holds these inputs", not "is this the feature that was requested".
-        // Passing fillet B's inputs together with fillet A's feature_ref would pass this check silently
-        // and edit B while reporting A — i.e. present one feature's edit as another's. So the owner must
-        // equal the requested feature, and the refusal fires BEFORE mutation.
-        //
-        // The requested feature's own inputs (the ones it returns in API5 via the definition) are
-        // compared with the found owner's inputs: fillet A and fillet B have different inputs by
-        // definition — otherwise they could not be told apart on read either. The transfer uses the same
-        // ksAPI7Dual as identification.
+        // composition answers "who holds these inputs", not "is this the feature that was requested":
+        // passing fillet B's inputs with fillet A's feature_ref would edit B while reporting A. So the
+        // owner must equal the requested feature, and the refusal fires BEFORE mutation. The requested
+        // feature's own inputs (returned in API5 via the definition) are compared with the owner's:
+        // fillet A and B have different inputs by definition — otherwise they could not be told apart
+        // on read either. The transfer uses the same ksAPI7Dual as identification.
         var requestedOwnInputs = new List<int>();
         if (entity.GetDefinition() is ksFilletDefinition requestedSource
             && requestedSource.array() is ksEntityCollection requestedArray)
@@ -776,16 +754,14 @@ public partial class Api5Session
                 RetryPolicy.Never);
         }
 
-        // The current set is FOR MATCHING the API5 feature to IFillet, not for deciding on mutation. It
-        // is expanded the same way as on creation: the reference registry plus three routes of unwrapping
-        // an edge into an entity (MEASURED P2.2). A second copy of this parsing is not needed here.
-        //
-        // IMPORTANT ON THE SOURCE. The API5 definition (ksFilletDefinition.array()) returns no edges at
-        // all on an EXISTING fillet — MEASURED (0 of 4 after a fillet, row FL10, a negative result kept in
-        // gap), the same property that puts the edit route in API7 rather than API5. Relying on it for
-        // IDENTIFICATION would depend on the very mechanism deemed non-working. So the primary source is
-        // the live feature's own inputs in API7 (IFillet.BaseObjects), and the API5 definition stays a
-        // fallback.
+        // The current set is FOR MATCHING the API5 feature to IFillet, not for deciding on mutation. It is
+        // expanded as on creation: the reference registry plus three routes of unwrapping an edge into an
+        // entity (MEASURED P2.2).
+        // IMPORTANT ON THE SOURCE. The API5 definition (ksFilletDefinition.array()) returns no edges at all
+        // on an EXISTING fillet — MEASURED (0 of 4 after a fillet, row FL10, a negative result kept in gap),
+        // the same property that puts the edit route in API7 rather than API5. Relying on it for
+        // IDENTIFICATION would depend on the very mechanism deemed non-working, so the primary source is the
+        // live feature's own inputs in API7 (IFillet.BaseObjects) and the API5 definition stays a fallback.
         var bridge = BridgeFor(document);
         var container = bridge.ContainerFor(document.Document, document.Id, document.Revision);
         if (container is null)
@@ -867,17 +843,13 @@ public partial class Api5Session
                 });
         }
 
-        // The new set is built as a SUBSET OF THE FEATURE'S OWN INPUTS, not as a set of objects newly
-        // obtained from the body. This is not an implementation trick but a measured requirement: probe
-        // H-2 (H2.3/H2.5) accepts back ONLY the objects it itself read from the feature — its own words:
-        // a subset of N objects read from BaseObjects is written, Clear() is NOT called, body edges are
-        // NOT sought.
-        //
-        // Here it was done differently at first: the client's references were resolved into body edges and
-        // re-transferred to API7. The feature does not accept such a set — MEASURED by acceptance (FL10:
-        // level=call_returned, V=80000 with err=None, i.e. the call passed but the set did not apply).
-        // Hence the rule: the required set is SELECTED from the feature's inputs, and the client's
-        // references only SAY which of them to keep.
+        // The new set is built as a SUBSET OF THE FEATURE'S OWN INPUTS, not from objects newly obtained
+        // from the body. Measured requirement: probe H-2 (H2.3/H2.5) accepts back ONLY the objects it
+        // itself read from the feature — a subset of N objects read from BaseObjects is written, Clear()
+        // is NOT called, body edges are NOT sought. Doing it differently (resolving client references
+        // into body edges and re-transferring to API7) the feature does not accept — MEASURED by
+        // acceptance (FL10: level=call_returned, V=80000 with err=None). Hence the rule: the required set
+        // is SELECTED from the feature's inputs, and the client's references only SAY which to keep.
         var requested = new List<ksEntity>(edgeRefs.Count);
         var routes = new HashSet<string>(StringComparer.Ordinal);
         foreach (var reference in edgeRefs)
@@ -942,28 +914,12 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["unresolved"] = unresolved });
         }
 
-        // The new set is PRESENTED with objects obtained by transfer — exactly as measured in the
-        // decisive control of probe H-2 (H2.4). The probe wrote into IFillet.BaseObjects an array of ONE
-        // body edge transferred by ksAPI7Dual that was definitely not among the feature's own inputs (a
-        // free corner), and KOMPAS accepted it: the composition moved to another corner at an unchanged
-        // set size. So the product accepts transferred objects and does NOT require them to match what the
-        // feature already holds.
-        //
-        // This used to be STRICTER: the set was selected only from the feature's own inputs by Reference
-        // match, and everything else was rejected. That rule came from a misunderstanding — it rested on
-        // observation H2.7 ("inputs 1073742065–67 against body edge 1073742080") read as "the contexts
-        // are incomparable". MEASURED 17.09.2026 on FL10x: the bands are ADJACENT (transferred edge
-        // 1073742309 against feature input 1073742308), both are ksObjectEdge, both references are stable
-        // across re-read, and the address bindings differ. So this is not "a foreign numbering space" but
-        // the ordinary API5/API7 duality: a body ksEntity and a feature IModelObject are two different
-        // COM objects for one edge. The probe never made such a check, so the ban was a guess, not a
-        // measurement.
-        //
-        // What remains of the old rule and why: the feature must still be IDENTIFIED (see above,
-        // FindIndexByInputReferences), and that needs its own inputs. Matching references mean the client
-        // asks to keep part of what already exists — then the SAME feature objects are taken (not
-        // recreated), because for a subset that is the strictly measured H2.3/H2.5 path. NON-matching
-        // ones are presented transferred, as in H2.4.
+        // The new set is PRESENTED with objects obtained by transfer — as measured in probe H-2 (H2.4):
+        // the product accepts transferred objects and does NOT require them to match what the feature
+        // already holds. The feature must still be IDENTIFIED by its own inputs
+        // (FindIndexByInputReferences): matching references take the SAME feature objects (the strictly
+        // measured H2.3/H2.5 reduction path), non-matching ones are presented transferred (H2.4).
+        // History: docs/decisions/adapter-features.md#fillet-edge-set-ban-lifted
         var overlapping = wantedRefs.Count(w => inputRefs.Contains(w));
         var targetsByOwn = overlapping > 0 && overlapping == wantedRefs.Count;
 
@@ -1118,30 +1074,12 @@ public partial class Api5Session
 
         var geometryConfirmed = edgesSet && sameFeature && volumeMatched;
 
-        // FEATURE ERASURE IS A REFUSAL, NOT A "SUCCESS AT A LOWER LEVEL".
-        //
-        // MEASURED 17.09.2026 (FL25, an L-shaped plate 100×80 with a 40×30 cut-out, six vertical corners).
-        // A set [arc of a filleted corner + vertical edge of a free corner] was presented to the feature —
-        // both parts body edges. The write passed, the rebuild passed, the answer returned err=None and
-        // level=call_returned, and the volume came out 68000, i.e. the L-PLATE WITHOUT FILLETS: the set
-        // did not "fail to apply", it COLLAPSED the feature, erasing the fillet already made. A client
-        // reading only err and level would take this for a successful edit.
-        //
-        // The cause is not the currency as such but its limit: BODY edges describe corners the feature
-        // does NOT hold right now, and presenting such a set means "build the fillet anew on these edges",
-        // not "keep the old one and add". For reduction and replacement this is immaterial (all presented
-        // edges already belong to the feature — FL10/FL10s/FL10b/FL10x), but on EXTENSION a corner the
-        // feature does not own is presented, and the previous composition is lost entirely.
-        //
-        // So the case "the feature stopped reading as a fillet OR the feature did not survive" is declared
-        // a refusal BEFORE returning success. This is not a weakening of the expectation (the volume is
-        // still checked against analytics) and not a substitution of the outcome: the mutation already
-        // happened, so the refusal carries partial_effects=true — the client must learn the model changed.
-        //
-        // The parent volume is taken as the volume BEFORE the edit plus what the edit removed: if the
-        // feature was erased, the geometry returns exactly to "before", not to "before minus the fillet".
-        // Hence the criterion is "after the edit the feature does not read as a fillet", not volume
-        // arithmetic: that would depend on the number of corners and repeat the fitting error.
+        // FEATURE ERASURE IS A REFUSAL, NOT A "SUCCESS AT A LOWER LEVEL". MEASURED 17.09.2026 (FL25): a
+        // presented set of BODY edges can describe corners the feature does NOT hold, meaning "build the
+        // fillet anew on these edges", not "keep the old one and add" — the feature was COLLAPSED (volume
+        // 68000, the L-plate WITHOUT FILLETS) while err=None and level=call_returned. So "the feature
+        // stopped reading as a fillet" is a refusal BEFORE returning success, carrying partial_effects=true.
+        // History: docs/decisions/adapter-features.md#fillet-erasure-and-no-effect
         if (afterRefs is null || !sameFeature)
         {
             throw new KompasContractException(
@@ -1170,25 +1108,13 @@ public partial class Api5Session
                 });
         }
 
-        // A WRITE WITHOUT EFFECT IS ALSO A REFUSAL, NOT A "SUCCESS AT A LOWER LEVEL".
-        //
-        // MEASURED 18.09.2026 (FL25, an L-shaped plate 100×80 with a 40×30 cut-out). A set [arc of a
-        // filleted corner + vertical edge of a FREE corner] was presented to the feature — both parts
-        // body edges. The write passed, the rebuild passed, the answer returned err=None and
-        // level=call_returned, edges_read_back=1 against 2 presented, and the volume stayed on ONE corner
-        // (67980.68583470576). A client reading status and err would take this for a completed extension —
-        // exactly the defect row FL25 exists for.
-        //
-        // The earlier revision below caught only feature ERASURE (collapse). Between "the feature was
-        // erased" and "the set was written" there is a third outcome — "nothing happened" — and it must
-        // be a refusal for the same reason: the edit was requested precisely because it changes something.
-        // An answer in which the edges_read_back=false check fired cannot be called a success.
-        //
-        // The criterion is the RE-READ COMPOSITION, not the volume: the volume depends on the number and
-        // kind of corners (fillet of a concave corner ADDS material), and arithmetic on it would repeat
-        // the fitting error. partial_effects distinguishes "the model changed into something other than
-        // requested" from "the model was untouched": it compares the volume with the volume BEFORE the
-        // edit, not with the client's expectation.
+        // A WRITE WITHOUT EFFECT IS ALSO A REFUSAL. MEASURED 18.09.2026 (FL25): the write and rebuild
+        // passed, err=None, level=call_returned, edges_read_back=1 against 2 presented, and the volume
+        // stayed on ONE corner (67980.68583470576). Between "the feature was erased" and "the set was
+        // written" there is a third outcome — "nothing happened" — also a refusal. The criterion is the
+        // RE-READ COMPOSITION, not the volume; partial_effects distinguishes a changed model from an
+        // untouched one.
+        // History: docs/decisions/adapter-features.md#fillet-erasure-and-no-effect
         if (!edgesSet)
         {
             var modelChanged = volumeAfter is double volumeNow && volumeBefore is double volumeWas

@@ -23,6 +23,19 @@
 (`NewEntity + Create`) на этом объекте не работает — это измерено и было причиной прежней
 блокировки.
 
+**Дословно из кода (verbatim, EN).** Run `95fa844107ce41609d6278f8f6c5759f` of 17.09.2026 (`docs/acceptance/api7/rotation.json`), steps R.24/R.25/R.26, established the factory route and its shape. MEASURED: 17.09.2026 — (R.24) all three factory operations (`o3d_baseRotated` 27, `o3d_bossRotated` 28, `o3d_cutRotated` 29) build a body whose analytical volume is 50265.4824574366 against π·r²·h = 50265.4824574367 at r=20, h=40; (R.25) the same result reproduces from scratch on a fresh document, shape verified independently of volume (one cylindrical face r=20 h=40, bounds 40×40×40), and the feature survives save → close → reopen; (R.26) a cut removes 25132.7412287183 from a 120×120×40 plate, while a boss writing `OperationResult = ksOperationCut` changes the volume by 0.
+
+MEASURED: 18.09.2026 (FullTurnProbe F.1…F.5, independently re-read from the saved `.m3d` by M3dVerificationProbe) — `Angle[true]` carries the requested angle directly (360→360°, 180→180°, 90→90°); the second slot of the pair, equal to the first, doubles the sweep. A full turn is built by a single call. This disproved the earlier "saturation at 180°" claim, which came from a step that changed `CutOffByPoint` instead of the angle (`docs/acceptance/api7/full-turn-findings.md`).
+
+The old API5 shell around an API7 factory object was a MIXED lifecycle — `Create()` returned `true`, the object appeared in the tree and the volume did not change — not a property of rotation. LIMIT: carried as refusals, not as caveats.
+
+* An angle beyond a full turn is not accepted: 360° is the sweep's own ceiling (measured 18.09.2026), and a value above it is cut off BEFORE the mutation.
+* `dtReverse` builds nothing (measured R.26.sector: `Update()` = False, 0 bodies); rejected before the mutation.
+* The axis is mandatory; rotation without an axis is not built at all.
+* A thin wall is unmeasured: the route was measured on a SOLID body, so a requested thin wall is refused with CAPABILITY_UNAVAILABLE rather than written as an unmeasured number.
+* Attachment to an existing body DOES happen (measured 18.09.2026, probe F.10: `Union` fuses, `NewBody` adds a second body). The operation kind is derived from the factory kind: base→`NewBody`, boss→`Union`, cut→`Cut`.
+* The target body is chosen BY GEOMETRY (probe F.11): only the INTERSECTED body is touched, not the first in the collection (KOMPAS reorders bodies, so an index is not an address). The declared `target_body_ref` is therefore verified AFTER the operation.
+
 ## <a id="rotated-multi-body"></a>Многoтельное вращение — какое тело тронуто
 
 **Что было.** Прежняя редакция отказывала при многoтельной детали.
@@ -36,6 +49,10 @@
 изменение читаются и возвращаются; расхождение с объявленным `target_body_ref` — отказ с
 `partialEffects`, а не молчаливое «наверное, то». Тело выбирается ПО ГЕОМЕТРИИ: индекс адресом не
 является, потому что КОМПАС переставляет тела.
+
+**Дословно из кода (verbatim, EN).** MEASURED: 18.09.2026 (FullTurnProbe F.11) — in a two-body part, boss/Union (bodies 2→2, volumes `[144000; 16000] → [16000; 181699.111843077]`) and cut/Cut (bodies 2→2, volumes `[144000; 16000] → [131433.629385641; 16000]`) each touched EXACTLY ONE body — the INTERSECTED one, not the first in the collection (KOMPAS swapped the bodies, `[144000; 16000] → [16000; …]`).
+
+Hence the rule: the operation does NOT silently pick a body for the caller. Body counts before/after and the named change are read and returned; a mismatch with the declared target_body_ref is a refusal with partialEffects, not a silent "probably that one".
 
 ## <a id="angle-saturation-refuted"></a>Предел угла — 360°, а не 180°
 
@@ -70,6 +87,8 @@ API5.
 ожидаемое состояние, а не признак неудавшейся геометрии; вызывающий получает
 `feature_ref_withheld` вместо ссылки, по которой правка всё равно не сработала бы.
 
+**Дословно из кода (verbatim, EN).** A reference to a feature the API5 tree does not show must not be issued: an edit through it would fail anyway, and the caller would learn about it later. The missing reference and the confirmed geometry are two independent claims, and the first does not weaken the second: the volume matched the analytical one, the parameters were re-read, the surface of revolution was found — all of that is measured and stays measured regardless of whether the feature is visible in the API5 tree. The first revision always returned CallReturned here, and that was a genuine acceptance defect: line RO.4 failed with "level=call_returned" on a call where ALL five checks passed, including the numeric volume match. The tree number for a rotation was never measured (unlike the 52→583 pair for a hole), so non-addressability here is the expected state, not a sign of failed geometry.
+
 ## <a id="read-rotated-matching"></a>Сопоставление признака вращения — по углу, а не по углу и направлению
 
 **Что было.** Документирующий комментарий `ReadRotatedFeature` утверждал, что сопоставление идёт «по
@@ -82,6 +101,8 @@ API5.
 при нескольких кандидатах возвращается `null` («не прочитано», а не «вот первый»). Слабость угла как
 признака тождества (два полуоборота вокруг разных осей совпадут) сохранена в формулировке как
 обоснование отказа от догадки.
+
+**Дословно из кода (verbatim, EN).** The angle as an identity token is weak (two half-turns around different axes would match), so with several candidates `null` is returned — "not read", not "here is the first": passing a foreign parameter off as the addressed feature's parameter would be lying about the model. NOTE: the code compares the angle ONLY; the direction is not part of the match (the earlier wording said "angle AND direction", which the code does not do — corrected 05.10.2026). Reading is NOT mutation: `BeginEdit`/`EndEdit`/`Update` are not called, the revision is not bumped.
 
 ## <a id="foreign-field-list"></a>Перечень чужих полей — расширяется каждым новым полем
 
@@ -156,6 +177,12 @@ H2.3/H2.5. Опознание признака по-прежнему идёт п
 общий вывод: расширение на эталоне 100×80×10 не измерено (у пластины ровно четыре вертикальных угла);
 измерены сокращение (4→3, 4→2) и замена при неизменном размере (1→1).
 
+**Дословно из кода (verbatim, EN).** The probe wrote into IFillet.BaseObjects an array of ONE body edge transferred by ksAPI7Dual that was definitely not among the feature's own inputs (a free corner), and KOMPAS accepted it: the composition moved to another corner at an unchanged set size. So the product accepts transferred objects and does NOT require them to match what the feature already holds.
+
+This used to be STRICTER: the set was selected only from the feature's own inputs by Reference match, and everything else was rejected. That rule came from a misunderstanding — it rested on observation H2.7 ("inputs 1073742065–67 against body edge 1073742080") read as "the contexts are incomparable". MEASURED 17.09.2026 on FL10x: the bands are ADJACENT (transferred edge 1073742309 against feature input 1073742308), both are ksObjectEdge, both references are stable across re-read, and the address bindings differ. So this is not "a foreign numbering space" but the ordinary API5/API7 duality: a body ksEntity and a feature IModelObject are two different COM objects for one edge. The probe never made such a check, so the ban was a guess, not a measurement.
+
+What remains of the old rule and why: the feature must still be IDENTIFIED (see above, FindIndexByInputReferences), and that needs its own inputs. Matching references mean the client asks to keep part of what already exists — then the SAME feature objects are taken (not recreated), because for a subset that is the strictly measured H2.3/H2.5 path. NON-matching ones are presented transferred, as in H2.4.
+
 ## <a id="fillet-erasure-and-no-effect"></a>Схлопывание признака и запись без эффекта — отказ (17–18.09.2026)
 
 **Что было.** Ответ на предъявление набора рёбер ТЕЛА, который признак не удержал, отдавался с
@@ -172,6 +199,20 @@ H2.3/H2.5. Опознание признака по-прежнему идёт п
 сохранность признака, а не арифметика по объёму (она зависела бы от числа и вида углов и повторила бы
 ошибку подгонки). Мутация уже произошла, поэтому отказ несёт `partial_effects=true`, а ревизия
 поднимается; клиент обязан перечитать контекст и документ.
+
+**Дословно из кода (verbatim, EN).** FEATURE ERASURE IS A REFUSAL, NOT A "SUCCESS AT A LOWER LEVEL". MEASURED 17.09.2026 (FL25, an L-shaped plate 100×80 with a 40×30 cut-out, six vertical corners). A set [arc of a filleted corner + vertical edge of a free corner] was presented to the feature — both parts body edges. The write passed, the rebuild passed, the answer returned err=None and level=call_returned, and the volume came out 68000, i.e. the L-PLATE WITHOUT FILLETS: the set did not "fail to apply", it COLLAPSED the feature, erasing the fillet already made. A client reading only err and level would take this for a successful edit.
+
+The cause is not the currency as such but its limit: BODY edges describe corners the feature does NOT hold right now, and presenting such a set means "build the fillet anew on these edges", not "keep the old one and add". For reduction and replacement this is immaterial (all presented edges already belong to the feature — FL10/FL10s/FL10b/FL10x), but on EXTENSION a corner the feature does not own is presented, and the previous composition is lost entirely.
+
+So the case "the feature stopped reading as a fillet OR the feature did not survive" is declared a refusal BEFORE returning success. This is not a weakening of the expectation (the volume is still checked against analytics) and not a substitution of the outcome: the mutation already happened, so the refusal carries partial_effects=true — the client must learn the model changed.
+
+The parent volume is taken as the volume BEFORE the edit plus what the edit removed: if the feature was erased, the geometry returns exactly to "before", not to "before minus the fillet". Hence the criterion is "after the edit the feature does not read as a fillet", not volume arithmetic: that would depend on the number of corners and repeat the fitting error.
+
+A WRITE WITHOUT EFFECT IS ALSO A REFUSAL, NOT A "SUCCESS AT A LOWER LEVEL". MEASURED 18.09.2026 (FL25, an L-shaped plate 100×80 with a 40×30 cut-out). A set [arc of a filleted corner + vertical edge of a FREE corner] was presented to the feature — both parts body edges. The write passed, the rebuild passed, the answer returned err=None and level=call_returned, edges_read_back=1 against 2 presented, and the volume stayed on ONE corner (67980.68583470576). A client reading status and err would take this for a completed extension — exactly the defect row FL25 exists for.
+
+The earlier revision below caught only feature ERASURE (collapse). Between "the feature was erased" and "the set was written" there is a third outcome — "nothing happened" — and it must be a refusal for the same reason: the edit was requested precisely because it changes something. An answer in which the edges_read_back=false check fired cannot be called a success.
+
+The criterion is the RE-READ COMPOSITION, not the volume: the volume depends on the number and kind of corners (fillet of a concave corner ADDS material), and arithmetic on it would repeat the fitting error. partial_effects distinguishes "the model changed into something other than requested" from "the model was untouched": it compares the volume with the volume BEFORE the edit, not with the client's expectation.
 
 ## <a id="chamfer-route"></a>Фаска: маршрут и измерения (проба F, 12.09.2026)
 
@@ -204,6 +245,8 @@ H2.3/H2.5. Опознание признака по-прежнему идёт п
 от угла, поэтому API5-маршрут записи теряет способ построения; для «расстояния и угла» используется
 API7-интерфейс `IChamfer`.
 
+**Дословно из кода (verbatim, EN).** A "distance and angle" chamfer lives as ksChamferSideAngle with a DERIVED second leg (d₂ = d₁·tg α). The API5 write route (SetChamferParam) only knows ksChamferTwoSides and does NOT preserve the build method: MEASURED on a 100×80×10 plate, d=2, α=30°, editing distance1_mm=3 without angle_deg changed the method, turned 30° into 45° and gave V=79820 instead of 79896.07695154587. That is a silent wrong result, so the write is refused BEFORE the mutation, naming "delete and recreate" instead. The method is read from API7 (API5 has none at all): on an ambiguous match ReadChamferAngle returns null and the write is NOT refused — "method not read" is not "method is angular".
+
 ## <a id="hole-route"></a>Отверстие: маршрут и измерения (проба M, 16.09.2026)
 
 **Что измерено** (проба M, `docs/acceptance/api7/hole-modes.md`):
@@ -226,6 +269,20 @@ API7-интерфейс `IChamfer`.
 `IHole3D`, пока не выяснилось, что они живут на `HoleParameters`, приведённом к интерфейсу СВОЕГО
 режима. Это структурная причина: «цековка» и «зенковка» отличаются не значением перечисления, а
 интерфейсом параметров.
+
+**Дословно из кода (verbatim, EN).** Basis — probe M of 16.09.2026 (`docs/acceptance/api7/hole-modes.md`), not method names.
+
+TEST: M.2 — counterbore: a Ø10 pilot through, a Ø18 recess 4 deep. Removed 703.7167544041131 mm³ OVER the through hole, which is π/4·(18²−10²)·4 = 703.7167544041137 — a ring, not a second full cylinder. A first draft of the formula added the pilot to a full Ø18 cylinder and thereby counted the pilot twice.
+
+TEST: M.3 — countersink: the rule `π·h/3·(rM² + rP·rM − 2·rP²)` was read from an 11-row table (3 angles × 3 entry depths × 6 diameters), and acceptance refuses to pass until the WHOLE table agrees. Key observation — `CountersinkDepth` is DERIVED: writing 2, 4 and 6 changes nothing, the object returns `(rM − rP)/tan(angle/2)`, and one must judge by the returned number. Probe N.2 of 17.09.2026 separated the mouth with the pilot and angle unchanged (Ø14/16/18/20/24 → h = 2/3/4/5/7), showing "4" was the radius difference of that row, not a constant.
+
+TEST: M.4 — blind with a flat bottom: removed 471.238898038471 vs the analytic π·5²·6 = 471.238898038469. The member `ksDTBlind` does not exist in the vendor enum at all — blind is expressed by `ksDTValue`.
+
+TEST: M.5 — position away from the origin: of five routes exactly one shifted it, `Point3DParamSurface` + `OffsetType=ksOffsetByCoords` + `Offset1`/`Offset2`. A Ø10 hole landed exactly at (25, 15). `AssociationVertex` and `DirectionObject` gave DISP_E_TYPEMISMATCH, a sketch with an offset circle did not reach API7, `DepthVertex` and `DepthFace` read as null, `Axis` as False.
+
+ROUTE — API7, not API5: a hole exists in API5 (`NewEntity(o3d_hole=52)`), but its definition physically has no mode parameters — probe M three times rejected writing mode numbers into `IHole3D` itself until it turned out they live on `HoleParameters` cast to the interface of ITS OWN mode. This is a structural cause, not convenience: "counterbore" and "countersink" differ not by an enum value but by the parameter interface.
+
+INVARIANT: volume is read only on the MAIN body — `ReadVolume`, as for fillet and chamfer. The delta expectation is set by the caller; without it only the parameter read-back is confirmed, and the result is honestly marked unproven geometry rather than presented as confirmed.
 
 ## <a id="hole-offset-common"></a>Отверстие вне начала координат (M.5)
 
@@ -257,6 +314,14 @@ API7 не доехал, `DepthVertex` и `DepthFace` читаются как nul
 разных интерфейсах, и «применили, что смогли, остальное проигнорировали» было бы молча неверной
 геометрией. Цена ошибки здесь несимметрична: лишний отказ виден сразу, а принятое и проигнорированное
 число доживает до приёмки, выглядя как выполненная операция.
+
+**Дословно из кода (verbatim, EN).** The feature is taken by the DOCUMENTED member `IHoles3D.Hole3D[index]` — the same route `kompas_get_feature` reads — the members of ITS OWN mode are written, `IModelObject.Update()` applied, then the rebuild. The volume changes exactly by the analytic value in all three modes, and controls (b) and (c) show that the change is caused by `Update()` itself: without it the volume does not move, and the parameter interface of a foreign mode is UNREACHABLE on the object.
+
+INVARIANT: the feature address is the same as for the read and is NOT guessed — the "tree feature ↔ `Holes3D` entry" correspondence is proven by the hole being unique in the document: at `count != 1` the correspondence is unproven and the call is refused `CAPABILITY_UNAVAILABLE` before COM. Picking an address by a body list or tree order is forbidden by lesson F-11: the address is ensured by the setup, not by a guess.
+
+LIMIT: the mode is NOT changed by the edit — the existing feature's mode is read from the model (`IHole3D.HoleType`) and frames it: foreign-mode fields are refused by name before COM, and its own members are written. Mode change (`blind_flat` → `through_counterbore` and back) was not measured and is not performed here — "accepted and built differently" is afterwards indistinguishable from "applied".
+
+INVARIANT: the countersink depth is not asserted — at `ksCTDiameterAngle` it is derived (M.3/N.2), so the `countersink_depth_derived` check publishes the READ number and states plainly that the written one is not checked.
 
 ## <a id="loft-route"></a>Элемент по сечениям: почему API7 (шаги B5.4/B5.9)
 
@@ -323,6 +388,12 @@ API5-маршрута `NewEntity(30)` (шаг B5.4).
 
 **Живой объект массива не кэшируется между вызовами.** Адрес COM-объекта не переживает перестроения,
 и сохранённый объект правил бы уже не тот признак.
+
+**Дословно из кода (verbatim, EN).** WHY A SEPARATE FILE, not a branch inside `UpdateFeature`: that branch is chosen by `entity.type` — the measured feature number in the tree. For a pattern this number was not measured in session B4 and must not be invented: an error here would mean the edit "does not find" the feature exactly as happened with the hole (searched by 52, the feature lies under 583). The pattern feature is therefore identified NOT by number but by the same instrument as the read (`Api5Session.PatternRead`): matching against an `IModelContainer.FeaturePatterns` element by the tree-wrapper name and update stamp.
+
+INVARIANT: `Update()=true` is "accepted", not "applied" — after the rebuild the feature is READ BACK (`Api7Pattern.ReadPattern`), each requested member gets its own `read_back_<member>` check, and document volume and body count confirm application geometrically if the caller gave an analytic expectation.
+
+LIMIT: support change is not performed — `Axis1/Axis2`, `Axis`, `Plane` take an `IModelObject`, not a server reference, and no B4 run measured a support change of an existing pattern; a call implying one is refused before the mutation.
 
 ## <a id="mirror-all-bodies"></a>Зеркальный массив: «зеркально отразить все»
 
@@ -397,3 +468,37 @@ API5-маршрута `NewEntity(30)` (шаг B5.4).
 
 **Дефект прибора, названный отдельно.** Длина траектории читается ПОСЛЕ построения: первый прогон
 пробы читал её до `Create()` и получал 0 — это был дефект прибора, а не факт о продукте (шаг B5.3).
+
+## <a id="mint-input-references"></a>Порождение ссылок на собственные входы признака (05.10.2026)
+
+**Дословно из кода (verbatim, EN).** Why here and not in the edge-set edit. A feature's own input is not a body edge: it has no `edge:` registry string and cannot have one, because the registry issues those to BODY edges. `IModelObject.Reference` numbers are not substituted into the edit contract by type. So the SERVER must mint the input string, and it does so at the only place where the input numbers become visible outside — when the feature is read. Same principle as `edge:` references: the client does not invent identifiers, it substitutes issued ones.
+
+INVARIANT: the minting is bound to the document REVISION (not to the feature state), like other references: after a mutation, references of the previous revision are cut off by `Require`, and the client must re-read the context. Otherwise an edit could be presented against a stale composition.
+
+References are not issued when: the API7 bridge is not built, several fillets share the radius (inputs not read — `null`), or there are no inputs at all (empty list). The reference order matches `BaseObjectReferences`, because both come from one walk of `BaseObjects`.
+
+## <a id="fillet-identify-by-inputs"></a>Опознание скругления по собственным входам, радиус — запасной ключ (05.10.2026)
+
+**Дословно из кода (verbatim, EN).** The acceptance addressing experiment (two R3, "change the selected one, keep the second") is built on exactly such a model. Identification by radius returned `null` there — the feature stayed without API7 parameters and without `base_object_input_refs`: the client got no reference to either of the two features and could address neither. That is a denial of a supported scenario, so the key source is the feature's OWN INPUTS — the same composition measure the write route uses (`FindIndexByInputReferences`). The radius remains a FALLBACK and is used exactly when the composition could not be read (MEASURED: on an existing fillet the API5 definition does not return its inputs). Then, and only then, the old rule applies: an unambiguous radius match or `null`.
+
+## <a id="feature-edit-basis"></a>Основание правки признака — измерения P2.3 (05.10.2026)
+
+**Дословно из кода (verbatim, EN).** The entity handed back by `NewEntity(24)` reports 24 while the same committed feature read out of the tree reports 25, so a type number captured at creation is not an identity.
+
+The three extrusion definitions share no common interface for these getters, and `GetThinParam` is declared `out` on base/cut but `ref` on boss, so the families are branched explicitly instead of being unified by reflection.
+
+## <a id="rotated-edit"></a>Правка угла вращения (05.10.2026)
+
+**Дословно из кода (verbatim, EN).** With bounds `z[−20,20] → z[−0,20] → z[−20,20]` — a geometric change, not merely a written number. The order "write angle → `Update()` → rebuild" is part of the contract, as on creation: without `Update()` the setter returns success while the model stays as it was. ONLY the angle is written (and the direction, if given). The profile and axis of an existing rotation are not changed by this call: those routes were not measured on a rotation, and accepting `sketch_ref` would promise a re-binding that does not exist.
+
+## <a id="rotated-find-entity"></a>Поиск признака вращения в дереве (05.10.2026)
+
+**Дословно из кода (verbatim, EN).** The cut is visible as 29, the same number it was created with by the factory. So all three kinds (27/28/29) are checked, not one number: the client chooses the operation kind, and searching only for `cut` would miss `base`.
+
+Selection runs not by name and not by index but by the entity having a profile and an axis (`IRotated` answers the cast). A name here is not an identifier — measured on a chamfer (F.8: `f-ch2` was replaced by the localised feature name) — and the "last element" index without such a check would point at anything if the operation failed. The absence of a meaningful candidate yields `null`, and the caller gets `feature_ref_withheld` instead of a reference an edit would not have worked through anyway.
+
+## <a id="rotated-identify-entity"></a>Опознание признака вращения — по номеру, QI запасной (05.10.2026)
+
+**Дословно из кода (verbatim, EN).** The first revision relied on QI alone and thus silently lost the feature: the branch name ("by QI") was passed off as the recognition result. The type number is the route for a FEATURE FROM THE TREE, not an identifier: it changes between creation time and the tree (for an extrusion 24 → 25, MEASURED P2.3), so recognition must use the SET of numbers of the three rotation kinds, not a single number remembered at creation.
+
+The question "does a `ksEntity` from the tree answer to QI(IRotated)" was tested on 18.09.2026 in three ways: an `is` cast, a runtime-type cast to the interface, and a direct call of the `Angle` member with interception — all three REFUSED on a feature that demonstrably reads from the model (angle 360, type 29, live UpdateStamp). So the QI branch is kept here as a fallback for a payload from the reference registry, but the RELIANCE is on the tree number: otherwise recognition would fall back to a means the tree object does not answer.

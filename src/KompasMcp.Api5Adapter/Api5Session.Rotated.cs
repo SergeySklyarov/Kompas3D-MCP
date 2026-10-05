@@ -11,41 +11,10 @@ namespace KompasMcp.Api5Adapter;
 
 /// <summary>Rotation (docs/05 SM-03): feature creation via the API7 factory directly.</summary>
 /// <remarks>
-/// INVARIANT: the route rests on measurement, not on method names. Run
-/// <c>95fa844107ce41609d6278f8f6c5759f</c> of 17.09.2026 (<c>docs/acceptance/api7/rotation.json</c>),
-/// steps R.24/R.25/R.26, established the factory route and its shape.
-/// MEASURED: 17.09.2026 — (R.24) all three factory operations (<c>o3d_baseRotated</c> 27,
-/// <c>o3d_bossRotated</c> 28, <c>o3d_cutRotated</c> 29) build a body whose analytical volume is
-/// 50265.4824574366 against π·r²·h = 50265.4824574367 at r=20, h=40; (R.25) the same result
-/// reproduces from scratch on a fresh document, shape verified independently of volume (one
-/// cylindrical face r=20 h=40, bounds 40×40×40), and the feature survives save → close → reopen;
-/// (R.26) a cut removes 25132.7412287183 from a 120×120×40 plate, while a boss writing
-/// <c>OperationResult = ksOperationCut</c> changes the volume by 0.
-/// MEASURED: 18.09.2026 (FullTurnProbe F.1…F.5, independently re-read from the saved <c>.m3d</c> by
-/// M3dVerificationProbe) — <c>Angle[true]</c> carries the requested angle directly (360→360°,
-/// 180→180°, 90→90°); the second slot of the pair, equal to the first, doubles the sweep. A full
-/// turn is built by a single call. This disproved the earlier "saturation at 180°" claim, which
-/// came from a step that changed <c>CutOffByPoint</c> instead of the angle
-/// (<c>docs/acceptance/api7/full-turn-findings.md</c>).
-/// INVARIANT: no <c>NewEntity</c> and no <c>Create()</c> appear here. The old API5 shell around an
-/// API7 factory object was a MIXED lifecycle — <c>Create()</c> returned <c>true</c>, the object
-/// appeared in the tree and the volume did not change — not a property of rotation.
-/// LIMIT: carried as refusals, not as caveats.
-/// <list type="number">
-/// <item>An angle beyond a full turn is not accepted: 360° is the sweep's own ceiling (measured
-/// 18.09.2026), and a value above it is cut off BEFORE the mutation.</item>
-/// <item><c>dtReverse</c> builds nothing (measured R.26.sector: <c>Update()</c> = False, 0 bodies);
-/// rejected before the mutation.</item>
-/// <item>The axis is mandatory; rotation without an axis is not built at all.</item>
-/// <item>A thin wall is unmeasured: the route was measured on a SOLID body, so a requested thin
-/// wall is refused with CAPABILITY_UNAVAILABLE rather than written as an unmeasured number.</item>
-/// <item>Attachment to an existing body DOES happen (measured 18.09.2026, probe F.10: <c>Union</c>
-/// fuses, <c>NewBody</c> adds a second body). The operation kind is derived from the factory kind:
-/// base→<c>NewBody</c>, boss→<c>Union</c>, cut→<c>Cut</c>.</item>
-/// <item>The target body is chosen BY GEOMETRY (probe F.11): only the INTERSECTED body is touched,
-/// not the first in the collection (KOMPAS reorders bodies, so an index is not an address). The
-/// declared <c>target_body_ref</c> is therefore verified AFTER the operation.</item>
-/// </list>
+/// INVARIANT: the route rests on measurement, not method names — run <c>95fa844107ce41609d6278f8f6c5759f</c>
+/// of 17.09.2026, steps R.24/R.25/R.26; no <c>NewEntity</c> and no <c>Create()</c> appear here. LIMIT:
+/// angle > 360°, <c>dtReverse</c>, missing axis and thin wall are refusals before the mutation; the
+/// target body is chosen BY GEOMETRY (probe F.11) and <c>target_body_ref</c> is verified AFTER.
 /// History: docs/decisions/adapter-features.md#rotated-route
 /// </remarks>
 public partial class Api5Session
@@ -99,17 +68,11 @@ public partial class Api5Session
                 RetryPolicy.ReacquireContext);
         }
 
-        // ── multi-body: behaviour is MEASURED, so the former refusal is gone ─────────────────────
-        //
-        // MEASURED: 18.09.2026 (FullTurnProbe F.11) — in a two-body part, boss/Union (bodies 2→2,
-        // volumes [144000; 16000] → [16000; 181699.111843077]) and cut/Cut (bodies 2→2, volumes
-        // [144000; 16000] → [131433.629385641; 16000]) each touched EXACTLY ONE body — the
-        // INTERSECTED one, not the first in the collection (KOMPAS swapped the bodies,
-        // [144000; 16000] → [16000; …]).
-        //
-        // Hence the rule: the operation does NOT silently pick a body for the caller. Body counts
-        // before/after and the named change are read and returned; a mismatch with the declared
-        // target_body_ref is a refusal with partialEffects, not a silent "probably that one".
+        // multi-body: behaviour is MEASURED, so the former refusal is gone. MEASURED 18.09.2026
+        // (FullTurnProbe F.11): each operation touched EXACTLY ONE body — the INTERSECTED one, not the first
+        // in the collection (KOMPAS swapped the bodies). Hence the operation does NOT silently pick a body:
+        // body counts before/after and the named change are read and returned; a mismatch with the declared
+        // target_body_ref is a refusal with partialEffects.
         // History: docs/decisions/adapter-features.md#rotated-multi-body
 
         // The profile is an API7 object. An un-transferred profile is a value API7 will not accept,
@@ -365,18 +328,12 @@ public partial class Api5Session
         var reference = FindRotatedEntity(document);
         if (reference is null)
         {
-            // A reference to a feature the API5 tree does not show must not be issued: an edit through
-            // it would fail anyway, and the caller would learn about it later.
-            //
-            // The level is NOT lowered to call_returned here. The missing reference and the confirmed
-            // geometry are two independent claims, and the first does not weaken the second: the volume
-            // matched the analytical one, the parameters were re-read, the surface of revolution was
-            // found — all of that is measured and stays measured regardless of whether the feature is
-            // visible in the API5 tree. The first revision always returned CallReturned here, and that
-            // was a genuine acceptance defect: line RO.4 failed with "level=call_returned" on a call
-            // where ALL five checks passed, including the numeric volume match. The tree number for a
-            // rotation was never measured (unlike the 52→583 pair for a hole), so non-addressability
-            // here is the expected state, not a sign of failed geometry.
+            // A reference to a feature the API5 tree does not show must not be issued. The level is NOT lowered
+            // to call_returned here: the missing reference and the confirmed geometry are two independent claims.
+            // The first revision always returned CallReturned, a genuine acceptance defect — line RO.4 failed
+            // with "level=call_returned" on a call where ALL five checks passed, including the numeric volume
+            // match. The tree number for a rotation was never measured (unlike the 52→583 pair for a hole), so
+            // non-addressability is the expected state.
             // History: docs/decisions/adapter-features.md#feature-ref-withheld
             unverified.Add("feature_ref_withheld — признак не найден в дереве API5, ссылка не выдана");
             return new RotatedResult(
@@ -414,17 +371,11 @@ public partial class Api5Session
 
     /// <summary>Read the parameters of an EXISTING rotation feature for <c>kompas_get_feature</c>.</summary>
     /// <remarks>
-    /// <b>The index is taken by matching the same feature, not by taking the first one.</b> A rotation
-    /// has no API5 definition by which the feature could be recognised, so matching runs on
-    /// COMPOSITION: a tree entity cast to <c>IRotated</c> is searched among the
-    /// <c>IModelContainer.Rotateds</c> elements by a match of the angle. The angle as an identity token
-    /// is weak (two half-turns around different axes would match), so with several candidates
-    /// <c>null</c> is returned — "not read", not "here is the first": passing a foreign parameter off
-    /// as the addressed feature's parameter would be lying about the model.
-    /// NOTE: the code compares the angle ONLY; the direction is not part of the match (the earlier
-    /// wording said "angle AND direction", which the code does not do — corrected 05.10.2026).
-    /// Reading is NOT mutation: <c>BeginEdit</c>/<c>EndEdit</c>/<c>Update</c> are not called, the
-    /// revision is not bumped.
+    /// The index is taken by matching the same feature, not by taking the first: a rotation has no API5
+    /// definition, so matching runs on COMPOSITION — a tree entity cast to <c>IRotated</c> is searched among
+    /// the <c>IModelContainer.Rotateds</c> elements by angle; with several candidates <c>null</c> is returned.
+    /// Reading is NOT mutation: <c>BeginEdit</c>/<c>EndEdit</c>/<c>Update</c> are not called.
+    /// History: docs/decisions/adapter-features.md#read-rotated-matching
     /// </remarks>
     private RotatedDto? ReadRotatedFeature(DocumentEntry document, ksEntity entity)
     {
@@ -552,15 +503,11 @@ public partial class Api5Session
 
     /// <summary>Edit the angle of an EXISTING rotation feature via <c>kompas_update_feature</c>.</summary>
     /// <remarks>
-    /// <b>MEASURED: 18.09.2026</b> (probe <c>FullTurnProbe</c>, step <c>F.2</c>): on a single feature
-    /// changing the angle 360 → 180 → 360 gave volumes
-    /// <c>50265.4824574366 → 25132.7412287183 → 50265.4824574366</c> with bounds
-    /// <c>z[−20,20] → z[−0,20] → z[−20,20]</c> — a geometric change, not merely a written number. The
-    /// order "write angle → <c>Update()</c> → rebuild" is part of the contract, as on creation:
-    /// without <c>Update()</c> the setter returns success while the model stays as it was.
-    /// ONLY the angle is written (and the direction, if given). The profile and axis of an existing
-    /// rotation are not changed by this call: those routes were not measured on a rotation, and
-    /// accepting <c>sketch_ref</c> would promise a re-binding that does not exist.
+    /// MEASURED 18.09.2026 (probe <c>FullTurnProbe</c>, step <c>F.2</c>): changing the angle 360 → 180 → 360
+    /// gave volumes <c>50265.4824574366 → 25132.7412287183 → 50265.4824574366</c>. The order "write angle →
+    /// <c>Update()</c> → rebuild" is part of the contract: without <c>Update()</c> the setter returns success
+    /// while the model stays as it was. ONLY the angle is written; profile/axis are not changed (<c>sketch_ref</c> refused).
+    /// History: docs/decisions/adapter-features.md#rotated-edit
     /// </remarks>
     private UpdateFeatureResult UpdateRotated(
         DocumentEntry document,
@@ -928,15 +875,11 @@ public partial class Api5Session
     }
 
     /// <summary>Bounding box of the main body: for a cylinder R20 H40 it is 40×40×40, for a half-cylinder
-    /// 40×40×20. This is a volume-independent shape check, so the box is read, not substituted with
-    /// zero.</summary>
-    /// <remarks>
-    /// <c>null</c> means "not read" and is NOT equal to a zero box. The difference matters: a zero box
-    /// compared against the expected bounds would look like a geometry mismatch, i.e. a failed read
-    /// would turn into a claim about the model. This is the same distinction as with
-    /// <c>MeasureVolume</c> and <c>BoundingBoxDto.Empty</c>: <c>GetGabarit</c> returning <c>false</c>
-    /// or throwing is a fact about the READ, not about the body.
-    /// </remarks>
+    /// 40×40×20. A volume-independent shape check: the box is read, not substituted with zero.</summary>
+    /// <remarks><c>null</c> means "not read" and is NOT equal to a zero box — a zero box compared against
+    /// the expected bounds would look like a geometry mismatch, turning a failed read into a claim about
+    /// the model. Same distinction as <c>MeasureVolume</c> and <c>BoundingBoxDto.Empty</c>:
+    /// <c>GetGabarit</c> returning <c>false</c> or throwing is a fact about the READ, not the body.</remarks>
     private static BoundingBoxDto? SafeBounds(ksPart part)
     {
         try
@@ -960,21 +903,11 @@ public partial class Api5Session
 
     /// <summary>The last API5 tree element, which is the created rotation feature.</summary>
     /// <remarks>
-    /// <b>Why by numbers first, then by enumeration.</b> For a hole, the "feature was never found"
-    /// defect cost a separate investigation: the adapter searched for 52 (the factory number
-    /// <c>o3d_holeOperation</c>) instead of 583 (the tree number <c>o3d_Hole3D</c>) measured by probe
-    /// N.1. For rotation the measurement was done by acceptance SM-03: line RO.10t printed the tree
-    /// types after a rotation cut — <c>['25', '29']</c>, i.e. the cut is visible as <b>29</b>, the same
-    /// number it was created with by the factory. So all three kinds (27/28/29) are checked, not one
-    /// number: the client chooses the operation kind, and searching only for <c>cut</c> would miss
-    /// <c>base</c>.
-    /// <b>Why enumeration cannot return a foreign feature.</b> Selection runs not by name and not by
-    /// index but by the entity having a profile and an axis (<c>IRotated</c> answers the cast). A name
-    /// here is not an identifier — measured on a chamfer (F.8: <c>f-ch2</c> was replaced by the
-    /// localised feature name) — and the "last element" index without such a check would point at
-    /// anything if the operation failed. The absence of a meaningful candidate yields <c>null</c>, and
-    /// the caller gets <c>feature_ref_withheld</c> instead of a reference an edit would not have worked
-    /// through anyway.
+    /// Why by numbers first, then enumeration: for a hole, searching 52 (<c>o3d_holeOperation</c>) instead
+    /// of 583 (<c>o3d_Hole3D</c>, probe N.1) cost an investigation; acceptance SM-03 (line RO.10t) printed
+    /// <c>['25', '29']</c>, so all three kinds (27/28/29) are checked. Enumeration returns no foreign
+    /// feature: selection is by profile+axis (<c>IRotated</c>), not name or "last element"; no candidate → <c>null</c>.
+    /// History: docs/decisions/adapter-features.md#rotated-find-entity
     /// </remarks>
     private static ksEntity? FindRotatedEntity(DocumentEntry document)
     {
@@ -1052,30 +985,13 @@ public partial class Api5Session
         }
     }
 
-    /// <summary>
-    /// Whether this is a rotation feature. The primary route is the measured tree number: 27
-    /// (<c>o3d_baseRotated</c>), 28 (<c>o3d_bossRotated</c>), 29 (<c>o3d_cutRotated</c>). This is the
-    /// same technique that recognises a native hole (<c>entity.type == 583</c>, MEASURED by probe
-    /// N.1), and it works on a feature READ FROM THE TREE. The fallback route is the answer to
-    /// <c>QI(IRotated)</c>, needed for an entity READ FROM THE REFERENCE REGISTRY.
-    /// </summary>
+    /// <summary>Whether this is a rotation feature: tree numbers 27/28/29 (<c>o3d_baseRotated</c>/<c>o3d_bossRotated</c>/<c>o3d_cutRotated</c>), fallback <c>QI(IRotated)</c>.</summary>
     /// <remarks>
-    /// Why QI alone is not enough — MEASURED at acceptance SM-03 on 18.09.2026. An entity taken from
-    /// the tree via <c>EntityCollection</c> arrives as a raw <c>__ComObject</c>, and the check
-    /// <c>entity is IRotated</c> answers <c>false</c> on it, even though <c>entity.type</c> is 29 and
-    /// the feature reads from the model. The first revision relied on QI alone and thus silently lost
-    /// the feature: the branch name ("by QI") was passed off as the recognition result.
-    /// The type number is the route for a FEATURE FROM THE TREE, not an identifier: it changes between
-    /// creation time and the tree (for an extrusion 24 → 25, MEASURED P2.3), so recognition must use
-    /// the SET of numbers of the three rotation kinds, not a single number remembered at creation.
-    /// <b>The second route (QI) is unreachable on a tree object, and that is not an excuse but a
-    /// measured boundary.</b> The question "does a <c>ksEntity</c> from the tree answer to
-    /// QI(IRotated)" was tested on 18.09.2026 in three ways: an <c>is</c> cast, a runtime-type cast to
-    /// the interface, and a direct call of the <c>Angle</c> member with interception — all three
-    /// REFUSED on a feature that demonstrably reads from the model (angle 360, type 29, live
-    /// UpdateStamp). So the QI branch is kept here as a fallback for a payload from the reference
-    /// registry, but the RELIANCE is on the tree number: otherwise recognition would fall back to a
-    /// means the tree object does not answer.
+    /// As a native hole (<c>entity.type == 583</c>, probe N.1). MEASURED at acceptance SM-03 on 18.09.2026:
+    /// an entity from the tree via <c>EntityCollection</c> arrives as a raw <c>__ComObject</c>, and
+    /// <c>entity is IRotated</c> answers <c>false</c> on it, even though <c>entity.type</c> is 29. The number
+    /// is a route, not an identifier (an extrusion 24 → 25, MEASURED P2.3); QI is a fallback only.
+    /// History: docs/decisions/adapter-features.md#rotated-identify-entity
     /// </remarks>
     private static bool IsRotatedEntity(ksEntity entity)
     {

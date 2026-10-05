@@ -313,18 +313,13 @@ public partial class Api5Session
     }
 
     /// <summary>Edit an angular chamfer by the API7 route: <c>IChamfer</c> on the live model, write →
-    /// <c>Update()</c> → <c>RebuildModel()</c>. The only route able to write an angle: API5 has
-    /// none.</summary>
-    /// <remarks>Differences from the API5 route (<see cref="UpdateChamfer"/>) that must not be lost:
-    /// the feature is addressed by INDEX in <c>IModelContainer.Chamfers</c> and matched to the API5
-    /// feature by the first leg (the name is not an identifier — F.8); the second leg is DERIVED from
-    /// the angle, so it is not written at all unless the client set it explicitly (writing the
-    /// "previous" number would pin a stale derivative and lose the link to the angle); the
-    /// confirmation level requires the derived leg to be recomputed — success is not "Update()
-    /// returned true" but that the model gives the new angle and the leg <c>d₁·tg α</c>.
-    /// INVARIANT: an ambiguous match (several chamfers with the same first leg, or none) is a refusal,
-    /// not "took the first": writing the angle into the wrong feature silently spoils foreign
-    /// geometry.</remarks>
+    /// <c>Update()</c> → <c>RebuildModel()</c>; the only route able to write an angle (API5 has none).</summary>
+    /// <remarks>Differences from the API5 route (<see cref="UpdateChamfer"/>): the feature is addressed by
+    /// INDEX in <c>IModelContainer.Chamfers</c> and matched to the API5 feature by the first leg (the name
+    /// is not an identifier — F.8); the second leg is DERIVED from the angle, so it is written only if the
+    /// client set it explicitly; success is not "Update() returned true" but that the model gives the new
+    /// angle and the leg <c>d₁·tg α</c>. INVARIANT: an ambiguous match (several chamfers with the same first
+    /// leg, or none) is a refusal, not "took the first".</remarks>
     private UpdateFeatureResult UpdateChamferByAngle(
         DocumentEntry document,
         ksEntity entity,
@@ -581,16 +576,11 @@ public partial class Api5Session
                 RetryPolicy.ReacquireContext);
         }
 
-        // ─── MEASURED ban on silent method substitution (probe 16.09.2026) ───────────────────
-        // A "distance and angle" chamfer lives as ksChamferSideAngle with a DERIVED second leg
-        // (d₂ = d₁·tg α). The API5 write route (SetChamferParam) only knows ksChamferTwoSides and does
-        // NOT preserve the build method: MEASURED on a 100×80×10 plate, d=2, α=30°, editing
-        // distance1_mm=3 without angle_deg changed the method, turned 30° into 45° and gave V=79820
-        // instead of 79896.07695154587. That is a silent wrong result, so the write is refused BEFORE
-        // the mutation, naming "delete and recreate" instead.
-        // The method is read from API7 (API5 has none at all): on an ambiguous match
-        // ReadChamferAngle returns null and the write is NOT refused — "method not read" is not
-        // "method is angular".
+        // MEASURED ban on silent method substitution (probe 16.09.2026): the API5 write route
+        // (SetChamferParam) only knows ksChamferTwoSides and does NOT preserve a "distance and angle"
+        // chamfer (ksChamferSideAngle, d₂ = d₁·tg α), so the write is refused BEFORE the mutation. The
+        // method is read from API7; on an ambiguous match ReadChamferAngle returns null and the write is
+        // NOT refused — "method not read" is not "method is angular".
         // History: docs/decisions/adapter-features.md#chamfer-method-substitution
         var existingApi7 = ReadChamferAngle(document, current);
         if (existingApi7?.BuildingType == SideAngleBuildingType && command.AngleDeg is null)

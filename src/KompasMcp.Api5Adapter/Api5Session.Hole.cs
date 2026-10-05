@@ -11,34 +11,10 @@ namespace KompasMcp.Api5Adapter;
 
 /// <summary>Native hole (docs/05 SM-07): three measured modes and a position away from the origin.</summary>
 /// <remarks>
-/// Basis — probe M of 16.09.2026 (<c>docs/acceptance/api7/hole-modes.md</c>), not method names:
-/// TEST: M.2 — counterbore: a Ø10 pilot through, a Ø18 recess 4 deep. Removed 703.7167544041131 mm³
-/// OVER the through hole, which is π/4·(18²−10²)·4 = 703.7167544041137 — a ring, not a second full
-/// cylinder. A first draft of the formula added the pilot to a full Ø18 cylinder and thereby counted
-/// the pilot twice.
-/// TEST: M.3 — countersink: the rule <c>π·h/3·(rM² + rP·rM − 2·rP²)</c> was read from an 11-row
-/// table (3 angles × 3 entry depths × 6 diameters), and acceptance refuses to pass until the WHOLE
-/// table agrees. Key observation — <c>CountersinkDepth</c> is DERIVED: writing 2, 4 and 6 changes
-/// nothing, the object returns <c>(rM − rP)/tan(angle/2)</c>, and one must judge by the returned
-/// number. Probe N.2 of 17.09.2026 separated the mouth with the pilot and angle unchanged
-/// (Ø14/16/18/20/24 → h = 2/3/4/5/7), showing "4" was the radius difference of that row, not a
-/// constant.
-/// TEST: M.4 — blind with a flat bottom: removed 471.238898038471 vs the analytic π·5²·6 =
-/// 471.238898038469. The member <c>ksDTBlind</c> does not exist in the vendor enum at all — blind is
-/// expressed by <c>ksDTValue</c>.
-/// TEST: M.5 — position away from the origin: of five routes exactly one shifted it,
-/// <c>Point3DParamSurface</c> + <c>OffsetType=ksOffsetByCoords</c> + <c>Offset1</c>/<c>Offset2</c>.
-/// A Ø10 hole landed exactly at (25, 15). <c>AssociationVertex</c> and <c>DirectionObject</c> gave
-/// DISP_E_TYPEMISMATCH, a sketch with an offset circle did not reach API7, <c>DepthVertex</c> and
-/// <c>DepthFace</c> read as null, <c>Axis</c> as False.
-/// ROUTE — API7, not API5: a hole exists in API5 (<c>NewEntity(o3d_hole=52)</c>), but its definition
-/// physically has no mode parameters — probe M three times rejected writing mode numbers into
-/// <c>IHole3D</c> itself until it turned out they live on <c>HoleParameters</c> cast to the interface
-/// of ITS OWN mode. This is a structural cause, not convenience: "counterbore" and "countersink"
-/// differ not by an enum value but by the parameter interface.
-/// INVARIANT: volume is read only on the MAIN body — <c>ReadVolume</c>, as for fillet and chamfer. The
-/// delta expectation is set by the caller; without it only the parameter read-back is confirmed, and
-/// the result is honestly marked unproven geometry rather than presented as confirmed.
+/// Basis — probe M of 16.09.2026 (<c>docs/acceptance/api7/hole-modes.md</c>). TEST: M.2 counterbore, M.3
+/// countersink (an 11-row table), M.4 blind with a flat bottom (<c>ksDTBlind</c> does not exist — blind is
+/// <c>ksDTValue</c>), M.5 position away (<c>Point3DParamSurface</c> + <c>ksOffsetByCoords</c>). ROUTE — API7:
+/// an API5 hole (<c>NewEntity(o3d_hole=52)</c>) has no mode parameters. INVARIANT: volume on the MAIN body (<c>ReadVolume</c>).
 /// History: docs/decisions/adapter-features.md#hole-route
 /// </remarks>
 public partial class Api5Session
@@ -595,16 +571,12 @@ public partial class Api5Session
         value?.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture) ?? "не читается";
 
     /// <summary>What the server sees of a hole: type, diameter, depth and mode parameters.</summary>
-    /// <remarks>Read ONLY from API7, and this is a MEASURED fact, not a choice: in the vendor wrapper
-    /// <c>Interop.Kompas6API5</c> the type <c>ksHoleDefinition</c> does NOT EXIST at all — among 67
-    /// declared definitions (<c>ksChamferDefinition</c> and <c>ksFilletDefinition</c> are there, the
-    /// hole is not). A hole is described by a feature with <c>type = 52</c> (<c>o3d_hole</c>), but it
-    /// has no definition in API5, so its parameters cannot be read from there. This is exactly why
-    /// SM-07 took the API7 route (ADR-004 §3): not "more convenient" but "not expressible in API5".
-    /// The feature is addressed by INDEX in <c>IModelContainer.Holes3D</c>; with several holes and the
-    /// caller naming the wrong one the numbers would be foreign, so the match is unambiguous — on
-    /// ambiguity null is returned and the confirmation level honestly drops.
-    /// An empty field means "not read", not "zero".</remarks>
+    /// <remarks>Read ONLY from API7 — MEASURED, not a choice: in <c>Interop.Kompas6API5</c> the type
+    /// <c>ksHoleDefinition</c> does NOT EXIST (among 67 declared definitions, <c>ksChamferDefinition</c>
+    /// and <c>ksFilletDefinition</c> are there, the hole is not). A hole is a feature with <c>type = 52</c>
+    /// (<c>o3d_hole</c>) with no API5 definition, which is why SM-07 took the API7 route (ADR-004 §3).
+    /// The feature is addressed by INDEX in <c>IModelContainer.Holes3D</c>; on ambiguity null is returned
+    /// and the confirmation level drops. An empty field means "not read", not "zero".</remarks>
     private HoleDto? ReadHole(DocumentEntry document, int index)
     {
         var bridge = BridgeFor(document);
@@ -636,17 +608,14 @@ public partial class Api5Session
                 : null);
     }
 
-    /// <summary>Hole parameters for an EXISTING tree feature — the same <see cref="ReadHole"/> but
-    /// without a caller-supplied index: the caller named the feature, and the match must be
-    /// unambiguous, otherwise the numbers would be foreign.</summary>
+    /// <summary>Hole parameters for an EXISTING tree feature — as <see cref="ReadHole"/> but without a
+    /// caller-supplied index: the caller named the feature, and the match must be unambiguous.</summary>
     /// <remarks>The match is by the NUMBER of holes in the API7 container: one hole, one link. With
-    /// several, the "tree feature ↔ Holes3D entry" correspondence is unproven (the feature name does
-    /// not survive the API5↔API7 transition — MEASURED by probe F) and null is returned: an empty
-    /// field is more honest than a foreign number. Then <c>family</c> stays recognised but the
-    /// confirmation level honestly drops to <c>call_returned</c>.
-    /// Index 0 is not enough: <c>Holes3D[0]</c> is "the document's first hole", not "the hole of the
-    /// feature asked about". On a document with one hole they are the same, which is why acceptance row
-    /// HD.25 first creates EXACTLY one hole.</remarks>
+    /// several, the "tree feature ↔ Holes3D entry" correspondence is unproven (the feature name does not
+    /// survive the API5↔API7 transition — MEASURED by probe F) and null is returned; <c>family</c> stays
+    /// recognised but the level drops to <c>call_returned</c>. Index 0 is not enough: <c>Holes3D[0]</c>
+    /// is "the document's first hole", not the asked-about feature's. On a one-hole document they are the
+    /// same, which is why acceptance row HD.25 first creates EXACTLY one hole.</remarks>
     private HoleDto? ReadHoleFeature(DocumentEntry document)
     {
         var bridge = BridgeFor(document);
@@ -661,25 +630,10 @@ public partial class Api5Session
 
     /// <summary>Edit the parameters of an EXISTING native hole via <c>kompas_update_feature</c>.</summary>
     /// <remarks>ROUTE — MEASURED 20.09.2026 (probe <c>scratch/_hole_edit_probe.py</c>; report
-    /// <c>docs/acceptance/api7/hole-modes.md</c>, section M.6): the feature is taken by the DOCUMENTED
-    /// member <c>IHoles3D.Hole3D[index]</c> — the same route <c>kompas_get_feature</c> reads — the
-    /// members of ITS OWN mode are written, <c>IModelObject.Update()</c> applied, then the rebuild. The
-    /// volume changes exactly by the analytic value in all three modes, and controls (b) and (c) show
-    /// that the change is caused by <c>Update()</c> itself: without it the volume does not move, and
-    /// the parameter interface of a foreign mode is UNREACHABLE on the object.
-    /// INVARIANT: the feature address is the same as for the read and is NOT guessed — the "tree feature
-    /// ↔ <c>Holes3D</c> entry" correspondence is proven by the hole being unique in the document: at
-    /// <c>count != 1</c> the correspondence is unproven and the call is refused
-    /// <c>CAPABILITY_UNAVAILABLE</c> before COM. Picking an address by a body list or tree order is
-    /// forbidden by lesson F-11: the address is ensured by the setup, not by a guess.
-    /// LIMIT: the mode is NOT changed by the edit — the existing feature's mode is read from the model
-    /// (<c>IHole3D.HoleType</c>) and frames it: foreign-mode fields are refused by name before COM, and
-    /// its own members are written. Mode change (<c>blind_flat</c> → <c>through_counterbore</c> and
-    /// back) was not measured and is not performed here — "accepted and built differently" is
-    /// afterwards indistinguishable from "applied".
-    /// INVARIANT: the countersink depth is not asserted — at <c>ksCTDiameterAngle</c> it is derived
-    /// (M.3/N.2), so the <c>countersink_depth_derived</c> check publishes the READ number and states
-    /// plainly that the written one is not checked.
+    /// <c>docs/acceptance/api7/hole-modes.md</c>, M.6): the feature is taken by <c>IHoles3D.Hole3D[index]</c>, the
+    /// members of ITS OWN mode are written, <c>IModelObject.Update()</c> applied, then rebuild. INVARIANT: the
+    /// address is the same as for the read and is NOT guessed — the correspondence is proven by the hole being
+    /// unique (<c>count != 1</c> refuses <c>CAPABILITY_UNAVAILABLE</c> before COM). LIMIT: the mode is NOT changed.
     /// History: docs/decisions/adapter-features.md#hole-edit-route
     /// </remarks>
     private UpdateFeatureResult UpdateHole(

@@ -197,9 +197,15 @@ public sealed partial class Api5Session
         finally
         {
             // The restore belongs to the `finally`: a refusal inside the render must not leave the
-            // document showing a view the caller asked for only to take one picture of it. keep_view is
-            // the caller saying "leave it" — then the restore is SKIPPED, not performed and reported.
-            if (viewState.Applied && !viewState.KeepView)
+            // document showing a view the caller asked for only to take one picture of it.
+            //
+            // keep_view is the caller SAYING "leave it": with a CONFIRMED switch the restore is not
+            // called at all. `view_restored` stays null and no "not restored" note reaches
+            // `unverified_aspects` — there is nothing to verify, and the note would be a false alarm.
+            // SwitchAttempted is different: the window may have moved without the label agreeing, so
+            // that path restores even under keep_view and NAMES the outcome.
+            var confirmedConsent = viewState.Applied && viewState.KeepView;
+            if (!confirmedConsent && (viewState.Applied || viewState.SwitchAttempted))
             {
                 ViewSwap.Restore(document, viewState, out var restored, out var restoreNote);
                 viewState.Restored = restored;

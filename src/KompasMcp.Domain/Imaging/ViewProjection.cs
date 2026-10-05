@@ -11,10 +11,11 @@ public sealed record ViewProjectionSpec(string Wire, int Type, string Display);
 
 /// <summary>The view projections the tool publishes.</summary>
 /// <remarks>INVARIANT: the list is a SUBSET the probe measured live in the document's collection, not
-/// every member of the enum. LIMIT: <c>ksVPUser</c> (10) and <c>ksVPDimetric</c> (8) are deliberately
-/// absent — the probe found no entry of those types in a freshly created part, and offering a value the
-/// collection does not carry would make the tool fail at apply time instead of at the argument.
-/// <c>vp_None</c> (-1) is never current (DOC) and is not a view.
+/// every member of the enum. <c>dimetric</c> (8) IS published: MEASURED — it is the current projection of
+/// a freshly created part, so leaving it out made the previous view of every fresh document
+/// UNRESTORABLE and every first <c>view</c> refusal a constant. LIMIT: <c>ksVPUser</c> (10) is absent —
+/// a user projection has no fixed type to address and was not measured. <c>vp_None</c> (-1) is never
+/// current (DOC) and is not a view.
 /// History: docs/decisions/contracts.md#view-projection</remarks>
 public static class ViewProjections
 {
@@ -32,8 +33,10 @@ public static class ViewProjections
 
     public static readonly ViewProjectionSpec Isometric = new("isometric", 7, "#Изометрия");
 
+    public static readonly ViewProjectionSpec Dimetric = new("dimetric", 8, "#Диметрия");
+
     public static readonly IReadOnlyList<ViewProjectionSpec> All =
-        new[] { Front, Rear, Up, Down, Left, Right, Isometric };
+        new[] { Front, Rear, Up, Down, Left, Right, Isometric, Dimetric };
 
     /// <summary>Names published by the schema, in list order.</summary>
     public static readonly IReadOnlyList<string> WireNames =

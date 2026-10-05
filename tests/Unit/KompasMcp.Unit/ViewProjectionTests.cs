@@ -20,6 +20,7 @@ public class ViewProjectionTests
     [InlineData("left", 5)]
     [InlineData("right", 6)]
     [InlineData("isometric", 7)]
+    [InlineData("dimetric", 8)]
     public void Published_name_resolves_to_the_documented_type(string wire, int type)
     {
         Assert.True(ViewProjections.TryResolve(wire, out var spec));
@@ -50,7 +51,6 @@ public class ViewProjectionTests
     [InlineData("#Спереди")]
     [InlineData("vp_Front")]
     [InlineData("axonometric")]
-    [InlineData("8")]
     public void Unknown_name_is_refused_not_substituted(string wire)
     {
         // A substituted projection is indistinguishable to the caller from the one requested.
@@ -60,6 +60,8 @@ public class ViewProjectionTests
     [Theory]
     [InlineData(1, "front")]
     [InlineData(7, "isometric")]
+    [InlineData(8, "dimetric")]
+    [InlineData(9, "type:9")]
     [InlineData(10, "type:10")]
     [InlineData(-1, "type:-1")]
     public void Read_back_type_is_described_or_named_by_its_number(int type, string expected)
@@ -73,7 +75,7 @@ public class ViewProjectionTests
     public void Published_list_matches_the_wire_names()
     {
         Assert.Equal(ViewProjections.All.Select(spec => spec.Wire).ToArray(), ViewProjections.WireNames);
-        Assert.Equal(7, ViewProjections.WireNames.Count);
+        Assert.Equal(8, ViewProjections.WireNames.Count);
         Assert.DoesNotContain("vpNone", ViewProjections.WireNames);
     }
 

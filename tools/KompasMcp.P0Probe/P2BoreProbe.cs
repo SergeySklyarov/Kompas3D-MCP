@@ -28,7 +28,7 @@ namespace KompasMcp.P0Probe;
 /// same curve, <c>ksCurve3D.GetGabarit()</c>.</item>
 /// </list>
 /// <para>
-/// <b>Why the cross-check is the point.</b> An affirmative return from КОМПАС is not a result. A
+/// <b>Why the cross-check is the point.</b> An affirmative return from KOMPAS is not a result. A
 /// route is credited only when (i) its number matches the analytic expectation for a Ø10 bore in a
 /// 10 mm plate, (ii) its unit is pinned against a calibrated reading — <c>GetArea(1)</c> is mm² and
 /// <c>GetArea(0)</c> is cm², so a 10× unit error in the cylinder parameters shows up as a 100×

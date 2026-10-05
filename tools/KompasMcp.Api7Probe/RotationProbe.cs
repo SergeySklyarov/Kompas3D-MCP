@@ -7,11 +7,8 @@ using Kompas6Constants3D;
 
 namespace KompasMcp.Api7Probe;
 
-/// <summary>
-/// SM-03 (rows of queue B2): does API5 rotation work, and where does its axis come from?
-/// </summary>
+/// <summary>SM-03 (rows of queue B2): does API5 rotation work, and where does its axis come from?</summary>
 /// <remarks>
-/// <para>
 /// The catalog is explicit that no rotation route leaving the axis implicit will be accepted: the
 /// axis source is a sketch construction line, a built axis or cylindrical geometry. The metadata
 /// dump settles the shape of the question — <c>ksBaseRotatedDefinition</c> has <b>no</b>
@@ -19,17 +16,13 @@ namespace KompasMcp.Api7Probe;
 /// definition is handed. This probe therefore measures, in order: which entity type yields that
 /// definition at all, whether a sketch can carry a construction line
 /// (<c>ksDocument2D.ksAxisLine</c>), and only then whether a cylinder comes out with π·r²·h.
-/// </para>
-/// <para>
 /// <b>Nothing is assumed about the type number.</b> The probe walks the entity ids the way the
-/// catalog's own note demands ("уточнить точные типы и номера метаданными установленного
-/// приложения") and reports the first one whose definition casts to <c>ksBaseRotatedDefinition</c>.
-/// </para>
-/// <para>
+/// catalog's own note demands ("clarify the exact types and numbers with the metadata of the installed
+/// application") and reports the first one whose definition casts to <c>ksBaseRotatedDefinition</c>.
 /// <b>Proof standard.</b> As in the other probes: a non-null object or a true Create is never a
 /// result. Only the measured volume and the read-back parameter decide, against
 /// <c>max(0.01 mm³, 1e-6 · expectation)</c>, which is not widened after a failure.
-/// </para>
+/// History: docs/decisions/probes.md#rotation-axis
 /// </remarks>
 internal sealed class RotationProbe
 {
@@ -43,38 +36,30 @@ internal sealed class RotationProbe
     /// The style an axis line inside a rotation profile must be born with:
     /// <c>ksCurveStyleEnum.ksCSConstruction = 6</c>.
     /// </summary>
-    /// <remarks>
-    /// A construction segment is explicitly not part of the sketch's region, which is what an axis
+    /// <remarks>A construction segment is explicitly not part of the sketch's region, which is what an axis
     /// line has to be. R.15 and R.16 measured that a fifth segment drawn with style 1
     /// (<c>ksCSNormal</c>) makes the sketch refuse to extrude at every gap, while the same rectangle
     /// without it extrudes to its exact analytic volume — so the style at creation, not the segment's
-    /// position, is the variable.
-    /// </remarks>
+    /// position, is the variable.</remarks>
     private const int AxisStyle = 6;
 
-    /// <summary>A full turn of that rectangle is a cylinder, π·r²·h = 50265.48245743669 мм³.</summary>
+    /// <summary>A full turn of that rectangle is a cylinder, π·r²·h = 50265.48245743669 mm³.</summary>
     private static double FullTurnVolume => Math.PI * RadiusMm * RadiusMm * HeightMm;
 
     private static double Tolerance(double expectation) => Math.Max(0.01d, 1e-6d * Math.Abs(expectation));
 
-    /// <summary>
-    /// A few ULPs of a reading, i.e. the band in which two doubles are the same number measured twice.
-    /// </summary>
+    /// <summary>A few ULPs of a reading, i.e. the band in which two doubles are the same number measured twice.</summary>
     /// <remarks>
-    /// <para>
     /// Measured, not assumed: a variant of R.21 reported <c>ΔV=-0.000000000116</c> against a baseline
     /// of <c>710194.690350851</c>, and the real spacing of doubles at that magnitude is
     /// <c>1.1641532182693481e-10</c> — the delta is exactly one ULP. Reported as a bare number it reads
     /// like a tiny real change; named as noise it is what it is, an unchanged volume.
-    /// </para>
-    /// <para>
     /// <b>Do not reach for <c>double.Epsilon</c> here.</b> The first version of this helper multiplied
     /// by <c>double.Epsilon</c>, which in .NET is <c>4.9e-324</c> — the smallest <i>denormal</i>, not
     /// the machine epsilon. The band came out as <c>2.8e-317</c>, about 4·10⁶ times too small, and the
-    /// step printed «БОЛЬШЕ шума» for a delta that is precisely one ULP. The spacing of doubles at
+    /// step printed "MORE than noise" for a delta that is precisely one ULP. The spacing of doubles at
     /// magnitude <c>v</c> is <c>|v| · 2⁻⁵²</c>; that is the factor written below, spelled as an explicit
     /// hex constant so its meaning cannot drift.
-    /// </para>
     /// </remarks>
     private static double NoiseFloor(double value) =>
         Math.Max(Math.Abs(value), 1d) * 8d * MachineEpsilon;
@@ -86,12 +71,10 @@ internal sealed class RotationProbe
     private readonly Options _options;
     private readonly Stopwatch _clock = new();
 
-    /// <summary>
-    /// PIDs of the КОМПАС processes that already existed when the probe started.
-    /// </summary>
+    /// <summary>PIDs of the KOMPAS processes that already existed when the probe started.</summary>
     /// <remarks>
     /// <b>Measured the hard way.</b> The first version of R.Z counted every <c>KOMPAS.exe</c> by image
-    /// name and reported "осталось процессов: 5" — which reads as a leak and is not one: four sessions
+    /// name and reported "processes left: 5" — which reads as a leak and is not one: four sessions
     /// belonging to the developer were already running, and the probe's own instance is the fifth
     /// until the local server reaps it. A verdict computed from a count that the environment can
     /// move is not a measurement. So the rule is stated as what it can actually prove: no process may
@@ -104,10 +87,8 @@ internal sealed class RotationProbe
     private short? _rotatedType;
     private int _ownPid;
 
-    /// <summary>
-    /// The КОМПАС installation root, from <c>KompasRoot</c> at build time. Used by R.20 to survey the
-    /// shipped sample models rather than to assume where they are.
-    /// </summary>
+    /// <summary>The KOMPAS installation root, from <c>KompasRoot</c> at build time. Used by R.20 to survey the
+    /// shipped sample models rather than to assume where they are.</summary>
     private string _kompasRoot = string.Empty;
 
     /// <summary>Which step the profile builder is currently serving, so its notes land in the right one.</summary>
@@ -116,20 +97,16 @@ internal sealed class RotationProbe
     /// <summary>Whether the profile last handed to the rotation carried a construction line.</summary>
     private bool _lastSketchHadAxis;
 
-    /// <summary>
-    /// The volume of the document's main body before the current step ran. The probe reuses one
+    /// <summary>The volume of the document's main body before the current step ran. The probe reuses one
     /// document for every step (see <c>Run</c>), so a step that reads <c>Api5.Volume(part)</c> after
     /// its own <c>Create()=false</c> is reading whatever an <em>earlier</em> step left behind. Every
     /// step that builds in the shared document records this before and after, so a number that did
-    /// not move is reported as not having moved rather than as a geometric result.
-    /// </summary>
+    /// not move is reported as not having moved rather than as a geometric result.</summary>
     private double? _bodyVolumeBeforeStep;
 
-    /// <summary>
-    /// The volume of the R.8 plate measured <em>before</em> it was drilled. Without this the step has
+    /// <summary>The volume of the R.8 plate measured <em>before</em> it was drilled. Without this the step has
     /// no honest baseline: subtracting a theoretical hole from a theoretical plate assumes the hole was
-    /// actually cut, which is the very thing under test. Measured, not assumed.
-    /// </summary>
+    /// actually cut, which is the very thing under test. Measured, not assumed.</summary>
     private double? _plateOnlyVolume;
 
     public RotationProbe(ProbeReport report, Options options)
@@ -148,7 +125,7 @@ internal sealed class RotationProbe
             Path.Combine(options.ReportDir, stem + ".md"));
     }
 
-    /// <summary>Snapshots the КОМПАС processes present before the probe's own instance is created.</summary>
+    /// <summary>Snapshots the KOMPAS processes present before the probe's own instance is created.</summary>
     private void SampleProcessesBefore()
     {
         foreach (var process in Process.GetProcessesByName("KOMPAS"))
@@ -335,7 +312,7 @@ internal sealed class RotationProbe
         // leaked, and by the time the next command ran, both had exited on their own. A verdict that
         // depends on how quickly the operating system reaps a process measures the race, not the
         // probe. So the wait follows the probe's OWN pid specifically — the other new pid on this
-        // machine belongs to КОМПАС's own helper arrangement and is not a leak this probe can close.
+        // machine belongs to KOMPAS's own helper arrangement and is not a leak this probe can close.
         var appeared = new List<int>();
         var ownStillAlive = false;
         for (var attempt = 0; attempt < 40; attempt++)
@@ -388,32 +365,24 @@ internal sealed class RotationProbe
 
     // ═══════════════════════════════════════════════════════ entity type search ══
 
-    /// <summary>
-    /// R.0d — whether a live element of a feature tree is a <c>ksEntity</c>, a <c>ksFeature</c>, or a
-    /// bare <c>System.__ComObject</c> that answers one cast and refuses the other.
-    /// </summary>
+    /// <summary>R.0d — whether a live element of a feature tree is a <c>ksEntity</c>, a <c>ksFeature</c>, or a
+    /// bare <c>System.__ComObject</c> that answers one cast and refuses the other.</summary>
     /// <remarks>
-    /// <para>
-    /// <b>Why this step exists.</b> R.20 walks the feature tree of files КОМПАС itself wrote. On those
-    /// files the walk demonstrably works — it returns real feature names (<c>«Операция вращения:1»</c>,
-    /// <c>«Вырезать элемент вращения:2»</c>) rather than the empty document's two service features. But
+    /// <b>Why this step exists.</b> R.20 walks the feature tree of files KOMPAS itself wrote. On those
+    /// files the walk demonstrably works — it returns real feature names (<c>"Rotation operation:1"</c>,
+    /// <c>"Cut rotation element:2"</c>) rather than the empty document's two service features. But
     /// <c>element as ksFeature</c> succeeds while <c>element as ksEntity</c> returns <b>null for every
     /// element in every file</b>, and <c>Api5.RuntimeName(element)</c> reports <c>System.__ComObject</c>
     /// in both cases. Those two facts cannot both be about the model: one object, two casts, two
     /// answers is a statement about the interop wrapper.
-    /// </para>
-    /// <para>
     /// <b>Why it is registered here and not inside <c>FindRotatedType</c>.</b> That method is a
     /// fallback — reached only when <c>QuickSweep(1, 120)</c> finds nothing. Because the sweep does
     /// find the rotation id (27), a question placed inside the fallback is a question that is never
     /// asked, and its absence from the journal looks exactly like a negative answer. This file has
     /// been bitten by the unreachable-diagnostic trap twice already, so the check is a step of its own.
-    /// </para>
-    /// <para>
     /// Both directions are measured: a freshly created entity asked whether it is a feature, and a real
     /// tree walked with both casts counted, so "the collection is empty" and "the cast is refused" are
     /// distinguishable in the journal.
-    /// </para>
     /// </remarks>
     private void EntityFeatureTypeRoute()
     {
@@ -550,7 +519,7 @@ internal sealed class RotationProbe
             // ── the experiment that decides between "the file is different" and "these are not my features" ──
             //
             // Everything so far measures ONE document: this empty part. R.20 measures ANOTHER: a file
-            // КОМПАС wrote years ago. They disagree — a feature built here yields a definition, a
+            // KOMPAS wrote years ago. They disagree — a feature built here yields a definition, a
             // feature read from a shipped file does not — and a disagreement between two documents is
             // not yet a mechanism, because the two differ in a dozen ways at once (author, version,
             // age, file origin).
@@ -567,7 +536,7 @@ internal sealed class RotationProbe
             // extrusion on a part that is thrown away in the next line.
             BuildFreshFeatureForCastingControl(part, step);
 
-            // The finding, stated as the measurement rather than as a conclusion about КОМПАС: if both
+            // The finding, stated as the measurement rather than as a conclusion about KOMPAS: if both
             // counts are zero the collection is empty; if ksFeature != ksEntity the cast, not the
             // model, decides which interface a caller can reach.
             if (count == 0)
@@ -594,14 +563,12 @@ internal sealed class RotationProbe
         step.Pass("обе стороны вопроса измерены: свежая сущность и живое дерево");
     }
 
-    /// <summary>
-    /// R.0b — a runner that proves the mechanism R.1 depends on. The first two attempts at R.1 both
+    /// <summary>R.0b — a runner that proves the mechanism R.1 depends on. The first two attempts at R.1 both
     /// came back with <b>zero</b> observations, which means they failed before their own first
     /// diagnostic line — and a step that cannot say how far it walked cannot be told apart from a
     /// step that walked everything and found nothing. This walks one known id (sketch = 5, already
     /// measured elsewhere in this repository) through the exact same two reference routes the real
-    /// sweep uses, so that a silent no-answer becomes a located fault.
-    /// </summary>
+    /// sweep uses, so that a silent no-answer becomes a located fault.</summary>
     /// <remarks>
     /// <b>What this step exists to expose.</b> A bare <c>entity.GetDefinition()</c> on a freshly
     /// created entity hands back a raw <c>System.__ComObject</c>, and a C# <c>is</c> against an
@@ -714,13 +681,10 @@ internal sealed class RotationProbe
     /// walks the plausible range and reports what answered.
     /// </summary>
     /// <remarks>
-    /// <para>
     /// <b>Staged, and it says which stage it reached.</b> Two blind sweeps over 1…60 producing no
     /// observations at all is not something to repeat a third time: this version reports the walk as
     /// five labelled chunks, so the report distinguishes "the band was wrong" from "the sweep never
     /// ran".
-    /// </para>
-    /// <para>
     /// <b>Two probes per id, because a NaN name is not a verdict.</b> The first instrumented sweep
     /// asked only <c>entity.GetDefinition()</c> and got <c>__ComObject</c> for all sixty ids — which
     /// measures the wrapper, not the product: the vendor returns a raw <c>__ComObject</c> whose
@@ -728,7 +692,6 @@ internal sealed class RotationProbe
     /// that the chamfer and hole probes already use. So each id is now asked twice, and an id is
     /// reported as a hit when <em>either</em> route yields a definition whose name marks the rotation
     /// family. The definition is never inferred from the id number.
-    /// </para>
     /// </remarks>
     private short? FindRotatedType()
     {
@@ -845,15 +808,11 @@ internal sealed class RotationProbe
         || name.Contains("Rotation", StringComparison.Ordinal)
         || name.Contains("Extrusion", StringComparison.Ordinal);
 
-    /// <summary>
-    /// The definition of a freshly created entity, by the direct route.
-    /// </summary>
-    /// <remarks>
-    /// Kept separate from the transferred route so the report can say which of the two answered.
+    /// <summary>The definition of a freshly created entity, by the direct route.</summary>
+    /// <remarks>Kept separate from the transferred route so the report can say which of the two answered.
     /// Failures are collected, never swallowed: an id where the vendor refused a definition is a
     /// measurement about the vendor, and a sweep that hides it repeats the mistake the first two
-    /// drafts made.
-    /// </remarks>
+    /// drafts made.</remarks>
     private static object? GetDefinition(ksEntity entity, List<string> failed, short id, string route)
     {
         try
@@ -867,15 +826,11 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// The second route: hand the definition through <c>TransferInterface</c> before casting it.
-    /// </summary>
-    /// <remarks>
-    /// Both the chamfer probe and the hole probe do this before they ask a definition any questions,
+    /// <summary>The second route: hand the definition through <c>TransferInterface</c> before casting it.</summary>
+    /// <remarks>Both the chamfer probe and the hole probe do this before they ask a definition any questions,
     /// and the difference is not cosmetic: a raw <c>__ComObject</c> answers a C# <c>is</c> against an
     /// interop interface with whatever its <c>QueryInterface</c> chooses, and a "no" from that path
-    /// is a statement about the wrapper chain rather than about the product (ADR-003 §4).
-    /// </remarks>
+    /// is a statement about the wrapper chain rather than about the product (ADR-003 §4).</remarks>
     private object? TransferDefinition(ksEntity entity, List<string> failed, short id)
     {
         try
@@ -898,23 +853,17 @@ internal sealed class RotationProbe
         _ => Api5.RuntimeName(definition),
     };
 
-    /// <summary>
-    /// R.1e — the three rotation definitions and the parameter block's own <c>direction</c>.
-    /// </summary>
+    /// <summary>R.1e — the three rotation definitions and the parameter block's own <c>direction</c>.</summary>
     /// <remarks>
-    /// <para>
     /// The metadata settles a question the first drafts got wrong: the definition carries
     /// <c>directionType</c> <em>and</em> the parameter block carries a separate <c>direction</c>
     /// (Int32, read/write). Those are two different fields with two different meanings, and until now
     /// only the first was set. The second is a candidate for the reason <c>Create()</c> refuses.
-    /// </para>
-    /// <para>
     /// The vendor also ships three separate interfaces for this family —
     /// <c>ksBaseRotatedDefinition</c>, <c>ksBossRotatedDefinition</c>, <c>ksCutRotatedDefinition</c> —
     /// so the ids next to 27 are walked and each cast is reported. A base rotation over a base part
     /// and a rotation of a boss are not the same operation, and which id is which is measured here
     /// rather than assumed from the neighbour.
-    /// </para>
     /// </remarks>
     private void VariantSweep()
     {
@@ -986,12 +935,9 @@ internal sealed class RotationProbe
         step.Pass("варианты определены и измерены — что из них собралось, сказано в наблюдениях");
     }
 
-    /// <summary>
-    /// R.1f — the side-vs-direction guard, borrowed from the extrusion defect this project already
-    /// paid for.
-    /// </summary>
+    /// <summary>R.1f — the side-vs-direction guard, borrowed from the extrusion defect this project already
+    /// paid for.</summary>
     /// <remarks>
-    /// <para>
     /// <c>ConfigureBase</c> in the shipping adapter carries a measured lesson: <c>directionType</c>
     /// <em>is</em> the direction, so the side passed to <c>SetSideParam</c> must agree with it. When it
     /// did not, a base extrusion answered <c>Create()=false</c> and the feature never appeared, while
@@ -999,12 +945,9 @@ internal sealed class RotationProbe
     /// fields — <c>directionType</c> on the definition, and <c>SetSideParam(side1, angle)</c> — and
     /// the run above shows <c>direction=1</c> silently zeroing <c>angleNormal</c>, which is the same
     /// signature: a setter that was accepted and then dropped.
-    /// </para>
-    /// <para>
     /// So the four combinations are walked: both directions against both sides. This is the cheapest
     /// remaining hypothesis, and if it is right it is the same defect twice — which would be worth
     /// knowing in the adapter rather than in a probe.
-    /// </para>
     /// </remarks>
     private void SideDirectionMatrix()
     {
@@ -1121,15 +1064,11 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// R.1b — what the definition of a freshly created entity really is.
-    /// </summary>
-    /// <remarks>
-    /// A bare <c>entity.GetDefinition()</c> hands back a raw <c>__ComObject</c> for almost every id,
+    /// <summary>R.1b — what the definition of a freshly created entity really is.</summary>
+    /// <remarks>A bare <c>entity.GetDefinition()</c> hands back a raw <c>__ComObject</c> for almost every id,
     /// and a C# cast against it can be refused by the wrapper chain rather than by the object. So the
     /// same question is asked of the ids whose family is already measured — extrusion, chamfer,
-    /// fillet — where a working cast proves the mechanism and a refusal is a fact about that family.
-    /// </remarks>
+    /// fillet — where a working cast proves the mechanism and a refusal is a fact about that family.</remarks>
     private void RotationFamilyProbe()
     {
         var step = _report.Begin("R.1b", "Чем на самом деле создаётся вращение: определение из эскиза",
@@ -1194,9 +1133,7 @@ internal sealed class RotationProbe
             + "который уже создан, а не у голого номера)");
     }
 
-    /// <summary>
-    /// The swift sweep R.1 was supposed to be.
-    /// </summary>
+    /// <summary>The swift sweep R.1 was supposed to be.</summary>
     /// <remarks>
     /// <b>Why this exists next to R.1.</b> R.1 asks each id twice and re-acquires the part every
     /// iteration; over 1…60 that is 120 cross-process calls and it took minutes without ever leaving
@@ -1297,23 +1234,15 @@ internal sealed class RotationProbe
 
     // ══════════════════════════════════════════════════════════════ building ══
 
-    /// <summary>
-    /// R.1d — what a rotation actually needs from its sketch, asked as four controlled variants.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The reading so far: the rotated definition is found (id 27), the angle reads back, the profile
+    /// <summary>R.1d — what a rotation actually needs from its sketch, asked as four controlled variants.</summary>
+    /// <remarks>The reading so far: the rotated definition is found (id 27), the angle reads back, the profile
     /// is accepted, and <c>Create()</c> still returns false. Three candidate explanations remain and
     /// they are cheap to separate: the axis is not in the sketch at all; the axis is there but not
     /// styled as a construction line; or the profile's position relative to the intended axis is
     /// degenerate (the rectangle touches the axis, so the swept body would be self-touching).
-    /// </para>
-    /// <para>
     /// Each variant differs from the next in exactly one thing, and the report keeps the four outcomes
     /// side by side. Whether an axis line is needed at all is <b>not</b> assumed — it is the first
-    /// variant.
-    /// </para>
-    /// </remarks>
+    /// variant.</remarks>
     private void AxisVariants()
     {
         _currentStepId = "R.1d";
@@ -1358,11 +1287,9 @@ internal sealed class RotationProbe
         step.Pass("четыре варианта измерены — какой из них работает, сказано в наблюдениях выше");
     }
 
-    /// <summary>
-    /// A fresh document holding one rectangle sketch, optionally carrying a construction axis.
+    /// <summary>A fresh document holding one rectangle sketch, optionally carrying a construction axis.
     /// The rectangle spans u ∈ [gap, gap + r], v ∈ [−h/2, h/2], so a full turn about the v axis
-    /// sweeps exactly π·r²·h and a half turn exactly half of it.
-    /// </summary>
+    /// sweeps exactly π·r²·h and a half turn exactly half of it.</summary>
     private (ksPart Part, ksEntity Sketch) RectangleSketch(
         string name, bool withAxis, double gapMm = 0d, int axisStyle = AxisStyle)
     {
@@ -1414,24 +1341,18 @@ internal sealed class RotationProbe
         return (part, sketch);
     }
 
-    /// <summary>
-    /// The construction line the rotation is meant to turn about, drawn as an ordinary segment and
-    /// then given a style by number.
-    /// </summary>
+    /// <summary>The construction line the rotation is meant to turn about, drawn as an ordinary segment and
+    /// then given a style by number.</summary>
     /// <remarks>
-    /// <para>
     /// The metadata closes off the obvious route: <c>ksAxisLineParam</c> declares only <c>Init()</c>
     /// with no arguments plus <c>GetBegPoint</c>/<c>GetEndPoint</c> — it can <b>read</b> an axis, not
     /// author one — and <c>ksDocument2D</c> does not declare <c>AxisLineParam</c> at all. What the
     /// document does declare is <c>ksSetObjectStyle(obj, style)</c> and <c>ksGetObjectStyle(obj)</c>,
     /// so the line is drawn normally and then given the axis style.
-    /// </para>
-    /// <para>
     /// <b>Which number that style is is not in the metadata</b> — the styles live in the
     /// application's own style library, one <c>spt*.lyt</c> file on disk — so this walks the numbers
     /// and reports what each one produced rather than asserting one. The walk is bounded and its
     /// outcome is the first style that makes the line read back as an axis.
-    /// </para>
     /// </remarks>
     private int? DrawAxis(ksDocument2D editor, double v0, double v1, int style = AxisStyle)
     {
@@ -1455,15 +1376,11 @@ internal sealed class RotationProbe
         return reference;
     }
 
-    /// <summary>
-    /// R.1c — which style number turns an ordinary segment into a construction axis.
-    /// </summary>
-    /// <remarks>
-    /// Carried as its own step because it is the one question in SM-03 whose answer is a <em>number
+    /// <summary>R.1c — which style number turns an ordinary segment into a construction axis.</summary>
+    /// <remarks>Carried as its own step because it is the one question in SM-03 whose answer is a <em>number
     /// outside the type library</em>: the axis is not a separate object in this API, it is a segment
     /// wearing the axis style, and the style table belongs to the application's per-install style
-    /// library. Reading the styles back is measured here rather than guessed from a document.
-    /// </remarks>
+    /// library. Reading the styles back is measured here rather than guessed from a document.</remarks>
     private int? FindAxisStyle()
     {
         var step = _report.Begin("R.1c", "Номер стиля осевой линии",
@@ -1618,32 +1535,24 @@ internal sealed class RotationProbe
 
     // ══════════════════════════════════════════════════════════════ steps ══
 
-    /// <summary>
-    /// R.6 — how a real construction axis is authored, measured rather than guessed.
-    /// </summary>
+    /// <summary>R.6 — how a real construction axis is authored, measured rather than guessed.</summary>
     /// <remarks>
-    /// <para>
     /// Every rotation rung before this one ends with <c>Create()=false</c>, and the reason is the same
     /// in all of them: the sketch holds a rectangle plus an ordinary segment that was <em>relabelled</em>
     /// with <c>ksSetObjectStyle</c>, and a relabelled segment is not a construction axis. R.1c already
-    /// said as much in its own conclusion — "стили принимаются документом; осевой линией он от этого
-    /// не становится". So the missing piece is not a parameter of the rotation definition but the axis
+    /// said as much in its own conclusion — "the styles are accepted by the document; that does not
+    /// make it an axis line". So the missing piece is not a parameter of the rotation definition but the axis
     /// object itself.
-    /// </para>
-    /// <para>
     /// The type library answers where to look: <c>ksLineSegParam</c> exists as a parameter block, and
     /// <c>ksSetObjParam(referObj, parType, param)</c> is the documented way to put one onto a drawn
     /// object. <c>ksAxisLineParam</c> also exists, but the metadata declares only <c>Init()</c>,
     /// <c>GetBegPoint</c> and <c>GetEndPoint</c> on it — it can read an axis and cannot author one — so
     /// the segment-parameter route is the one worth measuring.
-    /// </para>
-    /// <para>
     /// What is measured here, in order: the live member list of <c>ksLineSegParam</c>; what
     /// <c>ksGetObjParam</c> returns for each <c>parType</c> on a plain segment; and finally whether a
     /// rotation over a sketch whose axis came from that route produces a body. The last one is the only
     /// one that decides anything, and a route that authors no axis will simply show Create()=false again
     /// — recorded, not hidden.
-    /// </para>
     /// </remarks>
     private void AxisAuthoringRoute()
     {
@@ -1746,29 +1655,21 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// R.7 — does <c>IRotated.SetAxis</c> build the rotation that <c>ksBaseRotatedDefinition</c> refuses?
-    /// </summary>
+    /// <summary>R.7 — does <c>IRotated.SetAxis</c> build the rotation that <c>ksBaseRotatedDefinition</c> refuses?</summary>
     /// <remarks>
-    /// <para>
     /// R.6 closed the segment-parameter route and left the blocker stated as "there is no way to author
     /// a construction axis". That statement was too strong, and the API7 interface dump already on
     /// disk said so: <c>IRotated</c> (IID <c>{7BB28AD1-CCAE-449C-9086-A97470543089}</c>) declares
     /// <c>_set_Axis(POINTER(IModelObject))</c> — a real <c>SetAxis</c> that takes a model object, which
     /// is exactly the member <c>ksBaseRotatedDefinition</c> does not have.
-    /// </para>
-    /// <para>
     /// This is also the shape <c>IHoleDisposal</c> already proved: the useful members of a feature are
     /// not on its API5 definition, they are on a <b>separate API7 interface reached by QI on the
     /// transferred object</b>. The hole's placement lives on <c>IHoleDisposal</c>, not on
     /// <c>IHole3D</c>; the rotation's axis may likewise live on <c>IRotated</c>, not on the definition.
-    /// </para>
-    /// <para>
     /// What is measured, in order: whether the transferred feature answers QI for <c>IRotated</c> at
     /// all; what its <c>Axis</c> currently reads; whether an object can be assigned to it (tried with
     /// both a transferred edge of the profile's plane and an API7 construction object); and finally
     /// whether a body of volume π·r²·h appears. Only the volume decides — a non-null Axis is not proof.
-    /// </para>
     /// </remarks>
     private void RotatedSetAxisRoute()
     {
@@ -2012,29 +1913,21 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// R.8 — is a real cylindrical face the object <c>IRotated.Axis</c> will actually hold?
-    /// </summary>
+    /// <summary>R.8 — is a real cylindrical face the object <c>IRotated.Axis</c> will actually hold?</summary>
     /// <remarks>
-    /// <para>
     /// R.7 localized the rotation blocker to a single member: <c>IRotated.Axis</c> accepts an object
     /// and reads back <c>null</c>, while <c>Profile</c> on the same object, over the same transfer,
     /// persists. That leaves exactly one open question — which object the member will hold — and the
     /// catalog names the admissible axis sources itself: a sketch construction line, a built axis, or
     /// <b>cylindrical geometry</b>.
-    /// </para>
-    /// <para>
     /// The first two are measured and closed (R.1c/R.6: a relabelled segment is not an axis, and the
     /// parameter block is unreachable). R.7 tried an edge — a straight line, which is arguably not
     /// "cylindrical geometry" at all, and may simply be the wrong kind of object. This step tries the
     /// third source properly: a real through hole is drilled so the body contains a genuine cylindrical
     /// face, and that face is offered as the axis.
-    /// </para>
-    /// <para>
     /// A hole is used rather than a turned cylinder because the hole route is already proven in this
     /// probe suite (R.7's sibling, the hole group, drills through holes at will), and because the
     /// resulting face's axis is exactly the line a rotation about it would turn on.
-    /// </para>
     /// </remarks>
     private void RotatedAxisCylinderFace()
     {
@@ -2308,12 +2201,9 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// R.9 — does API7 expose a genuine <b>axis object</b>, created as an object rather than derived
-    /// from a profile?
-    /// </summary>
+    /// <summary>R.9 — does API7 expose a genuine <b>axis object</b>, created as an object rather than derived
+    /// from a profile?</summary>
     /// <remarks>
-    /// <para>
     /// This is the first of the two sources the rotation blocker was narrowed down to. It comes from
     /// the type library rather than from a guess: <c>IModelContainer</c> declares <c>Axes3D</c>
     /// alongside the <c>Holes3D</c> the hole group already proved, and <c>IAxes3D.Add</c> takes a
@@ -2321,19 +2211,14 @@ internal sealed class RotationProbe
     /// <c>o3d_axis2Planes(9)</c>, <c>o3d_axis2Points(10)</c>, <c>o3d_axisConeFace(11)</c>,
     /// <c>o3d_axisEdge(12)</c>, <c>o3d_axisOperation(13)</c>, plus the three global axes
     /// <c>o3d_axisOX/OY/OZ(71…73)</c>.
-    /// </para>
-    /// <para>
     /// <b>What this step decides.</b> A rotation needs an axis object. Every earlier rung offered the
     /// feature something it already had — an edge, a face, a sketch — and the member either discarded
     /// it or built nothing. Here the axis is <em>created as an axis</em> first, which is the one
     /// composition not yet tried. The step walks all five axis types, reports which of them
     /// <c>Add</c> actually builds, and for those that read back as a real object it goes on to offer
     /// the created axis to <c>IRotated.Axis</c> and rebuilds.
-    /// </para>
-    /// <para>
     /// The verdict is deliberately three-way and the middle case is not a pass: an axis object that
     /// exists but does not make the rotation build leaves the blocker exactly where it was.
-    /// </para>
     /// </remarks>
     private void Axis3DContainerRoute()
     {
@@ -2509,16 +2394,12 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// R.10 — the axis object reached from an <b>edge or an operation</b> of the real body, then fed
-    /// to the rotation.
-    /// </summary>
-    /// <remarks>
-    /// R.9 creates axes from the container and reports which types build. This step closes the loop on
+    /// <summary>R.10 — the axis object reached from an <b>edge or an operation</b> of the real body, then fed
+    /// to the rotation.</summary>
+    /// <remarks>R.9 creates axes from the container and reports which types build. This step closes the loop on
     /// the two concrete axis classes whose source the probe can actually supply — <c>IAxis3DByEdge</c>
     /// (<c>Edge</c>) and <c>IAxis3DByOperation</c> (<c>Operation</c>) — by attaching the source
-    /// explicitly, rebuilding, and then giving the resulting axis to <c>IRotated.Axis</c>.
-    /// </remarks>
+    /// explicitly, rebuilding, and then giving the resulting axis to <c>IRotated.Axis</c>.</remarks>
     private void Axis3DByEdgeRoute()
     {
         _currentStepId = "R.10";
@@ -2688,7 +2569,6 @@ internal sealed class RotationProbe
     /// <c>ksDocument2D.ksAxisLine(ksAxisLineParam)</c>.
     /// </summary>
     /// <remarks>
-    /// <para>
     /// This step exists because R.6 was wrong about what it had ruled out. R.6 concluded that
     /// "<c>ksAxisLineParam</c> can only read an axis and cannot author one" and therefore tried
     /// <c>ksLineSegParam</c> through <c>ksSetObjParam</c> instead — and got
@@ -2700,8 +2580,6 @@ internal sealed class RotationProbe
     /// <c>ksAxisLine(Object param)</c> — and the parameter type it wants, <c>ksAxisLineParam</c>,
     /// has its own co-class <c>AxisLineParamClass</c> at CLSID
     /// <c>{705962E9-5E9B-4379-8504-FA754D11FC66}</c>, a completely different registration.
-    /// </para>
-    /// <para>
     /// <b>What is measured, in order.</b> (1) Whether the <c>AxisLineParamClass</c> co-class can be
     /// constructed directly from the interop assembly at all. (2) Whether <c>ksAxisLine</c> returns a
     /// non-zero reference — a drawn object, not a promise. (3) Whether that reference reads back as an
@@ -2709,13 +2587,10 @@ internal sealed class RotationProbe
     /// <c>ksIsPointInsideContour</c>-style queries. (4) Whether a rotation over the sketch containing
     /// that axis builds. Only (4) decides anything, and a zero reference in (2) is reported as the
     /// route failing rather than being papered over.
-    /// </para>
-    /// <para>
     /// The rotation's own definition declares no <c>SetAxis</c> — reflection confirms only
     /// <c>SetSketch</c>, <c>SetSideParam(side1, angle)</c>, <c>GetSideParam</c>, <c>RotatedParam</c>,
     /// <c>SetThinParam</c> and a <c>toroidShapeType</c> property. So the axis genuinely has to live in
     /// the profile sketch, which is why authoring the sketch's axis is the whole question.
-    /// </para>
     /// </remarks>
     private void AxisLineParamRoute()
     {
@@ -2886,18 +2761,13 @@ internal sealed class RotationProbe
             + ") — блокер SM-03 остаётся открытым");
     }
 
-    /// <summary>
-    /// R.12 — the parameter-type numbers, taken from the enumeration that actually names them rather
-    /// than swept blind.
-    /// </summary>
+    /// <summary>R.12 — the parameter-type numbers, taken from the enumeration that actually names them rather
+    /// than swept blind.</summary>
     /// <remarks>
-    /// <para>
     /// R.6 swept <c>ksSetObjParam(segment, param, parType)</c> over <c>parType</c> 1…6 and reported
     /// nothing but <c>REGDB_E_CLASSNOTREG</c>, and R.11 showed the same for <c>AxisLineParamClass</c>.
     /// Both steps shared a defect that R.11's failure finally exposed: <b>the number was guessed and
     /// the parameter object was constructed directly.</b>
-    /// </para>
-    /// <para>
     /// Reflection over the shipped constants assembly names the numbers:
     /// <c>DrawingObjectTypeEnum.ksDrLineSeg = 1</c>, <c>ksDrLine = 28</c>,
     /// <b><c>ksDrAxisLine = 48</c></b>, <c>ksDrStraightAxis = 56</c>, <c>ksDrCircleAxis = 58</c>,
@@ -2905,8 +2775,6 @@ internal sealed class RotationProbe
     /// one the enumeration calls "axis line". The same enumeration also shows the 3D side of the
     /// family, <c>KompasAPIObjectTypeEnum.ksObjectAxis3D = 11188</c> and its relatives 11190…11195,
     /// which is what R.9's container was working with.
-    /// </para>
-    /// <para>
     /// And the parameter object is not constructed with <c>new</c>: this install registers its COM
     /// classes by manifest, so every <c>…ParamClass</c> co-class answers
     /// <c>REGDB_E_CLASSNOTREG</c>. The application declares the factory instead —
@@ -2914,13 +2782,9 @@ internal sealed class RotationProbe
     /// bound. This step asks that factory for the axis-adjacent structure numbers, reports the
     /// object it gets back for each, and, for every block that is a real object, puts it on the
     /// segment with <c>ksSetObjParam</c> at the axis-line number and then rebuilds a rotation.
-    /// </para>
-    /// <para>
     /// <b>Honesty rule.</b> A block that is null, and a <c>ksSetObjParam</c> that answers 0, are
     /// reported as such. The step passes only if a rotation over the resulting sketch builds with the
     /// analytic volume; a non-zero <c>ksSetObjParam</c> on its own is not a pass.
-    /// </para>
-    /// <para>
     /// <b>Measured outcome, and why the read direction is in here.</b> The factory works —
     /// <c>GetParamStruct(123 /* ko_AxisLineParam */)</c>, <c>(11 /* ko_LineSegParam */)</c> and
     /// <c>(109 /* ko_ContourParam */)</c> each return a live <c>System.__ComObject</c>, and that
@@ -2933,7 +2797,6 @@ internal sealed class RotationProbe
     /// questioned. That closes the authoring route for a measured reason rather than for want of
     /// attempts, and the failing rotation afterwards says the same thing: <c>Create()</c> is false and
     /// the body does not move.
-    /// </para>
     /// </remarks>
     private void ObjectTypeNumberRoute()
     {
@@ -3156,9 +3019,8 @@ internal sealed class RotationProbe
     /// is offered.
     /// </summary>
     /// <remarks>
-    /// <para>
     /// R.9 left one unexplained fact — an axis object that <c>Add</c> creates is still not in the
-    /// container (<c>осей стало 0</c>) and <c>IRotated.Axis</c> discards it. Reflection over the
+    /// container (<c>axes became 0</c>) and <c>IRotated.Axis</c> discards it. Reflection over the
     /// shipped interop narrows that down rather than guessing at it:
     /// <c>ksRotatedTypeEnum</c> has <b>three</b> members — <c>ksRTAngle = 0</c>,
     /// <c>ksRTVertex = 1</c>, <c>ksRTSurface = 2</c> — and <c>IRotated.RotatedType</c> is writable and
@@ -3166,8 +3028,6 @@ internal sealed class RotationProbe
     /// of rotation it is cannot know which axis it wants, so a silently discarded <c>Axis</c> is
     /// exactly what an unset <c>RotatedType</c> would produce. <c>AngleObject</c> is the second
     /// untouched member and is the one the vertex and surface kinds need.
-    /// </para>
-    /// <para>
     /// <b>What is measured, in four rungs, each reported whether or not it works.</b>
     /// (1) <c>RotatedType</c> before the write and after each of the three values — a write that does
     /// not read back is a different finding from one that refuses the value.
@@ -3179,12 +3039,9 @@ internal sealed class RotationProbe
     /// re-read, because whether an axis becomes a real tree object is the R.9 question.
     /// (4) The same writes on an axis created by <c>Add</c> and committed, offered as the pair
     /// <c>(Axis, Profile)</c> with <c>RotatedType</c> set first.
-    /// </para>
-    /// <para>
     /// The verdict stays three-way and the gate is the same one the suite has had to learn twice:
     /// the document's body carries every earlier step, so an unchanged volume is "nothing was built",
     /// never "a small rotation". A journal that reads back correctly is not a pass.
-    /// </para>
     /// </remarks>
     private void RotatedTypeAndWriteOrderRoute()
     {
@@ -3319,47 +3176,35 @@ internal sealed class RotationProbe
             + ") — блокер SM-03 остаётся открытым");
     }
 
-    /// <summary>
-    /// The two inputs no earlier step ever measured: <b>what kind of edge</b> is being handed to the
-    /// rotation, and <b>an axis built from two authored points</b> instead of from geometry.
-    /// </summary>
+    /// <summary>The two inputs no earlier step ever measured: <b>what kind of edge</b> is being handed to the
+    /// rotation, and <b>an axis built from two authored points</b> instead of from geometry.</summary>
     /// <remarks>
-    /// <para>
     /// R.13 shut down its own hypothesis: <c>RotatedType[true]</c> writes and reads back
     /// (<c>ksRTAngle → ksRTVertex → ksRTSurface</c>) and <c>Axis</c> still returned
-    /// <c>null (отброшено)</c> in all six rungs, in both write orders. So the axis is not discarded
+    /// <c>null (discarded)</c> in all six rungs, in both write orders. So the axis is not discarded
     /// for want of a rotation kind, and not because of the order of the writes. What R.13 also showed
     /// is that its axis was <i>real</i> — <c>Update() → True</c>, <c>Valid=True</c>,
-    /// <c>Name=Ось через ребро:1</c>, container <c>Count=1</c> — which is exactly what R.9 and R.10
-    /// never had (<c>Name=</c>, <c>осей стало 0</c>).
-    /// </para>
-    /// <para>
+    /// <c>Name=Axis through edge:1</c>, container <c>Count=1</c> — which is exactly what R.9 and R.10
+    /// never had (<c>Name=</c>, <c>axes became 0</c>).
     /// That leaves one input still unmeasured, and it is the probe's own defect rather than a fact
-    /// about КОМПАС: every step so far has fed <c>Axis</c> the <i>first edge it happens to find</i>
+    /// about KOMPAS: every step so far has fed <c>Axis</c> the <i>first edge it happens to find</i>
     /// (<see cref="TryAnyEdge"/> walks faces and returns the first one), and <b>never asked the edge
     /// what it is</b>. A plate has 12 edges; a seam or a tangent curve is a different object from a
     /// straight line, and an axis built on the wrong kind is a different axis. Without characterising
-    /// the edge, «Axis отвергает оси» and «Axis отвергает именно это ребро» are the same journal —
+    /// the edge, "Axis rejects axes" and "Axis rejects exactly this edge" are the same journal —
     /// the <c>4/tan</c> lesson again, this time about my own instrument.
-    /// </para>
-    /// <para>
     /// <b>Rung (1)</b> therefore characterises every edge of the plate with the predicates
     /// <c>ksEdgeDefinition</c> actually declares — <c>IsStraight</c>, <c>IsLineSeg</c>, <c>IsArc</c>,
     /// <c>IsCircle</c>, <c>IsEllipse</c>, <c>IsEllipseArc</c>, <c>IsNurbs</c>, <c>IsPlanar</c>,
     /// <c>IsPeriodic</c>, <c>IsValid</c> — and reads <c>GetCurve3D()</c> and <c>GetLength</c>. Only
     /// then is a <i>straight, valid</i> edge selected deliberately and offered.
-    /// </para>
-    /// <para>
-    /// <b>Rung (2)</b> closes a gap R.9 named in its own journal («точек в пробе нет, источник не
-    /// задан») and then never filled: <c>IAxis3DBy2Points</c> takes <c>Point1</c>/<c>Point2</c> as
+    /// <b>Rung (2)</b> closes a gap R.9 named in its own journal ("there are no points in the probe, the
+    /// source is not given") and then never filled: <c>IAxis3DBy2Points</c> takes <c>Point1</c>/<c>Point2</c> as
     /// <c>IModelObject</c>, and <c>IPoints3D.Add() → IPoint3D</c> with settable <c>X</c>/<c>Y</c>/<c>Z</c>
     /// and <c>Update()</c> is how a point is authored. A two-point axis lies on the declared axis
     /// through the part origin, so it is an axis the probe can <i>predict</i> rather than hope for.
-    /// </para>
-    /// <para>
     /// Verdict unchanged and three-way, gate unchanged: the document accumulates every earlier body,
-    /// so an unchanged volume is «ничего не построено» and never «маленькое вращение».
-    /// </para>
+    /// so an unchanged volume is "nothing built" and never "a small rotation".
     /// </remarks>
     private void EdgeKindAndTwoPointAxisRoute()
     {
@@ -3463,8 +3308,8 @@ internal sealed class RotationProbe
 
         // ── rung (3): offer both axes to the rotation, each with its own profile ────────────────
         // The label is paired with a fixed short tag rather than derived from the Russian text: the
-        // first run of this step matched on label.Contains("точек") against the label
-        // «ось по двум точкам», which is the genitive plural and does NOT contain «точек» — both
+        // first run of this step matched the label on a Russian substring ("points"), but the label
+        // "axis through two points" is the genitive plural and does NOT contain that nominative form — both
         // attempts were therefore labelled "straight-edge" and the journal could not say which axis
         // Axis had kept. A probe that mislabels its own two candidates reports a fact about itself.
         var candidates = new List<(string Label, string Tag, KompasAPI7.IAxis3D? Axis)>();
@@ -3528,22 +3373,17 @@ internal sealed class RotationProbe
             + ") — блокер SM-03 остаётся открытым");
     }
 
-    /// <summary>
-    /// The profile as a real closed <b>contour</b>, with the contour proved closed before the
-    /// rotation is asked to sweep it.
-    /// </summary>
+    /// <summary>The profile as a real closed <b>contour</b>, with the contour proved closed before the
+    /// rotation is asked to sweep it.</summary>
     /// <remarks>
-    /// <para>
     /// Every rotation step in this probe — R.1d, R.1e, R.1f, R.6, R.7, R.8, R.9, R.10, R.11, R.12,
     /// R.13, R.14 — ends the same way: <c>Create()=False</c>, while every parameter the probe set
     /// reads back correctly (<c>SetSideParam(true,360)=True</c>, <c>GetSideParam(true)=360</c>,
     /// <c>angleNormal=360</c>, <c>direction=0</c>). A definition that accepts every value and still
     /// refuses to create is refusing for a reason <i>outside</i> the parameters that were set.
-    /// </para>
-    /// <para>
     /// The reason is in the profile, and it is a <b>probe defect</b> rather than a fact about
-    /// КОМПАС: <see cref="RectangleSketch"/> draws the rectangle as four independent
-    /// <c>ksLineSeg</c> calls and never closes them into anything. A sketch region in КОМПАС is a
+    /// KOMPAS: <see cref="RectangleSketch"/> draws the rectangle as four independent
+    /// <c>ksLineSeg</c> calls and never closes them into anything. A sketch region in KOMPAS is a
     /// <i>contour</i> object — there is a whole family of document methods for it —
     /// <c>ksContour(style)</c>, <c>ksMakeEncloseContours(gr,x,y)</c>, <c>ksIsPointInsideContour(p,x,y,prec)</c>,
     /// <c>ksIsCurveClosed</c>, <c>ksClearRegion</c> — and the probe called <b>none of them</b>. Four
@@ -3551,19 +3391,14 @@ internal sealed class RotationProbe
     /// and the volume comes back <c>null</c> (no body at all) rather than wrong. This is the
     /// <c>4/tan</c> lesson a third time: an instrument that never formed the input cannot conclude
     /// anything about the operation.
-    /// </para>
-    /// <para>
     /// <b>Rung (1)</b> draws the same rectangle, then builds the contour with <c>ksContour</c> and
     /// <c>ksMakeEncloseContours</c>, and <i>proves</i> it with <c>ksIsPointInsideContour</c> at two
     /// points — one inside the rectangle, one outside — plus <c>ksIsCurveClosed</c>. A contour that
     /// claims to exist but does not contain its own interior point is not a region, and saying so
-    /// here is the difference between «вращение не работает» and «я не собрал профиль».
-    /// </para>
-    /// <para>
+    /// here is the difference between "rotation does not work" and "I failed to build the profile".
     /// <b>Rung (2)</b> rotates over the proved contour, with the committed two-point axis from R.14
     /// offered as <c>Axis</c> and <c>RotatedType</c> set to the plain-angle kind, and with the
     /// axis-bearing sketch variant as the control.
-    /// </para>
     /// </remarks>
     private void ContourProfileRoute()
     {
@@ -3694,7 +3529,7 @@ internal sealed class RotationProbe
                     //
                     // ELEVENTH PROBE DEFECT (found 17.09.2026 by reading the journal): this control
                     // was drawn but never checked. `ksLineSeg` returned 0 (as the journal shows —
-                    // «ksIsCurveClosed(отрезок=0) → -1»), so the "control" asked about reference zero
+                    // "ksIsCurveClosed(segment=0) → -1"), so the "control" asked about reference zero
                     // and answered -1, which is the answer to a question about nothing. The line
                     // below then asserted the comparison held. A control whose own subject failed to
                     // build cannot certify anything, and reporting it as if it had is the same class
@@ -3843,10 +3678,8 @@ internal sealed class RotationProbe
     /// <summary>The point strictly inside the rectangle, used to prove the contour encloses it.</summary>
     private static double gapInside(double radius) => radius / 2d;
 
-    /// <summary>
-    /// Calls <c>ksContour(style)</c> and reports what came back. Split out so the style number and
-    /// the return are both in the journal: the first run must not assume a style is accepted.
-    /// </summary>
+    /// <summary>Calls <c>ksContour(style)</c> and reports what came back. Split out so the style number and
+    /// the return are both in the journal: the first run must not assume a style is accepted.</summary>
     private int SafeContour(ksDocument2D editor, ProbeStep step)
     {
         foreach (var style in new[] { 1, 2, 0 })
@@ -3862,17 +3695,13 @@ internal sealed class RotationProbe
         return 0;
     }
 
-    /// <summary>
-    /// A base extrusion over the given sketch — the control that separates a bad profile from a
+    /// <summary>A base extrusion over the given sketch — the control that separates a bad profile from a
     /// refused operation. Built exactly like the real plate in <c>Api5.BasePlate</c>, so a success
-    /// here means the sketch is a region.
-    /// </summary>
-    /// <remarks>
-    /// This rung exists because seven earlier steps all ended at <c>Create()=False</c> with a valid
+    /// here means the sketch is a region.</summary>
+    /// <remarks>This rung exists because seven earlier steps all ended at <c>Create()=False</c> with a valid
     /// parameter block and an identical journal line, and none of them could say whether the profile
     /// or the operation was at fault. An extrusion over the same sketch is the cheapest way to ask
-    /// the profile on its own.
-    /// </remarks>
+    /// the profile on its own.</remarks>
     private (bool Created, string Detail) TryExtrusionOverSketch(
         ksPart part, ksEntity sketch, ProbeStep step, string name)
     {
@@ -3904,38 +3733,28 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// The axis line drawn <b>outside</b> the profile region, so the sweep is still π·r²·h while the
-    /// axis segment does not cut the rectangle's interior.
-    /// </summary>
+    /// <summary>The axis line drawn <b>outside</b> the profile region, so the sweep is still π·r²·h while the
+    /// axis segment does not cut the rectangle's interior.</summary>
     /// <remarks>
-    /// <para>
     /// R.15 isolated the one variable that had never been isolated. Two sketches, drawn by the same
     /// <see cref="RectangleSketch"/>, extruded by the same proven call:
-    /// </para>
     /// <list type="bullet">
     /// <item><c>withAxis: false</c> → <c>Create()=True</c>, <c>IsCreated()=True</c>, <c>ΔV=16000.0</c>
     /// — exactly 20×40×20, the analytic volume of the control extrusion;</item>
     /// <item><c>withAxis: true</c> → <c>Create()=False</c>, <c>IsCreated()=False</c>, <c>ΔV=0</c>.</item>
     /// </list>
-    /// <para>
     /// So the axis line is not a passenger. <see cref="DrawAxis"/> draws it as a plain
     /// <c>ksLineSeg(0, v0, 0, v1)</c> — a chord at u = 0 running the full height of the rectangle —
     /// and the rectangle is drawn at u ∈ [0, r]. The chord therefore lies <i>on</i> the rectangle's
     /// left edge and its endpoints touch the region's boundary, which is enough to make the sketch
     /// ambiguous as a region: the extrusion that succeeded without it refuses with it.
-    /// </para>
-    /// <para>
     /// <b>Rung (1)</b> repeats the control at three gaps — 0, 1 and 5 mm — reading
     /// <c>IsCreated()</c> and ΔV for each, so "the axis line is the variable" is confirmed at more
     /// than the one geometry R.15 happened to use.
-    /// </para>
-    /// <para>
     /// <b>Rung (2)</b> then rotates over the gapped contour with the committed two-point axis, and
     /// the verdict is the same volume gate as everywhere else. The expectation is explicit:
     /// a full turn of a rectangle spanning u ∈ [gap, gap+r] about the v axis sweeps
     /// π·((gap+r)² − gap²)·h, not π·r²·h, so the control value is computed rather than borrowed.
-    /// </para>
     /// </remarks>
     private void AxisOutsideProfileRoute()
     {
@@ -4071,29 +3890,21 @@ internal sealed class RotationProbe
             + ") — блокер SM-03 остаётся открытым");
     }
 
-    /// <summary>
-    /// The axis line born as construction geometry, swept over the styles, with the extrusion control
-    /// per style and then the rotation itself.
-    /// </summary>
+    /// <summary>The axis line born as construction geometry, swept over the styles, with the extrusion control
+    /// per style and then the rotation itself.</summary>
     /// <remarks>
-    /// <para>
     /// R.16 established that a fifth segment in the sketch breaks its region at every gap, and that
-    /// a healthy profile with <c>Axis=сохранено</c> still refuses. The type library then supplies the
+    /// a healthy profile with <c>Axis=saved</c> still refuses. The type library then supplies the
     /// missing distinction: <c>ksCurveStyleEnum</c> has <c>ksCSConstruction = 6</c> — construction
     /// geometry, drawn in the sketch but not part of its region — alongside <c>ksCSAxial = 3</c> and
     /// <c>ksCSThin = 2</c>. <see cref="DrawAxis"/> passed the style only after creation, so the
     /// segment had already joined the region.
-    /// </para>
-    /// <para>
     /// <b>Rung (1)</b> sweeps the three styles, each on its own sketch, each extruded with the proven
     /// call. The style that lets the extrusion succeed is the one that leaves the region intact.
     /// This is the control R.15 lacked: without it, "the axis line breaks the sketch" cannot be told
     /// from "style 1 specifically breaks the sketch".
-    /// </para>
-    /// <para>
     /// <b>Rung (2)</b> rotates over the profile drawn with the best style, with the committed
     /// two-point axis. Same three-way verdict and the same volume gate.
-    /// </para>
     /// </remarks>
     private void ConstructionAxisStyleRoute()
     {
@@ -4250,51 +4061,39 @@ internal sealed class RotationProbe
             + ") — блокер SM-03 остаётся открытым");
     }
 
-    /// <summary>
-    /// R.21 — the two member families of a rotation definition that no step of this probe has ever
-    /// written: the thin-wall parameters and the toroidal-shape flag.
-    /// </summary>
+    /// <summary>R.21 — the two member families of a rotation definition that no step of this probe has ever
+    /// written: the thin-wall parameters and the toroidal-shape flag.</summary>
     /// <remarks>
-    /// <para>
     /// Reflection over the installed type library (17.09.2026, <c>scratch/reflect</c>) prints the full
     /// member list of the three rotation definitions. <c>ksBaseRotatedDefinition</c> declares
     /// <b>14</b> members and the probe writes exactly five of them — <c>SetSketch</c>,
     /// <c>directionType</c>, <c>SetSideParam</c> (and its <c>GetSideParam</c> readback), and the
     /// <c>RotatedParam()</c> block. Two families are declared and <b>never written by any step</b>:
-    /// </para>
     /// <list type="bullet">
     /// <item><c>SetThinParam(Boolean, Int16, Double, Double)</c> / <c>GetThinParam</c> /
     /// <c>ThinParam()</c> — the thin-wall rotation (a shelled revolve),</item>
     /// <item><c>toroidShapeType</c> — the toroidal flag.</item>
     /// </list>
-    /// <para>
     /// This is the same shape of gap that R.19 closed: there, reflection found
     /// <c>IRotated1.OperationResult</c> declared and never written, and writing it changed the result
     /// (two of four values returned <c>Create()=True</c>). So the cheap explanation for the remaining
     /// refusal is that the definition is being asked to build while sitting in a thin-wall or toroidal
     /// state that no caller ever set — a state whose default may be invalid for this sketch.
-    /// </para>
-    /// <para>
     /// <b>Read before writing.</b> The first measurement is what a fresh definition reports for both
     /// families with nothing set. That reading tells whether the field sits at a benign default or is
     /// already in a state that would explain the refusal. Then the values are swept — toroid both
     /// ways, thin wall off and on with a thickness — each with the volume gate as the only verdict.
-    /// </para>
-    /// <para>
     /// A member that accepts a value and changes nothing is recorded as exactly that. The distinction
     /// this step must preserve is between "the member was never the reason" (measured: writing it does
     /// not move the volume) and "the member was never asked" — which is the state before this step.
-    /// </para>
-    /// <para>
     /// <b>What it measured (17.09.2026).</b> A fresh definition reports <c>toroidShapeType = False</c>
-    /// and <c>GetThinParam() = False, включена=False, тип=0, толщина=0, зазор=0</c> — both at benign
+    /// and <c>GetThinParam() = False, enabled=False, type=0, thickness=0, gap=0</c> — both at benign
     /// defaults, neither in a state that could explain a refusal. All four variants were then written
     /// explicitly: <c>SetThinParam</c> returned <c>True</c> and read back <b>exactly</b> what was
-    /// written (including <c>включена=True, толщина=2</c>), <c>toroidShapeType</c> read back whatever
+    /// written (including <c>enabled=True, thickness=2</c>), <c>toroidShapeType</c> read back whatever
     /// was stored — and <c>Create()</c> stayed <c>False</c> in all four, with the volume unchanged.
     /// The best explanation is therefore excluded: the thin-wall and toroidal families are not the
     /// call that was missing. Like R.20's collection, this line is now exhausted rather than open.
-    /// </para>
     /// </remarks>
     private void UnwrittenRotationMembersRoute()
     {
@@ -4523,16 +4322,11 @@ internal sealed class RotationProbe
             + "а до этого шага эти члены не писал НИ ОДИН шаг пробы. Блокер SM-03 остаётся открытым");
     }
 
-    /// <summary>
-    /// The one variable never varied: the <b>boolean operation</b> the feature performs.
-    /// </summary>
+    /// <summary>The one variable never varied: the <b>boolean operation</b> the feature performs.</summary>
     /// <remarks>
-    /// <para>
     /// R.18 closed every input-side explanation. Profile proved a region by an extrusion control,
     /// axis committed and held, sides and parameter order varied, clean document with exactly one
     /// sketch — and <c>Create()</c> is still <c>False</c>.
-    /// </para>
-    /// <para>
     /// Reflection over API7 found a member that no step of this probe has ever written and that the
     /// journal never carries: <c>IRotated1.OperationResult</c>, of type
     /// <c>ksOperationResultEnum</c>. The enumeration's own values are
@@ -4541,18 +4335,13 @@ internal sealed class RotationProbe
     /// <c>IExtrusion1</c>, <c>ILoft</c>, <c>IEvolution</c> and <c>ITrimmedSurface</c>, i.e. it is the
     /// <i>operation kind</i> every solid feature in this API carries, not an error code. The name is
     /// misleading; the enum is the price.
-    /// </para>
-    /// <para>
     /// <b>Rung (1)</b> reads <c>OperationResult</c> back from a <b>working</b> extrusion and from a
     /// refusing rotation in the same run. If the extrusion reports a defined value and the rotation
     /// reports a different one, the refusal is a default that has to be written. That comparison is
     /// what makes the rung a measurement rather than a guess — the control and the subject are read
     /// by the same call on the same live objects.
-    /// </para>
-    /// <para>
     /// <b>Rung (2)</b> then sweeps all four <c>ksOperationResultEnum</c> values on a fresh document
     /// with one sketch, and the verdict is the volume gate as always: π·r²·h for a lone cylinder.
-    /// </para>
     /// </remarks>
     private void BooleanOperationRoute()
     {
@@ -4609,7 +4398,7 @@ internal sealed class RotationProbe
         }
 
         // ── rung (3): one document, the same profile, an extrusion control and a rotation ────────
-        // rung (2) measured `тел=0` for every operation, including the two whose Create() returned
+        // rung (2) measured `bodies=0` for every operation, including the two whose Create() returned
         // True. A Create()=True with no body is the solver accepting a no-op — there was nothing to
         // cut or intersect — so the volume gate is the only thing that could have caught it. Rung
         // (3) removes the last confound: one document, a plate that exists, the profile extruded by
@@ -4636,7 +4425,7 @@ internal sealed class RotationProbe
     /// <remarks>
     /// Rung (2) showed that <c>Create()=True</c> alone is not evidence: with <c>cut</c> and
     /// <c>intersect</c> on an empty document the solver accepts the operation and leaves
-    /// <c>тел=0</c>. This rung gives the rotation something to union with, and reports — before the
+    /// <c>bodies=0</c>. This rung gives the rotation something to union with, and reports — before the
     /// rotation is even attempted — the volume an extrusion of the identical sketch produces. If the
     /// extrusion's ΔV is the analytic value and the rotation's is zero, the profile is a region and
     /// the refusal is the rotation's, with no remaining document-context explanation.
@@ -4758,18 +4547,14 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// A rotation over a profile <b>without</b> an axis line in the sketch, with the axis supplied as
-    /// a separate committed API7 object — the last distinction the blocker's wording leaves open.
-    /// </summary>
-    /// <remarks>
-    /// Rung (3) proved the sketch is a region by extruding it. But that sketch carries a construction
+    /// <summary>A rotation over a profile <b>without</b> an axis line in the sketch, with the axis supplied as
+    /// a separate committed API7 object — the last distinction the blocker's wording leaves open.</summary>
+    /// <remarks>Rung (3) proved the sketch is a region by extruding it. But that sketch carries a construction
     /// axis segment, and the extrusion control does not care about a construction segment while a
     /// rotation needs to interpret it as the axis. This rung draws the same rectangle with no axis
     /// segment at all — a profile an extrusion already proved twice (R.15, R.16) — and hands the
     /// rotation the committed two-point axis instead, so "the axis line poisons the sweep" and "the
-    /// rotation refuses whatever the axis source" are separated by measurement.
-    /// </remarks>
+    /// rotation refuses whatever the axis source" are separated by measurement.</remarks>
     private string RotationOverAxisFreeProfile(
         short type, ksPart part, ksDocument3D fresh, double? baseline, ProbeStep step)
     {
@@ -4880,12 +4665,9 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// Whether the axis and profile a shipped rotation hands back can be carried into a document the
-    /// probe owns and used to build a rotation there.
-    /// </summary>
+    /// <summary>Whether the axis and profile a shipped rotation hands back can be carried into a document the
+    /// probe owns and used to build a rotation there.</summary>
     /// <remarks>
-    /// <para>
     /// <b>Why this is the last unmeasured route.</b> R.7…R.19 established, by measurement, that every
     /// axis the probe can <i>author</i> is rejected: an edge, a cylindrical face, an axis object from
     /// <c>Axes3D</c>, an axis by two points, an axis from the sketch. R.22 then found something no
@@ -4894,25 +4676,20 @@ internal sealed class RotationProbe
     /// "the member silently drops the value". If the axis a shipped rotation carries is one the API
     /// itself accepts, then "SM-03 is blocked" and "the probe never had an acceptable axis" are two
     /// different claims, and only this measurement separates them.
-    /// </para>
-    /// <para>
     /// <b>What is measured.</b> A shipped file is opened and its rotation's <c>Axis</c> and
     /// <c>Profile</c> are taken as objects. Then the probe's own document builds a plate, a sketch with
     /// a closed rectangle profile, and a rotation — and tries to feed the shipped pair into
     /// <c>IRotated.SetAxis</c>/<c>SetProfile</c> on its own feature. Two preconditions are checked
     /// first, because a failure to satisfy either would make the main attempt meaningless: that the
     /// shipped axis object answers for something nameable (a runtime name other than a null), and that
-    /// the shipping document is still open and alive when the transfer happens (КОМПАС revokes
+    /// the shipping document is still open and alive when the transfer happens (KOMPAS revokes
     /// references when a document closes, and a revoked axis would fail for a reason that has nothing
     /// to do with the axis).
-    /// </para>
-    /// <para>
     /// <b>Verdict.</b> Pass only if the volume moves to the analytic value the profile implies — a
     /// transferred axis is worth exactly what it builds, and nothing else. <c>Create()=True</c> without a
     /// volume change is the no-op R.19 already caught once, and is reported as such. Fail otherwise,
     /// and the failure text says which of the three things happened: the shipped file gave no axis, the
     /// transfer was refused, or the transfer was accepted and built nothing.
-    /// </para>
     /// </remarks>
     private void DirectFactoryRoute()
     {
@@ -5188,32 +4965,24 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// R.25 — the factory route on the exact reference profile the task file specifies, with the axis
-    /// fixed in the same part, followed by the lifecycle checks a single success would not close.
-    /// </summary>
+    /// <summary>R.25 — the factory route on the exact reference profile the task file specifies, with the axis
+    /// fixed in the same part, followed by the lifecycle checks a single success would not close.</summary>
     /// <remarks>
-    /// <para>
     /// <b>Why a second step rather than more of R.24.</b> The task file fixes the reference geometry:
     /// an empty part, a flat closed rectangle <c>u∈[0,20]</c>, <c>v∈[-20,20]</c> mm, and an axis fixed
     /// <i>in the same part</i> as a real two-point axis object on the line <c>u=0</c>, with the
     /// sketch→model transform computed rather than assumed. R.24 draws its profile the general way this
     /// tool draws one, which answers "does the factory build at all" but is not the reference.
-    /// </para>
-    /// <para>
     /// <b>Independent checks, not the volume twice.</b> A body can carry the right volume and still be
     /// the wrong shape, so the solid is also checked by the cylindrical faces the API reports
     /// (<c>GetSurfaceParam() → ksCylinderParam</c>: radius, height) and by its bounding box — a cylinder
     /// R20 H40 has extents (40, 40, 40), a plate of the same volume does not.
-    /// </para>
-    /// <para>
     /// <b>The lifecycle a single success would not close.</b> After the body is confirmed: 360°→180° on
     /// the SAME feature must change that feature's geometry to half the volume; a direction change at a
     /// partial angle must keep the volume (the volume alone cannot show the sector moved, so the
     /// bounding box is read as well); and save→close→reopen must preserve the geometry and the
     /// parameters with the references re-obtained from the reopened document. A line that was not
     /// reached says so rather than being omitted.
-    /// </para>
     /// </remarks>
     private void DirectFactoryReferenceRoute()
     {
@@ -5520,17 +5289,13 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// Answers "is this profile a region" in a throwaway document, then closes it.
-    /// </summary>
-    /// <remarks>
-    /// The control must not share the document with the measurement it controls. Run 228b7540 left the
+    /// <summary>Answers "is this profile a region" in a throwaway document, then closes it.</summary>
+    /// <remarks>The control must not share the document with the measurement it controls. Run 228b7540 left the
     /// control plate in the measuring document and three things followed from it: the volume baseline
     /// became 16000 instead of the rotation's own contribution, the cylinder ended up off the axis
     /// (the sector is added from the plate's near face rather than from the part origin), and the
     /// reopen check read 41132.74 = 16000 + 25132.74 — the plate, reported as if it were the rotation.
-    /// The profile is rebuilt here from the same geometry, so the answer is about the same rectangle.
-    /// </remarks>
+    /// The profile is rebuilt here from the same geometry, so the answer is about the same rectangle.</remarks>
     private string ControlExtrusionInOwnDocument(string prefix)
     {
         ksDocument3D? doc = null;
@@ -5564,15 +5329,11 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// Repeats the decisive experiment in a fresh document: profile, axis, factory, full turn.
-    /// </summary>
-    /// <remarks>
-    /// "One success is not verified" is the same rule at the probe level as it is for the profile
+    /// <summary>Repeats the decisive experiment in a fresh document: profile, axis, factory, full turn.</summary>
+    /// <remarks>"One success is not verified" is the same rule at the probe level as it is for the profile
     /// rows. This repeats the identical sequence with fresh objects, so a reading that depended on the
     /// first document's state (an accidental leftover body, a reused axis, a container cached from an
-    /// earlier call) does not reproduce.
-    /// </remarks>
+    /// earlier call) does not reproduce.</remarks>
     private (bool Ok, string Detail) RepeatReferenceInOwnDocument(double halfTurnVolume)
     {
         ksDocument3D? doc = null;
@@ -5632,7 +5393,7 @@ internal sealed class RotationProbe
             // Null is not zero: a fresh document has no body before the rotation, so the contribution
             // is the absolute volume of the body that appeared rather than a difference from null. The
             // first run of this helper read `ΔV=null` on a repeat that had actually built the cylinder
-            // (тел=1, r=20 h=40) — the probe's own arithmetic, not a fact about КОМПАС.
+            // (bodies=1, r=20 h=40) — the probe's own arithmetic, not a fact about KOMPAS.
             var contribution = after is not null && before is not null ? after - before : after;
 
             // Computed BEFORE any further mutation — the repeat's earlier version read its own
@@ -5679,10 +5440,8 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// Measures what a cut-rotation actually does to a prepared body, and which side of the axis a
-    /// partial sector lands on.
-    /// </summary>
+    /// <summary>Measures what a cut-rotation actually does to a prepared body, and which side of the axis a
+    /// partial sector lands on.</summary>
     /// <remarks>
     /// Two claims that R.24/R.25 left unresolved and that must not be assumed:
     /// <list type="number">
@@ -5861,15 +5620,11 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// Creates one rotation of the given factory type on a part that already has a body, applies it and
-    /// reports whether the volume moved the way that operation demands.
-    /// </summary>
-    /// <remarks>
-    /// The verdict is a SIGN, not a magnitude: a cut must lose π·r²·h and a boss must gain it. A body
+    /// <summary>Creates one rotation of the given factory type on a part that already has a body, applies it and
+    /// reports whether the volume moved the way that operation demands.</summary>
+    /// <remarks>The verdict is a SIGN, not a magnitude: a cut must lose π·r²·h and a boss must gain it. A body
     /// count that grows is not evidence of anything on its own — R.24 saw a "cut" add a body, and the
-    /// volume is what distinguishes gluing from cutting.
-    /// </remarks>
+    /// volume is what distinguishes gluing from cutting.</remarks>
     private (bool Ok, string Action, string Detail) TryOperationOnPreparedBody(
         ProbeStep step,
         ksPart part,
@@ -5922,7 +5677,7 @@ internal sealed class RotationProbe
             // angle matrix measured in R26.angles shows the sweep grows linearly with the angle up to
             // 180° and then saturates: 90°→π·r²·h/4, 180°→π·r²·h/2, 360°→π·r²·h/2. A cut can therefore
             // never remove more than the half-turn region with this profile, and asserting a full
-            // cylinder here would be asserting something КОМПАС does not do. What IS asserted is that
+            // cylinder here would be asserting something KOMPAS does not do. What IS asserted is that
             // the operation removes material at all, and that the amount is one of the sweep's
             // reachable values.
             var isCut = type == Kompas6Constants3D.ksObj3dTypeEnum.o3d_cutRotated;
@@ -5960,20 +5715,14 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// Builds the same cylinder twice at 180° with the two directions and reports which side of the
-    /// axis the material occupies each time.
-    /// </summary>
-    /// <remarks>
-    /// The volume of a half turn is the same whichever way the sector points, and so is its bounding
+    /// <summary>Builds the same cylinder twice at 180° with the two directions and reports which side of the
+    /// axis the material occupies each time.</summary>
+    /// <remarks>The volume of a half turn is the same whichever way the sector points, and so is its bounding
     /// box when the sector straddles the plane the bounds are taken in. The only reading that can
     /// settle "the sector moved" is the side the material is on, measured by the sign of the
-    /// coordinate the sweep moves in — here, the y-extent relative to the axis at u=0.
-    /// </remarks>
-    /// <summary>
-    /// Measures the two directions a half turn can be built in, and reports which side of the axis the
-    /// material ends up on for each.
-    /// </summary>
+    /// coordinate the sweep moves in — here, the y-extent relative to the axis at u=0.</remarks>
+    /// <summary>Measures the two directions a half turn can be built in, and reports which side of the axis the
+    /// material ends up on for each.</summary>
     /// <remarks>
     /// The task file asks specifically that "a direction change at a partial angle keeps the volume and
     /// MOVES THE SECTOR", so a direction that fails to build is not an acceptable answer dressed up as
@@ -6066,9 +5815,7 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// Measures which of the two <c>Angle(Boolean Normal)</c> slots the rotation actually sweeps.
-    /// </summary>
+    /// <summary>Measures which of the two <c>Angle(Boolean Normal)</c> slots the rotation actually sweeps.</summary>
     /// <remarks>
     /// The cut on the prepared plate removed exactly π·r²·h/2 while <c>Angle[true]=360</c> and
     /// <c>Angle[false]=0</c> were written, which means the sweep was 180° and not 360° — so at least one
@@ -6389,13 +6136,11 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// Saves the document, closes it, reopens it and reads the geometry and parameters back.
-    /// </summary>
+    /// <summary>Saves the document, closes it, reopens it and reads the geometry and parameters back.</summary>
     /// <remarks>
     /// The reopened feature is found by walking the reopened document's own feature set and QI-ing
     /// <c>IRotated</c> on each element — never by holding the old COM reference across the close.
-    /// КОМПАС revokes references when a document closes (R.23 had to use its donor's axis while the
+    /// KOMPAS revokes references when a document closes (R.23 had to use its donor's axis while the
     /// donor was still open), and a revived pointer would fail for a reason unrelated to the rotation.
     /// </remarks>
     private (bool Ok, string Detail) SaveCloseReopen(
@@ -6513,15 +6258,11 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// Finds the API7 axis container on a live part and fixes a two-point axis on the line <c>u=0</c>.
-    /// </summary>
-    /// <remarks>
-    /// Two containers, two different QIs on the same live object — measured in R.13/R.18 and not
+    /// <summary>Finds the API7 axis container on a live part and fixes a two-point axis on the line <c>u=0</c>.</summary>
+    /// <remarks>Two containers, two different QIs on the same live object — measured in R.13/R.18 and not
     /// interchangeable: <c>Points3D</c> is declared on <c>IModelContainer</c>, while <c>Axes3D</c> is
     /// declared on <c>IAuxiliaryGeomContainer</c> and is reachable <b>only</b> by that QI. A step that
-    /// asks the model container for axes finds nothing and would report an absent feature.
-    /// </remarks>
+    /// asks the model container for axes finds nothing and would report an absent feature.</remarks>
     private KompasAPI7.IAxis3D? BuildReferenceAxis(
         ksDocument3D document, ksPart part, ProbeStep step, double u)
     {
@@ -6610,7 +6351,6 @@ internal sealed class RotationProbe
 
     /// <summary>The XOY sketch plane's placement, as an explicit sketch→model transform.</summary>
     /// <remarks>
-    /// <para>
     /// Two routes, in order, because the first is measured not to answer on a <i>default</i> plane
     /// entity: <c>ksEntity.GetDefinition()</c> on the default XOY plane hands back a bare
     /// <c>System.__ComObject</c> that does not cast to <c>ksPlaneOffsetDefinition</c> — the same
@@ -6618,13 +6358,10 @@ internal sealed class RotationProbe
     /// which works on the live object: <c>TransferInterface</c> → QI(<c>IPlane3D</c>) →
     /// <c>Surface</c> (<c>IMathSurface3D</c>) → <c>Placement</c> (<c>IPlacement3D</c>) →
     /// <c>GetPoint3D(XIn, YIn, out XOut, out YOut, out ZOut)</c>.
-    /// </para>
-    /// <para>
     /// <c>IPlacement3D.GetPoint3D</c> is the application's own definition of "a point in the plane's
     /// coordinates, in model coordinates", so the conversion is delegated rather than re-derived from
     /// vectors whose meaning as sketch u/v no step in this tool has measured. Building it out of a
     /// measured member is the difference between computing the position and assuming it.
-    /// </para>
     /// </remarks>
     private PlaneReadout ReadPlane(ksPart part, ProbeStep step)
     {
@@ -6687,13 +6424,9 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// API7 route: <c>TransferInterface(плоскость) → QI(IPlane3D) → Surface → Placement</c>.
-    /// </summary>
-    /// <remarks>
-    /// The plane entity is transferred, not the whole document: transferring the document gives the
-    /// container, and the container has no member that answers for a named default plane.
-    /// </remarks>
+    /// <summary>API7 route: <c>TransferInterface(plane) → QI(IPlane3D) → Surface → Placement</c>.</summary>
+    /// <remarks>The plane entity is transferred, not the whole document: transferring the document gives the
+    /// container, and the container has no member that answers for a named default plane.</remarks>
     private PlaneReadout? TryReadPlaneApi7(ksPart part, ProbeStep step)
     {
         try
@@ -6825,15 +6558,11 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// The independent geometry check: cylindrical faces, topology counts, and the bounding box.
-    /// </summary>
-    /// <remarks>
-    /// The volume alone cannot distinguish a cylinder R20 H40 from a plate of 50265 mm³, so readings
+    /// <summary>The independent geometry check: cylindrical faces, topology counts, and the bounding box.</summary>
+    /// <remarks>The volume alone cannot distinguish a cylinder R20 H40 from a plate of 50265 mm³, so readings
     /// that do not go through <c>CalcMassInertiaProperties</c> are taken beside it: the cylindrical
     /// faces the API5 topology route reports (<c>GetSurfaceParam() → ksCylinderParam</c>: radius and
-    /// height) and the bounding box of the main body.
-    /// </remarks>
+    /// height) and the bounding box of the main body.</remarks>
     private string DescribeBodyGeometry(ksPart part, ProbeStep step, string label)
     {
         var parts = new List<string> { label };
@@ -6869,7 +6598,6 @@ internal sealed class RotationProbe
 
     /// <summary>The main body's bounding box, so a body can be placed as well as measured.</summary>
     /// <remarks>
-    /// <para>
     /// The member is <c>ksBody.GetGabarit(x1, y1, z1, x2, y2, z2)</c> — read off the type library, not
     /// guessed. The first version of this helper looked for <c>GetBoundingBoxEx</c>, which
     /// <c>ksBody</c> does not declare (its ten members are <c>CalcMassInertiaProperties</c>,
@@ -6877,11 +6605,8 @@ internal sealed class RotationProbe
     /// <c>GetFeature</c>, <c>GetGabarit</c>, <c>GetIntersectionFacesWithBody</c>, <c>IsSolid</c>,
     /// <c>MultiBodyParts</c>) — so the step printed "not declared" and lost the check that separates a
     /// cylinder lying along the axis from a sector on one side of it.
-    /// </para>
-    /// <para>
     /// Reported as "not read" rather than as zeros when the API does not answer: a box of zeros is a
     /// legitimate reading for a degenerate body, and the two must not print the same way.
-    /// </para>
     /// </remarks>
     private string DescribeBodyBounds(ksPart part, ProbeStep step, string label)
     {
@@ -6930,12 +6655,10 @@ internal sealed class RotationProbe
     }
 
     /// <summary>Transfers an API5 object to API7 as an <c>IModelObject</c>, or null with the reason.</summary>
-    /// <remarks>
-    /// The vendor transfer is typed <c>IModelObject</c>, which is what every API7 setter that takes a
+    /// <remarks>The vendor transfer is typed <c>IModelObject</c>, which is what every API7 setter that takes a
     /// reference (<c>IRotated.Profile</c>, <c>IRotated.Axis</c>) declares. Returning the untyped result
     /// of <c>TransferInterface</c> would be a conversion the compiler refuses, and casting it away with
-    /// a blind <c>as</c> would turn "the transfer is not an IModelObject" into "the setter refused".
-    /// </remarks>
+    /// a blind <c>as</c> would turn "the transfer is not an IModelObject" into "the setter refused".</remarks>
     private KompasAPI7.IModelObject? TransferTo7(object source)
     {
         try
@@ -7142,12 +6865,9 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// R.23 — the last route that held any hope: carry an axis the API itself considers good out of a
-    /// shipped file and into a rotation the probe owns.
-    /// </summary>
+    /// <summary>R.23 — the last route that held any hope: carry an axis the API itself considers good out of a
+    /// shipped file and into a rotation the probe owns.</summary>
     /// <remarks>
-    /// <para>
     /// <b>Why this is the last unmeasured route.</b> R.7…R.19 established, by measurement, that every
     /// axis the probe can <i>author</i> is rejected: an edge, a cylindrical face, an axis object from
     /// <c>Axes3D</c>, an axis by two points, an axis from the sketch. R.22 then found something no
@@ -7156,25 +6876,20 @@ internal sealed class RotationProbe
     /// "the member silently drops the value". If the axis a shipped rotation carries is one the API
     /// itself accepts, then "SM-03 is blocked" and "the probe never had an acceptable axis" are two
     /// different claims, and only this measurement separates them.
-    /// </para>
-    /// <para>
     /// <b>What is measured.</b> A shipped file is opened and its rotation's <c>Axis</c> and
     /// <c>Profile</c> are taken as objects. Then the probe's own document builds a plate, a sketch with
     /// a closed rectangle profile, and a rotation — and tries to feed the shipped pair into
     /// <c>IRotated.SetAxis</c>/<c>SetProfile</c> on its own feature. Two preconditions are checked
     /// first, because a failure to satisfy either would make the main attempt meaningless: that the
     /// shipped axis object answers for something nameable (a runtime name other than a null), and that
-    /// the shipping document is still open and alive when the transfer happens (КОМПАС revokes
+    /// the shipping document is still open and alive when the transfer happens (KOMPAS revokes
     /// references when a document closes, and a revoked axis would fail for a reason that has nothing
     /// to do with the axis).
-    /// </para>
-    /// <para>
     /// <b>Verdict.</b> Pass only if the volume moves to the analytic value the profile implies — a
     /// transferred axis is worth exactly what it builds, and nothing else. <c>Create()=True</c> without a
     /// volume change is the no-op R.19 already caught once, and is reported as such. Fail otherwise,
     /// and the failure text says which of the three things happened: the shipped file gave no axis, the
     /// transfer was refused, or the transfer was accepted and built nothing.
-    /// </para>
     /// </remarks>
     private void ShippedAxisReuseRoute()
     {
@@ -7468,13 +7183,11 @@ internal sealed class RotationProbe
     }
 
     /// <summary>Writes the shipped axis FIRST on a fresh feature, so the writes cannot contaminate.</summary>
-    /// <remarks>
-    /// The control for R.23's order-of-operations objection. The main attempt writes Profile then Axis,
+    /// <remarks>The control for R.23's order-of-operations objection. The main attempt writes Profile then Axis,
     /// and the Profile write already read back false — so its result is compatible with two different
     /// explanations, and a step that reported either as <i>the</i> finding would be describing its own
     /// call order. This repeats the question on a brand-new rotation feature with the axis written
-    /// first and read back before anything else is touched.
-    /// </remarks>
+    /// first and read back before anything else is touched.</remarks>
     private string TryAxisFirstOnFreshFeature(
         ksPart part,
         ksDocument3D ownDoc,
@@ -7554,12 +7267,10 @@ internal sealed class RotationProbe
     }
 
     /// <summary>Finds a shipped KOMPAS_24.0 file whose rotation hands back a live API7 axis.</summary>
-    /// <remarks>
-    /// Searched rather than hard-coded: the file that has a rotation is a property of this
+    /// <remarks>Searched rather than hard-coded: the file that has a rotation is a property of this
     /// installation's shipped samples, and a hard-coded path would turn a missing file into a false
     /// negative about the route. The search stops at the first usable donor and reports which it took,
-    /// so the journal names the actual evidence.
-    /// </remarks>
+    /// so the journal names the actual evidence.</remarks>
     private string? FindShippedRotationWithLiveAxis(ProbeStep step)
     {
         var inventory = InventoryShippedModels(step);
@@ -7636,11 +7347,9 @@ internal sealed class RotationProbe
     }
 
     /// <summary>Runs one write-and-read-back pair, reporting both halves without hiding either.</summary>
-    /// <remarks>
-    /// A member that silently drops a value and a member that is absent are different findings, and the
+    /// <remarks>A member that silently drops a value and a member that is absent are different findings, and the
     /// read-back is the only thing that separates them: this helper always performs the read and
-    /// reports whether the value came back, rather than reporting only that the setter returned.
-    /// </remarks>
+    /// reports whether the value came back, rather than reporting only that the setter returned.</remarks>
     private static bool AttemptTransfer(ProbeStep step, string member, Func<bool> writeAndReadBack)
     {
         try
@@ -7659,22 +7368,17 @@ internal sealed class RotationProbe
         ? "null"
         : Api5.RuntimeName(value);
 
-    /// <summary>
-    /// Asks a <b>shipped</b> rotation feature the one question R.20 could not ask: not whether a managed
-    /// cast succeeds, but whether the object itself answers <c>QueryInterface</c> for the definition.
-    /// </summary>
+    /// <summary>Asks a <b>shipped</b> rotation feature the one question R.20 could not ask: not whether a managed
+    /// cast succeeds, but whether the object itself answers <c>QueryInterface</c> for the definition.</summary>
     /// <remarks>
-    /// <para>
     /// <b>The gap this closes.</b> R.20 measured that a real rotation out of a shipped
-    /// <c>KOMPAS_24.0</c> file is a feature of the tree (its name is «Операция вращения:2» in
+    /// <c>KOMPAS_24.0</c> file is a feature of the tree (its name is "Rotation operation:2" in
     /// <c>Propeller.m3d</c>), that its element casts to <c>ksEntity</c> through
     /// <c>EntityCollection(110)</c> (12 of 12), and that <c>GetDefinition()</c> returns something —
     /// but that <c>is ksBaseRotatedDefinition</c> is false on every element of every file. The step
     /// also printed the definition's runtime name as <c>System.__ComObject</c>, which is what
     /// <c>Api5.RuntimeName</c> reports for <i>any</i> COM-callable wrapper and therefore picks between
     /// none of the possible explanations.
-    /// </para>
-    /// <para>
     /// <b>Why a managed cast is the wrong instrument here.</b> R.7 hit the same wall on the probe's own
     /// feature and got past it: <c>TransferInterface(feature, 2 /* ksAPI7Dual */, 0)</c> followed by a
     /// QI for <c>IRotated</c> succeeded, where reaching the axis through the API5 definition was
@@ -7682,8 +7386,6 @@ internal sealed class RotationProbe
     /// is that an interop cast is a real <c>QueryInterface</c> the vendor object may refuse for its own
     /// reasons, and that the refusal says something about the wrapper unless the object is asked
     /// directly. R.20 asked only through the wrapper.
-    /// </para>
-    /// <para>
     /// <b>What is measured, in order.</b> For each shipped file that contains a rotation by name:
     /// (1) the element's own API5 definition object, and its <i>managed</i> runtime type — the string
     /// that has been printed as <c>System.__ComObject</c> and read as "no type", printed here alongside
@@ -7692,16 +7394,13 @@ internal sealed class RotationProbe
     /// (3) a QI for <c>KompasAPI7.IRotated</c> on the result, and if it answers, the members that are
     /// then readable — <c>Axis</c>, <c>Profile</c>, <c>Angle</c>, <c>Direction</c>, <c>RotatedType</c>,
     /// <c>ToroidShapeType</c>, <c>OperationResult</c>. A <c>true</c> here means the API can be asked
-    /// about a rotation КОМПАС authored; a refusal names the interface as the reason, not the attempt
+    /// about a rotation KOMPAS authored; a refusal names the interface as the reason, not the attempt
     /// count.
-    /// </para>
-    /// <para>
     /// <b>Verdict.</b> Pass when at least one shipped rotation answers the QI and yields at least one
     /// readable parameter — that is the claim "the API can be asked about a rotation this installation
     /// authored", and it is the narrowest true statement the measurement supports. Fail otherwise, and
     /// the failure text distinguishes the two ways to fail: no file openable, or the object refusing
     /// the interface. The probe builds nothing here and claims no volume.
-    /// </para>
     /// </remarks>
     private void ShippedDefinitionInterfaceRoute()
     {
@@ -7858,7 +7557,7 @@ internal sealed class RotationProbe
                         + Api5.RuntimeName(object7) + ")");
 
                     // (3) The QI. A refusal here is the answer, not a failure of the attempt: it says
-                    // the interface is absent on a rotation КОМПАС itself authored.
+                    // the interface is absent on a rotation KOMPAS itself authored.
                     if (object7 is not KompasAPI7.IRotated rotated)
                     {
                         step.Observe(file + ": «" + name + "» QI(IRotated) → ОТКАЗ "
@@ -7950,11 +7649,9 @@ internal sealed class RotationProbe
     }
 
     /// <summary>Reads a value for a journal line, turning any failure into its own text.</summary>
-    /// <remarks>
-    /// A member that throws and a member that reads null are different findings, and a line that
+    /// <remarks>A member that throws and a member that reads null are different findings, and a line that
     /// swallows either into an empty string erases the difference. This helper keeps both visible
-    /// without letting one dead member abort the rest of the readback.
-    /// </remarks>
+    /// without letting one dead member abort the rest of the readback.</remarks>
     private static string ReadOrThrow(Func<string> read)
     {
         try
@@ -7967,33 +7664,23 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// Opens a <b>shipped</b> КОМПАС model that contains a real rotation feature, and reports what its
-    /// tree holds and what its definition reads back.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Every measurement so far has been the probe's own construction: the probe draws a sketch, hands
+    /// <summary>Opens a <b>shipped</b> KOMPAS model that contains a real rotation feature, and reports what its
+    /// tree holds and what its definition reads back.</summary>
+    /// <remarks>Every measurement so far has been the probe's own construction: the probe draws a sketch, hands
     /// it to a rotation, and reads `Create()`. R.19 proved the input is good and the refusal survives it.
-    /// What no step has done is look at a file <b>КОМПАС itself produced</b>. A shaft is the canonical
+    /// What no step has done is look at a file <b>KOMPAS itself produced</b>. A shaft is the canonical
     /// rotated solid, and the installation ships shaft models, so the question "does this API rotation
     /// ever build anything" has a witness available that does not depend on the probe at all.
-    /// </para>
-    /// <para>
     /// This step converts the build/API5 probe into a document reader: `Document3D()` → `open(path)` →
     /// walk the feature tree via `GetFeature().SubFeatureCollection`, report every element's
     /// `ksObj3dTypeEnum` name, and for any `o3d_baseRotated`/`o3d_bossRotated`/`o3d_cutRotated` element
     /// read its definition back — `SetSketch`-side `GetSketch()`, `GetSideParam(true/false)`,
     /// `RotatedParam()` — so the parameters a <i>working</i> rotation actually carries are in the
     /// journal.
-    /// </para>
-    /// <para>
     /// The verdict is deliberately <b>not</b> a volume gate: the probe did not build this body and may
     /// not claim credit for it. The step passes on the narrower, honest claim it can support — that a
-    /// shipped КОМПАС file contains a rotation feature and that the probe can read its parameters back.
-    /// If no shipped model contains one, the step fails and says so, because then the claim is false.
-    /// </para>
-    /// </remarks>
+    /// shipped KOMPAS file contains a rotation feature and that the probe can read its parameters back.
+    /// If no shipped model contains one, the step fails and says so, because then the claim is false.</remarks>
     private void ShippedShaftRoute()
     {
         _currentStepId = "R.20";
@@ -8130,7 +7817,7 @@ internal sealed class RotationProbe
                 // The gate. When Open() fails, `reader` is still the empty document this loop just
                 // created — and walking its tree would report the empty document's two service
                 // features as if they were the model's. That is exactly what the first version of
-                // this step did, and it is a probe defect, not a fact about КОМПАС: the reading it
+                // this step did, and it is a probe defect, not a fact about KOMPAS: the reading it
                 // produced (`o3d_entity(105), o3d_mateConstraintGroup(143)`, identical for all three
                 // files) described the wrong object.
                 if (opened != true)
@@ -8161,12 +7848,12 @@ internal sealed class RotationProbe
                 // repeating the class list per file here would add noise, not evidence.
 
                 // `ksFeature.type` is 105 (`o3d_entity`) for EVERY feature family — a fact already
-                // measured and written down in HoleProbe (проба N): a hole cannot be told from an
+                // measured and written down in HoleProbe (probe N): a hole cannot be told from an
                 // extrusion by that number. So looking for "o3d_baseRotated (27)" in `f.Type` is
                 // looking for a number that never appears, and a step that does it will report "no
                 // rotation" for every file it opens, forever. Detecting a rotation therefore needs a
-                // route that carries the type: the feature's own NAME (КоМПАС names features
-                // «Вращение:1», «Выдавливание:1», …), and the definition's runtime interface as an
+                // route that carries the type: the feature's own NAME (KOMPAS names features
+                // "Rotation:1", "Extrusion:1", …), and the definition's runtime interface as an
                 // independent second opinion.
                 step.Observe(Path.GetFileName(path) + ": имена признаков → " + string.Join(", ",
                     features.Select(f => f.Name ?? "<нет>")));
@@ -8252,7 +7939,7 @@ internal sealed class RotationProbe
                     //
                     // R.0d measured that on a live tree the two casts DISAGREE on the very same
                     // object (2 of 2 were ksFeature, 0 of 2 were ksEntity), and that a bare element
-                    // transferred through `TransferInterface` answers `ksEntity: да`. `ksFeature`
+                    // transferred through `TransferInterface` answers `ksEntity: yes`. `ksFeature`
                     // itself declares no `GetDefinition`, so the route is: keep whatever came back,
                     // and if it is only a `ksFeature`, hand it through `TransferInterface` to reach
                     // the entity that has the definition. Requiring `ksEntity` outright is how the
@@ -8383,8 +8070,8 @@ internal sealed class RotationProbe
             // DIFFERENT question — not "does a managed cast reach the definition" but "does the object
             // answer a QI for it" — and got a definition on 11 of 11 rotations with 77 parameters read
             // back. So the failure below is a fact about THIS route, not about the product; the wording
-            // said "ИМЕННО ЭТИМ маршрутом" from the start, but a reader arriving at the summary alone
-            // could take "НИ ОДНОГО определения... прочитать не удалось" for a claim about the files.
+            // said "by EXACTLY THIS route" from the start, but a reader arriving at the summary alone
+            // could take "NOT A SINGLE definition... could be read" for a claim about the files.
             // R.22 is named here so the two readings cannot be confused.
             step.Fail("в файлах поставки есть признаки с именем вращения (" + rotationTypeName + ", файл "
                 + rotationFile + "), но НИ ОДНОГО определения вращения прочитать не удалось: элементы "
@@ -8419,37 +8106,29 @@ internal sealed class RotationProbe
             + "«вращение собирается где-то» остаётся непроверенным, блокер SM-03 не объяснён этой пробой");
     }
 
-    /// <summary>
-    /// Builds a feature of this probe's own making on <paramref name="part"/>, then asks for its
-    /// definition through the <b>same</b> collection route R.20 uses on shipped files.
-    /// </summary>
+    /// <summary>Builds a feature of this probe's own making on <paramref name="part"/>, then asks for its
+    /// definition through the <b>same</b> collection route R.20 uses on shipped files.</summary>
     /// <remarks>
-    /// <para>
     /// The control for the experiment that decides SM-03. R.20 measured two facts that cannot both be
     /// predicted from a single rule:
-    /// </para>
     /// <list type="bullet">
     /// <item>a feature this probe creates — <c>NewEntity(27)</c> — gives up its
     /// <c>ksBaseRotatedDefinition</c> through <c>GetDefinition()</c>, and the probe writes with it
     /// (R.1, R.1b, and every R.2…R.19 step);</item>
     /// <item>a feature read out of a shipped <c>KOMPAS_24.0</c> file — the tree literally says
-    /// «Операция вращения:2» — does <b>not</b>, through the tree walk or through
+    /// "Rotation operation:2" — does <b>not</b>, through the tree walk or through
     /// <c>EntityCollection(110)</c>, on any of twelve files.</item>
     /// </list>
-    /// <para>
     /// The cheap explanation is "the probe used the wrong collection". That explanation is testable
     /// in one measurement: build a feature here, read it through R.20's route, and see whether the
     /// route works when the author is this process. If it does, the collection is exonerated and the
     /// remaining difference is the features themselves. If it does not, the collection is the cause
     /// and R.20's route is simply wrong.
-    /// </para>
-    /// <para>
     /// An extrusion is built rather than a rotation on purpose: R.19 measured that no rotation
     /// actually forms on this part (the volume never rises), so a control built from a rotation would
     /// have no definition to report and would answer nothing. The extrusion is the feature this probe
     /// is measured to be able to author (<c>SketchLifecycleProbe</c>), so it is the right subject for
     /// a question about the collection rather than about rotation.
-    /// </para>
     /// </remarks>
     private void BuildFreshFeatureForCastingControl(ksPart part, ProbeStep step)
     {
@@ -8573,13 +8252,11 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// Whether a feature's own name says it is a rotation.
-    /// </summary>
+    /// <summary>Whether a feature's own name says it is a rotation.</summary>
     /// <remarks>
     /// Names rather than type numbers, because the number is useless here: <c>ksFeature.type</c> is
     /// <c>105</c> (<c>o3d_entity</c>) for every family — a hole, an extrusion and a rotation are
-    /// indistinguishable by it (measured in проба N and written down in <c>HoleProbe</c>). The name
+    /// indistinguishable by it (measured in probe N and written down in <c>HoleProbe</c>). The name
     /// is the only thing on the API5 side of a shipped feature that carries the kind. Both languages
     /// are checked because the installation and its samples are Russian, but the API may localise
     /// differently and the English form costs nothing.
@@ -8588,10 +8265,8 @@ internal sealed class RotationProbe
         name.Contains("Вращ", StringComparison.OrdinalIgnoreCase)
         || name.Contains("Rotat", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>
-    /// Walks a feature-set collection and counts how many rotated definitions it hands back, reading
-    /// each one through the accessors the probe writes with.
-    /// </summary>
+    /// <summary>Walks a feature-set collection and counts how many rotated definitions it hands back, reading
+    /// each one through the accessors the probe writes with.</summary>
     /// <remarks>
     /// This is the second of the two collection routes, and the one that matters. The tree walk
     /// (<c>part.GetFeature().SubFeatureCollection(true, false)</c>) yields elements that answer
@@ -8601,13 +8276,11 @@ internal sealed class RotationProbe
     /// is what every <b>working</b> lifecycle probe in this tool uses
     /// (<c>SketchLifecycleProbe.LastFeature</c>), and its elements DO cast to <c>ksEntity</c>.
     ///
-    /// <para>
     /// The count this returns is what the step's verdict hinges on. A name alone proves only that a
-    /// feature is <i>called</i> «Операция вращения»; only a definition read back through
+    /// feature is <i>called</i> "Rotation operation"; only a definition read back through
     /// <c>GetSketch</c>/<c>GetSideParam</c>/<c>RotatedParam</c> proves the API can be asked about it
     /// (ninth probe defect: a name reported as if verified). Returning 0 here is therefore a truthful
     /// "not measured", not a "absence" — and the step says exactly that.
-    /// </para>
     /// </remarks>
     /// <param name="operations">The collection, already obtained as <c>ksEntityCollection</c>.</param>
     /// <param name="step">The current step, for observations.</param>
@@ -8730,19 +8403,15 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>One shipped <c>.m3d</c>: where it is, and which КОМПАС wrote it.</summary>
+    /// <summary>One shipped <c>.m3d</c>: where it is, and which KOMPAS wrote it.</summary>
     private readonly record struct ShippedModel(string Path, string Version, string AppName);
 
-    /// <summary>
-    /// Opens <paramref name="path"/> on a fresh document, optionally calling <c>Create</c> first, and
-    /// reports what happened.
-    /// </summary>
-    /// <remarks>
-    /// Exists because two setup orders are in use in this tool and only one of them is measured to
+    /// <summary>Opens <paramref name="path"/> on a fresh document, optionally calling <c>Create</c> first, and
+    /// reports what happened.</summary>
+    /// <remarks>Exists because two setup orders are in use in this tool and only one of them is measured to
     /// work: every probe that reopens a saved document calls <c>Document3D()</c> and then <c>Open</c>
     /// directly, while R.20 called <c>Create(false, false)</c> first. A probe that reports "this file
-    /// will not open" must be able to say which of the two it did.
-    /// </remarks>
+    /// will not open" must be able to say which of the two it did.</remarks>
     private bool? TryOpen(string path, bool createFirst, out string detail)
     {
         ksDocument3D? reader = null;
@@ -8779,17 +8448,13 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// Every <c>.m3d</c> under the installation, with the producing version read from each file's own
-    /// container.
-    /// </summary>
-    /// <remarks>
-    /// This exists because the first version of R.20 hard-coded three paths under one folder and
-    /// concluded from them that no КОМПАС-written file on this machine can be opened. The
+    /// <summary>Every <c>.m3d</c> under the installation, with the producing version read from each file's own
+    /// container.</summary>
+    /// <remarks>This exists because the first version of R.20 hard-coded three paths under one folder and
+    /// concluded from them that no KOMPAS-written file on this machine can be opened. The
     /// installation ships thousands of <c>.m3d</c> files spanning v16.1 … v24.0, and the version
     /// stamp is the only honest way to choose among them. A probe must survey the population it is
-    /// making a claim about, not a convenient sample of it — that mistake is defect class 5's cousin.
-    /// </remarks>
+    /// making a claim about, not a convenient sample of it — that mistake is defect class 5's cousin.</remarks>
     private List<ShippedModel> InventoryShippedModels(ProbeStep step)
     {
         var found = new List<ShippedModel>();
@@ -8853,11 +8518,9 @@ internal sealed class RotationProbe
             .DefaultIfEmpty("пусто")
             .Aggregate((a, b) => a + ", " + b);
 
-    /// <summary>
-    /// Builds a control extrusion in a fresh document and reports its <c>OperationResult</c>, so the
+    /// <summary>Builds a control extrusion in a fresh document and reports its <c>OperationResult</c>, so the
     /// value a <i>working</i> solid feature carries is a measurement rather than a recollection.
-    /// Returns <c>null</c> if the extrusion itself could not be read, which is itself a fact.
-    /// </summary>
+    /// Returns <c>null</c> if the extrusion itself could not be read, which is itself a fact.</summary>
     private Kompas6Constants3D.ksOperationResultEnum? ReadOperationResultOfControlExtrusion(ProbeStep step)
     {
         ksDocument3D? fresh = null;
@@ -8945,12 +8608,10 @@ internal sealed class RotationProbe
     /// One rotation on a fresh single-sketch document with an explicit
     /// <c>OperationResult</c>, reporting <c>Create()</c>, ΔV and the value read back.
     /// </summary>
-    /// <remarks>
-    /// The volume is read from <c>fresh</c>'s own part, before and after, and reported as a delta:
+    /// <remarks>The volume is read from <c>fresh</c>'s own part, before and after, and reported as a delta:
     /// the first version of this rung read <c>_doc</c>'s body while building into <c>fresh</c> and
     /// printed <c>ΔV=null</c> for every operation — a probe defect that looked exactly like a
-    /// measurement. ΔV is what the verdict uses.
-    /// </remarks>
+    /// measurement. ΔV is what the verdict uses.</remarks>
     private (bool Created, double? Volume, string Detail) TryRotationWithOperation(
         short type,
         ksOperationResultEnum operation,
@@ -9056,13 +8717,11 @@ internal sealed class RotationProbe
     private static string DescribeOperation(Kompas6Constants3D.ksOperationResultEnum? value) =>
         value is null ? "null (не прочитано)" : value.Value + " (" + (int)value.Value + ")";
 
-    /// <summary>
-    /// What the <c>FileInfo</c> stream of a <c>.m3d</c> says about the file itself, read straight off
-    /// disk <b>without</b> opening it through the API.
-    /// </summary>
+    /// <summary>What the <c>FileInfo</c> stream of a <c>.m3d</c> says about the file itself, read straight off
+    /// disk <b>without</b> opening it through the API.</summary>
     /// <remarks>
     /// A <c>.m3d</c> is a ZIP container whose first entry is a little UTF-16 text block. Reading it
-    /// answers a question no API call can: which КОМПАС <i>wrote</i> this file. That distinction is
+    /// answers a question no API call can: which KOMPAS <i>wrote</i> this file. That distinction is
     /// the whole reason this helper exists — a file written by another major version fails
     /// <c>Open()</c> for a reason that has nothing to do with geometry, and a probe that skips this
     /// check will blame the API for a version mismatch.
@@ -9095,7 +8754,7 @@ internal sealed class RotationProbe
                     read += chunk;
                 }
 
-                // The stream is UTF-16 with a byte-order mark; in the files КОМПАС ships it carries
+                // The stream is UTF-16 with a byte-order mark; in the files KOMPAS ships it carries
                 // the big-endian mark FE FF, so `Encoding.Unicode` (which is little-endian) decodes it
                 // into CJK-looking mush and finds no fields at all. Read the mark and pick the
                 // matching endianness instead of assuming the platform's.
@@ -9170,38 +8829,28 @@ internal sealed class RotationProbe
         return string.Join(", ", chain);
     }
 
-    /// <summary>
-    /// A rotation in a <b>fresh document</b> that contains nothing else, with both sides of the sweep
-    /// configured, and the parameter block written before it is read.
-    /// </summary>
+    /// <summary>A rotation in a <b>fresh document</b> that contains nothing else, with both sides of the sweep
+    /// configured, and the parameter block written before it is read.</summary>
     /// <remarks>
-    /// <para>
     /// R.17 left one fact standing: over a region proved good by an extrusion control, with a
-    /// committed axis and <c>Axis=сохранено</c>, <c>IRotated.Create()</c> is still
+    /// committed axis and <c>Axis=saved</c>, <c>IRotated.Create()</c> is still
     /// <c>False</c> — and also <c>False</c> with no axis object at all. Everything about the input
     /// has been measured; what has never been varied is the <i>document context</i> the rotation is
     /// built in. Every rotation this probe has attempted shares one document with a dozen plates and
     /// a dozen earlier features, and every one of those attempts reused a sketch that had already
     /// been consumed.
-    /// </para>
-    /// <para>
     /// <b>Rung (1)</b> builds a new document, one contour sketch, one rotation. Nothing else. If a
     /// rotation can be built at all, this is the shape in which it should be — and if it still
     /// refuses, the failure is not context, not profile and not axis, and the remaining explanation
     /// is that <c>Create()</c> is not the call that commits this feature.
-    /// </para>
-    /// <para>
     /// <b>Rung (2)</b> varies the two things about the call itself that have never been varied:
     /// <c>SetSideParam</c> called on <b>both</b> sides (the signature takes one <c>Boolean side1</c>
     /// per call, and only <c>true</c> has ever been passed), and the parameter block written
     /// <i>before</i> it is read rather than after — <c>RotatedParam()</c> returns a live block, and a
     /// write to a block that was never handed back to the definition is a write into a copy.
-    /// </para>
-    /// <para>
     /// The verdict is three-way as everywhere else, and the volume gate is the same: a document with
     /// one sketch and one rotation has exactly one body, so the expected volume is π·r²·h with no
     /// plate to subtract.
-    /// </para>
     /// </remarks>
     private void FreshDocumentRoute()
     {
@@ -9399,10 +9048,8 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// A rotation whose profile is the given sketch, optionally with an API7 axis object offered as
-    /// well. Reports <c>Create()</c> and what <c>Axis</c> did with the object.
-    /// </summary>
+    /// <summary>A rotation whose profile is the given sketch, optionally with an API7 axis object offered as
+    /// well. Reports <c>Create()</c> and what <c>Axis</c> did with the object.</summary>
     private (bool Created, string Detail) TryRotationOverSketch(
         ksPart part, ksEntity sketch, KompasAPI7.IAxis3D? axis, ProbeStep step, string name)
     {
@@ -9466,11 +9113,9 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// Walks every edge of the main body and reports what it is, returning the first <b>straight and
+    /// <summary>Walks every edge of the main body and reports what it is, returning the first <b>straight and
     /// valid</b> one. <see cref="TryAnyEdge"/> returns the first edge of any kind; this is the
-    /// measured version of the same walk.
-    /// </summary>
+    /// measured version of the same walk.</summary>
     /// <remarks>
     /// The predicates come from the type library, not from guessing: <c>ksEdgeDefinition</c> declares
     /// <c>IsStraight</c>, <c>IsLineSeg</c>, <c>IsArc</c>, <c>IsCircle</c>, <c>IsEllipse</c>,
@@ -9569,11 +9214,9 @@ internal sealed class RotationProbe
         return chosen;
     }
 
-    /// <summary>
-    /// Runs one <c>Is*</c> predicate. A predicate that throws on a given edge kind is reported as
+    /// <summary>Runs one <c>Is*</c> predicate. A predicate that throws on a given edge kind is reported as
     /// "not this kind" rather than being allowed to kill the walk: the point of the rung is to see
-    /// all edges, and an edge whose predicate throws would otherwise hide every edge after it.
-    /// </summary>
+    /// all edges, and an edge whose predicate throws would otherwise hide every edge after it.</summary>
     private static bool Pred(ksEdgeDefinition edge, Func<ksEdgeDefinition, bool> call)
     {
         try
@@ -9586,10 +9229,8 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// Authors one 3D point at (x, y, z) through <c>IPoints3D.Add()</c> and commits it, returning it
-    /// as an <c>IModelObject</c> or null with the reason in the journal.
-    /// </summary>
+    /// <summary>Authors one 3D point at (x, y, z) through <c>IPoints3D.Add()</c> and commits it, returning it
+    /// as an <c>IModelObject</c> or null with the reason in the journal.</summary>
     private KompasAPI7.IModelObject? AuthorPoint(
         KompasAPI7.IPoints3D points, double x, double y, double z, string name, ProbeStep step)
     {
@@ -9630,10 +9271,8 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// Builds an edge axis and commits it, so the rotation is offered an axis that is a real tree
-    /// object (the R.13 precondition) rather than one whose <c>Update()</c> has not run.
-    /// </summary>
+    /// <summary>Builds an edge axis and commits it, so the rotation is offered an axis that is a real tree
+    /// object (the R.13 precondition) rather than one whose <c>Update()</c> has not run.</summary>
     private KompasAPI7.IAxis3D? MakeEdgeAxis(
         KompasAPI7.IAxes3D axes, object edge, ProbeStep step)
     {
@@ -9663,15 +9302,11 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// One attempt at a rotation with a given <c>RotatedType</c> and a given write order, reported as
-    /// text. Every number it reads is put in the journal, so a rung that fails says why.
-    /// </summary>
-    /// <remarks>
-    /// The write order is a parameter rather than a constant because it has never been varied:
+    /// <summary>One attempt at a rotation with a given <c>RotatedType</c> and a given write order, reported as
+    /// text. Every number it reads is put in the journal, so a rung that fails says why.</summary>
+    /// <remarks>The write order is a parameter rather than a constant because it has never been varied:
     /// R.7 set <c>Profile</c> then <c>Axis</c>, and an axis discarded against a set profile is
-    /// consistent with a member that validates the pair only in one direction.
-    /// </remarks>
+    /// consistent with a member that validates the pair only in one direction.</remarks>
     private string OneRotatedTypeAttempt(
         ksPart part, Kompas6Constants3D.ksRotatedTypeEnum rotType, string label, bool profileFirst,
         KompasAPI7.IAxis3D? axis, ProbeStep step, string name)
@@ -9808,13 +9443,9 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// Attaches whatever source a concrete axis class offers, and returns what happened as text.
-    /// </summary>
-    /// <remarks>
-    /// The cast is the measurement: asking for a specific axis class is how the step learns which
-    /// class <c>Add</c> actually returned. A miss is reported, not thrown.
-    /// </remarks>
+    /// <summary>Attaches whatever source a concrete axis class offers, and returns what happened as text.</summary>
+    /// <remarks>The cast is the measurement: asking for a specific axis class is how the step learns which
+    /// class <c>Add</c> actually returned. A miss is reported, not thrown.</remarks>
     private string AttachAxisSource(
         KompasAPI7.IAxis3D axis, KompasAPI7.IModelObject? edge, KompasAPI7.IModelObject? plane,
         KompasAPI7.IModelObject? cylinder, ProbeStep step)
@@ -9895,11 +9526,9 @@ internal sealed class RotationProbe
     }
 
     /// <summary>Builds a rotation whose axis is the given API7 axis object, and reports Create().</summary>
-    /// <remarks>
-    /// The profile is supplied as well, because R.7 measured that <c>Profile</c> persists where a
+    /// <remarks>The profile is supplied as well, because R.7 measured that <c>Profile</c> persists where a
     /// bare <c>Axis</c> did not: a rotation with an axis and no profile is not a rotation, and
-    /// testing only half the pair would have produced a confident wrong answer.
-    /// </remarks>
+    /// testing only half the pair would have produced a confident wrong answer.</remarks>
     private (bool Created, string Detail) TryRotationWithAxisObject(
         ksPart part, KompasAPI7.IModelObject axisObject, ProbeStep step, string name)
     {
@@ -9957,14 +9586,10 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// Transfers an API5 object to API7, returning null when there is nothing to transfer.
-    /// </summary>
-    /// <remarks>
-    /// Every axis member is typed <c>IModelObject</c>, so a raw API5 object cannot be assigned to it
+    /// <summary>Transfers an API5 object to API7, returning null when there is nothing to transfer.</summary>
+    /// <remarks>Every axis member is typed <c>IModelObject</c>, so a raw API5 object cannot be assigned to it
     /// even when the underlying entity is the same one. A silent null here would make a missing source
-    /// look like an axis type that refused its source, hence the explicit return.
-    /// </remarks>
+    /// look like an axis type that refused its source, hence the explicit return.</remarks>
     private KompasAPI7.IModelObject? Transfer(ksPart part, object? source)
     {
         if (source is null)
@@ -9983,9 +9608,7 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// The first operation of the part by tree order, as a live API5 object, or null with a reason.
-    /// </summary>
+    /// <summary>The first operation of the part by tree order, as a live API5 object, or null with a reason.</summary>
     /// <remarks>
     /// The tree is walked rather than guessed at, and the reason is returned in <paramref name="detail"/>
     /// so an empty part cannot pass for a found source. <c>ksEntity</c> exposes neither
@@ -10038,7 +9661,7 @@ internal sealed class RotationProbe
                 // Any extrusion is a valid operation source, not only the base one. The first run of
                 // this step looked for o3d_baseExtrusion alone and reported "no operation" for a part
                 // whose tree held o3d_bossExtrusion — the same class of self-inflicted defect as
-                // R.7's missing control plate: the probe's own filter looked like a fact about КОМПАС.
+                // R.7's missing control plate: the probe's own filter looked like a fact about KOMPAS.
                 if (kind is (short)Kompas6Constants3D.ksObj3dTypeEnum.o3d_baseExtrusion
                           or (short)Kompas6Constants3D.ksObj3dTypeEnum.o3d_bossExtrusion
                           or (short)Kompas6Constants3D.ksObj3dTypeEnum.o3d_cutExtrusion)
@@ -10073,10 +9696,8 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// The rotation source object behind a cylinder the reader already found, so it can be
-    /// transferred. The reader returns parameters, not the COM object, hence this second lookup.
-    /// </summary>
+    /// <summary>The rotation source object behind a cylinder the reader already found, so it can be
+    /// transferred. The reader returns parameters, not the COM object, hence this second lookup.</summary>
     private static object? FindCylinderFaceSource(ksPart part, Api5.FaceReading reading)
     {
         if (part.GetMainBody() is not ksBody body || body.FaceCollection() is not ksFaceCollection faces)
@@ -10112,16 +9733,12 @@ internal sealed class RotationProbe
             : null;
     }
 
-    /// <summary>
-    /// The first edge of the part's main body, offered as an axis candidate.
-    /// </summary>
-    /// <remarks>
-    /// The rotation under measurement builds no body (that is the point of the step), so the edges
+    /// <summary>The first edge of the part's main body, offered as an axis candidate.</summary>
+    /// <remarks>The rotation under measurement builds no body (that is the point of the step), so the edges
     /// come from the control plate built earlier in the same part. Which edge it is does not matter
     /// yet: the question is whether <c>SetAxis</c> accepts a transferred model object at all. The
     /// first version of this step reported "no candidate found" when the truth was "the control was
-    /// built too late" — a probe defect that would have been read as a finding about КОМПАС.
-    /// </remarks>
+    /// built too late" — a probe defect that would have been read as a finding about KOMPAS.</remarks>
     private static bool TryAnyEdge(ksPart part, out object? edge)
     {
         edge = null;
@@ -10211,15 +9828,11 @@ internal sealed class RotationProbe
         }
     }
 
-    /// <summary>
-    /// True when the body volume did not move across a build step, meaning nothing was added to the
-    /// shared document and any number read afterwards belongs to an earlier step.
-    /// </summary>
-    /// <remarks>
-    /// This exists because the probe builds every step into one document. Without the check, R.2…R.5
+    /// <summary>True when the body volume did not move across a build step, meaning nothing was added to the
+    /// shared document and any number read afterwards belongs to an earlier step.</summary>
+    /// <remarks>This exists because the probe builds every step into one document. Without the check, R.2…R.5
     /// all reported <c>V=82994.6903508512</c> — a figure produced by a base plate an earlier step had
-    /// left in the body — and the reports read as though five separate rotations had been measured.
-    /// </remarks>
+    /// left in the body — and the reports read as though five separate rotations had been measured.</remarks>
     private bool BodyDidNotMove(ProbeStep step, double? before, double? after, string what)
     {
         if (before is null || after is null || Math.Abs(after.Value - before.Value) > 1d)
@@ -10327,7 +9940,7 @@ internal sealed class RotationProbe
         }
 
         // Same gate as R.2: two identical readings of an unmoved body are not two measurements of a
-        // direction. Left in place, this step would report "направления не различимы" for a model in
+        // direction. Left in place, this step would report "directions indistinguishable" for a model in
         // which neither direction produced anything at all.
         //
         // FIFTEENTH PROBE DEFECT, found by a verdict that flipped between runs while the journal was
@@ -10337,7 +9950,7 @@ internal sealed class RotationProbe
         // thirteenth decimal) therefore PRINT identically and COMPARE unequal, so this step passed or
         // failed on the low bits of a re-computation rather than on anything visible. That is defect
         // class 12 in a second place: a threshold that is not a measurement. The comparison is now
-        // against the same noise band, so "различимы" means a difference a reader can see.
+        // against the same noise band, so "distinguishable" means a difference a reader can see.
         var band = NoiseFloor(volumes[0].Volume!.Value);
         var volumeDiffers = Math.Abs(volumes[0].Volume!.Value - volumes[1].Volume!.Value) > band;
         var facesDiffer = volumes[0].Faces != volumes[1].Faces;
@@ -10356,11 +9969,9 @@ internal sealed class RotationProbe
             + " против " + (volumes[1].Faces ?? "—"));
     }
 
-    /// <summary>
-    /// R.5 — negative test. With no construction line in the sketch there must be no silent wrong
+    /// <summary>R.5 — negative test. With no construction line in the sketch there must be no silent wrong
     /// solid: the catalog promises the axis is the caller's to state, so an implicit axis would be
-    /// exactly the failure this row exists to prevent.
-    /// </summary>
+    /// exactly the failure this row exists to prevent.</summary>
     /// <remarks>
     /// <b>Guarded against the empty pass.</b> The first version of this step would have reported PASS
     /// for a rotation that simply never got built, because the only thing it checked was that no body

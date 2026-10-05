@@ -6,33 +6,21 @@ using KompasAPI7;
 
 namespace KompasMcp.Api7Probe;
 
-/// <summary>
-/// Проба B3 — булевы операции над телами (SM-15) через API7 <c>IBooleans</c>.
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Почему отдельный опыт.</b> Каталог покрытия держит SM-15 на уровне <c>metadata_found</c>:
-/// интерфейсы найдены в библиотеке типов, но ни один маршрут не измерен, а именно на такие строки
-/// распространяется правило проекта «строка закрывается только измерением». Здесь измеряется
-/// ровно маршрут: явные тело-цель и набор инструментов, вид операции, политика сохранения
-/// инструментов, несколько инструментов одним признаком, несвязный результат и отрицательные
-/// случаи.
-/// </para>
-/// <para>
-/// <b>Геометрия берётся из наряда §6.1 и считается ДО опыта.</b> Все числа ниже — координаты
-/// модели в мм; ожидания печатаются в журнал перед вызовом, чтобы расхождение нельзя было
-/// объяснить подобранным после факта допуском.
-/// </para>
-/// <para>
-/// <b>Постороннее тело.</b> В каждой постановке, кроме оговорённых, в документе живёт куб
-/// <c>[100,110]×[0,10]×[0,10]</c> (V=1000), не участвующий в операции. Он — свидетель: если
-/// булева операция трогает его геометрию, положение или число тел сверх ожидания, опыт обязан
-/// это показать, а не «сойтись по объёму».
-/// </para>
-/// </remarks>
+/// <summary>Probe B3 — boolean operations on bodies (SM-15) via the API7 <c>IBooleans</c>.</summary>
+/// <remarks>The coverage catalog holds SM-15 at <c>metadata_found</c>: the interfaces are found in the type
+/// library, but no route is measured — and it is exactly such rows that the project rule "a row is closed
+/// only by measurement" applies to. What is measured here is the route itself: explicit target body and
+/// tool set, operation kind, tool save policy, several tools in one feature, a disconnected result and
+/// negative cases. Geometry is taken from order §6.1 and computed BEFORE the experiment; all numbers below
+/// are model coordinates in mm, and the expectations are printed to the log before the call so a divergence
+/// cannot be explained by a tolerance fitted after the fact. INVARIANT: in every setup, unless stated, the
+/// document holds a stranger cube <c>[100,110]×[0,10]×[0,10]</c> (V=1000) taking no part in the operation —
+/// a witness: if the boolean operation touches its geometry, position or the body count beyond expectation,
+/// the experiment must show it rather than "agree on the volume".
+/// History: docs/decisions/probes.md#bo-contact</remarks>
 internal sealed class BodyOpsProbe
 {
-    // ── эталон §6.1: A [0,40]×[0,30]×[0,20] V=24000, B [20,60]×[0,30]×[0,20] V=24000 ──
+    // ── reference §6.1: A [0,40]×[0,30]×[0,20] V=24000, B [20,60]×[0,30]×[0,20] V=24000 ──
     private const double Ax0 = 0d, Ax1 = 40d, Ay0 = 0d, Ay1 = 30d, Az = 20d;
     private const double Bx0 = 20d, Bx1 = 60d;
     private const double StrangerX0 = 100d, StrangerX1 = 110d, StrangerY0 = 0d, StrangerY1 = 10d, StrangerZ = 10d;
@@ -115,11 +103,10 @@ internal sealed class BodyOpsProbe
 
     // ══════════════════════════════════════════════════════════════ routes ══
 
-    /// <summary>
-    /// Первый вопрос — не «работает ли операция», а «отвечает ли фабрика». Каталог знает
-    /// <c>IBoolean</c> по библиотеке типов; здесь проверяется, что <c>IModelContainer.Booleans</c>
-    /// существует у живого контейнера и что <c>Add()</c> отдаёт объект, отвечающий на QI.
-    /// </summary>
+    /// <summary>The first question is not "does the operation work" but "does the factory answer". The
+    /// catalog knows <c>IBoolean</c> from the type library; here it is checked that
+    /// <c>IModelContainer.Booleans</c> exists on a live container and that <c>Add()</c> returns an object
+    /// answering the QI.</summary>
     private void RouteExists()
     {
         var step = _report.Begin("BO.1", "Фабрика IModelContainer.Booleans доступна живьём",
@@ -143,8 +130,8 @@ internal sealed class BodyOpsProbe
 
             step.Observe("Booleans.Count до создания: " + Api5.Raw(SafeInt(() => collection.Count)));
 
-            // Свойства, которые каталог приписывает IBoolean, читаются с ЖИВОГО объекта, а не с
-            // библиотеки типов: объявленный член и отвечающий член — разные утверждения.
+            // The properties the catalog attributes to IBoolean are read from a LIVE object, not the type
+            // library: a declared member and an answering member are different assertions.
             var created = collection.Add();
             if (created is not IBoolean boolean)
             {
@@ -182,7 +169,7 @@ internal sealed class BodyOpsProbe
         Announce(step, "A ∪ B", 36000d, new[] { 0d, 0d, 0d }, new[] { 60d, 30d, 20d });
         RunBinary(step, ksBooleanType.ksUnion, saveTool: false, expectedVolume: 36000d,
             expectedMin: new[] { 0d, 0d, 0d }, expectedMax: new[] { 60d, 30d, 20d },
-            expectedBodies: 2 /* результат + постороннее */);
+            expectedBodies: 2 /* result + stranger */);
     }
 
     private void Difference()
@@ -222,12 +209,9 @@ internal sealed class BodyOpsProbe
             expectedBodies: 3, expectToolSurvives: new[] { 20d, 0d, 0d, 60d, 30d, 20d });
     }
 
-    /// <summary>
-    /// §6.3: цель A, инструменты L=[−10,10]×[0,30]×[0,20] и R=[30,50]×[0,30]×[0,20]. Оба — в
-    /// ОДНОМ признаке. Два последовательных признака этот режим не закрывают, поэтому проверяется
-    /// и состав признака (число элементов ModifyObjects), и то, что перестановка L/R не меняет
-    /// геометрию.
-    /// </summary>
+    /// <summary>§6.3: target A, tools L=[−10,10]×[0,30]×[0,20] and R=[30,50]×[0,30]×[0,20]. Both in ONE
+    /// feature. Two consecutive features do not cover this mode, so both the feature composition (the number
+    /// of ModifyObjects elements) and the invariance of the geometry under swapping L/R are checked.</summary>
     private void MultipleToolsOneFeature()
     {
         var step = _report.Begin("BO.6", "Несколько инструментов ОДНИМ признаком",
@@ -277,8 +261,8 @@ internal sealed class BodyOpsProbe
                 return;
             }
 
-            // Состав признака — часть режима: «несколько инструментов ОДНИМ признаком» ложно, если
-            // признак один, а инструментов в нём один. Считается по ModifyObjects, а не по дереву.
+            // The feature composition is part of the mode: "several tools in ONE feature" is false if the
+            // feature is one but holds one tool. Counted by ModifyObjects, not by the tree.
             var feature = ReadLastBoolean(doc, step);
             step.Observe("признак прочитан обратно: " + (feature ?? "<не прочитан>"));
             step.Observe("признаков Booleans в документе: " + Api5.Raw(BooleanCount(doc)));
@@ -316,26 +300,23 @@ internal sealed class BodyOpsProbe
         }
     }
 
-    /// <summary>
-    /// §6.4: матрица касаний. Вопрос не «получится ли объединение», а как ядро ведёт себя на
-    /// КАЖДОМ виде контакта и как оно представляет результат, у которого связных частей больше
-    /// одной. Ожидания посчитаны заранее, а вид контакта классифицируется ДО операции вызовом
-    /// <c>ksBody.CheckIntersectionWithBody</c>, а не по моему предположению о числах.
-    /// </summary>
-    /// <remarks>
-    /// Прошлый прогон (18.09.2026) показал, что объединение двух РАЗНЕСЁННЫХ тел отвергается
-    /// ядром (<c>Update()=false</c>). Это не «отсутствие функции»: связность результата — свойство
-    /// геометрии, и достройка матрицы отличает «ядро отвергает несвязное объединение» от «ядро
-    /// отвергает объединение вообще». Без матрицы оба вывода выглядят одинаково.
-    /// </remarks>
+    /// <summary>§6.4: contact matrix. The question is not "will the union work" but how the kernel behaves
+    /// on EACH kind of contact and how it represents a result with more than one connected part.
+    /// Expectations are computed in advance, and the contact kind is classified BEFORE the operation by
+    /// <c>ksBody.CheckIntersectionWithBody</c>, not by an assumption about the numbers.</summary>
+    /// <remarks>MEASURED (earlier run, 18.09.2026): the union of two SEPARATE bodies is refused by the
+    /// kernel (<c>Update()=false</c>). That is not "no function": the result's connectivity is a property of
+    /// the geometry, and completing the matrix separates "the kernel refuses a disconnected union" from "the
+    /// kernel refuses a union at all". Without the matrix both conclusions look alike.
+    /// History: docs/decisions/probes.md#bo-contact</remarks>
     private void ContactMatrix()
     {
         var step = _report.Begin("BO.7", "Матрица касаний: грань, ребро, точка, отсутствие контакта, "
             + "вложенность",
             "Как ведёт себя объединение на каждом виде контакта и как представлен несвязный результат?");
 
-        // Каждый случай — свой документ: иначе предыдущая операция меняет состояние, и «отказ»
-        // перестаёт быть отказом именно этого случая.
+        // Each case gets its own document: otherwise the previous operation changes the state and a
+        // "refusal" stops being the refusal of this very case.
         ContactCase(step, "грань", new[] { 40d, 0d, 0d, 60d, 30d, 20d }, 36000d,
             new[] { 0d, 0d, 0d }, new[] { 60d, 30d, 20d });
         ContactCase(step, "ребро", new[] { 40d, 30d, 0d, 60d, 50d, 20d }, 36000d,
@@ -379,7 +360,7 @@ internal sealed class BodyOpsProbe
                 return;
             }
 
-            // Вид контакта устанавливает ЯДРО, а не моя подпись на ярлыке.
+            // The kernel establishes the contact kind, not the label on the tag.
             var intersection = DescribeIntersection(target.Element, tool.Element);
             step.Observe(label + ": CheckIntersectionWithBody → " + intersection);
 
@@ -424,12 +405,11 @@ internal sealed class BodyOpsProbe
         }
     }
 
-    /// <summary>
-    /// §6.4: разность A и плиты [15,25]×[−5,35]×[−5,25]. Прошлый прогон (18.09.2026) дал ОДНО
-    /// тело V=18000 с габаритом всего A — то есть ядро представляет распавшийся результат одним
-    /// телом. Здесь это проверяется явно: членом <c>MultiBodyParts</c> и числом граней, а не
-    /// только объёмом, который одинаков и для двух отдельных тел, и для одного тела из двух кусков.
-    /// </summary>
+    /// <summary>§6.4: difference of A and the plate [15,25]×[−5,35]×[−5,25]. MEASURED (earlier run,
+    /// 18.09.2026): the kernel gave ONE body V=18000 with A's whole extent — i.e. it represents the split
+    /// result as one body. Here this is checked explicitly: by the <c>MultiBodyParts</c> member and the face
+    /// count, not only by the volume, which is the same for two separate bodies and for one body of two
+    /// pieces. History: docs/decisions/probes.md#bo-split</summary>
     private void DifferenceIntoTwoParts()
     {
         var step = _report.Begin("BO.8", "Разность, распадающаяся на две части",
@@ -516,11 +496,9 @@ internal sealed class BodyOpsProbe
         }
     }
 
-    /// <summary>
-    /// Отрицательные случаи. Каждый идёт в СВОЁМ документе: прошлый прогон свёл три случая в один
-    /// документ, и «третий был принят ядром» сделало проверку «модель не изменилась» бессмысленной —
-    /// она мерила принятый случай, а не отказы.
-    /// </summary>
+    /// <summary>Negative cases. Each runs in its OWN document: the earlier run merged three cases into one
+    /// document, and "the third was accepted by the kernel" made the check "the model did not change"
+    /// meaningless — it measured the accepted case, not the refusals.</summary>
     private void NegativeCases()
     {
         var step = _report.Begin("BO.9", "Отрицательные случаи: цель среди инструментов, пустой "
@@ -586,10 +564,9 @@ internal sealed class BodyOpsProbe
         }
     }
 
-    /// <summary>
-    /// Save → close → reopen: читается ли признак обратно и сохраняются ли его входы. Вопрос не
-    /// «открылся ли файл», а «можно ли после переоткрытия узнать, что операция была, и какая».
-    /// </summary>
+    /// <summary>Save → close → reopen: does the feature read back and are its inputs preserved. The question
+    /// is not "did the file open" but "can the operation be recognised after reopening, and which one it
+    /// was".</summary>
     private void ReopenReadBack()
     {
         var step = _report.Begin("BO.10", "Признак переживает save → close → reopen",
@@ -672,9 +649,8 @@ internal sealed class BodyOpsProbe
 
     // ══════════════════════════════════════════════════════════════ core ══
 
-    /// <summary>
-    /// Общий прогон бинарной операции: свежий документ, A, B, посторонний куб, операция, проверка.
-    /// </summary>
+    /// <summary>Common run of a binary operation: a fresh document, A, B, the stranger cube, the operation,
+    /// the check.</summary>
     private void RunBinary(
         ProbeStep step,
         ksBooleanType type,
@@ -746,7 +722,7 @@ internal sealed class BodyOpsProbe
         }
     }
 
-    /// <summary>Печатает ожидания ДО опыта — иначе расхождение объясняется подобранным допуском.</summary>
+    /// <summary>Prints the expectations BEFORE the experiment — otherwise a divergence is explained by a tolerance chosen after the fact.</summary>
     private static void Announce(ProbeStep step, string what, double volume, double[] min, double[] max)
     {
         step.Observe("ОЖИДАНИЕ (посчитано до опыта): " + what
@@ -804,31 +780,17 @@ internal sealed class BodyOpsProbe
         return true;
     }
 
-    /// <summary>
-    /// Создание булева признака. Возвращает пару (создано, причина): вызывающий обязан отличать
-    /// отказ КОМПАСа от падения зонда.
-    /// </summary>
-    /// <summary>
-    /// Несвязное объединение: маршрут «объединение компонентов» вместо булевой операции.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Зачем шаг.</b> Наряд B3 §6.4 ожидает от объединения двух разнесённых кубов 10×10×10 ОДНО
-    /// тело V=2000 из двух кусков, и §10.5 прямо запрещает закрывать положительный режим отказом.
-    /// Шаг <c>BO.7</c> измерил, что <c>IBoolean</c> такие тела ОТВЕРГАЕТ (<c>Update() = false</c>).
-    /// Библиотека типов объявляет при этом отдельный маршрут — <c>IModelContainer.UnionsComponents</c>
-    /// (<c>IUnionComponents</c>: <c>Parts</c> + <c>Update()</c>), то есть «объединение компонентов».
-    /// Один отказ <c>IBoolean</c> не доказывает, что объединение несвязных тел невыразимо ВООБЩЕ,
-    /// поэтому маршрут измеряется, а не предполагается.
-    /// </para>
-    /// <para>
-    /// <b>Опыты.</b> UC-1 воспроизводит блокер (<c>IBoolean</c> на тех же двух телах), UC-2 проверяет
-    /// <c>UnionsComponents</c> на НИХ ЖЕ, UC-3 — контроль на КОНТАКТНЫХ телах (там <c>IBoolean</c>
-    /// работает, поэтому «не сработало» нельзя будет списать на неверно собранный вызов),
-    /// UC-4 — контроль с ОДНИМ телом в <c>Parts</c>. Каждый опыт идёт в своём документе: иначе
-    /// предыдущая операция меняет состояние, и отказ перестаёт быть отказом именно этого случая.
-    /// </para>
-    /// </remarks>
+    /// <summary>Disconnected union: the "union of components" route instead of a boolean operation.</summary>
+    /// <remarks>TEST: order B3 §6.4 expects the union of two separate 10×10×10 cubes to give ONE body V=2000
+    /// of two pieces, and §10.5 forbids closing a positive mode with a refusal. MEASURED: step <c>BO.7</c>
+    /// showed <c>IBoolean</c> REFUSES such bodies (<c>Update() = false</c>). The type library declares a
+    /// separate route — <c>IModelContainer.UnionsComponents</c> (<c>IUnionComponents</c>: <c>Parts</c> +
+    /// <c>Update()</c>). One <c>IBoolean</c> refusal does not prove that a disconnected union is
+    /// inexpressible AT ALL, so the route is measured, not assumed. Experiments: UC-1 reproduces the blocker
+    /// (<c>IBoolean</c> on the same two bodies), UC-2 tries <c>UnionsComponents</c> on THEM, UC-3 is a
+    /// control on CONTACTING bodies (where <c>IBoolean</c> works, so "did not work" cannot be blamed on a
+    /// wrongly assembled call), UC-4 is a control with ONE body in <c>Parts</c>. Each runs in its own
+    /// document. History: docs/decisions/probes.md#bo-union-components</remarks>
     private void UnionComponentsRoute()
     {
         var step = _report.Begin("BO.12", "Несвязное объединение: маршрут «объединение компонентов»",
@@ -848,7 +810,7 @@ internal sealed class BodyOpsProbe
         step.Pass("маршрут измерен; UC-2 (несвязные тела через UnionsComponents): " + verdict);
     }
 
-    /// <summary>UC-1: воспроизведение блокера — <c>IBoolean</c> на телах без контакта.</summary>
+    /// <summary>UC-1: reproduces the blocker — <c>IBoolean</c> on bodies without contact.</summary>
     private void BooleanOnDisjoint(ProbeStep step)
     {
         var doc = NewPart(out var part);
@@ -874,7 +836,7 @@ internal sealed class BodyOpsProbe
         }
     }
 
-    /// <summary>UC-2: те же два тела без контакта — маршрутом <c>UnionsComponents</c>.</summary>
+    /// <summary>UC-2: the same two bodies without contact — via the <c>UnionsComponents</c> route.</summary>
     private void UnionComponentsOnDisjoint(ProbeStep step)
     {
         var doc = NewPart(out var part);
@@ -923,10 +885,9 @@ internal sealed class BodyOpsProbe
         }
     }
 
-    /// <summary>
-    /// UC-3: контроль — тела КОНТАКТИРУЮТ. Там <c>IBoolean</c> работает (шаг BO.7), поэтому исход
-    /// этого опыта отделяет «маршрут собран неверно» от «ядро не принимает несвязные тела».
-    /// </summary>
+    /// <summary>UC-3: control — the bodies CONTACT. There <c>IBoolean</c> works (step BO.7), so the outcome
+    /// of this experiment separates "the route is assembled wrongly" from "the kernel does not accept
+    /// disconnected bodies".</summary>
     private void UnionComponentsOnContact(ProbeStep step)
     {
         var doc = NewPart(out var part);
@@ -964,7 +925,7 @@ internal sealed class BodyOpsProbe
         }
     }
 
-    /// <summary>UC-4: контроль — в <c>Parts</c> одно тело. «Объединение одного тела» ничего не меняет.</summary>
+    /// <summary>UC-4: control — one body in <c>Parts</c>. "Union of one body" changes nothing.</summary>
     private void UnionComponentsOnSinglePart(ProbeStep step)
     {
         var doc = NewPart(out var part);
@@ -1000,7 +961,7 @@ internal sealed class BodyOpsProbe
         }
     }
 
-    /// <summary>Пара кубов 10×10×10: [0,10]³ и [20,30]×[0,10]×[0,10], опознанные по габариту.</summary>
+    /// <summary>A pair of 10×10×10 cubes: [0,10]³ and [20,30]×[0,10]×[0,10], recognised by extent.</summary>
     private bool BuildPair(
         ksDocument3D doc, ksPart part, ProbeStep step, string label, out BodyRow? first, out BodyRow? second)
     {
@@ -1026,11 +987,9 @@ internal sealed class BodyOpsProbe
         return true;
     }
 
-    /// <summary>
-    /// Вызов «объединения компонентов»: <c>IModelContainer.UnionsComponents.Add()</c> →
-    /// <c>IUnionComponents.Parts</c> → <c>Update()</c>. Тела переносятся в API7 тем же способом, что и
-    /// для <c>IBoolean</c>: иначе исход мерил бы перенос, а не операцию.
-    /// </summary>
+    /// <summary>Calls "union of components": <c>IModelContainer.UnionsComponents.Add()</c> →
+    /// <c>IUnionComponents.Parts</c> → <c>Update()</c>. Bodies are transferred to API7 the same way as for
+    /// <c>IBoolean</c>: otherwise the outcome would measure the transfer, not the operation.</summary>
     private (bool Ok, string? Note) CreateUnionComponents(
         ksDocument3D doc, ksPart part, IReadOnlyList<BodyRow> bodies, ProbeStep step)
     {
@@ -1076,6 +1035,8 @@ internal sealed class BodyOpsProbe
         }
     }
 
+    /// <summary>Creates a boolean feature. Returns the pair (created, reason): the caller must distinguish a
+    /// KOMPAS refusal from a probe crash.</summary>
     private (bool Ok, string? Note) CreateBoolean(
         ksDocument3D doc,
         ksPart part,
@@ -1135,7 +1096,7 @@ internal sealed class BodyOpsProbe
         }
     }
 
-    /// <summary>Пробная операция, чей исход важен как ТЕКСТ: отказ ядра или отсутствие отказа.</summary>
+    /// <summary>A trial operation whose outcome matters as TEXT: a kernel refusal or no refusal.</summary>
     private string AttemptBoolean(
         ksDocument3D doc,
         ksPart part,
@@ -1150,66 +1111,56 @@ internal sealed class BodyOpsProbe
             return "ОТКАЗ (" + note + ")";
         }
 
-        // Успех здесь не означает «правильно»: постановка бессмысленна, и вопрос опыта — приняла ли
-        // её фабрика. Убираем признак, чтобы следующий случай шёл с чистого состояния.
+        // Success here does not mean "correct": the setup is meaningless, and the experiment's question is
+        // whether the factory accepted it. The feature is removed so the next case starts from a clean state.
         return "принято ядром (Update()=true)";
     }
 
-    /// <summary>
-    /// BO.11. Правка вида СУЩЕСТВУЮЩЕЙ булевой операции: маршрут.
-    /// </summary>
-    /// <remarks>
-    /// Наряд B3 §5 требует, чтобы правка меняла параметры СУЩЕСТВУЮЩЕГО признака относительно его
-    /// ИСХОДНЫХ входов. У булевой операции единственный содержательный параметр — вид операции
-    /// (<c>IBoolean.BooleanType</c>, чтение/запись, dispid = 1), и вопрос опыта простой: меняет ли
-    /// его перезапись геометрию, или <c>Update() = true</c> только подтверждает запись. Этот же
-    /// вопрос уже дал отрицательный ответ на семействе разделения (шаг SP.9, контроль E-B), но
-    /// переносить измерение между семействами запрещено — маршруты у них разные, поэтому опыт
-    /// повторяется здесь заново.
-    /// <para>
-    /// <b>Различающий контроль обязателен.</b> Объём разности и объём пересечения на этом эталоне
-    /// РАВНЫ (12 000), различает их габарит: разность лежит в <c>x ≤ 20</c>, пересечение —
-    /// в <c>x ∈ [20, 40]</c>. Поэтому шаг E-C идёт от разности к пересечению: прибор, сверяющий
-    /// только объём, на этом шаге не отличил бы правку от полного бездействия.
-    /// </para>
-    /// <para>
-    /// <b>Два контроля, и оба способны провалиться.</b> E-E различает два пути к одному и тому же
-    /// состоянию (запись без <c>Update()</c> против записи с ним) и потому проверяет само
-    /// утверждение о маршруте. E-C различает правку и бездействие там, где объём одинаков. E-B
-    /// контролем НЕ является и оставлен измерением — см. его собственный комментарий: первая
-    /// редакция объявила там контроль и была опровергнута.
-    /// </para>
-    /// </remarks>
+    /// <summary>BO.11. Editing the kind of an EXISTING boolean operation: the route.</summary>
+    /// <remarks>TEST: order B3 §5 requires the edit to change the parameters of an EXISTING feature relative
+    /// to its ORIGINAL inputs. The only meaningful parameter of a boolean operation is the operation kind
+    /// (<c>IBoolean.BooleanType</c>, read/write, dispid = 1): does overwriting it change the geometry, or
+    /// does <c>Update() = true</c> merely confirm the write. The same question already got a negative answer
+    /// on the split family (step SP.9, control E-B), but transferring a measurement between families is
+    /// forbidden — their routes differ, so the experiment is repeated here. The discriminating control is
+    /// mandatory: the volume of the difference and of the intersection on this reference are EQUAL (12 000),
+    /// and their extent tells them apart — the difference lies in <c>x ≤ 20</c>, the intersection in
+    /// <c>x ∈ [20, 40]</c>. So step E-C goes from the difference to the intersection: an instrument checking
+    /// only the volume would not tell an edit from complete inaction. Two controls, both able to fail: E-E
+    /// separates two paths to the same state (write without <c>Update()</c> vs with it) and so tests the
+    /// route claim itself; E-C separates edit from inaction where the volume is equal. E-B is NOT a control
+    /// and is left as a measurement — see its own comment.
+    /// History: docs/decisions/probes.md#bo-edit-kind</remarks>
     private void EditOperationKind()
     {
         var step = _report.Begin("BO.11", "Правка вида СУЩЕСТВУЮЩЕГО булева признака",
             "Меняет ли перезапись IBoolean.BooleanType геометрию, или Update()=true только "
             + "подтверждает запись?");
 
-        // ОЖИДАНИЯ ОБЪЯВЛЕНЫ ДО ИЗМЕРЕНИЯ (наряд §6.1, модельные координаты, мм):
+        // EXPECTATIONS DECLARED BEFORE MEASUREMENT (order §6.1, model coordinates, mm):
         //   A = [0,40]×[0,30]×[0,20], V = 24000;  B = [20,60]×[0,30]×[0,20], V = 24000;
         //   A ∩ B: x ∈ [20,40], V = 12000.
         //
-        //   создание  A ∪ B                    → одно тело V = 36000, габарит (0,0,0)…(60,30,20)
-        //   E-A       объединение → разность   → V = 12000, габарит (0,0,0)…(20,30,20)
-        //   E-C       РАЗЛИЧАЮЩИЙ контроль: разность → пересечение → объём ТОТ ЖЕ (12000),
-        //             а габарит другой: (20,0,0)…(40,30,20). Прибор, сверяющий только объём,
-        //             на этом шаге не отличил бы правку от полного бездействия
-        //   E-D       пересечение → объединение → V = 36000, габарит (0,0,0)…(60,30,20)
-        //   E-E       КОНТРОЛЬ «запись без Update() ничего не применяет»: записать разность БЕЗ
-        //             вызова Update() и пересобрать → геометрия обязана остаться 36000; затем
-        //             вызвать Update() → 12000. Если бы применяла одна запись, Update() не был бы
-        //             частью маршрута, и утверждение о маршруте было бы неточным
-        //   E-B       ИЗМЕРЕНИЕ (не контроль): что ядро делает со значением ksBooleanUnknown.
-        //             Первая редакция объявила его здесь контролем «неиспользуемое значение
-        //             геометрию не меняет», и это ожидание ОПРОВЕРГНУТО прогоном
-        //             f70c555f22394ad1a050eaf96c83dd04: из разности (12000) значение
-        //             ksBooleanUnknown перевело признак в 36000, то есть ядро трактует его как
-        //             ОБЪЕДИНЕНИЕ. Контроль перенесён в E-E, а здесь осталось измерение смысла
-        //             значения: клиент, записавший 0, получит объединение, а не отказ
+        //   create    A ∪ B                    → one body V = 36000, extent (0,0,0)…(60,30,20)
+        //   E-A       union → difference       → V = 12000, extent (0,0,0)…(20,30,20)
+        //   E-C       DISCRIMINATING control: difference → intersection → SAME volume (12000),
+        //             but a different extent: (20,0,0)…(40,30,20). An instrument checking only the
+        //             volume would not tell an edit from complete inaction here
+        //   E-D       intersection → union     → V = 36000, extent (0,0,0)…(60,30,20)
+        //   E-E       CONTROL "a write without Update() applies nothing": write the difference WITHOUT
+        //             calling Update() and rebuild → the geometry must stay 36000; then call Update()
+        //             → 12000. If a lone write applied, Update() would not be part of the route and
+        //             the route claim would be inaccurate
+        //   E-B       MEASUREMENT (not a control): what the kernel does with ksBooleanUnknown. Its first
+        //             wording declared a control here ("an unused value does not change the geometry"),
+        //             and that expectation was REFUTED by run
+        //             f70c555f22394ad1a050eaf96c83dd04: from the difference (12000) the value
+        //             ksBooleanUnknown turned the feature into 36000, i.e. the kernel treats it as a
+        //             UNION. The control moved to E-E; here only the meaning of the value is measured:
+        //             a client writing 0 gets a union, not a refusal
         //
-        //   На каждом шаге: признаков Booleans РОВНО ОДИН (правка, создавшая второй признак, —
-        //   не правка), посторонний куб цел.
+        //   At every step: EXACTLY ONE Booleans feature (an edit that creates a second feature is not an
+        //   edit), and the stranger cube is intact.
         var doc = NewPart(out var part);
         try
         {
@@ -1293,9 +1244,8 @@ internal sealed class BodyOpsProbe
         }
     }
 
-    /// <summary>
-    /// Перезапись вида на СУЩЕСТВУЮЩЕМ признаке + проверка ГЕОМЕТРИЕЙ, а не ответом <c>Update()</c>.
-    /// </summary>
+    /// <summary>Overwrites the kind on an EXISTING feature + checks the GEOMETRY, not the <c>Update()</c>
+    /// answer.</summary>
     private bool EditKind(
         ProbeStep step,
         string label,
@@ -1346,15 +1296,15 @@ internal sealed class BodyOpsProbe
         step.Data[label + "_volume"] = SumVolumes(rows);
         step.Data[label + "_bodies_detail"] = Describe(rows);
 
-        // Правка, создавшая второй признак, — не правка (наряд §5): параметр обязан примениться к
-        // СУЩЕСТВУЮЩЕМУ признаку, а не построить рядом ещё одну операцию.
+        // An edit that created a second feature is not an edit (order §5): the parameter must apply to the
+        // EXISTING feature, not build another operation next to it.
         if (countAfter != 1)
         {
             step.Fail(label + ": признаков Booleans " + Api5.Raw(countAfter) + " вместо 1");
             return false;
         }
 
-        // Правка касается СВОЕГО признака, а не соседей: посторонний куб обязан быть цел.
+        // The edit touches ITS OWN feature, not neighbours: the stranger cube must be intact.
         var stranger = FindBody(rows, StrangerX0, StrangerY0, 0d, StrangerX1, StrangerY1, StrangerZ);
         if (stranger is null || Math.Abs((stranger.Volume ?? 0d) - VolumeStranger) > 0.01d)
         {
@@ -1381,17 +1331,13 @@ internal sealed class BodyOpsProbe
         return true;
     }
 
-    /// <summary>
-    /// E-E. Отрицательный контроль маршрута: «запись БЕЗ <c>Update()</c> ничего не применяет».
-    /// </summary>
-    /// <remarks>
-    /// Маршрут правки заявлен как пара «перезапись члена → <c>Update()</c> → пересборка». Пока не
-    /// измерено обратное, нельзя утверждать, что <c>Update()</c> в этой паре что-то решает: если бы
-    /// применяла одна запись, вызов был бы украшением, а утверждение о маршруте — неточным.
-    /// Поэтому здесь запись делается БЕЗ <c>Update()</c> и с пересборкой: геометрия обязана остаться
-    /// прежней. Затем тот же член перезаписывается снова, но уже с <c>Update()</c>, и геометрия
-    /// обязана измениться. Опыт мерит РАЗНИЦУ двух путей, а не один путь.
-    /// </remarks>
+    /// <summary>E-E. Negative route control: "a write WITHOUT <c>Update()</c> applies nothing".</summary>
+    /// <remarks>The edit route is claimed as the pair "member overwrite → <c>Update()</c> → rebuild". Until
+    /// the contrary is measured, one cannot claim that <c>Update()</c> decides anything in that pair: if a
+    /// lone write applied, the call would be decoration and the route claim inaccurate. So here the write is
+    /// done WITHOUT <c>Update()</c> and with a rebuild: the geometry must stay as before. Then the same
+    /// member is overwritten again, now WITH <c>Update()</c>, and the geometry must change. The experiment
+    /// measures the DIFFERENCE of the two paths, not one path.</remarks>
     private bool ControlWriteWithoutUpdate(ProbeStep step, ksDocument3D doc, ksPart part)
     {
         var container = Container(doc);
@@ -1408,7 +1354,7 @@ internal sealed class BodyOpsProbe
             return false;
         }
 
-        // Состояние на входе — объединение (E-D): 36000 в габарите (0,0,0)…(60,30,20).
+        // Input state — the union (E-D): 36000 in the extent (0,0,0)…(60,30,20).
         var union = FindBody(BodyRows(part), 0d, 0d, 0d, 60d, 30d, 20d);
         if (union is null || Math.Abs((union.Volume ?? 0d) - 36000d) > 0.01d)
         {
@@ -1416,8 +1362,8 @@ internal sealed class BodyOpsProbe
             return false;
         }
 
-        // Путь 1: запись БЕЗ Update(). Пересборка есть — иначе мерился бы не «Update() не нужен»,
-        // а «ничего не вызвано».
+        // Path 1: write WITHOUT Update(). A rebuild is present — otherwise one would measure "Update() is
+        // not needed" as "nothing was called".
         boolean.BooleanType = ksBooleanType.ksDifference;
         part.RebuildModel();
         doc.RebuildDocument();
@@ -1436,7 +1382,7 @@ internal sealed class BodyOpsProbe
             return false;
         }
 
-        // Путь 2: тот же член, та же пересборка, но с Update(). Геометрия обязана измениться.
+        // Path 2: the same member, the same rebuild, but with Update(). The geometry must change.
         boolean.BooleanType = ksBooleanType.ksDifference;
         var updated = SafeBoolOf(() => boolean.Update());
         part.RebuildModel();
@@ -1458,19 +1404,15 @@ internal sealed class BodyOpsProbe
         return true;
     }
 
-    /// <summary>
-    /// E-B. ИЗМЕРЕНИЕ (не контроль): что ядро делает со значением <c>ksBooleanUnknown</c>.
-    /// </summary>
-    /// <remarks>
-    /// Первая редакция этого шага объявляла здесь отрицательный контроль: «неиспользуемое значение
-    /// геометрию не меняет». Ожидание ОПРОВЕРГНУТО прогоном <c>f70c555f22394ad1a050eaf96c83dd04</c>:
-    /// из состояния разности (12 000) запись <c>ksBooleanUnknown</c> перевела признак в 36 000, то
-    /// есть ядро трактует это значение как ОБЪЕДИНЕНИЕ, а не отказывается его исполнять. Ослаблять
-    /// утверждение под наблюдённый результат запрещено, поэтому опыт переименован в измерение: он
-    /// устанавливает ФАКТ о продукте, который обязан знать клиент (записав 0, он получит объединение,
-    /// а не отказ), а роль контроля передана опыту E-E, который различает два пути и потому способен
-    /// провалиться.
-    /// </remarks>
+    /// <summary>E-B. MEASUREMENT (not a control): what the kernel does with the value <c>ksBooleanUnknown</c>.</summary>
+    /// <remarks>The first wording of this step declared a negative control here: "an unused value does not
+    /// change the geometry". The expectation was REFUTED by run <c>f70c555f22394ad1a050eaf96c83dd04</c>: from
+    /// the difference state (12 000) writing <c>ksBooleanUnknown</c> turned the feature into 36 000, i.e. the
+    /// kernel treats the value as a UNION rather than refusing to execute it. Weakening the claim to fit the
+    /// observed result is forbidden, so the experiment is renamed a measurement: it establishes a FACT about
+    /// the product the client must know (writing 0 yields a union, not a refusal), and the control role passed
+    /// to experiment E-E, which separates two paths and can therefore fail.
+    /// History: docs/decisions/probes.md#bo-unknown</remarks>
     private bool MeasureUnknownKind(ProbeStep step, ksDocument3D doc, ksPart part)
     {
         var container = Container(doc);
@@ -1487,7 +1429,7 @@ internal sealed class BodyOpsProbe
             return false;
         }
 
-        // Вход — разность 12000 в габарите x ≤ 20 (состояние после E-E).
+        // Input — the difference 12000 in the extent x ≤ 20 (state after E-E).
         var before = FindBody(BodyRows(part), 0d, 0d, 0d, 20d, 30d, 20d);
         if (before is null || Math.Abs((before.Volume ?? 0d) - 12000d) > 0.01d)
         {
@@ -1521,8 +1463,8 @@ internal sealed class BodyOpsProbe
             return false;
         }
 
-        // Признак возвращается в рабочее состояние: измерение не должно оставлять модель в
-        // состоянии, которого не объявлял ни один шаг.
+        // The feature is returned to a working state: a measurement must not leave the model in a state no
+        // step declared.
         boolean.BooleanType = ksBooleanType.ksDifference;
         var restored = SafeBoolOf(() => boolean.Update());
         part.RebuildModel();
@@ -1584,11 +1526,9 @@ internal sealed class BodyOpsProbe
         }
     }
 
-    /// <summary>
-    /// Читает ПОСЛЕДНИЙ булев признак документа: вид операции и политику сохранения. Возвращает
-    /// текст, а не объект: зонду важно, что именно читается с модели, и «не прочитано» обязано
-    /// быть отличимо от «прочитан ноль».
-    /// </summary>
+    /// <summary>Reads the LAST boolean feature of the document: operation kind and save policy. Returns text,
+    /// not an object: what matters to the probe is what is read from the model, and "not read" must be
+    /// distinguishable from "read as zero".</summary>
     private string? ReadLastBoolean(ksDocument3D doc, ProbeStep step)
     {
         try
@@ -1634,11 +1574,9 @@ internal sealed class BodyOpsProbe
         return Extrude(doc, part, sketch, thickness, step, prefix);
     }
 
-    /// <summary>
-    /// Прямоугольник на СМЕЩЁННОЙ плоскости z=<paramref name="zPlane"/> высотой
-    /// <paramref name="thickness"/>. Нужен там, где тело выходит за плоскость XY: эталон §6.4
-    /// требует плиту z∈[−5,25], а выдавленный в одну сторону эскиз на XY её не даёт.
-    /// </summary>
+    /// <summary>A rectangle on the OFFSET plane z=<paramref name="zPlane"/> with height
+    /// <paramref name="thickness"/>. Needed where the body leaves the XY plane: reference §6.4 requires a
+    /// plate z∈[−5,25], which a one-sided sketch on XY does not give.</summary>
     private static bool ExtrudeRectOnOffsetPlane(
         ksDocument3D doc, ksPart part, double u0, double u1, double v0, double v1,
         double zPlane, double thickness, ProbeStep step, string prefix)
@@ -1744,19 +1682,17 @@ internal sealed class BodyOpsProbe
         return doc;
     }
 
-    /// <summary>Число булевых признаков в документе: «несколько инструментов ОДНИМ признаком» —
-    /// утверждение о ЧИСЛЕ признаков, и без этого счётчика оно непроверяемо.</summary>
+    /// <summary>The number of boolean features in the document: "several tools in ONE feature" is a claim
+    /// about the NUMBER of features, and without this counter it is unverifiable.</summary>
     private int? BooleanCount(ksDocument3D doc)
     {
         var container = Container(doc);
         return container?.Booleans is { } collection ? SafeInt(() => collection.Count) : null;
     }
 
-    /// <summary>
-    /// Вид контакта двух тел по ядру, а не по ярлыку случая: <c>CheckIntersectionWithBody</c>
-    /// отвечает на вопрос «пересекаются ли» сам, и подпись «ребро» рядом с ним — гипотеза,
-    /// которую этот вызов проверяет.
-    /// </summary>
+    /// <summary>The kernel's contact kind of two bodies, not the case label: <c>CheckIntersectionWithBody</c>
+    /// answers "do they intersect" itself, and the label "edge" next to it is a hypothesis this call
+    /// checks.</summary>
     private static string DescribeIntersection(object? first, object? second)
     {
         try
@@ -1787,11 +1723,9 @@ internal sealed class BodyOpsProbe
         }
     }
 
-    /// <summary>
-    /// Тела документа по одному элементу <c>BodyCollection</c> с объёмом и габаритом. Индекс
-    /// сохраняется: он нужен только как адрес внутри одного снимка, и ни одно решение опыта на
-    /// него не опирается — сопоставление идёт по габариту.
-    /// </summary>
+    /// <summary>Document bodies as one <c>BodyCollection</c> element each, with volume and extent. The index
+    /// is kept: it is only an address within one snapshot, and no experiment decision relies on it — matching
+    /// is by extent.</summary>
     private static List<BodyRow> BodyRows(ksPart part)
     {
         var rows = new List<BodyRow>();
@@ -1843,7 +1777,7 @@ internal sealed class BodyOpsProbe
         }
         catch (Exception)
         {
-            // Читается то, что успело прочитаться: частичный список честнее пустого.
+            // What managed to be read is read: a partial list is more honest than an empty one.
         }
 
         return rows;
@@ -1978,7 +1912,7 @@ internal sealed class BodyOpsProbe
         return found;
     }
 
-    /// <summary>Одно тело в снимке. <c>Element</c> — сырой элемент <c>BodyCollection</c>.</summary>
+    /// <summary>One body in a snapshot. <c>Element</c> is the raw <c>BodyCollection</c> element.</summary>
     private sealed class BodyRow
     {
         public int Index { get; init; }
@@ -1991,15 +1925,14 @@ internal sealed class BodyOpsProbe
 
         public double[]? Max { get; init; }
 
-        /// <summary>Число граней тела: различает «одно тело с двумя кусками» от «одного куска».</summary>
+        /// <summary>Body face count: separates "one body of two pieces" from "one piece".</summary>
         public int? FaceCount { get; init; }
 
         public bool? IsSolid { get; init; }
 
-        /// <summary>
-        /// <c>ksBody.MultiBodyParts</c>: состоит ли тело из НЕСКОЛЬКИХ несвязных частей. Именно
-        /// этот член, а не число тел, отвечает на вопрос «как ядро представляет несвязный результат».
-        /// </summary>
+        /// <summary><c>ksBody.MultiBodyParts</c>: whether the body consists of SEVERAL disconnected parts. It
+        /// is this member, not the body count, that answers "how the kernel represents a disconnected
+        /// result".</summary>
         public bool? MultiBodyParts { get; init; }
 
         public string Describe() =>

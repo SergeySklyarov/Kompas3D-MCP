@@ -5,41 +5,32 @@ using KompasAPI7;
 
 namespace KompasMcp.Api7Probe;
 
-/// <summary>
-/// Проба H — правка НАБОРА РЁБЕР существующего скругления (SM-09.fillet.change_edge_set).
-/// </summary>
+/// <summary>Probe H — editing the EDGE SET of an existing fillet (SM-09.fillet.change_edge_set).</summary>
 /// <remarks>
-/// <para>
-/// Основание: <c>SM-09.fillet.change_edge_set</c> стояла на уровне <c>metadata_found</c> с прямой
-/// пометкой «<c>array()</c> доступен; поведение при сокращении/расширении набора не измерялось».
-/// То есть <b>доступность метода уже известна, а применение — нет</b>, и именно это надо измерить.
-/// Ненулевой объект и <c>true</c> от <c>Add()</c>/<c>Clear()</c>/<c>Update()</c> доказательством не
-/// считаются (ADR-003 §3). Эталон — объём и число граней, а не ответ вызова.
-/// </para>
-/// <para>
-/// <b>Аналитика.</b> Пластина 100×80×10 (V₀ = 80000), четыре вертикальных угловых ребра длиной 10 мм.
-/// Одно ребро скругления радиуса r снимает <c>(1 − π/4)·r²·h</c>. Отсюда ровно читаются четыре
-/// состояния, и ни одно из них не спутать с другим:
-/// </para>
+/// MEASURED: <c>SM-09.fillet.change_edge_set</c> stood at level <c>metadata_found</c> with the direct
+/// note "array() is available; the behaviour on shrinking/growing the set was not measured". That is,
+/// the AVAILABILITY of the method is already known while its APPLICATION is not, and that is what must
+/// be measured. A non-null object and <c>true</c> from <c>Add()</c>/<c>Clear()</c>/<c>Update()</c> are
+/// not proof (ADR-003 §3). The reference is the volume and the face count, not the call's answer.
+/// TEST: analytics. Plate 100×80×10 (V₀ = 80000), four vertical corner edges 10 mm long. One fillet
+/// edge of radius r removes <c>(1 − π/4)·r²·h</c>. Hence four states are read unambiguously, and none
+/// can be confused with another:
 /// <list type="bullet">
-/// <item>4 ребра, r=3 → 80000 − 4·(1−π/4)·9·10 = <b>79922.74333882307</b>;</item>
-/// <item>2 ребра, r=3 → 80000 − 2·(1−π/4)·9·10 = <b>79961.37166941154</b> (СОКРАЩЕНИЕ набора);</item>
-/// <item>4 ребра, r=5 → 80000 − 4·(1−π/4)·25·10 = <b>79785.39816339745</b> (правка радиуса — контроль);</item>
-/// <item>4 ребра, r=3 и одно НОВОЕ ребро вне исходной четвёрки → +1·(1−π/4)·9·10 (РАСШИРЕНИЕ).</item>
+/// <item>4 edges, r=3 → 80000 − 4·(1−π/4)·9·10 = <b>79922.74333882307</b>;</item>
+/// <item>2 edges, r=3 → 80000 − 2·(1−π/4)·9·10 = <b>79961.37166941154</b> (SET SHRINK);</item>
+/// <item>4 edges, r=5 → 80000 − 4·(1−π/4)·25·10 = <b>79785.39816339745</b> (radius edit — control);</item>
+/// <item>4 edges, r=3 and one NEW edge outside the original four → +1·(1−π/4)·9·10 (GROW).</item>
 /// </list>
-/// <para>
-/// <b>Почему это отдельная проба, а не расширение пробы F.</b> У фаски правка набора не
-/// рассматривалась вовсе, а у скругления уже известно, что запись в определение API5 на
-/// СУЩЕСТВУЮЩЕМ признаке принимается и геометрически игнорируется (измерено FL04r: сеттер успешен,
-/// <c>entity.Update()</c> = true, определение перечитывает число, объём прежний). Значит нельзя
-/// предполагать, что <c>array()</c> ведёт себя иначе: это надо проверить отдельно, и именно
-/// <c>array()</c> — первым, потому что он и есть «найденный маршрут».
-/// </para>
-/// <para>
-/// <b>Порядок — часть измерения.</b> Каждое вмешательство идёт на СВОЁМ документе: сценарий
-/// сокращения меняет набор необратимо для последующих шагов, и на одном документе они бы мешали
-/// друг другу, то есть мерили бы не то, что заявляют.
-/// </para>
+/// MEASURED: why this is a separate probe and not an extension of probe F. For the chamfer, editing the
+/// set was not considered at all; for the fillet it is already known that writing to the API5
+/// definition on an EXISTING feature is accepted and geometrically ignored (measured FL04r: the setter
+/// succeeds, <c>entity.Update()</c> = true, the definition re-reads the number, the volume is
+/// unchanged). So one must not assume that <c>array()</c> behaves differently: it must be checked
+/// separately, and <c>array()</c> first, because it is the "found route".
+/// INVARIANT: the order is part of the measurement. Each intervention runs on its OWN document: the
+/// shrink scenario changes the set irreversibly for subsequent steps, and on a single document they
+/// would interfere, i.e. they would measure something other than what they claim.
+/// History: docs/decisions/probes.md#fillet-edge-set
 /// </remarks>
 internal sealed class FilletEdgeSetProbe
 {
@@ -77,9 +68,9 @@ internal sealed class FilletEdgeSetProbe
 
         try
         {
-            // Решающий вопрос идёт первым и на своём документе: применяется ли сокращение набора
-            // через array() — тот маршрут, который «найден». Если он не применяется, весь
-            // дальнейший разбор API7 имеет смысл только как поиск обходного пути.
+            // The decisive question goes first and on its own document: is the set shrink through
+            // array() — the "found" route — applied. If it is not, the whole subsequent API7 analysis
+            // is meaningful only as a search for a workaround.
             var api5Shrink = Api5ShrinkViaArray();
             if (api5Shrink is not null)
             {
@@ -105,7 +96,7 @@ internal sealed class FilletEdgeSetProbe
         }
     }
 
-    // ═══════════════════════════════════════════════════════════ решающие измерения ══
+    // ═══════════════════════════════════════════════════════════ decisive measurements ══
 
     private Plate? Api5ShrinkViaArray()
     {
@@ -147,7 +138,7 @@ internal sealed class FilletEdgeSetProbe
             return null;
         }
 
-        // Сокращаем набор: 4 ребра → 2. Именно это и есть «изменение набора».
+        // Shrink the set: 4 edges → 2. This is exactly the "set change".
         var kept = cornerEdges.Take(2).ToList();
         var outcome = WriteEdgeSet(step, plate, fillet, kept);
         step.Data["array_clear"] = outcome.Cleared;
@@ -194,7 +185,7 @@ internal sealed class FilletEdgeSetProbe
             "API5: расширение набора рёбер (добавить ребро, которого в наборе не было)",
             "Принимает ли array() новое ребро и появляется ли новая скруглённая грань?");
 
-        // Пересоздаём чистое состояние на новом документе: предыдущий шаг необратимо сократил набор.
+        // Recreate a clean state on a new document: the previous step shrank the set irreversibly.
         var fresh = NewPlate(step, "H.2", out var cornerEdges);
         if (fresh is null)
         {
@@ -220,7 +211,7 @@ internal sealed class FilletEdgeSetProbe
         step.Data["volume_before"] = Num(beforeVolume);
         step.Data["faces_before"] = beforeFaces;
 
-        // Расширяем: два ребра → четыре.
+        // Grow: two edges → four.
         var outcome = WriteEdgeSet(step, fresh, fillet, cornerEdges);
         step.Data["array_clear"] = outcome.Cleared;
         step.Data["array_added"] = outcome.Added;
@@ -260,7 +251,7 @@ internal sealed class FilletEdgeSetProbe
             "API5: переживает ли изменённый набор save→close→reopen",
             "Остаётся ли набор тем, что записали, или КОМПАС восстанавливает исходный?");
 
-        // Сокращаем, сохраняем, закрываем, открываем и ЧИТАЕМ набор заново.
+        // Shrink, save, close, open and READ the set again.
         var fresh = NewPlate(step, "H.3", out var cornerEdges);
         if (fresh is null)
         {
@@ -370,7 +361,7 @@ internal sealed class FilletEdgeSetProbe
 
         step.Data["base_objects_before"] = live.BaseObjects is object[] bo ? bo.Length : (object?)null;
 
-        // Передаём в BaseObjects ДВА ребра вместо четырёх — прямо, типизированно.
+        // Pass TWO edges instead of four into BaseObjects — directly, in a typed way.
         var two = ToApi7(step, cornerEdges.Take(2).ToList());
         if (two is not object[] array)
         {
@@ -420,15 +411,12 @@ internal sealed class FilletEdgeSetProbe
         return plate;
     }
 
-    // ═══════════════════════════════════════════════════════════════════ механика ══
+    // ═══════════════════════════════════════════════════════════════════ mechanics ══
 
-    /// <summary>
-    /// Записать набор рёбер в СУЩЕСТВУЮЩЕЕ скругление через определение API5:
-    /// <c>array().Clear()</c>, затем <c>Add()</c> по каждому ребру, затем <c>Update()</c>.
-    /// Возвращаются отдельные факты, а не «получилось»: вызывающий обязан различить, что именно
-    /// ответило <c>true</c>, потому что при радиусе все ответы были <c>true</c> при неизменной
-    /// геометрии.
-    /// </summary>
+    /// <summary>Writes an edge set into an EXISTING fillet through the API5 definition:
+    /// <c>array().Clear()</c>, then <c>Add()</c> for each edge, then <c>Update()</c>. Separate facts are
+    /// returned, not "it worked": the caller must distinguish what exactly answered <c>true</c>, because
+    /// for the radius all answers were <c>true</c> while the geometry was unchanged.</summary>
     private static (bool Cleared, int Added, bool AddOk, string? Route) WriteEdgeSet(
         ProbeStep step, Plate plate, ksEntity fillet, IReadOnlyList<ksEntity> edges)
     {
@@ -552,11 +540,9 @@ internal sealed class FilletEdgeSetProbe
         }
     }
 
-    /// <summary>
-    /// Четыре вертикальных угловых ребра конечного тела — тот же критерий отбора, что в пробе P2.2
-    /// и F.2: из <c>GetMainBody() → FaceCollection → EdgeCollection</c>, а не из
-    /// <c>EntityCollection(o3d_edge)</c>, где лежат и эскизные контуры.
-    /// </summary>
+    /// <summary>The four vertical corner edges of the final body — the same selection criterion as in
+    /// probes P2.2 and F.2: from <c>GetMainBody() → FaceCollection → EdgeCollection</c>, not from
+    /// <c>EntityCollection(o3d_edge)</c>, which also holds sketch contours.</summary>
     private static List<ksEntity> VerticalCornerEdges(ksPart part, ProbeStep step)
     {
         var chosen = new List<ksEntity>();
@@ -772,8 +758,8 @@ internal sealed class FilletEdgeSetProbe
         }
         catch (Exception)
         {
-            // Закрытие после падения шага — уборка, а не измерение: осиротевший документ заметен
-            // на шаге H.Z.
+            // Closing after a step crash is cleanup, not measurement: an orphaned document is visible
+            // at step H.Z.
         }
     }
 
@@ -781,12 +767,10 @@ internal sealed class FilletEdgeSetProbe
 
     private static int FaceCount(ksPart part) => Api5.FaceCount(part);
 
-    /// <summary>
-    /// Приводит тройственное состояние к «применилось / не применилось». Отличие от
-    /// <c>Api5.SafeBool</c> здесь принципиально: тот возвращает <c>null</c> на исключении, и
-    /// вызывающий обязан решить, что значит «не спросили». Для записи в модель «не спросили» —
-    /// это НЕ «записали», поэтому по умолчанию возвращается <c>false</c>.
-    /// </summary>
+    /// <summary>Reduces a three-valued state to "applied / not applied". The difference from
+    /// <c>Api5.SafeBool</c> is essential here: that returns <c>null</c> on an exception, and the caller
+    /// must decide what "not asked" means. For a write to the model, "not asked" is NOT "written", so
+    /// by default <c>false</c> is returned.</summary>
     private static bool Applied(Func<bool?> call)
     {
         try

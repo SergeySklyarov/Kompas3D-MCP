@@ -5,26 +5,26 @@ using KompasAPI7;
 
 namespace KompasMcp.Api7Probe;
 
-/// <summary>
-/// Проба E — можно ли сменить ОПОРНЫЙ ЭСКИЗ существующего признака выдавливания через API7.
-/// </summary>
+/// <summary>Probe E — whether the SUPPORT SKETCH of an existing extrusion feature can be changed through API7.</summary>
 /// <remarks>
-/// Повод ровно один и он измерен: в API5 `SetSketch` у определения выдавливания возвращает true,
-/// но `GetSketch()` перечитывает прежний эскиз и объём не меняется (строка L11 приёмки
-/// 12.09.2026, `docs/acceptance/INDEX.md`). У сквозного вырезания глубины как параметра нет
-/// (P2.1: solver игнорирует число), поэтому без смены опоры режим `SM-02.cut_extrusion.through`
-/// не имеет измеримой правки вообще.
+/// MEASURED: there is exactly one motive and it is measured: in API5 `SetSketch` on an extrusion
+/// definition returns true, but `GetSketch()` re-reads the previous sketch and the volume does not
+/// change (acceptance row L11 of 12.09.2026, `docs/acceptance/INDEX.md`). A through cut has no depth
+/// as a parameter (P2.1: the solver ignores the number), so without changing the support the mode
+/// `SM-02.cut_extrusion.through` has no measurable edit at all.
 ///
-/// Статическая часть вопроса уже решена рефлексией по обёртке (см. ADR-004 §6 про неполноту):
-/// `IExtrusion.Sketch` и `ICutExtrusion.Sketch` объявлены и читаемыми, и записываемыми
-/// (`set_Sketch(Sketch)`), у `IExtrusion1` есть `Profile`/`Profiles` тоже с сеттерами, и у всех
-/// — `Update()`. Но «свойство объявлено» не равно «модель меняется»: проверяется исключительно
-/// числом объёма. Ожидания аналитические: пластина 100×80×10 = 80000 мм³, окно 40×20 насквозь
-/// снимает 8000 (V = 72000), круг Ø20 насквозь снимает π·10²·10 = 3141.5926 (V = 76858.4073).
+/// DOC: the static part of the question is already settled by reflection over the wrapper (see ADR-004
+/// §6 on incompleteness): `IExtrusion.Sketch` and `ICutExtrusion.Sketch` are declared both readable
+/// and writable (`set_Sketch(Sketch)`), `IExtrusion1` has `Profile`/`Profiles` also with setters, and
+/// all of them have `Update()`. But "the property is declared" does not equal "the model changes": it
+/// is checked exclusively by the volume number.
+/// TEST: the expectations are analytical: plate 100×80×10 = 80000 mm³, a 40×20 through window removes
+/// 8000 (V = 72000), a Ø20 through circle removes π·10²·10 = 3141.5926 (V = 76858.4073).
 ///
-/// Документ перед правкой сохраняется, закрывается и открывается заново: правка опоры на
-/// «свеженаписанном» признаке ничего не стоила бы как доказательство, что маршрут работает с
-/// моделью, а не с только что созданными объектами.
+/// INVARIANT: the document is saved, closed and reopened before the edit: editing the support on a
+/// "freshly written" feature would prove nothing that the route works with the model rather than with
+/// just-created objects.
+/// History: docs/decisions/probes.md#extrusion-sketch
 /// </remarks>
 internal sealed class ExtrusionSketchProbe
 {
@@ -54,7 +54,7 @@ internal sealed class ExtrusionSketchProbe
     private ksPart _part = null!;
     private IModelContainer? _container7;
 
-    /// <summary>Перенесённый документ: нужен для RebuildModel() — у API7 своё перестроение модели.</summary>
+    /// <summary>The transferred document: needed for RebuildModel() — API7 has its own model rebuild.</summary>
     private IKompasDocument3D? _document7;
     private string _savedPath = string.Empty;
     private double _volumeBeforeEdit;
@@ -89,9 +89,9 @@ internal sealed class ExtrusionSketchProbe
                 return;
             }
 
-            // Порядок важен: маршруты A/B в предыдущем прогоне оставляли модель с нечитаемым
-            // объёмом (E.7: V после записи Profile = NaN), и шедший после них шаг терял базлайн.
-            // Решающий вопрос — типизированный вызов, поэтому он идёт первым.
+            // The order matters: in a previous run routes A/B left the model with an unreadable
+            // volume (E.7: V after writing Profile = NaN), and the step that followed them lost the
+            // baseline. The decisive question is the typed call, so it goes first.
             RetargetRouteC(circle);
             RetargetRouteA(circle);
             RetargetRouteB(circle);
@@ -109,7 +109,7 @@ internal sealed class ExtrusionSketchProbe
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════ сессия ══
+    // ═══════════════════════════════════════════════════════════════════ session ══
     private void Launch()
     {
         var step = _report.Begin("E.1", "Свой невидимый экземпляр", "Зонд работает со своим КОМПАС?");
@@ -166,7 +166,7 @@ internal sealed class ExtrusionSketchProbe
         }
     }
 
-    // ══════════════════════════════════════════════ построение и reopen ══
+    // ══════════════════════════════════════════════ construction and reopen ══
     private void BuildPlateWithWindow()
     {
         var step = _report.Begin("E.2", "Пластина + сквозное окно, затем save→close→reopen",
@@ -264,7 +264,7 @@ internal sealed class ExtrusionSketchProbe
         }
     }
 
-    // ═══════════════════════════════════════════════════════════ мост и обход ══
+    // ═══════════════════════════════════════════════════════════ bridge and enumeration ══
     private void Bridge()
     {
         var step = _report.Begin("E.3", "Мост API5→API7", "Часть документа доступна как IModelContainer?");
@@ -397,8 +397,8 @@ internal sealed class ExtrusionSketchProbe
         }
     }
 
-    // ═══════════════════════════════════════════════════ маршруты правки ══
-    /// <summary>Маршрут A: `IExtrusion.Sketch` (свойство объявлено с сеттером).</summary>
+    // ═══════════════════════════════════════════════════ edit routes ══
+    /// <summary>Route A: `IExtrusion.Sketch` (the property is declared with a setter).</summary>
     private void RetargetRouteA(Sketch circle)
     {
         var step = _report.Begin("E.6", "Маршрут A: IExtrusion.Sketch = круг + Update()",
@@ -409,7 +409,7 @@ internal sealed class ExtrusionSketchProbe
         }
     }
 
-    /// <summary>Маршрут B: `IExtrusion1.Profile` (свойство объявлено с сеттером на IModelObject).</summary>
+    /// <summary>Route B: `IExtrusion1.Profile` (the property is declared with a setter on IModelObject).</summary>
     private void RetargetRouteB(Sketch circle)
     {
         var step = _report.Begin("E.7", "Маршрут B: IExtrusion1.Profile = круг + Update()",
@@ -424,11 +424,10 @@ internal sealed class ExtrusionSketchProbe
         TryRoute(step, "Profile", circle);
     }
 
-    /// <summary>
-    /// Общий корпус маршрутов A и B: найти признак вырезания в API7, присвоить ему свойство через
-    /// позднее связывание, вызвать Update(), перестроить и сверить объём с аналитикой. Решение —
-    /// только за числом: «свойство объявлено» и «вызов не бросил» доказательствами не считаются.
-    /// </summary>
+    /// <summary>The common body of routes A and B: find the cut feature in API7, assign it the property
+    /// through late binding, call Update(), rebuild and compare the volume with the analytics. The
+    /// decision rests on the number alone: "the property is declared" and "the call did not throw" are
+    /// not proof.</summary>
     private bool TryRoute(ProbeStep step, string property, Sketch circle)
     {
         try
@@ -450,9 +449,9 @@ internal sealed class ExtrusionSketchProbe
                 Late.Call(target, "Update");
                 return "ок";
             }));
-            // Разделение «не записалось» / «не перестроилось»: перечитывается ТО ЖЕ свойство,
-            // которое пишется. Прежний вариант всегда читал Sketch и для Profile давал не ту
-            // величину (замечено в прогоне E.7).
+            // Separating "did not write" from "did not rebuild": the SAME property that is written is
+            // read back. A previous variant always read Sketch and for Profile gave the wrong value
+            // (noticed in run E.7).
             step.Data[$"{property}_stored_immediately"] = Str(Obj(target, property), "Name") ?? "—";
             _doc.RebuildDocument();
 
@@ -495,21 +494,16 @@ internal sealed class ExtrusionSketchProbe
         }
     }
 
-    /// <summary>
-    /// Маршрут C: типизированное присваивание вместо позднего связывания.
-    /// </summary>
-    /// <remarks>
-    /// Первая версия этого шага (PROPERTYPUTREF + `RebuildModel` через IDispatch) убила процесс
-    /// кодом 0xC0000409 (fail-fast) — см. `docs/STATUS.md`. Это само по себе наблюдение: поздний
-    /// вызов этих членов в v24 небезопасен, и повторять его в пробе, где за один прогон теряется
-    /// и отчёт, и экземпляр КОМПАС, незачем.
-    ///
-    /// Вопрос при этом оставался тот же, и у него есть более чистый дискриминант. Маршруты A и B
-    /// писали свойство через IDispatch (`Late.Set`), то есть «молчаливый отказ» мог быть отказом
-    /// диспатч-механизма, а не API7. Типизированное обращение идёт напрямую по vtable интерфейса:
-    /// если и оно не применит геометрию, объяснение «маршалинг» отпадает и остаётся свойство
-    /// или перестроение модели.
-    /// </remarks>
+    /// <summary>Route C: typed assignment instead of late binding.</summary>
+    /// <remarks>MEASURED: the first version of this step (PROPERTYPUTREF + `RebuildModel` through
+    /// IDispatch) killed the process with code 0xC0000409 (fail-fast) — see `docs/STATUS.md`. That is
+    /// itself an observation: a late call of these members in v24 is unsafe, and there is no reason to
+    /// repeat it in a probe where a single run loses both the report and the KOMPAS instance.
+    /// TEST: the question stayed the same, and it has a cleaner discriminator. Routes A and B wrote
+    /// the property through IDispatch (`Late.Set`), so the "silent refusal" could be a refusal of the
+    /// dispatch mechanism rather than of API7. A typed access goes straight through the interface
+    /// vtable: if even that does not apply the geometry, the "marshalling" explanation falls away and
+    /// what remains is the property or the model rebuild.</remarks>
     private void RetargetRouteC(Sketch circle)
     {
         var step = _report.Begin("E.9", "Маршрут C: типизированное IExtrusion.Sketch (vtable, не IDispatch)",
@@ -554,13 +548,13 @@ internal sealed class ExtrusionSketchProbe
                              ? "Значение свойство принимает: отказ A/B принадлежал позднему связыванию."
                              : "Свойство не принимает значение и по vtable: дело не в IDispatch."));
 
-            // Развод по шагам, потому что исходы разные: сразу после записи значение ЕСТЬ
-            // («e-hole»), после Update()+RebuildDocument() — нет (перечитывается «e-window»).
-            // Проверяется единственная несыгранная возможность: перестроение средствами API7.
-            // Раньше тот же вызов шёл через IDispatch и убивал процесс (0xC0000409); здесь он
-            // типизированный, то есть риск того же класса не воспроизводится.
-            // RebuildModel принадлежит IPart7 (проверено отражением: у IKompasDocument3D такого
-            // члена нет), поэтому берётся перенесённая часть, а не документ.
+            // The steps are split because the outcomes differ: right after the write the value IS
+            // there ("e-hole"), after Update()+RebuildDocument() it is not ("e-window" is re-read).
+            // The only untried possibility is checked: a rebuild by API7 means.
+            // Previously the same call went through IDispatch and killed the process (0xC0000409);
+            // here it is typed, so the risk of that class does not recur.
+            // RebuildModel belongs to IPart7 (checked by reflection: IKompasDocument3D has no such
+            // member), so the transferred part is taken, not the document.
             var part7 = _document7 is null ? null : _document7.TopPart as IPart7;
             step.Data["qi_IPart7"] = part7 is not null;
             var rebuild7 = Api5.Raw(TryValue(() =>
@@ -618,7 +612,7 @@ internal sealed class ExtrusionSketchProbe
     private bool _routeWorks;
     private string? _workingProperty;
 
-    /// <summary>Ищет в Extrusions признак с именем вырезания окна (API5-имя сохраняется).</summary>
+    /// <summary>Looks in Extrusions for the feature named after the window cut (the API5 name is preserved).</summary>
     private object? FindCutElement7(ProbeStep step)
     {
         if (_container7 is null)
@@ -658,7 +652,7 @@ internal sealed class ExtrusionSketchProbe
         return null;
     }
 
-    // ══════════════════════════════════════════════════════ переживание правки ══
+    // ══════════════════════════════════════════════════════ persistence of the edit ══
     private void Persistence()
     {
         var step = _report.Begin("E.8", "Переживает ли правка save→close→reopen и что видит API5",
@@ -693,7 +687,7 @@ internal sealed class ExtrusionSketchProbe
             step.Data["volume_after_reopen"] = Api5.Num(volumeAfterReopen);
             step.Observe($"V до сохранения {Api5.Num(volumeBeforeSave)}, после reopen {Api5.Num(volumeAfterReopen)}.");
 
-            // Что видит API5: GetSketch того же признака должен перечитать круг.
+            // What API5 sees: GetSketch of the same feature must re-read the circle.
             var api5Read = ReadApi5SketchOfCut(step);
             var persisted = Math.Abs(volumeAfterReopen - _volumeBeforeEdit) < 1d;
             if (persisted && api5Read == "e-hole")
@@ -752,7 +746,7 @@ internal sealed class ExtrusionSketchProbe
         return null;
     }
 
-    // ═══════════════════════════════════════════════════════════════════ хелперы ══
+    // ═══════════════════════════════════════════════════════════════════ helpers ══
     private static bool? TryBool(Func<bool> call)
     {
         try
@@ -819,10 +813,10 @@ internal sealed class ExtrusionSketchProbe
         return false;
     }
 
-    // ─── читалки позднего связывания ────────────────────────────────────────────────
-    // Позднее связывание спрашивает у самого COM-объекта: типизированный доступ к
-    // параметрическим свойствам (Item[i]) и к членам более новых версий интерфейсов в этой
-    // обёртке не объявлен, а вопрос «есть ли член» обязан решаться на рабочем объекте.
+    // ─── late-binding readers ────────────────────────────────────────────────────────
+    // Late binding asks the COM object itself: typed access to parametric properties (Item[i]) and to
+    // members of newer interface versions is not declared in this wrapper, and the question "does the
+    // member exist" must be decided on the live object.
     private static object? Obj(object? target, string name)
     {
         if (target is null)
@@ -845,8 +839,8 @@ internal sealed class ExtrusionSketchProbe
     private static string TypeName(object? target) =>
         target is null ? "null" : target.GetType().Name;
 
-    /// <summary>Элемент коллекции API7: доступ к параметрическому свойству, имя аксессора
-    /// в разных версиях обёртки различается, поэтому пробуются оба.</summary>
+    /// <summary>An API7 collection element: access to a parametric property; the accessor name differs
+    /// between wrapper versions, so both are tried.</summary>
     private static object? At(object collection, int index)
     {
         foreach (var accessor in new[] { "get_Item", "Item" })
@@ -861,7 +855,7 @@ internal sealed class ExtrusionSketchProbe
             }
             catch (Exception)
             {
-                // Отказ одного аксессора ничего не утверждает о наличии члена.
+                // The failure of one accessor says nothing about the member's existence.
             }
         }
 

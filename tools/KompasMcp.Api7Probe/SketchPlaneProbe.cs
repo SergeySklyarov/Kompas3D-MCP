@@ -6,62 +6,36 @@ using Kompas6Constants3D;
 
 namespace KompasMcp.Api7Probe;
 
-/// <summary>
-/// Проба SP — смена ОПОРНОЙ плоскости существующего эскиза документированным
-/// <c>ksSketchDefinition.SetPlane</c> и чтение её обратно <c>GetPlane</c>.
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Зачем отдельная проба.</b> Наряд <c>AUX_SKETCH_PLANE_EDIT_DEVELOPER_PROMPT.md</c> §3.1
-/// требует измерить ДО правки продукта, что документированный маршрут вообще работает на
-/// поставленной сборке 24.0.0.2799: прецедент <c>DRB</c> показал, что страница справки может
-/// существовать, а члена в поставке не быть. Вопрос ставится ПРОБОЙ, а не продуктом: маршрут,
-/// которого в продукте ещё нет, нельзя измерять его же инструментом.
-/// </para>
-/// <para>
-/// <b>Документационная основа снята 21.09.2026 с официального корня справки</b> (страницы лежат и в
-/// зеркале <c>scratch/sdk-docs/</c>):
-/// <c>kssketchdefinition_setplane.html</c> — «SetPlane — Изменить базовую плоскость эскиза»,
-/// <c>BOOL SetPlane(LPENTITY plane)</c>, параметр — «указатель на интерфейс базовой плоскости эскиза
-/// <c>ksEntity</c> или <c>IEntity</c>»; <c>kssketchdefinition_getplane.html</c> — «GetPlane —
-/// Получить базовую плоскость эскиза», <c>LPENTITY GetPlane()</c>. Обе страницы перечислены в
-/// «ISketchDefinition — методы» (<c>kssketchdefinition_methods.html</c>) вместе с
-/// <c>GetSurface</c>, <c>GetLocation</c>/<c>SetLocation</c> и <c>UserSetPlacement</c>.
-/// </para>
-/// <para>
-/// <b>Ожидания объявлены ДО прогона и выводятся аналитически, а не берутся из прежних прогонов.</b>
-/// Заготовка — прямоугольник 40×40 с центром в начале координат эскиза, базовое выдавливание 10 мм:
-/// <list type="bullet">
-/// <item>объём 40·40·10 = <b>16000</b> мм³ — и до, и после смены опоры: меняется ПОЛОЖЕНИЕ, а не
-/// размер, поэтому объём различающей величиной НЕ является, и это сказано прямо;</item>
-/// <item>габарит — коробка 40×40×10, у которой ДВА протяжения по 40 центрированы на начале координат
-/// модели, а третье (10) лежит со стороны нормали плоскости: на <c>xy+15</c> это
-/// <c>x∈[−20,20], y∈[−20,20], z∈[15,25]</c>;</item>
-/// <item>после переноса на <c>xz</c> та же коробка обязана встать так, что десятимиллиметровое
-/// протяжение уйдёт с оси Z на ось Y: <c>x∈[−20,20], z∈[−20,20]</c>, а <c>y</c> станет отрезком
-/// длиной 10. Сторона (знак) не предсказывается: справка её не задаёт, и она называется измеренной,
-/// а не угаданной.</item>
-/// </list>
-/// </para>
-/// <para>
-/// <b>Различающая пара.</b> SP.4 пишет ТУ ЖЕ плоскость (геометрия обязана не измениться), SP.5 —
-/// другую (обязана измениться). Одиночная запись «приняли и ничего не изменилось» не отличает
-/// «правка не применяется» от «правка не нужна», поэтому шаги идут парой, а контроль «инструмент
-/// вообще видит изменения» ставится ПОСЛЕ записей (класс 42).
-/// </para>
-/// <para>
-/// Свой STA-поток, собственный невидимый экземпляр КОМПАС, свои документы в <c>scratch</c>. Чужие
-/// процессы не завершаются, пользовательские модели не открываются.
-/// </para>
-/// </remarks>
+/// <summary>Probe SP — changing an existing sketch's BASE plane via the documented
+/// <c>ksSketchDefinition.SetPlane</c> and reading it back with <c>GetPlane</c>.</summary>
+/// <remarks>DOC (base taken 21.09.2026 from the official help root; pages mirrored in
+/// <c>scratch/sdk-docs/</c>): <c>kssketchdefinition_setplane.html</c> — «SetPlane — Изменить базовую
+/// плоскость эскиза», <c>BOOL SetPlane(LPENTITY plane)</c>, the parameter is «указатель на интерфейс
+/// базовой плоскости эскиза <c>ksEntity</c> или <c>IEntity</c>»; <c>kssketchdefinition_getplane.html</c>
+/// — «GetPlane — Получить базовую плоскость эскиза», <c>LPENTITY GetPlane()</c>. Both are listed under
+/// «ISketchDefinition — методы» (<c>kssketchdefinition_methods.html</c>) with <c>GetSurface</c>,
+/// <c>GetLocation</c>/<c>SetLocation</c> and <c>UserSetPlacement</c>. The question is put by the PROBE,
+/// not the product: a route the product does not yet have cannot be measured with the product's own tool.
+/// LIMIT: the fixture is a 40×40 rectangle centred on the sketch origin with a 10 mm base extrusion; the
+/// volume 40·40·10 = 16000 mm³ is the SAME before and after — it is the POSITION that changes, so volume
+/// is NOT a discriminating quantity. EXPECTED (declared BEFORE the run, derived analytically): a 40×40×10
+/// box whose two 40-extents are centred on the model origin and whose 10-extent lies on the plane normal
+/// side; on <c>xy+15</c> that is <c>x∈[−20,20], y∈[−20,20], z∈[15,25]</c>; after the move to <c>xz</c>
+/// the 10-extent must leave Z for Y (<c>x∈[−20,20], z∈[−20,20]</c>, <c>y</c> a 10-long segment). The SIDE
+/// (sign) is not predicted — the help does not fix it and it is measured, not guessed. TEST: SP.4 writes
+/// the SAME plane (geometry must not change), SP.5 another (must change): a lone "accepted and unchanged"
+/// does not separate "not applied" from "nothing to apply", so the steps come as a pair, and the "does the
+/// instrument see changes at all" control follows the writes (class 42). Own STA thread, own invisible
+/// KOMPAS instance, own documents in <c>scratch</c>; foreign processes are not killed.
+/// History: docs/decisions/probes.md#sp-plane</remarks>
 internal sealed class SketchPlaneProbe
 {
-    // ── заготовка ───────────────────────────────────────────────────────────────────────────────
+    // ── fixture ─────────────────────────────────────────────────────────────────────────────────
     private const double BoxSide = 40d;
     private const double BoxHeight = 10d;
     private const double OffsetMm = 15d;
 
-    /// <summary>Объём коробки: 40·40·10. Одинаков до и после смены опоры — величина НЕ различающая.</summary>
+    /// <summary>Box volume: 40·40·10. Equal before and after the support change — NOT a discriminating quantity.</summary>
     private const double BoxVolume = BoxSide * BoxSide * BoxHeight;
 
     private const double Tolerance = 1e-6;
@@ -82,8 +56,8 @@ internal sealed class SketchPlaneProbe
     private ksPart _part = null!;
     private string _savedPath = string.Empty;
 
-    /// <summary>Эскиз, который перепривязывается: он один на весь прогон, чтобы каждая запись шла по
-    /// тому же предмету, а не по свежему.</summary>
+    /// <summary>The sketch that is re-bound: a single one for the whole run, so every write targets the
+    /// same subject rather than a fresh one.</summary>
     private ksEntity? _sketch;
 
     public SketchPlaneProbe(ProbeReport report, Options options)
@@ -112,9 +86,9 @@ internal sealed class SketchPlaneProbe
             WriteSamePlaneKeepsGeometry();
             WriteOtherPlaneMovesGeometry();
             ReadPlaneBackAfterEdit();
-            // Переоткрытие идёт ДО отрицательных случаев: они пишут в ту же опору, и после них
-            // «применилась ли правка SP.5 при загрузке» уже не измерить (правило порядка: заведомо
-            // мутирующий случай — последним).
+            // Reopen runs BEFORE the negative cases: they write into the same support, and afterwards
+            // "did edit SP.5 apply at load" can no longer be measured (order rule: a certainly mutating
+            // case comes last).
             ReopenThenEditAgain();
             WriteNonPlaneObject();
             WritePlanarFaceCandidate();
@@ -131,7 +105,7 @@ internal sealed class SketchPlaneProbe
         }
     }
 
-    // ── сеанс ───────────────────────────────────────────────────────────────────────────────────
+    // ── session ─────────────────────────────────────────────────────────────────────────────────
     private void Launch()
     {
         var step = _report.Begin("SP.1", "Свой невидимый экземпляр", "Зонд управляет сеансом один?");
@@ -183,7 +157,7 @@ internal sealed class SketchPlaneProbe
         }
     }
 
-    // ── заготовка ───────────────────────────────────────────────────────────────────────────────
+    // ── fixture ─────────────────────────────────────────────────────────────────────────────────
     private void BuildFixtureOnOffsetPlane()
     {
         var step = _report.Begin("SP.2",
@@ -199,7 +173,7 @@ internal sealed class SketchPlaneProbe
 
         _part = (ksPart)_doc.GetPart(-1);
 
-        // Смещённая плоскость как ОБЪЕКТ модели: NewEntity(o3d_planeOffset=14) + ksPlaneOffsetDefinition.
+        // Offset plane as a MODEL object: NewEntity(o3d_planeOffset=14) + ksPlaneOffsetDefinition.
         var (plane, planeFailure) = NewOffsetPlane("SP-offset", PlaneXoy, OffsetMm);
         if (plane is null)
         {
@@ -268,7 +242,7 @@ internal sealed class SketchPlaneProbe
             + "смена опоры обязана сдвинуть десятимиллиметровое протяжение с оси Z.");
     }
 
-    // ── чтение обратно: документированный GetPlane ──────────────────────────────────────────────
+    // ── read back: documented GetPlane ──────────────────────────────────────────────────────────
     private void ReadPlaneBack()
     {
         var step = _report.Begin("SP.3",
@@ -317,8 +291,8 @@ internal sealed class SketchPlaneProbe
             step.Data["getplane_cast_ksEntity"] = "не приводится";
         }
 
-        // API7-маршрут: у ISketch опора читается свойством. Проба приводит и его: у адаптера этот
-        // маршрут уже есть (Api7SketchEntities.ReadPlane), и расхождение двух маршрутов — факт.
+        // API7 route: on ISketch the support is read by a property. The probe also reads it: the adapter
+        // already has this route (Api7SketchEntities.ReadPlane), and a divergence of the two routes is a fact.
         var api7 = ReadPlaneApi7(_sketch, step);
 
         if (plane is ksEntity read && read.type == PlaneOffset)
@@ -335,7 +309,7 @@ internal sealed class SketchPlaneProbe
         }
     }
 
-    // ── SP.4: запись ТОЙ ЖЕ плоскости ───────────────────────────────────────────────────────────
+    // ── SP.4: write the SAME plane ──────────────────────────────────────────────────────────────
     private void WriteSamePlaneKeepsGeometry()
     {
         var step = _report.Begin("SP.4",
@@ -385,7 +359,7 @@ internal sealed class SketchPlaneProbe
         }
     }
 
-    // ── SP.5: запись ДРУГОЙ плоскости — различающая половина пары ───────────────────────────────
+    // ── SP.5: write ANOTHER plane — the discriminating half of the pair ─────────────────────────
     private void WriteOtherPlaneMovesGeometry()
     {
         var step = _report.Begin("SP.5",
@@ -488,7 +462,7 @@ internal sealed class SketchPlaneProbe
             + ThicknessAxis(after.Value.Gabarit) + ".");
     }
 
-    // ── SP.6: чтение после правки — контроль, что чтение не константа ───────────────────────────
+    // ── SP.6: read after the edit — control that the read is not a constant ─────────────────────
     private void ReadPlaneBackAfterEdit()
     {
         var step = _report.Begin("SP.6",
@@ -526,7 +500,7 @@ internal sealed class SketchPlaneProbe
         }
     }
 
-    // ── SP.8: не-плоскость — ребро И тело ───────────────────────────────────────────────────────
+    // ── SP.8: non-plane — edge AND body ─────────────────────────────────────────────────────────
     private void WriteNonPlaneObject()
     {
         var step = _report.Begin("SP.8",
@@ -541,8 +515,8 @@ internal sealed class SketchPlaneProbe
             return;
         }
 
-        // Оба случая из наряда §3.1 P3: «ребро/тело». Постановки независимы, поэтому ответы
-        // называются отдельно, а не одним словом «не-плоскость».
+        // Both cases from order §3.1 P3: "edge/body". The setups are independent, so the answers are
+        // named separately rather than with one word "non-plane".
         var edge = FirstEntityOfType(EdgeType);
         var edgeResult = edge is null
             ? "ребро не найдено"
@@ -558,14 +532,14 @@ internal sealed class SketchPlaneProbe
             + ". Это ФАКТ О ЯДРЕ, а не разрешение продукту передавать не-плоскость в COM.");
     }
 
-    /// <summary>Одна постановка не-плоскости: ответ вызова, сдвиг габарита и что стало опорой.</summary>
+    /// <summary>One non-plane setup: the call's answer, the extent shift, and what became the support.</summary>
     private string Attempt(ProbeStep step, ksSketchDefinition definition, object candidate, string tag)
     {
         var before = Snapshot(step, tag + "_before");
         if (before is not { } start)
         {
-            // Пустой снимок в лестницу подавать нельзя: Same(null, …) отвечает «не одинаково», и
-            // ступень была бы названа сдвинувшей НИЧЕГО. Неизмеренное называется неизмеренным.
+            // An empty snapshot must not be fed into the ladder: Same(null, …) answers "not equal", and
+            // the step would be named as having moved NOTHING. The unmeasured is called unmeasured.
             step.Data[tag + "_moved"] = null;
             return "габарит до постановки не прочитан — постановка не оценена";
         }
@@ -584,7 +558,7 @@ internal sealed class SketchPlaneProbe
             + ", опора после — " + (planeAfter is ksEntity pe2 ? "тип " + pe2.type : "не прочитана");
     }
 
-    // ── SP.9: плоская грань как опора ───────────────────────────────────────────────────────────
+    // ── SP.9: planar face as support ────────────────────────────────────────────────────────────
     private void WritePlanarFaceCandidate()
     {
         var step = _report.Begin("SP.9",
@@ -605,11 +579,11 @@ internal sealed class SketchPlaneProbe
             return;
         }
 
-        // РАЗЛИЧАЮЩАЯ ПОСТАНОВКА, А НЕ ОДИН НАЗВАННЫЙ ОТВЕТ. Коробка 40×40×10 имеет шесть граней:
-        // две параллельны текущей опоре и четыре — перпендикулярны ей. Если грань вообще годится в
-        // опору перепривязки, то перпендикулярная обязана развернуть коробку; если ни одна из шести
-        // её не разворачивает, «грань принята» означает только запись свойства. Первый прогон
-        // (15:12) подавал ОДНУ грань и потому не различал этих двух объяснений.
+        // A DISCRIMINATING SETUP, NOT ONE NAMED ANSWER. The 40×40×10 box has six faces: two parallel to
+        // the current support and four perpendicular to it. If a face is fit for the re-bind support at
+        // all, the perpendicular one must turn the box; if none of the six turns it, "face accepted" means
+        // only that the property was written. MEASURED: the first run (15:12) fed ONE face and so could
+        // not separate these two explanations.
         var moved = new List<string>();
         var accepted = new List<string>();
         for (var i = 0; i < faces.Count; i++)
@@ -659,7 +633,7 @@ internal sealed class SketchPlaneProbe
             + "поставлена на ВСЕХ гранях, а не на одной — иначе эти два объяснения были бы неразличимы.");
     }
 
-    // ── SP.7: save→close→reopen, затем правка снова ─────────────────────────────────────────────
+    // ── SP.7: save→close→reopen, then edit again ────────────────────────────────────────────────
     private void ReopenThenEditAgain()
     {
         var step = _report.Begin("SP.7",
@@ -690,8 +664,8 @@ internal sealed class SketchPlaneProbe
 
         _part = (ksPart)_doc.GetPart(-1);
 
-        // Эскиз после reopen берётся из ДЕРЕВА по признаку, а не из памяти: ссылка сеанса записи
-        // после переоткрытия не обязана быть той же (правило пробы G).
+        // After reopen the sketch is taken from the TREE by feature, not from memory: the writing
+        // session's reference need not survive the reopen (rule of probe G).
         var reopened = FindSketchOfFirstExtrusion(step);
         if (reopened is null)
         {
@@ -712,9 +686,9 @@ internal sealed class SketchPlaneProbe
             return;
         }
 
-        // Читается СРАЗУ и запоминается числом, а не перечитывается при составлении итога: после
-        // второго переоткрытия ссылка на объект ЗАКРЫТОГО документа отвечает типом 0. Измерено в
-        // прогоне 15:18 — текст шага напечатал «тип 0» там, где данные того же шага хранили 2.
+        // Read IMMEDIATELY and remembered as a number, not re-read when the verdict is assembled: after
+        // the second reopen, a reference to a CLOSED document's object answers type 0. MEASURED in run
+        // 15:18 — the step text printed "type 0" where the same step's data held 2.
         var reopenedPlane = TryGetPlane(definition) as ksEntity;
         var reopenedPlaneType = reopenedPlane?.type;
         step.Data["plane_after_reopen_type"] = reopenedPlaneType;
@@ -727,9 +701,9 @@ internal sealed class SketchPlaneProbe
             return;
         }
 
-        // РЕШАЮЩИЙ ВОПРОС ШАГА: применилась ли правка SP.5 при ЗАГРУЗКЕ документа. Если да, то
-        // «не пересчитано в сеансе» — свойство сеанса, а не отказ маршрута; если нет — правка
-        // записана в свойство и не влияет на модель ни в одном состоянии.
+        // DECISIVE QUESTION OF THE STEP: did edit SP.5 apply at document LOAD. If yes, "not recomputed in
+        // the session" is a session property, not a route refusal; if no, the edit is written to the
+        // property and affects the model in no state.
         var reopenedValue = new SnapshotValue(gabarit, volume);
         var appliedAtLoad = IsBox(gabarit, BoxSide, BoxSide, BoxHeight)
             && IsCentred(gabarit, BoxSide, BoxSide)
@@ -738,7 +712,7 @@ internal sealed class SketchPlaneProbe
         step.Data["thickness_axis_after_reopen"] = ThicknessAxis(gabarit);
         step.Data["gabarit_expected_if_applied"] = "коробка 40×40×10 с тонким протяжением по Y";
 
-        // Обратная перепривязка: xy+15 заново, уже на документе с диска.
+        // Reverse re-bind: xy+15 again, now on the on-disk document.
         var (backPlane, backFailure) = NewOffsetPlane("SP-back", PlaneXoy, OffsetMm);
         if (backPlane is null)
         {
@@ -757,8 +731,8 @@ internal sealed class SketchPlaneProbe
         var movedInSession = afterBack is not null && !Same(afterBack.Value, reopenedValue);
         step.Data["moved_back_in_session"] = movedInSession;
 
-        // Второй цикл переоткрытия: единственное состояние, в котором «записано» обязано стать
-        // «применено», если маршрут вообще влияет на модель.
+        // Second reopen cycle: the only state in which "written" must become "applied", if the route
+        // affects the model at all.
         var secondPath = Path.Combine(_options.WorkDir, "sketch-plane-back.m3d");
         if (_doc.SaveAs(secondPath) != true)
         {
@@ -780,8 +754,8 @@ internal sealed class SketchPlaneProbe
                     && ThicknessAxis(gabarit2) == "Z";
                 step.Data["second_saved_path"] = secondPath;
 
-                // Предмет для отрицательных случаев SP.8/SP.9 — эскиз ЖИВОГО документа, а не
-                // закрытого: ссылка прежнего сеанса после переоткрытия недействительна.
+                // The subject for the negative cases SP.8/SP.9 is the LIVE document's sketch, not the
+                // closed one: the previous session's reference is invalid after the reopen.
                 _sketch = FindSketchOfFirstExtrusion(step);
             }
             else
@@ -790,11 +764,10 @@ internal sealed class SketchPlaneProbe
             }
         }
 
-        // ДВЕ ПОЛОВИНЫ, И ОНИ НЕЗАВИСИМЫ. Прогон 15:16 дал moved_back_in_session=True И
-        // back_applied_at_load=True одновременно, а прежняя формулировка утверждала «только при
-        // загрузке, в сеансе не двигает» — то есть противоречила собственным данным. Первая ветка
-        // срабатывала раньше и перекрывала вторую. Теперь обе измеренные величины называются в
-        // одном предложении, и ни одна не выдаётся за другую.
+        // TWO HALVES, AND THEY ARE INDEPENDENT. MEASURED: run 15:16 gave moved_back_in_session=True AND
+        // back_applied_at_load=True at once, while the earlier wording claimed "only at load, not in the
+        // session" — contradicting its own data. The first branch fired earlier and masked the second.
+        // Now both measured quantities are named in one sentence and neither is passed off as the other.
         var appliedBackAtLoad = step.Data["back_applied_at_load"] is true;
         var movedBy = step.Data["back_first_route_that_applied"];
         var inSession = movedInSession
@@ -827,25 +800,17 @@ internal sealed class SketchPlaneProbe
             + "(при загрузке после SP.5 сдвинулось=" + appliedAtLoad + ").");
     }
 
-    // ── вспомогательное ─────────────────────────────────────────────────────────────────────────
-    /// <summary>
-    /// Лестница пересборки: какие маршруты вообще заставляют зависимое тело пересчитаться после
-    /// смены опоры. Ступени применяются по очереди, габарит читается ПОСЛЕ КАЖДОЙ, и первой
-    /// сдвинувшей считается та, после которой он изменился.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Зачем лестница, а не один вызов.</b> Первый прогон (21.09.2026, 15:08) дал
-    /// <c>SetPlane(xz) = True</c> и неизменившийся габарит — то есть «принято и не применено».
-    /// Это ровно тот случай, когда дефект прибора и граница продукта выглядят одинаково: маршрут
-    /// пересборки у пробы мог быть неполным. Поэтому сначала перебираются ВСЕ документированные
-    /// ступени, и только если ни одна не двигает геометрию, это становится фактом о продукте.
-    /// </para>
-    /// <para>
-    /// <b>Ступени не смешиваются с записью.</b> Между ступенями габарит читается заново: иначе
-    /// «сдвинулось» нельзя приписать ни одной из них.
-    /// </para>
-    /// </remarks>
+    // ── helpers ─────────────────────────────────────────────────────────────────────────────────
+    /// <summary>Rebuild ladder: which routes at all force the dependent body to recompute after the
+    /// support change. Steps are applied in turn, the extent is read AFTER EACH, and the first that moved
+    /// is the one after which it changed.</summary>
+    /// <remarks>A single call cannot be trusted: MEASURED (first run, 21.09.2026, 15:08) gave
+    /// <c>SetPlane(xz) = True</c> with an unchanged extent — "accepted and not applied". That is exactly
+    /// where an instrument defect and a product boundary look alike: the probe's rebuild route might have
+    /// been incomplete. So ALL documented steps are tried first, and only if none moves the geometry does
+    /// it become a fact about the product. The steps are not mixed with the write: the extent is re-read
+    /// between steps, otherwise "moved" could not be attributed to any one of them.
+    /// History: docs/decisions/probes.md#sp-ladder</remarks>
     private SnapshotValue? RebuildLadder(ProbeStep step, SnapshotValue before, string tag)
     {
         var routes = new (string Name, Action Apply)[]
@@ -891,17 +856,17 @@ internal sealed class SketchPlaneProbe
 
             var differs = !Same(before, current);
             var movedByThis = differs && firstMover is null;
-            // ДВА РАЗНЫХ УТВЕРЖДЕНИЯ, и путать их нельзя. «Габарит отличается от исходного» верно и
-            // для ступени, которая сама ничего не сделала, если геометрию уже сдвинула предыдущая:
-            // в прогоне 15:16 поля `_moved` у RebuildModel и RebuildDocument стояли True при том,
-            // что сдвинула именно `sketch.Update()`. Поле названо по тому, что оно меряет.
+            // TWO DIFFERENT ASSERTIONS, and they must not be confused. "Extent differs from the start" is
+            // true even for a step that did nothing itself, if a previous step already moved the geometry:
+            // MEASURED, run 15:16 — the `_moved` fields of RebuildModel and RebuildDocument were True
+            // while it was `sketch.Update()` that moved it. The field is named after what it measures.
             step.Data[tag + "_" + Slug(name) + "_differs_from_start"] = differs;
             step.Data[tag + "_" + Slug(name) + "_moved_by_this_route"] = movedByThis;
             if (movedByThis)
             {
-                // ПЕРВАЯ сдвинувшая ступень и есть маршрут применения. Последующие ступени меряются
-                // уже на сдвинутой геометрии, поэтому «сдвинулось» у них ничего не добавляет — и
-                // именно поэтому здесь называются обе роли, а не список «сдвинувших».
+                // The FIRST moving step is the application route. Later steps are measured on the
+                // already-moved geometry, so their "moved" adds nothing — hence both roles are named here,
+                // not a list of "movers".
                 firstMover = name;
                 step.Observe("После «" + name + "»: " + current.Describe() + " — СДВИНУЛОСЬ (первая ступень)");
             }
@@ -919,8 +884,8 @@ internal sealed class SketchPlaneProbe
         step.Data[tag + "_first_route_that_applied"] = firstMover ?? "ни одна";
         if (firstMover is null && last is not null)
         {
-            // Ни одна ступень не сдвинула геометрию — тогда её пересчитывает переоткрытие, и это
-            // измеряется отдельно: SP.7.
+            // No step moved the geometry — then the reopen recomputes it, and that is measured
+            // separately: SP.7.
             step.Observe("Ни одна из " + routes.Length + " ступеней пересборки геометрию не сдвинула; "
                 + "переоткрытие документа проверяется шагом SP.7.");
         }
@@ -935,10 +900,9 @@ internal sealed class SketchPlaneProbe
         .Replace("document.", string.Empty, StringComparison.Ordinal)
         .Replace("()", string.Empty, StringComparison.Ordinal);
 
-    /// <summary>
-    /// Поверхность эскиза: сдвинулся ли САМ эскиз, а не только записанное свойство опоры. Нормаль
-    /// берётся в начале параметрической области — <c>GetNormal(u, v, …)</c> документирован как
-    /// функция параметров поверхности, и «взять u = 0» было бы догадкой о её области.
+    /// <summary>Sketch surface: did the sketch ITSELF move, not just the written support property. The
+    /// normal is taken at the start of the parametric domain — <c>GetNormal(u, v, …)</c> is documented as
+    /// a function of the surface parameters, and "take u = 0" would be a guess about its domain.</summary>
     /// </summary>
     private (double[]? Origin, double[]? Normal, string Note) SketchSurface()
     {
@@ -1014,7 +978,7 @@ internal sealed class SketchPlaneProbe
         return true;
     }
 
-    /// <summary>Габарит главного тела: <c>ksBody.GetGabarit(out …)</c> — шесть чисел, а не объект.</summary>
+    /// <summary>Main-body extent: <c>ksBody.GetGabarit(out …)</c> — six numbers, not an object.</summary>
     private static double[]? Gabarit(ksPart part)
     {
         try
@@ -1040,7 +1004,7 @@ internal sealed class SketchPlaneProbe
             + " y[" + Api5.Num(gabarit[1]) + "…" + Api5.Num(gabarit[4]) + "]"
             + " z[" + Api5.Num(gabarit[2]) + "…" + Api5.Num(gabarit[5]) + "]";
 
-    /// <summary>Коробка с двумя протяжениями <paramref name="a"/> и одним <paramref name="b"/>.</summary>
+    /// <summary>A box with two extents <paramref name="a"/> and one <paramref name="b"/>.</summary>
     private static bool IsBox(double[]? gabarit, double a, double a2, double b)
     {
         if (gabarit is null)
@@ -1068,7 +1032,7 @@ internal sealed class SketchPlaneProbe
         return true;
     }
 
-    /// <summary>Два сорокамиллиметровых протяжения центрированы на начале координат модели.</summary>
+    /// <summary>The two forty-millimetre extents are centred on the model origin.</summary>
     private static bool IsCentred(double[]? gabarit, double a, double a2)
     {
         if (gabarit is null)
@@ -1096,7 +1060,7 @@ internal sealed class SketchPlaneProbe
         return true;
     }
 
-    /// <summary>Отступ десятимиллиметрового протяжения от начала координат по своей оси.</summary>
+    /// <summary>Offset of the ten-millimetre extent from the origin along its own axis.</summary>
     private static string NormalSide(double[]? gabarit, double a, double a2)
     {
         if (gabarit is null)
@@ -1123,7 +1087,7 @@ internal sealed class SketchPlaneProbe
         return "не найдено";
     }
 
-    /// <summary>Ось, вдоль которой коробка тонкая (10 мм) — то есть ось нормали опоры.</summary>
+    /// <summary>The axis along which the box is thin (10 mm) — i.e. the support normal axis.</summary>
     private static string ThicknessAxis(double[]? gabarit)
     {
         if (gabarit is null)
@@ -1279,12 +1243,10 @@ internal sealed class SketchPlaneProbe
         return found.Count == 0 ? null : found[0];
     }
 
-    /// <summary>До <paramref name="max"/> объектов указанного типа — для постановки на ВСЕХ, а не на одном.</summary>
-    /// <remarks>
-    /// Отбор по номеру типа здесь уместен, потому что предмет — элементы дерева заданного класса
-    /// (грань, ребро), а не определение признака: подмена номера дерева фабричным случалась именно на
-    /// определениях (24 против 25) и уже названа в <see cref="FindSketchOfFirstExtrusion"/>.
-    /// </remarks>
+    /// <summary>Up to <paramref name="max"/> objects of the given type — to set on ALL of them, not one.</summary>
+    /// <remarks>Selecting by type number is appropriate here because the subject is tree elements of a
+    /// given class (face, edge), not a feature definition: the tree-vs-factory number substitution happened
+    /// on definitions (24 vs 25) and is already named in <see cref="FindSketchOfFirstExtrusion"/>.</remarks>
     private List<ksEntity> EntitiesOfType(short type, int max)
     {
         var result = new List<ksEntity>();
@@ -1311,23 +1273,18 @@ internal sealed class SketchPlaneProbe
         return result;
     }
 
-    /// <summary>Эскиз зависимого признака после переоткрытия — из ДЕРЕВА, а не из памяти сеанса.</summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Два дефекта прибора закрыты здесь, и оба были выданы за отсутствие предмета.</b> Первый
-    /// прогон (15:08) отбирал элементы с <c>type == o3d_baseExtrusion (24)</c> и не нашёл ни одного
-    /// при <c>operations = 1</c>: базовое выталкивание видно в дереве под <b>25</b>
-    /// (<c>o3d_bossExtrusion</c>), а не под своим фабричным 24 — номер дерева и номер фабрики разные
-    /// системы. Второй прогон (15:10) уже не отбирал по номеру, но приводил определение к ОДНОМУ
-    /// типу <c>ksBaseExtrusionDefinition</c>, а у 25-го элемента определение —
-    /// <c>ksBossExtrusionDefinition</c>: по <c>docs/compatibility/kompas-api5-metadata.json</c> это
-    /// ТРИ РАЗНЫХ интерфейса с тремя разными IID (<c>deefefe1…</c>, <c>deefefe4…</c>,
-    /// <c>deefefe7…</c>) и без наследования. Перебираются все три.
-    /// </para>
-    /// <para>
-    /// Номер дерева элемента записывается в данные: он и есть измеренная величина, а не украшение.
-    /// </para>
-    /// </remarks>
+    /// <summary>The dependent feature's sketch after reopen — from the TREE, not the session's memory.</summary>
+    /// <remarks>TWO INSTRUMENT DEFECTS were closed here, and both had been passed off as absence of the
+    /// subject. MEASURED: the first run (15:08) selected elements with <c>type == o3d_baseExtrusion (24)</c>
+    /// and found none at <c>operations = 1</c>: a base extrusion appears in the tree as <b>25</b>
+    /// (<c>o3d_bossExtrusion</c>), not its factory 24 — tree and factory numbers are different systems. The
+    /// second run (15:10) no longer selected by number, but cast the definition to the ONE type
+    /// <c>ksBaseExtrusionDefinition</c>, whereas the 25th element's definition is
+    /// <c>ksBossExtrusionDefinition</c>: per <c>docs/compatibility/kompas-api5-metadata.json</c> these are
+    /// THREE DIFFERENT interfaces with three different IIDs (<c>deefefe1…</c>, <c>deefefe4…</c>,
+    /// <c>deefefe7…</c>) and no inheritance. All three are tried. The element's tree number is recorded in
+    /// the data: it IS the measured quantity, not decoration.
+    /// History: docs/decisions/probes.md#sp-route</remarks>
     private ksEntity? FindSketchOfFirstExtrusion(ProbeStep step)
     {
         try
@@ -1379,10 +1336,8 @@ internal sealed class SketchPlaneProbe
         return null;
     }
 
-    /// <summary>
-    /// Чтение опоры маршрутом API7 (<c>ISketch.Plane</c>) — тем же, что уже использует адаптер.
-    /// Отказ маршрута называется, а не подменяется отсутствием опоры.
-    /// </summary>
+    /// <summary>Reads the support by the API7 route (<c>ISketch.Plane</c>) — the one the adapter already
+    /// uses. A route failure is named, not replaced by absence of a support.</summary>
     private static string? ReadPlaneApi7(ksEntity sketch, ProbeStep step)
     {
         try

@@ -6,12 +6,12 @@ namespace KompasMcp.Api7Probe;
 /// <summary>
 /// One dedicated STA thread with a real Win32 message pump. This is the probe's own apartment —
 /// ADR-003 §2 permits the probe to own its STA provided the production Worker is not attached to
-/// the same session, which is guaranteed here because the probe launches its own invisible КОМПАС
+/// the same session, which is guaranteed here because the probe launches its own invisible KOMPAS
 /// and never connects to the Host/Worker at all.
 /// </summary>
 /// <remarks>
 /// The logic mirrors <c>src/KompasMcp.Api5Adapter/Sta/StaExecutor.cs</c> rather than importing it:
-/// <c>BlockingCollection.Take</c> is not enough because КОМПАС is an out-of-process local server
+/// <c>BlockingCollection.Take</c> is not enough because KOMPAS is an out-of-process local server
 /// that can call back into the apartment while this thread sits inside an outgoing call. The loop
 /// waits on work <em>and</em> window messages together (<c>MsgWaitForMultipleObjectsEx</c> with
 /// <c>MWMO_INPUTAVAILABLE</c>) and then drains messages, so neither starves the other.

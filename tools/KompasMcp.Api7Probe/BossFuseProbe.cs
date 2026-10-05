@@ -6,41 +6,26 @@ using KompasAPI7;
 
 namespace KompasMcp.Api7Probe;
 
-/// <summary>
-/// §3 — сращивается ли родное вращение-бобышка с СУЩЕСТВУЮЩИМ телом.
-/// </summary>
+/// <summary>§3 — does the native rotation-boss fuse with an EXISTING body.</summary>
 /// <remarks>
-/// <para>
-/// <b>Почему этот опыт нужен отдельно.</b> Адаптер отказывает в бобышке при <c>bodiesBefore &gt;= 1</c>
-/// с причиной <c>rotation_boss_glue_unmeasured</c>. Отказ опирается на два прошлых опыта, и <b>оба
-/// записали неверный член результата</b>:
-/// </para>
-/// <list type="bullet">
-///   <item><description>
-///     <c>R.25</c> создал <c>o3d_bossRotated</c> и записал <c>OperationResult = ksOperationNewBody</c> —
-///     то есть попросил НОВОЕ ТЕЛО у типа, который просит сращивание.
-///   </description></item>
-///   <item><description>
-///     <c>R.26</c> «перекрёстная проверка (тип boss, результат cut)» записала
-///     <c>OperationResult = ksOperationCut</c> — параметр, предназначенный для вырезания.
-///   </description></item>
-/// </list>
-/// <para>
-/// Значение, которое адаптер сам считает правильным для бобышки, — <c>ksOperationUnion</c>
-/// (<c>Api7Rotated.OperationResultOf</c>), и оно <b>не измерялось ни разу</b>. Поэтому прошлый вывод
-/// «сращивание не подтверждено» относится к постановке опыта, а не к продукту: опыт спрашивал
-/// другое. Это тот же класс, что и опровергнутое «насыщение на 180°».
-/// </para>
-/// <para>
-/// <b>Что измеряется.</b> Плита и цилиндр-выступ, пересекающиеся по положительной толщине, причём
-/// часть цилиндра выходит за плиту. Тогда вклад в объём известен аналитически и равен объёму части
-/// цилиндра ВНЕ плиты: сращивание добавляет ровно её, а не всё тело. Это различает три исхода —
-/// «слилось» (прирост = выступающая часть), «второе тело» (тел 1→2), «отказ» (прироста нет).
-/// </para>
-/// <para>
-/// <b>Контроль на вырождение.</b> Отдельно ставится случай без пересечения: если он даёт тот же
-/// результат, что и пересекающийся, значит опыт меряет не сращивание, и вывод отменяется.
-/// </para>
+/// <b>Why this experiment is needed separately.</b> The adapter refuses a boss when
+/// <c>bodiesBefore &gt;= 1</c> with the reason <c>rotation_boss_glue_unmeasured</c>. That refusal rests
+/// on two earlier experiments, and <b>both wrote the wrong result member</b>.
+/// MEASURED: <c>R.25</c> created <c>o3d_bossRotated</c> and wrote
+/// <c>OperationResult = ksOperationNewBody</c> — i.e. asked for a NEW BODY from the type that requests
+/// fusing; <c>R.26</c> ("cross-check: type boss, result cut") wrote
+/// <c>OperationResult = ksOperationCut</c> — a parameter meant for cutting. The value the adapter
+/// itself considers correct for a boss is <c>ksOperationUnion</c>
+/// (<c>Api7Rotated.OperationResultOf</c>), and it was <b>never measured</b>.
+/// History: docs/decisions/probes.md#boss-fuse
+/// <b>What is measured.</b> A plate and a cylinder boss intersecting over a positive thickness, with
+/// part of the cylinder protruding beyond the plate. The volume contribution is then known
+/// analytically and equals the volume of the part of the cylinder OUTSIDE the plate: a correct union
+/// adds exactly that, not the whole body. This distinguishes three outcomes — "fused" (gain =
+/// protruding part), "second body" (bodies 1→2), "refused" (no gain).
+/// <b>Degeneracy control.</b> A case with no intersection is run separately: if it gives the same
+/// result as the intersecting one, the experiment is not measuring fusing and the conclusion is
+/// void.
 /// </remarks>
 internal sealed class BossFuseProbe
 {
@@ -55,10 +40,8 @@ internal sealed class BossFuseProbe
     /// <summary>Cylinder volume: π·r²·h.</summary>
     private static double CylinderVolume => Math.PI * CylinderRadius * CylinderRadius * CylinderHeight;
 
-    /// <summary>
-    /// The part of the cylinder that protrudes beyond the plate: h minus the plate thickness.
-    /// Only this much may be ADDED by a correct union.
-    /// </summary>
+    /// <summary>The part of the cylinder that protrudes beyond the plate: h minus the plate thickness.
+    /// Only this much may be ADDED by a correct union.</summary>
     private static double ProtrudingVolume => Math.PI * CylinderRadius * CylinderRadius * (CylinderHeight - PlateThickness);
 
     private static double ExpectFused => PlateVolume + ProtrudingVolume;
@@ -155,10 +138,8 @@ internal sealed class BossFuseProbe
         RunFusion(step, "эталон", plateShiftX: 0d, plateShiftY: 0d, withIntersection: true);
     }
 
-    /// <summary>
-    /// The work order also demands a repeat on a document with other dimensions and a shifted axis,
-    /// with the expectation computed in advance.
-    /// </summary>
+    /// <summary>The work order also demands a repeat on a document with other dimensions and a shifted axis,
+    /// with the expectation computed in advance.</summary>
     private void RepeatWithShiftedAxis()
     {
         var step = _report.Begin("B.2", "Повтор: другая плита и ось, сдвинутая к краю",
@@ -187,12 +168,10 @@ internal sealed class BossFuseProbe
             expectFused: plate + protruding, expectTwo: plate + Math.PI * radius * radius * height);
     }
 
-    /// <summary>
-    /// Clears the probe itself before any conclusion about the product: the SAME profile, axis and
+    /// <summary>Clears the probe itself before any conclusion about the product: the SAME profile, axis and
     /// code path, but in an EMPTY document with no blank. If the boss builds here and not on the
     /// plate, the refusal is about the boss-on-a-body; if it does not build here either, the probe
-    /// never exercised the boss route at all and B.1–B.5 say nothing about fusion.
-    /// </summary>
+    /// never exercised the boss route at all and B.1–B.5 say nothing about fusion.</summary>
     private void BossInEmptyDocumentControl()
     {
         var step = _report.Begin("B.6", "Очистка прибора: та же бобышка в ПУСТОМ документе",
@@ -293,11 +272,9 @@ internal sealed class BossFuseProbe
         }
     }
 
-    /// <summary>
-    /// The discriminating control: the same intersecting setup, but with the result parameter the
+    /// <summary>The discriminating control: the same intersecting setup, but with the result parameter the
     /// previous probes wrote. If this builds and Union does not, the refusal is about Union
-    /// specifically; if both fail, it is about a boss on an existing body.
-    /// </summary>
+    /// specifically; if both fail, it is about a boss on an existing body.</summary>
     private void UnionVersusNewBodyControl()
     {
         var step = _report.Begin("B.5", "Различающий контроль: ksOperationNewBody против ksOperationUnion",
@@ -311,10 +288,8 @@ internal sealed class BossFuseProbe
             withIntersection: true, result: ksOperationResultEnum.ksOperationNewBody);
     }
 
-    /// <summary>
-    /// A cylinder that does not touch the plate at all. If this gives the same answer as the
-    /// intersecting case, the experiment is measuring something other than fusion.
-    /// </summary>
+    /// <summary>A cylinder that does not touch the plate at all. If this gives the same answer as the
+    /// intersecting case, the experiment is measuring something other than fusion.</summary>
     private void NoIntersectionCase()
     {
         var step = _report.Begin("B.3", "Контроль на вырождение: цилиндр НЕ пересекает плиту",
@@ -328,10 +303,8 @@ internal sealed class BossFuseProbe
             gapMm: 20d);
     }
 
-    /// <summary>
-    /// A cylinder fully inside the plate. The work order is explicit: this must be recorded
-    /// separately and the rule "a boss always adds volume" must not be imposed on it.
-    /// </summary>
+    /// <summary>A cylinder fully inside the plate. The work order is explicit: this must be recorded
+    /// separately and the rule "a boss always adds volume" must not be imposed on it.</summary>
     private void FullyInsideCase()
     {
         var step = _report.Begin("B.4", "Цилиндр целиком внутри плиты",
@@ -629,11 +602,9 @@ internal sealed class BossFuseProbe
         return sketch;
     }
 
-    /// <summary>
-    /// The axis is built in MODEL coordinates by two points, the route measured to give a full
+    /// <summary>The axis is built in MODEL coordinates by two points, the route measured to give a full
     /// cylinder (F.1a). The old R.25 resolved the axis from the sketch plane, which flipped the
-    /// sign of the sweep.
-    /// </summary>
+    /// sign of the sweep.</summary>
     private IAxis3D? BuildAxis(
         ksDocument3D doc, ksPart part, double centreX, double centreY,
         double baseZ, double height, ProbeStep step)
@@ -694,10 +665,8 @@ internal sealed class BossFuseProbe
         }
     }
 
-    /// <summary>
-    /// Creates the native boss with <c>ksOperationUnion</c> — the parameter whose measurement is the
-    /// point of this probe.
-    /// </summary>
+    /// <summary>Creates the native boss with <c>ksOperationUnion</c> — the parameter whose measurement is the
+    /// point of this probe.</summary>
     private IRotated? CreateBoss(
         ksPart part, ksDocument3D doc, ksEntity profile, IAxis3D axis,
         double radius, double height, ProbeStep step,
@@ -816,7 +785,7 @@ internal sealed class BossFuseProbe
                     }
                     catch (System.Runtime.InteropServices.COMException)
                     {
-                        // A face whose parameters КОМПАС withheld is not a reason to abort the walk.
+                        // A face whose parameters KOMPAS withheld is not a reason to abort the walk.
                     }
                 }
             }

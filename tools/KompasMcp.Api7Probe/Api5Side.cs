@@ -560,7 +560,7 @@ internal static class Api5
 
         /// <summary>
         /// The same live element taken through the OTHER interface. This is the one that answers on a
-        /// КОМПАС-written file's tree.
+        /// KOMPAS-written file's tree.
         /// </summary>
         /// <remarks>
         /// <b>Measured (R.0d, 17.09.2026).</b> On a live feature tree, <c>element as ksFeature</c> and

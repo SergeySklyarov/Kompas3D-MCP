@@ -8,59 +8,43 @@ using KompasAPI7;
 
 namespace KompasMcp.Api7Probe;
 
-/// <summary>
-/// Проба RR — читается ли ВЕКТОР ПЕРЕНОСА признака изменения положения, и каким членом.
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Зачем.</b> Действие <c>read</c> наряда §7 требует, чтобы «параметры и входы читались из
-/// модели». Для переноса два параметра — <c>reposition_vector_mm</c> и <c>reposition_axis_point_mm</c> —
-/// не читаются ничем: они поимённо названы в <c>solid.unreadable_parameters</c>. Основанием для
-/// этого служили шаги RP.9–RP.12 пробы <c>--reposition</c>, и главное из них — RP.11: система
-/// координат признака, записанная самой КОМПАС (<c>Position.WriteToFile</c>), содержит 69 байт и
-/// ровно матрицу ориентации 3×3, начала в ней нет.
-/// </para>
-/// <para>
-/// <b>Что здесь перемеряется и почему.</b> Из «в этом объекте начала нет» было выведено «величины в
-/// модели нет». Это разные утверждения, и второе из первого не следует. Прямая проверка самого
-/// файла модели (19.09.2026, распаковка потоков <c>Contents</c>): файл с записанным переносом
-/// (7, −11, 13) содержит эту тройку <c>double</c> ЧЕТЫРЕ раза, а контрольный файл с переносом
-/// (1, 2, 3) — ни одного раза, зато содержит свою тройку четыре раза. Значит величина в модели ЕСТЬ,
-/// и вопрос не «хранится ли она», а «каким членом её отдаёт продукт».
-/// </para>
-/// <para>
-/// Поэтому перечень членов здесь не угадывается, а ЧИТАЕТСЯ из библиотеки типов самого продукта
-/// (<c>Bin\kAPI7.tlb</c>, 21.04.2025) — список, придуманный человеком, измеряет его воображение.
-/// Живой объект затем опрашивается по каждому объявленному имени, и всё, что отвечает, читается.
-/// </para>
-/// <para>
-/// <b>Правка 19.09.2026 (первый прогон пробы, 67c2ba62af0e43719e82e0720468f366).</b> RR.3/RR.4 дали
-/// отрицание, но два места прибора были негодны, и оба чинятся здесь, а не толкуются:
-/// </para>
-/// <list type="number">
-/// <item><b>RR.1 объявлял, что у <c>IBodyReposition</c> нет ни одного члена.</b> Это дефект
-/// перебора: он шёл от memId 1 и останавливался после восьми промахов, а члены объявлены около 800.
-/// Исправлено в <see cref="TlbScan.MemberNames"/>.</item>
-/// <item><b>Объект <c>Position</c> опрашивался только по членам <c>ILocalCoordinateSystem</c>.</b> Он
-/// типизирован как размещение (<c>reposition.Position.InitByMatrix3D(...)</c> компилируется), а члены
-/// <c>IPlacement3D</c> — <c>GetMatrix3D</c>, <c>GetOrigin</c>, <c>GetEulerAngles</c>, <c>GetPoint3D</c> —
-/// не спрашивались НИ РАЗУ, хотя <c>InitByMatrix3D</c> пишет ту самую матрицу 4×4. Отсюда RR.5.</item>
-/// </list>
-/// <para>
-/// <b>Отрицательный контроль обязателен.</b> Член, который всегда отдаёт одну и ту же четвёрку чисел,
-/// доказывает не чтение, а константу. Поэтому каждый маршрут здесь проверяется ДВУМЯ признаками:
-/// перенос (7, −11, 13) и перенос (1, 2, 3). Совпадение с обоими известными входами — единственное,
-/// что делает маршрут годным для <c>read</c>.
-/// </para>
-/// </remarks>
+/// <summary>Probe RR — is the TRANSLATION VECTOR of a reposition feature readable, and by which
+/// member.</summary>
+/// <remarks>DOC: order §7 requires the <c>read</c> action to read "parameters and inputs from the
+/// model". For translation two parameters — <c>reposition_vector_mm</c> and
+/// <c>reposition_axis_point_mm</c> — are read by nothing: they are named in
+/// <c>solid.unreadable_parameters</c>. That rested on steps RP.9–RP.12 of probe <c>--reposition</c>,
+/// chiefly RP.11: the feature's coordinate system, written by KOMPAS itself (<c>Position.WriteToFile</c>),
+/// holds 69 bytes and exactly a 3×3 orientation matrix — no origin in it. MEASURED 19.09.2026: from
+/// "there is no origin in this object" the claim "the quantity is not in the model" was drawn, but the
+/// two are different statements and the second does not follow from the first. A direct check of the
+/// model file itself (unpacking the <c>Contents</c> streams): the file with translation (7, −11, 13)
+/// contains that <c>double</c> triple FOUR times, while the control file with translation (1, 2, 3)
+/// contains it not once but contains its own triple four times — so the quantity IS in the model, and
+/// the question is not "is it stored" but "by which member the product returns it". MEASURED (first run
+/// of the probe, 67c2ba62af0e43719e82e0720468f366): RR.3/RR.4 came back negative, but two spots in the
+/// instrument were unfit, and both are fixed here rather than interpreted — RR.1 claimed
+/// <c>IBodyReposition</c> had not a single member (a scan defect: it started at memId 1 and stopped
+/// after eight misses, while ~800 members are declared; fixed in <see cref="TlbScan.MemberNames"/>),
+/// and the <c>Position</c> object was queried only through <c>ILocalCoordinateSystem</c> members while
+/// it is typed as a placement (<c>reposition.Position.InitByMatrix3D(...)</c> compiles) and the
+/// <c>IPlacement3D</c> members — <c>GetMatrix3D</c>, <c>GetOrigin</c>, <c>GetEulerAngles</c>,
+/// <c>GetPoint3D</c> — were never asked, though <c>InitByMatrix3D</c> writes exactly that 4×4 matrix
+/// (hence RR.5). ASSUMPTION: the member list is not guessed but READ from the product's own type library
+/// (<c>Bin\kAPI7.tlb</c>, 21.04.2025) — a list invented by a human measures his imagination; the live
+/// object is then queried by every declared name and everything that answers is read. TEST: a negative
+/// control is mandatory — a member that always returns the same four numbers proves a constant, not a
+/// read; so every route is checked with TWO features, translation (7, −11, 13) and translation
+/// (1, 2, 3), and matching BOTH known inputs is the only thing that makes a route fit for <c>read</c>.
+/// History: docs/decisions/probes.md#reposition-read</remarks>
 internal sealed class RepositionReadProbe
 {
     private const double Tx0 = 0d, Ty0 = 0d, Tx1 = 20d, Ty1 = 10d, Tz = 5d;
 
-    /// <summary>Записанный перенос основного случая. Габарит после него: (7,−11,13)…(27,−1,18).</summary>
+    /// <summary>MEASURED: the main case's written translation. Its extents afterwards: (7,−11,13)…(27,−1,18).</summary>
     private static readonly double[] Vector = { 7d, -11d, 13d };
 
-    /// <summary>Отрицательный контроль: другой перенос того же вида. Габарит: (1,2,3)…(21,12,8).</summary>
+    /// <summary>Negative control: another translation of the same kind. Extents: (1,2,3)…(21,12,8).</summary>
     private static readonly double[] Control = { 1d, 2d, 3d };
 
     private readonly ProbeReport _report;
@@ -113,10 +97,8 @@ internal sealed class RepositionReadProbe
 
     // ══════════════════════════════════════════════════════════════ RR.1 ══
 
-    /// <summary>
-    /// Какие члены библиотека типов ПРОДУКТА объявляет у признака изменения положения, у его
-    /// системы координат и у размещения. Ни одного имени не придумано здесь: все прочитаны.
-    /// </summary>
+    /// <summary>Which members the PRODUCT's type library declares on a reposition feature, its
+    /// coordinate system and the placement. INVARIANT: not one name is invented here — all are read.</summary>
     private void DeclaredMembers()
     {
         var step = _report.Begin("RR.1", "Какие члены объявлены у признака переноса и его системы координат",
@@ -186,10 +168,9 @@ internal sealed class RepositionReadProbe
 
     // ══════════════════════════════════════════════════════════════ RR.2 ══
 
-    /// <summary>
-    /// Что из объявленного отвечает ЖИВОЙ объект. Объявленный член и отвечающий член — разные
-    /// утверждения: первый говорит о библиотеке, второй о работающем приложении.
-    /// </summary>
+    /// <summary>Which of the declared members the LIVE object answers. INVARIANT: a declared member and
+    /// an answering member are different statements — the first is about the library, the second about
+    /// the running application.</summary>
     private void LiveSurface()
     {
         var step = _report.Begin("RR.2", "На какие объявленные имена отвечает ЖИВОЙ признак переноса",
@@ -224,8 +205,9 @@ internal sealed class RepositionReadProbe
 
             step.Data["feature_surface"] = featureSurface;
 
-            // Третья сторона вопроса: что объект объявляет САМ. Обёртка — снимок, библиотека типов —
-            // описание продукта, а это ответ самого работающего объекта.
+            // The third side of the question: what the object declares ITSELF. The wrapper is a
+            // snapshot, the type library is the product's description, and this is the answer of the
+            // running object itself.
             var featureOwn = Late.MemberNames(feature);
             step.Data["feature_own_names"] = featureOwn.Select(m => m.MemId + ":" + m.Name).ToArray();
             step.Observe("признак объявляет СВОИХ имён: " + featureOwn.Count
@@ -281,10 +263,8 @@ internal sealed class RepositionReadProbe
 
     // ══════════════════════════════════════════════════════════════ RR.3 ══
 
-    /// <summary>
-    /// Читается ли записанный вектор хоть одним из ОТВЕЧАЮЩИХ членов. Ожидание (7, −11, 13)
-    /// объявлено до чтения; контроль — тот же признак с вектором (1, 2, 3).
-    /// </summary>
+    /// <summary>Is the written vector read by any of the ANSWERING members. TEST: the expectation
+    /// (7, −11, 13) is declared before the read; the control is the same feature with vector (1, 2, 3).</summary>
     private void ReadAnswers()
     {
         var step = _report.Begin("RR.3", "Отдаёт ли хоть один отвечающий член вектор (7, −11, 13)",
@@ -359,24 +339,17 @@ internal sealed class RepositionReadProbe
 
     // ══════════════════════════════════════════════════════════════ RR.5 ══
 
-    /// <summary>
-    /// Читается ли записанный вектор САМИМ объектом системы координат: сначала по тем именам, которые
-    /// объект объявляет о себе, затем типизированно — по тому интерфейсу обёртки, который он
-    /// действительно реализует.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Сигнатуры не угадываются: они ЧИТАЮТСЯ отражением по интерфейсу обёртки, и в отчёт попадает
-    /// сама сигнатура. Аргументы <c>ref</c> заполняются значениями по умолчанию — <c>Invoke</c> сам
-    /// выделяет под них место и возвращает записанное обратно.
-    /// </para>
-    /// <para>
-    /// <b>Почему не <c>IPlacement3D</c>.</b> Первый прогон этой редакции пробовал именно его и
-    /// получил <c>position_is_placement = false</c>: объект <c>Position</c> этого интерфейса не
-    /// реализует, хотя библиотека типов объявляет у <c>IPlacement3D</c> одиннадцать имён. Спрашивать
-    /// надо тот интерфейс, который объект подтверждает, — <c>ILocalCoordinateSystem</c>.
-    /// </para>
-    /// </remarks>
+    /// <summary>Is the written vector read by the coordinate-system object ITSELF: first by the names
+    /// the object declares about itself, then typed — through the wrapper interface it really
+    /// implements.</summary>
+    /// <remarks>DOC: signatures are not guessed — they are READ by reflection over the wrapper
+    /// interface, and the signature itself goes into the report; <c>ref</c> arguments are filled with
+    /// default values, <c>Invoke</c> allocating room for them and returning what was written.
+    /// MEASURED (first run of this revision): <c>IPlacement3D</c> was tried and gave
+    /// <c>position_is_placement = false</c> — the <c>Position</c> object does not implement that
+    /// interface even though the type library declares eleven names on <c>IPlacement3D</c>. The
+    /// interface to ask is the one the object confirms: <c>ILocalCoordinateSystem</c>.
+    /// History: docs/decisions/probes.md#reposition-read</remarks>
     private void PlacementTyped()
     {
         var step = _report.Begin("RR.5", "Отдаёт ли Position записанный вектор (опрос объекта)",
@@ -413,10 +386,10 @@ internal sealed class RepositionReadProbe
                     continue;
                 }
 
-                // (а) Собственные имена объекта — его собственное утверждение о себе. Оговорка:
-                // IDispatch::GetTypeInfo(0) отдаёт УМОЛЧАТЕЛЬНЫЙ интерфейс класса, поэтому у Position
-                // перечень совпал с перечнем признака; члены, специфичные для системы координат,
-                // видны только по подтверждённому интерфейсу — это ветка (б).
+                // (a) The object's own names — its own statement about itself. Caveat:
+                // IDispatch::GetTypeInfo(0) returns the class's DEFAULT interface, so Position's list
+                // matched the feature's; members specific to the coordinate system are visible only
+                // through the confirmed interface — that is branch (b).
                 var own = Late.MemberNames(position);
                 step.Data["own_names_" + label] = own.Select(m => m.MemId + ":" + m.Name).ToArray();
                 step.Observe(label + ": объект объявляет " + own.Count + " своих имён (умолчательный "
@@ -438,7 +411,7 @@ internal sealed class RepositionReadProbe
                     }
                 }
 
-                // (б) Типизированный маршрут по подтверждённому интерфейсу обёртки.
+                // (b) The typed route through the confirmed wrapper interface.
                 var contract = position is ILocalCoordinateSystem
                     ? typeof(ILocalCoordinateSystem)
                     : position is IPlacement3D ? typeof(IPlacement3D) : null;
@@ -490,8 +463,8 @@ internal sealed class RepositionReadProbe
 
         step.Data["triple_found_in"] = found.ToArray();
 
-        // Маршрут годен, только если он различил ОБА известных входа. Член, отдающий одну и ту же
-        // четвёрку на обоих, — константа, а не чтение.
+        // The route is fit only if it distinguished BOTH known inputs. A member returning the same
+        // four numbers on both is a constant, not a read.
         var main = found.Where(f => f.Contains("основной", StringComparison.Ordinal)).Select(Name).ToArray();
         var control = found.Where(f => f.Contains("контроль", StringComparison.Ordinal)).Select(Name).ToArray();
         var both = main.Intersect(control, StringComparer.Ordinal).ToArray();
@@ -515,11 +488,9 @@ internal sealed class RepositionReadProbe
 
     // ══════════════════════════════════════════════════════════════ RR.6 ══
 
-    /// <summary>
-    /// Спуск в объектные члены признака: <c>RepositionCentre</c> и всё прочее, что вернуло живой
-    /// объект. Объект, на который признак отвечает, но который не раскрыт, — это незаданный вопрос,
-    /// а не отрицательный ответ.
-    /// </summary>
+    /// <summary>Descent into the feature's object members: <c>RepositionCentre</c> and everything else
+    /// that returned a live object. INVARIANT: an object the feature answers with but that is not
+    /// opened up is an unasked question, not a negative answer.</summary>
     private void Descent()
     {
         var step = _report.Begin("RR.6", "Спуск в объектные члены признака: не спрятан ли вектор глубже",
@@ -553,8 +524,9 @@ internal sealed class RepositionReadProbe
                 objects[name] = value;
             }
 
-            // Объектные члены САМОЙ системы координат: get_LocalCSParameters отвечает живым объектом,
-            // и объект, на который признак отвечает, но который не раскрыт, — это незаданный вопрос.
+            // Object members of the coordinate system ITSELF: get_LocalCSParameters answers with a
+            // live object, and an object the feature answers with but that is not opened up is an
+            // unasked question.
             if (SafeObject(() => feature.Position) is { } position && position is ILocalCoordinateSystem)
             {
                 var contract = typeof(ILocalCoordinateSystem);
@@ -588,8 +560,8 @@ internal sealed class RepositionReadProbe
 
             foreach (var (name, value) in objects)
             {
-                // Спрашиваем объект о нём самом; пул имён библиотеки — только запасной ход, потому
-                // что имя, объявленное библиотекой у ДРУГОГО интерфейса, объект всё равно не примет.
+                // Ask the object about itself; the library name pool is only a fallback, because a name
+                // declared by the library on ANOTHER interface will not be accepted by the object anyway.
                 var own = Late.MemberNames(value);
                 var surface = own.Count > 0
                     ? own.ToDictionary(m => m.MemId + ":" + m.Name, _ => "собственный член", StringComparer.Ordinal)
@@ -652,10 +624,8 @@ internal sealed class RepositionReadProbe
 
     // ══════════════════════════════════════════════════════════════ RR.4 ══
 
-    /// <summary>
-    /// То же на ПЕРЕОТКРЫТОМ документе: действие <c>read</c> в продукте работает и с ним, поэтому
-    /// вопрос перемеряется на состоянии, которое продукт действительно видит.
-    /// </summary>
+    /// <summary>The same on a REOPENED document: the product's <c>read</c> action works with it too, so
+    /// the question is re-measured on a state the product actually sees.</summary>
     private void AfterReopen()
     {
         var step = _report.Begin("RR.4", "Читается ли вектор с ПЕРЕОТКРЫТОГО документа",
@@ -807,10 +777,9 @@ internal sealed class RepositionReadProbe
 
     // ══════════════════════════════════════════════════════════════ RR.7 ══
 
-    /// <summary>
-    /// Итог пробы ОДНИМ утверждением: назван маршрут чтения или названо, что его нет. Отчёт без
-    /// итога читается как «неизвестно», а вопрос наряда §6 требует ответа «да» или «нет».
-    /// </summary>
+    /// <summary>The probe's verdict in ONE statement: either the read route is named or it is stated
+    /// that there is none. INVARIANT: a report without a verdict reads as "unknown", while order §6
+    /// demands a yes or no.</summary>
     private void Verdict()
     {
         var step = _report.Begin("RR.7", "Итог: найден ли маршрут чтения вектора переноса",
@@ -847,10 +816,8 @@ internal sealed class RepositionReadProbe
 
     // ══════════════════════════════════════════════════════════════ helpers ══
 
-    /// <summary>
-    /// Вызов объявленного члена по ИНТЕРФЕЙСУ (не поздним связыванием): сигнатура читается
-    /// отражением и попадает в отчёт, аргументы <c>ref</c> заполняются значениями по умолчанию.
-    /// </summary>
+    /// <summary>Calling a declared member through the INTERFACE (not by late binding): the signature is
+    /// read by reflection and goes into the report, and <c>ref</c> arguments are filled with defaults.</summary>
     private static (string Signature, string Result, string[] Written) InvokeDeclared(
         object target, Type contract, string name)
     {
@@ -901,12 +868,11 @@ internal sealed class RepositionReadProbe
         return (signature, Describe(returned), written.ToArray());
     }
 
-    /// <summary>
-    /// Можно ли звать этот член, не рискуя изменить измеряемый объект. Прибор обязан мерить, а не
-    /// править: <c>SetDisplacementByAxis</c>, <c>SetStartingOrientation</c> и <c>InitByMatrix3D</c>
-    /// объявлены у того же объекта, что и чтение, и вызов «на всякий случай» переписал бы состояние
-    /// до измерения. Такие члены называются в отчёте по имени, но не вызываются.
-    /// </summary>
+    /// <summary>Whether this member can be called without risking a change to the object being measured.
+    /// INVARIANT: the instrument must measure, not edit — <c>SetDisplacementByAxis</c>,
+    /// <c>SetStartingOrientation</c> and <c>InitByMatrix3D</c> are declared on the same object as the
+    /// reads, and a call "just in case" would rewrite the state before measurement; such members are
+    /// named in the report but not called.</summary>
     private static bool IsSafeRead(string name) =>
         !name.StartsWith("Set", StringComparison.Ordinal)
         && !name.StartsWith("Init", StringComparison.Ordinal)
@@ -916,10 +882,9 @@ internal sealed class RepositionReadProbe
         && !string.Equals(name, "WriteToFile", StringComparison.Ordinal)
         && !string.Equals(name, "ReadFromFile", StringComparison.Ordinal);
 
-    /// <summary>
-    /// Ищет ЛИБО записанную тройку подряд, либо имя члена, в котором она встретилась. Сравниваются
-    /// числа, а не подстроки: «17» содержит «7», и поиск по подстроке объявил бы находкой мусор.
-    /// </summary>
+    /// <summary>Looks EITHER for the written triple in sequence OR for the member name it appeared in.
+    /// INVARIANT: numbers are compared, not substrings — "17" contains "7", and a substring search
+    /// would call noise a hit.</summary>
     private static bool ContainsTriple(string text, double[] vector)
     {
         var numbers = Numbers(text);
@@ -950,7 +915,7 @@ internal sealed class RepositionReadProbe
         return found;
     }
 
-    /// <summary>Ключи шагов, в которых встретилась тройка, — по уже собранным данным отчёта.</summary>
+    /// <summary>The step keys in which the triple appeared — from the report data already collected.</summary>
     private static string[] Hits(Dictionary<string, object?> data, double[] vector)
     {
         var hits = new List<string>();
@@ -965,7 +930,7 @@ internal sealed class RepositionReadProbe
         return hits.Distinct(StringComparer.Ordinal).ToArray();
     }
 
-    /// <summary>Имя члена из подписи вида «GetMatrix3D [основной (7,−11,13)]».</summary>
+    /// <summary>The member name from a label of the form "GetMatrix3D [main (7,−11,13)]".</summary>
     private static string Name(string label) => label.Split(' ')[0];
 
     private static string Describe(object? value)
@@ -994,7 +959,7 @@ internal sealed class RepositionReadProbe
         return Api5.Raw(value);
     }
 
-    /// <summary>Чтение члена поздним связыванием: отказ — это отсутствие ответа, а не исключение шага.</summary>
+    /// <summary>Reading a member by late binding: a refusal is a missing answer, not a step exception.</summary>
     private static object? SafeGet(object target, string name)
     {
         try
@@ -1119,7 +1084,7 @@ internal sealed class RepositionReadProbe
         }
         catch (Exception)
         {
-            // Не предмет этого шага.
+            // Not this step's subject.
         }
     }
 
@@ -1172,7 +1137,7 @@ internal sealed class RepositionReadProbe
         }
     }
 
-    /// <summary>Матрица 4×4 с единичной ориентацией и заданным переносом.</summary>
+    /// <summary>A 4×4 matrix with identity orientation and the given translation.</summary>
     private static double[] Matrix4x4(double[] vector) => new[]
     {
         1d, 0d, 0d, 0d,
@@ -1285,7 +1250,7 @@ internal sealed class RepositionReadProbe
         }
         catch (Exception)
         {
-            // Возвращается прочитанное.
+            // What was read is returned.
         }
 
         return rows;

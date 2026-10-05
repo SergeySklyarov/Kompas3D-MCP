@@ -4,9 +4,7 @@ using System.Runtime.InteropServices.ComTypes;
 
 namespace KompasMcp.Api7Probe;
 
-/// <summary>
-/// Late-bound (IDispatch) access to a КОМПАС object.
-/// </summary>
+/// <summary>Late-bound (IDispatch) access to a KOMPAS object.</summary>
 /// <remarks>
 /// Two jobs, deliberately kept apart:
 /// <list type="bullet">
@@ -82,7 +80,7 @@ internal static class Late
     /// DISPPARAMS with raw pointers, not a marshalled <c>object[]</c> field: an LPArray of
     /// <c>UnmanagedType.Struct</c> over reference types is only legal in the restricted legacy
     /// marshaler, and declaring it on the struct surfaced as a <see cref="TypeLoadException"/>
-    /// <em>inside</em> the first COM call — which reads like a КОМПАС failure and is not one.
+    /// <em>inside</em> the first COM call — which reads like a KOMPAS failure and is not one.
     /// The VARIANT array is therefore built explicitly in <see cref="BuildArguments"/>.
     /// </summary>
     [StructLayout(LayoutKind.Sequential)]
@@ -97,10 +95,8 @@ internal static class Late
         public int NamedArgumentCount;
     }
 
-    /// <summary>
-    /// "dispid=N", "DISP_E_MEMBERNOTFOUND", or the failure. The last two are different answers and
-    /// are never collapsed into each other.
-    /// </summary>
+    /// <summary>"dispid=N", "DISP_E_MEMBERNOTFOUND", or the failure. The last two are different answers and
+    /// are never collapsed into each other.</summary>
     public static string Dispid(object comObject, string name)
     {
         try
@@ -113,19 +109,17 @@ internal static class Late
         }
     }
 
-    /// <summary>
-    /// Какие имена объявляет САМ живой объект — по его собственной информации о типе, которую он
-    /// отдаёт через <c>IDispatch::GetTypeInfo</c>. Это третья сторона вопроса, и она не сводится к
-    /// двум первым: обёртка (снимок) и установленная библиотека типов могут описывать объект иначе,
-    /// чем он сам себя. Измерено 19.09.2026: <c>IBodyReposition.Position</c> отвечает
-    /// <c>GetVector</c> dispid=3006 и <c>InitByMatrix3D</c> dispid=3010, тогда как библиотека типов
-    /// объявляет эти же имена под 3 и 5, а <c>IPlacement3D</c> (11 объявленных имён) объект не
-    /// реализует вовсе. Опрашивать надо объект.
-    /// </summary>
+    /// <summary>Which names the LIVE object itself declares — from its own type information, which it hands
+    /// back through <c>IDispatch::GetTypeInfo</c>. This is the third side of the question and does not
+    /// reduce to the first two: the wrapper (a snapshot) and the installed type library may describe
+    /// the object differently from how it describes itself.</summary>
     /// <remarks>
-    /// Перебор идёт по идентификаторам до <paramref name="max"/> и НЕ останавливается на промахах:
-    /// у этих объектов члены лежат в диапазонах 500, 800, 2000, 3000 и 6500, и ранний останов
-    /// превратил бы «не смотрел» в «нет».
+    /// MEASURED: 19.09.2026 — <c>IBodyReposition.Position</c> answers <c>GetVector</c> dispid=3006 and
+    /// <c>InitByMatrix3D</c> dispid=3010, while the type library declares those same names under 3 and
+    /// 5, and <c>IPlacement3D</c> (11 declared names) the object does not implement at all. The object
+    /// is what must be asked. The walk runs over identifiers up to <paramref name="max"/> and does NOT
+    /// stop at a miss: on these objects members lie in the ranges 500, 800, 2000, 3000 and 6500, so an
+    /// early stop would turn "did not look" into "absent".
     /// </remarks>
     public static List<(int MemId, string Name)> MemberNames(object comObject, int max = 8192)
     {
@@ -152,7 +146,7 @@ internal static class Late
                 }
                 catch (Exception)
                 {
-                    // Незанятый идентификатор.
+                    // An unoccupied identifier.
                 }
             }
         }
@@ -222,12 +216,10 @@ internal static class Late
         }
     }
 
-    /// <summary>
-    /// A VARIANT is 16 bytes on x64 (two shorts of type/reserved, four bytes, then an eight-byte
+    /// <summary>A VARIANT is 16 bytes on x64 (two shorts of type/reserved, four bytes, then an eight-byte
     /// payload). Arguments go into rgvarg in REVERSE logical order — that is the documented
     /// convention, and getting it backwards passes the right value to the wrong parameter without
-    /// complaining.
-    /// </summary>
+    /// complaining.</summary>
     private static IntPtr BuildArguments(IReadOnlyList<object?> args)
     {
         if (args.Count == 0)

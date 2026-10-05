@@ -6,11 +6,8 @@ using Kompas6Constants3D;
 
 namespace KompasMcp.Api7Probe;
 
-/// <summary>
-/// SM-07 (queue B2): the four native-hole modes that have never been executed.
-/// </summary>
+/// <summary>SM-07 (queue B2): the four native-hole modes that have never been executed.</summary>
 /// <remarks>
-/// <para>
 /// The probe in <see cref="HoleProbe"/> settled the base mode — a cylindrical through hole, created
 /// through API7, cutting exactly 250π mm³ with the millimetre reading proved by a 0.01 control. Every
 /// rung there uses <c>ksHTBase</c>. The queue needs four more, and none of them has ever run:
@@ -18,13 +15,10 @@ namespace KompasMcp.Api7Probe;
 /// <c>position_off_origin</c>. So this probe measures each one instead of assuming that "the hole
 /// works" transfers to "the hole's variants work" — the two are different claims and the second is
 /// the one the release profile requires.
-/// </para>
-/// <para>
 /// <b>Proof standard.</b> Same as the rest of the program: a non-null object and a <c>true</c> from
 /// <c>Update()</c> are not results. Each mode is judged on the material it actually removed, against
 /// an analytic expectation computed from the mode's own geometry — and where an expectation cannot be
 /// written down without guessing, the step says UNKNOWN rather than rounding to PASS.
-/// </para>
 /// </remarks>
 internal sealed class HoleModesProbe
 {
@@ -36,14 +30,12 @@ internal sealed class HoleModesProbe
     private static double ThroughHole(double diameterMm) =>
         Math.PI * diameterMm * diameterMm / 4d * PlateThickness;
 
-    /// <summary>
-    /// Counterbore: the pilot through hole plus the <em>annular</em> recess. The recess is an annulus,
+    /// <summary>Counterbore: the pilot through hole plus the <em>annular</em> recess. The recess is an annulus,
     /// not a full cylinder — the mode removes only the material between the pilot wall and the bore
     /// wall, because the pilot's own volume is already accounted for by the through hole. Measured, not
     /// assumed: with pilot Ø10, bore Ø18 and depth 4 the probe removed 703.7167544041131 mm³ beyond the
     /// through hole, and π/4·(18²−10²)·4 = 703.7167544041137 — agreement to every printed digit. The
-    /// first draft of this formula added a full Ø18 cylinder instead and so double-counted the pilot.
-    /// </summary>
+    /// first draft of this formula added a full Ø18 cylinder instead and so double-counted the pilot.</summary>
     private static double Counterbore(double pilotMm, double boreMm, double boreDepthMm) =>
         ThroughHole(pilotMm)
         + Math.PI / 4d * (boreMm * boreMm - pilotMm * pilotMm) * boreDepthMm;
@@ -210,16 +202,12 @@ internal sealed class HoleModesProbe
         }
     }
 
-    /// <summary>
-    /// How many processes a single headless session legitimately leaves behind on this build. Set from
+    /// <summary>How many processes a single headless session legitimately leaves behind on this build. Set from
     /// the measured behaviour of <c>Quit()</c> in SM-03 (it does not terminate KOMPAS.exe), so a
-    /// leftover is not counted as a leak — only a leftover *beyond* the session's own is.
-    /// </summary>
+    /// leftover is not counted as a leak — only a leftover *beyond* the session's own is.</summary>
     private const int _expectedLeftovers = 2;
 
-    /// <summary>
-    /// M.1 — what the live <c>IHole3D</c> actually offers, asked rather than read off a document.
-    /// </summary>
+    /// <summary>M.1 — what the live <c>IHole3D</c> actually offers, asked rather than read off a document.</summary>
     /// <remarks>
     /// The four modes need members that the base mode never touched: a countersink angle, a bore
     /// diameter and depth, a bottom shape. Whether those exist on this interface — and under which
@@ -374,7 +362,7 @@ internal sealed class HoleModesProbe
 
     // ══════════════════════════════════════════════════════════════ the four modes ══
 
-    /// <summary>M.2 — цековка: сквозное отверстие с цилиндрической выточкой у входа.</summary>
+    /// <summary>M.2 — counterbore: a through hole with a cylindrical counterbore at the entry.</summary>
     private void ThroughCounterbore()
     {
         const double pilot = 10d;
@@ -408,17 +396,12 @@ internal sealed class HoleModesProbe
         });
     }
 
-    /// <summary>
-    /// M.3 — зенковка. The mode whose geometry had to be read off the object rather than assumed.
-    /// </summary>
+    /// <summary>M.3 — countersink. The mode whose geometry had to be read off the object rather than assumed.</summary>
     /// <remarks>
-    /// <para>
     /// The first measurement showed the parameters taking effect (the material removed was no longer the
     /// bare pilot) but not matching the textbook frustum. The step therefore walks the mode's own inputs
     /// — four angles at one depth, then three depths at one angle, then a second mouth diameter — and
     /// reads a convention off the table instead of tuning a constant until something matches.
-    /// </para>
-    /// <para>
     /// The table returned an exact rule: the volume removed beyond the pilot is <c>π/3 · M · h</c>, where
     /// <c>h</c> is the <em>depth the object itself reports</em> — and, crucially,
     /// <c>CountersinkDepth</c> is a <em>derived</em> property. Writing 2, 4 or 6 changes nothing and all
@@ -427,7 +410,6 @@ internal sealed class HoleModesProbe
     /// is constant across all three angles, which is what makes the rule a rule rather than a fit. The
     /// candidate <c>M = (rM−3)² + (rM−3)(rM−5) + (rM−5)²</c> is checked against every row — including a
     /// second mouth diameter, which is the row that distinguishes it from the alternatives.
-    /// </para>
     /// </remarks>
     private void ThroughCountersink()
     {
@@ -525,11 +507,9 @@ internal sealed class HoleModesProbe
         }
     }
 
-    /// <summary>
-    /// One countersink measurement: a fresh plate, the mode applied, and the material removed beyond the
+    /// <summary>One countersink measurement: a fresh plate, the mode applied, and the material removed beyond the
     /// pilot. Returns the extra volume, a line describing what the object read back, and the depth the
-    /// object <em>actually</em> reports — which is the input the volume rule is built on.
-    /// </summary>
+    /// object <em>actually</em> reports — which is the input the volume rule is built on.</summary>
     private (double? Removed, string Read, double? ReportedDepth) MeasureCountersink(
         ProbeStep step, double pilot, double mouth, double angle, double depth)
     {
@@ -596,7 +576,7 @@ internal sealed class HoleModesProbe
         }
     }
 
-    /// <summary>M.4 — глухое отверстие с плоским дном.</summary>
+    /// <summary>M.4 — blind hole with a flat bottom.</summary>
     private void BlindFlatBottom()
     {
         const double diameter = 10d;
@@ -625,12 +605,9 @@ internal sealed class HoleModesProbe
         });
     }
 
-    /// <summary>
-    /// M.5 — положение вне начала координат. Walked as a table of placement routes rather than one
-    /// guessed route, because the base run and the C6 note between them tried only two.
-    /// </summary>
+    /// <summary>M.5 — position away from the origin. Walked as a table of placement routes rather than one
+    /// guessed route, because the base run and the C6 note between them tried only two.</summary>
     /// <remarks>
-    /// <para>
     /// C6 recorded <c>AssociationVertex</c> changing nothing and <c>LocalCoordinateSystem</c> returning
     /// null. Both were tried with what the earlier probe happened to have to hand, and neither is the
     /// only route the declaration offers. The declaration has <c>DepthVertex</c>, <c>DepthFace</c> and
@@ -638,13 +615,10 @@ internal sealed class HoleModesProbe
     /// <c>DirectionObject</c>, <c>Vector</c>, <c>OffsetType</c> and <c>Point3DParamSurface</c>. The
     /// step asks each one to move the hole and reads the position back off the body, so a route is
     /// judged by where the hole landed and not by what it accepted.
-    /// </para>
-    /// <para>
     /// The candidate C6 listed as <c>IHoleDisposal.BasePoint</c> does not exist: the only
     /// <c>BasePoint</c> in the type library belongs to <c>IScaling3D</c> and
     /// <c>IToleranceParam.BasePointPos</c> to form tolerances. That is recorded here because a route
     /// named in a catalogue entry but absent from the interface is a fact worth keeping.
-    /// </para>
     /// </remarks>
     private void PositionOffOrigin()
     {
@@ -719,13 +693,11 @@ internal sealed class HoleModesProbe
         }
     }
 
-    /// <summary>
-    /// M.5b — the adapter's own sequence, replayed exactly: <c>Add()</c>, the M.5 placement writes,
+    /// <summary>M.5b — the adapter's own sequence, replayed exactly: <c>Add()</c>, the M.5 placement writes,
     /// then the mode brought to completion on the SAME object, then reads. M.5 moved the hole and the
     /// adapter did not, despite issuing the same three writes; the difference has to be visible, not
     /// argued about, so this step runs both orders side by side on identical plates and prints where
-    /// the axis lands in each.
-    /// </summary>
+    /// the axis lands in each.</summary>
     /// <remarks>
     /// The two candidate differences that M.5 cannot separate, because it only ever ran one of them:
     /// <list type="number">
@@ -885,10 +857,8 @@ internal sealed class HoleModesProbe
         }
     }
 
-    /// <summary>
-    /// One placement route: fresh plate, the route applied, and the hole's axis read back off the body.
-    /// Returns the measured axis origin, or null with a line saying why the route produced no hole.
-    /// </summary>
+    /// <summary>One placement route: fresh plate, the route applied, and the hole's axis read back off the body.
+    /// Returns the measured axis origin, or null with a line saying why the route produced no hole.</summary>
     private (double[]? Placed, string Note) MeasurePlacement(
         ProbeStep step, string route, double diameter, double offsetX, double offsetY)
     {
@@ -1254,11 +1224,9 @@ internal sealed class HoleModesProbe
         return _holes is not null;
     }
 
-    /// <summary>
-    /// The largest face by area, transferred into API7. Copied from the base hole probe's own route
+    /// <summary>The largest face by area, transferred into API7. Copied from the base hole probe's own route
     /// rather than re-derived: the base surface is what makes a hole land on the plate's top face,
-    /// and a second implementation of it would be a second thing to get wrong.
-    /// </summary>
+    /// and a second implementation of it would be a second thing to get wrong.</summary>
     private KompasAPI7.IModelObject? TopFace(ProbeStep step)
     {
         if (_part.GetMainBody() is not ksBody body || body.FaceCollection() is not ksFaceCollection faces)

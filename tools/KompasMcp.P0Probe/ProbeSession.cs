@@ -7,7 +7,7 @@ using KompasMcp.Api5Adapter.Sta;
 namespace KompasMcp.P0Probe;
 
 /// <summary>
-/// The one КОМПАС instance the probe talks to. Holding it in a single place is the point:
+/// The one KOMPAS instance the probe talks to. Holding it in a single place is the point:
 /// the historical scripts called <c>Activator.CreateInstance</c> per run and leaked processes
 /// (spec 4.3), and the probe must demonstrate the opposite behaviour.
 /// </summary>
@@ -43,7 +43,7 @@ internal static class ProbeSession
 /// Why dump metadata instead of recalling it: every signature guess in an adapter is a bug that
 /// only shows up at 3 a.m. against a real model. The interop assembly is the vendor's own
 /// statement about the API of the version actually installed, so it is the source of truth here.
-/// Reflection (not <c>dynamic</c>) is used throughout the probe because КОМПАС interfaces are
+/// Reflection (not <c>dynamic</c>) is used throughout the probe because KOMPAS interfaces are
 /// custom vtable interfaces: late binding through IDispatch is not guaranteed to exist.
 /// </remarks>
 internal static class InteropFacts

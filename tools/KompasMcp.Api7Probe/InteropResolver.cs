@@ -5,7 +5,7 @@ using Microsoft.Win32;
 namespace KompasMcp.Api7Probe;
 
 /// <summary>
-/// Loads the vendor КОМПАС interop assemblies from the installation at run time.
+/// Loads the vendor KOMPAS interop assemblies from the installation at run time.
 /// </summary>
 /// <remarks>
 /// This is the resolution LOGIC of <c>src/KompasMcp.Api5Adapter/KompasInteropResolver.cs</c>,
@@ -34,7 +34,7 @@ internal static class InteropResolver
     public static IReadOnlyDictionary<string, string> LoadedFrom { get; private set; }
         = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Assembly names the resolver is allowed to satisfy from the КОМПАС installation.</summary>
+    /// <summary>Assembly names the resolver is allowed to satisfy from the KOMPAS installation.</summary>
     private static readonly string[] OwnedPrefixes =
     {
         "Interop.Kompas",

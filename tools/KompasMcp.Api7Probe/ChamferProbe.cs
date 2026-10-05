@@ -7,41 +7,32 @@ using KompasAPI7;
 
 namespace KompasMcp.Api7Probe;
 
-/// <summary>
-/// Проба F — фаска (SM-11): чем именно КОМПАС-3D v24 её строит, правит и переживает перезагрузку.
-/// </summary>
+/// <summary>Probe F — the chamfer (SM-11): what exactly KOMPAS-3D v24 builds, edits and survives a reload.</summary>
 /// <remarks>
-/// <para>
-/// Основание (уточнение заказчика от 12.09.2026): наличие <c>ksChamferDefinition</c> и
-/// <c>o3d_chamfer = 33</c> — найденный маршрут, а НЕ подтверждённая поддержка. Значит ответ даёт
-/// только измерение: объём, перечитанные параметры и геометрия граней до и после. Ни ненулевой
-/// объект, ни <c>true</c> от <c>Create()</c>/`Update()`, ни S_OK доказательством не считаются
-/// (ADR-003 §3).
-/// </para>
-/// <para>
-/// <b>Эталон аналитический и он выбран так, чтобы угол и катеты читались из одного числа.</b>
-/// Пластина 100×80×10 (V₀ = 80000), фаска по четырём ВЕРТИКАЛЬНЫМ угловым рёбрам длиной 10 мм:
-/// каждое ребро снимает призму с прямоугольным треугольником в сечении, катеты d₁ и d₂ →
-/// ΔV = 4 · (d₁·d₂/2) · 10 = 20·d₁·d₂. Для равных катетов 2×2 это ровно 80 мм³ (V = 79920),
-/// для 3×3 — 180. Четыре угловых ребра не влияют друг на друга (между ними нет общего угла при
-/// вершине в плоскости XY), поэтому формула точная, а не приближённая.
-/// </para>
-/// <para>
-/// <b>Что именно разрешает эта проба.</b> (1) работает ли маршрут API5 вообще и правится ли
-/// признак на месте; (2) что значит <c>transfer</c> в <c>SetChamferParam</c> — числом, а не по
-/// описанию «признак направления фаски»; (3) единицы <c>IChamfer.Angle</c> в API7 (градусы или
-/// радианы) и какое из двух толкований угла («от какой стороны катет») реализовано — по ΔV и по
-/// площади смежной грани; (4) семантика <c>IChamfer.Direction</c> — ΔV её не различает
-/// (площадь треугольника симметрична к перестановке катетов), поэтому различатор — площадь
-/// верхней грани; (5) видит ли API7 фаску, созданную API5, и правится ли она типизированно;
-/// (6) переживает ли признак save→close→reopen и остаётся ли редактируемым после;
-/// (7) что происходит на заведомо неверном параметре.
-/// </para>
-/// <para>
-/// Порядок шагов — часть измерения (вывод пробы E): сценарии, которые могут оставить модель с
-/// нечитаемым числом, идут на собственных документах и после решающих шагов, чтобы не съедать
-/// базлайн. Каждый шаг записывает и ожидаемое число, и полученное.
-/// </para>
+/// ASSUMPTION: per the customer's clarification of 12.09.2026, the presence of <c>ksChamferDefinition</c>
+/// and <c>o3d_chamfer = 33</c> is a FOUND route, NOT proven support. So only measurement gives the
+/// answer: volume, re-read parameters and face geometry before and after. Neither a non-null object,
+/// nor <c>true</c> from <c>Create()</c>/<c>Update()</c>, nor S_OK counts as proof (ADR-003 §3).
+/// TEST: the reference is analytical and chosen so that the angle and the legs are read from one
+/// number. Plate 100×80×10 (V₀ = 80000), chamfer on four VERTICAL corner edges 10 mm long: each edge
+/// removes a prism with a right triangle in section, legs d₁ and d₂ → ΔV = 4 · (d₁·d₂/2) · 10 =
+/// 20·d₁·d₂. For equal legs 2×2 this is exactly 80 mm³ (V = 79920), for 3×3 — 180. The four corner
+/// edges do not affect each other (there is no common vertex angle between them in the XY plane), so
+/// the formula is exact, not approximate.
+/// TEST: what this probe resolves. (1) whether the API5 route works at all and whether the feature is
+/// edited in place; (2) what <c>transfer</c> in <c>SetChamferParam</c> means — a number, not the
+/// description "chamfer direction flag"; (3) the units of <c>IChamfer.Angle</c> in API7 (degrees or
+/// radians) and which of the two angle interpretations ("which side the leg is measured from") is
+/// implemented — by ΔV and by the area of the adjacent face; (4) the semantics of
+/// <c>IChamfer.Direction</c> — ΔV does not tell it apart (the triangle area is symmetric under a swap
+/// of the legs), so the discriminator is the area of the TOP face; (5) whether API7 sees a chamfer
+/// created by API5 and whether it is edited in a typed way; (6) whether the feature survives
+/// save→close→reopen and stays editable afterwards; (7) what happens on a deliberately invalid
+/// parameter.
+/// TEST: the step order is part of the measurement (conclusion of probe E): scenarios that may leave
+/// the model with an unreadable number run on their own documents and after the decisive steps, so as
+/// not to consume the baseline. Each step records both the expected number and the obtained one.
+/// History: docs/decisions/probes.md#chamfer
 /// </remarks>
 internal sealed class ChamferProbe
 {
@@ -76,7 +67,7 @@ internal sealed class ChamferProbe
 
         try
         {
-            // Решающий вопрос — работает ли маршрут API5. Он идёт первым и на своём документе.
+            // The decisive question — does the API5 route work. It goes first and on its own document.
             var api5 = Api5CreateAndEdit();
             if (api5 is not null)
             {
@@ -106,7 +97,7 @@ internal sealed class ChamferProbe
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════════ сессия ══
+    // ═══════════════════════════════════════════════════════════════════════ session ══
     private void Launch()
     {
         var step = _report.Begin("F.1", "Свой невидимый экземпляр и доказательство PID",
@@ -186,11 +177,9 @@ internal sealed class ChamferProbe
         }
     }
 
-    // ════════════════════════════════════════════════════ маршрут API5 ══
-    /// <summary>
-    /// Создание фаски двумя катетами средствами API5 и её правка на месте.
-    /// </summary>
-    /// <returns>Пластина с фаской — она же используется для шага reopen.</returns>
+    // ════════════════════════════════════════════════════ API5 route ══
+    /// <summary>Creates a two-leg chamfer via API5 and edits it in place.</summary>
+    /// <returns>The plate with the chamfer — it is also used for the reopen step.</returns>
     private Plate? Api5CreateAndEdit()
     {
         var step = _report.Begin("F.2", "API5: фаска 2×2 по четырём вертикальным рёбрам",
@@ -246,7 +235,7 @@ internal sealed class ChamferProbe
         step.Data["faces"] = Api5.FaceCount(plate.Part);
         step.Data["delta"] = Delta(volume);
 
-        // Обратное чтение — с НОВОГО объекта определения, а не тем же RCW, которым писали.
+        // Read-back — from a NEW definition object, not the same RCW we wrote through.
         var readBack = ReadChamferParam(feature, step, "после Create");
 
         var removed = Removed(volume);
@@ -262,7 +251,7 @@ internal sealed class ChamferProbe
             return null;
         }
 
-        // Правка на месте: 2×2 → 3×3, ожидание ΔV = 20·9 = 180.
+        // Edit in place: 2×2 → 3×3, expectation ΔV = 20·9 = 180.
         var edit = _report.Begin("F.3", "API5: правка катетов существующей фаски 2→3",
             "Применяется ли правка параметров того же признака (для фаски это и есть edit)?");
         var writeTarget = feature.GetDefinition() as ksChamferDefinition;
@@ -293,11 +282,9 @@ internal sealed class ChamferProbe
         return plate;
     }
 
-    /// <summary>
-    /// Что делает <c>transfer</c> у <c>SetChamferParam</c>. ΔV этот выбор не различает: площадь
-    /// треугольника симметрична к перестановке катетов, поэтому различатор — площадь ВЕРХНЕЙ грани
-    /// (катет, отложенный на ней, съедаёт её с каждой из четырёх сторон).
-    /// </summary>
+    /// <summary>What <c>transfer</c> in <c>SetChamferParam</c> does. ΔV does not tell this choice apart:
+    /// the triangle area is symmetric under a swap of the legs, so the discriminator is the area of
+    /// the TOP face (a leg laid out on it consumes it from each of the four sides).</summary>
     private void Api5DirectionSemantics()
     {
         var step = _report.Begin("F.4", "API5: семантика transfer при неравных катетах 2×4",
@@ -351,7 +338,7 @@ internal sealed class ChamferProbe
                   "толкование имени параметра.");
     }
 
-    /// <summary>save → закрыть → открыть заново, затем правка того же признака.</summary>
+    /// <summary>save → close → reopen, then edit the same feature.</summary>
     private void ReopenAndEdit(Plate plate)
     {
         var step = _report.Begin("F.5", "API5: save→close→reopen, перечитать и снова править",
@@ -377,7 +364,7 @@ internal sealed class ChamferProbe
         step.Data["features"] = Api5.ReadFeatures(part, step).Select(f => f.Describe()).ToArray();
         step.Data["faces_after_reopen"] = Api5.FaceCount(part);
 
-        // Признак ищется по дереву, а не по памяти прогона: это и есть проверка «по модели».
+        // The feature is found through the tree, not from run memory: this is the "by the model" check.
         ksEntity? found = null;
         if (part.EntityCollection(OperationElement) is ksEntityCollection collection)
         {
@@ -428,8 +415,8 @@ internal sealed class ChamferProbe
         Close(reopened);
     }
 
-    // ════════════════════════════════════════════════════ маршрут API7 ══
-    /// <summary>Видна ли фаска, созданная API5, как объект API7 и берётся ли она типизированно.</summary>
+    // ════════════════════════════════════════════════════ API7 route ══
+    /// <summary>Whether a chamfer created by API5 is visible as an API7 object and can be obtained in a typed way.</summary>
     private void SeeApi5ChamferInApi7()
     {
         var step = _report.Begin("F.8", "API7: что видно из фаски, созданной API5",
@@ -504,7 +491,7 @@ internal sealed class ChamferProbe
         Close(plate.Doc);
     }
 
-    /// <summary>Фаска двумя катетами, созданная целиком в API7.</summary>
+    /// <summary>A two-leg chamfer created entirely in API7.</summary>
     private void Api7CreateTwoDistances()
     {
         var step = _report.Begin("F.9", "API7: Chamfers.Add, двумя катетами 2×2",
@@ -559,10 +546,9 @@ internal sealed class ChamferProbe
         Close(plate.Doc);
     }
 
-    /// <summary>
-    /// Фаска «расстояние + угол» — тот режим, для которого в <c>ksChamferDefinition</c> члена нет.
-    /// Гипотезы единицы угла перебираются явно: выбор делает измеренное число, а не соглашение.
-    /// </summary>
+    /// <summary>The "distance + angle" chamfer — the mode for which <c>ksChamferDefinition</c> has no
+    /// member. The angle-unit hypotheses are enumerated explicitly: the measured number makes the
+    /// choice, not a convention.</summary>
     private void Api7DistanceAndAngle()
     {
         var step = _report.Begin("F.10", "API7: расстояние + угол (ksChamferSideAngle)",
@@ -609,8 +595,8 @@ internal sealed class ChamferProbe
         step.Data["read_back_distance1"] = Api5.Raw(TryValue(() =>
             container.Chamfers[0] is IChamfer c ? c.Distance1 : double.NaN));
 
-        // Толкования: катет-второй = d·tan(α) (градусы), d/tan(α) (градусы, угол от другой грани),
-        // те же два с радианами и тот же угол в радианах буквально.
+        // Interpretations: second leg = d·tan(α) (degrees), d/tan(α) (degrees, angle from the other
+        // face), the same two with radians, and the same angle literally in radians.
         var tanDeg = Distance * Math.Tan(Degrees * Math.PI / 180d);
         var cotDeg = Distance / Math.Tan(Degrees * Math.PI / 180d);
         var candidates = new Dictionary<string, double>
@@ -643,10 +629,8 @@ internal sealed class ChamferProbe
         Close(plate.Doc);
     }
 
-    /// <summary>
-    /// Направление фаски в API7. ΔV её не различает, различает площадь грани, с которой фаска
-    /// снимает катет, — на пластине с неравными катетами.
-    /// </summary>
+    /// <summary>The chamfer direction in API7. ΔV does not tell it apart; the discriminator is the
+    /// area of the face from which the chamfer removes a leg — on a plate with unequal legs.</summary>
     private void Api7Direction()
     {
         var step = _report.Begin("F.11", "API7: Direction при 2×4",
@@ -702,7 +686,7 @@ internal sealed class ChamferProbe
                   "боковых граней (ΔV её не различает, площадь треугольника симметрична).");
     }
 
-    /// <summary>Заведомо неверный параметр: обязан не войти в модель.</summary>
+    /// <summary>A deliberately invalid parameter: it must not enter the model.</summary>
     private void RejectInvalid()
     {
         var step = _report.Begin("F.12", "Отрицательный случай: катет 0 и катет больше грани",
@@ -748,7 +732,7 @@ internal sealed class ChamferProbe
                   "Что из этого следует для контракта, решается по отчёту, а не здесь.");
     }
 
-    // ═══════════════════════════════════════════════════════════════════ построение ══
+    // ═══════════════════════════════════════════════════════════════════ construction ══
     private Plate? NewPlate(ProbeStep parent, string name, out List<ksEntity> cornerEdges)
     {
         cornerEdges = new List<ksEntity>();
@@ -798,11 +782,9 @@ internal sealed class ChamferProbe
         }
     }
 
-    /// <summary>
-    /// Четыре вертикальных угловых ребра конечного тела — тот же критерий отбора, что в пробе P2.2:
-    /// из <c>GetMainBody() → FaceCollection → EdgeCollection</c>, а не из <c>EntityCollection(o3d_edge)</c>,
-    /// где лежат и эскизные контуры.
-    /// </summary>
+    /// <summary>The four vertical corner edges of the final body — the same selection criterion as in
+    /// probe P2.2: from <c>GetMainBody() → FaceCollection → EdgeCollection</c>, not from
+    /// <c>EntityCollection(o3d_edge)</c>, which also holds sketch contours.</summary>
     private static List<ksEntity> VerticalCornerEdges(ksPart part, ProbeStep step)
     {
         var chosen = new List<ksEntity>();
@@ -927,7 +909,7 @@ internal sealed class ChamferProbe
 
     private static void Rebuild(IModelContainer container, Plate plate)
     {
-        // RebuildModel принадлежит IPart7 (измерено пробой E); типизированный вызов, не IDispatch.
+        // RebuildModel belongs to IPart7 (measured by probe E); a typed call, not IDispatch.
         if (container is IPart7 part7)
         {
             part7.RebuildModel(true);
@@ -936,7 +918,7 @@ internal sealed class ChamferProbe
         plate.Doc.RebuildDocument();
     }
 
-    // ═══════════════════════════════════════════════════════════════════ измерения ══
+    // ═══════════════════════════════════════════════════════════════════ measurements ══
     private static double? Removed(double? volume) =>
         volume is double v && v > 0 ? PlateVolume - v : null;
 
@@ -965,13 +947,10 @@ internal sealed class ChamferProbe
         }
     }
 
-    /// <summary>
-    /// Площади боковых плоских граней (нормаль вдоль X или Y) — вот что различает направление
-    /// фаски на вертикальном ребре: катет, отложенный от грани, съедает её площадь на d·h.
-    /// Площадь верхней грани для равных по произведению катетов не меняется, поэтому она
-    /// различатором не является (ошибочная версия этого шага давала бы ложное «transfer ни на что
-    /// не влияет»).
-    /// </summary>
+    /// <summary>Areas of the lateral planar faces (normal along X or Y) — this is what tells the
+    /// chamfer direction apart on a vertical edge: a leg laid out from a face consumes its area by
+    /// d·h. The area of the top face does not change for legs equal in product, so it is not a
+    /// discriminator (a wrong version of this step would give the false "transfer affects nothing").</summary>
     private static string SideFaceAreas(ksPart part)
     {
         var byAxis = new Dictionary<string, List<string>>(StringComparer.Ordinal)
@@ -1004,8 +983,9 @@ internal sealed class ChamferProbe
                 continue;
             }
 
-            // Оси нормале: |nx|≈1 → грань перпендикулярна X (её площадь = 80·10 до фаски),
-            // |ny|≈1 → перпендикулярна Y (100·10). Прочие (наклонные плоскости фаски, торцы) не нужны.
+            // Normal axis: |nx|≈1 → the face is perpendicular to X (its area = 80·10 before the
+            // chamfer), |ny|≈1 → perpendicular to Y (100·10). The rest (the chamfer's slanted planes,
+            // the ends) are not needed.
             var axis = Math.Abs(Math.Abs(nx) - 1d) < 1e-6 ? "x"
                 : Math.Abs(Math.Abs(ny) - 1d) < 1e-6 ? "y"
                 : null;
@@ -1047,7 +1027,7 @@ internal sealed class ChamferProbe
         }
         catch (Exception)
         {
-            // Закрытие диагностикой не является: осиротевший документ заметен на шаге F.Z.
+            // Closing is not diagnostic: an orphaned document is visible at step F.Z.
         }
     }
 

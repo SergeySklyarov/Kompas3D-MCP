@@ -6,28 +6,18 @@ using KompasAPI7;
 
 namespace KompasMcp.Api7Probe;
 
-/// <summary>
-/// Проба B3 — разделение тела плоскостью (SM-16) и отсечение по одну сторону (SM-16.cut_by_plane).
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Что именно неизвестно.</b> Каталог знает <c>ISplitSolid</c> по библиотеке типов и держит
-/// открытый вопрос OQ-A18: у <c>ISplitSolid</c> объявлен только <c>CutObjects</c>, а члена «набор
-/// сохраняемых частей» нет, тогда как в интерфейсе КОМПАС части выбираются диалогом «Изменение
-/// набора тел». Здесь измеряется, что реально происходит с частями по умолчанию, и что делает
-/// <c>ICut.Direction</c>.
-/// </para>
-/// <para>
-/// <b>Плоскость задаётся ТРЕМЯ ТОЧКАМИ модели</b> (<c>o3d_plane3Points</c>): это общий маршрут,
-/// который выражает и «точку с нормалью», и наклонную постановку, и не зависит от того, какая
-/// базовая плоскость выбрана. Порядок точек задаёт нормаль, поэтому инверсия нормали — это
-/// перестановка двух точек, и она измеряется отдельно.
-/// </para>
-/// <para>
-/// <b>Эталон §6.5.</b> Брусок <c>[0,40]×[0,30]×[0,20]</c>, V=24000, плоскость <c>x=10</c>:
-/// части 6000 при <c>x∈[0,10]</c> и 18000 при <c>x∈[10,40]</c>. Ожидания печатаются до опыта.
-/// </para>
-/// </remarks>
+/// <summary>Probe B3 — splitting a body by a plane (SM-16) and cutting to one side
+/// (SM-16.cut_by_plane).</summary>
+/// <remarks>DOC: the catalogue knows <c>ISplitSolid</c> from the type library and holds open question
+/// OQ-A18 — <c>ISplitSolid</c> declares only <c>CutObjects</c>, with no "set of kept parts" member,
+/// whereas in the KOMPAS interface the parts are chosen by the "Change body set" dialog. This measures
+/// what actually happens to the parts by default, and what <c>ICut.Direction</c> does. INVARIANT: the
+/// plane is given by THREE model points (<c>o3d_plane3Points</c>) — a common route that expresses both
+/// "point with normal" and an oblique setup and does not depend on which base plane is chosen; the point
+/// order sets the normal, so inverting the normal is a swap of two points, measured separately.
+/// MEASURED fixture §6.5: bar <c>[0,40]×[0,30]×[0,20]</c>, V=24000, plane <c>x=10</c> — parts 6000 at
+/// <c>x∈[0,10]</c> and 18000 at <c>x∈[10,40]</c>; expectations are printed before the experiment.
+/// History: docs/decisions/probes.md#split</remarks>
 internal sealed class SplitProbe
 {
     private const double Ax0 = 0d, Ax1 = 40d, Ay0 = 0d, Ay1 = 30d, Az = 20d;
@@ -106,11 +96,9 @@ internal sealed class SplitProbe
 
     // ══════════════════════════════════════════════════════════════ routes ══
 
-    /// <summary>
-    /// Вспомогательная плоскость через <c>Planes3D.Add(o3d_plane3Points)</c> и три точки модели.
-    /// Проверяется не «создалась ли», а выражает ли этот маршрут произвольную плоскость: точки
-    /// задаются в координатах МОДЕЛИ, а не в локальной системе плоскости.
-    /// </summary>
+    /// <summary>Auxiliary plane through <c>Planes3D.Add(o3d_plane3Points)</c> and three model points.
+    /// TEST: the check is not "was it created" but whether this route expresses an arbitrary plane —
+    /// the points are given in MODEL coordinates, not in the plane's local system.</summary>
     private void AuxiliaryPlane()
     {
         var step = _report.Begin("SP.1", "Вспомогательная плоскость по трём точкам модели",
@@ -247,7 +235,7 @@ internal sealed class SplitProbe
         }
     }
 
-    /// <summary>Плоскость вне тела: резать нечего. Вопрос — отказ это или пустой результат.</summary>
+    /// <summary>A plane outside the body: nothing to cut. The question is whether that is a refusal or an empty result.</summary>
     private void PlaneOutsideBody()
     {
         var step = _report.Begin("SP.3", "Плоскость вне тела",
@@ -255,8 +243,8 @@ internal sealed class SplitProbe
         PlaneCase(step, 100d, "x=100 вне бруска", expectBodies: null, expectTotal: 24000d);
     }
 
-    /// <summary>Касательная плоскость: проходит ровно по грани x=0. Вырожденный случай — тело
-    /// делится на «всё» и «ничего», и правильный ответ здесь не очевиден заранее.</summary>
+    /// <summary>Tangent plane: it passes exactly along the face x=0. A degenerate case — the body
+    /// splits into "everything" and "nothing", and the right answer is not obvious in advance.</summary>
     private void TangentPlane()
     {
         var step = _report.Begin("SP.4", "Касательная плоскость x=0",
@@ -264,8 +252,8 @@ internal sealed class SplitProbe
         PlaneCase(step, 0d, "x=0 по грани", expectBodies: null, expectTotal: 24000d);
     }
 
-    /// <summary>Инверсия нормали: те же три точки, но две переставлены. Если результат не зависит
-    /// от порядка точек, то «сторона» у разделения не выражается плоскостью вовсе.</summary>
+    /// <summary>Normal inversion: the same three points, but two swapped. If the result does not depend
+    /// on the point order, then the split's "side" is not expressed by the plane at all.</summary>
     private void InvertedNormal()
     {
         var step = _report.Begin("SP.5", "Инверсия нормали: перестановка двух точек плоскости",
@@ -378,11 +366,9 @@ internal sealed class SplitProbe
         }
     }
 
-    /// <summary>
-    /// §6.5: «изменить ту же плоскость на x=15 → части 9000 и 15000». Правка идёт по ТОЙ ЖЕ
-    /// плоскости: переставляются координаты точек, затем перестроение. Это проверяет, что признак
-    /// разделения читает опору заново, а не помнит первый расчёт.
-    /// </summary>
+    /// <summary>§6.5: change the same plane to x=15 → parts 9000 and 15000. TEST: the edit goes
+    /// through the SAME plane — the point coordinates are moved, then a rebuild — which checks that the
+    /// split feature reads its support afresh rather than remembering the first computation.</summary>
     private void EditPlaneAndRebuild()
     {
         var step = _report.Begin("SP.6", "Правка той же плоскости: x=10 → x=15",
@@ -424,7 +410,7 @@ internal sealed class SplitProbe
             step.Data["at_x10"] = Describe(first);
             var splitsBefore = SplitCount(doc);
 
-            // Двигаем ТУ ЖЕ плоскость: все три точки сдвигаются на 5 мм по X.
+            // Move the SAME plane: all three points shift by 5 mm in X.
             foreach (var point in points)
             {
                 point.X += 5d;
@@ -475,11 +461,9 @@ internal sealed class SplitProbe
         }
     }
 
-    /// <summary>
-    /// Отсечение по одну сторону: <c>ICuts.Add()</c>, <c>BuildingType=ksCutByPlane</c>,
-    /// <c>CutObject</c> — та же плоскость, <c>Direction</c> — сторона. Ожидание §6.5: при одном
-    /// значении остаётся V=6000 (x∈[0,10]), при другом V=18000 (x∈[10,40]).
-    /// </summary>
+    /// <summary>Cutting to one side: <c>ICuts.Add()</c>, <c>BuildingType=ksCutByPlane</c>,
+    /// <c>CutObject</c> — the same plane, <c>Direction</c> — the side. MEASURED expectation §6.5: one
+    /// value leaves V=6000 (x∈[0,10]), the other V=18000 (x∈[10,40]).</summary>
     private void CutOneSide()
     {
         var step = _report.Begin("SP.7", "Отсечение по одну сторону: что выбирает Direction",
@@ -531,46 +515,36 @@ internal sealed class SplitProbe
         step.Pass("оба значения Direction измерены раздельно; какая сторона остаётся — в наблюдениях");
     }
 
-    /// <summary>
-    /// Правка опоры СУЩЕСТВУЮЩЕГО признака: какой маршрут действительно меняет результат.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Вопрос поставлен расхождением, а не удобством. Шаг SP.6 менял опору, ПЕРЕДВИГАЯ точки
-    /// построения САМОЙ плоскости, и получил части 9000 и 15000; шаг SP.7 строил отсечение заново в
-    /// СВЕЖЕМ документе на каждое значение <c>Direction</c>. Ни один из этих шагов не проверял
-    /// маршрут «записать в существующий признак ДРУГУЮ опору», а именно он был перенесён в адаптер
-    /// как «правка опоры». Измерение через MCP показало, что он НЕ работает: <c>Update()</c>
-    /// возвращает <c>true</c>, а части остаются прежними (6000 и 18000). Поэтому маршруты измеряются
-    /// здесь раздельно, вместе с отрицательными контролями.
-    /// </para>
-    /// <para>
-    /// ОЖИДАНИЯ ОБЪЯВЛЕНЫ ДО ОПЫТА (брусок A = [0,40]×[0,30]×[0,20], V = 24000; плоскость x = 10):
-    /// <list type="bullet">
-    /// <item>E-A: чтение опоры обратно с существующего признака разделения даёт НЕПУСТОЙ набор, и
-    /// элемент отвечает <c>IPlane3DBy3Points</c>; перенос его трёх точек на +5 по X с <c>Update()</c>
-    /// каждой и перестроением даёт части 9000 и 15000 при неизменном числе признаков;</item>
-    /// <item>E-B (ОТРИЦАТЕЛЬНЫЙ КОНТРОЛЬ к E-A): запись ВТОРОЙ, только что созданной плоскости
-    /// (x = 20) в <c>CutObjects</c> того же существующего признака с <c>Update()</c> и перестроением
-    /// результат НЕ меняет — части остаются 9000 и 15000. Если контроль пройдёт «наоборот», то есть
-    /// части сдвинутся на x = 20, значит маршрут записи опоры рабочий и адаптер надо вернуть к
-    /// нему, а не переписывать на перенос точек;</item>
-    /// <item>E-C: чтение <c>ICut.CutObject</c> обратно и перенос его точек на +5 по X (x = 10 → 15)
-    /// меняет остаток с 6000 на 9000;</item>
-    /// <item>E-D (ОТРИЦАТЕЛЬНЫЙ КОНТРОЛЬ к E-C): смена ТОЛЬКО <c>ICut.Direction</c> на том же
-    /// существующем признаке меняет остаток с 9000 на 15000, если маршрут стороны через запись в
-    /// существующий признак рабочий; если остаток остаётся 9000 — этот маршрут не работает и
-    /// сторону можно менять только вместе с опорой.</item>
-    /// </list>
-    /// </para>
-    /// </remarks>
+    /// <summary>Editing the support of an EXISTING feature: which route really changes the
+    /// result.</summary>
+    /// <remarks>DOC: the question comes from a discrepancy, not from convenience. Step SP.6 changed
+    /// the support by MOVING the construction points of the plane ITSELF and got parts 9000 and 15000;
+    /// step SP.7 rebuilt the cut in a FRESH document for each <c>Direction</c> value. Neither step
+    /// tested the route "write a DIFFERENT support into an existing feature", and it was exactly that
+    /// which was carried into the adapter as "support editing". MEASURED through MCP: that route does
+    /// NOT work — <c>Update()</c> returns <c>true</c> while the parts stay as before (6000 and 18000) —
+    /// so the routes are measured separately here, together with negative controls. ASSUMPTION
+    /// (declared BEFORE the experiment; bar A = [0,40]×[0,30]×[0,20], V = 24000; plane x = 10): E-A —
+    /// reading the support back from an existing split feature gives a NON-EMPTY set and the element
+    /// answers <c>IPlane3DBy3Points</c>; moving its three points by +5 in X with <c>Update()</c> on
+    /// each and a rebuild gives parts 9000 and 15000 with the feature count unchanged. E-B (NEGATIVE
+    /// CONTROL to E-A) — writing a SECOND, just-created plane (x = 20) into <c>CutObjects</c> of the
+    /// same existing feature with <c>Update()</c> and a rebuild does NOT change the result, parts
+    /// staying 9000 and 15000; if the control passes "the other way" (parts shift to x = 20) then the
+    /// support-write route works and the adapter must return to it rather than be rewritten to move
+    /// points. E-C — reading <c>ICut.CutObject</c> back and moving its points by +5 in X (x = 10 → 15)
+    /// changes the remainder from 6000 to 9000. E-D (NEGATIVE CONTROL to E-C) — changing ONLY
+    /// <c>ICut.Direction</c> on the same existing feature changes the remainder from 9000 to 15000 if
+    /// the side route via writing into an existing feature works; if the remainder stays 9000 that route
+    /// does not work and the side can be changed only together with the support.
+    /// History: docs/decisions/probes.md#split</remarks>
     private void EditExistingFeatureSupport()
     {
         var step = _report.Begin("SP.9", "Правка опоры существующего признака: маршрут",
             "Меняет ли результат запись другой опоры в существующий признак — и меняет ли её перенос "
             + "точек самой опоры?");
 
-        // ── разделение: E-A (перенос точек опоры) и E-B (запись второй плоскости) ─────────────
+        // ── split: E-A (move the support points) and E-B (write a second plane) ─────────────
         var doc = NewPart(out var part);
         try
         {
@@ -660,7 +634,7 @@ internal sealed class SplitProbe
                         + " → " + Api5.Raw(SplitCount(doc)));
                 }
 
-                // E-B: отрицательный контроль — запись ВТОРОЙ плоскости в тот же признак.
+                // E-B: negative control — writing a SECOND plane into the same feature.
                 var second = MakePlane(container, planes, 20d, 0d, 0d, "edit-support-x20", step);
                 if (second is not IModelObject secondObject || splitCollection[0] is not ISplitSolid sameSplit)
                 {
@@ -698,7 +672,7 @@ internal sealed class SplitProbe
             TryClose(doc);
         }
 
-        // ── отсечение: E-C (перенос точек опоры) и E-D (смена стороны) ────────────────────────
+        // ── cut: E-C (move the support points) and E-D (change the side) ────────────────────────
         var cutDoc = NewPart(out var cutPart);
         try
         {
@@ -762,7 +736,7 @@ internal sealed class SplitProbe
                                 ? "E-C: подтверждено — остаток 9000"
                                 : "E-C: ОПРОВЕРГНУТО — " + Describe(atX15));
 
-                            // E-D: только сторона.
+                            // E-D: the side only.
                             if (cuts[0] is ICut sameCut)
                             {
                                 sameCut.Direction = true;
@@ -802,12 +776,10 @@ internal sealed class SplitProbe
         step.Pass("маршруты правки опоры измерены раздельно; исходы — в наблюдениях и Data");
     }
 
-    /// <summary>
-    /// Перенос трёх точек построения плоскости на <paramref name="dx"/> по X. Возвращается число
-    /// ПЕРЕДВИНУТЫХ точек: <c>IPlane3DBy3Points.Point1..3</c> объявлены как <c>IModelObject</c>, и
-    /// если какая-то из них не отвечает <c>IPoint3D</c>, переносить нечего — это наблюдение, а не
-    /// повод упасть.
-    /// </summary>
+    /// <summary>Moves the plane's three construction points by <paramref name="dx"/> in X and returns
+    /// the number of points MOVED. INVARIANT: <c>IPlane3DBy3Points.Point1..3</c> are declared as
+    /// <c>IModelObject</c>, and if one of them does not answer <c>IPoint3D</c> there is nothing to move —
+    /// that is an observation, not a reason to crash.</summary>
     private static int MovePointsByX(IPlane3DBy3Points plane, double dx)
     {
         var moved = 0;
@@ -826,10 +798,9 @@ internal sealed class SplitProbe
         return moved;
     }
 
-    /// <summary>
-    /// Первый элемент прочитанного набора <c>CutObjects</c>: интероп отдаёт его то массивом, то
-    /// одним объектом, и предполагать одно из двух значило бы гадать о типе.
-    /// </summary>
+    /// <summary>The first element of the read-back <c>CutObjects</c> set: the interop returns it
+    /// sometimes as an array and sometimes as a single object, and assuming one of the two would be
+    /// guessing at the type.</summary>
     private static object? FirstOf(object? readBack) => readBack switch
     {
         Array array when array.Length > 0 => array.GetValue(0),
@@ -845,32 +816,23 @@ internal sealed class SplitProbe
         _ => 1,
     };
 
-    /// <summary>
-    /// Читаются ли ОПОРА разделения и сторона отсечения ОБРАТНО — то, чего требует действие
-    /// <c>read</c> наряда B3 §7.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Зачем отдельный шаг.</b> Шаг SP.9 измерил, что опора читается с живого признака
-    /// (<c>CutObjects</c> отдаёт объект, отвечающий <c>IPlane3DBy3Points</c>) — но только как ФАКТ
-    /// существования объекта: числа не сверялись ни с чем. Из «объект вернулся» не следует «вернулись
-    /// ТЕ числа», а публиковать чтение опоры в продукте можно только по второму утверждению.
-    /// Шаг SP.7 измерил, что <c>Direction</c> МЕНЯЕТ результат, но обратного чтения там тоже не было.
-    /// </para>
-    /// <para>
-    /// <b>Ожидание объявлено до опыта и точное.</b> Вспомогательная плоскость строится тремя точками
-    /// модели <c>(x,0,0)</c>, <c>(x,1,0)</c>, <c>(x,0,1)</c> (см. <c>MakePlane</c>), и порядок задаёт
-    /// нормаль <c>(p2−p1)×(p3−p1) = (1,0,0)</c>. Значит чтение обязано вернуть ровно эти три точки и
-    /// эту нормаль — не «примерно», а поимённо по <c>Point1..3</c>.
-    /// </para>
-    /// <para>
-    /// <b>Контроль различающий, и он встроен в пару случаев.</b> Опоры при <c>x = 10</c> и
-    /// <c>x = 15</c> отличаются ровно одним числом, поэтому пара A/B различает «читается опора» и
-    /// «читается постоянное»: чтение, отдающее одинаковые точки на РАЗНЫХ опорах, читает не опору.
-    /// Пара C/D различает сторону при ОДНОЙ И ТОЙ ЖЕ опоре: если <c>Direction</c> не читается,
-    /// оба случая дадут одно и то же, и это будет видно.
-    /// </para>
-    /// </remarks>
+    /// <summary>Are the split's SUPPORT and the cut's SIDE read BACK — what the <c>read</c> action of
+    /// order B3 §7 requires.</summary>
+    /// <remarks>DOC: step SP.9 measured that the support is readable from a live feature
+    /// (<c>CutObjects</c> returns an object answering <c>IPlane3DBy3Points</c>) — but only as the FACT
+    /// that the object exists: the numbers were checked against nothing. From "the object came back" it
+    /// does not follow that "THOSE numbers came back", and publishing a support read in the product is
+    /// admissible only by the second statement. Step SP.7 measured that <c>Direction</c> CHANGES the
+    /// result, but there was no read-back there either. MEASURED expectation (declared before the
+    /// experiment, exact): the auxiliary plane is built from three model points <c>(x,0,0)</c>,
+    /// <c>(x,1,0)</c>, <c>(x,0,1)</c> (see <c>MakePlane</c>), and the order sets the normal
+    /// <c>(p2−p1)×(p3−p1) = (1,0,0)</c>, so the read must return exactly these three points and this
+    /// normal — not "approximately" but by name via <c>Point1..3</c>. TEST: the control is
+    /// discriminating and built into the case pair — the supports at <c>x = 10</c> and <c>x = 15</c>
+    /// differ in exactly one number, so pair A/B separates "the support is read" from "a constant is
+    /// read": a read returning identical points on DIFFERENT supports is not reading the support. Pair
+    /// C/D separates the side on ONE AND THE SAME support: if <c>Direction</c> is not read, both cases
+    /// give the same and it will be visible. History: docs/decisions/probes.md#split</remarks>
     private void ReadSupportBack()
     {
         var step = _report.Begin("SP.10", "Читаются ли опора разделения и сторона отсечения ОБРАТНО",
@@ -940,11 +902,9 @@ internal sealed class SplitProbe
             + "различается, и разные опоры читаются по-разному");
     }
 
-    /// <summary>
-    /// Один случай шага SP.10: создать признак (разделение либо отсечение) и прочитать его опору
-    /// ОБРАТНО. <c>cutDirection = null</c> — разделение, иначе отсечение с этой стороной.
-    /// <c>null</c> в ответе — случай не построен, и вызывающий обязан сказать это вслух.
-    /// </summary>
+    /// <summary>One case of step SP.10: create a feature (split or cut) and read its support BACK.
+    /// <c>cutDirection = null</c> means a split, otherwise a cut with that side. INVARIANT: a
+    /// <c>null</c> answer means the case was not built, and the caller must say so out loud.</summary>
     private SupportRead? SupportCase(ProbeStep step, string label, double planeX, bool? cutDirection)
     {
         var doc = NewPart(out var part);
@@ -1027,14 +987,13 @@ internal sealed class SplitProbe
         }
     }
 
-    /// <summary>Прочитанное описание опоры. Каждое поле — «null = не прочитано», не «ноль».</summary>
+    /// <summary>The read-back support description. INVARIANT: each field means "null = not read", not "zero".</summary>
     private sealed record SupportRead(
         double[]? P1, double[]? P2, double[]? P3, double[]? Normal, bool? Direction, string? Note);
 
-    /// <summary>
-    /// Три точки построения опоры и нормаль из них. Нормаль считается по тому же правилу, что и при
-    /// создании — <c>(p2−p1)×(p3−p1)</c>, — иначе сверять было бы нечего.
-    /// </summary>
+    /// <summary>The support's three construction points and the normal from them. INVARIANT: the normal
+    /// is computed by the same rule as at creation — <c>(p2−p1)×(p3−p1)</c> — otherwise there would be
+    /// nothing to compare against.</summary>
     private static SupportRead ReadSupportPoints(object? support)
     {
         if (support is not IPlane3DBy3Points byPoints)
@@ -1071,14 +1030,14 @@ internal sealed class SplitProbe
         return norm < 1e-12 ? n : new[] { n[0] / norm, n[1] / norm, n[2] / norm };
     }
 
-    /// <summary>Совпадает ли прочитанная опора с объявленной: точки построения и нормаль.</summary>
+    /// <summary>Whether the read-back support matches the declared one: construction points and normal.</summary>
     private static bool MatchesPlane(SupportRead read, double planeX) =>
         NearVec(read.P1, new[] { planeX, 0d, 0d })
         && NearVec(read.P2, new[] { planeX, 1d, 0d })
         && NearVec(read.P3, new[] { planeX, 0d, 1d })
         && NearVec(read.Normal, new[] { 1d, 0d, 0d });
 
-    /// <summary>Отличаются ли две прочитанные опоры хотя бы одним числом — различающий контроль.</summary>
+    /// <summary>Whether two read-back supports differ in at least one number — the discriminating control.</summary>
     private static bool SamePoints(SupportRead a, SupportRead b) =>
         NearVec(a.P1, b.P1) && NearVec(a.P2, b.P2) && NearVec(a.P3, b.P3);
 
@@ -1262,11 +1221,9 @@ internal sealed class SplitProbe
         }
     }
 
-    /// <summary>
-    /// Плоскость <c>x = x0</c> с нормалью <c>(1,0,0)</c>: три точки модели
-    /// <c>(x0,0,0)</c>, <c>(x0,1,0)</c>, <c>(x0,0,1)</c>. Порядок задаёт нормаль
-    /// <c>(p2−p1)×(p3−p1) = (0,1,0)×(0,0,1) = (1,0,0)</c>.
-    /// </summary>
+    /// <summary>The plane <c>x = x0</c> with normal <c>(1,0,0)</c>: three model points
+    /// <c>(x0,0,0)</c>, <c>(x0,1,0)</c>, <c>(x0,0,1)</c>. The order sets the normal
+    /// <c>(p2−p1)×(p3−p1) = (0,1,0)×(0,0,1) = (1,0,0)</c>.</summary>
     private IPlane3D? MakePlane(
         IModelContainer container, IPlanes3D planes, double x0, double y0, double z0,
         string name, ProbeStep step) =>
@@ -1289,7 +1246,7 @@ internal sealed class SplitProbe
         return BuildPlane(planes, first, second, third, name, step);
     }
 
-    /// <summary>Те же три точки, но вторая и третья переставлены: нормаль инвертируется.</summary>
+    /// <summary>The same three points but with the second and third swapped: the normal is inverted.</summary>
     private IPlane3D? MakePlaneInverted(
         IModelContainer container, IPlanes3D planes, double x0, string name, ProbeStep step)
     {
@@ -1466,7 +1423,7 @@ internal sealed class SplitProbe
         }
         catch (Exception)
         {
-            // Частичный список честнее пустого.
+            // A partial list is more honest than an empty one.
         }
 
         return rows;

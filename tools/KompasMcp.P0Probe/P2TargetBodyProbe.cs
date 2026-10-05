@@ -9,7 +9,7 @@ namespace KompasMcp.P0Probe;
 
 /// <summary>
 /// P2.6 — three questions that block real features, each settled by a cheap decisive experiment on
-/// a live КОМПАС-3D v24 instance.
+/// a live KOMPAS-3D v24 instance.
 /// </summary>
 /// <remarks>
 /// <para>

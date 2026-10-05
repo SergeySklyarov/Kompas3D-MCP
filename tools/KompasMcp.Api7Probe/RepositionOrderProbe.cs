@@ -5,59 +5,34 @@ using KompasAPI7;
 
 namespace KompasMcp.Api7Probe;
 
-/// <summary>
-/// Проба RO — почему признак, стоящий на 180°, читается как ПЕРЕНОС, и что читается вместо него.
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Симптом, который надо объяснить.</b> Клиентская приёмка 19.09.2026 (поставка
-/// <c>publish-b3-20260919-identity-fixed</c>, строка <c>B3C2.3.3.step5b.kind_at_180</c>) получила на
-/// признаке, повёрнутом на 180° вокруг Z, ответ <c>solid.reposition_kind = translate</c> с пустыми
-/// углом и осью — при ПРАВИЛЬНОЙ геометрии (<c>kompas_list_bodies</c> отдал
-/// <c>(−30,−10,0)…(−10,0,5)</c>, то есть зеркало относительно начала). Контроль того же признака на
-/// 90° в том же переоткрытом документе читался правильно (<c>rotate</c>, 90, <c>(0,0,1)</c>).
-/// </para>
-/// <para>
-/// <b>Что здесь проверяется и почему именно это.</b> Отчёт приёмки объяснял расхождение тем, что
-/// «столбцы матрицы единичны, поэтому это перенос». Это объяснение НЕ принимается: единичная длина
-/// столбцов имеет место и при 90°, и она не различает случаи. Разбор вывода
-/// (<c>Api5Session.SolidRead.cs</c>, <c>DeriveReposition</c>) показывает, что ветка 180° в нём ЕСТЬ и
-/// математически верна: для <c>diag(−1,−1,1)</c> след равен −1, угол 180°, кососимметричная часть
-/// нулевая, и ось берётся из <c>R + I</c> → <c>rotate/180/(0,0,1)</c>. Значит <c>translate</c> мог
-/// получиться только из ОСЕЙ, близких к единичной матрице, — то есть из ДРУГОГО объекта.
-/// </para>
-/// <para>
-/// <b>Гипотеза, которая здесь измеряется.</b> Сопоставление признака дерева с элементом коллекции
-/// API7 идёт ПО ПОРЯДКОВОМУ НОМЕРУ (<c>RequireSameTypeIndex</c>: порядок среди признаков того же
-/// типа в дереве → индекс в <c>IModelContainer.BodyRepositions</c>), а проверяется только СОВПАДЕНИЕ
-/// ЧИСЛА элементов. Если подавление и восстановление признака меняет порядок коллекции (а оно его
-/// меняет: снятие подавления убирает элементы из коллекции, возврат добавляет их заново), то
-/// порядковый номер перестаёт указывать на тот же признак — и чтение описывает СОСЕДА. Тогда
-/// «180° читается как перенос» означает «прочитан признак переноса, стоящий рядом», а не дефект
-/// вывода угла. Гипотеза подтверждается, только если порядок коллекции после подавления и
-/// восстановления РАСХОДИТСЯ с порядком дерева, а чтение по порядковому номеру даёт вид соседа.
-/// </para>
-/// <para>
-/// <b>Отрицательный контроль встроен.</b> Первое чтение идёт ДО подавления: там порядок заведомо
-/// согласован (это уже измерено клиентской приёмкой, шаг <c>step3.read_both</c>). Если бы и оно
-/// давало неверный вид, дело было бы не в подавлении, и проба обязана это показать, а не списать
-/// расхождение на гипотезу.
-/// </para>
-/// <para>
-/// <b>Что НЕ является предметом пробы.</b> Чтение вектора переноса и точки оси
-/// (<c>reposition_vector_mm</c>, <c>reposition_axis_point_mm</c>) — это отдельная граница, измеренная
-/// пробой <c>--reposition-read</c>. Здесь измеряется только вид и параметры поворота.
-/// </para>
-/// </remarks>
+/// <summary>Probe RO — why a feature standing at 180° reads as a TRANSLATION, and what is read instead.</summary>
+/// <remarks>MEASURED (client acceptance 19.09.2026, delivery <c>publish-b3-20260919-identity-fixed</c>,
+/// row <c>B3C2.3.3.step5b.kind_at_180</c>): a feature rotated 180° about Z returned
+/// <c>solid.reposition_kind = translate</c> with empty angle and axis, while the geometry was CORRECT
+/// (<c>(−30,−10,0)…(−10,0,5)</c>, a mirror about the origin); the same feature at 90° in the same
+/// reopened document read correctly (<c>rotate</c>, 90, <c>(0,0,1)</c>). The acceptance report blamed
+/// "the matrix columns are unit, so it is a translation" — REJECTED: unit columns hold at 90° too and do
+/// not separate the cases. INVARIANT: the 180° branch in <c>Api5Session.SolidRead.DeriveReposition</c>
+/// exists and is correct (<c>diag(−1,−1,1)</c>: trace −1, angle 180, zero skew, axis from <c>R + I</c>),
+/// so <c>translate</c> can only come from axes near the identity — i.e. from ANOTHER object.
+/// HYPOTHESIS: the tree feature is matched to the API7 collection element BY ORDINAL
+/// (<c>RequireSameTypeIndex</c>), checking only that the element COUNTS match; suppress/restore changes
+/// the collection order, so the ordinal then describes a NEIGHBOUR. TEST: the hypothesis holds only if
+/// the collection order diverges from the tree order and the ordinal reading yields the neighbour's
+/// kind. The first reading runs BEFORE suppression as a built-in negative control (already MEASURED by
+/// the client acceptance, step <c>step3.read_both</c>). LIMIT: the translation vector and axis point
+/// (<c>reposition_vector_mm</c>, <c>reposition_axis_point_mm</c>) are a separate boundary MEASURED by
+/// probe <c>--reposition-read</c>; here only the kind and rotation parameters are measured.
+/// History: docs/decisions/probes.md#ro-order</remarks>
 internal sealed class RepositionOrderProbe
 {
-    /// <summary>Тело A: 20×10×5 = 1000 мм³, габарит (0,0,0)…(20,10,5).</summary>
+    /// <summary>Body A: 20×10×5 = 1000 mm³, extent (0,0,0)…(20,10,5).</summary>
     private const double Ax0 = 0d, Ax1 = 20d, Ay0 = 0d, Ay1 = 10d, Az = 5d;
 
-    /// <summary>Постороннее тело S: 10×10×10 = 1000 мм³, далеко от A.</summary>
+    /// <summary>Foreign body S: 10×10×10 = 1000 mm³, far from A.</summary>
     private const double Sx0 = 100d, Sx1 = 110d, Sy0 = 0d, Sy1 = 10d, Sz = 10d;
 
-    /// <summary>Тип признака изменения положения в дереве (измерен, <c>Api5Session.cs</c>).</summary>
+    /// <summary>Reposition-feature type in the tree (MEASURED, <c>Api5Session.cs</c>).</summary>
     private const int RepositionTreeType = 79;
 
     private readonly ProbeReport _report;
@@ -67,11 +42,9 @@ internal sealed class RepositionOrderProbe
     private KompasObject _app = null!;
     private int _ownPid;
 
-    /// <summary>
-    /// Второй признак (поворот), удержанный МЕЖДУ подавлением и восстановлением. Подавленный признак
-    /// исчезает из <c>EntityCollection(110)</c> (измерено: 4→3 элемента), поэтому найти его повторным
-    /// обходом дерева нельзя — держать объект обязательно, а не удобно.
-    /// </summary>
+    /// <summary>The second feature (rotation), held BETWEEN suppression and restore. A suppressed
+    /// feature disappears from <c>EntityCollection(110)</c> (MEASURED: 4→3 elements), so it cannot be
+    /// found by re-walking the tree — holding the object is mandatory, not convenient.</summary>
     private ksEntity? _second;
     private ksDocument3D? _reopened;
     private ksPart? _reopenedPart;
@@ -113,7 +86,7 @@ internal sealed class RepositionOrderProbe
 
             var (doc, a, s, translate, rotate) = chain.Value;
 
-            // Отрицательный контроль к гипотезе: ДО подавления порядок заведомо согласован.
+            // Negative control for the hypothesis: BEFORE suppression the order is certainly consistent.
             var beforeSuppress = OrdinalReading(doc, part, "RO.3",
                 "чтение по порядковому номеру ДО подавления — контроль к гипотезе");
 
@@ -128,9 +101,10 @@ internal sealed class RepositionOrderProbe
             var at180 = OrdinalReading(doc, part, "RO.7",
                 "чтение по порядковому номеру ПОСЛЕ правки второго признака до 180°");
 
-            // Развёртка углов — на ЖИВОМ документе: после переоткрытия объект, взятый до закрытия,
-            // уже не годится (шаг RO.8 первого прогона показал это прямо: Update()=False и GetVector
-            // отказал). Переоткрытие поэтому идёт последним, и оно измеряет ПОРЯДОК, а не вывод.
+            // The angle sweep runs on the LIVE document: after reopening, an object taken before the
+            // close is no longer usable (RO.8 of the first run showed it plainly: Update()=False and
+            // GetVector refused). Reopening therefore comes last, and it measures ORDER, not derivation.
+            // History: docs/decisions/probes.md#ro-reopen
             AngleSweep(part, doc, a, translate, rotate);
 
             ReopenAndRead(doc, part, "RO.8");
@@ -243,11 +217,9 @@ internal sealed class RepositionOrderProbe
 
     // ══════════════════════════════════════════════════════════════ RO.2 ══
 
-    /// <summary>
-    /// Цепочка приёмки: признак[0] — перенос A на (10,0,0), признак[1] — поворот A на +90° вокруг Z.
-    /// Два признака получают ОДНО отображаемое имя — это условие уже исправленного дефекта
-    /// адресации по имени, и оно здесь сохраняется намеренно.
-    /// </summary>
+    /// <summary>Acceptance chain: feature[0] — translation of A by (10,0,0), feature[1] — rotation of A
+    /// by +90° about Z. Both features get the SAME displayed name — the condition of the already-fixed
+    /// name-address defect, kept here on purpose.</summary>
     private (ksDocument3D Doc, BodyRow A, BodyRow S, IBodyReposition Translate, IBodyReposition Rotate)? Chain(
         ksPart part)
     {
@@ -314,11 +286,9 @@ internal sealed class RepositionOrderProbe
 
     // ══════════════════════════════════════════════════════════════ RO.3/RO.5/RO.7 ══
 
-    /// <summary>
-    /// Чтение ТЕМ ЖЕ ПРАВИЛОМ, что и продукт: порядковый номер признака среди однотипных в дереве →
-    /// индекс в <c>IModelContainer.BodyRepositions</c>, с проверкой только СОВПАДЕНИЯ ЧИСЛА
-    /// элементов (это и есть <c>RequireSameTypeIndex</c>).
-    /// </summary>
+    /// <summary>Read by the SAME RULE as the product: the feature's ordinal among same-type tree features
+    /// → index in <c>IModelContainer.BodyRepositions</c>, checking only that the element COUNTS match
+    /// (this is <c>RequireSameTypeIndex</c>).</summary>
     private OrdinalResult OrdinalReading(ksDocument3D doc, ksPart part, string id, string title)
     {
         var step = _report.Begin(id, title,
@@ -369,7 +339,7 @@ internal sealed class RepositionOrderProbe
         return result;
     }
 
-    // ══════════════════════════════════════════════════════════════ подавление ══
+    // ══════════════════════════════════════════════════════════════ suppression ══
 
     private bool SuppressRestore(ksDocument3D doc, ksPart part, IBodyReposition rotate, bool suppress)
     {
@@ -439,7 +409,7 @@ internal sealed class RepositionOrderProbe
         }
     }
 
-    // ══════════════════════════════════════════════════════════════ правка до 180° ══
+    // ══════════════════════════════════════════════════════════════ edit to 180° ══
 
     private void EditTo180(ksDocument3D doc, ksPart part, IBodyReposition rotate)
     {
@@ -448,8 +418,8 @@ internal sealed class RepositionOrderProbe
             "Воспроизводится ли симптом: геометрия 180°, а чтение даёт перенос?");
         try
         {
-            // Правка адресуется НЕ порядковым номером, а самим объектом, измеренным в RO.2:
-            // иначе проба повторила бы дефект вместо того, чтобы его измерить.
+            // The edit is addressed by the OBJECT MEASURED in RO.2, not by ordinal — otherwise the probe
+            // would repeat the defect instead of measuring it.
             rotate.Position.InitByMatrix3D(RotationZ(180d));
             var updated = rotate.Update();
             part.RebuildModel();
@@ -474,7 +444,7 @@ internal sealed class RepositionOrderProbe
         }
     }
 
-    // ══════════════════════════════════════════════════════════════ переоткрытие ══
+    // ══════════════════════════════════════════════════════════════ reopen ══
 
     private void ReopenAndRead(ksDocument3D doc, ksPart part, string id)
     {
@@ -527,13 +497,10 @@ internal sealed class RepositionOrderProbe
         }
     }
 
-    /// <summary>
-    /// Разделить две причины, которые дают ОДИН И ТОТ ЖЕ ответ «translate»: прочитан ЧУЖОЙ элемент
-    /// коллекции либо преобразование не читается с переоткрытого признака. Разделяет запись:
-    /// если в элемент 1 можно ЗАПИСАТЬ известную матрицу и от неё двинется тело A, то элемент 1 —
-    /// это признак изменения положения, действующий на A, и нулевое чтение с него есть дефект
-    /// ЧТЕНИЯ, а не подмена объекта.
-    /// </summary>
+    /// <summary>Separates two causes that give the SAME answer "translate": a FOREIGN collection element
+    /// was read, or the transform does not read from the reopened feature. The write separates them: if a
+    /// known matrix can be WRITTEN into element 1 and body A moves, then element 1 is a reposition feature
+    /// acting on A, and the zero reading is a READ defect, not an object substitution.</summary>
     private void IdentifyElements(ksDocument3D doc, ksPart part, IModelContainer container, ProbeStep step)
     {
         for (var i = 0; i < (Count(container) ?? 0); i++)
@@ -558,33 +525,22 @@ internal sealed class RepositionOrderProbe
             }
         }
 
-        // Запись здесь НЕ выполняется: разделение причин («чужой элемент» против «нечитаемое
-        // преобразование») требует, чтобы записанное преобразование было ТЕМ ЖЕ, что и до записи, —
-        // иначе повторная запись 180° стала бы записью 90°, и неизменность геометрии ничего не
-        // доказывала бы. Поэтому запись вынесена в шаг RO.10.
+        // No write happens here: separating the causes ("foreign element" vs "unreadable transform")
+        // requires the written transform to be the SAME as before the write — otherwise a repeated 180°
+        // write would become a 90° write and the unchanged geometry would prove nothing. The write is
+        // therefore deferred to step RO.10.
     }
 
-    /// <summary>
-    /// Переоткрытый признак: читается ли преобразование ДО записи и меняется ли геометрия от
-    /// повторной записи ТОГО ЖЕ преобразования.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Разделение, которое наряд §5 требует явно: «неверное сопоставление объекта» против
-    /// «особенностей чтения Position». Оба дают ОДИН И ТОТ ЖЕ ответ «translate», и различить их
-    /// чтением невозможно — различает ПОВТОРНАЯ ЗАПИСЬ ТОГО ЖЕ преобразования:
-    /// </para>
-    /// <list type="bullet">
-    /// <item>если элемент 1 — ЧУЖОЙ элемент, то запись в него повернёт тело на 180° вокруг Z от
-    /// исходного положения, и геометрия СДВИНЕТСЯ;</item>
-    /// <item>если элемент 1 — тот самый признак, а нечитаемым было только чтение, то запись того же
-    /// преобразования не изменит геометрию НИ НА ЧТО, а чтение после записи станет верным.</item>
-    /// </list>
-    /// <para>
-    /// Третье переоткрытие с ДРУГИМ записанным углом (90°) отделяет «дефект при 180°» от «дефекта
-    /// чтения любого переоткрытого преобразования»: угол меняется, а условие чтения — нет.
-    /// </para>
-    /// </remarks>
+    /// <summary>Reopened feature: does the transform read BEFORE a write, and does the geometry change
+    /// from a repeated write of the SAME transform?</summary>
+    /// <remarks>The separation order §5 demands explicitly: "wrong object match" vs "Position read
+    /// peculiarities". Both give the SAME answer "translate" and cannot be told apart by reading — only a
+    /// REPEATED WRITE of the SAME transform separates them: if element 1 is a FOREIGN element, the write
+    /// rotates the body 180° about Z from its initial position and the geometry MOVES; if element 1 is
+    /// that very feature and only the read was unreadable, writing the same transform changes the geometry
+    /// NOTHING and the read after the write becomes correct. A third reopen with a DIFFERENT written angle
+    /// (90°) separates "defect at 180°" from "defect reading any reopened transform": the angle changes,
+    /// the read condition does not. History: docs/decisions/probes.md#ro-readback</remarks>
     private void ReopenedReadback(string id)
     {
         var step = _report.Begin(id,
@@ -601,13 +557,13 @@ internal sealed class RepositionOrderProbe
 
         try
         {
-            // (а) Чтение ДО любой записи: что отдаёт переоткрытый признак.
+            // (a) Read BEFORE any write: what the reopened feature returns.
             var before = ReadElement(container, 1, step, "элемент 1 до записи");
             var bodies0 = Describe(BodyRows(part));
             step.Observe("до записи: " + before.Text);
             step.Observe("геометрия, восстановленная ИЗ ФАЙЛА: " + bodies0);
 
-            // (б) Пересборка без записи: делает ли перестроение преобразование читаемым?
+            // (b) Rebuild without a write: does a rebuild make the transform readable?
             doc.RebuildDocument();
             var afterRebuild = ReadElement(container, 1, step, "элемент 1 после пересборки");
             step.Observe("после пересборки БЕЗ записи: " + afterRebuild.Text);
@@ -618,10 +574,10 @@ internal sealed class RepositionOrderProbe
                 return;
             }
 
-            // (в) Запись ЗАВЕДОМО известного преобразования: она обязана и прочитаться, и примениться.
-            // Тело при этом обязано встать в габарит ПОВОРОТА ОТ ПЕРЕНОСА, а не от исходного тела:
-            // перенос (10,0,0) даёт [10,30]×[0,10]×[0,5], поворот на 180° вокруг Z — [−30,−10]…[−10,0].
-            // Это и отличает «элемент 1 — второй признак» от «элемент 1 — первый».
+            // (c) Write of a KNOWN transform: it must both read and apply. The body must land in the
+            // extent of the ROTATION FROM THE TRANSLATION, not of the original body: translation
+            // (10,0,0) gives [10,30]×[0,10]×[0,5], 180° about Z gives [−30,−10]…[−10,0]. This is what
+            // separates "element 1 is the second feature" from "element 1 is the first".
             second.Position.InitByMatrix3D(RotationZ(180d));
             var updated = second.Update();
             part.RebuildModel();
@@ -633,9 +589,9 @@ internal sealed class RepositionOrderProbe
             step.Observe("чтение после записи: " + afterWrite.Text);
             step.Observe("геометрия после записи: " + bodies1);
 
-            // (г) ПОВТОРНАЯ запись ТОГО ЖЕ преобразования. Теперь оно заведомо записано — и если
-            // геометрия от повтора не двигается, то записанное значение и было этим преобразованием:
-            // значит нулевое чтение до записи было дефектом ЧТЕНИЯ, а не подменой объекта.
+            // (d) REPEATED write of the SAME transform. It is now certainly written — and if the geometry
+            // does not move on the repeat, the written value WAS that transform: so the zero read before
+            // the write was a READ defect, not an object substitution.
             second.Position.InitByMatrix3D(RotationZ(180d));
             var repeated = second.Update();
             part.RebuildModel();
@@ -646,7 +602,7 @@ internal sealed class RepositionOrderProbe
                 + ", чтение: " + afterRepeat.Text);
             step.Observe("геометрия после повторной записи: " + bodies2);
 
-            // (д) Положительный контроль записи: ДРУГОЕ преобразование обязано сдвинуть геометрию.
+            // (e) Positive write control: a DIFFERENT transform must move the geometry.
             second.Position.InitByMatrix3D(RotationZ(90d));
             var updated90 = second.Update();
             part.RebuildModel();
@@ -656,7 +612,7 @@ internal sealed class RepositionOrderProbe
             step.Observe("запись 90° вокруг Z: Update()=" + updated90 + ", чтение: " + after90.Text);
             step.Observe("геометрия после 90°: " + Describe(BodyRows(part)));
 
-            // (е) Третье переоткрытие: в модели 90°, условие чтения то же — БЕЗ записи.
+            // (f) Third reopen: the model holds 90°, the read condition is the same — WITHOUT a write.
             var path = Path.Combine(_options.WorkDir, "ro-readback-" + DateTime.Now.ToString("HHmmss") + ".m3d");
             var saved = doc.SaveAs(path);
             doc.close();
@@ -726,14 +682,12 @@ internal sealed class RepositionOrderProbe
         }
     }
 
-    /// <summary>
-    /// Сравнение геометрии после записи — по СТРОКЕ описания тел: она несёт и объём, и оба габарита,
-    /// то есть ровно то, что обязано совпасть у идемпотентной записи.
-    /// </summary>
+    /// <summary>Geometry comparison after a write — by the body description STRING: it carries the volume
+    /// and both extents, exactly what an idempotent write must keep equal.</summary>
     private static bool SameGeometry(string left, string right) =>
         string.Equals(left, right, StringComparison.Ordinal);
 
-    /// <summary>Тело-вход элемента — по <c>IBody7.BodyId</c>; коллекционный номер тела идентичностью не является.</summary>
+    /// <summary>The element's input body — by <c>IBody7.BodyId</c>; the collection body index is not identity.</summary>
     private static string DescribeBody(IBodyReposition element)
     {
         try
@@ -755,13 +709,11 @@ internal sealed class RepositionOrderProbe
         }
     }
 
-    // ══════════════════════════════════════════════════════════════ развёртка углов ══
+    // ══════════════════════════════════════════════════════════════ angle sweep ══
 
-    /// <summary>
-    /// Регрессия по углам на ОДНОМ признаке: 0°, ±90°, 180°, около 180°, 270°, 360°, произвольная
-    /// ось, ось через точку. Читается и вывод, и сами оси — чтобы «неверный вид» можно было отнести
-    /// либо к выводу, либо к прочитанным числам.
-    /// </summary>
+    /// <summary>Angle regression on a SINGLE feature: 0°, ±90°, 180°, near 180°, 270°, 360°, an arbitrary
+    /// axis, an axis through a point. Both the derivation and the axes themselves are read — so a "wrong
+    /// kind" can be attributed either to the derivation or to the numbers read.</summary>
     private void AngleSweep(ksPart part, ksDocument3D doc, BodyRow a, IBodyReposition translate, IBodyReposition rotate)
     {
         var step = _report.Begin("RO.8b", "Развёртка углов на одном признаке: вывод вида и оси по каждому",
@@ -806,7 +758,7 @@ internal sealed class RepositionOrderProbe
         step.Pass("развёртка углов измерена");
     }
 
-    // ══════════════════════════════════════════════════════════════ свод ══
+    // ══════════════════════════════════════════════════════════════ verdict ══
 
     private void Verdict(OrdinalResult before, OrdinalResult after, OrdinalResult at180)
     {
@@ -857,13 +809,12 @@ internal sealed class RepositionOrderProbe
             + "контроль не прошёл, и отнести расхождение к подавлению нельзя");
     }
 
-    // ══════════════════════════════════════════════════════════════ приборы ══
+    // ══════════════════════════════════════════════════════════════ instruments ══
 
-    /// <summary>
-    /// Вывод вида и параметров из осей локальной системы. ДОСЛОВНО повторяет алгоритм продукта
-    /// (<c>Api5Session.SolidRead.DeriveReposition</c>), потому что проба обязана измерять ТУ ЖЕ
-    /// ветку, а не похожую: разойдись они — измерялся бы прибор, а не продукт.
-    /// </summary>
+    /// <summary>Derives the kind and parameters from the local-system axes. VERBATIM repeat of the product
+    /// algorithm (<c>Api5Session.SolidRead.DeriveReposition</c>), because the probe must measure the SAME
+    /// branch, not a similar one: should they diverge, the instrument would be measured, not the
+    /// product.</summary>
     private static (string Kind, double[]? Axis, double? Angle, string Branch) Derive(double[][]? axes)
     {
         var (kind, axis, angle, _, branch) = DeriveDetailed(axes);
@@ -936,7 +887,7 @@ internal sealed class RepositionOrderProbe
         }
     }
 
-    /// <summary>Порядок коллекции — по осям: у переноса они единичны, у поворота нет.</summary>
+    /// <summary>Collection order — by axes: unit for a translation, not for a rotation.</summary>
     private string OrderOf(IModelContainer container, ProbeStep step)
     {
         var parts = new List<string>();
@@ -991,14 +942,12 @@ internal sealed class RepositionOrderProbe
         }
     }
 
-    /// <summary>
-    /// Признаки дерева — тем же маршрутом, что и продукт: <c>EntityCollection(110)</c>
-    /// (<c>o3d_operationElement</c>), а не <c>GetFeature().SubFeatureCollection(...)</c>. Маршрут
-    /// выбран по измерению, а не по удобству: первый шаг этой пробы показал, что
-    /// <c>SubFeatureCollection(true, false)</c> отдаёт ПУСТУЮ коллекцию на живой модели, тогда как
-    /// <c>EntityCollection(110)</c> отдаёт признаки, — и прибор, читающий пустоту, объявил бы
-    /// «признаков нет» там, где их два.
-    /// </summary>
+    /// <summary>Tree features — by the same route as the product: <c>EntityCollection(110)</c>
+    /// (<c>o3d_operationElement</c>), not <c>GetFeature().SubFeatureCollection(...)</c>. The route is
+    /// chosen by measurement, not convenience: MEASURED (first step of this probe),
+    /// <c>SubFeatureCollection(true, false)</c> returns an EMPTY collection on a live model, whereas
+    /// <c>EntityCollection(110)</c> returns the features — an instrument reading emptiness would declare
+    /// "no features" where there are two. History: docs/decisions/probes.md#ro-route</summary>
     private static List<TreeElement> TreeElements(ksPart part, ProbeStep step)
     {
         var list = new List<TreeElement>();
@@ -1044,9 +993,9 @@ internal sealed class RepositionOrderProbe
     private static double[] Unit(double[] value, double norm) =>
         new[] { value[0] / norm, value[1] / norm, value[2] / norm };
 
-    // ══════════════════════════════════════════════════════════════ матрицы ══
+    // ══════════════════════════════════════════════════════════════ matrices ══
 
-    /// <summary>Матрица 4×4 с единичной ориентацией и заданным переносом.</summary>
+    /// <summary>4×4 matrix with identity orientation and the given translation.</summary>
     private static double[] Translation(double x, double y, double z) => new[]
     {
         1d, 0d, 0d, 0d,
@@ -1055,7 +1004,7 @@ internal sealed class RepositionOrderProbe
         x, y, z, 1d,
     };
 
-    /// <summary>Поворот вокруг Z на угол в градусах, матрица 4×4 по столбцам.</summary>
+    /// <summary>Rotation about Z by an angle in degrees, 4×4 matrix by columns.</summary>
     private static double[] RotationZ(double angleDeg)
     {
         var r = angleDeg * Math.PI / 180d;
@@ -1070,7 +1019,7 @@ internal sealed class RepositionOrderProbe
         };
     }
 
-    /// <summary>Поворот на угол вокруг произвольного направления (нормализуется) — формула Родрига.</summary>
+    /// <summary>Rotation by an angle about an arbitrary direction (normalised) — Rodrigues formula.</summary>
     private static double[] RotationAbout(double[] direction, double angleDeg)
     {
         var norm = Norm(direction);
@@ -1079,12 +1028,12 @@ internal sealed class RepositionOrderProbe
         var (c, s) = (Math.Cos(r), Math.Sin(r));
         var t = 1d - c;
 
-        // Строки — формула Родрига R = t·nnᵀ + c·I + s·[n]×, где
-        // [n]× = [[0,−nz,ny],[nz,0,−nx],[−ny,nx,0]]. Знаки s-членов проверены на матрице
-        // 120° вокруг (1,1,1)/√3: она обязана быть циклической подстановкой [[0,0,1],[1,0,0],[0,1,0]],
-        // и обратный знак дал бы ровно ОБРАТНЫЙ поворот — то есть повернул бы тело не туда, а проба
-        // отчиталась бы о дефекте продукта там, где ошибочен её собственный эталон (эталон: случай
-        // 4/tan — прибор обязан быть чистым до вывода о продукте).
+        // Rows — Rodrigues R = t·nnᵀ + c·I + s·[n]×, where [n]× = [[0,−nz,ny],[nz,0,−nx],[−ny,nx,0]].
+        // The signs of the s-terms are TESTED on the 120°-about-(1,1,1)/√3 matrix: it must be the cyclic
+        // permutation [[0,0,1],[1,0,0],[0,1,0]], and the opposite sign would give exactly the INVERSE
+        // rotation — turning the body the wrong way, so the probe would report a product defect where its
+        // own reference is wrong (reference case 4/tan: the instrument must be clean before any
+        // conclusion about the product). History: docs/decisions/probes.md#ro-rodrigues
         var m = new[]
         {
             t * x * x + c, t * x * y - s * z, t * x * z + s * y,
@@ -1271,7 +1220,7 @@ internal sealed class RepositionOrderProbe
         }
         catch (Exception)
         {
-            // Не предмет шага.
+            // Not the subject of this step.
         }
 
         return rows;

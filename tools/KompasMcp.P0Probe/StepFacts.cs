@@ -477,7 +477,7 @@ internal static class ReleaseFacts
     }
 
     /// <summary>
-    /// P0.11 — can another process attach to a running КОМПАС? Measured against a *visible*
+    /// P0.11 — can another process attach to a running KOMPAS? Measured against a *visible*
     /// instance, because the headless orphans left by earlier scripts return MK_E_UNAVAILABLE.
     /// </summary>
     public static void Attach(ProbeReport report, ProbeOptions options)
@@ -497,7 +497,7 @@ internal static class ReleaseFacts
         try
         {
             // .NET (unlike .NET Framework) has no Marshal.GetActiveObject, so attaching to a
-            // running КОМПАС is only possible through the running object table. This is a design
+            // running KOMPAS is only possible through the running object table. This is a design
             // constraint on kompas_connect, not a detail: it is why RunningObjectTable exists.
             step.Observe("Marshal.GetActiveObject в .NET отсутствует: attach возможен только через перечисление ROT.");
 

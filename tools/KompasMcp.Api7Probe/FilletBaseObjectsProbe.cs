@@ -6,56 +6,42 @@ using KompasAPI7;
 
 namespace KompasMcp.Api7Probe;
 
-/// <summary>
-/// Проба H-2 — входы САМОГО признака скругления через <c>IFillet.BaseObjects</c> на живом признаке.
-/// </summary>
+/// <summary>Probe H-2 — the inputs of the fillet feature ITSELF through <c>IFillet.BaseObjects</c>, on a live feature.</summary>
 /// <remarks>
-/// <para>
-/// <b>Почему отдельная проба, а не шаг H.5.</b> Задание SM-09 (§137) требует, чтобы новый результат
-/// имел собственный идентификатор прогона и собственные артефакты, а к старому отчёту было добавлено
-/// точное пояснение, а не переписанный задним числом результат. Отдельный флаг даёт отдельный
-/// <c>run_id</c>, отдельную рабочую папку и отдельный файл отчёта — H остаётся логом 16.09.
-/// </para>
-/// <para>
-/// <b>Что здесь решается.</b> Проба H мерила пересчёт признака по ПОДСТАВЛЕННОМУ входу: в
-/// <c>BaseObjects</c> уходили запомненные угловые рёбра пластины (<c>cornerEdges.Take(2)</c>).
-/// Отсюда её геометрия верна, а подпись «ПРИМЕНЯЕТСЯ» — нет. Решающий вопрос другой: отдаёт ли
-/// <c>BaseObjects</c> живого скругления те объекты, которые признак принял бы ОБРАТНО. Если да —
-/// маршрут адресации существует, и <c>edit</c> можно вести через него. Если нет — доказано, что
-/// адресовать вход признака нечем и остаётся <c>blocked_api</c>, но уже с точной формулировкой.
-/// </para>
-/// <para>
-/// <b>Порядок опытов и почему он такой.</b>
-/// </para>
+/// <b>The question.</b> MEASURED: probe H measured the recomputation of a feature from a SUBSTITUTED
+/// input — the remembered plate corner edges (<c>cornerEdges.Take(2)</c>) went into
+/// <c>BaseObjects</c>; its geometry is therefore correct but its "APPLIES" label is not. The decisive
+/// question is different: does <c>BaseObjects</c> of a live fillet return the very objects the feature
+/// would accept BACK? If yes, an addressing route exists and <c>edit</c> can go through it; if no, it
+/// is proven that the feature input cannot be addressed and the verdict stays <c>blocked_api</c>, but
+/// with a precise formulation.
+/// <b>Order of the experiments and why it is this one.</b>
 /// <list type="number">
-/// <item>Пластина 100×80×10, четыре вертикальных угла R3 (эталон 79922.74333882307).</item>
-/// <item>Сохранение, закрытие, повторное открытие. Это требование задания §2: «Не используй
-/// сохранённые до скругления COM-объекты или публичные ссылки». После reopen у нас заведомо нет
-/// ни одного объекта, захваченного при создании, — значит всё, что мы прочитаем, получено от
-/// ЖИВОГО признака.</item>
-/// <item>Чтение <c>BaseObjects</c> без мутации: тип VARIANT/SAFEARRAY, длина, доступные интерфейсы,
-/// пригодность каждого элемента. Три случая различаются явно — пустое значение, другой тип
-/// массива, ошибка маршалинга.</item>
-/// <item>Контроль: проверить, что элементы <c>BaseObjects</c> вообще имеют геометрический смысл —
-/// сверить их число и, где возможно, тип с ожиданием.</item>
-/// <item>Сокращение 4→2 и 4→3 ИМЕННО объектами из <c>BaseObjects</c>, без Clear и без поиска
-/// рёбер конечного тела. Проверка СОСТАВА, а не количества: набор из трёх отличим от «сломали и
-/// собрали четыре».</item>
-/// <item>Если сокращение подтверждено — save → close → reopen → перечитать.</item>
+/// <item>Plate 100×80×10, four vertical R3 corners (reference 79922.74333882307).</item>
+/// <item>Save, close, reopen. This is order §2: "Do not use COM objects or public references saved
+/// before the fillet." After reopen we certainly hold no object captured at creation — so everything
+/// we read comes from the LIVE feature.</item>
+/// <item>Read <c>BaseObjects</c> without mutation: VARIANT/SAFEARRAY type, length, available
+/// interfaces, usability of each element. Three cases are told apart explicitly — empty value, a
+/// different array type, a marshalling error.</item>
+/// <item>Control: check that the <c>BaseObjects</c> elements have geometric meaning at all — compare
+/// their number and, where possible, the type against the expectation.</item>
+/// <item>Reduce 4→2 and 4→3 using EXACTLY the objects from <c>BaseObjects</c>, without Clear and
+/// without searching the edges of the final body. This checks COMPOSITION, not count: a set of three
+/// is distinguishable from "broke and rebuilt four".</item>
+/// <item>If the reduction is confirmed — save → close → reopen → read back.</item>
 /// </list>
-/// <para>
-/// <b>Почему 4→3, а не только 4→2.</b> Эталон 79961.37166941153 (два угла) и 79942.05750411731
-/// (три) уже измерены на этой установке. Три — это «тот же размер минус один», то есть набор,
-/// который нельзя получить простым совпадением числа: если после записи объём окажется на четырёх
-/// углах, значит запись проигнорирована; если на двух — сработало не то, что мы просили; только
-/// эталон трёх углов доказывает, что принят НАШ набор. Это и есть различение состава от количества.
-/// </para>
-/// <para>
-/// <b>Чего проба не делает.</b> Не вызывает <c>Clear()</c> перед записью из <c>BaseObjects</c>
-/// (это подмена предмета: задание прямо запрещает предварительное опустошение), не ищет рёбра
-/// конечного тела и не трогает публичный реестр ссылок MCP — прямой зонд обязан работать без него.
-/// </para>
-/// </remarks>
+/// <b>Why 4→3, not only 4→2.</b> MEASURED: references 79961.37166941153 (two corners) and
+/// 79942.05750411731 (three) are already measured on this rig. Three is "the same size minus one", a
+/// set that cannot be produced by a mere coincidence of the number: if after the write the volume
+/// lands on four corners the write was ignored; on two — something other than what we asked for
+/// happened; only the three-corner reference proves that OUR set was accepted. That is the
+/// distinction of composition from count.
+/// <b>What the probe does NOT do.</b> It does not call <c>Clear()</c> before writing from
+/// <c>BaseObjects</c> (that would substitute the subject: the order forbids prior emptying), does not
+/// search the final body edges and does not touch the MCP public reference registry — a direct probe
+/// must work without it.
+/// History: docs/decisions/probes.md#fillet-base-objects</remarks>
 internal sealed class FilletBaseObjectsProbe
 {
     private const double PlateWidth = 100d;
@@ -96,7 +82,7 @@ internal sealed class FilletBaseObjectsProbe
 
         try
         {
-            // Решающая линия идёт первой и на своём документе: всё дальнейшее — уточнения к ней.
+            // The decisive line goes first and on its own document: everything after it refines it.
             var live = BuildLiveFillet();
             if (live is not null)
             {
@@ -104,20 +90,21 @@ internal sealed class FilletBaseObjectsProbe
                 ReduceUsingBaseObjects(live);
             }
 
-            // ── различающие контроли. Без них «объём перешёл на эталон трёх» доказывает не больше,
-            //    чем доказала проба H: пересчёт признака по подставленному входу даёт ТУ ЖЕ картину.
-            //    Каждый идёт на своём документе (своя пластина), чтобы не наследовать чужое состояние.
+            // ── differentiating controls. Without them "the volume moved to the three-corner
+            //    reference" proves no more than probe H did: a recomputation from a substituted input
+            //    gives the SAME picture. Each runs on its own document (its own plate) so that no
+            //    state is inherited from another.
             SubstituteOneEdge();
             EnlargeUsingBaseObjects();
 
-            // ── Адресация на модели с ДВУМЯ скруглениями одного радиуса: обязательный критерий
-            //    приёмки (§«Проверка адресации на модели с двумя скруглениями одинакового радиуса:
-            //    меняется только выбранный признак»). Один признак без соседа не различает
-            //    «адресация» и «единственный кандидат».
+            // ── Addressing on a model with TWO fillets of one radius: a mandatory acceptance
+            //    criterion (order §"checking addressing on a model with two fillets of equal radius:
+            //    only the selected feature changes"). A single feature with no neighbour cannot tell
+            //    "addressing" from "the only candidate".
             AddressAmongTwoFillets();
 
-            // Согласование с пробой H — не пересказ, а сверка на числах ЭТОГО прогона: она
-            // пересчитывает, следует ли из полученного то, что приписывалось пробе H.
+            // Reconciliation with probe H — not a retelling but a check against the numbers of THIS
+            // run: it recomputes whether what was attributed to probe H follows from what we got.
             ReconcileWithProbeH();
         }
         catch (Exception ex)
@@ -132,23 +119,17 @@ internal sealed class FilletBaseObjectsProbe
         }
     }
 
-    // ════════════════════════════════════════════════════════ подготовка живого признака ══
+    // ════════════════════════════════════════════════════════ preparing the live feature ══
 
-    /// <summary>
-    /// Пластина со скруглением R3 по четырём вертикальным углам, СОХРАНЁННАЯ, ЗАКРЫТАЯ и
-    /// ОТКРЫТАЯ ЗАНОВО. Возвращается признак, полученный уже после reopen.
-    /// </summary>
-    /// <param name="label">
-    /// Метка сценария: у каждого контроля свой документ и свой файл, потому что сокращение набора
-    /// необратимо и на общем документе опыты мерили бы друг друга.
-    /// </param>
-    /// <param name="filledCorners">
-    /// Сколько углов из четырёх скруглить при ПЕРВИЧНОМ создании признака. По умолчанию все четыре
-    /// (эталон 79922.74333882307). Контроль замены требует трёх: тогда четвёртый угол остаётся
-    /// свободным, и его ребро можно предъявить как добавляемое. Создать набор из четырёх и потом
-    /// искать «свободный угол» невозможно — при r=3 по всем углам свободных углов не остаётся
-    /// вообще, и первая версия контроля именно на этом и остановилась.
-    /// </param>
+    /// <summary>Plate with R3 fillets on four vertical corners, SAVED, CLOSED and REOPENED. Returns the
+    /// feature obtained after the reopen.</summary>
+    /// <param name="label">Scenario label: each control has its own document and file, because reducing
+    /// the set is irreversible and on a shared document the experiments would measure one another.</param>
+    /// <param name="filledCorners">How many of the four corners to fillet at the FIRST creation of the
+    /// feature. Default is all four (reference 79922.74333882307). The substitution control needs three:
+    /// the fourth corner then stays free and its edge can be offered as the one to add. Building a set of
+    /// four and then looking for a "free corner" is impossible — at r=3 on all corners no free corner
+    /// remains at all.</param>
     private LiveFillet? BuildLiveFillet(string label = "H2.1", int filledCorners = 4)
     {
         var step = _report.Begin(
@@ -177,8 +158,8 @@ internal sealed class FilletBaseObjectsProbe
 
             doc.RebuildDocument();
 
-            // Угловые рёбра ДО скругления — только для создания признака. Дальше они не нужны и
-            // НЕ ПОЙДУТ ни в одно измерение: после reopen у нас их всё равно нет.
+            // Corner edges BEFORE the fillet — only for creating the feature. Afterwards they are not
+            // needed and will NOT enter any measurement: after reopen we do not have them anyway.
             var corners = VerticalCornerEdges(part, step);
             step.Data["corner_edges_before_create"] = corners.Count;
             if (corners.Count != 4)
@@ -188,10 +169,11 @@ internal sealed class FilletBaseObjectsProbe
                 return null;
             }
 
-            // Скругляется ПЕРВЫЕ `filledCorners` углов из четырёх. Порядок выдачи рёбер
-            // недетерминирован, но для эталона это неважно: важно лишь КОЛИЧЕСТВО углов, а объём
-            // от выбора угла не зависит (формула симметрична). Для контроля замены берётся 3 —
-            // тогда четвёртый угол остаётся свободным и его ребро можно предъявить как добавляемое.
+            // The FIRST `filledCorners` of the four corners are filleted. The order in which edges are
+            // returned is non-deterministic, but that does not matter for the reference: only the COUNT
+            // of corners matters, and the volume does not depend on which corner is chosen (the formula
+            // is symmetric). The substitution control takes 3 — the fourth corner then stays free and
+            // its edge can be offered as the one to add.
             var toFillet = corners.Take(filledCorners).ToList();
             step.Data["corners_to_fillet"] = toFillet.Count;
 
@@ -202,8 +184,8 @@ internal sealed class FilletBaseObjectsProbe
                 return null;
             }
 
-            // Перестроение — как в пробе H: у части документа, а не у признака (у ksPart члена
-            // Document нет; компилятор это подтвердил).
+            // Rebuild — as in probe H: on the document part, not on the feature (a ksPart has no
+            // Document member; the compiler confirmed this).
             doc.RebuildDocument();
             var expectedCreate = PlateVolume - filledCorners * (1 - Math.PI / 4) * Radius3 * Radius3 * PlateThickness;
             var volumeAfterCreate = Api5.Volume(part);
@@ -216,7 +198,7 @@ internal sealed class FilletBaseObjectsProbe
                 return null;
             }
 
-            // ── вот здесь разрывается связь с созданием ──
+            // ── this is where the link to creation is broken ──
             doc.SaveAs(path);
             Close(doc);
             doc = null;
@@ -267,11 +249,10 @@ internal sealed class FilletBaseObjectsProbe
             step.Observe($"Признак выжил reopen: V={Api5.Num(volumeAfterReopen)} при эталоне {Api5.Num(expectedCreate)}; " +
                          "ни один объект, захваченный при создании, в дальнейших шагах не используется.");
 
-            // Число входов читается ЗДЕСЬ, а не только в шаге H2.2: контроли H2.4/H2.5 — это другие
-            // документы со своими признаками, и `BaseObjectCount` от первого признака к ним не
-            // относится. Первая версия оставляла поле пустым, и оба контроля отказывались работать
-            // с формулировкой «входов не прочитано» — отказ харнесса, который легко принять за
-            // отказ продукта.
+            // The input count is read HERE, not only in step H2.2: controls H2.4/H2.5 are other
+            // documents with their own features, and `BaseObjectCount` from the first feature does not
+            // apply to them. INVARIANT: leaving the field empty would make both controls refuse with
+            // "inputs not read" — a harness refusal easily mistaken for a product refusal.
             var inputs = Api5.SafeObject(() => live.BaseObjects);
             var inputLength = inputs is null ? null : LengthOf(inputs);
             step.Data["base_objects_at_prep"] = inputLength;
@@ -300,29 +281,21 @@ internal sealed class FilletBaseObjectsProbe
         }
     }
 
-    // ════════════════════════════════════════ живой признак на модели с ДВУМЯ скруглениями ══
+    // ════════════════════════════════════════ live feature on a model with TWO fillets ══
 
-    /// <summary>
-    /// Пластина 100×80×10 с <b>ДВУМЯ независимыми скруглениями R3 на разных углах</b>, сохранённая,
-    /// закрытая и открытая заново. Возвращается контейнер, в котором ровно два признака.
-    /// </summary>
+    /// <summary>Plate 100×80×10 with <b>TWO independent R3 fillets on different corners</b>, saved,
+    /// closed and reopened. Returns the container holding exactly two features.</summary>
     /// <remarks>
-    /// <para>
-    /// <b>Зачем второй признак.</b> Критерий приёмки требует проверить адресацию на модели с двумя
-    /// скруглениями ОДИНАКОВОГО радиуса: меняется только выбранное. На модели с одним признаком
-    /// «адресация» и «единственный кандидат» неразличимы, и маршрут выглядит работающим независимо
-    /// от того, умеет ли он выбирать.
-    /// </para>
-    /// <para>
-    /// <b>Почему два ОТДЕЛЬНЫХ признака, а не один с двумя рёбрами.</b> Один признак с набором из
-    /// двух рёбер — это один объект, и запись в него ничего не говорит о выборе МЕЖДУ объектами.
-    /// Нужны два объекта в <c>container.Fillets</c>.
-    /// </para>
-    /// <para>
-    /// <b>Радиус одинаков намеренно.</b> Если бы радиусы различались, сопоставление можно было бы
-    /// вести по радиусу; задание прямо запрещает переносить такое упрощение в продукт, и опыт с
-    /// разными радиусами не проверял бы то, что требуется.
-    /// </para>
+    /// <b>Why a second feature.</b> The acceptance criterion requires checking addressing on a model
+    /// with two fillets of EQUAL radius: only the selected one changes. On a model with one feature
+    /// "addressing" and "the only candidate" are indistinguishable, and the route looks working
+    /// whether or not it can choose.
+    /// <b>Why two SEPARATE features, not one with two edges.</b> One feature with a set of two edges is
+    /// a single object, and writing into it says nothing about choosing BETWEEN objects. Two objects in
+    /// <c>container.Fillets</c> are required.
+    /// <b>The radius is equal on purpose.</b> If the radii differed, matching could be done by radius;
+    /// the order explicitly forbids carrying such a simplification into the product, and an experiment
+    /// with different radii would not test what is required.
     /// </remarks>
     private LiveFillet? BuildLiveTwoFillets(string label)
     {
@@ -352,7 +325,7 @@ internal sealed class FilletBaseObjectsProbe
 
             doc.RebuildDocument();
 
-            // Все четыре угловых ребра — из них берутся ДВА разных угла, каждый в свой признак.
+            // All four corner edges — TWO different corners are taken from them, each into its own feature.
             var corners = VerticalCornerEdges(part, step);
             step.Data["corner_edges_before_create"] = corners.Count;
             if (corners.Count != 4)
@@ -362,8 +335,9 @@ internal sealed class FilletBaseObjectsProbe
                 return null;
             }
 
-            // Углы выбираются ПО КООРДИНАТАМ, а не по позициям в коллекции: порядок выдачи
-            // недетерминирован, и два «первых» элемента легко оказались бы одним и тем же углом.
+            // Corners are chosen BY COORDINATES, not by positions in the collection: the order in which
+            // they are returned is non-deterministic, and two "first" elements would easily turn out to
+            // be the same corner.
             var allCorners = new[] { "(-50,-40)", "(-50,40)", "(50,-40)", "(50,40)" };
             var byCorner = new Dictionary<string, ksEntity>(StringComparer.Ordinal);
             foreach (var edge in corners)
@@ -398,10 +372,9 @@ internal sealed class FilletBaseObjectsProbe
 
             doc.RebuildDocument();
 
-            // Второй признак — на ДВА угла. Разные размеры наборов нужны, чтобы мутация была
-            // ВИДНА и ОТНОСИМА: у признака с одним входом снятие входа означало бы опустошение
-            // набора, и это другой опыт. Первая версия делала оба признака одноугольными и
-            // остановилась именно на этом.
+            // The second feature is on TWO corners. The different set sizes are needed so that the
+            // mutation is VISIBLE and ATTRIBUTABLE: for a feature with one input, removing an input
+            // would mean emptying the set, and that is a different experiment.
             var secondFeature = CreateFillet(step, part, new[] { byCorner[secondCornerA], byCorner[secondCornerB] }, Radius3);
             if (secondFeature is null)
             {
@@ -411,7 +384,7 @@ internal sealed class FilletBaseObjectsProbe
 
             doc.RebuildDocument();
 
-            // Эталон: три угла из четырёх (1 + 2, без пересечения).
+            // Reference: three of the four corners (1 + 2, without overlap).
             var expectedThree = PlateVolume - 3 * (1 - Math.PI / 4) * Radius3 * Radius3 * PlateThickness;
             var volumeAfterCreate = Api5.Volume(part);
             step.Data["volume_after_create"] = Api5.Num(volumeAfterCreate);
@@ -423,7 +396,7 @@ internal sealed class FilletBaseObjectsProbe
                 return null;
             }
 
-            // ── разрывается связь с созданием ──
+            // ── the link to creation is broken ──
             doc.SaveAs(path);
             Close(doc);
             doc = null;
@@ -496,13 +469,11 @@ internal sealed class FilletBaseObjectsProbe
         }
     }
 
-    // ════════════════════════════════════════════════════════════════ чтение BaseObjects ══
+    // ════════════════════════════════════════════════════════════════ reading BaseObjects ══
 
-    /// <summary>
-    /// Что именно возвращает <c>BaseObjects</c> живого признака: тип, длина, интерфейсы, пригодность.
-    /// Различает пустое значение, другой тип массива и ошибку маршалинга — задание §2 запрещает
-    /// читать несовпадение с <c>object[]</c> как пустой набор.
-    /// </summary>
+    /// <summary>What exactly <c>BaseObjects</c> of a live feature returns: type, length, interfaces,
+    /// usability. It distinguishes an empty value, a different array type and a marshalling error —
+    /// order §2 forbids reading a mismatch with <c>object[]</c> as an empty set.</summary>
     private void ReadBaseObjects(LiveFillet live)
     {
         var step = _report.Begin(
@@ -533,7 +504,7 @@ internal sealed class FilletBaseObjectsProbe
 
         step.Data["raw_type"] = Api5.RuntimeName(raw);
 
-        // Тип массива различается явно: object[] — ожидаемый, но не единственно возможный.
+        // The array type is distinguished explicitly: object[] is expected but not the only possible one.
         var length = LengthOf(raw);
         step.Data["length"] = length;
         step.Observe($"BaseObjects вернул {Api5.RuntimeName(raw)} длиной " +
@@ -548,9 +519,9 @@ internal sealed class FilletBaseObjectsProbe
 
         live.BaseObjectCount = count;
 
-        // Пригодность каждого элемента: что это за объект и отвечает ли он на интерфейсы, которыми
-        // признак принимает входы. Прямое приведение к object[] уже есть в проекте; проверяем
-        // СЕМАНТИКУ объектов, а не способ их достать (задание §5).
+        // Usability of each element: what object it is and whether it answers the interfaces by which
+        // the feature accepts inputs. A direct cast to object[] already exists in the project; here we
+        // check the SEMANTICS of the objects, not the way to obtain them (order §5).
         var details = new List<string>();
         var usable = 0;
         for (var i = 0; i < count; i++)
@@ -591,13 +562,11 @@ internal sealed class FilletBaseObjectsProbe
         step.Pass($"BaseObjects живого признака читается: {count} входов, {usable} пригодны к предъявлению.");
     }
 
-    // ══════════════════════════════════════════════════════ сокращение входами признака ══
+    // ══════════════════════════════════════════════════════ reduction by the feature's inputs ══
 
-    /// <summary>
-    /// Само сокращение: из объектов, ПРОЧИТАННЫХ ИЗ <c>BaseObjects</c>, собрать подмножество и
-    /// записать обратно. Ни <c>Clear()</c>, ни поиска рёбер конечного тела — обе операции подменили
-    /// бы предмет (задание §2).
-    /// </summary>
+    /// <summary>The reduction itself: build a subset from the objects READ FROM <c>BaseObjects</c> and
+    /// write it back. Neither <c>Clear()</c> nor a search for final-body edges — either operation would
+    /// substitute the subject (order §2).</summary>
     private void ReduceUsingBaseObjects(LiveFillet live)
     {
         var step = _report.Begin(
@@ -627,8 +596,8 @@ internal sealed class FilletBaseObjectsProbe
         var volumeBefore = Api5.Volume(live.Part);
         step.Data["volume_before"] = Api5.Num(volumeBefore);
 
-        // Три из ЧЕТЫРЁХ (а не два): набор из трёх отличим от «сломали и собрали четыре» и от
-        // постороннего набора из двух. Эталон трёх углов измерен ранее: 79942.05750411731.
+        // Three of FOUR (not two): a set of three is distinguishable from "broke and rebuilt four" and
+        // from a foreign set of two. MEASURED: the three-corner reference 79942.05750411731.
         var keep = Math.Min(3, count);
         var subset = new List<object>(keep);
         for (var i = 0; i < keep; i++)
@@ -706,62 +675,35 @@ internal sealed class FilletBaseObjectsProbe
         }
     }
 
-    // ═════════════════════════════════════════════════════════ различающие контроли ══
-    /// <summary>
-    /// <b>Замена одного ребра другим при НЕИЗМЕННОМ размере набора (1→1).</b> Это единственный опыт,
-    /// который отличает «признак принял наш состав» от «признак пересчитал то, чем был обязан быть».
-    /// </summary>
+    // ═════════════════════════════════════════════════════════ differentiating controls ══
+    /// <summary><b>Replacing one edge with another at an UNCHANGED set size (1→1).</b> This is the only
+    /// experiment that tells "the feature accepted our composition" from "the feature recomputed what
+    /// it was obliged to be".</summary>
     /// <remarks>
-    /// <para>
-    /// Почему без него нельзя. В опыте 4→3 объём перешёл на эталон трёх углов — но признак, у
-    /// которого сняли одно ребро, ОБЯЗАН пересчитаться именно так, независимо от того, понял ли он
-    /// наши входы. Ровно этой подменой и была ложная подпись пробы H. Замена держит количество
-    /// прежним, поэтому объём здесь не различает НИЧЕГО: набор из одного угла даёт
-    /// 79980.68583470577 при любом выборе угла (формула симметрична). Различает только СОСТАВ.
-    /// </para>
-    /// <para>
-    /// <b>Почему один угол, а не три или четыре (обе прежние версии опыта оказались
-    /// несостоятельны, и по разным причинам).</b>
-    /// </para>
-    /// <list type="bullet">
-    /// <item>
-    /// <b>Четыре угла.</b> Первая версия строила признак на всех четырёх углах и падала с
-    /// «свободных углов нет»: при r=3 по всем углам свободного угла не остаётся вообще, и
-    /// предъявлять как добавляемое нечего. Это отказ замысла опыта, а не свойство КОМПАС.
-    /// </item>
-    /// <item>
-    /// <b>Три угла.</b> Вторая версия строила признак на трёх углах и падала с «угловых рёбер
-    /// пластины 1, нужно 4». Причина установлена, и она поучительна: <see cref="VerticalCornerEdges"/>
-    /// ищет рёбра, которые вертикальны, стоят в углу и идут на всю толщину. После скругления трёх
-    /// углов рёбра ЭТИХ углов на конечном теле исчезают — на их месте цилиндры. Поэтому «свободное
-    /// угловое ребро» искалось среди того, чего больше нет. Ошибка была в предпосылке опыта, а не в
-    /// отказе признака; сообщение об отказе это и показало (4 ожидалось, 1 найдено).
-    /// </item>
-    /// </list>
-    /// <para>
-    /// <b>Один угол даёт чистый опыт.</b> Скругляется ровно один угол (эталон 79980.68583470577),
-    /// три остаются свободными. Заменяем предъявленное ребро на ребро ДРУГОГО свободного угла:
-    /// размер набора не меняется (1→1), объём не меняется (та же формула), а скругление обязано
-    /// переехать с угла A на угол B. Ничего «обязанного пересчитаться» здесь нет: признак с одним
-    /// входом, у которого подменили этот вход, либо принял подмену, либо нет.
-    /// </para>
-    /// <para>
-    /// <b>Чем именно измеряется состав.</b> Углы пластины имеют координаты (±50, ±40). Признак
-    /// состава — координаты осевых линий цилиндрических граней (<c>CylinderAxisCorners</c>): если
-    /// скругление переехало, прежний угол обязан исчезнуть из этого набора, а новый — появиться.
-    /// Никакая другая величина здесь этого не покажет.
-    /// </para>
-    /// <para>
-    /// <b>Откуда берётся «свободное» ребро.</b> Обходом конечного тела ПОСЛЕ reopen, тем же отбором,
-    /// что и при создании. У скруглённого угла ребра на теле нет — там цилиндр, и отбор по
-    /// «прямое + вертикальное + в углу + на всю толщину» его не пропускает. Поэтому у эталона с
-    /// одним скруглением обход обязан вернуть РОВНО ТРИ ребра — по числу свободных углов, и это
-    /// само по себе проверяется. Запоминать указатели рёбер до создания нельзя: после
-    /// save→close→open они мертвы, и предъявление мёртвого указателя было бы опытом о маршалинге,
-    /// а не об адресации. Свободное ребро опознаётся по координате угла, а не по позиции в
-    /// коллекции: порядок выдачи недетерминирован (измерено, 6 прогонов — 6 порядков).
-    /// </para>
-    /// </remarks>
+    /// <b>Why it is indispensable.</b> In the 4→3 experiment the volume moved to the three-corner
+    /// reference — but a feature from which one edge was removed is OBLIGED to recompute exactly that
+    /// way, whether or not it understood our inputs. That is precisely the substitution that gave probe
+    /// H its false label. Substitution keeps the count unchanged, so the volume here distinguishes
+    /// NOTHING: a set of one corner gives 79980.68583470577 for ANY choice of corner (the formula is
+    /// symmetric). Only the COMPOSITION distinguishes.
+    /// <b>Why one corner, not three or four.</b> A set of four leaves no free corner at r=3, so there is
+    /// nothing to offer as the one to add; a set of three destroys the edges of the filleted corners on
+    /// the final body, so a "free corner edge" would be sought among what no longer exists. One corner
+    /// gives a clean experiment: exactly one corner is filleted (reference 79980.68583470577), three stay
+    /// free.
+    /// <b>What exactly measures the composition.</b> The plate corners have coordinates (±50, ±40). The
+    /// composition witness is the coordinates of the cylinder-face axes (<c>CylinderAxisCorners</c>): if
+    /// the fillet moved, the old corner must disappear from that set and the new one must appear. No
+    /// other quantity shows this here.
+    /// <b>Where the "free" edge comes from.</b> From a walk of the final body AFTER reopen, with the
+    /// same selection as at creation. A filleted corner has no edge on the body — there is a cylinder —
+    /// so the "straight + vertical + in a corner + full thickness" selection does not pass it. Thus for a
+    /// one-fillet reference the walk must return EXACTLY THREE edges — one per free corner — and that is
+    /// checked by itself. INVARIANT: edge pointers must not be remembered before creation; after
+    /// save→close→open they are dead, and offering a dead pointer would be an experiment about
+    /// marshalling, not addressing. The free edge is identified by corner coordinate, not by position in
+    /// the collection: MEASURED: the return order is non-deterministic (6 runs — 6 orders).
+    /// History: docs/decisions/probes.md#fillet-base-objects</remarks>
     private void SubstituteOneEdge()
     {
         var step = _report.Begin(
@@ -769,7 +711,7 @@ internal sealed class FilletBaseObjectsProbe
             "КОНТРОЛЬ: замена одного ребра при неизменном размере набора (1→1)",
             "Признак принимает НАШ состав или пересчитывает то, чем был обязан быть?");
 
-        // Один угол: три остаются свободными, и подмена угла не задевает уже скруглённые рёбра.
+        // One corner: three stay free, and substituting the corner does not touch the already filleted edges.
         var live = BuildLiveFillet("H2.4", filledCorners: 1);
         if (live is null)
         {
@@ -786,7 +728,7 @@ internal sealed class FilletBaseObjectsProbe
                 return;
             }
 
-            // Углы, которые СКРУГЛЕНЫ сейчас (один), и углы пластины, которых в наборе нет (три).
+            // The corners that ARE filleted now (one) and the plate corners absent from the set (three).
             var filletedCorners = CylinderAxisCorners(live.Part, step);
             step.Data["corners_rounded_before"] = filletedCorners;
             if (filletedCorners.Count != 1)
@@ -804,12 +746,12 @@ internal sealed class FilletBaseObjectsProbe
                 return;
             }
 
-            // Свободное ребро берётся С ТЕЛА ПОСЛЕ REOPEN, обходом того же отбора, что и при
-            // создании. Почему не «запомнить ребро до создания»: указатели на объекты прежнего
-            // документа после save→close→open мертвы, и предъявлять признаку мёртвый указатель —
-            // это опыт о маршалинге, а не об адресации. Почему не «обход всех четырёх»: у
-            // скруглённого угла ребра на теле уже нет (на его месте цилиндр), поэтому у эталона с
-            // ОДНИМ скруглением обход обязан вернуть ТРИ ребра — по числу свободных углов.
+            // The free edge is taken FROM THE BODY AFTER REOPEN, by a walk with the same selection as at
+            // creation. Why not "remember an edge before creation": pointers to objects of the previous
+            // document are dead after save→close→open, and offering the feature a dead pointer is an
+            // experiment about marshalling, not addressing. Why not "walk all four": a filleted corner
+            // already has no edge on the body (there is a cylinder in its place), so for a reference with
+            // ONE fillet the walk must return THREE edges — one per free corner.
             var plateCorners = VerticalCornerEdges(live.Part, step);
             step.Data["free_corner_edges_on_reopened_body"] = plateCorners.Count;
             if (plateCorners.Count != 3)
@@ -819,9 +761,9 @@ internal sealed class FilletBaseObjectsProbe
                 return;
             }
 
-            // Какое из рёбер свободно — определяем по координатам, а не по позиции в коллекции:
-            // порядок выдачи недетерминирован (измерено, 6 прогонов — 6 порядков). Берётся ПЕРВОЕ
-            // свободное; какой именно угол попал в замену, записывается.
+            // Which edge is free is determined by coordinates, not by position in the collection: the
+            // return order is non-deterministic (MEASURED: 6 runs — 6 orders). The FIRST free one is
+            // taken; which corner ended up in the substitution is recorded.
             var foreign = plateCorners.FirstOrDefault(e => CornerOf(e) is string corner && free.Contains(corner));
             var foreignCorner = foreign is null ? null : CornerOf(foreign);
             if (foreign is null || foreignCorner is null)
@@ -832,9 +774,9 @@ internal sealed class FilletBaseObjectsProbe
 
             step.Data["substituting_corner"] = foreignCorner;
 
-            // ── Заменяем ОДИН вход: предъявляем ребро свободного угла вместо прежнего. Размер
-            //    набора НЕ меняется (1→1), объём НЕ меняется — меняется только состав. Именно это
-            //    и отличает адресацию от пересчёта по подставленному входу.
+            // ── Replace ONE input: offer an edge of a free corner instead of the previous one. The set
+            //    size does NOT change (1→1), the volume does NOT change — only the composition changes.
+            //    That is exactly what distinguishes addressing from recomputation from a substituted input.
             object? raw;
             try
             {
@@ -847,7 +789,7 @@ internal sealed class FilletBaseObjectsProbe
                 return;
             }
 
-            // Какой именно угол СНИМАЕТСЯ: тот, что скруглён сейчас (он же — единственный вход).
+            // Which corner is REMOVED: the one filleted now (it is also the single input).
             var droppedCorner = filletedCorners.Count == 1 ? filletedCorners[0] : null;
             step.Data["dropped_corner"] = droppedCorner ?? "не опознан";
 
@@ -886,12 +828,12 @@ internal sealed class FilletBaseObjectsProbe
             step.Data["volume_after"] = Api5.Num(volumeAfter);
             step.Data["corners_rounded_after"] = cornersAfter;
 
-            // Эталон при одном углу. И до, и после замены он ОДИН И ТОТ ЖЕ: объём при 1→1
-            // не различает ничего — в этом и смысл опыта.
+            // Reference at one corner. Before and after the substitution it is THE SAME: the volume at
+            // 1→1 distinguishes nothing — that is the point of the experiment.
             var expected1 = PlateVolume - 1 * (1 - Math.PI / 4) * Radius3 * Radius3 * PlateThickness;
             step.Data["expected_one_corner"] = Api5.Num(expected1);
 
-            // Исчез ли из состава угол, который мы НЕ предъявляли?
+            // Did the corner we did NOT offer disappear from the composition?
             var removed = filletedCorners.Where(c => !cornersAfter.Contains(c)).ToArray();
             var added = cornersAfter.Where(c => !filletedCorners.Contains(c)).ToArray();
             step.Data["corners_left"] = removed;
@@ -945,18 +887,14 @@ internal sealed class FilletBaseObjectsProbe
         }
     }
 
-    /// <summary>
-    /// <b>Повторяемость маршрута на свежем документе.</b> Задание §2 требует опыта с расширением, но
-    /// чистого расширения НАБОРА на этом эталоне не построить: у пластины ровно четыре вертикальных
-    /// угла, и все четыре уже скруглены при r=3. Поэтому здесь проверяется то, что осмысленно, —
-    /// <b>второй независимый прогон сокращения на своём документе</b>: маршрут обязан
-    /// воспроизводиться, а не сработать один раз.
-    /// </summary>
-    /// <remarks>
-    /// Подмена не выдаётся за выполнение требования: опыт с расширением НАБОРА остаётся невыполненным
-    /// на этом эталоне, и это записывается явно. Объявлять расширение измеренным по этому опыту
-    /// нельзя.
-    /// </remarks>
+    /// <summary><b>Repeatability of the route on a fresh document.</b> Order §2 asks for an enlargement
+    /// experiment, but a clean enlargement of the SET cannot be built on this reference: the plate has
+    /// exactly four vertical corners, all four already filleted at r=3. So what is meaningful is checked
+    /// here — <b>a second independent reduction run on its own document</b>: the route must reproduce,
+    /// not fire once.</summary>
+    /// <remarks>LIMIT: the substitution is not passed off as satisfying the requirement: the enlargement
+    /// experiment stays unfulfilled on this reference and that is recorded explicitly. Enlargement must
+    /// not be declared measured from this experiment.</remarks>
     private void EnlargeUsingBaseObjects()
     {
         var step = _report.Begin(
@@ -969,9 +907,8 @@ internal sealed class FilletBaseObjectsProbe
                      "Опыт «4→5» потребовал бы другого эталона и был бы несравним с числами этой серии. " +
                      "Здесь измеряется то, что доступно, — повторяемость уже найденного маршрута.");
 
-        // Исходный набор — четыре угла: повтор проверяет ДРУГОЕ сокращение, чем H2.3 (тот сокращал
-        // с четырёх до трёх). Два одинаковых опыта не различили бы «маршрут работает» от
-        // «сработал один раз».
+        // The source set is four corners: the repeat checks a DIFFERENT reduction than H2.3 (which went
+        // from four to three). Two identical experiments would not tell "the route works" from "it fired once".
         var live = BuildLiveFillet("H2.5");
         if (live is null)
         {
@@ -1000,7 +937,7 @@ internal sealed class FilletBaseObjectsProbe
                 return;
             }
 
-            // Сокращение 4→2: иная величина, чем в H2.3, поэтому и эталон иной.
+            // Reduction 4→2: a different quantity than in H2.3, hence a different reference.
             const int keep = 2;
             var subset = new List<object>();
             for (var i = 0; i < keep; i++)
@@ -1059,36 +996,26 @@ internal sealed class FilletBaseObjectsProbe
         }
     }
 
-    /// <summary>
-    /// <b>Адресация на модели с ДВУМЯ скруглениями одного радиуса.</b> Обязательный критерий приёмки:
-    /// меняется только выбранный признак. Один признак без соседа не различает «адресация» и
-    /// «единственный кандидат» — на модели с одним скруглением любой маршрут выглядит работающим.
-    /// </summary>
+    /// <summary><b>Addressing on a model with TWO fillets of one radius.</b> A mandatory acceptance
+    /// criterion: only the selected feature changes. A single feature with no neighbour cannot tell
+    /// "addressing" from "the only candidate" — on a model with one fillet any route looks working.</summary>
     /// <remarks>
-    /// <para>
-    /// <b>Почему эталон иной, а не четыре угла.</b> Нужны ДВА независимых признака одного радиуса на
-    /// одной пластине. Из четырёх вертикальных углов делаются два скругления: первое по ОДНОМУ углу,
-    /// второе — по ДВУМ. Радиус у обоих R3, документ один. Разные размеры наборов нужны для
-    /// различимости: у признака с одним входом снятие входа означало бы опустошение набора, и это
-    /// другой опыт.
-    /// </para>
-    /// <para>
-    /// <b>Что здесь измеряется.</b> Не объём (он симметричен), а РАСПРЕДЕЛЕНИЕ скруглений по углам:
-    /// какие углы заняты до записи и какие после. Мутируется признак с ДВУМЯ входами, признак с
-    /// одним входом служит СВИДЕТЕЛЕМ: если он изменится — адресация не найдена. Если изменился
-    /// только мутируемый — адресация по признаку подтверждена.
-    /// </para>
-    /// <para>
-    /// <b>Почему это не тот же опыт, что H2.4.</b> H2.4 держит ОДИН признак и меняет в нём угол:
-    /// он различает «принял наш состав» от «пересчитал по своему». Здесь проверяется, что маршрут
-    /// не путает ДВА признака. Два разных вопроса.
-    /// </para>
-    /// <para>
-    /// <b>Почему соответствие признаков не берётся по индексу.</b> Задание прямо запрещает
-    /// сопоставлять произвольные скругления по позиции в коллекции. Каждый признак опознаётся по
-    /// СВОИМ входным рёбрам: угол входного ребра читается через перенос в API7, и по нему признак
-    /// получает имя. Тот же приём применяется к свидетелю при перечитывании.
-    /// </para>
+    /// <b>Why the reference is different, not four corners.</b> TWO independent features of one radius
+    /// are needed on one plate. From the four vertical corners two fillets are made: the first on ONE
+    /// corner, the second on TWO. Both have radius R3, the document is one. Different set sizes are
+    /// needed for distinguishability: for a feature with one input, removing an input would mean
+    /// emptying the set, and that is a different experiment.
+    /// <b>What is measured here.</b> Not the volume (it is symmetric) but the DISTRIBUTION of fillets
+    /// over corners: which corners are occupied before the write and which after. The feature with TWO
+    /// inputs is mutated; the feature with one input serves as a WITNESS: if it changes, addressing is
+    /// not found. If only the mutated one changed, addressing by feature is confirmed.
+    /// <b>Why this is not the same experiment as H2.4.</b> H2.4 holds ONE feature and changes a corner
+    /// inside it: it tells "accepted our composition" from "recomputed its own". Here it is checked that
+    /// the route does not confuse TWO features. Two different questions.
+    /// <b>Why feature correspondence is not taken by index.</b> The order explicitly forbids matching
+    /// arbitrary fillets by position in the collection. Each feature is identified by ITS OWN input
+    /// edges: the corner of an input edge is read via a transfer to API7, and by it the feature gets a
+    /// name. The same technique is applied to the witness on re-read.
     /// </remarks>
     private void AddressAmongTwoFillets()
     {
@@ -1120,16 +1047,13 @@ internal sealed class FilletBaseObjectsProbe
                 return;
             }
 
-            // ── Какая запись какому признаку соответствует — НЕ предполагается по индексу.
-            //    Задание прямо запрещает сопоставлять произвольные скругления по позиции в
-            //    коллекции. Поэтому каждый признак опознаётся по СВОИМ входным рёбрам.
+            // ── Which write corresponds to which feature is NOT assumed by index. The order explicitly
+            //    forbids matching arbitrary fillets by position in the collection. So each feature is
+            //    identified by ITS OWN input edges.
             //
-            //    Первая версия опознания читала угол входного элемента через CornerOfApi7, который
-            //    переносил элемент в API7 и приводил к ksEntity. Он молча возвращал null на КАЖДОМ
-            //    элементе (fillets_0_corners=[], fillets_1_corners=[]), и вердикт падал в последнюю
-            //    ветку — то есть отказ идентификации выглядел как «адресация не подтверждена».
-            //    Поэтому здесь сначала ИЗМЕРЯЕТСЯ, какой маршрут чтения элемента вообще работает,
-            //    и результат записывается, а не подразумевается.
+            //    INVARIANT: first MEASURE which route of reading an element works at all, and record the
+            //    result rather than implying it — a failed identification must not look like "addressing
+            //    not confirmed".
             var aInputs = InputsOf(a, step, "a");
             var bInputs = InputsOf(b, step, "b");
             if (aInputs.Count == 0 || bInputs.Count == 0)
@@ -1138,9 +1062,9 @@ internal sealed class FilletBaseObjectsProbe
                 return;
             }
 
-            // Опознание по устойчивому идентификатору IModelObject.Reference — тому самому, что уже
-            // измерен в H2.2 (Reference=1073741872…75, Type=ksObjectEdge). Он не зависит от порядка
-            // выдачи коллекции, в отличие от индекса.
+            // Identification by the stable IModelObject.Reference — the very one already measured in H2.2
+            // (Reference=1073741872…75, Type=ksObjectEdge). Unlike the index it does not depend on the
+            // collection's return order.
             var aRefs = RefsOfInputs(aInputs);
             var bRefs = RefsOfInputs(bInputs);
             step.Data["fillets_0_input_refs"] = aRefs;
@@ -1148,16 +1072,15 @@ internal sealed class FilletBaseObjectsProbe
             step.Data["fillets_0_input_count"] = aInputs.Count;
             step.Data["fillets_1_input_count"] = bInputs.Count;
 
-            // ── ВАЖНОЕ ИЗМЕРЕНИЕ, закрывающее один путь опознания. Ссылки входов признака НЕ равны
-            //    ссылкам рёбер конечного тела: у входов 1073742065–2067, у единственного уцелевшего
-            //    углового ребра тела — 1073742080. Это разные объекты в разных контекстах, и
-            //    связать вход с углом по Reference НЕЛЬЗЯ. Измерено, а не предположено: первая
-            //    версия опознания на этом и остановилась, вернув 0 и 0.
+            // ── IMPORTANT MEASUREMENT closing one identification route. MEASURED: the feature's input
+            //    references are NOT equal to the final-body edge references: inputs are 1073742065–2067,
+            //    the single surviving corner edge of the body is 1073742080. These are different objects
+            //    in different contexts, and an input CANNOT be linked to a corner by Reference.
             //
-            //    Поэтому состав признака измеряется НЕ через углы тела, а через его СОБСТВЕННЫЕ
-            //    входы: их ссылки устойчивы и перечитываются. С углами тела сверяется лишь
-            //    количество и распределение скруглений — через CylinderAxisCorners, который
-            //    читается с граней, а не с входов.
+            //    Therefore the feature's composition is measured NOT through body corners but through its
+            //    OWN inputs: their references are stable and re-read. Against body corners only the count
+            //    and distribution of fillets is compared — via CylinderAxisCorners, which is read from
+            //    faces, not from inputs.
             var bodyCornerEdges = VerticalCornerEdges(live.Part, step);
             step.Data["body_free_corner_edges"] = bodyCornerEdges.Count;
             step.Data["body_corner_refs"] = bodyCornerEdges
@@ -1171,9 +1094,9 @@ internal sealed class FilletBaseObjectsProbe
                 return;
             }
 
-            // Радиусы обязаны совпадать: опыт про адресацию ПРИ ОДИНАКОВОМ радиусе — иначе
-            // сопоставление шло бы по радиусу, а это как раз то упрощение, которое задание
-            // запрещает переносить в продукт.
+            // The radii must match: the experiment is about addressing at an EQUAL radius — otherwise
+            // matching would go by radius, exactly the simplification the order forbids carrying into the
+            // product.
             var aRadius = ReadRadius(a, step, "a");
             var bRadius = ReadRadius(b, step, "b");
             step.Data["fillets_0_radius"] = aRadius;
@@ -1184,8 +1107,8 @@ internal sealed class FilletBaseObjectsProbe
                 return;
             }
 
-            // Мутируется признак с ДВУМЯ входами. Одноугольный не трогается и служит свидетелем:
-            // если он всё-таки изменится, значит запись задела не тот объект.
+            // The feature with TWO inputs is mutated. The one-corner feature is left alone and serves as
+            // a witness: if it changes anyway, the write touched the wrong object.
             var (victim, victimInputs, victimTag, witness, witnessInputs, witnessTag) =
                 aInputs.Count >= 2
                     ? (a, aInputs, "Fillets[0]", b, bInputs, "Fillets[1]")
@@ -1210,7 +1133,7 @@ internal sealed class FilletBaseObjectsProbe
             step.Data["mutated_refs_before"] = victimRefsBefore;
             step.Data["witness_refs_before"] = witnessRefsBefore;
 
-            // Состав каждого признака ДО записи — по его собственным входам.
+            // Composition of each feature BEFORE the write — by its own inputs.
             var cornersBefore = CylinderAxisCorners(live.Part, step);
             step.Data["corners_rounded_before_total"] = cornersBefore;
 
@@ -1246,7 +1169,7 @@ internal sealed class FilletBaseObjectsProbe
             step.Data["corners_lost"] = lost;
             step.Data["corners_gained"] = gained;
 
-            // Свидетель перечитывается: его входы обязаны остаться ровно теми же — по ссылкам.
+            // The witness is re-read: its inputs must stay exactly the same — by reference.
             var witnessAfter = InputsOf(witness, step, "witness_after");
             var witnessRefsAfter = RefsOfInputs(witnessAfter);
             step.Data["witness_inputs_after"] = witnessAfter.Count;
@@ -1257,13 +1180,13 @@ internal sealed class FilletBaseObjectsProbe
                 witnessRefsBefore.OrderBy(r => r).SequenceEqual(witnessRefsAfter.OrderBy(r => r));
             step.Data["witness_untouched"] = witnessUntouched;
 
-            // Мутируемый признак перечитывается: из его набора обязан уйти ровно один вход.
+            // The mutated feature is re-read: exactly one input must leave its set.
             var victimAfter = InputsOf(victim, step, "mutated_after");
             var victimRefsAfter = RefsOfInputs(victimAfter);
             step.Data["mutated_inputs_after"] = victimAfter.Count;
             step.Data["mutated_refs_after"] = victimRefsAfter;
 
-            // Ожидание: с тела ушёл ровно один угол, объём — эталон двух углов.
+            // Expectation: exactly one corner left the body, the volume is the two-corner reference.
             var expectedAfter = PlateVolume - 2 * (1 - Math.PI / 4) * Radius3 * Radius3 * PlateThickness;
             var volumeMatchesTwoCorners = Matches(volumeAfter, expectedAfter);
             var lostOneCorner = lost.Length == 1 && gained.Length == 0;
@@ -1317,18 +1240,15 @@ internal sealed class FilletBaseObjectsProbe
         }
     }
 
-    /// <summary>
-    /// Устойчивые идентификаторы <c>IModelObject.Reference</c> входных элементов признака. Не зависят
-    /// от порядка выдачи коллекции, в отличие от индекса, и перечитываются после мутации — поэтому
-    /// именно они служат мерой СОСТАВА признака в опыте адресации.
-    /// </summary>
-    /// <remarks>
-    /// <b>Чего эти ссылки НЕ делают.</b> Они не связывают вход признака с углом конечного тела:
-    /// измерено, что у входов ссылки 1073742065–2067, а у уцелевшего углового ребра тела —
-    /// 1073742080. Это разные объекты в разных контекстах; попытка связать их по Reference дала
-    /// 0 и 0 и остановила первую версию опыта. Границу полезно помнить: одна и та же ссылка
-    /// осмысленна внутри своего контекста и не переносится в чужой.
-    /// </remarks>
+    /// <summary>Stable <c>IModelObject.Reference</c> identifiers of the feature's input elements. Unlike
+    /// the index they do not depend on the collection's return order and are re-read after a mutation —
+    /// that is why they serve as the measure of the feature's COMPOSITION in the addressing
+    /// experiment.</summary>
+    /// <remarks><b>What these references do NOT do.</b> They do not link a feature input to a
+    /// final-body corner: MEASURED: input references are 1073742065–2067, the surviving corner edge of
+    /// the body is 1073742080. These are different objects in different contexts; trying to link them by
+    /// Reference returned 0 and 0. LIMIT: the same reference is meaningful within its own context and is
+    /// not carried into another.</remarks>
     private static List<int> RefsOfInputs(IReadOnlyList<object> inputs)
     {
         var refs = new List<int>();
@@ -1342,7 +1262,7 @@ internal sealed class FilletBaseObjectsProbe
                 }
                 catch (Exception ex) when (ex is COMException or InvalidCastException)
                 {
-                    // Элемент без читаемой ссылки пропускается: это ответ, а не падение.
+                    // An element without a readable reference is skipped: that is an answer, not a crash.
                 }
             }
         }
@@ -1350,7 +1270,7 @@ internal sealed class FilletBaseObjectsProbe
         return refs;
     }
 
-    /// <summary>Устойчивая ссылка ребра тела, полученного как <c>ksEntity</c> (API5-объект).</summary>
+    /// <summary>Stable reference of a body edge obtained as a <c>ksEntity</c> (an API5 object).</summary>
     private int? ReferenceOf(ksEntity edge)
     {
         try
@@ -1369,7 +1289,7 @@ internal sealed class FilletBaseObjectsProbe
         return null;
     }
 
-    /// <summary>Входы признака через <c>BaseObjects</c>: объекты, пригодные к предъявлению обратно.</summary>
+    /// <summary>The feature's inputs via <c>BaseObjects</c>: objects usable to be offered back.</summary>
     private static List<object> InputsOf(IFillet fillet, ProbeStep step, string tag)
     {
         var inputs = new List<object>();
@@ -1403,13 +1323,10 @@ internal sealed class FilletBaseObjectsProbe
         return inputs;
     }
 
-    /// <summary>
-    /// Радиус признака в API7: <c>IFillet.Radius1</c> — измеренный член (dispid 3, см.
-    /// <c>Api7Bridge.Api7Fillet.Read</c>). Нужен, чтобы убедиться, что два признака действительно
-    /// одного радиуса, — иначе опыт про адресацию выродился бы в сопоставление по радиусу, которое
-    /// задание прямо запрещает переносить в продукт. Первая версия обращалась к <c>IFillet.Radius</c>:
-    /// такого члена нет, компилятор это подтвердил.
-    /// </summary>
+    /// <summary>The feature's radius in API7: <c>IFillet.Radius1</c> — the measured member (dispid 3, see
+    /// <c>Api7Bridge.Api7Fillet.Read</c>). Needed to be sure the two features really have one radius —
+    /// otherwise the addressing experiment would degenerate into matching by radius, which the order
+    /// explicitly forbids carrying into the product.</summary>
     private static double? ReadRadius(IFillet fillet, ProbeStep step, string tag)
     {
         try
@@ -1423,32 +1340,20 @@ internal sealed class FilletBaseObjectsProbe
         }
     }
 
-    /// <summary>
-    /// <b>Сверка с пробой H на числах ЭТОГО прогона.</b> Не пересказ и не ссылка на документ:
-    /// метод пересчитывает, следует ли из ТОЛЬКО ЧТО полученного утверждение, которое приписывалось
-    /// пробе H, и в каком месте это утверждение перестаёт быть следствием.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Задание §137 требует не переписывать историю задним числом: результат этой пробы имеет
-    /// собственный <c>run_id</c>, а к старому добавляется точное пояснение. Поэтому сверка здесь
-    /// именно СЧИТАЕТСЯ: она берёт числа опытов 4→3 и 1→1 из этого же отчёта и проверяет
-    /// различающую способность каждого по отдельности.
-    /// </para>
-    /// <para>
-    /// Проверяемое утверждение: «запись <c>BaseObjects</c> применяется к существующему признаку».
-    /// Опыт 4→3 его НЕ подтверждает, даже когда объём точно попал в эталон трёх углов: признак,
-    /// у которого сняли одно ребро, обязан пересчитаться так же и в том случае, если он наши
-    /// входы не разобрал вовсе. Опыт 1→1 подтверждает, но не объёмом, а составом: при неизменном
-    /// размере набора объём до и после ОДИН И ТОТ ЖЕ, и единственное, что различается, — какой
-    /// угол скруглён.
-    /// </para>
-    /// <para>
-    /// Отсюда и граница: если опыт 1→1 не показал смены состава, то опыт 4→3 следует читать как
-    /// «пересчёт по своему составу», а маршрут адресации — как НЕ найденный. Именно эта связка
-    /// делает сверку содержательной, а не декоративной.
-    /// </para>
-    /// </remarks>
+    /// <summary><b>Reconciliation with probe H on the numbers of THIS run.</b> Not a retelling and not a
+    /// reference to a document: the method recomputes whether the claim attributed to probe H follows
+    /// from what was JUST obtained, and where that claim stops being a consequence.</summary>
+    /// <remarks>The reconciliation is COMPUTED, not narrated: it takes the numbers of the 4→3 and 1→1 experiments
+    /// from this same report and checks the distinguishing power of each on its own.
+    /// The claim under test: "a write to <c>BaseObjects</c> applies to an existing feature". The 4→3
+    /// experiment does NOT confirm it, even when the volume lands exactly on the three-corner reference:
+    /// a feature from which one edge was removed must recompute the same way even if it did not parse
+    /// our inputs at all. The 1→1 experiment confirms it, not by volume but by composition: at an
+    /// unchanged set size the volume before and after is THE SAME, and the only thing that differs is
+    /// which corner is filleted.
+    /// Hence the boundary: if the 1→1 experiment did not show a change of composition, the 4→3
+    /// experiment must be read as "recomputed its own composition", and the addressing route as NOT
+    /// found. That link is what makes the reconciliation substantive rather than decorative.</remarks>
     private void ReconcileWithProbeH()
     {
         var step = _report.Begin(
@@ -1471,7 +1376,7 @@ internal sealed class FilletBaseObjectsProbe
         step.Data["reduce_4_to_3_verdict"] = reduce.Verdict.ToString();
         step.Data["substitute_1_to_1_verdict"] = substitute.Verdict.ToString();
 
-        // Числа обеих сторон — из ЭТОГО прогона, а не из документа пробы H.
+        // The numbers of both sides come from THIS run, not from probe H's document.
         step.Data["this_run_expected_3_corners"] = Api5.Num(ExpectedCorners(3));
         step.Data["this_run_expected_1_corner"] = Api5.Num(ExpectedCorners(1));
         step.Data["this_run_reduce_volume_after"] = reduce.Data.TryGetValue("volume_after", out var v3) ? v3 : null;
@@ -1510,28 +1415,21 @@ internal sealed class FilletBaseObjectsProbe
         }
     }
 
-    /// <summary>Эталон объёма пластины с <paramref name="corners"/> скруглёнными углами при R3.</summary>
+    /// <summary>Reference volume of the plate with <paramref name="corners"/> filleted corners at R3.</summary>
     private static double ExpectedCorners(int corners) =>
         PlateVolume - corners * (1 - Math.PI / 4) * Radius3 * Radius3 * PlateThickness;
 
-    /// <summary>Шаг уже собранного отчёта по идентификатору — для сверки между опытами.</summary>
+    /// <summary>A step of the already-collected report by id — for reconciliation between experiments.</summary>
     private ProbeStep? FindStep(string id) =>
         _report.Steps.FirstOrDefault(s => string.Equals(s.Id, id, StringComparison.Ordinal));
-    /// <summary>
-    /// Координаты углов, В КОТОРЫХ СТОИТ ЦИЛИНДРИЧЕСКАЯ ГРАНЬ скругления — «какие углы скруглены»,
-    /// прочитанное с конечного тела, а не с признака. Это и есть мера СОСТАВА: объём одинаков у
-    /// любого набора из четырёх углов, а углы — разные.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Сигнатура цилиндрической грани скругления: ось на расстоянии r от угла пластины. Углы
-    /// (±50, ±40) при R3 дают оси в (±47, ±37). Источник осевой точки — не выдумка, а измеренный
-    /// путь <see cref="Api5.ReadFaces"/>: <c>GetSurface() → ksSurface → GetSurfaceParam() →
-    /// ksCylinderParam → GetPlacement() → GetOrigin()</c>. Первая версия этого метода вызывала
-    /// несуществующие <c>face.Surface()</c>/<c>ksCylinderSurface</c> — компилятор поймал, и это
-    /// ровно тот случай, когда догадка о члене API не должна попадать в замер.
-    /// </para>
-    /// </remarks>
+    /// <summary>The coordinates of the corners WHERE A CYLINDRICAL FILLET FACE SITS — "which corners are
+    /// filleted", read from the final body, not from the feature. This is the measure of COMPOSITION:
+    /// the volume is the same for any set of four corners, but the corners differ.</summary>
+    /// <remarks>Signature of a fillet's cylindrical face: an axis at distance r from the plate corner.
+    /// The corners (±50, ±40) at R3 give axes at (±47, ±37). The source of the axis point is not a guess
+    /// but the measured path <see cref="Api5.ReadFaces"/>: <c>GetSurface() → ksSurface →
+    /// GetSurfaceParam() → ksCylinderParam → GetPlacement() → GetOrigin()</c>. LIMIT: a guess about an
+    /// API member must not enter a measurement.</remarks>
     private static List<string> CylinderAxisCorners(ksPart part, ProbeStep step)
     {
         var corners = new List<string>();
@@ -1547,8 +1445,8 @@ internal sealed class FilletBaseObjectsProbe
             var x = point[0];
             var y = point[1];
 
-            // Ось скругления отстоит от угла на r по обеим осям. Принимаются только оси решётки
-            // (±47, ±37): иначе в «скруглённые углы» попали бы посторонние цилиндры.
+            // The fillet axis is r away from the corner along both axes. Only lattice axes (±47, ±37)
+            // are accepted: otherwise foreign cylinders would enter the "filleted corners".
             if (Math.Abs(Math.Abs(x) - (PlateWidth / 2d - Radius3)) > 1e-3 ||
                 Math.Abs(Math.Abs(y) - (PlateHeight / 2d - Radius3)) > 1e-3)
             {
@@ -1567,7 +1465,7 @@ internal sealed class FilletBaseObjectsProbe
         return corners;
     }
 
-    /// <summary>Координатный ярлык углового ребра: «(50,-40)» и т. п.</summary>
+    /// <summary>Coordinate label of a corner edge: "(50,-40)" and the like.</summary>
     private static string? CornerOf(ksEntity edge)
     {
         try
@@ -1585,10 +1483,9 @@ internal sealed class FilletBaseObjectsProbe
         }
     }
 
-    /// <summary>
-    /// Координатный ярлык угла по определению ребра — общий для ребра тела и для ребра, добытого
-    /// иным путём. Вызывается только там, где определение уже получено проверенным маршрутом.
-    /// </summary>
+    /// <summary>Coordinate label of a corner from an edge definition — shared by a body edge and an edge
+    /// obtained another way. Called only where the definition was already obtained by a verified
+    /// route.</summary>
     private static string? CornerOfDefinition(ksEdgeDefinition definition)
     {
         if (definition.GetVertex(true) is not ksVertexDefinition v0 || definition.GetVertex(false) is not ksVertexDefinition v1
@@ -1602,7 +1499,7 @@ internal sealed class FilletBaseObjectsProbe
         return $"({x.ToString("0.####", CultureInfo.InvariantCulture)},{y.ToString("0.####", CultureInfo.InvariantCulture)})";
     }
 
-    /// <summary>Перенос ребра в API7 тем же способом, каким это делает проба H.</summary>
+    /// <summary>Transfer of an edge into API7 the same way probe H does it.</summary>
     private object? ToApi7(ProbeStep step, ksEntity edge)
     {
         try
@@ -1622,14 +1519,12 @@ internal sealed class FilletBaseObjectsProbe
         }
     }
 
-    // ══════════════════════════════════════════════════════════════════════ механика ══
+    // ══════════════════════════════════════════════════════════════════════ mechanics ══
 
-    /// <summary>
-    /// Пластина 100×80×10, четыре вертикальных угла R3. Эталон: 79922.74333882307.
-    /// Возвращается созданный признак — он нужен ТОЛЬКО для дальнейшего сохранения документа.
-    /// Перестроение делает вызывающий: у <c>ksPart</c> нет члена <c>Document</c>, а документ у него
-    /// есть (это выяснилось компилятором, а не догадкой).
-    /// </summary>
+    /// <summary>Plate 100×80×10, four vertical R3 corners. MEASURED: reference 79922.74333882307. The
+    /// created feature is returned — it is needed ONLY for the subsequent save of the document. Rebuild
+    /// is done by the caller: a <c>ksPart</c> has no <c>Document</c> member but does have a document (the
+    /// compiler established this, not a guess).</summary>
     private static ksEntity? CreateFillet(ProbeStep step, ksPart part, IReadOnlyList<ksEntity> edges, double radius)
     {
         var feature = (ksEntity)part.NewEntity(Fillet);
@@ -1665,12 +1560,10 @@ internal sealed class FilletBaseObjectsProbe
         return feature;
     }
 
-    /// <summary>
-    /// Четыре вертикальных угловых ребра конечного тела — критерий отбора ВЗЯТ ИЗ ПРОБЫ H БЕЗ
-    /// ИЗМЕНЕНИЙ (<c>Api5.SafeBool(edge.IsStraight)</c> + вершины + проверка «вертикально, в углу,
-    /// на всю толщину»). Он уже измерен рабочим там, и второй, «свой» отбор дал бы второй эталон,
-    /// несравнимый с прежними числами.
-    /// </summary>
+    /// <summary>The four vertical corner edges of the final body — the selection criterion is TAKEN FROM
+    /// PROBE H UNCHANGED (<c>Api5.SafeBool(edge.IsStraight)</c> + vertices + the check "vertical, in a
+    /// corner, full thickness"). It is already measured working there, and a second, "own" selection
+    /// would give a second reference incomparable with the earlier numbers.</summary>
     private static List<ksEntity> VerticalCornerEdges(ksPart part, ProbeStep step)
     {
         var chosen = new List<ksEntity>();
@@ -1743,10 +1636,8 @@ internal sealed class FilletBaseObjectsProbe
         return chosen;
     }
 
-    /// <summary>
-    /// Длина набора, каким бы типом он ни вернулся. Различение обязательно: <c>object[]</c> — лишь
-    /// один из вариантов, и несовпадение с ним НЕ означает пустоту (задание §2).
-    /// </summary>
+    /// <summary>The set length, whatever type it came back as. The distinction is mandatory: <c>object[]</c>
+    /// is only one option, and a mismatch with it does NOT mean emptiness (order §2).</summary>
     private static int? LengthOf(object raw) => raw switch
     {
         object[] array => array.Length,
@@ -1754,7 +1645,7 @@ internal sealed class FilletBaseObjectsProbe
         _ => null,
     };
 
-    /// <summary>Элемент набора по индексу — с учётом того, что это может быть любой <see cref="Array"/>.</summary>
+    /// <summary>Set element by index — allowing for the fact that it may be any <see cref="Array"/>.</summary>
     private static object? ElementAt(object raw, int index) => raw switch
     {
         object[] array when index < array.Length => array[index],
@@ -1762,7 +1653,7 @@ internal sealed class FilletBaseObjectsProbe
         _ => null,
     };
 
-    /// <summary>Смысл элемента как ребра: отвечает ли он на интерфейсы, которыми признак принимает входы.</summary>
+    /// <summary>The meaning of an element as an edge: does it answer the interfaces by which the feature accepts inputs.</summary>
     private static string DescribeEdge(object element)
     {
         var asModelObject = TryQi<IModelObject>(element);
@@ -1783,10 +1674,8 @@ internal sealed class FilletBaseObjectsProbe
         }
     }
 
-    /// <summary>
-    /// QI на объект: то, что элемент вернулся из набора, не означает, что он отвечает интерфейсу
-    /// (измерено на вращениях: обычное приведение не работает, работает QI — см. R.22).
-    /// </summary>
+    /// <summary>QI on an object: the fact that an element came back from the set does not mean it answers
+    /// the interface (MEASURED on rotations: a plain cast does not work, QI does — see R.22).</summary>
     private static T? TryQi<T>(object element) where T : class
     {
         try
@@ -1836,10 +1725,8 @@ internal sealed class FilletBaseObjectsProbe
     private bool Matches(double? measured, double expected) =>
         measured is double m && Math.Abs(m - expected) <= Tolerance(expected);
 
-    /// <summary>
-    /// Приводит тройственное состояние к «применилось / не применилось»: <c>null</c> от «не спросили»
-    /// здесь означает НЕ «записали», поэтому по умолчанию false.
-    /// </summary>
+    /// <summary>Reduces a three-valued state to "applied / not applied": <c>null</c> from "not asked"
+    /// here means NOT "written", so the default is false.</summary>
     private static bool Applied(Func<bool> call)
     {
         try
@@ -1860,8 +1747,8 @@ internal sealed class FilletBaseObjectsProbe
         }
         catch (Exception)
         {
-            // Закрытие после падения шага — уборка, а не измерение: осиротевший документ заметен
-            // на шаге H2.Z.
+            // Closing after a step crash is cleanup, not measurement: an orphaned document is visible at
+            // step H2.Z.
         }
     }
 

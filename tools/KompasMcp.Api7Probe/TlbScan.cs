@@ -3,10 +3,8 @@ using System.Runtime.InteropServices.ComTypes;
 
 namespace KompasMcp.Api7Probe;
 
-/// <summary>
-/// Reads a КОМПАС type library (.tlb) out of the installation: which interfaces it declares, and
-/// whether a named interface declares a named member.
-/// </summary>
+/// <summary>Reads a KOMPAS type library (.tlb) out of the installation: which interfaces it declares, and
+/// whether a named interface declares a named member.</summary>
 /// <remarks>
 /// Why this exists: ADR-003 §4 refuses to treat "a type is missing from
 /// <c>Libs\PolynomLib\Bin\Client\Interop.KompasAPI7.dll</c>" as evidence that the installed product
@@ -16,7 +14,6 @@ namespace KompasMcp.Api7Probe;
 /// It is opened with <c>REGKIND_NONE</c>: nothing is registered, nothing under
 /// <c>D:\Programs\KOMPAS-3Dv24</c> is written or replaced.
 ///
-/// <para>
 /// Everything is answered with managed <c>ITypeLib</c>/<c>ITypeInfo</c> calls —
 /// <c>GetTypeInfoType</c>, <c>GetDocumentation</c>, <c>GetTypeInfoOfGuid</c>,
 /// <c>ITypeInfo::GetIDsOfNames</c>. The first revision of this class read <c>TYPEATTR</c> through
@@ -24,7 +21,6 @@ namespace KompasMcp.Api7Probe;
 /// which is the exact failure a passport must not contain, because a wrong IID reads as a finding.
 /// Asking the library "is there a type with this IID" and "does that type answer to this member
 /// name" needs no pointer arithmetic at all.
-/// </para>
 /// </remarks>
 internal static class TlbScan
 {
@@ -116,11 +112,9 @@ internal static class TlbScan
         return new Result(path, sha, info.Length, info.LastWriteTimeUtc, count, entries.Count, entries, failure);
     }
 
-    /// <summary>
-    /// What the installed library says about an IID the probe's wrapper declares: the name of the
+    /// <summary>What the installed library says about an IID the probe's wrapper declares: the name of the
     /// type that owns it, or "no such type in this library". This is the check that turns
-    /// "the wrapper is missing a member" into a statement about the wrapper rather than the product.
-    /// </summary>
+    /// "the wrapper is missing a member" into a statement about the wrapper rather than the product.</summary>
     public static string OwnerOfIid(string path, Guid iid)
     {
         ITypeInfo? typeInfo = null;
@@ -146,11 +140,9 @@ internal static class TlbScan
         }
     }
 
-    /// <summary>
-    /// Does the library's declaration of <paramref name="interfaceName"/> name each of these
+    /// <summary>Does the library's declaration of <paramref name="interfaceName"/> name each of these
     /// members? Answered by <c>ITypeInfo::GetIDsOfNames</c> on the type info the library itself
-    /// hands back for the wrapper's IID — so a "yes" cannot be an artefact of the wrapper.
-    /// </summary>
+    /// hands back for the wrapper's IID — so a "yes" cannot be an artefact of the wrapper.</summary>
     public static Dictionary<string, string> MembersOf(string path, Guid interfaceIid, IReadOnlyList<string> members)
     {
         var result = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -202,29 +194,21 @@ internal static class TlbScan
         return result;
     }
 
-    /// <summary>
-    /// Which member NAMES does the library declare for <paramref name="interfaceName"/>? Answered by
+    /// <summary>Which member NAMES does the library declare for <paramref name="interfaceName"/>? Answered by
     /// walking the type info's own member identifiers and asking it to document each one — so the
-    /// list comes from the product's type library, not from a hand-written candidate list.
-    /// </summary>
+    /// list comes from the product's type library, not from a hand-written candidate list.</summary>
     /// <remarks>
-    /// <para>
-    /// Зачем: список кандидатов, придуманный человеком, измеряет его воображение. Шаг RP.10 перебрал
-    /// десять имён и не нашёл вектора переноса, а сам вектор в модели ЕСТЬ (измерено 19.09.2026
-    /// поиском по распакованным потокам `.m3d`: файл с переносом (7,−11,13) содержит эту тройку
-    /// double четыре раза, контрольный файл с (1,2,3) — ни одного). Значит вопрос не в том, есть ли
-    /// величина, а в том, каким ЧЛЕНОМ её отдаёт продукт, и перечень членов надо прочитать, а не
-    /// угадать.
-    /// </para>
-    /// <para>
-    /// <b>ИСПРАВЛЕНО 19.09.2026 — прежняя редакция объявляла, что у <c>IBodyReposition</c> «ни одного
-    /// члена не объявлено».</b> Это был дефект прибора, а не факт о продукте: перебор шёл от memId 1 и
-    /// останавливался после ВОСЬМИ промахов подряд, а у этого интерфейса члены объявлены около 800
-    /// (живой признак отвечает <c>Position</c> dispid=804, <c>RepositionCentre</c> dispid=802,
-    /// <c>CopyBoby</c> dispid=803). Промахи здесь — норма, а не признак конца: диапазон читается
-    /// целиком, а «ни одного» теперь означает «просмотрено <paramref name="max"/> идентификаторов и
-    /// ни один не документирован».
-    /// </para>
+    /// ASSUMPTION: a candidate list invented by a human measures his imagination. The question is not
+    /// whether a quantity exists but which MEMBER the product returns it through, so the member list
+    /// must be read from the library, not guessed.
+    /// MEASURED: 19.09.2026, step RP.10 — ten candidate names did not include the displacement vector,
+    /// yet the vector IS in the model: scanning the decompressed `.m3d` streams, the file with the
+    /// displacement (7,−11,13) contains that triple of doubles four times, the control file with
+    /// (1,2,3) contains none. The live feature answers <c>Position</c> dispid=804,
+    /// <c>RepositionCentre</c> dispid=802, <c>CopyBoby</c> dispid=803, and the interface declares
+    /// members around 800. A miss is the norm here, not the end of the range: the range is read in
+    /// full, and "none" means "scanned <paramref name="max"/> identifiers and not one was documented".
+    /// History: docs/decisions/probes.md#tlb-membernames
     /// </remarks>
     public static List<(int MemId, string Name)> MemberNames(string path, string interfaceName, int max = 2048)
     {
@@ -253,7 +237,7 @@ internal static class TlbScan
                 }
                 catch (Exception)
                 {
-                    // Тип без документации — не предмет этого вопроса.
+                    // A type without documentation is not the subject of this question.
                 }
 
                 _ = Marshal.ReleaseComObject(candidate);
@@ -285,8 +269,8 @@ internal static class TlbScan
                 }
                 catch (Exception)
                 {
-                    // Незанятый идентификатор. Не признак конца диапазона: у части интерфейсов
-                    // API7 члены объявлены сотнями, а не подряд с единицы.
+                    // An unoccupied identifier. Not a sign of the end of the range: some API7
+                    // interfaces declare their members in the hundreds, not consecutively from one.
                 }
             }
         }
@@ -298,12 +282,9 @@ internal static class TlbScan
         return result;
     }
 
-    /// <summary>
-    /// ВСЕ имена членов, которые библиотека типов объявляет хоть где-нибудь. Нужны как ПУЛ для
-    /// опроса живого объекта, тип которого не совпадает ни с одним объявленным интерфейсом: у
-    /// <c>System.__ComObject</c> своего перечня не спросишь, а спрашивать у него имена, придуманные
-    /// человеком, — значит измерять воображение.
-    /// </summary>
+    /// <summary>EVERY member name the type library declares anywhere. Needed as a POOL for probing a live
+    /// object whose type matches no declared interface: a <c>System.__ComObject</c> has no list of
+    /// its own to ask, and asking it names invented by a human means measuring the imagination.</summary>
     public static List<string> AllMemberNames(string path, int max = 2048)
     {
         var names = new SortedSet<string>(StringComparer.Ordinal);
@@ -342,13 +323,13 @@ internal static class TlbScan
                     }
                     catch (Exception)
                     {
-                        // Незанятый идентификатор.
+                        // An unoccupied identifier.
                     }
                 }
             }
             catch (Exception)
             {
-                // Тип, который библиотека не отдаёт, в пул не попадает.
+                // A type the library does not hand back does not enter the pool.
             }
             finally
             {
@@ -362,12 +343,10 @@ internal static class TlbScan
         return names.ToList();
     }
 
-    /// <summary>
-    /// Asks a <em>live</em> object, through its own <c>IDispatch</c>, which member names it answers
+    /// <summary>Asks a <em>live</em> object, through its own <c>IDispatch</c>, which member names it answers
     /// to. Neither an interop assembly nor a type library is in this path, so a name that resolves
     /// here exists in the running application even where the prebuilt wrapper predates it — the
-    /// distinction ADR-003 §4 asks the probe to draw.
-    /// </summary>
+    /// distinction ADR-003 §4 asks the probe to draw.</summary>
     public static Dictionary<string, string> LiveMembers(object comObject, IReadOnlyList<string> names)
     {
         var result = new Dictionary<string, string>(StringComparer.Ordinal);

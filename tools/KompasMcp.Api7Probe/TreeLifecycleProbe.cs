@@ -6,37 +6,30 @@ using KompasAPI7;
 
 namespace KompasMcp.Api7Probe;
 
-/// <summary>
-/// Проба T — как признак B3 адресуется в ЖИЗНЕННОМ ЦИКЛЕ, а не только в момент создания.
-/// </summary>
+/// <summary>Probe T — how the B3 feature is addressed across the LIFECYCLE, not only at creation.</summary>
 /// <remarks>
-/// <para>
-/// <b>Почему отдельный опыт.</b> Пробы BO/SP/RP измерили СОЗДАНИЕ признаков булевой операции,
-/// разделения, отсечения и преобразования положения — и все четыре создаются фабрикой API7
-/// (<c>IModelContainer.Booleans/SplitSolids/Cuts/BodyRepositions</c>). Продукт обязан закрывать
-/// каждый режим не одним действием <c>create</c>, а полным жизненным циклом, и в нём есть
-/// <c>suppress_restore</c>, <c>delete_dependencies</c> и <c>discover</c>. Все три работают через
-/// ДЕРЕВО ПРИЗНАКОВ API5: <c>kompas_list_features</c> читает коллекцию <c>o3d_operationElement</c>,
-/// подавление пишет <c>ksFeature.excluded</c>, удаление зовёт <c>DeleteObject</c> на <c>ksEntity</c>.
-/// Объект API7 — не <c>ksEntity</c>, поэтому вопрос не в удобстве, а в том, существует ли вообще
-/// маршрут: <b>появляется ли признак, созданный фабрикой API7, в дереве API5 и можно ли его
-/// подавить и удалить</b>.
-/// </para>
-/// <para>
-/// <b>Второй вопрос — есть ли у булевой операции и отсечения родной маршрут API5.</b> Каталог
-/// покрытия держит для SM-15 <c>ksAggregateDefinition</c> (<c>o3d_aggregate=69</c>) и для SM-16
-/// <c>ksCutByPlaneDefinition</c>; оба интерфейса найдены в <c>kApi5.tlb</c>, но ни один маршрут не
-/// измерен. Родной маршрут API5 даёт <c>ksEntity</c>, то есть жизненный цикл целиком; маршрут API7
-/// даёт объект, который в дерево может не попасть. Поэтому оба маршрута измеряются здесь одним
-/// прогоном, и решение о реализации принимается по числам, а не по удобству.
-/// </para>
-/// <para>
-/// <b>Эталон — наряд §6.1.</b> A <c>[0,40]×[0,30]×[0,20]</c> (V=24000), B
-/// <c>[20,60]×[0,30]×[0,20]</c> (V=24000), посторонний куб <c>[100,110]×[0,10]×[0,10]</c> (V=1000).
-/// Объединение — V=36000, габарит <c>(0,0,0)…(60,30,20)</c>; разность A−B — V=12000; пересечение —
-/// V=12000. Числа считаются ДО вызова и печатаются в журнал, чтобы расхождение нельзя было закрыть
-/// допуском, подобранным после факта.
-/// </para>
+/// INVARIANT: probes BO/SP/RP measured the CREATION of boolean, split, cut and reposition features —
+/// and all four are created by the API7 factory
+/// (<c>IModelContainer.Booleans/SplitSolids/Cuts/BodyRepositions</c>). The product must cover each mode
+/// not with a single <c>create</c> but with the full lifecycle, which includes <c>suppress_restore</c>,
+/// <c>delete_dependencies</c> and <c>discover</c>. All three work through the API5 FEATURE TREE:
+/// <c>kompas_list_features</c> reads the <c>o3d_operationElement</c> collection, suppression writes
+/// <c>ksFeature.excluded</c>, deletion calls <c>DeleteObject</c> on a <c>ksEntity</c>. An API7 object is
+/// not a <c>ksEntity</c>, so the question is not convenience but whether a route exists at all:
+/// whether a feature created by the API7 factory appears in the API5 tree and can be suppressed and
+/// deleted.
+/// TEST: the second question — whether the boolean and the cut have a native API5 route. The coverage
+/// catalogue holds <c>ksAggregateDefinition</c> (<c>o3d_aggregate=69</c>) for SM-15 and
+/// <c>ksCutByPlaneDefinition</c> for SM-16; both interfaces are found in <c>kApi5.tlb</c>, but neither
+/// route is measured. The native API5 route yields a <c>ksEntity</c>, i.e. the whole lifecycle; the
+/// API7 route yields an object that may not enter the tree. Both routes are therefore measured here in
+/// one run, and the implementation decision is made on numbers, not convenience.
+/// TEST: reference — order §6.1. A <c>[0,40]×[0,30]×[0,20]</c> (V=24000), B
+/// <c>[20,60]×[0,30]×[0,20]</c> (V=24000), stranger cube <c>[100,110]×[0,10]×[0,10]</c> (V=1000).
+/// Union — V=36000, bounding box <c>(0,0,0)…(60,30,20)</c>; difference A−B — V=12000; intersection —
+/// V=12000. The numbers are computed BEFORE the call and printed to the journal, so that a discrepancy
+/// could not be closed with a tolerance fitted after the fact.
+/// History: docs/decisions/probes.md#tree-lifecycle
 /// </remarks>
 internal sealed class TreeLifecycleProbe
 {
@@ -44,14 +37,14 @@ internal sealed class TreeLifecycleProbe
     private const double Bx0 = 20d, Bx1 = 60d;
     private const double Sx0 = 100d, Sx1 = 110d, Sy0 = 0d, Sy1 = 10d, Sz = 10d;
 
-    /// <summary>Объём объединения A∪B: пересечение считается один раз.</summary>
+    /// <summary>Volume of the union A∪B: the intersection is counted once.</summary>
     private const double UnionVolume = 36000d;
 
-    /// <summary>Разность A−B: остаётся x∈[0,20].</summary>
+    /// <summary>Difference A−B: x∈[0,20] remains.</summary>
     private const double DifferenceVolume = 12000d;
 
-    // Типы объектов из ksObj3dTypeEnum, измеренные ранее (docs/04_KOMPAS_API_NOTES.md):
-    // o3d_aggregate=69 «Булева операция», o3d_cutByPlane=50, o3d_SplitSolid=633,
+    // Object types from ksObj3dTypeEnum, measured earlier (docs/04_KOMPAS_API_NOTES.md):
+    // o3d_aggregate=69 "boolean operation", o3d_cutByPlane=50, o3d_SplitSolid=633,
     // o3d_BodyReposition=569.
     private const short TypeAggregate = 69;
     private const short TypeCutByPlane = 50;
@@ -101,7 +94,7 @@ internal sealed class TreeLifecycleProbe
         }
     }
 
-    // ══════════════════════════════════════════════════════ TL.0 сеанс ══
+    // ══════════════════════════════════════════════════════ TL.0 session ══
 
     private void Launch()
     {
@@ -128,7 +121,7 @@ internal sealed class TreeLifecycleProbe
         }
     }
 
-    // ═══════════════════════════════════════════════ TL.1 заготовка ══
+    // ═══════════════════════════════════════════════ TL.1 fixture ══
 
     private bool Blank(ksPart part, ksDocument3D doc)
     {
@@ -161,7 +154,7 @@ internal sealed class TreeLifecycleProbe
         }
     }
 
-    // ══════════════════════════════════════ TL.2..TL.4 маршрут API7 ══
+    // ══════════════════════════════════════ TL.2..TL.4 API7 route ══
 
     private void Api7BooleanRoute(ksDocument3D doc, ksPart part)
     {
@@ -224,17 +217,15 @@ internal sealed class TreeLifecycleProbe
         }
     }
 
-    /// <summary>
-    /// Подавление и удаление того же признака — вторым и третьим действием. Именно здесь
-    /// проверяется, годится ли элемент дерева как адрес: если подавление не меняет объём, адрес
-    /// не работает, и продукту нужен другой маршрут.
-    /// </summary>
+    /// <summary>Suppression and deletion of the same feature — as the second and third actions. This is
+    /// where it is checked whether a tree element is usable as an address: if suppression does not
+    /// change the volume, the address does not work and the product needs another route.</summary>
     private void SuppressAndDelete(ProbeStep parent, ksDocument3D doc, ksPart part, Api5.FeatureReading? reading)
     {
         var step = _report.Begin("TL.3", "Подавление и восстановление признака через дерево API5",
             "Меняет ли ksFeature.excluded геометрию, и возвращается ли она при снятии подавления?");
-        // Обе стороны элемента: на живом дереве `as ksFeature` проходит, а `as ksEntity` — нет
-        // (измерено R.0d). Адрес берётся той стороной, которая отвечает, а не той, которая удобна.
+        // Both faces of the element: on a live tree `as ksFeature` succeeds while `as ksEntity` does
+        // not (measured R.0d). The address is taken through the face that answers, not the convenient one.
         var feature = reading?.Feature ?? reading?.Entity?.GetFeature() as ksFeature;
         var entity = reading?.Entity ?? feature?.GetObject() as ksEntity;
         if (feature is null && entity is null)
@@ -330,7 +321,7 @@ internal sealed class TreeLifecycleProbe
         }
     }
 
-    // ══════════════════════════════════ TL.5 родной маршрут API5 ══
+    // ══════════════════════════════════ TL.5 native API5 route ══
 
     private void Api5AggregateRoute(ksDocument3D doc, ksPart part)
     {
@@ -374,9 +365,9 @@ internal sealed class TreeLifecycleProbe
                     return;
                 }
 
-                // Перечисляются ВСЕ кандидаты, а не только ожидаемые: вопрос опыта — существует ли
-                // у определения хоть один член, которым задаются тела. Ожидание каталога
-                // («BodyCollection — получить массив тел») проверяется здесь же.
+                // ALL candidates are enumerated, not only the expected ones: the question is whether the
+                // definition has at least one member that sets the bodies. The catalogue's expectation
+                // ("BodyCollection — get an array of bodies") is checked here as well.
                 step.Data["definition_members"] = TlbScan.LiveMembers(definition, new[]
                 {
                     "BooleanType", "BodyCollection", "ChooseBodies", "ChooseParts",
@@ -394,14 +385,14 @@ internal sealed class TreeLifecycleProbe
                 step.Observe("BooleanType записан и прочитан обратно: " + typed.BooleanType
                              + " (ksUnion=" + (short)ksBooleanType.ksUnion + ")");
 
-                // BodyCollection объявлен МЕТОДОМ (get-доступ): проверяется, что это чтение, а не
-                // запись — иначе задать операнды можно было бы прямо здесь.
+                // BodyCollection is declared as a METHOD (get access): it is checked that this is a read,
+                // not a write — otherwise the operands could be set right here.
                 var readBack = Api5.SafeObject(() => typed.BodyCollection());
                 step.Observe("BodyCollection() → " + Api5.RuntimeName(readBack)
                              + ": член только на чтение, операнды им не задаются");
 
-                // Операнды могут задаваться выбором тел у САМОГО признака — это отдельный вопрос, и
-                // он решается перечислением членов элемента, а не догадкой.
+                // The operands might be set by choosing bodies on the feature ITSELF — that is a separate
+                // question, and it is settled by enumerating the element's members, not by guessing.
                 step.Data["entity_members"] = TlbScan.LiveMembers(entity, new[]
                 {
                     "ChooseBodies", "ChooseBodiesType", "BodyCollection", "SetBody",
@@ -439,7 +430,7 @@ internal sealed class TreeLifecycleProbe
         }
     }
 
-    // ═══════════════════ TL.6..TL.9 остальные три семейства ══
+    // ═══════════════════ TL.6..TL.9 the other three families ══
 
     private void Api7SplitRoute(ksDocument3D doc, ksPart part)
     {
@@ -739,7 +730,7 @@ internal sealed class TreeLifecycleProbe
         }
         catch (Exception)
         {
-            // Ниже — честный ответ «не прочитано».
+            // Below is the honest answer "not read".
         }
 
         return "<определение не прочитано>";
@@ -754,8 +745,8 @@ internal sealed class TreeLifecycleProbe
             x, y, z, 1,
         };
 
-    /// <summary>Плоскость x=10 с нормалью (1,0,0) — через <c>Planes3D.Add(o3d_plane3Points)</c>,
-    /// измеренный маршрут пробы SP.</summary>
+    /// <summary>Plane x=10 with normal (1,0,0) — via <c>Planes3D.Add(o3d_plane3Points)</c>, the measured
+    /// route of probe SP.</summary>
     private object? MakePlane(IModelContainer? container, ProbeStep step, string prefix)
     {
         try
@@ -990,7 +981,7 @@ internal sealed class TreeLifecycleProbe
         }
         catch (Exception)
         {
-            // Пустой список — честный ответ «тел не прочитано».
+            // An empty list is the honest answer "no bodies read".
         }
 
         return rows;
@@ -1050,7 +1041,7 @@ internal sealed class TreeLifecycleProbe
         }
         catch (Exception)
         {
-            // Закрытие документа — уборка, а не измерение.
+            // Closing the document is cleanup, not measurement.
         }
     }
 

@@ -6,35 +6,20 @@ using KompasAPI7;
 
 namespace KompasMcp.Api7Probe;
 
-/// <summary>
-/// Проба M — сопряжения сборки: адресуются ли ГРАНИ КОМПОНЕНТОВ и создаётся ли сопряжение.
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Зачем эта проба.</b> Блок C1 (минимальные сборки) закрыт, и следующий блок — сопряжения.
-/// Маршрут сопряжения ДОКУМЕНТИРОВАН и прочитан по проводу 05.10.2026:
-/// <c>IPart7.MateConstraints</c> → <c>IMateConstraints3D.Add(MateConstraintType)</c> →
-/// <c>IMateConstraint3D</c> (<c>BaseObject1</c>, <c>BaseObject2</c>, <c>Alignment</c>,
-/// <c>ParamValue</c>, <c>Fixed</c>, <c>Update()</c>). Не измерено другое: <c>BaseObject1/2</c>
-/// имеют тип <c>IModelObject</c> и обязаны указывать на грани КОМПОНЕНТОВ, то есть адрес должен
-/// вести в документ компонента, а не в саму сборку. Если грань компонента оттуда не достаётся,
-/// блок придётся строить иначе — и узнать это надо ДО проектирования режимов.
-/// </para>
-/// <para>
-/// <b>Только документированные вызовы.</b> Маршрут чтения грани — тот, который проект уже
-/// применяет и который описан в справке: <c>ksPart.GetMainBody() → ksBody.FaceCollection()</c>,
-/// а НЕ <c>EntityCollection(o3d_face)</c>. Передача в API7 — документированный
-/// <c>TransferInterface(…, ksAPI7Dual, …)</c>. Составные части вставляются маршрутом, ИЗМЕРЕННЫМ
-/// в блоке C1: <c>CreatePartInAssembly(file, plane)</c> для первого экземпляра и
-/// <c>CopyPart(source, placement)</c> для повторного (повторная <c>CreatePartInAssembly</c> того же
-/// файла возвращает null — измерено 04.10.2026).
-/// </para>
-/// <para>
-/// <b>Что здесь доказательство.</b> Числа: число сопряжений до и после, <c>Valid</c> созданного
-/// сопряжения, непустые <c>BaseObject1/2</c>, и — решающее — сместился ли компонент после
-/// сопряжения. Сопряжение «создано» без смещения не отличает принятую связь от пустой записи.
-/// </para>
-/// </remarks>
+/// <summary>Probe M — assembly mates: are COMPONENT FACES addressable and is a mate created?</summary>
+/// <remarks>DOC: the mate route, read 05.10.2026, is <c>IPart7.MateConstraints</c> →
+/// <c>IMateConstraints3D.Add(MateConstraintType)</c> → <c>IMateConstraint3D</c> (<c>BaseObject1</c>,
+/// <c>BaseObject2</c>, <c>Alignment</c>, <c>ParamValue</c>, <c>Fixed</c>, <c>Update()</c>).
+/// INVARIANT: <c>BaseObject1/2</c> are <c>IModelObject</c> and must address the COMPONENT document,
+/// not the assembly itself — if a component face cannot be reached from there, the block must be
+/// built differently. DOC: the face route is the documented <c>ksPart.GetMainBody() →
+/// ksBody.FaceCollection()</c>, NOT <c>EntityCollection(o3d_face)</c>; the API7 transfer is
+/// <c>TransferInterface(…, ksAPI7Dual, …)</c>. MEASURED 04.10.2026: a second
+/// <c>CreatePartInAssembly</c> of the same file returns null, so a repeat instance uses
+/// <c>CopyPart(source, placement)</c>. TEST: the evidence is the mate count before/after, the new
+/// mate's <c>Valid</c>, non-empty <c>BaseObject1/2</c>, and — decisively — whether the component
+/// MOVED; a mate "created" without motion does not separate an accepted link from an empty record.
+/// History: docs/decisions/probes.md#mate</remarks>
 internal sealed class MateProbe
 {
     private const double PlateWidth = 100d;
@@ -58,7 +43,7 @@ internal sealed class MateProbe
         _options = options;
     }
 
-    /// <summary>Пишет отчёт изнутри прогона — для диагностического пути <c>--keep</c>.</summary>
+    /// <summary>Writes the report from inside the run — for the diagnostic <c>--keep</c> path.</summary>
     public static void Flush(ProbeReport report, Options options)
     {
         report.Flush(
@@ -76,9 +61,9 @@ internal sealed class MateProbe
 
         try
         {
-            // РАЗЛИЧАЮЩИЙ КОНТРОЛЬ идёт ПЕРВЫМ и на своём документе: он не зависит от того,
-            // получится ли программная сборка, и обязан выполниться даже если всё дальнейшее
-            // остановится. Иначе контроль «не достигнут» — и находка остаётся без опоры.
+            // DISCRIMINATING CONTROL runs FIRST and on its own document: it does not depend on the
+            // programmatic assembly succeeding and must run even if everything after it stops —
+            // otherwise the control is "not reached" and the finding has no support.
             SampleAssemblyControl();
 
             var source = BuildSourcePart();
@@ -93,8 +78,8 @@ internal sealed class MateProbe
                 return;
             }
 
-            // ПЕРЕОТКРЫТИЕ — документированная проверка: если тела появляются только после загрузки
-            // документа с диска, то причина «тел нет» названа, и это условие входит в маршрут.
+            // REOPEN is the documented check: if bodies appear only after loading the document from
+            // disk, the cause "no bodies" is named, and that condition becomes part of the route.
             var reopened = ReopenAssembly(assembly.Value.Path);
             if (reopened is null)
             {
@@ -124,7 +109,7 @@ internal sealed class MateProbe
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════ сеанс ══
+    // ═══════════════════════════════════════════════════════════════ session ══
 
     private void Launch()
     {
@@ -200,7 +185,7 @@ internal sealed class MateProbe
         }
     }
 
-    // ═══════════════════════════════════════════════════════ деталь-источник ══
+    // ═══════════════════════════════════════════════════════ source part ══
 
     private (string Path, ksPart Part)? BuildSourcePart()
     {
@@ -235,8 +220,9 @@ internal sealed class MateProbe
         step.Data["analytic_mm3"] = PlateVolume;
         step.Observe("объём источника: " + Api5.Num(volume) + " (аналитика " + Api5.Num(PlateVolume) + ")");
 
-        // КОНТРОЛЬ ПРИБОРА: работает ли сам маршрут ksPart.BodyCollection() там, где тело заведомо
-        // есть. Без этого контроля «у компонента тел нет» неотличимо от «прибор зовёт не то».
+        // INSTRUMENT CONTROL: does the route ksPart.BodyCollection() itself work where a body surely
+        // exists? Without it, "component has no bodies" is indistinguishable from "the instrument
+        // calls the wrong thing".
         var sourceBodies = Api5.SafeInt(() => (part.BodyCollection() as ksBodyCollection)!.GetCount());
         step.Data["source_bodies"] = sourceBodies;
         step.Observe("контроль: BodyCollection().GetCount() у ДЕТАЛИ-источника = " + sourceBodies);
@@ -254,16 +240,16 @@ internal sealed class MateProbe
             return null;
         }
 
-        // Документ ЗАКРЫВАЕТСЯ: измерено 05.10.2026 — при открытом источнике CreatePartInAssembly
-        // возвращает null. Грань компонента берётся не из этого документа, а поиском по точке
-        // (IPart7.FindObjectsByPoint) уже в сборке.
+        // The document is CLOSED: MEASURED 05.10.2026 — with the source open, CreatePartInAssembly
+        // returns null. The component face is taken not from this document but by point search
+        // (IPart7.FindObjectsByPoint) in the assembly.
         document.close();
         step.Observe("файл: " + path + "; документ-источник закрыт");
         step.Pass("источник сохранён");
         return (path, part);
     }
 
-    // ═════════════════════════════════════════════════════════════ сборка ══
+    // ═════════════════════════════════════════════════════════════ assembly ══
 
     private (string Path, ksPart Part, ksPart SourcePart)? BuildAssemblyWithTwoComponents(
         string sourcePath)
@@ -286,11 +272,11 @@ internal sealed class MateProbe
         part.name = "Mate-asm";
         part.Update();
 
-        // ДОКУМЕНТИРОВАННЫЙ маршрут вставки компонента — iparts7_addfromfile.html:
-        //   IPart7.Parts → IParts7.AddFromFile(FileName, ExternalFile, Redraw) → Part7
-        // «FileName — имя файла, из которого будет ВСТАВЛЕН компонент», «ExternalFile — TRUE — вставка
-        // СО ССЫЛКОЙ на внешний файл», «Redraw — признак перестроения документа после вставки».
-        // Возвращает ВСТАВЛЕННЫЙ компонент — то есть и адрес, и перестроение даёт один документ. вызов.
+        // DOC (iparts7_addfromfile.html): IPart7.Parts → IParts7.AddFromFile(FileName, ExternalFile,
+        // Redraw) → Part7. «FileName — имя файла, из которого будет ВСТАВЛЕН компонент», «ExternalFile —
+        // TRUE — вставка СО ССЫЛКОЙ на внешний файл», «Redraw — признак перестроения документа после
+        // вставки». It returns the INSERTED component, so one call gives both the address and the
+        // rebuild.
         var top7 = (_app7?.ActiveDocument as IKompasDocument3D)?.TopPart;
         var parts7 = top7?.Parts;
         if (parts7 is null)
@@ -321,10 +307,10 @@ internal sealed class MateProbe
         step.Data["components"] = count;
         step.Observe("компонентов по IParts7.Count: " + count);
 
-        // ВТОРОЙ КОМПОНЕНТ СДВИГАЕТСЯ. Без сдвига обе вставки стоят в начале координат, их грани
-        // совпадают, и сопряжение вырождается: все документированные сочетания параметров вернули
-        // False. Маршрут записи размещения — измеренный в блоке C1: ksDocument3D.DefaultPlacement →
-        // InitByMatrix3D → SetPlacement → UpdatePlacement; раскладка [X,0][Y,0][Z,0][перенос,1].
+        // THE SECOND COMPONENT IS OFFSET. Without an offset both inserts sit at the origin, their
+        // faces coincide and the mate degenerates: every documented parameter combination returned
+        // False. DOC/MEASURED (block C1): placement is written via ksDocument3D.DefaultPlacement →
+        // InitByMatrix3D → SetPlacement → UpdatePlacement; layout [X,0][Y,0][Z,0][translation,1].
         var offset = new double[]
         {
             1, 0, 0, 0,
@@ -348,7 +334,7 @@ internal sealed class MateProbe
             step.Observe("сдвинуть второй компонент НЕ удалось");
         }
 
-        // ТЕЛА каждого компонента — сразу и документированным ksPart.BodyCollection().
+        // Bodies of each component — immediately, via the documented ksPart.BodyCollection().
         if (document.PartCollection(true) is ksPartCollection collection)
         {
             for (var index = 0; index < collection.GetCount(); index++)
@@ -383,7 +369,7 @@ internal sealed class MateProbe
         return (path, part, _sourcePart!);
     }
 
-    /// <summary>Открывает сохранённую сборку заново — документированным <c>ksDocument3D.Open</c>.</summary>
+    /// <summary>Reopens the saved assembly — via the documented <c>ksDocument3D.Open</c>.</summary>
     private (ksDocument3D Document, ksPart Part)? ReopenAssembly(string path)
     {
         var step = _report.Begin("M.2b", "Переоткрытие сборки с диска",
@@ -399,11 +385,11 @@ internal sealed class MateProbe
             return null;
         }
 
-        // ДЕФЕКТ ПРОБЫ, ПОЙМАННЫЙ ЗДЕСЬ: объект, на котором вызван Open, документом НЕ становится —
-        // его PartCollection пуст. Документ берётся заново у приложения, как это делает и образец
-        // M.7 (там документ получен от приложения, и компоненты видны).
-        // KompasObject не объявляет ActiveDocument статически — свойство берётся поздним связыванием,
-        // как это уже делает проба для ksGetApplication7.
+        // PROBE DEFECT CAUGHT HERE: the object Open is called on does NOT become the document — its
+        // PartCollection is empty. The document is taken fresh from the application, as sample M.7
+        // does. KompasObject does not declare ActiveDocument statically, so the property is taken by
+        // late binding, as the probe already does for ksGetApplication7.
+        // History: docs/decisions/probes.md#mate-reopen
         var active = Api5.SafeObject(() => _app.GetType().InvokeMember(
             "ActiveDocument", System.Reflection.BindingFlags.GetProperty, null, _app, null)) as ksDocument3D;
         step.Observe("_app.ActiveDocument после Open: " + (active is null ? "null" : "получен"));
@@ -474,26 +460,17 @@ internal sealed class MateProbe
         }
     }
 
-    // ═════════════════════════════════════════════ РЕШАЮЩИЙ ОПЫТ: грани компонентов ══
+    // ═════════════════════════════════════════════ DECISIVE EXPERIMENT: component faces ══
 
-    /// <summary>
-    /// Грани компонентов как <c>ksEntity</c> — ДОКУМЕНТИРОВАННЫМ маршрутом
-    /// <c>ksPart.BodyCollection() → ksBody.FaceCollection()</c>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Почему не <c>GetMainBody()</c>.</b> Справка <c>kspart_getmainbody.html</c> говорит:
-    /// «Пример: Деталь имеет массив интерфейсов тел <c>IBody</c>» — то есть у детали тел МОЖЕТ быть
-    /// несколько, и одиночное «главное тело» у компонента сборки не читается (измерено: null).
-    /// Документированный маршрут к телам — <c>kspart_bodycollection.html</c>:
-    /// <c>ksPart.BodyCollection()</c> возвращает <c>ksBodyCollection</c>.
-    /// </para>
-    /// <para>
-    /// <b>Только документированные вызовы.</b> <c>ksEntity</c> — ровно тот тип, который принимает
-    /// <c>ksDocument3D::AddMateConstraint</c> («object1 — указатель на интерфейс первого объекта,
-    /// на который накладывается сопряжение (<c>ksEntity</c> или <c>IEntity</c>)»).
-    /// </para>
-    /// </remarks>
+    /// <summary>Component faces as <c>ksEntity</c> — via the DOCUMENTED route
+    /// <c>ksPart.BodyCollection() → ksBody.FaceCollection()</c>.</summary>
+    /// <remarks>DOC (<c>kspart_getmainbody.html</c>): «Пример: Деталь имеет массив интерфейсов тел
+    /// <c>IBody</c>» — a part may have SEVERAL bodies, and a single "main body" does not read on an
+    /// assembly component (MEASURED: null). DOC (<c>kspart_bodycollection.html</c>):
+    /// <c>ksPart.BodyCollection()</c> returns <c>ksBodyCollection</c>. <c>ksEntity</c> is exactly the
+    /// type <c>ksDocument3D::AddMateConstraint</c> accepts («object1 — указатель на интерфейс первого
+    /// объекта, на который накладывается сопряжение (<c>ksEntity</c> или <c>IEntity</c>)»).
+    /// History: docs/decisions/probes.md#mate-faces</remarks>
     private List<object>? ReadComponentFaces(ksDocument3D document)
     {
         var step = _report.Begin("M.4", "Грань компонента как ksEntity — BodyCollection → FaceCollection",
@@ -520,8 +497,8 @@ internal sealed class MateProbe
                 var bodyCount = Api5.SafeInt(() => (component.BodyCollection() as ksBodyCollection)!.GetCount());
                 step.Observe("компонент " + index + ": BodyCollection().GetCount() до перестроения = " + bodyCount);
 
-                // Документированный ipart7_rebuildmodel.html: «Redraw — TRUE перестроить документ».
-                // Проверяется, материализует ли перестроение геометрию компонента.
+                // DOC (ipart7_rebuildmodel.html): «Redraw — TRUE перестроить документ». Checks whether
+                // a rebuild materialises the component geometry.
                 if (bodyCount == 0 && TransferTo7(component) is IPart7 componentRebuild)
                 {
                     bool? rebuilt = null;
@@ -540,9 +517,9 @@ internal sealed class MateProbe
                         + ", BodyCollection().GetCount() после = " + bodyCount);
                 }
 
-                // Документированный ipart7_opensourcedocument.html: открыть документ-ИСТОЧНИК
-                // компонента. Проверяется, материализует ли это геометрию: если да, то причина
-                // «тел нет» — не загруженный источник, а не отсутствие маршрута.
+                // DOC (ipart7_opensourcedocument.html): open the component's SOURCE document. Checks
+                // whether this materialises the geometry: if so, the cause "no bodies" is the unloaded
+                // source, not a missing route.
                 if (bodyCount == 0 && TransferTo7(component) is IPart7 componentSource)
                 {
                     try
@@ -562,9 +539,9 @@ internal sealed class MateProbe
                     }
                 }
 
-                // ДОКУМЕНТИРОВАННЫЙ ipart7_islocal.html: «IsLocal — получить И УСТАНОВИТЬ свойство»
-                // (put_IsLocal). Локальный компонент хранит геометрию В СБОРКЕ, а не по ссылке —
-                // если тела появляются отсюда, то причина «тел нет» названа: компонент ссылочный.
+                // DOC (ipart7_islocal.html): «IsLocal — получить И УСТАНОВИТЬ свойство» (put_IsLocal).
+                // A local component keeps geometry IN THE ASSEMBLY rather than by reference — if
+                // bodies appear here, the cause "no bodies" is named: the component is a reference.
                 if (bodyCount == 0 && TransferTo7(component) is IPart7 componentLocal)
                 {
                     var wasLocal = Api5.SafeBool(() => componentLocal.IsLocal);
@@ -629,7 +606,7 @@ internal sealed class MateProbe
         }
     }
 
-    /// <summary>Компонент по порядковому номеру как <c>IPart7</c> (адрес измерен в блоке C1).</summary>
+    /// <summary>Component by ordinal as <c>IPart7</c> (address MEASURED in block C1).</summary>
     private IPart7? ComponentByIndex(ksDocument3D document, int index)
     {
         try
@@ -645,12 +622,10 @@ internal sealed class MateProbe
         }
     }
 
-    /// <summary>Приводит результат <c>FindObjectsByPoint</c> к списку <c>IModelObject</c>.</summary>
-    /// <remarks>
-    /// Документация не фиксирует форму ответа: это может быть один объект, SAFEARRAY или массив
-    /// <c>object[]</c>. Разбираются все три случая, а неожиданная форма НАЗЫВАЕТСЯ, а не
-    /// проглатывается.
-    /// </remarks>
+    /// <summary>Coerces the <c>FindObjectsByPoint</c> result into a list of <c>IModelObject</c>.</summary>
+    /// <remarks>The documentation does not fix the shape of the answer: it may be a single object, a
+    /// SAFEARRAY or an <c>object[]</c>. All three are handled, and an unexpected shape is NAMED, not
+    /// swallowed.</remarks>
     private List<IModelObject> AsModelObjects(object? raw)
     {
         var result = new List<IModelObject>();
@@ -678,15 +653,11 @@ internal sealed class MateProbe
         }
     }
 
-    /// <summary>
-    /// Запасной документированный путь: открыть документ-ИСТОЧНИК компонента
-    /// (<c>IPart7.OpenSourceDocument</c>) и прочитать тело там.
-    /// </summary>
-    /// <remarks>
-    /// Оставлен диагностическим: если <c>Load(true)</c> уже дал тело, сюда не заходим. Если не дал —
-    /// этот шаг НАЗЫВАЕТ, что именно вернул <c>OpenSourceDocument</c>, вместо молчаливого «не
-    /// получилось»: следующая правка должна опираться на наблюдение, а не на догадку.
-    /// </remarks>
+    /// <summary>Fallback documented path: open the component's SOURCE document
+    /// (<c>IPart7.OpenSourceDocument</c>) and read the body there.</summary>
+    /// <remarks>Kept diagnostic: if <c>Load(true)</c> already gave a body, we do not come here. If it
+    /// did not, this step NAMES what <c>OpenSourceDocument</c> returned instead of a silent "failed":
+    /// the next edit must rest on observation, not a guess.</remarks>
     private ksBody? BodyFromSourceDocument(ksPart component, int index, ProbeStep step)
     {
         try
@@ -717,25 +688,16 @@ internal sealed class MateProbe
         }
     }
 
-    // ═══════════════════════════════════════════════════ РЕШАЮЩИЙ ОПЫТ: сопряжение ══
+    // ═══════════════════════════════════════════════════ DECISIVE EXPERIMENT: mate ══
 
-    /// <summary>
-    /// Постоянное сопряжение — ДОКУМЕНТИРОВАННЫМ методом <c>ksDocument3D.AddMateConstraint</c>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Справка <c>ksdocument3d_getmateconstraint.html</c> и <c>ksmateconstraint_create.html</c> говорят
-    /// прямо: «Сопряжения бывают постоянными и временными… <b>Постоянные сопряжения создаются с
-    /// помощью метода <c>ksDocument3D::AddMateConstraint</c></b>», а <c>Create()</c> служит только
-    /// для ВРЕМЕННОГО сопряжения внутри процесса <c>UserGetPlacementAndEntity</c>. Поэтому блок
-    /// строится на <c>AddMateConstraint</c>, а не на API7-коллекции.
-    /// </para>
-    /// <para>
-    /// Подпись: <c>BOOL AddMateConstraint(long constraintType, LPDISPATCH object1, LPDISPATCH object2,
-    /// short direction, short fixed, double value)</c>; <c>direction</c>: 1 — однонаправленные,
-    /// 0 — направление не учитывается, −1 — разнонаправленные.
-    /// </para>
-    /// </remarks>
+    /// <summary>Permanent mate — via the DOCUMENTED <c>ksDocument3D.AddMateConstraint</c>.</summary>
+    /// <remarks>DOC (<c>ksdocument3d_getmateconstraint.html</c>, <c>ksmateconstraint_create.html</c>):
+    /// «Сопряжения бывают постоянными и временными… <b>Постоянные сопряжения создаются с помощью метода
+    /// <c>ksDocument3D::AddMateConstraint</c></b>», while <c>Create()</c> serves only the TEMPORARY mate
+    /// inside <c>UserGetPlacementAndEntity</c>. Signature: <c>BOOL AddMateConstraint(long constraintType,
+    /// LPDISPATCH object1, LPDISPATCH object2, short direction, short fixed, double value)</c>;
+    /// <c>direction</c>: 1 unidirectional, 0 ignored, −1 opposite.
+    /// History: docs/decisions/probes.md#mate-create</remarks>
     private void CreateMate(ksDocument3D document, object first, object second)
     {
         var step = _report.Begin("M.5", "Сопряжение создаётся ksDocument3D.AddMateConstraint",
@@ -748,12 +710,12 @@ internal sealed class MateProbe
             step.Data["count_before"] = before;
             step.Observe("сопряжений до: " + before);
 
-            // ПАРАМЕТРЫ ПЕРЕБИРАЮТСЯ ПО ИХ ДОКУМЕНТИРОВАННЫМ ЗНАЧЕНИЯМ, а не наугад.
+            // PARAMETERS ARE ENUMERATED BY THEIR DOCUMENTED VALUES, not at random.
             // ksdDocument3d_addmateconstraint.html: direction — «1 однонаправленные, 0 направление не
-            // учитывается, −1 разнонаправленные»; fixed — «0 детали не фиксируются, 1 фиксируется
-            // первая деталь, 2 фиксируется вторая деталь»; val — «параметр для ограничений (расстояние
-            // или угол)», и «НАПРАВЛЕНИЕ ЗАДАЁТСЯ ЗНАКОМ параметра val».
-            // Первый вызов (всё нули) вернул False — значит нулевой набор не является рабочим.
+            // учитывается, −1 разнонаправленные»; fixed — «0 детали не фиксируются, 1 фиксируется первая
+            // деталь, 2 фиксируется вторая деталь»; val — «параметр для ограничений (расстояние или
+            // угол)», and «НАПРАВЛЕНИЕ ЗАДАЁТСЯ ЗНАКОМ параметра val». MEASURED: the first call (all
+            // zeroes) returned False — the zero set is not a working one.
             var combos = new (string Label, MateConstraintType Type, short Direction, short Fix, double Value)[]
             {
                 ("совпадение: direction=0, fixed=1", MateConstraintType.mc_Coincidence, 0, 1, 0d),
@@ -790,9 +752,9 @@ internal sealed class MateProbe
                 }
             }
 
-            // ВТОРОЙ ДОКУМЕНТИРОВАННЫЙ ПУТЬ — API7: IPart7.MateConstraints → IMateConstraints3D.Add
-            // (imateconstraints3d_add.html) → BaseObject1/BaseObject2 → Update(). Он проверяется
-            // НА ТЕХ ЖЕ настоящих гранях: если API5-метод отказал по объектам, это покажет.
+            // SECOND DOCUMENTED PATH — API7: IPart7.MateConstraints → IMateConstraints3D.Add
+            // (imateconstraints3d_add.html) → BaseObject1/BaseObject2 → Update(). It is tried ON THE SAME
+            // real faces: if the API5 method refused on the objects, this will show it.
             if (created != true)
             {
                 var top7 = (_app7?.ActiveDocument as IKompasDocument3D)?.TopPart;
@@ -852,8 +814,8 @@ internal sealed class MateProbe
             step.Data["created"] = created;
             step.Data["count_after"] = after;
 
-            // Чтение обратно — тем же документированным маршрутом: MateConstraintCollection →
-            // GetCount/GetByIndex → GetBaseObj(1|2). Без чтения «создано» неотличимо от «принято молча».
+            // Read back by the same documented route: MateConstraintCollection → GetCount/GetByIndex →
+            // GetBaseObj(1|2). Without the read, "created" is indistinguishable from "accepted silently".
             if (document.MateConstraintCollection() is ksMateConstraintCollection mates && mates.GetCount() > 0)
             {
                 if (mates.GetByIndex(mates.GetCount() - 1) is ksMateConstraint mate)
@@ -898,10 +860,8 @@ internal sealed class MateProbe
         }
     }
 
-    /// <summary>
-    /// Отрицательный контроль: одна и та же грань в обе позиции. Документированный метод не обязан
-    /// это отвергать, и проба НАЗЫВАЕТ исход, а не выдаёт желаемое за измеренное.
-    /// </summary>
+    /// <summary>Negative control: the same face in both positions. The documented method is not obliged
+    /// to reject it, and the probe NAMES the outcome rather than passing off the wish as the measured.</summary>
     private void Negative_SameObjectTwice(ksDocument3D document, object only)
     {
         var step = _report.Begin("M.6", "Отрицательный контроль: один объект в обе позиции",
@@ -947,21 +907,14 @@ internal sealed class MateProbe
         }
     }
 
-    /// <summary>
-    /// РАЗЛИЧАЮЩИЙ КОНТРОЛЬ: тела компонентов у сборки, созданной НЕ пробой.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Без этого контроля «у компонента нет тел» неотличимо от «проба строит сборку так, что
-    /// геометрия не материализуется». Открывается готовая сборка из поставки КОМПАС-3D (их на
-    /// машине 607), и тем же прибором читаются тела её компонентов.
-    /// </para>
-    /// <para>
-    /// Ожидание сформулировано ЗАРАНЕЕ, чтобы исход не был подогнан: если у ручной сборки тела
-    /// ЕСТЬ, причина «тел нет» — в способе создания (программная сборка), а не в КОМПАСе; если тел
-    /// НЕТ и там, значит неверен сам прибор, и все прежние выводы отзываются.
-    /// </para>
-    /// </remarks>
+    /// <summary>DISCRIMINATING CONTROL: component bodies in an assembly NOT created by the probe.</summary>
+    /// <remarks>A ready-made assembly from the KOMPAS-3D install is opened (MEASURED: 607 on this
+    /// machine) and the same instrument reads its component bodies. Without this control, "component
+    /// has no bodies" is indistinguishable from "the probe builds the assembly so geometry does not
+    /// materialise". The expectation was stated IN ADVANCE so the outcome is not fitted: if the manual
+    /// assembly HAS bodies, the cause is the creation method (programmatic assembly); if it has NONE
+    /// either, the instrument itself is wrong and all earlier conclusions are revoked.
+    /// History: docs/decisions/probes.md#mate-sample</remarks>
     private void SampleAssemblyControl()
     {
         var step = _report.Begin("M.7", "Различающий контроль: сборка, созданная НЕ пробой",
@@ -1032,9 +985,9 @@ internal sealed class MateProbe
         }
     }
 
-    // ═════════════════════════════════════════════════════════════════ мост ══
+    // ═════════════════════════════════════════════════════════════════ bridge ══
 
-    /// <summary>Переносит объект API5 в API7 как <c>Part7</c> (тип аргумента <c>FindObject</c>).</summary>
+    /// <summary>Transfers an API5 object into API7 as <c>Part7</c> (argument type <c>FindObject</c>).</summary>
     private Part7? TransferPart7(object? source)
     {
         if (source is null)
@@ -1053,7 +1006,7 @@ internal sealed class MateProbe
         }
     }
 
-    /// <summary>Переносит объект API5 в API7 как <c>IModelObject</c>, либо null с причиной.</summary>
+    /// <summary>Transfers an API5 object into API7 as <c>IModelObject</c>, or null with a reason.</summary>
     private IModelObject? TransferTo7(object? source)
     {
         if (source is null)

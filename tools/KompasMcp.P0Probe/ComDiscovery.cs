@@ -5,9 +5,7 @@ using Kompas6API5;
 
 namespace KompasMcp.P0Probe;
 
-/// <summary>
-/// Runtime discovery of what a КОМПАС object actually is.
-/// </summary>
+/// <summary>Runtime discovery of what a KOMPAS object actually is.</summary>
 /// <remarks>
 /// <b>Why this exists.</b> For an RCW handed back by <c>GetDefinition()</c> the CLR type name is
 /// always <c>System.__ComObject</c> — it carries no information. <c>instance.GetType()
@@ -16,19 +14,15 @@ namespace KompasMcp.P0Probe;
 /// project — see the header comment of <see cref="Members"/>. The only sound route is to take the
 /// object's <c>IUnknown</c> and QueryInterface it against the interfaces the <em>vendor</em>
 /// interop declares, then read the members off that static interop type.
-/// <para>
 /// <b>Why <c>Marshal.QueryInterface(IntPtr, …)</c> and not the <c>object</c> overload or
 /// <c>Type.IsInstanceOfType</c>:</b> the <c>IntPtr</c> overload returns the HRESULT instead of
 /// raising, so a negative answer is data rather than an exception, and it cannot surface as an
 /// <see cref="ExecutionEngineException"/>. <c>IsInstanceOfType</c> over an RCW consults the
 /// interfaces already grafted onto it, which for a fresh <c>__ComObject</c> is nothing — it would
 /// report "supports nothing" for every object in the model.
-/// </para>
-/// <para>
 /// The API7 interop is swept as well as API5: <c>Interop.Kompas6API5.dll</c> is a *reference*
 /// assembly of this project and an absent name in it proves only that the name is absent from
 /// that binary, not that the product lacks the feature.
-/// </para>
 /// </remarks>
 internal static class ComDiscovery
 {
@@ -43,11 +37,9 @@ internal static class ComDiscovery
             ? $"загружен {Api7Candidates.Value.Count} интерфейсов"
             : "не загружен: " + (_api7LoadError ?? "не найден");
 
-    /// <summary>
-    /// Interfaces from the vendor interop that the object answers QI for. API7 is opt-in: the sweep
+    /// <summary>Interfaces from the vendor interop that the object answers QI for. API7 is opt-in: the sweep
     /// is an out-of-process call per interface, so it is only paid for where the answer matters
-    /// (the hole definition), not for every body and edge.
-    /// </summary>
+    /// (the hole definition), not for every body and edge.</summary>
     public static List<DiscoveredInterface> Probe(object? comObject, bool includeApi7 = false)
     {
         var found = new List<DiscoveredInterface>();
@@ -83,10 +75,8 @@ internal static class ComDiscovery
         return found;
     }
 
-    /// <summary>
-    /// The names of the members the discovered interfaces declare, taken from the static interop
-    /// type (never from the instance — see the class remarks).
-    /// </summary>
+    /// <summary>The names of the members the discovered interfaces declare, taken from the static interop
+    /// type (never from the instance — see the class remarks).</summary>
     public static IReadOnlyList<string> MembersOf(string interfaceFullName)
     {
         var type = LookupType(interfaceFullName);
@@ -232,15 +222,13 @@ internal sealed record DiscoveredInterface(string FullName, string AssemblyName,
     public string Describe() => Error is null ? FullName : FullName + " " + Error;
 }
 
-/// <summary>
-/// Named constants from the vendor <c>ksConstants3D</c> type library, resolved by name the same
-/// way <see cref="EntityTypes"/> resolves <c>ksObj3dTypeEnum</c>.
-/// </summary>
+/// <summary>Named constants from the vendor <c>ksConstants3D</c> type library, resolved by name the same
+/// way <see cref="EntityTypes"/> resolves <c>ksObj3dTypeEnum</c>.</summary>
 /// <remarks>
 /// End-condition selectors are the case that matters: <c>SetSideParam</c> takes a bare
 /// <see cref="short"/>, so the adapter would otherwise be passing numbers whose meaning nobody on
 /// this repository had measured. Names come from the vendor binary; whether a given value really
-/// behaves as "насквозь" is still decided by the probe (<c>P2.1</c>), not by the name.
+/// behaves as "through-all" is still decided by the probe (<c>P2.1</c>), not by the name.
 /// </remarks>
 internal static class VendorConstants
 {

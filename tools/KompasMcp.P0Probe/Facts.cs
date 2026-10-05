@@ -851,7 +851,7 @@ internal static class GeometryFacts
 
             // Direct typed reads: CalcMassInertiaProperties is declared to return Object in the
             // interop, so reflection over method.ReturnType finds no members — that, and not
-            // КОМПАС, is why the first attempt reported "no volume".
+            // KOMPAS, is why the first attempt reported "no volume".
             return (SafeProperty(properties, "v"), SafeProperty(properties, "F"), SafeProperty(properties, "m"), null);
         }
         catch (Exception ex)

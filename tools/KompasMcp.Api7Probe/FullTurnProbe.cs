@@ -6,42 +6,30 @@ using KompasAPI7;
 
 namespace KompasMcp.Api7Probe;
 
-/// <summary>
-/// F.1 — правда ли, что развёртка вращения насыщается на 180° и полный оборот недостижим.
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Почему этот опыт нужен отдельно.</b> Вращение SM-03 создаётся прямой фабрикой API7
-/// (<c>IModelContainer.Rotateds.Add</c>), и запись <c>Angle[true] = 360</c> давала объём, равный
-/// ПОЛОВИНЕ цилиндра. Из этого был сделан вывод «развёртка насыщается на 180°», он попал в схему
-/// (<c>schemas/kompas_rotated.json</c>, <c>maximum: 180</c>), в адаптер
-/// (<c>ValidateRotatedCommand</c>) и в строку покрытия как факт о продукте. При этом сама матрица
-/// углов, на которой вывод держится, измеряла только <c>CutOffByPoint</c> — член, и <b>ни один</b>
-/// угол в ней не был записан как <c>360</c> при полном наборе параметров развёртки.
-/// </para>
-/// <para>
-/// <b>Что здесь измеряется.</b> Профиль в этом опыте устроен так, что полный оборот и полуоборот
-/// РАЗЛИЧАЮТСЯ ОБЪЁМОМ при любой оси и любом направлении: ось лежит на <b>границе</b> профиля, то
-/// есть развёртка на 360° даёт цилиндр π·r²·h, а на 180° — его половину. Прошлая матрица этого не
-/// гарантировала: её профиль тоже стоял одной стороной на оси, но запись 360 всё равно давала
-/// половину, и различить «насыщение» от «читается второй слот» по одному числу было нельзя.
-/// </para>
-/// <para>
-/// <b>Гипотеза, которая проверяется.</b> <c>IRotated.Angle</c> — индексированная пара
-/// <c>Angle(Boolean Normal)</c>. Прошлый опыт писал <c>Angle[true] = 360, Angle[false] = 0</c>. Если
-/// ядро читает угол со стороны, противоположной той, где лежит материал, то корректная запись
-/// полного оборота — <c>Angle[true] = 360, Angle[false] = 360</c> с <c>Direction = dtBoth</c>: это
-/// ровно то, что делает <b>файл поставки</b> <c>BEARING 410</c> (R.22: <c>Angle[true]=180,
-/// Angle[false]=180, Direction=dtBoth</c>). Три величины различаются по объёму и потому не могут
-/// быть спутаны: 360/0, 180/180 и 360/360.
-/// </para>
-/// <para>
-/// <b>Что опыт НЕ делает.</b> Он не меняет продукт и не пишет ни в одну строку покрытия: он
-/// измеряет. Вывод опыта — либо маршрут полного оборота (тогда его переносят в адаптер), либо
-/// подтверждённое насыщение (тогда статус строки понижается). Оба исхода законны; недопустим только
-/// третий — оставить закрытую строку, доказательство которой опровергнуто.
-/// </para>
-/// </remarks>
+/// <summary>Probe F2 — is it true that a rotation sweep saturates at 180° and a full turn is
+/// unreachable.</summary>
+/// <remarks>DOC: rotation SM-03 is created by the direct API7 factory
+/// (<c>IModelContainer.Rotateds.Add</c>), and the write <c>Angle[true] = 360</c> gave a volume equal to
+/// HALF a cylinder. From that the conclusion "the sweep saturates at 180°" was drawn, and it reached
+/// the schema (<c>schemas/kompas_rotated.json</c>, <c>maximum: 180</c>), the adapter
+/// (<c>ValidateRotatedCommand</c>) and a coverage row as a fact about the product. MEASURED: the angle
+/// matrix the conclusion rests on measured only <c>CutOffByPoint</c> — a member — and NOT ONE angle in
+/// it was written as <c>360</c> with the full sweep parameter set. TEST: the profile here is arranged
+/// so that a full turn and a half turn DIFFER IN VOLUME for any axis and any direction — the axis lies
+/// on the profile BOUNDARY, so a 360° sweep gives the cylinder π·r²·h and a 180° one its half; the
+/// previous matrix did not guarantee this, since its profile also stood with one side on the axis yet
+/// the 360 write still gave half, so "saturation" could not be told from "the second slot is read" by a
+/// single number. ASSUMPTION (the hypothesis under test): <c>IRotated.Angle</c> is an indexed pair
+/// <c>Angle(Boolean Normal)</c>; the previous run wrote <c>Angle[true] = 360, Angle[false] = 0</c>, and
+/// if the kernel reads the angle from the side opposite the material then the correct full-turn write
+/// is <c>Angle[true] = 360, Angle[false] = 360</c> with <c>Direction = dtBoth</c> — exactly what the
+/// shipped file <c>BEARING 410</c> does (R.22: <c>Angle[true]=180, Angle[false]=180,
+/// Direction=dtBoth</c>). The three quantities differ in volume and so cannot be confused: 360/0,
+/// 180/180 and 360/360. LIMIT: the probe does NOT change the product and writes to no coverage row — it
+/// measures; the outcome is either a full-turn route (then it is carried into the adapter) or a
+/// confirmed saturation (then the row's status is lowered), both legitimate, and only the third is
+/// inadmissible — leaving a closed row whose evidence has been refuted.
+/// History: docs/decisions/probes.md#full-turn</remarks>
 internal sealed class FullTurnProbe
 {
     private const double RadiusMm = 20d;
@@ -204,14 +192,10 @@ internal sealed class FullTurnProbe
 
     // ══════════════════════════════════════════════════════════ experiments ══
 
-    /// <summary>
-    /// The angle-pair matrix: three writes that can be told apart by volume alone.
-    /// </summary>
-    /// <remarks>
-    /// Every case builds in its OWN document, so a number cannot be inherited from the previous case.
+    /// <summary>The angle-pair matrix: three writes that can be told apart by volume alone.</summary>
+    /// <remarks>Every case builds in its OWN document, so a number cannot be inherited from the previous case.
     /// The reading is the volume, and the three expectations are distinct: a full turn is
-    /// π·r²·h = 50265.4824574367, a half turn is half of it, and nothing is <c>null</c>.
-    /// </remarks>
+    /// π·r²·h = 50265.4824574367, a half turn is half of it, and nothing is <c>null</c>.</remarks>
     private void AnglePairMatrix()
     {
         var step = _report.Begin("F.1", "Пара Angle(true/false): какая запись даёт полный оборот",
@@ -293,9 +277,7 @@ internal sealed class FullTurnProbe
                     + "причина прежнего чтения «половина»");
     }
 
-    /// <summary>
-    /// The change 360 → 180 → 360 on the SAME feature, which is what the task file asks for.
-    /// </summary>
+    /// <summary>The change 360 → 180 → 360 on the SAME feature, which is what the task file asks for.</summary>
     private void ChangeOnSameFeature()
     {
         var step = _report.Begin("F.2", "Смена угла у ТОГО ЖЕ признака: 360 → 180 → 360",
@@ -369,9 +351,7 @@ internal sealed class FullTurnProbe
         }
     }
 
-    /// <summary>
-    /// Save → close → reopen with the angle re-read from the reopened model.
-    /// </summary>
+    /// <summary>Save → close → reopen with the angle re-read from the reopened model.</summary>
     private void PersistenceAndReopen()
     {
         var step = _report.Begin("F.3", "Сохранение и переоткрытие полного оборота",
@@ -454,14 +434,10 @@ internal sealed class FullTurnProbe
         }
     }
 
-    /// <summary>
-    /// The direction matrix at the angle that produced the largest volume.
-    /// </summary>
-    /// <remarks>
-    /// A direction that does not build is a fact about that direction and is reported as such, never
+    /// <summary>The direction matrix at the angle that produced the largest volume.</summary>
+    /// <remarks>A direction that does not build is a fact about that direction and is reported as such, never
     /// compared as if it were a position — the same rule R.26.sector had to learn when its first
-    /// version read a failed build as a moved sector.
-    /// </remarks>
+    /// version read a failed build as a moved sector.</remarks>
     private void DirectionMatrix()
     {
         var step = _report.Begin("F.4", "Направление при полном обороте",
@@ -486,29 +462,19 @@ internal sealed class FullTurnProbe
 
     // ══════════════════════════════════════════════════════════════ building ══
 
-    /// <summary>
-    /// Решает ли вид фабрики и сторона оси, что означает записанный угол.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Что здесь проверяется.</b> Прежний эталонный маршрут (R.25) строил вращение фабрикой
-    /// <c>o3d_bossRotated</c> и записывал <c>Angle[true] = 360, Angle[false] = 0</c>; объём выходил
-    /// ровно <c>π·r²·h</c>. Затем на ТОМ ЖЕ признаке угол менялся на <c>180</c> — и объём падал
-    /// ровно вдвое. Из этого был сделан вывод «развёртка насыщается на 180°».
-    /// </para>
-    /// <para>
-    /// <b>Почему вывод мог быть неверен.</b> Достаточно, чтобы материал признака стоял по ДРУГУЮ
-    /// сторону оси, чем в опыте F.1: тогда один и тот же записанный угол отсчитывается в другую
-    /// сторону, и «четверть» и «половина» меняются местами. Опыт F.2 показал ровно этот эффект —
-    /// там плоскость эскиза F.1 развернула ось так, что <c>360</c> дало четверть, а <c>180</c> —
-    /// половину. Значит сторона оси решает, и прежнее чтение «180 = половина» могло быть чтением
-    /// «180 = полный оборот по другую сторону оси».
-    /// </para>
-    /// <para>
-    /// Здесь обе стороны перебираются ЯВНО, одной и той же парой точек, различающейся только знаком
-    /// координаты: это исключает вопрос о том, куда смотрит нормаль плоскости эскиза.
-    /// </para>
-    /// </remarks>
+    /// <summary>Whether the factory kind and the axis side decide what the written angle means.</summary>
+    /// <remarks>MEASURED: the previous reference route (R.25) built the rotation with the
+    /// <c>o3d_bossRotated</c> factory and wrote <c>Angle[true] = 360, Angle[false] = 0</c>, the volume
+    /// coming out exactly <c>π·r²·h</c>; then on the SAME feature the angle was changed to <c>180</c>
+    /// and the volume fell by exactly half, from which "the sweep saturates at 180°" was concluded.
+    /// MEASURED: it suffices for the feature's material to stand on the OTHER side of the axis than in
+    /// F.1 — then the same written angle counts the other way and "quarter" and "half" swap. F.2 showed
+    /// exactly that effect: there the F.1 sketch plane turned the axis so that <c>360</c> gave a quarter
+    /// and <c>180</c> a half, so the axis side decides, and the earlier reading "180 = half" could have
+    /// been "180 = a full turn on the other side of the axis". TEST: both sides are enumerated
+    /// EXPLICITLY, with the same point pair differing only in the sign of a coordinate, which removes
+    /// the question of where the sketch plane's normal looks.
+    /// History: docs/decisions/probes.md#full-turn</remarks>
     private void BossHalfAngleRoute()
     {
         var step = _report.Begin("F.5", "Сторона оси: как читается угол по разные её стороны",
@@ -525,7 +491,7 @@ internal sealed class FullTurnProbe
         step.Pass("обе стороны оси измерены при 180° и 360° — что читается, сказано выше");
     }
 
-    /// <summary>Строит вращение с осью, направленной по указанному знаку координаты v.</summary>
+    /// <summary>Builds a rotation whose axis is directed by the given sign of coordinate v.</summary>
     private string BuildWithSignedAxis(
         double angleNormal, double angleReverse, double sign, ProbeStep host)
     {
@@ -561,15 +527,11 @@ internal sealed class FullTurnProbe
         }
     }
 
-    /// <summary>
-    /// A boss built ONTO an existing extruded plate, using this probe's own working builders.
-    /// </summary>
-    /// <remarks>
-    /// This case exists because the separate BossFuseProbe could not build a boss at all — its
+    /// <summary>A boss built ONTO an existing extruded plate, using this probe's own working builders.</summary>
+    /// <remarks>This case exists because the separate BossFuseProbe could not build a boss at all — its
     /// instrument was defective, which the empty-document control exposed. Here the profile, axis and
     /// creation code are the ones already measured to produce a full cylinder (F.1a/F.1f), so a
-    /// failure here is a statement about the product rather than about the probe.
-    /// </remarks>
+    /// failure here is a statement about the product rather than about the probe.</remarks>
     private void BossOntoPlate()
     {
         var step = _report.Begin("F.6", "Бобышка на готовую плиту (рабочий прибор этого опыта)",
@@ -676,17 +638,13 @@ internal sealed class FullTurnProbe
         }
     }
 
-    /// <summary>
-    /// The work order's reference for native fusion: plate x,y∈[−60,60], z∈[0,10]; the cylinder
-    /// stands ON the plate (z∈[0,40]) and protrudes 30 mm, so a correct union adds π·20²·30.
-    /// </summary>
-    /// <remarks>
-    /// This differs from <see cref="BossOntoPlate"/> in the axis position: there the profile spans
+    /// <summary>The work order's reference for native fusion: plate x,y∈[−60,60], z∈[0,10]; the cylinder
+    /// stands ON the plate (z∈[0,40]) and protrudes 30 mm, so a correct union adds π·20²·30.</summary>
+    /// <remarks>This differs from <see cref="BossOntoPlate"/> in the axis position: there the profile spans
     /// v∈[−20,20] and the cylinder ends up centred on the origin; here the profile spans v∈[0,40] and
     /// the axis runs along Y from the origin. In BOTH cases the axis lies in the sketch plane (z=0),
     /// which is the plane of the plate's upper face — so the intersection is the cylinder slab
-    /// z∈[0,10], and the expected gain is <see cref="BossFusedDelta"/>, not π·R²·(H−t).
-    /// </remarks>
+    /// z∈[0,10], and the expected gain is <see cref="BossFusedDelta"/>, not π·R²·(H−t).</remarks>
     private void BossProtrudingReference()
     {
         var step = _report.Begin("F.7", "Эталон наряда: выступ 30 мм над плитой",
@@ -780,37 +738,24 @@ internal sealed class FullTurnProbe
         }
     }
 
-    /// <summary>
-    /// Вырезание вращением на полный оборот: снимает ли <c>o3d_cutRotated</c> при 360° весь
-    /// цилиндр, как это делает <c>o3d_baseRotated</c>, или только половину?
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Опыт поставлен 18.09.2026 после приёмки SM-03 через MCP. Строка приёмки «cut 360° снимает
-    /// цилиндр насквозь» упала: <c>base</c> при 360° дал ровно полный цилиндр
-    /// (<c>50265.4824574366</c>), а <c>cut</c> на плите 120×120×40 снял ровно ПОЛОВИНУ
-    /// (<c>25132.7412287183</c>) при прочитанном обратно угле 360. Разница между видами операции —
-    /// это утверждение о продукте, и оно проверяется здесь на приборе, независимом от адаптера.
-    /// </para>
-    /// <para>
-    /// Разбираются три возможные причины, и опыт различает их, а не выбирает удобную:
-    /// <list type="number">
-    /// <item><b>форма профиля.</b> В приёмке профиль — прямоугольник u∈[0,20], стоящий ПО ОДНУ
-    /// сторону оси. Для <c>cut</c> это могло бы означать, что вырезается только одна половина
-    /// развёртки. Проверяется профиль u∈[−20,+20] с осью по его середине: при 360° обе половины
-    /// обязаны сойтись в полный цилиндр;</item>
-    /// <item><b>пара Angle.</b> Проверяются обе записи: <c>(360,0)</c> и <c>(360,360)</c> — если
-    /// разница есть, причина в паре, а не в виде операции;</item>
-    /// <item><b>угол как таковой.</b> Тот же <c>cut</c> при 180° обязан снять половину. Если 180° и
-    /// 360° снимают одинаково, угол на <c>cut</c> не действует в полном диапазоне — и это
-    /// измеренная граница, которую нельзя выдать за поддержку полного оборота.</item>
-    /// </list>
-    /// </para>
-    /// <para>
-    /// Ожидание при ярлыке «полный оборот» — <c>V = 576000 − 50265.4824574366</c>, при «половина» —
-    /// <c>V = 576000 − 25132.7412287183</c>. Обе величины записаны ДО опыта.
-    /// </para>
-    /// </remarks>
+    /// <summary>Full-turn cut by rotation: does <c>o3d_cutRotated</c> at 360° remove the whole
+    /// cylinder as <c>o3d_baseRotated</c> does, or only half?</summary>
+    /// <remarks>MEASURED 18.09.2026 after SM-03 acceptance through MCP: the acceptance row "cut 360°
+    /// removes the cylinder through" failed — <c>base</c> at 360° gave exactly a full cylinder
+    /// (<c>50265.4824574366</c>), while <c>cut</c> on a 120×120×40 plate removed exactly HALF
+    /// (<c>25132.7412287183</c>) with the angle read back as 360; the difference between the operation
+    /// kinds is a claim about the product, checked here on an instrument independent of the adapter.
+    /// TEST: three possible causes are examined and the experiment distinguishes them rather than
+    /// choosing the convenient one — profile shape (in acceptance the profile is a rectangle u∈[0,20]
+    /// standing on ONE side of the axis, which for <c>cut</c> could mean only one half of the sweep is
+    /// cut; a profile u∈[−20,+20] with the axis through its middle is checked, and at 360° both halves
+    /// must join into a full cylinder); the Angle pair (both writes <c>(360,0)</c> and <c>(360,360)</c>
+    /// are checked — if they differ the cause is the pair, not the operation kind); and the angle as
+    /// such (the same <c>cut</c> at 180° must remove half — if 180° and 360° remove the same, the angle
+    /// does not act on <c>cut</c> over the full range, a measured boundary that must not be passed off
+    /// as support for a full turn). MEASURED expectation (declared BEFORE the experiment): the "full
+    /// turn" label expects <c>V = 576000 − 50265.4824574366</c>, the "half" label
+    /// <c>V = 576000 − 25132.7412287183</c>. History: docs/decisions/probes.md#full-turn</remarks>
     private void CutFullTurnOnPlate()
     {
         var step = _report.Begin("F.8", "Вырезание вращением на полный оборот: сколько снимает cut",
@@ -826,7 +771,7 @@ internal sealed class FullTurnProbe
         step.Observe("  ПОЛОВИНА      → V=" + Api5.Num(plateVolume - HalfTurnVolume)
             + " (снято " + Api5.Num(HalfTurnVolume) + ")");
 
-        // Три постановки: профиль по одну сторону оси (как в приёмке) и по обе; пара (360,0) и (360,360).
+        // Three setups: the profile on one side of the axis (as in acceptance) and on both; the pairs (360,0) and (360,360).
         var cases = new (string Label, double U0, double U1, double AngleNormal, double AngleReverse)[]
         {
             ("профиль u∈[0,20], пара (360,0) — как в приёмке SM-03", 0d, RadiusMm, 360d, 0d),
@@ -903,18 +848,19 @@ internal sealed class FullTurnProbe
 
         step.Pass("вырезание измерено во всех постановках — исход назван выше по каждой строке");
 
-        // ── контроль: ТА ЖЕ геометрия, но вид base ───────────────────────────────────────────────
-        // Без этого контроля «cut не выражает 360°» смешивалось бы с «профиль u∈[0,20] не выражает
-        // 360°». Контроль ставит на ту же плиту base-вращение ТЕМ ЖЕ ПРОФИЛЕМ: если base даёт
-        // полный цилиндр при 360° и половину при 180°, различие принадлежит ВИДУ операции, а не
-        // геометрии профиля.
+        // ── control: the SAME geometry but the base kind ──────────────────────────────────────────
+        // Without this control "cut does not express 360°" would be mixed with "profile u∈[0,20] does
+        // not express 360°". The control puts a base rotation on the same plate with the SAME PROFILE:
+        // if base gives a full cylinder at 360° and half at 180°, the difference belongs to the
+        // operation KIND, not to the profile geometry.
         //
-        // ДЕФЕКТ ПРИБОРА, ИСПРАВЛЕН 18.09.2026. Первая редакция этого контроля подставляла профиль
-        // u∈[0,20] ПОСТОЯННО, независимо от того, какой профиль стоял в контролируемой строке.
-        // Для большинства строк совпадение случайно, но для профилей u∈[−20,20] и u∈[−20,0] контроль
-        // мерил ДРУГУЮ геометрию и подтверждал не то, что заявлял: «тем же профилем» было описанием
-        // намерения, а не поведения. Это тот же класс, что и дефект вида операции в CreateRotation —
-        // прибор описывал себя вместо объекта. Ниже профиль контроля ЗЕРКАЛИТ профиль каждой строки.
+        // INSTRUMENT DEFECT, FIXED 18.09.2026. The first edition of this control substituted the profile
+        // u∈[0,20] CONSTANTLY, regardless of the profile in the controlled row. For most rows the match
+        // was accidental, but for profiles u∈[−20,20] and u∈[−20,0] the control measured DIFFERENT
+        // geometry and confirmed something other than it claimed: "the same profile" was a description
+        // of intent, not of behaviour — the same class as the operation-kind defect in CreateRotation,
+        // the instrument describing itself instead of the object. Below, the control's profile MIRRORS
+        // the profile of each row.
         foreach (var (angleNormal, u0, u1, label) in new[]
         {
             (360d, 0d, RadiusMm, "360°, профиль u∈[0,20] — как в приёмке SM-03"),
@@ -952,11 +898,11 @@ internal sealed class FullTurnProbe
 
                 var volume = Api5.Volume(part);
                 var bodies = Api5.BodyCount(part);
-                // Сектор пропорционален доле профиля, реально образующей материал: профиль
-                // u∈[−20,20] на полном обороте даёт тот же цилиндр, что и u∈[0,20] (вторая половина
-                // ложится на первую), но при НЕПОЛНОМ угле он даёт вдвое больше, потому что
-                // развернулись обе половины. Поэтому ожидание — |u1−u0|, нормированное на радиус,
-                // с насыщением на 360°.
+                // The sector is proportional to the share of the profile that actually forms material:
+                // the profile u∈[−20,20] at a full turn gives the same cylinder as u∈[0,20] (the second
+                // half lands on the first), but at a PARTIAL angle it gives twice as much because both
+                // halves swept. Hence the expectation is |u1−u0| normalised by the radius, saturating
+                // at 360°.
                 var spanRatio = Math.Min(Math.Abs(u1 - u0), RadiusMm) / RadiusMm;
                 var expected = plateVolume + FullTurnVolume
                     * (Math.Min(angleNormal, 360d) / 360d) * spanRatio;
@@ -976,26 +922,18 @@ internal sealed class FullTurnProbe
         }
     }
 
-    /// <summary>
-    /// F.9 — вырезание полным оборотом на плите, ПОЛНОСТЬЮ охватывающей развёрнутое тело.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Почему прежний опыт F.8 не мог решить этот вопрос.</b> Плита в F.8 строилась
-    /// <c>Api5.BasePlate(120,120,40)</c>, то есть выдавливанием от плоскости эскиза В ОДНУ сторону:
-    /// <c>z∈[0,40]</c>. Развёрнутое тело того же опыта идёт <c>z∈[−20,20]</c> — развёртка
-    /// симметрична относительно плоскости эскиза (измерено F.6/F.7: профиль <c>v∈[0,40]</c> дал
-    /// габарит <c>z∈[−20,20]</c>). Значит с плитой пересекается только половина тела
-    /// (<c>z∈[0,20]</c>), и «360° снимает половину цилиндра» — ПРАВИЛЬНЫЙ ответ для той постановки,
-    /// а не насыщение развёртки. Контроль F.8 сравнивал ПРИБАВЛЕННЫЙ объём целого цилиндра со
-    /// СНЯТЫМ объёмом пересечения: это разные величины, и совпадение или расхождение между ними
-    /// ничего не говорит о законе развёртки.
-    /// </para>
-    /// <para>
-    /// Здесь тело помещено ВНУТРЬ плиты целиком: ось Z, профиль на плоскости XOZ, плита
-    /// <c>z∈[0,40]</c>. Тогда снятый объём равен объёму тела и пропорционален углу.
-    /// </para>
-    /// </remarks>
+    /// <summary>F.9 — a full-turn cut on a plate that FULLY encloses the swept body.</summary>
+    /// <remarks>MEASURED: the earlier F.8 could not settle this — its plate was built
+    /// <c>Api5.BasePlate(120,120,40)</c>, i.e. extruded from the sketch plane in ONE direction,
+    /// <c>z∈[0,40]</c>, while the swept body of the same experiment runs <c>z∈[−20,20]</c>, the sweep
+    /// being symmetric about the sketch plane (measured F.6/F.7: profile <c>v∈[0,40]</c> gave extents
+    /// <c>z∈[−20,20]</c>). So only half the body intersects the plate (<c>z∈[0,20]</c>), and "360°
+    /// removes half the cylinder" is the CORRECT answer for that setup, not a sweep saturation; the F.8
+    /// control compared the ADDED volume of a whole cylinder with the REMOVED volume of the
+    /// intersection — different quantities whose match or mismatch says nothing about the sweep law.
+    /// Here the body is placed WHOLLY inside the plate: Z axis, profile on the XOZ plane, plate
+    /// <c>z∈[0,40]</c>, so the removed volume equals the body volume and is proportional to the angle.
+    /// History: docs/decisions/probes.md#full-turn</remarks>
     private void CutFullTurnContained()
     {
         var step = _report.Begin("F.9", "Вырезание вращением: плита, ПОЛНОСТЬЮ охватывающая тело",
@@ -1012,7 +950,7 @@ internal sealed class FullTurnProbe
         step.Observe("  аналитика: тело " + Api5.Num(FullTurnVolume) + ", 180° → " + Api5.Num(HalfTurnVolume)
             + ", 90° → " + Api5.Num(FullTurnVolume / 4d));
 
-        // ── §4: контроль геометрии тем же профилем и осью, рабочим base-маршрутом, в СВОЁМ документе
+        // ── §4: geometry control with the same profile and axis, via the working base route, in its OWN document
         ksDocument3D? controlDoc = null;
         try
         {
@@ -1052,7 +990,7 @@ internal sealed class FullTurnProbe
             TryClose(controlDoc);
         }
 
-        // ── основной опыт: тот же угол на плите, охватывающей тело целиком ──────────────────────
+        // ── main experiment: the same angle on a plate enclosing the body wholly ────────────────
         var removed = new Dictionary<double, double>();
         var verdictFailed = false;
         foreach (var angle in new[] { 360d, 180d, 90d })
@@ -1123,8 +1061,8 @@ internal sealed class FullTurnProbe
             }
         }
 
-        // Вердикт условный: прежняя редакция этого шага вызывала Pass() безусловно, то есть
-        // «измерено» выдавалось за «выполнено» независимо от чисел. Здесь он следует за числами.
+        // The verdict is conditional: the previous edition of this step called Pass() unconditionally,
+        // i.e. "measured" was passed off as "satisfied" regardless of the numbers; here it follows them.
         if (verdictFailed || removed.Count < 3)
         {
             step.Fail("вырезание полным оборотом на плите, охватывающей тело целиком, не дало "
@@ -1141,15 +1079,12 @@ internal sealed class FullTurnProbe
         }
     }
 
-    /// <summary>
-    /// F.10 — бобышка вращением на существующем теле с видом операции, СООТВЕТСТВУЮЩИМ фабрике.
-    /// </summary>
-    /// <remarks>
-    /// Опыт F.6/F.7 записывал <c>ksOperationNewBody</c> и получал второе тело — то есть ровно то,
-    /// что и просил. Здесь та же геометрия прогоняется дважды: с <c>Union</c> и с <c>NewBody</c>.
-    /// Различие исходов при неизменной геометрии и есть ответ на вопрос «дело в виде операции или
-    /// в постановке».
-    /// </remarks>
+    /// <summary>F.10 — a boss by rotation on an existing body with an operation kind MATCHING the
+    /// factory.</summary>
+    /// <remarks>MEASURED: F.6/F.7 wrote <c>ksOperationNewBody</c> and got a second body — exactly what
+    /// it asked for. Here the same geometry is run twice, with <c>Union</c> and with <c>NewBody</c>, and
+    /// the difference of outcomes at unchanged geometry is the answer to "is it the operation kind or
+    /// the setup". History: docs/decisions/probes.md#full-turn</remarks>
     private void BossUnionOnPlate()
     {
         var step = _report.Begin("F.10", "Бобышка вращением на теле: Union против NewBody",
@@ -1247,24 +1182,19 @@ internal sealed class FullTurnProbe
         }
     }
 
-    /// <summary>
-    /// F.11 — выбор целевого тела: boss и cut вращением в детали с ПОСТОРОННИМ телом.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Строки <c>SM-03.boss_rotated.full_turn</c> и <c>SM-03.cut_rotated.full_turn</c> объявляют
-    /// зависимости <c>dep.bodies.multibody</c> и <c>dep.selection.unambiguous</c>. Значит вопрос
-    /// «какое тело тронуто» обязан быть измерен, а не выведен из однотельной постановки.
-    /// </para>
-    /// <para>
-    /// Измеряется не «выбор» как настройка, а поведение: <c>IRotated</c>/<c>IRotated1</c> селектора
-    /// тела не объявляют вовсе (проверено по интероп-сборке: у них нет ни <c>chooseType</c>, ни
-    /// <c>ChooseBodies</c>; они есть только у API5-определений <c>ksBossRotatedDefinition</c> и
-    /// <c>ksCutRotatedDefinition</c>). Поэтому здесь фиксируется, к какому телу ядро отнесло
-    /// операцию: если оно берёт ПЕРЕСЕКАЕМОЕ тело, а не первое в коллекции, то поведение
-    /// однозначно и может быть заявлено; если первое — операцию нельзя выполнять вслепую.
-    /// </para>
-    /// </remarks>
+    /// <summary>F.11 — target-body selection: boss and cut by rotation in a part with a STRANGER
+    /// body.</summary>
+    /// <remarks>DOC: rows <c>SM-03.boss_rotated.full_turn</c> and <c>SM-03.cut_rotated.full_turn</c>
+    /// declare the dependencies <c>dep.bodies.multibody</c> and <c>dep.selection.unambiguous</c>, so
+    /// "which body is touched" must be measured, not inferred from a single-body setup. MEASURED: what
+    /// is measured is behaviour, not "selection" as a setting — <c>IRotated</c>/<c>IRotated1</c> declare
+    /// no body selector at all (checked against the interop assembly: they have neither
+    /// <c>chooseType</c> nor <c>ChooseBodies</c>; those exist only on the API5 definitions
+    /// <c>ksBossRotatedDefinition</c> and <c>ksCutRotatedDefinition</c>). So what is recorded is which
+    /// body the kernel attributed the operation to: if it takes the INTERSECTED body rather than the
+    /// first in the collection, the behaviour is unambiguous and can be declared; if it takes the first,
+    /// the operation must not be performed blindly.
+    /// History: docs/decisions/probes.md#full-turn</remarks>
     private void MultiBodyTarget()
     {
         var step = _report.Begin("F.11", "Целевое тело boss/cut в детали с посторонним телом",
@@ -1284,9 +1214,10 @@ internal sealed class FullTurnProbe
         var cases = new (string Label, ksObj3dTypeEnum Kind, ksOperationResultEnum Result, double V0,
             double V1, double ExpectedDelta)[]
         {
-            // Пересечение с ЦЕЛЕВЫМ телом, а не объём инструмента: boss-цилиндр z∈[−20,20] пересекает
-            // плиту z∈[0,10] на 10 мм; cut-цилиндр z∈[0,40] — тоже на 10 мм. Снять или добавить
-            // больше, чем пересечение, нельзя, и ожидание обязано считаться от пересечения.
+            // The intersection with the TARGET body, not the tool volume: the boss cylinder z∈[−20,20]
+            // meets the plate z∈[0,10] over 10 mm, and the cut cylinder z∈[0,40] likewise over 10 mm.
+            // More than the intersection cannot be removed or added, so the expectation must be
+            // computed from the intersection.
             ("boss, Union", ksObj3dTypeEnum.o3d_bossRotated, ksOperationResultEnum.ksOperationUnion,
                 -RadiusMm, RadiusMm, bossDelta),
             ("cut, Cut", ksObj3dTypeEnum.o3d_cutRotated, ksOperationResultEnum.ksOperationCut,
@@ -1333,9 +1264,9 @@ internal sealed class FullTurnProbe
                 step.Observe(label + ": тел=" + bodiesBefore + "→" + bodiesAfter + ", объёмы по телам ["
                     + string.Join("; ", volumesAfter.Select(Api5.Num)) + "]");
 
-                // Сопоставление по ОБЪЁМАМ, а не по позиции: измерено F.11, что КОМПАС ПЕРЕСТАВЛЯЕТ
-                // тела в коллекции после операции (144000/16000 → 16000/181699.111843077). Сравнение
-                // по индексу читало бы перестановку как «тело A изменилось на −128000».
+                // Matching by VOLUMES, not by position: F.11 measured that KOMPAS REORDERS the bodies
+                // in the collection after the operation (144000/16000 → 16000/181699.111843077); an
+                // index comparison would read the reordering as "body A changed by −128000".
                 var before = volumesBefore.Where(v => v is not null).Select(v => v!.Value).OrderBy(v => v).ToList();
                 var after = volumesAfter.Where(v => v is not null).Select(v => v!.Value).OrderBy(v => v).ToList();
                 var countOk = bodiesAfter == bodiesBefore && before.Count == after.Count;
@@ -1707,16 +1638,12 @@ internal sealed class FullTurnProbe
         return doc;
     }
 
-    /// <summary>
-    /// The reference profile: a rectangle <c>u∈[0,20]</c>, <c>v∈[-20,20]</c> with the axis on its
-    /// left edge.
-    /// </summary>
-    /// <remarks>
-    /// The axis lies ON the profile boundary on purpose. With the axis on the boundary a full turn
+    /// <summary>The reference profile: a rectangle <c>u∈[0,20]</c>, <c>v∈[-20,20]</c> with the axis on its
+    /// left edge.</summary>
+    /// <remarks>The axis lies ON the profile boundary on purpose. With the axis on the boundary a full turn
     /// sweeps the full cylinder π·r²·h and a half turn exactly half of it, so the two are
     /// distinguishable by volume for every direction — which is the property the previous angle
-    /// matrix did not have.
-    /// </remarks>
+    /// matrix did not have.</remarks>
     private static ksEntity ProfileSketch(ksDocument3D doc, string name)
     {
         var part = (ksPart)doc.GetPart(-1);
@@ -1751,9 +1678,7 @@ internal sealed class FullTurnProbe
         return sketch;
     }
 
-    /// <summary>
-    /// The rotation axis as an API7 object, on the line <c>u = 0</c> in model coordinates.
-    /// </summary>
+    /// <summary>The rotation axis as an API7 object, on the line <c>u = 0</c> in model coordinates.</summary>
     /// <remarks>
     /// <c>Axes3D</c> is declared on <c>IAuxiliaryGeomContainer</c>, not on <c>IModelContainer</c>:
     /// asking the model container finds nothing and would report an absent axis. The QI is measured,
@@ -1858,13 +1783,14 @@ internal sealed class FullTurnProbe
                 // The kind is set by the FACTORY, not by this member — measured in R.26. It is written
                 // for the tree's sake and read back below.
                 //
-                // ИСПРАВЛЕНО 18.09.2026 (второй раз). Прежняя правка заменила жёсткий
-                // ksOperationNewBody на пару «cut → Cut, всё остальное → NewBody». Этого мало и это
-                // было НЕВЕРНО по существу для boss: вид операции boss требует ksOperationUnion, а
-                // получал NewBody. Опыты F.6/F.7 (бобышка на плите) записаны с NewBody — то есть
-                // измеряли ровно то, что и должны были измерить при «новом теле»: второе тело и
-                // прирост в целый цилиндр. Вывод «сращивания нет» опирался на опыт, который
-                // сращивания и не запрашивал. Теперь вид операции выводится из вида фабрики.
+                // FIXED 18.09.2026 (second time). An earlier fix replaced the hard-coded
+                // ksOperationNewBody with the pair "cut → Cut, everything else → NewBody". That was not
+                // enough and was WRONG in substance for boss: the boss operation kind requires
+                // ksOperationUnion but got NewBody. Experiments F.6/F.7 (boss onto a plate) were recorded
+                // with NewBody — i.e. they measured exactly what "a new body" should measure: a second
+                // body and a gain of a whole cylinder. The conclusion "there is no fusion" rested on an
+                // experiment that never asked for fusion. Now the operation kind is derived from the
+                // factory kind.
                 rotated1.OperationResult = operationResult;
             }
 
@@ -1930,53 +1856,37 @@ internal sealed class FullTurnProbe
             + ", Angle[false]=" + Api5.Num(Api5.SafeDouble(() => rotation.Angle[false])));
     }
 
-    /// <summary>
-    /// Cross-section area of the boss-cylinder slab lying inside a plate that occupies <c>z∈[0,t]</c>,
+    /// <summary>Cross-section area of the boss-cylinder slab lying inside a plate that occupies <c>z∈[0,t]</c>,
     /// for the geometry this probe actually builds: the cylinder's axis lies IN the plate's upper face
-    /// plane (z=0).
-    /// </summary>
-    /// <remarks>
-    /// Derivation, not a fit: ∫₀ᵗ 2√(R²−z²) dz = t·√(R²−t²) + R²·asin(t/R).
-    /// </remarks>
+    /// plane (z=0).</summary>
+    /// <remarks>Derivation, not a fit: ∫₀ᵗ 2√(R²−z²) dz = t·√(R²−t²) + R²·asin(t/R).
     private static double BossFusedSlabArea(double plateThickness) =>
         plateThickness * Math.Sqrt(RadiusMm * RadiusMm - plateThickness * plateThickness)
         + RadiusMm * RadiusMm * Math.Asin(plateThickness / RadiusMm);
 
-    /// <summary>
-    /// The volume a fusing boss adds: the whole cylinder minus the slab of it inside the plate.
-    /// </summary>
-    /// <remarks>
-    /// The FIRST edition of F.6/F.7 wrote <c>π·R²·(H−t)</c>, which is the answer for a cylinder
+    /// <summary>The volume a fusing boss adds: the whole cylinder minus the slab of it inside the plate.</summary>
+    /// <remarks>The FIRST edition of F.6/F.7 wrote <c>π·R²·(H−t)</c>, which is the answer for a cylinder
     /// STANDING on the plate, axis perpendicular to it. The probe never built that — <c>BuildAxis</c>
     /// puts the axis along Y inside the sketch plane. The stale expectation is why both steps failed
     /// on a correct fusion after the operation-result defect was fixed: the EXPECTATION was wrong, not
-    /// the product (§4 of the B2 наряд).
-    /// </remarks>
+    /// the product (§4 of the B2 order).</remarks>
     private static double BossFusedDelta(double plateThickness) =>
         FullTurnVolume - BossFusedSlabArea(plateThickness) * HeightMm;
 
-    /// <summary>
-    /// The same quantity when the cylinder's axis is PERPENDICULAR to the plate (axis along Z), so the
-    /// intersection is the full disc over the plate's thickness: <c>π·R²·t</c>.
-    /// </summary>
-    /// <remarks>
-    /// The two differ by geometry, not by taste: with the axis lying IN the plate's face plane the
+    /// <summary>The same quantity when the cylinder's axis is PERPENDICULAR to the plate (axis along Z), so the
+    /// intersection is the full disc over the plate's thickness: <c>π·R²·t</c>.</summary>
+    /// <remarks>The two differ by geometry, not by taste: with the axis lying IN the plate's face plane the
     /// cross-section is a circular segment (<see cref="BossFusedSlabArea"/>), with the axis
     /// perpendicular to it the cross-section is the whole disc. F.6/F.7 build the first, F.10/F.11
-    /// the second.
-    /// </remarks>
+    /// the second.</remarks>
     private static double BossFusedDeltaAxial(double plateThickness) =>
         FullTurnVolume - Math.PI * RadiusMm * RadiusMm * plateThickness;
 
-    /// <summary>
-    /// The operation result that MATCHES the factory kind. Written into <c>IRotated1.OperationResult</c>.
-    /// </summary>
-    /// <remarks>
-    /// The mapping is read off <c>ksOperationResultEnum</c> and the three factories, not chosen by
+    /// <summary>The operation result that MATCHES the factory kind. Written into <c>IRotated1.OperationResult</c>.</summary>
+    /// <remarks>The mapping is read off <c>ksOperationResultEnum</c> and the three factories, not chosen by
     /// symmetry: <c>ksOperationUnion = 0</c>, <c>ksOperationNewBody = 1</c>, <c>ksOperationCut = 2</c>.
     /// Writing <c>NewBody</c> for a <c>boss</c> factory asks for a NEW body, which is exactly the
-    /// outcome F.6/F.7 recorded and then reported as "boss does not fuse".
-    /// </remarks>
+    /// outcome F.6/F.7 recorded and then reported as "boss does not fuse".</remarks>
     private static ksOperationResultEnum OperationResultOf(ksObj3dTypeEnum kind) => kind switch
     {
         ksObj3dTypeEnum.o3d_bossRotated => ksOperationResultEnum.ksOperationUnion,
@@ -1986,10 +1896,8 @@ internal sealed class FullTurnProbe
 
     // ══════════════════════════════════════════════════════════════ readings ══
 
-    /// <summary>
-    /// An independent shape reading: the cylindrical faces with radius and height, plus the bounding
-    /// box. A full cylinder R20 H40 has bounds 40×40×40; a half cylinder has 40×40×20.
-    /// </summary>
+    /// <summary>An independent shape reading: the cylindrical faces with radius and height, plus the bounding
+    /// box. A full cylinder R20 H40 has bounds 40×40×40; a half cylinder has 40×40×20.</summary>
     private static string DescribeShape(ksPart part, ProbeStep step)
     {
         try
@@ -2024,7 +1932,7 @@ internal sealed class FullTurnProbe
                     }
                     catch (COMException)
                     {
-                        // A face whose parameters КОМПАС withheld is not a reason to abort the walk.
+                        // A face whose parameters KOMPAS withheld is not a reason to abort the walk.
                     }
                 }
             }

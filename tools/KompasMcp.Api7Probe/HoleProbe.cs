@@ -8,12 +8,9 @@ using Kompas6Constants3D;
 
 namespace KompasMcp.Api7Probe;
 
-/// <summary>
-/// The measured program. API5 builds the reference plate, API7 creates and edits the native
-/// «Отверстие», API5 reads the result back — the program of ADR-003 §3, in its order.
-/// </summary>
+/// <summary>The measured program. API5 builds the reference plate, API7 creates and edits the native
+/// Hole operation, API5 reads the result back — the program of ADR-003 §3, in its order.</summary>
 /// <remarks>
-/// <para>
 /// <b>Binding.</b> API5 goes through the vendor typed interop, which is what production uses and
 /// what P0 proved loads and runs in x64 .NET 10. API7 also goes through a typed interop — the
 /// prebuilt <c>Libs\PolynomLib\Bin\Client\Interop.KompasAPI7.dll</c> — because that is the wrapper
@@ -23,13 +20,10 @@ namespace KompasMcp.Api7Probe;
 /// <c>IDispatch</c> (<see cref="Late"/>) instead: a failure on that path is a statement about the
 /// product, while a failure only on the typed path is a statement about the wrapper. Which one it
 /// was is recorded per member.
-/// </para>
-/// <para>
 /// <b>Proof standard</b> (ADR-003 §3): a non-null object, a found type or <c>S_OK</c> is never
 /// reported as success. Only measured volumes and read-back parameters decide, against
 /// <c>max(0.01 mm³, 1e-6 × expectation)</c>, which is not widened after a failure. Where a call
 /// could not be made at all, the verdict is UNKNOWN, not FAIL, and the reason is written down.
-/// </para>
 /// </remarks>
 internal sealed class HoleProbe
 {
@@ -45,7 +39,7 @@ internal sealed class HoleProbe
     }
 
     /// <summary>Material a through hole of this diameter removes from the reference plate:
-    /// π·r²·t, which for Ø10 through 10 мм is 250π.</summary>
+    /// π·r²·t, which for Ø10 through 10 mm is 250π.</summary>
     internal static double RemovedByHole(double diameterMillimetres)
     {
         var radius = diameterMillimetres / 2d;
@@ -539,10 +533,8 @@ internal sealed class HoleProbe
         }
     }
 
-    /// <summary>
-    /// Everything a rung is allowed to touch: the API7 families of the live document, the ability to
-    /// add another hole, and the API5 helpers needed to draw a base sketch first.
-    /// </summary>
+    /// <summary>Everything a rung is allowed to touch: the API7 families of the live document, the ability to
+    /// add another hole, and the API5 helpers needed to draw a base sketch first.</summary>
     private sealed class HoleContext
     {
         public HoleContext(HoleProbe owner, ProbeStep step)
@@ -569,7 +561,7 @@ internal sealed class HoleProbe
         }
 
         /// <summary>An API5 sketch whose only geometry is a circle of the hole radius, centred on the
-        /// model origin — the way the КОМПАС interface itself supplies hole positions.</summary>
+        /// model origin — the way the KOMPAS interface itself supplies hole positions.</summary>
         public void BaseCircleSketch(string name, double radiusMm, double planeOffsetMm)
         {
             var plane = Owner._part.GetDefaultEntity(Api5.PlaneXoy) as ksEntity;
@@ -608,11 +600,9 @@ internal sealed class HoleProbe
             Log.Add(name + ": окружность R" + Api5.Num(radiusMm) + " на плоскости со смещением " + Api5.Num(planeOffsetMm) + " мм нарисована");
         }
 
-        /// <summary>
-        /// Rebuilds the reference plate in its own document, with its own API7 views. Without this a
+        /// <summary>Rebuilds the reference plate in its own document, with its own API7 views. Without this a
         /// control candidate cuts whatever its predecessor left and reports the result as a property
-        /// of its own configuration.
-        /// </summary>
+        /// of its own configuration.</summary>
         public bool FreshPlate(Rung rung)
         {
             try
@@ -701,7 +691,7 @@ internal sealed class HoleProbe
                 Owner._lastDelta = delta;
                 // Two separate numbers, two separate checks: what the hole removed must equal
                 // π·r²·t, and what is left must equal 80000 − 250π. Conflating them is the bug
-                // that first read a correct 785.3981633974472 мм³ as a failure.
+                // that first read a correct 785.3981633974472 mm³ as a failure.
                 var removed = RemovedByHole(10d);
                 var expectation = ExpectedThroughHole(10d);
                 var removedMatches = delta is double dv && Math.Abs(dv - removed) <= Tolerance(removed);
@@ -733,12 +723,10 @@ internal sealed class HoleProbe
         }
     }
 
-    /// <summary>
-    /// The server's own account of a refusal: <c>IApplication.KompasError</c> (Code, Description)
+    /// <summary>The server's own account of a refusal: <c>IApplication.KompasError</c> (Code, Description)
     /// plus the feature's <c>ObjectError</c>/<c>State</c>. Recorded because a rejection without the
     /// wording is a guess about why it was rejected, and ADR-003 §4 requires the diagnostics to be
-    /// precise.
-    /// </summary>
+    /// precise.</summary>
     private string KompasErrorText(KompasAPI7.IHole3D hole)
     {
         var parts = new List<string>();
@@ -1410,10 +1398,10 @@ internal sealed class HoleProbe
                     ["update_stamp_after"] = Api5.Raw(stampAfter),
                     ["tree_need_rebuild_before"] = Api5.Raw(rebuildFlagBefore),
                     ["tree_need_rebuild_after"] = Api5.Raw(Flag(() => _doc.treeNeedRebuild)),
-                    // Что сравнивалось на самом деле — объём и перечитанный параметр. Их равенство
-                    // НЕ означает неизменности документа: этот же замер показывает
-                    // updateStamp 70 → 78, то есть дерево претерпело перестроение. Ключ поэтому
-                    // называется точно, и «документ не изменился» не утверждается нигде.
+                    // What was actually compared — the volume and the read-back parameter. Their
+                    // equality does NOT mean the document is unchanged: this same measurement shows
+                    // updateStamp 70 → 78, i.e. the tree underwent a rebuild. The key is therefore
+                    // named exactly, and "the document is unchanged" is asserted nowhere.
                     ["geometry_and_readback_unchanged"] = unchanged,
                     ["document_state_unchanged"] = Equals(stampBefore, stampAfter),
                     ["rejected_in_effect"] = rejectedInEffect,
@@ -1472,19 +1460,15 @@ internal sealed class HoleProbe
         }
     }
 
-    /// <summary>
-    /// Millimetres into the unit <c>IHole3D.Diameter</c> answers in. Measured, not assumed: the
-    /// candidate that removed 0.000785398166 мм³ from a 10 мм plate at <c>Diameter = 0.01</c>
+    /// <summary>Millimetres into the unit <c>IHole3D.Diameter</c> answers in. Measured, not assumed: the
+    /// candidate that removed 0.000785398166 mm³ from a 10 mm plate at <c>Diameter = 0.01</c>
     /// matches π·(0.01/2)²·10 exactly, so the unit is millimetres and this conversion is the
-    /// identity. The unit candidate in the ladder keeps the metre reading tested rather than dropped.
-    /// </summary>
+    /// identity. The unit candidate in the ladder keeps the metre reading tested rather than dropped.</summary>
     private double Scale(double millimetres) => _diameterIsMillimetres ? millimetres : millimetres / 1000d;
 
-    /// <summary>
-    /// The face to drill into, found with the API5 topology route the project already uses and
+    /// <summary>The face to drill into, found with the API5 topology route the project already uses and
     /// carried into API7 by TransferInterface. That transition is one of the answers ADR-003 §3.8
-    /// asks for, so it is logged rather than hidden.
-    /// </summary>
+    /// asks for, so it is logged rather than hidden.</summary>
     private KompasAPI7.IModelObject? TopFace(ProbeStep step)
     {
         if (_part.GetMainBody() is not ksBody body || body.FaceCollection() is not ksFaceCollection faces)
@@ -1522,11 +1506,9 @@ internal sealed class HoleProbe
         return Transfer(largest, "верхняя грань: API5 ksFaceDefinition", "API7 IModelObject", step) as KompasAPI7.IModelObject;
     }
 
-    /// <summary>
-    /// What the model itself reports about the feature: its type as the model names it, its
+    /// <summary>What the model itself reports about the feature: its type as the model names it, its
     /// placement, and every parameter read back out of the object rather than remembered from what
-    /// the probe wrote into it.
-    /// </summary>
+    /// the probe wrote into it.</summary>
     private void ReportFeature()
     {
         var step = _report.Begin(
@@ -1620,11 +1602,9 @@ internal sealed class HoleProbe
     }
 
     // ══════════════════════════════════════════════════════════════════════ plumbing ══
-    /// <summary>
-    /// One line per endpoint pair with a ×N count. Every candidate now rebuilds its own document, so
+    /// <summary>One line per endpoint pair with a ×N count. Every candidate now rebuilds its own document, so
     /// without this the same API5→API7 line would repeat once per plate and bury the transition list
-    /// ADR-003 §3.8 asks for.
-    /// </summary>
+    /// ADR-003 §3.8 asks for.</summary>
     private void RecordTransfer(string line)
     {
         for (var i = 0; i < _transitions.Count; i++)
@@ -1718,11 +1698,9 @@ internal sealed class HoleProbe
         return NativeWindow.GetWindowThreadProcessId(handle, out var pid) == 0 ? null : (int)pid;
     }
 
-    /// <summary>
-    /// КОМПАС can still be mid-operation when a rebuild call returns. Draining a slice of real time
+    /// <summary>KOMPAS can still be mid-operation when a rebuild call returns. Draining a slice of real time
     /// between rebuild and measurement is what stops «returned true, nothing changed» from being
-    /// read as an answer of the API rather than of the scheduler.
-    /// </summary>
+    /// read as an answer of the API rather than of the scheduler.</summary>
     private void Settle(int milliseconds = 600)
     {
         var clock = Stopwatch.StartNew();

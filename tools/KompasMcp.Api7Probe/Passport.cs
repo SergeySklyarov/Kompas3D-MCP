@@ -8,7 +8,7 @@ namespace KompasMcp.Api7Probe;
 
 /// <summary>
 /// A7.0 — the environment passport ADR-003 §4 demands before any COM result is trusted: which
-/// КОМПАС actually runs, which type libraries and interop assemblies describe API7, and which of
+/// KOMPAS actually runs, which type libraries and interop assemblies describe API7, and which of
 /// the disagreeing sources the probe believes.
 /// </summary>
 /// <remarks>

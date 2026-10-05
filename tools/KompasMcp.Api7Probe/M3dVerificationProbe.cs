@@ -4,27 +4,19 @@ using Kompas6Constants3D;
 
 namespace KompasMcp.Api7Probe;
 
-/// <summary>
-/// Проверка готового файла: открыть <c>.m3d</c> в НОВОМ сеансе и прочитать его геометрию.
-/// </summary>
+/// <summary>Verification of a finished file: open the <c>.m3d</c> in a NEW session and read its geometry.</summary>
 /// <remarks>
-/// <para>
-/// <b>Зачем это нужно отдельно от опыта F.</b> Опыт F строит признак и сам же его измеряет. Это
-/// законная проба маршрута, но она не отвечает на вопрос «что лежит в файле»: если зонд ошибся в
-/// чтении или мерил не тот документ, опыт этого не покажет (класс дефекта 14 — измерение после
-/// предмета). Сохранённый файл читает <b>другой процесс</b>, который не знает, как файл строился, и
-/// которому нечем ошибиться: он видит только то, что записала КОМПАС.
-/// </para>
-/// <para>
-/// <b>Почему это не «проба ради пробы».</b> Утверждение, которое готовится к записи в адаптер,
-/// звучит как «маршрут полного оборота даёт полный цилиндр». Пока оно подтверждено только тем же
-/// инструментом, что его построил, — это утверждение о зонде. Открытие файла сторонним читателем
-/// переводит его в утверждение о продукте.
-/// </para>
-/// <para>
-/// <b>Ожидания задаются ДО чтения</b>, а не подбираются под результат: R20 H40, полный оборот —
-/// весь цилиндр <c>V = π·20²·40 = 50265.4824574366…</c> мм³, габарит 40×40×40.
-/// </para>
+/// <b>Why this is needed separately from experiment F.</b> Experiment F builds a feature and measures
+/// it itself. That is a legitimate route check, but it does not answer "what is in the file": if the
+/// probe misread or measured the wrong document, the experiment would not show it (defect class 14 —
+/// measuring after the subject). The saved file is read by <b>another process</b> that does not know
+/// how the file was built and has no way to err: it sees only what KOMPAS wrote.
+/// <b>Why this is not "a probe for a probe's sake".</b> The claim being prepared for the adapter reads
+/// "the full-turn route yields a full cylinder". While it is confirmed only by the same instrument
+/// that built it, it is a claim about the probe. Opening the file with a third-party reader turns it
+/// into a claim about the product.
+/// <b>Expectations are set BEFORE the read</b> rather than fitted to the result: R20 H40, a full turn
+/// is the whole cylinder <c>V = π·20²·40 = 50265.4824574366…</c> mm³, bounding box 40×40×40.
 /// </remarks>
 internal sealed class M3dVerificationProbe
 {
@@ -189,10 +181,8 @@ internal sealed class M3dVerificationProbe
         }
     }
 
-    /// <summary>
-    /// Reads the feature tree so the verification states what KIND of object carries the mass, not
-    /// only how much mass there is.
-    /// </summary>
+    /// <summary>Reads the feature tree so the verification states what KIND of object carries the mass, not
+    /// only how much mass there is.</summary>
     private static List<string> ReadFeatures(ksDocument3D doc, ProbeStep step)
     {
         var found = new List<string>();
@@ -265,7 +255,7 @@ internal sealed class M3dVerificationProbe
                     }
                     catch (System.Runtime.InteropServices.COMException)
                     {
-                        // A face whose parameters КОМПАС withheld is not a reason to abort the walk.
+                        // A face whose parameters KOMPAS withheld is not a reason to abort the walk.
                     }
                 }
             }

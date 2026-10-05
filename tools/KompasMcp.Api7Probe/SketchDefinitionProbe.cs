@@ -4,36 +4,26 @@ using Kompas6Constants;
 
 namespace KompasMcp.Api7Probe;
 
-/// <summary>
-/// Проба S — определённость эскиза: читается ли статус «+ / − / !» из API, и различает ли он
-/// состояния, подготовленные ограничениями.
-/// </summary>
+/// <summary>Probe S — sketch definition: is the "+ / − / !" status readable from the API, and does it
+/// tell apart states prepared by constraints.</summary>
 /// <remarks>
-/// <para>
-/// Задание: <c>SKETCH_DEFINITION_CHECK_DEVELOPER_PROMPT.md</c>. Вопрос ставится так, чтобы ответ не
-/// зависел от памяти клиента и не подменялся удобным признаком: точные координаты, ширина и высота,
-/// радиус при создании, замкнутость контура и успешное выдавливание полную определённость НЕ
-/// доказывают (задание §«Семантика», пп. 2–3). Поэтому контрольные состояния строятся на ФАКТИЧЕСКИ
-/// наложенных ограничениях, а ожидаемый статус не объявляется фактом до чтения из КОМПАС.
-/// </para>
-/// <para>
-/// Маршрут чтения (найден разведкой, см. <c>docs/acceptance/api7/sketch-definition.md</c>):
-/// <c>ISketch.ConstraintsState</c> типа <c>ksConstraintsStateEnum</c> — агрегированный статус всего
-/// эскиза, ровно та величина, которую КОМПАС показывает символами «+», «−», «!». Перечисление
-/// объявлено в <c>Bin\ksConstants.tlb</c>, а не в <c>kAPI7.tlb</c>, и НЕ линкуется в эту пробу;
-/// значения продублированы локально и сверяются шагом S.3 с объявленными.
-/// </para>
-/// <para>
-/// Ветка разведки, которую проба закрывает и НЕ переносит на общий вывод:
-/// <c>IParametriticConstraint.Degrees</c> — это градусы УГЛОВОГО ограничения
-/// (<c>ksConstraintTypeEnum.ksCFixedAngle = 18</c> и соседи), а не степени свободы. Имена обманывают,
-/// поэтому величина различается явно.
-/// </para>
-/// <para>
-/// Свой STA-поток, собственный невидимый экземпляр КОМПАС, свои документы в каталоге <c>scratch</c>.
-/// Чужие процессы не завершаются, пользовательские модели не открываются.
-/// </para>
-/// </remarks>
+/// Order: <c>SKETCH_DEFINITION_CHECK_DEVELOPER_PROMPT.md</c>. The question is posed so that the answer
+/// does not depend on client memory and is not replaced by a convenient sign: exact coordinates, width
+/// and height, the radius at creation, a closed contour and a successful extrusion do NOT prove full
+/// definition (order §"Semantics", items 2–3). So the control states are built on ACTUALLY applied
+/// constraints, and the expected status is not declared a fact before reading from KOMPAS.
+/// The read route (found by reconnaissance, see <c>docs/acceptance/api7/sketch-definition.md</c>):
+/// <c>ISketch.ConstraintsState</c> of type <c>ksConstraintsStateEnum</c> — the aggregated status of the
+/// whole sketch, exactly the quantity KOMPAS shows as "+", "−", "!". The enumeration is declared in
+/// <c>Bin\ksConstants.tlb</c>, not in <c>kAPI7.tlb</c>, and is NOT linked into this probe; the values
+/// are duplicated locally and checked against the declared ones by step S.3.
+/// The reconnaissance branch the probe closes and does NOT carry into a general conclusion:
+/// <c>IParametriticConstraint.Degrees</c> is the degrees of an ANGULAR constraint
+/// (<c>ksConstraintTypeEnum.ksCFixedAngle = 18</c> and neighbours), not degrees of freedom. The names
+/// deceive, so the quantity is distinguished explicitly.
+/// Its own STA thread, its own invisible KOMPAS instance, its own documents in the <c>scratch</c>
+/// directory. Foreign processes are not terminated and user models are not opened.
+/// History: docs/decisions/probes.md#sketch-definition</remarks>
 internal sealed class SketchDefinitionProbe
 {
     private const double PlateWidth = 100d;
@@ -41,17 +31,15 @@ internal sealed class SketchDefinitionProbe
     private const double PlateThickness = 10d;
     private const double PlateVolume = PlateWidth * PlateHeight * PlateThickness;
 
-    /// <summary>Радиус контрольной окружности.</summary>
+    /// <summary>Radius of the control circle.</summary>
     private const double CircleRadius = 20d;
 
-    /// <summary>Центр контрольной окружности — заведомо не в начале координат.</summary>
+    /// <summary>Centre of the control circle — deliberately not at the origin.</summary>
     private const double CircleCenterX = 25d;
     private const double CircleCenterY = 15d;
 
-    /// <summary>
-    /// Сырое значение <c>ksStateWellConstrained</c>. Дублируется намеренно: шаг S.4d должен быть
-    /// читаем сам по себе, а совпадение дублированного значения с объявленным проверяет S.3.
-    /// </summary>
+    /// <summary>Raw value of <c>ksStateWellConstrained</c>. Duplicated on purpose: step S.4d must be
+    /// readable by itself, and the match of the duplicate with the declared value is checked by S.3.</summary>
     private const int WellConstrained = 1;
 
     private readonly ProbeReport _report;
@@ -59,20 +47,20 @@ internal sealed class SketchDefinitionProbe
     private KompasObject _app = null!;
     private KompasAPI7.IApplication? _app7;
 
-    /// <summary>Текущий документ пробы и его часть.</summary>
+    /// <summary>The probe's current document and its part.</summary>
     private ksDocument3D? _doc;
     private ksPart? _part;
 
-    /// <summary>Эскиз текущего документа как сущность дерева — с него берётся ISketch.</summary>
+    /// <summary>The current document's sketch as a tree entity — ISketch is taken from it.</summary>
     private ksEntity? _sketchEntity;
 
-    /// <summary>Итог пробы: удалось ли вообще наложить ограничение.</summary>
+    /// <summary>Probe outcome: whether a constraint could be applied at all.</summary>
     private bool _constraintRouteWorks;
 
-    /// <summary>Итог пробы: принят ли управляющий размер и изменил ли он статус.</summary>
+    /// <summary>Probe outcome: whether the driving dimension was accepted and changed the status.</summary>
     private bool _dimensionRouteWorks;
 
-    /// <summary>Итог пробы: приняла ли связь через API7 <c>NewConstraint()</c> и изменился ли статус.</summary>
+    /// <summary>Probe outcome: whether the API7 route <c>NewConstraint()</c> accepted the constraint and changed the status.</summary>
     private bool _api7ConstraintRouteWorks;
 
     public SketchDefinitionProbe(ProbeReport report, Options options)
@@ -116,7 +104,7 @@ internal sealed class SketchDefinitionProbe
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════════ сессия ══
+    // ═══════════════════════════════════════════════════════════════════════ session ══
 
     private void Launch()
     {
@@ -201,17 +189,14 @@ internal sealed class SketchDefinitionProbe
         }
     }
 
-    // ══════════════════════════════════════════════════════════ перечисление ══
+    // ══════════════════════════════════════════════════════════ enumeration ══
 
-    /// <summary>
-    /// Шаг S.3: сверяет локально продублированные значения <c>ksConstraintsStateEnum</c> с
-    /// объявленными в залинкованных сборках.
-    /// </summary>
-    /// <remarks>
-    /// Проба НЕ линкует сборку констант целиком ради четырёх чисел, поэтому дублирование здесь
-    /// намеренное — и именно поэтому оно обязано быть проверено. Если тип не найдётся ни в одной
-    /// сборке, шаг честно фиксирует, что подтверждения нет, и числа в отчёте остаются сырыми.
-    /// </remarks>
+    /// <summary>Step S.3: checks the locally duplicated <c>ksConstraintsStateEnum</c> values against the
+    /// ones declared in the linked assemblies.</summary>
+    /// <remarks>The probe does NOT link the constants assembly as a whole just for four numbers, so the
+    /// duplication here is deliberate — and that is exactly why it must be checked. If the type is found
+    /// in no assembly, the step honestly records that there is no confirmation, and the numbers in the
+    /// report stay raw.</remarks>
     private void ProbeEnum()
     {
         var step = _report.Begin("S.3", "ksConstraintsStateEnum: объявленные состояния",
@@ -240,8 +225,8 @@ internal sealed class SketchDefinitionProbe
 
             step.Observe("Объявлено: " + string.Join(", ", declared.Select(p => $"{p.Value}={p.Key}")));
 
-            // Сверка дубликата с объявленным — по каждой из четырёх нужных величин отдельно, чтобы
-            // расхождение называло конкретное состояние, а не «перечисление не совпало».
+            // The duplicate is checked against the declared value for each of the four quantities
+            // separately, so that a mismatch names a concrete state rather than "the enum did not match".
             var mismatches = new List<string>();
             foreach (var (name, expected) in LocalStateValues)
             {
@@ -278,38 +263,32 @@ internal sealed class SketchDefinitionProbe
         }
     }
 
-    // ═══════════════════════════════════════════════════════ маршрут ограничений ══
+    // ═══════════════════════════════════════════════════════ constraint route ══
 
-    /// <summary>
-    /// Шаг S.4: устанавливает, каким вызовом ограничение на объект эскиза ДЕЙСТВИТЕЛЬНО
-    /// накладывается, и меняется ли от этого статус.
-    /// </summary>
+    /// <summary>Step S.4: establishes by which call a constraint on a sketch object is REALLY applied,
+    /// and whether the status changes because of it.</summary>
     /// <remarks>
-    /// <para>
-    /// Без этого шага матрица состояний была бы постановкой: если ограничение не наложилось, все
-    /// состояния оказались бы одинаковыми, и «статус не различает» было бы выводом о пробе, а не о
-    /// КОМПАС. Поэтому сначала измеряется сам инструмент, и только потом им строятся состояния.
-    /// </para>
-    /// <para>
-    /// <b>Устройство шага определяется первым запуском.</b> Первый запуск дал: <c>Init() → True</c>,
-    /// то есть блок параметров живой, но <c>ksSetObjConstraint → 0</c> — отказ. Документация
-    /// (help.ascon.ru, <c>ksSetObjConstraint</c> и <c>structconstraintparam</c>) говорит, что 0 — это
-    /// именно неудача, что <c>index</c> — номер точки на объекте (у окружности <c>0</c> — центр), а
-    /// <c>partner</c> — <em>указатель на второй объект</em>. Пример в справке накладывает
-    /// <c>CONSTRAINT_EQUAL_RADIUS</c> на ДВА объекта. Отсюда два разных подозрения, и они обязаны
-    /// быть различены, а не слиты в одно «не работает»:
+    /// Without this step the state matrix would be a setup: if the constraint did not apply, all states
+    /// would come out the same, and "the status does not distinguish" would be a conclusion about the
+    /// probe, not about KOMPAS. So the tool itself is measured first, and only then used to build states.
+    /// <b>The shape of the step is determined by the first run.</b> MEASURED: the first run gave
+    /// <c>Init() → True</c> (the parameter block is alive) but <c>ksSetObjConstraint → 0</c> — a refusal.
+    /// The documentation (help.ascon.ru, <c>ksSetObjConstraint</c> and <c>structconstraintparam</c>) says
+    /// that 0 is exactly a failure, that <c>index</c> is the point number on the object (for a circle
+    /// <c>0</c> is the centre), and <c>partner</c> is a <em>pointer to the second object</em>. The help
+    /// example applies <c>CONSTRAINT_EQUAL_RADIUS</c> to TWO objects. Hence two different suspicions that
+    /// must be told apart rather than merged into one "does not work":
     /// <list type="number">
-    /// <item>подозрение «не тот номер объекта» — тогда <c>ksExistObj</c> по тому же номеру скажет
-    /// «объекта нет», и это отказ адресации, а не свойство ограничения;</item>
-    /// <item>подозрение «тип ограничения не тот» — тогда адресация подтверждена, а конкретный
-    /// <c>constrType</c> не применим к окружности.</item>
+    /// <item>suspicion "wrong object number" — then <c>ksExistObj</c> on the same number says "no such
+    /// object", and that is an addressing refusal, not a property of the constraint;</item>
+    /// <item>suspicion "wrong constraint type" — then addressing is confirmed, but the specific
+    /// <c>constrType</c> does not apply to a circle.</item>
     /// </list>
-    /// Поэтому здесь сначала подтверждается существование объекта по номеру, затем пробуется и
-    /// одиночное ограничение (<c>CONSTRAINT_FIXED_POINT</c>, у которого партнёра нет по смыслу), и
-    /// парное (<c>CONSTRAINT_EQUAL_RADIUS</c> на двух окружностях — ровно тот случай, что показан в
-    /// справке). После каждой попытки читается <c>ksGetObjConstraints</c> — это ПРЯМАЯ проверка
-    /// «связь действительно появилась», независимая от смены статуса.
-    /// </para>
+    /// So here the existence of the object by number is confirmed first, then both a single constraint
+    /// (<c>CONSTRAINT_FIXED_POINT</c>, which by meaning has no partner) and a paired one
+    /// (<c>CONSTRAINT_EQUAL_RADIUS</c> on two circles — exactly the case shown in the help) are tried.
+    /// After each attempt <c>ksGetObjConstraints</c> is read — a DIRECT check that "the constraint really
+    /// appeared", independent of the status change.
     /// </remarks>
     private void ReconConstraintRoute()
     {
@@ -331,15 +310,15 @@ internal sealed class SketchDefinitionProbe
 
             var attempts = new List<string>();
 
-            // (а) Адресация. ksExistObj отвечает по тому же номеру, что принимает ksSetObjConstraint.
-            // Если по номеру «объекта нет», то отказ 0 объясняется адресацией, и ни один вывод о
-            // применимости типа ограничения из него не следует.
+            // (a) Addressing. ksExistObj answers on the same number that ksSetObjConstraint accepts. If
+            // the number says "no object", then the 0 refusal is explained by addressing, and no
+            // conclusion about the applicability of the constraint type follows from it.
             var circleExists = Api5.SafeInt(() => editor.ksExistObj(circleRef));
             step.Data["ksExistObj_circle"] = circleExists;
             attempts.Add($"ksExistObj({circleRef}) → " + Api5.Raw(circleExists));
 
-            // Вторая окружность — для парного ограничения, которое показано в справке. Та же кромка,
-            // другая точка, чтобы объекты были различимы.
+            // The second circle is for the paired constraint shown in the help. Same edge, different
+            // point, so that the objects are distinguishable.
             var second = editor.ksCircle(CircleCenterX + 40d, CircleCenterY, CircleRadius, 1);
             step.Data["second_circle_ref"] = second;
             var secondExists = Api5.SafeInt(() => editor.ksExistObj(second));
@@ -349,18 +328,18 @@ internal sealed class SketchDefinitionProbe
             var constraintStruct = (short)StructType2DEnum.ko_ConstraintParam;
             step.Data["ko_ConstraintParam"] = constraintStruct;
 
-            // (б) Одиночное ограничение: фиксация точки центра окружности.
+            // (b) Single constraint: fixing the point at the circle centre.
             var fixSingle = TryConstraint(editor, step, "fix_point_single", constraintStruct,
                 LocalConstraintType.FixedPoint, circleRef, index: 0, partner: 0, partnerIndex: 0);
             attempts.Add("CONSTRAINT_FIXED_POINT на окружности → " + Api5.Raw(fixSingle) + " (1 = принято)");
 
-            // (в) Парное ограничение ровно по образцу справки: равенство радиусов двух окружностей.
+            // (c) Paired constraint exactly per the help example: equality of the radii of two circles.
             var equalRadius = TryConstraint(editor, step, "equal_radius_pair", constraintStruct,
                 LocalConstraintType.EqualRadius, circleRef, index: 0, partner: second, partnerIndex: 0);
             attempts.Add("CONSTRAINT_EQUAL_RADIUS двух окружностей → " + Api5.Raw(equalRadius) + " (1 = принято)");
 
-            // (г) Прямая проверка: появились ли связи на объекте. Это НЕ производная от статуса —
-            // это ответ функции, которая эти связи и перечисляет.
+            // (d) Direct check: did constraints appear on the object. This is NOT a derivative of the
+            // status — it is the answer of the function that enumerates those constraints.
             var constraintsSeen = ReadBackConstraints(editor, step, circleRef);
             attempts.Add("ksGetObjConstraints(окружность) → " + constraintsSeen);
 
@@ -377,8 +356,9 @@ internal sealed class SketchDefinitionProbe
             }
             else if (accepted)
             {
-                // Ограничение принято, а статус не изменился: это уже факт о ПРОДУКТЕ — либо выбранный
-                // тип не снимает свободу, либо статус меняется не в этом месте жизненного цикла.
+                // The constraint was accepted but the status did not change: this is already a fact about
+                // the PRODUCT — either the chosen type does not remove a degree of freedom, or the status
+                // changes elsewhere in the lifecycle.
                 _constraintRouteWorks = true;
                 step.Data["accepted_but_status_unchanged"] = true;
             }
@@ -389,8 +369,8 @@ internal sealed class SketchDefinitionProbe
                 step.Observe(line);
             }
 
-            // Путь чтения и путь записи оцениваются РАЗДЕЛЬНО: чтение статуса может работать даже
-            // там, где наложить ограничение этой пробе не удалось, и наоборот.
+            // The read path and the write path are evaluated SEPARATELY: reading the status may work even
+            // where this probe could not apply a constraint, and vice versa.
             var readWorks = stateBefore is not null;
             step.Data["read_route_works"] = readWorks;
             step.Data["write_route_works"] = _constraintRouteWorks;
@@ -405,9 +385,10 @@ internal sealed class SketchDefinitionProbe
             }
             else if (readWorks && addressConfirmed)
             {
-                // Самая важная ветка для честности вывода: адресация работает, а ограничение не
-                // принимается. Значит отказ относится к применимости вызова, а не к «объект не
-                // найден», и именно это записывается — без подмены удобной формулировкой.
+                // The most important branch for the honesty of the conclusion: addressing works but the
+                // constraint is not accepted. So the refusal concerns the applicability of the call, not
+                // "object not found", and that is what is recorded — without substituting a convenient
+                // wording.
                 step.Unknown("Адресация объекта подтверждена (ksExistObj не 0 по обоим объектам и " +
                              "GetParamStruct выдал живой блок), но ksSetObjConstraint вернул 0 на обоих " +
                              "типах — одиночном и парном. Отказ относится к самому вызову, а не к " +
@@ -432,16 +413,13 @@ internal sealed class SketchDefinitionProbe
         }
     }
 
-    /// <summary>
-    /// Пробует наложить ограничение одним вызовом и возвращает результат как есть (<c>1</c> принято,
-    /// <c>0</c> отказ, <c>null</c> — вызов не прошёл).
-    /// </summary>
-    /// <remarks>
-    /// Номер типа и участие партнёра передаются параметрами, потому что различие «одиночное или
-    /// парное» — предмет опыта: справка демонстрирует парное (<c>CONSTRAINT_EQUAL_RADIUS</c>), а
-    /// одиночное (<c>CONSTRAINT_FIXED_POINT</c>) обязано быть проверено отдельно, иначе отказ одного
-    /// типа был бы выдан за свойство всей функции.
-    /// </remarks>
+    /// <summary>Tries to apply a constraint with a single call and returns the result as is (<c>1</c>
+    /// accepted, <c>0</c> refused, <c>null</c> — the call did not go through).</summary>
+    /// <remarks>The type number and the partner's participation are passed as parameters, because the
+    /// distinction "single or paired" is the subject of the experiment: the help demonstrates a paired
+    /// one (<c>CONSTRAINT_EQUAL_RADIUS</c>), and a single one (<c>CONSTRAINT_FIXED_POINT</c>) must be
+    /// checked separately, otherwise a refusal of one type would be passed off as a property of the whole
+    /// function.</remarks>
     private int? TryConstraint(ksDocument2D editor, ProbeStep step, string tag, short structType,
         LocalConstraintType type, int objectRef, int index, int partner, int partnerIndex)
     {
@@ -473,22 +451,16 @@ internal sealed class SketchDefinitionProbe
         }
     }
 
-    /// <summary>
-    /// Прямая проверка «связь действительно появилась»: спрашивает у документа список ограничений
-    /// объекта, а не выводит его из статуса.
-    /// </summary>
+    /// <summary>A direct check that "the constraint really appeared": asks the document for the object's
+    /// list of constraints instead of deriving it from the status.</summary>
     /// <remarks>
-    /// <para>
-    /// <c>ksGetObjConstraints</c> возвращает <c>CONSTRAINT_ARR</c> либо <c>0</c> при неудаче
-    /// (help.ascon.ru). Ноль здесь означает «список не получен», и он не превращается в «связей нет»:
-    /// это разные утверждения, и в отчёте они различимы.
-    /// </para>
-    /// <para>
-    /// Возврат приходит как COM-массив (<c>System.__ComObject</c>), а не как .NET-массив, поэтому
-    /// одного <c>is Array</c> мало: массив разворачивается как <c>object[]</c> через приведение, а
-    /// когда развернуть не удалось, это записывается КАК ЕСТЬ — «не смог прочитать» вместо «связей
-    /// нет», иначе неудача чтения выдала бы себя за отсутствие ограничений.
-    /// </para>
+    /// <c>ksGetObjConstraints</c> returns <c>CONSTRAINT_ARR</c> or <c>0</c> on failure (help.ascon.ru).
+    /// A zero here means "list not obtained" and is not turned into "no constraints": these are different
+    /// statements, and they are distinguishable in the report.
+    /// The return comes as a COM array (<c>System.__ComObject</c>), not a .NET array, so a bare
+    /// <c>is Array</c> is not enough: the array is unwrapped as <c>object[]</c> via a cast, and when it
+    /// could not be unwrapped that is recorded AS IS — "could not read" instead of "no constraints",
+    /// otherwise a read failure would pass itself off as an absence of constraints.
     /// </remarks>
     private string ReadBackConstraints(ksDocument2D editor, ProbeStep step, int objectRef)
     {
@@ -501,14 +473,14 @@ internal sealed class SketchDefinitionProbe
                 return "null";
             }
 
-            // Единственный объект-параметр: экземпляр ksConstraintParam, а не массив.
+            // A single parameter object: a ksConstraintParam instance, not an array.
             if (raw is Kompas6API5.ksConstraintParam single)
             {
                 step.Data["ksGetObjConstraints_constrType"] = (int)single.constrType;
                 return "одна связь, constrType=" + (int)single.constrType;
             }
 
-            // COM-массив: сначала пробуем прямое приведение, затем — как object[].
+            // COM array: first a direct cast is tried, then as object[].
             if (raw is object[] directArray)
             {
                 return DescribeConstraintArray(directArray, step);
@@ -529,7 +501,7 @@ internal sealed class SketchDefinitionProbe
                 return "массив из " + asArray.Length + ", constrType=[" + string.Join(",", types) + "]";
             }
 
-            // Не развернулось: попытка привести к строго типизированному массиву параметров.
+            // Not unwrapped: an attempt to cast to a strongly typed array of parameters.
             try
             {
                 if (raw is Kompas6API5.ksConstraintParam[] typedArray)
@@ -552,7 +524,7 @@ internal sealed class SketchDefinitionProbe
         }
     }
 
-    /// <summary>Описывает массив связей по типам, сохраняя длину как наблюдение.</summary>
+    /// <summary>Describes an array of constraints by type, keeping the length as an observation.</summary>
     private string DescribeConstraintArray(object?[] array, ProbeStep step)
     {
         step.Data["ksGetObjConstraints_is_array"] = true;
@@ -569,24 +541,18 @@ internal sealed class SketchDefinitionProbe
         return "массив из " + array.Length + ", constrType=[" + string.Join(",", types) + "]";
     }
 
-    /// <summary>
-    /// Шаг S.4c: связь через САМ API7 — <c>IDrawingObject1.NewConstraint()</c> →
-    /// <c>IParametriticConstraint.Create()</c>.
-    /// </summary>
+    /// <summary>Step S.4c: a constraint through API7 ITSELF — <c>IDrawingObject1.NewConstraint()</c> →
+    /// <c>IParametriticConstraint.Create()</c>.</summary>
     /// <remarks>
-    /// <para>
-    /// Отдельный шаг, потому что это третья, независимая ветка. <c>ksSetObjConstraint</c> (S.4) —
-    /// вызов API5 на документе; управляющий размер (S.4b) — метод размеров. Здесь же строится
-    /// ОБЪЕКТ связи: <c>NewConstraint()</c> выдаёт <c>IParametriticConstraint</c> с полями
-    /// <c>ConstraintType</c>, <c>Index</c>, <c>Partner</c>, <c>PartnerIndex</c>, методом
-    /// <c>Create()</c> и признаком <c>Valid</c>. Именно эта ветка названа в задании как средство
-    /// перевести найденный маршрут в продукт, поэтому она измеряется отдельно, а не подразумевается.
-    /// </para>
-    /// <para>
-    /// Объект берётся через <c>GetCurve2D()</c> у эскиза и приводится к <c>IDrawingObject1</c>; QI
-    /// делается явно, и «приведение не прошло» записывается как отдельный исход, а не как «связь не
-    /// создаётся».
-    /// </para>
+    /// A separate step because it is a third, independent branch. <c>ksSetObjConstraint</c> (S.4) is an
+    /// API5 call on the document; the driving dimension (S.4b) is a dimension method. Here a constraint
+    /// OBJECT is built: <c>NewConstraint()</c> yields an <c>IParametriticConstraint</c> with the fields
+    /// <c>ConstraintType</c>, <c>Index</c>, <c>Partner</c>, <c>PartnerIndex</c>, the method <c>Create()</c>
+    /// and the <c>Valid</c> flag. It is this branch that the order names as the means to carry the found
+    /// route into the product, so it is measured separately, not implied.
+    /// The object is taken via the sketch's <c>GetCurve2D()</c> and cast to <c>IDrawingObject1</c>; the
+    /// QI is done explicitly, and "the cast did not go through" is recorded as a separate outcome, not as
+    /// "the constraint is not created".
     /// </remarks>
     private void Api7ConstraintRoute()
     {
@@ -594,9 +560,9 @@ internal sealed class SketchDefinitionProbe
             "Принимает ли API7 объектную связь там, где API5 ответил 0, и меняется ли от неё статус?");
         try
         {
-            // Документ строится с ЗАКРЫТЫМ редактором: API7 не отдаёт фрагмент эскиза, пока тот
-            // открыт на редактирование через API5 (измерено: BeginEdit() → null). Это условие самой
-            // ветки, и оно соблюдается, а не обходится.
+            // The document is built with a CLOSED editor: API7 does not return the sketch fragment while
+            // it is open for editing via API5 (MEASURED: BeginEdit() → null). This is a condition of the
+            // branch itself, and it is respected, not worked around.
             if (!BuildCircleDocument("s-api7", step, out var editor, out var circleRef, closeEditor: true))
             {
                 step.Fail("Контрольный документ для маршрута API7 не построен.");
@@ -616,11 +582,11 @@ internal sealed class SketchDefinitionProbe
                 return;
             }
 
-            // Объект кривой внутри эскиза. Цепочка взята из обёртки, а не подобрана:
-            // ISketch.BeginEdit() → IFragmentDocument.ViewsAndLayersManager.Views → вид → Layers →
-            // объекты чертежа. Ни одно звено не пропускается молча: какой шаг не отдал следующий
-            // объект, записано в данных, потому что «связь не создалась» и «до объекта не дошли» —
-            // разные наблюдения.
+            // The curve object inside the sketch. The chain is taken from the wrapper, not guessed:
+            // ISketch.BeginEdit() → IFragmentDocument.ViewsAndLayersManager.Views → view → Layers →
+            // drawing objects. No link is skipped silently: which step failed to yield the next object is
+            // recorded in the data, because "the constraint was not created" and "we did not reach the
+            // object" are different observations.
             var notes = new List<string>();
             var drawingObject = FindDrawingObjectInSketch(sketch, notes, step);
             if (drawingObject is null)
@@ -638,8 +604,8 @@ internal sealed class SketchDefinitionProbe
 
             notes.Add("IDrawingObject1 получен, IsCurve=" + drawingObject.IsCurve);
 
-            // Состояние объекта по ограничениям — отдельная величина из того же интерфейса. Она
-            // читается и записывается, даже если создать связь не удастся.
+            // The object's constraint state is a separate quantity from the same interface. It is read
+            // and recorded even if the constraint cannot be created.
             try
             {
                 var objectState = (int)drawingObject.ConstraintsState;
@@ -669,7 +635,7 @@ internal sealed class SketchDefinitionProbe
             {
                 try
                 {
-                    // ksConstraintTypeEnum.ksCFixedPoint = 1: фиксация точки; у окружности индекс 0 — центр.
+                    // ksConstraintTypeEnum.ksCFixedPoint = 1: point fixing; for a circle index 0 is the centre.
                     constraint.ConstraintType = Kompas6Constants.ksConstraintTypeEnum.ksCFixedPoint;
                     constraint.Index = 0;
                     step.Data["api7_constraint_type"] = (int)constraint.ConstraintType;
@@ -734,22 +700,16 @@ internal sealed class SketchDefinitionProbe
         }
     }
 
-    /// <summary>
-    /// Достаёт объект окружности внутри эскиза через API7, находя его ПО ТОЧКЕ.
-    /// </summary>
+    /// <summary>Fetches the circle object inside the sketch through API7, finding it BY POINT.</summary>
     /// <remarks>
-    /// <para>
-    /// Цепочка взята из обёртки, а не подобрана: <c>ISketch.BeginEdit()</c> →
+    /// The chain is taken from the wrapper, not guessed: <c>ISketch.BeginEdit()</c> →
     /// <c>IFragmentDocument.ViewsAndLayersManager.Views</c> → <c>IViews.View(index)</c> →
-    /// <c>IView1.FindObject(X, Y, Limit, Param)</c>. <c>FindObject</c> возвращает
-    /// <c>IDrawingObject</c> — это тот объект, у которого живёт <c>NewConstraint()</c>.
-    /// </para>
-    /// <para>
-    /// Поиск идёт по координатам центра окружности, потому что это единственный ключ, который у пробы
-    /// есть независимо от объектов: номер <c>ksCircle</c> принадлежит пространству API5 и для API7
-    /// значения не имеет. Каждое звено либо отдаёт следующий объект, либо записывает в
-    /// <paramref name="notes"/>, где оборвалось.
-    /// </para>
+    /// <c>IView1.FindObject(X, Y, Limit, Param)</c>. <c>FindObject</c> returns <c>IDrawingObject</c> — the
+    /// object on which <c>NewConstraint()</c> lives.
+    /// The search goes by the circle centre coordinates, because that is the only key the probe has
+    /// independently of objects: the <c>ksCircle</c> number belongs to the API5 space and means nothing to
+    /// API7. Each link either yields the next object or records in <paramref name="notes"/> where it broke
+    /// off.
     /// </remarks>
     private KompasAPI7.IDrawingObject1? FindDrawingObjectInSketch(
         KompasAPI7.ISketch sketch, List<string> notes, ProbeStep step)
@@ -796,7 +756,7 @@ internal sealed class SketchDefinitionProbe
             KompasAPI7.IView? view;
             try
             {
-                // View — индексатор, а не метод (обёртка API7): обращение через [v].
+                // View is an indexer, not a method (API7 wrapper): accessed via [v].
                 view = views.View[v] as KompasAPI7.IView;
             }
             catch (Exception ex)
@@ -830,19 +790,13 @@ internal sealed class SketchDefinitionProbe
         return null;
     }
 
-    /// <summary>
-    /// Ищет кривую в виде по координатам центра контрольной окружности.
-    /// </summary>
+    /// <summary>Searches for a curve in a view by the control circle's centre coordinates.</summary>
     /// <remarks>
-    /// <para>
-    /// Параметры поиска создаются по CLSID, а не через <c>Activator.CreateInstance(Type)</c>:
-    /// <c>FindObjectParametersClass</c> — COM-класс без открытого конструктора без параметров
-    /// (измерено: <c>MissingMethodException</c>), поэтому экземпляр берётся у COM по GUID класса.
-    /// </para>
-    /// <para>
-    /// Если создание не удалось, причина остаётся в <paramref name="notes"/>, и возвращается
-    /// <c>null</c> — это записывается как «до объекта не дошли», а не как «связь не создаётся».
-    /// </para>
+    /// The search parameters are created by CLSID, not via <c>Activator.CreateInstance(Type)</c>:
+    /// <c>FindObjectParametersClass</c> is a COM class without an exposed parameterless constructor
+    /// (MEASURED: <c>MissingMethodException</c>), so the instance is taken from COM by the class GUID.
+    /// If creation fails, the reason stays in <paramref name="notes"/> and <c>null</c> is returned —
+    /// recorded as "we did not reach the object", not as "the constraint is not created".
     /// </remarks>
     private KompasAPI7.IDrawingObject1? FindCurveByPoint(
         KompasAPI7.IView1 finder, List<string> notes, ProbeStep step)
@@ -857,7 +811,7 @@ internal sealed class SketchDefinitionProbe
                 return null;
             }
 
-            // GUID класса взят у самого типа в обёртке, а не вписан числом.
+            // The class GUID is taken from the type in the wrapper itself, not written in as a number.
             var clsid = type.GUID;
             notes.Add("FindObjectParametersClass CLSID=" + clsid.ToString("N"));
             var comType = Type.GetTypeFromCLSID(clsid, throwOnError: false);
@@ -874,15 +828,15 @@ internal sealed class SketchDefinitionProbe
         }
         catch (Exception ex)
         {
-            // Класс параметров регистрируется манифестом и через COM не поднимается
-            // (измерено: REGDB_E_CLASSNOTREG). Это не конец опыта: FindObject проверяется ещё и с
-            // пустыми параметрами, потому что тогда причина отказа будет видна отдельно от причины
-            // «параметры не сделать».
+            // The parameter class is registered by a manifest and does not come up through COM (MEASURED:
+            // REGDB_E_CLASSNOTREG). This is not the end of the experiment: FindObject is also checked with
+            // empty parameters, because then the reason for the refusal is visible separately from the
+            // reason "cannot make parameters".
             notes.Add("FindObjectParameters: " + ex.GetType().Name + ": " + ex.Message);
             parameters = null;
         }
 
-        // Попытка 1: с параметрами, если их удалось создать.
+        // Attempt 1: with parameters, if they could be created.
         if (parameters is KompasAPI7.FindObjectParameters findParameters)
         {
             try
@@ -911,8 +865,8 @@ internal sealed class SketchDefinitionProbe
             }
         }
 
-        // Попытка 2: без параметров. Отказ здесь отделён от отказа создания параметров, иначе
-        // «параметры не сделать» и «поиск не работает» слились бы в одно наблюдение.
+        // Attempt 2: without parameters. A refusal here is separated from a failure to create parameters,
+        // otherwise "cannot make parameters" and "search does not work" would merge into one observation.
         try
         {
             var found = finder.FindObject(CircleCenterX, CircleCenterY, 1.0, null!);
@@ -926,27 +880,22 @@ internal sealed class SketchDefinitionProbe
         }
     }
 
-    /// <summary>
-    /// Шаг S.4b: меняет ли статус управляющий размер, и является ли он той самой связью, которая
-    /// снимает свободу.
-    /// </summary>
+    /// <summary>Step S.4b: does a driving dimension change the status, and is it the very constraint that
+    /// removes a degree of freedom.</summary>
     /// <remarks>
-    /// <para>
-    /// Отдельный шаг, потому что это ДРУГОЙ вызов с другой природой. <c>ksSetObjConstraint</c> —
-    /// это параметрическая связь; управляющий размер ставится методами размеров
-    /// (<c>ksRadDimension</c>), и справка задаёт его параметры не ссылкой на кривую, а ГЕОМЕТРИЕЙ:
-    /// <c>RDimSource</c> содержит <c>xc</c>, <c>yc</c>, <c>rad</c> — центр и радиус, по которым размер
-    /// находит измеряемую окружность (help.ascon.ru, <c>structrdimparam</c> и пример
-    /// <c>raddimension_radbreakdimension_example</c>). Поэтому «размер не привязался» и «связь не
-    /// наложилась» — разные отказы, и они измеряются разными шагами.
-    /// </para>
-    /// <para>
-    /// Задание §«Семантика» п. 3 прямо запрещает выводить определённость из НАЛИЧИЯ ТЕКСТА размера.
-    /// Поэтому шаг не останавливается на «метод вернул ненулевую ссылку»: он читает статус до и
-    /// после, и различает три исхода — размер принят и статус изменился, размер принят и статус
-    /// НЕ изменился, и размер не принят. Первый исход даёт маршрут для контрольной матрицы, третий —
-    /// честный отказ, второй — факт о продукте.
-    /// </para>
+    /// A separate step because it is a DIFFERENT call of a different nature. <c>ksSetObjConstraint</c> is a
+    /// parametric constraint; a driving dimension is placed by dimension methods (<c>ksRadDimension</c>),
+    /// and the help specifies its parameters not by a curve reference but by GEOMETRY: <c>RDimSource</c>
+    /// holds <c>xc</c>, <c>yc</c>, <c>rad</c> — the centre and radius by which the dimension finds the
+    /// measured circle (help.ascon.ru, <c>structrdimparam</c> and the example
+    /// <c>raddimension_radbreakdimension_example</c>). So "the dimension did not bind" and "the constraint
+    /// did not apply" are different refusals, and they are measured by different steps.
+    /// Order §"Semantics" item 3 explicitly forbids deriving definition from the PRESENCE OF A DIMENSION
+    /// TEXT. So the step does not stop at "the method returned a non-zero reference": it reads the status
+    /// before and after, and distinguishes three outcomes — the dimension was accepted and the status
+    /// changed, the dimension was accepted and the status did NOT change, and the dimension was not
+    /// accepted. The first outcome gives a route for the control matrix, the third is an honest refusal,
+    /// the second is a fact about the product.
     /// </remarks>
     private void DimensionRoute()
     {
@@ -985,21 +934,21 @@ internal sealed class SketchDefinitionProbe
                 return;
             }
 
-            // Привязка задаётся геометрией измеряемой окружности: центр (25,15) и радиус 20 — те же
-            // числа, которыми окружность и построена.
+            // The binding is set by the geometry of the measured circle: centre (25,15) and radius 20 —
+            // the same numbers the circle was built with.
             //
-            // Init() вызывается ПЕРВЫМ и его результат ПРОВЕРЯЕТСЯ: первый прогон показал, что Init()
-            // обнуляет поля (при заданных 25/15/20 обратное чтение дало xc=0, yc=0, rad=10), и если
-            // поля заполнять до него, SetSPar принимает блок с умолчаниями — размер ставится «в
-            // никуда», возвращает живую ссылку, и это выглядит как «размер не влияет на статус».
-            // Это был дефект пробы, а не факт о КОМПАС.
+            // Init() is called FIRST and its result is CHECKED: MEASURED: the first run showed Init()
+            // zeroes the fields (with 25/15/20 set, a read-back gave xc=0, yc=0, rad=10), and filling the
+            // fields before it makes SetSPar accept a block with defaults — the dimension is placed
+            // "nowhere", returns a live reference, and it looks like "the dimension does not affect the
+            // status". That was a probe defect, not a fact about KOMPAS.
             source.Init();
             source.xc = CircleCenterX;
             source.yc = CircleCenterY;
             source.rad = CircleRadius;
             notes.Add($"привязка: xc={source.xc}, yc={source.yc}, rad={source.rad}");
 
-            // Обратное чтение — контроль того, что размер уйдёт по заданным числам, а не по умолчанию.
+            // The read-back is a control that the dimension goes by the set numbers, not by defaults.
             var bindingHeld = Math.Abs(source.xc - CircleCenterX) < 1e-9
                               && Math.Abs(source.yc - CircleCenterY) < 1e-9
                               && Math.Abs(source.rad - CircleRadius) < 1e-9;
@@ -1019,23 +968,25 @@ internal sealed class SketchDefinitionProbe
             step.Data["ksRadDimension_ref_is_zero"] = dimension is null or 0;
             notes.Add("ksRadDimension → " + Api5.Raw(dimension));
 
-            // Ссылка на размер — это ещё не изменённая система ограничений. Статус читается отдельно
-            // и сравнивается с исходным; наличие размера как факт здесь не подменяет различие.
+            // A reference to a dimension is not yet a changed constraint system. The status is read
+            // separately and compared with the initial one; the presence of a dimension as a fact does not
+            // substitute the distinction here.
             _doc!.RebuildDocument();
             var after = StateOfCurrent(step, "dim_after");
             step.Data["dim_state_after"] = after;
             step.Data["dim_state_after_interpreted"] = Interpret(after);
             notes.Add($"статус после размера: {Interpret(after)} (сырое {Api5.Raw(after)})");
 
-            // Прямая проверка: зарегистрировал ли документ связь на этой окружности. Это различает
-            // «размер создан, но связью не стал» и «связь есть, а статус не пересчитан» — две разные
-            // причины одного и того же наблюдения, и одна не выдаётся за другую.
+            // Direct check: did the document register a constraint on this circle. This distinguishes
+            // "the dimension was created but did not become a constraint" from "the constraint exists but
+            // the status was not recomputed" — two different causes of the same observation, and one is
+            // not passed off as the other.
             var afterConstraints = ReadBackConstraints(editor, step, circleRef);
             step.Data["dim_constraints_after"] = afterConstraints;
             notes.Add("связи на окружности после размера: " + afterConstraints);
 
-            // Контроль-близнец: та же операция на второй окружности, которой в этом эскизе нет, —
-            // «размер принят» не должно быть свойством конкретной кривой.
+            // Twin control: the same operation on a second circle that is not in this sketch — "dimension
+            // accepted" must not be a property of a specific curve.
             var second = editor.ksCircle(CircleCenterX + 40d, CircleCenterY, CircleRadius * 1.5d, 1);
             var secondDim = (int?)null;
             if (second != 0)
@@ -1083,9 +1034,10 @@ internal sealed class SketchDefinitionProbe
             }
             else if (after is not null && before is not null)
             {
-                // Размер принят, статус не изменился. Причина формулируется по фактам, а не по догадке:
-                // у окружности три степени свободы, и радиальный размер снимает только одну (радиус),
-                // оставляя свободным центр, — поэтому «недоопределён» здесь ОЖИДАЕМ, а не подозрителен.
+                // The dimension was accepted but the status did not change. The cause is stated from
+                // facts, not a guess: a circle has three degrees of freedom, and a radial dimension
+                // removes only one (the radius), leaving the centre free — so "under-defined" here is
+                // EXPECTED, not suspicious.
                 step.Unknown($"Размер принят (ссылка {dimension}) и привязан к окружности R{CircleRadius} " +
                              $"в ({CircleCenterX},{CircleCenterY}), статус остался {Interpret(after)} " +
                              $"(до размера {Interpret(before)}). Свобода центра (x, y) размером радиуса не " +
@@ -1104,26 +1056,17 @@ internal sealed class SketchDefinitionProbe
         }
     }
 
-    // ════════════════════════════════════════════════════════ контрольные состояния ══
+    // ════════════════════════════════════════════════════════ control states ══
 
-    /// <summary>
-    /// Шаг S.4d — можно ли ДОВЕСТИ эскиз до «полностью определён» управляющими размерами.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// S.4b показал, что радиальный размер принимается, но статус не меняет: у окружности три
-    /// степени свободы, а радиус снимает одну. Если маршрут управляющих размеров настоящий, то
-    /// ТРИ размера — радиус плюс два линейных, задающих центр (x и y), — обязаны снять все три и
-    /// дать <c>ksStateWellConstrained</c>. Это и есть проверка «различает ли маршрут
-    /// well_constrained», оставленная S.5 открытой.
-    /// </para>
-    /// <para>
-    /// Если и три размера не дают «+», это НЕ доказывает, что статус недостижим: причина может быть
-    /// в том, что линейный размер в этой установке не становится управляющим. Поэтому исход шага
-    /// формулируется как «до well_constrained этой пробой не дошли», а не «well_constrained
-    /// недостижим».
-    /// </para>
-    /// </remarks>
+    /// <summary>Step S.4d — can the sketch be DRIVEN to "fully defined" by driving dimensions.</summary>
+    /// <remarks>MEASURED: S.4b showed that a radial dimension is accepted but does not change the status: a circle
+    /// has three degrees of freedom and the radius removes one. If the driving-dimension route is real,
+    /// THREE dimensions — the radius plus two linear ones setting the centre (x and y) — must remove all
+    /// three and give <c>ksStateWellConstrained</c>. This is the check "does the route distinguish
+    /// well_constrained" that S.5 left open.
+    /// If even three dimensions do not give "+", this does NOT prove the status is unreachable: the cause
+    /// may be that a linear dimension on this rig does not become driving. So the outcome of the step is
+    /// worded as "this probe did not reach well_constrained", not "well_constrained is unreachable".</remarks>
     private void DrivingDimensionsRoute()
     {
         var step = _report.Begin("S.4d", "Управляющие размеры: можно ли дойти до «полностью определён»",
@@ -1142,13 +1085,13 @@ internal sealed class SketchDefinitionProbe
 
             var notes = new List<string>();
 
-            // (1) Радиус — тем же проверенным маршрутом, что в S.4b.
+            // (1) Radius — by the same verified route as in S.4b.
             var radiusRef = ApplyRadiusDimension(editor, step, "driving_radius");
             notes.Add("радиус → " + Api5.Raw(radiusRef));
 
-            // (2) Два линейных размера, задающих центр окружности: по x и по y от начала координат
-            // эскиза. Координаты концов берутся из фактической геометрии (центр 25,15), а не из
-            // «памяти сервера»: проба измеряет эскиз, который сама же и нарисовала.
+            // (2) Two linear dimensions setting the circle centre: in x and in y from the sketch origin.
+            // The end coordinates come from the actual geometry (centre 25,15), not from "server memory":
+            // the probe measures the sketch it drew itself.
             var ldimStruct = (short)StructType2DEnum.ko_LDimParam;
             var lsrcStruct = (short)StructType2DEnum.ko_LDimSource;
             step.Data["ko_LDimParam"] = ldimStruct;
@@ -1177,8 +1120,8 @@ internal sealed class SketchDefinitionProbe
 
             if (after == WellConstrained)
             {
-                // Маршрут размеров ДОКАЗАН тем, что снимает свободу: это не «вызов принят», а
-                // «состояние изменилось в ожидаемую сторону». На нём и строится матрица S.5.
+                // The dimension route is PROVEN by removing a degree of freedom: this is not "the call was
+                // accepted" but "the state changed in the expected direction". The S.5 matrix is built on it.
                 _dimensionRouteWorks = true;
                 step.Pass("Три управляющих размера (радиус + два линейных) сняли все степени свободы " +
                           $"окружности: {Interpret(before)} → {Interpret(after)}. Маршрут различает " +
@@ -1202,13 +1145,11 @@ internal sealed class SketchDefinitionProbe
         }
     }
 
-    /// <summary>Линейный управляющий размер между двумя точками внутри эскиза.</summary>
-    /// <remarks>
-    /// Привязка линейного размера задаётся координатами концов и приращениями выносных линий, а не
-    /// ссылкой на кривую. Как и у радиального, <c>Init()</c> вызывается ПЕРВЫМ: сброс блока после
-    /// записи полей уже однажды превратил дефект пробы в «факт» о КОМПАСе (S.4b), и повторять это
-    /// на новом блоке незачем.
-    /// </remarks>
+    /// <summary>A linear driving dimension between two points inside the sketch.</summary>
+    /// <remarks>The binding of a linear dimension is set by the end coordinates and the extension-line
+    /// offsets, not by a curve reference. As with the radial one, <c>Init()</c> is called FIRST: resetting
+    /// the block after writing the fields once already turned a probe defect into a "fact" about KOMPAS
+    /// (S.4b), and there is no reason to repeat it on a new block.</remarks>
     private int? ApplyLinearDimension(ksDocument2D editor, ProbeStep step, string tag,
         double x1, double y1, double x2, double y2, List<string> notes)
     {
@@ -1227,7 +1168,7 @@ internal sealed class SketchDefinitionProbe
             source.y1 = y1;
             source.x2 = x2;
             source.y2 = y2;
-            // dx/dy — смещение размерной линии от измеряемого отрезка; 0 совпадает с самим отрезком.
+            // dx/dy — the offset of the dimension line from the measured segment; 0 coincides with the segment itself.
             source.dx = 0d;
             source.dy = 0d;
             linear.SetSPar(source);
@@ -1254,23 +1195,17 @@ internal sealed class SketchDefinitionProbe
         }
     }
 
-    /// <summary>
-    /// Шаг S.4e — параметризация объекта: становится ли наложенный размер УПРАВЛЯЮЩИМ.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// S.4d показал главное различие задачи: <c>ksRadDimension</c>/<c>ksLinDimension</c> ПРИНИМАЮТСЯ
-    /// (живая ссылка, привязка удержана), но статус не меняется. Это ровно то, о чём предупреждает
-    /// задание §«Семантика» п. 3: наличие размера не доказывает наличия управляющего размерного
-    /// ограничения. Остаётся вопрос: можно ли превратить наложенный размер в управляющий.
-    /// </para>
-    /// <para>
-    /// Обёртка объявляет штатный для этого вызов — <c>ksDocument2D.ksParametrizeObjects(obj, par)</c>
-    /// с блоком <c>ko_ParametrisationParam</c>. Шаг пробует его на контрольной окружности, у которой
-    /// размер уже стоит, и читает статус после. Положительный исход — «+»; отрицательный — запись
-    /// того, что вызов не принят или принят без эффекта, а не вывод «управляющие размеры не работают».
-    /// </para>
-    /// </remarks>
+    /// <summary>Step S.4e — parametrization of an object: does an applied dimension become DRIVING.</summary>
+    /// <remarks>MEASURED: S.4d showed the key distinction of the task: <c>ksRadDimension</c>/<c>ksLinDimension</c>
+    /// ARE ACCEPTED (live reference, binding held), but the status does not change. This is exactly what
+    /// order §"Semantics" item 3 warns about: the presence of a dimension does not prove the presence of a
+    /// driving dimension constraint. The remaining question: can an applied dimension be turned into a
+    /// driving one.
+    /// The wrapper declares the intended call for this — <c>ksDocument2D.ksParametrizeObjects(obj, par)</c>
+    /// with the block <c>ko_ParametrisationParam</c>. The step tries it on the control circle that already
+    /// has a dimension, and reads the status after. A positive outcome is "+"; a negative one is a record
+    /// that the call was not accepted or was accepted with no effect, not a conclusion that "driving
+    /// dimensions do not work".</remarks>
     private void ParametrizationRoute()
     {
         var step = _report.Begin("S.4e", "Параметризация: становится ли наложенный размер управляющим",
@@ -1289,8 +1224,9 @@ internal sealed class SketchDefinitionProbe
 
             var notes = new List<string>();
 
-            // Сначала ставим три размера тем же принимаемым вызовом, что в S.4d: без размера
-            // параметризовать нечего, и «не принято» было бы объяснено отсутствием входа.
+            // First the three dimensions are placed with the same accepted call as in S.4d: without a
+            // dimension there is nothing to parametrize, and "not accepted" would be explained by the
+            // absence of input.
             var radiusRef = ApplyRadiusDimension(editor, step, "param_radius");
             var dimX = ApplyLinearDimension(editor, step, "param_x", 0d, 0d, CircleCenterX, 0d, notes);
             var dimY = ApplyLinearDimension(editor, step, "param_y", 0d, 0d, 0d, CircleCenterY, notes);
@@ -1311,8 +1247,9 @@ internal sealed class SketchDefinitionProbe
             var parametrized = (int?)null;
             try
             {
-                // group=0 — параметризуются ВЫДЕЛЕННЫЕ объекты (справка API5). Ссылка берётся та, что
-                // вернул ksCircle, а не «нулевой объект»: адресация этой ссылки подтверждена в S.4.
+                // group=0 — the SELECTED objects are parametrized (API5 help). The reference is the one
+                // ksCircle returned, not "the zero object": the addressing of this reference was confirmed
+                // in S.4.
                 parametrized = Api5.SafeInt(() => editor.ksParametrizeObjects(circleRef, rawBlock!));
                 step.Data["parametrize_result"] = parametrized;
                 notes.Add("ksParametrizeObjects(окружность, блок) → " + Api5.Raw(parametrized));
@@ -1363,22 +1300,16 @@ internal sealed class SketchDefinitionProbe
         }
     }
 
-    /// <summary>
-    /// Шаг S.5 — сердце задачи. Одна и та же окружность в состояниях, различающихся ТОЛЬКО
-    /// фактически наложенными ограничениями и размерами.
-    /// </summary>
+    /// <summary>Step S.5 — the heart of the task. The same circle in states differing ONLY by the
+    /// constraints and dimensions actually applied.</summary>
     /// <remarks>
-    /// <para>
-    /// Геометрия во всех состояниях задаётся одними и теми же числами (R20 в точке 25,15). Если
-    /// статус различается, он различается ОГРАНИЧЕНИЯМИ, а не формой, и подмена «координаты
-    /// совпали» невозможна по построению. Это контроль задания §«Этап 2».
-    /// </para>
-    /// <para>
-    /// <b>Матрица строится теми маршрутами, которые подтвердились опытом, и называется это прямо.</b>
-    /// Если ни один способ изменить систему ограничений не подтверждён, шаг даёт <c>Unknown</c> с
-    /// указанием, чего именно не хватило: «различия нет» и «менять нечем» — разные утверждения, и
-    /// второе нельзя выдать за первое.
-    /// </para>
+    /// The geometry in all states is set by the same numbers (R20 at the point 25,15). If the status
+    /// differs, it differs by CONSTRAINTS, not by shape, and substituting "the coordinates matched" is
+    /// impossible by construction. This is the order §"Stage 2" control.
+    /// <b>The matrix is built with the routes that the experiments confirmed, and this is said
+    /// plainly.</b> If no way to change the constraint system is confirmed, the step yields <c>Unknown</c>
+    /// naming exactly what was missing: "there is no difference" and "there is nothing to change with" are
+    /// different statements, and the second must not be passed off as the first.
     /// </remarks>
     private void ControlMatrix()
     {
@@ -1395,9 +1326,10 @@ internal sealed class SketchDefinitionProbe
             return;
         }
 
-        // Маршрут API7 NewConstraint() учитывается отдельно: он мог быть принят, тогда как ни
-        // соединение API5, ни размер не дали состояния. Без этой публикации его исход ни на что не
-        // влиял — поле присваивалось и не читалось (дефект прибора, найден компилятором CS0414).
+        // The API7 NewConstraint() route is accounted for separately: it could have been accepted while
+        // neither the API5 constraint nor the dimension produced a state. Without this publication its
+        // outcome affected nothing — the field was assigned and never read (a probe defect found by the
+        // compiler, CS0414).
         step.Data["api7_constraint_route_works"] = _api7ConstraintRouteWorks;
         step.Data["constraint_route_works"] = _constraintRouteWorks;
         step.Data["dimension_route_works"] = _dimensionRouteWorks;
@@ -1407,8 +1339,9 @@ internal sealed class SketchDefinitionProbe
 
         try
         {
-            // Состояние A: окружность без связей и размеров. Числа заданы, но у окружности три
-            // степени свободы — ожидание записывается, но фактом до чтения не объявляется.
+            // State A: a circle with no constraints and no dimensions. The numbers are set, but a circle
+            // has three degrees of freedom — the expectation is recorded but not declared a fact before
+            // reading.
             if (!BuildCircleDocument("s-a-free", step, out var editorA, out var circleA))
             {
                 step.Fail("Состояние A не построено.");
@@ -1422,7 +1355,7 @@ internal sealed class SketchDefinitionProbe
             var d = (int?)null;
             var appliedNotes = new List<string>();
 
-            // Состояние B: центр закреплён БЕЗ управляющего радиуса — часть свободы снята.
+            // State B: the centre is fixed WITHOUT a driving radius — part of the freedom is removed.
             if (_constraintRouteWorks)
             {
                 var fixedCentre = TryConstraint(editorA, step, "b_center", (short)StructType2DEnum.ko_ConstraintParam,
@@ -1432,8 +1365,8 @@ internal sealed class SketchDefinitionProbe
                 b = StateOfCurrent(step, "b");
             }
 
-            // Состояние C: на том же эскизе поставлен управляющий размер радиуса. Ожидание задания —
-            // полная определённость; оно записано, но фактом не объявляется до чтения.
+            // State C: a driving radius dimension is placed on the same sketch. The order's expectation is
+            // full definition; it is recorded but not declared a fact before reading.
             if (_dimensionRouteWorks)
             {
                 var dimension = ApplyRadiusDimension(editorA, step, "c_radius");
@@ -1442,10 +1375,10 @@ internal sealed class SketchDefinitionProbe
                 c = StateOfCurrent(step, "c");
             }
 
-            // Состояние D: три управляющих размера (радиус + два линейных на центр). Только оно
-            // способно снять все три степени свободы окружности; состояния A и B сняты не полностью
-            // по построению. Отдельный документ, потому что размеры необратимы: добавить их в тот же
-            // эскиз значило бы измерить СУММУ шагов, а не состояние.
+            // State D: three driving dimensions (radius + two linear ones for the centre). Only it can
+            // remove all three degrees of freedom of the circle; states A and B are incompletely removed
+            // by construction. A separate document, because dimensions are irreversible: adding them to the
+            // same sketch would measure the SUM of steps, not a state.
             if (_dimensionRouteWorks
                 && BuildCircleDocument("s-d-driving", step, out var editorD, out _))
             {
@@ -1483,8 +1416,8 @@ internal sealed class SketchDefinitionProbe
                 return;
             }
 
-            // Сравниваются только те состояния, которые удалось построить. Сравнение «состояния,
-            // которого не было» дало бы ложное различие или ложное совпадение.
+            // Only the states that could be built are compared. Comparing "a state that did not exist"
+            // would give a false difference or a false match.
             var built = new List<(string Name, int Value)> { ("A", a.Value) };
             if (b is not null)
             {
@@ -1520,9 +1453,9 @@ internal sealed class SketchDefinitionProbe
                 return;
             }
 
-            // Решающее различие задания: A недоопределён, D полностью определён. C (только радиус)
-            // обязан остаться недоопределённым — это не «плохо», а проверка того, что маршрут
-            // считает степени свободы, а не факт «размер поставлен».
+            // The decisive distinction of the order: A is under-defined, D is fully defined. C (radius
+            // only) must stay under-defined — this is not "bad" but a check that the route counts degrees
+            // of freedom, not the fact "a dimension was placed".
             var aUnder = a == LocalStateValues["ksStateUnderConstrained"];
             var cWell = c == LocalStateValues["ksStateWellConstrained"];
             var dWell = d == LocalStateValues["ksStateWellConstrained"];
@@ -1549,8 +1482,8 @@ internal sealed class SketchDefinitionProbe
                 return;
             }
 
-            // Отличается, но не так, как предполагало задание: это измерение, а не повод править
-            // ожидание до совпадения. Расхождение оставлено открытым.
+            // It differs, but not as the order assumed: this is a measurement, not a reason to edit the
+            // expectation until it matches. The discrepancy is left open.
             step.Unknown($"Статусы различаются ({string.Join(" → ", built.Select(x => Interpret(x.Value)))})" +
                          ", но не совпали с ожиданием задания (A=недоопределён, D=определён). " +
                          "Ожидание записано, расхождение не закрыто и не подогнано.");
@@ -1562,16 +1495,12 @@ internal sealed class SketchDefinitionProbe
         }
     }
 
-    /// <summary>
-    /// Ставит управляющий радиальный размер на окружность с центром (<see cref="CircleCenterX"/>,
-    /// <see cref="CircleCenterY"/>) и радиусом <see cref="CircleRadius"/>.
-    /// </summary>
-    /// <remarks>
-    /// Привязка задаётся <c>RDimSource</c> (центр и радиус), а не ссылкой на кривую — так устроен
-    /// пример справки. <c>Init()</c> вызывается до заполнения полей: он их обнуляет (измерено в
-    /// первом прогоне), и заполнение до него привело бы к размеру по умолчанию. Возвращается ссылка
-    /// на размер, <c>null</c> — вызов не прошёл.
-    /// </remarks>
+    /// <summary>Places a driving radial dimension on the circle with centre (<see cref="CircleCenterX"/>,
+    /// <see cref="CircleCenterY"/>) and radius <see cref="CircleRadius"/>.</summary>
+    /// <remarks>The binding is set by <c>RDimSource</c> (centre and radius), not by a curve reference —
+    /// that is how the help example is built. <c>Init()</c> is called before filling the fields: it zeroes
+    /// them (MEASURED: in the first run), and filling before it would lead to a default dimension. A
+    /// reference to the dimension is returned; <c>null</c> means the call did not go through.</remarks>
     private int? ApplyRadiusDimension(ksDocument2D editor, ProbeStep step, string tag)
     {
         try
@@ -1609,28 +1538,20 @@ internal sealed class SketchDefinitionProbe
         }
     }
 
-    /// <summary>
-    /// Шаг S.5b: контрольные состояния, которые строятся ЧТЕНИЕМ, без наложения связей.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Задание §«Этап 2» требует среди прочего: пустой эскиз, два эскиза с разными состояниями и
-    /// выбор нужного из них. Эти контроли ценны тем, что не зависят от маршрута записи: даже когда
-    /// связь наложить не удалось, они показывают, отвечает ли <c>ConstraintsState</c> на разное
-    /// СОДЕРЖИМОЕ эскиза, а не выдаёт одну константу на всё.
-    /// </para>
-    /// <para>
-    /// Пустой эскиз — отдельный случай: значения «объектов нет ⇒ определён» заранее НЕ объявляется.
-    /// Читается то, что ответит КОМПАС, и это записывается как измерение.
-    /// </para>
-    /// </remarks>
+    /// <summary>Step S.5b: control states built BY READING, without applying constraints.</summary>
+    /// <remarks>Order §"Stage 2" requires, among other things: an empty sketch, two sketches with different states
+    /// and choosing the needed one. These controls are valuable because they do not depend on the write
+    /// route: even when a constraint could not be applied, they show whether <c>ConstraintsState</c>
+    /// answers to different sketch CONTENT rather than returning one constant for everything.
+    /// An empty sketch is a separate case: the value "no objects ⇒ defined" is NOT declared in advance.
+    /// What KOMPAS answers is read, and it is recorded as a measurement.</remarks>
     private void ReadOnlyControls()
     {
         var step = _report.Begin("S.5b", "Контроли чтением: пустой эскиз и выбор нужного эскиза из двух",
             "Отвечает ли ConstraintsState на разное содержимое эскиза, и что читается у пустого эскиза?");
         try
         {
-            // ── Пустой эскиз ──
+            // ── Empty sketch ──
             var doc = (ksDocument3D)_app.Document3D();
             if (doc.Create(true, true) != true)
             {
@@ -1665,9 +1586,9 @@ internal sealed class SketchDefinitionProbe
             step.Data["empty_state_interpreted"] = Interpret(emptyState);
             step.Observe($"Пустой эскиз: {Interpret(emptyState)} (сырое {Api5.Raw(emptyState)}).");
 
-            // ── Два эскиза в одном документе, разное содержимое ──
-            // Второй эскиз получает окружность; первый остаётся пустым. Это различие содержимого,
-            // построенное без единого ограничения, поэтому оно не зависит от маршрута записи.
+            // ── Two sketches in one document, different content ──
+            // The second sketch gets a circle; the first stays empty. This is a content difference built
+            // without a single constraint, so it does not depend on the write route.
             if (part.NewEntity(Api5.Sketch) is not ksEntity secondSketch
                 || secondSketch.GetDefinition() is not ksSketchDefinition secondDefinition)
             {
@@ -1688,8 +1609,8 @@ internal sealed class SketchDefinitionProbe
                 secondDefinition.EndEdit();
             }
 
-            // Читается ВТОРОЙ эскиз при том, что первым в дереве лежит другой: это контроль на
-            // «читается тот эскиз, который попросили», а не «первый попавшийся».
+            // The SECOND sketch is read while another lies first in the tree: this is a control for "the
+            // sketch that was asked for is read", not "the first one encountered".
             _sketchEntity = secondSketch;
             var secondState = StateOfCurrent(step, "second");
             step.Data["second_state"] = secondState;
@@ -1733,7 +1654,7 @@ internal sealed class SketchDefinitionProbe
         }
     }
 
-    /// <summary>Возвращает внимание пробы на предыдущий документ после контроля.</summary>
+    /// <summary>Returns the probe's attention to the previous document after a control.</summary>
     private void Restore(ksDocument3D? doc, ksPart? part, ksEntity? sketch)
     {
         _doc = doc;
@@ -1741,7 +1662,7 @@ internal sealed class SketchDefinitionProbe
         _sketchEntity = sketch;
     }
 
-    /// <summary>Вердикт для ветки «второй эскиз не создан»: пустой эскиз всё равно измерен.</summary>
+    /// <summary>Verdict for the "second sketch not created" branch: the empty sketch is measured anyway.</summary>
     private static void VerdictForEmpty(ProbeStep step, int? emptyState)
     {
         if (emptyState is null)
@@ -1789,7 +1710,7 @@ internal sealed class SketchDefinitionProbe
             _part = (ksPart)_doc.GetPart(-1);
             step.Data["volume_after_reopen"] = Api5.Num(Api5.Volume(_part));
 
-            // Эскиз ищется ПО МОДЕЛИ, а не по сохранённому дескриптору: память сеанса не используется.
+            // The sketch is searched by MODEL, not by a saved descriptor: session memory is not used.
             if (!FindSketchInReopened(step))
             {
                 step.Fail("Эскиз в переоткрытом документе не найден — статус прочитать нечем.");
@@ -1832,10 +1753,8 @@ internal sealed class SketchDefinitionProbe
         }
     }
 
-    /// <summary>
-    /// Шаг S.7: побочные эффекты чтения. Отдельный шаг, потому что от него зависит, можно ли
-    /// регистрировать инструмент как читающий.
-    /// </summary>
+    /// <summary>Step S.7: side effects of reading. A separate step, because whether the tool can be
+    /// registered as reading depends on it.</summary>
     private void ReadIsSideEffectFree()
     {
         var step = _report.Begin("S.7", "Побочные эффекты чтения: объём, топология, признак изменения",
@@ -1858,7 +1777,7 @@ internal sealed class SketchDefinitionProbe
             step.Data["faces_before"] = facesBefore;
             step.Data["edges_before"] = edgesBefore;
 
-            // Пятикратное чтение — так поведёт себя инструмент под нагрузкой и при повторных вызовах.
+            // A five-fold read — this is how the tool will behave under load and on repeated calls.
             for (var i = 0; i < 5; i++)
             {
                 _ = StateOfCurrent(step, "side_effect_probe" + i);
@@ -1874,8 +1793,8 @@ internal sealed class SketchDefinitionProbe
             step.Data["faces_after"] = facesAfter;
             step.Data["edges_after"] = edgesAfter;
 
-            // Ноль объёма — это «тело исчезло», и он обязан быть отказом, а не успешным замером:
-            // на это уже наступали в правке эскиза (Q-SKETCH-EDIT-ZERO).
+            // A zero volume is "the body vanished", and it must be a refusal, not a successful
+            // measurement: this was already hit in the sketch edit (Q-SKETCH-EDIT-ZERO).
             if (volumeAfter is null or 0d || volumeBefore is null or 0d)
             {
                 step.Fail("Объём тела равен " + Api5.Num(volumeAfter) + " (до чтения " +
@@ -1905,17 +1824,13 @@ internal sealed class SketchDefinitionProbe
         }
     }
 
-    // ══════════════════════════════════════════════════════════════ построение ══
+    // ══════════════════════════════════════════════════════════════ construction ══
 
-    /// <summary>
-    /// Строит документ с пластиной и эскизом, в котором лежит одна окружность R20 в (25,15).
-    /// </summary>
-    /// <remarks>
-    /// По умолчанию редактор возвращается ОТКРЫТЫМ, чтобы вызывающий мог наложить ограничения через
-    /// API5. При <paramref name="closeEditor"/> = <c>true</c> редактирование завершается: это нужно
-    /// ветке API7, где <c>ISketch.BeginEdit()</c> отказывает, пока эскиз открыт со стороны API5
-    /// (измерено: <c>BeginEdit() → null</c>).
-    /// </remarks>
+    /// <summary>Builds a document with a plate and a sketch holding one R20 circle at (25,15).</summary>
+    /// <remarks>By default the editor is returned OPEN so that the caller can apply constraints via API5.
+    /// With <paramref name="closeEditor"/> = <c>true</c> editing is finished: this is needed by the API7
+    /// branch, where <c>ISketch.BeginEdit()</c> refuses while the sketch is open on the API5 side
+    /// (MEASURED: <c>BeginEdit() → null</c>).</remarks>
     private bool BuildCircleDocument(string name, ProbeStep step, out ksDocument2D editor, out int circleRef,
         bool closeEditor = false)
     {
@@ -1954,7 +1869,7 @@ internal sealed class SketchDefinitionProbe
             return false;
         }
 
-        // Числовая геометрия одинакова во всех состояниях: окружность R20 в точке (25,15).
+        // The numeric geometry is the same in all states: an R20 circle at the point (25,15).
         var circle = activeEditor.ksCircle(CircleCenterX, CircleCenterY, CircleRadius, 1);
         if (circle == 0)
         {
@@ -1986,7 +1901,7 @@ internal sealed class SketchDefinitionProbe
         return true;
     }
 
-    /// <summary>Эскиз переоткрытого документа: ищется по модели, память сеанса не используется.</summary>
+    /// <summary>Sketch of the reopened document: searched by model, session memory is not used.</summary>
     private bool FindSketchInReopened(ProbeStep step)
     {
         if (_part is null)
@@ -2035,26 +1950,16 @@ internal sealed class SketchDefinitionProbe
         return false;
     }
 
-    /// <summary>
-    /// Шаг S.8 — эскиз, созданный ВНЕ MCP: сторонний документ поставки.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Задание §«Этап 2» требует контроля «эскиз, созданный вне MCP, с источником и происхождением
-    /// тестового файла». До этого шага такого контроля не было: все эскизы ставила сама проба, и
-    /// вывод «читается» относился бы только к собственным моделям.
-    /// </para>
-    /// <para>
-    /// Файлы берутся из поставки КОМПАС-3D (`Samples\Models`), их происхождение — вендор, автор —
-    /// человек. Файлы <b>открываются, но не изменяются и не сохраняются</b>: шаг не мутирует
-    /// чужой документ. Для каждого документа перебираются эскизы по дереву, и читается статус —
-    /// ровно тем же вызовом, что и для своих моделей.
-    /// </para>
-    /// <para>
-    /// Если в документе эскизов нет, это записывается как «нечего читать», а не как «статус не
-    /// читается»: различать эти два случая обязательно.
-    /// </para>
-    /// </remarks>
+    /// <summary>Step S.8 — a sketch created OUTSIDE the MCP: a third-party document from the distribution.</summary>
+    /// <remarks>Order §"Stage 2" requires the control "a sketch created outside the MCP, with the source and
+    /// provenance of the test file". Before this step there was no such control: every sketch was placed
+    /// by the probe itself, and the conclusion "readable" would apply only to its own models.
+    /// The files come from the KOMPAS-3D distribution (<c>Samples\Models</c>); their provenance is the
+    /// vendor, the author a human. The files <b>are opened but not modified or saved</b>: the step does
+    /// not mutate a foreign document. For each document the sketches are enumerated by tree, and the
+    /// status is read — by exactly the same call as for its own models.
+    /// If a document has no sketches, this is recorded as "nothing to read", not as "the status is not
+    /// readable": these two cases must be told apart.</remarks>
     private void ExternalDocumentRoute()
     {
         var step = _report.Begin("S.8", "Эскиз, созданный вне MCP: сторонний документ поставки",
@@ -2131,8 +2036,8 @@ internal sealed class SketchDefinitionProbe
                 }
                 finally
                 {
-                    // Чужой документ закрывается БЕЗ сохранения: шаг только читает, и это его условие.
-                    // Save здесь был бы мутацией пользовательского файла.
+                    // The foreign document is closed WITHOUT saving: the step only reads, and that is its
+                    // condition. A Save here would mutate a user file.
                     TryBool(() => doc.close());
                 }
             }
@@ -2174,12 +2079,11 @@ internal sealed class SketchDefinitionProbe
         }
     }
 
-    /// <summary>Собирает эскизы из дерева части обходом, с ограничением глубины и числа.</summary>
-    /// <remarks>
-    /// Обход нужен потому, что эскиз может лежать и в самой части, и внутри признака. Число
-    /// ограничено: шаг читает, а не инвентаризирует чужую модель, и «не найдено из-за лимита»
-    /// отличается от «не найдено вовсе» только этим пределом, который записан в данных шага.
-    /// </remarks>
+    /// <summary>Collects sketches from the part tree by walking it, with depth and count limits.</summary>
+    /// <remarks>The walk is needed because a sketch may lie in the part itself or inside a feature. The
+    /// count is limited: the step reads rather than inventories a foreign model, and "not found due to the
+    /// limit" differs from "not found at all" only by that bound, which is recorded in the step
+    /// data.</remarks>
     private static void CollectSketchEntities(ksPart part, List<ksEntity> found, int depth, int limit)
     {
         if (depth > 4 || found.Count >= limit)
@@ -2228,13 +2132,13 @@ internal sealed class SketchDefinitionProbe
                 }
                 catch
                 {
-                    // Отказ на определении не превращается в «эскиза нет».
+                    // A refusal on the definition is not turned into "there is no sketch".
                 }
 
                 if (definition is ksSketchDefinition)
                 {
-                    // Дедупликация по имени: у ksEntity нет ссылки, а один и тот же эскиз попадает
-                    // в несколько коллекций типов. Имя — то, что доступно и читаемо человеком.
+                    // Deduplication by name: ksEntity has no reference, and the same sketch lands in
+                    // several type collections. The name is what is available and human-readable.
                     if (!found.Any(f => f.name == entity.name))
                     {
                         found.Add(entity);
@@ -2244,9 +2148,9 @@ internal sealed class SketchDefinitionProbe
         }
     }
 
-    // ══════════════════════════════════════════════════════════════ чтение ══
+    // ══════════════════════════════════════════════════════════════ reading ══
 
-    /// <summary>Читает <c>ISketch.ConstraintsState</c> у текущего эскиза.</summary>
+    /// <summary>Reads <c>ISketch.ConstraintsState</c> of the current sketch.</summary>
     private int? StateOfCurrent(ProbeStep step, string tag)
     {
         if (_sketchEntity is null)
@@ -2271,21 +2175,17 @@ internal sealed class SketchDefinitionProbe
         }
         catch (Exception ex)
         {
-            // Отказ COM — не «недоопределён»: пишется отдельным полем, чтобы не смешивать
-            // «продукт ответил» и «вызов не прошёл».
+            // A COM refusal is not "under-defined": it is written in a separate field so that "the product
+            // answered" and "the call did not go through" are not mixed.
             step.Data[tag + "_state_error"] = ex.GetType().Name + ": " + ex.Message;
             return null;
         }
     }
 
-    /// <summary>
-    /// Переносит API5-эскиз в API7 <c>ISketch</c>.
-    /// </summary>
-    /// <remarks>
-    /// QI делается явно: обёртка, объявляющая интерфейс, не гарантирует, что объект его поддерживает,
-    /// и молчаливый <c>null</c> от <c>as</c> здесь означал бы «статуса нет» вместо «приведение
-    /// не прошло». Оба случая различимы в данных шага.
-    /// </remarks>
+    /// <summary>Transfers an API5 sketch into the API7 <c>ISketch</c>.</summary>
+    /// <remarks>The QI is done explicitly: a wrapper declaring an interface does not guarantee the object
+    /// supports it, and a silent <c>null</c> from <c>as</c> here would mean "there is no status" instead
+    /// of "the cast did not go through". Both cases are distinguishable in the step data.</remarks>
     private KompasAPI7.ISketch? TransferSketch(ksEntity sketch, ProbeStep step)
     {
         try
@@ -2316,16 +2216,12 @@ internal sealed class SketchDefinitionProbe
         }
     }
 
-    // ══════════════════════════════════════════════════════════════ семантика ══
+    // ══════════════════════════════════════════════════════════════ semantics ══
 
-    /// <summary>
-    /// Значения <c>ksConstraintsStateEnum</c> из <c>Bin\ksConstants.tlb</c>.
-    /// </summary>
-    /// <remarks>
-    /// Локальная копия: перечисление лежит в сборке констант, которую проба не линкует ради четырёх
-    /// чисел. Сверка с объявленными — шаг S.3, и без неё числа считались бы утверждением о памяти
-    /// автора, а не о продукте.
-    /// </remarks>
+    /// <summary>The <c>ksConstraintsStateEnum</c> values from <c>Bin\ksConstants.tlb</c>.</summary>
+    /// <remarks>A local copy: the enumeration lies in the constants assembly, which the probe does not
+    /// link just for four numbers. The check against the declared ones is step S.3, and without it the
+    /// numbers would count as a claim about the author's memory rather than about the product.</remarks>
     private static readonly Dictionary<string, int> LocalStateValues = new(StringComparer.Ordinal)
     {
         ["ksStateUnknown"] = 0,
@@ -2334,38 +2230,31 @@ internal sealed class SketchDefinitionProbe
         ["ksStateUnresolvedRedundancy"] = 3,
     };
 
-    /// <summary>
-    /// Типы ограничений, использованные пробой.
-    /// </summary>
+    /// <summary>The constraint types used by the probe.</summary>
     /// <remarks>
-    /// <para>
-    /// Величины сверены с таблицей «Типы параметрических ограничений» справки SDK (help.ascon.ru,
-    /// <c>paramrestrictiontypes</c>), где перечислены константы, принимаемые полем <c>constrType</c>:
-    /// <c>CONSTRAINT_FIXED_POINT = 1</c> («фиксация точки» — одиночное, партнёра не требует) и
-    /// <c>CONSTRAINT_EQUAL_RADIUS = 8</c> («равенство радиусов двух дуг или окружностей» — парное;
-    /// именно оно показано в примере к <c>ksSetObjConstraint</c>).
-    /// </para>
-    /// <para>
-    /// <c>FixedDim = 14</c> сюда намеренно НЕ входит: в таблице экспортных констант номера 14 нет
-    /// (там <c>13</c> отсутствует, а <c>15</c> — это <c>CONSTRAINT_TANGENT_TWO_CURVES</c>). Величина
-    /// 14 как «фиксированный размер» известна только перечислению API7
-    /// <c>ksConstraintTypeEnum.ksCFixedDim</c>, то есть принадлежит ДРУГОМУ пространству имён, и
-    /// смешивать их в одном поле нельзя. Управляющий размер через этот вызов пробой не ставится.
-    /// </para>
+    /// The values are checked against the SDK help table "Parametric constraint types" (help.ascon.ru,
+    /// <c>paramrestrictiontypes</c>), which lists the constants accepted by the <c>constrType</c> field:
+    /// <c>CONSTRAINT_FIXED_POINT = 1</c> ("point fixing" — single, needs no partner) and
+    /// <c>CONSTRAINT_EQUAL_RADIUS = 8</c> ("equality of the radii of two arcs or circles" — paired; it is
+    /// the one shown in the example for <c>ksSetObjConstraint</c>).
+    /// <c>FixedDim = 14</c> is deliberately NOT included here: the export-constants table has no number 14
+    /// (there <c>13</c> is absent and <c>15</c> is <c>CONSTRAINT_TANGENT_TWO_CURVES</c>). The value 14 as
+    /// "fixed dimension" is known only to the API7 enumeration
+    /// <c>ksConstraintTypeEnum.ksCFixedDim</c>, i.e. it belongs to a DIFFERENT namespace, and they must
+    /// not be mixed in one field. A driving dimension is not placed through this call by the probe.
     /// </remarks>
     private enum LocalConstraintType
     {
-        /// <summary>Фиксация точки (индекс 0 у окружности — центр).</summary>
+        /// <summary>Point fixing (index 0 on a circle is the centre).</summary>
         FixedPoint = 1,
 
-        /// <summary>Равенство радиусов двух дуг или окружностей.</summary>
+        /// <summary>Equality of the radii of two arcs or circles.</summary>
         EqualRadius = 8,
     }
 
-    /// <summary>
-    /// Нормализованный статус задания. Ответ строится по ЧИСЛУ: обёртка может не отдать имя, число
-    /// отдаст всегда. Число вне объявленного набора — «неизвестно», а не догадка по величине.
-    /// </summary>
+    /// <summary>Normalized task status. The answer is built from the NUMBER: the wrapper may not return a
+    /// name, a number it will always return. A number outside the declared set is "unknown", not a guess
+    /// by magnitude.</summary>
     private static string Interpret(int? raw) => raw switch
     {
         null => "unknown",
@@ -2385,7 +2274,7 @@ internal sealed class SketchDefinitionProbe
         _ => "неизвестное значение " + raw,
     };
 
-    // ═════════════════════════════════════════════════════════════════ прочее ══
+    // ═════════════════════════════════════════════════════════════════ misc ══
 
     private static uint[] KompasIds() =>
         Process.GetProcessesByName("KOMPAS").Select(p => (uint)p.Id).ToArray();

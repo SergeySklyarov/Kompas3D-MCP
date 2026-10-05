@@ -162,7 +162,7 @@ internal static class FeatureProbe
             working = "doc.GetLastFeature()";
         }
 
-        // R5 — rollback marker, which is how КОМПАС itself defines "the rest of the tree".
+        // R5 — rollback marker, which is how KOMPAS itself defines "the rest of the tree".
         try
         {
             var rollback = doc.GetRollBackFeature() as ksFeature;

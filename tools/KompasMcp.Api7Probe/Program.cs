@@ -4,14 +4,10 @@ using System.Text;
 
 namespace KompasMcp.Api7Probe;
 
-/// <summary>
-/// Single entry point of the API7 research probe (ADR-003 §3).
-/// </summary>
-/// <remarks>
-/// Everything that touches КОМПАС runs on one STA thread with a real message pump
+/// <summary>Single entry point of the API7 research probe (ADR-003 §3).</summary>
+/// <remarks>Everything that touches KOMPAS runs on one STA thread with a real message pump
 /// (<see cref="StaPump"/>), because that is the only configuration the shipping adapter is allowed
-/// to use and a route that worked on a pool thread would prove nothing about the product.
-/// </remarks>
+/// to use and a route that worked on a pool thread would prove nothing about the product.</remarks>
 public static class Program
 {
     public static int Main(string[] args)
@@ -100,7 +96,7 @@ public static class Program
             pump.Run(() => Passport.Collect(report, options));
             if (options.PassportOnly)
             {
-                // Паспорт среды — без КОМПАС-документов.
+                // Environment passport — no KOMPAS documents.
             }
             else if (options.Lifecycle)
             {
@@ -364,7 +360,7 @@ public static class Program
             else
             {
                 // The connect call happens inside the queued lambda on purpose: if Main's body
-                // mentioned a КОМПАС type, the JIT would try to resolve the interop assembly while
+                // mentioned a KOMPAS type, the JIT would try to resolve the interop assembly while
                 // compiling Main — before the resolver above had a chance to install.
                 var probe = new HoleProbe(report, options);
                 pump.Run(() => probe.Run());
@@ -453,10 +449,8 @@ public sealed class Options
 
     public required string ReportDir { get; init; }
 
-    /// <summary>
-    /// The КОМПАС installation root, so a step can survey the shipped sample models instead of
-    /// hard-coding paths. Supplied at build time as <c>-p:KompasRoot=…</c>.
-    /// </summary>
+    /// <summary>The KOMPAS installation root, so a step can survey the shipped sample models instead of
+    /// hard-coding paths. Supplied at build time as <c>-p:KompasRoot=…</c>.</summary>
     public required string KompasRoot { get; init; }
 
     public bool PassportOnly { get; private set; }
@@ -466,166 +460,138 @@ public sealed class Options
     /// <summary>--controls: run the whole candidate ladder instead of stopping at the first match.</summary>
     public bool CollectControls { get; private set; }
 
-    /// <summary>--lifecycle: эскиз после reopen и жизненный цикл признака (проба L).</summary>
+    /// <summary>--lifecycle: a sketch after reopen and the feature lifecycle (probe L).</summary>
     public bool Lifecycle { get; private set; }
 
-    /// <summary>--extrusion: смена опорного эскиза признака через API7 (проба E).</summary>
+    /// <summary>--extrusion: changing a feature's support sketch through API7 (probe E).</summary>
     public bool Extrusion { get; private set; }
 
-    /// <summary>--chamfer: фаска SM-11 — маршруты API5 и API7, единицы угла, направление, reopen (проба F).</summary>
+    /// <summary>--chamfer: SM-11 chamfer — API5 and API7 routes, angle units, direction, reopen (probe F).</summary>
     public bool Chamfer { get; private set; }
 
-    /// <summary>--sketch-reopen: правка геометрии существующего эскиза в документе после reopen (проба G).</summary>
+    /// <summary>--sketch-reopen: editing the geometry of an existing sketch in a reopened document (probe G).</summary>
     public bool SketchReopen { get; private set; }
 
-    /// <summary>--fillet-edge-set: правка набора рёбер существующего скругления (проба H).</summary>
+    /// <summary>--fillet-edge-set: editing the edge set of an existing fillet (probe H).</summary>
     public bool FilletEdgeSet { get; private set; }
 
-    /// <summary>
-    /// --fillet-base-objects: входы САМОГО признака скругления через <c>IFillet.BaseObjects</c> на
-    /// живом признаке после reopen (проба H-2, решающий опыт задания SM-09 §2).
-    /// </summary>
+    /// <summary>--fillet-base-objects: the inputs of the fillet feature ITSELF through
+    /// <c>IFillet.BaseObjects</c> on a live feature after reopen (probe H-2, the decisive experiment of
+    /// task SM-09 §2). History: docs/decisions/probes.md#fillet-base-objects</summary>
     public bool FilletBaseObjects { get; private set; }
 
-    /// <summary>--rotation: вращение SM-03 — номер типа, осевая линия эскиза, полный и частичный оборот (проба R).</summary>
+    /// <summary>--rotation: SM-03 rotation — type number, sketch axis line, full and partial turn (probe R).</summary>
     public bool Rotation { get; private set; }
 
-    /// <summary>
-    /// --mate: сопряжения сборки — адресуются ли ГРАНИ КОМПОНЕНТОВ и создаётся ли сопряжение
-    /// (проба M, вход следующего блока после C1).
-    /// </summary>
+    /// <summary>--mate: assembly mates — are COMPONENT FACES addressable and is a mate created
+    /// (probe M, the entry of the next block after C1). History: docs/decisions/probes.md#mate</summary>
     public bool Mate { get; private set; }
 
-    /// <summary>
-    /// --full-turn: правда ли, что развёртка вращения насыщается на 180° (проба F2).
-    /// </summary>
-    /// <remarks>
-    /// Отдельный вход, потому что вопрос этот — о ПРОДУКТЕ, а не о пробе R. Матрица углов R26.angles
-    /// измеряла запись <c>Angle[true]=360, Angle[false]=0</c> с <c>dtNormal</c> и, кроме неё, только
-    /// <c>CutOffByPoint</c>; из неё был сделан вывод «развёртка насыщается на 180°», попавший в схему
-    /// и в адаптер как факт. Здесь перебираются пары <c>Angle[true]/Angle[false]</c>, включая ту, что
-    /// стоит в файле поставки <c>BEARING 410</c> (<c>180/180</c>, <c>dtBoth</c>), и профиль устроен
-    /// так, что полный оборот и полуоборот РАЗЛИЧАЮТСЯ ОБЪЁМОМ.
-    /// </remarks>
+    /// <summary>--full-turn: is it true that a rotation sweep saturates at 180° (probe F2).</summary>
+    /// <remarks>DOC: a separate entry because the question is about the PRODUCT, not about probe R.
+    /// The angle matrix R26.angles measured the write <c>Angle[true]=360, Angle[false]=0</c> with
+    /// <c>dtNormal</c> and, besides it, only <c>CutOffByPoint</c>; from it the conclusion "the sweep
+    /// saturates at 180°" was drawn and reached the schema and the adapter as a fact. Here the
+    /// <c>Angle[true]/Angle[false]</c> pairs are enumerated, including the one in the shipped file
+    /// <c>BEARING 410</c> (<c>180/180</c>, <c>dtBoth</c>), and the profile is arranged so that a full
+    /// turn and a half turn DIFFER IN VOLUME. History: docs/decisions/probes.md#full-turn</remarks>
     public bool FullTurn { get; private set; }
 
-    /// <summary>
-    /// <c>--verify-m3d &lt;path&gt;</c>: открыть готовый .m3d в НОВОМ сеансе и прочитать его
-    /// геометрию. Отдельный режим существует ровно потому, что «предмет проверен» и «прибор описал
-    /// себя» — разные утверждения: сохранённый файл читает другой процесс, который не знает, как
-    /// файл построен (дисциплина измерений, класс 16).
-    /// </summary>
+    /// <summary><c>--verify-m3d &lt;path&gt;</c>: open a ready .m3d in a NEW session and read its
+    /// geometry. The separate mode exists precisely because "the subject was verified" and "the
+    /// instrument described itself" are different claims: the saved file is read by another process that
+    /// does not know how the file was built (measurement discipline, class 16).</summary>
     public string? VerifyM3d { get; private set; }
 
-    /// <summary>
-    /// <c>--boolean</c>: булевы операции над телами SM-15 через API7 <c>IBooleans</c> — явные
-    /// тело-цель и набор инструментов, вид операции, политика сохранения, несколько инструментов
-    /// одним признаком, несвязный результат, отрицательные случаи и reopen.
-    /// </summary>
+    /// <summary><c>--boolean</c>: boolean operations on SM-15 bodies through API7 <c>IBooleans</c> —
+    /// explicit target body and tool set, operation kind, retention policy, several tools in one
+    /// feature, a disconnected result, negative cases and reopen.</summary>
     public bool Boolean { get; private set; }
 
-    /// <summary>
-    /// <c>--split</c>: разделение тела плоскостью SM-16 и отсечение по одну сторону — сохраняются
-    /// ли все части, что выбирает <c>ICut.Direction</c>, вырожденные постановки и reopen.
-    /// </summary>
+    /// <summary><c>--split</c>: splitting an SM-16 body by a plane and cutting to one side — are all
+    /// parts kept, what does <c>ICut.Direction</c> select, degenerate setups and reopen.
+    /// History: docs/decisions/probes.md#split</summary>
     public bool Split { get; private set; }
 
-    /// <summary>
-    /// <c>--reposition</c>: перенос и поворот тела SM-17 через <c>IBodyReposition</c> — каким членом
-    /// пишется положение (<c>Position</c> отдаёт только propget, OQ-A19), знак и центр поворота,
-    /// правка существующего признака без накопления смещения.
-    /// </summary>
+    /// <summary><c>--reposition</c>: translation and rotation of an SM-17 body through
+    /// <c>IBodyReposition</c> — which member writes the position (<c>Position</c> is propget-only,
+    /// OQ-A19), the sign and centre of rotation, editing an existing feature without accumulating the
+    /// offset. History: docs/decisions/probes.md#rp-open</summary>
     public bool Reposition { get; private set; }
 
-    /// <summary>
-    /// <c>--tree</c>: как признак B3 адресуется в ЖИЗНЕННОМ ЦИКЛЕ, а не только в момент создания.
-    /// Создание всех четырёх семейств измерено фабриками API7 (<c>Booleans</c>, <c>SplitSolids</c>,
-    /// <c>Cuts</c>, <c>BodyRepositions</c>), но подавление, удаление и <c>list_features</c> работают
-    /// через дерево признаков API5. Здесь измеряется, попадает ли туда объект API7, и есть ли у
-    /// булевой операции и отсечения родной маршрут API5 (<c>o3d_aggregate=69</c>,
-    /// <c>o3d_cutByPlane=50</c>), дающий настоящий <c>ksEntity</c>.
-    /// </summary>
+    /// <summary><c>--tree</c>: how a B3 feature is addressed over its LIFECYCLE, not only at creation
+    /// time. The creation of all four families was measured with the API7 factories (<c>Booleans</c>,
+    /// <c>SplitSolids</c>, <c>Cuts</c>, <c>BodyRepositions</c>), but suppression, deletion and
+    /// <c>list_features</c> go through the API5 feature tree. This measures whether an API7 object lands
+    /// there, and whether the boolean operation and the cut have a native API5 route
+    /// (<c>o3d_aggregate=69</c>, <c>o3d_cutByPlane=50</c>) that yields a real <c>ksEntity</c>.</summary>
     public bool TreeLifecycle { get; private set; }
 
-    /// <summary>
-    /// <c>--boss-fuse</c>: сращивается ли родное вращение-бобышка с существующим телом (§3 наряда).
-    /// </summary>
+    /// <summary><c>--boss-fuse</c>: does a native boss-rotation fuse with an existing body (order
+    /// §3).</summary>
     public bool BossFuse { get; private set; }
 
-    /// <summary>--hole-modes: четыре режима родных отверстий SM-07 — цековка, зенковка, плоское дно, положение (проба M).</summary>
+    /// <summary>--hole-modes: the four modes of native SM-07 holes — counterbore, countersink, flat bottom, position (probe M).</summary>
     public bool HoleModes { get; private set; }
 
-    /// <summary>--hole-tree: под каким номером признак отверстия виден в дереве (проба N).</summary>
+    /// <summary>--hole-tree: under which number the hole feature appears in the tree (probe N).</summary>
     public bool HoleTree { get; private set; }
 
-    /// <summary>
-    /// <c>--identity</c>: чем ОТЛИЧАЕТСЯ только что созданный признак от уже существующего, когда
-    /// отображаемое имя у них одинаковое. Клиентская приёмка 19.09.2026 показала, что второй
-    /// признак изменения положения получает то же имя, и правило «новое имя» его отбрасывает.
-    /// </summary>
+    /// <summary><c>--identity</c>: how a just-created feature DIFFERS from an existing one when the
+    /// two share the same display name. Client acceptance 19.09.2026 showed that a second reposition
+    /// feature gets the same name, and the "new name" rule drops it.
+    /// History: docs/decisions/probes.md#identity</summary>
     public bool Identity { get; private set; }
 
-    /// <summary>
-    /// <c>--union</c>: граница применимости обычного объединения — условие применимости из справки
-    /// самого продукта, ответ ядра на входы вне условия и контроль на контактных телах.
-    /// </summary>
+    /// <summary><c>--union</c>: the applicability boundary of ordinary union — the applicability
+    /// condition from the product's own help, the kernel's answer for inputs outside the condition, and
+    /// a control on touching bodies. History: docs/decisions/probes.md#bo-contact</summary>
     public bool Union { get; private set; }
 
-    /// <summary>
-    /// <c>--cut-area</c>: «Область применения» отсечения по плоскости — существует ли маршрут,
-    /// направляющий операцию на ВЫБРАННЫЕ тела (проба CA, приоритет 1 наряда 19.09.2026). Имена
-    /// членов читаются из установленной библиотеки типов, а не берутся из списка кандидатов.
-    /// </summary>
+    /// <summary><c>--cut-area</c>: the "application area" of a plane cut — does a route exist that
+    /// directs the operation at SELECTED bodies (probe CA, priority 1 of the 19.09.2026 order). Member
+    /// names are read from the installed type library, not taken from a candidate list.</summary>
     public bool CutArea { get; private set; }
 
-    /// <summary>
-    /// <c>--reposition-order</c>: почему признак, стоящий на 180°, читается как ПЕРЕНОС (проба RO,
-    /// приоритет 3 наряда 19.09.2026). Измеряется гипотеза о ПОРЯДКЕ коллекции API7: сопоставление
-    /// признака дерева с элементом коллекции идёт по порядковому номеру, а проверяется только
-    /// совпадение ЧИСЛА элементов, поэтому подавление и восстановление признака может сдвинуть
-    /// порядок — и чтение опишет соседа.
-    /// </summary>
+    /// <summary><c>--reposition-order</c>: why a feature at 180° is read as a TRANSLATION (probe RO,
+    /// priority 3 of the 19.09.2026 order). The hypothesis under test is about the ORDER of the API7
+    /// collection: a tree feature is matched to a collection element by ordinal number, while only the
+    /// NUMBER of elements is checked, so suppressing and restoring a feature can shift the order — and
+    /// the read describes the neighbour. History: docs/decisions/probes.md#ro-order</summary>
     public bool RepositionOrder { get; private set; }
 
-    /// <summary>
-    /// <c>--sketch-plane</c>: смена ОПОРНОЙ плоскости существующего эскиза документированным
-    /// <c>ksSketchDefinition.SetPlane</c> и чтение её обратно <c>GetPlane</c> (проба SP, наряд
-    /// <c>AUX_SKETCH_PLANE_EDIT_DEVELOPER_PROMPT.md</c> §3.1). Отдельный вход, потому что вопрос
-    /// задаётся ЯДРУ до правки продукта: маршрута в продукте ещё нет, и мерить его продуктом нельзя.
-    /// </summary>
+    /// <summary><c>--sketch-plane</c>: changing an existing sketch's BASE plane via the documented
+    /// <c>ksSketchDefinition.SetPlane</c> and reading it back with <c>GetPlane</c> (probe SP, order
+    /// <c>AUX_SKETCH_PLANE_EDIT_DEVELOPER_PROMPT.md</c> §3.1). A separate entry because the question is
+    /// put to the KERNEL before the product is changed: the route does not exist in the product yet, and
+    /// it cannot be measured with the product. History: docs/decisions/probes.md#sp-plane</summary>
     public bool SketchPlane { get; private set; }
 
-    /// <summary>
-    /// <c>--b5</c>: калибровка трёх семейств последней обязательной очереди — кинематическая операция
-    /// (SM-04), по сечениям (SM-05), оболочка (SM-13). Закрывает измерением OQ-A1 и OQ-A12.
-    /// </summary>
+    /// <summary><c>--b5</c>: calibration of the last mandatory queue's three families — sweep
+    /// (SM-04), loft (SM-05), shell (SM-13). Closes OQ-A1 and OQ-A12 by measurement.
+    /// History: docs/decisions/probes.md#b5</summary>
     public bool B5 { get; private set; }
 
-    /// <summary>
-    /// <c>--reposition-read</c>: читается ли вектор переноса признака изменения положения, и каким
-    /// членом. Перечень членов берётся из библиотеки типов продукта, а не из списка кандидатов.
-    /// </summary>
+    /// <summary><c>--reposition-read</c>: is the translation vector of a reposition feature readable,
+    /// and by which member. The member list is taken from the product's type library, not from a
+    /// candidate list. History: docs/decisions/probes.md#reposition-read</summary>
     public bool RepositionRead { get; private set; }
 
-    /// <summary>
-    /// <c>--reposition-params</c>: читаются ли ВХОДЫ признака изменения положения по
-    /// ДОКУМЕНТИРОВАННОМУ маршруту API7 — <c>Position</c> → <c>ILocalCoordinateSystem</c> →
-    /// <c>ParameterType</c>/<c>Parameters</c> → <c>IPoint3DParamDisplace.DX/DY/DZ</c> и
-    /// <c>RepositionCentre</c> → <c>IPoint3D.X/Y/Z</c>. Отдельная проба от <c>--reposition-read</c>
-    /// потому, что та опрашивала объект поздним связыванием по умолчательному интерфейсу класса и
-    /// типизированно только по <c>ILocalCoordinateSystem</c>, то есть документированный интерфейс
-    /// ПАРАМЕТРОВ не спрашивала вовсе.
-    /// </summary>
+    /// <summary><c>--reposition-params</c>: are the INPUTS of a reposition feature readable by the
+    /// DOCUMENTED API7 route — <c>Position</c> → <c>ILocalCoordinateSystem</c> →
+    /// <c>ParameterType</c>/<c>Parameters</c> → <c>IPoint3DParamDisplace.DX/DY/DZ</c> and
+    /// <c>RepositionCentre</c> → <c>IPoint3D.X/Y/Z</c>. A separate probe from <c>--reposition-read</c>
+    /// because that one queried the object by late binding on the class's default interface and typed
+    /// only through <c>ILocalCoordinateSystem</c>, i.e. never asked the documented PARAMETERS interface.
+    /// History: docs/decisions/probes.md#rp-params</summary>
     public bool RepositionParams { get; private set; }
 
-    /// <summary>--sketch-definition: определённость эскиза «+ / − / !» из API (проба S).</summary>
+    /// <summary>--sketch-definition: the sketch certainty "+ / − / !" read from the API (probe S). History: docs/decisions/probes.md#sketch-definition</summary>
     public bool SketchDefinition { get; private set; }
 
-    /// <summary>
-    /// PID of the КОМПАС instance the probe launched, written back by the step that measured the
+    /// <summary>PID of the KOMPAS instance the probe launched, written back by the step that measured the
     /// process diff. <c>null</c> means "not attributed yet" — a distinct state from a PID of zero,
-    /// and the step that needs it says so rather than comparing against a placeholder.
-    /// </summary>
+    /// and the step that needs it says so rather than comparing against a placeholder.</summary>
     public int? ProcessId { get; set; }
 
     public static Options Parse(string[] args)
@@ -829,13 +795,9 @@ public sealed class Options
         };
     }
 
-    /// <summary>
-    /// The installation root baked in at build time as <c>AssemblyMetadata("KompasRoot")</c>.
-    /// </summary>
-    /// <remarks>
-    /// Returns <c>""</c> rather than guessing when the attribute is absent, so a step that needs the
-    /// installation says it could not find it instead of surveying a wrong directory.
-    /// </remarks>
+    /// <summary>The installation root baked in at build time as <c>AssemblyMetadata("KompasRoot")</c>.</summary>
+    /// <remarks>Returns <c>""</c> rather than guessing when the attribute is absent, so a step that needs the
+    /// installation says it could not find it instead of surveying a wrong directory.</remarks>
     private static string ReadKompasRoot()
     {
         var attribute = typeof(Options).Assembly
@@ -844,10 +806,8 @@ public sealed class Options
         return attribute?.Value ?? string.Empty;
     }
 
-    /// <summary>
-    /// Walks upward from the working directory looking for the repository root, which is the folder
-    /// that carries <c>KompasMcp.sln</c>. Nothing is assumed about where the probe was launched from.
-    /// </summary>
+    /// <summary>Walks upward from the working directory looking for the repository root, which is the folder
+    /// that carries <c>KompasMcp.sln</c>. Nothing is assumed about where the probe was launched from.</summary>
     private static string FindProjectRoot()
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);

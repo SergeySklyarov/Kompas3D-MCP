@@ -6,39 +6,33 @@ using KompasAPI7;
 
 namespace KompasMcp.Api7Probe;
 
-/// <summary>
-/// Проба U — ГРАНИЦА ПРИМЕНИМОСТИ обычного объединения: что продукт сам говорит об условиях
-/// применимости, как он отвечает на входы вне этих условий и чем отказ отличается от ошибки вызова.
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Зачем.</b> Разнесённые тела лежат ВНЕ объявленной области применимости объединения, поэтому
-/// «положительное объединение двух разнесённых кубов» — ошибочное требование, а не невыполненное
-/// (решение заказчика 19.09.2026; обычное объединение КОМПАС требует пересечения или общей
-/// поверхности). Проба отвечает на три вопроса о ГРАНИЦЕ: какое условие называет сам продукт, что
-/// он делает на входах вне условия и не является ли отказ следствием неправильно собранного вызова.
-/// </para>
-/// <para>
-/// <b>Три шага, и каждый нужен другому.</b>
-/// </para>
+/// <summary>Probe U — the APPLICABILITY BOUNDARY of ordinary union: what the product itself says about
+/// the applicability conditions, how it answers inputs outside them, and how a refusal differs from a
+/// malformed call.</summary>
+/// <remarks>INVARIANT: separated bodies lie OUTSIDE the declared applicability domain of union, so a
+/// "positive union of two separated cubes" is an erroneous requirement, not an unmet one (customer
+/// decision 19.09.2026; ordinary KOMPAS union requires intersection or a shared surface). The probe
+/// answers three questions about the BOUNDARY: which condition the product itself states, what it does
+/// on inputs outside the condition, and whether a refusal is merely the consequence of a malformed call.
+/// The withdrawn requirement <c>SM-15.union.mode_disconnected</c> (a positive disconnected-union mode) is
+/// recorded here as history only — it is NOT a current requirement.
+/// Three steps, each needed by the next:
 /// <list type="number">
-/// <item>условие применимости, прочитанное из справки ПОСТАВКИ
-/// (<c>Help/KOMPAS_ru-RU.zip</c>, раздел «Булева операция над телами → Выполнение булевой операции») —
-/// это утверждение о ПРОДУКТЕ, а не о приборе;</item>
-/// <item>ответ ядра на разнесённые тела (<c>IBoolean</c>): отказ, названный кодом, при НЕИЗМЕННОЙ
-/// геометрии — это и есть проверяемая граница, а не дефект продукта;</item>
-/// <item>КОНТРОЛЬ на телах с общей гранью тем же самым вызовом: там объединение обязано работать
-/// (измерено BO.7), поэтому отказ на шаге 2 отделяется от «вызов собран неверно» именно этим шагом,
-/// и без него отказ не доказывал бы ничего.</item>
+/// <item>DOC: the applicability condition read from the SUPPLIED help
+/// (<c>Help/KOMPAS_ru-RU.zip</c>, section «Булева операция над телами → Выполнение булевой операции») —
+/// a statement about the PRODUCT, not the instrument;</item>
+/// <item>MEASURED: the kernel's answer on separated bodies (<c>IBoolean</c>) is a refusal named by a code
+/// with UNCHANGED geometry — that is the measured boundary, not a product defect;</item>
+/// <item>TEST: the CONTROL on bodies sharing a face with the very same call — there union must work
+/// (measured BO.7), so the refusal at step 2 is separated from "the call is malformed" precisely by this
+/// step, and without it the refusal would prove nothing.</item>
 /// </list>
-/// <para>
-/// <b>Чего проба НЕ делает.</b> Она не ищет обходные маршруты объединения и не перебирает
-/// предполагаемые COM-члены: по правилам проекта недокументированный маршрут не исследуется и в
-/// требования не включается, а наличие имени в TLB или обёртке документированного маршрута не
-/// заменяет. Шаги «второй маршрут» и «живая поверхность членов» удалены из пробы 19.09.2026 вместе
-/// со снятым требованием положительного несвязного объединения.
-/// </para>
-/// </remarks>
+/// LIMIT: the probe does NOT look for workaround union routes and does not enumerate presumed COM
+/// members: project rules forbid investigating an undocumented route or including it in requirements, and
+/// a name present in the TLB or the wrapper does not replace a documented route. The steps "second route"
+/// and "live member surface" were removed from the probe on 19.09.2026 together with the withdrawn
+/// requirement of a positive disconnected union.
+/// History: docs/decisions/probes.md#union-boundary</remarks>
 internal sealed class UnionProbe
 {
     private readonly ProbeReport _report;
@@ -82,10 +76,8 @@ internal sealed class UnionProbe
 
     // ══════════════════════════════════════════════════════════════ U.0 ══
 
-    /// <summary>
-    /// Что продукт сам говорит об условиях применимости объединения. Это утверждение о ПРОДУКТЕ,
-    /// а не о приборе: справка поставки — часть поставки.
-    /// </summary>
+    /// <summary>DOC: what the product itself says about the union applicability conditions. This is a
+    /// statement about the PRODUCT, not the instrument: the supplied help is part of the delivery.</summary>
     private void Documentation()
     {
         var step = _report.Begin("U.0", "Условия применимости объединения по справке самого продукта",
@@ -120,11 +112,10 @@ internal sealed class UnionProbe
 
     // ══════════════════════════════════════════════════════════════ U.1 ══
 
-    /// <summary>
-    /// Разнесённые тела маршрутом <c>IBoolean</c> — ответ ядра на входы ВНЕ объявленных условий
-    /// применимости. Ожидание здесь — ОТКАЗ, и проверяется он не сам по себе, а вместе с контролем
-    /// U.2: без контроля «отказ» неотличим от «вызов собран неверно».
-    /// </summary>
+    /// <summary>MEASURED: separated bodies via the <c>IBoolean</c> route — the kernel's answer on inputs
+    /// OUTSIDE the declared applicability conditions. The expectation here is a REFUSAL, and it is checked
+    /// not on its own but together with control U.2: without the control a "refusal" is indistinguishable
+    /// from "the call is malformed".</summary>
     private void DisjointBoolean()
     {
         var step = _report.Begin("U.1", "Разнесённые кубы: IBoolean — ответ на входы вне условий применимости",
@@ -171,12 +162,10 @@ internal sealed class UnionProbe
 
     // ══════════════════════════════════════════════════════════════ U.2 ══
 
-    /// <summary>
-    /// Контроль на КОНТАКТНЫХ телах тем же самым вызовом. Без него отказ U.1 неотличим от
-    /// «вызов собран неверно»: различие «ядро не принимает несвязные тела» и «ядро не принимает
-    /// ничего» держится ровно на этом опыте, поэтому он идёт тем же <see cref="BooleanUnion"/>,
-    /// что и U.1, и отличается только геометрией.
-    /// </summary>
+    /// <summary>TEST: the CONTROL on CONTACT bodies with the very same call. Without it the refusal of
+    /// U.1 is indistinguishable from "the call is malformed": the difference between "the kernel rejects
+    /// disconnected bodies" and "the kernel rejects anything" rests exactly on this experiment, so it uses
+    /// the same <see cref="BooleanUnion"/> as U.1 and differs only in geometry.</summary>
     private void ContactControl()
     {
         var step = _report.Begin("U.2", "Контроль: тот же вызов на КОНТАКТНЫХ телах",
@@ -375,7 +364,7 @@ internal sealed class UnionProbe
         }
         catch (Exception)
         {
-            // Не предмет этого шага.
+            // Not the subject of this step.
         }
     }
 
@@ -504,7 +493,7 @@ internal sealed class UnionProbe
         }
         catch (Exception)
         {
-            // Возвращается прочитанное.
+            // Returns what was read.
         }
 
         return rows;

@@ -5,31 +5,20 @@ using KompasAPI7;
 
 namespace KompasMcp.Api7Probe;
 
-/// <summary>
-/// Проба B3 — перенос и поворот тела (SM-17.reposition) через API7 <c>IBodyRepositions</c>.
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Открытый вопрос OQ-A19.</b> У <c>IBodyReposition</c> объявлен <c>Position</c> типа
-/// <c>LocalCoordinateSystem</c> и, по библиотеке типов, только с геттером; вторая половина
-/// <c>RepositionCentre</c> — точка смещения. Поэтому маршрут «перенести тело на вектор» не
-/// очевиден: неизвестно ни то, каким членом записывается смещение, ни то, в каком порядке лежат
-/// числа в матрице, если запись идёт через <c>InitByMatrix3D</c>.
-/// </para>
-/// <para>
-/// <b>Отсутствие сеттера у свойства не доказывает невозможность записи</b> (правило проекта):
-/// возвращённый объект может быть живым и изменяемым на месте. Здесь это проверяется перебором
-/// маршрутов, причём КАЖДЫЙ маршрут идёт в СВОЁМ документе, а результат каждого называется
-/// числом — иначе «маршрут работает» и «тело не сдвинулось» выглядят одинаково.
-/// </para>
-/// <para>
-/// <b>Эталон §6.6.</b> Асимметричный брусок <c>T=[10,30]×[0,10]×[0,5]</c>, V=1000: перенос
-/// <c>(7,−11,13)</c> → <c>[17,−11,13]…[37,−1,18]</c>; поворот +90° вокруг Z через начало координат →
-/// <c>[−10,10,0]…[0,30,5]</c>; тот же поворот вокруг оси через <c>(5,0,0)</c> →
-/// <c>[−5,5,0]…[5,25,5]</c>. Асимметрия важна: по симметричной детали знак и направление
-/// преобразования неразличимы.
-/// </para>
-/// </remarks>
+/// <summary>Probe B3 — translation and rotation of a body (SM-17.reposition) via the API7
+/// <c>IBodyRepositions</c>.</summary>
+/// <remarks>OQ-A19: <c>IBodyReposition</c> declares <c>Position</c> of type <c>LocalCoordinateSystem</c> and,
+/// per the type library, only with a getter; the second half <c>RepositionCentre</c> is the displacement
+/// point. So the route "move a body by a vector" is not obvious: neither which member writes the
+/// displacement nor the order of the numbers in the matrix (if written via <c>InitByMatrix3D</c>) is known.
+/// INVARIANT (project rule): the absence of a setter does not prove a write is impossible — the returned
+/// object may be live and modifiable in place. This is checked by enumerating routes, each route in its OWN
+/// document, and each result named as a number — otherwise "the route works" and "the body did not move"
+/// look alike. TEST reference §6.6: an asymmetric bar <c>T=[10,30]×[0,10]×[0,5]</c>, V=1000: translation
+/// <c>(7,−11,13)</c> → <c>[17,−11,13]…[37,−1,18]</c>; +90° about Z through the origin →
+/// <c>[−10,10,0]…[0,30,5]</c>; the same rotation about an axis through <c>(5,0,0)</c> →
+/// <c>[−5,5,0]…[5,25,5]</c>. Asymmetry matters: on a symmetric part the sign and direction of the transform
+/// are indistinguishable. History: docs/decisions/probes.md#rp-open</remarks>
 internal sealed class RepositionProbe
 {
     private const double Tx0 = 10d, Tx1 = 30d, Ty0 = 0d, Ty1 = 10d, Tz = 5d;
@@ -109,11 +98,9 @@ internal sealed class RepositionProbe
 
     // ══════════════════════════════════════════════════════════════ routes ══
 
-    /// <summary>
-    /// Что за объект отдаёт <c>Position</c> и какие члены у него отвечают живьём. Чтение
-    /// библиотеки типов уже показало <c>InitByMatrix3D</c> и <c>SetDisplacementByAxis</c>; здесь
-    /// проверяется, что живой объект на них отвечает, а не только объявляет их.
-    /// </summary>
+    /// <summary>What kind of object <c>Position</c> returns and which members answer live. Reading the type
+    /// library already showed <c>InitByMatrix3D</c> and <c>SetDisplacementByAxis</c>; here it is checked that
+    /// the live object answers them, not merely declares them.</summary>
     private void ReadPositionMembers()
     {
         var step = _report.Begin("RP.1", "Что такое IBodyReposition.Position живьём",
@@ -157,16 +144,16 @@ internal sealed class RepositionProbe
                 + Api5.Raw(SafeDouble(() => local.Y)) + " / " + Api5.Raw(SafeDouble(() => local.Z)));
             step.Observe("  Position.ParameterType: " + Api5.Raw(SafeEnum(() => local.ParameterType)));
             step.Observe("  Position.OrientationType: " + Api5.Raw(SafeEnum(() => local.OrientationType)));
-            // Vector3D — индексированное по оси свойство (get_Vector3D(ksObj3dTypeEnum)); обычной
-            // записью оно в C# не берётся (CS0856). Читаем тем же вопросом через явный метод
-            // GetVector: он отвечает тремя числами и потому годится как наблюдение.
+            // Vector3D is an axis-indexed property (get_Vector3D(ksObj3dTypeEnum)); it cannot be taken by a
+            // normal C# access (CS0856). Read by the same question via the explicit GetVector method: it
+            // answers three numbers and so is usable as an observation.
             step.Observe("  Position.GetVector(OX): " + DescribeVector(local, ksObj3dTypeEnum.o3d_axisOX));
             step.Observe("  Position.GetVector(OY): " + DescribeVector(local, ksObj3dTypeEnum.o3d_axisOY));
             step.Observe("  Position.GetVector(OZ): " + DescribeVector(local, ksObj3dTypeEnum.o3d_axisOZ));
             step.Observe("  Position.LocalCSParameters: " + Api5.RuntimeName(SafeObjectOf(() => local.LocalCSParameters)));
             step.Observe("  Position.Parameters: " + Api5.RuntimeName(SafeObjectOf(() => local.Parameters)));
 
-            // Проба записи: пустая операция должна отвергнуться, иначе «принято» ничего не значит.
+            // Write trial: an empty operation must be refused, otherwise "accepted" means nothing.
             var emptyUpdate = SafeBoolOf(() => reposition.Update());
             step.Observe("  Update() без цели и без Position: " + Api5.Raw(emptyUpdate));
             step.Data["empty_update"] = emptyUpdate;
@@ -183,11 +170,9 @@ internal sealed class RepositionProbe
         }
     }
 
-    /// <summary>
-    /// Каким членом записывается ПЕРЕНОС. Перебираются маршруты, и каждый идёт в своём документе:
-    /// накопление от предыдущей попытки сделало бы сравнение бессмысленным. Порядок чисел в
-    /// матрице — часть маршрута, поэтому обе раскладки названы отдельно.
-    /// </summary>
+    /// <summary>Which member writes the TRANSLATION. Routes are enumerated, each in its own document:
+    /// accumulation from a previous attempt would make the comparison meaningless. The order of the numbers
+    /// in the matrix is part of the route, so both layouts are named separately.</summary>
     private void TranslationRoute()
     {
         var step = _report.Begin("RP.2", "Каким членом записывается перенос: перебор маршрутов",
@@ -196,17 +181,17 @@ internal sealed class RepositionProbe
         step.Observe("перенос выбран потому, что единичная матрица поворота симметрична: раскладка "
             + "строк/столбцов на нём неразличима, и он честно отвечает только на вопрос о переносе");
 
-        // R1: InitByMatrix3D, оси, затем начало.
+        // R1: InitByMatrix3D, axes then origin.
         AttemptRoute(step, "InitByMatrix3D: оси (3×3), затем начало",
             reposition => reposition.Position.InitByMatrix3D(Matrix(Identity(), new[] { 7d, -11d, 13d })));
 
-        // R2: InitByMatrix3D, начало, затем оси.
+        // R2: InitByMatrix3D, origin then axes.
         AttemptRoute(step, "InitByMatrix3D: начало, затем оси (3×3)",
             reposition => reposition.Position.InitByMatrix3D(MatrixOriginFirst(Identity(), new[] { 7d, -11d, 13d })));
 
-        // R3: SetDisplacementByAxis по каждой оси. Имена осей взяты из перечисления, а не угаданы:
-        // в ksObj3dTypeEnum это o3d_axisOX=71 / o3d_axisOY=72 / o3d_axisOZ=73 (того же перечисления
-        // требует и GetVector, и индексатор Vector3D).
+        // R3: SetDisplacementByAxis per axis. The axis names are taken from the enum, not guessed: in
+        // ksObj3dTypeEnum they are o3d_axisOX=71 / o3d_axisOY=72 / o3d_axisOZ=73 (the same enum is required by
+        // both GetVector and the Vector3D indexer).
         AttemptRoute(step, "SetDisplacementByAxis(OX,7), (OY,−11), (OZ,13)",
             reposition =>
             {
@@ -215,7 +200,7 @@ internal sealed class RepositionProbe
                 reposition.Position.SetDisplacementByAxis(ksObj3dTypeEnum.o3d_axisOZ, 13d);
             });
 
-        // R4: матрица 16 чисел — на случай, если ядро ждёт однородную 4×4.
+        // R4: a 16-number matrix — in case the kernel expects a homogeneous 4×4.
         AttemptRoute(step, "InitByMatrix3D: однородная 4×4 (16 чисел)",
             reposition => reposition.Position.InitByMatrix3D(Matrix4x4(Identity(), new[] { 7d, -11d, 13d })));
 
@@ -403,12 +388,9 @@ internal sealed class RepositionProbe
         }
     }
 
-    /// <summary>
-    /// Правка СУЩЕСТВУЮЩЕГО признака: параметр задаётся относительно ИСХОДНЫХ входов, а не
-    /// применяется повторно к текущему положению. Проверка: тот же вектор, записанный дважды,
-    /// не должен накапливать смещение, а возврат к исходному вектору обязан вернуть исходное
-    /// положение.
-    /// </summary>
+    /// <summary>Editing an EXISTING feature: the parameter is set relative to the ORIGINAL inputs, not
+    /// applied again to the current position. Check: the same vector written twice must not accumulate the
+    /// displacement, and resetting the vector must restore the original position.</summary>
     private void EditExistingOperation()
     {
         var step = _report.Begin("RP.6", "Правка существующего признака: смещение не накапливается",
@@ -444,7 +426,7 @@ internal sealed class RepositionProbe
             var featureIndex = RepositionCount(doc);
             step.Observe("признаков BodyRepositions: " + Api5.Raw(featureIndex));
 
-            // Повторно записываем ТОТ ЖЕ вектор в ТОТ ЖЕ признак.
+            // Write the SAME vector again into the SAME feature.
             var (ok2, note2) = WriteExisting(doc, part, 0, Matrix4x4(Identity(), new[] { 7d, -11d, 13d }), step);
             var second = BodyRows(part);
             step.Observe("после повторной записи того же вектора (" + (ok2 ? "принято" : "ОТКАЗ: " + note2)
@@ -467,10 +449,10 @@ internal sealed class RepositionProbe
             var atExpected = second.FirstOrDefault(r => Near(r, 17d, -11d, 13d, 37d, -1d, 18d));
             if (atExpected is null)
             {
-                // Две разные причины выглядят одинаково, если их не различить: тело могло НЕ
-                // сдвинуться вовсе (маршрут правки не сработал) либо сдвинуться ДВАЖДЫ (параметр
-                // применён к текущему положению). Это разные факты о продукте, и называть их надо
-                // по отдельности — иначе «не двинулось» запишется как «накапливается».
+                // Two different causes look alike unless told apart: the body may NOT have moved at all (the
+                // edit route did not work) or have moved TWICE (the parameter applied to the current position).
+                // These are different facts about the product and must be named separately — otherwise "did
+                // not move" gets recorded as "accumulates".
                 var doubled = second.FirstOrDefault(r => Near(r, 24d, -22d, 26d, 44d, -12d, 31d));
                 step.Fail(doubled is not null
                     ? "повторная запись того же вектора сместила тело ЕЩЁ РАЗ (габарит удвоенного "
@@ -578,70 +560,26 @@ internal sealed class RepositionProbe
 
     // ══════════════════════════════════════════════════════════════ read ══
 
-    /// <summary>
-    /// Что читается ОБРАТНО с признака ПОСЛЕ записи — и различает ли чтение перенос от поворота.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Зачем отдельный шаг. Наряд §7 требует, чтобы действие <c>read</c> отдавало «параметры и входы
-    /// ИЗ МОДЕЛИ». У семейства переноса эти параметры — вид преобразования, вектор, ось и угол, и
-    /// сложить их можно только из <c>Position</c>. До этого шага был измерен ровно один его срез —
-    /// чтение ПУСТОГО признака (RP.1): <c>GetVector</c> на нём отвечает <c>False (0, 0, 0)</c>. Этого
-    /// мало: чтение записанного не измерялось вовсе, а публиковать чтение, которое всегда отдаёт
-    /// null, значит выдать «в модели ничего нет» за свойство модели. Это тот же класс ошибки, что
-    /// урок <c>4/tan</c>: прибор, который не может ничего прочитать, описывает себя.
-    /// </para>
-    /// <para>
-    /// <b>Ожидания объявлены ДО опыта.</b> Перенос: оси единичные, <c>X/Y/Z = (7, −11, 13)</c>.
-    /// Поворот на 90° вокруг Z через начало координат: <c>Rz = [[0, −1, 0], [1, 0, 0], [0, 0, 1]]</c>,
-    /// и запись в <c>InitByMatrix3D</c> идёт ПО СТОЛБЦАМ (это измерено шагом RP.4 и записано в
-    /// <see cref="RotationZ"/>), поэтому ось X локальной системы — либо столбец <c>(0, 1, 0)</c>,
-    /// либо строка <c>(0, −1, 0)</c>. Обе гипотезы объявлены заранее и названа совпавшая: одна и та же
-    /// запись читается как строка и как столбец с точностью до знака угла, и выбрать «на глаз» здесь
-    /// значило бы угадать направление поворота.
-    /// </para>
-    /// <para>
-    /// <b>Отрицательный контроль встроен.</b> Третий опыт — признак, которому НЕ записывали ничего.
-    /// Если и он покажет единичные оси, то чтение не отличает «записано» от «не записано», и
-    /// публиковать его нельзя. Ожидание контроля: <c>GetVector</c> отвечает отказом, а не единицей.
-    /// </para>
-    /// </remarks>
-    /// <summary>
-    /// Что читается ОБРАТНО с признака ПОСЛЕ записи: различимы ли перенос и поворот, и читается ли
-    /// сам вектор переноса.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Зачем эти шаги. Наряд §7 требует, чтобы действие <c>read</c> отдавало «параметры и входы
-    /// ИЗ МОДЕЛИ». У семейства переноса эти параметры — вид преобразования, вектор, ось и угол, и
-    /// сложить их можно только из <c>Position</c>. До этих шагов был измерен ровно один срез —
-    /// чтение ПУСТОГО признака (RP.1): <c>GetVector</c> на нём отвечает <c>False (0, 0, 0)</c>.
-    /// Публиковать чтение, построенное на таком срезе, значило бы выдать «в модели ничего нет» за
-    /// свойство модели. Это тот же класс ошибки, что урок <c>4/tan</c>: прибор, который ничего не
-    /// может прочитать, описывает себя.
-    /// </para>
-    /// <para>
-    /// <b>Два вопроса — два вердикта, и это не формальность.</b> Первая редакция задавала оба
-    /// вопроса одним шагом и останавливалась на первом же расхождении. Прогон это и показал: перенос
-    /// не прочитался, шаг отказал и завершился — и ответ про ПОВОРОТ, ради которого всё затевалось,
-    /// остался неизмеренным. Шаг, который замолкает на первой неожиданности, прячет ровно то, что
-    /// ещё не знает.
-    /// </para>
-    /// <para>
-    /// <b>Ожидания объявлены ДО опыта.</b> Перенос: оси единичные. Поворот на 90° вокруг Z через
-    /// начало координат: <c>Rz = [[0, −1, 0], [1, 0, 0], [0, 0, 1]]</c>, и запись в
-    /// <c>InitByMatrix3D</c> идёт ПО СТОЛБЦАМ (измерено шагом RP.4 и записано в
-    /// <see cref="RotationZ"/>), поэтому ось X локальной системы — либо столбец <c>(0, 1, 0)</c>,
-    /// либо строка <c>(0, −1, 0)</c>. Обе гипотезы объявлены заранее и названа совпавшая: одна и та
-    /// же запись читается как строка и как столбец с точностью до знака угла, и выбрать «на глаз»
-    /// значило бы угадать направление поворота.
-    /// </para>
-    /// <para>
-    /// <b>Отрицательный контроль встроен в оба шага.</b> Третий признак — тот, которому НЕ
-    /// записывали ничего. Если и он отдаст оси, чтение не отличает «записано» от «не записано», и
-    /// публиковать его нельзя.
-    /// </para>
-    /// </remarks>
+    /// <summary>What is read BACK from a feature AFTER a write: are a translation and a rotation
+    /// distinguishable, and is the translation vector itself read.</summary>
+    /// <remarks>TEST: order §7 requires the <c>read</c> action to return "parameters and inputs FROM THE
+    /// MODEL". For the translation family these parameters are the transform kind, the vector, the axis and
+    /// the angle, and they can only be assembled from <c>Position</c>. Before these steps exactly one slice of
+    /// it was measured — reading an EMPTY feature (RP.1): <c>GetVector</c> on it answers
+    /// <c>False (0, 0, 0)</c>. Publishing a read built on such a slice would pass off "there is nothing in the
+    /// model" as a property of the model — the same class of error as the <c>4/tan</c> lesson: an instrument
+    /// that can read nothing describes itself. INVARIANT: two questions — two verdicts, and this is not a
+    /// formality: the first revision asked both in one step and stopped at the first divergence, so a run
+    /// showed the translation fail, the step abort, and the answer about the ROTATION — the whole point —
+    /// remain unmeasured. A step that falls silent at the first surprise hides exactly what it does not yet
+    /// know. EXPECTED (declared BEFORE the run): translation — unit axes; 90° about Z through the origin —
+    /// <c>Rz = [[0, −1, 0], [1, 0, 0], [0, 0, 1]]</c>, and a write via <c>InitByMatrix3D</c> goes BY COLUMNS
+    /// (MEASURED, step RP.4, recorded in <see cref="RotationZ"/>), so the local X axis is either the column
+    /// <c>(0, 1, 0)</c> or the row <c>(0, −1, 0)</c>; both hypotheses are declared in advance and the matching
+    /// one is named, because choosing "by eye" would guess the rotation direction. A negative control is built
+    /// into both steps: the third feature is one NOTHING was written to — if it too returns axes, the read
+    /// does not separate "written" from "not written" and must not be published.
+    /// History: docs/decisions/probes.md#rp-readback</remarks>
     private void ReadBackAfterWrite()
     {
         var step = _report.Begin("RP.8", "Различимы ли перенос и поворот по чтению Position",
@@ -686,10 +624,10 @@ internal sealed class RepositionProbe
 
             readA = ReadPosition(docA, 0, step, "A");
 
-            // Контроль: ВТОРОЙ признак того же документа, созданный и НЕ настроенный. От A он
-            // отличается ровно одним — отсутствием записи. Update() у него не вызывается намеренно:
-            // RP.1 измерил, что без цели и без Position он отвечает False, и требовать от контроля
-            // успешного Update значило бы проверять не то.
+            // Control: the SECOND feature of the same document, created and NOT configured. It differs from A
+            // in exactly one thing — the absence of a write. Its Update() is deliberately not called: RP.1
+            // measured that without a target and without Position it answers False, and demanding a successful
+            // Update from the control would check the wrong thing.
             var containerA = Container(docA);
             if (containerA?.BodyRepositions?.Add() is not IBodyReposition control)
             {
@@ -814,8 +752,9 @@ internal sealed class RepositionProbe
 
             if (step.Verdict == Verdict.Fail)
             {
-                // Перенос уже отказал — вердикт шага уже «отказ», и переписывать его нечем. Ответ
-                // про поворот всё равно записан в наблюдениях, и это здесь главное.
+                // The translation already failed — the step verdict is already "fail" and cannot be rewritten.
+                // The answer about the rotation is still recorded in the observations, and that is what matters
+                // here.
                 return;
             }
 
@@ -843,7 +782,7 @@ internal sealed class RepositionProbe
         }
     }
 
-    /// <summary>Прочитанные с живого признака числа. Каждое поле — «null = не прочитано», не «ноль».</summary>
+    /// <summary>Numbers read from a live feature. Each field is "null = not read", not "zero".</summary>
     private sealed record PositionRead(
         double? X, double? Y, double? Z,
         bool? OxOk, double[]? Ox,
@@ -884,11 +823,9 @@ internal sealed class RepositionProbe
             Vector3DText(local));
     }
 
-    /// <summary>
-    /// <c>Vector3D</c> — свойство, ИНДЕКСИРОВАННОЕ по оси (<c>get_Vector3D(ksObj3dTypeEnum)</c>),
-    /// поэтому обычной записью в C# оно не берётся (CS0856) и спрашивается через IDispatch.
-    /// Отказ здесь — наблюдение, а не сбой: у неповёрнутой системы вектора может не быть вовсе.
-    /// </summary>
+    /// <summary><c>Vector3D</c> is a property INDEXED by axis (<c>get_Vector3D(ksObj3dTypeEnum)</c>), so a
+    /// normal C# access cannot take it (CS0856) and it is asked via IDispatch. A refusal here is an
+    /// observation, not a failure: an unrotated system may have no vector at all.</summary>
     private static string? Vector3DText(ILocalCoordinateSystem local)
     {
         try
@@ -912,37 +849,26 @@ internal sealed class RepositionProbe
         }
     }
 
-    /// <summary>«Не прочитано» целиком — все поля null, а не ноль.</summary>
+    /// <summary>"Not read" in full — all fields null, not zero.</summary>
     private static PositionRead EmptyPositionRead =>
         new(null, null, null, null, null, null, null, null, null, null, null, null);
 
-    // ══════════════════════════════ вектор переноса ══
+    // ══════════════════════════════ translation vector ══
 
-    /// <summary>
-    /// Читается ли ВЕКТОР переноса хоть каким-нибудь маршрутом — развёртка кандидатов.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Зачем отдельный шаг. Шаг RP.9 измерил, что <c>Position.X/Y/Z</c> записанного переноса не
-    /// отдаёт, а <c>Vector3D</c> через IDispatch отвечает <c>DISP_E_UNKNOWNNAME</c>. Один
-    /// отрицательный результат закрывает ОДИН маршрут, а не вопрос: полей у <c>ILocalCoordinateSystem</c>
-    /// хватает на несколько гипотез, и каждая стоит своей проверки. Без этого вектора действие
-    /// <c>read</c> наряда §7 у семейства переноса закрыть нечем — <c>reposition_vector_mm</c> и
-    /// <c>reposition_axis_point_mm</c> из одних только осей не выводятся.
-    /// </para>
-    /// <para>
-    /// <b>Ожидание объявлено ДО опыта и одно на все маршруты:</b> записан вектор <c>(7, −11, 13)</c>,
-    /// и вопрос шага — «отдаёт ли ХОТЬ ОДИН маршрут эти три числа». Маршрут, который вернёт что-то
-    /// другое, не «почти подошёл»: подставить вместо вектора габарит, объём или положение центра
-    /// значило бы выдать производное за прочитанное.
-    /// </para>
-    /// <para>
-    /// <b>Контроль встроен и он различающий.</b> Те же чтения выполняются на признаке, которому НЕ
-    /// записывали ничего. Маршрут, отдающий <c>(7, −11, 13)</c> и там, описывает не признак, а себя.
-    /// Кроме того отдельно измеряется чтение ДО <c>Update()</c>: если система координат хранит
-    /// запрошенное преобразование до применения, числа видны там, а после применения — уже нет.
-    /// </para>
-    /// </remarks>
+    /// <summary>Is the TRANSLATION vector read by any route at all — an enumeration of candidates.</summary>
+    /// <remarks>MEASURED (step RP.9): <c>Position.X/Y/Z</c> does not return the written translation, and
+    /// <c>Vector3D</c> via IDispatch answers <c>DISP_E_UNKNOWNNAME</c>. One negative result closes ONE route,
+    /// not the question: <c>ILocalCoordinateSystem</c> has enough fields for several hypotheses, each worth
+    /// checking. Without this vector the <c>read</c> action of order §7 cannot be closed for the translation
+    /// family — <c>reposition_vector_mm</c> and <c>reposition_axis_point_mm</c> are not derivable from the axes
+    /// alone. EXPECTED (declared BEFORE the run, one for all routes): the vector <c>(7, −11, 13)</c> was
+    /// written, and the step's question is "does AT LEAST ONE route return these three numbers". A route
+    /// returning something else is not "almost right": substituting the extent, volume or centre position for
+    /// the vector would pass off a derived quantity as a read one. The control is built in and discriminating:
+    /// the same reads run on a feature NOTHING was written to — a route returning <c>(7, −11, 13)</c> there
+    /// too describes itself, not the feature. Reading BEFORE <c>Update()</c> is also measured separately: if
+    /// the coordinate system holds the requested transform before applying it, the numbers are visible there
+    /// and not after. History: docs/decisions/probes.md#rp-vector</remarks>
     private void TranslationVectorRoutes()
     {
         var step = _report.Begin("RP.10", "Читается ли вектор переноса хоть каким-нибудь маршрутом",
@@ -985,7 +911,7 @@ internal sealed class RepositionProbe
             reposition.RepositionBody = body7;
             reposition.Position.InitByMatrix3D(Matrix4x4(Identity(), wanted));
 
-            // ── чтение ДО Update(): хранит ли система координат запрошенное преобразование ──
+            // ── read BEFORE Update(): does the coordinate system hold the requested transform ──
             var before = ReadPosition(doc, 0, step, "до Update");
             step.Observe("до Update(): X/Y/Z = " + Triple(before.X, before.Y, before.Z)
                 + ", оси " + AxisText(before.OxOk, before.Ox) + " / " + AxisText(before.OyOk, before.Oy)
@@ -1005,7 +931,7 @@ internal sealed class RepositionProbe
                 + ", оси " + AxisText(after.OxOk, after.Ox) + " / " + AxisText(after.OyOk, after.Oy)
                 + " / " + AxisText(after.OzOk, after.Oz));
 
-            // ── остальные кандидаты: их тип и что они вообще отдают ──
+            // ── other candidates: their type and what they return at all ──
             var local = SafeObjectOf(() => reposition.Position) as ILocalCoordinateSystem;
             step.Observe("Position.Parameters: " + Api5.RuntimeName(SafeObjectOf(() => local!.Parameters)));
             step.Observe("Position.LocalCSParameters: " + Api5.RuntimeName(SafeObjectOf(() => local!.LocalCSParameters)));
@@ -1016,9 +942,9 @@ internal sealed class RepositionProbe
             step.Observe("RepositionCentre: " + Api5.RuntimeName(SafeObjectOf(() => reposition.RepositionCentre)));
             step.Observe("CopyBoby: " + Api5.Raw(SafeBoolOf(() => reposition.CopyBoby)));
 
-            // Три числа, если маршрут их всё-таки отдаёт: X/Y/Z у Parameters и у LocalCSParameters
-            // спрашиваются через IDispatch — их тип объявлен как IKompasAPIObject, конкретный
-            // интерфейс заранее неизвестен, и предполагать его значило бы гадать.
+            // Three numbers, if a route returns them at all: X/Y/Z on Parameters and LocalCSParameters are
+            // asked via IDispatch — their type is declared as IKompasAPIObject, the concrete interface is not
+            // known in advance, and assuming it would be a guess.
             foreach (var (label, source) in new[]
                      {
                          ("Parameters", SafeObjectOf(() => local!.Parameters)),
@@ -1041,7 +967,7 @@ internal sealed class RepositionProbe
                 step.Observe(label + ".X/Y/Z: " + string.Join(", ", values));
             }
 
-            // ── контроль: тот же набор чтений на признаке БЕЗ записи ──
+            // ── control: the same set of reads on a feature WITHOUT a write ──
             var controlDoc = NewPart(out var controlPart);
             try
             {
@@ -1106,32 +1032,20 @@ internal sealed class RepositionProbe
         }
     }
 
-    /// <summary>
-    /// Читается ли ВЕКТОР переноса с ПЕРЕОТКРЫТОГО документа — то есть из того состояния модели,
-    /// которое действие <c>read</c> и обязано читать.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Зачем отдельный шаг.</b> Шаги RP.8/RP.9/RP.10 читали признак ЖИВЫМ — в том же сеансе, где
-    /// он и записан. Между двумя разными выводами прибор до сих пор не различал: «система координат
-    /// не хранит перенос» и «система координат отдаёт перенос только тогда, когда построена из
-    /// файла». Первый закрывает вопрос, второй открывает маршрут. Шаг RP.7 измерил, что признак и
-    /// новое положение переживают <c>save → close → reopen</c>, но перенос с переоткрытого признака
-    /// там НЕ читался — читался только габарит тела.
-    /// </para>
-    /// <para>
-    /// <b>Ожидание объявлено до опыта и своё у каждого случая:</b> A записывает (7, −11, 13) и
-    /// обязан прочитаться как (7, −11, 13); контроль B записывает (1, 2, 3) тем же маршрутом и
-    /// обязан прочитаться как (1, 2, 3). Оси в A ожидаются единичными — перенос ориентацию не
-    /// меняет, — и это положительный контроль: если и они не читаются, отказывает вся система
-    /// координат, а не один её член.
-    /// </para>
-    /// <para>
-    /// <b>Контроль различающий, а не «пустой признак».</b> Пустой признак отличался бы от A не
-    /// одним, а двумя (нет записи и нет тела), и по нему нельзя было бы отличить «читается
-    /// записанное» от «читается постоянное». Поэтому B — тот же маршрут, другое число.
-    /// </para>
-    /// </remarks>
+    /// <summary>Is the TRANSLATION vector read from a REOPENED document — i.e. from the model state the
+    /// <c>read</c> action is obliged to read.</summary>
+    /// <remarks>Steps RP.8/RP.9/RP.10 read the feature LIVE — in the same session it was written in. The
+    /// instrument did not yet separate two different conclusions: "the coordinate system does not hold the
+    /// translation" and "the coordinate system returns the translation only when built from a file". The first
+    /// closes the question, the second opens a route. MEASURED (step RP.7): the feature and the new position
+    /// survive <c>save → close → reopen</c>, but the translation was NOT read from the reopened feature there —
+    /// only the body extent was. EXPECTED (declared before the run, one per case): A writes (7, −11, 13) and
+    /// must read back as (7, −11, 13); control B writes (1, 2, 3) by the same route and must read back as
+    /// (1, 2, 3). A's axes are expected unit — a translation does not change orientation — a positive control:
+    /// if they too do not read, the whole coordinate system fails, not one member. The control is
+    /// discriminating, not an "empty feature": an empty feature would differ from A in two ways (no write and
+    /// no body) and could not separate "the written is read" from "a constant is read". So B is the same route
+    /// with a different number. History: docs/decisions/probes.md#rp-reopened</remarks>
     private void ReopenedTranslationRead()
     {
         var step = _report.Begin("RP.11", "Читается ли вектор переноса с ПЕРЕОТКРЫТОГО документа",
@@ -1193,11 +1107,9 @@ internal sealed class RepositionProbe
         step.Pass("вектор переноса читается с переоткрытого документа: A = (7, −11, 13), B = (1, 2, 3)");
     }
 
-    /// <summary>
-    /// Один случай шага RP.11: записать вектор, сохранить, закрыть, переоткрыть, прочитать признак.
-    /// <c>null</c> — случай не построен, и вызывающий обязан сказать это вслух, а не считать
-    /// отсутствие измерения отрицательным результатом.
-    /// </summary>
+    /// <summary>One case of step RP.11: write the vector, save, close, reopen, read the feature. <c>null</c>
+    /// means the case was not built, and the caller must say so aloud rather than count the absence of a
+    /// measurement as a negative result.</summary>
     private PositionRead? ReopenedCase(ProbeStep step, string label, double[] vector, string fileName)
     {
         var doc = NewPart(out var part);
@@ -1258,11 +1170,9 @@ internal sealed class RepositionProbe
         }
     }
 
-    /// <summary>
-    /// Члены системы координат ПЕРЕОТКРЫТОГО признака, которые в шагах RP.8–RP.10 не спрашивались:
-    /// состояние, тип, ссылка, а также <c>WriteToFile</c>. Последний отвечает на отдельный вопрос —
-    /// лежат ли числа в самой системе координат, независимо от того, отдают ли их её члены.
-    /// </summary>
+    /// <summary>Members of the REOPENED feature's coordinate system that steps RP.8–RP.10 did not ask: state,
+    /// type, reference, and <c>WriteToFile</c>. The latter answers a separate question — whether the numbers
+    /// lie in the coordinate system itself, regardless of whether its members return them.</summary>
     private void ReopenedPositionDetails(ProbeStep step, string label, ksDocument3D doc)
     {
         var container = Container(doc);
@@ -1282,9 +1192,9 @@ internal sealed class RepositionProbe
         step.Observe(label + ". типизированный get_Vector3D(OX) → "
             + Api5.Raw(TypedVector3D(local, ksObj3dTypeEnum.o3d_axisOX)));
 
-        // Обновление САМОЙ системы координат: если записанное преобразование попадает в её члены
-        // только при этом вызове, чтение обязано измениться. Порядок важен — сначала чтение, потом
-        // Update, потом повторное чтение: иначе измерение перезаписало бы само себя.
+        // Updating the coordinate system ITSELF: if the written transform reaches its members only on this
+        // call, the read must change. Order matters — read first, then Update, then read again: otherwise the
+        // measurement would overwrite itself.
         var before = new[] { SafeDouble(() => local.X), SafeDouble(() => local.Y), SafeDouble(() => local.Z) };
         var updated = SafeBoolOf(() => local.Update());
         var after = new[] { SafeDouble(() => local.X), SafeDouble(() => local.Y), SafeDouble(() => local.Z) };
@@ -1297,7 +1207,7 @@ internal sealed class RepositionProbe
             + (File.Exists(file) ? DumpFile(file) : "файла нет"));
     }
 
-    /// <summary>Файл, записанный системой координат, — как наблюдение, а не как маршрут чтения.</summary>
+    /// <summary>The file written by the coordinate system — as an observation, not as a read route.</summary>
     private static string DumpFile(string path)
     {
         try
@@ -1312,11 +1222,9 @@ internal sealed class RepositionProbe
         }
     }
 
-    /// <summary>
-    /// Типизированный вызов <c>get_Vector3D(ksObj3dTypeEnum)</c>. Через IDispatch этот член отвечает
-    /// <c>DISP_E_UNKNOWNNAME</c> (шаг RP.9), поэтому вопрос задаётся по интерфейсу, а не поздним
-    /// связыванием: «через IDispatch не берётся» и «не существует» — разные утверждения.
-    /// </summary>
+    /// <summary>Typed call <c>get_Vector3D(ksObj3dTypeEnum)</c>. Via IDispatch this member answers
+    /// <c>DISP_E_UNKNOWNNAME</c> (step RP.9), so the question is put through the interface, not late binding:
+    /// "not taken via IDispatch" and "does not exist" are different assertions.</summary>
     private static object? TypedVector3D(ILocalCoordinateSystem local, ksObj3dTypeEnum axis)
     {
         try
@@ -1329,27 +1237,18 @@ internal sealed class RepositionProbe
         }
     }
 
-    /// <summary>
-    /// Читается ли ТОЧКА ОПОРЫ поворота, и выводятся ли из осей ось и угол.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Последний открытый вопрос действия <c>read</c> у семейства 4.10. Шаг RP.11 измерил, что система
-    /// координат признака переноса состоит из одной ориентации: её <c>WriteToFile</c> содержит ровно
-    /// матрицу 3×3, а <c>X/Y/Z</c> нулевы и на переоткрытом документе. Для ПОВОРОТА из этого следует
-    /// проверяемая гипотеза: если <c>X/Y/Z</c> — это смещение начала координат <c>p − R·p</c>, то у
-    /// поворота вокруг точки (5, 0, 0) они обязаны прочитаться как (5, −5, 0), а у поворота вокруг
-    /// начала координат — остаться нулевыми. Именно эта пара и различает «член не заполняется никогда»
-    /// и «член заполняется только для поворота».
-    /// </para>
-    /// <para>
-    /// <b>Второй вопрос того же шага — выводимость.</b> Ось и угол не читаются ни одним членом, но
-    /// выводятся из осей: угол — <c>acos((tr R − 1)/2)</c>, ось — собственный вектор собственного
-    /// значения 1. Это утверждение тоже проверяется, а не принимается на веру: записано 90° вокруг Z,
-    /// и вывод обязан дать 90° вокруг Z. Совпадение вывода с известным входом — единственное, что
-    /// делает такой маршрут годным для <c>read</c>.
-    /// </para>
-    /// </remarks>
+    /// <summary>Is the ROTATION's support point read, and are the axis and angle derived from the axes.</summary>
+    /// <remarks>The last open question of the <c>read</c> action for family 4.10. MEASURED (step RP.11): the
+    /// coordinate system of a translation feature consists of one orientation — its <c>WriteToFile</c>
+    /// contains exactly a 3×3 matrix, and <c>X/Y/Z</c> are zero even on the reopened document. For a ROTATION
+    /// this yields a testable hypothesis: if <c>X/Y/Z</c> is the origin displacement <c>p − R·p</c>, then for a
+    /// rotation about (5, 0, 0) they must read as (5, −5, 0), and for a rotation about the origin they must
+    /// stay zero. It is this pair that separates "the member is never filled" from "the member is filled only
+    /// for a rotation". The second question of the same step is derivability: the axis and angle are read by
+    /// no member but derived from the axes — angle <c>acos((tr R − 1)/2)</c>, axis the eigenvector of
+    /// eigenvalue 1. This claim is tested too, not taken on faith: 90° about Z was written and the derivation
+    /// must give 90° about Z. Agreement of the derivation with a known input is the only thing that makes such
+    /// a route fit for <c>read</c>. History: docs/decisions/probes.md#rp-rotation</remarks>
     private void RotationReadBack()
     {
         var step = _report.Begin("RP.12", "Читается ли точка опоры поворота и выводятся ли ось и угол",
@@ -1413,7 +1312,7 @@ internal sealed class RepositionProbe
             + "работает: " + DescribeDerived(derivedA));
     }
 
-    /// <summary>Один случай шага RP.12: записать поворот известной матрицей и прочитать признак.</summary>
+    /// <summary>One case of step RP.12: write a rotation by a known matrix and read the feature.</summary>
     private PositionRead? RotationCase(ProbeStep step, string label, double[] matrix, double cx, double cy)
     {
         var doc = NewPart(out var part);
@@ -1453,13 +1352,11 @@ internal sealed class RepositionProbe
         }
     }
 
-    /// <summary>
-    /// Вывод оси и угла из осей локальной системы. Раскладка — СТОЛБЦЫ (измерено шагом RP.8): ось X
-    /// локальной системы есть первый столбец матрицы поворота. Угол считается по следу, ось — как
-    /// собственный вектор собственного значения 1, то есть через кососимметричную часть:
-    /// <c>axis ∝ (R₂₃ − R₃₂, R₃₁ − R₁₃, R₁₂ − R₂₁)</c>. Углы 0 и 180° этим маршрутом неразличимы по
-    /// знаку оси, и это ограничение вывода, а не чтения.
-    /// </summary>
+    /// <summary>Derives the axis and angle from the local-system axes. The layout is COLUMNS (MEASURED, step
+    /// RP.8): the local X axis is the first column of the rotation matrix. The angle is from the trace, the
+    /// axis as the eigenvector of eigenvalue 1, i.e. via the skew part:
+    /// <c>axis ∝ (R₂₃ − R₃₂, R₃₁ − R₁₃, R₁₂ − R₂₁)</c>. At 0 and 180° the axis sign is indistinguishable by
+    /// this route — a limitation of the derivation, not of the read.</summary>
     private static (double AngleDeg, double[] Axis)? DeriveRotation(PositionRead read)
     {
         if (read.Ox is not { Length: 3 } ox || read.Oy is not { Length: 3 } oy || read.Oz is not { Length: 3 } oz)
@@ -1467,7 +1364,7 @@ internal sealed class RepositionProbe
             return null;
         }
 
-        // Столбцы: r[i][j] = j-я компонента i-й оси.
+        // Columns: r[i][j] = j-th component of the i-th axis.
         var trace = ox[0] + oy[1] + oz[2];
         var angle = Math.Acos(Math.Clamp((trace - 1d) / 2d, -1d, 1d)) * 180d / Math.PI;
 
@@ -1492,7 +1389,7 @@ internal sealed class RepositionProbe
             : value.AngleDeg.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + "°, ось "
               + Triple(value.Axis[0], value.Axis[1], value.Axis[2]);
 
-    /// <summary>Значение члена через IDispatch — «не прочитано» отличается от «ноль».</summary>
+    /// <summary>A member value via IDispatch — "not read" is distinguished from "zero".</summary>
     private static string LateText(object source, string member)
     {
         try
@@ -1524,11 +1421,9 @@ internal sealed class RepositionProbe
     private static string Triple(double? x, double? y, double? z) =>
         "(" + Api5.Num(x) + ", " + Api5.Num(y) + ", " + Api5.Num(z) + ")";
 
-    /// <summary>
-    /// Сравнение ОДНОГО прочитанного числа с объявленным ожиданием. Отдельное имя, а не перегрузка
-    /// <see cref="Near(double[], double, double, double)"/>: у чтения с признака «не прочитано» —
-    /// это null, и оно обязано НЕ совпасть с ожиданием, а не упасть и не сойти за ноль.
-    /// </summary>
+    /// <summary>Compares ONE read number with a declared expectation. A separate name, not an overload of
+    /// <see cref="Near(double[], double, double, double)"/>: for a read from a feature "not read" is null, and
+    /// it must NOT match the expectation rather than crash or pass for zero.</summary>
     private static bool NearScalar(double? actual, double expected) =>
         actual is double value && Math.Abs(value - expected) <= 1e-6;
 
@@ -1569,7 +1464,7 @@ internal sealed class RepositionProbe
         }
     }
 
-    /// <summary>Запись в СУЩЕСТВУЮЩИЙ признак по индексу: маршрут правки, а не создания.</summary>
+    /// <summary>Writes into an EXISTING feature by index: the edit route, not creation.</summary>
     private (bool Ok, string? Note) WriteExisting(
         ksDocument3D doc, ksPart part, int index, object matrix, ProbeStep step)
     {
@@ -1599,9 +1494,7 @@ internal sealed class RepositionProbe
         }
     }
 
-    /// <summary>
-    /// Матрица в раскладке «оси, затем начало»: 3×3 построчно, затем вектор переноса.
-    /// </summary>
+    /// <summary>A matrix in the "axes, then origin" layout: 3×3 row-wise, then the translation vector.</summary>
     private static double[] Matrix(double[] axes, double[] origin) =>
         new[] { axes[0], axes[1], axes[2], axes[3], axes[4], axes[5], axes[6], axes[7], axes[8],
             origin[0], origin[1], origin[2] };
@@ -1616,14 +1509,10 @@ internal sealed class RepositionProbe
 
     private static double[] Identity() => new[] { 1d, 0d, 0d, 0d, 1d, 0d, 0d, 0d, 1d };
 
-    /// <summary>
-    /// Сопоставление наблюдённого габарита с ДВУМЯ заранее объявленными гипотезами раскладки.
-    /// </summary>
-    /// <remarks>
-    /// Прибор обязан различать гипотезы, а не подтверждать одну догадку: на симметричной детали и на
-    /// переносе «поворот на +90°» и «поворот на −90°» дают одинаково выглядящий успех. Совпадение
-    /// второй гипотезы — тоже измерение, и оно называется, а не прячется за «FAIL».
-    /// </remarks>
+    /// <summary>Matches the observed extent against TWO pre-declared layout hypotheses.</summary>
+    /// <remarks>The instrument must separate hypotheses, not confirm one guess: on a symmetric part and on a
+    /// translation, "+90°" and "−90°" give an identically looking success. A match of the second hypothesis is
+    /// also a measurement, and it is named rather than hidden behind "FAIL".</remarks>
     private static (string Layout, BodyRow? Row) MatchLayout(
         List<BodyRow> after,
         (double[] Min, double[] Max, string Label) primary,
@@ -1647,27 +1536,21 @@ internal sealed class RepositionProbe
         return ("ни одна из объявленных", null);
     }
 
-    /// <summary>
-    /// Поворот на <paramref name="angleDeg"/> вокруг оси Z через точку <c>(cx,cy,0)</c>.
-    /// </summary>
-    /// <remarks>
-    /// Раскладка — однородная 4×4, потому что именно она ДВИГАЕТ тело: маршруты из 12 чисел
-    /// (оси+начало) и <c>SetDisplacementByAxis</c> принимаются с <c>Update()=True</c>, но положения
-    /// не меняют (RP.2). Строчно: 3×3, где СТОЛБЦЫ — образы базисных векторов, поэтому для поворота
-    /// на +90° это <c>(0,1,0)</c>, <c>(−1,0,0)</c>, <c>(0,0,1)</c>; последняя строка — перенос,
-    /// равный <c>c − R·c</c>.
-    /// <para>
-    /// Направление поворота этой записью НЕ доказывается: строка и столбец в 3×3 различаются только
-    /// знаком угла. Поэтому RP.4 объявляет ДВЕ гипотезы заранее и называет совпавшую.
-    /// </para>
-    /// </remarks>
+    /// <summary>Rotation by <paramref name="angleDeg"/> about the Z axis through the point <c>(cx,cy,0)</c>.</summary>
+    /// <remarks>The layout is a homogeneous 4×4, because that is what MOVES the body: the 12-number routes
+    /// (axes+origin) and <c>SetDisplacementByAxis</c> are accepted with <c>Update()=True</c> but do not change
+    /// the position (RP.2). Row-wise: 3×3 where the COLUMNS are the images of the basis vectors, so for a +90°
+    /// rotation they are <c>(0,1,0)</c>, <c>(−1,0,0)</c>, <c>(0,0,1)</c>; the last row is the translation equal
+    /// to <c>c − R·c</c>. The rotation direction is NOT proved by this write: a row and a column in a 3×3
+    /// differ only by the sign of the angle. So RP.4 declares TWO hypotheses in advance and names the matching
+    /// one.</remarks>
     private static double[] RotationZ(double angleDeg, double cx, double cy)
     {
         var a = angleDeg * Math.PI / 180d;
         var c = Math.Cos(a);
         var s = Math.Sin(a);
 
-        // R = [[c, −s, 0], [s, c, 0], [0, 0, 1]]; столбцы: (c,s,0), (−s,c,0), (0,0,1).
+        // R = [[c, −s, 0], [s, c, 0], [0, 0, 1]]; columns: (c,s,0), (−s,c,0), (0,0,1).
         var axes = new[] { c, s, 0d, -s, c, 0d, 0d, 0d, 1d };
         var origin = new[] { cx - (c * cx - s * cy), cy - (s * cx + c * cy), 0d };
         return Matrix4x4(axes, origin);
@@ -1790,7 +1673,7 @@ internal sealed class RepositionProbe
         }
         catch (Exception)
         {
-            // Частичный список честнее пустого.
+            // A partial list is more honest than an empty one.
         }
 
         return rows;
@@ -1937,11 +1820,9 @@ internal sealed class RepositionProbe
         }
     }
 
-    /// <summary>
-    /// Одноосный вопрос к <c>Position.GetVector</c>: отвечает ли он и что именно. Нужен потому, что
-    /// «член объявлен» и «член отвечает числом» — разные утверждения, а индексированное свойство
-    /// <c>Vector3D</c> в C# напрямую не вызывается.
-    /// </summary>
+    /// <summary>A single-axis question to <c>Position.GetVector</c>: does it answer, and with what. Needed
+    /// because "the member is declared" and "the member answers with a number" are different assertions, and
+    /// the indexed property <c>Vector3D</c> is not called directly from C#.</summary>
     private static string DescribeVector(ILocalCoordinateSystem local, ksObj3dTypeEnum axis)
     {
         try

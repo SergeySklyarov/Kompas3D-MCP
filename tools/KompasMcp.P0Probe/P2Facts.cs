@@ -15,20 +15,20 @@ namespace KompasMcp.P0Probe;
 /// P2.6: which body an extrusion actually acts on and whether one can be declared, how to remove
 /// entities from an existing sketch, and the raw keys the unit-probe path produces.
 /// Nothing here is a feature. It is a probe whose only job is to record what the installed
-/// КОМПАС-3D v24 actually answers, so that no tool gets implemented on top of a guess.
+/// KOMPAS-3D v24 actually answers, so that no tool gets implemented on top of a guess.
 /// </summary>
 /// <remarks>
 /// Two rules are held throughout, because both were already broken once in this repository:
 /// <list type="number">
 /// <item>Signatures come from the vendor interop (<see cref="ComDiscovery"/>), never from
-/// memory — several memory-based КОМПАС signatures were caught and corrected (docs/04 §4.5).</item>
+/// memory — several memory-based KOMPAS signatures were caught and corrected (docs/04 §4.5).</item>
 /// <item>An affirmative return from the API is never the result. Every route is judged by a
 /// measured number against an analytic expectation; where no number exists, the step says so and
 /// the verdict stays negative.</item>
 /// </list>
 /// The steps make the same calls the adapter would make (<c>NewEntity</c> +
 /// <c>GetDefinition</c> + a typed definition interface), not untyped <c>dynamic</c>: a route that
-/// only works through late binding is not a route the Worker can use, because КОМПАС interfaces
+/// only works through late binding is not a route the Worker can use, because KOMPAS interfaces
 /// are custom-vtable interfaces with no guaranteed IDispatch.
 /// </remarks>
 internal static class P2Facts
@@ -52,11 +52,9 @@ internal static class P2Facts
 
     private static short TypeOf(string constant, int fallback) => EntityTypes.Value(constant, (short)fallback);
 
-    /// <summary>
-    /// The "на величину" end condition, resolved from the vendor enum by name rather than copied
+    /// <summary>The "by value" end condition (<c>etBlind</c>), resolved from the vendor enum by name rather than copied
     /// as a literal out of the reference scripts. Its behaviour is still confirmed by measurement
-    /// in <c>P2.1</c>.
-    /// </summary>
+    /// in <c>P2.1</c>.</summary>
     private static short Blind() => VendorConstants.Value(EndTypeEnum, "etBlind", 0);
 
     private static short ThroughAll() => VendorConstants.Value(EndTypeEnum, "etThroughAll", 1);
@@ -67,12 +65,10 @@ internal static class P2Facts
     // Session
     // -----------------------------------------------------------------------------------------
 
-    /// <summary>
-    /// P2.0b — connect, storing the instance on <see cref="ProbeSession"/>. A copy of the P0.4
+    /// <summary>P2.0b — connect, storing the instance on <see cref="ProbeSession"/>. A copy of the P0.4
     /// procedure rather than a call into it, on purpose: the P2 report has to stand alone as
     /// evidence, and "which PID is ours" is part of that evidence. Only the instance created here
-    /// is ever terminated — see <see cref="Shutdown"/>.
-    /// </summary>
+    /// is ever terminated — see <see cref="Shutdown"/>.</summary>
     /// <remarks>
     /// It returns void and assigns <c>ProbeSession.App</c> itself rather than handing a
     /// <see cref="KompasObject"/> back to <c>Main</c>: assigning an interop-typed value inside
@@ -359,7 +355,7 @@ internal static class P2Facts
 
         step.Observe($"Рабочая конфигурация выбрана по признаку «сеттер реально соблюдается»: directionType={directionTypeUsed}, «насквозь» на обеих толщинах дали type [{string.Join(", ", through)}].");
 
-        // (b) A plate is not enough to tell «насквозь» from «до ближайшей поверхности»: on a solid
+        // (b) A plate is not enough to tell through-all from up-to-nearest-surface: on a solid
         // plate the nearest surface ahead *is* the far side, so both selectors remove the whole
         // thickness. The stack below has an air gap on the drill axis, so through-all must remove
         // two walls and up-to-near-surface only one.
@@ -404,7 +400,7 @@ internal static class P2Facts
             step.Data["depth_inert_in_through_mode"] = shallow.Delta is double s && deep.Delta is double dd && Math.Abs(s - dd) <= 1e-6 * Math.Abs(s);
         }
 
-        // (c) The native «Отверстие» operation, reported from the runtime rather than from names.
+        // (c) The native Hole operation, reported from the runtime rather than from names.
         var native = NativeHole(app, step);
 
         var g02Expected = Math.PI * HoleAreaOverPi * 10d;
@@ -467,11 +463,9 @@ internal static class P2Facts
 
     private sealed record CutResult(short EndType, string Classification, string Readback, double? VolumeBefore, double? VolumeAfter, double? Delta);
 
-    /// <summary>
-    /// A Ø10 circle on the XY base plane of a plate of known thickness, cut with one end-condition
+    /// <summary>A Ø10 circle on the XY base plane of a plate of known thickness, cut with one end-condition
     /// candidate. Returns raw measurements; the classification is derived from them, never
-    /// asserted.
-    /// </summary>
+    /// asserted.</summary>
     private static CutResult MeasureCut(KompasObject app, double thickness, short endType, double depth, short directionType)
     {
         ksDocument3D? doc = null;
@@ -530,11 +524,9 @@ internal static class P2Facts
         }
     }
 
-    /// <summary>
-    /// The same Ø10 cut through a stack that has an air gap on the drill axis: bottom wall
-    /// z∈[0,10], pillars, top wall z∈[20,30]. «Насквозь» must remove both walls (2·250π),
-    /// «до ближайшей поверхности» only the first (250π) — which a solid plate cannot tell apart.
-    /// </summary>
+    /// <summary>The same Ø10 cut through a stack that has an air gap on the drill axis: bottom wall
+    /// z∈[0,10], pillars, top wall z∈[20,30]. Through-all must remove both walls (2·250π),
+    /// up-to-nearest-surface only the first (250π) — which a solid plate cannot tell apart.</summary>
     private static CutResult MeasureCutThroughStack(KompasObject app, short endType, short directionType)
     {
         ksDocument3D? doc = null;
@@ -682,24 +674,18 @@ internal static class P2Facts
 
     private sealed record NativeHoleResult(bool Available, string DefinitionClrType, string Reason);
 
-    /// <summary>
-    /// The native «Отверстие» operation: <c>NewEntity(o3d_holeOperation=52)</c>, then a report of
-    /// what the runtime actually handed back.
-    /// </summary>
+    /// <summary>The native Hole operation: <c>NewEntity(o3d_holeOperation=52)</c>, then a report of
+    /// what the runtime actually handed back.</summary>
     /// <remarks>
-    /// <para>
     /// Nothing in <c>Interop.Kompas6API5.dll</c> declares a hole definition: zero type names and
     /// zero member names in the dumped API5 metadata contain "hole"
     /// (docs/compatibility/kompas-api5-metadata.json). That is a statement about <em>that
     /// binary</em> only. API7 is counted in the same step, because an absent name in one interop
     /// assembly does not license the claim "the product has no native hole".
-    /// </para>
-    /// <para>
     /// Discovery is QI over every interface the vendor interop declares
     /// (<see cref="ComDiscovery.Probe"/>), not reflection over the instance: on a
     /// <c>__ComObject</c> the latter is blind to COM interfaces and has already produced false
     /// "member missing" conclusions in this project.
-    /// </para>
     /// </remarks>
     private static NativeHoleResult NativeHole(KompasObject app, ProbeStep step)
     {
@@ -871,11 +857,9 @@ internal static class P2Facts
         return results;
     }
 
-    /// <summary>
-    /// Writes one probe value into every settable scalar member the object exposes. This is not a
+    /// <summary>Writes one probe value into every settable scalar member the object exposes. This is not a
     /// hole API — it is a survey of whether a caller can write <em>anything</em> into the returned
-    /// definition, which is what «is kompas_hole reachable in API5» actually asks.
-    /// </summary>
+    /// definition, which is what «is kompas_hole reachable in API5» actually asks.</summary>
     private static List<string> TryWritableMembers(IReadOnlyList<DiscoveredInterface> discovered, object? target, double value)
     {
         var results = new List<string>();
@@ -1505,12 +1489,10 @@ internal static class P2Facts
         string? StampAfter,
         bool SameFeatureObject);
 
-    /// <summary>
-    /// The four candidates for "the change took effect", separated deliberately, weakest finalizer
+    /// <summary>The four candidates for "the change took effect", separated deliberately, weakest finalizer
     /// first. Reading back through a <em>fresh</em> <c>GetDefinition()</c> distinguishes "the
     /// setter wrote into the document" from "the setter wrote into my RCW" — which is the
-    /// distinction the ТЗ cares about, and the one an externally successful rebuild hides.
-    /// </summary>
+    /// distinction the work order cares about, and the one an externally successful rebuild hides.</summary>
     private static WriteResult WritePathProbe(KompasObject app, ProbeStep step, Enumeration enumeration)
     {
         ksDocument3D? doc = null;
@@ -1658,13 +1640,11 @@ internal static class P2Facts
     private static bool Nearly(double? value, double expected, double tolerance) =>
         value is double v && Math.Abs(v - expected) <= tolerance;
 
-    /// <summary>
-    /// Is <c>ksEntity.Update()</c> actually required, or would the document rebuild have applied
+    /// <summary>Is <c>ksEntity.Update()</c> actually required, or would the document rebuild have applied
     /// the change on its own? The staged probe walks finalizers in one order, so on its own it can
     /// only say "the change appeared at or before this stage". These two documents separate it: the
     /// first applies the setter and then only <c>RebuildDocument()</c>, the second applies the
-    /// setter and nothing at all.
-    /// </summary>
+    /// setter and nothing at all.</summary>
     private static string MinimalFinalizerProbe(KompasObject app, ProbeStep step)
     {
         var outcomes = new List<string>();
@@ -1721,11 +1701,9 @@ internal static class P2Facts
         return string.Join("; ", outcomes);
     }
 
-    /// <summary>
-    /// Always a fresh GetDefinition(), and always through <see cref="SideParams"/>: the point is to
-    /// ask the document, not the wrapper, and КОМПАС reports a stored base extrusion under the
-    /// boss-extrusion interface, so a cast to one interface is not enough.
-    /// </summary>
+    /// <summary>Always a fresh GetDefinition(), and always through <see cref="SideParams"/>: the point is to
+    /// ask the document, not the wrapper, and KOMPAS reports a stored base extrusion under the
+    /// boss-extrusion interface, so a cast to one interface is not enough.</summary>
     private static double? ReadDepth(ksEntity entity) => SideParams.Get(entity.GetDefinition(), true)?.Depth;
 
     /// <summary>The base extrusion, found without assuming which interface it will answer.</summary>
@@ -1740,11 +1718,9 @@ internal static class P2Facts
 
     private sealed record DependentResult(string Summary, bool Survived, double? ExpectedVolume, double? ActualVolume);
 
-    /// <summary>
-    /// Does a dependent feature survive a change to its parent's parameter? A pocket is cut into
+    /// <summary>Does a dependent feature survive a change to its parent's parameter? A pocket is cut into
     /// the plate, then the plate thickness is edited: the pocket must stay in the tree and the
-    /// volume must move by exactly the plate delta, not by the pocket's.
-    /// </summary>
+    /// volume must move by exactly the plate delta, not by the pocket's.</summary>
     private static DependentResult DependentFeatureProbe(KompasObject app, ProbeStep step, Enumeration enumeration)
     {
         ksDocument3D? doc = null;
@@ -1827,11 +1803,9 @@ internal static class P2Facts
 
     private sealed record PersistedResult(double? DepthAfterReopen, double? VolumeAfterReopen);
 
-    /// <summary>
-    /// Save → close → reopen and read the depth again. If the reopened document answers 10 where
+    /// <summary>Save → close → reopen and read the depth again. If the reopened document answers 10 where
     /// the live one answered 12, the edit never reached the model file — and that is the headline
-    /// of this step, because the geometry in the session looked correct.
-    /// </summary>
+    /// of this step, because the geometry in the session looked correct.</summary>
     private static PersistedResult PersistenceProbe(KompasObject app, ProbeStep step, Enumeration enumeration)
     {
         ksDocument3D? doc = null;
@@ -2235,10 +2209,8 @@ internal static class P2Facts
         PlaneRow Failure(string why) => new(plane.Name, offsetMm, direction, null, null, null, null, null, null, why, null, live);
     }
 
-    /// <summary>
-    /// Does <c>direction</c> survive the file round trip? It is the value the adapter would re-read
-    /// to decide a sign, so persistence may not be assumed.
-    /// </summary>
+    /// <summary>Does <c>direction</c> survive the file round trip? It is the value the adapter would re-read
+    /// to decide a sign, so persistence may not be assumed.</summary>
     private static string? ReadPersistedOffsetPlane(ksDocument3D doc, double requestedOffset, bool requestedDirection)
     {
         try
@@ -2298,10 +2270,8 @@ internal static class P2Facts
         return plane.Create() ? plane : null;
     }
 
-    /// <summary>
-    /// The four corner edges of the probe block, taken from the body topology with the same
-    /// predicate P2.2 uses, unwrapped to <c>ksEntity</c> the same three ways.
-    /// </summary>
+    /// <summary>The four corner edges of the probe block, taken from the body topology with the same
+    /// predicate P2.2 uses, unwrapped to <c>ksEntity</c> the same three ways.</summary>
     private static List<ksEntity> VerticalCornerEdges(ksPart part, ProbeStep step, string tag)
     {
         var chosen = new List<ksEntity>();
@@ -2347,7 +2317,7 @@ internal static class P2Facts
                 }
 
                 // Same three unwrappings P2.2 measures: the collection element, GetEntity(),
-                // GetOwnerEntity(). Whichever one КОМПАС hands back is what the fillet needs.
+                // GetOwnerEntity(). Whichever one KOMPAS hands back is what the fillet needs.
                 var entity = edgeObject as ksEntity ?? edge.GetEntity() as ksEntity ?? edge.GetOwnerEntity() as ksEntity;
                 if (entity is null)
                 {

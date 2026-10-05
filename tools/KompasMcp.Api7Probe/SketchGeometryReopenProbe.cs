@@ -5,46 +5,34 @@ using Kompas6Constants3D;
 
 namespace KompasMcp.Api7Probe;
 
-/// <summary>
-/// Проба G — менялась ли геометрия существующего эскиза средствами API5 в документе, который
-/// сохранён, закрыт и открыт заново, и заметно ли это на зависимом теле.
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Почему это отдельная проба, а не строка приёмки.</b> В продукте правка эскиза уже есть и
-/// принята (V04r/V04d/V04f), но она работает только для эскиза, примитивы которого нарисовал этот
-/// сервер в этом сеансе: в API5 нет перечисления объектов эскиза, и удаление идёт объектом,
-/// найденным по сохранённой координате (<c>ksFindObj(x, y, limit) → ksDeleteObj(ref)</c>, замер P2.6).
-/// После reopen помнить нечего, и <c>replace</c> отказывает как CAPABILITY_UNAVAILABLE. Значит
-/// вопрос не «умеет ли сервер удалять», а «можно ли найти координату по самой модели».
-/// </para>
-/// <para>
-/// <b>Что статически известно до пробы</b> (<c>docs/compatibility/kompas-api5-metadata.json</c>):
-/// у <c>ksSketchDefinition</c> 15 членов и среди них нет ни обхода, ни счётчика; у
-/// <c>ksDocument2D</c> из 258 членов есть <c>ksFindObj</c>, <c>ksDeleteObj</c>, <c>ksExistObj</c>,
-/// <c>ksMoveObj</c>, но нет <c>ksGetObjCount</c>/<c>ksFirstObj</c>/<c>ksNextObj</c>. Единственный
-/// вход в существующий объект — точка, которая на нём лежит.
-/// </para>
-/// <para>
-/// <b>Откуда берётся точка.</b> Из зависимого тела: сквозное отверстие оставляет цилиндрическую
-/// грань, у неё есть центр, радиус и ось (<c>GetSurfaceParam() → ksCylinderParam</c>, ось из
-/// <c>GetPlacement().GetVector(2)</c> — <c>GetAxis()</c> даёт точку, а не направление, замер P2.5).
-/// Точка (cx + r, cy) лежит на окружности эскиза ровно тогда, когда ось цилиндра соосна нормали
-/// плоскости эскиза, а сама плоскость — XY основного треугольника с единичными осями в плоскости.
-/// Это допущение проверяется числом (найдется ли объект) и отдельно записывается как ограничение
-/// эталона: для наклонной плоскости нужен перенос координат, и здесь он не измеряется.
-/// </para>
-/// <para>
-/// <b>Различатор — объём зависимого тела, а не ответ вызова.</b> Пластина 100×80×10 со сквозным
-/// отверстием Ø20 даёт 80000 − π·10²·10 = 76858.4073464102 мм³; после замены окружности на R12
-/// ожидание 80000 − π·12²·10 = 75476.1065788307 мм³. Любая оставшаяся в эскизе лишняя геометрия
-/// сдвинула бы это число, поэтому оно проверяется и после правки, и после второго reopen.
-/// </para>
-/// <para>
-/// Порядок шагов — часть измерения: заведомо разрушающий случай (радиус, поглощающий все сечение)
-/// идёт на отдельном документе и последним, чтобы не обесценить базлайн предыдущих шагов.
-/// </para>
-/// </remarks>
+/// <summary>Probe G — whether the geometry of an existing sketch can be changed by API5 means in a
+/// document that was saved, closed and reopened, and whether that is visible on the dependent body.</summary>
+/// <remarks>INVARIANT: the product already edits sketches and accepts it (V04r/V04d/V04f), but only for a
+/// sketch whose primitives this server drew in this session: API5 has no sketch-object enumeration, and
+/// deletion is done by an object found at a saved coordinate
+/// (<c>ksFindObj(x, y, limit) → ksDeleteObj(ref)</c>, measurement P2.6). After reopen there is nothing to
+/// remember, and <c>replace</c> refuses as CAPABILITY_UNAVAILABLE. So the question is not "can the server
+/// delete" but "can the coordinate be found from the model itself".
+/// DOC (<c>docs/compatibility/kompas-api5-metadata.json</c>): <c>ksSketchDefinition</c> has 15 members and
+/// among them neither a traversal nor a counter; <c>ksDocument2D</c> of 258 members has <c>ksFindObj</c>,
+/// <c>ksDeleteObj</c>, <c>ksExistObj</c>, <c>ksMoveObj</c>, but no
+/// <c>ksGetObjCount</c>/<c>ksFirstObj</c>/<c>ksNextObj</c>. The only entry into an existing object is a
+/// point that lies on it.
+/// ASSUMPTION: the point comes from the dependent body — a through hole leaves a cylindrical face with a
+/// centre, radius and axis (<c>GetSurfaceParam() → ksCylinderParam</c>, axis from
+/// <c>GetPlacement().GetVector(2)</c>; <c>GetAxis()</c> gives a point, not a direction, measurement P2.5).
+/// The point <c>(cx + r, cy)</c> lies on the sketch circle exactly when the cylinder axis is coaxial with
+/// the sketch plane normal, and that plane is the XY of the base triad with unit axes in the plane.
+/// LIMIT: the assumption is checked by a number (whether the object is found) and separately recorded: an
+/// inclined plane needs a coordinate transform, which is not measured here.
+/// MEASURED: the discriminator is the dependent body's volume, not the call's answer. A 100×80×10 plate
+/// with a Ø20 through hole gives 80000 − π·10²·10 = 76858.4073464102 mm³; after replacing the circle with
+/// R12 the expectation is 80000 − π·12²·10 = 75476.1065788307 mm³. Any extra geometry left in the sketch
+/// would shift this number, so it is checked both after the edit and after the second reopen.
+/// TEST: the step order is part of the measurement — the certainly destructive case (a radius swallowing
+/// the whole section) runs on a separate document and last, so as not to devalue the baseline of the
+/// previous steps.
+/// History: docs/decisions/probes.md#sketch-geometry-reopen</remarks>
 internal sealed class SketchGeometryReopenProbe
 {
     private const double PlateWidth = 100d;
@@ -116,7 +104,7 @@ internal sealed class SketchGeometryReopenProbe
         }
     }
 
-    // ─── сеанс ────────────────────────────────────────────────────────────────────────────────
+    // ─── session ──────────────────────────────────────────────────────────────────────────────
     private void Launch()
     {
         var step = _report.Begin("G.1", "Свой невидимый экземпляр", "Зонд управляет сеансом один?");
@@ -169,7 +157,7 @@ internal sealed class SketchGeometryReopenProbe
         }
     }
 
-    // ─── заготовка с отверстием и первый reopen ───────────────────────────────────────────────
+    // ─── fixture with the hole and the first reopen ───────────────────────────────────────────
     private void BuildHoleAndReopen()
     {
         var step = _report.Begin("G.2", "Пластина со сквозным Ø20, save→close→reopen",
@@ -246,7 +234,7 @@ internal sealed class SketchGeometryReopenProbe
         }
     }
 
-    // ─── эскиз находится по дереву, координата — по телу ──────────────────────────────────────
+    // ─── the sketch is found by the tree, the coordinate by the body ──────────────────────────
     private (ksEntity Sketch, double[] Center, double Radius)? LocateSketchAfterReopen()
     {
         var step = _report.Begin("G.3", "Эскиз и координата для поиска: ищем по дереву и по телу",
@@ -280,7 +268,7 @@ internal sealed class SketchGeometryReopenProbe
             return null;
         }
 
-        // Координату берём у зависимого тела, а не из памяти: cylindrical face → центр, радиус, ось.
+        // The coordinate is taken from the dependent body, not from memory: cylindrical face → centre, radius, axis.
         var face = Api5.ReadFaces(_part, step).FirstOrDefault(f => f.CylinderRadius is double rr && rr > 0);
         if (face?.CylinderRadius is not double radius || face.CylinderOrigin is not double[] origin)
         {
@@ -364,7 +352,7 @@ internal sealed class SketchGeometryReopenProbe
         }
     }
 
-    // ─── правка ───────────────────────────────────────────────────────────────────────────────
+    // ─── edit ─────────────────────────────────────────────────────────────────────────────────
     private bool ReplaceCircle(ksEntity sketch, double[] center, double radius)
     {
         var step = _report.Begin("G.5", "Удаление найденного объекта и новая окружность R12",
@@ -537,7 +525,7 @@ internal sealed class SketchGeometryReopenProbe
         }
     }
 
-    // ─── заведомо разрушающий случай, отдельный документ ───────────────────────────────────────
+    // ─── certainly destructive case, separate document ────────────────────────────────────────
     private void ImpossibleRadiusOnFreshDocument()
     {
         var step = _report.Begin("G.9", "Радиус, поглощающий всё сечение (R90)",
@@ -608,7 +596,7 @@ internal sealed class SketchGeometryReopenProbe
         TryClose(fresh);
     }
 
-    // ─── построение ───────────────────────────────────────────────────────────────────────────
+    // ─── construction ─────────────────────────────────────────────────────────────────────────
     private ksEntity? NewSketchOnXy(string name) => NewSketchOnXy(_doc, _part, name);
 
     private ksEntity? NewSketchOnXy(ksDocument3D doc, ksPart part, string name)
@@ -647,7 +635,7 @@ internal sealed class SketchGeometryReopenProbe
         return created;
     }
 
-    // ─── мелочь ───────────────────────────────────────────────────────────────────────────────
+    // ─── misc ─────────────────────────────────────────────────────────────────────────────────
     private static void TryClose(ksDocument3D doc)
     {
         try
@@ -656,7 +644,7 @@ internal sealed class SketchGeometryReopenProbe
         }
         catch (Exception)
         {
-            // Закрытие — не измеряемый факт; осиротевший документ виден на шаге G.Z.
+            // Closing is not a measured fact; an orphaned document shows up at step G.Z.
         }
     }
 

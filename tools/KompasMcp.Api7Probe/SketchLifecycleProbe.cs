@@ -4,39 +4,33 @@ using Kompas6Constants;
 
 namespace KompasMcp.Api7Probe;
 
-/// <summary>
-/// Проба L — перечисление эскиза после reopen и жизненный цикл признака.
-/// Закрывает два блокатора выпуска: dep.sketch.entities (план §2.2) и SM-30
-/// suppress/restore/delete-with-dependencies (план §5.1).
-/// </summary>
-/// <remarks>
-/// Вопросы поставлены так, чтобы ответ не зависел от памяти клиента: документ сохраняется,
-/// закрывается и открывается заново, и только после этого эскиз обязан быть найден и прочитан.
-/// Собственное представление «что я рисовал» не используется: сервер должен находить объект по
-/// модели, иначе адресное редактирование чужого эскиза невозможно в принципе.
-///
-/// Типизированные вызовы — там, где интерфейс описан; «есть ли у работающего объекта член X»
-/// спрашивается у самого объекта через <see cref="Late.Dispid"/> (DISP_E_MEMBERNOTFOUND — ответ
-/// объекта, любой прочий сбой — проблема COM, в отчёте они не смешиваются).
-/// </remarks>
+/// <summary>Probe L — sketch enumeration after reopen and the feature lifecycle. Closes two release
+/// blockers: dep.sketch.entities (plan §2.2) and SM-30 suppress/restore/delete-with-dependencies
+/// (plan §5.1).</summary>
+/// <remarks>The questions are posed so that the answer does not depend on client memory: the document is
+/// saved, closed and reopened, and only then must the sketch be found and read. The client's own notion
+/// of "what I drew" is not used: the server must find the object from the model, otherwise addressed
+/// editing of a foreign sketch is impossible in principle.
+/// Typed calls are used where the interface is declared; "does the working object have member X" is asked
+/// of the object itself via <see cref="Late.Dispid"/> (DISP_E_MEMBERNOTFOUND is the object's answer, any
+/// other failure is a COM problem — they are not mixed in the report).
+/// History: docs/decisions/probes.md#sketch-lifecycle</remarks>
 internal sealed class SketchLifecycleProbe
 {
     private const double PlateWidth = 100d;
     private const double PlateHeight = 80d;
     private const double PlateThickness = 10d;
 
-    /// <summary>
-    /// Окно 40×20 центром в (0,0), вырезанное насквозь. Вырезание, а не вторая вставка: второй
-    /// изолированный контур дал бы ВТОРОЕ тело, а Api5.Volume читает главное тело, и «объём
-    /// не совпал» оказался бы артефактом выбора формы, а не свойством КОМПАС.
-    /// </summary>
+    /// <summary>A 40×20 window centred at (0,0), cut through. A cut, not a second insert: a second
+    /// isolated contour would give a SECOND body, and Api5.Volume reads the main body, so "volume
+    /// mismatched" would be an artefact of the shape choice, not a property of KOMPAS.</summary>
     private const double RectWidth = 40d;
 
     private const double RectHeight = 20d;
     private const double PlateVolume = PlateWidth * PlateHeight * PlateThickness;
     private const double WindowVolume = RectWidth * RectHeight * PlateThickness;
 
-    /// <summary>Пластина 80000 минус окно 8000.</summary>
+    /// <summary>Plate 80000 minus window 8000.</summary>
     private const double CutVolume = PlateVolume - WindowVolume;
 
     private readonly ProbeReport _report;
@@ -46,13 +40,13 @@ internal sealed class SketchLifecycleProbe
     private ksPart _part = null!;
     private ksSketchDefinition? _sketch;
 
-    /// <summary>Тот же эскиз как объект дерева: SetSketch принимает entity, а не определение.</summary>
+    /// <summary>The same sketch as a tree object: SetSketch takes an entity, not a definition.</summary>
     private ksEntity? _sketchEntity;
     private KompasAPI7.IModelContainer? _container7;
     private string _savedPath = string.Empty;
     private double _volumeBeforeEdit;
 
-    /// <summary>Объём, который обязан вернуться после восстановления подавленного признака.</summary>
+    /// <summary>The volume that must come back after a suppressed feature is restored.</summary>
     private double _volumeWithFeature;
 
     public SketchLifecycleProbe(ProbeReport report, Options options)
@@ -97,7 +91,7 @@ internal sealed class SketchLifecycleProbe
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════════ сессия ══
+    // ═══════════════════════════════════════════════════════════════════════ session ══
     private void Launch()
     {
         var step = _report.Begin("L.1", "Свой невидимый экземпляр и доказательство PID",
@@ -165,7 +159,7 @@ internal sealed class SketchLifecycleProbe
         }
     }
 
-    // ═══════════════════════════════════════════════════ построение и reopen ══
+    // ═══════════════════════════════════════════════════ construction and reopen ══
     private void BuildAndReopen()
     {
         var step = _report.Begin("L.2", "Пластина + эскиз 40×20 + выдавливание, затем save→close→reopen",
@@ -294,8 +288,8 @@ internal sealed class SketchLifecycleProbe
 
         definition.SetSketch(_sketchEntity);
 
-        // P2.1: etThroughAll=1 работает только при directionType=symmetric(2); число глубины в
-        // этом режимеsolver отбрасывает, поэтому передаётся 0 — как в проверенном маршруте адаптера.
+        // P2.1: etThroughAll=1 works only with directionType=symmetric(2); the solver discards the depth
+        // number in this mode, so 0 is passed — as in the verified adapter route.
         definition.directionType = 2;
         definition.SetSideParam(true, (short)EndConditionThrough, 0d, 0d, false);
         definition.SetSideParam(false, (short)EndConditionThrough, 0d, 0d, false);
@@ -322,7 +316,7 @@ internal sealed class SketchLifecycleProbe
     private const short CutExtrusion = 26;
     private const short EndConditionThrough = 1;
 
-    /// <summary>Эскизы части: EntityCollection(o3d_sketch=5), определение ищется по модели.</summary>
+    /// <summary>Sketches of the part: EntityCollection(o3d_sketch=5), the definition is found from the model.</summary>
     private ksSketchDefinition? FindSketchAfterReopen(ProbeStep step)
     {
         var attempts = new List<string>();
@@ -355,7 +349,7 @@ internal sealed class SketchLifecycleProbe
 
                 if (entity.GetDefinition() is ksSketchDefinition sketch)
                 {
-                    // Тот же объект дерева, а не только определение: правка и выдавливание работают с entity.
+                    // The same tree object, not just the definition: edit and extrusion work with the entity.
                     _sketchEntity = entity;
                     step.Observe($"Эскиз найден: EntityCollection({objType})[{i}] → «{entity.name}» type={entity.type}.");
                     step.Data["sketch_lookup"] = attempts;
@@ -369,7 +363,7 @@ internal sealed class SketchLifecycleProbe
         return null;
     }
 
-    // ═══════════════════════════════════════════════ API5: перечисление объектов ══
+    // ═══════════════════════════════════════════════ API5: object enumeration ══
     private void EnumerateApi5()
     {
         var step = _report.Begin("L.3", "API5: есть ли у ksDocument2D перечисление объектов",
@@ -467,7 +461,7 @@ internal sealed class SketchLifecycleProbe
         }
     }
 
-    // ═══════════════════════════════════════════════ API5: правка по адресу ══
+    // ═══════════════════════════════════════════════ API5: addressed edit ══
     private void EditAddressedApi5()
     {
         var step = _report.Begin("L.4", "API5: изменить примитивы по ref и перестроить тело",
@@ -498,7 +492,7 @@ internal sealed class SketchLifecycleProbe
 
             var volume = Api5.Volume(_part) ?? double.NaN;
 
-            // Окно стало 40×40: снятый объём 16000, значит V = 80000 − 16000.
+            // The window became 40×40: removed volume 16000, so V = 80000 − 16000.
             var expected = PlateVolume - RectWidth * (RectHeight + 20d) * PlateThickness;
             step.Data["volume_after_move"] = Api5.Num(volume);
             step.Data["volume_expected"] = expected;
@@ -523,7 +517,7 @@ internal sealed class SketchLifecycleProbe
         }
     }
 
-    // ═══════════════════════════════════════════════════ API7: мост и разведка ══
+    // ═══════════════════════════════════════════════════ API7: bridge and reconnaissance ══
     private void Bridge()
     {
         var step = _report.Begin("L.5", "Мост API5→API7 в сеансе пробы L",
@@ -542,8 +536,8 @@ internal sealed class SketchLifecycleProbe
             var transferred = _app.TransferInterface(_doc, (int)ksAPITypeEnum.ksAPI7Dual, 0);
             step.Data["transfer_document"] = Api5.RuntimeName(transferred);
 
-            // Единственный перенос, дающий IModelContainer: документ переносится как
-            // IKompasDocument3D (так измерено в пробе A7.2), а контейнером модели является ЧАСТЬ.
+            // The only transfer that yields IModelContainer: the document is transferred as
+            // IKompasDocument3D (so measured in probe A7.2), and the model container is the PART.
             if (transferred is not KompasAPI7.IKompasDocument3D document7)
             {
                 step.Fail($"TransferInterface(документ, ksAPI7Dual) не дал IKompasDocument3D " +
@@ -556,7 +550,7 @@ internal sealed class SketchLifecycleProbe
             _container7 = partRaw as KompasAPI7.IModelContainer;
             if (_container7 is null && partRaw is not null)
             {
-                // QI вручную: обёртка объявления не гарантирует, что объект его поддерживает.
+                // QI by hand: a declaration wrapper does not guarantee the object supports it.
                 step.Data["modelcontainer_qi"] = Late.Dispid(partRaw, "Holes3D");
             }
 
@@ -596,8 +590,8 @@ internal sealed class SketchLifecycleProbe
                 return;
             }
 
-            // Item — параметрическое свойство: типизированный доступ к нему в этой обёртке не
-            // объявлен, поэтому спрашиваем у самого объекта (позднее связывание, проба на это и заведена).
+            // Item is a parameterized property: typed access to it is not declared in this wrapper,
+            // so we ask the object itself (late binding — the probe exists for exactly this).
             object? sketch = null;
             foreach (var getter in new[] { "Item", "get_Item" })
             {
@@ -662,7 +656,7 @@ internal sealed class SketchLifecycleProbe
         }
     }
 
-    // ═══════════════════════════════════════════════ жизненный цикл признака ══
+    // ═══════════════════════════════════════════════ feature lifecycle ══
     private void SuppressRestore()
     {
         var step = _report.Begin("L.7", "Подавление и восстановление: ksFeature.excluded",
@@ -692,9 +686,9 @@ internal sealed class SketchLifecycleProbe
             step.Observe($"V: до {Api5.Num(before)} → excluded {Api5.Num(suppressed)} (ожидание {PlateVolume}) " +
                          $"→ снято {Api5.Num(restored)} (ожидание {Api5.Num(before)}).");
 
-            // Подавление вырезания объём УВЕЛИЧИВАЕТ (окно перестаёт сниматься), подавление
-            // приклейки — уменьшает. Направление поэтому не утверждается: проверяются факт
-            // изменения, возврат к исходному числу и неизменность числа признаков.
+            // Suppressing a cut INCREASES the volume (the window stops being removed); suppressing a
+            // join decreases it. The direction is therefore not asserted: what is checked is the fact of
+            // change, the return to the original number and the invariance of the feature count.
             var changed = Math.Abs(suppressed - before) > 1d;
             var cameBack = Math.Abs(restored - before) < 1d;
             var matchesAnalytic = Math.Abs(suppressed - PlateVolume) < 1d;
@@ -737,8 +731,8 @@ internal sealed class SketchLifecycleProbe
             var name = target.name ?? string.Empty;
             var before = Api5.Volume(_part) ?? double.NaN;
             var names = FeatureNames(step, "до удаления");
-            // Собственного члена «зависимые» нет ни в API5, ни в API7 (проверено рефлексией по
-            // обеим сборкам), поэтому перечисляются признаки ПОСЛЕ удаляемого — как кандидаты.
+            // There is no dedicated "dependents" member in either API5 or API7 (checked by reflection
+            // over both assemblies), so the features AFTER the deleted one are listed as candidates.
             var at = names.IndexOf(name);
             var candidates = at >= 0 ? names.Skip(at + 1).ToList() : names;
             step.Data["target"] = name;
@@ -777,7 +771,7 @@ internal sealed class SketchLifecycleProbe
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════ хелперы ══
+    // ═══════════════════════════════════════════════════════════════════ helpers ══
     private List<string> FeatureNames(ProbeStep step, string moment)
     {
         try
@@ -807,7 +801,7 @@ internal sealed class SketchLifecycleProbe
         }
     }
 
-    /// <summary>Последний признак дерева — созданное позже остальных выдавливание.</summary>
+    /// <summary>The last feature of the tree — the extrusion created after the others.</summary>
     private ksEntity? LastFeature(ProbeStep step)
     {
         if (_part.EntityCollection(Api5.OperationElement) is not ksEntityCollection collection)
@@ -870,7 +864,7 @@ internal sealed class SketchLifecycleProbe
         }
         catch (ArgumentException)
         {
-            // Процесса нет — это и есть ответ, а не ошибка.
+            // There is no process — that is the answer, not an error.
             return false;
         }
     }

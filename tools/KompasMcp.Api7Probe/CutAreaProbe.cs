@@ -7,41 +7,31 @@ using KompasAPI7;
 
 namespace KompasMcp.Api7Probe;
 
-/// <summary>
-/// Проба CA — «Область применения» отсечения: какой маршрут направляет плоскость на ВЫБРАННЫЕ тела.
-/// </summary>
+/// <summary>Probe CA — the cut "application area": which route directs the plane at the SELECTED bodies.</summary>
 /// <remarks>
-/// <para>
-/// <b>Зачем.</b> Клиентская приёмка 19.09.2026 (10:23–10:53) измерила дефект
-/// <c>CUT-PLANE-APPLIED-TO-UNNAMED-BODIES</c>: контракт <c>kompas_cut_by_plane</c> называет ОДНО
-/// тело (<c>target_body_ref</c>), а плоскость снимает материал у ВСЕХ тел документа. Разбор кода
-/// адаптера показал механизм: <c>Api5Session.SolidOps.cs</c> разрешает <c>target_body_ref</c>, но в
-/// <c>Api7SolidCut.TryCreateByPlane</c> передаются только контейнер, плоскость, сторона и имя.
-/// </para>
-/// <para>
-/// <b>Что утверждает справка продукта.</b> Установленная справка v24,
-/// <c>rezultat_oper_v_zavisimosti_ot_s_o.html</c>: «По умолчанию область применения операции
-/// Сечение — Все объекты», а для плоского секущего объекта «Область применения включает в себя
-/// объекты, которые плоскость пересекает, а также объекты, целиком расположенные со стороны
-/// отсечения». То есть поведение, наблюдённое клиентом, — это ДОКУМЕНТИРОВАННОЕ поведение режима по
-/// умолчанию, а не сбой ядра. Отсюда вопрос пробы: существует ли маршрут задания области применения.
-/// </para>
-/// <para>
-/// <b>Что читается, а не угадывается.</b> Имена членов берутся из установленной библиотеки типов
-/// <c>Bin\kAPI7.tlb</c> (<see cref="TlbScan.MemberNames"/>) и из объявления интерфейса в
-/// <c>Interop.KompasAPI7.dll</c>. Список кандидатов, придуманный человеком, измеряет воображение
-/// автора, а не продукт.
-/// </para>
-/// <para>
-/// <b>Эталон §3.3 наряда.</b> A = <c>[10,40]×[0,30]×[0,20]</c>, V=18000; S = <c>[100,110]×[0,10]×[0,10]</c>,
-/// V=1000. Плоскость с нормалью <c>(0,1,0)</c>, сторона positive (<c>s = y − y₀ &gt; 0</c>):
-/// при <c>y₀=10</c> остаток A = 12000, S = 1000; при <c>y₀=5</c> остаток A = 15000, S = 1000;
-/// при <c>y₀=15</c> остаток A = 9000, S = 1000.
-/// </para>
+/// MEASURED: client acceptance 19.09.2026 (10:23–10:53) measured defect
+/// <c>CUT-PLANE-APPLIED-TO-UNNAMED-BODIES</c>: the <c>kompas_cut_by_plane</c> contract names ONE body
+/// (<c>target_body_ref</c>), while the plane removes material from ALL bodies of the document. Reading
+/// the adapter code showed the mechanism: <c>Api5Session.SolidOps.cs</c> resolves <c>target_body_ref</c>,
+/// but <c>Api7SolidCut.TryCreateByPlane</c> receives only the container, the plane, the side and the name.
+/// DOC: the installed v24 help, <c>rezultat_oper_v_zavisimosti_ot_s_o.html</c>: «По умолчанию область
+/// применения операции Сечение — Все объекты», and for a planar cutting object «Область применения
+/// включает в себя объекты, которые плоскость пересекает, а также объекты, целиком расположенные со
+/// стороны отсечения». So the behaviour the client saw is the DOCUMENTED default-mode behaviour, not a
+/// kernel failure. Hence the probe question: does a route to set the application area exist?
+/// INVARIANT: member names are read from the installed type library <c>Bin\kAPI7.tlb</c>
+/// (<see cref="TlbScan.MemberNames"/>) and from the interface declaration in
+/// <c>Interop.KompasAPI7.dll</c>. A candidate list invented by a human measures the author's
+/// imagination, not the product.
+/// TEST: reference §3.3 of the order. A = <c>[10,40]×[0,30]×[0,20]</c>, V=18000;
+/// S = <c>[100,110]×[0,10]×[0,10]</c>, V=1000. Plane with normal <c>(0,1,0)</c>, positive side
+/// (<c>s = y − y₀ &gt; 0</c>): at <c>y₀=10</c> the remainder is A = 12000, S = 1000; at <c>y₀=5</c>
+/// the remainder is A = 15000, S = 1000; at <c>y₀=15</c> the remainder is A = 9000, S = 1000.
+/// History: docs/decisions/probes.md#cut-area
 /// </remarks>
 internal sealed class CutAreaProbe
 {
-    // ── эталон §3.3: два независимых тела в одном документе ──
+    // ── reference §3.3: two independent bodies in one document ──
     private const double Ax0 = 10d, Ax1 = 40d, Ay0 = 0d, Ay1 = 30d, Az = 20d;
     private const double Sx0 = 100d, Sx1 = 110d, Sy0 = 0d, Sy1 = 10d, Sz = 10d;
 
@@ -124,7 +114,7 @@ internal sealed class CutAreaProbe
         }
         catch (Exception)
         {
-            // Не предмет вопроса.
+            // Not the subject of the question.
         }
 
         try
@@ -164,10 +154,8 @@ internal sealed class CutAreaProbe
 
     // ══════════════════════════════════════════════════════════════ CA.1 ══
 
-    /// <summary>
-    /// Что объявляет УСТАНОВЛЕННАЯ библиотека типов. Это утверждение продукта о себе, не проходящее
-    /// через снимок обёртки <c>Interop.KompasAPI7.dll</c> (ADR-003 §4).
-    /// </summary>
+    /// <summary>What the INSTALLED type library declares. This is the product's statement about itself,
+    /// not one passing through the wrapper snapshot <c>Interop.KompasAPI7.dll</c> (ADR-003 §4).</summary>
     private void DeclaredMembers()
     {
         var step = _report.Begin("CA.1", "Объявленные члены области применения в kAPI7.tlb",
@@ -214,9 +202,8 @@ internal sealed class CutAreaProbe
 
     // ══════════════════════════════════════════════════════════════ CA.2 ══
 
-    /// <summary>
-    /// Читается ли область применения у ЖИВОГО признака, и что продукт сообщает о ней по умолчанию.
-    /// </summary>
+    /// <summary>Is the application area read back from a LIVE feature, and what does the product report
+    /// about it by default.</summary>
     private void LiveAreaReadBack()
     {
         var step = _report.Begin("CA.2", "Область применения живого признака: чтение по умолчанию",
@@ -298,10 +285,9 @@ internal sealed class CutAreaProbe
 
     // ══════════════════════════════════════════════════════════════ CA.3 ══
 
-    /// <summary>
-    /// Воспроизведение клиентского дефекта на пробе: область применения НЕ задаётся, и постороннее
-    /// тело S исчезает вместе с материалом цели. Ожидание объявлено до опыта по справке продукта.
-    /// </summary>
+    /// <summary>Reproduction of the client defect on the probe: the application area is NOT set, and the
+    /// stranger body S vanishes together with the target's material. The expectation is declared before
+    /// the experiment, from the product help.</summary>
     private void DefaultAreaReproducesClientDefect()
     {
         var step = _report.Begin("CA.3", "Режим по умолчанию «Все объекты»: воспроизведение дефекта",
@@ -352,15 +338,12 @@ internal sealed class CutAreaProbe
 
     // ══════════════════════════════════════════════════════════════ CA.4 ══
 
-    /// <summary>
-    /// Главный опыт: назначить область применения и получить адресное отсечение.
-    /// </summary>
-    /// <remarks>
-    /// Форма значения <c>ChooseBodies</c> не угадывается, а перебирается: кандидаты предъявляются
-    /// по очереди, и принятым считается тот, после которого ИЗМЕРЕННЫЙ результат совпал с
-    /// аналитическим ожиданием адресного отсечения. «Принято без исключения» доказательством не
-    /// является: <c>Update() = true</c> в этом проекте уже означал «принято молча».
-    /// </remarks>
+    /// <summary>The main experiment: set the application area and obtain targeted cutting.</summary>
+    /// <remarks>TEST: the shape of the <c>ChooseBodies</c> value is not guessed but enumerated: the
+    /// candidates are presented one by one, and the accepted one is the candidate after which the
+    /// MEASURED result matched the analytical expectation of targeted cutting. "Accepted without an
+    /// exception" is not proof: <c>Update() = true</c> in this project has already meant "accepted
+    /// silently".</remarks>
     private void TargetedCreate()
     {
         var step = _report.Begin("CA.4", "Адресное отсечение: область применения = тело A",
@@ -433,7 +416,7 @@ internal sealed class CutAreaProbe
 
                 if (!targeted)
                 {
-                    // Документ уже мутирован; следующий кандидат требует свежего документа.
+                    // The document is already mutated; the next candidate needs a fresh document.
                     break;
                 }
 
@@ -465,10 +448,9 @@ internal sealed class CutAreaProbe
 
     // ══════════════════════════════════════════════════════════════ CA.5 ══
 
-    /// <summary>
-    /// Отрицательный контроль к CA.4: целью названо ПОСТОРОННЕЕ тело S. Если адресность работает,
-    /// материал должен сняться у S, а A остаться целым — то есть результат обязан ОТЛИЧАТЬСЯ от CA.4.
-    /// </summary>
+    /// <summary>Negative control for CA.4: the target named is the STRANGER body S. If targeting works,
+    /// the material must be removed from S while A stays whole — i.e. the result must DIFFER from
+    /// CA.4.</summary>
     private void NegativeControlTargetsStranger()
     {
         var step = _report.Begin("CA.5", "Отрицательный контроль: целью названо тело S",
@@ -545,10 +527,8 @@ internal sealed class CutAreaProbe
 
     // ══════════════════════════════════════════════════════════════ CA.6 ══
 
-    /// <summary>
-    /// Правка: перенос опоры существующего признака. Адресность обязана сохраниться — иначе
-    /// «назначить область применения» выполняется только при создании.
-    /// </summary>
+    /// <summary>Edit: moving the support of an existing feature. Targeting must survive — otherwise
+    /// "set the application area" only works at creation.</summary>
     private void EditKeepsTargeting()
     {
         var step = _report.Begin("CA.6", "Правка опоры: сохраняется ли область применения",
@@ -586,7 +566,7 @@ internal sealed class CutAreaProbe
             step.Observe("создание: " + (ok ? "принято" : "ОТКАЗ (" + note + ")")
                 + "; область: " + area + "; тела: " + Describe(rows));
 
-            // Перенос опоры: точки построения плоскости двигаются на +10 по Y.
+            // Moving the support: the plane construction points shift by +10 along Y.
             var moved = MoveSupportToY(container, part, doc, 20d, step);
             var after = BodyRows(part);
             var a = VolumeInA(after);
@@ -623,10 +603,8 @@ internal sealed class CutAreaProbe
 
     // ══════════════════════════════════════════════════════════════ CA.7 ══
 
-    /// <summary>
-    /// Сохранение и переоткрытие: читается ли область применения с файла, и остаётся ли отсечение
-    /// адресным после <c>save → close → open</c>.
-    /// </summary>
+    /// <summary>Save and reopen: is the application area read from the file, and does the cut stay
+    /// targeted after <c>save → close → open</c>.</summary>
     private void SaveReopenKeepsArea()
     {
         var step = _report.Begin("CA.7", "Save → close → open: сохраняется ли область применения",
@@ -725,9 +703,7 @@ internal sealed class CutAreaProbe
 
     // ══════════════════════════════════════════════════════════════ cut route ══
 
-    /// <summary>
-    /// Отсечение БЕЗ задания области применения — маршрут действующего адаптера.
-    /// </summary>
+    /// <summary>Cutting WITHOUT setting the application area — the route of the current adapter.</summary>
     private (bool Ok, string? Note) CutPlain(
         ksDocument3D doc, ksPart part, double y0, ProbeStep step, string label)
     {
@@ -765,10 +741,9 @@ internal sealed class CutAreaProbe
         }
     }
 
-    /// <summary>
-    /// Отсечение с ЗАДАННОЙ областью применения. Возвращает и область, прочитанную ПОСЛЕ
-    /// <c>Update()</c>, и состав тел: принятое значение и применённое значение — разные утверждения.
-    /// </summary>
+    /// <summary>Cutting with the application area SET. It returns both the area read AFTER
+    /// <c>Update()</c> and the body composition: an accepted value and an applied value are different
+    /// claims.</summary>
     private (bool Ok, string? Note, string Area, List<BodyRow> Rows) TryTargetedCut(
         IModelContainer container, ksPart part, ksDocument3D doc, IPlane3D plane,
         object? chooseBodies, ProbeStep step, string label)
@@ -784,10 +759,10 @@ internal sealed class CutAreaProbe
             cut.CutObject = (IModelObject)plane;
             cut.Direction = true;
 
-            // Порядок записей: способ выбора объектов, затем состав. Имя перечисления
-            // ksChooseType.ksChBodies — «в область входят тела» (в отличие от ksChParts и
-            // ksChBodiesAndParts); ksChoosePartsType.ksChManualEditing — «Выбранные объекты»
-            // против ksChAutomaticDefinition («Автоопределение») в справке продукта.
+            // Write order: the object-selection mode first, then the composition. The enum name
+            // ksChooseType.ksChBodies means "bodies enter the area" (unlike ksChParts and
+            // ksChBodiesAndParts); ksChoosePartsType.ksChManualEditing means "selected objects" versus
+            // ksChAutomaticDefinition (DOC: «Автоопределение», ksapi_kschoosepartstype.html).
             cut.ChooseType = ksChooseType.ksChBodies;
             cut.ChoosePartsType = ksChoosePartsType.ksChManualEditing;
             cut.ChooseBodies = chooseBodies;
@@ -806,11 +781,9 @@ internal sealed class CutAreaProbe
         }
     }
 
-    /// <summary>
-    /// Перенос опоры существующего признака отсечения на другое значение Y: точки построения
-    /// плоскости двигаются на разницу. Опора, не отвечающая <c>IPlane3DBy3Points</c>, отвергается —
-    /// правка «наугад» не выполняется.
-    /// </summary>
+    /// <summary>Moves the support of an existing cut feature to another Y value: the plane construction
+    /// points shift by the difference. A support that does not answer <c>IPlane3DBy3Points</c> is
+    /// rejected — no blind edit is performed.</summary>
     private bool MoveSupportToY(IModelContainer container, ksPart part, ksDocument3D doc, double y, ProbeStep step)
     {
         try
@@ -1015,7 +988,7 @@ internal sealed class CutAreaProbe
         }
         catch (Exception)
         {
-            // Не предмет этого шага.
+            // Not the subject of this step.
         }
     }
 
@@ -1056,7 +1029,7 @@ internal sealed class CutAreaProbe
         }
         catch (Exception)
         {
-            // Частичный список честнее пустого.
+            // A partial list is more honest than an empty one.
         }
 
         return rows;
@@ -1066,10 +1039,9 @@ internal sealed class CutAreaProbe
         ksPart part, double x0, double y0, double z0, double x1, double y1, double z1) =>
         BodyRows(part).FirstOrDefault(r => Near(r, x0, y0, z0, x1, y1, z1))?.Element;
 
-    /// <summary>
-    /// Номер тела для формы значения «число». Читается у ПЕРЕНОСА тела в API7 (<c>IBody7.BodyId</c>),
-    /// а не выводится из индекса в коллекции: индекс — не идентичность.
-    /// </summary>
+    /// <summary>The body number for the "number" value shape. It is read from the body TRANSFER into
+    /// API7 (<c>IBody7.BodyId</c>), not derived from the index in the collection: an index is not an
+    /// identity.</summary>
     private object BodyIdOf(object? element)
     {
         var transferred = element is null ? null : TransferTo7(element);
@@ -1091,11 +1063,9 @@ internal sealed class CutAreaProbe
 
     private static bool Near(double actual, double expected) => Math.Abs(actual - expected) < 1e-6;
 
-    /// <summary>
-    /// Объём тел, чей габарит лежит в области тела A. Считается по ГАБАРИТУ, а не по индексу: после
-    /// отсечения остаток A остаётся в той же области, а S — в своей, и это различает их независимо
-    /// от порядка в коллекции.
-    /// </summary>
+    /// <summary>Volume of the bodies whose bounding box lies in the region of body A. It is computed
+    /// from the BOUNDING BOX, not the index: after cutting, the remainder of A stays in the same region
+    /// while S stays in its own, and this tells them apart regardless of collection order.</summary>
     private static double? VolumeInA(List<BodyRow> rows) =>
         SumOf(rows.Where(r => r.Max is not null && r.Min is not null
             && r.Min[0] > Ax0 - 0.5 && r.Max[0] < Ax1 + 0.5
@@ -1120,10 +1090,8 @@ internal sealed class CutAreaProbe
     private static string Describe(List<BodyRow> rows) =>
         rows.Count == 0 ? "<тел нет>" : string.Join(" | ", rows.Select(r => r.Describe()));
 
-    /// <summary>
-    /// Плоскость <c>y = y0</c> с нормалью <c>(0,1,0)</c>: точки модели <c>(0,y0,0)</c>,
-    /// <c>(0,y0,1)</c>, <c>(1,y0,0)</c> дают нормаль <c>(p2−p1)×(p3−p1) = (0,1,0)</c>.
-    /// </summary>
+    /// <summary>Plane <c>y = y0</c> with normal <c>(0,1,0)</c>: model points <c>(0,y0,0)</c>,
+    /// <c>(0,y0,1)</c>, <c>(1,y0,0)</c> give the normal <c>(p2−p1)×(p3−p1) = (0,1,0)</c>.</summary>
     private IPlane3D? MakePlaneAtY(
         IModelContainer container, IPlanes3D planes, double y0, string name, ProbeStep step)
     {

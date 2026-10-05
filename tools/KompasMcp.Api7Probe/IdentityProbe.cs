@@ -6,40 +6,26 @@ using KompasAPI7;
 
 namespace KompasMcp.Api7Probe;
 
-/// <summary>
-/// Проба I — чем ОТЛИЧАЕТСЯ только что созданный признак от уже существующего, когда
-/// отображаемое имя у них ОДИНАКОВОЕ.
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Зачем.</b> Клиентская приёмка 19.09.2026 (дефект <c>REPOSITION-SECOND-FEATURE-ADDRESS-AMBIGUOUS</c>)
-/// измерила: второй признак изменения положения в одном документе получает ТО ЖЕ имя, что и первый
-/// («Изменение положения : Тело 1»), и правило адаптера «новый = имя, которого не было в снимке ДО»
-/// отбрасывает его: <c>candidates=[]</c>. Геометрия при этом построена верно.
-/// </para>
-/// <para>
-/// <b>Что здесь измеряется.</b> Не «какой маршрут кажется надёжнее», а что отвечает живой API на
-/// каждый из кандидатов, объявленных ЗАРАНЕЕ:
-/// </para>
-/// <list type="number">
-/// <item>устойчивость адреса элемента между двумя чтениями коллекции 110 (тот же COM-объект или нет);</item>
-/// <item><c>ksEntityCollection.FindIt(entity)</c> — возвращает ли индекс и что отдаёт на чужом объекте;</item>
-/// <item>жива ли коллекция, взятая ДО операции, и находит ли она в себе элементы ПОСЛЕ операции;</item>
-/// <item><c>ksDocument3D.GetLastFeature()</c> — указывает ли он на только что созданный признак;</item>
-/// <item><c>ksFeature.GetObject()</c> — связан ли элемент дерева с объектом API7, которым признак создан;</item>
-/// <item>порядок элементов в коллекции 110 после добавления (в конец или нет).</item>
-/// </list>
-/// <para>
-/// <b>Почему это отдельная проба, а не правка адаптера сразу.</b> Правило проекта: измерение
-/// расходится с ожиданием — первым под сомнение ставится ОЖИДАНИЕ. Маршрут, выбранный по догадке,
-/// даёт зелёную строку, которая держится на совпадении имён, — то есть ровно тот дефект, который
-/// здесь и вскрыт. Ни один из кандидатов не объявляется рабочим до того, как он различает ДВА
-/// одноимённых признака на одном документе.
-/// </para>
-/// </remarks>
+/// <summary>Probe I — how a just-created feature DIFFERS from an existing one when the two share the
+/// same display name.</summary>
+/// <remarks>DOC: the tree is read through <c>EntityCollection(o3d_operationElement = 110)</c>.
+/// MEASURED 19.09.2026 (client acceptance, defect <c>REPOSITION-SECOND-FEATURE-ADDRESS-AMBIGUOUS</c>):
+/// a second reposition feature in one document gets the SAME display name as the first
+/// ("Position change : Body 1"), so the adapter rule "new = a name absent from the BEFORE snapshot"
+/// drops it (<c>candidates=[]</c>), even though the geometry is built correctly. ASSUMPTION (each
+/// candidate is declared BEFORE the run and measured against the live API): element-address stability
+/// across two reads of collection 110 (same COM object or not); <c>ksEntityCollection.FindIt(entity)</c>
+/// — does it return an index, and what does it return for a foreign object; whether a collection taken
+/// BEFORE the operation stays alive and finds its own elements AFTER it;
+/// <c>ksDocument3D.GetLastFeature()</c> — does it point at the just-created feature;
+/// <c>ksFeature.GetObject()</c> — is the tree element linked to the API7 object that created the
+/// feature; element order in collection 110 after the add (appended or not). TEST: no candidate is
+/// declared working until it distinguishes TWO same-named features in one document — a route chosen by
+/// guesswork yields a green row resting on a name match, the exact defect exposed here.
+/// History: docs/decisions/probes.md#identity</remarks>
 internal sealed class IdentityProbe
 {
-    // Эталон §4.3 наряда: A = [0,20]×[0,10]×[0,5], V=1000; S — постороннее тело.
+    // MEASURED fixture (order §4.3): A = [0,20]×[0,10]×[0,5], V=1000; S is a stranger body.
     private const double Ax0 = 0d, Ax1 = 20d, Ay0 = 0d, Ay1 = 10d, Az = 5d;
     private const double Sx0 = 100d, Sx1 = 110d, Sy0 = 0d, Sy1 = 10d, Sz = 10d;
 
@@ -136,8 +122,9 @@ internal sealed class IdentityProbe
             step.Observe("Quit: " + HResult.Describe(ex));
         }
 
-        // Ожидание обязательно: без него STA-поток выходит из pump раньше процесса, и «уборка не
-        // подтверждена» выглядит как зависший COM-вызов, хотя это лишь незавершённый Quit.
+        // INVARIANT: the wait is mandatory — without it the STA thread leaves the pump before the
+        // process does, and "cleanup unconfirmed" looks like a hung COM call though it is only an
+        // unfinished Quit.
         var waited = 0;
         const int stepMs = 250;
         const int limitMs = 15000;
@@ -180,11 +167,9 @@ internal sealed class IdentityProbe
 
     // ══════════════════════════════════════════════════════════════ I.1 ══
 
-    /// <summary>
-    /// Два чтения коллекции 110 подряд: тот же ли COM-объект лежит в одном и том же индексе.
-    /// Это основание для любого сопоставления «до/после»: если адрес не устойчив даже между двумя
-    /// соседними чтениями, то и разность множеств по указателю ничего не значит.
-    /// </summary>
+    /// <summary>Two reads of collection 110 in a row: is the same COM object at the same index?
+    /// INVARIANT: this is the basis of any before/after match — if the address is not stable even
+    /// between two adjacent reads, a pointer set-difference means nothing either.</summary>
     private List<ElementRow> Baseline(ksPart part)
     {
         var step = _report.Begin("I.1", "Устойчивость адреса элемента между двумя чтениями коллекции 110",
@@ -216,10 +201,8 @@ internal sealed class IdentityProbe
         return rows;
     }
 
-    /// <summary>
-    /// Семантика <c>FindIt</c>: что он отдаёт на своём элементе и что на чужом. Без этого «FindIt
-    /// вернул -1» нельзя читать как «не в коллекции».
-    /// </summary>
+    /// <summary>Semantics of <c>FindIt</c>: what it returns for its own element and for a foreign one.
+    /// INVARIANT: without this, "FindIt returned -1" cannot be read as "not in the collection".</summary>
     private (int OnSelf, int OnForeign, int Count) FindItSemantics(
         ksPart part, ksDocument3D doc, List<ElementRow> baseline)
     {
@@ -237,7 +220,7 @@ internal sealed class IdentityProbe
             ? (SafeInt(() => collection.FindIt(first)) ?? -998)
             : -997;
 
-        // Чужой объект — эскиз: он есть в документе, но в коллекцию 110 не входит.
+        // The foreign object is a sketch: it exists in the document but is not part of collection 110.
         object? foreign = SafeObject(() => doc.GetPart(-1) is ksPart p ? p.GetDefaultEntity(Api5.PlaneXoy) : null);
         var onForeign = foreign is null ? -996 : (SafeInt(() => collection.FindIt(foreign)) ?? -995);
 
@@ -261,11 +244,9 @@ internal sealed class IdentityProbe
         string? TreeTypeOfNew,
         ksEntityCollection? HeldCollection = null);
 
-    /// <summary>
-    /// Создаёт ОДИН признак изменения положения и измеряет, какими маршрутами его элемент в дереве
-    /// отличается от уже существовавших. Коллекция «до» берётся ЖИВОЙ и удерживается: вопрос
-    /// «переживает ли она мутацию» — часть измерения, а не предположение.
-    /// </summary>
+    /// <summary>Creates ONE reposition feature and measures by which routes its tree element differs
+    /// from the pre-existing ones. INVARIANT: the BEFORE collection is taken LIVE and held — whether it
+    /// survives the mutation is part of the measurement, not an assumption.</summary>
     private CreationResult CreateReposition(
         ksDocument3D doc, ksPart part, double[] matrix, string label, string id,
         (double X0, double Y0, double Z0, double X1, double Y1, double Z1) targetBefore,
@@ -323,8 +304,8 @@ internal sealed class IdentityProbe
             step.Observe("  новый: " + row.Describe());
         }
 
-        // Контроль геометрии: отказ адресации не должен выдаваться за отказ ядра. Тело-цель обязано
-        // оказаться там, куда его послали, — иначе измеряется не тот случай.
+        // TEST geometry control: an addressing failure must not be passed off as a kernel failure. The
+        // target body must land where it was sent — otherwise the wrong case is being measured.
         var moved = FindBody(BodyRows(part),
             targetAfter.X0, targetAfter.Y0, targetAfter.Z0,
             targetAfter.X1, targetAfter.Y1, targetAfter.Z1);
@@ -334,7 +315,7 @@ internal sealed class IdentityProbe
         step.Observe("имя нового совпадает с уже существовавшим: " + sameNameAsExisting
             + " — именно на этом падает фильтр «имя, которого не было в снимке»");
 
-        // Кандидат 1: FindIt на УДЕРЖАННОЙ коллекции «до».
+        // Candidate 1: FindIt on the HELD BEFORE collection.
         var verdicts = new List<string>();
         if (collectionBefore is not null)
         {
@@ -350,7 +331,7 @@ internal sealed class IdentityProbe
             }
         }
 
-        // Кандидат 2: свежая коллекция + FindIt на ней же (контроль: должен находить всех).
+        // Candidate 2: a fresh collection + FindIt on it (control: it must find all of them).
         var fresh = Collection(part);
         var freshVerdict = new List<string>();
         if (fresh is not null)
@@ -365,7 +346,7 @@ internal sealed class IdentityProbe
         step.Data["findit_held"] = verdicts.ToArray();
         step.Data["findit_fresh"] = freshVerdict.ToArray();
 
-        // Кандидат 3: GetLastFeature().
+        // Candidate 3: GetLastFeature().
         string? lastFeature = null;
         string? lastMatch = null;
         try
@@ -451,10 +432,10 @@ internal sealed class IdentityProbe
         step.Data["rows"] = rows.ToArray();
         step.Data["baseline_count"] = baseline.Count;
 
-        // Контроль семантики «удержанная коллекция — снимок»: после ВТОРОЙ операции коллекция,
-        // удержанная перед ПЕРВОЙ, обязана по-прежнему считать новым элемент первой операции и
-        // считать новым элемент второй. Если она «ожила» и обновилась, разность множеств по ней
-        // означала бы не «было ли ДО», а «что вообще есть», и маршрут был бы негоден.
+        // TEST "held collection is a snapshot": after the SECOND operation, the collection held before
+        // the FIRST must still count the first operation's element as new, and must count the second
+        // operation's element as new too. If it came alive and refreshed, a set-difference over it would
+        // mean "what exists at all" instead of "was it there BEFORE", and the route would be unfit.
         var snapshotRows = new List<string>();
         if (first.HeldCollection is { } held)
         {
@@ -499,17 +480,14 @@ internal sealed class IdentityProbe
 
     // ══════════════════════════════════════════════════════════════ I.5 ══
 
-    /// <summary>
-    /// Жизненный цикл двух ОДНОИМЁННЫХ признаков: подавление, снятие подавления, удаление — по
-    /// тому же маршруту, которым идёт продукт (<c>ksFeature.excluded</c> + <c>RebuildDocument()</c>).
-    /// </summary>
-    /// <remarks>
-    /// Наряд §4.2 требует отдельного доказательства восстановления: клиентская приёмка 19.09.2026
-    /// показала, что после снятия подавления положение тела не вернулось, а признаков стало 2 из 3.
-    /// Догадка «это следствие дефекта адресации» проверке не подлежит — здесь измеряется сам
-    /// маршрут, и каждое состояние называется числами: состав коллекции 110, габариты тел и
-    /// живость объекта признака.
-    /// </remarks>
+    /// <summary>Lifecycle of two SAME-NAMED features: suppression, un-suppression, deletion — by the
+    /// same route the product uses (<c>ksFeature.excluded</c> + <c>RebuildDocument()</c>).</summary>
+    /// <remarks>DOC: order §4.2 demands a separate proof of restoration — client acceptance 19.09.2026
+    /// showed that after un-suppression the body position did not come back and the feature count went
+    /// to 2 of 3. TEST: the guess "this is a consequence of the addressing defect" is not admissible —
+    /// the route itself is measured here, and every state is named by numbers: the composition of
+    /// collection 110, the body extents, and the liveness of the feature object.
+    /// History: docs/decisions/probes.md#identity</remarks>
     private void Lifecycle(ksDocument3D doc, ksPart part, CreationResult last)
     {
         var step = _report.Begin("I.5", "Жизненный цикл двух одноимённых признаков: подавление и снятие",
@@ -530,11 +508,11 @@ internal sealed class IdentityProbe
         step.Observe("второй одноимённый: [" + second.Index + "] ptr=" + Hex(second.ElementPtr));
         step.Observe("исходное состояние тел: " + Describe(BodyRows(part)));
 
-        // Последовательность выбрана так, чтобы каждый вопрос был отделён от соседнего:
-        // E1/E2 — подавление и снятие ВТОРОГО (последнего в дереве);
-        // E3/E4 — подавление и снятие ПЕРВОГО: здесь и проверяется, каскадно ли подавление;
-        // E5     — снятие подавления ВТОРОГО после E4: возвращает ли оно состояние ПОСЛЕ;
-        // E6     — удаление ВТОРОГО: возвращает ли оно состояние ПОСЛЕ ПЕРВОГО.
+        // The sequence is chosen so each question is isolated from its neighbour:
+        // E1/E2 — suppress and un-suppress the SECOND (last in the tree);
+        // E3/E4 — suppress and un-suppress the FIRST: this is where suppression cascading is checked;
+        // E5     — un-suppress the SECOND after E4: does it restore the AFTER state;
+        // E6     — delete the SECOND: does it restore the state AFTER THE FIRST.
         var states = new List<string>
         {
             Suppress(part, doc, second, true, step, "E1 подавление ВТОРОГО"),
@@ -551,7 +529,7 @@ internal sealed class IdentityProbe
             ? Hex(last.NewByPointer[0].ElementPtr)
             : "<не определён>";
 
-        // Каскад подавления: подавление ПЕРВОГО убирает из коллекции 110 больше одного элемента.
+        // Suppression cascade: suppressing the FIRST removes more than one element from collection 110.
         var cascade = states[2].Contains("элементов 2");
         var restoreFirstAlone = states[3].Contains("элементов 3")
                                 && states[3].Contains("габарит (10, 0, 0)");
@@ -581,7 +559,7 @@ internal sealed class IdentityProbe
         }
     }
 
-    /// <summary>Удаление признака маршрутом продукта: <c>ksDocument3D.DeleteObject(entity)</c>.</summary>
+    /// <summary>Feature deletion by the product route: <c>ksDocument3D.DeleteObject(entity)</c>.</summary>
     private string Delete(ksPart part, ksDocument3D doc, ElementRow row, ProbeStep step, string label)
     {
         var line = label + ": ";
@@ -610,9 +588,7 @@ internal sealed class IdentityProbe
         return line;
     }
 
-    /// <summary>
-    /// Один акт подавления/снятия маршрутом продукта и его полное описание.
-    /// </summary>
+    /// <summary>One suppress/un-suppress act by the product route and its full description.</summary>
     private string Suppress(
         ksPart part, ksDocument3D doc, ElementRow row, bool suppressed, ProbeStep step, string label)
     {
@@ -779,10 +755,9 @@ internal sealed class IdentityProbe
         ? "0"
         : "0x" + value.ToInt64().ToString("x", System.Globalization.CultureInfo.InvariantCulture);
 
-    /// <summary>
-    /// Адрес COM-объекта. <c>GetIUnknownForObject</c> увеличивает счётчик ссылок, поэтому ссылка
-    /// отпускается сразу: объект держится нашим RCW, а нам нужен только адрес для сравнения.
-    /// </summary>
+    /// <summary>The address of a COM object. INVARIANT: <c>GetIUnknownForObject</c> bumps the refcount,
+    /// so the reference is released at once — the object is kept alive by our RCW, and only the address
+    /// is needed for comparison.</summary>
     private static IntPtr Ptr(object? value)
     {
         if (value is null)
@@ -932,8 +907,8 @@ internal sealed class IdentityProbe
                 double[]? max = null;
                 if (element is ksBody body)
                 {
-                    // GetGabarit — метод с шестью out-параметрами, а лямбда не выносит их наружу,
-                    // поэтому значения забираются локальной функцией, а не внутри SafeBool.
+                    // GetGabarit has six out-parameters and a lambda cannot carry them out, so the
+                    // values are collected by a local function rather than inside SafeBool.
                     (double[] Min, double[] Max)? box = null;
                     if (Api5.SafeBool(() =>
                         {
@@ -964,7 +939,7 @@ internal sealed class IdentityProbe
         }
         catch (Exception)
         {
-            // Возвращается то, что успело прочитаться: пустой список виден вызывающему.
+            // Whatever was read so far is returned: an empty list is visible to the caller.
         }
 
         return rows;

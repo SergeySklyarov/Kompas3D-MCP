@@ -5,35 +5,27 @@ using Kompas6Constants3D;
 
 namespace KompasMcp.Api7Probe;
 
-/// <summary>
-/// Probe N: two facts the SM-07 acceptance group got wrong, both measured instead of argued.
-/// </summary>
+/// <summary>Probe N: two facts the SM-07 acceptance group got wrong, both measured instead of argued.</summary>
 /// <remarks>
-/// <para>
 /// The group <c>HO</c> in <c>scripts/mcp-smoke.py</c> failed three assertions on its first real run.
 /// In each case the question was whether the <em>expectation</em> was wrong rather than the product,
 /// and the answer could only come from the live session — not from reasoning about the names.
-/// </para>
-/// <para>
 /// <b>N.1 — what number the committed feature carries in the tree.</b> The adapter looks for the hole
 /// with <c>entity.type == 52</c>, reading <c>o3d_holeOperation</c> as the tree's own number. The
-/// acceptance run printed <c>типов=['25', '583']</c> — the hole was <c>583</c>, not <c>52</c>, and the
-/// adapter therefore withheld <c>feature_ref</c> and then reported "нечего править". Probe
+/// acceptance run printed the type list <c>['25', '583']</c> — the hole was <c>583</c>, not <c>52</c>, and the
+/// adapter therefore withheld <c>feature_ref</c> and then reported "nothing to edit". Probe
 /// <see cref="HoleProbe"/> had already recorded <c>ModelObjectType 583</c> for an object API7
 /// returned from <c>IHoles3D.Add()</c>, so <c>583</c> is the API7 <em>model object</em> number while
 /// <c>52</c> is the API5 <em>NewEntity</em> constant. Those are two different numbering systems, and
 /// the adapter's search conflated them. This step prints what each route actually yields for the same
 /// committed feature, so the fix is written against the number the tree really uses.
-/// </para>
-/// <para>
 /// <b>N.2 — how the derived countersink depth is read.</b> The catalog and the adapter both explain
-/// <c>CountersinkDepth</c> as "the object returns <c>4/tan(угол/2)</c>". The acceptance run measured
+/// <c>CountersinkDepth</c> as "the object returns <c>4/tan(angle/2)</c>". The acceptance run measured
 /// <c>5.0</c> for a mouth of Ø20, pilot Ø10, 90° — and 5 is not 4/tan(45°). The formula in the docs
 /// was fitted to the one row that happened to have <c>rM − rP = 4</c> (Ø18 mouth, Ø10 pilot), which
 /// makes "4" look like a constant when it is the radial difference of that row. This step varies the
-/// mouth with everything else fixed and prints the reported depth next to <c>(rM − rP)/tan(угол/2)</c>,
+/// mouth with everything else fixed and prints the reported depth next to <c>(rM − rP)/tan(angle/2)</c>,
 /// so the law is either read off the series or the step fails.
-/// </para>
 /// </remarks>
 internal sealed class HoleTreeProbe
 {
@@ -205,23 +197,21 @@ internal sealed class HoleTreeProbe
 
     // ════════════════════════════════════════════════════════════════ N.1 ══
 
-    /// <summary>
-    /// Под каким номером признак отверстия виден в дереве после того, как его создал API7.
-    /// </summary>
-    /// <remarks>
-    /// Сравниваются ТРИ источника одного и того же признака, потому что «номер типа» здесь не одно
-    /// число, а три разных системы нумерации, и путать их — это и есть найденный дефект:
+    /// <summary>MEASURED: under which number the hole feature is visible in the tree after API7 creates
+    /// it.</summary>
+    /// <remarks>THREE sources of the same feature are compared, because the "type number" here is not one
+    /// number but three different numbering systems, and conflating them is exactly the defect found:
     /// <list type="number">
-    /// <item><c>ksEntity.type</c> объекта, которого вернул <c>NewEntity(52)</c> — номер, под которым
-    /// признак СОЗДАЁТСЯ через API5;</item>
-    /// <item><c>IModelObject.ModelObjectType</c> живого <c>IHole3D</c> из API7 — номер, под которым
-    /// признак живёт в модели;</item>
-    /// <item><c>ksEntity.type</c> всех элементов обеих коллекций дерева API5
-    /// (<c>OperationElement = 110</c> и общая) ДО и ПОСЛЕ создания — то, что видит адаптер, когда
-    /// ищет признак, чтобы выдать <c>feature_ref</c>.</item>
+    /// <item><c>ksEntity.type</c> of the object <c>NewEntity(52)</c> returned — the number under which the
+    /// feature is CREATED through API5;</item>
+    /// <item><c>IModelObject.ModelObjectType</c> of the live <c>IHole3D</c> from API7 — the number under
+    /// which the feature lives in the model;</item>
+    /// <item><c>ksEntity.type</c> of every element of both API5 tree collections
+    /// (<c>OperationElement = 110</c> and the general one) BEFORE and AFTER creation — what the adapter
+    /// sees when it looks for the feature in order to hand out <c>feature_ref</c>.</item>
     /// </list>
-    /// Пункт 3 и решает вопрос: адаптер обязан искать по тому номеру, который там реально появился.
-    /// </remarks>
+    /// Item 3 settles the question: the adapter must search by the number that actually appeared there.
+    /// History: docs/decisions/probes.md#hole-tree</remarks>
     private void TreeNumbering()
     {
         var step = _report.Begin("N.1", "Под каким номером признак отверстия виден в дереве",
@@ -231,13 +221,13 @@ internal sealed class HoleTreeProbe
         step.Data["tree_before"] = before.ToArray();
         step.Observe("дерево ДО отверстия: " + Render(before));
 
-        // Номер, под которым признак создаётся через API5 — исходная посылка адаптера.
+        // The number under which the feature is created through API5 — the adapter's original premise.
         var newEntityType = Count(() => (int)((ksEntity)_part.NewEntity(52)!).type);
         step.Data["api5_new_entity_type"] = newEntityType;
         step.Observe("NewEntity(52).type = " + Api5.Raw(newEntityType)
             + " → имя " + (newEntityType is int t ? Api5.ObjectTypeName(t) : "<нет>"));
 
-        // Отверстие создаётся маршрутом API7 — точно тем, которым его создаёт продукт.
+        // The hole is created by the API7 route — exactly the one the product itself uses.
         if (!CreateBaseHole(step))
         {
             return;
@@ -253,8 +243,8 @@ internal sealed class HoleTreeProbe
         step.Data["tree_after"] = after.ToArray();
         step.Observe("дерево ПОСЛЕ отверстия: " + Render(after));
 
-        // Что именно прибавилось. Дифф, а не «есть ли 52 в дереве»: 52 может лежать там и от
-        // чего-то другого, и тогда утверждение было бы верным по случайности.
+        // What exactly was added. A diff, not "is there a 52 in the tree": 52 could be there for
+        // something else, and then the claim would be true by coincidence.
         var beforeKeys = before.Select(Render).ToHashSet(StringComparer.Ordinal);
         var added = after.Where(r => !beforeKeys.Contains(Render(r))).ToList();
         step.Data["tree_added"] = added.ToArray();
@@ -288,11 +278,9 @@ internal sealed class HoleTreeProbe
               + ", а не под 52. Поиск адаптера по 52 обязан быть исправлен на этот номер.");
     }
 
-    /// <summary>
-    /// Снимок дерева API5: обе коллекции, которые адаптер вообще смотрит. Обе — потому что
-    /// «OperationElement = 110» это лишь одна из них, и отсутствие признака в одной не означает
-    /// отсутствия в дереве.
-    /// </summary>
+    /// <summary>Snapshot of the API5 tree: both collections the adapter looks at. Both — because
+    /// "OperationElement = 110" is only one of them, and a feature absent from one does not mean it is
+    /// absent from the tree.</summary>
     private List<(string Where, int Index, int Type, string Name)> TreeSnapshot()
     {
         var rows = new List<(string, int, int, string)>();
@@ -366,16 +354,12 @@ internal sealed class HoleTreeProbe
 
     // ════════════════════════════════════════════════════════════════ N.2 ══
 
-    /// <summary>
-    /// Как читается ПРОИЗВОДНАЯ глубина зенковки при разных устьях.
-    /// </summary>
-    /// <remarks>
-    /// Пилот, угол и толщина фиксированы; меняется только диаметр устья. Каждая строка — своя
-    /// пластина, иначе снятый объём был бы суммой по нескольким отверстиям и ни одна строка ни с
-    /// чем бы не сошлась. Печатается возвращённая глубина рядом с <c>(rM − rP)/tan(угол/2)</c>: если
-    /// закон верен, согласие должно быть не в одной строке, а во всей серии — константа, подогнанная
-    /// под одну точку, здесь не пройдёт.
-    /// </remarks>
+    /// <summary>MEASURED: how the DERIVED countersink depth is read across different mouths.</summary>
+    /// <remarks>Pilot, angle and thickness are fixed; only the mouth diameter varies. Each row is its own
+    /// plate, otherwise the removed volume would be a sum over several holes and no row would agree with
+    /// anything. The returned depth is printed next to <c>(rM − rP)/tan(angle/2)</c>: if the law holds,
+    /// agreement must be across the whole series, not one row — a constant fitted to a single point will
+    /// not pass here.</remarks>
     private void CountersinkDepthLaw()
     {
         var step = _report.Begin("N.2", "Производная глубина зенковки при разных устьях",
@@ -410,9 +394,9 @@ internal sealed class HoleTreeProbe
 
             total++;
             var depthOk = reported is double h && Math.Abs(h - predictedDepth) <= 1e-6d;
-            // Кросс-проверка независимым числом: если глубина верна, то объём сверх пилота обязан
-            // сойтись по правилу M.3, посчитанному на ЭТОЙ возвращённой глубине. Одно и то же
-            // утверждение, полученное двумя разными измерениями, — это и отличает закон от подгонки.
+            // Cross-check with an independent number: if the depth is right, the volume beyond the pilot
+            // must agree by rule M.3 computed on THIS returned depth. The same statement obtained by two
+            // different measurements is what separates a law from a fit.
             var predictedExtra = reported is double hh ? ConeBeyondPilot(mouth, PilotDiameter, hh) : double.NaN;
             var volumeOk = reported is not null
                 && Math.Abs(predictedExtra - extra) <= Tolerance(extra);
@@ -463,7 +447,7 @@ internal sealed class HoleTreeProbe
         }
     }
 
-    /// <summary>Одна зенковка на свежей пластине: (снятый объём, возвращённая глубина, причина отказа).</summary>
+    /// <summary>One countersink on a fresh plate: (removed volume, returned depth, failure reason).</summary>
     private double MeasureCountersink(ProbeStep step, double mouth, out double? reported, out string? failure)
     {
         reported = null;
@@ -496,8 +480,9 @@ internal sealed class HoleTreeProbe
             countersink.CountersinkType = (short)ksCountersinkTypeEnum.ksCTDiameterAngle;
             countersink.CountersinkDiameter = mouth;
             countersink.CountersinkAngle = CountersinkAngle;
-            // Глубина записывается нулём осознанно: предмет замера — именно то, что объект считает
-            // САМ. Ненулевая запись ничего не меняет (измерено M.3), но ноль делает это очевидным.
+            // The depth is deliberately written as zero: the subject of the measurement is exactly what
+            // the object computes ITSELF. A non-zero write changes nothing (measured M.3), but zero makes
+            // that obvious.
             countersink.CountersinkDepth = 0d;
 
             hole.Update();
@@ -530,7 +515,7 @@ internal sealed class HoleTreeProbe
         }
         catch (Exception)
         {
-            // Заменяется ниже; осиротевшие процессы — забота N.Z, а не этого вызова.
+            // Replaced below; orphaned processes are N.Z's concern, not this call's.
         }
 
         _doc = (ksDocument3D)_app.Document3D();
@@ -575,11 +560,9 @@ internal sealed class HoleTreeProbe
         }
     }
 
-    /// <summary>
-    /// Самая большая грань по площади, перенесённая в API7. Тот же маршрут, что в пробе M: опорная
-    /// грань — это то, от чего зависит, куда встанет отверстие, и вторая реализация этого была бы
-    /// вторым поводом ошибиться.
-    /// </summary>
+    /// <summary>The largest face by area, transferred into API7. The same route as in probe M: the base
+    /// face determines where the hole lands, and a second implementation of this would be a second
+    /// chance to get it wrong.</summary>
     private KompasAPI7.IModelObject? TopFace(ProbeStep step)
     {
         if (_part.GetMainBody() is not ksBody body || body.FaceCollection() is not ksFaceCollection faces)

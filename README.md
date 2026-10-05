@@ -21,7 +21,7 @@
 <p>
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/openai-blossom-white.svg">
-    <img src="docs/assets/openai-blossom-black.svg" alt="Логотип OpenAI" height="40" align="absmiddle">
+    <img src="docs/assets/openai-blossom-black.svg" alt="Логотип OpenAI" height="78" align="absmiddle">
   </picture>
   &nbsp;&nbsp;<b>ChatGPT Codex</b>: установка одной фразой
 </p>

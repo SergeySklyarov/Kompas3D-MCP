@@ -4,17 +4,13 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>
-/// The analytic profile area is what turns "КОМПАС returned true" into a verified geometry
-/// change (spec 1.11), so its own numbers must be exact and its refusals must be real.
-/// </summary>
-/// <remarks>
-/// The nested cases below are not arithmetic exercises: each was measured on КОМПАС-3D v24 before it
+/// <summary>The analytic profile area is what turns "KOMPAS returned true" into a verified geometry
+/// change (spec 1.11), so its own numbers must be exact and its refusals must be real.</summary>
+/// <remarks>The nested cases below are not arithmetic exercises: each was measured on KOMPAS-3D v24 before it
 /// was written down (24.09.2026, extruded 10 mm from a sketch on XY), and the measured volumes are
 /// quoted next to the expectations. The controls — one circle, disjoint contours — are here for the
 /// same reason as the refusals: an instrument that cannot pass is as useless as one that cannot
-/// refuse, and without them "summing is wrong" is indistinguishable from "the check is broken".
-/// </remarks>
+/// refuse, and without them "summing is wrong" is indistinguishable from "the check is broken".</remarks>
 public class ProfileAreaTests
 {
     private static SketchEntityDto Rect(double x, double y, double w, double h) => new()
@@ -256,7 +252,7 @@ public class ProfileAreaTests
     [Fact]
     public void Matches_UsesRelativeTolerance()
     {
-        // The measured 80000 mm³ arrives as 79999.99999999999 in КОМПАС; a purely absolute
+        // The measured 80000 mm³ arrives as 79999.99999999999 in KOMPAS; a purely absolute
         // tolerance would have to be either huge (for big models) or flaky (for small ones).
         Assert.True(ProfileArea.Matches(80000d, 79999.99999999999d));
         Assert.True(ProfileArea.Matches(1e9, 1e9 + 0.5));

@@ -2,27 +2,16 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>
-/// Граница «продукт говорит с КОМПАСом только типизированно» (поручение от 12.09.2026, п. 4).
-/// </summary>
-/// <remarks>
-/// <para>
-/// API7 допускается в продукте (ADR-004 §1, §4) — но только через сгенерированные вендором
-/// интерфейсы. Позднее связывание (<c>Type.InvokeMember</c>, <c>dynamic</c> поверх RCW, прямой
-/// вызов <c>IDispatch</c>) остаётся аварийным маршрутом исследовательской пробы
-/// <c>tools/KompasMcp.Api7Probe</c> и в <c>src/</c> не переносится. Причина измерена, а не
-/// соблюдается «для чистоты»: проба E (2026-09-12) дала, что запись <c>IExtrusion.Sketch</c>
-/// через <c>IDispatch</c> в общем процессе роняла его кодом 0xC0000409, а в изолированном — нет;
-/// при этом та же запись молча не сохраняла значение и перечитывалась прежним объектом.
-/// Молчаливо непринятая запись, возвращающая S_OK, хуже отказа именно тем, что приёмка посчитала
-/// бы её успехом.
-/// </para>
-/// <para>
-/// Проверка статическая по исходникам: «позднего связывания нет» — это свойство кода, а не
-/// наблюдаемое число, и подтвердить его прогоном нельзя (отказ проявится только на том вызове,
-/// который до него дойдёт).
-/// </para>
-/// </remarks>
+/// <summary>The "the product talks to KOMPAS only in a typed way" boundary (order of 12.09.2026, item 4).</summary>
+/// <remarks>INVARIANT: API7 is allowed in the product (ADR-004 §1, §4) but only through vendor-generated
+/// interfaces. Late binding (<c>Type.InvokeMember</c>, <c>dynamic</c> over an RCW, a direct <c>IDispatch</c>
+/// call) stays the emergency route of the research probe <c>tools/KompasMcp.Api7Probe</c> and is not carried
+/// into <c>src/</c>. MEASURED (probe E, 2026-09-12): writing <c>IExtrusion.Sketch</c> through <c>IDispatch</c>
+/// crashed the shared process with 0xC0000409 and did not crash the isolated one, while the same write
+/// silently did not persist and was re-read by the old object. A silently unaccepted write returning S_OK is
+/// worse than a refusal precisely because acceptance would count it a success. LIMIT: the check is static by
+/// source — "no late binding" is a property of code, not an observable number.
+/// History: docs/decisions/tests.md#typed-com</remarks>
 public sealed class TypedComBoundaryGuardTests
 {
     private static string RepoRoot => FindRepoRoot();
@@ -47,7 +36,7 @@ public sealed class TypedComBoundaryGuardTests
                            && !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}",
                                StringComparison.Ordinal));
 
-    /// <summary>Строки исполняемого кода: комментарий и XML-документацию считаем ссылкой, а не вызовом.</summary>
+    /// <summary>Executable code lines: a comment or XML doc counts as a reference, not a call.</summary>
     private static IEnumerable<(string Path, int Number, string Line)> CodeLines(IEnumerable<string> paths) =>
         paths.SelectMany(path => File.ReadLines(path).Select((line, number) => (path, number, line)))
             .Where(row => !row.line.TrimStart().StartsWith("//", StringComparison.Ordinal)
@@ -61,10 +50,10 @@ public sealed class TypedComBoundaryGuardTests
     [InlineData("KompasMcp.Domain")]
     public void ProductCode_NeverBindsToKompasLateBound(string project)
     {
-        // Позднее связывание под любым именем: InvokeMember (в том числе Type.InvokeMember),
-        // local-объявление IDispatch с его GetIDsOfNames/Invoke и dynamic-получатель. Именно этот
-        // набор образует аварийный маршрут в tools/KompasMcp.Api7Probe/Late.cs — копия любой из
-        // этих форм в продукт переносит то, от чего граница и защищает.
+        // Late binding under any name: InvokeMember (including Type.InvokeMember), a local IDispatch declaration
+        // with its GetIDsOfNames/Invoke, and a dynamic receiver. Exactly this set forms the emergency route in
+        // tools/KompasMcp.Api7Probe/Late.cs — copying any of these forms into the product carries over what the
+        // boundary guards against.
         var patterns = new[]
         {
             ("InvokeMember", "Type.InvokeMember — позднее связывание в продукте"),
@@ -95,7 +84,7 @@ public sealed class TypedComBoundaryGuardTests
     [Fact]
     public void ProductCode_MustNotDeclareDynamicReceivers()
     {
-        // dynamic разрешает вызов, который компилируется без проверки сигнатуры и уходит в IDispatch.
+        // dynamic allows a call that compiles without a signature check and goes to IDispatch.
         var offenders = new List<string>();
         foreach (var path in SourceFiles("KompasMcp.Api5Adapter"))
         {
@@ -117,9 +106,9 @@ public sealed class TypedComBoundaryGuardTests
     [Fact]
     public void LateBindingRoute_StillLivesOnlyInTheIsolatedProbe()
     {
-        // Инверсия того же требования: аварийный маршрут обязан остаться в probes-проекте. Если
-        // он исчезнет оттуда, а в продукте его по-прежнему нет, — значит проверка ниже стала
-        // вакуумом, и об этом надо узнать, а не радоваться зелёному тесту.
+        // The inverse of the same requirement: the emergency route must stay in the probes project. If it
+        // disappears from there while still absent from the product, the check below has become a vacuum — that
+        // must be learned, not celebrated as a green test.
         var probe = Path.Combine(RepoRoot, "tools", "KompasMcp.Api7Probe", "Late.cs");
         Assert.True(File.Exists(probe),
             "позднее связывание больше нигде не разрешено, но и исследовательский файл пропал: " +

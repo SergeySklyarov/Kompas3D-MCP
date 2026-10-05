@@ -4,25 +4,15 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>
-/// Решение «можно ли освобождать сеанс» — таблицей, без КОМПАС и без Worker.
-/// </summary>
-/// <remarks>
-/// <para>
-/// Проверяется ИМЕННО чистая функция: дефект H3 ревью 05.10.2026 состоял в том, что правило жило
-/// разложенным по ветвям <c>HostSession.ReleaseAsync</c> и один из обходов (промежуточный CAD-вызов,
-/// поднявший новый Worker с пустой описью) через эти ветви проскакивал. Здесь каждая строка таблицы —
-/// это состояние, в котором решение обязано быть принято ДО обращения к Worker.
-/// </para>
-/// <para>
-/// ОБЯЗАТЕЛЬНАЯ СТРОКА: «Worker перезапущен после обрыва, опись пуста → отказ». Пустая опись нового
-/// Worker — это не «правок нет», а «документы потеряны», и признак <c>DocumentStateUnknown</c> её
-/// перекрывает.
-/// </para>
-/// </remarks>
+/// <summary>The "may the session be released" decision — as a table, without KOMPAS and without a Worker.</summary>
+/// <remarks>TEST: exactly the pure function is checked. INVARIANT (defect H3, review 05.10.2026): each table
+/// row is a state in which the decision must be made BEFORE contacting the Worker. INVARIANT: "Worker
+/// restarted after a break, inventory empty → refusal" — an empty inventory of a new Worker is not "no
+/// edits" but "documents lost", and the <c>DocumentStateUnknown</c> sign overrides it.
+/// History: docs/decisions/tests.md#release-guard</remarks>
 public class ReleaseGuardTests
 {
-    /// <summary>Состояние по умолчанию: Worker работал, канал жив, опись прочитана, правок нет.</summary>
+    /// <summary>Default state: Worker ran, channel live, inventory read, no edits.</summary>
     private static ReleaseFacts Facts(
         bool workerStarted = true,
         bool canSendWithoutRestart = true,
@@ -44,19 +34,19 @@ public class ReleaseGuardTests
     [Fact]
     public void WorkerNeverStarted_IsReleasedWithoutInventory()
     {
-        // COM-сеанса не было вовсе: документов нет, и описи спрашивать не у кого.
+        // There was no COM session at all: no documents, and no one to ask for an inventory.
         var decision = ReleaseGuard.Decide(Facts(workerStarted: false, inventoryRead: false));
 
         Assert.True(decision.Proceed);
     }
 
-    /// <summary>ОБЯЗАТЕЛЬНАЯ СТРОКА ТАБЛИЦЫ (H3).</summary>
+    /// <summary>MANDATORY TABLE ROW (H3).</summary>
     [Fact]
     public void WorkerRestartedAfterBreakWithEmptyInventory_IsRefused()
     {
-        // Промежуточный CAD-вызов поднял новый Worker: канал жив (canSend=true), опись прочитана и
-        // ПУСТА (dirty=0) — то есть все «старые» проверки довольны. Но документы прежнего Worker
-        // потеряны, и это состояние обязано перекрыть пустую опись.
+        // An intermediate CAD call raised a new Worker: the channel is live (canSend=true), the inventory was
+        // read and is EMPTY (dirty=0) — all the "old" checks are happy. But the previous Worker's documents
+        // are lost, and this state must override the empty inventory.
         var decision = ReleaseGuard.Decide(Facts(
             canSendWithoutRestart: true,
             documentStateUnknown: true,
@@ -80,8 +70,8 @@ public class ReleaseGuardTests
     [Fact]
     public void UnknownDocumentState_StillRefusesOnDirtyDocumentsEvenWithAcknowledgement()
     {
-        // Подтверждение неизвестного состояния НЕ отменяет отказа по известным несохранённым правкам:
-        // «я не знаю» и «я знаю, что там правки» — разные состояния, и второе лечится сохранением.
+        // INVARIANT: acknowledging an unknown state does NOT cancel the refusal for known unsaved edits —
+        // "I don't know" and "I know there are edits" are different states, and the second is cured by saving.
         var decision = ReleaseGuard.Decide(Facts(
             documentStateUnknown: true, acknowledge: true, dirtyCount: 2));
 
@@ -99,16 +89,14 @@ public class ReleaseGuardTests
         Assert.Contains("НЕИЗВЕСТНО", decision.Reason!, StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// ОБЯЗАТЕЛЬНАЯ СТРОКА (§4): подтверждённое неизвестное состояние снимает отказ по СЛОМАННОМУ каналу.
-    /// </summary>
+    /// <summary>MANDATORY ROW (§4): an acknowledged unknown state removes the refusal for a BROKEN channel.</summary>
     [Fact]
     public void UnknownDocumentState_Acknowledged_SkipsTheBrokenChannelRefusal()
     {
-        // Сразу после обрыва канала клиент, который уже принял неизвестное состояние, обязан уметь
-        // освободить сеанс. Прежде подтверждение снимало только шаг 1, а шаг 3 («канал сломан») всё
-        // равно отказывал, и единственным выходом был обходной: сделать CAD-вызов, чтобы Worker
-        // перезапустился, и повторить. Опись при подтверждении не нужна — она не добавляет сведений.
+        // Right after a channel break a client that has already accepted the unknown state must be able to
+        // release the session. The old code cleared only step 1 while step 3 ("channel broken") still refused,
+        // leaving a workaround as the only way out. With acknowledgement the inventory is not needed — it adds
+        // no information.
         var decision = ReleaseGuard.Decide(Facts(
             canSendWithoutRestart: false,
             documentStateUnknown: true,
@@ -119,7 +107,7 @@ public class ReleaseGuardTests
         Assert.Null(decision.RefusalCode);
     }
 
-    /// <summary>ОБЯЗАТЕЛЬНАЯ СТРОКА (§4): подтверждение снимает и отказ «опись не прочитана».</summary>
+    /// <summary>MANDATORY ROW (§4): acknowledgement also removes the "inventory not read" refusal.</summary>
     [Fact]
     public void UnknownDocumentState_Acknowledged_SkipsTheUnreadInventoryRefusal()
     {
@@ -132,11 +120,9 @@ public class ReleaseGuardTests
         Assert.True(decision.Proceed);
     }
 
-    /// <summary>
-    /// Отрицательный контроль: подтверждение НЕ снимает отказ по каналу, если неизвестное состояние не
-    /// отмечено. Подтверждать нечего — признак не стоит, и «acknowledge» не должен быть универсальной
-    /// отмычкой от любой проверки описи.
-    /// </summary>
+    /// <summary>Negative control: acknowledgement does NOT remove the channel refusal when the unknown state
+    /// is not flagged. There is nothing to acknowledge — the sign is absent, and "acknowledge" must not be a
+    /// universal skeleton key for any inventory check.</summary>
     [Fact]
     public void BrokenChannel_WithoutUnknownStateFlag_StillRefusesEvenWithAcknowledgement()
     {
@@ -153,8 +139,8 @@ public class ReleaseGuardTests
     [Fact]
     public void BrokenChannelRefusal_NamesTheAcknowledgementAsTheWayOut()
     {
-        // Отказ обязан НАЗЫВАТЬ выход, а не оставлять клиента в тупике: иначе единственным способом
-        // остаётся обходной шаг, которого в тексте нет.
+        // INVARIANT: the refusal must NAME the way out, not leave the client in a dead end — otherwise the
+        // only way remains a workaround that the text does not mention.
         var decision = ReleaseGuard.Decide(Facts(canSendWithoutRestart: false, inventoryRead: false));
 
         Assert.Contains("acknowledge_unknown_document_state", decision.Reason!, StringComparison.Ordinal);
@@ -179,11 +165,9 @@ public class ReleaseGuardTests
         Assert.Contains("1", decision.Reason!, StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// Отрицательный контроль: неизвестное состояние без подтверждения отказывает РАНЬШЕ, чем
-    /// проверяется сломанный канал. Иначе ответ называл бы причиной «канал сломан» там, где истинная
-    /// причина — потеря документов, и клиент искал бы выход не там.
-    /// </summary>
+    /// <summary>Negative control: an unknown state without acknowledgement refuses EARLIER than the broken
+    /// channel is checked — otherwise the answer would name "channel broken" where the true cause is lost
+    /// documents, and the client would look for a way out in the wrong place.</summary>
     [Fact]
     public void UnknownDocumentState_IsCheckedBeforeTheChannel()
     {

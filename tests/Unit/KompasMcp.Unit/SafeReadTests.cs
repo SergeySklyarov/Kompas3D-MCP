@@ -4,11 +4,9 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>
-/// FIX C. Непрочитанное COM-значение обязано отличаться от успешно прочитанного <c>false</c>/<c>0</c>/
-/// первого значения перечисления. Прежний помощник возвращал <c>default</c>, и «чтение не состоялось»
-/// было неотличимо от «прочитано значение по умолчанию».
-/// </summary>
+/// <summary>INVARIANT (FIX C): an unread COM value must differ from a successfully read <c>false</c>/<c>0</c>/
+/// first enum value. The old helper returned <c>default</c>, making "the read did not happen"
+/// indistinguishable from "the default value was read". History: docs/decisions/tests.md#safe-read</summary>
 public class SafeReadTests
 {
     private enum Sample
@@ -30,7 +28,7 @@ public class SafeReadTests
     [Fact]
     public void UnreadNullableBool_IsNull_WhileReadNull_IsNull()
     {
-        // Оба null — для ссылочной семантики это ожидаемо; различие ловится через TryRead.
+        // Both null — expected for reference semantics; the difference is caught through TryRead.
         Assert.Null(SafeRead.Bool(() => Fail<bool?>()));
         var read = SafeRead.TryRead(() => Fail<bool>());
         Assert.False(read.Ok);
@@ -46,7 +44,7 @@ public class SafeReadTests
     [Fact]
     public void UnreadEnumName_IsNamedUnread_NotTheFirstEnumValue()
     {
-        // Прежний Safe давал default(Sample) = First, и «не прочитано» печаталось как "First".
+        // The old Safe gave default(Sample) = First, and "not read" was printed as "First".
         Assert.Equal("unread", SafeRead.EnumName(() => Fail<Sample>()));
         Assert.Equal("First", SafeRead.EnumName(() => Sample.First));
         Assert.Equal("Second", SafeRead.EnumName(() => Sample.Second));

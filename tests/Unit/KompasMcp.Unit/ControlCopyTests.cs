@@ -4,15 +4,10 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>
-/// Восстановление файла документа из контрольной копии: решение — таблицей, поведение — на файлах.
-/// </summary>
-/// <remarks>
-/// Дефект H4 ревью 05.10.2026 состоял из двух частей, и обе проверяются здесь: (1) восстановление
-/// шло в обход режима доступа и перезаписывало файл документа, открытого <c>access=read_only</c>;
-/// (2) восстановление выполнялось и на отказах, которые до COM не доходили, — то есть сервер писал в
-/// пользовательский файл без причины.
-/// </remarks>
+/// <summary>Restoring a document file from its control copy: the decision as a table, the behaviour on files.</summary>
+/// <remarks>INVARIANT (defect H4, review 05.10.2026): a restore never overwrites a document opened
+/// <c>access=read_only</c>, and never runs for a refusal that never reached COM — writing into a user file
+/// without cause. History: docs/decisions/tests.md#control-copy</remarks>
 public class ControlCopyTests : IDisposable
 {
     private readonly string _directory;
@@ -33,7 +28,7 @@ public class ControlCopyTests : IDisposable
     }
 
     // -----------------------------------------------------------------------------------------
-    // Решение (чистая функция)
+    // Decision (pure function)
     // -----------------------------------------------------------------------------------------
 
     [Fact]
@@ -49,7 +44,7 @@ public class ControlCopyTests : IDisposable
     [Fact]
     public void CleanRefusalBeforeCom_IsNotRestored()
     {
-        // REVISION_CONFLICT приходит до COM: файл не менялся, восстановление было бы лишней записью.
+        // REVISION_CONFLICT arrives before COM: the file did not change, so a restore would be a needless write.
         var decision = ControlCopyRestorePolicy.Decide(
             copyMade: true, DocumentAccess.Edit, ErrorCodes.RevisionConflict, partialEffects: false);
 
@@ -82,7 +77,7 @@ public class ControlCopyTests : IDisposable
     [Fact]
     public void UnknownOutcome_IsRestored()
     {
-        // Неожиданное исключение: кода нет, исход неизвестен — файл возвращается.
+        // Unexpected exception: no code, outcome unknown — the file is returned.
         var decision = ControlCopyRestorePolicy.Decide(
             copyMade: true, DocumentAccess.Edit, errorCode: null, partialEffects: false);
 
@@ -98,11 +93,9 @@ public class ControlCopyTests : IDisposable
         Assert.False(decision.Restore);
     }
 
-    /// <summary>
-    /// Отрицательный контроль: частичный эффект НЕ перебивает запрет записи в read_only-документ.
-    /// Порядок проверок — часть контракта: перезапись файла в обход политики путей хуже, чем
-    /// отсутствие отката, и причина произносится, а не умалчивается.
-    /// </summary>
+    /// <summary>Negative control: a partial effect does NOT override the ban on writing to a read_only
+    /// document. LIMIT: the order of the checks is part of the contract — overwriting a file around the
+    /// path policy is worse than no rollback, and the reason is spoken, not withheld.</summary>
     [Fact]
     public void PartialEffect_DoesNotOverrideTheReadOnlyAccess()
     {
@@ -113,7 +106,7 @@ public class ControlCopyTests : IDisposable
     }
 
     // -----------------------------------------------------------------------------------------
-    // Поведение на файлах
+    // Behaviour on files
     // -----------------------------------------------------------------------------------------
 
     [Fact]
@@ -126,7 +119,7 @@ public class ControlCopyTests : IDisposable
 
         File.WriteAllText(document, "mutated");
 
-        // Режим доступа read_only: восстановление обязано отказать и НЕ трогать файл документа.
+        // Access mode read_only: the restore must refuse and NOT touch the document file.
         var failure = copies.Restore(document, copy.Path, DocumentAccess.ReadOnly);
 
         Assert.NotNull(failure);
@@ -182,7 +175,7 @@ public class ControlCopyTests : IDisposable
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // Уборка временного каталога — best effort.
+            // Temp directory cleanup is best effort.
         }
     }
 }

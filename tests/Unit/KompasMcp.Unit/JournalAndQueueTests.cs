@@ -5,10 +5,9 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>
-/// Idempotency and crash semantics (spec 1.8). The interesting assertions are the ones about
-/// what must NOT happen: no second COM call on replay, and no "safe to retry" after a crash.
-/// </summary>
+/// <summary>Idempotency and crash semantics (spec 1.8). The interesting assertions are the ones about
+/// what must NOT happen: no second COM call on replay, and no "safe to retry" after a crash.</summary>
+/// <remarks>History: docs/decisions/tests.md#journal-tests</remarks>
 public class OperationJournalTests : IDisposable
 {
     private readonly string _file;
@@ -47,11 +46,9 @@ public class OperationJournalTests : IDisposable
         Assert.Equal("""{"body_count":1}""", again.Existing.ResultJson);
     }
 
-    /// <summary>
-    /// Повтор во время выполнения НЕ разрешает вторую отправку. Прежде журнал отвечал
-    /// <c>Proceed=true</c> на незавершённую запись, и вызывающий отправлял команду в КОМПАС второй
-    /// раз — измерено 04.10.2026: повтор <c>kompas_create_document</c> создал два документа.
-    /// </summary>
+    /// <summary>INVARIANT: a replay while in flight does NOT allow a second dispatch. MEASURED 04.10.2026:
+    /// the old journal answered <c>Proceed=true</c> to an unfinished record, and a repeated
+    /// <c>kompas_create_document</c> created two documents.</summary>
     [Fact]
     public void SameIdWhileStillInFlight_IsNotAllowedToProceedAgain()
     {
@@ -60,7 +57,7 @@ public class OperationJournalTests : IDisposable
         var first = journal.TryBegin(id, "kompas_create_document", Args(10), "doc-1", 3);
         Assert.True(first.Proceed);
 
-        // Запись ещё InFlight: операция выполняется.
+        // The record is still InFlight: the operation is running.
         var second = journal.TryBegin(id, "kompas_create_document", Args(10), "doc-1", 3);
 
         Assert.False(second.Proceed, "незавершённая операция не имеет права быть отправленной второй раз");
@@ -143,18 +140,11 @@ public class OperationJournalTests : IDisposable
         Assert.Contains(id, text, StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// Read a file the server may still hold open. File.ReadAllText asks for FileShare.Read, which
-    /// Windows refuses against a live writer handle — so anything that has to observe the journal
-    /// or the logs while the server runs must open with FileShare.ReadWrite.
-    /// </summary>
-    /// <remarks>
-    /// Уточнено 21.09.2026: сам журнал ручку на запись теперь НЕ держит (запись —
-    /// открыть-дописать-закрыть, R2 наряда), поэтому этот путь больше не единственный способ
-    /// прочитать живой журнал. Правило остаётся в силе для журнала ХОСТА, который ручку держит, и
-    /// для прежних сборок поставки. Проверка «читается при живом писателе» вынесена отдельным
-    /// тестом — <see cref="SecondInstance_ReadsTheJournalWhileTheFirstIsWriting"/>.
-    /// </remarks>
+    /// <summary>Read a file the server may still hold open. File.ReadAllText asks for FileShare.Read, which
+    /// Windows refuses against a live writer handle — so anything observing the journal or the logs while the
+    /// server runs must open with FileShare.ReadWrite. The rule still holds for the HOST log, which keeps a
+    /// handle. The "readable while a writer is live" check is a separate test —
+    /// <see cref="SecondInstance_ReadsTheJournalWhileTheFirstIsWriting"/>.</summary>
     private static string ReadWhileOpen(string path)
     {
         using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
@@ -178,8 +168,8 @@ public class OperationJournalTests : IDisposable
         using var restarted = new OperationJournal(_file);
         Assert.NotEmpty(restarted.Recent(10));
 
-        // Пропуск НАЗЫВАЕТСЯ числом, и оборванный хвост назван хвостом. «Журнал прочитан» и
-        // «журнал прочитан не весь» — разные утверждения: молчание между ними неразличимо.
+        // INVARIANT: the skip is NAMED by a number and the torn tail is named a tail. "The journal was read"
+        // and "the journal was not read in full" are different claims — silence between them is indistinguishable.
         Assert.Equal(1, restarted.SkippedLines);
         Assert.True(restarted.TornTail, "незавершённая последняя строка обязана быть названа рваным хвостом");
     }
@@ -193,9 +183,8 @@ public class OperationJournalTests : IDisposable
             journal.TryBegin(id, "kompas_extrude", Args(10), "doc-1", 3);
         }
 
-        // Мусорная строка В СЕРЕДИНЕ, за которой есть перевод строки и ещё одна годная строка:
-        // причина другая (порча файла, а не убийство процесса), и назвать её рваным хвостом —
-        // значит назвать измеренное не тем, чем оно является.
+        // A garbage line IN THE MIDDLE, followed by a newline and another valid line: the cause is different
+        // (file corruption, not a killed process), and calling it a torn tail would misname what was measured.
         File.AppendAllText(_file, "{ это не запись журнала }\n");
         using (var second = new OperationJournal(_file))
         {
@@ -208,23 +197,13 @@ public class OperationJournalTests : IDisposable
         Assert.NotEmpty(restarted.Recent(10));
     }
 
-    /// <summary>
-    /// R1 наряда: журнал, открытый на запись ДРУГИМ экземпляром, читается.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Это ровно тот дефект, из-за которого 21.09.2026 клиент остался без инструментов: путь чтения
-    /// (<c>File.ReadLines</c> с <c>FileShare.Read</c>) запрещал запись, которую держал живой писатель,
-    /// и второй Хост падал необработанным <c>IOException</c> до старта транспорта.
-    /// </para>
-    /// <para>
-    /// ИЗМЕРЕННОЕ СЛЕДСТВИЕ, КОТОРОЕ ЗДЕСЬ НАЗВАНО, А НЕ ЗАМОЛЧАНО. Второй читатель не знает, жив
-    /// ли писатель, поэтому незавершённая запись читается им как <see cref="JournalOutcome.OutcomeUnknown"/>
-    /// с требованием согласования — это и есть правило восстановления после падения, и оно не
-    /// ослаблено. Именно поэтому чтение живого журнала вторым Хостом — не безобидное действие, а
-    /// причина, по которой владелец журнала обязан быть один (R3 наряда).
-    /// </para>
-    /// </remarks>
+    /// <summary>INVARIANT (order R1): a journal opened for writing by ANOTHER instance is readable.</summary>
+    /// <remarks>MEASURED (21.09.2026): the read path (<c>File.ReadLines</c> with <c>FileShare.Read</c>)
+    /// forbade the write a live writer held, and the second Host died with an unhandled <c>IOException</c>
+    /// before transport start. INVARIANT: a second reader cannot know whether the writer is alive, so an
+    /// unfinished record reads as <see cref="JournalOutcome.OutcomeUnknown"/> with a reconciliation demand —
+    /// the crash-recovery rule, unweakened; this is why the journal owner must be one (R3).
+    /// History: docs/decisions/tests.md#journal-tests</remarks>
     [Fact]
     public void SecondInstance_ReadsTheJournalWhileTheFirstIsWriting()
     {
@@ -232,34 +211,29 @@ public class OperationJournalTests : IDisposable
         var id = Guid.NewGuid().ToString();
         first.TryBegin(id, "kompas_extrude", Args(10), "doc-1", 3);
 
-        // Второй экземпляр на том же пути — и ни одного исключения.
+        // A second instance on the same path — and not a single exception.
         using var second = new OperationJournal(_file);
 
         Assert.True(second.TryGet(id, out var seen), "второй экземпляр обязан прочитать запись первого");
         Assert.Equal(JournalOutcome.OutcomeUnknown, seen!.Outcome);
         Assert.True(seen.NeedsReconciliation);
 
-        // Ни одной неразобранной строки: чтение идёт под той же межпроцессной блокировкой, что и
-        // запись, поэтому половина строки не может быть принята за рваный хвост.
+        // Not a single unparsed line: reading runs under the same cross-process lock as writing, so half a
+        // line cannot be taken for a torn tail.
         Assert.Equal(0, second.SkippedLines);
         Assert.False(second.TornTail);
 
-        // И первый продолжает писать: совместность нужна в ОБЕ стороны, а не только на чтении.
+        // And the first keeps writing: sharing is needed in BOTH directions, not only on read.
         first.Complete(id, """{"body_count":1}""");
         using var third = new OperationJournal(_file);
         Assert.True(third.TryGet(id, out var completed));
         Assert.Equal(JournalOutcome.Succeeded, completed!.Outcome);
     }
 
-    /// <summary>
-    /// R2 наряда: записи двух экземпляров не рвут строки друг друга.
-    /// </summary>
-    /// <remarks>
-    /// Ручка на запись больше не держится всю жизнь процесса: каждая запись — открыть-дописать-
-    /// закрыть одним вызовом. Проверяется не «код выглядит совместным», а результат: 400 записей от
-    /// двух независимых экземпляров, прочитанных третьим, — ни одной неразобранной строки и ни одной
-    /// потерянной записи.
-    /// </remarks>
+    /// <summary>INVARIANT (order R2): the writes of two instances do not tear each other's lines.</summary>
+    /// <remarks>The write handle is no longer held for the process lifetime: each write is open-append-close
+    /// in one call. The result is checked, not "the code looks shared": 400 records from two independent
+    /// instances, read by a third, with no unparsed and no lost line.</remarks>
     [Fact]
     public async Task TwoInstancesAppendingConcurrently_ProduceNoTornLines()
     {
@@ -284,12 +258,9 @@ public class OperationJournalTests : IDisposable
         Assert.Equal(2 * perWriter, reader.Recent(10_000).Count);
     }
 
-    /// <summary>
-    /// FIX A. Запись журнала при недоступной межпроцессной блокировке НЕ выполняется: намерение не
-    /// записано, начатой операции в памяти нет, команда не уходит, отказ НАЗВАН. Прежняя редакция
-    /// писала строку без блокировки и лишь выставляла диагностический флаг — гарантия журналирования
-    /// подменялась наблюдением.
-    /// </summary>
+    /// <summary>INVARIANT (FIX A): with the cross-process lock unavailable the journal write does NOT happen
+    /// — no intent recorded, no in-memory operation, no command leaves, and the refusal is NAMED.
+    /// History: docs/decisions/tests.md#journal-tests</summary>
     [Fact]
     public void BeginRefused_WhenLockHeldElsewhere_NothingRecordedAndNamedRefusal()
     {
@@ -306,15 +277,13 @@ public class OperationJournalTests : IDisposable
             "неудачная запись намерения не имеет права оставлять фиктивную начатую операцию");
         Assert.Equal(1, journal.RefusedAppends);
 
-        // И на диске её тоже нет: отказ — это «не записано», а не «записано без блокировки».
+        // And it is not on disk either: a refusal is "not recorded", not "recorded without the lock".
         var text = File.Exists(_file) ? ReadWhileOpen(_file) : string.Empty;
         Assert.DoesNotContain(id, text, StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// Освобождение блокировки восстанавливает работу: тот же operation_id принимается, запись
-    /// намерения долговечна, повторной отправки уже выполненной команды не происходит.
-    /// </summary>
+    /// <summary>INVARIANT: releasing the lock restores work — the same operation_id is accepted, the intent
+    /// record is durable, and a completed command is not re-dispatched.</summary>
     [Fact]
     public void BeginSucceedsAfterLockReleased_AndCompletedCommandIsNotReExecuted()
     {
@@ -336,11 +305,9 @@ public class OperationJournalTests : IDisposable
         Assert.Equal(JournalOutcome.Succeeded, again.Existing!.Outcome);
     }
 
-    /// <summary>
-    /// FIX A (терминальная запись). Если строка исхода не легла ПОСЛЕ выполненной мутации, исход
-    /// нельзя объявлять записанным: в памяти он помечается требующим согласования, вызывающий
-    /// получает `false`, а долговечный журнал по-прежнему говорит `in_flight`.
-    /// </summary>
+    /// <summary>INVARIANT (FIX A, terminal write): if the outcome line did not land AFTER a completed
+    /// mutation, the outcome cannot be declared recorded — in memory it is marked for reconciliation, the
+    /// caller gets <c>false</c>, and the durable journal still says <c>in_flight</c>.</summary>
     [Fact]
     public void TerminalWriteFailureAfterMutation_RequiresReconciliation()
     {
@@ -363,11 +330,9 @@ public class OperationJournalTests : IDisposable
         Assert.Contains("in_flight", ReadWhileOpen(_file), StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// FIX H2. Рваный хвост НЕ только отмечается, но и ЧИНИТСЯ: иначе первая же запись нового
-    /// процесса склеивается с обрывком, и её намерение теряется полностью — журнал не знает
-    /// операции, и повтор с тем же operation_id выполняет мутацию ВТОРОЙ раз.
-    /// </summary>
+    /// <summary>INVARIANT (FIX H2): a torn tail is not only marked but REPAIRED — otherwise the first write
+    /// of a new process glues itself to the fragment, its intent is lost, and a repeat with the same
+    /// operation_id applies the mutation a SECOND time.</summary>
     [Fact]
     public void TornTail_IsRepaired_SoTheNextRecordIsNotSwallowed()
     {
@@ -379,7 +344,7 @@ public class OperationJournalTests : IDisposable
             journal.Complete(firstId, null);
         }
 
-        // Жёсткое убийство процесса посередине записи: строка без перевода строки.
+        // A hard process kill mid-write: a line with no newline.
         File.AppendAllText(_file, "{\"operation_id\":\"truncat");
 
         string secondId;
@@ -387,7 +352,7 @@ public class OperationJournalTests : IDisposable
         {
             Assert.True(restarted.TornTail, "обрыв обязан быть назван");
             Assert.Equal(1, restarted.SkippedLines);
-            Assert.Equal(1, restarted.RepairedTornTails); // обрыв обязан быть починен при открытии
+            Assert.Equal(1, restarted.RepairedTornTails); // the tear must be repaired on open
             Assert.Equal(0, restarted.TornTailRepairFailures);
 
             secondId = Guid.NewGuid().ToString();
@@ -396,20 +361,19 @@ public class OperationJournalTests : IDisposable
             restarted.Complete(secondId, """{"body_count":2}""");
         }
 
-        // Намерение B не потеряно — это и было содержимым дефекта.
+        // Intent B is not lost — that was the substance of the defect.
         using var third = new OperationJournal(_file);
         Assert.True(third.TryGet(firstId, out var first), "прежняя запись не имеет права теряться");
         Assert.Equal(JournalOutcome.Succeeded, first!.Outcome);
         Assert.True(third.TryGet(secondId, out var second));
         Assert.Equal(JournalOutcome.Succeeded, second!.Outcome);
-        Assert.Equal(1, third.SkippedLines); // рваный хвост по-прежнему НАЗВАН пропуском
+        Assert.Equal(1, third.SkippedLines); // the torn tail is still NAMED a skip
     }
 
-    /// <summary>
-    /// FIX §4 (05.10.2026). Рваный хвост чинится ТОЛЬКО под полученной блокировкой. Пока блокировку
-    /// держит другой писатель, починка НЕ выполняется — иначе дописанный перевод строки лёг бы в
-    /// середину чужой целой записи. Хвост чинит первая же запись — под СВОЕЙ блокировкой.
-    /// </summary>
+    /// <summary>INVARIANT (FIX §4, 05.10.2026): a torn tail is repaired ONLY under an acquired lock. While
+    /// another writer holds the lock the repair does NOT run — else the appended newline would land inside a
+    /// foreign intact record. The first write repairs the tail under ITS OWN lock.
+    /// History: docs/decisions/tests.md#journal-tests</summary>
     [Fact]
     public void TornTail_IsNotRepairedWithoutTheLock_AndTheFirstAppendRepairsIt()
     {
@@ -423,8 +387,8 @@ public class OperationJournalTests : IDisposable
         File.AppendAllText(_file, "{\"operation_id\":\"truncat");
         var before = File.ReadAllBytes(_file);
 
-        // Блокировку держит ДРУГОЙ ПОТОК: именованная блокировка Windows принадлежит ПОТОКУ, и с того же
-        // потока её взял бы и второй объект. Поэтому держатель — отдельный поток.
+        // ANOTHER THREAD holds the lock: a named Windows lock belongs to a THREAD, and a second object on the
+        // same thread would take it too. So the holder is a separate thread.
         using var acquired = new ManualResetEventSlim(false);
         using var release = new ManualResetEventSlim(false);
         var holder = new Thread(() =>
@@ -449,10 +413,10 @@ public class OperationJournalTests : IDisposable
             Assert.True(unlocked.TornTailRepairSkippedUnlocked,
                 "без блокировки починка обязана быть НАЗВАНА пропущенной");
             Assert.Equal(0, unlocked.RepairedTornTails);
-            Assert.Equal(before, File.ReadAllBytes(_file)); // ФАЙЛ НЕ ИЗМЕНЁН — это и есть содержание правки
+            Assert.Equal(before, File.ReadAllBytes(_file)); // THE FILE IS UNCHANGED — that is the substance of the fix
 
-            // Держатель отпускает блокировку — и ТА ЖЕ открытая без блокировки запись обязана починить
-            // хвост под СВОЕЙ блокировкой, а не склеить свою строку с обрывком.
+            // The holder releases the lock — and the SAME record opened without the lock must repair the tail
+            // under ITS OWN lock, not glue its line to the fragment.
             release.Set();
             holder.Join(TimeSpan.FromSeconds(10));
 
@@ -478,11 +442,9 @@ public class OperationJournalTests : IDisposable
         }
     }
 
-    /// <summary>
-    /// FIX M1. Политика <c>SameOperationId</c> у записанного ЧИСТОГО отказа теперь выполнима:
-    /// повтор с тем же operation_id доходит до повторной отправки. Частичный эффект — не выполнима,
-    /// и это различие проведено по существу, а не по тексту ошибки.
-    /// </summary>
+    /// <summary>INVARIANT (FIX M1): the <c>SameOperationId</c> policy on a recorded CLEAN failure is now
+    /// feasible — a repeat with the same operation_id reaches re-dispatch. A partial effect is not, and the
+    /// distinction is drawn by substance, not by error text.</summary>
     [Fact]
     public void CleanFailure_CanBeRetriedWithTheSameOperationId()
     {
@@ -497,8 +459,8 @@ public class OperationJournalTests : IDisposable
         Assert.True(again.Proceed, "чистый отказ: ничего не применено, повтор тем же id обязан дойти до отправки");
         Assert.Equal(1, journal.RestartsAfterCleanFailure);
 
-        // И это не «забыли прежнее»: повторно начатая операция снова in_flight, а терминальная
-        // запись перекрывает прежний отказ.
+        // And this is not "the old one was forgotten": the restarted operation is again in_flight, and the
+        // terminal record overrides the old failure.
         Assert.True(journal.TryGet(id, out var record));
         Assert.Equal(JournalOutcome.InFlight, record!.Outcome);
         journal.Complete(id, """{"body_count":1}""");
@@ -569,14 +531,12 @@ public class OperationJournalTests : IDisposable
         Assert.False(queue.TryCancelQueued("running"));
     }
 
-    /// <summary>
-    /// The Host admits a mutation through this queue and then dispatches it to the Worker directly —
+    /// <summary>The Host admits a mutation through this queue and then dispatches it to the Worker directly —
     /// the queue is the counter of outstanding CAD work, not the thing that executes it. A served
     /// command must therefore release its slot, or <c>capacity</c> stops meaning "concurrently
     /// waiting" and becomes a lifetime budget of mutations per process. That is not a hypothetical:
     /// the acceptance run grew past 64 mutations in one session and every later call died with
-    /// QUEUE_FULL while the Worker was idle.
-    /// </summary>
+    /// QUEUE_FULL while the Worker was idle.</summary>
     [Fact]
     public async Task Queue_ServedCommandsReleaseTheirSlots_SecondHundredthMutationIsNotTheLast()
     {
@@ -616,12 +576,10 @@ public class OperationJournalTests : IDisposable
         Assert.Equal(2, queue.Count);
     }
 
-    /// <summary>
-    /// Держит межпроцессную блокировку журнала ИЗ ДРУГОГО ПОТОКА: проверка «запись без блокировки»
-    /// имеет смысл только тогда, когда блокировку действительно держит кто-то ещё. Имя берётся из
-    /// <see cref="OperationJournal.FileLockPurpose"/>, а не набирается строкой: своя копия имени
-    /// разошлась бы с продуктом и проверка измеряла бы чужую блокировку.
-    /// </summary>
+    /// <summary>Holds the journal's cross-process lock FROM ANOTHER THREAD: the "write without the lock"
+    /// check only makes sense when someone else really holds the lock. The name comes from
+    /// <see cref="OperationJournal.FileLockPurpose"/>, not typed as a literal — a private copy would diverge
+    /// from the product and the check would measure a foreign lock.</summary>
     private sealed class JournalLockHolder : IDisposable
     {
         private readonly ManualResetEventSlim _acquired = new(false);
@@ -636,7 +594,7 @@ public class OperationJournalTests : IDisposable
             {
                 if (!_lock.Enter(TimeSpan.FromSeconds(10)))
                 {
-                    return; // _acquired остаётся сброшенным, и конструктор назовёт это отказом.
+                    return; // _acquired stays reset, and the constructor names it a refusal.
                 }
 
                 _acquired.Set();

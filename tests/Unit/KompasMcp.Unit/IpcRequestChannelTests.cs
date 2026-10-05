@@ -6,23 +6,12 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>
-/// The single-reader contract of the Host-Worker pipe.
-/// </summary>
-/// <remarks>
-/// This guards the ABSENCE of the 18.09.2026 defect. The Host used to let every caller run its own
-/// read loop, so two tool calls in flight at once read the same stream concurrently, interleaved
-/// their bytes, and produced
-///   "WORKER_UNRESPONSIVE — Недопустимая длина кадра 1919951483 байт" (the four bytes were '{"pr')
-/// and
-///   "JsonException: 'o' is an invalid start of a value".
-/// Measured from the WorkBuddy client, which issues tool calls concurrently; the acceptance suite
-/// called tools one at a time and never touched the path.
-///
-/// The fake Worker below answers a "slow" request LATER than a "fast" one, so answers come back in
-/// the opposite order to the requests. That is the cheapest deterministic shape of the failure: a
-/// per-caller reader consumes someone else's frame and either mis-routes it or tears it.
-/// </remarks>
+/// <summary>The single-reader contract of the Host-Worker pipe.</summary>
+/// <remarks>INVARIANT: one serialised reader owns the stream, so concurrent tool calls each get their own
+/// answer. MEASURED: before 18.09.2026 every caller ran its own read loop, so two in-flight calls
+/// interleaved their bytes and produced a bad frame length and a JSON parse failure. The fake Worker below
+/// answers a "slow" request LATER than a "fast" one, so answers come back in reverse order — the cheapest
+/// deterministic shape of the failure. History: docs/decisions/tests.md#ipc-channel</remarks>
 public class IpcRequestChannelTests
 {
     private static async Task<(NamedPipeServerStream Server, NamedPipeClientStream Client)> ConnectAsync()
@@ -133,16 +122,10 @@ public class IpcRequestChannelTests
         }
     }
 
-    /// <summary>
-    /// Отмена клиентом ПОСЛЕ записи кадра мутации — это НЕ «команда не отправлялась».
-    /// </summary>
-    /// <remarks>
-    /// FIX H1 ревью 05.10.2026. Прежде любая <c>OperationCanceledException</c> с токеном клиента
-    /// выходила наружу, и вызывающий писал терминальное <c>cancelled</c> без требования
-    /// согласования: клиент получал «команда отменена в очереди Host и не отправлялась в КОМПАС»,
-    /// хотя Worker уже выполнял команду. Клиент, поверивший ответу, повторял мутацию с НОВЫМ
-    /// operation_id — и мутация применялась дважды.
-    /// </remarks>
+    /// <summary>INVARIANT: a client cancel AFTER a mutation frame was written is NOT "the command was not sent".</summary>
+    /// <remarks>MEASURED (FIX H1, review 05.10.2026): a client that believed "cancelled before dispatch"
+    /// repeated the mutation with a NEW operation_id and it applied twice.
+    /// History: docs/decisions/tests.md#ipc-channel</remarks>
     [Fact]
     public async Task ClientCancelsAfterTheFrameWasWritten_MutationIsOutcomeUnknownNotCancelled()
     {
@@ -150,8 +133,8 @@ public class IpcRequestChannelTests
         var channel = new IpcRequestChannel(client);
         using var workerStop = new CancellationTokenSource();
 
-        // Пир принимает кадр и НЕ отвечает: команда гарантированно ушла, но её исход никому не
-        // известен. Это и есть состояние, которое прежний код называл «отменено до отправки».
+        // The peer receives the frame and does NOT answer: the command definitely left, but its outcome is
+        // unknown to anyone — the state the old code called "cancelled before dispatch".
         var received = await StartSilentWorkerAsync(server, workerStop.Token);
 
         try
@@ -178,7 +161,7 @@ public class IpcRequestChannelTests
         }
     }
 
-    /// <summary>Чтение после отправки: модель не менялась, но отмена не подтверждена.</summary>
+    /// <summary>A read after the frame was written: the model did not change, but the cancel is not confirmed.</summary>
     [Fact]
     public async Task ClientCancelsAfterTheFrameWasWritten_ReadIsCancelNotConfirmed()
     {
@@ -209,10 +192,8 @@ public class IpcRequestChannelTests
         }
     }
 
-    /// <summary>
-    /// Отмена ДО записи кадра остаётся отменой: команда в Worker не ушла, и это единственный
-    /// случай, где «отменено» — подтверждённое состояние.
-    /// </summary>
+    /// <summary>INVARIANT: a cancel BEFORE the frame is written stays a cancel — the command did not reach
+    /// the Worker, and this is the only case where "cancelled" is a confirmed state.</summary>
     [Fact]
     public async Task ClientCancelsBeforeTheFrameIsWritten_CancellationStaysACancellation()
     {
@@ -237,7 +218,7 @@ public class IpcRequestChannelTests
         }
     }
 
-    /// <summary>Пир, который читает один кадр и молчит. Возвращает ожидание получения кадра.</summary>
+    /// <summary>A peer that reads one frame and stays silent. Returns the awaitable for frame receipt.</summary>
     private static async Task<Task<bool>> StartSilentWorkerAsync(Stream server, CancellationToken cancellationToken)
     {
         var received = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -253,7 +234,7 @@ public class IpcRequestChannelTests
             }
             catch (Exception)
             {
-                // Пир уходит — ожидание получения остаётся false, и тест это увидит.
+                // The peer goes away — the receipt awaitable stays false, and the test sees it.
             }
         }, CancellationToken.None);
 

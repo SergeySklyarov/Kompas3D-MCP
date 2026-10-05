@@ -3,29 +3,15 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>
-/// Преобразование сырого <c>ksConstraintsStateEnum</c> в опубликованный статус определённости эскиза.
-/// </summary>
-/// <remarks>
-/// <para>
-/// Эти тесты проверяют <b>чистую функцию</b> <see cref="SketchStatusResult.FromRawState"/>, и это
-/// единственное, что они проверяют. Живого КОМПАСа здесь нет, поэтому ни один прогон этого файла не
-/// является подтверждением маршрута чтения: маршрут подтверждён пробой S
-/// (<c>docs/acceptance/api7/sketch-definition.json</c>), а не мок-значением. Тест на значении 3
-/// специально написан так, чтобы <b>не</b> считаться доказательством получения состояния «на живой
-/// модели» — см. <see cref="Redundancy_WithoutLiveVerification_StaysUnknown"/>.
-/// </para>
-/// <para>
-/// Проверяются три свойства, каждое из которых легко потерять при следующей правке:
-/// <list type="number">
-/// <item><c>is_fully_defined</c> — nullable: «недоопределён» (<c>false</c>) и «не установлено»
-/// (<c>null</c>) это разные ответы;</item>
-/// <item><c>degrees_of_freedom</c> — всегда <c>null</c>, и никогда не выводится из числа размеров;</item>
-/// <item>неизвестное значение enum — не успех и не «недоопределён», а честный <c>unknown</c> с
-/// причиной.</item>
-/// </list>
-/// </para>
-/// </remarks>
+/// <summary>Converting the raw <c>ksConstraintsStateEnum</c> into the published sketch-definiteness status.</summary>
+/// <remarks>TEST: these tests check the PURE function <see cref="SketchStatusResult.FromRawState"/> and nothing
+/// else. LIMIT: there is no live KOMPAS here, so no run of this file confirms the read route — the route is
+/// confirmed by probe S (<c>docs/acceptance/api7/sketch-definition.json</c>), not by a mock value; the test on
+/// value 3 is deliberately written NOT to count as proof of reading the state on a live model (see
+/// <see cref="Redundancy_WithoutLiveVerification_StaysUnknown"/>). INVARIANT: three properties, each easy to
+/// lose on the next edit — <c>is_fully_defined</c> is nullable (false vs null are different answers);
+/// <c>degrees_of_freedom</c> is always null and never derived from the dimension count; an unknown enum value
+/// is not a success and not "under-defined" but an honest <c>unknown</c> with a reason.</remarks>
 public class SketchStatusConversionTests
 {
     private static readonly string[] Diagnostics = { "Эскиз: Эскиз:1.", "Перенос в ISketch: ISketch напрямую." };
@@ -34,7 +20,7 @@ public class SketchStatusConversionTests
     private static SketchStatusResult Convert(int? raw, bool redundancyVerified = false) =>
         SketchStatusResult.FromRawState(raw, redundancyVerified, Diagnostics, Limitations);
 
-    // ── Подтверждённые маршрутом значения 0/1/2 ───────────────────────────────────────────────
+    // ── Values 0/1/2 confirmed by the route ─────────────────────────────────────────────────────
 
     [Fact]
     public void WellConstrained_IsFullyDefined()
@@ -51,7 +37,7 @@ public class SketchStatusConversionTests
     [Fact]
     public void UnderConstrained_IsUnderDefined()
     {
-        // Минус, а не «неизвестно»: именно так ответил КОМПАС на свободную окружность в S.5b.
+        // Minus, not "unknown": this is how KOMPAS answered for a free circle in S.5b.
         var result = Convert(2);
 
         Assert.Equal(SketchDefinitionStatus.UnderDefined, result.DefinitionStatus);
@@ -62,8 +48,8 @@ public class SketchStatusConversionTests
     [Fact]
     public void UnknownState_IsUnknownNotUnderDefined()
     {
-        // 0 — это ответ КОМПАСа «не установил», и он не равен 2. Смешать их значило бы объявить
-        // пустой эскиз (S.5b: ровно этот случай) недоопределённым без основания.
+        // 0 is KOMPAS's "did not set" answer and is not equal to 2. Mixing them would declare an empty sketch
+        // (S.5b: exactly this case) under-defined without grounds.
         var result = Convert(0);
 
         Assert.Equal(SketchDefinitionStatus.Unknown, result.DefinitionStatus);
@@ -75,8 +61,8 @@ public class SketchStatusConversionTests
     [Fact]
     public void MissingRead_IsUnknownAndKeepsNoRawState()
     {
-        // raw == null означает, что вызов не дошёл (или дошёл, но значения нет). Это не ответ
-        // продукта, и подставлять сюда 0 было бы выдумкой.
+        // raw == null means the call did not arrive (or arrived but has no value). That is not the product's
+        // answer, and substituting 0 here would be an invention.
         var result = Convert(null);
 
         Assert.Equal(SketchDefinitionStatus.Unknown, result.DefinitionStatus);
@@ -95,22 +81,20 @@ public class SketchStatusConversionTests
     [InlineData(97)]
     public void DegreesOfFreedom_IsNeverInvented(int raw)
     {
-        // Маршрут (ISketch.ConstraintsState) отдаёт состояние, а не счётчик. Число степеней свободы
-        // не складывается из числа размеров: ограничения связывают объекты между собой, и сумма
-        // размеров не равна числу оставшихся свобод. Ноль здесь был бы утверждением, которого
-        // измерение не делало.
+        // The route (ISketch.ConstraintsState) returns a state, not a counter. The number of degrees of freedom
+        // is not summed from the dimension count: constraints tie objects together, so the sum of dimensions is
+        // not the number of remaining freedoms. A zero here would be a claim the measurement never made.
         Assert.Null(Convert(raw, redundancyVerified: true).DegreesOfFreedom);
     }
 
-    // ── Значение 3: объявлено, но живой контроль не получен ───────────────────────────────────
+    // ── Value 3: declared, but no live check obtained ───────────────────────────────────────────
 
     [Fact]
     public void Redundancy_WithoutLiveVerification_StaysUnknown()
     {
-        // Ключевой тест честности. Значение 3 объявлено в ksConstraintsStateEnum, но в
-        // подтверждённом прогоне на живой модели (S.8: 46 эскизов поставки) не встретилось ни разу,
-        // а ветка записи ограничений не найдена. Поэтому «у нас есть мок» не является основанием
-        // публиковать состояние как измеренное.
+        // The key honesty test. Value 3 is declared in ksConstraintsStateEnum but never appeared in a confirmed
+        // run on a live model (S.8: 46 shipped sketches), and no constraint-writing branch was found. So "we
+        // have a mock" is no ground to publish the state as measured.
         var result = Convert(3, redundancyVerified: false);
 
         Assert.Equal(SketchDefinitionStatus.Unknown, result.DefinitionStatus);
@@ -119,15 +103,15 @@ public class SketchStatusConversionTests
         Assert.Contains("unresolved_redundancy_not_verified", result.Limitations);
         Assert.Contains(result.Diagnostics, d => d.Contains("ksStateUnresolvedRedundancy", StringComparison.Ordinal));
 
-        // Сырое значение сохранено: «неизвестное значение enum» и «КОМПАС ответил 3» — разные вещи.
+        // The raw value is kept: "an unknown enum value" and "KOMPAS answered 3" are different things.
         Assert.Equal("ksStateUnresolvedRedundancy", result.NativeStateName);
     }
 
     [Fact]
     public void Redundancy_WithLiveVerification_IsNeedsAttention()
     {
-        // Если живой контроль когда-нибудь появится, преобразование уже готово — и оно остаётся
-        // needs_attention, а не fully_defined: «требует внимания» это не «+».
+        // If a live check ever appears the conversion is already ready — and it stays needs_attention, not
+        // fully_defined: "needs attention" is not "+".
         var result = Convert(3, redundancyVerified: true);
 
         Assert.Equal(SketchDefinitionStatus.NeedsAttention, result.DefinitionStatus);
@@ -138,8 +122,8 @@ public class SketchStatusConversionTests
     [Fact]
     public void NeedsAttention_IsNotFullyDefinedAndNotUnderDefined()
     {
-        // Утверждение про различимость состояний: «!» нельзя свести ни к «+», ни к «−», ни к
-        // generic unknown по значению поля.
+        // A claim about state distinguishability: "!" cannot be reduced to "+", to "−", or to a generic unknown
+        // by field value.
         var needsAttention = Convert(3, redundancyVerified: true);
 
         Assert.NotEqual(SketchDefinitionStatus.FullyDefined, needsAttention.DefinitionStatus);
@@ -148,7 +132,7 @@ public class SketchStatusConversionTests
         Assert.NotEqual(false, needsAttention.IsFullyDefined);
     }
 
-    // ── Значения вне объявленного перечисления ────────────────────────────────────────────────
+    // ── Values outside the declared enumeration ─────────────────────────────────────────────────
 
     [Theory]
     [InlineData(4)]
@@ -158,9 +142,9 @@ public class SketchStatusConversionTests
     [InlineData(int.MaxValue)]
     public void UnknownEnumValue_IsNotTreatedAsSuccess(int raw)
     {
-        // Строгое запрещение из постановки: любое неизвестное значение enum → unknown,
-        // is_fully_defined=null, диагностическая причина. Не «недоопределён» и не «определён»:
-        // продукт сказал что-то, чего сервер не понимает, и это надо назвать.
+        // Strict prohibition from the statement: any unknown enum value → unknown, is_fully_defined=null, a
+        // diagnostic reason. Not "under-defined" and not "defined": the product said something the server does
+        // not understand, and it must be named.
         var result = Convert(raw);
 
         Assert.Equal(SketchDefinitionStatus.Unknown, result.DefinitionStatus);
@@ -174,8 +158,8 @@ public class SketchStatusConversionTests
     [Fact]
     public void UnknownEnumValue_IsDistinguishableFromAnsweredUnknown()
     {
-        // 0 и 42 дают одинаковый DefinitionStatus=Unknown, но разные Limitations и разные RawState.
-        // Именно это различие и есть смысл хранить сырое значение отдельно от нормализованного.
+        // 0 and 42 give the same DefinitionStatus=Unknown but different Limitations and RawState. That is the
+        // point of keeping the raw value separate from the normalised one.
         var answeredUnknown = Convert(0);
         var unknownValue = Convert(42);
 
@@ -188,13 +172,13 @@ public class SketchStatusConversionTests
             unknownValue.Limitations);
     }
 
-    // ── Контекст, приложенный вызывающим, не теряется ─────────────────────────────────────────
+    // ── Context attached by the caller is not lost ─────────────────────────────────────────────
 
     [Fact]
     public void CallerDiagnosticsAndLimitations_ArePreserved()
     {
-        // Адаптер передаёт сюда диагностику переноса и ограничение по DOF. Функция не имеет права
-        // их вытеснять: клиент читает ответ, а не внутренности адаптера.
+        // The adapter passes in the transfer diagnostics and the DOF limitation. The function must not displace
+        // them: the client reads the answer, not the adapter's internals.
         var result = SketchStatusResult.FromRawState(
             raw: 2,
             redundancyVerified: false,
@@ -212,8 +196,8 @@ public class SketchStatusConversionTests
     [Fact]
     public void CallerDiagnostics_ComeBeforeStatusSpecificOnes()
     {
-        // Порядок важен для человека: сначала «какой эскиз и каким маршрутом прочитан», затем
-        // «почему статус именно такой».
+        // The order matters to a human: first "which sketch and by which route it was read", then "why the
+        // status is what it is".
         var result = SketchStatusResult.FromRawState(0, false, Diagnostics, Limitations);
 
         Assert.Equal(Diagnostics.Length + 1, result.Diagnostics.Count);
@@ -221,13 +205,13 @@ public class SketchStatusConversionTests
         Assert.Contains("ksStateUnknown", result.Diagnostics[^1], StringComparison.Ordinal);
     }
 
-    // ── Ответ на главный вопрос инструмента ───────────────────────────────────────────────────
+    // ── The answer to the tool's main question ──────────────────────────────────────────────────
 
     [Fact]
     public void FullyDefined_IsTheOnlyStateAnsweringYes()
     {
-        // «Этот эскиз сейчас полностью определён?» — на этот вопрос true отвечает ровно одно
-        // состояние. Всё остальное, включая «не установлено», не даёт права сказать «да».
+        // "Is this sketch fully defined right now?" — exactly one state answers true. Everything else, including
+        // "not set", gives no right to say "yes".
         var yes = new[] { 1 }.Select(r => Convert(r)).Count(r => r.IsFullyDefined == true);
         var everythingElse = new[] { 0, 2, 3, 4, 42 }.Select(r => Convert(r)).Count(r => r.IsFullyDefined == true);
 
@@ -238,8 +222,8 @@ public class SketchStatusConversionTests
     [Fact]
     public void UnderDefined_IsTheOnlyStateAnsweringNo()
     {
-        // Зеркальное свойство, и оно не менее важно: ответ «нет» допустим только там, где продукт
-        // прямо сказал «недоопределён». «Неизвестно» не превращается в «нет».
+        // The mirror property, no less important: a "no" answer is allowed only where the product explicitly
+        // said "under-defined". "Unknown" does not turn into "no".
         var no = new[] { 2 }.Select(r => Convert(r)).Count(r => r.IsFullyDefined == false);
         var everythingElse = new[] { 0, 1, 3, 4, 42, 99 }.Select(r => Convert(r)).Count(r => r.IsFullyDefined == false);
 

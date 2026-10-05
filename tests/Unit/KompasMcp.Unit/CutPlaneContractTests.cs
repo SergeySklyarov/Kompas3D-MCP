@@ -8,31 +8,21 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>
-/// Соответствие ОПУБЛИКОВАННОЙ формы плоскости и контракта, который её принимает.
-/// </summary>
-/// <remarks>
-/// <para>
-/// Класс заведён по измеренному дефекту <c>PLANE-BASE-DECLARED-REFUSAL-UNREACHABLE</c> (клиентская
-/// приёмка B3, 19.09.2026, три строки FAIL). Схема поставки и описание инструмента публиковали
-/// <c>plane.base</c> строкой <c>xy|xz|yz</c> и соседний <c>plane.offset_mm</c> числом, а DTO ждал на
-/// этом месте ОБЪЕКТ — форма расходилась на один уровень вложенности. Вызов, соответствующий
-/// опубликованной схеме, падал на разборе payload (<c>JsonException</c> по <c>$.plane.base</c>), и
-/// объявленный <c>CAPABILITY_UNAVAILABLE</c> был недостижим.
-/// </para>
-/// <para>
-/// Сравнение <c>schemas/*.json</c> с <c>tools/list</c> этот класс дефектов не ловит по построению: обе
-/// стороны — одна и та же схема. Поэтому проверка идёт по цепочке
-/// «опубликованная схема → schema-valid JSON → DTO → контрактный исход», и дискриминирующим контролем
-/// служит вложенный объект: он обязан быть ОТВЕРГНУТ схемой.
-/// </para>
-/// </remarks>
+/// <summary>Agreement between the PUBLISHED shape of a plane and the contract that accepts it.</summary>
+/// <remarks>TEST: the check walks the chain "published schema → schema-valid JSON → DTO → contract
+/// outcome", and a nested object is the discriminating control: it MUST be rejected by the schema.
+/// LIMIT: comparing <c>schemas/*.json</c> with <c>tools/list</c> cannot catch this class of defect by
+/// construction — both sides are the same schema. MEASURED (client acceptance B3, 19.09.2026, three FAIL
+/// rows, defect <c>PLANE-BASE-DECLARED-REFUSAL-UNREACHABLE</c>): the published schema made
+/// <c>plane.base</c> a string and <c>plane.offset_mm</c> a number while the DTO expected an OBJECT one
+/// level deeper, so a call matching the published schema failed parsing and the declared refusal was
+/// unreachable. History: docs/decisions/tests.md#cut-plane-contract</remarks>
 public sealed class CutPlaneContractTests
 {
     private static JsonObject CutPlaneSchema() =>
         (JsonObject)ToolCatalog.SharedDefinitions["cut_plane"]!.DeepClone();
 
-    /// <summary>Корень для валидатора: сама схема плоскости плюс словарь, на который она ссылается.</summary>
+    /// <summary>Validator root: the plane schema itself plus the dictionary it references.</summary>
     private static JsonObject CutPlaneRoot()
     {
         var root = CutPlaneSchema();
@@ -66,7 +56,7 @@ public sealed class CutPlaneContractTests
         var properties = (JsonObject)schema["properties"]!;
         var baseSchema = (JsonObject)properties["base"]!;
 
-        // Nullable(Enum(...)) выражается массивом типов — это и есть «строка или null».
+        // Nullable(Enum(...)) is expressed as a type array — that is "string or null".
         var types = ((JsonArray)baseSchema["type"]!).Select(node => node!.GetValue<string>()).ToArray();
         Assert.Equal(new[] { "string", "null" }, types);
         Assert.True(properties.ContainsKey("offset_mm"),
@@ -93,8 +83,8 @@ public sealed class CutPlaneContractTests
             Assert.Equal(value, dto.Base!.Value.ToString().ToLowerInvariant());
             Assert.Equal(0d, dto.OffsetMm);
 
-            // Объявленный исход обязан быть ДОСТИЖИМ: именно эту проверку делал недостижимой прежний
-            // рассинхрон схемы и DTO.
+            // INVARIANT: the declared outcome must be REACHABLE — the old schema/DTO desync made exactly
+            // this check unreachable.
             Assert.Equal(CutPlaneFormVerdict.BaseUnsupported, CutPlaneForm.Validate(dto));
         }
     }
@@ -110,8 +100,8 @@ public sealed class CutPlaneContractTests
     [Fact]
     public void ANestedObjectInBase_IsRejectedByTheSchema()
     {
-        // Дискриминирующий контроль: прежняя (ошибочная) форма DTO принимала бы именно это, поэтому
-        // проверка обязана падать, если форма снова станет объектом.
+        // Discriminating control: the old (wrong) DTO shape would accept exactly this, so the check must
+        // fail if the shape becomes an object again.
         var payload = new JsonObject
         {
             ["base"] = new JsonObject { ["base"] = "xy", ["offset_mm"] = 0 },
@@ -166,7 +156,7 @@ public sealed class CutPlaneContractTests
     [Fact]
     public void PlaneSchemaOfTheTool_ResolvesToTheSameShapeAsTheSharedDefinition()
     {
-        // Инструмент ссылается на $defs/cut_plane, и именно по этой ссылке Host валидирует вызов.
+        // The tool references $defs/cut_plane, and the Host validates the call through exactly this reference.
         var plane = PlaneProperty();
         Assert.Equal("#/$defs/cut_plane", plane["$ref"]?.GetValue<string>());
     }

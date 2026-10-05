@@ -3,22 +3,12 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>
-/// Матрица положения тела и базис плоскости для B3 — проверяются на ТОЙ ЖЕ геометрии, которой
-/// измерен маршрут в КОМПАСе.
-/// </summary>
-/// <remarks>
-/// <para>
-/// Это не «тест ради покрытия»: числа ниже — эталон §6.6 наряда, и они же получены пробой
-/// <c>--reposition</c> (прогон <c>929f08886f1348fe921943052a4026b0</c>, шаги RP.3, RP.4, RP.5).
-/// Если построитель матрицы разойдётся с этими числами, адаптер начнёт двигать тело не туда, а
-/// КОМПАС на это не ошибается — он просто выполнит другое преобразование.
-/// </para>
-/// <para>
-/// Асимметричный брусок <c>[10,30]×[0,10]×[0,5]</c> выбран намеренно: по симметричной детали
-/// знак угла и направление оси неразличимы, и тест «прошёл бы» на неверной матрице.
-/// </para>
-/// </remarks>
+/// <summary>Body placement matrix and plane basis for B3 — checked on the SAME geometry the KOMPAS route was measured on.</summary>
+/// <remarks>MEASURED: the numbers below are reference §6.6 of the order, obtained by probe <c>--reposition</c>
+/// (run <c>929f08886f1348fe921943052a4026b0</c>, steps RP.3, RP.4, RP.5). If the matrix builder diverges from
+/// them, the adapter moves the body elsewhere and KOMPAS does not err — it just performs a different
+/// transform. ASSUMPTION: the asymmetric bar <c>[10,30]×[0,10]×[0,5]</c> is deliberate — on a symmetric part
+/// the angle sign and axis direction are indistinguishable and the test would pass on a wrong matrix.</remarks>
 public class RepositionMatrixTests
 {
     private static readonly double[][] BarCorners = BuildCorners(10d, 30d, 0d, 10d, 0d, 5d);
@@ -42,7 +32,7 @@ public class RepositionMatrixTests
     [Fact]
     public void RotateAboutZThroughOrigin_FollowsRightHandRule()
     {
-        // Правое правило вокруг Z: (x,y) → (−y,x). Именно это дало измерение RP.4.
+        // Right-hand rule about Z: (x,y) → (−y,x). This is what measurement RP.4 gave.
         var matrix = RepositionMatrix.RotateAboutAxis(
             new[] { 0d, 0d, 0d }, new[] { 0d, 0d, 1d }, 90d);
         AssertClose(new[] { -10d, 10d, 0d, 0d, 30d, 5d }, Bounds(matrix));
@@ -51,16 +41,15 @@ public class RepositionMatrixTests
     [Fact]
     public void RotateAboutZ_StoresAxisImagesInTheMeasuredArrayLayout()
     {
-        // РАЗЛИЧАЮЩИЙ контроль раскладки — того, чего здесь не было и из-за отсутствия чего
-        // 18.09.2026 поворот через MCP отвергался как NO_GEOMETRY_CHANGE. Все прочие тесты этого
-        // класса читают матрицу через Apply, то есть проверяют СОГЛАСИЕ построения с чтением, а не
-        // саму раскладку: две взаимно транспонированные ошибки такое согласие сохраняют целиком.
-        // Перенос дефект не ловит по той же причине — единичный поворот симметричен.
+        // DISCRIMINATING control of the layout — the thing that was absent here, and whose absence made a
+        // rotation through MCP be rejected as NO_GEOMETRY_CHANGE on 18.09.2026. All the other tests in this
+        // class read the matrix through Apply, i.e. check AGREEMENT of build with read, not the layout itself:
+        // two mutually transposed errors preserve that agreement entirely. A translation does not catch the
+        // defect for the same reason — an identity rotation is symmetric.
         //
-        // Здесь сверяется СЫРОЙ массив, то есть ровно то, что уходит в Position.InitByMatrix3D.
-        // Эталон — раскладка, которой поворот измерен в КОМПАСе (проба RP.4, RotationZ): три числа
-        // подряд есть ОБРАЗ оси. Для +90° вокруг Z: образ X = (0,1,0), образ Y = (−1,0,0),
-        // образ Z = (0,0,1).
+        // Here the RAW array is compared, exactly what goes into Position.InitByMatrix3D. The reference is the
+        // layout by which the rotation was measured in KOMPAS (probe RP.4, RotationZ): three consecutive
+        // numbers are the IMAGE of an axis. For +90° about Z: image X = (0,1,0), image Y = (−1,0,0), Z = (0,0,1).
         var matrix = RepositionMatrix.RotateAboutAxis(
             new[] { 0d, 0d, 0d }, new[] { 0d, 0d, 1d }, 90d);
 
@@ -70,8 +59,8 @@ public class RepositionMatrixTests
         AssertClose(new[] { 0d, 0d, 0d }, new[] { matrix[12], matrix[13], matrix[14] });
         Assert.Equal(1d, matrix[15], 12);
 
-        // Отрицательный контроль: транспонированная раскладка обязана НЕ совпасть с эталоном.
-        // Без него тест не отличал бы верную раскладку от перепутанной.
+        // Negative control: the transposed layout must NOT match the reference — without it the test would not
+        // tell a correct layout from a swapped one.
         var transposed = new[] { 0d, -1d, 0d };
         Assert.False(Math.Abs(transposed[0] - matrix[0]) <= 1e-9
                      && Math.Abs(transposed[1] - matrix[1]) <= 1e-9
@@ -86,8 +75,8 @@ public class RepositionMatrixTests
             new[] { 5d, 0d, 0d }, new[] { 0d, 0d, 1d }, 90d);
         AssertClose(new[] { -5d, 5d, 0d, 5d, 25d, 5d }, Bounds(matrix));
 
-        // Точка оси обязана остаться на месте — это то, чем поворот «вокруг оси» отличается от
-        // поворота «вокруг начала с последующим переносом».
+        // INVARIANT: the axis point must stay in place — that is what distinguishes a rotation "about an axis"
+        // from one "about the origin followed by a translation".
         var fixedPoint = RepositionMatrix.Apply(matrix, new[] { 5d, 0d, 0d });
         Assert.Equal(5d, fixedPoint[0], 12);
         Assert.Equal(0d, fixedPoint[1], 12);
@@ -97,16 +86,16 @@ public class RepositionMatrixTests
     [Fact]
     public void RotateBackwards_IsNotTheSameAsForwards()
     {
-        // Отрицательный контроль: на асимметричной детали −90° обязан дать ДРУГОЙ габарит.
-        // Тест, который проходит и на перепутанном знаке, ничего не доказывает.
+        // Negative control: on an asymmetric part −90° must give a DIFFERENT bounding box — a test that also
+        // passes on a swapped sign proves nothing.
         var forward = Bounds(RepositionMatrix.RotateAboutAxis(
             new[] { 0d, 0d, 0d }, new[] { 0d, 0d, 1d }, 90d));
         var backward = Bounds(RepositionMatrix.RotateAboutAxis(
             new[] { 0d, 0d, 0d }, new[] { 0d, 0d, 1d }, -90d));
         AssertClose(new[] { 0d, -30d, 0d, 10d, -10d, 5d }, backward);
 
-        // Сравниваются только X и Y: поворот вокруг Z не меняет Z, и совпадение по Z — не признак
-        // перепутанного знака, а следствие того, что ось поворота ей перпендикулярна.
+        // Only X and Y are compared: a rotation about Z does not change Z, and a match in Z is not a sign of a
+        // swapped sign but a consequence of the axis being perpendicular to it.
         foreach (var index in new[] { 0, 1, 3, 4 })
         {
             Assert.True(Math.Abs(forward[index] - backward[index]) > 1d,
@@ -117,8 +106,8 @@ public class RepositionMatrixTests
     [Fact]
     public void RotateAboutAxisThroughPoint_MatchesAnalyticTranslation()
     {
-        // Перенос поворота вокруг точки c равен c − R·c. При c = (5,0,0) и +90° вокруг Z это
-        // (5,0,0) − (0,5,0) = (5,−5,0) — то, что записано в эталоне §6.6.
+        // The translation of a rotation about point c equals c − R·c. With c = (5,0,0) and +90° about Z this is
+        // (5,0,0) − (0,5,0) = (5,−5,0) — what reference §6.6 records.
         var matrix = RepositionMatrix.RotateAboutAxis(
             new[] { 5d, 0d, 0d }, new[] { 0d, 0d, 1d }, 90d);
         Assert.Equal(5d, matrix[12], 12);
@@ -129,8 +118,8 @@ public class RepositionMatrixTests
     [Fact]
     public void Rotate_AboutTiltedAxis_KeepsLengths()
     {
-        // Наклонная ось: расстояния между вершинами обязаны сохраниться. Это ловит матрицу,
-        // которая «выглядит вращением», но не ортогональна.
+        // A tilted axis: distances between vertices must be preserved. This catches a matrix that "looks like a
+        // rotation" but is not orthogonal.
         var matrix = RepositionMatrix.RotateAboutAxis(
             new[] { 3d, 2d, 1d }, new[] { 1d, 2d, 3d }, 37d);
         foreach (var corner in BarCorners)
@@ -165,8 +154,8 @@ public class RepositionMatrixTests
     [Fact]
     public void PlaneBasis_ReproducesRequestedNormal()
     {
-        // Измеренный маршрут создания плоскости — по трём точкам модели, где нормаль равна
-        // (P2−P1)×(P3−P1). Базис обязан воспроизвести ЗАДАННУЮ нормаль, а не её поворот в плоскости.
+        // The measured plane-creation route is by three model points, where the normal equals (P2−P1)×(P3−P1).
+        // INVARIANT: the basis must reproduce the REQUESTED normal, not a rotation of it within the plane.
         foreach (var normal in new[]
         {
             new[] { 1d, 0d, 0d },
@@ -191,8 +180,8 @@ public class RepositionMatrixTests
     [Fact]
     public void PlaneBasis_NormalisesLengthButKeepsDirection()
     {
-        // Знак s = n·(p − p₀) от длины нормали не зависит, поэтому единичная нормаль — тот же
-        // ответ, но воспроизводимый.
+        // The sign s = n·(p − p₀) does not depend on the normal length, so a unit normal gives the same answer
+        // but a reproducible one.
         var (_, _, _, unit) = PlaneBasis.ThreePoints(new[] { 0d, 0d, 0d }, new[] { 0d, 0d, 7d });
         Assert.Equal(0d, unit[0], 12);
         Assert.Equal(0d, unit[1], 12);
@@ -243,10 +232,8 @@ public class RepositionMatrixTests
     private static double Distance(double[] a, double[] b) =>
         RigidFrame.Norm(new[] { a[0] - b[0], a[1] - b[1], a[2] - b[2] });
 
-    /// <summary>
-    /// Сравнение координат с допуском. Точное равенство здесь непригодно: <c>cos 90°</c> не равен
-    /// нулю, и разность <c>6.1e-16</c> — это форма записи нуля, а не ошибка построения.
-    /// </summary>
+    /// <summary>Coordinate comparison with a tolerance. Exact equality is unusable here: <c>cos 90°</c> is not
+    /// zero, and a difference of <c>6.1e-16</c> is a way of writing zero, not a build error.</summary>
     private static void AssertClose(double[] expected, double[] actual)
     {
         Assert.Equal(expected.Length, actual.Length);

@@ -3,37 +3,23 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>
-/// Тождество адреса компонента — таблицей, без КОМПАС.
-/// </summary>
-/// <remarks>
-/// <para>
-/// Проверяется ИМЕННО чистая функция. До 05.10.2026 правило сверки жило разложенным по ветвям
-/// адаптера (<c>Api5Session.IdentityMatches</c>), где каждая правка признака ломала соседний случай,
-/// а регрессия была невидима модульным тестам: сборка проходила, тесты — тоже, а живая приёмка
-/// отвергла бы вторую мутацию по той же ссылке.
-/// </para>
-/// <para>
-/// ОБЯЗАТЕЛЬНЫЕ СТРОКИ (находки §1 и §3 задания 05.10.2026):
+/// <summary>Component-address identity — as a table, without KOMPAS.</summary>
+/// <remarks>TEST: exactly the pure function is checked. INVARIANT (findings §1 and §3 of the 05.10.2026
+/// order):
 /// <list type="bullet">
-/// <item><description>
-/// «источник совпал, имя совпало, матрица СМЕНИЛАСЬ после собственной мутации» → тождество НЕ ложно.
-/// Матрица — изменяемое состояние: её меняет и собственная мутация, и сопряжение.
-/// </description></item>
-/// <item><description>
-/// «имя РАСХОДИТСЯ, источник и матрица совпали» → НЕ отказ. Сравнение имён API5/API7 живьём не
-/// измерялось, и систематическое расхождение форматов отвергло бы все мутации сборки.
-/// </description></item>
+/// <item><description>source matches, name matches, matrix CHANGED after an own mutation → identity is NOT
+/// false. The matrix is mutable state: both an own mutation and a mate change it.</description></item>
+/// <item><description>name DIFFERS while source and matrix match → NOT a refusal. API5/API7 name comparison
+/// was never measured live, and a systematic format difference would refuse every assembly mutation.</description></item>
 /// </list>
-/// </para>
-/// </remarks>
+/// History: docs/decisions/tests.md#component-identity</remarks>
 public class ComponentIdentityTests
 {
     private const ComponentIdentitySignal NotRead = ComponentIdentitySignal.NotRead;
     private const ComponentIdentitySignal Match = ComponentIdentitySignal.Matches;
     private const ComponentIdentitySignal Differ = ComponentIdentitySignal.Differs;
 
-    /// <summary>ОБЯЗАТЕЛЬНАЯ СТРОКА (п. 1): смена матрицы после собственной мутации не ломает тождество.</summary>
+    /// <summary>INVARIANT (item 1): a matrix change after an own mutation does not break identity.</summary>
     [Fact]
     public void SourceAndNameMatch_ButMatrixChangedAfterOwnMutation_IsNotRefused()
     {
@@ -42,7 +28,7 @@ public class ComponentIdentityTests
         Assert.True(verdict.Matches);
     }
 
-    /// <summary>ОБЯЗАТЕЛЬНАЯ СТРОКА (п. 3): расхождение имени само по себе мутацию не отвергает.</summary>
+    /// <summary>INVARIANT (item 3): a name difference by itself does not refuse the mutation.</summary>
     [Fact]
     public void NameDiffers_WhileSourceAndMatrixMatch_IsNotRefused()
     {
@@ -54,8 +40,8 @@ public class ComponentIdentityTests
     [Fact]
     public void SourceMatches_EvenWhenBothSecondarySignalsDiffer_IsNotRefused()
     {
-        // Имя и матрица расходятся ОБА — и всё равно не отказ: ни один из них не является измеренным
-        // и неизменяемым признаком. Отвергать здесь значило бы поставить работу на непроверенное.
+        // INVARIANT: both the name and the matrix differ — still not a refusal: neither is a measured,
+        // immutable sign. Refusing here would rest the work on something unverified.
         var verdict = ComponentIdentity.Decide(Match, Differ, Differ);
 
         Assert.True(verdict.Matches);
@@ -64,9 +50,9 @@ public class ComponentIdentityTests
     [Fact]
     public void SourceDiffers_IsRefusedEvenWhenSecondarySignalsMatch()
     {
-        // Источник — единственный признак, решающий отказ: по номеру лежит компонент с другим файлом.
-        // Отрицательный контроль: совпадение имени и матрицы НЕ перебивает расхождение источника —
-        // иначе номер, ведущий в чужой компонент с той же матрицей, был бы подтверждён.
+        // INVARIANT: the source is the only sign that decides a refusal — the number points at a component
+        // with a different file. Negative control: matching name and matrix do NOT override a source
+        // difference, else a number leading into a foreign component with the same matrix would pass.
         var verdict = ComponentIdentity.Decide(Differ, Match, Match);
 
         Assert.False(verdict.Matches);
@@ -84,8 +70,8 @@ public class ComponentIdentityTests
     [Fact]
     public void SourceUnread_IsUnconfirmedEvenWhenNameMatches()
     {
-        // Совпадение имени НЕ подтверждает адрес: подтверждать непроверенным признаком значило бы
-        // разрешить мутацию по адресу, который не сверен.
+        // INVARIANT: a matching name does NOT confirm the address — confirming by an unverified sign would
+        // allow a mutation by an address that was never checked.
         var verdict = ComponentIdentity.Decide(NotRead, Match, NotRead);
 
         Assert.Null(verdict.Matches);
@@ -102,7 +88,7 @@ public class ComponentIdentityTests
     [Fact]
     public void MatrixMismatch_IsNamedAsNonDecidingInTheDetail()
     {
-        // Расхождение матрицы НАЗЫВАЕТСЯ, а не проглатывается: молчание неотличимо от «не смотрели».
+        // INVARIANT: a matrix difference is NAMED, not swallowed — silence is indistinguishable from "we did not look".
         var verdict = ComponentIdentity.Decide(Match, Match, Differ);
 
         Assert.Contains("матрица размещения РАСХОДИТСЯ", verdict.Detail, StringComparison.Ordinal);
@@ -121,8 +107,8 @@ public class ComponentIdentityTests
     [Fact]
     public void CleanConfirmation_DoesNotCarryTheRuleExplanation()
     {
-        // При чистом совпадении примечание не засоряется: правило печатается там, где оно объясняет
-        // расхождение или непрочитанность.
+        // INVARIANT: on a clean match the note stays clean — the rule is printed where it explains a
+        // difference or an unread sign.
         var verdict = ComponentIdentity.Decide(Match, Match, Match);
 
         Assert.True(verdict.Matches);

@@ -4,25 +4,17 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>
-/// The decision layer behind the model-derived sketch coordinate: when a point read out of a
+/// <summary>The decision layer behind the model-derived sketch coordinate: when a point read out of a
 /// dependent body may be used to point at an existing sketch primitive, and when the only honest
-/// answer is a refusal.
-/// </summary>
-/// <remarks>
-/// <para>
-/// Every case here is a boundary of one measurement. Probe G showed the derivation works for a base
+/// answer is a refusal.</summary>
+/// <remarks>Every case here is a boundary of one measurement. Probe G showed the derivation works for a base
 /// XY sketch with a circular profile consumed by a through cut — and the same probe states plainly
 /// that nothing else was measured. The tests below pin that boundary down so a later change cannot
 /// widen it by accident: the cost of widening wrongly is deleting the wrong sketch object on a
 /// model that cannot be rolled back.
-/// </para>
-/// <para>
 /// The numbers are the probe's own, which is what makes them worth asserting rather than inventing:
 /// a 100×80×10 plate with a Ø20 through hole measures V = 76858.4073464102, and the replacement to
-/// R12 measures 75476.1065788307 with a lateral surface of 753.98223686155.
-/// </para>
-/// </remarks>
+/// R12 measures 75476.1065788307 with a lateral surface of 753.98223686155.</remarks>
 public class SketchPointDerivationTests
 {
     private static IReadOnlyCollection<SketchEntityKind> Circle() =>
@@ -130,7 +122,7 @@ public class SketchPointDerivationTests
     public void CylinderAxisAlongZIsAcceptedInEitherDirection(double x, double y, double z, bool expected)
     {
         // An axis has no inherent sign: the same hole read from the other side reports the opposite
-        // vector. Rejecting one of them would make the route depend on which way КОМПАС happened to
+        // vector. Rejecting one of them would make the route depend on which way KOMPAS happened to
         // orient a face.
         Assert.Equal(expected, SketchPointDerivation.AxisIsNormalToXyPlane(new[] { x, y, z }));
     }

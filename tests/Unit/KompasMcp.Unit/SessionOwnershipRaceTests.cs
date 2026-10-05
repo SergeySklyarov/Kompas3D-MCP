@@ -4,23 +4,13 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>
-/// Гонки за владение сеансом: два одновременных захвата не могут оба получить право работы.
-/// </summary>
-/// <remarks>
-/// <para>
-/// ЗАЧЕМ ОТДЕЛЬНЫЙ КЛАСС. Гонка — это утверждение о ПОРЯДКЕ, а не о состоянии: проверить его
-/// последовательными вызовами нельзя, потому что последовательные вызовы по определению не
-/// пересекаются. Здесь каждый участник — отдельный объект <see cref="HostOwnership"/> (своя
-/// «личность» Хоста, свой захват имени блокировки), и все они стартуют ОДНОВРЕМЕННО с барьера.
-/// </para>
-/// <para>
-/// ЧТО ЭТИМ НЕ ПРОВЕРЯЕТСЯ. Настоящая межпроцессная гонка меряется прибором двух независимых
-/// MCP-клиентов на бинарях поставки: в одном процессе pid у всех участников общий, и правило
-/// «тот же pid, но чужое поколение» здесь работает иначе, чем между процессами. Этот класс
-/// проверяет атомарность ПЕРЕХОДА состояния, а не межпроцессную исключительность целиком.
-/// </para>
-/// </remarks>
+/// <summary>Session-ownership races: two simultaneous acquires cannot both get the right to work.</summary>
+/// <remarks>INVARIANT: a race is a claim about ORDER, not state, so sequential calls cannot check it. Each
+/// participant is a separate <see cref="HostOwnership"/> (its own Host "identity", its own lock-name
+/// acquisition), and all start SIMULTANEOUSLY from a barrier. LIMIT: a real cross-process race is measured by
+/// two independent MCP clients on the shipped binaries — within one process the pid is shared, so "same pid,
+/// foreign generation" works differently. This class checks the atomicity of the state TRANSITION, not
+/// cross-process exclusivity as a whole.</remarks>
 public class SessionOwnershipRaceTests : IDisposable
 {
     private readonly string _journal;
@@ -33,15 +23,13 @@ public class SessionOwnershipRaceTests : IDisposable
         _journal = Path.Combine(_directory, "operations.jsonl");
     }
 
-    /// <summary>
-    /// Запустить <paramref name="count"/> участников одновременно и собрать их исходы.
-    /// </summary>
+    /// <summary>Run <paramref name="count"/> participants simultaneously and collect their outcomes.</summary>
     private OwnershipOutcome[] RunInParallel(int count, Func<HostOwnership, OwnershipOutcome> action)
     {
         var participants = Enumerable.Range(0, count).Select(_ => HostOwnership.Open(_journal)).ToArray();
         try
         {
-            // Барьер: без него «одновременно» означало бы «кто успел первым», и гонка не случилась бы.
+            // A barrier: without it "simultaneously" would mean "whoever got there first", and the race would not happen.
             using var barrier = new Barrier(count);
             var outcomes = new OwnershipOutcome[count];
 
@@ -88,13 +76,13 @@ public class SessionOwnershipRaceTests : IDisposable
         using var owner = HostOwnership.Open(_journal);
         Assert.Equal(OwnershipOutcome.Acquired, owner.TryAcquire(explicitRequest: true).Outcome);
 
-        // Участники — ДРУГИЕ «личности» с тем же pid: претендуют на освобождение чужого сеанса.
+        // The participants are OTHER "identities" with the same pid: they claim to release a foreign session.
         var results = RunInParallel(8, ownership => ownership.BeginRelease() ? OwnershipOutcome.Acquired : OwnershipOutcome.RefusedActiveOwner);
 
         Assert.True(results.Count(o => o == OwnershipOutcome.Acquired) == 0,
             "освободить сеанс имеет право только владелец: чужое поколение не трогается");
 
-        // Владелец при этом остаётся владельцем и может освободить сеанс сам.
+        // The owner meanwhile stays the owner and can release the session itself.
         Assert.True(owner.BeginRelease());
         Assert.True(owner.CompleteRelease());
     }
@@ -113,10 +101,8 @@ public class SessionOwnershipRaceTests : IDisposable
         Assert.False(owner.CompleteRelease(), "повторная публикация не выдаётся за успех");
     }
 
-    /// <summary>
-    /// Передача сеанса: владелец освобождает, следующий Хост занимает сеанс ЯВНО и получает НОВОЕ
-    /// поколение; прежний владелец после этого не имеет права ни на работу, ни на освобождение.
-    /// </summary>
+    /// <summary>Session hand-over: the owner releases, the next Host takes the session EXPLICITLY and gets a
+    /// NEW generation; the previous owner then has no right to work or to release.</summary>
     [Fact]
     public void HandOver_PreviousOwnerCannotActAfterNewOwnerAcquired()
     {
@@ -131,7 +117,7 @@ public class SessionOwnershipRaceTests : IDisposable
         Assert.Equal(OwnershipOutcome.Acquired, secondAcquire.Outcome);
         Assert.NotEqual(firstGeneration, secondAcquire.Generation);
 
-        // СТАРЫЙ ВЛАДЕЛЕЦ: ни работать, ни освобождать чужой сеанс.
+        // THE OLD OWNER: neither work nor release a foreign session.
         Assert.False(first.MarkServing());
         Assert.False(first.BeginRelease());
         Assert.False(first.StillOwned());
@@ -145,7 +131,7 @@ public class SessionOwnershipRaceTests : IDisposable
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // Уборка временного каталога — best effort.
+            // Temp directory cleanup is best effort.
         }
     }
 }

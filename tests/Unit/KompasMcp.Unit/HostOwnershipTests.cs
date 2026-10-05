@@ -6,25 +6,13 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>
-/// Единственный владелец CAD-сеанса: захват, освобождение и поколения.
-/// </summary>
-/// <remarks>
-/// <para>
-/// Проверяется ПРАВИЛО, а не удобный его случай. «Владелец мёртв» и «владелец жив» проверяются на
-/// НАСТОЯЩЕМ чужом процессе: подставленный pid, которого нет, доказывал бы только то, что
-/// несуществующий процесс не мешает.
-/// </para>
-/// <para>
-/// ПОЧЕМУ ПРЕЖНИЕ ПРОВЕРКИ ПЕРЕПИСАНЫ, А НЕ ДОПОЛНЕНЫ. Старая модель захватывала владение на
-/// старте транспорта и считала <c>draining</c> разрешением взять сеанс. Оба утверждения измеренно
-/// ложны (04.10.2026): <c>tools/list</c> вспомогательного обнаружения занимал сеанс, а владение,
-/// помеченное <c>draining</c> до подтверждённой очистки, отдавалось при живом Worker. Здесь
-/// проверяется новая модель: старт владения не берёт, «освобождается» не равно «можно взять»,
-/// явный release запрещает неявный захват. Полный межпроцессный случай меряется прибором двух
-/// независимых MCP-клиентов, юнит-тест его не заменяет.
-/// </para>
-/// </remarks>
+/// <summary>The single owner of the CAD session: acquire, release and generations.</summary>
+/// <remarks>INVARIANT: the tests check the RULE, not a convenient case — "owner dead" and "owner alive" are
+/// checked against a REAL foreign process, since a fabricated pid would only prove that a nonexistent
+/// process does not interfere. INVARIANT (model of 04.10.2026): transport start takes no ownership,
+/// "releasing" is not "free to take", and an explicit release forbids an implicit acquire. LIMIT: the full
+/// cross-process case is measured by two independent MCP clients; a unit test does not replace it.
+/// History: docs/decisions/tests.md#host-ownership</remarks>
 public class HostOwnershipTests : IDisposable
 {
     private readonly string _journal;
@@ -33,12 +21,12 @@ public class HostOwnershipTests : IDisposable
 
     public HostOwnershipTests()
     {
-        // Свой каталог на класс: уборка одного класса не имеет права сносить файлы другого.
+        // A per-class directory: cleanup of one class must not delete another's files.
         _directory = Path.Combine(Path.GetTempPath(), "kompas-mcp-tests", "ownership-" + Guid.NewGuid().ToString("N")[..8]);
         Directory.CreateDirectory(_directory);
         _journal = Path.Combine(_directory, "operations.jsonl");
 
-        // Живой чужой процесс: без него «владелец жив» нечем измерить.
+        // A live foreign process: without it "owner alive" cannot be measured.
         _foreign = Process.Start(new ProcessStartInfo
         {
             FileName = "cmd.exe",
@@ -50,7 +38,7 @@ public class HostOwnershipTests : IDisposable
 
     private string RecordPath => HostOwnership.RecordPathFor(_journal);
 
-    /// <summary>Те же правила разбора, что у самой записи: иначе тест мерил бы свой формат.</summary>
+    /// <summary>The same parse rules as the record itself: otherwise the test would measure its own format.</summary>
     private static readonly JsonSerializerOptions RecordJson = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
@@ -72,7 +60,7 @@ public class HostOwnershipTests : IDisposable
                 RecordJson));
 
     // -----------------------------------------------------------------------------------------
-    // Старт владения не берёт
+    // Transport start takes no ownership
     // -----------------------------------------------------------------------------------------
 
     [Fact]
@@ -90,7 +78,7 @@ public class HostOwnershipTests : IDisposable
     }
 
     // -----------------------------------------------------------------------------------------
-    // Захват
+    // Acquire
     // -----------------------------------------------------------------------------------------
 
     [Fact]
@@ -138,14 +126,12 @@ public class HostOwnershipTests : IDisposable
         Assert.Equal(HostOwnerState.Serving, result.Refusal.State);
         Assert.Contains(_foreign.Id.ToString(), result.ErrorMessage!, StringComparison.Ordinal);
 
-        // Отказ НЕ переписал чужую запись: иначе отказ был бы способом захватить владение.
+        // INVARIANT: the refusal did NOT overwrite the foreign record — otherwise a refusal would be a way to take ownership.
         Assert.Equal(_foreign.Id, ReadRecord().Pid);
     }
 
-    /// <summary>
-    /// «Освобождается» НЕ равно «можно взять»: живой владелец в <c>releasing</c> сохраняет
-    /// исключительное право. Это ровно то различие, которого не было в прежней модели.
-    /// </summary>
+    /// <summary>INVARIANT: "releasing" is NOT "free to take" — a live owner in <c>releasing</c> keeps the
+    /// exclusive right.</summary>
     [Fact]
     public void LiveOwnerReleasing_IsRefusedAndNotTakenOver()
     {
@@ -159,10 +145,8 @@ public class HostOwnershipTests : IDisposable
         Assert.Equal(_foreign.Id, ReadRecord().Pid);
     }
 
-    /// <summary>
-    /// Транспорт завершён, очистка не подтверждена (<c>draining</c>) — владение не отдаётся живому
-    /// владельцу. Прежняя модель здесь отдавала его, и это было измеренным дефектом.
-    /// </summary>
+    /// <summary>INVARIANT: transport finished but cleanup unconfirmed (<c>draining</c>) — ownership is not
+    /// handed to a live owner (the old model did, a measured defect).</summary>
     [Fact]
     public void LiveOwnerDraining_IsNotTakenOver()
     {
@@ -197,7 +181,7 @@ public class HostOwnershipTests : IDisposable
     }
 
     // -----------------------------------------------------------------------------------------
-    // Освобождение и поколения
+    // Release and generations
     // -----------------------------------------------------------------------------------------
 
     [Fact]
@@ -260,10 +244,8 @@ public class HostOwnershipTests : IDisposable
         Assert.True(ownership.IsOwner, "отказ до очистки обязан вернуть owned, а не полусвободное состояние");
     }
 
-    /// <summary>
-    /// Незавершённое освобождение — не повод начать заново: новый захват создал бы второе поколение
-    /// и второго Worker'а поверх, возможно, ещё живого прежнего.
-    /// </summary>
+    /// <summary>INVARIANT: an unfinished release is no reason to start over — a new acquire would create a
+    /// second generation and a second Worker over a possibly still-live one.</summary>
     [Fact]
     public void AcquireWhileReleasing_IsRefusedAndDoesNotCreateASecondGeneration()
     {
@@ -289,17 +271,15 @@ public class HostOwnershipTests : IDisposable
         Assert.Equal(HostOwnerState.Serving, ReadRecord().State);
     }
 
-    /// <summary>
-    /// Запоздалый callback СТАРОГО поколения не обновляет состояние нового владельца: запись с
-    /// нашим pid, но чужим поколением — не наша.
-    /// </summary>
+    /// <summary>INVARIANT: a late callback from an OLD generation does not update the new owner's state — a
+    /// record with our pid but a foreign generation is not ours.</summary>
     [Fact]
     public void StaleGeneration_CannotMarkServingOrRelease()
     {
         using var ownership = HostOwnership.Open(_journal);
         var acquired = ownership.TryAcquire(explicitRequest: true);
 
-        // Тот же pid, но уже не то поколение: симуляция переданного сеанса.
+        // Same pid, but no longer that generation: a simulated hand-over.
         WriteRecord(Environment.ProcessId, HostOwnerState.Serving, generation: Guid.NewGuid().ToString("N"));
 
         Assert.NotEqual(acquired.Generation, ReadRecord().Generation);
@@ -335,7 +315,7 @@ public class HostOwnershipTests : IDisposable
     }
 
     // -----------------------------------------------------------------------------------------
-    // Нечитаемая запись — не свобода
+    // An unreadable record is not freedom
     // -----------------------------------------------------------------------------------------
 
     [Fact]
@@ -343,8 +323,8 @@ public class HostOwnershipTests : IDisposable
     {
         using var ownership = HostOwnership.Open(_journal);
 
-        // Запись владельца есть, но не разбирается. «Не прочиталось» и «владельца нет» — разные
-        // состояния: приравнять их значило бы разрешить работу при неизвестном сеансе.
+        // INVARIANT: the owner record exists but does not parse. "Did not read" and "no owner" are different
+        // states — equating them would allow work with an unknown session.
         File.WriteAllText(RecordPath, "{ это не json ");
 
         var probe = ownership.Probe();
@@ -368,7 +348,7 @@ public class HostOwnershipTests : IDisposable
 
         Assert.True(ownership.StillOwned(), "нечитаемая запись — не доказательство потери владения");
 
-        // СБОЙ ЗАПИСИ НЕ ПРЕВРАЩАЕТ ЖИВОЙ ВЫЗОВ В ОТКАЗ: хост остаётся владельцем, но беда названа.
+        // INVARIANT: a write failure does not turn a live call into a refusal — the host stays the owner, but the trouble is named.
         Assert.True(ownership.MarkServing());
         Assert.NotNull(ownership.TakeWriteProblem());
         Assert.True(ownership.TakeWriteProblem() is null, "одна и та же беда называется ровно один раз");
@@ -387,7 +367,7 @@ public class HostOwnershipTests : IDisposable
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
         {
-            // Процесс уже ушёл.
+            // The process has already gone.
         }
 
         try
@@ -396,7 +376,7 @@ public class HostOwnershipTests : IDisposable
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // Уборка временного каталога — best effort.
+            // Temp directory cleanup is best effort.
         }
     }
 }

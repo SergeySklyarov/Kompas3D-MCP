@@ -4,15 +4,11 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>
-/// Бюджеты команды: Хост не имеет права сдаваться раньше Worker (дефект M11 ревью 05.10.2026).
-/// </summary>
-/// <remarks>
-/// Прежде бюджет Хоста задавался одной настройкой (120 с по умолчанию), а бюджеты Worker —
-/// отдельным <c>switch</c> в диспетчере (180–300 с). Следствие: Хост объявлял OUTCOME_UNKNOWN и
-/// ломал канал раньше, чем Worker доходил до своего предела, а следующий вызов убивал Worker,
-/// который ещё работал. Проверка — на общей таблице, а не на двух независимых числах.
-/// </remarks>
+/// <summary>Command budgets: the Host must never give up before the Worker (defect M11, review 05.10.2026).</summary>
+/// <remarks>INVARIANT: the Host budget is derived from the Worker budget on one shared table, not set by an
+/// independent number — otherwise the Host declares OUTCOME_UNKNOWN and breaks the channel before the
+/// Worker reaches its own limit, and the next call kills a Worker that is still working.
+/// History: docs/decisions/tests.md#command-budget</remarks>
 public class CommandBudgetTests
 {
     [Theory]
@@ -47,11 +43,8 @@ public class CommandBudgetTests
         Assert.Equal(worker + CommandBudgets.HostMarginMs, host);
     }
 
-    /// <summary>
-    /// Бюджет умолчания (120 с по умолчанию у настройки) больше бюджета Worker уже не обязан быть —
-    /// он обязан быть НЕ меньше обычного: прежде 120 с Хоста против 240 с Worker были ровно
-    /// расхождением, которое здесь закрыто.
-    /// </summary>
+    /// <summary>INVARIANT: the default budget (120 s) need no longer exceed the Worker budget, but it must be
+    /// no LESS than the old flat one — the old 120 s Host vs 240 s Worker was the discrepancy closed here.</summary>
     [Fact]
     public void LongCommandsGetMoreThanTheOldFlatHostBudget()
     {

@@ -4,10 +4,8 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>
-/// The two decisions about an extrusion's target body that do not need КОМПАС: which operations may
-/// name a body, and whether a drawn profile can plausibly lie over the body that was named.
-/// </summary>
+/// <summary>The two decisions about an extrusion's target body that do not need KOMPAS: which operations may
+/// name a body, and whether a drawn profile can plausibly lie over the body that was named.</summary>
 /// <remarks>
 /// The second one exists because probe P2.6 measured a silent no-op: declaring a body the contour
 /// does not sit over makes SetSketch, Create and RebuildDocument all answer true while no body
@@ -70,14 +68,14 @@ public class TargetBodyGuardTests
     }
 
     // ---------------------------------------------------------------------------------------------
-    // The contradiction that КОМПАС swallows
+    // The contradiction that KOMPAS swallows
     // ---------------------------------------------------------------------------------------------
 
     [Fact]
     public void ContourOverSecondBody_DisagreesWithThePlate()
     {
         // This is row A.5a of probe P2.6: declaring the plate while the contour sits over the blob.
-        // КОМПАС answered Create=true, RebuildDocument succeeded and ΔV was 0 on both bodies.
+        // KOMPAS answered Create=true, RebuildDocument succeeded and ΔV was 0 on both bodies.
         var verdict = TargetBodyGuard.ProfileMayAffectBody(HoleOverBlob, PlaneBase.Xy, PlateMin, PlateMax);
 
         Assert.NotNull(verdict);
@@ -170,7 +168,7 @@ public class TargetBodyGuardTests
     public void UnknownPlaneOrUnknownProfile_IsReportedAsNotChecked()
     {
         // "cannot say" must never arrive as "refused": a sketch on a referenced plane has no
-        // measured correspondence here, and inventing one would reject work that КОМПАС does fine.
+        // measured correspondence here, and inventing one would reject work that KOMPAS does fine.
         Assert.Null(TargetBodyGuard.ProfileMayAffectBody(HoleOverBlob, null, BlobMin, BlobMax));
         Assert.Null(TargetBodyGuard.ProfileMayAffectBody(null, PlaneBase.Xy, BlobMin, BlobMax));
         Assert.Null(TargetBodyGuard.ProfileMayAffectBody(HoleOverBlob, PlaneBase.Xy, null, BlobMax));

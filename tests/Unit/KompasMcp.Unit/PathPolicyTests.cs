@@ -3,10 +3,8 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>
-/// File-boundary rules from spec 1.12. Every case here exists because the naive version of the
-/// check looks correct and is not.
-/// </summary>
+/// <summary>File-boundary rules from spec 1.12. Every case here exists because the naive version of the
+/// check looks correct and is not.</summary>
 public class PathPolicyTests : IDisposable
 {
     private readonly string _root;
@@ -107,12 +105,12 @@ public class PathPolicyTests : IDisposable
     [InlineData("less<.png")]
     public void FileNameCharactersInvalidOnWindows_AreRefusedInsideTheWritableRoot(string leaf)
     {
-        // Измерено пробой P4 наряда KOMPAS_EXPORT_IMAGE, а не выведено из общих соображений:
-        // ядро КОМПАС на такое имя НЕ отказывает. Оно вернуло успех, базовый файл `bad` остался
-        // нулевым, а полезная нагрузка (8639 байт) ушла в АЛЬТЕРНАТИВНЫЙ ПОТОК NTFS:
+        // MEASURED (probe P4, order KOMPAS_EXPORT_IMAGE), not inferred: the KOMPAS kernel does NOT refuse
+        // such a name. It returned success, the base file `bad` stayed zero, and the payload (8639 bytes) went
+        // into an ALTERNATIVE NTFS STREAM:
         //   FILE=bad LEN=0 STREAMS=:$DATA=0|name?.png=8639
-        // `Path.GetInvalidPathChars()` этот путь пропускает — набор там уже таблицы имён, — поэтому
-        // проверка ведётся по компонентам и по таблице ИМЁН.
+        // `Path.GetInvalidPathChars()` lets this through — its set is narrower than the name table — so the
+        // check works by components and by the NAME table.
         var decision = Policy().Evaluate(Path.Combine(_root, "out", leaf), intendToWrite: true);
         Assert.Equal(PathAccess.Denied, decision.Access);
         Assert.NotNull(decision.DeniedReason);
@@ -121,8 +119,8 @@ public class PathPolicyTests : IDisposable
     [Fact]
     public void AlternateDataStreamSyntax_IsRefusedByNameNotByAccident()
     {
-        // Отдельно от Theory: здесь важно, что отказ пришёл ИМЕНОВАННО от проверки компонент, а не
-        // от исключения канонизации. Иначе тест был бы зелёным по случайной причине.
+        // Separate from the Theory: what matters is that the refusal came NAMED from the component check, not
+        // from a canonicalisation exception — otherwise the test would be green for a chance reason.
         var decision = Policy().Evaluate(Path.Combine(_root, "out", "bad:name?.png"), intendToWrite: true);
         Assert.Equal(PathAccess.Denied, decision.Access);
         Assert.Contains("недопустимые в имени файла", decision.DeniedReason, StringComparison.Ordinal);
@@ -131,7 +129,7 @@ public class PathPolicyTests : IDisposable
     [Fact]
     public void DriveLetterColon_IsNotMistakenForAStreamSeparator()
     {
-        // Запрет ':' обязан не ломать обычный путь: двоеточие диска — часть КОРНЯ, а не имени.
+        // INVARIANT: banning ':' must not break an ordinary path — the drive colon is part of the ROOT, not the name.
         var target = Path.Combine(_root, "out", "part.png");
         var decision = Policy().Evaluate(target, intendToWrite: true);
         Assert.Equal(PathAccess.Writable, decision.Access);

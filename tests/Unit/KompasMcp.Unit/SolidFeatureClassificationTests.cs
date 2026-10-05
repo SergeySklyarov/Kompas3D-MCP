@@ -7,30 +7,17 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>
-/// Классификация полей правки признака B3 и адресация по номеру типа в дереве — то, что связывает
-/// контракт, опубликованную схему и адаптер, и чего прогон приёмки не заменяет.
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Почему здесь два разных способа проверки.</b> Всё, что лежит в контракте и каталоге
-/// (<see cref="UpdateFeatureCommand"/>, схема инструмента), проверяется ПО ЗНАЧЕНИЮ — типы доступны
-/// процессу тестов. Всё, что лежит в адаптере, приходится проверять ПО ИСХОДНИКАМ: сборка адаптера
-/// не загружается в процесс без установленного КОМПАСа, потому что поля его типов имеют типы
-/// interop'а, а interop намеренно не копируется в вывод (<c>Private=false</c> в
-/// <c>build/KompasInterop.props</c>) и подставляется на ходу только резолвером, который ставит
-/// Worker. Такой же приём уже применён к двум другим свойствам кода —
-/// <c>Api5SessionVisibilityGuardTests</c> и <c>TypedComBoundaryGuardTests</c>.
-/// </para>
-/// <para>
-/// <b>Чего эти проверки НЕ доказывают.</b> Они держат СОГЛАСОВАННОСТЬ трёх мест — контракта,
-/// схемы и таблицы адаптера — и не являются доказательством того, что отказ на чужое поле
-/// действительно приходит клиенту. Это доказано приёмкой: строка <c>B3.28</c> посылает
-/// <c>plane + keep_side</c> на признак разделения и получает <c>INVALID_ARGUMENT</c> с
-/// <c>foreign_fields == ["keep_side"]</c> на живой модели. Разделение ролей намеренное: тест ловит
-/// расхождение за миллисекунды, приёмка подтверждает поведение.
-/// </para>
-/// </remarks>
+/// <summary>Classification of the B3 feature-edit fields and addressing by tree type number — what ties the
+/// contract, the published schema and the adapter together, which an acceptance run does not replace.</summary>
+/// <remarks>TEST: two ways of checking. What lives in the contract and catalog
+/// (<see cref="UpdateFeatureCommand"/>, the tool schema) is checked BY VALUE — the types are available to the
+/// test process. What lives in the adapter is checked BY SOURCE: the adapter assembly does not load without
+/// KOMPAS installed, because its interop types are deliberately not copied to the output (<c>Private=false</c>
+/// in <c>build/KompasInterop.props</c>). LIMIT: these checks hold the CONSISTENCY of the three places and do
+/// not prove that a foreign-field refusal reaches the client — that is proved by acceptance (row <c>B3.28</c>
+/// sends <c>plane + keep_side</c> to a split feature and gets <c>INVALID_ARGUMENT</c> with
+/// <c>foreign_fields == ["keep_side"]</c> on a live model).
+/// History: docs/decisions/tests.md#solid-feature</remarks>
 public sealed class SolidFeatureClassificationTests
 {
     private static readonly string RepoRoot = FindRepoRoot();
@@ -47,26 +34,23 @@ public sealed class SolidFeatureClassificationTests
             "KompasMcp.sln не найден выше " + AppContext.BaseDirectory);
     }
 
-    /// <summary>
-    /// Исходник адаптера без комментариев. Комментарии исключены намеренно: правило «строка кода
-    /// важнее упоминания» здесь не формальность — разбираемый текст описывает в том числе и сам
-    /// разбор, и без отсечения комментариев тест находил бы имена в объяснении, а не в коде.
-    /// </summary>
-    /// <param name="fileName">Часть <c>Api5Session</c>, которую разбираем. Их несколько намеренно:
-    /// таблица семейственных полей лежит в <c>Api5Session.SolidOps.cs</c>, а номера типов дерева —
-    /// в <c>Api5Session.cs</c>, и склеивать их в один текст значило бы разрешить тесту находить
-    /// имя в чужом файле.</param>
+    /// <summary>Adapter source without comments. Comments are excluded deliberately: the parsed text also
+    /// describes the parse itself, and without stripping them the test would find names in an explanation, not
+    /// in the code.</summary>
+    /// <param name="fileName">Which part of <c>Api5Session</c> is parsed. Several on purpose: the family-field
+    /// table is in <c>Api5Session.SolidOps.cs</c> and the tree type numbers are in <c>Api5Session.cs</c>;
+    /// merging them would let the test find a name in a foreign file.</param>
     private static string AdapterSource(string fileName = "Api5Session.SolidOps.cs") => string.Join("\n",
         File.ReadLines(Path.Combine(RepoRoot, "src", "KompasMcp.Api5Adapter", fileName))
             .Where(line => !line.TrimStart().StartsWith("//", StringComparison.Ordinal)));
 
     // ---------------------------------------------------------------------------------------
-    // Ожидание: чем поля команды являются для семейств B3. Здесь перечислено ПОЛНОСТЬЮ, и это
-    // перечисление — предмет проверки, а не её украшение: расхождение с контрактом и со схемой
-    // ловится ниже.
+    // Expectation: what the command fields are for the B3 families. Listed COMPLETELY here, and the
+    // listing is the subject of the check, not its decoration: a divergence from the contract and the
+    // schema is caught below.
     // ---------------------------------------------------------------------------------------
 
-    /// <summary>Поля, приписанные семействам: имя в схеме → семейства-владельцы.</summary>
+    /// <summary>Fields assigned to families: schema name → owning families.</summary>
     private static readonly Dictionary<string, string[]> FamilyFields = new(StringComparer.Ordinal)
     {
         ["operation"] = ["boolean"],
@@ -80,18 +64,14 @@ public sealed class SolidFeatureClassificationTests
         ["reposition_axis_direction_mm"] = ["reposition"],
         ["reposition_axis_point2_mm"] = ["reposition"],
         ["reposition_angle_deg"] = ["reposition"],
-        // Добавлено 20.09.2026. Поле pattern появилось в контракте вместе с очередью B4, но ни в одну
-        // роль не попало — и проверка полноты падала на нём с тех пор. Роль именно «семейственное», а
-        // не «неприменимое»: поле принадлежит семейству массива, и признак массива его ЧИТАЕТ;
-        // отвергается оно только у признаков других семейств, причём своей веткой, которая
-        // возвращается раньше остальных.
+        // INVARIANT: pattern belongs to the pattern family, which READS it; other families reject it via their
+        // own branch that returns before the rest — "family", not "not applicable".
         ["pattern"] = ["pattern"],
-        // Добавлено 20.09.2026 (наряд SM07 §3.2, очередь B2). Шесть полей правки родного отверстия.
-        // Роль «семейственное», а не «неприменимое»: их ЧИТАЕТ ветка отверстия, а признаки остальных
-        // семейств отвергают их по общей таблице (SolidOps.cs) — то есть отказ здесь проверяемое
-        // поведение, а не запись в тесте. Ожидание дельты объёма приписано ЭТОМУ семейству
-        // намеренно: его читает только отверстие, и объявить его общим ожиданием значило бы принять
-        // его на переносе и булевой операции и молча не применить (тот же класс, что keep_side, П5).
+        // INVARIANT (order SM07 §3.2, queue B2): six native-hole edit fields. Role "family", not "not
+        // applicable" — the hole branch READS them, and other families reject them via the shared table
+        // (SolidOps.cs). The volume-delta expectation belongs to THIS family deliberately: only the hole reads
+        // it, so declaring it a shared expectation would accept it on a translation and a boolean and silently
+        // not apply it (same class as keep_side, P5).
         ["diameter_mm"] = ["hole"],
         ["counterbore_diameter_mm"] = ["hole"],
         ["counterbore_depth_mm"] = ["hole"],
@@ -100,43 +80,36 @@ public sealed class SolidFeatureClassificationTests
         ["expected_volume_delta_mm3"] = ["hole"],
     };
 
-    /// <summary>
-    /// Поля команды, не принадлежащие семействам B3: выдавливание, фаска, скругление, вращение и три
-    /// семейства последней обязательной очереди B5 (кинематика, сечения, оболочка). Отвергаются
-    /// отдельной проверкой адаптера как НЕПРИМЕНИМЫЕ к признаку B3.
-    /// </summary>
+    /// <summary>Command fields not belonging to the B3 families: extrusion, chamfer, fillet, rotation and the
+    /// three families of the last mandatory queue B5 (kinematics, sections, shell). Rejected by a separate
+    /// adapter check as NOT APPLICABLE to a B3 feature.</summary>
     private static readonly string[] NotApplicableFields =
     [
         "depth_mm", "end_condition", "sketch_ref", "distance1_mm", "distance2_mm", "angle_deg",
         "direction", "radius_mm", "edge_refs", "base_object_refs", "rotation_angle_deg",
         "rotation_direction",
-        // Добавлено 20.09.2026 вместе с правкой трёх семейств очереди B5 (наряд B5 §11). Поля не
-        // приписаны семействам B3 — значит, обязаны отвергаться как неприменимые, а не достигать
-        // семейства, которое их не читает.
+        // INVARIANT (queue B5 §11): these fields are not assigned to B3 families, so they must be rejected as
+        // not applicable rather than reach a family that does not read them.
         "shift_mode", "section_refs", "thickness_mm", "thin_inward", "face_refs",
-        // Добавлено 20.09.2026 (наряд B1–B5 §3.2, шаг C). Очередь B5 добавила ШЕСТЬ правимых полей,
-        // и пять из них попали и сюда, и в сторож адаптера, а шестое — couplings — ни туда, ни сюда.
-        // Эта проверка полноты и уронила на нём, назвав ровно то, чем дефект и был. Роль определена
-        // ОПЫТОМ, а не удобством: зонд scratch/_couplings_scope_probe.py показал, что вызов
-        // «distance1_mm + couplings» на фаске возвращал успех и объём 79840 → 79955 (правка
-        // применилась, цепочки нет), тогда как shift_mode и section_refs в том же вызове отвергались
-        // INVALID_ARGUMENT. Сторож адаптера (SolidOps.cs, Features.cs, Rotated.cs, PatternEdit.cs)
-        // дополнен тем же полем, поэтому «неприменимое» здесь — не запись в тесте, а проверяемое
-        // поведение.
+        // MEASURED (order B1–B5 §3.2, step C): queue B5 added SIX editable fields; the sixth, couplings, was in
+        // neither this list nor the adapter guard, and the completeness check failed on exactly that. The role is
+        // set by EXPERIMENT, not convenience: probe scratch/_couplings_scope_probe.py showed a call
+        // "distance1_mm + couplings" on a chamfer returned success and volume 79840 → 79955 (the edit applied,
+        // no chain), while shift_mode and section_refs in the same call were rejected INVALID_ARGUMENT. The
+        // adapter guard (SolidOps.cs, Features.cs, Rotated.cs, PatternEdit.cs) now names the same field, so
+        // "not applicable" here is verified behaviour, not a test note.
         "couplings",
     ];
 
-    /// <summary>Поля адресации: ими признак выбирается, а не определяется.</summary>
+    /// <summary>Addressing fields: they select the feature, they do not define it.</summary>
     private static readonly string[] AddressingFields = ["feature_ref", "expected_revision"];
 
-    /// <summary>
-    /// Аналитические ожидания геометрии. Они не принадлежат ни одному семейству намеренно: одно и то
-    /// же ожидание объявляется и для переноса, и для булевой правки, поэтому приписать их семейству
-    /// значило бы запретить законный вызов.
-    /// </summary>
+    /// <summary>Analytic geometry expectations. They belong to no family deliberately: the same expectation is
+    /// declared for a translation and a boolean edit, so assigning them to a family would forbid a legal
+    /// call.</summary>
     private static readonly string[] ExpectationFields = ["expected_volume_mm3", "expected_bbox_mm"];
 
-    /// <summary>Имя в схеме → имя свойства C#, по политике именования САМОГО продукта.</summary>
+    /// <summary>Schema name → C# property name, per the product's OWN naming policy.</summary>
     private static Dictionary<string, string> JsonNameToProperty()
     {
         var policy = KompJson.Options.PropertyNamingPolicy
@@ -148,17 +121,16 @@ public sealed class SolidFeatureClassificationTests
             .ToDictionary(p => policy.ConvertName(p.Name), p => p.Name, StringComparer.Ordinal);
     }
 
-    /// <summary>Разобранная таблица адаптера: имя поля → имена семейств (уже как строки контракта).</summary>
+    /// <summary>Parsed adapter table: field name → family names (already as contract strings).</summary>
     private static Dictionary<string, string[]> ParsedFamilyTable()
     {
         var source = AdapterSource();
 
-        // Константы семейств лежат в РАЗНЫХ файлах адаптера: таблица семейственных полей — в
-        // SolidOps.cs, константа семейства массива — в PatternEdit.cs (очередь B4), константа
-        // семейства отверстия — в Hole.cs (наряд SM07, очередь B2). Искать их в одном файле значило
-        // бы требовать переноса константы ради теста. Таблица при этом разбирается ТОЛЬКО из
-        // SolidOps.cs: расширение разбора на второй файл позволило бы тесту находить запись в чужом
-        // месте.
+        // The family constants live in DIFFERENT adapter files: the family-field table in SolidOps.cs, the
+        // pattern-family constant in PatternEdit.cs (queue B4), the hole-family constant in Hole.cs (order SM07,
+        // queue B2). Looking for them in one file would demand moving a constant for the test. The table itself
+        // is parsed ONLY from SolidOps.cs: extending the parse to a second file would let the test find an entry
+        // in a foreign place.
         var constants = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var fileName in new[]
                  {
@@ -196,9 +168,9 @@ public sealed class SolidFeatureClassificationTests
     [Fact]
     public void AdapterTable_ClassifiesExactlyTheExpectedFields()
     {
-        // Различающий контроль к самой проверке: таблица обязана не только содержать ожидаемое, но и
-        // НЕ содержать лишнего. Таблица, куда дописали поле «на всякий случай», отказывала бы на
-        // законном вызове — то есть отвергала бы применимое поле как чужое.
+        // Discriminating control of the check itself: the table must not only contain the expected but also NOT
+        // contain extras. A table with a field added "just in case" would refuse a legal call — rejecting an
+        // applicable field as foreign.
         var parsed = ParsedFamilyTable();
 
         Assert.Equal(
@@ -216,8 +188,8 @@ public sealed class SolidFeatureClassificationTests
     [Fact]
     public void EveryClassifiedField_IsAPropertyOfTheUpdateCommand()
     {
-        // Ловит опечатку и переименование: поле, названное в таблице строкой, которой в контракте
-        // нет, не отвергло бы ничего — оно просто никогда не встретится в команде.
+        // Catches a typo and a rename: a field named in the table by a string absent from the contract would
+        // reject nothing — it simply never occurs in a command.
         var properties = JsonNameToProperty();
 
         foreach (var field in FamilyFields.Keys)
@@ -231,10 +203,10 @@ public sealed class SolidFeatureClassificationTests
     [Fact]
     public void EveryClassifiedField_IsPublishedInTheToolSchema()
     {
-        // Это защита от ИЗМЕРЕННОГО класса дефекта (§9.1 П4): поле есть в контракте и в адаптере, но
-        // не объявлено в схеме, поэтому Host с additionalProperties:false отвергает вызов ещё до COM,
-        // и клиент видит «не поддерживается» там, где всё написано. Так уже было с base_object_refs
-        // при сокращении набора рёбер скругления: маршрут и валюта были готовы, не хватало публикации.
+        // MEASURED defect class (§9.1 P4): a field exists in the contract and the adapter but is not declared
+        // in the schema, so the Host with additionalProperties:false rejects the call before COM and the client
+        // sees "unsupported" where everything is implemented. This happened with base_object_refs on the fillet
+        // edge-set reduction: the route and currency were ready, the publication was missing.
         var schema = ToolCatalog.All.Single(t => t.Name == "kompas_update_feature").InputSchema;
         var published = (schema["properties"] as JsonObject)
                         ?? throw new InvalidOperationException(
@@ -247,7 +219,7 @@ public sealed class SolidFeatureClassificationTests
                 "клиент не сможет его прислать, а strict-валидация отвергнет вызов");
         }
 
-        // Ожидания и адресация — тем более: без них правка не выполняется вовсе.
+        // Expectations and addressing even more so: without them the edit does not run at all.
         foreach (var field in ExpectationFields.Concat(AddressingFields))
         {
             Assert.True(published.ContainsKey(field),
@@ -258,13 +230,13 @@ public sealed class SolidFeatureClassificationTests
     [Fact]
     public void EveryCommandProperty_IsClassifiedExactlyOnce()
     {
-        // Главная проверка полноты: у каждого поля команды обязана быть РОЛЬ. Поле, не попавшее ни в
-        // одно из четырёх ведомств, — это поле, которое адаптер не отвергнет ни как чужое семейству,
-        // ни как неприменимое, то есть примет и молча проигнорирует. Ровно так вёл себя keep_side,
-        // пока его не приписали отсечению (дефект П5): вызов проходил, а параметр не применялся.
+        // The main completeness check: every command field must have a ROLE. A field in none of the four
+        // departments is one the adapter rejects neither as foreign to a family nor as not applicable, i.e. it
+        // accepts and silently ignores it. This is how keep_side behaved until it was assigned to split (defect
+        // P5): the call passed but the parameter was not applied.
         //
-        // Новое поле контракта уронит эту проверку — и это её назначение: автор обязан решить, чья
-        // это роль, а не оставить решение по умолчанию.
+        // A new contract field will fail this check — and that is its purpose: the author must decide its role
+        // rather than leave the default.
         var properties = JsonNameToProperty();
 
         var buckets = new[]
@@ -296,49 +268,34 @@ public sealed class SolidFeatureClassificationTests
             $"в ведомствах названы поля, которых в {nameof(UpdateFeatureCommand)} нет: "
             + string.Join(", ", phantom));
 
-        // Полнота заодно фиксирует размер контракта: рост числа полей виден как падение этой строки.
-        // 26 → 27 (19.09.2026): добавлено target_body_ref — область применения признака отсечения на
-        // ПРАВКЕ (наряд B3 §3.2 требует назначать её на создании и ВОССТАНАВЛИВАТЬ на правке).
-        // 27 → 28 (очередь B4): добавлено pattern — и ЭТА СТРОКА НЕ БЫЛА ОБНОВЛЕНА, как и роль поля.
-        // Обе проверки падали с тех пор: сначала на неотнесённом поле, и до числа дело не доходило.
-        // 28 → 33 (20.09.2026): добавлены пять полей правки трёх семейств очереди B5 — shift_mode,
-        // section_refs, thickness_mm, thin_inward, face_refs. Число выросло не «на всякий случай»:
-        // каждое поле стоит на измеренном маршруте (шаги B5.13, B5.14), а закрытие семи обязательных
-        // режимов очереди B5 требует именно действия edit у каждого из них.
-        // 33 → 34 (20.09.2026, шаг C наряда B1–B5 §3.2): шестое поле той же очереди — couplings.
-        // Прежняя редакция этого числа (33) была НЕВЕРНА с момента появления поля: она описывала
-        // пять полей из шести, и заметить это было нечем, потому что проверка падала раньше — на
-        // неотнесённом поле. Число пересчитано по контракту, а не подогнано под прогон.
-        // 34 → 40 (20.09.2026, наряд SM07 §3.2): шесть полей правки родного отверстия — diameter_mm,
-        // counterbore_diameter_mm, counterbore_depth_mm, countersink_diameter_mm,
-        // countersink_angle_deg и ожидание дельты объёма expected_volume_delta_mm3. Число растёт не
-        // «на всякий случай»: у каждого поля стоит измеренный маршрут (шаг M.6 зонда
-        // scratch/_hole_edit_probe.py), а закрытие действия edit шести строк SM-07 требует именно их.
+        // INVARIANT: completeness also fixes the contract size — growth of the field count shows as this line
+        // failing. The count is recounted from the contract, never fitted to a run. It reached 40 with the six
+        // native-hole edit fields (order SM07 §3.2), each on a measured route (step M.6 of probe
+        // scratch/_hole_edit_probe.py). History: docs/decisions/tests.md#solid-feature
         Assert.Equal(40, properties.Count);
     }
 
     [Fact]
     public void AdapterGuard_RejectsEveryNotApplicableField_AndNoFamilyField()
     {
-        // Проверка читает УСЛОВИЕ ОТКАЗА, а не список в комментарии: важно, что адаптер отвергает
-        // именно эти поля. Обратная половина (не отвергает семейственные) — различающий контроль:
-        // без неё проверка проходила бы и на условии, отвергающем всё подряд.
+        // The check reads the REFUSAL CONDITION, not a list in a comment: what matters is that the adapter
+        // rejects exactly these fields. The reverse half (does not reject family fields) is the discriminating
+        // control — without it the check would also pass on a condition rejecting everything.
         var source = AdapterSource();
-        // Условие начинается с ДВОЙНОЙ скобки с 20.09.2026 (наряд SM07 §3.2): первое поле стало
-        // условным — `command.DepthMm is not null && !Owned("depth_mm")` — потому что depth_mm
-        // принадлежит и выдавливанию, и глухому отверстию. Регулярное выражение обновлено ВМЕСТЕ с
-        // условием, и это не косметика: прежняя редакция просто не нашла бы условие и уронила тест,
-        // как он и обязан падать на переписанном стороже.
+        // The condition starts with a DOUBLE paren since 20.09.2026 (order SM07 §3.2): the first field became
+        // conditional — `command.DepthMm is not null && !Owned("depth_mm")` — because depth_mm belongs to both
+        // extrusion and a blind hole. The regex was updated TOGETHER with the condition, and that is not
+        // cosmetics: the old regex simply would not find the condition and would fail the test.
         var guard = Regex.Match(source, @"if \(\(command\.DepthMm is not null[\s\S]*?\)\s*\n\s*\{");
 
         Assert.True(guard.Success,
             "условие отказа на неприменимые поля не найдено — оно переписано, и эта проверка " +
             "перестала что-либо утверждать");
 
-        // Исключение ровно одно и названо явно: depth_mm отвергается как неприменимое, ЕСЛИ
-        // семейство не объявило его своим. Иначе проверка ниже проходила бы на условии, которое
-        // отвергает depth_mm всегда, — а именно так правка глухого отверстия и не работала
-        // (измерено строками F08.15/16/19/20.edit 20.09.2026).
+        // There is exactly one exception, named explicitly: depth_mm is rejected as not applicable IF the
+        // family did not declare it its own. Otherwise the check below would pass on a condition that always
+        // rejects depth_mm — which is exactly how the blind-hole edit failed (measured by rows
+        // F08.15/16/19/20.edit, 20.09.2026).
         Assert.Contains("command.DepthMm is not null && !Owned(\"depth_mm\")", guard.Value,
             StringComparison.Ordinal);
 
@@ -361,10 +318,10 @@ public sealed class SolidFeatureClassificationTests
     [Fact]
     public void TreeTypeConstants_AreTheMeasuredOnes_AndNotTheCreationNumber()
     {
-        // Числа измерены прибором scratch/b3-measure-feature-types.py (чтение ksEntity.type на дереве
-        // через kompas_list_features), а не выведены из вендорского перечисления: у трёх семейств из
-        // четырёх номер ФАБРИКИ и номер ДЕРЕВА различаются, и это измерено отдельно на вращении
-        // (29 = 29, вопреки аналогии с отверстием) и на отверстии (52 → 583).
+        // MEASURED by probe scratch/b3-measure-feature-types.py (reading ksEntity.type in the tree via
+        // kompas_list_features), not inferred from the vendor enum: in three of four families the FACTORY number
+        // and the TREE number differ — measured separately on rotation (29 = 29, against the hole analogy) and
+        // on the hole (52 → 583).
         var source = AdapterSource("Api5Session.cs");
         var constants = Regex.Matches(source, @"public const int (\w+) = (\d+);")
             .ToDictionary(m => m.Groups[1].Value, m => int.Parse(m.Groups[2].Value), StringComparer.Ordinal);
@@ -384,24 +341,24 @@ public sealed class SolidFeatureClassificationTests
             Assert.Equal(number, actual);
         }
 
-        // Различающий контроль против именно того числа, которое напрашивается: 569 —
-        // o3d_BodyReposition, номер СОЗДАНИЯ. Признак в дереве виден под 79, и поиск по 569 не нашёл
-        // бы его никогда — это исправленный дефект, и он не должен вернуться под видом «уточнения».
+        // Discriminating control against the very number that suggests itself: 569 — o3d_BodyReposition, the
+        // CREATION number. The feature appears in the tree under 79, and a search for 569 would never find it —
+        // this is a fixed defect that must not return under the guise of a "refinement".
         Assert.DoesNotContain(569, expected.Values);
         Assert.All(constants, pair => Assert.NotEqual(569, pair.Value));
 
-        // Тип — это признак адресации, поэтому два семейства с одним номером слились бы в одно
-        // ведомство, и правка попала бы не в тот признак.
+        // The type is an addressing sign, so two families with one number would merge into one department and
+        // the edit would hit the wrong feature.
         Assert.Equal(expected.Count, expected.Values.Distinct().Count());
     }
 
     [Fact]
     public void DeclaredExpectationRule_IsWrittenOnce()
     {
-        // Корневая причина дефекта П6 — правило «ожидание объявлено», записанное ДВАЖДЫ. Копии
-        // разошлись: булева правка требовала ожидания, а перенос требовал именно ОБЪЁМ, поэтому
-        // объявленный и совпавший габарит отчитывался как необъявленный. Пока выражение стоит в
-        // одном месте, разойтись ему не с чем; этот тест держит именно единственность.
+        // Root cause of defect P6: the rule "an expectation is declared" was written TWICE. The copies diverged
+        // — the boolean edit required an expectation, the translation required specifically VOLUME, so a
+        // declared and matching bounding box was reported as undeclared. While the expression stands in one
+        // place it has nothing to diverge from; this test holds exactly the uniqueness.
         var source = AdapterSource();
 
         var rule = Regex.Matches(

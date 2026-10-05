@@ -4,17 +4,13 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>
-/// A sketch is built by several calls (append per contour, replace to clear), and the extrusion's
+/// <summary>A sketch is built by several calls (append per contour, replace to clear), and the extrusion's
 /// expected volume is the area of the WHOLE profile — so the accumulation, not just the formula, is
-/// what the check stands on.
-/// </summary>
-/// <remarks>
-/// Measured 24.09.2026: while the adapter remembered a running sum, drawing the outer circle and then
+/// what the check stands on.</summary>
+/// <remarks>Measured 24.09.2026: while the adapter remembered a running sum, drawing the outer circle and then
 /// the inner one gave exactly the same figure as drawing both at once — π·100 + π·25 = 392.699081699
 /// against the ring's π·75 = 235.619449019. A scalar cannot carry nesting, so a later edit could never
-/// turn the remembered number into a hole; these tests hold the contour list to that.
-/// </remarks>
+/// turn the remembered number into a hole; these tests hold the contour list to that.</remarks>
 public class SketchProfileTests
 {
     private static SketchEntityDto Circle(double cx, double cy, double r) => new()

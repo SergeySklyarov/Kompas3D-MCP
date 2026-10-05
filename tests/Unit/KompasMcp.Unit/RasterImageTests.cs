@@ -5,25 +5,18 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>
-/// Разбор заголовков растра и перечень форматов — то, на чём стоит приёмка инструмента
-/// <c>kompas_export_image</c>.
-/// </summary>
-/// <remarks>
-/// ПОЧЕМУ ЭТИ ПРОВЕРКИ ВООБЩЕ НУЖНЫ, А НЕ «ПУСТЬ ПРИЁМКА ПОСМОТРИТ». Габарит снимка — то, что
-/// сервер ПУБЛИКУЕТ, и взять его из запроса значило бы опубликовать намерение вместо факта.
-/// Разбор заголовка — код, который легко написать «на глазок» и не заметить, что порядок байт
-/// перепутан: тогда ответ несёт правдоподобные, но неверные числа, и живой прогон этого не
-/// поймает, потому что сравнивать ему не с чем. Здесь сравнивать есть с чем — с байтами,
-/// собранными в тесте по спецификации формата.
-/// </remarks>
+/// <summary>Raster header parsing and the format list — what the <c>kompas_export_image</c> acceptance rests on.</summary>
+/// <remarks>INVARIANT: the image size is what the server PUBLISHES, so taking it from the request would
+/// publish an intention instead of a fact. LIMIT: header parsing is easy to write "by eye" and miss a byte
+/// order swap, after which the answer carries plausible but wrong numbers that a live run cannot catch —
+/// there is nothing to compare against. Here there is: bytes assembled in the test from the format spec.</remarks>
 public class RasterImageTests
 {
     private static byte[] Png(int width, int height, byte bitDepth = 8, byte colorType = 2)
     {
         var data = new byte[33];
         new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }.CopyTo(data, 0);
-        data[11] = 13;                                   // длина блока IHDR
+        data[11] = 13;                                   // IHDR chunk length
         data[12] = (byte)'I';
         data[13] = (byte)'H';
         data[14] = (byte)'D';
@@ -46,7 +39,7 @@ public class RasterImageTests
         var data = new byte[54];
         data[0] = 0x42;                                  // 'B'
         data[1] = 0x4D;                                  // 'M'
-        data[14] = 40;                                   // размер BITMAPINFOHEADER
+        data[14] = 40;                                   // BITMAPINFOHEADER size
         BitConverter.GetBytes(width).CopyTo(data, 18);
         BitConverter.GetBytes(height).CopyTo(data, 22);
         BitConverter.GetBytes((short)24).CopyTo(data, 28);
@@ -73,9 +66,9 @@ public class RasterImageTests
     [InlineData(null)]
     public void UnknownFormats_AreRefusedRatherThanDefaulted(string? wire)
     {
-        // Молчаливая подмена формата неотличима для вызывающего от исполнения просьбы. Измерено
-        // пробой P5: значение ВНЕ перечня ядро принимает и подменяет другим форматом (99 дало BMP
-        // 440886 байт), поэтому «неизвестное имя» обязано отвергаться здесь, до COM.
+        // INVARIANT: a silent format substitution is indistinguishable to the caller from fulfilling the
+        // request. MEASURED (probe P5): the kernel accepts a value OUTSIDE the list and substitutes another
+        // format (99 gave BMP, 440886 bytes), so an unknown name must be refused here, before COM.
         Assert.False(RasterFormats.TryResolve(wire, out _));
     }
 
@@ -94,9 +87,9 @@ public class RasterImageTests
     [Fact]
     public void WrongMagic_IsReportedRatherThanIgnored()
     {
-        // Файл, названный PNG, но не являющийся им: это ровно тот случай, ради которого проверка
-        // магии стоит в адаптере. Значение вне перечня ядро принимает молча (P5), поэтому «ядро
-        // ответило успехом» о формате не говорит ничего.
+        // A file named PNG that is not one: exactly the case the magic check in the adapter exists for. The
+        // kernel accepts a value outside the list silently (P5), so "the kernel answered success" says nothing
+        // about the format.
         var facts = RasterImageReader.Inspect(Bmp(100, 80), RasterFormats.Png);
         Assert.False(facts.MagicMatches);
         Assert.Null(facts.PixelWidth);
@@ -122,8 +115,8 @@ public class RasterImageTests
     [Fact]
     public void JpegDimensions_StayUnreadRatherThanZero()
     {
-        // «Не прочитано» и «ноль» — разные утверждения, и молчаливый ноль был бы ложью: JPG
-        // 9961 байт с габаритом 0×0 выглядел бы как пустая картинка.
+        // INVARIANT: "not read" and "zero" are different claims, and a silent zero would be a lie — a 9961-byte
+        // JPG with a 0×0 size would look like an empty image.
         var data = new byte[] { 0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46 };
         var facts = RasterImageReader.Inspect(data, RasterFormats.Jpg);
         Assert.True(facts.MagicMatches);
@@ -148,11 +141,9 @@ public class RasterImageTests
         Assert.Equal(2 * 1024 * 1024, RasterLimits.MaxBase64Characters);
     }
 
-    /// <summary>
-    /// Схема инструмента и перечень форматов в Domain обязаны называть ОДНО И ТО ЖЕ. Разойдясь,
-    /// они дали бы клиенту формат, который адаптер отвергает, — и отказ выглядел бы дефектом
-    /// продукта, а не расхождением двух списков.
-    /// </summary>
+    /// <summary>INVARIANT: the tool schema and the Domain format list must name the SAME formats. Diverging,
+    /// they would give the client a format the adapter rejects, and the refusal would look like a product
+    /// defect rather than a mismatch of two lists.</summary>
     [Fact]
     public void ExportImageSchema_PublishesExactlyTheSupportedFormats()
     {

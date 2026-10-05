@@ -7,21 +7,12 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>
-/// Жизненный цикл сеанса со стороны Хоста: захват, освобождение, отказ без владения.
-/// </summary>
-/// <remarks>
-/// <para>
-/// КОМ ЗДЕСЬ НЕТ, И ЭТО ОСОЗНАННО. Проверяется то, что решается ДО COM: маршрутизация, владение,
-/// запись в журнал и форма отказа. Worker не запускается ни в одном тесте — канал создаётся, а
-/// процесс стартует только на первой реальной команде, которой здесь нет.
-/// </para>
-/// <para>
-/// ЧТО ЗДЕСЬ ПРОВЕРЯЕТСЯ ПО СУЩЕСТВУ: обычный CAD-вызов без владения отказывает ДО записи в
-/// журнал и ДО COM; освобождение создаёт состояние, в котором неявный захват запрещён;
-/// диагностика отвечает и без владения.
-/// </para>
-/// </remarks>
+/// <summary>Session lifecycle from the Host side: acquire, release, refusal without ownership.</summary>
+/// <remarks>LIMIT: there is deliberately no COM here — the tests check what is decided BEFORE COM
+/// (routing, ownership, journal write, refusal shape). No test starts a Worker: the channel is created and
+/// the process starts only on the first real command, of which there is none here. INVARIANT: a CAD call
+/// without ownership is refused BEFORE the journal and BEFORE COM; release creates a state in which an
+/// implicit acquire is forbidden; diagnostics answer without ownership too.</remarks>
 public class HostSessionLifecycleTests : IDisposable
 {
     private readonly string _directory;
@@ -61,7 +52,7 @@ public class HostSessionLifecycleTests : IDisposable
         Body(envelope)["session_state"]!.GetValue<string>();
 
     // -----------------------------------------------------------------------------------------
-    // Статус
+    // Status
     // -----------------------------------------------------------------------------------------
 
     [Fact]
@@ -93,7 +84,7 @@ public class HostSessionLifecycleTests : IDisposable
     }
 
     // -----------------------------------------------------------------------------------------
-    // Диагностика без владения
+    // Diagnostics without ownership
     // -----------------------------------------------------------------------------------------
 
     [Fact]
@@ -127,7 +118,7 @@ public class HostSessionLifecycleTests : IDisposable
     }
 
     // -----------------------------------------------------------------------------------------
-    // Захват и освобождение
+    // Acquire and release
     // -----------------------------------------------------------------------------------------
 
     [Fact]
@@ -163,8 +154,8 @@ public class HostSessionLifecycleTests : IDisposable
         Assert.NotNull(envelope.Error.Details);
         Assert.True(envelope.Error.Details!.ContainsKey("remedy"), "отказ обязан нести инструкцию, а не только код");
 
-        // ОТКАЗ ДО ЖУРНАЛА. Считаются строки, а не существование файла: журнал создаётся уже при
-        // захвате, поэтому «файла нет» здесь ничего не доказывало бы.
+        // REFUSAL BEFORE THE JOURNAL. Lines are counted, not file existence: the journal is created already
+        // at acquire, so "no file" would prove nothing here.
         Assert.True(before == JournalLines(),
             "отказ без владения обязан приходить до записи в журнал операций");
     }
@@ -181,7 +172,7 @@ public class HostSessionLifecycleTests : IDisposable
         Assert.True(Body(released)["released_by_this_request"]!.GetValue<bool>());
         Assert.Equal("released", State(released));
 
-        // ПОСЛЕ ЯВНОГО RELEASE НЕЯВНЫЙ ЗАХВАТ ЗАПРЕЩЁН.
+        // INVARIANT: after an explicit RELEASE an implicit acquire is FORBIDDEN.
         var refused = await session.InvokeAsync("kompas_rebuild", new JsonObject
         {
             ["document_id"] = "0000000000000000000000000000000f",
@@ -202,14 +193,14 @@ public class HostSessionLifecycleTests : IDisposable
         Assert.Equal(OperationStatus.Succeeded, first.Status);
         Assert.False(Body(first)["released_by_this_request"]!.GetValue<bool>());
 
-        // ПОВТОР БЕЗОПАСЕН: второе освобождение не портит состояние и не делает вид, что работало.
+        // A repeat is safe: a second release does not corrupt the state or pretend it worked.
         var second = await session.InvokeAsync(HostSession.ReleaseTool, new JsonObject(), CancellationToken.None);
         Assert.Equal(OperationStatus.Succeeded, second.Status);
         Assert.False(Body(second)["released_by_this_request"]!.GetValue<bool>());
     }
 
     // -----------------------------------------------------------------------------------------
-    // Повтор освобождения по operation_id (правило §2.1: поле объявлено И используется)
+    // Release replay by operation_id (rule §2.1: the field is declared AND used)
     // -----------------------------------------------------------------------------------------
 
     [Fact]
@@ -226,9 +217,9 @@ public class HostSessionLifecycleTests : IDisposable
         Assert.Equal(id, first.OperationId);
         Assert.True(Body(first)["released_by_this_request"]!.GetValue<bool>());
 
-        // ТОТ ЖЕ id — записанный исход: «освобождён ЭТИМ запросом» остаётся истиной, хотя владения
-        // уже нет. Выполнись процедура заново — ответ сказал бы «не этим запросом», и различие
-        // воспроизведения от повторного исполнения было бы невидимым.
+        // INVARIANT: the SAME id replays the recorded outcome — "released BY THIS request" stays true even
+        // though ownership is already gone. Running the procedure again would answer "not by this request",
+        // making replay indistinguishable from re-execution.
         var replay = await session.InvokeAsync(HostSession.ReleaseTool,
             new JsonObject { ["operation_id"] = id }, CancellationToken.None);
 
@@ -248,7 +239,7 @@ public class HostSessionLifecycleTests : IDisposable
             new JsonObject { ["operation_id"] = Guid.NewGuid().ToString() }, CancellationToken.None);
         Assert.True(Body(first)["released_by_this_request"]!.GetValue<bool>());
 
-        // НОВЫЙ id начинает освобождение заново: владения уже нет, поэтому «не этим запросом».
+        // A NEW id starts the release again: ownership is already gone, so "not by this request".
         var fresh = await session.InvokeAsync(HostSession.ReleaseTool,
             new JsonObject { ["operation_id"] = Guid.NewGuid().ToString() }, CancellationToken.None);
 
@@ -289,16 +280,14 @@ public class HostSessionLifecycleTests : IDisposable
         var again = await session.InvokeAsync(HostSession.ReleaseTool,
             new JsonObject { ["operation_id"] = id }, CancellationToken.None);
 
-        // Тот же id, но НОВОЕ поколение: исход прежнего сеанса не воспроизводится — освобождение
-        // выполнено заново и снова «этим запросом». Без очистки карты ответ был бы чужим исходом.
+        // INVARIANT: the same id but a NEW generation does not replay the previous session's outcome — the
+        // release runs again and is again "by this request". Without clearing the map the answer would be foreign.
         Assert.True(Body(again)["released_by_this_request"]!.GetValue<bool>());
     }
 
-    /// <summary>
-    /// Инструменты сеанса присутствуют в опубликованном каталоге: их нельзя добавить «для
-    /// уведомления об изменении списка» — базовый каталог публикуется сразу, включая ожидающий
-    /// Хост. Проверка живёт здесь, потому что именно этим достигается доступность без владения.
-    /// </summary>
+    /// <summary>INVARIANT: the session tools are in the published catalog — they cannot be added "for a
+    /// list-changed notification", since the base catalog is published at once, including a waiting Host.
+    /// The check lives here because this is what achieves availability without ownership.</summary>
     [Fact]
     public void SessionTools_AreInThePublishedCatalog()
     {
@@ -320,7 +309,7 @@ public class HostSessionLifecycleTests : IDisposable
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // Уборка временного каталога — best effort.
+            // Temp directory cleanup is best effort.
         }
     }
 }

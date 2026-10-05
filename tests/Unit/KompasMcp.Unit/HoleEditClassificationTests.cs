@@ -6,36 +6,24 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>
-/// Правка родного отверстия (наряд SM07 §3.4): три свойства, которые прогон приёмки НЕ держит, а
-/// расхождение между контрактом, схемой и адаптером ловится здесь.
-/// </summary>
-/// <remarks>
-/// <para>
-/// <b>Почему три, и почему именно эти.</b> Приёмка доказывает ПОВЕДЕНИЕ на живой модели — что правка
-/// применяется, что объём уходит на аналитику, что чужие поля отвергаются. Она не может доказать
-/// согласованность трёх мест между собой и не может заметить «поле, которого нет ни в одном
-/// ведомстве»: такое поле не отвергается ничем и не применяется ничем, поэтому на модели выглядит
-/// как успешный вызов. Здесь проверяется именно это:
+/// <summary>Editing a native hole (order SM07 §3.4): three properties the acceptance run does NOT hold, while a
+/// disagreement between contract, schema and adapter is caught here.</summary>
+/// <remarks>INVARIANT, three claims acceptance cannot prove (it proves behaviour on a live model, not the
+/// agreement of the three places):
 /// <list type="number">
-/// <item>признак отверстия опознаётся в диспетчере правки ПО ТИПУ ДЕРЕВА и ветка стоит до чтения
-/// определения API5 — у отверстия определения нет вовсе, и обратный порядок сделал бы правку
-/// недостижимой;</item>
-/// <item>каждое поле правки отверстия отвергается чужими семействами — иначе оно принимается и
-/// проглатывается (измеренный класс: <c>keep_side</c> П5, <c>couplings</c> 20.09.2026);</item>
-/// <item>производная глубина зенковки НЕ объявлена записываемой и НЕ проверяется на совпадение с
-/// запрошенной — при способе «диаметр + угол» запись в неё не действует (M.3), и требовать
-/// совпадения значило бы требовать от приёмки заведомо ложного утверждения.</item>
+/// <item>the hole feature is recognised in the edit dispatcher BY TREE TYPE, and the branch stands before
+/// reading the API5 definition — a hole has no definition at all, so the reverse order would make the edit
+/// unreachable;</item>
+/// <item>every hole-edit field is rejected by the neighbouring families — otherwise it is accepted and
+/// swallowed (measured class: <c>keep_side</c> P5, <c>couplings</c> 20.09.2026);</item>
+/// <item>the derived countersink depth is NOT declared writable and NOT asserted to match the requested one
+/// — with the "diameter + angle" method a write into it has no effect (M.3), so requiring a match would
+/// demand a false claim from acceptance.</item>
 /// </list>
-/// </para>
-/// <para>
-/// <b>Почему по ИСХОДНИКАМ, а не по сборке.</b> Сборка адаптера не загружается в процесс без
-/// установленного КОМПАСа: поля её типов имеют типы interop'а, а interop намеренно не копируется в
-/// вывод (<c>Private=false</c> в <c>build/KompasInterop.props</c>). Тот же приём применён в
-/// <c>SolidFeatureClassificationTests</c>. Комментарии из разбираемого текста исключаются: иначе
-/// тест находил бы имя в объяснении, а не в коде.
-/// </para>
-/// </remarks>
+/// LIMIT: the check is by SOURCE, not by assembly — the adapter assembly does not load without KOMPAS
+/// installed (interop types are not copied to the output, <c>Private=false</c> in
+/// <c>build/KompasInterop.props</c>). Comments are stripped from the parsed text, else the test would find
+/// the name in an explanation, not in the code. History: docs/decisions/tests.md#hole-edit</remarks>
 public sealed class HoleEditClassificationTests
 {
     private static readonly string RepoRoot = FindRepoRoot();
@@ -52,18 +40,15 @@ public sealed class HoleEditClassificationTests
             "KompasMcp.sln не найден выше " + AppContext.BaseDirectory);
     }
 
-    /// <summary>Исходник адаптера без строк комментариев.</summary>
+    /// <summary>Adapter source without comment lines.</summary>
     private static string AdapterSource(string fileName) => string.Join("\n",
         File.ReadLines(Path.Combine(RepoRoot, "src", "KompasMcp.Api5Adapter", fileName))
             .Where(line => !line.TrimStart().StartsWith("//", StringComparison.Ordinal)));
 
-    /// <summary>Тело метода по сигнатуре: от неё до следующего члена того же уровня вложенности.</summary>
-    /// <remarks>
-    /// Разбор обязан быть ограничен ОДНИМ методом. В том же файле есть маршрут ЧТЕНИЯ
-    /// (<c>GetFeature</c>), где <c>entity.GetDefinition()</c> стоит на первой же строке, и поиск по
-    /// всему файлу находил бы именно его: тест тогда утверждал бы порядок строк в чужом методе и
-    /// проходил бы независимо от того, где стоит ветка отверстия.
-    /// </remarks>
+    /// <summary>Method body by signature: from it to the next member of the same nesting level.</summary>
+    /// <remarks>INVARIANT: the parse is limited to ONE method. The same file has a READ route
+    /// (<c>GetFeature</c>) where <c>entity.GetDefinition()</c> is on the first line, and a whole-file search
+    /// would find exactly that one: the test would then assert line order in a foreign method.</remarks>
     private static string MethodBody(string source, string signature)
     {
         var start = source.IndexOf(signature, StringComparison.Ordinal);
@@ -73,7 +58,7 @@ public sealed class HoleEditClassificationTests
         return source[start..(next > 0 ? next : source.Length)];
     }
 
-    /// <summary>Имя в схеме → имя свойства C#, по политике именования самого продукта.</summary>
+    /// <summary>Schema name → C# property name, per the product's own naming policy.</summary>
     private static Dictionary<string, string> JsonNameToProperty()
     {
         var policy = KompJson.Options.PropertyNamingPolicy
@@ -85,7 +70,7 @@ public sealed class HoleEditClassificationTests
             .ToDictionary(p => policy.ConvertName(p.Name), p => p.Name, StringComparer.Ordinal);
     }
 
-    /// <summary>Поля правки отверстия — ровно те, что объявлены в контракте и в схеме.</summary>
+    /// <summary>Hole-edit fields — exactly those declared in the contract and the schema.</summary>
     private static readonly string[] HoleEditFields =
     [
         "diameter_mm", "counterbore_diameter_mm", "counterbore_depth_mm",
@@ -95,11 +80,11 @@ public sealed class HoleEditClassificationTests
     [Fact]
     public void HoleBranch_IsIdentifiedByTreeType_AndStandsBeforeTheApi5Definition()
     {
-        // Две половины одной причины. Первая: опознание по типу сущности в дереве — как в чтении
-        // (FindHoleEntity), а не по номеру фабрики создания: 52 при создании, 583 в дереве (проба
-        // N.1), и поиск по 52 не нашёл бы признак никогда. Вторая: ветка обязана стоять ДО чтения
-        // определения API5 — у отверстия определения нет вовсе (типа ksHoleDefinition в вендорском
-        // интеропе не существует), и опознание через определение было бы невозможно.
+        // Two halves of one cause. First: recognition by the entity type in the tree — as in reading
+        // (FindHoleEntity), not by the creation factory number: 52 at creation, 583 in the tree (probe N.1),
+        // and a search for 52 would never find the feature. Second: the branch must stand BEFORE reading the
+        // API5 definition — a hole has no definition at all (type ksHoleDefinition does not exist in the
+        // vendor interop), so recognition through a definition would be impossible.
         var source = AdapterSource("Api5Session.Features.cs");
         var dispatcher = MethodBody(source, "public UpdateFeatureResult UpdateFeature(UpdateFeatureCommand command)");
 
@@ -113,8 +98,8 @@ public sealed class HoleEditClassificationTests
             "ветка отверстия стоит ПОСЛЕ чтения определения API5: у отверстия определения нет, и " +
             "такой порядок делал бы правку недостижимой при отказе GetDefinition()");
 
-        // Различающий контроль: константа обязана быть тем самым измеренным номером дерева, а не
-        // номером фабрики. Иначе тест проходил бы и на опознании по 52.
+        // Discriminating control: the constant must be the measured tree number, not the factory number —
+        // otherwise the test would also pass on recognition by 52.
         var constants = AdapterSource("Api5Session.cs");
         Assert.Contains("public const int Hole3D = 583;", constants, StringComparison.Ordinal);
         Assert.Contains("public const int HoleOperation = 52;", constants, StringComparison.Ordinal);
@@ -123,9 +108,9 @@ public sealed class HoleEditClassificationTests
     [Fact]
     public void EveryHoleEditField_IsRejectedByTheNeighbouringFamilies()
     {
-        // Поле, не попавшее ни в один перечень чужих полей, — это поле, которое адаптер примет и
-        // НЕ применит: признак другого семейства его не читает, а общего сторожа для него нет. Ровно
-        // так вёл себя keep_side у разделения (П5) и couplings у фаски (измерено 20.09.2026).
+        // INVARIANT: a field in none of the foreign-field lists is one the adapter accepts and does NOT
+        // apply — another family does not read it and there is no shared guard for it. This is how keep_side
+        // on split (P5) and couplings on chamfer (measured 20.09.2026) behaved.
         var properties = JsonNameToProperty();
         var families = new (string File, string Owner)[]
         {
@@ -154,31 +139,31 @@ public sealed class HoleEditClassificationTests
     [Fact]
     public void CountersinkDepth_IsNotWritableAndNotAssertedAsWritten()
     {
-        // Три независимые половины одного требования наряда SM07 §3.4.
-        // (1) Контракт: поля для производной глубины НЕТ. Объявить его значило бы обещать запись,
-        //     которая не действует.
+        // Three independent halves of one requirement (order SM07 §3.4).
+        // (1) Contract: there is NO field for the derived depth. Declaring it would promise a write that
+        //     has no effect.
         var properties = JsonNameToProperty();
         Assert.DoesNotContain("countersink_depth_mm", properties.Keys);
         Assert.DoesNotContain("CountersinkDepthMm", typeof(UpdateFeatureCommand).GetProperties()
             .Select(p => p.Name));
 
-        // (2) Схема инструмента: того же поля нет и там, иначе Host с additionalProperties:false
-        //     пропустил бы вызов до COM, а адаптер не знал бы, что с ним делать.
+        // (2) Tool schema: the same field is absent there too, else the Host with additionalProperties:false
+        //     would pass the call through to COM and the adapter would not know what to do with it.
         var published = (ToolCatalog.All.Single(t => t.Name == "kompas_update_feature").InputSchema
                          ["properties"] as JsonObject)
                         ?? throw new InvalidOperationException(
                             "у kompas_update_feature нет свойств в схеме — проверка стала вакуумом");
         Assert.DoesNotContain("countersink_depth_mm", published.Select(p => p.Key));
 
-        // (3) Адаптер: записанное число не проверяется на совпадение, а производное ПУБЛИКУЕТСЯ
-        //     отдельной проверкой с прямым текстом о том, что оно производно.
+        // (3) Adapter: the written number is not checked for a match, and the derived value is PUBLISHED by
+        //     a separate check with explicit text saying it is derived.
         var hole = AdapterSource("Api5Session.Hole.cs");
         Assert.Contains("countersink_depth_derived", hole, StringComparison.Ordinal);
         Assert.DoesNotContain("countersink_depth_read_back", hole, StringComparison.Ordinal);
 
-        // (4) Мост: на правке в CountersinkDepth НЕ пишут. Утверждение проверяется по телу метода
-        //     правки, а не по всему файлу: при СОЗДАНИИ этот член пишется намеренно (глубина
-        //     передаётся нулём для полноты контракта и не притворяется значимой).
+        // (4) Bridge: on edit, CountersinkDepth is NOT written. The claim is checked against the edit method
+        //     body, not the whole file: at CREATION this member is written deliberately (depth is passed as
+        //     zero for contract completeness and does not pretend to be meaningful).
         var bridge = AdapterSource("Api7/Api7Bridge.cs");
         var write = bridge.IndexOf("public static (bool Written, string? Failure, double? ReportedDepthMm) TryWriteCountersink",
             StringComparison.Ordinal);
@@ -193,11 +178,10 @@ public sealed class HoleEditClassificationTests
     [Fact]
     public void HoleEditWrites_AreGuardedByPositivity_OnTheMeasuredGround()
     {
-        // Нулевой диаметр КОМПАС принимает и строит признак без материала при неизменном объёме —
-        // измерено на СОЗДАНИИ (тот же класс, что нулевой катет фаски, F.12). Поэтому на правке
-        // положительность проверяется до COM, а не оставляется на усмотрение ядра: «принято» там не
-        // означает «применено». Проверяется КАЖДОЕ записываемое числовое поле по имени, а не
-        // «где-то в файле есть проверка»: пропущенное поле — это поле без проверки.
+        // MEASURED (at CREATION, same class as a zero chamfer leg, F.12): KOMPAS accepts a zero diameter and
+        // builds a feature with no material at unchanged volume. So on edit positivity is checked before COM,
+        // not left to the kernel — "accepted" there does not mean "applied". EVERY writable numeric field is
+        // checked by name, not "there is some check in the file": a missed field is a field without a check.
         var hole = AdapterSource("Api5Session.Hole.cs");
 
         foreach (var field in new[]
@@ -209,7 +193,7 @@ public sealed class HoleEditClassificationTests
             Assert.Contains($"PositiveHoleEditValue(\"{field}\"", hole, StringComparison.Ordinal);
         }
 
-        // Поля ЧУЖОГО режима отвергаются тем же порядком: по имени поля и режима признака.
+        // Fields of a FOREIGN mode are rejected by the same order: by field name and feature mode.
         Assert.Contains("RejectForeignHoleEditField(", hole, StringComparison.Ordinal);
         Assert.Contains("HoleModeOfRead(", hole, StringComparison.Ordinal);
     }
@@ -217,31 +201,29 @@ public sealed class HoleEditClassificationTests
     [Fact]
     public void DepthMm_IsOwnedByTheHoleFamily_AndRefusedByTheThroughModes()
     {
-        // Измеренный дефект первой поставки с веткой отверстия (20.09.2026): правка ГЛУХОГО
-        // отверстия отвергалась INVALID_ARGUMENT до COM, потому что depth_mm — поле выдавливания в
-        // таблице ролей и одновременно СВОЁ поле режима blind_flat. Отказ был на строке, которая
-        // обязана проходить, и нашла его приёмка (F08.15/16/19/20.edit), а не чтение кода.
-        //
-        // Здесь держатся обе половины исключения и различающий контроль к нему.
+        // MEASURED defect of the first delivery with the hole branch (20.09.2026): editing a BLIND hole was
+        // refused with INVALID_ARGUMENT before COM, because depth_mm is an extrusion field in the role table
+        // and at the same time an OWN field of the blind_flat mode. The refusal was on a line that must pass,
+        // found by acceptance (F08.15/16/19/20.edit), not by reading the code. Both halves of the exception
+        // and its discriminating control are held here.
         var hole = AdapterSource("Api5Session.Hole.cs");
         var ops = AdapterSource("Api5Session.SolidOps.cs");
 
-        // (1) Семейство объявляет поле своим — иначе исключения нет вовсе.
+        // (1) The family declares the field its own — otherwise there is no exception at all.
         Assert.Contains("ownFields: new[] { \"depth_mm\" }", hole, StringComparison.Ordinal);
         Assert.Contains("IReadOnlyCollection<string>? ownFields = null", ops, StringComparison.Ordinal);
         Assert.Contains("&& !Owned(f.Name)", ops, StringComparison.Ordinal);
         Assert.Contains("command.DepthMm is not null && !Owned(\"depth_mm\")", ops, StringComparison.Ordinal);
 
-        // (2) У СКВОЗНЫХ режимов глубина по-прежнему чужая: исключение выдано СЕМЕЙСТВУ, а режим
-        //     решает своё. Обе половины названы по имени режима, а не «где-то в файле есть отказ».
+        // (2) For THROUGH modes the depth is still foreign: the exception was granted to the FAMILY, and the
+        //     mode decides its own. Both halves are named by mode, not "there is some refusal in the file".
         Assert.Contains("RejectForeignHoleEditField(command, \"through_counterbore\", \"depth_mm\"",
             hole, StringComparison.Ordinal);
         Assert.Contains("RejectForeignHoleEditField(command, \"through_countersink\", \"depth_mm\"",
             hole, StringComparison.Ordinal);
 
-        // (3) Различающий контроль: исключение выдано РОВНО ОДНОМУ вызывающему. Второй `ownFields:`
-        //     означал бы, что поле объявило своим ещё одно семейство, и сторож на нём перестал бы
-        //     отвергать чужое.
+        // (3) Discriminating control: the exception was granted to EXACTLY ONE caller. A second `ownFields:`
+        //     would mean another family declared the field its own, and the guard would stop rejecting it as foreign.
         var callers = Directory
             .EnumerateFiles(Path.Combine(RepoRoot, "src", "KompasMcp.Api5Adapter"), "*.cs",
                 SearchOption.AllDirectories)
@@ -253,11 +235,11 @@ public sealed class HoleEditClassificationTests
     [Fact]
     public void HoleEditAddress_IsProvenBySingleHole_AndTakenFromTheReadingRoute()
     {
-        // Адрес признака — урок F-11: он ОБЕСПЕЧИВАЕТСЯ постановкой, а не подбирается. У правки
-        // отверстия постановка — единственность отверстия в документе: при нескольких соответствие
-        // «признак дерева ↔ запись Holes3D» ничем не доказано, и вызов обязан быть отвергнут ДО
-        // записи. Проверяются обе половины: и наличие отказа, и то, что адрес берётся маршрутом
-        // ЧТЕНИЯ — индексом в IHoles3D через Api7Hole, а не перебором тел и не по имени.
+        // INVARIANT (lesson F-11): the feature address is GUARANTEED by the setup, not guessed. For a hole
+        // edit the setup is the hole's uniqueness in the document — with several, the correspondence "tree
+        // feature ↔ Holes3D entry" is unproved, and the call must be refused BEFORE the write. Both halves are
+        // checked: the refusal exists, and the address comes from the READ route — an index into IHoles3D via
+        // Api7Hole, not by iterating bodies or by name.
         var hole = AdapterSource("Api5Session.Hole.cs");
 
         Assert.Contains("Api7Hole.Count(container) != 1", hole, StringComparison.Ordinal);
@@ -268,8 +250,8 @@ public sealed class HoleEditClassificationTests
             Assert.Contains(write, hole, StringComparison.Ordinal);
         }
 
-        // Различающий контроль: адрес НЕ берётся обращением к коллекции по индексу «руками» —
-        // такая запись обошла бы единственное место, где адрес доказан.
+        // Discriminating control: the address is NOT taken by indexing the collection by hand — such a write
+        // would bypass the only place where the address is proved.
         Assert.DoesNotContain("Holes3D[0]", hole, StringComparison.Ordinal);
     }
 }

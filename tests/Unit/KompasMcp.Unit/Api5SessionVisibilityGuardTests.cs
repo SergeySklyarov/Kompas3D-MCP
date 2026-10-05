@@ -3,22 +3,15 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>
-/// Гарантии видимости, которые нельзя проверить без КОМПАС, но можно проверить по коду.
-/// </summary>
-/// <remarks>
-/// Требования к режиму «видно пользователю» (поручение от 12.09.2026, п. 7) гласят: обновлять вид
-/// после моделирования и не сбрасывать пользовательскую камеру и масштаб после каждой операции.
-/// Второе — запрет на конкретный вызов: <c>ZoomPrevNextOrAll</c> и <c>ksZoom*</c> в API5 меняют
-/// именно камеру. Проверка статическая, потому что камерного состояния у 3D-документа в API5
-/// спросить нельзя (геттера масштаба у <c>ksDocument3D</c> нет — только <c>ksGetZoomScale</c> у
-/// 2D-редактора), а значит «камера не изменилась» невозможно подтвердить числом при приёмке.
-/// Молчаливый запрет на код — единственный честный способ держать это требование.
-///
-/// Проверяется и обратное: что ответ о видимости не вычисляется из доступности PID. Прежняя
-/// реализация давала ложноположительный <c>visible=true</c> именно так — <c>ProcessIdOf(...) is
-/// not null</c> на скрытое окно, у которого HWND есть.
-/// </remarks>
+/// <summary>Visibility guarantees that cannot be checked without KOMPAS, but can be checked in the code.</summary>
+/// <remarks>INVARIANT (requirement of 12.09.2026, item 7): the "visible to the user" mode refreshes the view
+/// after modelling and never resets the user camera and zoom after an operation. The second half bans a
+/// specific call — <c>ZoomPrevNextOrAll</c> and <c>ksZoom*</c> in API5 change exactly the camera. LIMIT: the
+/// check is static because a 3D document in API5 exposes no camera state (no scale getter on
+/// <c>ksDocument3D</c>, only <c>ksGetZoomScale</c> on the 2D editor), so "the camera did not change" cannot
+/// be confirmed by a number at acceptance. INVARIANT: the visibility answer is never derived from PID
+/// availability — a hidden window has both an HWND and a PID, so <c>ProcessIdOf(...) is not null</c> would
+/// read as a false <c>visible=true</c>. History: docs/decisions/tests.md#api5-visibility</remarks>
 public sealed class Api5SessionVisibilityGuardTests
 {
     private static readonly string RepoRoot = FindRepoRoot();
@@ -40,10 +33,8 @@ public sealed class Api5SessionVisibilityGuardTests
             .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
                 StringComparison.Ordinal));
 
-    /// <summary>
-    /// Строки кода без комментариев: комментарий «было вот так» текстом совпадает с запрещённым
-    /// выражением, но запрет относится к исполняемому коду.
-    /// </summary>
+    /// <summary>Code lines without comments: a "this used to be" comment matches the forbidden expression
+    /// as text, but the ban applies to executable code.</summary>
     private static IEnumerable<string> CodeLines(params string[] paths) => paths
         .SelectMany(path => File.ReadLines(path))
         .Select(line => line.TrimStart())
@@ -60,7 +51,7 @@ public sealed class Api5SessionVisibilityGuardTests
             .SelectMany(path => File.ReadLines(path)
                 .Select((line, number) => (path, number, line))
                 .Where(row => pattern.IsMatch(row.line)
-                              // комментарий или XML-документацию считаем ссылкой, а не вызовом
+                              // a comment or XML doc counts as a reference, not a call
                               && !row.line.TrimStart().StartsWith("//", StringComparison.Ordinal)))
             .ToList();
 
@@ -73,11 +64,11 @@ public sealed class Api5SessionVisibilityGuardTests
         var code = string.Join("\n", CodeLines(
             Path.Combine(RepoRoot, "src", "KompasMcp.Api5Adapter", "Api5Session.cs")));
 
-        // Та самая строка, из-за которой дефект прошёл приёмку: «PID достаётся» выдавалось за «видно».
+        // The very line that let the defect through acceptance: "a PID is obtained" was passed off as "visible".
         Assert.False(code.Contains("Visible = ProcessIdOf", StringComparison.Ordinal),
             "видимость снова выводится из доступности PID по HWND — скрытое окно даёт и HWND, и PID");
 
-        // Новое определение обязано опираться на наблюдение окна, а не на косвенный признак.
+        // INVARIANT: the definition rests on observing the window, not on an indirect sign.
         Assert.Contains("Visible = observed.Visible", code, StringComparison.Ordinal);
         Assert.Contains("IsWindowVisible",
             File.ReadAllText(Path.Combine(RepoRoot, "src", "KompasMcp.Api5Adapter",
@@ -90,8 +81,8 @@ public sealed class Api5SessionVisibilityGuardTests
         var visibility = File.ReadAllText(Path.Combine(RepoRoot, "src", "KompasMcp.Api5Adapter",
             "Api5Session.Visibility.cs"));
 
-        // Скрытый режим должен выходить до обращения к окну: иначе «проверка скрытого режима
-        // отдельно» превращается в обещание, а не в поведение.
+        // INVARIANT: hidden mode returns before touching the window — otherwise "hidden mode is checked
+        // separately" is a promise, not behaviour.
         var guard = visibility.IndexOf("if (!document.DocumentsVisible)", StringComparison.Ordinal);
         var refresh = visibility.IndexOf("ksRefreshActiveWindow()", guard, StringComparison.Ordinal);
         Assert.True(guard >= 0, "нет проверки режима в RefreshViewAfterMutation");

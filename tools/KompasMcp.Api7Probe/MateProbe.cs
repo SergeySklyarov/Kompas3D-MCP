@@ -76,6 +76,11 @@ internal sealed class MateProbe
 
         try
         {
+            // РАЗЛИЧАЮЩИЙ КОНТРОЛЬ идёт ПЕРВЫМ и на своём документе: он не зависит от того,
+            // получится ли программная сборка, и обязан выполниться даже если всё дальнейшее
+            // остановится. Иначе контроль «не достигнут» — и находка остаётся без опоры.
+            SampleAssemblyControl();
+
             var source = BuildSourcePart();
             if (source is null)
             {
@@ -286,17 +291,30 @@ internal sealed class MateProbe
         part.name = "Mate-asm";
         part.Update();
 
-        // Плоскость приклейки обязательна (измерено в C1: null даёт GEOMETRY_FAILED).
-        if (part.GetDefaultEntity(Api5.PlaneXoy) is not { } plane)
+        // ВСТАВКА КОМПОНЕНТА — документированный SetPartFromFile, а НЕ CreatePartInAssembly.
+        //
+        // ИЗМЕРЕНО 05.10.2026 и подтверждено справкой ДОСЛОВНО:
+        //  * ksdDocument3d_createpartinassembly.html: «fileName — имя файла детали СОЗДАВАЕМОЙ в
+        //    сборке», «plane — плоскость, к которой ПРИКЛЕИВАЕТСЯ деталь» — это СОЗДАНИЕ новой
+        //    (пустой) детали в сборке, а не вставка существующей. Отсюда 0 тел у компонента.
+        //  * ksdDocument3d_setpartfromfile.html: «fileName — имя файла, из которого будет ВСТАВЛЕН
+        //    компонент», «externalFile — TRUE — вставка СО ССЫЛКОЙ на внешний файл» — это вставка.
+        //
+        // Оба экземпляра вставляются ЭТИМ методом: он документирован, и повторная вставка того же
+        // файла даёт второй экземпляр (в C1 это ошибочно считалось невозможным).
+        // С null метод вернул FALSE (измерено) — значит `part` не выходной параметр, а входной.
+        // Поэтому сначала создаётся «деталь в сборке» (единственный вызов, который у нас работает),
+        // и уже НА НЕЙ проверяется документированный SetPartFromFile с реальным компонентом.
+        if (part.GetDefaultEntity(Api5.PlaneXoy) is not { } gluePlane)
         {
             step.Fail("GetDefaultEntity(o3d_planeXOY=1) не вернул плоскость.");
             return null;
         }
 
-        object? first;
+        object? seeded;
         try
         {
-            first = document.CreatePartInAssembly(sourcePath, plane);
+            seeded = document.CreatePartInAssembly(sourcePath, gluePlane);
         }
         catch (Exception ex)
         {
@@ -304,60 +322,53 @@ internal sealed class MateProbe
             return null;
         }
 
-        if (first is not ksPart firstPart)
+        if (seeded is not ksPart seededPart)
         {
-            step.Fail("CreatePartInAssembly не вернул ksPart (вернул "
-                + (first is null ? "null" : first.GetType().FullName) + ").");
+            step.Fail("CreatePartInAssembly не вернул ksPart — вставлять SetPartFromFile не на чем.");
             return null;
         }
 
-        step.Observe("первый экземпляр создан: ksPart");
+        step.Observe("затравка: CreatePartInAssembly создал компонент; "
+            + "тел у него = " + Api5.SafeInt(() => (seededPart.BodyCollection() as ksBodyCollection)!.GetCount()));
 
-        // ВТОРОЙ экземпляр ТОЙ ЖЕ детали: повторная CreatePartInAssembly того же файла возвращает
-        // null (измерено 04.10.2026), документированный маршрут копии — CopyPart.
-        object? copy;
-        try
+        for (var attempt = 0; attempt < 2; attempt++)
         {
-            copy = document.CopyPart(firstPart, document.DefaultPlacement());
-        }
-        catch (Exception ex)
-        {
-            step.Fail("CopyPart бросил: " + ex.Message);
-            return null;
-        }
+            bool? inserted = null;
+            try
+            {
+                inserted = document.SetPartFromFile(sourcePath, seededPart, externalFile: true);
+            }
+            catch (Exception ex)
+            {
+                step.Observe("SetPartFromFile бросил на попытке " + attempt + ": "
+                    + ex.GetType().Name + ": " + ex.Message);
+                continue;
+            }
 
-        if (copy is not ksPart)
-        {
-            step.Fail("CopyPart не вернул ksPart (вернул "
-                + (copy is null ? "null" : copy.GetType().FullName) + ").");
-            return null;
+            var bodies = Api5.SafeInt(() => (seededPart.BodyCollection() as ksBodyCollection)!.GetCount());
+            var components = Api5.SafeInt(() => (document.PartCollection(true) as ksPartCollection)!.GetCount());
+            step.Observe("SetPartFromFile(источник, существующий компонент, externalFile=true) попытка "
+                + attempt + " → " + inserted + ", компонентов " + components
+                + ", тел у переданного компонента " + bodies);
         }
 
         document.RebuildDocument();
-        step.Observe("второй экземпляр создан через CopyPart");
 
-        // Второй компонент СДВИГАЕТСЯ на известное расстояние: без этого грани совпадают, и
-        // «объект по точке» не отличил бы один экземпляр от другого. Маршрут записи размещения
-        // измерен в блоке C1 (ksDocument3D.DefaultPlacement → InitByMatrix3D → SetPlacement →
-        // UpdatePlacement), раскладка массива — [X,0][Y,0][Z,0][перенос,1].
-        var offset = new double[]
+        // ЧТО ДАЛ ДОКУМЕНТИРОВАННЫЙ SetPartFromFile: тела у КАЖДОГО компонента, поимённо.
+        if (document.PartCollection(true) is ksPartCollection afterInsert)
         {
-            1, 0, 0, 0,
-            0, 1, 0, 0,
-            0, 0, 1, 0,
-            150, 0, 0, 1,
-        };
-        if (copy is ksPart secondPart && document.DefaultPlacement() is ksPlacement placement)
-        {
-            placement.InitByMatrix3D(offset);
-            secondPart.SetPlacement(placement);
-            secondPart.UpdatePlacement();
-            document.RebuildDocument();
-            step.Observe("второй компонент сдвинут на 150 мм по X");
-        }
-        else
-        {
-            step.Observe("размещение второго компонента НЕ записано (DefaultPlacement не ksPlacement)");
+            for (var index = 0; index < afterInsert.GetCount(); index++)
+            {
+                if (afterInsert.GetByIndex(index) is not ksPart component)
+                {
+                    continue;
+                }
+
+                var bodies = Api5.SafeInt(() => (component.BodyCollection() as ksBodyCollection)!.GetCount());
+                step.Observe("компонент " + index + " '" + (Api5.SafeObject(() => component.name) ?? "—")
+                    + "': тел = " + bodies);
+                step.Data["component_bodies_" + index] = bodies;
+            }
         }
 
         var count = CountComponents(document);
@@ -394,6 +405,19 @@ internal sealed class MateProbe
         {
             step.Fail("сборка не открылась");
             return null;
+        }
+
+        // ДЕФЕКТ ПРОБЫ, ПОЙМАННЫЙ ЗДЕСЬ: объект, на котором вызван Open, документом НЕ становится —
+        // его PartCollection пуст. Документ берётся заново у приложения, как это делает и образец
+        // M.7 (там документ получен от приложения, и компоненты видны).
+        // KompasObject не объявляет ActiveDocument статически — свойство берётся поздним связыванием,
+        // как это уже делает проба для ksGetApplication7.
+        var active = Api5.SafeObject(() => _app.GetType().InvokeMember(
+            "ActiveDocument", System.Reflection.BindingFlags.GetProperty, null, _app, null)) as ksDocument3D;
+        step.Observe("_app.ActiveDocument после Open: " + (active is null ? "null" : "получен"));
+        if (active is not null)
+        {
+            document = active;
         }
 
         var part = (ksPart)document.GetPart(-1);
@@ -846,6 +870,91 @@ internal sealed class MateProbe
         catch (Exception ex)
         {
             step.Fail("отрицательный контроль бросил: " + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// РАЗЛИЧАЮЩИЙ КОНТРОЛЬ: тела компонентов у сборки, созданной НЕ пробой.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Без этого контроля «у компонента нет тел» неотличимо от «проба строит сборку так, что
+    /// геометрия не материализуется». Открывается готовая сборка из поставки КОМПАС-3D (их на
+    /// машине 607), и тем же прибором читаются тела её компонентов.
+    /// </para>
+    /// <para>
+    /// Ожидание сформулировано ЗАРАНЕЕ, чтобы исход не был подогнан: если у ручной сборки тела
+    /// ЕСТЬ, причина «тел нет» — в способе создания (программная сборка), а не в КОМПАСе; если тел
+    /// НЕТ и там, значит неверен сам прибор, и все прежние выводы отзываются.
+    /// </para>
+    /// </remarks>
+    private void SampleAssemblyControl()
+    {
+        var step = _report.Begin("M.7", "Различающий контроль: сборка, созданная НЕ пробой",
+            "Есть ли тела у компонентов готовой сборки КОМПАС-3D?");
+        _current = step;
+
+        var samples = new[]
+        {
+            Path.Combine(_options.KompasRoot, "Libs", "Pipeline", "TemplateHPH",
+                "концевики", "Ниппель прямой (П.1)", "Законцовка прямая-10.a3d"),
+            Path.Combine(_options.KompasRoot, "Libs", "Cable3D", "template.a3d"),
+            Path.Combine(_options.KompasRoot, "Libs", "Pipeline", "StylesTemplate.a3d"),
+        };
+
+        foreach (var sample in samples)
+        {
+            if (!File.Exists(sample))
+            {
+                step.Observe("нет файла: " + sample);
+                continue;
+            }
+
+            try
+            {
+                var document = (ksDocument3D)_app.Document3D();
+                var opened = Api5.SafeBool(() => document.Open(sample));
+                var components = Api5.SafeInt(() => (document.PartCollection(true) as ksPartCollection)!.GetCount());
+                step.Observe(Path.GetFileName(sample) + ": Open=" + opened + ", компонентов=" + components);
+
+                if (components is > 0 && document.PartCollection(true) is ksPartCollection collection)
+                {
+                    for (var index = 0; index < Math.Min(2, collection.GetCount()); index++)
+                    {
+                        if (collection.GetByIndex(index) is not ksPart component)
+                        {
+                            continue;
+                        }
+
+                        var bodies = Api5.SafeInt(() => (component.BodyCollection() as ksBodyCollection)!.GetCount());
+                        var name = Api5.SafeObject(() => component.name);
+                        step.Observe("   компонент " + index + " '" + (name ?? "—") + "': тел = " + bodies);
+                        step.Data["sample_component_bodies_" + index] = bodies;
+                    }
+
+                    step.Data["sample"] = Path.GetFileName(sample);
+                    step.Data["sample_components"] = components;
+                }
+
+                document.close();
+            }
+            catch (Exception ex)
+            {
+                step.Observe("файл " + Path.GetFileName(sample) + " бросил "
+                    + ex.GetType().Name + ": " + ex.Message);
+            }
+        }
+
+        var anyBodies = step.Data.Where(pair => pair.Key.StartsWith("sample_component_bodies_"))
+            .Any(pair => pair.Value is int value && value > 0);
+        step.Data["sample_has_bodies"] = anyBodies;
+        if (anyBodies)
+        {
+            step.Pass("у компонентов ГОТОВОЙ сборки тела ЕСТЬ — причина «тел нет» в способе создания");
+        }
+        else
+        {
+            step.Fail("тел нет и у готовой сборки — прибор или чтение тел под вопросом, прежние выводы отзываются");
         }
     }
 

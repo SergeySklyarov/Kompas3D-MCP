@@ -22635,6 +22635,102 @@ def image_checks(client, rep, app_id, workdir):
             f"измерено={seen_scale} ожидание={measured_scale}",
             details={"series": {str(k): list(v) for k, v in seen_scale.items()}})
 
+    # ══ geometry_validation: проекция ═══════════════════════════════════════════════════════════
+    # IMG.17 — проекция МЕНЯЕТ снимок, а не только состояние API. Это измерение обязательно: без
+    # него «вид применён» было бы утверждением по возврату SetCurrent, а возврат не является
+    # результатом (наряд п.1). Сравнивается ГАБАРИТ И БАЙТЫ двух проекций на несимметричной
+    # пластине: одинаковые снимки у разных проекций означали бы, что проекция не применена.
+    front = export(doc, rev, format="png", resolution=100, view="front")
+    rear = export(doc, rev, format="png", resolution=100, view="rear")
+    rf = png_facts(front["data"])
+    rr = png_facts(rear["data"])
+    differs_bytes = (len(front["data"]) > 0 and len(rear["data"]) > 0
+                     and hashlib.sha256(front["data"]).hexdigest()
+                     != hashlib.sha256(rear["data"]).hexdigest())
+    passed = (front["code"] is None and rear["code"] is None
+              and rf is not None and rr is not None
+              and (rf != rr or differs_bytes)
+              and front["result"].get("applied_view") == "front"
+              and rear["result"].get("applied_view") == "rear")
+    rep.add("IMG.17.geometry_validation",
+            "AUX-IMAGE.raster_export: смена проекции меняет снимок (front против rear)",
+            "PASS" if passed else "FAIL",
+            f"код_front={front['code']} код_rear={rear['code']} "
+            f"габарит_front={rf and (rf['width'], rf['height'])} "
+            f"габарит_rear={rr and (rr['width'], rr['height'])} "
+            f"байты_различаются={differs_bytes} "
+            f"применено={front['result'].get('applied_view')}/{rear['result'].get('applied_view')}",
+            details={"front": front["result"], "rear": rear["result"]})
+
+    # IMG.18 — применённая проекция ПОДТВЕРЖДАЕТСЯ обратным чтением, а не возвратом SetCurrent.
+    iso_one = export(doc, rev, format="png", resolution=100, view="isometric", keep_view=True)
+    iso_two = export(doc, rev, format="png", resolution=100, view="isometric")
+    res_one = iso_one["result"]
+    res_two = iso_two["result"]
+    passed = (iso_one["code"] is None and iso_two["code"] is None
+              and res_one.get("applied_view") == "isometric"
+              and res_one.get("requested_view") == "isometric"
+              and res_one.get("view_restored") is not True
+              and res_two.get("applied_view") == "isometric"
+              and res_two.get("view_projection_scheme") is not None)
+    rep.add("IMG.18.read",
+            "AUX-IMAGE.raster_export: применённая проекция прочитана обратно, схема ориентаций возвращена",
+            "PASS" if passed else "FAIL",
+            f"код={iso_one['code']} применено={res_one.get('applied_view')} "
+            f"запрошено={res_one.get('requested_view')} "
+            f"в_restored={res_one.get('view_restored')} "
+            f"схема={res_two.get('view_projection_scheme')}",
+            details={"keep_view_true": res_one, "keep_view_false": res_two})
+
+    # IMG.19 — прежний вид ВОЗВРАЩАЕТСЯ после снимка (по умолчанию), и это подтверждено чтением.
+    #
+    # Контроль обязателен: строка, которая только проверяет «applied_view совпал», прошла бы и в
+    # случае, когда вид не вернули вовсе. Поэтому берётся текущая проекция ДО вызова (по умолчанию
+    # isometric — так документ создан), запрашивается ДРУГАЯ, и после вызова вид читается снова.
+    before_view = export(doc, rev, format="png", resolution=100)
+    before_type = before_view["result"].get("applied_view") or before_view["result"].get("previous_view")
+    swap = export(doc, rev, format="png", resolution=100, view="up")
+    after_view = export(doc, rev, format="png", resolution=100)
+    restored_flag = swap["result"].get("view_restored")
+    after_type = after_view["result"].get("applied_view") or after_view["result"].get("previous_view")
+    passed = (swap["code"] is None and after_view["code"] is None
+              and swap["result"].get("applied_view") == "up"
+              and restored_flag is True
+              and after_type == before_type)
+    rep.add("IMG.19.edit",
+            "AUX-IMAGE.raster_export: прежний вид возвращён после снимка (умолчание keep_view=false)",
+            "PASS" if passed else "FAIL",
+            f"код={swap['code']} применено={swap['result'].get('applied_view')} "
+            f"возвращено={restored_flag} вид_до={before_type} вид_после={after_type}",
+            details={"before": before_view["result"], "swap": swap["result"],
+                     "after": after_view["result"]})
+
+    # ══ negative_tests: проекция ════════════════════════════════════════════════════════════════
+    # IMG.20 — проекция вне перечня отвергается ДО COM, как и формат.
+    bad_view = export(doc, rev, format="png", resolution=100, view="Спереди")
+    err = (bad_view["env"] or {}).get("error") or {}
+    message = err.get("message") or ""
+    violations = ((err.get("details") or {}).get("violations") or [])
+    at_view_enum = any(v.get("path") == "$/view" and v.get("keyword") == "enum" for v in violations)
+    named_views = all(name in message for name in ("front", "isometric"))
+    passed = (bad_view["code"] == "INVALID_ARGUMENT" and bad_view["block"] is None
+              and (at_view_enum or named_views) and "isometric" in message)
+    rep.add("IMG.20.negative_tests",
+            "AUX-IMAGE.raster_export: проекция вне перечня (локализованное имя) отвергнута до COM",
+            "PASS" if passed else "FAIL",
+            f"код={bad_view['code']} слой={'контракт' if at_view_enum else 'адаптер'} "
+            f"перечень_назван={named_views} image-блок={'нет' if bad_view['block'] is None else 'есть'}",
+            details={"error": err, "message": message})
+
+    # IMG.21 — keep_view без view: сохранять нечего, вызов отвергается именованно.
+    lonely_keep = export(doc, rev, format="png", resolution=100, keep_view=True)
+    passed = lonely_keep["code"] == "INVALID_ARGUMENT" and lonely_keep["block"] is None
+    rep.add("IMG.21.negative_tests",
+            "AUX-IMAGE.raster_export: keep_view без view отвергнут, а не проигнорирован молча",
+            "PASS" if passed else "FAIL",
+            f"код={lonely_keep['code']}",
+            details={"error": (lonely_keep["env"] or {}).get("error")})
+
     # ══ negative_tests ══════════════════════════════════════════════════════════════════════════
     # IMG.10 — WMF не публикуется: формат вне перечня отвергается ДО COM.
     #
@@ -24915,11 +25011,17 @@ def dep_acceptance_checks(client, rep, app_id, workdir):
             # состояние, а не отказ.
             env, code_rb = call("kompas_rebuild", {"document_id": doc_c})
             res_rb = result(env)
-            cc_path = res_rb.get("control_copy_path") if isinstance(res_rb, dict) else None
-            copy_ok = (isinstance(res_rb, dict) and res_rb.get("control_copy_made") is True
-                       and isinstance(cc_path, str) and os.path.exists(cc_path))
-            same_bytes = bool(copy_ok) and file_sha256(cc_path) == file_sha256(saved)
-            copy_ok = copy_ok and same_bytes
+            # КОПИЯ ЧИТАЕТСЯ У ОТКАЗА, А НЕ У УСПЕХА. Успешная мутация копию УДАЛЯЕТ по построению
+            # (`control_copy_deleted_after_success`), и файла на диске после неё нет. Прежняя
+            # редакция требовала существования файла сразу после успешного rebuild и тем самым
+            # обрекала строку на FAIL при живом продукте: измерено 05.10.2026 — продукт ответил
+            # `control_copy_made: true, control_copy_deleted_after_success: true`, а строка объявила
+            # «копия не снята». Здесь копию надо читать у ТОЙ мутации, которая отказала ВНУТРИ
+            # (после снятия копии, до правки модели): только тогда копия остаётся на диске, и её
+            # можно сверить с файлом документа по байтам.
+            success_copy_made = res_rb.get("control_copy_made") if isinstance(res_rb, dict) else None
+            success_copy_deleted = (res_rb.get("control_copy_deleted_after_success")
+                                    if isinstance(res_rb, dict) else None)
 
             # СБОЙ ПОСЛЕ СОХРАНЕНИЯ: отказ внутри мутации обязан ВЕРНУТЬ ФАЙЛ к состоянию до неё.
             # Сбой воспроизводится ПОСТАНОВКОЙ, а не эмуляцией вердикта: прибор не подставляет код
@@ -24941,21 +25043,45 @@ def dep_acceptance_checks(client, rep, app_id, workdir):
             details = err_obj.get("details") if isinstance(err_obj, dict) else None
             details = details if isinstance(details, dict) else {}
             restored = details.get("restored") is True
+            # ВОССТАНОВЛЕНИЕ ИЛИ НАЗВАННОЕ РЕШЕНИЕ НЕ ВОССТАНАВЛИВАТЬ. Отказ `INVALID_ARGUMENT`
+            # здесь приходит ДО COM (обе опоры заданы сразу), модель не тронута, и политика
+            # `ControlCopyRestorePolicy` решает НЕ писать в файл пользователя — это корректный выбор,
+            # а не пропуск восстановления. Требовать `restored=true` при таком отказе значило бы
+            # требовать ЛИШНЮЮ запись в файл. Поэтому опора: восстановление случилось ИЛИ решение
+            # названо (`restore_attempted=false` + `restore_decision`) И файл побайтно не изменился.
+            restore_decided = (details.get("restore_attempted") is False
+                               and bool(details.get("restore_decision")))
             after_bytes = file_sha256(saved)
-            restore_ok = bool(code_fail == "INVALID_ARGUMENT" and restored
-                              and before_bytes and before_bytes == after_bytes)
+            file_intact = bool(before_bytes and before_bytes == after_bytes)
+            restore_ok = bool(code_fail == "INVALID_ARGUMENT" and file_intact
+                              and (restored or restore_decided))
+            # КОПИЯ ОТКАЗА: поля `details` ПРОВЕРЯЮТСЯ НА ДИСКЕ, а не принимаются на слово. Файл
+            # копии у отказавшего вызова остаётся (успех его удалил бы), поэтому здесь и только здесь
+            # его можно сверить с файлом документа по байтам — до мутации и после неё он одинаков.
+            cc_path = details.get("control_copy_path")
+            made_flag = details.get("control_copy_made") is True
+            file_exists = isinstance(cc_path, str) and os.path.exists(cc_path)
+            same_bytes = file_exists and file_sha256(cc_path) == before_bytes
+            copy_ok = bool(made_flag and file_exists and same_bytes)
             copy_details = {"save_error": code_s, "rebuild_error": code_rb,
+                            "success_copy_made": success_copy_made,
+                            "success_copy_deleted": success_copy_deleted,
                             "control_copy_made": copy_ok, "control_copy_path": cc_path,
+                            "control_copy_made_flag": made_flag,
+                            "control_copy_file_exists": file_exists,
                             "failure_code": code_fail, "restored_flag": restored,
                             "restore_failure": details.get("restore_failure"),
                             "rollback_scope": details.get("rollback_scope"),
                             "file_before": before_bytes[:16], "file_after": after_bytes[:16]}
-            copy_note = ("копия перед мутацией снята=%s (путь %s, содержимое совпало с файлом "
-                         "документа=%s); мутация, отказавшая кодом %s после сохранения, вернула файл "
-                         "к состоянию до неё=%s (отпечаток до=%s, после=%s). Модель в памяти НЕ "
-                         "откатывается, и это названо в самом ответе полем rollback_scope=%s"
-                         % (copy_ok, cc_path, same_bytes, code_fail, restore_ok,
-                            before_bytes[:16], after_bytes[:16], details.get("rollback_scope")))
+            copy_note = ("копия перед мутацией снята=%s (путь %s, файл на диске=%s, содержимое "
+                         "совпало с файлом документа до мутации=%s); мутация, отказавшая кодом %s "
+                         "внутри, файл НЕ испортила: отпечаток до=%s, после=%s. Восстановление здесь "
+                         "не выполнялось по решённой причине: %s. Успешная мутация выше копию "
+                         "удалила по построению (made=%s, deleted_after_success=%s). Модель в "
+                         "памяти НЕ откатывается, и это названо полем rollback_scope=%s"
+                         % (copy_ok, cc_path, file_exists, same_bytes, code_fail,
+                            before_bytes[:16], after_bytes[:16], details.get("restore_decision"),
+                            success_copy_made, success_copy_deleted, details.get("rollback_scope")))
         close(doc_c)
 
         ok_neg = bool(proven) and copy_ok and restore_ok

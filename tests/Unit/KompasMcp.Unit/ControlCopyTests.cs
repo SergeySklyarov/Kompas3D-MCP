@@ -105,6 +105,43 @@ public class ControlCopyTests : IDisposable
 
     // Behaviour on files.
 
+    /// <summary>The copy lands in <c>&lt;root&gt;/control-copies/</c> — the documented layout, not next to
+    /// the document and not one level deeper.</summary>
+    /// <remarks>INVARIANT: the folder name is appended ONCE by <see cref="DocumentControlCopies"/>.
+    /// MEASURED: the shipped example config and the Host default both ended in <c>control-copies</c>,
+    /// so the effective path was <c>…\control-copies\control-copies\…</c>. This test pins the layout so a
+    /// root that already names the folder is caught here rather than in an acceptance run.
+    /// History: docs/decisions/tests.md#control-copy-layout</remarks>
+    [Fact]
+    public void Copy_LandsInTheControlCopiesFolderUnderTheRoot_NotOneLevelDeeper()
+    {
+        var root = Path.Combine(_directory, "service");
+        var copies = new DocumentControlCopies(root);
+        var document = DocumentFile("original");
+
+        var copy = copies.Before(document, "doc-1", 1);
+
+        Assert.True(copy.Made);
+        Assert.Equal(Path.Combine(root, "control-copies"), Path.GetDirectoryName(copy.Path!));
+    }
+
+    /// <summary>A root already ending in <c>control-copies</c> doubles the folder: this is the caller
+    /// error the example config used to make, and it is shown here rather than left to be discovered
+    /// as a mystery path.</summary>
+    [Fact]
+    public void RootAlreadyEndingInControlCopies_DoublesTheFolder()
+    {
+        var root = Path.Combine(_directory, "service", "control-copies");
+        var copies = new DocumentControlCopies(root);
+        var document = DocumentFile("original");
+
+        var copy = copies.Before(document, "doc-1", 1);
+
+        Assert.True(copy.Made);
+        Assert.EndsWith(Path.Combine("control-copies", "control-copies"), Path.GetDirectoryName(copy.Path!),
+            StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Restore_RefusesToOverwriteAReadOnlyDocument()
     {

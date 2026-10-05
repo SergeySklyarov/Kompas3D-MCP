@@ -582,6 +582,15 @@ Worker не делается намеренно: после повторного
 (`IViewProjection7` документирован, не реализован), ориентация подтверждается связкой «числа + чтение
 снимка», а не управляемым видом.
 
+> **ПОПРАВКА 05.10.2026 (часы машины, UTC+2): «вид не управляется» БОЛЬШЕ НЕВЕРНО.** Параметр `view` у
+> `kompas_export_image` реализован документированным маршрутом `ksViewProjectionCollection` →
+> `SetCurrent` → `refresh` → обратное чтение типа; `keep_view` оставляет вид, `viewProjectionScheme`
+> возвращается рядом с типом. Измерено: смена проекции меняет снимок и НЕ помечает документ изменённым
+> (`IKompasDocument.Changed` остаётся `false`). Приёмка `--image-only` — **42 PASS / 0 FAIL**, строка
+> `AUX-IMAGE.raster_export` в матрице закрыта (`edit` = `verified`). Прежнее утверждение оставлено как
+> есть с датированной пометой; подробности — `docs/04_KOMPAS_API_NOTES.md` §4.30.1 и
+> `BLENDER_IDEAS_REPORT_20261005.md`.
+
 **Шесть отрицательных проб** — все названы, ни одной image-блока. Пробы `save_path` вне корней и с
 недопустимым символом (`PATH_NOT_ALLOWED`) **не попали в `operations.jsonl`**: отказ файловой
 политики случается ДО журналирования операции, и они измерены записью `tool call` в `host.jsonl`.
@@ -7522,6 +7531,13 @@ AnyCPU-выход; перегенерация даёт 28 только из x64-
 | Метаданные API5 | тот же прогон, шаг P0.2 | 1007 типов → `docs/compatibility/kompas-api5-metadata.json` |
 | Unit/contract | `dotnet test tests\Unit\KompasMcp.Unit` | 116/116 passed |
 | Вертикальный MCP-сценарий | `python scripts\mcp-smoke.py` | **71 PASS · 0 FAIL · 0 UNKNOWN** |
+
+> **ПОПРАВКА 05.10.2026 (часы машины, UTC+2).** Тот же класс ловушки, что у P2: `mcp-smoke.py` по
+> умолчанию берёт `src\KompasMcp.Host\bin\x64\Debug\net10.0-windows\KompasMcp.Host.exe`. Прогон,
+> собранный только в Release, **молча измеряет старое Debug-дерево**: строки вида `IMG.17…IMG.20`
+> валятся с «Неизвестное поле запрещено контрактом», хотя схема в дереве обновлена. Перед прогоном
+> по умолчанию пересобрать **обе** конфигурации (`-c Debug` и `-c Release`) или задать `--host`
+> явно. Измерено: полный прогон на устаревшем Debug дал 4 FAIL, на свежем — те же строки PASS.
 | JSON Schema инструментов | `src\KompasMcp.Host\bin\x64\Debug\net10.0-windows\KompasMcp.Host.exe --emit-schemas schemas` | 26 файлов в `schemas\` |
 | Линт текста (случайные CJK) | `python scripts\lint-cjk.py` | чисто |
 

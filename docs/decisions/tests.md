@@ -559,6 +559,14 @@ false`, не публиковала поле, которое Хост затем
 > Negative control: a partial effect does NOT override the ban on writing to a read_only document. LIMIT: the order of the checks is part of the contract — overwriting a file around the path policy is worse than no rollback, and the reason is spoken, not withheld.
 > Access mode read_only: the restore must refuse and NOT touch the document file.
 
+## <a id="control-copy-layout"></a>Раскладка каталога копий (05.10.2026)
+
+Вынесено из `ControlCopyTests` дословно.
+
+> The copy lands in `<root>/control-copies/` — the documented layout, not next to the document and not one level deeper.
+> INVARIANT: the folder name is appended ONCE by `DocumentControlCopies`. MEASURED: the shipped example config and the Host default both ended in `control-copies`, so the effective path was `…\control-copies\control-copies\…`. This test pins the layout so a root that already names the folder is caught here rather than in an acceptance run. History: docs/decisions/tests.md#control-copy-layout
+> A root already ending in `control-copies` doubles the folder: this is the caller error the example config used to make, and it is shown here rather than left to be discovered as a mystery path.
+
 ## <a id="document-save-2"></a>Сохранённость документа: вынесенная проза
 
 Вынесено из `DocumentSaveTrackingTests` дословно.

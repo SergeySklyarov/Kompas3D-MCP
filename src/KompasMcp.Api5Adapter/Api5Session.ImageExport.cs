@@ -9,12 +9,12 @@ using KompasMcp.Domain.Imaging;
 namespace KompasMcp.Api5Adapter;
 
 /// <summary>Raster snapshot of the model via the documented API5 route (order §4).</summary>
-/// <remarks>MEASURED (probe P2b): the two modes are mutually exclusive — a non-empty name writes the file
-/// (PNG 8639 bytes, 328×448) with <c>resultArrayBytes</c> null, an empty name gives
-/// <c>resultArrayBytes</c> (8639 bytes, PNG magic bytes) and no file on disk. So "return an image" and
-/// "write a file" are DIFFERENT route calls; when both are wanted the render runs ONCE in byte mode.
-/// LIMIT: projection not controlled (<c>IViewProjection7</c> left to a separate order), no silent
-/// downscale, no "success" without bytes; snapshot is the window's current view, camera unverified.
+/// <remarks>MEASURED: the two modes are mutually exclusive — a non-empty name writes the file with
+/// <c>resultArrayBytes</c> null, an empty name gives <c>resultArrayBytes</c> and no file on disk, so
+/// "return an image" and "write a file" are DIFFERENT route calls; with both wanted the render runs
+/// ONCE in byte mode. LIMIT: no silent downscale, no "success" without bytes.
+/// The projection IS controlled now, by <c>ksViewProjectionCollection</c> + <c>SetCurrent</c> +
+/// <c>refresh</c>; the camera beyond the projection is unverified.
 /// History: docs/decisions/adapter-core.md#image-export</remarks>
 public sealed partial class Api5Session
 {
@@ -57,6 +57,37 @@ public sealed partial class Api5Session
                 });
         }
 
+        ViewProjectionSpec? requestedView = null;
+        if (command.View is { Length: > 0 } requestedViewName)
+        {
+            if (!ViewProjections.TryResolve(requestedViewName, out var resolved))
+            {
+                throw new KompasContractException(
+                    ErrorCodes.InvalidArgument,
+                    $"Проекция '{requestedViewName}' не входит в опубликованный перечень: " +
+                    string.Join(", ", ViewProjections.WireNames) + ".",
+                    RetryPolicy.Never,
+                    details: new Dictionary<string, object?>
+                    {
+                        ["view"] = requestedViewName,
+                        ["published_views"] = ViewProjections.WireNames,
+                    });
+            }
+
+            requestedView = resolved;
+        }
+
+        if (command.KeepView && requestedView is null)
+        {
+            // keep_view without view would express "keep the view I did not ask to change" — a promise
+            // about nothing. Named refusal instead of silently ignoring the field.
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                "keep_view задан без view: сохранять нечего, потому что вид не запрашивался.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?> { ["keep_view"] = true });
+        }
+
         if (!command.ReturnImageContent && command.SavePath is null)
         {
             throw new KompasContractException(
@@ -82,8 +113,17 @@ public sealed partial class Api5Session
 
         ksRasterFormatParam? parameter = null;
         byte[]? data = null;
+        var viewState = ViewSwapState.NotRequested;
         try
         {
+            // The view is applied BEFORE the render and restored AFTER it. The swap is a separate object
+            // so that the restore happens in a `finally` even when the render refuses: a caller must not
+            // lose the window's view because a snapshot failed.
+            if (requestedView is not null)
+            {
+                viewState = ViewSwap.Apply(document, requestedView, command.KeepView);
+            }
+
             parameter = (ksRasterFormatParam)document.Document.RasterFormatParam();
             if (parameter is null)
             {
@@ -156,6 +196,16 @@ public sealed partial class Api5Session
         }
         finally
         {
+            // The restore belongs to the `finally`: a refusal inside the render must not leave the
+            // document showing a view the caller asked for only to take one picture of it. keep_view is
+            // the caller saying "leave it" — then the restore is SKIPPED, not performed and reported.
+            if (viewState.Applied && !viewState.KeepView)
+            {
+                ViewSwap.Restore(document, viewState, out var restored, out var restoreNote);
+                viewState.Restored = restored;
+                viewState.RestoreNote = restoreNote;
+            }
+
             ComApartment.Release(parameter);
         }
 
@@ -217,13 +267,29 @@ public sealed partial class Api5Session
 
         var unverified = new List<string>
         {
-            "view_state_not_captured — снят текущий вид окна сервера; состояние камеры не фиксировалось, "
-            + "и снимок не является подтверждением ориентации геометрии",
             "image_content_not_analysed — сервер не разбирает изображение и не сверяет его с моделью",
         };
+        if (viewState.Applied)
+        {
+            unverified.Add(
+                "view_identity_not_proved — применённая проекция подтверждена ТИПОМ, прочитанным обратно "
+                + "из коллекции; совпадение картинки с ожидаемой проекцией не измерялось");
+        }
+        else
+        {
+            unverified.Add(
+                "view_state_not_captured — снят текущий вид окна сервера; проекция не запрашивалась, "
+                + "и снимок не является подтверждением ориентации геометрии");
+        }
+
         if (facts.PixelWidth is null)
         {
             unverified.Add("pixel_size_not_read — габарит из заголовка не прочитан (формат не разбирается)");
+        }
+
+        if (viewState.RestoreNote is { Length: > 0 } note)
+        {
+            unverified.Add(note);
         }
 
         return new ExportImageResultDto
@@ -236,7 +302,12 @@ public sealed partial class Api5Session
             SavePath = command.SavePath,
             RasterRoute = bytesRoute ? "memory" : "file",
             SavePathFromMemory = savePathFromMemory,
-            ViewNote = "текущий вид окна сервера; управление видом вне этого инструмента",
+            ViewNote = viewState.Note,
+            RequestedView = requestedView?.Wire,
+            AppliedView = viewState.AppliedView,
+            PreviousView = viewState.PreviousView,
+            ViewRestored = viewState.Restored,
+            ViewProjectionScheme = viewState.Scheme,
             ImageBase64 = base64,
             ReachedLevel = facts.PixelWidth is null ? VerificationLevel.FileCreated : VerificationLevel.SyntaxChecked,
             UnverifiedAspects = unverified,

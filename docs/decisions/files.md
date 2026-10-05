@@ -21,6 +21,22 @@ Worker не проверяли, что папка документа лежит 
 состоянию до мутации, а открытый документ продолжает жить своей жизнью. Вызывающий обязан назвать это
 прямо, а не выдать восстановление файла за откат модели.
 
+## <a id="control-copy-parent"></a>`control_copy_directory` — родительский каталог, не каталог копий
+
+**Что было.** Настройка `control_copy_directory` (и значение по умолчанию в `HostOptions`) задавалась
+путём, уже оканчивающимся на `control-copies`, тогда как `DocumentControlCopies` дописывает это имя
+само. Действительный путь копии удваивался: `…\control-copies\control-copies\…`. Измерено
+05.10.2026 в полном прогоне приёмки (строка `DEP.DFN.02`): продукт работал верно
+(`control_copy_made: true`), а путь указывал в удвоенную папку. Ни один тест не закреплял раскладку,
+поэтому расхождение дожило до прогона.
+
+**Что решено.** `control_copy_directory` — РОДИТЕЛЬСКИЙ каталог; подпапку `control-copies` создаёт
+`DocumentControlCopies` ровно один раз. Исправлены шаблон `config/kompas-mcp.example.json` и значение
+по умолчанию в `HostOptions`. Раскладка закреплена тестами `ControlCopyTests`:
+`Copy_LandsInTheControlCopiesFolderUnderTheRoot_NotOneLevelDeeper` (положительный) и
+`RootAlreadyEndingInControlCopies_DoublesTheFolder` (дефект назван, чтобы не искали загадочный путь).
+Оператору сказано в `docs/operator-guide/control-copies.md`.
+
 ## <a id="restore-policy"></a>Решение о восстановлении файла (дефект H4)
 
 **Что было.** Восстановление проверяло только файловую возможность записи

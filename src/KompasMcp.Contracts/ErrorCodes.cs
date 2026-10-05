@@ -53,6 +53,12 @@ public static class ErrorCodes
     /// is done: a smaller image is a separate request with a lower <c>resolution</c>.</summary>
     public const string RasterLimitExceeded = "RASTER_LIMIT_EXCEEDED";
 
+    /// <summary>The requested projection cannot be applied or confirmed: the document has no collection, no entry of
+    /// that type, or the read-back after <c>SetCurrent</c> reported a different type. A separate code, not
+    /// <see cref="RasterRefused"/>: here the CORE did not refuse the raster — the VIEW could not be established, and
+    /// a snapshot taken anyway would carry a label the kernel never confirmed.</summary>
+    public const string ViewUnavailable = "VIEW_UNAVAILABLE";
+
     public const string UnitsUnverified = "UNITS_UNVERIFIED";
     public const string NotConstantThickness = "NOT_CONSTANT_THICKNESS";
     public const string AmbiguousFlatPattern = "AMBIGUOUS_FLAT_PATTERN";
@@ -146,6 +152,10 @@ public static class ErrorMessages
         [ErrorCodes.RasterLimitExceeded] =
             "Снимок превысил ограничения ответа (большая сторона 1600 пикселей или 2 МиБ base64). " +
             "Уменьшите resolution — молчаливого ужатия сервер не делает.",
+        [ErrorCodes.ViewUnavailable] =
+            "Запрошенную проекцию применить или подтвердить не удалось: в документе нет коллекции " +
+            "проекций, нет проекции этого типа, либо обратное чтение после SetCurrent назвало другой " +
+            "тип. Снимок не снимается: подписывать картинку неподтверждённым видом нельзя.",
         [ErrorCodes.UnitsUnverified] = "Единицы результата не подтверждены; значение не выдаётся.",
         [ErrorCodes.NotConstantThickness] = "Деталь не является плоской постоянной толщины.",
         [ErrorCodes.AmbiguousFlatPattern] = "Одной проекции недостаточно для однозначного контура.",

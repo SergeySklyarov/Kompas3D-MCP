@@ -28,9 +28,11 @@ public sealed class HostOptions
 
     public string JournalPath { get; init; } = Default("journal", "operations.jsonl");
 
-    /// <summary>Service directory for control copies of document files. Mandatory: the copy the server
-    /// takes before a mutation must not land next to the user's document.</summary>
-    public string ControlCopyDirectory { get; init; } = Default("control-copies");
+    /// <summary>PARENT service directory for control copies of document files. Mandatory: the copy the
+    /// server takes before a mutation must not land next to the user's document. The copies themselves
+    /// go into <c>&lt;ControlCopyDirectory&gt;/control-copies/</c> — <see cref="DocumentControlCopies"/>
+    /// appends that folder name, so the value here must NOT already end in it.</summary>
+    public string ControlCopyDirectory { get; init; } = Default();
 
     public string ArtifactDirectory { get; init; } = Default("artifacts");
 
@@ -55,6 +57,11 @@ public sealed class HostOptions
     private static string Default(params string[] parts)
     {
         var root = Path.Combine(Path.GetTempPath(), "kompas-mcp");
+        if (parts.Length == 0)
+        {
+            return root;
+        }
+
         var full = parts.Length == 1 ? Path.Combine(root, parts[0]) : Path.Combine(new[] { root }.Concat(parts).ToArray());
         return full;
     }
@@ -79,7 +86,7 @@ public sealed class HostOptions
             WorkerLogPath = ReadString(node, "worker_log_path"),
             LogPath = ReadString(node, "log_path") ?? Default("logs", "host.jsonl"),
             JournalPath = ReadString(node, "journal_path") ?? Default("journal", "operations.jsonl"),
-            ControlCopyDirectory = ReadString(node, "control_copy_directory") ?? Default("control-copies"),
+            ControlCopyDirectory = ReadString(node, "control_copy_directory") ?? Default(),
             ArtifactDirectory = ReadString(node, "artifact_directory") ?? Default("artifacts"),
             QueueCapacity = ReadInt(node, "queue_capacity") ?? 64,
             SyncBudgetMs = ReadInt(node, "sync_budget_ms") ?? 10_000,

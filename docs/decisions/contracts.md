@@ -1769,10 +1769,28 @@ not confirmed by the probe are not part of the contract: <c>IViewProjection7</c>
 <remarks>MEASURED: the two route modes are MUTUALLY EXCLUSIVE — with a NON-EMPTY file name the core
 writes the file and <c>resultArrayBytes</c> stays null; with an EMPTY file name the core returns
 <c>System.Byte[]</c> (PNG magic) and does NOT create a file at all. So "return the picture" and
-"write the file" are two different route calls, not one with two consequences. Fields not confirmed
-by the probe are not part of the contract: <c>IViewProjection7</c> (projection control) is documented
-but not implemented by this order.
+"write the file" are two different route calls, not one with two consequences.
+The optional <c>view</c> field carries a projection by ASCII wire name; the kernel is addressed by
+the <c>ksViewProjectionType</c> code, because the kernel's own names ("#Спереди") are localized. An
+unknown name is REFUSED, not defaulted: a substituted view is indistinguishable to the caller from
+the one requested. The applied projection is confirmed by a READ-BACK of the type, never by
+<c>SetCurrent</c>'s return value, and the previous view is restored after the snapshot unless
+<c>keep_view</c> is set. MEASURED: a projection change does not raise <c>IKompasDocument.Changed</c>,
+so the document revision is untouched by a snapshot.
 History: docs/decisions/contracts.md#export-image-route</remarks>
+
+## <a id="view-projection"></a>Проекции вида: имена, типы, публикуемый перечень
+
+<summary>Projection of a snapshot: the published ASCII wire names and the <c>ksViewProjectionType</c> codes they resolve to.</summary>
+<remarks>DOC: <c>ksviewprojectiontype.html</c> — <c>ksVPNone -1 … ksVPIsometric 7</c>, <c>ksVPDimetric 8</c>,
+<c>ksVPUnfold 9</c>, <c>ksVPUser 10</c>. The API7 numbers do NOT match the API5 <c>ProjectionType</c> numbers
+(three isometries there, one here) and the correspondence is not implied by the help page.
+PUBLISHED: front 1, rear 2, up 3, down 4, left 5, right 6, isometric 7. LIMIT: the published list is the SUBSET
+the probe found live in a freshly created part's collection; <c>ksVPUser</c> (10) and <c>ksVPDimetric</c> (8) are
+deliberately absent, and a request for a type the collection does not carry refuses <c>VIEW_UNAVAILABLE</c>
+rather than snapping the current view under a false label. Wire names are ASCII so that a product language
+change cannot break the contract.
+History: docs/decisions/contracts.md#view-projection</remarks>
 
 ## <a id="sketch-ref-readback"></a>Ссылка на эскиз из признака
 

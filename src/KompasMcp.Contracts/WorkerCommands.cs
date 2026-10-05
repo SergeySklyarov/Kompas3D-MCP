@@ -2121,6 +2121,19 @@ public sealed record ExportImageCommand
 
     /// <summary>Whether to return the picture in the response. Default — yes.</summary>
     public bool ReturnImageContent { get; init; } = true;
+
+    /// <summary>Projection to show in the snapshot, by published name (front, rear, up, down, left,
+    /// right, isometric). Not set — the document's CURRENT view is captured and left untouched. Set —
+    /// the view is applied before the render and RESTORED after it.</summary>
+    /// <remarks>MEASURED (probe VIEW): switching the projection does NOT mark the document changed
+    /// (<c>IKompasDocument.Changed</c> stays false), so the revision is unaffected and the restore is
+    /// honest rather than a courtesy. The type is applied, not the localized name.
+    /// History: docs/decisions/contracts.md#view-projection</remarks>
+    public string? View { get; init; }
+
+    /// <summary>Keep the requested projection after the snapshot instead of restoring the previous one.
+    /// Default — false (restore). Only meaningful together with <see cref="View"/>.</summary>
+    public bool KeepView { get; init; }
 }
 
 /// <summary>Raster snapshot result. The dimensions are READ FROM THE HEADER, not taken from the request: the parameter
@@ -2152,6 +2165,24 @@ public sealed record ExportImageResultDto
 
     /// <summary>View state: the snapshot was taken from the server window's current view.</summary>
     public required string ViewNote { get; init; }
+
+    /// <summary>Projection the CALLER asked for by name; null — the current view was captured.</summary>
+    public string? RequestedView { get; init; }
+
+    /// <summary>Projection SWITCHED TO, read back from the kernel after the change; null — not applied
+    /// (no view requested, or the document carries no entry of that type). This is a measurement, not the
+    /// echo of the request: the field names the type the collection reported as current.</summary>
+    public string? AppliedView { get; init; }
+
+    /// <summary>Projection the document showed BEFORE the change, read back by type; null — not read.</summary>
+    public string? PreviousView { get; init; }
+
+    /// <summary>Whether the previous projection was restored after the snapshot.</summary>
+    public bool? ViewRestored { get; init; }
+
+    /// <summary>Value of the collection's <c>viewProjectionScheme</c> — the document's orientation
+    /// scheme, read alongside the projection type.</summary>
+    public long? ViewProjectionScheme { get; init; }
 
     /// <summary>base64 of the picture. The Host moves it into an image block and REMOVES it from the
     /// structure.</summary>

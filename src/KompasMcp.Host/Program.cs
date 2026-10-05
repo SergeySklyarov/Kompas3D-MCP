@@ -185,7 +185,10 @@ public static class Program
         - verification.level в ответе говорит, что реально проверено. Уровень ниже ожидаемого —
           повод перечитать модель (kompas_get_context, list/get/measure), а не повторять вызов:
           повтор не поднимет уровень доказательства.
-        - Снимок (kompas_export_image) — вспомогательный канал, а не доказательство.
+        - Снимок (kompas_export_image) — вспомогательный канал, а не доказательство. Проекция
+          задаётся полем view по имени типа (front/rear/up/down/left/right/isometric), а не по
+          локализованной подписи вида; применённый вид подтверждается обратным чтением, прежний
+          возвращается после снимка (или остаётся при keep_view).
         """;
 
     /// <summary>The tool list: the same catalog for the owner and for a waiting Host.</summary>

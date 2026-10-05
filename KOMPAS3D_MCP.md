@@ -105,7 +105,7 @@ B2_MCP_INTEGRATION.md` §4.4, доказательство наряда в пу�
 - `kompas_rebuild` — **Перестроить**. Перестроение документа.
 - `kompas_export_step` — **Экспорт STEP**. Экспорт нативным конвертером.
 - `kompas_import_step` — **Импорт STEP**. Чтение STEP.
-- `kompas_export_image` — **Снимок модели**. Растровый снимок ТЕКУЩЕГО вида окна сервера документированным маршрутом API5: ksDocument3D.RasterFormatParam → ksRasterFormatParam → SaveAsToRasterFormat.
+- `kompas_export_image` — **Снимок модели**. Растровый снимок документированным маршрутом API5: ksDocument3D.RasterFormatParam → ksRasterFormatParam → SaveAsToRasterFormat.
 - `kompas_probe_units` — **Замер единиц**. Строит известную геометрию и возвращает сырые показания всех измерительных вызовов.
 - `kompas_read_topology` — **Топология тела**. Грани и рёбра из конечного тела (GetMainBody→FaceCollection→EdgeCollection), а не из EntityCollection: коллекция рёбер модели содержит эскизные и служебные контуры.
 - `kompas_resolve_selection` — **Однозначный выбор**. Структурный предикат по граням тела.

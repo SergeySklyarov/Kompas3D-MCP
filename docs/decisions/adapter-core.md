@@ -772,3 +772,25 @@ honestly and after the read-back: the feature is intact, the volume unchanged, n
 
 DOC: `ksplaneoffsetdefinition_props.html`, «смещение вдоль нормали базовой плоскости». MEASURED:
 `direction=true` means offset along the plane's own normal for XY, XZ and YZ alike.
+
+## <a id="view-swap"></a>Applying and restoring a view projection (probe VIEW, 05.10.2026)
+
+Projection control for a snapshot uses the documented API5 route: `ksDocument3D.GetViewProjectionCollection()`
+(`ksdocument3d_getviewprojectioncollection.html`) → `ksViewProjectionCollection`
+(`ksviewprojectioncollection.html`: `GetCount`, `GetByIndex`, `refresh`, `viewProjectionScheme`) →
+`ksViewProjection` (`ksviewprojection.html`: `GetViewProjectonType`, `IsCurrent`, `SetCurrent`). The type
+applied is `ksViewProjectionType` (`ksviewprojectiontype.html`) — isometric is 7 — NOT the API5
+`ProjectionType`; the two enums do NOT share their numbers and the help page says the correspondence is
+not implied. The published names are ASCII (front/rear/up/down/left/right/isometric) because the kernel's
+own names ("#Спереди") are localized.
+
+MEASURED (probe VIEW, invisible and visible document): a projection change does NOT raise
+`IKompasDocument.Changed` — false before, false after, false after the restore. The document revision is a
+server-side counter and is untouched, so restoring the previous view after the snapshot is honest, not a
+courtesy. MEASURED: `SetCurrent()` returning TRUE is NOT the result — the type read back from
+`GetViewProjectonType()` is, and a mismatch refuses `VIEW_UNAVAILABLE` rather than snapping under a label
+the kernel never confirmed. MEASURED: the raster extent is fitted to the model's extent in the CURRENT
+projection, so different projections legitimately differ in size (front 399×320, up 399×202, isometric
+423×503), and two consecutive snapshots of one projection are byte-identical. LIMIT: a projection type the
+collection does not carry (user projection, dimetric) refuses `VIEW_UNAVAILABLE`; the published list is the
+subset the probe found live in a fresh part.

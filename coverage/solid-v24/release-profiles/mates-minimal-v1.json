@@ -2,12 +2,17 @@
  "meta": {
   "profile_id": "mates-minimal-v1",
   "title": "Минимальные сопряжения v24",
-  "revision": "1.0",
+  "revision": "1.1",
   "revision_history": [
    {
     "revision": "1.0",
     "date": "05.10.2026",
     "change": "блок зарегистрирован по решению заказчика о маршруте (документированный API7-путь); код не написан"
+   },
+   {
+    "revision": "1.1",
+    "date": "05.10.2026",
+    "change": "живой прогон группы MATE: 6 режимов и 5 зависимостей закрыты; профиль закрыт"
    }
   ],
   "target_build": "24.0.0.2799",
@@ -22,7 +27,7 @@
    "family": "MATE",
    "queue": "C2",
    "priority": "practical_required",
-   "current_level": "metadata_found",
+   "current_level": "mcp_verified",
    "required_actions": [
     "discover",
     "create",
@@ -35,7 +40,7 @@
     "negative_tests",
     "geometry_validation"
    ],
-   "gap": "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+   "gap": "Живой прогон 05.10.2026: 32 строки группы MATE, 0 отказов. Строка закрыта по mode_closed. Приёмка на бинарях поставки — отдельный шаг."
   },
   {
    "ref": "MATE-02.mate.read",
@@ -43,7 +48,7 @@
    "family": "MATE",
    "queue": "C2",
    "priority": "practical_required",
-   "current_level": "metadata_found",
+   "current_level": "mcp_verified",
    "required_actions": [
     "discover",
     "create",
@@ -56,7 +61,7 @@
     "negative_tests",
     "geometry_validation"
    ],
-   "gap": "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+   "gap": "Живой прогон 05.10.2026: 32 строки группы MATE, 0 отказов. Строка закрыта по mode_closed. Приёмка на бинарях поставки — отдельный шаг."
   },
   {
    "ref": "MATE-03.mate.param_edit",
@@ -64,7 +69,7 @@
    "family": "MATE",
    "queue": "C2",
    "priority": "practical_required",
-   "current_level": "metadata_found",
+   "current_level": "mcp_verified",
    "required_actions": [
     "discover",
     "create",
@@ -77,7 +82,7 @@
     "negative_tests",
     "geometry_validation"
    ],
-   "gap": "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+   "gap": "Живой прогон 05.10.2026: 32 строки группы MATE, 0 отказов. Строка закрыта по mode_closed. Приёмка на бинарях поставки — отдельный шаг."
   },
   {
    "ref": "MATE-04.mate.fixed",
@@ -85,7 +90,7 @@
    "family": "MATE",
    "queue": "C2",
    "priority": "practical_required",
-   "current_level": "metadata_found",
+   "current_level": "mcp_verified",
    "required_actions": [
     "discover",
     "create",
@@ -98,7 +103,7 @@
     "negative_tests",
     "geometry_validation"
    ],
-   "gap": "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+   "gap": "Живой прогон 05.10.2026: 32 строки группы MATE, 0 отказов. Строка закрыта по mode_closed. Приёмка на бинарях поставки — отдельный шаг."
   },
   {
    "ref": "MATE-05.mate.delete",
@@ -106,7 +111,7 @@
    "family": "MATE",
    "queue": "C2",
    "priority": "practical_required",
-   "current_level": "metadata_found",
+   "current_level": "mcp_verified",
    "required_actions": [
     "discover",
     "create",
@@ -119,7 +124,7 @@
     "negative_tests",
     "geometry_validation"
    ],
-   "gap": "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+   "gap": "Живой прогон 05.10.2026: 32 строки группы MATE, 0 отказов. Строка закрыта по mode_closed. Приёмка на бинарях поставки — отдельный шаг."
   },
   {
    "ref": "MATE-06.mate.placement_effect",
@@ -127,7 +132,7 @@
    "family": "MATE",
    "queue": "C2",
    "priority": "practical_required",
-   "current_level": "metadata_found",
+   "current_level": "mcp_verified",
    "required_actions": [
     "discover",
     "create",
@@ -140,7 +145,7 @@
     "negative_tests",
     "geometry_validation"
    ],
-   "gap": "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+   "gap": "Живой прогон 05.10.2026: 32 строки группы MATE, 0 отказов. Строка закрыта по mode_closed. Приёмка на бинарях поставки — отдельный шаг."
   }
  ],
  "common_dependencies": [

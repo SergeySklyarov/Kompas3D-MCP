@@ -6358,20 +6358,20 @@
    "id": "MATE",
    "title": "Сопряжения сборки",
    "classification": "solid",
-   "level": "metadata_found",
+   "level": "mcp_verified",
    "evidence": {
     "documentation": "Проводная проверка справки SDK 24, 05.10.2026: ksdocument3d_addmateconstraint, ksmateconstraint_create, imateconstraints3d_add, imateconstraint3d_baseobject1/2, ksdocument3d_mateconstraintcollection, ksmateconstraint_getbaseobj, mateconstrainttype, mateconstraintdirection, mateconstraintfixed, kspart_bodycollection, iparts7_addfromfile — HTTP 200. Артефакт: scratch/docs-wire-20261005/",
     "metadata": "Сканер по поставленным обёрткам 24.0.0.2799: IMateConstraints3D (22 члена), IMateConstraint3D (41), IParts7 (23), MateConstraintType 15 значений в Interop.Kompas6Constants3D.dll. Артефакт: scratch/interop-20261004/",
-    "runtime": "проба M (tools/KompasMcp.Api7Probe --mate), 05.10.2026: сопряжение создано документированным API7-путём, Update()=True, Valid=True, сопряжений 0 → 1. Артефакт: docs/acceptance/api7/mate.json"
+    "runtime": "живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов"
    },
    "route": "API7: IPart7.MateConstraints → IMateConstraints3D.Add(MateConstraintType) → BaseObject1/BaseObject2 → Update(); чтение — ksDocument3D.MateConstraintCollection → ksMateConstraint. Решение заказчика 05.10.2026: ksDocument3D.AddMateConstraint НЕ используется (возвращал False при всех документированных сочетаниях, причина не установлена).",
-   "mcp_support": "пока нет: инструменты блока не написаны",
-   "next_step": "Написать инструменты блока на измеренном документированном маршруте, затем приёмочная группа и закрытие строк.",
+   "mcp_support": "kompas_list_mates / kompas_create_mate / kompas_set_mate_parameter / kompas_set_mate_fixed / kompas_delete_mate",
+   "next_step": "Живой прогон пройден (32 строки, 0 отказов). Следующее: приёмка на БИНАРЯХ ПОСТАВКИ, переиздание аудита и паспорта.",
    "operations": [
     {
      "id": "MATE-01.mate.create",
      "name": "Создать сопряжение компонентов",
-     "level": "metadata_found",
+     "level": "mcp_verified",
      "doc_source": [
       "imateconstraints3d_add"
      ],
@@ -6380,7 +6380,7 @@
     {
      "id": "MATE-02.mate.read",
      "name": "Прочитать сопряжения сборки и их параметры",
-     "level": "metadata_found",
+     "level": "mcp_verified",
      "doc_source": [
       "imateconstraints3d_add"
      ],
@@ -6389,7 +6389,7 @@
     {
      "id": "MATE-03.mate.param_edit",
      "name": "Изменить параметр сопряжения (расстояние или угол)",
-     "level": "metadata_found",
+     "level": "mcp_verified",
      "doc_source": [
       "imateconstraints3d_add"
      ],
@@ -6398,7 +6398,7 @@
     {
      "id": "MATE-04.mate.fixed",
      "name": "Фиксация компонентов сопряжением",
-     "level": "metadata_found",
+     "level": "mcp_verified",
      "doc_source": [
       "imateconstraints3d_add"
      ],
@@ -6407,7 +6407,7 @@
     {
      "id": "MATE-05.mate.delete",
      "name": "Удалить сопряжение",
-     "level": "metadata_found",
+     "level": "mcp_verified",
      "doc_source": [
       "imateconstraints3d_add"
      ],
@@ -6416,7 +6416,7 @@
     {
      "id": "MATE-06.mate.placement_effect",
      "name": "Положение компонента после сопряжения",
-     "level": "metadata_found",
+     "level": "mcp_verified",
      "doc_source": [
       "imateconstraints3d_add"
      ],

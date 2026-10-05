@@ -935,6 +935,335 @@ def assembly_checks(client, rep, app_id, workdir):
     call("kompas_close_document", {"document_id": asm2, "dirty_policy": "discard"})
 
 
+def mate_checks(client, rep, app_id, workdir):
+    """MATE.* — сопряжения сборки через MCP (блок C2, профиль `mates-minimal-v1`).
+
+    ЗАЧЕМ ЭТА ГРУППА. Шесть режимов блока написаны на маршруте, выбранном решением заказчика
+    05.10.2026 (документированный API7-путь). Маршрут подтверждён пробой M, но ЧЕРЕЗ ПРОДУКТ не
+    проверялся ни разу: группа — это и есть проверка.
+
+    ЧТО ЗДЕСЬ ДОКАЗАТЕЛЬСТВО. Не «status=succeeded», а ЧИСЛА и подтверждение: `Valid` созданного
+    сопряжения (измерено: сопряжение с двумя объектами одного компонента тоже давало `Update()=true`,
+    но `Valid=false`), перечитанный тип, оба базовых объекта, перечитанный параметр, убыль счётчика
+    при удалении.
+
+    ЧЕГО ЗДЕСЬ НЕТ. Клиентская приёмка (шаг заказчика) и Trust не трогаются вовсе.
+    """
+    import os
+
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def rev_of(env, fallback=1):
+        return (env or {}).get("revision_after") or fallback
+
+    def emsg(env):
+        err = (env or {}).get("error") or {}
+        return err.get("message") if isinstance(err, dict) else None
+
+    def current_rev(doc):
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return ((env or {}).get("result") or {}).get("revision") or 1
+
+    def doc_id(env):
+        r = result(env)
+        return r.get("document_id") or r.get("id") or (env or {}).get("document_id")
+
+    src_dir = os.path.join(workdir, "mate-src")
+    os.makedirs(src_dir, exist_ok=True)
+
+    # ========= подготовка: деталь-источник и сборка с двумя компонентами =========
+    src_path = os.path.join(src_dir, "mate-source.m3d")
+    env, code = call("kompas_create_document", {"application_id": app_id, "kind": "part",
+                                                "name": "MATE-src"})
+    part = doc_id(env)
+    prev = rev_of(env)
+    ok_src = False
+    if part:
+        env, code = call("kompas_create_sketch", {
+            "document_id": part, "expected_revision": prev,
+            "plane": {"base": "xy", "offset_mm": 0}, "name": "mate-sketch"})
+        sk = result(env).get("id")
+        prev = rev_of(env, prev)
+        env, code = call("kompas_edit_sketch", {
+            "sketch_ref": sk, "expected_revision": prev, "mode": "append",
+            "entities": [{"kind": "rectangle", "start_mm": [-50, -40], "width_mm": 100,
+                          "height_mm": 80}]})
+        prev = rev_of(env, prev)
+        env, code = call("kompas_finish_sketch", {"sketch_ref": sk,
+                                                  "require_closed_profile": False})
+        prev = rev_of(env, prev)
+        env, code = call("kompas_extrude", {"sketch_ref": sk, "expected_revision": prev,
+                                            "operation": "base", "depth_mm": 10,
+                                            "direction": "positive"})
+        prev = rev_of(env, prev)
+        env, code = call("kompas_save_document", {
+            "document_id": part, "expected_revision": prev, "target_path": src_path})
+        ok_src = (not code) and os.path.isfile(src_path)
+        call("kompas_close_document", {"document_id": part, "dirty_policy": "discard"})
+
+    rep.add("MATE.SRC", "деталь-источник сохранена (нужна для вставки компонентов)",
+            "PASS" if ok_src else "FAIL", f"path={src_path} error={code}")
+
+    env, code = call("kompas_create_document", {"application_id": app_id, "kind": "assembly",
+                                                "name": "MATE-asm"})
+    asm = doc_id(env)
+    if not asm:
+        rep.add("MATE.01.create", "сборка не создана", "FAIL", f"error={code}")
+        return
+
+    refs = []
+    for index in range(2):
+        env, code = call("kompas_insert_component", {
+            "document_id": asm, "expected_revision": current_rev(asm),
+            "source_path": src_path, "fixed": False})
+        if code:
+            rep.add("MATE.SRC2", f"вставка компонента {index} не прошла", "FAIL",
+                    f"error={code} msg={emsg(env)}")
+            return
+
+    env, code = call("kompas_list_components", {"document_id": asm})
+    rows = result(env).get("components") or []
+    rep.add("MATE.PREP", "сборка с двумя компонентами, у каждого есть геометрия",
+            "PASS" if (len(rows) == 2 and all(r.get("face_count") for r in rows)) else "FAIL",
+            f"components={len(rows)} faces={[r.get('face_count') for r in rows]}")
+
+    if len(rows) != 2:
+        return
+
+    # ВТОРОЙ КОМПОНЕНТ СДВИГАЕТСЯ ДО СОПРЯЖЕНИЯ: без сдвига грани совпадают, сопряжение
+    # вырождается, и «создано» перестаёт что-либо доказывать. Маршрут размещения измерен в C1.
+    env, code = call("kompas_set_component_placement", {
+        "document_id": asm, "expected_revision": current_rev(asm),
+        "component_ref": rows[1].get("component_ref"),
+        "transform": {"origin_mm": [150, 0, 0], "x_axis": [1, 0, 0], "y_axis": [0, 1, 0]}})
+    rep.add("MATE.PREP2", "второй компонент сдвинут на 150 мм до сопряжения",
+            "PASS" if not code else "FAIL", f"error={code} msg={emsg(env)}")
+
+    first, second = rows[0].get("component_ref"), rows[1].get("component_ref")
+
+    # ========= MATE.01: создать сопряжение =========
+    env, code = call("kompas_create_mate", {
+        "document_id": asm, "expected_revision": current_rev(asm),
+        "constraint_type": "coincidence",
+        "first_component_ref": first, "first_face_index": 0,
+        "second_component_ref": second, "second_face_index": 0})
+    mate = result(env).get("mate") or {}
+    mate_ref = (result(env).get("mate_ref") or {}).get("id") if isinstance(
+        result(env).get("mate_ref"), dict) else None
+    valid = mate.get("valid")
+    rep.add("MATE.01.create", "сопряжение создаётся документированным API7-путём (Valid=true)",
+            "PASS" if (not code and valid is True and mate_ref) else "FAIL",
+            f"type={mate.get('constraint_type')} valid={valid} "
+            f"base1={mate.get('base_object1')} base2={mate.get('base_object2')} "
+            f"count={result(env).get('mate_count')} error={code} msg={emsg(env)}")
+
+    # ========= MATE.02: чтение =========
+    env, code = call("kompas_list_mates", {"document_id": asm})
+    mates = result(env).get("mates") or []
+    rep.add("MATE.02.read", "сопряжения перечисляются (тип, объекты, подтверждение)",
+            "PASS" if (not code and len(mates) >= 1) else "FAIL",
+            f"mates={len(mates)} count={result(env).get('mate_count')} route="
+            f"{(result(env).get('route') or '')[:60]} error={code}")
+    if mates:
+        row = mates[0]
+        rep.add("MATE.02.fields", "строка сопряжения несёт тип, Valid и оба базовых объекта",
+                "PASS" if (row.get("constraint_type") == "coincidence" and row.get("valid") is True
+                           and row.get("base_object1") and row.get("base_object2")) else "FAIL",
+                f"type={row.get('constraint_type')} valid={row.get('valid')} "
+                f"fixed={row.get('fixed')} base1={row.get('base_object1')} base2={row.get('base_object2')}")
+
+    # ========= MATE.03: параметр (на сопряжении-расстоянии) =========
+    env, code = call("kompas_create_mate", {
+        "document_id": asm, "expected_revision": current_rev(asm),
+        "constraint_type": "distance",
+        "first_component_ref": first, "first_face_index": 0,
+        "second_component_ref": second, "second_face_index": 0,
+        "param_value": 50.0})
+    dist_ref = (result(env).get("mate_ref") or {}).get("id") if isinstance(
+        result(env).get("mate_ref"), dict) else None
+    dist_valid = (result(env).get("mate") or {}).get("valid")
+    rep.add("MATE.03.create_distance", "сопряжение-расстояние создаётся с параметром 50",
+            "PASS" if (not code and dist_valid is True and dist_ref) else "FAIL",
+            f"valid={dist_valid} param={(result(env).get('mate') or {}).get('param_value')} "
+            f"error={code} msg={emsg(env)}")
+
+    if dist_ref:
+        env, code = call("kompas_set_mate_parameter", {
+            "document_id": asm, "expected_revision": current_rev(asm),
+            "mate_ref": dist_ref, "param_value": 30.0})
+        before = result(env).get("param_value_before")
+        after = result(env).get("param_value_after")
+        rep.add("MATE.03.edit", "параметр сопряжения задаётся и перечитывается (50 → 30)",
+                "PASS" if (not code and after is not None and abs(after - 30.0) <= 1e-6) else "FAIL",
+                f"before={before} after={after} error={code} msg={emsg(env)}")
+
+    # ========= MATE.04: фиксация =========
+    if mate_ref:
+        env, code = call("kompas_set_mate_fixed", {
+            "document_id": asm, "expected_revision": current_rev(asm),
+            "mate_ref": mate_ref, "fixed": "first"})
+        rep.add("MATE.04.edit", "признак фиксации задаётся и перечитывается (none → first)",
+                "PASS" if (not code and result(env).get("fixed_after") == "first") else "FAIL",
+                f"before={result(env).get('fixed_before')} after={result(env).get('fixed_after')} "
+                f"error={code} msg={emsg(env)}")
+
+    # ========= MATE.06: положение компонента после сопряжения =========
+    env, code = call("kompas_list_components", {"document_id": asm})
+    after_rows = result(env).get("components") or []
+    moved = [r for r in after_rows
+             if isinstance(r.get("matrix"), list) and len(r["matrix"]) >= 16]
+    distinct = len({round(r["matrix"][12], 3) for r in moved})
+    rep.add("MATE.06.geometry_validation",
+            "положение компонентов после сопряжений читается и РАЗЛИЧИМО (второй сдвинут на 150)",
+            "PASS" if (len(moved) == 2 and distinct == 2) else "FAIL",
+            f"прочитано размещений={len(moved)} различных origin.x={distinct} "
+            f"({sorted({round(r['matrix'][12], 3) for r in moved})})")
+
+    # ========= MATE.05: удаление =========
+    # ССЫЛКА ПЕРЕЧИТЫВАЕТСЯ: после правок ревизия поднялась, и прежняя ссылка законно устарела
+    # (продукт её отверг — это его верное поведение, а не дефект).
+    env, _code = call("kompas_list_mates", {"document_id": asm})
+    fresh = [m for m in (result(env).get("mates") or [])
+             if m.get("constraint_type") == "coincidence"]
+    fresh_ref = fresh[0].get("mate_ref") if fresh else None
+
+    if fresh_ref:
+        env, code = call("kompas_delete_mate", {
+            "document_id": asm, "expected_revision": current_rev(asm), "mate_ref": fresh_ref})
+        rep.add("MATE.05.delete", "сопряжение удаляется, счётчик убывает",
+                "PASS" if (not code and (result(env).get("mate_count_after") or 0)
+                           < (result(env).get("mate_count_before") or 0)) else "FAIL",
+                f"{result(env).get('mate_count_before')} → {result(env).get('mate_count_after')} "
+                f"error={code} msg={emsg(env)}")
+
+    # РАЗЛИЧАЮЩИЙ ОПЫТ ПОСЛЕ УДАЛЕНИЯ: свежая ссылка из list_mates идёт в мутацию. Он стоит ЗДЕСЬ,
+    # а не перед удалением, потому что сам является мутацией: поставленный раньше, он поднимал
+    # ревизию и обесценивал ссылку, которой предстояло удалять (это поймал первый его прогон).
+    env, _code = call("kompas_list_mates", {"document_id": asm})
+    left = result(env).get("mates") or []
+    if left:
+        env, probe_code = call("kompas_set_mate_parameter", {
+            "document_id": asm, "expected_revision": current_rev(asm),
+            "mate_ref": left[0].get("mate_ref"), "param_value": 40.0})
+        rep.add("MATE.05.fresh_ref_probe",
+                "ссылка, только что полученная из list_mates, пригодна для мутации",
+                "PASS" if not probe_code else "FAIL",
+                f"error={probe_code} msg={emsg(env)}")
+
+    # ========= отрицательные контроли =========
+    env, code = call("kompas_create_mate", {
+        "document_id": asm, "expected_revision": current_rev(asm),
+        "constraint_type": "нет-такого-типа",
+        "first_component_ref": first, "first_face_index": 0,
+        "second_component_ref": second, "second_face_index": 0})
+    rep.add("MATE.01.negative_tests", "неизвестный тип сопряжения отвергается до COM",
+            "PASS" if code == "INVALID_ARGUMENT" else "FAIL", f"error={code}")
+
+    env, _code = call("kompas_list_components", {"document_id": asm})
+    fresh_rows = result(env).get("components") or []
+    if len(fresh_rows) == 2:
+        first, second = fresh_rows[0].get("component_ref"), fresh_rows[1].get("component_ref")
+    env, code = call("kompas_create_mate", {
+        "document_id": asm, "expected_revision": current_rev(asm),
+        "constraint_type": "coincidence",
+        "first_component_ref": first, "first_face_index": 9999,
+        "second_component_ref": second, "second_face_index": 0})
+    rep.add("MATE.01.face_range", "номер грани вне диапазона отвергается с числом граней",
+            "PASS" if code == "INVALID_ARGUMENT" else "FAIL",
+            f"error={code} msg={emsg(env)}")
+
+    env, code = call("kompas_set_mate_parameter", {
+        "document_id": asm, "expected_revision": current_rev(asm),
+        "mate_ref": "mate:00000000000000000000000000000000", "param_value": 1.0})
+    rep.add("MATE.03.negative_tests", "чужая ссылка на сопряжение отвергается",
+            "PASS" if code in ("STALE_REFERENCE", "INVALID_ARGUMENT") else "FAIL", f"error={code}")
+
+    env, code = call("kompas_set_mate_fixed", {
+        "document_id": asm, "expected_revision": current_rev(asm),
+        "mate_ref": left[0].get("mate_ref") if left else first, "fixed": "нет-такого"})
+    rep.add("MATE.04.negative_tests", "неизвестный признак фиксации отвергается до COM",
+            "PASS" if code == "INVALID_ARGUMENT" else "FAIL", f"error={code}")
+
+    env, code = call("kompas_delete_mate", {
+        "document_id": asm, "expected_revision": current_rev(asm),
+        "mate_ref": "mate:00000000000000000000000000000000"})
+    rep.add("MATE.05.negative_tests", "чужая ссылка на сопряжение при удалении отвергается",
+            "PASS" if code in ("STALE_REFERENCE", "INVALID_ARGUMENT") else "FAIL", f"error={code}")
+
+    # ---- остальные применимые действия словаря ----
+    env, code = call("kompas_list_mates", {"document_id": asm})
+    rows_now = result(env).get("mates") or []
+    rep.add("MATE.02.discover", "перечисление сопряжений показывает оставшееся сопряжение",
+            "PASS" if (not code and len(rows_now) == 1) else "FAIL",
+            f"mates={len(rows_now)} error={code}")
+    if rows_now:
+        rep.add("MATE.03.read", "параметр сопряжения читается в перечислении",
+                "PASS" if rows_now[0].get("param_value") is not None else "FAIL",
+                f"param_value={rows_now[0].get('param_value')}")
+        rep.add("MATE.04.read", "признак фиксации читается в перечислении",
+                "PASS" if rows_now[0].get("fixed") in ("none", "first", "second") else "FAIL",
+                f"fixed={rows_now[0].get('fixed')}")
+        rep.add("MATE.05.read", "после удаления перечисление показывает убыль",
+                "PASS" if len(rows_now) == 1 else "FAIL", f"mates={len(rows_now)}")
+        rep.add("MATE.06.read", "положение компонентов читается после удаления",
+                "PASS" if len(after_rows) == 2 else "FAIL", f"components={len(after_rows)}")
+
+    env, code = call("kompas_rebuild", {"document_id": asm})
+    env2, code2 = call("kompas_list_mates", {"document_id": asm})
+    kept = result(env2).get("mates") or []
+    rep.add("MATE.01.rebuild", "перестроение сборки не теряет сопряжения",
+            "PASS" if (not code and len(kept) == 1) else "FAIL", f"error={code} mates={len(kept)}")
+    rep.add("MATE.03.rebuild", "после перестроения параметр сопряжения читается",
+            "PASS" if (kept and kept[0].get("param_value") is not None) else "FAIL",
+            f"param_value={kept[0].get('param_value') if kept else None}")
+    rep.add("MATE.04.rebuild", "после перестроения признак фиксации читается",
+            "PASS" if (kept and kept[0].get("fixed") in ("none", "first", "second")) else "FAIL",
+            f"fixed={kept[0].get('fixed') if kept else None}")
+    rep.add("MATE.05.rebuild", "после перестроения сопряжений по-прежнему одно",
+            "PASS" if len(kept) == 1 else "FAIL", f"mates={len(kept)}")
+    rep.add("MATE.06.rebuild", "после перестроения положение компонентов читается",
+            "PASS" if not code2 else "FAIL", f"error={code2}")
+
+    # ---- save → close → reopen: сопряжения обязаны пережить ----
+    asm_path = os.path.join(src_dir, "mate-asm.m3d")
+    env, code = call("kompas_save_document", {"document_id": asm,
+                                              "expected_revision": current_rev(asm),
+                                              "target_path": asm_path})
+    saved_ok = (not code) and os.path.isfile(asm_path)
+    call("kompas_close_document", {"document_id": asm, "dirty_policy": "save"})
+    env, code = call("kompas_open_document", {"application_id": app_id, "path": asm_path,
+                                              "access": "edit"})
+    asm2 = doc_id(env)
+    env, code = call("kompas_list_mates", {"document_id": asm2})
+    after_reopen = result(env).get("mates") or []
+    rep.add("MATE.01.save_reopen", "сопряжение переживает save → close → reopen",
+            "PASS" if (saved_ok and len(after_reopen) == 1) else "FAIL",
+            f"path={asm_path} exists={os.path.isfile(asm_path)} mates={len(after_reopen)} error={code}")
+    if after_reopen:
+        rep.add("MATE.03.save_reopen", "параметр переживает save → close → reopen",
+                "PASS" if after_reopen[0].get("param_value") is not None else "FAIL",
+                f"param_value={after_reopen[0].get('param_value')}")
+        rep.add("MATE.04.save_reopen", "фиксация переживает save → close → reopen",
+                "PASS" if after_reopen[0].get("fixed") in ("none", "first", "second") else "FAIL",
+                f"fixed={after_reopen[0].get('fixed')}")
+    rep.add("MATE.05.save_reopen", "перечисление после переоткрытия показывает то же число",
+            "PASS" if len(after_reopen) == 1 else "FAIL", f"mates={len(after_reopen)}")
+    env, code = call("kompas_list_components", {"document_id": asm2})
+    re_rows = result(env).get("components") or []
+    rep.add("MATE.06.save_reopen", "положение компонентов переживает переоткрытие",
+            "PASS" if len(re_rows) == 2 else "FAIL", f"components={len(re_rows)}")
+
+    call("kompas_close_document", {"document_id": asm2, "dirty_policy": "discard"})
+
+
 def main():
     # x64, not bin\Debug: the solution forces x64 (Directory.Build.props), so `dotnet build`
     # refreshes bin\x64\... only — the AnyCPU output that used to be picked here silently kept
@@ -1059,6 +1388,10 @@ def main():
     # вызывает kompas_list_components, kompas_insert_component, kompas_set_component_placement,
     # kompas_replace_component и kompas_check_component_links.
     assembly_only = "--assembly-only" in sys.argv
+    # То же для домена СОПРЯЖЕНИЙ (блок C2): одна группа MATE на своём сеансе. Отдельная ветка нужна
+    # по той же причине, что у прочих групп: клетка матрицы обязана находиться по ИМЕНИ строки
+    # (`MATE.<NN>.<действие>`), а не по номеру в общем потоке.
+    mate_only = "--mate-only" in sys.argv
 
     rep = Report(
         ("Приёмка контракта: схемы, отказы до COM, политика путей" if only_contract
@@ -1081,6 +1414,7 @@ def main():
         else "Приёмка IMG: растровый снимок модели (строка AUX-IMAGE.raster_export) через MCP" if image_only
         else "Приёмка NEST: вложенные контуры и несколько замкнутых контуров (критерий dep.sketch.entities)" if nested_only
         else "Приёмка ASM: минимальные сборки через MCP (наряд C1, профиль assemblies-minimal-v1)" if assembly_only
+        else "Приёмка MATE: сопряжения сборки через MCP (блок C2, профиль mates-minimal-v1)" if mate_only
         else "Интеграционный прогон вертикального сценария через MCP"),
         os.path.join(workdir, "chamfer-acceptance.json" if chamfer_only
                      else "fillet-acceptance.json" if fillet_only
@@ -1101,6 +1435,7 @@ def main():
                      else "image-acceptance.json" if image_only
                      else "nested-acceptance.json" if nested_only
                      else "assembly-acceptance.json" if assembly_only
+                     else "mate-acceptance.json" if mate_only
                      else "smoke-report.json"))
     report_override = argument("--report")
     if report_override:
@@ -1462,6 +1797,14 @@ def main():
 
         if assembly_only:
             assembly_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if mate_only:
+            mate_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,

@@ -258,6 +258,16 @@ public static class WorkerCommands
     public const string SetComponentPlacement = "asm.set_placement";
     public const string ReplaceComponent = "asm.replace_component";
     public const string CheckComponentLinks = "asm.check_links";
+
+    // ── блок C2 «минимальные сопряжения» (профиль mates-minimal-v1) ──
+    // mate.create → MATE-01, mate.list → MATE-02, mate.set_parameter → MATE-03,
+    // mate.set_fixed → MATE-04, mate.delete → MATE-05. MATE-06 (положение компонента после
+    // сопряжения) читается существующим asm.list_components и своего инструмента не заводит.
+    public const string ListMates = "mate.list";
+    public const string CreateMate = "mate.create";
+    public const string SetMateParameter = "mate.set_parameter";
+    public const string SetMateFixed = "mate.set_fixed";
+    public const string DeleteMate = "mate.delete";
     public const string Shutdown = "sys.shutdown";
 
     /// <summary>

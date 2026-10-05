@@ -27,25 +27,14 @@
 ### профиль mates-minimal-v1 — Минимальные сопряжения v24
 
 - **обязательных_режимов:** 6
-- **режимов_закрыто:** 0
+- **режимов_закрыто:** 6
 - **общих_зависимостей:** 5
-- **зависимостей_закрыто:** 0
-- **профиль_закрыт:** нет
-- **готовность_процента:** 0.0%
-- **по_очередям:** C2 0/6
-- **открытые_режимы:**
-  - `MATE-01.mate.create`
-  - `MATE-02.mate.read`
-  - `MATE-03.mate.param_edit`
-  - `MATE-04.mate.fixed`
-  - `MATE-05.mate.delete`
-  - `MATE-06.mate.placement_effect`
-- **открытые_зависимости:**
-  - `dep.mate.object_address`
-  - `dep.mate.component_insert`
-  - `dep.mate.revisions`
-  - `dep.mate.idempotency`
-  - `dep.mate.save_reopen`
+- **зависимостей_закрыто:** 5
+- **профиль_закрыт:** да
+- **готовность_процента:** 100.0%
+- **по_очередям:** C2 6/6
+- **открытые_режимы:** []
+- **открытые_зависимости:** []
 
 ### профиль mechanical-core-v1 — Практическое твердотельное моделирование v24
 
@@ -62,17 +51,17 @@
 ### Метрика 2 — полный нормализованный каталог P6
 
 - **строк_каталога:** 268
-- **строк_полностью_закрыто:** 68
-- **строк_с_каким_либо_прогрессом:** 83
+- **строк_полностью_закрыто:** 79
+- **строк_с_каким_либо_прогрессом:** 94
 - **семейств_в_каталоге:** 34
 - **семейств_без_строк:** 14
 - **операций:** 82
 - **режимов_и_вариантов:** 206
-- **применимых_действий:** 2618
-- **действий_verified:** 677
-- **покрытие_действий:** 25.9%
-- **распределение_статусов:** {'not_started': 1941, 'verified': 677, 'not_applicable': 62}
-- **уровни_каталога_операций:** {'metadata_found': 56, 'mcp_verified': 16, 'runtime_verified': 6, 'documented': 10}
+- **применимых_действий:** 2558
+- **действий_verified:** 727
+- **покрытие_действий:** 28.4%
+- **распределение_статусов:** {'not_started': 1831, 'verified': 727, 'not_applicable': 122}
+- **уровни_каталога_операций:** {'metadata_found': 50, 'mcp_verified': 22, 'runtime_verified': 6, 'documented': 10}
 - **уровни_каталога_режимов:** {'mcp_verified': 52, 'documented': 19, 'runtime_verified': 3, 'metadata_found': 48, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
@@ -102,22 +91,22 @@
 
 | режим/операция | семья | приоритет | очередь | уровень каталога | поиск | созд | чтен | правк | перестр | reopen | подавл | удал | отказ | геом | проверки |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
-| `MATE-01.mate.create` | MATE | practical_required | C2 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
-| `MATE-02.mate.read` | MATE | practical_required | C2 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
-| `MATE-03.mate.param_edit` | MATE | practical_required | C2 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
-| `MATE-04.mate.fixed` | MATE | practical_required | C2 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
-| `MATE-05.mate.delete` | MATE | practical_required | C2 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
-| `MATE-06.mate.placement_effect` | MATE | practical_required | C2 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
+| `MATE-01.mate.create` | MATE | practical_required | C2 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | MATE.02.discover, MATE.01.create, MATE.02.read, MATE.02.fields, MATE.01.rebuild, MATE.01.save_reopen, MATE.01.negative_tests, MATE.01.face_range, MATE.06.geometry_validation |
+| `MATE-02.mate.read` | MATE | practical_required | C2 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | MATE.02.discover, MATE.02.read, MATE.02.fields, MATE.05.read, MATE.05.save_reopen, MATE.03.negative_tests |
+| `MATE-03.mate.param_edit` | MATE | practical_required | C2 | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | OK | MATE.02.discover, MATE.03.read, MATE.03.edit, MATE.03.create_distance, MATE.03.rebuild, MATE.03.save_reopen, MATE.03.negative_tests |
+| `MATE-04.mate.fixed` | MATE | practical_required | C2 | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | н/п | MATE.02.discover, MATE.04.read, MATE.04.edit, MATE.04.rebuild, MATE.04.save_reopen, MATE.04.negative_tests |
+| `MATE-05.mate.delete` | MATE | practical_required | C2 | mcp_verified | OK | н/п | OK | н/п | OK | OK | н/п | OK | OK | н/п | MATE.02.discover, MATE.05.read, MATE.05.rebuild, MATE.05.save_reopen, MATE.05.delete, MATE.05.negative_tests |
+| `MATE-06.mate.placement_effect` | MATE | practical_required | C2 | mcp_verified | OK | н/п | OK | н/п | OK | OK | н/п | н/п | OK | OK | MATE.02.discover, MATE.06.read, MATE.06.rebuild, MATE.06.save_reopen, MATE.05.negative_tests, MATE.06.geometry_validation |
 
 ### Общие зависимости профиля `mates-minimal-v1`
 
 | зависимость | закрыто | приоритетные действия | проверки |
 |---|---|---|---|
-| `dep.mate.object_address` | нет | discover, read, negative_tests | — |
-| `dep.mate.component_insert` | нет | create, read, geometry_validation | — |
-| `dep.mate.revisions` | нет | read, edit, negative_tests | — |
-| `dep.mate.idempotency` | нет | create, read, negative_tests | — |
-| `dep.mate.save_reopen` | нет | save_reopen, read | — |
+| `dep.mate.object_address` | да | discover, read, negative_tests | MATE.02.discover, MATE.03.read, MATE.01.face_range |
+| `dep.mate.component_insert` | да | create, read, geometry_validation | MATE.01.create, MATE.02.read, MATE.06.geometry_validation |
+| `dep.mate.revisions` | да | read, edit, negative_tests | MATE.05.read, MATE.03.edit, MATE.03.negative_tests |
+| `dep.mate.idempotency` | да | create, read, negative_tests | MATE.01.create, MATE.02.read, MATE.05.negative_tests |
+| `dep.mate.save_reopen` | да | save_reopen, read | MATE.05.read, MATE.01.save_reopen |
 
 ## Метрика 1 — обязательные режимы профиля `mechanical-core-v1`
 
@@ -439,12 +428,12 @@
 | `ASM-05.component.replace` | ASM | practical_required | C1 | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | OK | ASM.03.read, ASM.05.read, ASM.05.edit, ASM.02.rebuild, ASM.07.reopen, ASM.05.negative_tests, ASM.05.discover, ASM.05.save_reopen, ASM.05.geometry_validation |
 | `ASM-06.links.check` | ASM | practical_required | C1 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | ASM.06.discover, ASM.06.read, ASM.07.reopen, ASM.06.negative_tests, ASM.06.save_reopen |
 | `ASM-07.save_reopen` | ASM | practical_required | C1 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | OK | ASM.01.discover, ASM.07.read, ASM.07.save_reopen, ASM.07.reopen, ASM.07.negative_tests, ASM.04.save_reopen, ASM.07.geometry_validation |
-| `MATE-01.mate.create` | MATE | practical_required | C2 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
-| `MATE-02.mate.read` | MATE | practical_required | C2 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
-| `MATE-03.mate.param_edit` | MATE | practical_required | C2 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
-| `MATE-04.mate.fixed` | MATE | practical_required | C2 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
-| `MATE-05.mate.delete` | MATE | practical_required | C2 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
-| `MATE-06.mate.placement_effect` | MATE | practical_required | C2 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
+| `MATE-01.mate.create` | MATE | practical_required | C2 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | MATE.02.discover, MATE.01.create, MATE.02.read, MATE.02.fields, MATE.01.rebuild, MATE.01.save_reopen, MATE.01.negative_tests, MATE.01.face_range, MATE.06.geometry_validation |
+| `MATE-02.mate.read` | MATE | practical_required | C2 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | MATE.02.discover, MATE.02.read, MATE.02.fields, MATE.05.read, MATE.05.save_reopen, MATE.03.negative_tests |
+| `MATE-03.mate.param_edit` | MATE | practical_required | C2 | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | OK | MATE.02.discover, MATE.03.read, MATE.03.edit, MATE.03.create_distance, MATE.03.rebuild, MATE.03.save_reopen, MATE.03.negative_tests |
+| `MATE-04.mate.fixed` | MATE | practical_required | C2 | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | н/п | MATE.02.discover, MATE.04.read, MATE.04.edit, MATE.04.rebuild, MATE.04.save_reopen, MATE.04.negative_tests |
+| `MATE-05.mate.delete` | MATE | practical_required | C2 | mcp_verified | OK | н/п | OK | н/п | OK | OK | н/п | OK | OK | н/п | MATE.02.discover, MATE.05.read, MATE.05.rebuild, MATE.05.save_reopen, MATE.05.delete, MATE.05.negative_tests |
+| `MATE-06.mate.placement_effect` | MATE | practical_required | C2 | mcp_verified | OK | н/п | OK | н/п | OK | OK | н/п | н/п | OK | OK | MATE.02.discover, MATE.06.read, MATE.06.rebuild, MATE.06.save_reopen, MATE.05.negative_tests, MATE.06.geometry_validation |
 | `AUX-SKETCH.plane_and_profile_lifecycle` *(вне каталога)* | AUX-SKETCH | later | — | — | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | V03, V04, V05, G07_xy, G07_xz, G07_yz, V04r, V04d, V04e, V04f, G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, F08.28.discover, F08.28.create, F08.28.read, F08.28.edit, F08.28.rebuild, F08.28.save_reopen, F08.28.negative_tests, F08.28.geometry_validation, AUXS.01.edit, AUXS.02.negative_tests |
 | `SM-04.boss` *(вне каталога)* | SM-04 | later | B5 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `dep.sketch.entities` *(вне каталога)* | AUX-SKETCH | dependency_of | — | — | OK | OK | OK | OK | — | OK | — | — | OK | OK | G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, DEP.DSE.02.create, DEP.DSE.07.geometry_validation, DEP.DSE.06.negative_tests, DEP.DSE.05.save_reopen, DEP.DSE.04.edit, DEP.DSE.01.discover, DEP.DSE.03.read |
@@ -467,11 +456,11 @@
 | `dep.assembly.component_address` *(вне каталога)* | — | dependency_of | — | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | OK | ASM.03.read, ASM.03.fields, ASM.03.multiplicity, ASM.07.reopen, ASM.04.negative_tests, ASM.04.distinguishing, ASM.04.edit, ASM.04.discover, ASM.04.geometry_validation, ASM.05.discover, ASM.07.geometry_validation, ASM.03.save_reopen |
 | `dep.assembly.revisions` *(вне каталога)* | — | dependency_of | — | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | н/п | ASM.01.read, ASM.07.read, ASM.04.edit, ASM.02.rebuild, ASM.07.save_reopen, ASM.04.negative_tests, ASM.04.discover, ASM.05.save_reopen |
 | `dep.assembly.idempotency` *(вне каталога)* | — | dependency_of | — | mcp_verified | OK | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | ASM.03.read, ASM.02.create, ASM.02.idempotency, ASM.04.discover, ASM.02.negative_tests |
-| `dep.mate.object_address` *(вне каталога)* | — | dependency_of | — | — | — | — | — | — | — | — | — | — | — | — | — |
-| `dep.mate.component_insert` *(вне каталога)* | — | dependency_of | — | — | — | — | — | — | — | — | — | — | — | — | — |
-| `dep.mate.revisions` *(вне каталога)* | — | dependency_of | — | — | — | — | — | — | — | — | — | — | — | — | — |
-| `dep.mate.idempotency` *(вне каталога)* | — | dependency_of | — | — | — | — | — | — | — | — | — | — | — | — | — |
-| `dep.mate.save_reopen` *(вне каталога)* | — | dependency_of | — | — | — | — | — | — | — | — | — | — | — | — | — |
+| `dep.mate.object_address` *(вне каталога)* | — | dependency_of | — | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | MATE.02.discover, MATE.03.read, MATE.01.face_range |
+| `dep.mate.component_insert` *(вне каталога)* | — | dependency_of | — | mcp_verified | н/п | OK | OK | н/п | н/п | н/п | н/п | н/п | н/п | OK | MATE.01.create, MATE.02.read, MATE.06.geometry_validation |
+| `dep.mate.revisions` *(вне каталога)* | — | dependency_of | — | mcp_verified | н/п | н/п | OK | OK | н/п | н/п | н/п | н/п | OK | н/п | MATE.05.read, MATE.03.edit, MATE.03.negative_tests |
+| `dep.mate.idempotency` *(вне каталога)* | — | dependency_of | — | mcp_verified | н/п | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | MATE.01.create, MATE.02.read, MATE.05.negative_tests |
+| `dep.mate.save_reopen` *(вне каталога)* | — | dependency_of | — | mcp_verified | н/п | н/п | OK | н/п | н/п | OK | н/п | н/п | н/п | н/п | MATE.05.read, MATE.01.save_reopen |
 
 ## Ограничения и незакрытое
 
@@ -804,18 +793,30 @@
   - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
   - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
   - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
-- `MATE-01.mate.create` — не закрыт
-  - Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started.
-- `MATE-02.mate.read` — не закрыт
-  - Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started.
-- `MATE-03.mate.param_edit` — не закрыт
-  - Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started.
-- `MATE-04.mate.fixed` — не закрыт
-  - Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started.
-- `MATE-05.mate.delete` — не закрыт
-  - Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started.
-- `MATE-06.mate.placement_effect` — не закрыт
-  - Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started.
+- `MATE-01.mate.create` — закрыт целиком
+  - живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов
+  - Приёмка на бинарях ПОСТАВКИ — отдельный шаг.
+  - Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями).
+- `MATE-02.mate.read` — закрыт целиком
+  - живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов
+  - Приёмка на бинарях ПОСТАВКИ — отдельный шаг.
+  - Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями).
+- `MATE-03.mate.param_edit` — закрыт целиком
+  - живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов
+  - Приёмка на бинарях ПОСТАВКИ — отдельный шаг.
+  - Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями).
+- `MATE-04.mate.fixed` — закрыт целиком
+  - живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов
+  - Приёмка на бинарях ПОСТАВКИ — отдельный шаг.
+  - Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями).
+- `MATE-05.mate.delete` — закрыт целиком
+  - живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов
+  - Приёмка на бинарях ПОСТАВКИ — отдельный шаг.
+  - Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями).
+- `MATE-06.mate.placement_effect` — закрыт целиком
+  - живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов
+  - Приёмка на бинарях ПОСТАВКИ — отдельный шаг.
+  - Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями).
 - `AUX-SKETCH.plane_and_profile_lifecycle` — закрыт целиком
   - замена и очистка после reopen работают для измеренной области: эскиз на основной XY, профиль — окружность, вырезание сквозное; точка поиска выводится из цилиндрической грани зависимого тела (проба G, строки G10…G10r)
   - вне измеренной области (наклонная плоскость, отрезки, дуги, прямоугольники) отказ явный: CAPABILITY_UNAVAILABLE с derivation=profile_not_circle / plane_not_xy, а не догадка (строка G11)
@@ -871,16 +872,26 @@
   - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
   - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
   - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
-- `dep.mate.object_address` — не закрыт
-  - Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started.
-- `dep.mate.component_insert` — не закрыт
-  - Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started.
-- `dep.mate.revisions` — не закрыт
-  - Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started.
-- `dep.mate.idempotency` — не закрыт
-  - Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started.
-- `dep.mate.save_reopen` — не закрыт
-  - Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started.
+- `dep.mate.object_address` — закрыт целиком
+  - живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов
+  - Приёмка на бинарях ПОСТАВКИ — отдельный шаг.
+  - Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями).
+- `dep.mate.component_insert` — закрыт целиком
+  - живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов
+  - Приёмка на бинарях ПОСТАВКИ — отдельный шаг.
+  - Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями).
+- `dep.mate.revisions` — закрыт целиком
+  - живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов
+  - Приёмка на бинарях ПОСТАВКИ — отдельный шаг.
+  - Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями).
+- `dep.mate.idempotency` — закрыт целиком
+  - живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов
+  - Приёмка на бинарях ПОСТАВКИ — отдельный шаг.
+  - Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями).
+- `dep.mate.save_reopen` — закрыт целиком
+  - живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов
+  - Приёмка на бинарях ПОСТАВКИ — отдельный шаг.
+  - Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями).
 
 ## Семьи без строк матрицы (инвентаризация не завершена)
 

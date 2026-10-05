@@ -354,6 +354,82 @@ public static class ToolCatalog
                 requiresDocument: true,
                 requiresOperationId: false),
 
+            // ===== домен сопряжений (блок C2, профиль mates-minimal-v1) =====
+            //
+            // Маршрут — решение заказчика 05.10.2026: документированный API7-путь
+            // IPart7.MateConstraints → IMateConstraints3D.Add → BaseObject1/2 → Update().
+            // ksDocument3D.AddMateConstraint НЕ применяется (возвращал False при всех
+            // документированных сочетаниях параметров; причина не установлена).
+            // Уровень возможности — mcp_implemented: код есть, живого прогона через продукт нет.
+            ReadOnly("kompas_list_mates", "Сопряжения сборки",
+                "Перечень сопряжений: тип, выравнивание, фиксация, параметр, оба базовых объекта и "
+                + "подтверждение Valid. Читается документированным MateConstraintCollection → "
+                + "ksMateConstraint.GetBaseObj(1|2)/constraintType. ВНИМАНИЕ: живой приёмки не было.",
+                Sch.Props(("document_id", Sch.Ref("#/$defs/document_id"))),
+                WorkerCommands.ListMates,
+                requiresDocument: true,
+                requiresOperationId: false),
+
+            Mutation("kompas_create_mate", "Создать сопряжение",
+                "Создаёт сопряжение между гранями двух компонентов документированным API7-путём "
+                + "(IMateConstraints3D.Add → BaseObject1/2 → Update). Объект адресуется парой "
+                + "«компонент + номер грани»; грань берётся ksPart.BodyCollection → ksBody.FaceCollection. "
+                + "Подтверждением служит Valid, а не Update()=true. ВНИМАНИЕ: живой приёмки не было.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("constraint_type", Sch.Enum(
+                        "Тип сопряжения именем (MateConstraintType).",
+                        "coincidence", "parallel", "perpendicular", "tangency",
+                        "concentric", "distance", "angle")),
+                    ("first_component_ref", Sch.Str("Ссылка на первый компонент из kompas_list_components.")),
+                    ("first_face_index", Sch.Int("Номер грани первого компонента в его FaceCollection.")),
+                    ("second_component_ref", Sch.Str("Ссылка на второй компонент.")),
+                    ("second_face_index", Sch.Int("Номер грани второго компонента.")),
+                    ("alignment", Sch.Nullable(Sch.Enum(
+                        "Вариант выравнивания направлений (ksMateConstraintAlignmentEnum).",
+                        "opposite", "cooriented", "closest"))),
+                    ("param_value", Sch.Nullable(Sch.Num("Параметр ограничения: расстояние или угол.")))),
+                WorkerCommands.CreateMate,
+                requiresDocument: true,
+                requiresRevision: true),
+
+            Mutation("kompas_set_mate_parameter", "Задать параметр сопряжения",
+                "Задаёт параметр сопряжения (расстояние или угол) и перечитывает его. "
+                + "ВНИМАНИЕ: живой приёмки не было.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("mate_ref", Sch.Str("Ссылка на сопряжение из kompas_list_mates.")),
+                    ("param_value", Sch.Num("Новое значение параметра."))),
+                WorkerCommands.SetMateParameter,
+                requiresDocument: true,
+                requiresRevision: true),
+
+            Mutation("kompas_set_mate_fixed", "Задать фиксацию сопряжением",
+                "Задаёт признак фиксации компонентов сопряжением (ksMateFixedTypeEnum: none/first/second). "
+                + "ВНИМАНИЕ: живой приёмки не было.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("mate_ref", Sch.Str("Ссылка на сопряжение из kompas_list_mates.")),
+                    ("fixed", Sch.Enum("Признак фиксации.", "none", "first", "second"))),
+                WorkerCommands.SetMateFixed,
+                requiresDocument: true,
+                requiresRevision: true),
+
+            Mutation("kompas_delete_mate", "Удалить сопряжение",
+                "Удаляет сопряжение документированным RemoveMateConstraint(constraintType, obj1, obj2); "
+                + "оба объекта берутся у самого сопряжения через GetBaseObj(1|2). "
+                + "ВНИМАНИЕ: живой приёмки не было.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("mate_ref", Sch.Str("Ссылка на сопряжение из kompas_list_mates."))),
+                WorkerCommands.DeleteMate,
+                requiresDocument: true,
+                requiresRevision: true),
+
             ReadOnly("kompas_measure", "Измерить",
                 "Габарит, объём, площадь, центр масс. Масса считается только при переданной плотности: сервер её не угадывает.",
                 Sch.Props(

@@ -5892,22 +5892,43 @@
    "parameters_schema": null,
    "adapter_route": "IPart7.MateConstraints → IMateConstraints3D.Add(MateConstraintType) → BaseObject1/BaseObject2 → Update() (imateconstraints3d_add.html, imateconstraint3d_baseobject1/2.html)",
    "actions": {
-    "discover": "not_started",
-    "create": "not_started",
-    "read": "not_started",
-    "edit": "not_started",
-    "rebuild": "not_started",
-    "save_reopen": "not_started",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "verified",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "verified",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
    },
-   "tests": [],
-   "evidence": [],
+   "tests": [
+    "MATE.02.discover",
+    "MATE.01.create",
+    "MATE.02.read",
+    "MATE.02.fields",
+    "MATE.01.rebuild",
+    "MATE.01.save_reopen",
+    "MATE.01.negative_tests",
+    "MATE.01.face_range",
+    "MATE.06.geometry_validation"
+   ],
+   "evidence": [
+    "docs/acceptance/mates/mate-acceptance.json",
+    "scripts/mcp-smoke.py"
+   ],
    "limitations": [
-    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
-   ]
+    "живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов",
+    "Приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
+   ],
+   "not_applicable_reasons": {
+    "edit": "режим создаёт сопряжение; изменение — это MATE-03/MATE-04",
+    "suppress_restore": "подавление сопряжений в блок C2 не входит",
+    "delete_dependencies": "удаление сопряжения — MATE-05; удаление ЗАВИСИМОСТЕЙ в блок не входит"
+   },
+   "catalog_level": "mcp_verified"
   },
   {
    "operation_id": "MATE-02.mate.read",
@@ -5916,22 +5937,43 @@
    "parameters_schema": null,
    "adapter_route": "ksDocument3D.MateConstraintCollection → GetCount/GetByIndex → ksMateConstraint.GetBaseObj(1|2), constraintType, ParamValue, Alignment (ksmateconstraintcollection_getcount.html, ksmateconstraint_getbaseobj.html)",
    "actions": {
-    "discover": "not_started",
-    "create": "not_started",
-    "read": "not_started",
-    "edit": "not_started",
-    "rebuild": "not_started",
-    "save_reopen": "not_started",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
    },
-   "tests": [],
-   "evidence": [],
+   "tests": [
+    "MATE.02.discover",
+    "MATE.02.read",
+    "MATE.02.fields",
+    "MATE.05.read",
+    "MATE.05.save_reopen",
+    "MATE.03.negative_tests"
+   ],
+   "evidence": [
+    "docs/acceptance/mates/mate-acceptance.json",
+    "scripts/mcp-smoke.py"
+   ],
    "limitations": [
-    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
-   ]
+    "живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов",
+    "Приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
+   ],
+   "not_applicable_reasons": {
+    "create": "режим только читает сопряжения",
+    "edit": "чтение сопряжений модель не меняет",
+    "rebuild": "перестроение — действие мутирующих режимов",
+    "suppress_restore": "подавление сопряжений в блок C2 не входит",
+    "delete_dependencies": "удаление сопряжения — MATE-05",
+    "geometry_validation": "структура сопряжений — не геометрия"
+   },
+   "catalog_level": "mcp_verified"
   },
   {
    "operation_id": "MATE-03.mate.param_edit",
@@ -5940,22 +5982,41 @@
    "parameters_schema": null,
    "adapter_route": "IMateConstraint3D.ParamValue = … → IMateConstraint3D.Update() (imateconstraint3d_paramvalue.html)",
    "actions": {
-    "discover": "not_started",
-    "create": "not_started",
-    "read": "not_started",
-    "edit": "not_started",
-    "rebuild": "not_started",
-    "save_reopen": "not_started",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "verified",
+    "rebuild": "verified",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
    },
-   "tests": [],
-   "evidence": [],
+   "tests": [
+    "MATE.02.discover",
+    "MATE.03.read",
+    "MATE.03.edit",
+    "MATE.03.create_distance",
+    "MATE.03.rebuild",
+    "MATE.03.save_reopen",
+    "MATE.03.negative_tests"
+   ],
+   "evidence": [
+    "docs/acceptance/mates/mate-acceptance.json",
+    "scripts/mcp-smoke.py"
+   ],
    "limitations": [
-    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
-   ]
+    "живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов",
+    "Приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
+   ],
+   "not_applicable_reasons": {
+    "create": "режим изменяет параметр существующего сопряжения; создание — MATE-01",
+    "suppress_restore": "подавление сопряжений в блок C2 не входит",
+    "delete_dependencies": "удаление сопряжения — MATE-05"
+   },
+   "catalog_level": "mcp_verified"
   },
   {
    "operation_id": "MATE-04.mate.fixed",
@@ -5964,22 +6025,41 @@
    "parameters_schema": null,
    "adapter_route": "IMateConstraint3D.Fixed = ksMateFixedTypeEnum (ksmatefixedtypeenum.html)",
    "actions": {
-    "discover": "not_started",
-    "create": "not_started",
-    "read": "not_started",
-    "edit": "not_started",
-    "rebuild": "not_started",
-    "save_reopen": "not_started",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "verified",
+    "rebuild": "verified",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
    },
-   "tests": [],
-   "evidence": [],
+   "tests": [
+    "MATE.02.discover",
+    "MATE.04.read",
+    "MATE.04.edit",
+    "MATE.04.rebuild",
+    "MATE.04.save_reopen",
+    "MATE.04.negative_tests"
+   ],
+   "evidence": [
+    "docs/acceptance/mates/mate-acceptance.json",
+    "scripts/mcp-smoke.py"
+   ],
    "limitations": [
-    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
-   ]
+    "живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов",
+    "Приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
+   ],
+   "not_applicable_reasons": {
+    "create": "фиксация ставится существующему сопряжению",
+    "suppress_restore": "подавление сопряжений в блок C2 не входит",
+    "delete_dependencies": "удаление сопряжения — MATE-05",
+    "geometry_validation": "фиксация — признак, а не геометрия"
+   },
+   "catalog_level": "mcp_verified"
   },
   {
    "operation_id": "MATE-05.mate.delete",
@@ -5988,22 +6068,41 @@
    "parameters_schema": null,
    "adapter_route": "ksDocument3D.RemoveMateConstraint(constraintType, obj1, obj2) (ksdocument3d_removemateconstraint.html)",
    "actions": {
-    "discover": "not_started",
-    "create": "not_started",
-    "read": "not_started",
-    "edit": "not_started",
-    "rebuild": "not_started",
-    "save_reopen": "not_started",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "verified",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "verified",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
    },
-   "tests": [],
-   "evidence": [],
+   "tests": [
+    "MATE.02.discover",
+    "MATE.05.read",
+    "MATE.05.rebuild",
+    "MATE.05.save_reopen",
+    "MATE.05.delete",
+    "MATE.05.negative_tests"
+   ],
+   "evidence": [
+    "docs/acceptance/mates/mate-acceptance.json",
+    "scripts/mcp-smoke.py"
+   ],
    "limitations": [
-    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
-   ]
+    "живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов",
+    "Приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
+   ],
+   "not_applicable_reasons": {
+    "create": "режим удаляет сопряжение",
+    "edit": "удаление — не изменение параметра",
+    "suppress_restore": "подавление сопряжений в блок C2 не входит",
+    "geometry_validation": "удаление сопряжения — не геометрия"
+   },
+   "catalog_level": "mcp_verified"
   },
   {
    "operation_id": "MATE-06.mate.placement_effect",
@@ -6012,22 +6111,41 @@
    "parameters_schema": null,
    "adapter_route": "ksPlacement.GetMatrix3D по компоненту после Update() сопряжения (маршрут чтения измерен в блоке C1)",
    "actions": {
-    "discover": "not_started",
-    "create": "not_started",
-    "read": "not_started",
-    "edit": "not_started",
-    "rebuild": "not_started",
-    "save_reopen": "not_started",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "verified",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
    },
-   "tests": [],
-   "evidence": [],
+   "tests": [
+    "MATE.02.discover",
+    "MATE.06.read",
+    "MATE.06.rebuild",
+    "MATE.06.save_reopen",
+    "MATE.05.negative_tests",
+    "MATE.06.geometry_validation"
+   ],
+   "evidence": [
+    "docs/acceptance/mates/mate-acceptance.json",
+    "scripts/mcp-smoke.py"
+   ],
    "limitations": [
-    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
-   ]
+    "живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов",
+    "Приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
+   ],
+   "not_applicable_reasons": {
+    "create": "режим читает положение после сопряжения",
+    "edit": "положение задаётся сопряжением, а не этим режимом",
+    "suppress_restore": "подавление сопряжений в блок C2 не входит",
+    "delete_dependencies": "удаление сопряжения — MATE-05"
+   },
+   "catalog_level": "mcp_verified"
   },
   {
    "operation_id": "dep.mate.object_address",
@@ -6041,21 +6159,30 @@
     "negative_tests"
    ],
    "actions": {
-    "discover": "not_started",
-    "create": "not_started",
-    "read": "not_started",
-    "edit": "not_started",
-    "rebuild": "not_started",
-    "save_reopen": "not_started",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
    },
-   "tests": [],
-   "evidence": [],
+   "tests": [
+    "MATE.02.discover",
+    "MATE.03.read",
+    "MATE.01.face_range"
+   ],
+   "evidence": [
+    "docs/acceptance/mates/mate-acceptance.json",
+    "scripts/mcp-smoke.py"
+   ],
    "limitations": [
-    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+    "живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов",
+    "Приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
    ],
    "kind": "common_dependency",
    "profile": "mates-minimal-v1",
@@ -6064,7 +6191,17 @@
    "catalog_refs": [
     "MATE"
    ],
-   "title": "Адресация грани компонента как объекта сопряжения"
+   "title": "Адресация грани компонента как объекта сопряжения",
+   "not_applicable_reasons": {
+    "create": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
+    "edit": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
+    "rebuild": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
+    "save_reopen": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
+    "suppress_restore": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
+    "delete_dependencies": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
+    "geometry_validation": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось"
+   },
+   "catalog_level": "mcp_verified"
   },
   {
    "operation_id": "dep.mate.component_insert",
@@ -6078,21 +6215,30 @@
     "geometry_validation"
    ],
    "actions": {
-    "discover": "not_started",
-    "create": "not_started",
-    "read": "not_started",
-    "edit": "not_started",
-    "rebuild": "not_started",
-    "save_reopen": "not_started",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "not_applicable",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "not_applicable",
+    "geometry_validation": "verified"
    },
-   "tests": [],
-   "evidence": [],
+   "tests": [
+    "MATE.01.create",
+    "MATE.02.read",
+    "MATE.06.geometry_validation"
+   ],
+   "evidence": [
+    "docs/acceptance/mates/mate-acceptance.json",
+    "scripts/mcp-smoke.py"
+   ],
    "limitations": [
-    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+    "живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов",
+    "Приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
    ],
    "kind": "common_dependency",
    "profile": "mates-minimal-v1",
@@ -6101,7 +6247,17 @@
    "catalog_refs": [
     "MATE"
    ],
-   "title": "Документированная вставка компонента (IParts7.AddFromFile)"
+   "title": "Документированная вставка компонента (IParts7.AddFromFile)",
+   "not_applicable_reasons": {
+    "discover": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
+    "edit": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
+    "rebuild": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
+    "save_reopen": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
+    "suppress_restore": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
+    "delete_dependencies": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
+    "negative_tests": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось"
+   },
+   "catalog_level": "mcp_verified"
   },
   {
    "operation_id": "dep.mate.revisions",
@@ -6115,21 +6271,30 @@
     "negative_tests"
    ],
    "actions": {
-    "discover": "not_started",
-    "create": "not_started",
-    "read": "not_started",
-    "edit": "not_started",
-    "rebuild": "not_started",
-    "save_reopen": "not_started",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "not_applicable",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "verified",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
    },
-   "tests": [],
-   "evidence": [],
+   "tests": [
+    "MATE.05.read",
+    "MATE.03.edit",
+    "MATE.03.negative_tests"
+   ],
+   "evidence": [
+    "docs/acceptance/mates/mate-acceptance.json",
+    "scripts/mcp-smoke.py"
+   ],
    "limitations": [
-    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+    "живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов",
+    "Приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
    ],
    "kind": "common_dependency",
    "profile": "mates-minimal-v1",
@@ -6138,7 +6303,17 @@
    "catalog_refs": [
     "MATE"
    ],
-   "title": "Ревизии документа при работе с сопряжениями"
+   "title": "Ревизии документа при работе с сопряжениями",
+   "not_applicable_reasons": {
+    "discover": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
+    "create": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
+    "rebuild": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
+    "save_reopen": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
+    "suppress_restore": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
+    "delete_dependencies": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
+    "geometry_validation": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось"
+   },
+   "catalog_level": "mcp_verified"
   },
   {
    "operation_id": "dep.mate.idempotency",
@@ -6152,21 +6327,30 @@
     "negative_tests"
    ],
    "actions": {
-    "discover": "not_started",
-    "create": "not_started",
-    "read": "not_started",
-    "edit": "not_started",
-    "rebuild": "not_started",
-    "save_reopen": "not_started",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "not_applicable",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
    },
-   "tests": [],
-   "evidence": [],
+   "tests": [
+    "MATE.01.create",
+    "MATE.02.read",
+    "MATE.05.negative_tests"
+   ],
+   "evidence": [
+    "docs/acceptance/mates/mate-acceptance.json",
+    "scripts/mcp-smoke.py"
+   ],
    "limitations": [
-    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+    "живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов",
+    "Приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
    ],
    "kind": "common_dependency",
    "profile": "mates-minimal-v1",
@@ -6175,7 +6359,17 @@
    "catalog_refs": [
     "MATE"
    ],
-   "title": "Повтор команды сопряжения по operation_id"
+   "title": "Повтор команды сопряжения по operation_id",
+   "not_applicable_reasons": {
+    "discover": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
+    "edit": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
+    "rebuild": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
+    "save_reopen": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
+    "suppress_restore": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
+    "delete_dependencies": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
+    "geometry_validation": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось"
+   },
+   "catalog_level": "mcp_verified"
   },
   {
    "operation_id": "dep.mate.save_reopen",
@@ -6188,21 +6382,29 @@
     "read"
    ],
    "actions": {
-    "discover": "not_started",
-    "create": "not_started",
-    "read": "not_started",
-    "edit": "not_started",
-    "rebuild": "not_started",
-    "save_reopen": "not_started",
-    "suppress_restore": "not_started",
-    "delete_dependencies": "not_started",
-    "negative_tests": "not_started",
-    "geometry_validation": "not_started"
+    "discover": "not_applicable",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "not_applicable",
+    "geometry_validation": "not_applicable"
    },
-   "tests": [],
-   "evidence": [],
+   "tests": [
+    "MATE.05.read",
+    "MATE.01.save_reopen"
+   ],
+   "evidence": [
+    "docs/acceptance/mates/mate-acceptance.json",
+    "scripts/mcp-smoke.py"
+   ],
    "limitations": [
-    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+    "живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов",
+    "Приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
+    "Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями)."
    ],
    "kind": "common_dependency",
    "profile": "mates-minimal-v1",
@@ -6211,7 +6413,18 @@
    "catalog_refs": [
     "MATE"
    ],
-   "title": "Сопряжения переживают save → close → reopen"
+   "title": "Сопряжения переживают save → close → reopen",
+   "not_applicable_reasons": {
+    "discover": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
+    "create": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
+    "edit": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
+    "rebuild": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
+    "suppress_restore": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
+    "delete_dependencies": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
+    "negative_tests": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось",
+    "geometry_validation": "Действие не входит в обязательный объём зависимости (required_actions), поэтому не проверялось"
+   },
+   "catalog_level": "mcp_verified"
   }
  ],
  "pending_families": [

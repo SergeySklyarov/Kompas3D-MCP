@@ -160,6 +160,10 @@ public sealed class CommandDispatcher
         WorkerCommands.InsertComponent or WorkerCommands.ReplaceComponent => 240_000,
         WorkerCommands.ListComponents or WorkerCommands.SetComponentPlacement
             or WorkerCommands.CheckComponentLinks => 240_000,
+        // Сопряжение перестраивает сборку (Update() + RebuildDocument), а перечисление читает
+        // каждый объект сопряжения через два интерфейса — бюджет тот же, что у операций сборки.
+        WorkerCommands.ListMates or WorkerCommands.CreateMate or WorkerCommands.SetMateParameter
+            or WorkerCommands.SetMateFixed or WorkerCommands.DeleteMate => 240_000,
         _ => 120_000,
     };
 
@@ -243,6 +247,11 @@ public sealed class CommandDispatcher
             WorkerCommands.SetComponentPlacement => _sta.Run(() => SetComponentPlacement(request), "asm.set_placement", cancellationToken),
             WorkerCommands.ReplaceComponent => _sta.Run(() => ReplaceComponent(request), "asm.replace_component", cancellationToken),
             WorkerCommands.CheckComponentLinks => _sta.Run(() => CheckComponentLinks(request), "asm.check_links", cancellationToken),
+            WorkerCommands.ListMates => _sta.Run(() => ListMates(request), "mate.list", cancellationToken),
+            WorkerCommands.CreateMate => _sta.Run(() => CreateMate(request), "mate.create", cancellationToken),
+            WorkerCommands.SetMateParameter => _sta.Run(() => SetMateParameter(request), "mate.set_parameter", cancellationToken),
+            WorkerCommands.SetMateFixed => _sta.Run(() => SetMateFixed(request), "mate.set_fixed", cancellationToken),
+            WorkerCommands.DeleteMate => _sta.Run(() => DeleteMate(request), "mate.delete", cancellationToken),
             WorkerCommands.Shutdown => _sta.Run(ShutdownPayload, "shutdown", cancellationToken),
             _ => throw new KompasContractException(
                 ErrorCodes.CapabilityUnavailable,
@@ -830,6 +839,21 @@ public sealed class CommandDispatcher
 
     private object? ListComponents(IpcFrame request) =>
         _session.ListComponents(Argument<ListComponentsCommand>(request));
+
+    private object? ListMates(IpcFrame request) =>
+        _session.ListMates(Argument<ListMatesCommand>(request));
+
+    private object? CreateMate(IpcFrame request) =>
+        _session.CreateMate(Argument<CreateMateCommand>(request));
+
+    private object? SetMateParameter(IpcFrame request) =>
+        _session.SetMateParameter(Argument<SetMateParameterCommand>(request));
+
+    private object? SetMateFixed(IpcFrame request) =>
+        _session.SetMateFixed(Argument<SetMateFixedCommand>(request));
+
+    private object? DeleteMate(IpcFrame request) =>
+        _session.DeleteMate(Argument<DeleteMateCommand>(request));
 
     private object? InsertComponent(IpcFrame request) =>
         _session.InsertComponent(Argument<InsertComponentCommand>(request));

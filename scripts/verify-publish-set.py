@@ -56,7 +56,7 @@ FORBIDDEN_PATHS: list[tuple[str, str]] = [
     (r"^reference/", "материалы прежнего проекта EH70, с жёсткими путями"),
     (r"^docs/acceptance/", "доказательства прогонов и приёмки"),
     (r"^docs/progress/", "дашборд наряда, производный от scripts/"),
-    (r"^test/", "данные заказчика: модели, по которым велась работа"),
+    (r"^task-drawings/", "исходные чертежи заданий, права у авторов"),
     (r"^\.qwen/", "локальное состояние инструмента разработки"),
     (r"^\.workbuddy-ai/", "память и журналы агента"),
     (r"^%SystemDrive%/", "след аварийной команды оболочки"),
@@ -675,7 +675,7 @@ def main() -> int:
            "но на GitHub такие ссылки не откроются")
 
     # 8c. Упоминания непубликуемых путей внутри публикуемых документов — не ссылкой,
-    #     а текстом (`artifacts/publish-…`, `docs/acceptance/…`, `test/…`).
+    #     а текстом (`artifacts/publish-…`, `docs/acceptance/…`, `task-drawings/…`).
     #     Класс шире, чем 8a: markdown-ссылки ловятся там, а эти — нет, и именно они
     #     показывают, для кого написан документ: для читателя внутри наряда или для
     #     читателя публичного репозитория.
@@ -685,7 +685,7 @@ def main() -> int:
     #     смысл: перечень обязан называть ровно то, что мерит.
     toplevel_dirs = {
         d for f in files for d in [f.split("/", 1)[0]] if "/" in f
-    } | {"artifacts", "test", "reference", "scratch"}
+    } | {"artifacts", "task-drawings", "reference", "scratch"}
     token_rx = re.compile(r"(?<![\w./\\-])((?:[\w.\-]+[/\\])+[\w.\-]+)")
     mention_where: dict[str, set[str]] = {}
     mention_count: dict[str, int] = {}

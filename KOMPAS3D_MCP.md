@@ -271,7 +271,8 @@ dotnet test tests\Unit\KompasMcp.Unit\KompasMcp.Unit.csproj -c Debug -p:Platform
   публикуются ни в каком виде.
 - `reference/` — справочные материалы прежнего проекта EH70: жёсткие локальные пути, для сборки,
   запуска и приёмки не требуются.
-- `test/` — модели, по которым велась работа.
+- `task-drawings/` — исходные чертежи заданий (Model Mania 2021, 2024); чертёж 2021 опубликован
+  в `docs/assets/`.
 - `config/*.json`, кроме `config/kompas-mcp.example.json` — локальные пути этой машины.
 - `docs/progress/` — дашборд наряда, производный от приборов.
 - Приборы `tools/` — кроме `KompasMcp.P0Probe` и `KompasMcp.Api7Probe`: первый нужен решению для

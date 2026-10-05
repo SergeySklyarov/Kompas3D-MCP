@@ -21,6 +21,11 @@
 
 **Что решено.** `M = Rz(прецессия)·Rx(нутация)·Rz(вращение)` — классические углы `z-x-z`.
 
+**Дословно из комментария кода (сжатие 05.10.2026).** RP.25 tried every product and exactly ONE
+matched (PNR, max diff 0; the other five, 1). INVARIANT: the 16-number layout is the one of
+<see cref="RepositionMatrix"/> — a second layout is a second way to swap rows and columns, and that
+defect is invisible on a translation.
+
 ## <a id="euler-pole"></a>Знак на полюсе параметризации (строка приёмки B3.59)
 
 **Что было.** При `nutation = 180` знак разности прецессии и вращения был взят неверно: сборка матрицы
@@ -64,3 +69,50 @@
 КОМПАС транспонированной, перенос работал, а поворот отвергался как `NO_GEOMETRY_CHANGE`. Измерено
 также (RP.4): поворот бруска `[10,30]×[0,10]×[0,5]` на +90° вокруг Z через начало даёт
 `(−10,10,0)…(0,30,5)`, то есть `(x,y) → (−y,x)`.
+
+## <a id="profile-area"></a>Площадь области профиля (KOMPAS-3D v24)
+
+**Дословно из комментария кода (сжатие 05.10.2026).** On KOMPAS-3D v24 a sketch with circles R=10 and
+r=5 extruded 10 mm deep gives <c>2356.1944901923607</c> mm³ against π·(100−25)·10 = 2356.194490192345
+(6.8e-15 relative), and a 100×80 rectangle with an r=10 circle inside gives <c>76858.4073464102</c> mm³
+against (8000−100π)·10 = 76858.40734641021. The depth-2 case is measured too: circles R=10, r=5, r=2
+extruded 10 mm give <c>2481.8581963359516</c> mm³ = π·(100−25+4)·10. A line or an arc on its own, a
+self-intersecting polyline, a degenerate (non-positive area) contour, a profile drawn outside this
+session, or a pair of contours that touch or partially overlap return null. The extrusion then reports
+"not computable" and an unverified aspect instead of inventing a target — which is the difference
+between "we checked" and "the numbers happened to look fine". Partial overlap is refused on purpose
+even though the union of two overlapping circles <i>is</i> exactly computable and was measured (R=10
+with centres 15 mm apart, 10 mm deep: <c>5829.873553201979</c> mm³ against the lens formula's
+5829.873553201976). One measured special case does not make the general case analytic, and an
+expectation special-cased until it matches is exactly how an instrument starts describing itself.
+Touching contours are refused as well, and that is deliberate: at tangency the region depends on how
+the kernel resolves a shared point or edge, which is not measured, so neither "sum" nor "difference"
+is a statement this code is entitled to make.
+
+## <a id="sketch-point-derivation"></a>Точка для ksFindObj, выведенная из модели (проба G)
+
+**Дословно из комментария кода (сжатие 05.10.2026).** For a sketch this server drew, the coordinate
+is remembered. For one it did not — a reopened document, or a model built by hand — there is no
+memory, and the product used to refuse <c>replace</c>/<c>delete_entities</c> outright. The probe
+checked it against two control points that find nothing, and confirmed the edit by measuring the
+dependent body (V 76858.4073464102 → 75476.1065788307 for R10 → R12 on a 100×80×10 plate). Everything
+else in the mapping — an inclined plane (where 3D→2D needs a transport that was never measured), a
+profile of segments, arcs or rectangles (where a cylinder gives no point that provably lies on the
+primitive) — must refuse rather than extrapolate. That boundary is the whole point of this type: it
+turns "the number happened to work" into a stated precondition.
+
+## <a id="target-body-guard"></a>Проверка целевого тела по габаритам (проба P2)
+
+**Дословно из комментария кода (сжатие 05.10.2026).** The profile may still miss the material
+entirely (a hole inside a pocket, a contour in the concave part of an L). Probe P2.6 measured that
+declaring a body the contour does not sit over makes <c>SetSketch</c>, <c>Create</c> and
+<c>RebuildDocument</c> all return true while the document does not change at all. KOMPAS does not
+report that contradiction as an error, so a no-op would otherwise be delivered as a success. The axis
+correspondence is asserted by acceptance rows <c>G07_xy</c>/<c>G07_xz</c>/<c>G07_yz</c> in
+<c>scripts/mcp-smoke.py</c>, where the same rectangle (u=10..50, v=20..40) with depth 6 produced
+exactly the boxes encoded here. A plane the server did not derive from one of the three base planes
+has no measured correspondence and yields "unknown", which the caller reports as unverified rather
+than guessing a sign — the mistake G07 was left open over. A through cut travels along the normal axis
+in both directions from the sketch plane, which sits outside the material by construction (the probe's
+cut plane was 10 mm above the bodies), so requiring the body to straddle the plane would refuse the
+very operation being measured.

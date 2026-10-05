@@ -8,18 +8,12 @@ namespace KompasMcp.Host;
 
 /// <summary>Ownership of one Host's CAD session: when it holds the journal, queue, Invoker and Worker —
 /// and when it hands them to another Host.</summary>
-/// <remarks>INVARIANT: ownership is a separate resource with explicit acquire and release, while the
-/// MCP transport lives independently of it. Transport start, <c>initialize</c>, <c>tools/list</c> and
+/// <remarks>INVARIANT: ownership is a separate resource with explicit acquire and release, while the MCP
+/// transport lives independently of it. Transport start, <c>initialize</c>, <c>tools/list</c> and
 /// diagnostic <c>health</c> take NO ownership; an ordinary CAD call takes it only as a coordinated
-/// admission of a REAL operation and only when the previous owner did not release it EXPLICITLY;
-/// release is one critical section (refuse new calls, check busy, check unsaved documents, confirm the
-/// Worker stop, then publish <c>released</c> atomically); the acquisition generation changes on every
-/// acquire, so a late callback of an old generation cannot refresh a new owner's state.
-/// LOCK ORDER: <c>_transition</c> serialises acquire and release in-process (cross-process exclusion
-/// lives in <see cref="HostOwnership"/>); <c>_callGate</c> guards the active-call counter and the
-/// <c>_releasing</c> flag. The order is always <c>_transition</c> → <c>_callGate</c>, never the
-/// reverse; only counter arithmetic runs under <c>_callGate</c>, so COM and IPC never do and there is
-/// nothing to deadlock on. History: docs/decisions/host.md#ownership-model</remarks>
+/// admission of a REAL operation and only when the previous owner did not release it EXPLICITLY; the
+/// acquisition generation changes on every acquire, so a late callback of an old generation cannot refresh a new owner's state.
+/// History: docs/decisions/host.md#ownership-model</remarks>
 public sealed class HostSession : IAsyncDisposable
 {
     public const string StatusCommand = "session.status";
@@ -472,16 +466,14 @@ public sealed class HostSession : IAsyncDisposable
     // ---------------------------------------------------------------------------------------------
 
     /// <summary>Session release with replay of the recorded outcome by <c>operation_id</c>.</summary>
-    /// <remarks>Why <c>operation_id</c> is here: line <c>S03b</c> of the <c>mcp-smoke.py</c> harness
-    /// requires a tool with <c>destructiveHint=true</c> to declare <c>operation_id</c> (published rule
-    /// §2.1). Declaration without behaviour would be "declared and swallowed", so the field is not
-    /// only declared but USED: a replay with the same id answers with the recorded outcome and does
-    /// not perform the release again. Only a TERMINAL SUCCESS is recorded: refusals
-    /// (<c>DOCUMENT_DIRTY</c>, <c>SESSION_RELEASE_BUSY</c>) and unfinished branches (the Worker did
-    /// not confirm the stop, the state was not published) are NOT recorded, because their cure is to
-    /// repeat the call and a record would make the repeat forever return the same refusal instead of
-    /// continuing cleanup. LIMIT: the record is not a journal — a Host restart carries none of it, and
-    /// this is named, not implied. History: docs/decisions/host.md#release-replay</remarks>
+    /// <remarks>Why <c>operation_id</c> is here: line <c>S03b</c> of the <c>mcp-smoke.py</c> harness requires a
+    /// tool with <c>destructiveHint=true</c> to declare <c>operation_id</c> (published rule §2.1). Declaration
+    /// without behaviour would be "declared and swallowed", so the field is USED: a replay with the same id
+    /// answers with the recorded outcome and does not release again. Only a TERMINAL SUCCESS is recorded;
+    /// refusals (<c>DOCUMENT_DIRTY</c>, <c>SESSION_RELEASE_BUSY</c>) and unfinished branches are NOT recorded
+    /// — their cure is to repeat the call. LIMIT: the record is not a journal — a Host restart carries none of it.
+    /// History: docs/decisions/host.md#release-replay</remarks>
+
     /// <summary>Remember a replay outcome and keep the map within <see cref="ReleaseReplayLimit"/>.
     /// Called under <c>_transition</c>, so it needs no separate lock.</summary>
     private void Remember(string operationId, string fingerprint, ResultEnvelope<JsonNode?> outcome)
@@ -655,11 +647,10 @@ public sealed class HostSession : IAsyncDisposable
             // closing a document with the documented ksDocument3D.close() promises no save, so silently
             // handing the session over would lose the model. The "may this be released" decision is a
             // PURE function (ReleaseGuard). Only FACTS come here: whether the Worker ran, whether the
-            // channel is alive without a restart, whether the sticky unknown-document-state flag is
-            // set, whether the client acknowledged it, whether the inventory was read and how many
-            // dirty documents it holds. Scattered across branches, this rule once let a bypass through
-            // (defect H3): after a break an intermediate call raised a new Worker, the inventory was
-            // empty and "honest", and release passed.
+            // channel is alive without a restart, whether the sticky unknown-document-state flag is set,
+            // whether the client acknowledged it, whether the inventory was read and how many dirty
+            // documents it holds. Scattered across branches, this rule once let a bypass through (defect H3).
+            // History: docs/decisions/host.md#release-guard
             var worker = _worker;
             var acknowledge = JsonScalars.ReadBool(arguments["acknowledge_unknown_document_state"]) == true;
 

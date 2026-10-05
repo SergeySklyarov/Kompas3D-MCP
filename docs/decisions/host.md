@@ -21,6 +21,14 @@ MCP-транспорт живёт независимо от него. Старт
 захвата меняется при каждом acquire, поэтому запоздалый callback старого поколения не обновляет
 состояние нового владельца.
 
+**Дословно из комментария кода (сжатие 05.10.2026).** Release is one critical section (refuse new
+calls, check busy, check unsaved documents, confirm the Worker stop, then publish <c>released</c>
+atomically). LOCK ORDER: <c>_transition</c> serialises acquire and release in-process (cross-process
+exclusion lives in <see cref="HostOwnership"/>); <c>_callGate</c> guards the active-call counter and
+the <c>_releasing</c> flag. The order is always <c>_transition</c> → <c>_callGate</c>, never the
+reverse; only counter arithmetic runs under <c>_callGate</c>, so COM and IPC never do and there is
+nothing to deadlock on.
+
 ## <a id="transport-end"></a>Завершение транспорта отдаёт сеанс (04.10.2026)
 
 **Что было.** В `finally` просто писалось `draining` до конца очистки, и второй Хост читал его как
@@ -41,6 +49,9 @@ MCP-транспорт живёт независимо от него. Старт
 **Что решено.** `tools/list` публикует один и тот же каталог владельцу и ожидающему Хосту; владение
 здесь не берётся и не обновляется. Отказ доставляется там, где протокол его несёт, — конвертом
 вызова.
+
+**Дословно из комментария кода (сжатие 05.10.2026).** Ownership is neither taken nor refreshed here:
+taking it here was the 04.10.2026 defect.
 
 ## <a id="worker-restart-warning"></a>Вызов, перезапустивший Worker, называет это (05.10.2026)
 
@@ -70,6 +81,12 @@ MCP-транспорт живёт независимо от него. Старт
 только ТЕРМИНАЛЬНЫЙ УСПЕХ; отказы и незавершённые ветки лечатся повтором и не записываются. Запись —
 не журнал: перезапуск Хоста её не несёт.
 
+**Дословно из комментария кода (сжатие 05.10.2026).** Unfinished branches (the Worker did not
+confirm the stop, the state was not published) are NOT recorded, because their cure is to repeat the
+call and a record would make the repeat forever return the same refusal instead of continuing
+cleanup. LIMIT: the record is not a journal — a Host restart carries none of it, and this is named,
+not implied.
+
 ## <a id="release-guard"></a>Решение «можно ли освобождать» — чистая функция (05.10.2026)
 
 **Что было.** Правило было разложено по ветвям `HostSession.ReleaseAsync` и один раз уже пропустило
@@ -83,6 +100,13 @@ MCP-транспорт живёт независимо от него. Старт
 (`acknowledge_unknown_document_state=true`) пропускает шаги 3 и 4 (отказы по каналу и непрочитанной
 описи); шаг 5 (известные несохранённые документы) НЕ пропускается (находка §4 задания 05.10.2026).
 
+**Дословно из комментария кода (сжатие 05.10.2026).** The sticky unknown-state flag comes FIRST: it
+covers the case the channel cannot catch. The client takes on that the previous Worker's edits may
+remain unsaved in KOMPAS. There is no silent exit; acknowledgement also lifts the CHANNEL refusals
+(steps 3 and 4), else a broken channel would be a dead end right after a break. Scattered across
+branches, this rule once let a bypass through (defect H3): after a break an intermediate call raised
+a new Worker, the inventory was empty and "honest", and release passed.
+
 ## <a id="sticky-unknown"></a>Липкий признак неизвестного состояния документов (05.10.2026)
 
 **Что было.** Правка H3 закрыла прямой путь обхода защиты `DOCUMENT_DIRTY`, но оставался обходной:
@@ -95,6 +119,12 @@ MCP-транспорт живёт независимо от него. Старт
 перезапускается (`MarkBroken`, выход процесса, перезапуск в `EnsureStartedAsync`), и НЕ снимается сам
 по себе. Сбрасывается только явным действием клиента — освобождением с подтверждением неизвестного
 состояния.
+
+**Дословно из комментария кода (сжатие 05.10.2026).** Set as soon as a Worker that ran is lost or
+restarted (<see cref="MarkBroken"/>, process exit, restart in <see cref="EnsureStartedAsync"/>), and
+never cleared by itself — only by an explicit client action, a release acknowledging the unknown
+state. <see cref="EnsureStartedAsync"/> stops the old Worker and raises a NEW one with no documents;
+release passes although the previous Worker's edits may remain unsaved in KOMPAS.
 
 ## <a id="restart-state-loss"></a>Перезапуск Worker — потеря состояния документов (05.10.2026)
 
@@ -142,6 +172,9 @@ Worker (20 с ожидания, затем убийство) и поднимал
 **Что решено.** Для описи есть отдельный `SendWithoutRestartAsync`, который не поднимает новый Worker
 при сломанном канале. Сломанный канал — это отказ описи, а не «правок нет».
 
+**Дословно из комментария кода (сжатие 05.10.2026).** It also kills a process that may be inside a
+COM call, against the meaning of <see cref="MarkBroken"/> (defect H3, review 05.10.2026).
+
 ## <a id="no-tree-kill"></a>Дерево процессов не убивается; ожидание асинхронное (05.10.2026)
 
 **Что было.** Собственный (launched) экземпляр KOMPAS порождён процессом Worker через COM, то есть
@@ -155,6 +188,11 @@ Worker (20 с ожидания, затем убийство) и поднимал
 для НЕ отвечающего Worker'а. Названное следствие: если Worker снимается убийством, его KOMPAS может
 остаться запущенным. Ожидание выхода — асинхронное.
 
+**Дословно из комментария кода (сжатие 05.10.2026).** Give the Worker time to shut down its own
+KOMPAS instance gracefully. If it does not exit, only the Worker is terminated — never the CAD
+application it was talking to. Named consequence: if the Worker is killed, its KOMPAS may stay
+running, and that is named in the answer, not hidden.
+
 ## <a id="path-fields"></a>Классы путевых полей save_path и source_path (наряд C1, проба P4)
 
 **Что измерено.** Проба P4 наряда: ЯДРО путь не проверяет — на запрещённых символах оно записало
@@ -165,6 +203,9 @@ Worker (20 с ожидания, затем убийство) и поднимал
 **Что решено.** Оба имени названы в списке путевых полей, потому что политика путей судит поле по
 ИМЕНИ: без них путь вставки/замены компонента уходил бы за разрешённый корень без отказа.
 Единственная защита от такого пути — отказ ХОСТА до COM.
+
+**Дословно из комментария кода (сжатие 05.10.2026).** A component insert/replace path would slip
+past the allowed root without a refusal.
 
 ## <a id="running-poll"></a>Опрос идёт повтором той же команды (05.10.2026)
 
@@ -326,6 +367,11 @@ stdout (stdout — транспорт MCP). Повторяющиеся сооб�
 обязательно: Хост не проверяет схемы инструментов сеанса (они обязаны отвечать без Worker), поэтому
 «обязательное» объявление было бы обещанием, которого никто не исполняет.
 
+**Дословно из комментария кода (сжатие 05.10.2026).** The product is brought to the rule, not the
+rule to the product. <see cref="ToolBehaviour.HostLocal"/> leaves it outside
+<see cref="ToolDefinition.IsMutation"/>. The Host does not validate session-tool schemas (they must
+answer without a Worker), so a "required" declaration would be a promise nobody keeps.
+
 ## <a id="cut-plane-side"></a>Сторона плоскости отсечения задаётся командой
 
 **Что решено.** Способ «базовая плоскость + смещение» объявлен, но не поддержан: маршрут
@@ -333,3 +379,20 @@ stdout (stdout — транспорт MCP). Повторяющиеся сооб�
 `CAPABILITY_UNAVAILABLE`, а не подставляет догадку о знаке нормали базовой плоскости. Сторону задаёт
 знак `s = n·(p − p₀)` в самой команде отсечения, потому что «левая сторона» без системы координат —
 не адрес.
+
+## <a id="worker-child-process"></a>Worker — дочерний процесс (spec 1.5)
+
+**Дословно из комментария кода (сжатие 05.10.2026).** The child is started with a unique,
+session-scoped pipe name and is expected to exit on Host disconnect. Several tool calls may be in
+flight at once — a long mutation and a <c>kompas_health</c> probe is the case the design exists for
+— and the channel routes each answer back by request id. Reading the pipe from the caller was the
+18.09.2026 defect: two concurrent callers interleaved bytes and corrupted the stream.
+
+## <a id="text-block-envelope"></a>Конверт едет в TEXT-блоке (измерено 18.09.2026)
+
+**Дословно из комментария кода (сжатие 05.10.2026).** With a summary-only text block the agent saw
+  "kompas_health: succeeded | verified: argumentvalidated"
+and no document_id, no revision, no error code and no measurement — so §5 of the client-acceptance
+scenario could not be executed at all, while all 671 acceptance rows stayed green because
+mcp-smoke.py reads structuredContent directly. The same blindness as the transport defect: the
+instrument reads what the client does not.

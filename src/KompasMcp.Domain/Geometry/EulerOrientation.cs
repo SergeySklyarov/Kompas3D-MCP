@@ -4,14 +4,10 @@ namespace KompasMcp.Domain.Geometry;
 /// (<c>ILocalCoordinateSystem.OrientationType = ksEulerCorners</c>).</summary>
 /// <remarks>MEASURED (probe --reposition-params, run a336120926fc4652a8bf737562568271, step RP.25): the
 /// orientation is stored as PARAMETERS, not a matrix — the angle triple survives reopening, and the
-/// translation is read via <c>ksPDisplace</c> + <c>IPoint3DParamDisplace.DX/DY/DZ</c>.
-/// INVARIANT: <c>M = Rz(precession)·Rx(nutation)·Rz(rotation)</c> (z-x-z), MEASURED not guessed — DOC
-/// gives the order only as a picture (<c>rotation_pict.html</c>), so RP.25 tried every product and
-/// exactly ONE matched (PNR, max diff 0; the other five, 1). MEASURED: units are DEGREES.
-/// INVARIANT: the 16-number layout is the one of <see cref="RepositionMatrix"/> — a second layout is a
-/// second way to swap rows and columns, and that defect is invisible on a translation.
-/// LIMIT: the parametrisation is ambiguous at nutation 0/180, so validity is proved by MATRIX
-/// EQUIVALENCE, not by matching numbers. History: docs/decisions/geometry.md#euler</remarks>
+/// translation is read via <c>ksPDisplace</c> + <c>IPoint3DParamDisplace.DX/DY/DZ</c>; units are DEGREES.
+/// INVARIANT: <c>M = Rz(precession)·Rx(nutation)·Rz(rotation)</c> (z-x-z), MEASURED not guessed (DOC gives
+/// the order only as a picture, <c>rotation_pict.html</c>: RP.25 tried every product, ONE matched — PNR).
+/// LIMIT: ambiguous at nutation 0/180; validity is proved by MATRIX EQUIVALENCE, not by matching numbers. History: docs/decisions/geometry.md#euler</remarks>
 public static class EulerOrientation
 {
     /// <summary>Matrix comparison tolerance: dimensionless values of order one.</summary>

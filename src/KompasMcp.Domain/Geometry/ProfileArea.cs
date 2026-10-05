@@ -3,32 +3,13 @@ using KompasMcp.Contracts;
 namespace KompasMcp.Domain.Geometry;
 
 /// <summary>Analytic area of the <b>region</b> a sketch profile encloses, used as the expected value for an
-/// extrusion (spec 1.11: volume must be compared against an analytic expectation, a silent PASS is
-/// forbidden).</summary>
-/// <remarks>
-/// The region, not the sum of the primitives: a contour lying inside another one is a hole in it, so
-/// a disk with a concentric circle is an annulus (π(R²−r²)), not π(R²+r²). That distinction is
-/// measured, not assumed — on KOMPAS-3D v24 a sketch with circles R=10 and r=5 extruded 10 mm deep
-/// gives <c>2356.1944901923607</c> mm³ against π·(100−25)·10 = 2356.194490192345 (6.8e-15 relative),
-/// and a 100×80 rectangle with an r=10 circle inside gives <c>76858.4073464102</c> mm³ against
-/// (8000−100π)·10 = 76858.40734641021. Nesting is resolved by the even-odd rule — every contour
-/// strictly inside another flips the sign of its area — and the depth-2 case is measured too:
-/// circles R=10, r=5, r=2 extruded 10 mm give <c>2481.8581963359516</c> mm³ = π·(100−25+4)·10.
-/// Only shapes whose region is exactly computable from the primitives the caller sent are answered:
-/// circles, rectangles and closed polylines. A line or an arc on its own, a self-intersecting
-/// polyline, a degenerate (non-positive area) contour, a profile drawn outside this session, or a
-/// pair of contours that <b>touch or partially overlap</b> return null. The extrusion then reports
-/// "not computable" and an unverified aspect instead of inventing a target — which is the difference
-/// between "we checked" and "the numbers happened to look fine".
-/// Partial overlap is refused on purpose even though the union of two overlapping circles <i>is</i>
-/// exactly computable and was measured (R=10 with centres 15 mm apart, 10 mm deep:
-/// <c>5829.873553201979</c> mm³ against the lens formula's 5829.873553201976). One measured special
-/// case does not make the general case analytic, and an expectation special-cased until it matches is
-/// exactly how an instrument starts describing itself.
-/// Touching contours are refused as well, and that is deliberate: at tangency the region depends on
-/// how the kernel resolves a shared point or edge, which is not measured, so neither "sum" nor
-/// "difference" is a statement this code is entitled to make.
-/// </remarks>
+/// extrusion (spec 1.11: a silent PASS is forbidden — volume must be compared against an analytic expectation).</summary>
+/// <remarks>The region, not the sum of the primitives: a contour inside another is a hole, so a disk with a
+/// concentric circle is an annulus (π(R²−r²)), not π(R²+r²) — MEASURED, not assumed. Nesting is resolved by
+/// the even-odd rule: every contour strictly inside another flips the sign of its area. Only shapes whose
+/// region is exactly computable from the primitives the caller sent are answered (circles, rectangles,
+/// closed polylines); everything else returns null and the extrusion reports "not computable".
+/// History: docs/decisions/geometry.md#profile-area</remarks>
 public static class ProfileArea
 {
     /// <summary>Length tolerance of the geometric predicates, in mm.</summary>

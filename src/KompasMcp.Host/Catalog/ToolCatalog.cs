@@ -978,15 +978,13 @@ public static class ToolCatalog
                         "в коллекции не принимаются — они не постоянные идентификаторы.",
                         1, 64)),
                     ("thickness_mm", Sch.PositiveMm("Толщина стенки")),
-                    // The NAME of this field is a defect fix, not style. The first revision declared it
-                    // as `direction`, while the command record (`ShellCommand`) carries `ThinDirection`
-                    // — `thin_direction` on the wire. The Host passes arguments to the Worker AS IS and
-                    // the Worker binds them by snake_case name, so `direction` never reached the command
-                    // at all: MEASURED 20.09.2026 that `direction: "outward"` passed the schema and gave
-                    // a volume of 21631.999999999996 — exactly "inward" — while `kompas_get_feature` read
-                    // back `thin_direction: "inward"`. The only name the command binds, `thin_direction`,
-                    // was FORBIDDEN by the schema, so the wall direction was inexpressible and the
-                    // declared parameter was "declared and swallowed".
+                    // The NAME of this field is a defect fix, not style. The first revision declared it as `direction`,
+                    // while the command record (`ShellCommand`) carries `ThinDirection` — `thin_direction` on the wire.
+                    // The Host passes arguments to the Worker AS IS and the Worker binds them by snake_case name, so
+                    // `direction` never reached the command at all: MEASURED 20.09.2026 that `direction: "outward"` passed
+                    // the schema and gave a volume of 21631.999999999996 — exactly "inward" — while `kompas_get_feature`
+                    // read back `thin_direction: "inward"`. The only name the command binds, `thin_direction`, was FORBIDDEN
+                    // by the schema, so the wall direction was inexpressible and the declared parameter was "declared and swallowed".
                     // History: docs/decisions/host.md#thin-direction
                     ("thin_direction", Sch.Nullable(Sch.Enum(
                         "Направление формирования стенки: inward — материал внутрь (thinType = true, " +
@@ -2231,17 +2229,12 @@ public static class ToolCatalog
     }
 
     /// <summary>A session-control tool: handled by the Host itself, not the Worker.</summary>
-    /// <remarks>A separate factory rather than <see cref="ReadOnly"/>/<see cref="Mutation"/>: these
-    /// tools write no operation journal (session release is not a model mutation) and must answer when
-    /// there is no CAD channel at all. The <c>destructive</c> mark on release is honest: it ends the
-    /// session and closes the documents. Why release still has <c>operation_id</c>: MEASURED
-    /// 04.10.2026 (line <c>S03b</c> of <c>mcp-smoke.py</c>) that published rule §2.1 requires a tool
-    /// annotated <c>destructiveHint=true</c> to declare <c>operation_id</c> — the product is brought to
-    /// the rule, not the rule to the product. Release declares the field and replays the outcome itself
-    /// (<see cref="ToolBehaviour.ReplaysOperationId"/>) but still keeps no journal:
-    /// <see cref="ToolBehaviour.HostLocal"/> leaves it outside <see cref="ToolDefinition.IsMutation"/>.
-    /// The field is NOT required — the Host does not validate session-tool schemas (they must answer
-    /// without a Worker), so a "required" declaration would be a promise nobody keeps.
+    /// <remarks>A separate factory rather than <see cref="ReadOnly"/>/<see cref="Mutation"/>: these tools
+    /// write no operation journal (session release is not a model mutation) and must answer when there is no
+    /// CAD channel at all. The <c>destructive</c> mark on release is honest: it ends the session and closes
+    /// the documents. Why release still has <c>operation_id</c>: MEASURED 04.10.2026 (line <c>S03b</c> of
+    /// <c>mcp-smoke.py</c>) that published rule §2.1 requires a tool annotated <c>destructiveHint=true</c> to
+    /// declare <c>operation_id</c>; release declares it and replays the outcome itself (<see cref="ToolBehaviour.ReplaysOperationId"/>), field NOT required.
     /// History: docs/decisions/host.md#control-operation-id</remarks>
     private static ToolDefinition Control(
         string name,

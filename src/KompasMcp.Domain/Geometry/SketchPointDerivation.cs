@@ -4,25 +4,12 @@ namespace KompasMcp.Domain.Geometry;
 
 /// <summary>Where a coordinate for <c>ksFindObj</c> can be derived from when the server has no memory of
 /// drawing the sketch at all, and under exactly which conditions that derivation is allowed.</summary>
-/// <remarks>
-/// <b>Why this exists.</b> API5 has no sketch enumeration: <c>ksSketchDefinition</c> has no counter
-/// and no walker, and <c>ksDocument2D</c> exposes <c>ksFindObj</c>/<c>ksDeleteObj</c> but no
-/// <c>ksFirstObj</c>/<c>ksNextObj</c>. So the only way to point at an existing sketch primitive is
-/// a coordinate that lies on it. For a sketch this server drew, the coordinate is remembered. For
-/// one it did not — a reopened document, or a model built by hand — there is no memory, and the
-/// product used to refuse <c>replace</c>/<c>delete_entities</c> outright.
-/// <b>What probe G measured.</b> The coordinate can be read back out of the model itself: a
-/// through hole leaves a cylindrical face, and that face yields centre, radius and axis. The point
-/// <c>(cx + r; cy)</c> then lies on the sketch circle. This is not a guess — the probe checked it
-/// against two control points that find nothing, and confirmed the edit by measuring the dependent
-/// body (V 76858.4073464102 → 75476.1065788307 for R10 → R12 on a 100×80×10 plate).
-/// <b>Where the measurement stops.</b> The derivation is proven for one configuration only: a
-/// sketch on the base XY plane, a circle in the profile, and a through cut. Everything else in the
-/// mapping — an inclined plane (where 3D→2D needs a transport that was never measured), a profile
-/// of segments, arcs or rectangles (where a cylinder gives no point that provably lies on the
-/// primitive) — must refuse rather than extrapolate. That boundary is the whole point of this
-/// type: it turns "the number happened to work" into a stated precondition.
-/// </remarks>
+/// <remarks>API5 has no sketch enumeration: <c>ksSketchDefinition</c> has no counter and no walker, and
+/// <c>ksDocument2D</c> exposes <c>ksFindObj</c>/<c>ksDeleteObj</c> but no <c>ksFirstObj</c>/<c>ksNextObj</c>,
+/// so the only way to point at an existing primitive is a coordinate that lies on it. MEASURED (probe G): a
+/// through hole leaves a cylindrical face that yields centre, radius and axis, and <c>(cx + r; cy)</c> lies on
+/// the sketch circle. LIMIT: proven for one configuration only — a sketch on the base XY plane, a circle in the profile, and a through cut; everything else must refuse rather than extrapolate.
+/// History: docs/decisions/geometry.md#sketch-point-derivation</remarks>
 public static class SketchPointDerivation
 {
     /// <summary>Unit-vector agreement, generous enough for a placement read back from COM.</summary>
@@ -32,16 +19,12 @@ public static class SketchPointDerivation
     public const double RadiusToleranceMm = 1e-6;
 
     /// <summary>Whether a model-derived point may be used at all for the sketch being edited.</summary>
-    /// <param name="planeBase">
-    /// The base plane the sketch sits on, when the server chose it. Null means the sketch was built
-    /// on a referenced plane or one the server did not create, and the 3D→2D mapping for that case
-    /// was not measured.
-    /// </param>
-    /// <param name="profileKinds">
-    /// Kinds of the primitives the caller asks to write. The derivation yields a point that lies on
-    /// a circle; a caller replacing the profile with segments would be handed a point that may lie
-    /// on nothing.
-    /// </param>
+    /// <param name="planeBase">The base plane the sketch sits on, when the server chose it. Null means the
+    /// sketch was built on a referenced plane or one the server did not create, and the 3D→2D mapping for
+    /// that case was not measured.</param>
+    /// <param name="profileKinds">Kinds of the primitives the caller asks to write. The derivation yields a
+    /// point that lies on a circle; a caller replacing the profile with segments would be handed a point
+    /// that may lie on nothing.</param>
     public static SketchDerivationVerdict Verdict(
         PlaneBase? planeBase,
         IReadOnlyCollection<SketchEntityKind> profileKinds)

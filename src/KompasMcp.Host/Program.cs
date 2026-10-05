@@ -161,12 +161,11 @@ public static class Program
 
     /// <summary>The tool list: the same catalog for the owner and for a waiting Host.</summary>
     /// <remarks>INVARIANT: the catalog does not depend on ownership. An earlier refusal arrived at
-    /// <c>initialize</c>, leaving the second chat with ZERO tools: it could neither learn the reason
-    /// nor release the other session. A refusal is not returned here for a second reason (MEASURED
-    /// 21.09.2026, probe P2): an exception thrown from this handler never reaches the client — the SDK
-    /// replaces it with <c>-32603</c>, losing the text — so refusals travel where the protocol carries
-    /// them, in the call envelope (<see cref="CallToolAsync"/>). Ownership is neither taken nor
-    /// refreshed here: taking it here was the 04.10.2026 defect.
+    /// <c>initialize</c>, leaving the second chat with ZERO tools: it could neither learn the reason nor
+    /// release the other session. A refusal is not returned here for a second reason (MEASURED 21.09.2026,
+    /// probe P2): an exception thrown from this handler never reaches the client — the SDK replaces it with
+    /// <c>-32603</c>, losing the text — so refusals travel where the protocol carries them, in the call
+    /// envelope (<see cref="CallToolAsync"/>). Ownership is neither taken nor refreshed here.
     /// History: docs/decisions/host.md#listtools-no-ownership</remarks>
     private static ValueTask<ListToolsResult> ListTools(RequestContext<ListToolsRequestParams> request, CancellationToken cancellationToken, HostLog log)
     {
@@ -295,21 +294,14 @@ public static class Program
         var jsonText = json.ToJsonString();
         var content = new System.Collections.Generic.List<ModelContextProtocol.Protocol.ContentBlock>
         {
-            // The summary line is for a human reading a log; the envelope underneath is what a
-            // client actually acts on. Both must travel in the TEXT block, not only in
-            // structuredContent.
-            //
-            // Measured 18.09.2026 on the live client (WorkBuddy AI 5.5.2, build 910352f0):
-            // its `convertMcpResult` builds the model-visible content from text blocks ONLY and
-            // parks structuredContent in `mcpMeta`, which reaches the UI but never the agent.
-            // With a summary-only text block the agent saw
-            //   "kompas_health: succeeded | verified: argumentvalidated"
-            // and no document_id, no revision, no error code and no measurement — so §5 of the
-            // client-acceptance scenario could not be executed at all, while all 671 acceptance
-            // rows stayed green because mcp-smoke.py reads structuredContent directly.
-            // The same blindness as the transport defect: the instrument reads what the client
-            // does not. MCP 2025-06-18 asks a tool that returns structured content to also
+            // The summary line is for a human reading a log; the envelope underneath is what a client actually
+            // acts on. Both must travel in the TEXT block, not only in structuredContent. MEASURED 18.09.2026 on
+            // the live client (WorkBuddy AI 5.5.2, build 910352f0): its `convertMcpResult` builds the model-visible
+            // content from text blocks ONLY and parks structuredContent in `mcpMeta`, which reaches the UI but
+            // never the agent, so a summary-only text block left the agent with no document_id, no revision, no
+            // error code and no measurement. MCP 2025-06-18 asks a tool that returns structured content to also
             // return the serialized JSON in a text block for exactly this reason.
+            // History: docs/decisions/host.md#text-block-envelope
             new ModelContextProtocol.Protocol.TextContentBlock { Text = summary + "\n" + jsonText },
         };
 

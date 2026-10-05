@@ -13,30 +13,22 @@ using KompasMcp.Host.Catalog;
 namespace KompasMcp.Host;
 
 /// <summary>Turns a validated MCP tool call into exactly one Worker command.</summary>
-/// <remarks>
-/// Ordered so that the guarantees hold without extra ceremony:
-/// <list type="bullet">
-/// <item>schema validation (unknown field, NaN, negative length, bad enum) — no COM call yet;</item>
-/// <item>path policy — a refusal here never touches the model;</item>
-/// <item><b>durable journal append</b> — before dispatch, so a crash afterwards is recoverable as
-/// outcome-unknown rather than as "it never happened";</item>
-/// <item>bounded queue → single Worker dispatch;</item>
-/// <item>terminal journal record with the result or the error.</item>
-/// </list>
-/// The same <c>operation_id</c> with the same arguments returns the recorded outcome instead of
-/// re-running: that is what makes a client retry after a timeout safe for reads and honest for
-/// writes.
-/// </remarks>
+/// <remarks>Ordered so that the guarantees hold without extra ceremony: schema validation (unknown
+/// field, NaN, negative length, bad enum) — no COM call yet; path policy — a refusal here never touches
+/// the model; <b>durable journal append</b> — before dispatch, so a crash afterwards is recoverable as
+/// outcome-unknown rather than as "it never happened"; bounded queue → single Worker dispatch; terminal
+/// journal record with the result or the error. The same <c>operation_id</c> with the same arguments
+/// returns the recorded outcome instead of re-running: that is what makes a client retry after a timeout
+/// safe for reads and honest for writes.</remarks>
 public sealed class ToolInvoker : IAsyncDisposable
 {
     // save_path is the same class of field as output_path/target_path: a file destination. Named
-    // separately because for a raster snapshot it means "where to put the picture", and the policy
-    // must judge it just as strictly: MEASURED (probe P4) that the CORE does not check the path — on
-    // forbidden characters it wrote a truncated empty file, and a missing directory it created
-    // itself. The only defence against such a path is a HOST refusal before COM.
-    // source_path is the assembly component's source file (order C1): same class as input_path, i.e.
-    // a READ, not a write. Named here because the path policy judges a field by its NAME, and without
-    // this line a component insert/replace path would slip past the allowed root without a refusal.
+    // separately because for a raster snapshot it means "where to put the picture", and the policy must
+    // judge it just as strictly: MEASURED (probe P4) that the CORE does not check the path — on forbidden
+    // characters it wrote a truncated empty file, and a missing directory it created itself; the only
+    // defence is a HOST refusal before COM. source_path is the assembly component's source file (order C1):
+    // same class as input_path, i.e. a READ, not a write — named here because the path policy judges a field
+    // by its NAME, and without this line a component insert/replace path would slip past the allowed root.
     // History: docs/decisions/host.md#path-fields
     private static readonly string[] PathFields = { "path", "output_path", "target_path", "input_path", "save_path", "source_path" };
 

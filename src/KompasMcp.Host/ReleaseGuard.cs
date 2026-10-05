@@ -3,14 +3,10 @@ using KompasMcp.Contracts;
 namespace KompasMcp.Host;
 
 /// <summary>The facts the "may this session be released" decision depends on.</summary>
-/// <remarks>Split into a record so the decision is a PURE function: a table-driven test needs neither
-/// KOMPAS, nor a Worker, nor a live Host, and the rule stops being scattered across the branches of
-/// <see cref="HostSession.ReleaseAsync"/>.</remarks>
+/// <remarks>A record so the decision is a PURE function: a table-driven test needs neither KOMPAS, nor a Worker, nor a live Host, and the rule is not scattered across <see cref="HostSession.ReleaseAsync"/>.</remarks>
 /// <param name="WorkerStarted">Whether the Worker ran in this session (there may have been no COM session at all).</param>
-/// <param name="CanSendWithoutRestart">Whether the channel is alive enough to request the inventory
-/// WITHOUT restarting the Worker. False here is not "no edits" but "the inventory cannot be obtained".</param>
-/// <param name="DocumentStateUnknown">Sticky flag: the Worker was lost or restarted, and what became of
-/// its documents is unknown.</param>
+/// <param name="CanSendWithoutRestart">Whether the channel is alive enough to request the inventory WITHOUT restarting the Worker. False here is not "no edits" but "the inventory cannot be obtained".</param>
+/// <param name="DocumentStateUnknown">Sticky flag: the Worker was lost or restarted, and what became of its documents is unknown.</param>
 /// <param name="AcknowledgeUnknownDocumentState">The client EXPLICITLY accepted the unknown document state.</param>
 /// <param name="InventoryRead">Whether the document inventory was read.</param>
 /// <param name="DirtyCount">How many documents with unsaved edits were listed.</param>
@@ -26,15 +22,12 @@ public sealed record ReleaseFacts(
 public sealed record ReleaseDecision(bool Proceed, string? RefusalCode, string? Reason);
 
 /// <summary>The "may this session be released" decision — a PURE function of <see cref="ReleaseFacts"/>.</summary>
-/// <remarks>The order of the checks is the meaning, not decoration. The sticky unknown-state flag
-/// comes FIRST: it covers the case the channel cannot catch. After a channel break any CAD call
-/// raises a NEW Worker with no documents at all, whose inventory is empty and honest — empty precisely
-/// because the documents were LOST, not because there were no edits. Checking "is the channel alive"
-/// and "is the inventory empty" first would skip exactly the state the flag exists for (defect H3,
-/// review 05.10.2026). The only way to release an unknown-state session is an explicit
-/// <c>acknowledge_unknown_document_state: true</c>: the client takes on that the previous Worker's
-/// edits may remain unsaved in KOMPAS. There is no silent exit; acknowledgement also lifts the CHANNEL
-/// refusals (steps 3 and 4), else a broken channel would be a dead end right after a break.
+/// <remarks>The order of the checks is the meaning. The sticky unknown-state flag comes FIRST: after a
+/// channel break any CAD call raises a NEW Worker with no documents, whose inventory is empty and honest
+/// — empty precisely because the documents were LOST, not because there were no edits; checking "is the
+/// channel alive" and "is the inventory empty" first would skip exactly the state the flag exists for
+/// (defect H3, review 05.10.2026). The only way to release is an explicit
+/// <c>acknowledge_unknown_document_state: true</c>; acknowledgement also lifts the CHANNEL refusals (steps 3 and 4).
 /// History: docs/decisions/host.md#release-guard</remarks>
 public static class ReleaseGuard
 {

@@ -7,10 +7,9 @@ namespace KompasMcp.Domain.Geometry;
 /// <remarks>The contours are kept, not the area: one scalar cannot express nesting. Measured 24.09.2026 — with
 /// a stored sum, appending a circle inside another one produced exactly the figure of drawing both at
 /// once (π·100 + π·25 = π·125 = 392.699081698724), so no later edit could ever turn the value into a
-/// hole. Keeping the entities lets <see cref="ProfileArea"/> see the whole profile at once, in
-/// whatever order the caller built it.
-/// The area is computed on demand rather than cached: it is read once per extrusion, and a cached
-/// figure is one more thing that can go stale against the contour list it describes.</remarks>
+/// hole. Keeping the entities lets <see cref="ProfileArea"/> see the whole profile at once, in whatever
+/// order the caller built it. The area is computed on demand rather than cached: it is read once per
+/// extrusion, and a cached figure is one more thing that can go stale against the contour list it describes.</remarks>
 public sealed class SketchProfile
 {
     private readonly List<SketchEntityDto> _entities = new();

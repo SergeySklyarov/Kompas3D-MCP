@@ -5,13 +5,11 @@ namespace KompasMcp.Domain.Geometry;
 /// <summary>Axis-aligned box of the primitives the server itself drew into a sketch, in sketch-local
 /// millimetres (<c>u</c> along sketch X, <c>v</c> along sketch Y).</summary>
 /// <remarks>The box is deliberately an <b>over-approximation</b>, never an under-approximation, because the
-/// only consumer is <see cref="TargetBodyGuard.ProfileMayAffectBody"/>: that test refuses an
-/// operation, so a box that is too small would refuse legitimate work, while a box that is too big
-/// only weakens the refusal. An arc is therefore boxed by its full circle, and a polyline by the
-/// rectangle around its vertices.
-/// Null is returned for anything whose extent cannot be stated (a missing coordinate pair, an
-/// unknown kind). Absence is reported as absence — the caller then says "not checked" instead of
-/// treating an empty box as a proof.</remarks>
+/// only consumer is <see cref="TargetBodyGuard.ProfileMayAffectBody"/>: that test refuses an operation, so a
+/// box that is too small would refuse legitimate work, while a box that is too big only weakens the refusal.
+/// An arc is therefore boxed by its full circle, and a polyline by the rectangle around its vertices. Null is
+/// returned for anything whose extent cannot be stated (a missing coordinate pair, an unknown kind); absence
+/// is reported as absence — the caller says "not checked" instead of treating an empty box as a proof.</remarks>
 public readonly record struct ProfileBox(double MinU, double MinV, double MaxU, double MaxV)
 {
     /// <summary>Extent of a whole batch of primitives, or null if any of them is unmeasurable.</summary>
@@ -129,29 +127,13 @@ public readonly record struct ProfileBox(double MinU, double MinV, double MaxU, 
 }
 
 /// <summary>The two decisions about an extrusion's target body that can be made without KOMPAS: whether an
-/// operation may name a body at all, and whether a drawn profile can plausibly lie over the body
-/// the caller declared.</summary>
-/// <remarks>
-/// <b>The second test is necessary, not sufficient, and must never be presented as geometric
-/// containment.</b> It compares two rectangles: the over-approximated extent of the profile the
-/// server drew, and the <c>GetGabarit</c> box of the declared body. Agreement says only "these two
-/// boxes are not disjoint" — the profile may still miss the material entirely (a hole inside a
-/// pocket, a contour in the concave part of an L). Disagreement says something stronger and is the
-/// reason the test exists: probe P2.6 measured that declaring a body the contour does not sit over
-/// makes <c>SetSketch</c>, <c>Create</c> and <c>RebuildDocument</c> all return true while the
-/// document does not change at all. KOMPAS does not report that contradiction as an error, so a
-/// no-op would otherwise be delivered as a success.
-/// The axis correspondence below is not assumed. It is the mapping measured by probe P2.4 and
-/// asserted by acceptance rows <c>G07_xy</c>/<c>G07_xz</c>/<c>G07_yz</c> in
-/// <c>scripts/mcp-smoke.py</c>, where the same rectangle (u=10..50, v=20..40) with depth 6 produced
-/// exactly the boxes encoded here. A plane the server did not derive from one of the three base
-/// planes has no measured correspondence and yields "unknown", which the caller reports as
-/// unverified rather than guessing a sign — the mistake G07 was left open over.
-/// The plane's normal axis is deliberately never constrained. A through cut travels along it in
-/// both directions from the sketch plane, which sits outside the material by construction (the
-/// probe's cut plane was 10 mm above the bodies), so requiring the body to straddle the plane would
-/// refuse the very operation being measured.
-/// </remarks>
+/// operation may name a body at all, and whether a drawn profile can plausibly lie over the declared body.</summary>
+/// <remarks>The second test is necessary, not sufficient, and must never be presented as geometric
+/// containment: it compares two rectangles — the over-approximated profile extent and the <c>GetGabarit</c>
+/// box of the declared body. Agreement says only "these two boxes are not disjoint"; disagreement says
+/// something stronger and is the reason the test exists (probe P2.6). The axis correspondence is measured by
+/// probe P2.4 and asserted by acceptance rows <c>G07_xy</c>/<c>G07_xz</c>/<c>G07_yz</c>; the plane's normal axis is never constrained.
+/// History: docs/decisions/geometry.md#target-body-guard</remarks>
 public static class TargetBodyGuard
 {
     /// <summary>Slack applied when deciding that two intervals are disjoint, in mm. It is the coordinate

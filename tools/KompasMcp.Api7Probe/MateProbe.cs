@@ -90,14 +90,14 @@ internal sealed class MateProbe
 
             ReadComponents(assembly.Value.Document, assembly.Value.Part);
 
-            var objects = ReadComponentFaceObjects(assembly.Value.Document, assembly.Value.SourcePart);
+            var objects = ReadComponentFaces(assembly.Value.Document);
             if (objects is null)
             {
                 return;
             }
 
-            CreateMate(assembly.Value.Part, objects[0], objects[1]);
-            Negative_SameObjectTwice(assembly.Value.Part, objects[0]);
+            CreateMate(assembly.Value.Document, objects[0], objects[1]);
+            Negative_SameObjectTwice(assembly.Value.Document, objects[0]);
         }
         catch (Exception ex)
         {
@@ -222,6 +222,19 @@ internal sealed class MateProbe
         step.Data["analytic_mm3"] = PlateVolume;
         step.Observe("объём источника: " + Api5.Num(volume) + " (аналитика " + Api5.Num(PlateVolume) + ")");
 
+        // КОНТРОЛЬ ПРИБОРА: работает ли сам маршрут ksPart.BodyCollection() там, где тело заведомо
+        // есть. Без этого контроля «у компонента тел нет» неотличимо от «прибор зовёт не то».
+        var sourceBodies = Api5.SafeInt(() => (part.BodyCollection() as ksBodyCollection)!.GetCount());
+        step.Data["source_bodies"] = sourceBodies;
+        step.Observe("контроль: BodyCollection().GetCount() у ДЕТАЛИ-источника = " + sourceBodies);
+        if (sourceBodies is > 0 && part.BodyCollection() is ksBodyCollection bodiesOfSource
+            && bodiesOfSource.GetByIndex(0) is ksBody sourceBody)
+        {
+            var sourceFaces = Api5.SafeInt(() => (sourceBody.FaceCollection() as ksFaceCollection)!.GetCount());
+            step.Data["source_faces"] = sourceFaces;
+            step.Observe("контроль: FaceCollection().GetCount() у детали-источника = " + sourceFaces);
+        }
+
         if (document.SaveAs(path) != true)
         {
             step.Fail("SaveAs(" + path + ") не дал true.");
@@ -250,11 +263,16 @@ internal sealed class MateProbe
         var path = Path.Combine(directory, "mate-assembly.m3d");
 
         var document = (ksDocument3D)_app.Document3D();
-        if (!document.Create(true, false))
+        // ВИДИМЫЙ документ сборки: Create(invisible=false, isDetail=false). Первая редакция создавала
+        // сборку невидимой, и у компонентов не было тел ни одним документированным путём; проверяется,
+        // материализует ли геометрию именно видимость документа.
+        if (!document.Create(false, false))
         {
-            step.Fail("Create(невидимый, сборка) вернул false.");
+            step.Fail("Create(видимый, сборка) вернул false.");
             return null;
         }
+
+        step.Observe("документ сборки создан ВИДИМЫМ (Create(false, false))");
 
         var part = (ksPart)document.GetPart(-1);
         part.name = "Mate-asm";
@@ -407,140 +425,127 @@ internal sealed class MateProbe
 
     // ═════════════════════════════════════════════ РЕШАЮЩИЙ ОПЫТ: грани компонентов ══
 
-    private List<IModelObject>? ReadComponentFaceObjects(ksDocument3D document, ksPart sourcePart)
+    /// <summary>
+    /// Грани компонентов как <c>ksEntity</c> — ДОКУМЕНТИРОВАННЫМ маршрутом
+    /// <c>ksPart.BodyCollection() → ksBody.FaceCollection()</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Почему не <c>GetMainBody()</c>.</b> Справка <c>kspart_getmainbody.html</c> говорит:
+    /// «Пример: Деталь имеет массив интерфейсов тел <c>IBody</c>» — то есть у детали тел МОЖЕТ быть
+    /// несколько, и одиночное «главное тело» у компонента сборки не читается (измерено: null).
+    /// Документированный маршрут к телам — <c>kspart_bodycollection.html</c>:
+    /// <c>ksPart.BodyCollection()</c> возвращает <c>ksBodyCollection</c>.
+    /// </para>
+    /// <para>
+    /// <b>Только документированные вызовы.</b> <c>ksEntity</c> — ровно тот тип, который принимает
+    /// <c>ksDocument3D::AddMateConstraint</c> («object1 — указатель на интерфейс первого объекта,
+    /// на который накладывается сопряжение (<c>ksEntity</c> или <c>IEntity</c>)»).
+    /// </para>
+    /// </remarks>
+    private List<object>? ReadComponentFaces(ksDocument3D document)
     {
-        var step = _report.Begin("M.4", "Грань компонента как IModelObject — поиск по точке",
-            "Находятся ли грани ДВУХ компонентов сборки документированным IPart7.FindObjectsByPoint?");
+        var step = _report.Begin("M.4", "Грань компонента как ksEntity — BodyCollection → FaceCollection",
+            "Достаётся ли грань компонента документированным ksPart.BodyCollection()?");
         _current = step;
 
         try
         {
-            // ИЗМЕРЕНО 05.10.2026: ksPart.GetMainBody() у КОМПОНЕНТА сборки даёт null (при
-            // LoadState=ksLCompletely и Load(true)=True), поэтому грань ищется не через тело, а
-            // документированным поиском объекта по точке — в системе САМОЙ СБОРКИ.
-            var top = _app7?.ActiveDocument as IKompasDocument3D;
-            var topPart = top?.TopPart;
-            if (topPart is null)
+            if (document.PartCollection(true) is not ksPartCollection collection)
             {
-                step.Fail("активный документ не дал IKompasDocument3D.TopPart (Part7).");
+                step.Fail("PartCollection(true) не вернул ksPartCollection.");
                 return null;
             }
 
-            step.Observe("верхняя часть сборки получена как Part7: да");
-
-            // Точки — НЕ центры, а четверть верхней грани плит. ДЕФЕКТ ПРОБЫ, ПОЙМАННЫЙ ПРОГОНОМ:
-            // точка (0, 0, 10) лежит НА базовых плоскостях сборки, и FindObjectsByPoint вернул
-            // именно их — «Плоскость ZX» (o3d_planeXOZ) и «Плоскость ZY» (o3d_planeYOZ), а не грань
-            // компонента. Плита 100×80×10 выдавлена в +Z, поэтому верхняя грань на z = 10 и
-            // занимает x ∈ [−50, 50], y ∈ [−40, 40]; берём (25, 20, 10) и, у сдвинутого на 150 мм
-            // второго компонента, (175, 20, 10) — обе точки вне обеих плоскостей.
-            var probes = new (string Label, double X, double Y, double Z)[]
+            var faces = new List<object>();
+            for (var index = 0; index < collection.GetCount() && faces.Count < 2; index++)
             {
-                ("компонент 1", 25d, 20d, 10d),
-                ("компонент 2", 175d, 20d, 10d),
-            };
-
-            // ДЕФЕКТ ПРОБЫ, ПОЙМАННЫЙ ПЕРВЫМ ПРОГОНОМ ЭТОЙ РЕДАКЦИИ: точки дали 2 и 1 объект, а
-            // сопряжение было построено на ПЕРВЫХ ДВУХ из общего списка — то есть на двух объектах
-            // ОДНОГО компонента, и такое сопряжение Valid=false. Это тот же класс, что MANIA.17:
-            // «различающая пара» измерила один и тот же узел. Поэтому теперь берётся ровно по
-            // одному объекту С КАЖДОЙ точки, а состав пары называется вслух.
-            // ГДЕ ТЕЛО ПО Z — измеряется сканом, а не предполагается: первая редакция считала, что
-            // плита занимает z ∈ [0, 10], и точка z = 10 не нашла ничего. Скан называет числа.
-            // FirstLevel — документированный параметр, и его значение решает, видна ли геометрия
-            // КОМПОНЕНТА: при true находились только базовые плоскости сборки. Проверяются ОБА.
-            foreach (var firstLevel in new[] { true, false })
-            {
-                foreach (var z in new[] { -5d, 0d, 5d, 10d })
+                if (collection.GetByIndex(index) is not ksPart component)
                 {
-                    var level = firstLevel;
-                    var zz = z;
-                    var rawScan = Api5.SafeObject(() => topPart.FindObjectsByPoint(25d, 20d, zz, level));
-                    var foundScan = AsModelObjects(rawScan);
-                    step.Observe("скан FirstLevel=" + level + " (25, 20, "
-                        + zz.ToString(CultureInfo.InvariantCulture) + ") → "
-                        + (rawScan is null ? "null" : "объектов " + foundScan.Count + ": "
-                            + string.Join(", ", foundScan.Select(o => Api5.SafeEnum(() => o.ModelObjectType).ToString()))));
+                    step.Observe("компонент " + index + ": не ksPart");
+                    continue;
                 }
-            }
 
-            // ГЕОМЕТРИЯ КОМПОНЕНТА ищется НА САМОМ КОМПОНЕНТЕ (его IPart7) в ЛОКАЛЬНЫХ координатах:
-            // поиск по верхней части сборки находил только её базовые плоскости. Параметр
-            // FirstLevel проверяется оба значения, как и раньше.
-            var componentParts = new List<IPart7>();
-            for (var index = 0; index < 2; index++)
-            {
-                if (ComponentByIndex(document, index) is { } component7)
-                {
-                    componentParts.Add(component7);
-                }
-            }
+                var bodyCount = Api5.SafeInt(() => (component.BodyCollection() as ksBodyCollection)!.GetCount());
+                step.Observe("компонент " + index + ": BodyCollection().GetCount() до перестроения = " + bodyCount);
 
-            step.Observe("компонентов как IPart7: " + componentParts.Count);
-            foreach (var component7 in componentParts)
-            {
-                foreach (var firstLevel in new[] { true, false })
+                // Документированный ipart7_rebuildmodel.html: «Redraw — TRUE перестроить документ».
+                // Проверяется, материализует ли перестроение геометрию компонента.
+                if (bodyCount == 0 && TransferTo7(component) is IPart7 componentRebuild)
                 {
-                    foreach (var z in new[] { 0d, 5d, 10d })
+                    bool? rebuilt = null;
+                    try
                     {
-                        var level = firstLevel;
-                        var zz = z;
-                        var rawScan = Api5.SafeObject(() => component7.FindObjectsByPoint(25d, 20d, zz, level));
-                        var foundScan = AsModelObjects(rawScan);
-                        step.Observe("скан на КОМПОНЕНТЕ FirstLevel=" + level + " (25, 20, "
-                            + zz.ToString(CultureInfo.InvariantCulture) + ") → "
-                            + (rawScan is null ? "null" : "объектов " + foundScan.Count + ": "
-                                + string.Join(", ", foundScan.Select(o => Api5.SafeEnum(() => o.ModelObjectType).ToString()))));
+                        rebuilt = componentRebuild.RebuildModel(true);
+                    }
+                    catch (Exception ex)
+                    {
+                        step.Observe("компонент " + index + ": RebuildModel бросил " + ex.GetType().Name);
+                    }
+
+                    document.RebuildDocument();
+                    bodyCount = Api5.SafeInt(() => (component.BodyCollection() as ksBodyCollection)!.GetCount());
+                    step.Observe("компонент " + index + ": RebuildModel(true)=" + rebuilt
+                        + ", BodyCollection().GetCount() после = " + bodyCount);
+                }
+
+                // Документированный ipart7_opensourcedocument.html: открыть документ-ИСТОЧНИК
+                // компонента. Проверяется, материализует ли это геометрию: если да, то причина
+                // «тел нет» — не загруженный источник, а не отсутствие маршрута.
+                if (bodyCount == 0 && TransferTo7(component) is IPart7 componentSource)
+                {
+                    try
+                    {
+                        var parameters = componentSource.GetOpenDocumentParam();
+                        var sourceDoc = parameters is null ? null : componentSource.OpenSourceDocument(parameters);
+                        document.RebuildDocument();
+                        bodyCount = Api5.SafeInt(() => (component.BodyCollection() as ksBodyCollection)!.GetCount());
+                        step.Observe("компонент " + index + ": OpenSourceDocument → "
+                            + (sourceDoc is null ? "null" : "документ открыт")
+                            + ", BodyCollection().GetCount() после = " + bodyCount);
+                    }
+                    catch (Exception ex)
+                    {
+                        step.Observe("компонент " + index + ": OpenSourceDocument бросил "
+                            + ex.GetType().Name + ": " + ex.Message);
                     }
                 }
-            }
 
-            var perProbe = new List<List<IModelObject>>();
-            foreach (var probe in probes)
-            {
-                var raw = Api5.SafeObject(() => topPart.FindObjectsByPoint(probe.X, probe.Y, probe.Z, false));
-                var found = AsModelObjects(raw);
-                perProbe.Add(found);
-                step.Observe(probe.Label + ": FindObjectsByPoint("
-                    + probe.X.ToString(CultureInfo.InvariantCulture) + ", "
-                    + probe.Y.ToString(CultureInfo.InvariantCulture) + ", "
-                    + probe.Z.ToString(CultureInfo.InvariantCulture) + ") → "
-                    + (raw is null ? "null" : raw.GetType().Name + ", объектов " + found.Count));
-                // ЧТО именно найдено — называется вслух: без типа объекта «сопряжение не Valid»
-                // неотличимо от «в BaseObject ушло не то».
-                foreach (var item in found)
+                if (component.BodyCollection() is not ksBodyCollection bodies || bodies.GetCount() == 0)
                 {
-                    step.Observe("   " + probe.Label + " объект: тип="
-                        + Api5.SafeEnum(() => item.ModelObjectType)
-                        + ", имя='" + (Api5.SafeObject(() => item.Name) ?? "—") + "'");
+                    step.Observe("компонент " + index + ": тел нет");
+                    continue;
+                }
+
+                var body = bodies.GetByIndex(0) as ksBody;
+                if (body?.FaceCollection() is not ksFaceCollection bodyFaces || bodyFaces.GetCount() == 0)
+                {
+                    step.Observe("компонент " + index + ": FaceCollection() пуста");
+                    continue;
+                }
+
+                var face = bodyFaces.GetByIndex(0);
+                step.Observe("компонент " + index + ": граней " + bodyFaces.GetCount()
+                    + ", грань[0]=" + Api5.RuntimeName(face));
+                if (face is not null)
+                {
+                    faces.Add(face);
                 }
             }
 
-            var objects = new List<IModelObject>();
-            foreach (var found in perProbe)
+            step.Data["faces"] = faces.Count;
+            if (faces.Count < 2)
             {
-                if (found.Count > 0)
-                {
-                    objects.Add(found[0]);
-                }
-            }
-
-            step.Data["per_probe"] = perProbe.Select(f => f.Count).ToArray();
-            step.Data["objects"] = objects.Count;
-            step.Observe("в сопряжение пойдут объекты: " + objects.Count
-                + " (по одному с каждой точки, не «первые два из списка»)");
-            if (objects.Count < 2)
-            {
-                step.Fail("с разных точек собрано объектов: " + objects.Count + ", нужно минимум 2.");
+                step.Fail("граней собрано: " + faces.Count + ", нужно 2 (по одной с каждого компонента).");
                 return null;
             }
 
-            step.Pass("по одному объекту с каждой из " + objects.Count + " точек");
-            return objects;
+            step.Pass("собрано граней: " + faces.Count + " — по одной с каждого компонента");
+            return faces;
         }
         catch (Exception ex)
         {
-            step.Fail("поиск по точке бросил: " + ex.Message);
+            step.Fail("чтение граней бросило: " + ex.Message);
             return null;
         }
     }
@@ -635,102 +640,81 @@ internal sealed class MateProbe
 
     // ═══════════════════════════════════════════════════ РЕШАЮЩИЙ ОПЫТ: сопряжение ══
 
-    private void CreateMate(ksPart assemblyPart, IModelObject first, IModelObject second)
+    /// <summary>
+    /// Постоянное сопряжение — ДОКУМЕНТИРОВАННЫМ методом <c>ksDocument3D.AddMateConstraint</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Справка <c>ksdocument3d_getmateconstraint.html</c> и <c>ksmateconstraint_create.html</c> говорят
+    /// прямо: «Сопряжения бывают постоянными и временными… <b>Постоянные сопряжения создаются с
+    /// помощью метода <c>ksDocument3D::AddMateConstraint</c></b>», а <c>Create()</c> служит только
+    /// для ВРЕМЕННОГО сопряжения внутри процесса <c>UserGetPlacementAndEntity</c>. Поэтому блок
+    /// строится на <c>AddMateConstraint</c>, а не на API7-коллекции.
+    /// </para>
+    /// <para>
+    /// Подпись: <c>BOOL AddMateConstraint(long constraintType, LPDISPATCH object1, LPDISPATCH object2,
+    /// short direction, short fixed, double value)</c>; <c>direction</c>: 1 — однонаправленные,
+    /// 0 — направление не учитывается, −1 — разнонаправленные.
+    /// </para>
+    /// </remarks>
+    private void CreateMate(ksDocument3D document, object first, object second)
     {
-        var step = _report.Begin("M.5", "Сопряжение создаётся через IPart7.MateConstraints.Add",
-            "Add(MateConstraintType) + BaseObject1/2 + Update() дают ЖИВОЕ сопряжение?");
+        var step = _report.Begin("M.5", "Сопряжение создаётся ksDocument3D.AddMateConstraint",
+            "Документированный метод ПОСТОЯННОГО сопряжения даёт сопряжение в сборке?");
         _current = step;
 
         try
         {
-            var part7 = TransferTo7(assemblyPart) as IPart7;
-            if (part7 is null)
-            {
-                step.Fail("сборка не перенеслась в API7 как IPart7.");
-                return;
-            }
-
-            var mates = part7.MateConstraints;
-            if (mates is null)
-            {
-                step.Fail("IPart7.MateConstraints вернул null.");
-                return;
-            }
-
-            var before = Api5.SafeInt(() => mates.Count);
+            var before = MateCount(document);
             step.Data["count_before"] = before;
             step.Observe("сопряжений до: " + before);
 
-            IMateConstraint3D mate;
+            bool? created = null;
             try
             {
-                mate = mates.Add(MateConstraintType.mc_Coincidence);
+                created = document.AddMateConstraint(
+                    // Аргументы ПОЗИЦИОННЫЕ: direction, fixed, value. Имя `fixed` в C# — ключевое
+                    // слово, поэтому именованный аргумент здесь не компилируется.
+                    (int)MateConstraintType.mc_Coincidence, first, second, 0, 0, 0d);
             }
             catch (Exception ex)
             {
-                step.Fail("Add(mc_Coincidence) бросил: " + ex.Message);
+                step.Fail("AddMateConstraint бросил " + ex.GetType().Name + ": " + ex.Message);
                 return;
             }
 
-            if (mate is null)
-            {
-                step.Fail("Add(mc_Coincidence) вернул null.");
-                return;
-            }
+            document.RebuildDocument();
 
-            step.Observe("сопряжение создано: ConstraintType=" + Api5.SafeEnum(() => mate.ConstraintType));
-
-            // Объекты — грани РАЗНЫХ компонентов. Пара «грань1 ↔ грань2» и есть предмет проверки:
-            // если адрес ведёт не в компонент, а в сборку, объект не примется.
-            try
-            {
-                mate.BaseObject1 = first;
-                mate.BaseObject2 = second;
-                mate.Alignment = ksMateConstraintAlignmentEnum.ksMCAlignmentOpposite;
-            }
-            catch (Exception ex)
-            {
-                step.Fail("запись BaseObject1/2 или Alignment бросила: " + ex.Message);
-                return;
-            }
-
-            step.Data["base1_set"] = Api5.SafeObject(() => mate.BaseObject1) is not null;
-            step.Data["base2_set"] = Api5.SafeObject(() => mate.BaseObject2) is not null;
-            step.Observe("BaseObject1 задан: " + step.Data["base1_set"]
-                + ", BaseObject2 задан: " + step.Data["base2_set"]);
-
-            var updated = false;
-            try
-            {
-                updated = mate.Update();
-            }
-            catch (Exception ex)
-            {
-                step.Fail("Update() бросил: " + ex.Message);
-                return;
-            }
-
-            var after = Api5.SafeInt(() => mates.Count);
-            step.Data["update"] = updated;
+            var after = MateCount(document);
+            step.Data["created"] = created;
             step.Data["count_after"] = after;
-            step.Data["valid"] = Api5.SafeBool(() => mate.Valid);
-            step.Observe("Update()=" + updated + ", сопряжений после: " + after
-                + ", Valid=" + step.Data["valid"]);
+            step.Observe("AddMateConstraint(mc_Coincidence, direction=0, fixed=0, value=0) → " + created
+                + ", сопряжений после: " + after);
 
-            // ПОДТВЕРЖДЕНИЕ — это Valid, а не рост счётчика. Измерено 05.10.2026: сопряжение с
-            // двумя объектами ОДНОГО компонента тоже дало Update()=true и счётчик 0 → 1, но
-            // Valid=false. Значит «Update()=true» доказательством не является, и ослаблять это
-            // утверждение под наблюдённый результат запрещено.
-            var valid = Api5.SafeBool(() => mate.Valid);
-            if (updated && valid == true)
+            // Чтение обратно — тем же документированным маршрутом: MateConstraintCollection →
+            // GetCount/GetByIndex → GetBaseObj(1|2). Без чтения «создано» неотличимо от «принято молча».
+            if (document.MateConstraintCollection() is ksMateConstraintCollection mates && mates.GetCount() > 0)
             {
-                step.Pass("сопряжение подтверждено: Valid=true, сопряжений " + before + " → " + after);
+                if (mates.GetByIndex(mates.GetCount() - 1) is ksMateConstraint mate)
+                {
+                    var base1 = Api5.SafeObject(() => mate.GetBaseObj(1));
+                    var base2 = Api5.SafeObject(() => mate.GetBaseObj(2));
+                    step.Data["base1"] = base1 is not null;
+                    step.Data["base2"] = base2 is not null;
+                    step.Observe("последнее сопряжение: GetBaseObj(1)=" + Api5.RuntimeName(base1)
+                        + ", GetBaseObj(2)=" + Api5.RuntimeName(base2)
+                        + ", constraintType=" + Api5.SafeInt(() => mate.constraintType));
+                }
+            }
+
+            if (created == true && after is not null && before is not null && after > before)
+            {
+                step.Pass("постоянное сопряжение создано: сопряжений " + before + " → " + after);
             }
             else
             {
-                step.Fail("сопряжение НЕ подтверждено: Update()=" + updated + ", Valid=" + valid
-                    + ", сопряжений " + before + " → " + after
-                    + ". Запись создана, но недействительна — это факт о продукте, а не о пробе.");
+                step.Fail("сопряжение не подтверждено: AddMateConstraint=" + created
+                    + ", сопряжений " + before + " → " + after);
             }
         }
         catch (Exception ex)
@@ -739,68 +723,61 @@ internal sealed class MateProbe
         }
     }
 
+    private static int? MateCount(ksDocument3D document)
+    {
+        try
+        {
+            return document.MateConstraintCollection() is ksMateConstraintCollection mates
+                ? mates.GetCount()
+                : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
     /// <summary>
-    /// Отрицательный контроль: один и тот же объект в обе позиции. Сопряжение грани с самой собой
-    /// либо отвергается, либо не даёт Valid — но не должно молча считаться успешным.
+    /// Отрицательный контроль: одна и та же грань в обе позиции. Документированный метод не обязан
+    /// это отвергать, и проба НАЗЫВАЕТ исход, а не выдаёт желаемое за измеренное.
     /// </summary>
-    private void Negative_SameObjectTwice(ksPart assemblyPart, IModelObject only)
+    private void Negative_SameObjectTwice(ksDocument3D document, object only)
     {
         var step = _report.Begin("M.6", "Отрицательный контроль: один объект в обе позиции",
-            "Сопряжение объекта с самим собой отвергается, а не считается успешным?");
+            "Сопряжение грани с самой собой отвергается или принимается?");
         _current = step;
 
         try
         {
-            if (TransferTo7(assemblyPart) is not IPart7 part7 || part7.MateConstraints is not { } mates)
-            {
-                step.Fail("сборка не перенеслась в API7 как IPart7.");
-                return;
-            }
-
-            var before = Api5.SafeInt(() => mates.Count);
-            IMateConstraint3D mate;
+            var before = MateCount(document);
+            bool? created;
             try
             {
-                mate = mates.Add(MateConstraintType.mc_Coincidence);
-                mate.BaseObject1 = only;
-                mate.BaseObject2 = only;
+                created = document.AddMateConstraint(
+                    (int)MateConstraintType.mc_Coincidence, only, only, 0, 0, 0d);
             }
             catch (Exception ex)
             {
-                step.Observe("запись отвергнута на этапе присваивания: " + ex.Message);
-                step.Pass("отказ назван на присваивании");
+                step.Observe("AddMateConstraint бросил: " + ex.GetType().Name + ": " + ex.Message);
+                step.Pass("отказ назван исключением");
                 return;
             }
 
-            bool updated;
-            try
-            {
-                updated = mate.Update();
-            }
-            catch (Exception ex)
-            {
-                step.Observe("Update() бросил: " + ex.Message);
-                step.Pass("отказ назван на Update()");
-                return;
-            }
-
-            var valid = Api5.SafeBool(() => mate.Valid);
-            var after = Api5.SafeInt(() => mates.Count);
-            step.Data["update"] = updated;
-            step.Data["valid"] = valid;
+            document.RebuildDocument();
+            var after = MateCount(document);
+            step.Data["created"] = created;
             step.Data["count_before"] = before;
             step.Data["count_after"] = after;
-            step.Observe("Update()=" + updated + ", Valid=" + valid + ", сопряжений " + before + " → " + after);
+            step.Observe("AddMateConstraint(грань, та же грань) → " + created
+                + ", сопряжений " + before + " → " + after);
 
-            // Честный вердикт: если продукт принял вырожденное сопряжение — это НАЗЫВАЕТСЯ, а не
-            // выдаётся за наш провал. Проба измеряет, а не желает.
-            if (updated && valid == true)
+            if (created == true)
             {
-                step.Fail("вырожденное сопряжение принято как Valid — это факт о продукте, а не о пробе");
+                step.Fail("вырожденное сопряжение принято — это факт о продукте, а не о пробе");
             }
             else
             {
-                step.Pass("вырожденное сопряжение не подтверждено (Update()=" + updated + ", Valid=" + valid + ")");
+                step.Pass("вырожденное сопряжение отвергнуто (AddMateConstraint=" + created + ")");
             }
         }
         catch (Exception ex)

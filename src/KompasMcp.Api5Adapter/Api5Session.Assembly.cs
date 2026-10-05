@@ -631,31 +631,58 @@ public partial class Api5Session
         var matrixBefore = ReadPlacementMatrix(part5);
         var countBefore = CountComponents(document);
 
-        // ЗАМЕНА ИСТОЧНИКА — документированный сеттер IPart7.FileName.
+        // ЗАМЕНА ИСТОЧНИКА — ДОКУМЕНТИРОВАННЫЙ ksPart.SetFileName.
         //
-        // ИЗМЕРЕНО 04.10.2026 живым прогоном, две ветки:
-        //  * ksDocument3D.SetPartFromFileEx(fileName, part, …) — «part — указатель на интерфейс
-        //    компонента, который будет вставлен в документ»: это маршрут ВСТАВКИ, а не замены.
-        //    Измерено: он добавил ТРЕТИЙ компонент вместо замены первого.
-        //  * присваивание IPart7.FileName меняет представление немедленно, но без перестроения
-        //    МОДЕЛИ (IPart7.RebuildModel) не переживало save→close→reopen. Здесь оно и добавлено.
+        // kspart_setfilename.html, примечания ДОСЛОВНО:
+        //   1. «Метод используется для компонентов, вставленных в сборку» — ровно наш случай;
+        //   2. «Документ с указанным именем должен существовать» — проверено RequireSourceFile;
+        //   3. «Компонент не должен быть деталью из библиотеки моделей или стандартным элементом»;
+        //   4. «ИЗМЕНЕНИЕ ВСТУПАЕТ В СИЛУ ПОСЛЕ ВЫЗОВА МЕТОДА ksPart::Update» — поэтому Update ниже.
+        // Метод возвращает BOOL, и возврат ПРОВЕРЯЕТСЯ: прежняя редакция присваивала свойство
+        // (ipart7_filename.html: «вступает в силу после IModelObject::Update») и о результате
+        // молчала. Измерено 04.10.2026: одного API7-сеттера НЕ хватало — замена не переживала
+        // save→close→reopen.
+        // РАСХОЖДЕНИЕ ОБЁРТКИ И СПРАВКИ, НАЗВАННОЕ: справка kspart_setfilename.html обещает метод
+        // BOOL ksPart::SetFileName(BSTR), а поставленная обёртка 24.0.0.2799 объявляет только
+        // СВОЙСТВО (kspart_filename.html: «fileName = iPart.fileName / iPart.fileName = fileName»),
+        // возврата у него нет. Поэтому результат проверяется ЧТЕНИЕМ ОБРАТНО документированным
+        // геттером ksPart.fileName: молчаливая запись была бы тем же дефектом, что непроверенный
+        // возврат.
         try
         {
-            // Пишется ОБА представления: API5 ksPart.fileName (свойство документа компонента) и
-            // API7 IPart7.FileName. Измерено 04.10.2026: одного API7-сеттера НЕ хватало — замена не
-            // переживала save→close→reopen.
             part5.fileName = command.SourcePath;
-            part5.Update();
-            payload.Part7.FileName = command.SourcePath;
-            payload.Part7.RebuildModel(true);
         }
         catch (COMException ex)
         {
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
-                $"Замена FileName прервалась: {ex.Message}. Ссылка могла измениться частично.",
+                $"Запись ksPart.fileName прервалась: {ex.Message}. Ссылка могла измениться частично.",
                 RetryPolicy.AfterReconciliation,
                 partialEffects: true);
+        }
+
+        // Примечание 4 справки: изменение вступает в силу ПОСЛЕ Update().
+        part5.Update();
+
+        var replacedPath = Safe(() => part5.fileName);
+        if (!string.Equals(
+                Path.GetFileName(replacedPath ?? string.Empty),
+                Path.GetFileName(command.SourcePath),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                $"Источник компонента НЕ заменён: после записи и Update() перечитывается " +
+                $"«{replacedPath ?? "null"}» вместо «{command.SourcePath}». Причины по справке: документа " +
+                "с указанным именем нет, либо компонент — деталь из библиотеки моделей или стандартный " +
+                "элемент.",
+                RetryPolicy.SameOperationId,
+                details: new Dictionary<string, object?>
+                {
+                    ["component_ref"] = command.ComponentRef,
+                    ["source_path"] = command.SourcePath,
+                    ["read_back"] = replacedPath,
+                });
         }
 
         document.Document.RebuildDocument();

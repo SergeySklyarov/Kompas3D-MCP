@@ -797,3 +797,28 @@ false`, не публиковала поле, которое Хост затем
 > The adapter passes in the transfer diagnostics and the DOF limitation; the function must not displace them - the client reads the answer, not the adapter's internals.
 > "Is this sketch fully defined right now?" - exactly one state answers true; everything else, including "not set", gives no right to say "yes".
 > The mirror property: a "no" answer is allowed only where the product explicitly said "under-defined"; "Unknown" does not turn into "no".
+
+## <a id="mate-after-mate-moved"></a>Строка MATE.01.create_after_mate_moved (06.10.2026)
+
+**Что было.** Строка, добавленная после проверки кода 05.10.2026, создавала второе сопряжение
+«расстояние 50» на той же паре граней, что и совпадение MATE.01. Первый живой прогон группы MATE
+на бинарях поставки `publish-viewcleanup-20261005` (06.10.2026) дал 4 FAIL: два ограничения
+противоречат друг другу, оба становятся недействительными, продукт честно отвечает
+`VERIFICATION_FAILED` («разность дала 2 строк»), и недействительное сопряжение остаётся в модели и
+роняет MATE.02.fields, MATE.03.create_distance и MATE.04.edit. Сама проверка строки (нет
+`STALE_REFERENCE`) при этом выполнялась.
+
+**Что решено.** Второе сопряжение - «параллельность» на той же паре граней: проба на тех же
+бинарях показала, что оба сопряжения остаются `Valid=true`. После удаления этого сопряжения ссылки
+на компоненты и на сопряжение MATE.01 перечитываются: удаление поднимает ревизию и отзывает ссылки
+документа (поведение продукта, описанное строкой MATE.05.delete_dependencies).
+
+## <a id="asm-repeat-restores"></a>Строка ASM.04.repeat_after_mutation (06.10.2026)
+
+**Что было.** Строка переносила компонент на 45 мм и оставляла его там, а последующие строки
+ASM.04.geometry_validation и ASM.07.geometry_validation сверяют аналитический перенос 30 мм. Первый
+живой прогон группы ASM на бинарях поставки дал на них 2 FAIL (`origin.x=[0, 45]`); продукт
+выполнил ровно то, что ему задали.
+
+**Что решено.** Третьим вызовом по той же ссылке компонент возвращается на 30 мм; строка требует,
+чтобы прошли оба повторных вызова.

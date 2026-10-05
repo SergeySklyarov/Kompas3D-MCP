@@ -5,6 +5,7 @@ using KompasAPI7;
 using KompasMcp.Api5Adapter.Api7;
 using KompasMcp.Api5Adapter.Com;
 using KompasMcp.Contracts;
+using KompasMcp.Domain.References;
 
 namespace KompasMcp.Api5Adapter;
 
@@ -614,7 +615,8 @@ public sealed partial class Api5Session
             details: new Dictionary<string, object?> { ["document_id"] = document.Id });
     }
 
-    /// <summary>A mate row signature for comparing two collection snapshots.</summary>
+    /// <summary>A mate row signature for comparing two collection snapshots: only what the creating call
+    /// fixes. Validity is carried beside it, never inside (see MateDifference).</summary>
     private static string MateSignature(MateRowDto row) => string.Join('|',
         row.ConstraintType ?? "?",
         row.Fixed ?? "?",
@@ -622,40 +624,28 @@ public sealed partial class Api5Session
         row.Alignment ?? "?",
         row.Direction?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?",
         row.BaseObject1 ?? "?",
-        row.BaseObject2 ?? "?",
-        row.Valid?.ToString() ?? "?");
+        row.BaseObject2 ?? "?");
 
     /// <summary>Pick the mate that was absent from the <paramref name="before"/> snapshot.</summary>
-    /// <remarks>Comparison is over the MULTISET of signatures: two identical mates before creation give
-    /// two occurrences, and a third after gives exactly one new one.</remarks>
     private static MateRowDto? FindNewMate(List<MateRowDto> before, List<MateRowDto> after, out string note)
     {
-        var remaining = new List<string>(before.Select(MateSignature));
-        MateRowDto? candidate = null;
-        var addedCount = 0;
+        static MateSnapshotRow Snapshot(MateRowDto row) => new(MateSignature(row), row.Valid);
 
-        foreach (var row in after)
+        var found = MateDifference.Find(before.Select(Snapshot).ToList(), after.Select(Snapshot).ToList());
+        var invalidated = found.NewlyInvalid > 0
+            ? $"; прежних сопряжений стало недействительными: {found.NewlyInvalid} (новое им противоречит)"
+            : string.Empty;
+
+        if (found.AddedIndex is int index)
         {
-            var index = remaining.IndexOf(MateSignature(row));
-            if (index >= 0)
-            {
-                remaining.RemoveAt(index);
-                continue;
-            }
-
-            addedCount++;
-            candidate = row;
-        }
-
-        if (addedCount == 1 && candidate is not null)
-        {
-            note = $"новое сопряжение выделено разностью множеств: номер {candidate.Ordinal}";
+            var candidate = after[index];
+            note = $"новое сопряжение выделено разностью множеств: номер {candidate.Ordinal}{invalidated}";
             return candidate;
         }
 
-        note = addedCount == 0
+        note = found.AddedCount == 0
             ? "новое сопряжение НЕ выделено: перечитанная коллекция не отличается от снимка до создания"
-            : $"новое сопряжение НЕ выделено однозначно: разность дала {addedCount} строк";
+            : $"новое сопряжение НЕ выделено однозначно: разность дала {found.AddedCount} строк{invalidated}";
         return null;
     }
 

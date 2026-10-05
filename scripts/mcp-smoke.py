@@ -704,10 +704,20 @@ def assembly_checks(client, rep, app_id, workdir):
         after2 = result(env).get("placement_after_matrix")
         origin2 = ([after2[12], after2[13], after2[14]]
                    if isinstance(after2, list) and len(after2) >= 16 else None)
+        # INVARIANT: the row leaves the component where ASM.04.edit put it (30 mm): later rows check
+        # that analytic value. The third call by the same ref also restores it.
+        # History: docs/decisions/tests.md#asm-repeat-restores
+        env, code3 = call("kompas_set_component_placement", {
+            "document_id": asm, "expected_revision": current_rev(asm), "component_ref": target,
+            "transform": {"origin_mm": [30, 0, 0], "x_axis": [1, 0, 0], "y_axis": [0, 1, 0]}})
+        after3 = result(env).get("placement_after_matrix")
+        origin3 = ([after3[12], after3[13], after3[14]]
+                   if isinstance(after3, list) and len(after3) >= 16 else None)
         rep.add("ASM.04.repeat_after_mutation",
-                "вторая подряд set_component_placement по ТОЙ ЖЕ ссылке проходит (не STALE_REFERENCE)",
-                "PASS" if (not code and origin2 and near(origin2[0], 45.0)) else "FAIL",
-                f"origin={origin2} error={code} msg={emsg(env)}")
+                "вторая и третья подряд set_component_placement по ТОЙ ЖЕ ссылке проходят (не STALE_REFERENCE)",
+                "PASS" if (not code and origin2 and near(origin2[0], 45.0)
+                           and not code3 and origin3 and near(origin3[0], 30.0)) else "FAIL",
+                f"origin2={origin2} origin3={origin3} error={code or code3} msg={emsg(env)}")
 
         # различающий контроль: размещение ВТОРОГО компонента иное (иначе чтение «первого» неотличимо
         # от правильного — контроль «непустой список» прошёл бы на любом чтении)
@@ -1324,16 +1334,15 @@ def mate_checks(client, rep, app_id, workdir):
             f"base1={mate.get('base_object1')} base2={mate.get('base_object2')} "
             f"count={result(env).get('mate_count')} error={code} msg={emsg(env)}")
 
-    # РЕГРЕССИЯ §1 ЗАДАНИЯ 05.10.2026: `create_mate` ПО ССЫЛКЕ, ЧЕЙ КОМПОНЕНТ СДВИНУТ СОПРЯЖЕНИЕМ.
-    #
-    # `first`/`second` получены из list_components ДО того, как сопряжение MATE.01 сдвинуло компонент.
-    # Прежняя редакция хранила в ссылке снимок матрицы размещения и отвергала ЛЮБУЮ следующую мутацию
-    # по ней, если размещение изменилось, — то есть второе сопряжение с тем же компонентом падало бы с
-    # STALE_REFERENCE. Здесь создаётся ЕЩЁ ОДНО сопряжение теми же ссылками (маршрут и параметры — как
-    # у измеренного MATE.03), затем оно удаляется, чтобы не сдвинуть счётчики строк MATE.05.
+    # INVARIANT: create_mate by component refs taken BEFORE a mate moved the component must not be
+    # rejected as STALE_REFERENCE (identity is decided by the source file, the matrix is read fresh).
+    # MEASURED: the second mate must not contradict MATE.01. A distance mate on the same coincident
+    # faces makes both mates invalid and cascades into MATE.02-04; parallel on the same faces keeps
+    # both valid. Deleting a mate revokes the document refs, so component and mate refs are re-read.
+    # History: docs/decisions/tests.md#mate-after-mate-moved
     env, code = call("kompas_create_mate", {
         "document_id": asm, "expected_revision": current_rev(asm),
-        "constraint_type": "distance", "param_value": 50.0,
+        "constraint_type": "parallel",
         "first_component_ref": first, "first_face_index": 0,
         "second_component_ref": second, "second_face_index": 0})
     repeat_ref = (result(env).get("mate_ref") or {}).get("id") if isinstance(
@@ -1346,6 +1355,13 @@ def mate_checks(client, rep, app_id, workdir):
     if repeat_ref:
         call("kompas_delete_mate", {
             "document_id": asm, "expected_revision": current_rev(asm), "mate_ref": repeat_ref})
+        env, _c = call("kompas_list_components", {"document_id": asm})
+        comps = result(env).get("components") or []
+        if len(comps) == 2:
+            first, second = comps[0].get("component_ref"), comps[1].get("component_ref")
+        env, _c = call("kompas_list_mates", {"document_id": asm})
+        kept = [m for m in (result(env).get("mates") or []) if m.get("constraint_type") == "coincidence"]
+        mate_ref = kept[0].get("mate_ref") if kept else mate_ref
 
     # ========= MATE.02: чтение =========
     env, code = call("kompas_list_mates", {"document_id": asm})

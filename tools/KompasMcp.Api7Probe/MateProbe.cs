@@ -268,98 +268,92 @@ internal sealed class MateProbe
     private (string Path, ksPart Part, ksPart SourcePart)? BuildAssemblyWithTwoComponents(
         string sourcePath)
     {
-        var step = _report.Begin("M.2", "Сборка с ДВУМЯ компонентами одной детали",
-            "Сборка, в которой есть что сопрягать?");
+        var step = _report.Begin("M.2", "Сборка с ДВУМЯ компонентами — документированный IParts7.AddFromFile",
+            "Документированный маршрут вставки даёт компоненты С ГЕОМЕТРИЕЙ?");
         _current = step;
 
         var directory = Path.Combine(_options.WorkDir, "mate");
         var path = Path.Combine(directory, "mate-assembly.m3d");
 
         var document = (ksDocument3D)_app.Document3D();
-        // ВИДИМЫЙ документ сборки: Create(invisible=false, isDetail=false). Первая редакция создавала
-        // сборку невидимой, и у компонентов не было тел ни одним документированным путём; проверяется,
-        // материализует ли геометрию именно видимость документа.
-        if (!document.Create(false, false))
+        if (!document.Create(true, false))
         {
-            step.Fail("Create(видимый, сборка) вернул false.");
+            step.Fail("Create(невидимый, сборка) вернул false.");
             return null;
         }
-
-        step.Observe("документ сборки создан ВИДИМЫМ (Create(false, false))");
 
         var part = (ksPart)document.GetPart(-1);
         part.name = "Mate-asm";
         part.Update();
 
-        // ВСТАВКА КОМПОНЕНТА — документированный SetPartFromFile, а НЕ CreatePartInAssembly.
-        //
-        // ИЗМЕРЕНО 05.10.2026 и подтверждено справкой ДОСЛОВНО:
-        //  * ksdDocument3d_createpartinassembly.html: «fileName — имя файла детали СОЗДАВАЕМОЙ в
-        //    сборке», «plane — плоскость, к которой ПРИКЛЕИВАЕТСЯ деталь» — это СОЗДАНИЕ новой
-        //    (пустой) детали в сборке, а не вставка существующей. Отсюда 0 тел у компонента.
-        //  * ksdDocument3d_setpartfromfile.html: «fileName — имя файла, из которого будет ВСТАВЛЕН
-        //    компонент», «externalFile — TRUE — вставка СО ССЫЛКОЙ на внешний файл» — это вставка.
-        //
-        // Оба экземпляра вставляются ЭТИМ методом: он документирован, и повторная вставка того же
-        // файла даёт второй экземпляр (в C1 это ошибочно считалось невозможным).
-        // С null метод вернул FALSE (измерено) — значит `part` не выходной параметр, а входной.
-        // Поэтому сначала создаётся «деталь в сборке» (единственный вызов, который у нас работает),
-        // и уже НА НЕЙ проверяется документированный SetPartFromFile с реальным компонентом.
-        if (part.GetDefaultEntity(Api5.PlaneXoy) is not { } gluePlane)
+        // ДОКУМЕНТИРОВАННЫЙ маршрут вставки компонента — iparts7_addfromfile.html:
+        //   IPart7.Parts → IParts7.AddFromFile(FileName, ExternalFile, Redraw) → Part7
+        // «FileName — имя файла, из которого будет ВСТАВЛЕН компонент», «ExternalFile — TRUE — вставка
+        // СО ССЫЛКОЙ на внешний файл», «Redraw — признак перестроения документа после вставки».
+        // Возвращает ВСТАВЛЕННЫЙ компонент — то есть и адрес, и перестроение даёт один документ. вызов.
+        var top7 = (_app7?.ActiveDocument as IKompasDocument3D)?.TopPart;
+        var parts7 = top7?.Parts;
+        if (parts7 is null)
         {
-            step.Fail("GetDefaultEntity(o3d_planeXOY=1) не вернул плоскость.");
+            step.Fail("IPart7.Parts не дал IParts7 — вставлять нечем.");
             return null;
         }
-
-        object? seeded;
-        try
-        {
-            seeded = document.CreatePartInAssembly(sourcePath, gluePlane);
-        }
-        catch (Exception ex)
-        {
-            step.Fail("CreatePartInAssembly бросил: " + ex.Message);
-            return null;
-        }
-
-        if (seeded is not ksPart seededPart)
-        {
-            step.Fail("CreatePartInAssembly не вернул ksPart — вставлять SetPartFromFile не на чем.");
-            return null;
-        }
-
-        step.Observe("затравка: CreatePartInAssembly создал компонент; "
-            + "тел у него = " + Api5.SafeInt(() => (seededPart.BodyCollection() as ksBodyCollection)!.GetCount()));
 
         for (var attempt = 0; attempt < 2; attempt++)
         {
-            bool? inserted = null;
+            Part7? inserted = null;
             try
             {
-                inserted = document.SetPartFromFile(sourcePath, seededPart, externalFile: true);
+                inserted = parts7.AddFromFile(sourcePath, ExternalFile: true, Redraw: true);
             }
             catch (Exception ex)
             {
-                step.Observe("SetPartFromFile бросил на попытке " + attempt + ": "
+                step.Fail("AddFromFile бросил на попытке " + attempt + ": "
                     + ex.GetType().Name + ": " + ex.Message);
-                continue;
+                return null;
             }
 
-            var bodies = Api5.SafeInt(() => (seededPart.BodyCollection() as ksBodyCollection)!.GetCount());
-            var components = Api5.SafeInt(() => (document.PartCollection(true) as ksPartCollection)!.GetCount());
-            step.Observe("SetPartFromFile(источник, существующий компонент, externalFile=true) попытка "
-                + attempt + " → " + inserted + ", компонентов " + components
-                + ", тел у переданного компонента " + bodies);
+            step.Observe("AddFromFile(источник, ExternalFile=true, Redraw=true) попытка " + attempt
+                + " → " + (inserted is null ? "null" : "Part7"));
         }
 
-        document.RebuildDocument();
+        var count = Api5.SafeInt(() => parts7.Count);
+        step.Data["components"] = count;
+        step.Observe("компонентов по IParts7.Count: " + count);
 
-        // ЧТО ДАЛ ДОКУМЕНТИРОВАННЫЙ SetPartFromFile: тела у КАЖДОГО компонента, поимённо.
-        if (document.PartCollection(true) is ksPartCollection afterInsert)
+        // ВТОРОЙ КОМПОНЕНТ СДВИГАЕТСЯ. Без сдвига обе вставки стоят в начале координат, их грани
+        // совпадают, и сопряжение вырождается: все документированные сочетания параметров вернули
+        // False. Маршрут записи размещения — измеренный в блоке C1: ksDocument3D.DefaultPlacement →
+        // InitByMatrix3D → SetPlacement → UpdatePlacement; раскладка [X,0][Y,0][Z,0][перенос,1].
+        var offset = new double[]
         {
-            for (var index = 0; index < afterInsert.GetCount(); index++)
+            1, 0, 0, 0,
+            0, 1, 0, 0,
+            0, 0, 1, 0,
+            150, 0, 0, 1,
+        };
+        if (document.PartCollection(true) is ksPartCollection insertedParts
+            && insertedParts.GetCount() >= 2
+            && insertedParts.GetByIndex(1) is ksPart secondComponent
+            && document.DefaultPlacement() is ksPlacement secondPlacement)
+        {
+            secondPlacement.InitByMatrix3D(offset);
+            secondComponent.SetPlacement(secondPlacement);
+            secondComponent.UpdatePlacement();
+            document.RebuildDocument();
+            step.Observe("второй компонент сдвинут на 150 мм по X");
+        }
+        else
+        {
+            step.Observe("сдвинуть второй компонент НЕ удалось");
+        }
+
+        // ТЕЛА каждого компонента — сразу и документированным ksPart.BodyCollection().
+        if (document.PartCollection(true) is ksPartCollection collection)
+        {
+            for (var index = 0; index < collection.GetCount(); index++)
             {
-                if (afterInsert.GetByIndex(index) is not ksPart component)
+                if (collection.GetByIndex(index) is not ksPart component)
                 {
                     continue;
                 }
@@ -371,8 +365,6 @@ internal sealed class MateProbe
             }
         }
 
-        var count = CountComponents(document);
-        step.Data["components"] = count;
         if (count != 2)
         {
             step.Fail("компонентов " + count + ", ожидалось 2.");
@@ -756,27 +748,109 @@ internal sealed class MateProbe
             step.Data["count_before"] = before;
             step.Observe("сопряжений до: " + before);
 
+            // ПАРАМЕТРЫ ПЕРЕБИРАЮТСЯ ПО ИХ ДОКУМЕНТИРОВАННЫМ ЗНАЧЕНИЯМ, а не наугад.
+            // ksdDocument3d_addmateconstraint.html: direction — «1 однонаправленные, 0 направление не
+            // учитывается, −1 разнонаправленные»; fixed — «0 детали не фиксируются, 1 фиксируется
+            // первая деталь, 2 фиксируется вторая деталь»; val — «параметр для ограничений (расстояние
+            // или угол)», и «НАПРАВЛЕНИЕ ЗАДАЁТСЯ ЗНАКОМ параметра val».
+            // Первый вызов (всё нули) вернул False — значит нулевой набор не является рабочим.
+            var combos = new (string Label, MateConstraintType Type, short Direction, short Fix, double Value)[]
+            {
+                ("совпадение: direction=0, fixed=1", MateConstraintType.mc_Coincidence, 0, 1, 0d),
+                ("совпадение: direction=-1, fixed=1", MateConstraintType.mc_Coincidence, -1, 1, 0d),
+                ("совпадение: direction=1, fixed=1", MateConstraintType.mc_Coincidence, 1, 1, 0d),
+                ("расстояние 50: direction=0, fixed=1", MateConstraintType.mc_Distance, 0, 1, 50d),
+                ("параллельность: direction=0, fixed=1", MateConstraintType.mc_Parallel, 0, 1, 0d),
+            };
+
             bool? created = null;
-            try
+            foreach (var combo in combos)
             {
-                created = document.AddMateConstraint(
-                    // Аргументы ПОЗИЦИОННЫЕ: direction, fixed, value. Имя `fixed` в C# — ключевое
-                    // слово, поэтому именованный аргумент здесь не компилируется.
-                    (int)MateConstraintType.mc_Coincidence, first, second, 0, 0, 0d);
-            }
-            catch (Exception ex)
-            {
-                step.Fail("AddMateConstraint бросил " + ex.GetType().Name + ": " + ex.Message);
-                return;
+                bool? result = null;
+                try
+                {
+                    result = document.AddMateConstraint(
+                        (int)combo.Type, first, second, combo.Direction, combo.Fix, combo.Value);
+                }
+                catch (Exception ex)
+                {
+                    step.Observe(combo.Label + ": бросил " + ex.GetType().Name + ": " + ex.Message);
+                    continue;
+                }
+
+                document.RebuildDocument();
+                var matesNow = MateCount(document);
+                step.Observe(combo.Label + " → " + result + ", сопряжений " + matesNow);
+                step.Data["combo_" + combo.Label] = result?.ToString() ?? "null";
+
+                if (result == true)
+                {
+                    created = true;
+                    break;
+                }
             }
 
-            document.RebuildDocument();
+            // ВТОРОЙ ДОКУМЕНТИРОВАННЫЙ ПУТЬ — API7: IPart7.MateConstraints → IMateConstraints3D.Add
+            // (imateconstraints3d_add.html) → BaseObject1/BaseObject2 → Update(). Он проверяется
+            // НА ТЕХ ЖЕ настоящих гранях: если API5-метод отказал по объектам, это покажет.
+            if (created != true)
+            {
+                var top7 = (_app7?.ActiveDocument as IKompasDocument3D)?.TopPart;
+                var mates7 = top7?.MateConstraints;
+                if (mates7 is not null)
+                {
+                    var face1 = TransferTo7(first);
+                    var face2 = TransferTo7(second);
+                    step.Observe("API7: грани перенесены — первая " + (face1 is null ? "null" : "да")
+                        + ", вторая " + (face2 is null ? "null" : "да"));
+
+                    if (face1 is not null && face2 is not null)
+                    {
+                        var before7 = Api5.SafeInt(() => mates7.Count);
+                        IMateConstraint3D? mate = null;
+                        try
+                        {
+                            mate = mates7.Add(MateConstraintType.mc_Coincidence);
+                            mate.BaseObject1 = face1;
+                            mate.BaseObject2 = face2;
+                        }
+                        catch (Exception ex)
+                        {
+                            step.Observe("API7: присваивание бросило " + ex.GetType().Name + ": " + ex.Message);
+                        }
+
+                        if (mate is not null)
+                        {
+                            bool? updated = null;
+                            try
+                            {
+                                updated = mate.Update();
+                            }
+                            catch (Exception ex)
+                            {
+                                step.Observe("API7: Update() бросил " + ex.GetType().Name + ": " + ex.Message);
+                            }
+
+                            document.RebuildDocument();
+                            var after7 = Api5.SafeInt(() => mates7.Count);
+                            var valid = Api5.SafeBool(() => mate.Valid);
+                            step.Observe("API7 Add(mc_Coincidence) + BaseObject1/2 + Update() → " + updated
+                                + ", Valid=" + valid + ", сопряжений " + before7 + " → " + after7);
+                            step.Data["api7_update"] = updated;
+                            step.Data["api7_valid"] = valid;
+                            step.Data["api7_count_after"] = after7;
+                            if (updated == true && valid == true)
+                            {
+                                created = true;
+                            }
+                        }
+                    }
+                }
+            }
 
             var after = MateCount(document);
             step.Data["created"] = created;
             step.Data["count_after"] = after;
-            step.Observe("AddMateConstraint(mc_Coincidence, direction=0, fixed=0, value=0) → " + created
-                + ", сопряжений после: " + after);
 
             // Чтение обратно — тем же документированным маршрутом: MateConstraintCollection →
             // GetCount/GetByIndex → GetBaseObj(1|2). Без чтения «создано» неотличимо от «принято молча».

@@ -228,10 +228,12 @@ internal sealed class MateProbe
             return null;
         }
 
-        // Документ НЕ закрывается: его грань нужна как объект сопряжения, а закрытие документа
-        // обесценило бы COM-объект. Это измерено пробой, а не предположено.
-        step.Observe("файл: " + path + "; документ-источник оставлен открытым");
-        step.Pass("источник сохранён, документ открыт");
+        // Документ ЗАКРЫВАЕТСЯ: измерено 05.10.2026 — при открытом источнике CreatePartInAssembly
+        // возвращает null. Грань компонента берётся не из этого документа, а поиском по точке
+        // (IPart7.FindObjectsByPoint) уже в сборке.
+        document.close();
+        step.Observe("файл: " + path + "; документ-источник закрыт");
+        step.Pass("источник сохранён");
         return (path, part);
     }
 
@@ -308,6 +310,30 @@ internal sealed class MateProbe
         document.RebuildDocument();
         step.Observe("второй экземпляр создан через CopyPart");
 
+        // Второй компонент СДВИГАЕТСЯ на известное расстояние: без этого грани совпадают, и
+        // «объект по точке» не отличил бы один экземпляр от другого. Маршрут записи размещения
+        // измерен в блоке C1 (ksDocument3D.DefaultPlacement → InitByMatrix3D → SetPlacement →
+        // UpdatePlacement), раскладка массива — [X,0][Y,0][Z,0][перенос,1].
+        var offset = new double[]
+        {
+            1, 0, 0, 0,
+            0, 1, 0, 0,
+            0, 0, 1, 0,
+            150, 0, 0, 1,
+        };
+        if (copy is ksPart secondPart && document.DefaultPlacement() is ksPlacement placement)
+        {
+            placement.InitByMatrix3D(offset);
+            secondPart.SetPlacement(placement);
+            secondPart.UpdatePlacement();
+            document.RebuildDocument();
+            step.Observe("второй компонент сдвинут на 150 мм по X");
+        }
+        else
+        {
+            step.Observe("размещение второго компонента НЕ записано (DefaultPlacement не ksPlacement)");
+        }
+
         var count = CountComponents(document);
         step.Data["components"] = count;
         if (count != 2)
@@ -383,106 +409,188 @@ internal sealed class MateProbe
 
     private List<IModelObject>? ReadComponentFaceObjects(ksDocument3D document, ksPart sourcePart)
     {
-        var step = _report.Begin("M.4", "Грань КОМПОНЕНТА как IModelObject",
-            "Достаётся ли грань компонента сборки и переносится ли она в API7?");
+        var step = _report.Begin("M.4", "Грань компонента как IModelObject — поиск по точке",
+            "Находятся ли грани ДВУХ компонентов сборки документированным IPart7.FindObjectsByPoint?");
         _current = step;
 
         try
         {
-            if (document.PartCollection(true) is not ksPartCollection collection)
+            // ИЗМЕРЕНО 05.10.2026: ksPart.GetMainBody() у КОМПОНЕНТА сборки даёт null (при
+            // LoadState=ksLCompletely и Load(true)=True), поэтому грань ищется не через тело, а
+            // документированным поиском объекта по точке — в системе САМОЙ СБОРКИ.
+            var top = _app7?.ActiveDocument as IKompasDocument3D;
+            var topPart = top?.TopPart;
+            if (topPart is null)
             {
-                step.Fail("PartCollection(true) не вернул ksPartCollection.");
+                step.Fail("активный документ не дал IKompasDocument3D.TopPart (Part7).");
                 return null;
             }
 
-            // ИЗМЕРЕНО 05.10.2026 первым прогоном: у компонента сборки ksPart.GetMainBody() вернул
-            // null ДАЖЕ при LoadState=ksLCompletely и Load(true)=True. Значит, геометрия компонента
-            // читается не через его ksPart, а через ДОКУМЕНТ-ИСТОЧНИК. Грань берётся там, а в
-            // экземпляр переносится документированным IPart7.FindObject(Obj, SourcePart).
-            var sourceBody = Api5.SafeObject(() => sourcePart.GetMainBody());
-            if (sourceBody is not ksBody sourceSolid)
+            step.Observe("верхняя часть сборки получена как Part7: да");
+
+            // Точки — НЕ центры, а четверть верхней грани плит. ДЕФЕКТ ПРОБЫ, ПОЙМАННЫЙ ПРОГОНОМ:
+            // точка (0, 0, 10) лежит НА базовых плоскостях сборки, и FindObjectsByPoint вернул
+            // именно их — «Плоскость ZX» (o3d_planeXOZ) и «Плоскость ZY» (o3d_planeYOZ), а не грань
+            // компонента. Плита 100×80×10 выдавлена в +Z, поэтому верхняя грань на z = 10 и
+            // занимает x ∈ [−50, 50], y ∈ [−40, 40]; берём (25, 20, 10) и, у сдвинутого на 150 мм
+            // второго компонента, (175, 20, 10) — обе точки вне обеих плоскостей.
+            var probes = new (string Label, double X, double Y, double Z)[]
             {
-                step.Fail("у документа-источника GetMainBody() не дал ksBody ("
-                    + Api5.RuntimeName(sourceBody) + ").");
-                return null;
+                ("компонент 1", 25d, 20d, 10d),
+                ("компонент 2", 175d, 20d, 10d),
+            };
+
+            // ДЕФЕКТ ПРОБЫ, ПОЙМАННЫЙ ПЕРВЫМ ПРОГОНОМ ЭТОЙ РЕДАКЦИИ: точки дали 2 и 1 объект, а
+            // сопряжение было построено на ПЕРВЫХ ДВУХ из общего списка — то есть на двух объектах
+            // ОДНОГО компонента, и такое сопряжение Valid=false. Это тот же класс, что MANIA.17:
+            // «различающая пара» измерила один и тот же узел. Поэтому теперь берётся ровно по
+            // одному объекту С КАЖДОЙ точки, а состав пары называется вслух.
+            // ГДЕ ТЕЛО ПО Z — измеряется сканом, а не предполагается: первая редакция считала, что
+            // плита занимает z ∈ [0, 10], и точка z = 10 не нашла ничего. Скан называет числа.
+            // FirstLevel — документированный параметр, и его значение решает, видна ли геометрия
+            // КОМПОНЕНТА: при true находились только базовые плоскости сборки. Проверяются ОБА.
+            foreach (var firstLevel in new[] { true, false })
+            {
+                foreach (var z in new[] { -5d, 0d, 5d, 10d })
+                {
+                    var level = firstLevel;
+                    var zz = z;
+                    var rawScan = Api5.SafeObject(() => topPart.FindObjectsByPoint(25d, 20d, zz, level));
+                    var foundScan = AsModelObjects(rawScan);
+                    step.Observe("скан FirstLevel=" + level + " (25, 20, "
+                        + zz.ToString(CultureInfo.InvariantCulture) + ") → "
+                        + (rawScan is null ? "null" : "объектов " + foundScan.Count + ": "
+                            + string.Join(", ", foundScan.Select(o => Api5.SafeEnum(() => o.ModelObjectType).ToString()))));
+                }
             }
 
-            if (sourceSolid.FaceCollection() is not ksFaceCollection sourceFaces || sourceFaces.GetCount() == 0)
+            // ГЕОМЕТРИЯ КОМПОНЕНТА ищется НА САМОМ КОМПОНЕНТЕ (его IPart7) в ЛОКАЛЬНЫХ координатах:
+            // поиск по верхней части сборки находил только её базовые плоскости. Параметр
+            // FirstLevel проверяется оба значения, как и раньше.
+            var componentParts = new List<IPart7>();
+            for (var index = 0; index < 2; index++)
             {
-                step.Fail("у документа-источника FaceCollection() пуста или не получена.");
-                return null;
+                if (ComponentByIndex(document, index) is { } component7)
+                {
+                    componentParts.Add(component7);
+                }
             }
 
-            var sourceFace = sourceFaces.GetByIndex(0);
-            var sourceFace7 = TransferTo7(sourceFace);
-            // FindObject(Obj, SourcePart) принимает именно Part7, а не IPart7 — та же ловушка,
-            // что у IPart7.InstanceCount в блоке C1. Поэтому перенос типизирован отдельно.
-            var sourcePart7 = TransferPart7(sourcePart);
-            step.Observe("источник: граней " + sourceFaces.GetCount()
-                + ", грань[0]=" + Api5.RuntimeName(sourceFace)
-                + " → API7 " + (sourceFace7 is null ? "null" : "IModelObject")
-                + ", документ-источник как Part7: " + (sourcePart7 is null ? "null" : "да"));
-
-            if (sourceFace7 is null || sourcePart7 is null)
+            step.Observe("компонентов как IPart7: " + componentParts.Count);
+            foreach (var component7 in componentParts)
             {
-                step.Fail("грань источника или сам источник не переносятся в API7.");
-                return null;
+                foreach (var firstLevel in new[] { true, false })
+                {
+                    foreach (var z in new[] { 0d, 5d, 10d })
+                    {
+                        var level = firstLevel;
+                        var zz = z;
+                        var rawScan = Api5.SafeObject(() => component7.FindObjectsByPoint(25d, 20d, zz, level));
+                        var foundScan = AsModelObjects(rawScan);
+                        step.Observe("скан на КОМПОНЕНТЕ FirstLevel=" + level + " (25, 20, "
+                            + zz.ToString(CultureInfo.InvariantCulture) + ") → "
+                            + (rawScan is null ? "null" : "объектов " + foundScan.Count + ": "
+                                + string.Join(", ", foundScan.Select(o => Api5.SafeEnum(() => o.ModelObjectType).ToString()))));
+                    }
+                }
+            }
+
+            var perProbe = new List<List<IModelObject>>();
+            foreach (var probe in probes)
+            {
+                var raw = Api5.SafeObject(() => topPart.FindObjectsByPoint(probe.X, probe.Y, probe.Z, false));
+                var found = AsModelObjects(raw);
+                perProbe.Add(found);
+                step.Observe(probe.Label + ": FindObjectsByPoint("
+                    + probe.X.ToString(CultureInfo.InvariantCulture) + ", "
+                    + probe.Y.ToString(CultureInfo.InvariantCulture) + ", "
+                    + probe.Z.ToString(CultureInfo.InvariantCulture) + ") → "
+                    + (raw is null ? "null" : raw.GetType().Name + ", объектов " + found.Count));
+                // ЧТО именно найдено — называется вслух: без типа объекта «сопряжение не Valid»
+                // неотличимо от «в BaseObject ушло не то».
+                foreach (var item in found)
+                {
+                    step.Observe("   " + probe.Label + " объект: тип="
+                        + Api5.SafeEnum(() => item.ModelObjectType)
+                        + ", имя='" + (Api5.SafeObject(() => item.Name) ?? "—") + "'");
+                }
             }
 
             var objects = new List<IModelObject>();
-            for (var index = 0; index < collection.GetCount(); index++)
+            foreach (var found in perProbe)
             {
-                if (collection.GetByIndex(index) is not ksPart component)
+                if (found.Count > 0)
                 {
-                    step.Observe("компонент " + index + ": не ksPart");
-                    continue;
-                }
-
-                if (TransferTo7(component) is not IPart7 component7)
-                {
-                    step.Observe("компонент " + index + ": не переносится в API7 как IPart7");
-                    continue;
-                }
-
-                // Наблюдения предыдущего прогона, оставленные намеренно: они объясняют, ПОЧЕМУ
-                // маршрут через GetMainBody() не используется.
-                step.Observe("компонент " + index + ": LoadState=" + Api5.SafeEnum(() => component7.LoadState)
-                    + ", GetMainBody()=" + Api5.RuntimeName(Api5.SafeObject(() => component.GetMainBody())));
-
-                IModelObject? mapped = null;
-                try
-                {
-                    mapped = component7.FindObject(sourceFace7, sourcePart7);
-                }
-                catch (Exception ex)
-                {
-                    step.Observe("компонент " + index + ": FindObject бросил "
-                        + ex.GetType().Name + ": " + ex.Message);
-                }
-
-                step.Observe("компонент " + index + ": FindObject(грань источника) → "
-                    + (mapped is null ? "null" : "IModelObject"));
-
-                if (mapped is not null)
-                {
-                    objects.Add(mapped);
+                    objects.Add(found[0]);
                 }
             }
 
+            step.Data["per_probe"] = perProbe.Select(f => f.Count).ToArray();
             step.Data["objects"] = objects.Count;
+            step.Observe("в сопряжение пойдут объекты: " + objects.Count
+                + " (по одному с каждой точки, не «первые два из списка»)");
             if (objects.Count < 2)
             {
-                step.Fail("в API7 перенесено объектов: " + objects.Count + ", нужно минимум 2.");
+                step.Fail("с разных точек собрано объектов: " + objects.Count + ", нужно минимум 2.");
                 return null;
             }
 
-            step.Pass("перенесено объектов: " + objects.Count);
+            step.Pass("по одному объекту с каждой из " + objects.Count + " точек");
             return objects;
         }
         catch (Exception ex)
         {
-            step.Fail("чтение граней бросило: " + ex.Message);
+            step.Fail("поиск по точке бросил: " + ex.Message);
             return null;
+        }
+    }
+
+    /// <summary>Компонент по порядковому номеру как <c>IPart7</c> (адрес измерен в блоке C1).</summary>
+    private IPart7? ComponentByIndex(ksDocument3D document, int index)
+    {
+        try
+        {
+            return document.PartCollection(true) is ksPartCollection collection
+                && collection.GetByIndex(index) is ksPart part
+                ? TransferTo7(part) as IPart7
+                : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Приводит результат <c>FindObjectsByPoint</c> к списку <c>IModelObject</c>.</summary>
+    /// <remarks>
+    /// Документация не фиксирует форму ответа: это может быть один объект, SAFEARRAY или массив
+    /// <c>object[]</c>. Разбираются все три случая, а неожиданная форма НАЗЫВАЕТСЯ, а не
+    /// проглатывается.
+    /// </remarks>
+    private List<IModelObject> AsModelObjects(object? raw)
+    {
+        var result = new List<IModelObject>();
+        switch (raw)
+        {
+            case null:
+                return result;
+            case IModelObject single:
+                result.Add(single);
+                return result;
+            case System.Array array:
+                foreach (var item in array)
+                {
+                    if (item is IModelObject model)
+                    {
+                        result.Add(model);
+                    }
+                }
+
+                return result;
+            default:
+                _report.Note(_current?.Id ?? "M", "FindObjectsByPoint вернул неожиданную форму: "
+                    + raw.GetType().FullName);
+                return result;
         }
     }
 
@@ -609,14 +717,20 @@ internal sealed class MateProbe
             step.Observe("Update()=" + updated + ", сопряжений после: " + after
                 + ", Valid=" + step.Data["valid"]);
 
-            if (updated && after is not null && before is not null && after > before)
+            // ПОДТВЕРЖДЕНИЕ — это Valid, а не рост счётчика. Измерено 05.10.2026: сопряжение с
+            // двумя объектами ОДНОГО компонента тоже дало Update()=true и счётчик 0 → 1, но
+            // Valid=false. Значит «Update()=true» доказательством не является, и ослаблять это
+            // утверждение под наблюдённый результат запрещено.
+            var valid = Api5.SafeBool(() => mate.Valid);
+            if (updated && valid == true)
             {
-                step.Pass("сопряжение принято: сопряжений " + before + " → " + after);
+                step.Pass("сопряжение подтверждено: Valid=true, сопряжений " + before + " → " + after);
             }
             else
             {
-                step.Fail("сопряжение не подтверждено: Update()=" + updated
-                    + ", сопряжений " + before + " → " + after);
+                step.Fail("сопряжение НЕ подтверждено: Update()=" + updated + ", Valid=" + valid
+                    + ", сопряжений " + before + " → " + after
+                    + ". Запись создана, но недействительна — это факт о продукте, а не о пробе.");
             }
         }
         catch (Exception ex)

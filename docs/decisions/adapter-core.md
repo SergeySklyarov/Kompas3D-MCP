@@ -791,6 +791,10 @@ courtesy. MEASURED: `SetCurrent()` returning TRUE is NOT the result — the type
 `GetViewProjectonType()` is, and a mismatch refuses `VIEW_UNAVAILABLE` rather than snapping under a label
 the kernel never confirmed. MEASURED: the raster extent is fitted to the model's extent in the CURRENT
 projection, so different projections legitimately differ in size (front 399×320, up 399×202, isometric
-423×503), and two consecutive snapshots of one projection are byte-identical. LIMIT: a projection type the
-collection does not carry (user projection, dimetric) refuses `VIEW_UNAVAILABLE`; the published list is the
-subset the probe found live in a fresh part.
+423×503), and two consecutive snapshots of one projection are byte-identical. MEASURED: the CURRENT
+projection of a freshly created part is dimetry (type 8); it reads back through <c>GetViewProjectonType</c>
+and, once <c>dimetric</c> is published, is restorable, so a first <c>view</c> without <c>keep_view</c>
+succeeds and restores it. LIMIT: a projection type the collection does not carry, or one with no published
+name, cannot be restored; a call asking to switch without <c>keep_view</c> then refuses BEFORE the first
+<c>SetCurrent</c> rather than move the window. The restore itself never throws — an exception out of the
+caller's <c>finally</c> would replace a finished snapshot's result with a refusal.

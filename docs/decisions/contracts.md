@@ -1785,11 +1785,13 @@ History: docs/decisions/contracts.md#export-image-route</remarks>
 <remarks>DOC: <c>ksviewprojectiontype.html</c> — <c>ksVPNone -1 … ksVPIsometric 7</c>, <c>ksVPDimetric 8</c>,
 <c>ksVPUnfold 9</c>, <c>ksVPUser 10</c>. The API7 numbers do NOT match the API5 <c>ProjectionType</c> numbers
 (three isometries there, one here) and the correspondence is not implied by the help page.
-PUBLISHED: front 1, rear 2, up 3, down 4, left 5, right 6, isometric 7. LIMIT: the published list is the SUBSET
-the probe found live in a freshly created part's collection; <c>ksVPUser</c> (10) and <c>ksVPDimetric</c> (8) are
-deliberately absent, and a request for a type the collection does not carry refuses <c>VIEW_UNAVAILABLE</c>
-rather than snapping the current view under a false label. Wire names are ASCII so that a product language
-change cannot break the contract.
+PUBLISHED: front 1, rear 2, up 3, down 4, left 5, right 6, isometric 7, dimetric 8. LIMIT: the published list is the
+SUBSET the probe found live in a part's collection plus <c>dimetric</c>, which is the CURRENT projection of a freshly
+created part (documented <c>ksVPDimetric 8</c>); <c>ksVPUser</c> (10) is deliberately absent because a user projection
+has no fixed type to address. A request for a type the collection does not carry refuses <c>VIEW_UNAVAILABLE</c> rather
+than snapping the current view under a false label. <c>dimetric</c> was added after leaving it out made the previous
+view of every fresh document UNRESTORABLE, so every first <c>view</c> call refused. Wire names are ASCII so that a
+product language change cannot break the contract.
 History: docs/decisions/contracts.md#view-projection</remarks>
 
 ## <a id="sketch-ref-readback"></a>Ссылка на эскиз из признака

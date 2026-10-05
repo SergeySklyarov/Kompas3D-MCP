@@ -2122,17 +2122,19 @@ public sealed record ExportImageCommand
     /// <summary>Whether to return the picture in the response. Default — yes.</summary>
     public bool ReturnImageContent { get; init; } = true;
 
-    /// <summary>Projection to show in the snapshot, by published name (front, rear, up, down, left,
-    /// right, isometric). Not set — the document's CURRENT view is captured and left untouched. Set —
-    /// the view is applied before the render and RESTORED after it.</summary>
-    /// <remarks>MEASURED (probe VIEW): switching the projection does NOT mark the document changed
-    /// (<c>IKompasDocument.Changed</c> stays false), so the revision is unaffected and the restore is
-    /// honest rather than a courtesy. The type is applied, not the localized name.
-    /// History: docs/decisions/contracts.md#view-projection</remarks>
+    /// <summary>Projection to show in the snapshot, by published name (front, rear, up, down, left, right,
+    /// isometric). Not set — the current view is captured and left untouched. Set — applied before the
+    /// render and RESTORED after it, unless <see cref="KeepView"/> says otherwise.</summary>
+    /// <remarks>MEASURED: switching the projection does NOT mark the document changed
+    /// (<c>IKompasDocument.Changed</c> stays false). In a VISIBLE window before the first <c>SetCurrent</c>
+    /// no projection answers <c>IsCurrent=true</c>, so a call without <c>keep_view=true</c> refuses BEFORE
+    /// changing the view. History: docs/decisions/contracts.md#view-projection</remarks>
     public string? View { get; init; }
 
     /// <summary>Keep the requested projection after the snapshot instead of restoring the previous one.
-    /// Default — false (restore). Only meaningful together with <see cref="View"/>.</summary>
+    /// Default — false (restore). Only meaningful together with <see cref="View"/>. In a visible window
+    /// whose current projection cannot be read, <c>keep_view=true</c> is REQUIRED: there is nothing to
+    /// restore, and the call refuses rather than move the window silently.</summary>
     public bool KeepView { get; init; }
 }
 
@@ -2163,7 +2165,7 @@ public sealed record ExportImageResultDto
     /// two).</summary>
     public bool? SavePathFromMemory { get; init; }
 
-    /// <summary>View state: the snapshot was taken from the server window's current view.</summary>
+    /// <summary>View state: which projection was requested and what the collection reported back.</summary>
     public required string ViewNote { get; init; }
 
     /// <summary>Projection the CALLER asked for by name; null — the current view was captured.</summary>
@@ -2174,7 +2176,10 @@ public sealed record ExportImageResultDto
     /// echo of the request: the field names the type the collection reported as current.</summary>
     public string? AppliedView { get; init; }
 
-    /// <summary>Projection the document showed BEFORE the change, read back by type; null — not read.</summary>
+    /// <summary>Projection the document showed BEFORE the change, read back by type; null — not read.
+    /// MEASURED: in a visible window before the first <c>SetCurrent</c> this is always null, and a call
+    /// asking for a switch WITHOUT <c>keep_view=true</c> is refused before the view changes, so a null
+    /// here never means "the window was moved anyway".</summary>
     public string? PreviousView { get; init; }
 
     /// <summary>Whether the previous projection was restored after the snapshot.</summary>

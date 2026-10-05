@@ -186,9 +186,12 @@ public static class Program
           повод перечитать модель (kompas_get_context, list/get/measure), а не повторять вызов:
           повтор не поднимет уровень доказательства.
         - Снимок (kompas_export_image) — вспомогательный канал, а не доказательство. Проекция
-          задаётся полем view по имени типа (front/rear/up/down/left/right/isometric), а не по
-          локализованной подписи вида; применённый вид подтверждается обратным чтением, прежний
-          возвращается после снимка (или остаётся при keep_view).
+          задаётся полем view по имени типа (front/rear/up/down/left/right/isometric/dimetric), а
+          не по локализованной подписи вида; применённый вид подтверждается обратным чтением.
+          Прежний вид возвращается после снимка, но только если он восстановим (прочитан и его
+          тип опубликован): в видимом окне до первого SetCurrent он не читается, и вызов с
+          keep_view=false отказывает VIEW_UNAVAILABLE, не меняя вид окна. keep_view=true —
+          согласие оставить запрошенную проекцию.
         """;
 
     /// <summary>The tool list: the same catalog for the owner and for a waiting Host.</summary>

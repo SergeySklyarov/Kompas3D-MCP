@@ -57,6 +57,10 @@ public static class ErrorCodes
     /// that type, or the read-back after <c>SetCurrent</c> reported a different type. A separate code, not
     /// <see cref="RasterRefused"/>: here the CORE did not refuse the raster — the VIEW could not be established, and
     /// a snapshot taken anyway would carry a label the kernel never confirmed.</summary>
+    /// <remarks>Also returned when the CURRENT projection cannot be read and the caller did not set
+    /// <c>keep_view=true</c>: nothing could be put back, and switching anyway would move the user's window on a
+    /// promise the tool cannot keep. That refusal is taken BEFORE the view changes, and its `details` carry
+    /// <c>keep_view_required_without_previous_view: true</c> with the remedy named.</remarks>
     public const string ViewUnavailable = "VIEW_UNAVAILABLE";
 
     public const string UnitsUnverified = "UNITS_UNVERIFIED";
@@ -155,7 +159,10 @@ public static class ErrorMessages
         [ErrorCodes.ViewUnavailable] =
             "Запрошенную проекцию применить или подтвердить не удалось: в документе нет коллекции " +
             "проекций, нет проекции этого типа, либо обратное чтение после SetCurrent назвало другой " +
-            "тип. Снимок не снимается: подписывать картинку неподтверждённым видом нельзя.",
+            "тип, либо текущую проекцию прочитать не удалось, и вернуть её после снимка нечем. "
+            + "Снимок не снимается: подписывать картинку неподтверждённым видом нельзя. В "
+            + "последнем случае вид окна НЕ изменён, и повтор с keep_view=true означает согласие "
+            + "оставить запрошенную проекцию.",
         [ErrorCodes.UnitsUnverified] = "Единицы результата не подтверждены; значение не выдаётся.",
         [ErrorCodes.NotConstantThickness] = "Деталь не является плоской постоянной толщины.",
         [ErrorCodes.AmbiguousFlatPattern] = "Одной проекции недостаточно для однозначного контура.",

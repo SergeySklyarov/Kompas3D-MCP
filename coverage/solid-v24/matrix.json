@@ -5188,7 +5188,7 @@
    "context": "assembly",
    "catalog_ref": "ASM",
    "parameters_schema": null,
-   "adapter_route": "kompas_insert_component: API5 ksDocument3D.CreatePartInAssembly(fileName, GetDefaultEntity(o3d_planeXOY)) для первого экземпляра и ksDocument3D.CopyPart(source, placement) для повторного",
+   "adapter_route": "kompas_insert_component: API7 IPart7.Parts → IParts7.AddFromFile(fileName, ExternalFile=true, Redraw=true) → Part7 (iparts7_addfromfile.html — «имя файла, из которого будет ВСТАВЛЕН компонент»); размещение — ksDocument3D.DefaultPlacement → InitByMatrix3D → ksPart.SetPlacement → UpdatePlacement",
    "actions": {
     "discover": "verified",
     "create": "verified",
@@ -5246,7 +5246,7 @@
    "context": "assembly",
    "catalog_ref": "ASM",
    "parameters_schema": null,
-   "adapter_route": "kompas_list_components: API7 IAssemblyDocument.TopPart → IPart7.PartsEx(ksAllParts) + IPart7.InstanceCount/Fixed/Marking/FileName/LoadState; API5 ksDocument3D.PartCollection(true) для размещения",
+   "adapter_route": "kompas_list_components: API7 IAssemblyDocument.TopPart → IPart7.PartsEx(ksAllParts); тела и грани компонента — ksPart.BodyCollection() → ksBody.FaceCollection() (kspart_bodycollection.html); размещение — ksPlacement.GetMatrix3D",
    "actions": {
     "discover": "verified",
     "create": "not_applicable",
@@ -5355,7 +5355,7 @@
    "context": "assembly",
    "catalog_ref": "ASM",
    "parameters_schema": null,
-   "adapter_route": "kompas_replace_component: API5 ksPart.fileName + API7 IPart7.FileName + IPart7.RebuildModel(true) + ksDocument3D.RebuildDocument",
+   "adapter_route": "kompas_replace_component: ksPart.fileName (kspart_setfilename.html) + ksPart.Update (примечание 4 справки: «изменение вступает в силу после вызова ksPart::Update») с проверкой результата чтением обратно",
    "actions": {
     "discover": "verified",
     "create": "not_applicable",
@@ -5884,6 +5884,334 @@
     "geometry_validation": "идемпотентность — счётчик, а не геометрия"
    },
    "catalog_level": "mcp_verified"
+  },
+  {
+   "operation_id": "MATE-01.mate.create",
+   "context": "assembly",
+   "catalog_ref": "MATE",
+   "parameters_schema": null,
+   "adapter_route": "IPart7.MateConstraints → IMateConstraints3D.Add(MateConstraintType) → BaseObject1/BaseObject2 → Update() (imateconstraints3d_add.html, imateconstraint3d_baseobject1/2.html)",
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "not_started",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "tests": [],
+   "evidence": [],
+   "limitations": [
+    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+   ]
+  },
+  {
+   "operation_id": "MATE-02.mate.read",
+   "context": "assembly",
+   "catalog_ref": "MATE",
+   "parameters_schema": null,
+   "adapter_route": "ksDocument3D.MateConstraintCollection → GetCount/GetByIndex → ksMateConstraint.GetBaseObj(1|2), constraintType, ParamValue, Alignment (ksmateconstraintcollection_getcount.html, ksmateconstraint_getbaseobj.html)",
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "not_started",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "tests": [],
+   "evidence": [],
+   "limitations": [
+    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+   ]
+  },
+  {
+   "operation_id": "MATE-03.mate.param_edit",
+   "context": "assembly",
+   "catalog_ref": "MATE",
+   "parameters_schema": null,
+   "adapter_route": "IMateConstraint3D.ParamValue = … → IMateConstraint3D.Update() (imateconstraint3d_paramvalue.html)",
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "not_started",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "tests": [],
+   "evidence": [],
+   "limitations": [
+    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+   ]
+  },
+  {
+   "operation_id": "MATE-04.mate.fixed",
+   "context": "assembly",
+   "catalog_ref": "MATE",
+   "parameters_schema": null,
+   "adapter_route": "IMateConstraint3D.Fixed = ksMateFixedTypeEnum (ksmatefixedtypeenum.html)",
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "not_started",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "tests": [],
+   "evidence": [],
+   "limitations": [
+    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+   ]
+  },
+  {
+   "operation_id": "MATE-05.mate.delete",
+   "context": "assembly",
+   "catalog_ref": "MATE",
+   "parameters_schema": null,
+   "adapter_route": "ksDocument3D.RemoveMateConstraint(constraintType, obj1, obj2) (ksdocument3d_removemateconstraint.html)",
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "not_started",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "tests": [],
+   "evidence": [],
+   "limitations": [
+    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+   ]
+  },
+  {
+   "operation_id": "MATE-06.mate.placement_effect",
+   "context": "assembly",
+   "catalog_ref": "MATE",
+   "parameters_schema": null,
+   "adapter_route": "ksPlacement.GetMatrix3D по компоненту после Update() сопряжения (маршрут чтения измерен в блоке C1)",
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "not_started",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "tests": [],
+   "evidence": [],
+   "limitations": [
+    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+   ]
+  },
+  {
+   "operation_id": "dep.mate.object_address",
+   "context": "assembly",
+   "catalog_ref": null,
+   "parameters_schema": null,
+   "adapter_route": "см. строки режимов MATE-01…MATE-06",
+   "required_actions": [
+    "discover",
+    "read",
+    "negative_tests"
+   ],
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "not_started",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "tests": [],
+   "evidence": [],
+   "limitations": [
+    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+   ],
+   "kind": "common_dependency",
+   "profile": "mates-minimal-v1",
+   "priority": "dependency_of",
+   "queue": null,
+   "catalog_refs": [
+    "MATE"
+   ],
+   "title": "Адресация грани компонента как объекта сопряжения"
+  },
+  {
+   "operation_id": "dep.mate.component_insert",
+   "context": "assembly",
+   "catalog_ref": null,
+   "parameters_schema": null,
+   "adapter_route": "см. строки режимов MATE-01…MATE-06",
+   "required_actions": [
+    "create",
+    "read",
+    "geometry_validation"
+   ],
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "not_started",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "tests": [],
+   "evidence": [],
+   "limitations": [
+    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+   ],
+   "kind": "common_dependency",
+   "profile": "mates-minimal-v1",
+   "priority": "dependency_of",
+   "queue": null,
+   "catalog_refs": [
+    "MATE"
+   ],
+   "title": "Документированная вставка компонента (IParts7.AddFromFile)"
+  },
+  {
+   "operation_id": "dep.mate.revisions",
+   "context": "assembly",
+   "catalog_ref": null,
+   "parameters_schema": null,
+   "adapter_route": "см. строки режимов MATE-01…MATE-06",
+   "required_actions": [
+    "read",
+    "edit",
+    "negative_tests"
+   ],
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "not_started",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "tests": [],
+   "evidence": [],
+   "limitations": [
+    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+   ],
+   "kind": "common_dependency",
+   "profile": "mates-minimal-v1",
+   "priority": "dependency_of",
+   "queue": null,
+   "catalog_refs": [
+    "MATE"
+   ],
+   "title": "Ревизии документа при работе с сопряжениями"
+  },
+  {
+   "operation_id": "dep.mate.idempotency",
+   "context": "assembly",
+   "catalog_ref": null,
+   "parameters_schema": null,
+   "adapter_route": "см. строки режимов MATE-01…MATE-06",
+   "required_actions": [
+    "create",
+    "read",
+    "negative_tests"
+   ],
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "not_started",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "tests": [],
+   "evidence": [],
+   "limitations": [
+    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+   ],
+   "kind": "common_dependency",
+   "profile": "mates-minimal-v1",
+   "priority": "dependency_of",
+   "queue": null,
+   "catalog_refs": [
+    "MATE"
+   ],
+   "title": "Повтор команды сопряжения по operation_id"
+  },
+  {
+   "operation_id": "dep.mate.save_reopen",
+   "context": "assembly",
+   "catalog_ref": null,
+   "parameters_schema": null,
+   "adapter_route": "см. строки режимов MATE-01…MATE-06",
+   "required_actions": [
+    "save_reopen",
+    "read"
+   ],
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "not_started",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "tests": [],
+   "evidence": [],
+   "limitations": [
+    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+   ],
+   "kind": "common_dependency",
+   "profile": "mates-minimal-v1",
+   "priority": "dependency_of",
+   "queue": null,
+   "catalog_refs": [
+    "MATE"
+   ],
+   "title": "Сопряжения переживают save → close → reopen"
   }
  ],
  "pending_families": [

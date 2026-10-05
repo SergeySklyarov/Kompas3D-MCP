@@ -19,8 +19,8 @@
    "note": "читалась по проводу; зеркало справки лежит вне поставки",
    "links_note": "набор ссылок сузился до ПОДТВЕРЖДАЮЩИХ страниц: прежде проверялись и одноимённые страницы чужих интерфейсов, и их наличие считалось подтверждением (снято вместе с находкой F-06). Меньшее число — исправленное определение, а не снятая проверка",
    "links": {
-    "checked": 217,
-    "ok": 217,
+    "checked": 215,
+    "ok": 215,
     "failed": 0,
     "not_verified": 0,
     "failed_list": [],
@@ -53,13 +53,13 @@
     "Не реализовано"
    ]
   },
-  "scope": "Все опубликованные инструменты на проводе (58), все строки матрицы покрытия (86), 324 COM-маршрутов с установленным типом получателя (API5 148 / API7 176) и 35 числовых идентификаторов типов объектов. Обращения, у которых тип получателя не установлен, перечислены отдельно и в подтверждённые не отнесены.",
+  "scope": "Все опубликованные инструменты на проводе (58), все строки матрицы покрытия (97), 324 COM-маршрутов с установленным типом получателя (API5 148 / API7 176) и 35 числовых идентификаторов типов объектов. Обращения, у которых тип получателя не установлен, перечислены отдельно и в подтверждённые не отнесены.",
   "completeness": {
    "tools_on_wire": 58,
    "com_snapshot_fresh": true,
-   "com_snapshot_lag_seconds": -469.9304780960083,
+   "com_snapshot_lag_seconds": -899.80837225914,
    "inventory_fresh": true,
-   "inventory_lag_seconds": -405.09714579582214,
+   "inventory_lag_seconds": -18.21444058418274,
    "inventory_negative_control_proved": true,
    "reports_with_argument_mode": 2,
    "report_route_guard_required": true,
@@ -899,19 +899,19 @@
    "catalog_support_without_wire": {},
    "catalog_support_names_count": 28,
    "catalog_support_shapes": {
-    "строка": 68,
+    "строка": 69,
     "словарь": 36
    },
    "catalog_support_levels": {
     "none": 36
    },
    "catalog_support_notes_not_read": 11,
-   "rows_total": 86,
-   "rows_without_schema_link": 29,
+   "rows_total": 97,
+   "rows_without_schema_link": 40,
    "rows_without_schema_shared_named": 12,
-   "rows_without_schema_planned": 3,
+   "rows_without_schema_planned": 9,
    "rows_without_schema_unexplained": 7,
-   "rows_dependency_without_required_of": 7,
+   "rows_dependency_without_required_of": 12,
    "required_of_mismatches_matrix_vs_profile": 0,
    "rows_claiming_verified_actions": 83,
    "rows_actions_all_named_by_dedicated_row": 83,
@@ -939,7 +939,7 @@
    "object_types_not_in_table": 0,
    "documentation_confirmed": 70,
    "implementation_confirmed": 56,
-   "planned_rows": 3,
+   "planned_rows": 9,
    "acceptance_rows_referenced": 983,
    "acceptance_groups": [
     "assembly.json",
@@ -9798,7 +9798,7 @@
    "schema_note": "причина отсутствия схемы не установлена — названо прямо, а не заполнено чем попало",
    "shared_schemas": [],
    "code": [],
-   "declared_route": "kompas_insert_component: API5 ksDocument3D.CreatePartInAssembly(fileName, GetDefaultEntity(o3d_planeXOY)) для первого экземпляра и ksDocument3D.CopyPart(source, placement) для повторного",
+   "declared_route": "kompas_insert_component: API7 IPart7.Parts → IParts7.AddFromFile(fileName, ExternalFile=true, Redraw=true) → Part7 (iparts7_addfromfile.html — «имя файла, из которого будет ВСТАВЛЕН компонент»); размещение — ksDocument3D.DefaultPlacement → InitByMatrix3D → ksPart.SetPlacement → UpdatePlacement",
    "com": [],
    "documentation": {
     "status": "Не подтверждено",
@@ -9868,7 +9868,7 @@
    "schema_note": "причина отсутствия схемы не установлена — названо прямо, а не заполнено чем попало",
    "shared_schemas": [],
    "code": [],
-   "declared_route": "kompas_list_components: API7 IAssemblyDocument.TopPart → IPart7.PartsEx(ksAllParts) + IPart7.InstanceCount/Fixed/Marking/FileName/LoadState; API5 ksDocument3D.PartCollection(true) для размещения",
+   "declared_route": "kompas_list_components: API7 IAssemblyDocument.TopPart → IPart7.PartsEx(ksAllParts); тела и грани компонента — ksPart.BodyCollection() → ksBody.FaceCollection() (kspart_bodycollection.html); размещение — ksPlacement.GetMatrix3D",
    "com": [],
    "documentation": {
     "status": "Не подтверждено",
@@ -10005,7 +10005,7 @@
    "schema_note": "причина отсутствия схемы не установлена — названо прямо, а не заполнено чем попало",
    "shared_schemas": [],
    "code": [],
-   "declared_route": "kompas_replace_component: API5 ksPart.fileName + API7 IPart7.FileName + IPart7.RebuildModel(true) + ksDocument3D.RebuildDocument",
+   "declared_route": "kompas_replace_component: ksPart.fileName (kspart_setfilename.html) + ksPart.Update (примечание 4 справки: «изменение вступает в силу после вызова ksPart::Update») с проверкой результата чтением обратно",
    "com": [],
    "documentation": {
     "status": "Не подтверждено",
@@ -10537,6 +10537,677 @@
     "Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.",
     "Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).",
     "Сверено только начало координат: различающий контроль по осям (поворот) не ставился."
+   ]
+  },
+  {
+   "operation_id": "MATE-01.mate.create",
+   "queue": null,
+   "kind": null,
+   "catalog_level": null,
+   "tool": null,
+   "family": "MATE-01",
+   "schema": null,
+   "schema_note": "схема не применима: инструмент для этой строки не опубликован. Существующий инструмент к плановой функции НЕ приписывается",
+   "shared_schemas": [],
+   "code": [],
+   "declared_route": "IPart7.MateConstraints → IMateConstraints3D.Add(MateConstraintType) → BaseObject1/BaseObject2 → Update() (imateconstraints3d_add.html, imateconstraint3d_baseobject1/2.html)",
+   "com": [],
+   "documentation": {
+    "status": "Не подтверждено",
+    "note": "семейство не реализовано; маршрут в коде отсутствует",
+    "planned_documented_interfaces": []
+   },
+   "conditions": null,
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "not_started",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "actions_verified": 0,
+   "actions_open": [
+    "discover",
+    "create",
+    "read",
+    "edit",
+    "rebuild",
+    "save_reopen",
+    "suppress_restore",
+    "delete_dependencies",
+    "negative_tests",
+    "geometry_validation"
+   ],
+   "actions_without_call_evidence": [],
+   "implementation": {
+    "status": "Не реализовано",
+    "status_basis": "ни одно действие строки не начато",
+    "catalog_level_claim": null,
+    "catalog_level_is_authoritative": false,
+    "delivery": "artifacts/publish-assemblies-20261004",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
+    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "acceptance_rows": [],
+    "acceptance_verdicts": []
+   },
+   "limitations": [
+    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+   ]
+  },
+  {
+   "operation_id": "MATE-02.mate.read",
+   "queue": null,
+   "kind": null,
+   "catalog_level": null,
+   "tool": null,
+   "family": "MATE-02",
+   "schema": null,
+   "schema_note": "схема не применима: инструмент для этой строки не опубликован. Существующий инструмент к плановой функции НЕ приписывается",
+   "shared_schemas": [],
+   "code": [],
+   "declared_route": "ksDocument3D.MateConstraintCollection → GetCount/GetByIndex → ksMateConstraint.GetBaseObj(1|2), constraintType, ParamValue, Alignment (ksmateconstraintcollection_getcount.html, ksmateconstraint_getbaseobj.html)",
+   "com": [],
+   "documentation": {
+    "status": "Не подтверждено",
+    "note": "семейство не реализовано; маршрут в коде отсутствует",
+    "planned_documented_interfaces": []
+   },
+   "conditions": null,
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "not_started",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "actions_verified": 0,
+   "actions_open": [
+    "discover",
+    "create",
+    "read",
+    "edit",
+    "rebuild",
+    "save_reopen",
+    "suppress_restore",
+    "delete_dependencies",
+    "negative_tests",
+    "geometry_validation"
+   ],
+   "actions_without_call_evidence": [],
+   "implementation": {
+    "status": "Не реализовано",
+    "status_basis": "ни одно действие строки не начато",
+    "catalog_level_claim": null,
+    "catalog_level_is_authoritative": false,
+    "delivery": "artifacts/publish-assemblies-20261004",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
+    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "acceptance_rows": [],
+    "acceptance_verdicts": []
+   },
+   "limitations": [
+    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+   ]
+  },
+  {
+   "operation_id": "MATE-03.mate.param_edit",
+   "queue": null,
+   "kind": null,
+   "catalog_level": null,
+   "tool": null,
+   "family": "MATE-03",
+   "schema": null,
+   "schema_note": "схема не применима: инструмент для этой строки не опубликован. Существующий инструмент к плановой функции НЕ приписывается",
+   "shared_schemas": [],
+   "code": [],
+   "declared_route": "IMateConstraint3D.ParamValue = … → IMateConstraint3D.Update() (imateconstraint3d_paramvalue.html)",
+   "com": [],
+   "documentation": {
+    "status": "Не подтверждено",
+    "note": "семейство не реализовано; маршрут в коде отсутствует",
+    "planned_documented_interfaces": []
+   },
+   "conditions": null,
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "not_started",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "actions_verified": 0,
+   "actions_open": [
+    "discover",
+    "create",
+    "read",
+    "edit",
+    "rebuild",
+    "save_reopen",
+    "suppress_restore",
+    "delete_dependencies",
+    "negative_tests",
+    "geometry_validation"
+   ],
+   "actions_without_call_evidence": [],
+   "implementation": {
+    "status": "Не реализовано",
+    "status_basis": "ни одно действие строки не начато",
+    "catalog_level_claim": null,
+    "catalog_level_is_authoritative": false,
+    "delivery": "artifacts/publish-assemblies-20261004",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
+    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "acceptance_rows": [],
+    "acceptance_verdicts": []
+   },
+   "limitations": [
+    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+   ]
+  },
+  {
+   "operation_id": "MATE-04.mate.fixed",
+   "queue": null,
+   "kind": null,
+   "catalog_level": null,
+   "tool": null,
+   "family": "MATE-04",
+   "schema": null,
+   "schema_note": "схема не применима: инструмент для этой строки не опубликован. Существующий инструмент к плановой функции НЕ приписывается",
+   "shared_schemas": [],
+   "code": [],
+   "declared_route": "IMateConstraint3D.Fixed = ksMateFixedTypeEnum (ksmatefixedtypeenum.html)",
+   "com": [],
+   "documentation": {
+    "status": "Не подтверждено",
+    "note": "семейство не реализовано; маршрут в коде отсутствует",
+    "planned_documented_interfaces": []
+   },
+   "conditions": null,
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "not_started",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "actions_verified": 0,
+   "actions_open": [
+    "discover",
+    "create",
+    "read",
+    "edit",
+    "rebuild",
+    "save_reopen",
+    "suppress_restore",
+    "delete_dependencies",
+    "negative_tests",
+    "geometry_validation"
+   ],
+   "actions_without_call_evidence": [],
+   "implementation": {
+    "status": "Не реализовано",
+    "status_basis": "ни одно действие строки не начато",
+    "catalog_level_claim": null,
+    "catalog_level_is_authoritative": false,
+    "delivery": "artifacts/publish-assemblies-20261004",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
+    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "acceptance_rows": [],
+    "acceptance_verdicts": []
+   },
+   "limitations": [
+    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+   ]
+  },
+  {
+   "operation_id": "MATE-05.mate.delete",
+   "queue": null,
+   "kind": null,
+   "catalog_level": null,
+   "tool": null,
+   "family": "MATE-05",
+   "schema": null,
+   "schema_note": "схема не применима: инструмент для этой строки не опубликован. Существующий инструмент к плановой функции НЕ приписывается",
+   "shared_schemas": [],
+   "code": [],
+   "declared_route": "ksDocument3D.RemoveMateConstraint(constraintType, obj1, obj2) (ksdocument3d_removemateconstraint.html)",
+   "com": [],
+   "documentation": {
+    "status": "Не подтверждено",
+    "note": "семейство не реализовано; маршрут в коде отсутствует",
+    "planned_documented_interfaces": []
+   },
+   "conditions": null,
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "not_started",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "actions_verified": 0,
+   "actions_open": [
+    "discover",
+    "create",
+    "read",
+    "edit",
+    "rebuild",
+    "save_reopen",
+    "suppress_restore",
+    "delete_dependencies",
+    "negative_tests",
+    "geometry_validation"
+   ],
+   "actions_without_call_evidence": [],
+   "implementation": {
+    "status": "Не реализовано",
+    "status_basis": "ни одно действие строки не начато",
+    "catalog_level_claim": null,
+    "catalog_level_is_authoritative": false,
+    "delivery": "artifacts/publish-assemblies-20261004",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
+    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "acceptance_rows": [],
+    "acceptance_verdicts": []
+   },
+   "limitations": [
+    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+   ]
+  },
+  {
+   "operation_id": "MATE-06.mate.placement_effect",
+   "queue": null,
+   "kind": null,
+   "catalog_level": null,
+   "tool": null,
+   "family": "MATE-06",
+   "schema": null,
+   "schema_note": "схема не применима: инструмент для этой строки не опубликован. Существующий инструмент к плановой функции НЕ приписывается",
+   "shared_schemas": [],
+   "code": [],
+   "declared_route": "ksPlacement.GetMatrix3D по компоненту после Update() сопряжения (маршрут чтения измерен в блоке C1)",
+   "com": [],
+   "documentation": {
+    "status": "Не подтверждено",
+    "note": "семейство не реализовано; маршрут в коде отсутствует",
+    "planned_documented_interfaces": []
+   },
+   "conditions": null,
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "not_started",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "actions_verified": 0,
+   "actions_open": [
+    "discover",
+    "create",
+    "read",
+    "edit",
+    "rebuild",
+    "save_reopen",
+    "suppress_restore",
+    "delete_dependencies",
+    "negative_tests",
+    "geometry_validation"
+   ],
+   "actions_without_call_evidence": [],
+   "implementation": {
+    "status": "Не реализовано",
+    "status_basis": "ни одно действие строки не начато",
+    "catalog_level_claim": null,
+    "catalog_level_is_authoritative": false,
+    "delivery": "artifacts/publish-assemblies-20261004",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
+    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "acceptance_rows": [],
+    "acceptance_verdicts": []
+   },
+   "limitations": [
+    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+   ]
+  },
+  {
+   "operation_id": "dep.mate.object_address",
+   "queue": null,
+   "kind": "common_dependency",
+   "catalog_level": null,
+   "tool": null,
+   "family": null,
+   "schema": null,
+   "schema_note": "общая зависимость, у которой матрица НЕ объявила `required_of`: участвующие инструменты в покрытии не названы. Это пробел матрицы, а не доказанное отсутствие схемы — назван прямо",
+   "shared_schemas": [],
+   "code": [],
+   "declared_route": "см. строки режимов MATE-01…MATE-06",
+   "com": [],
+   "documentation": {
+    "status": "Не подтверждено",
+    "note": "строка не отнесена к проверенному семейству: маршрут в коде не заявлен, поэтому документированность МАРШРУТА не подтверждена и не опровергнута",
+    "planned_documented_interfaces": []
+   },
+   "conditions": null,
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "not_started",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "actions_verified": 0,
+   "actions_open": [
+    "discover",
+    "create",
+    "read",
+    "edit",
+    "rebuild",
+    "save_reopen",
+    "suppress_restore",
+    "delete_dependencies",
+    "negative_tests",
+    "geometry_validation"
+   ],
+   "actions_without_call_evidence": [],
+   "implementation": {
+    "status": "Недостаточно проверки",
+    "status_basis": "общая зависимость: обязательные действия профиль не объявил — судить не по чему, и это названо, а не заполнено догадкой",
+    "catalog_level_claim": null,
+    "catalog_level_is_authoritative": false,
+    "delivery": "artifacts/publish-assemblies-20261004",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
+    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "acceptance_rows": [],
+    "acceptance_verdicts": []
+   },
+   "limitations": [
+    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+   ]
+  },
+  {
+   "operation_id": "dep.mate.component_insert",
+   "queue": null,
+   "kind": "common_dependency",
+   "catalog_level": null,
+   "tool": null,
+   "family": null,
+   "schema": null,
+   "schema_note": "общая зависимость, у которой матрица НЕ объявила `required_of`: участвующие инструменты в покрытии не названы. Это пробел матрицы, а не доказанное отсутствие схемы — назван прямо",
+   "shared_schemas": [],
+   "code": [],
+   "declared_route": "см. строки режимов MATE-01…MATE-06",
+   "com": [],
+   "documentation": {
+    "status": "Не подтверждено",
+    "note": "строка не отнесена к проверенному семейству: маршрут в коде не заявлен, поэтому документированность МАРШРУТА не подтверждена и не опровергнута",
+    "planned_documented_interfaces": []
+   },
+   "conditions": null,
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "not_started",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "actions_verified": 0,
+   "actions_open": [
+    "discover",
+    "create",
+    "read",
+    "edit",
+    "rebuild",
+    "save_reopen",
+    "suppress_restore",
+    "delete_dependencies",
+    "negative_tests",
+    "geometry_validation"
+   ],
+   "actions_without_call_evidence": [],
+   "implementation": {
+    "status": "Недостаточно проверки",
+    "status_basis": "общая зависимость: обязательные действия профиль не объявил — судить не по чему, и это названо, а не заполнено догадкой",
+    "catalog_level_claim": null,
+    "catalog_level_is_authoritative": false,
+    "delivery": "artifacts/publish-assemblies-20261004",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
+    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "acceptance_rows": [],
+    "acceptance_verdicts": []
+   },
+   "limitations": [
+    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+   ]
+  },
+  {
+   "operation_id": "dep.mate.revisions",
+   "queue": null,
+   "kind": "common_dependency",
+   "catalog_level": null,
+   "tool": null,
+   "family": null,
+   "schema": null,
+   "schema_note": "общая зависимость, у которой матрица НЕ объявила `required_of`: участвующие инструменты в покрытии не названы. Это пробел матрицы, а не доказанное отсутствие схемы — назван прямо",
+   "shared_schemas": [],
+   "code": [],
+   "declared_route": "см. строки режимов MATE-01…MATE-06",
+   "com": [],
+   "documentation": {
+    "status": "Не подтверждено",
+    "note": "строка не отнесена к проверенному семейству: маршрут в коде не заявлен, поэтому документированность МАРШРУТА не подтверждена и не опровергнута",
+    "planned_documented_interfaces": []
+   },
+   "conditions": null,
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "not_started",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "actions_verified": 0,
+   "actions_open": [
+    "discover",
+    "create",
+    "read",
+    "edit",
+    "rebuild",
+    "save_reopen",
+    "suppress_restore",
+    "delete_dependencies",
+    "negative_tests",
+    "geometry_validation"
+   ],
+   "actions_without_call_evidence": [],
+   "implementation": {
+    "status": "Недостаточно проверки",
+    "status_basis": "общая зависимость: обязательные действия профиль не объявил — судить не по чему, и это названо, а не заполнено догадкой",
+    "catalog_level_claim": null,
+    "catalog_level_is_authoritative": false,
+    "delivery": "artifacts/publish-assemblies-20261004",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
+    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "acceptance_rows": [],
+    "acceptance_verdicts": []
+   },
+   "limitations": [
+    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+   ]
+  },
+  {
+   "operation_id": "dep.mate.idempotency",
+   "queue": null,
+   "kind": "common_dependency",
+   "catalog_level": null,
+   "tool": null,
+   "family": null,
+   "schema": null,
+   "schema_note": "общая зависимость, у которой матрица НЕ объявила `required_of`: участвующие инструменты в покрытии не названы. Это пробел матрицы, а не доказанное отсутствие схемы — назван прямо",
+   "shared_schemas": [],
+   "code": [],
+   "declared_route": "см. строки режимов MATE-01…MATE-06",
+   "com": [],
+   "documentation": {
+    "status": "Не подтверждено",
+    "note": "строка не отнесена к проверенному семейству: маршрут в коде не заявлен, поэтому документированность МАРШРУТА не подтверждена и не опровергнута",
+    "planned_documented_interfaces": []
+   },
+   "conditions": null,
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "not_started",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "actions_verified": 0,
+   "actions_open": [
+    "discover",
+    "create",
+    "read",
+    "edit",
+    "rebuild",
+    "save_reopen",
+    "suppress_restore",
+    "delete_dependencies",
+    "negative_tests",
+    "geometry_validation"
+   ],
+   "actions_without_call_evidence": [],
+   "implementation": {
+    "status": "Недостаточно проверки",
+    "status_basis": "общая зависимость: обязательные действия профиль не объявил — судить не по чему, и это названо, а не заполнено догадкой",
+    "catalog_level_claim": null,
+    "catalog_level_is_authoritative": false,
+    "delivery": "artifacts/publish-assemblies-20261004",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
+    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "acceptance_rows": [],
+    "acceptance_verdicts": []
+   },
+   "limitations": [
+    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+   ]
+  },
+  {
+   "operation_id": "dep.mate.save_reopen",
+   "queue": null,
+   "kind": "common_dependency",
+   "catalog_level": null,
+   "tool": null,
+   "family": null,
+   "schema": null,
+   "schema_note": "общая зависимость, у которой матрица НЕ объявила `required_of`: участвующие инструменты в покрытии не названы. Это пробел матрицы, а не доказанное отсутствие схемы — назван прямо",
+   "shared_schemas": [],
+   "code": [],
+   "declared_route": "см. строки режимов MATE-01…MATE-06",
+   "com": [],
+   "documentation": {
+    "status": "Не подтверждено",
+    "note": "строка не отнесена к проверенному семейству: маршрут в коде не заявлен, поэтому документированность МАРШРУТА не подтверждена и не опровергнута",
+    "planned_documented_interfaces": []
+   },
+   "conditions": null,
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "not_started",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "actions_verified": 0,
+   "actions_open": [
+    "discover",
+    "create",
+    "read",
+    "edit",
+    "rebuild",
+    "save_reopen",
+    "suppress_restore",
+    "delete_dependencies",
+    "negative_tests",
+    "geometry_validation"
+   ],
+   "actions_without_call_evidence": [],
+   "implementation": {
+    "status": "Недостаточно проверки",
+    "status_basis": "общая зависимость: обязательные действия профиль не объявил — судить не по чему, и это названо, а не заполнено догадкой",
+    "catalog_level_claim": null,
+    "catalog_level_is_authoritative": false,
+    "delivery": "artifacts/publish-assemblies-20261004",
+    "host_dll_sha256": "573edcf872d3ea92cd23436067f77c66b162260a6271fbb2f065dcbb283e16b9",
+    "adapter_sha256": "81b3188f33a2defec4171f05f7b6c604985f213b3a379242ab0546b654095abc",
+    "identity_source": "scratch/mcp-smoke/delivery-assemblies-20261004/package-check.json",
+    "acceptance_rows": [],
+    "acceptance_verdicts": []
+   },
+   "limitations": [
+    "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
    ]
   }
  ],
@@ -21495,7 +22166,7 @@
   "fresh": true,
   "reason": "свеж",
   "newest_source": "src/KompasMcp.Api5Adapter/Api5Session.Assembly.cs",
-  "lag_seconds": -469.9304780960083,
+  "lag_seconds": -899.80837225914,
   "refresh_requested": false,
   "refreshed_rc": null,
   "negative_control": {
@@ -21512,17 +22183,17 @@
   "source": "scratch/_audit_inventory.json",
   "scanner": "scratch/_audit_inventory.py",
   "inputs": [
+   "coverage/solid-v24/matrix.json",
+   "coverage/solid-v24/catalog.json",
    "artifacts/publish-assemblies-20261004/KompasMcp.Host.dll",
    "artifacts/publish-assemblies-20261004/KompasMcp.Worker.dll",
    "artifacts/publish-assemblies-20261004/KompasMcp.Api5Adapter.dll",
-   "coverage/solid-v24/matrix.json",
-   "coverage/solid-v24/catalog.json",
    "coverage/solid-v24/release-profiles/mechanical-core-v1.json"
   ],
   "fresh": true,
   "reason": "свеж",
-  "newest_input": "artifacts/publish-assemblies-20261004/KompasMcp.Host.dll",
-  "lag_seconds": -405.09714579582214,
+  "newest_input": "coverage/solid-v24/matrix.json",
+  "lag_seconds": -18.21444058418274,
   "refresh_requested": false,
   "refreshed_rc": null,
   "negative_control": {
@@ -22736,7 +23407,7 @@
    "id": "F-03",
    "class": "состояние объёма будущей работы (не дефект)",
    "severity": "—",
-   "statement": "Обязательный объём профиля не закрыт: часть режимов и зависимостей профиля лежит на уровне `metadata_found`. Строки SM-01.primitive_box, SM-04.boss, SM-15.union.mode_save_base_copy не реализованы — это ПЛАН, а не текущий дефект, и живой проверки в этом аудите они не требуют.",
+   "statement": "Обязательный объём профиля не закрыт: часть режимов и зависимостей профиля лежит на уровне `metadata_found`. Строки SM-01.primitive_box, SM-04.boss, SM-15.union.mode_save_base_copy, MATE-01.mate.create, MATE-02.mate.read, MATE-03.mate.param_edit, MATE-04.mate.fixed, MATE-05.mate.delete, MATE-06.mate.placement_effect не реализованы — это ПЛАН, а не текущий дефект, и живой проверки в этом аудите они не требуют.",
    "code": "coverage/solid-v24/matrix.json",
    "documentation": [],
    "expected": "у каждой ОПУБЛИКОВАННОЙ возможности есть приёмочная запись",

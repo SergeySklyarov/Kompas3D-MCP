@@ -1,0 +1,210 @@
+﻿{
+ "meta": {
+  "profile_id": "mates-minimal-v1",
+  "title": "Минимальные сопряжения v24",
+  "revision": "1.0",
+  "revision_history": [
+   {
+    "revision": "1.0",
+    "date": "05.10.2026",
+    "change": "блок зарегистрирован по решению заказчика о маршруте (документированный API7-путь); код не написан"
+   }
+  ],
+  "target_build": "24.0.0.2799",
+  "queue": {
+   "C2": "Минимальные сопряжения — первый блок после сборок"
+  }
+ },
+ "modes": [
+  {
+   "ref": "MATE-01.mate.create",
+   "title": "Создать сопряжение компонентов",
+   "family": "MATE",
+   "queue": "C2",
+   "priority": "practical_required",
+   "current_level": "metadata_found",
+   "required_actions": [
+    "discover",
+    "create",
+    "read",
+    "edit",
+    "rebuild",
+    "save_reopen",
+    "suppress_restore",
+    "delete_dependencies",
+    "negative_tests",
+    "geometry_validation"
+   ],
+   "gap": "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+  },
+  {
+   "ref": "MATE-02.mate.read",
+   "title": "Прочитать сопряжения сборки и их параметры",
+   "family": "MATE",
+   "queue": "C2",
+   "priority": "practical_required",
+   "current_level": "metadata_found",
+   "required_actions": [
+    "discover",
+    "create",
+    "read",
+    "edit",
+    "rebuild",
+    "save_reopen",
+    "suppress_restore",
+    "delete_dependencies",
+    "negative_tests",
+    "geometry_validation"
+   ],
+   "gap": "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+  },
+  {
+   "ref": "MATE-03.mate.param_edit",
+   "title": "Изменить параметр сопряжения (расстояние или угол)",
+   "family": "MATE",
+   "queue": "C2",
+   "priority": "practical_required",
+   "current_level": "metadata_found",
+   "required_actions": [
+    "discover",
+    "create",
+    "read",
+    "edit",
+    "rebuild",
+    "save_reopen",
+    "suppress_restore",
+    "delete_dependencies",
+    "negative_tests",
+    "geometry_validation"
+   ],
+   "gap": "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+  },
+  {
+   "ref": "MATE-04.mate.fixed",
+   "title": "Фиксация компонентов сопряжением",
+   "family": "MATE",
+   "queue": "C2",
+   "priority": "practical_required",
+   "current_level": "metadata_found",
+   "required_actions": [
+    "discover",
+    "create",
+    "read",
+    "edit",
+    "rebuild",
+    "save_reopen",
+    "suppress_restore",
+    "delete_dependencies",
+    "negative_tests",
+    "geometry_validation"
+   ],
+   "gap": "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+  },
+  {
+   "ref": "MATE-05.mate.delete",
+   "title": "Удалить сопряжение",
+   "family": "MATE",
+   "queue": "C2",
+   "priority": "practical_required",
+   "current_level": "metadata_found",
+   "required_actions": [
+    "discover",
+    "create",
+    "read",
+    "edit",
+    "rebuild",
+    "save_reopen",
+    "suppress_restore",
+    "delete_dependencies",
+    "negative_tests",
+    "geometry_validation"
+   ],
+   "gap": "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+  },
+  {
+   "ref": "MATE-06.mate.placement_effect",
+   "title": "Положение компонента после сопряжения",
+   "family": "MATE",
+   "queue": "C2",
+   "priority": "practical_required",
+   "current_level": "metadata_found",
+   "required_actions": [
+    "discover",
+    "create",
+    "read",
+    "edit",
+    "rebuild",
+    "save_reopen",
+    "suppress_restore",
+    "delete_dependencies",
+    "negative_tests",
+    "geometry_validation"
+   ],
+   "gap": "Блок зарегистрирован 05.10.2026 по решению заказчика о маршруте (документированный API7-путь). Маршрут измерен пробой M (tools/KompasMcp.Api7Probe --mate): сопряжение создано, Update()=True, Valid=True. ЧЕРЕЗ ПРОДУКТ не проверялось ничего: инструменты блока не написаны, все действия not_started."
+  }
+ ],
+ "common_dependencies": [
+  {
+   "id": "dep.mate.object_address",
+   "title": "Адресация грани компонента как объекта сопряжения",
+   "required_actions": [
+    "discover",
+    "read",
+    "negative_tests"
+   ],
+   "gap": "Зависимость блока сопряжений; через продукт не проверялась."
+  },
+  {
+   "id": "dep.mate.component_insert",
+   "title": "Документированная вставка компонента (IParts7.AddFromFile)",
+   "required_actions": [
+    "create",
+    "read",
+    "geometry_validation"
+   ],
+   "gap": "Зависимость блока сопряжений; через продукт не проверялась."
+  },
+  {
+   "id": "dep.mate.revisions",
+   "title": "Ревизии документа при работе с сопряжениями",
+   "required_actions": [
+    "read",
+    "edit",
+    "negative_tests"
+   ],
+   "gap": "Зависимость блока сопряжений; через продукт не проверялась."
+  },
+  {
+   "id": "dep.mate.idempotency",
+   "title": "Повтор команды сопряжения по operation_id",
+   "required_actions": [
+    "create",
+    "read",
+    "negative_tests"
+   ],
+   "gap": "Зависимость блока сопряжений; через продукт не проверялась."
+  },
+  {
+   "id": "dep.mate.save_reopen",
+   "title": "Сопряжения переживают save → close → reopen",
+   "required_actions": [
+    "save_reopen",
+    "read"
+   ],
+   "gap": "Зависимость блока сопряжений; через продукт не проверялась."
+  }
+ ],
+ "explicitly_out_of_scope": {
+  "deferred_full_P6": [
+   "механические передачи mc_Transmission и кулачковые mc_CamGear",
+   "симметрия mc_Symmetric и зависимое положение mc_Dependent",
+   "AddUserMate и интерактивный процесс UserGetPlacementAndEntity (требует CallBack)",
+   "массивы компонентов и полный BOM"
+  ],
+  "next_block_after_profile": [
+   "массивы компонентов",
+   "полный BOM",
+   "сопряжения в подсборках"
+  ]
+ }
+}

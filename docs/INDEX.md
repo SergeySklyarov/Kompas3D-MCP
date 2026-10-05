@@ -35,6 +35,7 @@
 | `docs/research/api5-semantics-agent-report.raw.md` | сырой разбор TLB/SDK: входной материал, не подтверждённый факт - в публичный набор не входит |
 | [docs/operator-guide/](operator-guide/) | сборка, установка, конфигурация MCP, диагностика, откат |
 | [docs/operator-guide/codex-setup.md](operator-guide/codex-setup.md) | установка готового выпуска и подключение к Codex по ссылке на репозиторий |
+| [docs/operator-guide/claude-setup.md](operator-guide/claude-setup.md) | установка готового выпуска и подключение к Claude Code и Claude Desktop |
 | [docs/distribution/](distribution/) | заметки выпуска, инструкция в архиве пакета, лицензии зависимостей |
 
 ## Код

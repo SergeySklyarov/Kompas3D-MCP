@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Reflection;
 using System.Text;
 
@@ -45,6 +45,8 @@ public static class Program
                                                     ? "Проба N — под каким номером признак отверстия виден в дереве после создания маршрутом API7, и как читается производная глубина зенковки"
                                                     : options.FilletBaseObjects
                                                         ? "Проба H-2 — входы существующего скругления через IFillet.BaseObjects: чтение, сокращение, замена и различающие контроли"
+                                                        : options.Mate
+                                                            ? "Проба M — сопряжения сборки: грани компонентов как IModelObject и создание сопряжения"
                                                         : options.SketchDefinition
                                                             ? "Проба S — определённость эскиза: читается ли статус «+ / − / !» из API и различает ли он состояния"
                                                             : options.Identity
@@ -63,7 +65,7 @@ public static class Program
         };
         var clock = Stopwatch.StartNew();
         Console.WriteLine($"A7 probe run {report.RunId} — рабочая папка: {options.WorkDir}");
-        Console.WriteLine($"Режим: passportOnly={options.PassportOnly}, lifecycle={options.Lifecycle}, extrusion={options.Extrusion}, chamfer={options.Chamfer}, sketchReopen={options.SketchReopen}, filletEdgeSet={options.FilletEdgeSet}, filletBaseObjects={options.FilletBaseObjects}, sketchDefinition={options.SketchDefinition}, controls={options.CollectControls}, keep={options.KeepRunning}, отчёты: {options.ReportDir}");
+        Console.WriteLine($"Режим: passportOnly={options.PassportOnly}, lifecycle={options.Lifecycle}, extrusion={options.Extrusion}, chamfer={options.Chamfer}, sketchReopen={options.SketchReopen}, filletEdgeSet={options.FilletEdgeSet}, filletBaseObjects={options.FilletBaseObjects}, mate={options.Mate}, sketchDefinition={options.SketchDefinition}, controls={options.CollectControls}, keep={options.KeepRunning}, отчёты: {options.ReportDir}");
 
         // Before any Kompas6API5/KompasAPI7 type is first touched: the vendor interop is referenced,
         // not copied, so it only resolves from the installation directory at run time.
@@ -127,6 +129,17 @@ public static class Program
             {
                 var filletEdgeSet = new FilletEdgeSetProbe(report, options);
                 pump.Run(() => filletEdgeSet.Run());
+            }
+            else if (options.Mate)
+            {
+                var mate = new MateProbe(report, options);
+                pump.Run(() => mate.Run());
+                if (options.KeepRunning)
+                {
+                    MateProbe.Flush(report, options);
+                    Console.WriteLine("Отчёт записан; процесс оставлен для диагностики (--keep).");
+                    return 0;
+                }
             }
             else if (options.FilletBaseObjects)
             {
@@ -390,6 +403,7 @@ public static class Program
             : options.SketchReopen ? "sketch-geometry-reopen"
             : options.FilletEdgeSet ? "fillet-edge-set"
             : options.FilletBaseObjects ? "fillet-base-objects"
+            : options.Mate ? "mate"
             : options.Boolean ? "boolean-ops"
             : options.Split ? "split-plane"
             : options.Reposition ? "reposition"
@@ -475,6 +489,12 @@ public sealed class Options
 
     /// <summary>--rotation: вращение SM-03 — номер типа, осевая линия эскиза, полный и частичный оборот (проба R).</summary>
     public bool Rotation { get; private set; }
+
+    /// <summary>
+    /// --mate: сопряжения сборки — адресуются ли ГРАНИ КОМПОНЕНТОВ и создаётся ли сопряжение
+    /// (проба M, вход следующего блока после C1).
+    /// </summary>
+    public bool Mate { get; private set; }
 
     /// <summary>
     /// --full-turn: правда ли, что развёртка вращения насыщается на 180° (проба F2).
@@ -632,6 +652,7 @@ public sealed class Options
         var holeModes = false;
         var holeTree = false;
         var filletBaseObjects = false;
+        var mate = false;
         var sketchDefinition = false;
         var identity = false;
         var union = false;
@@ -672,6 +693,9 @@ public sealed class Options
                     break;
                 case "--fillet-base-objects":
                     filletBaseObjects = true;
+                    break;
+                case "--mate":
+                    mate = true;
                     break;
                 case "--rotation":
                     rotation = true;
@@ -782,6 +806,7 @@ public sealed class Options
             SketchReopen = sketchReopen,
             FilletEdgeSet = filletEdgeSet,
             FilletBaseObjects = filletBaseObjects,
+            Mate = mate,
             Boolean = boolean,
             Split = split,
             Reposition = reposition,

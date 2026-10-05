@@ -62,6 +62,12 @@ public sealed class ToolListingTests
     }
 
     [Fact]
+    public void GeneratedBlock_HasNoEmDash()
+    {
+        Assert.DoesNotContain("—", ToolListing.Markdown(ToolCatalog.All), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SchemasFolder_HasOneFilePerTool()
     {
         // INVARIANT: schemas/ is the published CONTRACT — a file per catalog entry, no more, no fewer.

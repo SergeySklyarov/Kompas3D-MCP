@@ -107,7 +107,11 @@ def main():
         matrix["meta"].setdefault("profiles", {})[profile_id] = {
             "artifact": os.path.relpath(os.path.join(PROFILE_DIR, name), ROOT).replace("\\", "/"),
             "title": profile["meta"]["title"],
-            "plan": profile["meta"]["plan"],
+            # `plan` есть не у каждого профиля: минимальные профили (mates-minimal-v1,
+            # variables-material-minimal-v1) заведены без него, и прямое обращение к ключу валило
+            # прибор `KeyError` — то есть проверка падала на ВАЛИДНОМ профиле, а не находила
+            # расхождение. Отсутствие называется None, а не подставляется чужим планом.
+            "plan": profile["meta"].get("plan"),
         }
 
         for entry in profile.get("modes") or []:
@@ -150,6 +154,15 @@ def main():
                 existing["kind"] = "profile_mode" if kind == "mode" else "profile_operation"
                 changed = True
             (touched if changed else skipped).append(ref)
+
+        # Профиль ссылается на строки не только режимами и зависимостями: `scenarios[].covers`
+        # перечисляет строки, которые сценарий проверяет СКВОЗНО (масса VM-06 — сквозная проверка
+        # существующего инструмента, а не режим профиля). Без этого сквозная строка выглядела
+        # «больше не упоминается», и прибор требовал снять её вручную — то есть не различал
+        # «ссылки нет» и «ссылка не прочитана».
+        for scenario in profile.get("scenarios") or []:
+            for ref in scenario.get("covers") or []:
+                referenced.add(ref)
 
         for dep in profile.get("common_dependencies") or []:
             for ref in dep.get("catalog_refs") or []:

@@ -1,6 +1,7 @@
 ﻿using System.Reflection;
 using System.Runtime.InteropServices;
 using Kompas6API5;
+using Kompas6Constants;
 using KompasAPI7;
 using KompasMcp.Api5Adapter.Com;
 using KompasMcp.Contracts;
@@ -513,15 +514,72 @@ public sealed partial class Api5Session : IDisposable
     private static bool IsDrawingPath(string path) =>
         string.Equals(Path.GetExtension(path), ".cdw", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Create a drawing through the documented API5 2D route.</summary>
-    /// <remarks>DOC: <c>ksdocument2d_kscreatedocument.html</c> — <c>ksCreateDocument(par)</c>, where
-    /// <c>par</c> is a <c>ksDocumentParam</c> (<c>ksdocumentparam.html</c>, obtained via
-    /// <c>KompasObject.GetParamStruct</c>); its <c>type</c> is taken from <c>DocType</c>
-    /// (<c>doctype.html</c>: <c>lt_DocSheetStandart</c> = 1) and <c>regime</c> is 0/1
-    /// (<c>ksdocumentparam_regime.html</c>). The API5 <c>Document3D.Create</c> cannot make a drawing,
-    /// which is why the separate route is used rather than mislabelling an assembly.
-    /// History: docs/decisions/drawings.md#create-drawing</remarks>
+    /// <summary>The <c>regim</c> of <c>ksOpenDocument</c> for a drawing: FALSE = visible. The blind mode
+    /// (TRUE) is documented for hidden batch generation and MEASURED to cost the drawing its API7
+    /// identity after a converter export — see <see cref="OpenDrawingDocument"/>.</summary>
+    private const bool DrawingOpenRegimVisible = false;
+
+    /// <summary>Create a drawing. The API7 documented route <c>IDocuments.Add</c> is preferred; the API5
+    /// 2D route is the fallback (see History).</summary>
+    /// <remarks>MEASURED: with cell, text, write order and re-read expression held identical, a drawing
+    /// made through API7 <c>Documents.Add</c> reads its <c>IStamp.Text[id].Str</c> back UNCHANGED after
+    /// <c>Update()</c>, while one made through API5 <c>ksCreateDocument</c> reads an empty string — the
+    /// difference is a property of the creation ROUTE; the internal cause is not established. API7 is
+    /// chosen first so a title-block write round-trips and the drawing carries a NATIVE
+    /// <c>IDrawingDocument</c>. History: docs/decisions/drawings.md#create-drawing</remarks>
     private DocumentEntry CreateDrawingDocument(ApplicationEntry application, CreateDocumentCommand command)
+    {
+        // ROUTE 1 (preferred) — documented API7 IDocuments.Add. The document types differ between the two
+        // APIs, so the API7 enum member is used here and the API5 DocType in the fallback below.
+        var bridge = BridgeForApplication(application);
+        if (bridge.Application() is { Documents: { } documents })
+        {
+            try
+            {
+                if (documents.Add(DocumentTypeEnum.ksDocumentDrawing, application.DocumentsVisible)
+                        is IDrawingDocument added)
+                {
+                    return RegisterDrawing7(application, command, added, route: "API7.Documents.Add");
+                }
+            }
+            catch (COMException ex)
+            {
+                // Fall through to the API5 route rather than fail: the choice is a preference, and a
+                // refused preferred route must not cost the caller the working one. The failure is kept
+                // for the note below when BOTH routes fail.
+                _lastDrawingRouteFailure = $"IDocuments.Add прервался: {ex.Message}";
+            }
+        }
+        else
+        {
+            _lastDrawingRouteFailure = "API7 недоступен: " + (bridge.BridgeFailure ?? "причина не названа");
+        }
+
+        // ROUTE 2 (fallback) — documented API5 2D ksCreateDocument.
+        return CreateDrawingDocumentApi5(application, command, _lastDrawingRouteFailure);
+    }
+
+    /// <summary>Why the preferred API7 drawing route was not taken (carried into a both-routes refusal).</summary>
+    private string? _lastDrawingRouteFailure;
+
+    /// <summary>Register a drawing created through the API7 route: it has a NATIVE <c>IDrawingDocument</c>
+    /// and no API5 2D handle of its own, so <see cref="DocumentEntry.Drawing"/> stays null and every 2D
+    /// route reaches the sheet through <see cref="DocumentEntry.Drawing7"/>.</summary>
+    private DocumentEntry RegisterDrawing7(
+        ApplicationEntry application, CreateDocumentCommand command, IDrawingDocument added, string route)
+    {
+        var entry = RegisterDocument(
+            document: null, part: null, application, DocumentKind.Drawing, path: null,
+            kindVerified: true, drawing: null, drawing7: added);
+        entry.LastRevisionReason = "create:" + route;
+        entry.Drawing7Resolution = "native:" + route;
+        return entry;
+    }
+
+    /// <summary>Create a drawing through the documented API5 2D route (fallback of
+    /// <see cref="CreateDrawingDocument"/>).</summary>
+    private DocumentEntry CreateDrawingDocumentApi5(
+        ApplicationEntry application, CreateDocumentCommand command, string? api7Failure)
     {
         var application5 = application.Application;
         var param = application5.GetParamStruct(KompasStructTypes.DocumentParam) as ksDocumentParam;
@@ -529,8 +587,9 @@ public sealed partial class Api5Session : IDisposable
         {
             throw new KompasContractException(
                 ErrorCodes.CapabilityUnavailable,
-                "KompasObject.GetParamStruct(ksDocumentParam) не вернул параметры документа: " +
-                "создать чертёж этим маршрутом нельзя.",
+                "KompasObject.GetParamStruct(ksDocumentParam) не вернул параметры документа: "
+                + "создать чертёж этим маршрутом нельзя. Предпочтительный маршрут API7 тоже не сработал: "
+                + (api7Failure ?? "причина не названа") + ".",
                 RetryPolicy.Never);
         }
 
@@ -548,7 +607,8 @@ public sealed partial class Api5Session : IDisposable
         {
             throw new KompasContractException(
                 ErrorCodes.CapabilityUnavailable,
-                "KompasObject.Document2D() не вернул ksDocument2D: создать чертёж этим маршрутом нельзя.",
+                "KompasObject.Document2D() не вернул ksDocument2D: создать чертёж этим маршрутом нельзя. "
+                + "Предпочтительный маршрут API7 тоже не сработал: " + (api7Failure ?? "причина не названа") + ".",
                 RetryPolicy.Never);
         }
 
@@ -562,7 +622,8 @@ public sealed partial class Api5Session : IDisposable
             ComApartment.Release(drawing);
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
-                $"ksCreateDocument прервался: {ex.Message}. Чертёж не создан.",
+                $"ksCreateDocument прервался: {ex.Message}. Чертёж не создан. Предпочтительный маршрут "
+                + "API7 тоже не сработал: " + (api7Failure ?? "причина не названа") + ".",
                 RetryPolicy.SameOperationId,
                 hresult: ex.HResult);
         }
@@ -583,8 +644,19 @@ public sealed partial class Api5Session : IDisposable
     }
 
     /// <summary>Open an existing drawing through the documented API5 2D route.</summary>
-    /// <remarks>DOC: <c>ksDocument2D.ksOpenDocument(nameDoc, regim)</c> (ksdocument2d.html);
-    /// <c>regim</c> follows the same 0/1 (visible/"blind") convention as creation.
+    /// <remarks>DOC: <c>ksdocument2d_ksopendocument.html</c> — <c>ksOpenDocument(nameDoc, regim)</c>,
+    /// where <c>regim</c> is «0 - видимый, 1 - невидимый ("слепой")» and «Невидимый режим применяется
+    /// при пакетном (скрытом) формировании документа». The drawing is opened with <c>regim = 0</c>
+    /// (visible): the blind mode is documented for hidden BATCH GENERATION, and a drawing the session
+    /// must keep addressing through API7 is not that case.
+    /// MEASURED: a drawing opened with <c>regim = 1</c> stops being addressable through API7 as soon as
+    /// <c>IConverter.Convert</c> runs on it — the API7 collection drops to 0, a fresh transfer no longer
+    /// yields a drawing, <c>ViewsAndLayersManager</c> is lost and <c>RebuildDocument()</c> does not
+    /// restore it; the same export leaves a <c>regim = 0</c> drawing intact, and this holds with the
+    /// APPLICATION invisible. LIMIT: the internal cause is NOT established — the note in
+    /// <c>iconverter_convert.html</c> («конвертация будет происходить в новый документ системы
+    /// КОМПАС») is conditioned on a missing output file name, which this tool always passes, so it does
+    /// not explain the observation and is not cited as its cause.
     /// History: docs/decisions/drawings.md#open-drawing</remarks>
     private DocumentEntry OpenDrawingDocument(ApplicationEntry application, OpenDocumentCommand command)
     {
@@ -600,7 +672,7 @@ public sealed partial class Api5Session : IDisposable
         bool opened;
         try
         {
-            opened = drawing.ksOpenDocument(command.Path, !application.DocumentsVisible);
+            opened = drawing.ksOpenDocument(command.Path, DrawingOpenRegimVisible);
         }
         catch (COMException ex)
         {
@@ -650,7 +722,8 @@ public sealed partial class Api5Session : IDisposable
         DocumentKind kind,
         string? path,
         bool kindVerified,
-        ksDocument2D? drawing = null)
+        ksDocument2D? drawing = null,
+        IDrawingDocument? drawing7 = null)
     {
         var entry = new DocumentEntry(
             Guid.NewGuid().ToString("N"),
@@ -659,7 +732,8 @@ public sealed partial class Api5Session : IDisposable
             NormalizePath(path) ?? NormalizePath(part is null ? null : SafeFileName(part)),
             document,
             part,
-            drawing)
+            drawing,
+            drawing7)
         {
             Revision = 1,
             KindVerified = kindVerified,
@@ -1007,14 +1081,27 @@ public sealed partial class Api5Session : IDisposable
         _documents.Remove(document.Id);
         try
         {
-            // A drawing closes through its own 2D handle: ksDocument3D.close() would dereference a null.
+            // A drawing created through the API7 route closes through its own API7 IKompasDocument.Close;
+            // one created/opened through API5 closes through its 2D handle. A 3D document closes through
+            // the 3D handle. Each branch names the handle it actually holds.
             if (document.Document is not null)
             {
                 document.Document.close();
             }
-            else
+            else if (document.Drawing is not null)
             {
-                document.Drawing?.ksCloseDocument();
+                document.Drawing.ksCloseDocument();
+            }
+            else if (document.Drawing7 is not null)
+            {
+                // Save-then-close was already performed by CloseDocument before the drop, so the drop
+                // itself discards. DOC: ikompasdocument_close.html + documentcloseoptions.html
+                // (kdDoNotSaveChanges = 0). MEASURED: the close returns Boolean, reported nowhere — the
+                // registry entry is removed regardless, exactly as for the other two handles.
+                if (document.Drawing7 is IKompasDocument kompasDocument)
+                {
+                    kompasDocument.Close(DocumentCloseOptions.kdDoNotSaveChanges);
+                }
             }
         }
         catch (Exception ex) when (ex is COMException)
@@ -1081,6 +1168,23 @@ public sealed partial class Api5Session : IDisposable
             // (ksdocument2d.html). It has no "save to previous name" form, so a document that has a path
             // but no target_path still passes that path explicitly.
             ok = document.Drawing.ksSaveDocument(path);
+        }
+        else if (document.Drawing7 is IKompasDocument kompasDocument)
+        {
+            // An API7-created drawing has no API5 2D handle and saves through IKompasDocument.
+            // DOC: ikompasdocument_save.html — Save() writes to the document's own file;
+            // ikompasdocument_saveas.html — SaveAs(path) writes to a named file. MEASURED: both return
+            // Void, so the write is confirmed ONLY by the file re-read below (ReadBackSavedFile), never
+            // by a return value — the same discipline as the API5 3D route's boolean, taken further.
+            if (targetPath is null)
+            {
+                kompasDocument.Save();
+            }
+            else
+            {
+                kompasDocument.SaveAs(path);
+            }
+            ok = true;
         }
         else
         {
@@ -1236,7 +1340,8 @@ public sealed class DocumentEntry
 {
     public DocumentEntry(
         string id, string applicationId, DocumentKind kind, string? path,
-        ksDocument3D? document, ksPart? part, ksDocument2D? drawing = null)
+        ksDocument3D? document, ksPart? part, ksDocument2D? drawing = null,
+        IDrawingDocument? drawing7 = null)
     {
         Id = id;
         ApplicationId = applicationId;
@@ -1245,6 +1350,7 @@ public sealed class DocumentEntry
         Document = document;
         Part = part;
         Drawing = drawing;
+        Drawing7 = drawing7;
     }
 
     public string Id { get; }
@@ -1280,6 +1386,22 @@ public sealed class DocumentEntry
     /// <summary>The API5 2D document handle (<c>ksDocument2D</c>). Non-null only for a drawing; a 3D
     /// document reaches 2D only through a sketch edit, which is a different, transient handle.</summary>
     public ksDocument2D? Drawing { get; }
+
+    /// <summary>The API7 drawing handle. Set at creation when the drawing was made through the API7 route
+    /// (<c>IDocuments.Add</c>), and — MEASURED — ALSO cached here after the FIRST successful resolution of
+    /// a reopened drawing by the bridge. A reopened drawing has no native handle, so without the cache
+    /// every call re-transfers the API5 2D handle; that transfer was measured to stop yielding a drawing
+    /// once another document has been created and closed in the same session, while the draft obtained
+    /// beforehand keeps working. Holding the first successful value keeps later calls from depending on a
+    /// transfer that can degrade. Null when the drawing was never resolved as an API7 drawing.
+    /// History: docs/decisions/drawings.md#create-drawing</summary>
+    public IDrawingDocument? Drawing7 { get; internal set; }
+
+    /// <summary>Which stage produced <see cref="Drawing7"/>, for the refusal diagnosis: the API7 route
+    /// that minted the native handle, or the bridge transfer / fresh transfer / collection scan that
+    /// resolved a reopened drawing. Recorded so a LATER refusal can say whether the handle it is now
+    /// missing was ever obtained, and how.</summary>
+    public string? Drawing7Resolution { get; internal set; }
 
     /// <summary>The 3D handle, or a NAMED refusal: a drawing has no <c>ksDocument3D</c>, and a null
     /// dereference would be an instrument crash, not a fact about the document.</summary>

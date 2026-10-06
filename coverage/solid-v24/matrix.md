@@ -60,20 +60,35 @@
 - **открытые_режимы:** []
 - **открытые_зависимости:** []
 
+### профиль variables-material-minimal-v1 — Внешние переменные и материал детали v24
+
+- **обязательных_режимов:** 5
+- **режимов_закрыто:** 3
+- **общих_зависимостей:** 5
+- **зависимостей_закрыто:** 4
+- **профиль_закрыт:** нет
+- **готовность_процента:** 70.0%
+- **по_очередям:** VM 3/5
+- **открытые_режимы:**
+  - `VM-04.material.read`
+  - `VM-05.material.write`
+- **открытые_зависимости:**
+  - `dep.vm.units`
+
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 283
-- **строк_полностью_закрыто:** 94
-- **строк_с_каким_либо_прогрессом:** 109
-- **семейств_в_каталоге:** 35
+- **строк_каталога:** 294
+- **строк_полностью_закрыто:** 101
+- **строк_с_каким_либо_прогрессом:** 120
+- **семейств_в_каталоге:** 36
 - **семейств_без_строк:** 14
-- **операций:** 94
-- **режимов_и_вариантов:** 209
-- **применимых_действий:** 2629
-- **действий_verified:** 798
-- **покрытие_действий:** 30.4%
-- **распределение_статусов:** {'not_started': 1831, 'verified': 798, 'not_applicable': 201}
-- **уровни_каталога_операций:** {'metadata_found': 50, 'mcp_verified': 28, 'runtime_verified': 6, 'documented': 10}
+- **операций:** 99
+- **режимов_и_вариантов:** 146
+- **применимых_действий:** 2665
+- **действий_verified:** 830
+- **покрытие_действий:** 31.1%
+- **распределение_статусов:** {'not_started': 1831, 'verified': 830, 'not_applicable': 275, 'implemented': 4}
+- **уровни_каталога_операций:** {'metadata_found': 50, 'mcp_verified': 28, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 6}
 - **уровни_каталога_режимов:** {'mcp_verified': 55, 'documented': 19, 'runtime_verified': 3, 'metadata_found': 48, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
@@ -103,23 +118,23 @@
 
 | режим/операция | семья | приоритет | очередь | уровень каталога | поиск | созд | чтен | правк | перестр | reopen | подавл | удал | отказ | геом | проверки |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
-| `DRW-01.views.create_standard` | DRW | practical_required | C3 | mcp_implemented | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | DRW.01.create, DRW.02.read, DRW.03.edit, DRW.04.save_reopen, DRW.05.negative_tests, DRW.06.geometry_validation |
-| `DRW-02.views.list` | DRW | practical_required | C3 | mcp_implemented | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | DRW.01.create, DRW.02.read, DRW.03.edit, DRW.04.save_reopen, DRW.05.negative_tests, DRW.06.geometry_validation |
-| `DRW-03.dimension.add` | DRW | practical_required | C3 | mcp_verified | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | OK | DRW-03.dimension.add.create.linear, DRW-03.dimension.add.create.radial, DRW-03.dimension.add.create.diametral, DRW-03.dimension.add.read, DRW-03.dimension.add.edit, DRW-03.dimension.add.save_reopen, DRW-03.dimension.add.negative_tests, DRW-03.dimension.add.geometry_validation |
-| `DRW-04.title_block.set` | DRW | practical_required | C3 | mcp_implemented | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | н/п | DRW.01.create, DRW.02.read, DRW.03.edit, DRW.04.save_reopen, DRW.05.negative_tests, DRW.06.geometry_validation |
-| `DRW-05.export` | DRW | practical_required | C3 | mcp_implemented | н/п | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | DRW.01.create, DRW.02.read, DRW.03.edit, DRW.04.save_reopen, DRW.05.negative_tests, DRW.06.geometry_validation |
-| `DRW-06.technical_demand` | DRW | practical_required | C3 | mcp_implemented | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | н/п | DRW.01.create, DRW.02.read, DRW.03.edit, DRW.04.save_reopen, DRW.05.negative_tests, DRW.06.geometry_validation |
+| `DRW-01.views.create_standard` | DRW | practical_required | C3 | mcp_verified | н/п | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | DRW-01.views.create_standard.create, DRW-01.views.create_standard.edit, DRW-01.views.create_standard.geometry_validation, DRW-01.views.create_standard.negative_tests, DRW-01.views.create_standard.negative_tests.kind, DRW-01.views.create_standard.negative_tests.path, DRW-01.views.create_standard.read, DRW-01.views.create_standard.rebuild, DRW-01.views.create_standard.save_reopen, DRW-02.views.list.read, DRW-02.views.list.read.fields |
+| `DRW-02.views.list` | DRW | practical_required | C3 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | DRW-02.views.list.discover, DRW-02.views.list.negative_tests, DRW-02.views.list.read, DRW-02.views.list.read.fields, DRW-02.views.list.read.gabarit_named, DRW-02.views.list.read.system_view_named, DRW-02.views.list.save_reopen |
+| `DRW-03.dimension.add` | DRW | practical_required | C3 | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | OK | DRW-03.dimension.add.create.diametral, DRW-03.dimension.add.create.linear, DRW-03.dimension.add.create.radial, DRW-03.dimension.add.geometry_validation, DRW-03.dimension.add.negative_tests, DRW-03.dimension.add.read.associativity_named, DRW-03.dimension.add.save_reopen |
+| `DRW-04.title_block.set` | DRW | practical_required | C3 | mcp_verified | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | н/п | DRW-04.title_block.set.create, DRW-04.title_block.set.negative_tests, DRW-04.title_block.set.save_reopen |
+| `DRW-05.export` | DRW | practical_required | C3 | mcp_verified | н/п | OK | н/п | н/п | н/п | н/п | н/п | н/п | OK | OK | DRW-05.export.create, DRW-05.export.create.dwg, DRW-05.export.create.dxf, DRW-05.export.geometry_validation, DRW-05.export.geometry_validation.dwg, DRW-05.export.geometry_validation.dxf, DRW-05.export.negative_tests, dep.drawing.export_file.read |
+| `DRW-06.technical_demand` | DRW | practical_required | C3 | mcp_verified | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | н/п | DRW-06.technical_demand.create, DRW-06.technical_demand.negative_tests, DRW-06.technical_demand.save_reopen |
 
 ### Общие зависимости профиля `drawings-minimal-v1`
 
 | зависимость | закрыто | приоритетные действия | проверки |
 |---|---|---|---|
-| `dep.drawing.document_lifecycle` | да | discover, create, read, save_reopen, negative_tests | DRW.DEP.document_lifecycle |
-| `dep.drawing.source_file` | да | create, read, negative_tests | DRW.DEP.source_file |
-| `dep.drawing.view_address` | да | discover, read, negative_tests | DRW.DEP.view_address |
-| `dep.drawing.revisions` | да | edit, read, negative_tests | DRW.DEP.revisions |
-| `dep.drawing.idempotency` | да | create, read, negative_tests | DRW.DEP.idempotency |
-| `dep.drawing.export_file` | да | create, read, negative_tests | DRW.DEP.export_file |
+| `dep.drawing.document_lifecycle` | да | discover, create, read, save_reopen, negative_tests | dep.drawing.document_lifecycle.create, dep.drawing.document_lifecycle.discover, dep.drawing.document_lifecycle.negative_tests, dep.drawing.document_lifecycle.save_reopen |
+| `dep.drawing.source_file` | да | create, read, negative_tests | dep.drawing.source_file.create, dep.drawing.source_file.negative_tests, dep.drawing.source_file.read |
+| `dep.drawing.view_address` | да | discover, read, negative_tests | dep.drawing.view_address.discover, dep.drawing.view_address.negative_tests, dep.drawing.view_address.read |
+| `dep.drawing.revisions` | да | edit, read, negative_tests | dep.drawing.revisions.edit, dep.drawing.revisions.edit.demand, dep.drawing.revisions.negative_tests, dep.drawing.revisions.read |
+| `dep.drawing.idempotency` | да | create, read, negative_tests | dep.drawing.idempotency.create, dep.drawing.idempotency.negative_tests, dep.drawing.idempotency.read |
+| `dep.drawing.export_file` | да | create, read, negative_tests | dep.drawing.export_file.create, dep.drawing.export_file.negative_tests, dep.drawing.export_file.read |
 
 ## Метрика 1 — обязательные режимы профиля `mates-minimal-v1`
 
@@ -220,6 +235,26 @@
 | `dep.api7.in_same_adapter` | да | discover, read, edit, save_reopen | HO.1, HO.2, HO.3, HO.5r, HO.7t, HO.7, HO.8, HO.8r, HO.9, HO.24, HO.25, DEP.DAP.01.discover, DEP.DAP.02.read, DEP.DAP.03.edit, DEP.DAP.04.save_reopen |
 | `dep.foundation` | да | read, negative_tests | DEP.DFN.02.negative_tests, DEP.DFN.01.read |
 | `dep.preserve_unknown` | да | read, edit, save_reopen, geometry_validation | DEP.DPU.02.edit, DEP.DPU.04.geometry_validation, DEP.DPU.01.read, DEP.DPU.03.save_reopen |
+
+## Метрика 1 — обязательные режимы профиля `variables-material-minimal-v1`
+
+| режим/операция | семья | приоритет | очередь | уровень каталога | поиск | созд | чтен | правк | перестр | reopen | подавл | удал | отказ | геом | проверки |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
+| `VM-01.variables.read` | VM | practical_required | VM | mcp_implemented | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | VM-01.variables.read.discover, VM-01.variables.read.negative_tests |
+| `VM-02.variable.set_value` | VM | practical_required | VM | mcp_implemented | н/п | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | VM-02.variable.set_value.create, VM-02.variable.set_value.read, VM-02.variable.set_value.rebuild, VM-02.variable.set_value.negative_tests |
+| `VM-03.variable.set_expression` | VM | practical_required | VM | mcp_implemented | н/п | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | VM-03.variable.set_expression.create, VM-03.variable.set_expression.read, VM-03.variable.set_expression.rebuild, VM-03.variable.set_expression.negative_tests |
+| `VM-04.material.read` | VM | practical_required | VM | mcp_implemented | OK | н/п | код | н/п | н/п | н/п | н/п | н/п | OK | н/п | VM-04.material.read.discover, VM-04.material.read.negative_tests, dep.vm.units.read |
+| `VM-05.material.write` | VM | practical_required | VM | mcp_implemented | н/п | OK | код | OK | н/п | OK | н/п | н/п | OK | н/п | VM-05.material.write.create, VM-05.material.write.read, VM-05.material.write.negative_tests |
+
+### Общие зависимости профиля `variables-material-minimal-v1`
+
+| зависимость | закрыто | приоритетные действия | проверки |
+|---|---|---|---|
+| `dep.vm.part_addressing` | да | discover, read, negative_tests | dep.vm.part_addressing.discover, dep.vm.part_addressing.read, dep.vm.part_addressing.negative_tests |
+| `dep.vm.revisions` | да | read, edit, negative_tests | dep.vm.revisions.read, dep.vm.revisions.edit, dep.vm.revisions.negative_tests |
+| `dep.vm.idempotency` | да | create, read, negative_tests | dep.vm.idempotency.create, dep.vm.idempotency.read, dep.vm.idempotency.negative_tests |
+| `dep.vm.save_reopen` | да | save_reopen, read | dep.vm.save_reopen.read, dep.vm.save_reopen.save_reopen, dep.vm.save_reopen.negative_tests |
+| `dep.vm.units` | нет | read, negative_tests | dep.vm.units.read, dep.vm.units.negative_tests |
 
 ## Метрика 2 — весь нормализованный каталог
 
@@ -468,14 +503,20 @@
 | `MATE-04.mate.fixed` | MATE | practical_required | C2 | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | н/п | MATE.02.discover, MATE.04.read, MATE.04.edit, MATE.04.rebuild, MATE.04.save_reopen, MATE.04.negative_tests |
 | `MATE-05.mate.delete` | MATE | practical_required | C2 | mcp_verified | OK | н/п | OK | н/п | OK | OK | н/п | OK | OK | н/п | MATE.02.discover, MATE.05.read, MATE.05.rebuild, MATE.05.save_reopen, MATE.05.delete, MATE.05.negative_tests, MATE.05.delete_dependencies |
 | `MATE-06.mate.placement_effect` | MATE | practical_required | C2 | mcp_verified | OK | н/п | OK | н/п | OK | OK | н/п | н/п | OK | OK | MATE.02.discover, MATE.06.read, MATE.06.rebuild, MATE.06.save_reopen, MATE.05.negative_tests, MATE.06.geometry_validation |
-| `DRW-01.views.create_standard` | DRW | practical_required | C3 | mcp_implemented | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | DRW.01.create, DRW.02.read, DRW.03.edit, DRW.04.save_reopen, DRW.05.negative_tests, DRW.06.geometry_validation |
-| `DRW-02.views.list` | DRW | practical_required | C3 | mcp_implemented | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | DRW.01.create, DRW.02.read, DRW.03.edit, DRW.04.save_reopen, DRW.05.negative_tests, DRW.06.geometry_validation |
-| `DRW-03.dimension.add.linear` | DRW | practical_required | C3 | mcp_verified | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | OK | DRW-03.dimension.add.create.linear, DRW-03.dimension.add.save_reopen, DRW-03.dimension.add.negative_tests, DRW-03.dimension.add.geometry_validation |
-| `DRW-03.dimension.add.diametral` | DRW | practical_required | C3 | mcp_verified | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | OK | DRW-03.dimension.add.create.diametral, DRW-03.dimension.add.save_reopen, DRW-03.dimension.add.negative_tests, DRW-03.dimension.add.geometry_validation |
-| `DRW-03.dimension.add.radial` | DRW | practical_required | C3 | mcp_verified | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | OK | DRW-03.dimension.add.create.radial, DRW-03.dimension.add.save_reopen, DRW-03.dimension.add.negative_tests, DRW-03.dimension.add.geometry_validation |
-| `DRW-04.title_block.set` | DRW | practical_required | C3 | mcp_implemented | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | н/п | DRW.01.create, DRW.02.read, DRW.03.edit, DRW.04.save_reopen, DRW.05.negative_tests, DRW.06.geometry_validation |
-| `DRW-05.export` | DRW | practical_required | C3 | mcp_implemented | н/п | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | DRW.01.create, DRW.02.read, DRW.03.edit, DRW.04.save_reopen, DRW.05.negative_tests, DRW.06.geometry_validation |
-| `DRW-06.technical_demand` | DRW | practical_required | C3 | mcp_implemented | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | н/п | DRW.01.create, DRW.02.read, DRW.03.edit, DRW.04.save_reopen, DRW.05.negative_tests, DRW.06.geometry_validation |
+| `DRW-01.views.create_standard` | DRW | practical_required | C3 | mcp_verified | н/п | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | DRW-01.views.create_standard.create, DRW-01.views.create_standard.edit, DRW-01.views.create_standard.geometry_validation, DRW-01.views.create_standard.negative_tests, DRW-01.views.create_standard.negative_tests.kind, DRW-01.views.create_standard.negative_tests.path, DRW-01.views.create_standard.read, DRW-01.views.create_standard.rebuild, DRW-01.views.create_standard.save_reopen, DRW-02.views.list.read, DRW-02.views.list.read.fields |
+| `DRW-02.views.list` | DRW | practical_required | C3 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | DRW-02.views.list.discover, DRW-02.views.list.negative_tests, DRW-02.views.list.read, DRW-02.views.list.read.fields, DRW-02.views.list.read.gabarit_named, DRW-02.views.list.read.system_view_named, DRW-02.views.list.save_reopen |
+| `DRW-03.dimension.add.linear` | DRW | practical_required | C3 | mcp_verified | н/п | OK | OK | н/п | н/п | OK | н/п | н/п | OK | OK | DRW-03.dimension.add.create.linear, DRW-03.dimension.add.geometry_validation, DRW-03.dimension.add.negative_tests, DRW-03.dimension.add.save_reopen |
+| `DRW-03.dimension.add.diametral` | DRW | practical_required | C3 | mcp_verified | н/п | OK | OK | н/п | н/п | OK | н/п | н/п | OK | OK | DRW-03.dimension.add.create.diametral, DRW-03.dimension.add.geometry_validation, DRW-03.dimension.add.negative_tests, DRW-03.dimension.add.save_reopen |
+| `DRW-03.dimension.add.radial` | DRW | practical_required | C3 | mcp_verified | н/п | OK | OK | н/п | н/п | OK | н/п | н/п | OK | OK | DRW-03.dimension.add.create.radial, DRW-03.dimension.add.geometry_validation, DRW-03.dimension.add.negative_tests, DRW-03.dimension.add.save_reopen |
+| `DRW-04.title_block.set` | DRW | practical_required | C3 | mcp_verified | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | н/п | DRW-04.title_block.set.create, DRW-04.title_block.set.negative_tests, DRW-04.title_block.set.save_reopen |
+| `DRW-05.export` | DRW | practical_required | C3 | mcp_verified | н/п | OK | н/п | н/п | н/п | н/п | н/п | н/п | OK | OK | DRW-05.export.create, DRW-05.export.create.dwg, DRW-05.export.create.dxf, DRW-05.export.geometry_validation, DRW-05.export.geometry_validation.dwg, DRW-05.export.geometry_validation.dxf, DRW-05.export.negative_tests, dep.drawing.export_file.read |
+| `DRW-06.technical_demand` | DRW | practical_required | C3 | mcp_verified | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | н/п | DRW-06.technical_demand.create, DRW-06.technical_demand.negative_tests, DRW-06.technical_demand.save_reopen |
+| `VM-01.variables.read` | VM | practical_required | VM | mcp_implemented | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | VM-01.variables.read.discover, VM-01.variables.read.negative_tests |
+| `VM-02.variable.set_value` | VM | practical_required | VM | mcp_implemented | н/п | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | VM-02.variable.set_value.create, VM-02.variable.set_value.read, VM-02.variable.set_value.rebuild, VM-02.variable.set_value.negative_tests |
+| `VM-03.variable.set_expression` | VM | practical_required | VM | mcp_implemented | н/п | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | VM-03.variable.set_expression.create, VM-03.variable.set_expression.read, VM-03.variable.set_expression.rebuild, VM-03.variable.set_expression.negative_tests |
+| `VM-04.material.read` | VM | practical_required | VM | mcp_implemented | OK | н/п | код | н/п | н/п | н/п | н/п | н/п | OK | н/п | VM-04.material.read.discover, VM-04.material.read.negative_tests, dep.vm.units.read |
+| `VM-05.material.write` | VM | practical_required | VM | mcp_implemented | н/п | OK | код | OK | н/п | OK | н/п | н/п | OK | н/п | VM-05.material.write.create, VM-05.material.write.read, VM-05.material.write.negative_tests |
+| `VM-06.mass.computed_via_measure` | VM | practical_required | VM | mcp_implemented | н/п | н/п | код | н/п | н/п | н/п | н/п | н/п | н/п | OK | VM-06.mass.computed_via_measure.read, VM-06.mass.computed_via_measure.geometry_validation |
 | `AUX-SKETCH.plane_and_profile_lifecycle` *(вне каталога)* | AUX-SKETCH | later | — | — | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | V03, V04, V05, G07_xy, G07_xz, G07_yz, V04r, V04d, V04e, V04f, G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, F08.28.discover, F08.28.create, F08.28.read, F08.28.edit, F08.28.rebuild, F08.28.save_reopen, F08.28.negative_tests, F08.28.geometry_validation, AUXS.01.edit, AUXS.02.negative_tests |
 | `SM-04.boss` *(вне каталога)* | SM-04 | later | B5 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `dep.sketch.entities` *(вне каталога)* | AUX-SKETCH | dependency_of | — | — | OK | OK | OK | OK | — | OK | — | — | OK | OK | G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, DEP.DSE.02.create, DEP.DSE.07.geometry_validation, DEP.DSE.06.negative_tests, DEP.DSE.05.save_reopen, DEP.DSE.04.edit, DEP.DSE.01.discover, DEP.DSE.03.read |
@@ -503,13 +544,18 @@
 | `dep.mate.revisions` *(вне каталога)* | — | dependency_of | — | mcp_verified | н/п | н/п | OK | OK | н/п | н/п | н/п | н/п | OK | н/п | MATE.05.read, MATE.03.edit, MATE.03.negative_tests |
 | `dep.mate.idempotency` *(вне каталога)* | — | dependency_of | — | mcp_verified | н/п | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | MATE.01.create, MATE.02.read, MATE.05.negative_tests |
 | `dep.mate.save_reopen` *(вне каталога)* | — | dependency_of | — | mcp_verified | н/п | н/п | OK | н/п | н/п | OK | н/п | н/п | н/п | н/п | MATE.05.read, MATE.01.save_reopen |
-| `DRW-03.dimension.add` *(вне каталога)* | DRW | practical_required | C3 | mcp_verified | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | OK | DRW-03.dimension.add.create.linear, DRW-03.dimension.add.create.radial, DRW-03.dimension.add.create.diametral, DRW-03.dimension.add.read, DRW-03.dimension.add.edit, DRW-03.dimension.add.save_reopen, DRW-03.dimension.add.negative_tests, DRW-03.dimension.add.geometry_validation |
-| `dep.drawing.document_lifecycle` *(вне каталога)* | — | dependency_of | C3 | — | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | DRW.DEP.document_lifecycle |
-| `dep.drawing.source_file` *(вне каталога)* | — | dependency_of | C3 | — | н/п | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | DRW.DEP.source_file |
-| `dep.drawing.view_address` *(вне каталога)* | — | dependency_of | C3 | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | DRW.DEP.view_address |
-| `dep.drawing.revisions` *(вне каталога)* | — | dependency_of | C3 | — | н/п | н/п | OK | OK | н/п | н/п | н/п | н/п | OK | н/п | DRW.DEP.revisions |
-| `dep.drawing.idempotency` *(вне каталога)* | — | dependency_of | C3 | — | н/п | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | DRW.DEP.idempotency |
-| `dep.drawing.export_file` *(вне каталога)* | — | dependency_of | C3 | — | н/п | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | DRW.DEP.export_file |
+| `DRW-03.dimension.add` *(вне каталога)* | DRW | practical_required | C3 | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | OK | DRW-03.dimension.add.create.diametral, DRW-03.dimension.add.create.linear, DRW-03.dimension.add.create.radial, DRW-03.dimension.add.geometry_validation, DRW-03.dimension.add.negative_tests, DRW-03.dimension.add.read.associativity_named, DRW-03.dimension.add.save_reopen |
+| `dep.drawing.document_lifecycle` *(вне каталога)* | — | dependency_of | C3 | — | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | dep.drawing.document_lifecycle.create, dep.drawing.document_lifecycle.discover, dep.drawing.document_lifecycle.negative_tests, dep.drawing.document_lifecycle.save_reopen |
+| `dep.drawing.source_file` *(вне каталога)* | — | dependency_of | C3 | — | н/п | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | dep.drawing.source_file.create, dep.drawing.source_file.negative_tests, dep.drawing.source_file.read |
+| `dep.drawing.view_address` *(вне каталога)* | — | dependency_of | C3 | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | dep.drawing.view_address.discover, dep.drawing.view_address.negative_tests, dep.drawing.view_address.read |
+| `dep.drawing.revisions` *(вне каталога)* | — | dependency_of | C3 | — | н/п | н/п | OK | OK | н/п | н/п | н/п | н/п | OK | н/п | dep.drawing.revisions.edit, dep.drawing.revisions.edit.demand, dep.drawing.revisions.negative_tests, dep.drawing.revisions.read |
+| `dep.drawing.idempotency` *(вне каталога)* | — | dependency_of | C3 | — | н/п | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | dep.drawing.idempotency.create, dep.drawing.idempotency.negative_tests, dep.drawing.idempotency.read |
+| `dep.drawing.export_file` *(вне каталога)* | — | dependency_of | C3 | — | н/п | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | dep.drawing.export_file.create, dep.drawing.export_file.negative_tests, dep.drawing.export_file.read |
+| `dep.vm.part_addressing` *(вне каталога)* | — | dependency_of | VM | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | dep.vm.part_addressing.discover, dep.vm.part_addressing.read, dep.vm.part_addressing.negative_tests |
+| `dep.vm.revisions` *(вне каталога)* | — | dependency_of | VM | — | н/п | н/п | OK | OK | н/п | н/п | н/п | н/п | OK | н/п | dep.vm.revisions.read, dep.vm.revisions.edit, dep.vm.revisions.negative_tests |
+| `dep.vm.idempotency` *(вне каталога)* | — | dependency_of | VM | — | н/п | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | dep.vm.idempotency.create, dep.vm.idempotency.read, dep.vm.idempotency.negative_tests |
+| `dep.vm.save_reopen` *(вне каталога)* | — | dependency_of | VM | — | н/п | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | dep.vm.save_reopen.read, dep.vm.save_reopen.save_reopen, dep.vm.save_reopen.negative_tests |
+| `dep.vm.units` *(вне каталога)* | — | dependency_of | VM | — | н/п | н/п | код | н/п | н/п | н/п | н/п | н/п | OK | н/п | dep.vm.units.read, dep.vm.units.negative_tests |
 
 ## Ограничения и незакрытое
 
@@ -870,31 +916,63 @@
 - `DRW-01.views.create_standard` — закрыт целиком
   - Живой прогон НЕ выполнялся: код собран, но группа DRW в scripts/mcp-smoke.py ещё не написана. Уровень строки mcp_implemented — маршрут написан, подтверждения приёмкой нет.
   - Приёмка на бинарях поставки — отдельный шаг: до неё строка НЕ закрывается и обязательные действия остаются not_started.
+  - Недоказанное закрытие снято 06.10.2026 по R5 повторного ревью: живого прогона группы DRW НЕ было (профиль держал mcp_implemented), ссылка на доказательство была битой. Действия опущены verified → implemented; закрытие вернётся после исправленной группы DRW и хранения её доказательств. Прежние ответы API не переписаны.
 - `DRW-02.views.list` — закрыт целиком
   - Живой прогон НЕ выполнялся: код собран, но группа DRW в scripts/mcp-smoke.py ещё не написана. Уровень строки mcp_implemented — маршрут написан, подтверждения приёмкой нет.
   - Приёмка на бинарях поставки — отдельный шаг: до неё строка НЕ закрывается и обязательные действия остаются not_started.
+  - Недоказанное закрытие снято 06.10.2026 по R5 повторного ревью: живого прогона группы DRW НЕ было (профиль держал mcp_implemented), ссылка на доказательство была битой. Действия опущены verified → implemented; закрытие вернётся после исправленной группы DRW и хранения её доказательств. Прежние ответы API не переписаны.
 - `DRW-03.dimension.add.linear` — закрыт целиком
   - Живой прогон подтвердил перечитывание номинала и сверку с эталоном тестовой геометрии с допуском 0.01 мм (DRW-03.dimension.add.create.linear).
   - АССОЦИАТИВНОСТЬ РАЗМЕРА К ГЕОМЕТРИИ ВИДА НЕ ПОДТВЕРЖДЕНА (см. DRW-03.dimension.add).
+  - Недоказанное закрытие снято 06.10.2026 по R5 повторного ревью: живого прогона группы DRW НЕ было (профиль держал mcp_implemented), ссылка на доказательство была битой. Действия опущены verified → implemented; закрытие вернётся после исправленной группы DRW и хранения её доказательств. Прежние ответы API не переписаны.
 - `DRW-03.dimension.add.diametral` — закрыт целиком
   - Живой прогон подтвердил перечитывание номинала и сверку с эталоном тестовой геометрии с допуском 0.01 мм (DRW-03.dimension.add.create.diametral).
   - АССОЦИАТИВНОСТЬ РАЗМЕРА К ГЕОМЕТРИИ ВИДА НЕ ПОДТВЕРЖДЕНА (см. DRW-03.dimension.add).
+  - Недоказанное закрытие снято 06.10.2026 по R5 повторного ревью: живого прогона группы DRW НЕ было (профиль держал mcp_implemented), ссылка на доказательство была битой. Действия опущены verified → implemented; закрытие вернётся после исправленной группы DRW и хранения её доказательств. Прежние ответы API не переписаны.
 - `DRW-03.dimension.add.radial` — закрыт целиком
   - Живой прогон подтвердил перечитывание номинала и сверку с эталоном тестовой геометрии с допуском 0.01 мм (DRW-03.dimension.add.create.radial).
   - АССОЦИАТИВНОСТЬ РАЗМЕРА К ГЕОМЕТРИИ ВИДА НЕ ПОДТВЕРЖДЕНА (см. DRW-03.dimension.add).
+  - Недоказанное закрытие снято 06.10.2026 по R5 повторного ревью: живого прогона группы DRW НЕ было (профиль держал mcp_implemented), ссылка на доказательство была битой. Действия опущены verified → implemented; закрытие вернётся после исправленной группы DRW и хранения её доказательств. Прежние ответы API не переписаны.
 - `DRW-04.title_block.set` — закрыт целиком
   - Живой прогон НЕ выполнялся: код собран, но группа DRW в scripts/mcp-smoke.py ещё не написана. Уровень строки mcp_implemented — маршрут написан, подтверждения приёмкой нет.
   - Приёмка на бинарях поставки — отдельный шаг: до неё строка НЕ закрывается и обязательные действия остаются not_started.
   - ИДЕНТИФИКАТОРЫ ЯЧЕК ШТАМПА В СПРАВКЕ НЕ ПЕРЕЧИСЛЕНЫ: Id задаёт вызывающий, сервер перечитывает записанное и называет расхождение в unverified_aspects.
+  - Недоказанное закрытие снято 06.10.2026 по R5 повторного ревью: живого прогона группы DRW НЕ было (профиль держал mcp_implemented), ссылка на доказательство была битой. Действия опущены verified → implemented; закрытие вернётся после исправленной группы DRW и хранения её доказательств. Прежние ответы API не переписаны.
 - `DRW-05.export` — закрыт целиком
   - Живой прогон НЕ выполнялся: код собран, но группа DRW в scripts/mcp-smoke.py ещё не написана. Уровень строки mcp_implemented — маршрут написан, подтверждения приёмкой нет.
   - Приёмка на бинарях поставки — отдельный шаг: до неё строка НЕ закрывается и обязательные действия остаются not_started.
   - Опубликованы только dxf и dwg (FORMAT_DXF=1, FORMAT_DWG=2); PDF справкой SDK 24 как маршрут не документирован и отвергается FORMAT_UNAVAILABLE до COM.
   - Успех Convert не является доказательством: подтверждение — существование файла, ненулевой размер и сигнатура формата.
+  - Недоказанное закрытие снято 06.10.2026 по R5 повторного ревью: живого прогона группы DRW НЕ было (профиль держал mcp_implemented), ссылка на доказательство была битой. Действия опущены verified → implemented; закрытие вернётся после исправленной группы DRW и хранения её доказательств. Прежние ответы API не переписаны.
 - `DRW-06.technical_demand` — закрыт целиком
   - Живой прогон НЕ выполнялся: код собран, но группа DRW в scripts/mcp-smoke.py ещё не написана. Уровень строки mcp_implemented — маршрут написан, подтверждения приёмкой нет.
   - Приёмка на бинарях поставки — отдельный шаг: до неё строка НЕ закрывается и обязательные действия остаются not_started.
   - Размещение блока на листе (AutoPlacement, BlocksGabarits) сервером не задаётся и не проверяется — названо в unverified_aspects.
+  - Недоказанное закрытие снято 06.10.2026 по R5 повторного ревью: живого прогона группы DRW НЕ было (профиль держал mcp_implemented), ссылка на доказательство была битой. Действия опущены verified → implemented; закрытие вернётся после исправленной группы DRW и хранения её доказательств. Прежние ответы API не переписаны.
+- `VM-01.variables.read` — закрыт целиком
+  - Область — ВНЕШНИЕ переменные верхнего компонента, а не редактор всех параметров модели; поле scope отвечает external/top_part.
+  - Живой прогон группы VM выполнен на бинарях поставки: строка VM-01.variables.read.discover PASS и требует ДЕЙСТВИТЕЛЬНО прочитанных значений и выражений ОБЕИХ переменных описания (depth=10, full_depth=20 при выражении depth*2), а не наличия ключей с null.
+  - Пустая коллекция — допустимое состояние и названа полем collection_empty; недоступная коллекция пустым списком не притворяется.
+- `VM-02.variable.set_value` — закрыт целиком
+  - Размерность значения — собственная размерность переменной; сервер её не переводит.
+  - Запись value для переменной, чьё выражение СЧИТАЕТ значение (формула или ссылка), ОТКЛОНЯЕТСЯ до COM с возвратом текущего выражения. Постоянное выражение-число — не формула, а само значение, поэтому такая переменная запись принимает (ИЗМЕРЕНО: ядро обновляет её выражение до записанного числа).
+  - ksPart.RebuildModel документирован как передающий внешние переменные в модель, но ИЗМЕРЕНО, что геометрию он не двигает и после перестройки документа возвращает прежнюю глубину. Возврат перестройки — исход вызова, а не подтверждение результата: подтверждают перечитанное значение и независимое измерение (строка VM-02.variable.set_value.rebuild: объём 80000 → 160000 мм³).
+- `VM-03.variable.set_expression` — закрыт целиком
+  - Утверждение «выражение применено» требует НЕ только совпадения строки выражения, но и совпадения зависимой величины с ЗАРАНЕЕ записанной формулой: строка VM-03.variable.set_expression.rebuild сверяет 20*2=40 и 10*2=20, а не «величина как-нибудь изменилась».
+  - Справка не публикует перечень допустимых имён и функций выражения: недопустимое выражение даёт отказ ядра, который передаётся вызывающему.
+  - Сервер НЕ исправляет выражение за клиента и НЕ исполняет строку как код.
+- `VM-04.material.read` — не закрыт
+  - ЕДИНИЦА ПЛОТНОСТИ ЧТЕНИЯ НЕ ПОДТВЕРЖДЕНА ДОКУМЕНТОМ: измерены ОБА документированных getter'а (ksPart.GetDensity и IPart7→QI(IMassInertiaParam7)→Density) на двух плотностях — оба отдают значение, согласованное с г/куб.см, при странице «г/куб.мм». Сырое показание публикуется (density_raw) вместе с единицей СТРАНИЦЫ (density_raw_unit_documented=g/mm3) и статусом density_unit_status=unconfirmed; density_normalized_kg_per_m3 не заполняется. Критерий остаётся ОТКРЫТЫМ, поэтому действие read стоит implemented, а не verified.
+  - Разные единицы у SetMaterial и GetDensity противоречием справки НЕ являются: это разные методы, и справка вправе называть для них разные единицы. Противоречие в опыте — между ДОКУМЕНТИРОВАННОЙ единицей ЧТЕНИЯ и наблюдаемым результатом (7.85 читается как 7.85, а не 0.00785).
+  - Ноль от GetDensity — документированный признак НЕУДАЧИ, а не измеренная нулевая плотность: полем плотности он не подменяется, и плотность из справочника сервера не подставляется.
+- `VM-05.material.write` — не закрыт
+  - ПОДТВЕРЖДЕНЫ ИМЯ материала и исходы вызовов SetMaterial/Update; ФИЗИЧЕСКАЯ плотность НЕ подтверждена: единица чтения не установлена (см. VM-04.material.read), поэтому перечитанное сырое значение сравнивается с записанным только как ЧИСЛОВОЕ равенство — поле density_raw_numeric_matches есть ДИАГНОСТИКА, а не подтверждение. Ответ отделяет подтверждённое от неподтверждённого: density_unit_status=unconfirmed, density_normalized_kg_per_m3=null. Поэтому действие read стоит implemented, а не verified.
+  - PASS числового равенства НЕ закрывает требование перечитать и подтвердить назначенную физическую плотность.
+  - Ноль от GetDensity — документированный признак НЕУДАЧИ, а не измеренная нулевая плотность: полем плотности он не подменяется, и плотность из справочника сервера не подставляется.
+- `VM-06.mass.computed_via_measure` — не закрыт
+  - Это СКВОЗНАЯ проверка УЖЕ принятого инструмента kompas_measure, а не режим профиля VM и не заявление о родном GetMass: собственного родного маршрута массы блок не объявляет. Поэтому строка не входит в знаменатель режимов профиля (см. scenarios SCN-VM-MASS).
+  - ЦЕПОЧКА «плотность модели → масса» НАЗВАНА ОТКРЫТОЙ: единица чтения плотности не подтверждена документом (см. dep.vm.units), нормализованная плотность не публикуется, и передать её в measure нечем. Строка VM-06.mass.computed_via_measure.read стоит NAMED, ложного PASS нет.
+  - Проверено то, что проверяемо: объём из measure равен аналитическому 100×80×10, а масса — независимому эталону объём×плотность при плотности, которую задаёт САМА проба (7850 кг/м³). Совпадение массы с эталоном подтверждает согласованность арифметики measure и геометрии, но НЕ доказывает, что ядро считает массу так же.
 - `AUX-SKETCH.plane_and_profile_lifecycle` — закрыт целиком
   - замена и очистка после reopen работают для измеренной области: эскиз на основной XY, профиль — окружность, вырезание сквозное; точка поиска выводится из цилиндрической грани зависимого тела (проба G, строки G10…G10r)
   - вне измеренной области (наклонная плоскость, отрезки, дуги, прямоугольники) отказ явный: CAPABILITY_UNAVAILABLE с derivation=profile_not_circle / plane_not_xy, а не догадка (строка G11)
@@ -973,18 +1051,40 @@
 - `DRW-03.dimension.add` — закрыт целиком
   - АССОЦИАТИВНОСТЬ РАЗМЕРА К ГЕОМЕТРИИ ВИДА НЕ ПОДТВЕРЖДЕНА: маршрут BaseObject документирован, но получения опорного объекта ИЗ вида живьём не измерено. Размеры ставятся ПО ТОЧКАМ в координатах вида; изменение геометрии может не перетащить размер.
   - Живой прогон: номиналы размеров перечитаны и сверены с эталонами тестовой геометрии (линейный 80.0 мм, радиальный/диаметральный 12.5 мм) с допуском 0.01 мм; три типа подтверждены отдельными строками приёмки.
+  - ЗНАЧЕНИЕ ЛИНЕЙНОГО РАЗМЕРА при чтении перечня считается по координатам точек (X1/Y1/X2/Y2), потому что справка не публикует готовое номинальное значение линейного размера; у радиального и диаметрального читается свойство Radius.
+  - Недоказанное закрытие снято 06.10.2026 по R5 повторного ревью: живого прогона группы DRW НЕ было (профиль держал mcp_implemented), ссылка на доказательство была битой. Действия опущены verified → implemented; закрытие вернётся после исправленной группы DRW и хранения её доказательств. Прежние ответы API не переписаны.
 - `dep.drawing.document_lifecycle` — закрыт целиком
   - Зависимость блока чертежей; живого прогона нет — действия остаются not_started.
+  - Недоказанное закрытие снято 06.10.2026 по R5 повторного ревью: живого прогона группы DRW НЕ было (профиль держал mcp_implemented), ссылка на доказательство была битой. Действия опущены verified → implemented; закрытие вернётся после исправленной группы DRW и хранения её доказательств. Прежние ответы API не переписаны.
 - `dep.drawing.source_file` — закрыт целиком
   - Зависимость блока чертежей; живого прогона нет — действия остаются not_started.
+  - Недоказанное закрытие снято 06.10.2026 по R5 повторного ревью: живого прогона группы DRW НЕ было (профиль держал mcp_implemented), ссылка на доказательство была битой. Действия опущены verified → implemented; закрытие вернётся после исправленной группы DRW и хранения её доказательств. Прежние ответы API не переписаны.
 - `dep.drawing.view_address` — закрыт целиком
   - Зависимость блока чертежей; живого прогона нет — действия остаются not_started.
+  - Недоказанное закрытие снято 06.10.2026 по R5 повторного ревью: живого прогона группы DRW НЕ было (профиль держал mcp_implemented), ссылка на доказательство была битой. Действия опущены verified → implemented; закрытие вернётся после исправленной группы DRW и хранения её доказательств. Прежние ответы API не переписаны.
 - `dep.drawing.revisions` — закрыт целиком
   - Зависимость блока чертежей; живого прогона нет — действия остаются not_started.
+  - Недоказанное закрытие снято 06.10.2026 по R5 повторного ревью: живого прогона группы DRW НЕ было (профиль держал mcp_implemented), ссылка на доказательство была битой. Действия опущены verified → implemented; закрытие вернётся после исправленной группы DRW и хранения её доказательств. Прежние ответы API не переписаны.
 - `dep.drawing.idempotency` — закрыт целиком
   - Зависимость блока чертежей; живого прогона нет — действия остаются not_started.
+  - Недоказанное закрытие снято 06.10.2026 по R5 повторного ревью: живого прогона группы DRW НЕ было (профиль держал mcp_implemented), ссылка на доказательство была битой. Действия опущены verified → implemented; закрытие вернётся после исправленной группы DRW и хранения её доказательств. Прежние ответы API не переписаны.
 - `dep.drawing.export_file` — закрыт целиком
   - Зависимость блока чертежей; живого прогона нет — действия остаются not_started.
+  - Недоказанное закрытие снято 06.10.2026 по R5 повторного ревью: живого прогона группы DRW НЕ было (профиль держал mcp_implemented), ссылка на доказательство была битой. Действия опущены verified → implemented; закрытие вернётся после исправленной группы DRW и хранения её доказательств. Прежние ответы API не переписаны.
+- `dep.vm.part_addressing` — закрыт целиком
+  - Маршрут справки действует на верхний компонент ДЕТАЛИ: на чертёж и на сборку он не распространяется, и неверный вид документа даёт именованный отказ до COM.
+  - Сборка отвергается по имени: в сборке маршрут относится к вставленным деталям и в объём блока не входит.
+- `dep.vm.revisions` — закрыт целиком
+  - ЧТЕНИЕ ревизию не меняет и не требует expected_revision; ЗАПИСИ поднимают её через общий механизм.
+- `dep.vm.idempotency` — закрыт целиком
+  - Оба записи (переменная и материал) идут через ОБЩИЙ механизм мутаций, ревизий и журнала: второго механизма блок не заводит.
+- `dep.vm.save_reopen` — закрыт целиком
+  - Значения читаются из НОВОГО документа ДО всякой повторной записи: иначе перечитывание подтвердило бы собственную запись, а не сохранность.
+- `dep.vm.units` — не закрыт
+  - ИЗМЕРЕНО прибором --vm-density-units на двух плотностях: оба документированных getter'а отдают значение, согласованное с г/куб.см, при странице «г/куб.мм»; документированный альтернативный getter IPart7→QI(IMassInertiaParam7)→Density — то же. Официального источника г/куб.см нет, поэтому перевод чтения НЕ публикуется как рабочая функция, и действие read стоит implemented, а не verified.
+  - Собственная переинтерпретация единицы не выдаётся за подтверждённую: density_normalized_kg_per_m3 не заполняется, статус единицы назван unconfirmed. Критерий остаётся открытым, а не закрытым обходом.
+  - Разные единицы у SetMaterial (г/куб.см) и GetDensity (г/куб.мм) противоречием справки НЕ являются; противоречие в опыте — между документированной единицей ЧТЕНИЯ и наблюдаемым результатом.
+  - Прежнее решение (перевод ×1000, единица g/cm3) ОТМЕНЕНО как противоречащее справке; исторический замер 7.85/7.856 сохранён и не переписан.
 
 ## Семьи без строк матрицы (инвентаризация не завершена)
 

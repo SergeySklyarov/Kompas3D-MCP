@@ -6,7 +6,8 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>Drawing domain (block DRW): the contract of five tools and the honesty of their descriptions.</summary>
+/// <summary>Drawing domain (block DRW): the contract of the drawing tools and the honesty of their
+/// descriptions.</summary>
 /// <remarks>TEST: only what is checkable WITHOUT KOMPAS — registration, worker-command mapping, the mandatory
 /// fields of mutations, schema strictness, the nullability that keeps "not read" distinct from "read zero",
 /// and the descriptions that NAME the current limits (dimensions bind to view POINTS not model topology,
@@ -24,9 +25,13 @@ public class DrawingDomainTests
         ("kompas_create_drawing_views", "drawing.create_views"),
         ("kompas_list_drawing_views", "drawing.list_views"),
         ("kompas_edit_view", "drawing.edit_view"),
+        ("kompas_rebuild_drawing_views", "drawing.rebuild_views"),
         ("kompas_add_dimension", "drawing.add_dimension"),
+        ("kompas_list_dimensions", "drawing.list_dimensions"),
         ("kompas_set_title_block", "drawing.set_title_block"),
+        ("kompas_get_title_block", "drawing.get_title_block"),
         ("kompas_set_technical_demand", "drawing.set_technical_demand"),
+        ("kompas_get_technical_demand", "drawing.get_technical_demand"),
         ("kompas_export_drawing", "drawing.export"),
     };
 
@@ -68,6 +73,27 @@ public class DrawingDomainTests
         Assert.False(tool.IsMutation);
         Assert.False(tool.Behaviour.RequiresOperationId);
         Assert.True(tool.Behaviour.RequiresDocument);
+    }
+
+    /// <summary>The read-only siblings of the two setters must NOT be mutations.</summary>
+    /// <remarks>TEST: a setter cannot witness persistence — it assigns the expected value and reads it
+    /// back, so it passes even on a document that lost the value at reopen. The read routes exist to be
+    /// an independent witness, therefore they must carry no expected_revision and no operation_id, and
+    /// must not be declared destructive. History: docs/decisions/drawings.md#stamp-read</remarks>
+    [Theory]
+    [InlineData("kompas_get_title_block")]
+    [InlineData("kompas_get_technical_demand")]
+    public void DrawingReadRoute_IsNotAMutation(string name)
+    {
+        var tool = Tool(name);
+        var properties = (JsonObject)tool.InputSchema["properties"]!;
+        Assert.False(tool.IsMutation);
+        Assert.False(tool.Behaviour.Destructive);
+        Assert.False(tool.Behaviour.RequiresOperationId);
+        Assert.False(tool.Behaviour.RequiresExpectedRevision);
+        Assert.True(tool.Behaviour.RequiresDocument);
+        // A read must NOT demand a revision: it writes nothing, so a stale revision must not refuse it.
+        Assert.DoesNotContain("expected_revision", properties.Select(p => p.Key));
     }
 
     [Theory]
@@ -297,10 +323,45 @@ public class DrawingDomainTests
         Assert.Equal("drawing.create_views", WorkerCommands.CreateDrawingViews);
         Assert.Equal("drawing.list_views", WorkerCommands.ListDrawingViews);
         Assert.Equal("drawing.edit_view", WorkerCommands.EditView);
+        Assert.Equal("drawing.rebuild_views", WorkerCommands.RebuildDrawingViews);
         Assert.Equal("drawing.add_dimension", WorkerCommands.AddDimension);
+        Assert.Equal("drawing.list_dimensions", WorkerCommands.ListDimensions);
         Assert.Equal("drawing.set_title_block", WorkerCommands.SetTitleBlock);
         Assert.Equal("drawing.set_technical_demand", WorkerCommands.SetTechnicalDemand);
         Assert.Equal("drawing.export", WorkerCommands.ExportDrawing);
+    }
+
+    [Fact]
+    public void RebuildDrawingViews_NamesTheDocumentedRouteAndTheAbsentMember()
+    {
+        // INVARIANT: the rebuild action names the DOCUMENTED route it actually calls
+        // (IKompasDocument2D1.RebuildDocument), and states that IDrawingDocument.RebuildViews — named by
+        // the help but declared by no type of the shipped interop — is not used. The verdict must be the
+        // RE-READ view, never the returned boolean alone.
+        var tool = Tool("kompas_rebuild_drawing_views");
+        var description = tool.Description;
+
+        Assert.True(tool.IsMutation);
+        Assert.Contains("RebuildDocument", description, StringComparison.Ordinal);
+        Assert.Contains("ikompasdocument2d1_rebuilddocument.html", description, StringComparison.Ordinal);
+        Assert.Contains("НЕ объявлен", description, StringComparison.Ordinal);
+        Assert.Contains("ПЕРЕЧИТАННЫЙ", description, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RebuildDrawingViewsResult_KeepsTheCallAndTheRereadSeparate()
+    {
+        // INVARIANT: the boolean says "the call completed", the re-read row says "the view is still there";
+        // they are carried separately so a TRUE verdict cannot be mistaken for a proven projection change.
+        var before = new DrawingViewRowDto { ViewRef = "view:1", Number = 1, SourcePath = "m.m3d" };
+        var result = new RebuildDrawingViewsResult(
+            true, before, before, "IDrawingDocument(QI IKompasDocument2D1).RebuildDocument()",
+            new VerificationDto(VerificationLevel.StructureChecked, Array.Empty<NamedCheck>(),
+                                Array.Empty<string>()));
+
+        Assert.True(result.RebuildReturned);
+        Assert.Equal(result.ViewBefore!.Number, result.ViewAfter!.Number);
+        Assert.Contains("RebuildDocument", result.Route, StringComparison.Ordinal);
     }
 
     [Fact]

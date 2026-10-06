@@ -41,6 +41,14 @@ public partial class Api5Session
     private Api7Bridge BridgeFor(DocumentEntry document)
     {
         var application = RequireApplication(document.ApplicationId);
+        return BridgeForApplication(application);
+    }
+
+    /// <summary>The API7 bridge for an application instance (cached per <c>ApplicationEntry.Id</c>), for
+    /// routes that run BEFORE a document exists — drawing creation is the case: the choice of route is
+    /// what decides the document.</summary>
+    private Api7Bridge BridgeForApplication(ApplicationEntry application)
+    {
         if (!_api7Bridges.TryGetValue(application.Id, out var bridge))
         {
             bridge = new Api7Bridge(application.Application);

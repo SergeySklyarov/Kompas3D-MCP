@@ -111,6 +111,64 @@ public static class KompasInteropResolver
         return loaded;
     }
 
+    /// <summary>Install root derived from the resolved interop directory, or null.</summary>
+    /// <remarks>The interop lives at <c>&lt;root&gt;\Libs\PolynomLib\Bin\Client</c>; three levels up is the
+    /// installation root. Returned only when the layout actually matches, so a custom interop directory
+    /// does not silently produce a wrong root.</remarks>
+    public static string? InstallRoot
+    {
+        get
+        {
+            var directory = ResolvedDirectory;
+            if (directory is null)
+            {
+                return null;
+            }
+
+            var polynomLib = Directory.GetParent(directory);            // Bin
+            var bin = polynomLib?.Parent;                               // PolynomLib
+            var libs = bin?.Parent;                                     // Libs
+            var root = libs?.Parent;                                    // install root
+            if (root is null || libs is null ||
+                !string.Equals(libs.Name, "Libs", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            return root.FullName;
+        }
+    }
+
+    /// <summary>Full path to the vendor export library for a named format, or null when the installed
+    /// layout does not carry it.</summary>
+    /// <remarks>DOC: the export library is chosen BY FULL PATH
+    /// (<c>iapplication_converter.html</c>: «Library - полный путь к библиотеке»). Which library carries
+    /// which format is the library's own declaration — <c>Libs\ImpExp\dwgdxfExp.xml</c> publishes the
+    /// dwgdxfExp application with its «Сохранить как DXF»/«Сохранить как DWG» commands — so a format absent
+    /// from the installation is refused here by name rather than attempted with a guessed library.
+    /// History: docs/decisions/drawings.md#export-formats</remarks>
+    public static string? ExportLibraryPath(string format)
+    {
+        var library = format.Trim().ToLowerInvariant() switch
+        {
+            "dxf" or "dwg" => "dwgdxfExp.rtw",
+            _ => null,
+        };
+        if (library is null)
+        {
+            return null;
+        }
+
+        var root = InstallRoot;
+        if (root is null)
+        {
+            return null;
+        }
+
+        var path = Path.Combine(root, "Libs", "ImpExp", library);
+        return File.Exists(path) ? path : null;
+    }
+
     /// <summary>Candidate interop directories, most explicit first: environment override, then the
     /// installation located through COM registration, then the historically observed path.</summary>
     public static IReadOnlyList<string> CandidateDirectories()

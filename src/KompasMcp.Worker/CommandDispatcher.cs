@@ -71,10 +71,14 @@ public sealed class CommandDispatcher
         WorkerCommands.DeleteMate,
         WorkerCommands.CreateDrawingViews,
         WorkerCommands.EditView,
+        WorkerCommands.RebuildDrawingViews,
         WorkerCommands.AddDimension,
         WorkerCommands.SetTitleBlock,
         WorkerCommands.ExportDrawing,
         WorkerCommands.SetTechnicalDemand,
+        WorkerCommands.SetVariableValue,
+        WorkerCommands.SetVariableExpression,
+        WorkerCommands.SetMaterial,
         WorkerCommands.UnitProbe,
     };
 
@@ -216,7 +220,12 @@ public sealed class CommandDispatcher
         // converter), which is longer than a pure API5 call; dimensions and the stamp are API7 too.
         WorkerCommands.CreateDrawingViews or WorkerCommands.ExportDrawing
             or WorkerCommands.AddDimension or WorkerCommands.SetTitleBlock
-            or WorkerCommands.EditView or WorkerCommands.SetTechnicalDemand => 240_000,
+            or WorkerCommands.EditView or WorkerCommands.SetTechnicalDemand
+            or WorkerCommands.GetTitleBlock or WorkerCommands.GetTechnicalDemand => 240_000,
+        // Variable writes go through Set + RebuildModel + a re-read of the collection; the material write
+        // goes through SetMaterial + Update + a re-read of name and density.
+        WorkerCommands.SetVariableValue or WorkerCommands.SetVariableExpression
+            or WorkerCommands.SetMaterial => 240_000,
         _ => 120_000,
     };
 
@@ -307,11 +316,20 @@ public sealed class CommandDispatcher
             WorkerCommands.DeleteMate => _sta.Run(() => DeleteMate(request), "mate.delete", cancellationToken),
             WorkerCommands.CreateDrawingViews => _sta.Run(() => CreateDrawingViews(request), "drawing.create_views", cancellationToken),
             WorkerCommands.ListDrawingViews => _sta.Run(() => ListDrawingViews(request), "drawing.list_views", cancellationToken),
+            WorkerCommands.ListDimensions => _sta.Run(() => ListDimensions(request), "drawing.list_dimensions", cancellationToken),
             WorkerCommands.AddDimension => _sta.Run(() => AddDimension(request), "drawing.add_dimension", cancellationToken),
             WorkerCommands.SetTitleBlock => _sta.Run(() => SetTitleBlock(request), "drawing.set_title_block", cancellationToken),
             WorkerCommands.ExportDrawing => _sta.Run(() => ExportDrawing(request), "drawing.export", cancellationToken),
             WorkerCommands.SetTechnicalDemand => _sta.Run(() => SetTechnicalDemand(request), "drawing.set_technical_demand", cancellationToken),
+            WorkerCommands.GetTitleBlock => _sta.Run(() => GetTitleBlock(request), "drawing.get_title_block", cancellationToken),
+            WorkerCommands.GetTechnicalDemand => _sta.Run(() => GetTechnicalDemand(request), "drawing.get_technical_demand", cancellationToken),
             WorkerCommands.EditView => _sta.Run(() => EditView(request), "drawing.edit_view", cancellationToken),
+            WorkerCommands.RebuildDrawingViews => _sta.Run(() => RebuildDrawingViews(request), "drawing.rebuild_views", cancellationToken),
+            WorkerCommands.ListVariables => _sta.Run(() => ListVariables(request), "var.list", cancellationToken),
+            WorkerCommands.SetVariableValue => _sta.Run(() => SetVariable(request), "var.set_value", cancellationToken),
+            WorkerCommands.SetVariableExpression => _sta.Run(() => SetVariable(request), "var.set_expression", cancellationToken),
+            WorkerCommands.GetMaterial => _sta.Run(() => GetMaterial(request), "mat.get", cancellationToken),
+            WorkerCommands.SetMaterial => _sta.Run(() => SetMaterial(request), "mat.set", cancellationToken),
             WorkerCommands.Shutdown => _sta.Run(ShutdownPayload, "shutdown", cancellationToken),
             _ => throw new KompasContractException(
                 ErrorCodes.CapabilityUnavailable,
@@ -857,6 +875,13 @@ public sealed class CommandDispatcher
         return Tagged(document.Id, document.Revision, _session.ListDrawingViews(command));
     }
 
+    private object? ListDimensions(IpcFrame request)
+    {
+        var command = Argument<ListDimensionsCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return Tagged(document.Id, document.Revision, _session.ListDimensions(command));
+    }
+
     private object? AddDimension(IpcFrame request)
     {
         var command = Argument<AddDimensionCommand>(request);
@@ -885,11 +910,67 @@ public sealed class CommandDispatcher
         return TaggedAfter(document.Id, () => _session.SetTechnicalDemand(command), document);
     }
 
+    // READ-ONLY: no revision bump, no control copy, no TaggedAfter — the document is not modified, so
+    // the returned revision must be the one observed, not a new one. History: docs/decisions/drawings.md#stamp-read
+    private object? GetTitleBlock(IpcFrame request)
+    {
+        var command = Argument<GetTitleBlockCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return Tagged(document.Id, document.Revision, _session.GetTitleBlock(command));
+    }
+
+    private object? GetTechnicalDemand(IpcFrame request)
+    {
+        var command = Argument<GetTechnicalDemandCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return Tagged(document.Id, document.Revision, _session.GetTechnicalDemand(command));
+    }
+
     private object? EditView(IpcFrame request)
     {
         var command = Argument<EditViewCommand>(request);
         var document = _session.RequireDocument(command.DocumentId);
         return TaggedAfter(document.Id, () => _session.EditView(command), document);
+    }
+
+    private object? RebuildDrawingViews(IpcFrame request)
+    {
+        var command = Argument<RebuildDrawingViewsCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return TaggedAfter(document.Id, () => _session.RebuildDrawingViews(command), document);
+    }
+
+    // READ-ONLY: no revision bump and no control copy. INVARIANT: reading variables must not change the
+    // revision and must not demand an expected_revision — the caller is not about to write.
+    // History: docs/decisions/variables-material.md#read-variables
+    private object? ListVariables(IpcFrame request)
+    {
+        var command = Argument<ListVariablesCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return Tagged(document.Id, document.Revision, _session.ListVariables(command));
+    }
+
+    private object? GetMaterial(IpcFrame request)
+    {
+        var command = Argument<GetMaterialCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return Tagged(document.Id, document.Revision, _session.GetMaterial(command));
+    }
+
+    // Both write commands share one handler: the mode is decided by which of value/expression the caller
+    // supplied, and the contract refusal for "both or neither" happens before COM.
+    private object? SetVariable(IpcFrame request)
+    {
+        var command = Argument<SetVariableCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return TaggedAfter(document.Id, () => _session.SetVariable(command), document);
+    }
+
+    private object? SetMaterial(IpcFrame request)
+    {
+        var command = Argument<SetMaterialCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return TaggedAfter(document.Id, () => _session.SetMaterial(command), document);
     }
 
     private static void GuardRevision(DocumentEntry document, long expectedRevision)

@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Reflection;
 using System.Text;
 
@@ -325,6 +325,66 @@ public static class Program
                     }
                 });
             }
+            else if (options.VmReference is not null)
+            {
+                var vmReference = new VmReferenceProbe(report, options);
+                pump.Run(() =>
+                {
+                    vmReference.Run(options.VmReference!);
+                    if (options.KeepRunning)
+                    {
+                        VmReferenceProbe.Flush(report, options);
+                    }
+                });
+            }
+            else if (options.VmVariableRoute)
+            {
+                var vmRoute = new VmVariableRouteProbe(report, options);
+                pump.Run(() =>
+                {
+                    vmRoute.Run();
+                    if (options.KeepRunning)
+                    {
+                        VmVariableRouteProbe.Flush(report, options);
+                    }
+                });
+            }
+            else if (options.VmControlExpression)
+            {
+                var vmControl = new VmControlExpressionProbe(report, options);
+                pump.Run(() =>
+                {
+                    vmControl.Run();
+                    if (options.KeepRunning)
+                    {
+                        VmControlExpressionProbe.Flush(report, options);
+                    }
+                });
+            }
+            else if (options.VmOpen is not null)
+            {
+                var vmOpen = new VmOpenRebuildProbe(report, options);
+                pump.Run(() =>
+                {
+                    vmOpen.Run(options.VmOpen!);
+                    if (options.KeepRunning)
+                    {
+                        VmOpenRebuildProbe.Flush(report, options);
+                    }
+                });
+            }
+            else if (options.VmDensityUnits)
+            {
+                var vmDensity = new VmDensityUnitsProbe(report, options);
+                pump.Run(() =>
+                {
+                    vmDensity.Run();
+                    if (options.KeepRunning)
+                    {
+                        VmDensityUnitsProbe.Flush(report, options);
+                    }
+                });
+            }
             else if (options.RepositionRead)
             {
                 var repositionRead = new RepositionReadProbe(report, options);
@@ -417,6 +477,11 @@ public static class Program
             : options.RepositionParams ? "reposition-params"
             : options.CutArea ? "cut-area"
             : options.RepositionOrder ? "reposition-order"
+            : options.VmOpen is not null ? "vm-open-rebuild"
+            : options.VmReference is not null ? "vm-reference"
+            : options.VmVariableRoute ? "vm-variable-route"
+            : options.VmControlExpression ? "vm-control-expression"
+            : options.VmDensityUnits ? "vm-density-units"
             : options.CollectControls ? "api7-attribution"
             : "api7-probe-report";
         var jsonPath = Path.Combine(options.ReportDir, stem + ".json");
@@ -589,6 +654,34 @@ public sealed class Options
     /// <summary>--sketch-definition: the sketch certainty "+ / − / !" read from the API (probe S). History: docs/decisions/probes.md#sketch-definition</summary>
     public bool SketchDefinition { get; private set; }
 
+    /// <summary><c>--vm-reference &lt;path&gt;</c>: build the VM acceptance reference — a parametrized
+    /// part (<c>100×80</c>, depth 10) carrying two EXTERNAL variables on the top part collection. The
+    /// order forbids creating variables as an MCP function, so the reference is prepared here, once, and
+    /// the acceptance group only OPENS the file. History: docs/decisions/variables-material.md</summary>
+    public string? VmReference { get; private set; }
+
+    /// <summary><c>--vm-variable-route</c>: throwaway ladder — on which object does the documented
+    /// <c>AddNewVariable</c> actually take. Needed because the reference part's variables must be created
+    /// by documented means, and the first two candidates refused. History:
+    /// docs/decisions/variables-material.md</summary>
+    public bool VmVariableRoute { get; private set; }
+
+    /// <summary><c>--vm-control-expression</c>: throwaway ladder for the DOCUMENTED external-variable
+    /// route — <c>IProcess3D</c> → QI(<c>IProcessWithVariables</c>) → <c>SetControlExpression</c>. Asked
+    /// because the API5 <c>AddNewVariable</c> route was measured NOT to surface external variables on a
+    /// top-level part, and the reference (order §5) must be built by documented means or not at all.
+    /// History: docs/decisions/variables-material.md</summary>
+    public bool VmControlExpression { get; private set; }
+
+    /// <summary><c>--vm-density-units</c>: which unit the two DOCUMENTED density getters really return —
+    /// <c>ksPart.GetDensity()</c> and <c>IPart7</c>→QI(<c>IMassInertiaParam7</c>)→<c>Density</c> — measured
+    /// on two pre-set densities. History: docs/decisions/variables-material.md#units</summary>
+    public bool VmDensityUnits { get; private set; }
+
+    /// <summary><c>--vm-open &lt;path&gt;</c>: which write+rebuild pair moves the geometry of the SAVED
+    /// reference file — the question the adapter's behaviour on an opened document turned into.</summary>
+    public string? VmOpen { get; private set; }
+
     /// <summary>PID of the KOMPAS instance the probe launched, written back by the step that measured the
     /// process diff. <c>null</c> means "not attributed yet" — a distinct state from a PID of zero,
     /// and the step that needs it says so rather than comparing against a placeholder.</summary>
@@ -628,6 +721,11 @@ public sealed class Options
         var cutArea = false;
         var repositionOrder = false;
         var sketchPlane = false;
+        string? vmReference = null;
+        var vmVariableRoute = false;
+        var vmControlExpression = false;
+        var vmDensityUnits = false;
+        string? vmOpen = null;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -720,11 +818,26 @@ public sealed class Options
                 case "--sketch-plane":
                     sketchPlane = true;
                     break;
+                case "--vm-reference" when i + 1 < args.Length:
+                    vmReference = args[++i];
+                    break;
+                case "--vm-variable-route":
+                    vmVariableRoute = true;
+                    break;
+                case "--vm-control-expression":
+                    vmControlExpression = true;
+                    break;
+                case "--vm-density-units":
+                    vmDensityUnits = true;
+                    break;
+                case "--vm-open" when i + 1 < args.Length:
+                    vmOpen = args[++i];
+                    break;
                 case "--work" when i + 1 < args.Length:
                     workOverride = args[++i];
                     break;
                 case "--help":
-                    Console.WriteLine("KompasMcp.Api7Probe [--passport] [--controls] [--lifecycle] [--extrusion] [--chamfer] [--sketch-reopen] [--fillet-edge-set] [--fillet-base-objects] [--boolean] [--split] [--reposition] [--tree] [--rotation] [--full-turn] [--boss-fuse] [--verify-m3d PATH] [--hole-modes] [--hole-tree] [--sketch-definition] [--identity] [--union] [--b5] [--reposition-read] [--reposition-params] [--cut-area] [--reposition-order] [--sketch-plane] [--work DIR] [--keep]");
+                    Console.WriteLine("KompasMcp.Api7Probe [--passport] [--controls] [--lifecycle] [--extrusion] [--chamfer] [--sketch-reopen] [--fillet-edge-set] [--fillet-base-objects] [--boolean] [--split] [--reposition] [--tree] [--rotation] [--full-turn] [--boss-fuse] [--verify-m3d PATH] [--hole-modes] [--hole-tree] [--sketch-definition] [--identity] [--union] [--b5] [--reposition-read] [--reposition-params] [--cut-area] [--reposition-order] [--sketch-plane] [--vm-reference PATH] [--vm-variable-route] [--vm-control-expression] [--vm-density-units] [--vm-open PATH] [--work DIR] [--keep]");
                     Environment.Exit(0);
                     break;
             }
@@ -751,6 +864,10 @@ public sealed class Options
             : cutArea ? "cut-area"
             : repositionOrder ? "reposition-order"
             : sketchPlane ? "sketch-plane"
+            : vmReference is not null ? "vm-reference"
+            : vmVariableRoute ? "vm-variable-route"
+            : vmControlExpression ? "vm-control-expression"
+            : vmDensityUnits ? "vm-density-units"
             : controls ? "api7-attribution" : "api7-probe-report";
         var work = workOverride ?? Path.Combine(root, "scratch", $"api7-{stem}-{runId}");
         var reportDir = Path.Combine(root, "docs", "acceptance", "api7");
@@ -792,6 +909,11 @@ public sealed class Options
             CutArea = cutArea,
             RepositionOrder = repositionOrder,
             SketchPlane = sketchPlane,
+            VmReference = vmReference,
+            VmVariableRoute = vmVariableRoute,
+            VmControlExpression = vmControlExpression,
+            VmDensityUnits = vmDensityUnits,
+            VmOpen = vmOpen,
         };
     }
 

@@ -1,4 +1,4 @@
-using System.Text.Json.Nodes;
+﻿using System.Text.Json.Nodes;
 using KompasMcp.Contracts.Ipc;
 using KompasMcp.Contracts.Schema;
 
@@ -2070,6 +2070,26 @@ public static class ToolCatalog
                 WorkerCommands.ListDrawingViews,
                 requiresDocument: true),
 
+            ReadOnly("kompas_list_dimensions", "Перечень размеров вида чертежа",
+                "Читает размеры выбранного вида через ISymbols2DContainer, полученный из IView: "
+                + "LineDimensions, RadialDimensions, DiametralDimensions (справка v24: "
+                + "isymbols2dcontainer.html). Для каждого размера отдаётся тип отрисовки "
+                + "(IDrawingObject.DrawingObjectType), признак Valid, значение в миллиметрах и точки. "
+                + "ЧТЕНИЕ ИЗ ПЕРЕОТКРЫТОГО ДОКУМЕНТА: инструмент берёт размеры ТЕКУЩЕГО дескриптора "
+                + "документа, поэтому после close/open он читает объекты переоткрытого файла, а не "
+                + "сохранённый ранее DTO или освобождённую RCW. ОГРАНИЧЕНИЕ, НАЗВАННОЕ ПРЯМО: значение "
+                + "линейного размера считается по координатам точек (X1/Y1/X2/Y2), потому что справка "
+                + "не публикует готовое номинальное значение; ассоциативность размера к модели не "
+                + "читается и не заявляется.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("view_ref", Sch.Ref("#/$defs/reference")),
+                    ("limit", Sch.Nullable(Sch.Num(
+                        "Предел числа возвращаемых размеров. Не задано — умолчание сервера.",
+                        exclusiveMin: true, exclusiveMinValue: 0d)))),
+                WorkerCommands.ListDimensions,
+                requiresDocument: true),
+
             Mutation("kompas_add_dimension", "Поставить размер на виде",
                 "Линейный, радиальный или диаметральный размер в выбранном виде через "
                 + "ISymbols2DContainer (справка v24: isymbols2dcontainer.html), полученный из IView: "
@@ -2184,6 +2204,27 @@ public static class ToolCatalog
                 requiresDocument: true,
                 requiresRevision: true),
 
+            Mutation("kompas_rebuild_drawing_views", "Перестроить чертёж после изменения модели",
+                "Перестраивает чертёж документированным маршрутом API7, чтобы ассоциативный вид заново "
+                + "построил проекцию из изменённой модели: IDrawingDocument приводится к "
+                + "IKompasDocument2D1, вызывается RebuildDocument() (справка v24: "
+                + "ikompasdocument2d1_rebuilddocument.html — «Метод позволяет перестроить документ», "
+                + "TRUE при успехе). ИЗМЕРЕНО ОТРАЖЕНИЕМ по поставляемому interop: "
+                + "IKompasDocument2D1.RebuildDocument() объявлен и возвращает Boolean, тогда как "
+                + "IDrawingDocument.RebuildViews (названный справкой) НЕ объявлен НИ ОДНИМ типом сборки "
+                + "— отсутствие названо, а не выдано за рабочий маршрут. Ответ несёт возвращённое "
+                + "значение (ПРОВЕРКА, а не вердикт) и вид, ПЕРЕЧИТАННЫЙ из свежего чтения коллекции: "
+                + "перестроение подтверждается перечитыванием, а не булевым результатом вызова. "
+                + "ГРАНИЦА: сверка геометрии проекции с изменённой моделью сервером не выполняется "
+                + "(IView габарит не публикует).",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("view_ref", Sch.Ref("#/$defs/reference"))),
+                WorkerCommands.RebuildDrawingViews,
+                requiresDocument: true,
+                requiresRevision: true),
+
             Mutation("kompas_set_technical_demand", "Записать технические требования чертежа",
                 "Пишет блок технических требований документированным маршрутом API7: "
                 + "IDrawingDocument.TechnicalDemand → ITechnicalDemand.Text (read-only свойство, "
@@ -2201,6 +2242,155 @@ public static class ToolCatalog
                     ("text", Sch.Str(
                         "Полный текст технических требований. Строки разделяются переводом строки."))),
                 WorkerCommands.SetTechnicalDemand,
+                requiresDocument: true,
+                requiresRevision: true),
+
+            ReadOnly("kompas_get_title_block", "Прочитать ячейки основной надписи",
+                "ЧИТАЕТ ячейки основной надписи и НИЧЕГО не записывает: IStamp.Text(Id) — свойство "
+                + "только для чтения, отдающее IText, а IText.Str читается без изменения (справка v24: "
+                + "istamp_text.html, itext_str.html). Отдельный маршрут чтения нужен потому, что "
+                + "установщик не свидетельствует сохранность: kompas_set_title_block СНАЧАЛА присваивает "
+                + "IText.Str, и перечитывание совпадёт даже на документе, потерявшем значение при "
+                + "сохранении/переоткрытии. Этот инструмент не несёт ожидаемого значения вовсе, поэтому "
+                + "годится как независимая проверка «что реально лежит в документе сейчас». "
+                + "ГРАНИЦА: справка SDK НЕ документирует соответствие номеров ячеек понятиям (наименование, "
+                + "обозначение, …) — номера задаёт вызывающий.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("cell_ids", Sch.Arr(
+                        Sch.Str("Строковый номер ячейки (Int32 для IStamp.Text(Id))."),
+                        "Номера ячеек для чтения. Пустой список ничего не читает."))),
+                WorkerCommands.GetTitleBlock,
+                requiresDocument: true),
+
+            ReadOnly("kompas_get_technical_demand", "Прочитать технические требования",
+                "ЧИТАЕТ блок технических требований и НИЧЕГО не записывает: "
+                + "IDrawingDocument.TechnicalDemand → ITechnicalDemand.Text (свойство только для чтения, "
+                + "отдающее IText) → IText.Str (чтение); IsCreated — «отображение технических требований "
+                + "в документе» (справка v24: idrawingdocument_technicaldemand.html, "
+                + "itechnicaldemand_text.html, itechnicaldemand_iscreated.html). Отдельный маршрут чтения "
+                + "нужен потому, что kompas_set_technical_demand СНАЧАЛА перезаписывает текст, и "
+                + "перечитывание совпадёт даже на документе, потерявшем блок при сохранении/переоткрытии. "
+                + "Этот инструмент не несёт ожидаемого текста и потому служит независимой проверкой.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id"))),
+                WorkerCommands.GetTechnicalDemand,
+                requiresDocument: true),
+
+            // ── block VM "variables and material" (profile variables-material-minimal-v1) ──
+            ReadOnly("kompas_list_variables", "Внешние переменные детали",
+                "ЧИТАЕТ внешние параметрические переменные ВЕРХНЕГО компонента детали и ничего не "
+                + "записывает: IPart.VariableCollection() отдаёт «указатель на интерфейс массива внешних "
+                + "переменных», перечисление — GetCount()/GetByIndex(), чтение — IVariable.name (только "
+                + "чтение), IVariable.value (double) и IVariable.Expression (строка) (справка v24: "
+                + "kspart_variablecollection.html, ksvariablecollection_getcount.html, "
+                + "ksvariablecollection_getbyindex.html, ksvariable_name.html, ksvariable_value.html, "
+                + "ksvariable_expression.html). "
+                + "ГРАНИЦА ОБЛАСТИ: это ВНЕШНИЕ переменные компонента, а НЕ редактор всех параметров "
+                + "модели; поле scope отвечает «external/top_part» именно поэтому. Поле с непрочитанным "
+                + "значением остаётся null с причиной в diagnostics — нулём или пустой строкой оно не "
+                + "подменяется. Пустая коллекция — допустимое состояние и названа полем collection_empty; "
+                + "недоступная коллекция пустым списком НЕ притворяется и приводит к отказу."
+                + "Чтение не меняет ревизию и не требует expected_revision.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("limit", Sch.Nullable(Sch.Int(
+                        "Сколько переменных прочитать. Полный размер коллекции возвращается полем total "
+                        + "всегда, поэтому усечённый ответ не примут за короткую коллекцию.",
+                        min: 0,
+                        max: 5000)))),
+                WorkerCommands.ListVariables,
+                requiresDocument: true),
+
+            Mutation("kompas_set_variable", "Изменить внешнюю переменную",
+                "МЕНЯЕТ значение ИЛИ выражение одной внешней переменной детали, адресуя её ТОЧНЫМ именем. "
+                + "Порядок: сначала проверяются документ, ревизия и наличие ИМЕННО этой переменной, затем "
+                + "выполняется запись документированного свойства (IVariable.value или IVariable.Expression), "
+                + "затем обязательная перестройка ksDocument3D.RebuildDocument, после чего значение и "
+                + "выражение ПЕРЕЧИТЫВАЮТСЯ из ВНОВЬ ПОЛУЧЕННОЙ коллекции (справка v24: "
+                + "ksvariable_value.html, ksvariable_expression.html, "
+                + "ksvariablecollection_getbyname.html, ksdocument3d_rebuilddocument.html). "
+                + "ИЗМЕРЕНО: ksPart.RebuildModel, чья страница обещает передать внешние переменные в "
+                + "модель, геометрию НЕ двигает и после перестройки документа возвращает прежнюю глубину; "
+                + "перестраивает именно RebuildDocument. "
+                + "Ровно одно из value и expression; оба сразу или ни одного — отказ до COM. "
+                + "В режиме value переменная, чьё выражение СЧИТАЕТ значение (формула или ссылка), "
+                + "ОТКЛОНЯЕТСЯ с возвратом текущего выражения: запись числа уничтожила бы его молча. "
+                + "Постоянное выражение-число — не формула, а само значение, поэтому такая переменная "
+                + "принимает запись числа (ИЗМЕРЕНО: ядро обновляет её выражение до записанного числа). "
+                + "Возврат перестройки = TRUE — исход вызова, а НЕ подтверждение результата: "
+                + "подтверждением служит перечитанное значение и независимое измерение. "
+                + "Выражение считает КОМПАС; собственный вычислитель сервер не подставляет и строку как "
+                + "код не исполняет.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("name", Sch.Str(
+                        "Точное имя внешней переменной. Сравнивается ПОЛНОСТЬЮ и С УЧЁТОМ РЕГИСТРА "
+                        + "(GetByName(name, testFullName=TRUE, testIgnoreCase=FALSE)); поиск подстрокой "
+                        + "не выполняется.",
+                        minLength: 1)),
+                    ("value", Sch.Nullable(Sch.Num(
+                        "Новое числовое значение в собственной размерности переменной. Только конечное "
+                        + "число. Допустимо лишь для переменной БЕЗ активного выражения."))),
+                    ("expression", Sch.Nullable(Sch.Str(
+                        "Новое выражение; его считает КОМПАС. Пустая строка снимает выражение.")))),
+                WorkerCommands.SetVariableValue,
+                requiresDocument: true,
+                requiresRevision: true),
+
+            ReadOnly("kompas_get_material", "Материал и плотность детали",
+                "ЧИТАЕТ обозначение материала верхнего компонента детали и СЫРОЕ показание плотности: "
+                + "ksPart.material (свойство ТОЛЬКО ДЛЯ ЧТЕНИЯ, и справка прямо говорит «Обозначение "
+                + "материала можно получить только у детали») и ksPart.GetDensity() (справка v24: "
+                + "kspart_material.html, kspart_getdensity.html). "
+                + "ЕДИНИЦА ПЛОТНОСТИ НЕ ПОДТВЕРЖДЕНА: справка называет возврат «плотность (г/куб.мм)», "
+                + "но ИЗМЕРЕНО, что установленная сборка отдаёт значение, согласованное с г/куб.см (сталь "
+                + "7850 кг/м³ читается как 7.85), и то же отдаёт документированный IPart7→QI("
+                + "IMassInertiaParam7)→Density, чья страница тоже называет г/куб.мм. Официального "
+                + "источника г/куб.см нет, поэтому нормализованная плотность НЕ публикуется: сырое "
+                + "значение возвращается полем density_raw, документированная страницей единица — полем "
+                + "density_raw_unit_documented, состояние — density_unit_status=unconfirmed, а "
+                + "density_normalized_kg_per_m3 остаётся null. "
+                + "ГРАНИЦА: чтение имени и чтение плотности — ДВА разных исхода; успешное чтение имени не "
+                + "означает успешного чтения плотности, и они сообщаются раздельно. Ноль, возвращённый "
+                + "GetDensity, документирован как НЕУДАЧА («если компонент — не деталь»), а не как "
+                + "измеренная нулевая плотность, поэтому нулём не подменяется; плотность из справочника "
+                + "сервера вместо неудачного чтения НЕ подставляется.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id"))),
+                WorkerCommands.GetMaterial,
+                requiresDocument: true),
+
+            Mutation("kompas_set_material", "Назначить материал и плотность",
+                "НАЗНАЧАЕТ материал и плотность верхнего компонента детали: ksPart.SetMaterial(name, "
+                + "density) и затем обязательный ksPart.Update («Изменение материала вступает в силу "
+                + "после вызова метода ksPart::Update»), после чего имя и плотность ПЕРЕЧИТЫВАЮТСЯ "
+                + "(справка v24: kspart_setmaterial.html). "
+                + "ЕДИНИЦЫ: SetMaterial документирован в г/куб.см, и сервер переводит вход по единственному "
+                + "документированному переводу (7850 кг/м³ → 7.85 г/см³). ЕДИНИЦА ЧТЕНИЯ НЕ ПОДТВЕРЖДЕНА "
+                + "(см. kompas_get_material), поэтому подтверждены ИМЯ материала и исходы вызовов, а "
+                + "ФИЗИЧЕСКАЯ плотность — НЕТ: перечитанное сырое значение сравнивается с записанным только "
+                + "как ЧИСЛОВОЕ равенство (диагностика, поле density_raw_numeric_matches, а не подтверждение "
+                + "плотности), нормализованная плотность не публикуется, а состояние единицы сообщается "
+                + "полем density_unit_status=unconfirmed. "
+                + "ГРАНИЦЫ (документированы справкой): компонент должен быть деталью и не должен быть "
+                + "деталью из библиотеки моделей или стандартным элементом; в детали метод действует на "
+                + "ВЕРХНИЙ компонент и на подсборку не распространяется. "
+                + "Ответ строится ПЕРЕЧИТЫВАНИЕМ, а не эхом запроса: запрошенные значения лежат в "
+                + "отдельных полях, чтобы расхождение было видно, а не сглажено.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("material_name", Sch.Str(
+                        "Обозначение материала как оно записывается в деталь.",
+                        minLength: 1)),
+                    ("density_kg_per_m3", Sch.Num(
+                        "Плотность материала, кг/м³. Только конечное положительное значение. Перед вызовом "
+                        + "сервер переводит её в документированную для SetMaterial единицу г/см³.",
+                        exclusiveMin: true,
+                        exclusiveMinValue: 0d))),
+                WorkerCommands.SetMaterial,
                 requiresDocument: true,
                 requiresRevision: true),
 

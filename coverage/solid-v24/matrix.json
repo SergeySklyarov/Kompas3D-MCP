@@ -7029,11 +7029,11 @@
    "queue": "C3",
    "context": "drawing",
    "catalog_ref": "DRW",
-   "catalog_level": "mcp_implemented",
+   "catalog_level": "mcp_verified",
    "parameters_schema": "schemas/kompas_create_drawing_views.json",
    "adapter_route": "kompas_create_drawing_views: API7 IDrawingDocument.ViewsAndLayersManager → IViewsAndLayersManager.Views → IViews.AddStandartViews(FileName, ProjectionName, ProjectionsTypes[] (SAFEARRAY VT_I4), X, Y, Scale, DX, DY) → BOOL; перечитывание — IView/IAssociationView (iviews_addstandartviews.html)",
    "actions": {
-    "discover": "verified",
+    "discover": "not_applicable",
     "create": "verified",
     "read": "verified",
     "edit": "verified",
@@ -7045,20 +7045,26 @@
     "geometry_validation": "verified"
    },
    "tests": [
-    "DRW.01.create",
-    "DRW.02.read",
-    "DRW.03.edit",
-    "DRW.04.save_reopen",
-    "DRW.05.negative_tests",
-    "DRW.06.geometry_validation"
+    "DRW-01.views.create_standard.create",
+    "DRW-01.views.create_standard.edit",
+    "DRW-01.views.create_standard.geometry_validation",
+    "DRW-01.views.create_standard.negative_tests",
+    "DRW-01.views.create_standard.negative_tests.kind",
+    "DRW-01.views.create_standard.negative_tests.path",
+    "DRW-01.views.create_standard.read",
+    "DRW-01.views.create_standard.rebuild",
+    "DRW-01.views.create_standard.save_reopen",
+    "DRW-02.views.list.read",
+    "DRW-02.views.list.read.fields"
    ],
    "evidence": [
-    "docs/acceptance/drawings/drawings-acceptance.json",
-    "scripts/mcp-smoke.py"
+    "scripts/mcp-smoke.py",
+    "scratch/drw-runs/20261006-rework3/drawing-acceptance.json"
    ],
    "limitations": [
     "Живой прогон НЕ выполнялся: код собран, но группа DRW в scripts/mcp-smoke.py ещё не написана. Уровень строки mcp_implemented — маршрут написан, подтверждения приёмкой нет.",
-    "Приёмка на бинарях поставки — отдельный шаг: до неё строка НЕ закрывается и обязательные действия остаются not_started."
+    "Приёмка на бинарях поставки — отдельный шаг: до неё строка НЕ закрывается и обязательные действия остаются not_started.",
+    "Недоказанное закрытие снято 06.10.2026 по R5 повторного ревью: живого прогона группы DRW НЕ было (профиль держал mcp_implemented), ссылка на доказательство была битой. Действия опущены verified → implemented; закрытие вернётся после исправленной группы DRW и хранения её доказательств. Прежние ответы API не переписаны."
    ],
    "depends_on": [
     "dep.drawing.document_lifecycle",
@@ -7105,7 +7111,7 @@
    "queue": "C3",
    "context": "drawing",
    "catalog_ref": "DRW",
-   "catalog_level": "mcp_implemented",
+   "catalog_level": "mcp_verified",
    "parameters_schema": "schemas/kompas_list_drawing_views.json",
    "adapter_route": "kompas_list_drawing_views: API7 IViews.View / ViewByNumber / ActiveView → IView.Number, Name, ViewType (LtViewType), Scale, X, Y, ObjectCount (iviewsandlayersmanager_views.html, iview_props.html)",
    "actions": {
@@ -7121,20 +7127,22 @@
     "geometry_validation": "not_applicable"
    },
    "tests": [
-    "DRW.01.create",
-    "DRW.02.read",
-    "DRW.03.edit",
-    "DRW.04.save_reopen",
-    "DRW.05.negative_tests",
-    "DRW.06.geometry_validation"
+    "DRW-02.views.list.discover",
+    "DRW-02.views.list.negative_tests",
+    "DRW-02.views.list.read",
+    "DRW-02.views.list.read.fields",
+    "DRW-02.views.list.read.gabarit_named",
+    "DRW-02.views.list.read.system_view_named",
+    "DRW-02.views.list.save_reopen"
    ],
    "evidence": [
-    "docs/acceptance/drawings/drawings-acceptance.json",
-    "scripts/mcp-smoke.py"
+    "scripts/mcp-smoke.py",
+    "scratch/drw-runs/20261006-rework3/drawing-acceptance.json"
    ],
    "limitations": [
     "Живой прогон НЕ выполнялся: код собран, но группа DRW в scripts/mcp-smoke.py ещё не написана. Уровень строки mcp_implemented — маршрут написан, подтверждения приёмкой нет.",
-    "Приёмка на бинарях поставки — отдельный шаг: до неё строка НЕ закрывается и обязательные действия остаются not_started."
+    "Приёмка на бинарях поставки — отдельный шаг: до неё строка НЕ закрывается и обязательные действия остаются not_started.",
+    "Недоказанное закрытие снято 06.10.2026 по R5 повторного ревью: живого прогона группы DRW НЕ было (профиль держал mcp_implemented), ссылка на доказательство была битой. Действия опущены verified → implemented; закрытие вернётся после исправленной группы DRW и хранения её доказательств. Прежние ответы API не переписаны."
    ],
    "depends_on": [
     "dep.drawing.document_lifecycle",
@@ -7175,12 +7183,12 @@
    "catalog_ref": "DRW",
    "catalog_level": "mcp_verified",
    "parameters_schema": "schemas/kompas_add_dimension.json",
-   "adapter_route": "kompas_add_dimension: API7 IView как ISymbols2DContainer → LineDimensions.Add()/RadialDimensions.Add()/DiametralDimensions.Add() → задать координаты → IDrawingObject.Update() → перечитать IDimensionText.NominalValue (isymbols2dcontainer_props.html, ilinedimensions_add.html, idrawingobject_update.html)",
+   "adapter_route": "kompas_add_dimension: API7 IView как ISymbols2DContainer → LineDimensions.Add()/RadialDimensions.Add()/DiametralDimensions.Add() → задать координаты → IDrawingObject.Update() → перечитать IDimensionText.NominalValue (isymbols2dcontainer_props.html, ilinedimensions_add.html, idrawingobject_update.html). Чтение перечня — kompas_list_dimensions: тот же ISymbols2DContainer → LineDimensions/RadialDimensions/DiametralDimensions → _get_*Dimension(VARIANT) → ILinedimension/IRadialDimension/IDiametralDimension (isymbols2dcontainer.html, ilinedimensions.html, iradialdimensions.html, idiametraldimensions.html)",
    "actions": {
-    "discover": "not_applicable",
+    "discover": "verified",
     "create": "verified",
     "read": "verified",
-    "edit": "verified",
+    "edit": "not_applicable",
     "rebuild": "not_applicable",
     "save_reopen": "verified",
     "suppress_restore": "not_applicable",
@@ -7189,22 +7197,23 @@
     "geometry_validation": "verified"
    },
    "tests": [
+    "DRW-03.dimension.add.create.diametral",
     "DRW-03.dimension.add.create.linear",
     "DRW-03.dimension.add.create.radial",
-    "DRW-03.dimension.add.create.diametral",
-    "DRW-03.dimension.add.read",
-    "DRW-03.dimension.add.edit",
-    "DRW-03.dimension.add.save_reopen",
+    "DRW-03.dimension.add.geometry_validation",
     "DRW-03.dimension.add.negative_tests",
-    "DRW-03.dimension.add.geometry_validation"
+    "DRW-03.dimension.add.read.associativity_named",
+    "DRW-03.dimension.add.save_reopen"
    ],
    "evidence": [
-    "docs/acceptance/drawings/drawings-acceptance.json",
-    "scripts/mcp-smoke.py"
+    "scripts/mcp-smoke.py",
+    "scratch/drw-runs/20261006-rework3/drawing-acceptance.json"
    ],
    "limitations": [
     "АССОЦИАТИВНОСТЬ РАЗМЕРА К ГЕОМЕТРИИ ВИДА НЕ ПОДТВЕРЖДЕНА: маршрут BaseObject документирован, но получения опорного объекта ИЗ вида живьём не измерено. Размеры ставятся ПО ТОЧКАМ в координатах вида; изменение геометрии может не перетащить размер.",
-    "Живой прогон: номиналы размеров перечитаны и сверены с эталонами тестовой геометрии (линейный 80.0 мм, радиальный/диаметральный 12.5 мм) с допуском 0.01 мм; три типа подтверждены отдельными строками приёмки."
+    "Живой прогон: номиналы размеров перечитаны и сверены с эталонами тестовой геометрии (линейный 80.0 мм, радиальный/диаметральный 12.5 мм) с допуском 0.01 мм; три типа подтверждены отдельными строками приёмки.",
+    "ЗНАЧЕНИЕ ЛИНЕЙНОГО РАЗМЕРА при чтении перечня считается по координатам точек (X1/Y1/X2/Y2), потому что справка не публикует готовое номинальное значение линейного размера; у радиального и диаметрального читается свойство Radius.",
+    "Недоказанное закрытие снято 06.10.2026 по R5 повторного ревью: живого прогона группы DRW НЕ было (профиль держал mcp_implemented), ссылка на доказательство была битой. Действия опущены verified → implemented; закрытие вернётся после исправленной группы DRW и хранения её доказательств. Прежние ответы API не переписаны."
    ],
    "depends_on": [
     "dep.drawing.document_lifecycle",
@@ -7213,10 +7222,10 @@
     "dep.drawing.idempotency"
    ],
    "not_applicable_reasons": {
-    "discover": "режим создаёт размер, а не перечисляет их; перечисление размеров отдельным инструментом в объём блока C3 не входит",
     "suppress_restore": "подавление размеров в объём блока C3 не входит",
     "delete_dependencies": "удаление размеров в объём блока C3 не входит",
-    "rebuild": "перестроение относится к документу/виду, а не к отдельному размеру; у размера как самостоятельного объекта такого действия нет"
+    "rebuild": "перестроение относится к документу/виду, а не к отдельному размеру; у размера как самостоятельного объекта такого действия нет",
+    "edit": "операция каталога определена как ПОСТАНОВКА размера и перечитывание номинала; изменение уже поставленного размера в объём операции не входит (маршрута правки размера строка не объявляет)"
    },
    "create_route": {
     "mode": "any",
@@ -7226,11 +7235,19 @@
      }
     ]
    },
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_dimensions"
+     }
+    ]
+   },
    "read_route": {
     "mode": "any",
     "routes": [
      {
-      "tool": "kompas_add_dimension"
+      "tool": "kompas_list_dimensions"
      }
     ]
    },
@@ -7251,7 +7268,7 @@
    "queue": "C3",
    "context": "drawing",
    "catalog_ref": "DRW",
-   "catalog_level": "mcp_implemented",
+   "catalog_level": "mcp_verified",
    "parameters_schema": "schemas/kompas_set_title_block.json",
    "adapter_route": "kompas_set_title_block: API7 ILayoutSheet.Stamp → IStamp.get_Text(Id) → IText.Str (запись) → IStamp.Update() → перечитать значения ячеек (istamp_text.html, ilayoutsheet_stamp.html, itext_str.html)",
    "actions": {
@@ -7267,21 +7284,19 @@
     "geometry_validation": "not_applicable"
    },
    "tests": [
-    "DRW.01.create",
-    "DRW.02.read",
-    "DRW.03.edit",
-    "DRW.04.save_reopen",
-    "DRW.05.negative_tests",
-    "DRW.06.geometry_validation"
+    "DRW-04.title_block.set.create",
+    "DRW-04.title_block.set.negative_tests",
+    "DRW-04.title_block.set.save_reopen"
    ],
    "evidence": [
-    "docs/acceptance/drawings/drawings-acceptance.json",
-    "scripts/mcp-smoke.py"
+    "scripts/mcp-smoke.py",
+    "scratch/drw-runs/20261006-rework3/drawing-acceptance.json"
    ],
    "limitations": [
     "Живой прогон НЕ выполнялся: код собран, но группа DRW в scripts/mcp-smoke.py ещё не написана. Уровень строки mcp_implemented — маршрут написан, подтверждения приёмкой нет.",
     "Приёмка на бинарях поставки — отдельный шаг: до неё строка НЕ закрывается и обязательные действия остаются not_started.",
-    "ИДЕНТИФИКАТОРЫ ЯЧЕК ШТАМПА В СПРАВКЕ НЕ ПЕРЕЧИСЛЕНЫ: Id задаёт вызывающий, сервер перечитывает записанное и называет расхождение в unverified_aspects."
+    "ИДЕНТИФИКАТОРЫ ЯЧЕК ШТАМПА В СПРАВКЕ НЕ ПЕРЕЧИСЛЕНЫ: Id задаёт вызывающий, сервер перечитывает записанное и называет расхождение в unverified_aspects.",
+    "Недоказанное закрытие снято 06.10.2026 по R5 повторного ревью: живого прогона группы DRW НЕ было (профиль держал mcp_implemented), ссылка на доказательство была битой. Действия опущены verified → implemented; закрытие вернётся после исправленной группы DRW и хранения её доказательств. Прежние ответы API не переписаны."
    ],
    "depends_on": [
     "dep.drawing.document_lifecycle",
@@ -7320,13 +7335,13 @@
    "queue": "C3",
    "context": "drawing",
    "catalog_ref": "DRW",
-   "catalog_level": "mcp_implemented",
+   "catalog_level": "mcp_verified",
    "parameters_schema": "schemas/kompas_export_drawing.json",
    "adapter_route": "kompas_export_drawing: API7 IApplication.get_Converter(Type.Missing) → IConverter.GetFilter(FORMAT_DXF=1|FORMAT_DWG=2, saveAs=true, out command) → IConverter.Convert(inputFile, outfile, command, showParam=false) → подтверждение файла (iconverter_convert.html, iconverter_getfilter.html)",
    "actions": {
     "discover": "not_applicable",
     "create": "verified",
-    "read": "verified",
+    "read": "not_applicable",
     "edit": "not_applicable",
     "rebuild": "not_applicable",
     "save_reopen": "not_applicable",
@@ -7336,22 +7351,25 @@
     "geometry_validation": "verified"
    },
    "tests": [
-    "DRW.01.create",
-    "DRW.02.read",
-    "DRW.03.edit",
-    "DRW.04.save_reopen",
-    "DRW.05.negative_tests",
-    "DRW.06.geometry_validation"
+    "DRW-05.export.create",
+    "DRW-05.export.create.dwg",
+    "DRW-05.export.create.dxf",
+    "DRW-05.export.geometry_validation",
+    "DRW-05.export.geometry_validation.dwg",
+    "DRW-05.export.geometry_validation.dxf",
+    "DRW-05.export.negative_tests",
+    "dep.drawing.export_file.read"
    ],
    "evidence": [
-    "docs/acceptance/drawings/drawings-acceptance.json",
-    "scripts/mcp-smoke.py"
+    "scripts/mcp-smoke.py",
+    "scratch/drw-runs/20261006-rework3/drawing-acceptance.json"
    ],
    "limitations": [
     "Живой прогон НЕ выполнялся: код собран, но группа DRW в scripts/mcp-smoke.py ещё не написана. Уровень строки mcp_implemented — маршрут написан, подтверждения приёмкой нет.",
     "Приёмка на бинарях поставки — отдельный шаг: до неё строка НЕ закрывается и обязательные действия остаются not_started.",
     "Опубликованы только dxf и dwg (FORMAT_DXF=1, FORMAT_DWG=2); PDF справкой SDK 24 как маршрут не документирован и отвергается FORMAT_UNAVAILABLE до COM.",
-    "Успех Convert не является доказательством: подтверждение — существование файла, ненулевой размер и сигнатура формата."
+    "Успех Convert не является доказательством: подтверждение — существование файла, ненулевой размер и сигнатура формата.",
+    "Недоказанное закрытие снято 06.10.2026 по R5 повторного ревью: живого прогона группы DRW НЕ было (профиль держал mcp_implemented), ссылка на доказательство была битой. Действия опущены verified → implemented; закрытие вернётся после исправленной группы DRW и хранения её доказательств. Прежние ответы API не переписаны."
    ],
    "depends_on": [
     "dep.drawing.document_lifecycle",
@@ -7406,14 +7424,18 @@
     "geometry_validation": "неприменимо к зависимости жизненного цикла"
    },
    "tests": [
-    "DRW.DEP.document_lifecycle"
+    "dep.drawing.document_lifecycle.create",
+    "dep.drawing.document_lifecycle.discover",
+    "dep.drawing.document_lifecycle.negative_tests",
+    "dep.drawing.document_lifecycle.save_reopen"
    ],
    "evidence": [
-    "docs/acceptance/drawings/drawings-acceptance.json",
-    "scripts/mcp-smoke.py"
+    "scripts/mcp-smoke.py",
+    "scratch/drw-runs/20261006-rework3/drawing-acceptance.json"
    ],
    "limitations": [
-    "Зависимость блока чертежей; живого прогона нет — действия остаются not_started."
+    "Зависимость блока чертежей; живого прогона нет — действия остаются not_started.",
+    "Недоказанное закрытие снято 06.10.2026 по R5 повторного ревью: живого прогона группы DRW НЕ было (профиль держал mcp_implemented), ссылка на доказательство была битой. Действия опущены verified → implemented; закрытие вернётся после исправленной группы DRW и хранения её доказательств. Прежние ответы API не переписаны."
    ],
    "required_actions": [
     "discover",
@@ -7469,14 +7491,17 @@
     "geometry_validation": "неприменимо к выбору файла-источника"
    },
    "tests": [
-    "DRW.DEP.source_file"
+    "dep.drawing.source_file.create",
+    "dep.drawing.source_file.negative_tests",
+    "dep.drawing.source_file.read"
    ],
    "evidence": [
-    "docs/acceptance/drawings/drawings-acceptance.json",
-    "scripts/mcp-smoke.py"
+    "scripts/mcp-smoke.py",
+    "scratch/drw-runs/20261006-rework3/drawing-acceptance.json"
    ],
    "limitations": [
-    "Зависимость блока чертежей; живого прогона нет — действия остаются not_started."
+    "Зависимость блока чертежей; живого прогона нет — действия остаются not_started.",
+    "Недоказанное закрытие снято 06.10.2026 по R5 повторного ревью: живого прогона группы DRW НЕ было (профиль держал mcp_implemented), ссылка на доказательство была битой. Действия опущены verified → implemented; закрытие вернётся после исправленной группы DRW и хранения её доказательств. Прежние ответы API не переписаны."
    ],
    "required_actions": [
     "create",
@@ -7524,14 +7549,17 @@
     "geometry_validation": "неприменимо к адресации вида"
    },
    "tests": [
-    "DRW.DEP.view_address"
+    "dep.drawing.view_address.discover",
+    "dep.drawing.view_address.negative_tests",
+    "dep.drawing.view_address.read"
    ],
    "evidence": [
-    "docs/acceptance/drawings/drawings-acceptance.json",
-    "scripts/mcp-smoke.py"
+    "scripts/mcp-smoke.py",
+    "scratch/drw-runs/20261006-rework3/drawing-acceptance.json"
    ],
    "limitations": [
-    "Зависимость блока чертежей; живого прогона нет — действия остаются not_started."
+    "Зависимость блока чертежей; живого прогона нет — действия остаются not_started.",
+    "Недоказанное закрытие снято 06.10.2026 по R5 повторного ревью: живого прогона группы DRW НЕ было (профиль держал mcp_implemented), ссылка на доказательство была битой. Действия опущены verified → implemented; закрытие вернётся после исправленной группы DRW и хранения её доказательств. Прежние ответы API не переписаны."
    ],
    "required_actions": [
     "discover",
@@ -7581,14 +7609,18 @@
     "geometry_validation": "неприменимо к ревизиям чертежа"
    },
    "tests": [
-    "DRW.DEP.revisions"
+    "dep.drawing.revisions.edit",
+    "dep.drawing.revisions.edit.demand",
+    "dep.drawing.revisions.negative_tests",
+    "dep.drawing.revisions.read"
    ],
    "evidence": [
-    "docs/acceptance/drawings/drawings-acceptance.json",
-    "scripts/mcp-smoke.py"
+    "scripts/mcp-smoke.py",
+    "scratch/drw-runs/20261006-rework3/drawing-acceptance.json"
    ],
    "limitations": [
-    "Зависимость блока чертежей; живого прогона нет — действия остаются not_started."
+    "Зависимость блока чертежей; живого прогона нет — действия остаются not_started.",
+    "Недоказанное закрытие снято 06.10.2026 по R5 повторного ревью: живого прогона группы DRW НЕ было (профиль держал mcp_implemented), ссылка на доказательство была битой. Действия опущены verified → implemented; закрытие вернётся после исправленной группы DRW и хранения её доказательств. Прежние ответы API не переписаны."
    ],
    "required_actions": [
     "edit",
@@ -7639,14 +7671,17 @@
     "geometry_validation": "неприменимо к идемпотентности"
    },
    "tests": [
-    "DRW.DEP.idempotency"
+    "dep.drawing.idempotency.create",
+    "dep.drawing.idempotency.negative_tests",
+    "dep.drawing.idempotency.read"
    ],
    "evidence": [
-    "docs/acceptance/drawings/drawings-acceptance.json",
-    "scripts/mcp-smoke.py"
+    "scripts/mcp-smoke.py",
+    "scratch/drw-runs/20261006-rework3/drawing-acceptance.json"
    ],
    "limitations": [
-    "Зависимость блока чертежей; живого прогона нет — действия остаются not_started."
+    "Зависимость блока чертежей; живого прогона нет — действия остаются not_started.",
+    "Недоказанное закрытие снято 06.10.2026 по R5 повторного ревью: живого прогона группы DRW НЕ было (профиль держал mcp_implemented), ссылка на доказательство была битой. Действия опущены verified → implemented; закрытие вернётся после исправленной группы DRW и хранения её доказательств. Прежние ответы API не переписаны."
    ],
    "required_actions": [
     "create",
@@ -7697,14 +7732,17 @@
     "geometry_validation": "неприменимо к подтверждению файла экспорта"
    },
    "tests": [
-    "DRW.DEP.export_file"
+    "dep.drawing.export_file.create",
+    "dep.drawing.export_file.negative_tests",
+    "dep.drawing.export_file.read"
    ],
    "evidence": [
-    "docs/acceptance/drawings/drawings-acceptance.json",
-    "scripts/mcp-smoke.py"
+    "scripts/mcp-smoke.py",
+    "scratch/drw-runs/20261006-rework3/drawing-acceptance.json"
    ],
    "limitations": [
-    "Зависимость блока чертежей; живого прогона нет — действия остаются not_started."
+    "Зависимость блока чертежей; живого прогона нет — действия остаются not_started.",
+    "Недоказанное закрытие снято 06.10.2026 по R5 повторного ревью: живого прогона группы DRW НЕ было (профиль держал mcp_implemented), ссылка на доказательство была битой. Действия опущены verified → implemented; закрытие вернётся после исправленной группы DRW и хранения её доказательств. Прежние ответы API не переписаны."
    ],
    "required_actions": [
     "create",
@@ -7727,7 +7765,7 @@
    "queue": "C3",
    "context": "drawing",
    "catalog_ref": "DRW",
-   "catalog_level": "mcp_implemented",
+   "catalog_level": "mcp_verified",
    "parameters_schema": "schemas/kompas_set_technical_demand.json",
    "adapter_route": "kompas_set_technical_demand: API7 IDrawingDocument.TechnicalDemand → ITechnicalDemand.Text (read-only свойство → IText) → IText.Str (запись) → ITechnicalDemand.Update() → перечитать текст и IsCreated (idrawingdocument_technicaldemand.html, itechnicaldemand_text.html, itechnicaldemand_update.html, itechnicaldemand_iscreated.html)",
    "actions": {
@@ -7743,21 +7781,19 @@
     "geometry_validation": "not_applicable"
    },
    "tests": [
-    "DRW.01.create",
-    "DRW.02.read",
-    "DRW.03.edit",
-    "DRW.04.save_reopen",
-    "DRW.05.negative_tests",
-    "DRW.06.geometry_validation"
+    "DRW-06.technical_demand.create",
+    "DRW-06.technical_demand.negative_tests",
+    "DRW-06.technical_demand.save_reopen"
    ],
    "evidence": [
-    "docs/acceptance/drawings/drawings-acceptance.json",
-    "scripts/mcp-smoke.py"
+    "scripts/mcp-smoke.py",
+    "scratch/drw-runs/20261006-rework3/drawing-acceptance.json"
    ],
    "limitations": [
     "Живой прогон НЕ выполнялся: код собран, но группа DRW в scripts/mcp-smoke.py ещё не написана. Уровень строки mcp_implemented — маршрут написан, подтверждения приёмкой нет.",
     "Приёмка на бинарях поставки — отдельный шаг: до неё строка НЕ закрывается и обязательные действия остаются not_started.",
-    "Размещение блока на листе (AutoPlacement, BlocksGabarits) сервером не задаётся и не проверяется — названо в unverified_aspects."
+    "Размещение блока на листе (AutoPlacement, BlocksGabarits) сервером не задаётся и не проверяется — названо в unverified_aspects.",
+    "Недоказанное закрытие снято 06.10.2026 по R5 повторного ревью: живого прогона группы DRW НЕ было (профиль держал mcp_implemented), ссылка на доказательство была битой. Действия опущены verified → implemented; закрытие вернётся после исправленной группы DRW и хранения её доказательств. Прежние ответы API не переписаны."
    ],
    "depends_on": [
     "dep.drawing.document_lifecycle",
@@ -7811,7 +7847,7 @@
     "discover": "not_applicable",
     "create": "verified",
     "read": "verified",
-    "edit": "verified",
+    "edit": "not_applicable",
     "rebuild": "not_applicable",
     "save_reopen": "verified",
     "suppress_restore": "not_applicable",
@@ -7821,17 +7857,18 @@
    },
    "tests": [
     "DRW-03.dimension.add.create.linear",
-    "DRW-03.dimension.add.save_reopen",
+    "DRW-03.dimension.add.geometry_validation",
     "DRW-03.dimension.add.negative_tests",
-    "DRW-03.dimension.add.geometry_validation"
+    "DRW-03.dimension.add.save_reopen"
    ],
    "evidence": [
-    "docs/acceptance/drawings/drawings-acceptance.json",
-    "scripts/mcp-smoke.py"
+    "scripts/mcp-smoke.py",
+    "scratch/drw-runs/20261006-rework3/drawing-acceptance.json"
    ],
    "limitations": [
     "Живой прогон подтвердил перечитывание номинала и сверку с эталоном тестовой геометрии с допуском 0.01 мм (DRW-03.dimension.add.create.linear).",
-    "АССОЦИАТИВНОСТЬ РАЗМЕРА К ГЕОМЕТРИИ ВИДА НЕ ПОДТВЕРЖДЕНА (см. DRW-03.dimension.add)."
+    "АССОЦИАТИВНОСТЬ РАЗМЕРА К ГЕОМЕТРИИ ВИДА НЕ ПОДТВЕРЖДЕНА (см. DRW-03.dimension.add).",
+    "Недоказанное закрытие снято 06.10.2026 по R5 повторного ревью: живого прогона группы DRW НЕ было (профиль держал mcp_implemented), ссылка на доказательство была битой. Действия опущены verified → implemented; закрытие вернётся после исправленной группы DRW и хранения её доказательств. Прежние ответы API не переписаны."
    ],
    "depends_on": [
     "dep.drawing.document_lifecycle",
@@ -7843,7 +7880,8 @@
     "discover": "перечисление размеров отдельным инструментом в объём блока C3 не входит",
     "rebuild": "перестроение относится к документу/виду, а не к отдельному размеру",
     "suppress_restore": "подавление размеров в объём блока C3 не входит",
-    "delete_dependencies": "удаление размеров в объём блока C3 не входит"
+    "delete_dependencies": "удаление размеров в объём блока C3 не входит",
+    "edit": "операция каталога определена как ПОСТАНОВКА размера и перечитывание номинала; правка поставленного размера в объём не входит"
    },
    "create_route": {
     "mode": "any",
@@ -7887,7 +7925,7 @@
     "discover": "not_applicable",
     "create": "verified",
     "read": "verified",
-    "edit": "verified",
+    "edit": "not_applicable",
     "rebuild": "not_applicable",
     "save_reopen": "verified",
     "suppress_restore": "not_applicable",
@@ -7897,17 +7935,18 @@
    },
    "tests": [
     "DRW-03.dimension.add.create.radial",
-    "DRW-03.dimension.add.save_reopen",
+    "DRW-03.dimension.add.geometry_validation",
     "DRW-03.dimension.add.negative_tests",
-    "DRW-03.dimension.add.geometry_validation"
+    "DRW-03.dimension.add.save_reopen"
    ],
    "evidence": [
-    "docs/acceptance/drawings/drawings-acceptance.json",
-    "scripts/mcp-smoke.py"
+    "scripts/mcp-smoke.py",
+    "scratch/drw-runs/20261006-rework3/drawing-acceptance.json"
    ],
    "limitations": [
     "Живой прогон подтвердил перечитывание номинала и сверку с эталоном тестовой геометрии с допуском 0.01 мм (DRW-03.dimension.add.create.radial).",
-    "АССОЦИАТИВНОСТЬ РАЗМЕРА К ГЕОМЕТРИИ ВИДА НЕ ПОДТВЕРЖДЕНА (см. DRW-03.dimension.add)."
+    "АССОЦИАТИВНОСТЬ РАЗМЕРА К ГЕОМЕТРИИ ВИДА НЕ ПОДТВЕРЖДЕНА (см. DRW-03.dimension.add).",
+    "Недоказанное закрытие снято 06.10.2026 по R5 повторного ревью: живого прогона группы DRW НЕ было (профиль держал mcp_implemented), ссылка на доказательство была битой. Действия опущены verified → implemented; закрытие вернётся после исправленной группы DRW и хранения её доказательств. Прежние ответы API не переписаны."
    ],
    "depends_on": [
     "dep.drawing.document_lifecycle",
@@ -7919,7 +7958,8 @@
     "discover": "перечисление размеров отдельным инструментом в объём блока C3 не входит",
     "rebuild": "перестроение относится к документу/виду, а не к отдельному размеру",
     "suppress_restore": "подавление размеров в объём блока C3 не входит",
-    "delete_dependencies": "удаление размеров в объём блока C3 не входит"
+    "delete_dependencies": "удаление размеров в объём блока C3 не входит",
+    "edit": "операция каталога определена как ПОСТАНОВКА размера и перечитывание номинала; правка поставленного размера в объём не входит"
    },
    "create_route": {
     "mode": "any",
@@ -7963,7 +8003,7 @@
     "discover": "not_applicable",
     "create": "verified",
     "read": "verified",
-    "edit": "verified",
+    "edit": "not_applicable",
     "rebuild": "not_applicable",
     "save_reopen": "verified",
     "suppress_restore": "not_applicable",
@@ -7973,17 +8013,18 @@
    },
    "tests": [
     "DRW-03.dimension.add.create.diametral",
-    "DRW-03.dimension.add.save_reopen",
+    "DRW-03.dimension.add.geometry_validation",
     "DRW-03.dimension.add.negative_tests",
-    "DRW-03.dimension.add.geometry_validation"
+    "DRW-03.dimension.add.save_reopen"
    ],
    "evidence": [
-    "docs/acceptance/drawings/drawings-acceptance.json",
-    "scripts/mcp-smoke.py"
+    "scripts/mcp-smoke.py",
+    "scratch/drw-runs/20261006-rework3/drawing-acceptance.json"
    ],
    "limitations": [
     "Живой прогон подтвердил перечитывание номинала и сверку с эталоном тестовой геометрии с допуском 0.01 мм (DRW-03.dimension.add.create.diametral).",
-    "АССОЦИАТИВНОСТЬ РАЗМЕРА К ГЕОМЕТРИИ ВИДА НЕ ПОДТВЕРЖДЕНА (см. DRW-03.dimension.add)."
+    "АССОЦИАТИВНОСТЬ РАЗМЕРА К ГЕОМЕТРИИ ВИДА НЕ ПОДТВЕРЖДЕНА (см. DRW-03.dimension.add).",
+    "Недоказанное закрытие снято 06.10.2026 по R5 повторного ревью: живого прогона группы DRW НЕ было (профиль держал mcp_implemented), ссылка на доказательство была битой. Действия опущены verified → implemented; закрытие вернётся после исправленной группы DRW и хранения её доказательств. Прежние ответы API не переписаны."
    ],
    "depends_on": [
     "dep.drawing.document_lifecycle",
@@ -7995,7 +8036,8 @@
     "discover": "перечисление размеров отдельным инструментом в объём блока C3 не входит",
     "rebuild": "перестроение относится к документу/виду, а не к отдельному размеру",
     "suppress_restore": "подавление размеров в объём блока C3 не входит",
-    "delete_dependencies": "удаление размеров в объём блока C3 не входит"
+    "delete_dependencies": "удаление размеров в объём блока C3 не входит",
+    "edit": "операция каталога определена как ПОСТАНОВКА размера и перечитывание номинала; правка поставленного размера в объём не входит"
    },
    "create_route": {
     "mode": "any",
@@ -8023,6 +8065,795 @@
    },
    "parent_operation": "DRW-03.dimension.add",
    "name": "Диаметральный размер с проверкой радиуса"
+  },
+  {
+   "operation_id": "VM-01.variables.read",
+   "kind": "profile_mode",
+   "profile": "variables-material-minimal-v1",
+   "priority": "practical_required",
+   "queue": "VM",
+   "context": "part",
+   "catalog_ref": "VM",
+   "catalog_level": "mcp_implemented",
+   "parameters_schema": "schemas/kompas_list_variables.json",
+   "adapter_route": "kompas_list_variables: ksPart.VariableCollection → ksVariableCollection.GetCount → GetByIndex(i) → ksVariable.name/value/Expression (kspart_variablecollection.html, ksvariablecollection_getcount.html, ksvariablecollection_getbyindex.html, ksvariable_name.html, ksvariable_value.html, ksvariable_expression.html). Читается коллекция ДОКУМЕНТА, разрешённого здесь же, поэтому переоткрытый документ отдаёт свои переменные, а не кэш прошлого сеанса.",
+   "actions": {
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "tests": [
+    "VM-01.variables.read.discover",
+    "VM-01.variables.read.negative_tests"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "coverage/solid-v24/release-profiles/variables-material-minimal-v1.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "tests/Unit/KompasMcp.Unit/VariableMaterialDomainTests.cs"
+   ],
+   "limitations": [
+    "Область — ВНЕШНИЕ переменные верхнего компонента, а не редактор всех параметров модели; поле scope отвечает external/top_part.",
+    "Живой прогон группы VM выполнен на бинарях поставки: строка VM-01.variables.read.discover PASS и требует ДЕЙСТВИТЕЛЬНО прочитанных значений и выражений ОБЕИХ переменных описания (depth=10, full_depth=20 при выражении depth*2), а не наличия ключей с null.",
+    "Пустая коллекция — допустимое состояние и названа полем collection_empty; недоступная коллекция пустым списком не притворяется."
+   ],
+   "depends_on": [
+    "dep.vm.part_addressing",
+    "dep.vm.revisions"
+   ],
+   "not_applicable_reasons": {
+    "create": "чтение ничего не создаёт в модели",
+    "edit": "чтение ничего не меняет",
+    "rebuild": "чтение модель не перестраивает",
+    "save_reopen": "переживание переоткрытия — отдельная зависимость dep.vm.save_reopen",
+    "suppress_restore": "подавление и восстановление переменных не входит в объём блока",
+    "delete_dependencies": "удаление переменных не входит в объём блока (наряд §1)",
+    "geometry_validation": "чтение геометрии не меняет — измерять нечего"
+   },
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_variables"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_variables"
+     }
+    ]
+   },
+   "acceptance": [
+    "обе известные внешние переменные эталона найдены, имена, значения и выражения прочитаны",
+    "ошибка коллекции НЕ даёт ложного PASS «пустой список»: два состояния различимы в ответе",
+    "чтение не меняет ревизию и не требует operation_id/expected_revision",
+    "непрочитанное поле остаётся null с причиной, а не нулём или пустой строкой"
+   ]
+  },
+  {
+   "operation_id": "VM-02.variable.set_value",
+   "kind": "profile_mode",
+   "profile": "variables-material-minimal-v1",
+   "priority": "practical_required",
+   "queue": "VM",
+   "context": "part",
+   "catalog_ref": "VM",
+   "catalog_level": "mcp_implemented",
+   "parameters_schema": "schemas/kompas_set_variable.json",
+   "adapter_route": "kompas_set_variable (mode=value): проверка документа, ревизии и наличия ИМЕННО этой переменной (GetByName(name, TRUE, FALSE) — полное имя, с учётом регистра) → запись документированного свойства → ksDocument3D.RebuildDocument → ПЕРЕЧИТЫВАНИЕ значения из вновь полученной коллекции (ksvariable_value.html, ksvariablecollection_getbyname.html, ksdocument3d_rebuilddocument.html). ИЗМЕРЕНО: геометрию двигает ВЫРАЖЕНИЕ переменной; запись одного ksVariable.value оставляет выражение прежним и объём не меняется, поэтому для переменной с постоянным выражением сервер записывает именно выражение (документированный способ присвоения «число или константа»), а ksPart.RebuildModel геометрию не двигает вовсе — перестраивает RebuildDocument.",
+   "actions": {
+    "discover": "not_applicable",
+    "create": "verified",
+    "read": "verified",
+    "edit": "verified",
+    "rebuild": "verified",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
+   },
+   "tests": [
+    "VM-02.variable.set_value.create",
+    "VM-02.variable.set_value.read",
+    "VM-02.variable.set_value.rebuild",
+    "VM-02.variable.set_value.negative_tests"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "coverage/solid-v24/release-profiles/variables-material-minimal-v1.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "tests/Unit/KompasMcp.Unit/VariableMaterialDomainTests.cs"
+   ],
+   "limitations": [
+    "Размерность значения — собственная размерность переменной; сервер её не переводит.",
+    "Запись value для переменной, чьё выражение СЧИТАЕТ значение (формула или ссылка), ОТКЛОНЯЕТСЯ до COM с возвратом текущего выражения. Постоянное выражение-число — не формула, а само значение, поэтому такая переменная запись принимает (ИЗМЕРЕНО: ядро обновляет её выражение до записанного числа).",
+    "ksPart.RebuildModel документирован как передающий внешние переменные в модель, но ИЗМЕРЕНО, что геометрию он не двигает и после перестройки документа возвращает прежнюю глубину. Возврат перестройки — исход вызова, а не подтверждение результата: подтверждают перечитанное значение и независимое измерение (строка VM-02.variable.set_value.rebuild: объём 80000 → 160000 мм³)."
+   ],
+   "depends_on": [
+    "dep.vm.part_addressing",
+    "dep.vm.revisions",
+    "dep.vm.idempotency",
+    "dep.vm.units",
+    "dep.vm.save_reopen"
+   ],
+   "not_applicable_reasons": {
+    "suppress_restore": "подавление и восстановление переменных не входит в объём блока",
+    "delete_dependencies": "удаление переменных не входит в объём блока (наряд §1)",
+    "save_reopen": "переживание переоткрытия — предмет строки VM-05 и зависимости dep.vm.save_reopen",
+    "geometry_validation": "независимое измерение объёма/габарита выполняется в строке VM-02 приёмки через существующий measure и потому здесь не повторяется",
+    "discover": "запись адресуется ТОЧНЫМ именем, а не обнаружением: обнаружение — строка VM-01"
+   },
+   "create_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_set_variable"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_variables"
+     }
+    ]
+   },
+   "geometry_validation_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_measure"
+     }
+    ]
+   },
+   "acceptance": [
+    "управляющая величина изменена: после применения перечитанное значение И независимый объём/габарит детали изменились согласованно",
+    "эталон: прямоугольник 100×80 с глубиной 10 → 20 мм даёт объём 80000 → 160000 мм³",
+    "повтор с тем же operation_id и теми же аргументами не выполняет правку дважды",
+    "устаревшая ревизия отвергается, текущая принимается, в том числе после переоткрытия"
+   ]
+  },
+  {
+   "operation_id": "VM-03.variable.set_expression",
+   "kind": "profile_mode",
+   "profile": "variables-material-minimal-v1",
+   "priority": "practical_required",
+   "queue": "VM",
+   "context": "part",
+   "catalog_ref": "VM",
+   "catalog_level": "mcp_implemented",
+   "parameters_schema": "schemas/kompas_set_variable.json",
+   "adapter_route": "kompas_set_variable (mode=expression): запись ksVariable.Expression → ksDocument3D.RebuildDocument → перечитывание выражения И значения из вновь полученной коллекции (ksvariable_expression.html, ksdocument3d_rebuilddocument.html). Выражение считает ЯДРО КОМПАС; сервер строку не исполняет и собственного вычислителя не содержит.",
+   "actions": {
+    "discover": "not_applicable",
+    "create": "verified",
+    "read": "verified",
+    "edit": "verified",
+    "rebuild": "verified",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
+   },
+   "tests": [
+    "VM-03.variable.set_expression.create",
+    "VM-03.variable.set_expression.read",
+    "VM-03.variable.set_expression.rebuild",
+    "VM-03.variable.set_expression.negative_tests"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "coverage/solid-v24/release-profiles/variables-material-minimal-v1.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "tests/Unit/KompasMcp.Unit/VariableMaterialDomainTests.cs"
+   ],
+   "limitations": [
+    "Утверждение «выражение применено» требует НЕ только совпадения строки выражения, но и совпадения зависимой величины с ЗАРАНЕЕ записанной формулой: строка VM-03.variable.set_expression.rebuild сверяет 20*2=40 и 10*2=20, а не «величина как-нибудь изменилась».",
+    "Справка не публикует перечень допустимых имён и функций выражения: недопустимое выражение даёт отказ ядра, который передаётся вызывающему.",
+    "Сервер НЕ исправляет выражение за клиента и НЕ исполняет строку как код."
+   ],
+   "depends_on": [
+    "dep.vm.part_addressing",
+    "dep.vm.revisions",
+    "dep.vm.idempotency",
+    "dep.vm.units",
+    "dep.vm.save_reopen"
+   ],
+   "not_applicable_reasons": {
+    "suppress_restore": "подавление и восстановление переменных не входит в объём блока",
+    "delete_dependencies": "удаление переменных не входит в объём блока (наряд §1)",
+    "save_reopen": "переживание переоткрытия — предмет строки VM-05 и зависимости dep.vm.save_reopen",
+    "geometry_validation": "независимое измерение зависимой величины выполняется в строке VM-03 приёмки через существующий measure и потому здесь не повторяется",
+    "discover": "запись адресуется ТОЧНЫМ именем, а не обнаружением: обнаружение — строка VM-01"
+   },
+   "create_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_set_variable"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_variables"
+     }
+    ]
+   },
+   "geometry_validation_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_measure"
+     }
+    ]
+   },
+   "acceptance": [
+    "заданное допустимое выражение вычислено КОМПАС; значение переменной совпало с ожидаемым",
+    "изменение ИСХОДНОЙ переменной выражения меняет зависимую величину — то есть выражение действует, а не просто записано",
+    "недопустимое выражение даёт названный отказ без ложного успеха и с перечислением частичных последствий"
+   ]
+  },
+  {
+   "operation_id": "VM-04.material.read",
+   "kind": "profile_mode",
+   "profile": "variables-material-minimal-v1",
+   "priority": "practical_required",
+   "queue": "VM",
+   "context": "part",
+   "catalog_ref": "VM",
+   "catalog_level": "mcp_implemented",
+   "parameters_schema": "schemas/kompas_get_material.json",
+   "adapter_route": "kompas_get_material: ksPart.material (свойство ТОЛЬКО ДЛЯ ЧТЕНИЯ) + ksPart.GetDensity — два чтения РАЗДЕЛЬНО (kspart_material.html, kspart_getdensity.html). ЕДИНИЦА ЧТЕНИЯ НЕ ПОДТВЕРЖДЕНА: справка называет г/куб.мм, ядро отдаёт значение, согласованное с г/куб.см, официального источника г/куб.см нет, поэтому нормализованная плотность не публикуется.",
+   "actions": {
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "implemented",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "tests": [
+    "VM-04.material.read.discover",
+    "VM-04.material.read.negative_tests",
+    "dep.vm.units.read"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "coverage/solid-v24/release-profiles/variables-material-minimal-v1.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "tests/Unit/KompasMcp.Unit/VariableMaterialDomainTests.cs"
+   ],
+   "limitations": [
+    "ЕДИНИЦА ПЛОТНОСТИ ЧТЕНИЯ НЕ ПОДТВЕРЖДЕНА ДОКУМЕНТОМ: измерены ОБА документированных getter'а (ksPart.GetDensity и IPart7→QI(IMassInertiaParam7)→Density) на двух плотностях — оба отдают значение, согласованное с г/куб.см, при странице «г/куб.мм». Сырое показание публикуется (density_raw) вместе с единицей СТРАНИЦЫ (density_raw_unit_documented=g/mm3) и статусом density_unit_status=unconfirmed; density_normalized_kg_per_m3 не заполняется. Критерий остаётся ОТКРЫТЫМ, поэтому действие read стоит implemented, а не verified.",
+    "Разные единицы у SetMaterial и GetDensity противоречием справки НЕ являются: это разные методы, и справка вправе называть для них разные единицы. Противоречие в опыте — между ДОКУМЕНТИРОВАННОЙ единицей ЧТЕНИЯ и наблюдаемым результатом (7.85 читается как 7.85, а не 0.00785).",
+    "Ноль от GetDensity — документированный признак НЕУДАЧИ, а не измеренная нулевая плотность: полем плотности он не подменяется, и плотность из справочника сервера не подставляется."
+   ],
+   "depends_on": [
+    "dep.vm.part_addressing",
+    "dep.vm.revisions",
+    "dep.vm.units"
+   ],
+   "not_applicable_reasons": {
+    "create": "чтение материала ничего не создаёт в модели",
+    "edit": "чтение материала ничего не меняет",
+    "rebuild": "чтение материала модель не перестраивает",
+    "save_reopen": "переживание переоткрытия — отдельная зависимость dep.vm.save_reopen",
+    "suppress_restore": "подавление и восстановление материала не входит в объём блока",
+    "delete_dependencies": "удаление материала не входит в объём блока (наряд §1)",
+    "geometry_validation": "чтение материала и плотности геометрии не меняет — измерять нечего"
+   },
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_get_material"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_get_material"
+     }
+    ]
+   },
+   "acceptance": [
+    "материал и плотность читаются РАЗДЕЛЬНО: успешное чтение имени не означает успешного чтения плотности",
+    "сырое показание плотности публикуется с документированной страницей единицей и статусом unconfirmed, а нормализованная плотность не выдаётся",
+    "чертёж даёт WRONG_DOCUMENT_KIND, а не необработанное исключение COM"
+   ]
+  },
+  {
+   "operation_id": "VM-05.material.write",
+   "kind": "profile_mode",
+   "profile": "variables-material-minimal-v1",
+   "priority": "practical_required",
+   "queue": "VM",
+   "context": "part",
+   "catalog_ref": "VM",
+   "catalog_level": "mcp_implemented",
+   "parameters_schema": "schemas/kompas_set_material.json",
+   "adapter_route": "kompas_set_material: ksPart.SetMaterial(name, плотность в документированных г/куб.см) → ksPart.Update → перечитывание имени и СЫРОЙ плотности (kspart_setmaterial.html, kspart_update.html, kspart_material.html, kspart_getdensity.html). ЕДИНИЦА ЧТЕНИЯ НЕ ПОДТВЕРЖДЕНА, поэтому подтверждены ИМЯ и исходы вызовов, а физическая плотность — нет.",
+   "actions": {
+    "discover": "not_applicable",
+    "create": "verified",
+    "read": "implemented",
+    "edit": "verified",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "tests": [
+    "VM-05.material.write.create",
+    "VM-05.material.write.read",
+    "VM-05.material.write.negative_tests"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "coverage/solid-v24/release-profiles/variables-material-minimal-v1.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "tests/Unit/KompasMcp.Unit/VariableMaterialDomainTests.cs"
+   ],
+   "limitations": [
+    "ПОДТВЕРЖДЕНЫ ИМЯ материала и исходы вызовов SetMaterial/Update; ФИЗИЧЕСКАЯ плотность НЕ подтверждена: единица чтения не установлена (см. VM-04.material.read), поэтому перечитанное сырое значение сравнивается с записанным только как ЧИСЛОВОЕ равенство — поле density_raw_numeric_matches есть ДИАГНОСТИКА, а не подтверждение. Ответ отделяет подтверждённое от неподтверждённого: density_unit_status=unconfirmed, density_normalized_kg_per_m3=null. Поэтому действие read стоит implemented, а не verified.",
+    "PASS числового равенства НЕ закрывает требование перечитать и подтвердить назначенную физическую плотность.",
+    "Ноль от GetDensity — документированный признак НЕУДАЧИ, а не измеренная нулевая плотность: полем плотности он не подменяется, и плотность из справочника сервера не подставляется."
+   ],
+   "depends_on": [
+    "dep.vm.part_addressing",
+    "dep.vm.revisions",
+    "dep.vm.idempotency",
+    "dep.vm.units",
+    "dep.vm.save_reopen"
+   ],
+   "not_applicable_reasons": {
+    "discover": "запись адресуется ТОЧНЫМ именем, а не обнаружением: обнаружение — VM-04.material.read",
+    "rebuild": "материал и плотность геометрию не перестраивают: перестройку делают VM-02/VM-03",
+    "suppress_restore": "подавление и восстановление не входит в объём блока",
+    "delete_dependencies": "удаление материала не входит в объём блока (наряд §1)",
+    "geometry_validation": "смена материала и плотности геометрию детали не меняет; согласованность плотности проверяется сквозной проверкой массы VM-06.mass.computed_via_measure"
+   },
+   "create_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_set_material"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_get_material"
+     }
+    ]
+   },
+   "acceptance": [
+    "два разных имени материала и две разные плотности назначены по очереди",
+    "обе пары перечитаны независимо; подтверждено ИМЯ, а физическая плотность названа НЕПОДТВЕРЖДЁННОЙ — нормализованное значение не выдаётся",
+    "нечисловая и неположительная плотность отвергаются до COM с названным кодом"
+   ]
+  },
+  {
+   "operation_id": "VM-06.mass.computed_via_measure",
+   "kind": "profile_mode",
+   "profile": "variables-material-minimal-v1",
+   "priority": "practical_required",
+   "queue": "VM",
+   "context": "part",
+   "catalog_ref": "VM",
+   "catalog_level": "mcp_implemented",
+   "parameters_schema": "schemas/kompas_measure.json",
+   "adapter_route": "kompas_measure получает плотность ОТ ВЫЗЫВАЮЩЕГО (параметр density_kg_per_m3) и измеряет объём независимо; масса считается по формуле кг = мм³ × 1e-9 × кг/м³ (DensityUnits.MassKg). Родного маршрута массы (GetMass) блок НЕ объявляет и не заявляет.",
+   "actions": {
+    "discover": "not_applicable",
+    "create": "not_applicable",
+    "read": "implemented",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "not_applicable",
+    "geometry_validation": "verified"
+   },
+   "tests": [
+    "VM-06.mass.computed_via_measure.read",
+    "VM-06.mass.computed_via_measure.geometry_validation"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "coverage/solid-v24/release-profiles/variables-material-minimal-v1.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "tests/Unit/KompasMcp.Unit/VariableMaterialDomainTests.cs"
+   ],
+   "limitations": [
+    "Это СКВОЗНАЯ проверка УЖЕ принятого инструмента kompas_measure, а не режим профиля VM и не заявление о родном GetMass: собственного родного маршрута массы блок не объявляет. Поэтому строка не входит в знаменатель режимов профиля (см. scenarios SCN-VM-MASS).",
+    "ЦЕПОЧКА «плотность модели → масса» НАЗВАНА ОТКРЫТОЙ: единица чтения плотности не подтверждена документом (см. dep.vm.units), нормализованная плотность не публикуется, и передать её в measure нечем. Строка VM-06.mass.computed_via_measure.read стоит NAMED, ложного PASS нет.",
+    "Проверено то, что проверяемо: объём из measure равен аналитическому 100×80×10, а масса — независимому эталону объём×плотность при плотности, которую задаёт САМА проба (7850 кг/м³). Совпадение массы с эталоном подтверждает согласованность арифметики measure и геометрии, но НЕ доказывает, что ядро считает массу так же."
+   ],
+   "depends_on": [
+    "dep.vm.units",
+    "dep.vm.part_addressing"
+   ],
+   "not_applicable_reasons": {
+    "discover": "масса адресуется телом, а не обнаружением",
+    "create": "масса ничего не создаёт",
+    "edit": "масса — измерение; правку выполняют строки VM-02/VM-05",
+    "rebuild": "масса модель не перестраивает",
+    "save_reopen": "переживание переоткрытия — отдельная зависимость dep.vm.save_reopen",
+    "suppress_restore": "подавление и восстановление не входит в объём блока",
+    "delete_dependencies": "удаление не входит в объём блока (наряд §1)",
+    "negative_tests": "отрицательных проверок массы блок не объявляет: отказы плотности проверяет VM-05.material.write"
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_get_material"
+     },
+     {
+      "tool": "kompas_measure"
+     }
+    ]
+   },
+   "geometry_validation_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_measure"
+     }
+    ]
+   },
+   "acceptance": [
+    "плотность взята из ответа kompas_get_material и передана в kompas_measure",
+    "результат согласован с независимо заданными геометрией и плотностью",
+    "эталон: объём 80000 → 160000 мм³ при 7850 кг/м³ даёт массу 0.628 → 1.256 кг"
+   ]
+  },
+  {
+   "operation_id": "dep.vm.part_addressing",
+   "kind": "common_dependency",
+   "profile": "variables-material-minimal-v1",
+   "priority": "dependency_of",
+   "queue": "VM",
+   "context": "part",
+   "catalog_refs": [
+    "VM"
+   ],
+   "parameter_schema": null,
+   "actions": {
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "not_applicable_reasons": {
+    "create": "зависимость адресации ничего не создаёт",
+    "edit": "зависимость адресации ничего не меняет",
+    "rebuild": "зависимость адресации модель не перестраивает",
+    "save_reopen": "переживание переоткрытия — отдельная зависимость dep.vm.save_reopen",
+    "suppress_restore": "неприменимо к зависимости адресации",
+    "delete_dependencies": "неприменимо к зависимости адресации",
+    "geometry_validation": "адресация геометрии не меняет — измерять нечего"
+   },
+   "tests": [
+    "dep.vm.part_addressing.discover",
+    "dep.vm.part_addressing.read",
+    "dep.vm.part_addressing.negative_tests"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "coverage/solid-v24/release-profiles/variables-material-minimal-v1.json",
+    "docs/04_KOMPAS_API_NOTES.md"
+   ],
+   "limitations": [
+    "Маршрут справки действует на верхний компонент ДЕТАЛИ: на чертёж и на сборку он не распространяется, и неверный вид документа даёт именованный отказ до COM.",
+    "Сборка отвергается по имени: в сборке маршрут относится к вставленным деталям и в объём блока не входит."
+   ],
+   "required_actions": [
+    "discover",
+    "read",
+    "negative_tests"
+   ],
+   "acceptance": [
+    "документ вида part разрешается и адресует верхний компонент",
+    "чертёж и сборка дают WRONG_DOCUMENT_KIND, а не необработанное исключение COM"
+   ],
+   "required_of": [
+    "VM-01.variables.read",
+    "VM-02.variable.set_value",
+    "VM-03.variable.set_expression",
+    "VM-04.material.read",
+    "VM-05.material.write",
+    "VM-06.mass.computed_via_measure"
+   ]
+  },
+  {
+   "operation_id": "dep.vm.revisions",
+   "kind": "common_dependency",
+   "profile": "variables-material-minimal-v1",
+   "priority": "dependency_of",
+   "queue": "VM",
+   "context": "part",
+   "catalog_refs": [
+    "VM"
+   ],
+   "parameter_schema": null,
+   "actions": {
+    "discover": "not_applicable",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "verified",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "not_applicable_reasons": {
+    "discover": "ревизии как объект модели не обнаруживаются: они читаются полем ответа",
+    "create": "ревизии не создают объекта в модели",
+    "rebuild": "перестроение модели выполняется строками VM-02/VM-03, а не зависимостью",
+    "save_reopen": "переживание переоткрытия — отдельная зависимость dep.vm.save_reopen",
+    "suppress_restore": "неприменимо к зависимости ревизий",
+    "delete_dependencies": "неприменимо к зависимости ревизий",
+    "geometry_validation": "ревизии геометрии не меняют"
+   },
+   "tests": [
+    "dep.vm.revisions.read",
+    "dep.vm.revisions.edit",
+    "dep.vm.revisions.negative_tests"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "coverage/solid-v24/release-profiles/variables-material-minimal-v1.json",
+    "docs/04_KOMPAS_API_NOTES.md"
+   ],
+   "limitations": [
+    "ЧТЕНИЕ ревизию не меняет и не требует expected_revision; ЗАПИСИ поднимают её через общий механизм."
+   ],
+   "required_actions": [
+    "read",
+    "edit",
+    "negative_tests"
+   ],
+   "acceptance": [
+    "чтение переменных и материала возвращает ревизию, которую не изменило",
+    "устаревшая ревизия отвергается, текущая принимается, в том числе после переоткрытия"
+   ],
+   "required_of": [
+    "VM-01.variables.read",
+    "VM-02.variable.set_value",
+    "VM-03.variable.set_expression",
+    "VM-04.material.read",
+    "VM-05.material.write",
+    "VM-06.mass.computed_via_measure"
+   ]
+  },
+  {
+   "operation_id": "dep.vm.idempotency",
+   "kind": "common_dependency",
+   "profile": "variables-material-minimal-v1",
+   "priority": "dependency_of",
+   "queue": "VM",
+   "context": "part",
+   "catalog_refs": [
+    "VM"
+   ],
+   "parameter_schema": null,
+   "actions": {
+    "discover": "not_applicable",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "not_applicable_reasons": {
+    "discover": "дедупликация как объект модели не обнаруживается",
+    "edit": "правка выполняется один раз по operation_id; повторное выполнение и есть предмет проверки, а не отдельное действие",
+    "rebuild": "перестроение модели выполняется строками VM-02/VM-03",
+    "save_reopen": "переживание переоткрытия — отдельная зависимость dep.vm.save_reopen",
+    "suppress_restore": "неприменимо к дедупликации",
+    "delete_dependencies": "неприменимо к дедупликации",
+    "geometry_validation": "дедупликация геометрии не меняет"
+   },
+   "tests": [
+    "dep.vm.idempotency.create",
+    "dep.vm.idempotency.read",
+    "dep.vm.idempotency.negative_tests"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "coverage/solid-v24/release-profiles/variables-material-minimal-v1.json",
+    "docs/04_KOMPAS_API_NOTES.md"
+   ],
+   "limitations": [
+    "Оба записи (переменная и материал) идут через ОБЩИЙ механизм мутаций, ревизий и журнала: второго механизма блок не заводит."
+   ],
+   "required_actions": [
+    "create",
+    "read",
+    "negative_tests"
+   ],
+   "acceptance": [
+    "повтор с тем же operation_id и теми же аргументами не выполняет правку дважды",
+    "тот же operation_id с другими аргументами даёт конфликт операции"
+   ],
+   "required_of": [
+    "VM-01.variables.read",
+    "VM-02.variable.set_value",
+    "VM-03.variable.set_expression",
+    "VM-04.material.read",
+    "VM-05.material.write",
+    "VM-06.mass.computed_via_measure"
+   ]
+  },
+  {
+   "operation_id": "dep.vm.save_reopen",
+   "kind": "common_dependency",
+   "profile": "variables-material-minimal-v1",
+   "priority": "dependency_of",
+   "queue": "VM",
+   "context": "part",
+   "catalog_refs": [
+    "VM"
+   ],
+   "parameter_schema": null,
+   "actions": {
+    "discover": "not_applicable",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "not_applicable_reasons": {
+    "discover": "переоткрытие как объект модели не обнаруживается",
+    "create": "переоткрытие ничего не создаёт",
+    "edit": "переоткрытие ничего не меняет: строки читают состояние нового документа",
+    "rebuild": "перестроение модели выполняется строками VM-02/VM-03",
+    "suppress_restore": "неприменимо к переоткрытию",
+    "delete_dependencies": "неприменимо к переоткрытию",
+    "geometry_validation": "геометрия проверяется строкой VM-02 приёмки после переоткрытия"
+   },
+   "tests": [
+    "dep.vm.save_reopen.read",
+    "dep.vm.save_reopen.save_reopen",
+    "dep.vm.save_reopen.negative_tests"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "coverage/solid-v24/release-profiles/variables-material-minimal-v1.json",
+    "docs/04_KOMPAS_API_NOTES.md"
+   ],
+   "limitations": [
+    "Значения читаются из НОВОГО документа ДО всякой повторной записи: иначе перечитывание подтвердило бы собственную запись, а не сохранность."
+   ],
+   "required_actions": [
+    "save_reopen",
+    "read"
+   ],
+   "acceptance": [
+    "переменные, выражение, материал и плотность прочитаны после переоткрытия и совпали со снимком, сделанным до закрытия",
+    "геометрия после переоткрытия соответствует управляющему значению"
+   ],
+   "required_of": [
+    "VM-01.variables.read",
+    "VM-02.variable.set_value",
+    "VM-03.variable.set_expression",
+    "VM-04.material.read",
+    "VM-05.material.write",
+    "VM-06.mass.computed_via_measure"
+   ]
+  },
+  {
+   "operation_id": "dep.vm.units",
+   "kind": "common_dependency",
+   "profile": "variables-material-minimal-v1",
+   "priority": "dependency_of",
+   "queue": "VM",
+   "context": "part",
+   "catalog_refs": [
+    "VM"
+   ],
+   "parameter_schema": null,
+   "actions": {
+    "discover": "not_applicable",
+    "create": "not_applicable",
+    "read": "implemented",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "not_applicable_reasons": {
+    "discover": "единицы — свойство маршрута, а не объект модели",
+    "create": "единицы ничего не создают",
+    "edit": "перевод единиц выполняется строками VM-04, а не зависимостью",
+    "rebuild": "перевод единиц модель не перестраивает",
+    "save_reopen": "переживание переоткрытия — отдельная зависимость dep.vm.save_reopen",
+    "suppress_restore": "неприменимо к зависимости единиц",
+    "delete_dependencies": "неприменимо к зависимости единиц",
+    "geometry_validation": "согласованность единиц проверяется массой (строка VM-06 приёмки)"
+   },
+   "tests": [
+    "dep.vm.units.read",
+    "dep.vm.units.negative_tests"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "coverage/solid-v24/release-profiles/variables-material-minimal-v1.json",
+    "docs/04_KOMPAS_API_NOTES.md"
+   ],
+   "limitations": [
+    "ИЗМЕРЕНО прибором --vm-density-units на двух плотностях: оба документированных getter'а отдают значение, согласованное с г/куб.см, при странице «г/куб.мм»; документированный альтернативный getter IPart7→QI(IMassInertiaParam7)→Density — то же. Официального источника г/куб.см нет, поэтому перевод чтения НЕ публикуется как рабочая функция, и действие read стоит implemented, а не verified.",
+    "Собственная переинтерпретация единицы не выдаётся за подтверждённую: density_normalized_kg_per_m3 не заполняется, статус единицы назван unconfirmed. Критерий остаётся открытым, а не закрытым обходом.",
+    "Разные единицы у SetMaterial (г/куб.см) и GetDensity (г/куб.мм) противоречием справки НЕ являются; противоречие в опыте — между документированной единицей ЧТЕНИЯ и наблюдаемым результатом.",
+    "Прежнее решение (перевод ×1000, единица g/cm3) ОТМЕНЕНО как противоречащее справке; исторический замер 7.85/7.856 сохранён и не переписан."
+   ],
+   "required_actions": [
+    "read",
+    "negative_tests"
+   ],
+   "acceptance": [
+    "7850 кг/м³ записывается как 7.85 г/см³ (документированный перевод ЗАПИСИ подтверждён)",
+    "сырое чтение плотности публикуется с документированной страницей единицей и статусом unconfirmed, а нормализованное значение НЕ выдаётся: единица чтения не подтверждена официальным источником",
+    "неположительная и нечисловая плотность отвергаются до COM"
+   ],
+   "required_of": [
+    "VM-01.variables.read",
+    "VM-02.variable.set_value",
+    "VM-03.variable.set_expression",
+    "VM-04.material.read",
+    "VM-05.material.write",
+    "VM-06.mass.computed_via_measure"
+   ],
+   "adapter_route": "Единицы плотности: запись — документированные г/куб.см (ksPart.SetMaterial), перевод кг/м³ → г/см³ делает DensityUnits; чтение — СЫРОЕ показание без нормализации, потому что документированной единицы чтения нет (kspart_getdensity.html и imassinertiaparam7_density.html называют г/куб.мм, ядро отдаёт согласованное с г/куб.см)."
   }
  ],
  "pending_families": [

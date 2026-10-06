@@ -69,11 +69,19 @@ MATRIX_REL = "coverage/solid-v24/matrix.json"
 # INCOMPLETE — это признание открытой работы, а не причина её прятать. `COMPLETE` по трём прежним
 # профилям доказательством готовности блока DRW больше НЕ является по другой причине: блок закрыт
 # собственными строками приёмки, а не выводом из чужого вердикта.
+#
+# `variables-material-minimal-v1` (блок VM) добавлен 06.10.2026 тем же правилом, что и DRW: профиль
+# заведён и подключён к объёму выпуска. Его строка НЕ проверена живым прогоном (эталон VM не собран —
+# причина названа в docs/04_KOMPAS_API_NOTES.md §4.40.1), поэтому подключение переводит вердикт
+# объёма в INCOMPLETE — это признание ОТКРЫТОЙ работы, а не причина её прятать. `COMPLETE` по прежним
+# профилям доказательством готовности блока VM не является: у блока свои строки приёмки.
 PROFILES = (
     ("mechanical-core-v1", "coverage/solid-v24/release-profiles/mechanical-core-v1.json"),
     ("assemblies-minimal-v1", "coverage/solid-v24/release-profiles/assemblies-minimal-v1.json"),
     ("mates-minimal-v1", "coverage/solid-v24/release-profiles/mates-minimal-v1.json"),
     ("drawings-minimal-v1", "coverage/solid-v24/release-profiles/drawings-minimal-v1.json"),
+    ("variables-material-minimal-v1",
+     "coverage/solid-v24/release-profiles/variables-material-minimal-v1.json"),
 )
 
 # Профили, ЗАВЕДЁННЫЕ, но в объём выпуска пока не подключённые. Названы явно, чтобы отсутствие не
@@ -138,11 +146,21 @@ def evaluate_profile(root, profile_rel):
         else:
             blocked = sorted(a for a, v in (state or {}).items() if v.startswith("blocked_"))
             missing = sorted(a for a in actions if a not in (state or {}))
+            # СТАТУС КАЖДОГО ДЕЙСТВИЯ ПУБЛИКУЕТСЯ, А НЕ ТОЛЬКО ИМЯ РЕЖИМА. ИЗМЕРЕНО: прежде открытый
+            # режим печатал `blocked_actions` (пуст при `not_started`) и `missing_actions` — читатель
+            # видел, ЧТО режим открыт, но не видел, КАКИМ действием: открытое по `implemented` и вовсе
+            # не выглядело открытым, потому что не попадало ни в один из двух списков. Теперь по
+            # действию видно его состояние (`verified`/`not_applicable`/`implemented`/`not_started`),
+            # и «чем открыт режим» отвечается без догадок.
+            statuses = {a: (state or {}).get(a, "нет в строке") for a in actions}
+            not_closed = sorted(a for a in actions if statuses[a] not in CLOSING_STATUSES)
             open_modes.append({
                 "ref": ref,
                 "queue": mode.get("queue"),
                 "title": mode.get("title"),
                 "row_present": row is not None,
+                "action_statuses": statuses,
+                "not_closed_actions": not_closed,
                 "blocked_actions": blocked,
                 "missing_actions": missing,
                 "blocked_reason": blocked_reasons.get(blocked[0]) if blocked else None,
@@ -189,6 +207,14 @@ def evaluate_profile(root, profile_rel):
             })
 
     open_total = len(open_modes) + len(open_deps)
+    # РАСХОЖДЕНИЕ КАТАЛОГ/МАТРИЦА/ПРОФИЛЬ — ПРЕПЯТСТВИЕ ПОЛОЖИТЕЛЬНОМУ ВЕРДИКТУ, А НЕ ПРИМЕЧАНИЕ.
+    # ИЗМЕРЕНО 06.10.2026 (R5 повторного ревью): `open_total` равнялся нулю, а `problems` был
+    # непуст — шесть строк DRW стояли закрытыми в матрице при `current_level = mcp_implemented`
+    # в профиле. Прежняя редакция выводила вердикт ТОЛЬКО из `open_total`, поэтому печатала
+    # `COMPLETE` рядом с непустым `problems`, и потребитель читал ошибочные данные готовым
+    # выпуском. Правило: `COMPLETE` требует ОДНОВРЕМЕННО отсутствия открытого объёма И отсутствия
+    # расхождений; наличие любого из двух даёт `INCOMPLETE` с названной причиной.
+    verdict = "COMPLETE" if (open_total == 0 and not problems) else "INCOMPLETE"
     return {
         "profile_id": profile["meta"]["profile_id"],
         "profile_revision": profile["meta"].get("revision"),
@@ -203,7 +229,7 @@ def evaluate_profile(root, profile_rel):
         "deps_closed": len(closed_deps),
         "deps_open": open_deps,
         "open_total": open_total,
-        "verdict": "COMPLETE" if open_total == 0 else "INCOMPLETE",
+        "verdict": verdict,
         "problems": problems,
     }
 
@@ -244,7 +270,13 @@ def evaluate_release_scope(root):
         "profiles": profiles,
         "open": open_entries,
         "problems": problems,
-        "verdict": "COMPLETE" if all(p["verdict"] == "COMPLETE" for p in profiles)
+        # ТО ЖЕ ПРАВИЛО ДЛЯ ОБЪЕДИНЁННОГО ВЫПУСКА. `all(COMPLETE)` по профилям уже включает
+        # их расхождения (вердикт профиля их учитывает), но `problems` здесь склеивает их вместе
+        # с расхождениями уровня выпуска — и он обязан входить в вердикт, а не печататься рядом.
+        # Иначе объединённый вердикт мог бы дать `COMPLETE` при непустом `problems`, если
+        # расхождение возникло на уровне самого выпуска, минуя вердикты профилей.
+        "verdict": "COMPLETE" if (all(p["verdict"] == "COMPLETE" for p in profiles)
+                                  and not problems)
                    else "INCOMPLETE",
         # Совместимость прежнего формата: поля одиночного профиля указывают на ЯДРО, а не на сводку —
         # подмена знаменателя ядра расширенным составом запрещена нарядом.
@@ -456,6 +488,13 @@ def self_test():
     transport_ok = {"client_calls_observed": 435, "client_calls_foreign_pid": 0,
                     "tools_visible": 48, "tools_total": 48, "tools_invoked": 24}
     transport_bad = dict(transport_ok, client_calls_observed=0, tools_visible=0, tools_invoked=0)
+    # НАБОР (ж): объём объявлен закрытым, но прибор назвал расхождение. ВОСПРОИЗВОДИТ состояние
+    # сеанса 06.10.2026, из-за которого набор проходил: `open_total = 0`, а `problems` непуст,
+    # и вердикт печатался `COMPLETE`. Виновник — `mandatory_scope`: расхождение каталог/матрица/
+    # профиль относится к объёму, и объём обязан отказать, даже когда открытого объёма нет.
+    closed_with_problems = dict(
+        closed, problems=["example.mode: строка матрицы говорит закрыто, а профиль — "
+                          "'mcp_implemented'"], verdict="INCOMPLETE")
     clean_rows = {"PASS": 178, "N/A": 6}
     client_ok = {"status": "run", "verdict": "PASS"}
     client_fail = {"status": "run", "verdict": "FAIL"}
@@ -477,6 +516,8 @@ def self_test():
          clean_rows, closed, transport_ok, client_absent, "FAIL", "client_acceptance"),
         ("клиентская приёмка не передана в правило",
          clean_rows, closed, transport_ok, None, "FAIL", "client_acceptance"),
+        ("объём закрыт по открытым строкам, но прибор назвал расхождение (R5 06.10.2026)",
+         clean_rows, closed_with_problems, transport_ok, client_ok, "FAIL", "mandatory_scope"),
     ]
     failures = []
     for name, counts, scope, transport, client, expected, blamed in cases:
@@ -513,4 +554,10 @@ if __name__ == "__main__":
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     state = evaluate_release_scope(root)
     print(json.dumps(state, ensure_ascii=False, indent=2))
-    raise SystemExit(1 if state["problems"] else 0)
+    # КОД ВОЗВРАТА СЛЕДУЕТ ЗА ВЕРДИКТОМ, А НЕ ТОЛЬКО ЗА `problems`. ИЗМЕРЕНО 06.10.2026 (R5):
+    # прежде код был `1 if problems else 0`, и при непустом `problems` он совпадал с вердиктом
+    # случайно — вердикт выводился из одного `open_total`. После правки вердикт учитывает и
+    # расхождения, поэтому код берётся ИЗ НЕГО: расхождение «код 0 при INCOMPLETE» или
+    # «код 1 при COMPLETE» стало бы новым молчанием, заменяющим прежнее.
+    failing = state["verdict"] != "COMPLETE" or bool(state["problems"])
+    raise SystemExit(1 if failing else 0)

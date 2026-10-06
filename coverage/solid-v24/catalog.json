@@ -62,12 +62,12 @@
    "level": "отсутствие уровня у записи означает «не описано», а не «не поддержано» и не «verified»"
   },
   "counters": {
-   "families": 35,
-   "operations": 94,
+   "families": 36,
+   "operations": 99,
    "operations_as_bare_strings": 0,
-   "modes_and_variants": 209,
+   "modes_and_variants": 146,
    "operations_without_level": 0,
-   "modes_without_level": 84,
+   "modes_without_level": 31,
    "levels_out_of_vocabulary": [],
    "id_collision_operation_and_mode": []
   },
@@ -6688,6 +6688,183 @@
      "limitations": [
       "Размещение блока на листе (AutoPlacement, BlocksGabarits) сервером не задаётся и не проверяется — названо в unverified_aspects.",
       "Живого прогона не было: уровень mcp_implemented, не mcp_verified. Строка закрывается только после перечитывания текста в группе DRW."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "VM",
+   "title": "Внешние параметрические переменные детали и материал",
+   "classification": "required_auxiliary",
+   "level": "mcp_implemented",
+   "evidence": {
+    "documentation": "Проводная проверка справки SDK 24, 06.10.2026: 12 целевых страниц HTTP 200, отрицательный контроль ksvariablecollection_thisdoesnotexist → 404. Проверены: kspart_variablecollection, ksvariablecollection_getcount, ksvariablecollection_getbyindex, ksvariablecollection_getbyname, ksvariablecollection_addnewvariable, ksvariable_name, ksvariable_value, ksvariable_expression, kspart_rebuildmodel, kspart_setmaterial, kspart_material, kspart_getdensity. Артефакт: scratch/docs-wire-20261006-vm/all-pages.txt",
+    "metadata": "Сканер tools/KompasMcp.InteropScan по поставленным обёрткам 24.0.0.2799, 06.10.2026: ksVariable (29 членов: name только get, value/Expression set+get, external, linkDocName, linkVarName, Pseudonym, note, parameterNote, Information, SetLink), ksVariableCollection (10: GetCount/GetByIndex/GetByName/AddNewVariable/First/Last/Next/Prev/RemoveVariable/refresh), ksPart (86: VariableCollection, SetMaterial(String,Double), material, get_density, RebuildModel, RebuildModelEx, Update). Артефакт: scratch/interop-20261006-vm/",
+    "runtime": "живой прогон группы VM (--variables-material-only) выполнен на бинарях поставки; материал и плотность назначены и перечитаны, переменные эталона прочитаны и изменены, объём 80000 → 160000 мм³. Уровень семейства оставлен mcp_implemented: режимы материала ОТКРЫТЫ, потому что единица чтения плотности не подтверждена документом"
+   },
+   "route": "API5: ksPart.VariableCollection → ksVariableCollection.GetCount/GetByIndex/GetByName(name, testFullName, testIgnoreCase) → ksVariable.name (только чтение), value (double), Expression (строка); применение — ksPart.RebuildModel. Материал: ksPart.material (только чтение), ksPart.GetDensity (справка называет г/куб.мм, ИЗМЕРЕНО г/куб.см), ksPart.SetMaterial(name, плотность в г/куб.см) + ksPart.Update. Создание переменных этим маршрутом НЕ документировано: AddNewVariable допускает добавление только для ksFeature/IFeature.",
+   "mcp_support": "kompas_list_variables / kompas_set_variable (режимы value и expression) / kompas_get_material / kompas_set_material; масса — существующий kompas_measure с переданной плотностью (сквозная проверка VM-06), родного маршрута массы блок не объявляет",
+   "next_step": "Живой прогон группы VM (--variables-material-only) на бинарях поставки и хранение доказательств в scratch/vm-runs/<run>/: чтение обеих известных переменных, изменение управляющей величины с проверкой объёма, выражение, две пары материал+плотность, save → close → reopen ДО всякой повторной записи, масса через measure, дедупликация по operation_id и отказы.",
+   "documentation_gaps_named": [
+    "Справка НЕ называет поля/свойства, различающего переменную с активным выражением и без него: has_expression выводится сервером из прочитанной строки Expression и называется производным признаком, а не полем API.",
+    "Справка НЕ документирует числовой идентификатор типа переменной по этому маршруту: поля IVariable7.VariableType/VariableID в обёртке ЕСТЬ, но справкой они здесь не подтверждены и в требования не берутся.",
+    "Справка НЕ даёт умолчания плотности по имени материала: сервер плотность не угадывает и из справочника не подставляет.",
+    "Единица измерения GetDensity возвращается справкой только цитатой («плотность (г/куб.мм)»): машинного признака единицы интерфейс не публикует, поэтому сервер называет единицу текстом. ИЗМЕРЕНО на установленной сборке: значение численно равно плотности в г/куб.см (сталь 7850 кг/м³ читается как 7.85, а не 0.00785) — справка расходится с ядром в 1000 раз, и расхождение названо, а не сглажено."
+   ],
+   "operations": [
+    {
+     "id": "VM-01.variables.read",
+     "name": "Прочитать внешние переменные верхнего компонента детали",
+     "level": "mcp_implemented",
+     "doc_source": [
+      "kspart_variablecollection",
+      "ksvariablecollection_getcount",
+      "ksvariablecollection_getbyindex",
+      "ksvariablecollection_getbyname",
+      "ksvariable_name",
+      "ksvariable_value",
+      "ksvariable_expression"
+     ],
+     "interfaces": {
+      "api5": [
+       "IPart.VariableCollection() → ksVariableCollection (LPVARIABLECOLLECTION VariableCollection())",
+       "ksVariableCollection.GetCount() → long; GetByIndex(long index) → ksVariable",
+       "ksVariableCollection.GetByName(BSTR name, BOOL testFullName, BOOL testIgnoreCase) → ksVariable",
+       "ksVariable.name (BSTR, только чтение), ksVariable.value (double), ksVariable.Expression (BSTR)"
+      ],
+      "api7": [
+       "IVariableTable — ДРУГАЯ функция (таблица переменных), в этом маршруте не используется"
+      ]
+     },
+     "route": "справка kspart_variablecollection: «Получить указатель на интерфейс массива внешних переменных… указатель на интерфейс ksVariableCollection или IVariableCollection»; примечание: «Изменения в полученном массиве не отображаются в модели немедленно. Чтобы изменения вступили в силу, необходимо вызвать метод RebuildModel». ksvariablecollection_getbyname: «testFullName — признак полного имени: TRUE — name — полное имя, FALSE — имя name может быть частью полного имени; testIgnoreCase — признак игнорирования регистра символов имени». ksvariable_name: «Свойство только для чтения». ksvariable_expression: «позволяет получить или задать строковое выражение для расчета значения переменной».",
+     "mcp_support": "kompas_list_variables — только чтение, без expected_revision и без operation_id; ревизию не меняет. Поле scope отвечает external/top_part; непрочитанное поле остаётся null с причиной, а недоступная коллекция — именованный отказ, а не пустой список.",
+     "modes": [],
+     "limitations": [
+      "Область — ВНЕШНИЕ переменные верхнего компонента, а НЕ полный редактор параметров модели: так называть коллекцию запрещено и в описании, и в требованиях.",
+      "Поиск «ровно по имени» использует GetByName(name, TRUE, FALSE); подстрочный режим (testFullName = FALSE) в инструмент НЕ выводится — он вернул бы ДРУГУЮ переменную, и запись попала бы не в тот объект.",
+      "Признак активного выражения справкой не назван: has_expression — производный признак из строки Expression, и это прямо помечено в diagnostics.",
+      "Создание переменной в коллекции верхнего ksPart маршрутом AddNewVariable НЕ документировано (допускается только для ksFeature/IFeature) и в объём блока не входит."
+     ]
+    },
+    {
+     "id": "VM-02.variable.set_value",
+     "name": "Изменить числовое значение внешней переменной",
+     "level": "mcp_implemented",
+     "doc_source": [
+      "ksvariable_value",
+      "ksvariablecollection_getbyname",
+      "kspart_rebuildmodel"
+     ],
+     "interfaces": {
+      "api5": [
+       "ksVariable.value (prop Double value, set_value(Double)/get_value())",
+       "ksPart.RebuildModel() → BOOL"
+      ]
+     },
+     "route": "справка ksvariable_value: «Тип данных: double… iVariable.value = value — Установить свойство». kspart_rebuildmodel: «TRUE — в случае успешного завершения. Примечание: Если изменены значения внешних переменных компонента, то они будут переданы в модель». Порядок инструмента: проверка документа/ревизии/наличия переменной → запись value → RebuildModel → ПЕРЕЧИТЫВАНИЕ значения из вновь полученной коллекции.",
+     "mcp_support": "kompas_set_variable (одно из value/expression строго обязательно, ровно одно). Режим value ОТКЛОНЯЕТ переменную с непустым выражением и возвращает текущее выражение. Возврат RebuildModel не считается подтверждением: подтверждение — перечитанное значение и независимое измерение.",
+     "modes": [],
+     "limitations": [
+      "Размерность значения — собственная размерность переменной; сервер её не переводит и не выводит из имени.",
+      "Запись value поверх активного выражения отклоняется до COM: уничтожение выражения молча запрещено.",
+      "Подтверждение результата независимым измерением объёма/габарита — предмет приёмочной строки VM-02, а не модульного теста: без живого прогона строке остаётся implemented."
+     ]
+    },
+    {
+     "id": "VM-03.variable.set_expression",
+     "name": "Задать выражение внешней переменной",
+     "level": "mcp_implemented",
+     "doc_source": [
+      "ksvariable_expression",
+      "kspart_rebuildmodel"
+     ],
+     "interfaces": {
+      "api5": [
+       "ksVariable.Expression (prop String Expression, set_Expression(String)/get_Expression())",
+       "ksPart.RebuildModel() → BOOL"
+      ]
+     },
+     "route": "справка ksvariable_expression: «Свойство позволяет получить или задать строковое выражение для расчета значения переменной»; kspart_rebuildmodel применяет изменение к модели. Выражение считает ЯДРО КОМПАС; сервер строку не исполняет и собственным вычислителем не заменяет.",
+     "mcp_support": "kompas_set_variable (mode=expression). Пустая строка снимает выражение. После RebuildModel значение и выражение перечитываются; недопустимое выражение и неудачное перестроение называются по имени с перечислением частичных последствий.",
+     "modes": [],
+     "limitations": [
+      "Собственный вычислитель выражений сервер НЕ содержит и строку как код (C#/Python/PowerShell) НЕ исполняет.",
+      "Справка не публикует перечень допустимых имён и функций выражения: недопустимое выражение даёт отказ ядра, который передаётся вызывающему без «исправления» выражения за клиента.",
+      "Утверждение «выражение применено» требует не только совпадения строки, но и изменения зависимой величины — предмет приёмочной строки VM-03."
+     ]
+    },
+    {
+     "id": "VM-04.material.read",
+     "name": "Прочитать материал и плотность верхнего компонента детали",
+     "level": "mcp_implemented",
+     "doc_source": [
+      "kspart_material",
+      "kspart_getdensity"
+     ],
+     "interfaces": {
+      "api5": [
+       "ksPart.material (prop String material, get_material()) — только чтение",
+       "ksPart.GetDensity() → double — справка «плотность (г/куб.мм)», 0 при неудаче; ИЗМЕРЕНО: значение, согласованное с г/куб.см"
+      ]
+     },
+     "route": "справка kspart_material: «Данное свойство доступно только для чтения. Обозначение материала можно получить только у детали». kspart_getdensity: «плотность (г/куб.мм) — в случае успешного завершения, 0 — в случае неудачи (если компонент — не деталь)». Оба чтения выполняются РАЗДЕЛЬНО.",
+     "mcp_support": "kompas_get_material: имя материала и СЫРАЯ плотность читаются раздельно; сырое показание отдаётся полем density_raw вместе с документированной страницей единицей и статусом unconfirmed, а нормализованное значение не публикуется.",
+     "modes": [],
+     "limitations": [
+      "ЕДИНИЦА ПЛОТНОСТИ ЧТЕНИЯ НЕ ПОДТВЕРЖДЕНА ДОКУМЕНТОМ: справка называет возврат GetDensity «(г/куб.мм)», а ядро отдаёт значение, согласованное с г/куб.см; официального источника г/куб.см нет. Разные единицы у SetMaterial и GetDensity противоречием справки НЕ являются — противоречие в опыте между ДОКУМЕНТИРОВАННОЙ единицей чтения и наблюдаемым результатом. Поэтому сырое показание публикуется (density_raw), единица страницы названа (density_raw_unit_documented=g/mm3), статус — unconfirmed, а нормализованная плотность (density_normalized_kg_per_m3) НЕ заполняется.",
+      "Ноль от GetDensity — документированный признак НЕУДАЧИ, а не измеренная нулевая плотность: полем плотности он не подменяется, и плотность из справочника сервера не подставляется.",
+      "Имя и плотность читаются РАЗДЕЛЬНО: успешное чтение имени не означает успешного чтения плотности."
+     ]
+    },
+    {
+     "id": "VM-05.material.write",
+     "name": "Назначить материал и плотность верхнего компонента детали",
+     "level": "mcp_implemented",
+     "doc_source": [
+      "kspart_setmaterial",
+      "kspart_update"
+     ],
+     "interfaces": {
+      "api5": [
+       "ksPart.SetMaterial(BSTR name, double density) → BOOL — density «(г/куб.см)»",
+       "ksPart.Update() → BOOL"
+      ]
+     },
+     "route": "справка kspart_setmaterial: «density — плотность материала (г/куб.см)», примечания: «1. Компонент, у которого меняется материал, должен быть деталью. 2. Компонент не должен быть деталью из библиотеки моделей или стандартным элементом. 3. Метод используется в детали для верхнего компонента, в сборках — для вставленных деталей. 4. Изменение материала вступает в силу после вызова метода ksPart::Update».",
+     "mcp_support": "kompas_set_material: SetMaterial(name, плотность в документированных г/куб.см) → Update → перечитывание имени и СЫРОЙ плотности. Подтверждены имя и исходы вызовов; физическая плотность названа неподтверждённой. Перевод кг/м³ → г/см³ — DensityUnits.",
+     "modes": [],
+     "limitations": [
+      "ПОДТВЕРЖДЕНЫ имя материала и исходы вызовов SetMaterial/Update; ФИЗИЧЕСКАЯ плотность НЕ подтверждена: единица чтения не установлена (см. VM-04.material.read), поэтому перечитанное сырое значение сравнивается с записанным только как ЧИСЛОВОЕ равенство (density_raw_numeric_matches — диагностика, а не подтверждение). Ответ отделяет подтверждённое от неподтверждённого: density_unit_status=unconfirmed, density_normalized_kg_per_m3=null.",
+      "Ноль от GetDensity — документированный признак НЕУДАЧИ, а не измеренная нулевая плотность.",
+      "Плотность задаётся ЯВНО и по имени материала не выводится: справочник материалов в объём не входит.",
+      "Деталь из библиотеки моделей и стандартный элемент — документированный запрет SetMaterial; отдельной проверки этого класса в блоке нет, запрет назван в описании инструмента."
+     ]
+    },
+    {
+     "id": "VM-06.mass.computed_via_measure",
+     "name": "Масса, вычисленная по измеренному объёму и прочитанной плотности (сквозная проверка существующего measure), — НЕ родной маршрут КОМПАС",
+     "level": "mcp_implemented",
+     "doc_source": [
+      "kspart_getdensity",
+      "kspart_material"
+     ],
+     "interfaces": {
+      "api5": [
+       "ksPart.GetDensity() → double — источник плотности (kspart_getdensity.html называет г/куб.мм; ИЗМЕРЕНО г/куб.см)",
+       "объём берётся существующим измерительным маршрутом (kompas_measure), а не этим маршрутом"
+      ],
+      "note": [
+       "РОДНОГО МАРШРУТА МАССЫ ЗДЕСЬ НЕТ И НЕ ЗАЯВЛЯЕТСЯ: подраздел справки IPart, документирующий готовое свойство массы, в этом блоке не читался, и операция его не объявляет"
+      ]
+     },
+     "route": "Масса НЕ читается из модели: сервер берёт объём из независимого измерения (существующий kompas_measure) и плотность из ответа kompas_get_material, после чего считает массу сам по формуле кг = мм³ × 1e-9 × кг/м³ (DensityUnits.MassKg). Согласованность подтверждается совпадением вычисленного значения с эталоном тестовой геометрии, а не родным свойством ядра. Что именно доказывает такая проверка: согласованность плотности и геометрии, а также единство единиц. Чего она НЕ доказывает: что ядро считает массу тем же способом — оно массу не сообщает.",
+     "mcp_support": "kompas_get_material (плотность) + kompas_measure с параметром density_kg_per_m3 (объём и масса); нового инструмента операция не заводит",
+     "modes": [],
+     "limitations": [
+      "ПРОВЕРКА ЗАВИСИТ ОТ СУЩЕСТВУЮЩЕГО ИНСТРУМЕНТА kompas_measure: отказ measure делает строку непроверяемой, и это названо, а не замаскировано.",
+      "Плотность НЕ угадывается и НЕ берётся из справочника сервера: она приходит из ответа kompas_get_material.",
+      "Совпадение массы с эталоном подтверждает согласованность, но не метод ядра: сервер считает массу сам.",
+      "Эталонная геометрия строки приёмки — прямоугольник 100×80 с глубиной 10 → 20 мм (объём 80000 → 160000 мм³); при 7850 кг/м³ масса 0.628 → 1.256 кг. Эти числа — АНАЛИТИЧЕСКАЯ геометрия теста, а не измеренные величины прогона."
      ]
     }
    ]

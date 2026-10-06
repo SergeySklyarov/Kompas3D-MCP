@@ -8,7 +8,7 @@
      Источник - src/KompasMcp.Host/Catalog/ToolCatalog.cs. -->
 
 <!-- BEGIN TOOL LISTING -->
-Всего инструментов: 70.
+Всего инструментов: 78.
 
 | Инструмент | Назначение | Что делает |
 |---|---|---|
@@ -69,11 +69,19 @@
 | `kompas_export_image` | Снимок модели | Растровый снимок документированным маршрутом API5: ksDocument3D.RasterFormatParam → ksRasterFormatParam → SaveAsToRasterFormat. |
 | `kompas_create_drawing_views` | Создать стандартные виды чертежа | Строит группу стандартных ассоциативных видов модели документированным маршрутом API7: IDrawingDocument.ViewsAndLayersManager → IViews.AddStandartViews(FileName, ProjectionName, ProjectionsTypes, X, Y, Scale, DX, DY) (справка v24:… |
 | `kompas_list_drawing_views` | Перечень видов чертежа | Читает виды чертежа через IDrawingDocument.ViewsAndLayersManager.Views: номер, имя, тип, масштаб, координаты точки привязки и - для ассоциативных видов - файл-источник, имя проекции, видимость скрытых и осевых линий, число объектов. |
+| `kompas_list_dimensions` | Перечень размеров вида чертежа | Читает размеры выбранного вида через ISymbols2DContainer, полученный из IView: LineDimensions, RadialDimensions, DiametralDimensions (справка v24: isymbols2dcontainer.html). |
 | `kompas_add_dimension` | Поставить размер на виде | Линейный, радиальный или диаметральный размер в выбранном виде через ISymbols2DContainer (справка v24: isymbols2dcontainer.html), полученный из IView: LineDimensions.Add(), RadialDimensions.Add(), DiametralDimensions.Add() - каждый Add()… |
 | `kompas_set_title_block` | Заполнить основную надпись | Записывает значения в ячейки основной надписи через ILayoutSheet.Stamp → IStamp (справка v24: ilayoutsheet_stamp.html, istamp_text.html, itext_str.html): IStamp.Text(Id) ВОЗВРАЩАЕТ IText (чтение - не установщик), запись идёт через… |
 | `kompas_export_drawing` | Выгрузить чертёж в DXF или DWG | Экспорт чертежа документированным маршрутом конвертера: IApplication.Converter → IConverter.GetFilter(docType, saveAs, out command) → IConverter.Convert(InputFile, Outfile, Command, ShowParam) (справка v24: iapplication_converter.html,… |
 | `kompas_edit_view` | Изменить вид чертежа | Изменяет СУЩЕСТВУЮЩИЙ вид документированными записываемыми свойствами: масштаб (IView.Scale) и точку привязки (IView.X / IView.Y). |
+| `kompas_rebuild_drawing_views` | Перестроить чертёж после изменения модели | Перестраивает чертёж документированным маршрутом API7, чтобы ассоциативный вид заново построил проекцию из изменённой модели: IDrawingDocument приводится к IKompasDocument2D1, вызывается RebuildDocument() (справка v24:… |
 | `kompas_set_technical_demand` | Записать технические требования чертежа | Пишет блок технических требований документированным маршрутом API7: IDrawingDocument.TechnicalDemand → ITechnicalDemand.Text (read-only свойство, отдающее интерфейс IText) → IText.Str (запись) → ITechnicalDemand.Update() («применить… |
+| `kompas_get_title_block` | Прочитать ячейки основной надписи | ЧИТАЕТ ячейки основной надписи и НИЧЕГО не записывает: IStamp.Text(Id) - свойство только для чтения, отдающее IText, а IText.Str читается без изменения (справка v24: istamp_text.html, itext_str.html). |
+| `kompas_get_technical_demand` | Прочитать технические требования | ЧИТАЕТ блок технических требований и НИЧЕГО не записывает: IDrawingDocument.TechnicalDemand → ITechnicalDemand.Text (свойство только для чтения, отдающее IText) → IText.Str (чтение); IsCreated - «отображение технических требований в… |
+| `kompas_list_variables` | Внешние переменные детали | ЧИТАЕТ внешние параметрические переменные ВЕРХНЕГО компонента детали и ничего не записывает: IPart.VariableCollection() отдаёт «указатель на интерфейс массива внешних переменных», перечисление - GetCount()/GetByIndex(), чтение -… |
+| `kompas_set_variable` | Изменить внешнюю переменную | МЕНЯЕТ значение ИЛИ выражение одной внешней переменной детали, адресуя её ТОЧНЫМ именем. |
+| `kompas_get_material` | Материал и плотность детали | ЧИТАЕТ обозначение материала верхнего компонента детали и СЫРОЕ показание плотности: ksPart.material (свойство ТОЛЬКО ДЛЯ ЧТЕНИЯ, и справка прямо говорит «Обозначение материала можно получить только у детали») и ksPart.GetDensity()… |
+| `kompas_set_material` | Назначить материал и плотность | НАЗНАЧАЕТ материал и плотность верхнего компонента детали: ksPart.SetMaterial(name, density) и затем обязательный ksPart.Update («Изменение материала вступает в силу после вызова метода ksPart::Update»), после чего имя и плотность… |
 | `kompas_probe_units` | Замер единиц | Строит известную геометрию и возвращает сырые показания всех измерительных вызовов. |
 | `kompas_read_topology` | Топология тела | Грани и рёбра из конечного тела (GetMainBody→FaceCollection→EdgeCollection), а не из EntityCollection: коллекция рёбер модели содержит эскизные и служебные контуры. |
 | `kompas_resolve_selection` | Однозначный выбор | Структурный предикат по граням тела. |

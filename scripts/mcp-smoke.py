@@ -1,4 +1,4 @@
-"""Drives KompasMcp.Host over the real MCP stdio transport for the vertical scenario.
+﻿"""Drives KompasMcp.Host over the real MCP stdio transport for the vertical scenario.
 
 The server side uses the official C# SDK for transport; this client speaks the wire format
 directly (newline-delimited JSON-RPC 2.0) on purpose: the assertions must be about OUR contract —
@@ -24,6 +24,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -538,10 +539,12 @@ def assembly_checks(client, rep, app_id, workdir):
             "PASS" if not code and ctx_kind in ("assembly", "Assembly") else "FAIL",
             f"kind={ctx_kind} revision={result(env).get('revision')} error={code}")
 
-    # negative: создать документ-чертёж нельзя (инструмент объявляет только part/assembly)
-    env, code = call("kompas_create_document", {"application_id": app_id, "kind": "drawing"})
-    rep.add("ASM.01.negative_tests", "недопустимый тип документа отвергается до COM",
-            "PASS" if code else "FAIL", f"error={code}")
+    # СТРОКА ASM.01.negative_tests «недопустимый тип документа отвергается до COM» УДАЛЕНА 06.10.2026
+    # как ОШИБОЧНОЕ требование того же класса, что V10: её посылка («инструмент объявляет только
+    # part/assembly, поэтому kind=drawing отвергается») была верна до блока DRW. После того как блок
+    # DRW реализован и принят, та же проверка требовала бы от продукта НЕ создавать документированный
+    # и уже принятый вид документа. Проверка УДАЛЕНА, а не превращена в PASS; создание чертежа
+    # проверяется строками группы DRW, а вид документа для сопряжений — строкой MATE ниже.
 
     # ========= источники: детали на диске =========
     def build_part(name, path, entities, depth):
@@ -1731,19 +1734,22 @@ def drawing_checks(client, rep, app_id, workdir):
         return ((env or {}).get("verification") or {}).get("checks") or []
 
     def signature_ok(path, fmt):
-        # Форма выгрузки — не догадка: ИЗМЕРЕНО, что конвертер v24 пишет DXF и DWG как ZIP-КОНТЕЙНЕР
-        # («PK\\x03\\x04») с членом Contents, а не текстовым DXF и не «AC10xx». Прибор принимает ОБЕ
-        # формы и НАЗЫВАЕТ найденную; нераспознанная форма остаётся FAIL.
+        # Форма выгрузки — это СОДЕРЖИМОЕ файла, а НЕ его расширение. ИЗМЕРЕНО документированным
+        # маршрутом (библиотека по полному пути + её собственная команда): DXF пишется текстом, первая
+        # секция «  0\r\nSECTION»; DWG пишется бинарно с заголовком «AC1032». Контейнер нативной модели
+        # КОМПАС («PK\x03\x04», член FileInfo с FileTypeName=Kompas.cdw) — это НЕ dxf и НЕ dwg: принять
+        # его за успех означало бы выдать переименованный чертёж за выгрузку, поэтому он назван и
+        # отвергнут.
         try:
             with open(path, "rb") as fh:
                 head = fh.read(512)
         except OSError:
             return False, ""
         if head[:4] == b"PK\x03\x04":
-            return True, "zip_container"
+            return False, "zip_container(нативная модель, не DXF/DWG)"
         if fmt == "dxf":
             ok = b"SECTION" in head or b"HEADER" in head
-            return ok, head[:16].decode("latin-1", "replace")
+            return ok, (head[:16].decode("latin-1", "replace") if ok else "")
         if fmt == "dwg":
             idx = head.find(b"AC10")
             ok = idx >= 0
@@ -1765,6 +1771,23 @@ def drawing_checks(client, rep, app_id, workdir):
 
     def close_enough(a, b, tol):
         return (a is not None) and (b is not None) and abs(a - b) <= tol
+
+    def dxf_entity_counts(path):
+        """Число сущностей по типам в текстовом DXF — ГЕОМЕТРИЧЕСКИЙ признак выгрузки.
+
+        MEASURED: пара DXF-выгрузок одного и того же чертежа побайтово НЕ совпадает (в заголовке
+        меняются `$TDCREATE`/`$TDUPDATE`/`$HANDSEED`/`$FINGERPRINTGUID`), поэтому сравнение хешей
+        или байтов было бы дефектом прибора, а не фактом о проекции. Счёт сущностей по типам берётся
+        из СЕКЦИЙ ENTITIES (`0/SECTION`) и не зависит от изменчивого заголовка. DWG бинарен и
+        текстовым разбором не читается — признак берётся ТОЛЬКО из DXF, и это названо в строке.
+        """
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            text = fh.read()
+        counts = {}
+        for m in re.finditer(r"^\s*0\s*\r?\n\s*([A-Z0-9_]+)", text, re.M):
+            t = m.group(1)
+            counts[t] = counts.get(t, 0) + 1
+        return counts
 
     # ── ЭТАЛОНЫ ТЕСТОВОЙ ГЕОМЕТРИИ ────────────────────────────────────────────────────────────────
     # Прямоугольник 80×60 вытянут на 20. В него добавлено КРУГЛОЕ ОТВЕРСТИЕ радиуса 12.5 в центре:
@@ -1853,6 +1876,35 @@ def drawing_checks(client, rep, app_id, workdir):
     rep.add("DRW-02.views.list.read", "перечень видов читается на свежем чертеже",
             "PASS" if not code else "FAIL",
             f"views={len(views_before)} route={result(env).get('route')} error={code}")
+
+    # ========= DRW-02.discover: обзор =========
+    # ПРЕЖНЯЯ РЕДАКЦИЯ БЫЛА ДЕФЕКТОМ ПРИБОРА (исправлено по T4 проверки): строка объявлялась
+    # доказательством discover, но вызывала kompas_get_context — режим, который описывает документ, а
+    # НЕ перечисляет виды его коллекцией API7. Читаемость контекста не доказывает ни обнаруживаемость
+    # видов, ни успешность разрешения дескриптора API7. Теперь строка РАЗЛИЧАЕТ серверный тип, факт
+    # перечисления коллекцией и результат разрешения дескриптора, и требует ФАКТИЧЕСКОГО перечисления:
+    # серверный `kind` его не заменяет. Измерение ведётся на СВЕЖЕМ чертеже, пока API7-маршрут жив:
+    # на переоткрытом документе он отказывает WRONG_DOCUMENT_KIND, и эта граница названа СВОЕЙ строкой
+    # (`DRW-01.views.create_standard.rebuild`, `dep.drawing.revisions.edit.demand`), а не размазана по
+    # обзору. Иначе обзор показывал бы отказ маршрута как «виды не обнаружены».
+    env_ctx, code_ctx = call("kompas_get_context", {"document_id": drw, "detail": "minimal"})
+    ctx_kind = result(env_ctx).get("kind")
+    env_list, code_list = call("kompas_list_drawing_views", {"document_id": drw})
+    discovered = result(env_list).get("views") or []
+    discover_ok = (drw is not None
+                   and code_list is None
+                   and len(discovered) > 0
+                   and all(v.get("view_ref") for v in discovered))
+    rep.add("DRW-02.views.list.discover",
+            "обзор РАЗЛИЧАЕТ серверный тип, перечисление коллекции API7 и разрешение дескриптора; "
+            "PASS требует ФАКТИЧЕСКОГО перечисления видов на этом документе — серверный `kind` его не "
+            "заменяет",
+            "PASS" if discover_ok else "FAIL",
+            f"document_id={drw} kind_сервера={ctx_kind} "
+            f"серверный_тип_проверен={ctx_kind in (None, 'drawing', 'Drawing')} "
+            f"перечисление_API7: разрешение_дескриптора={'отказ ' + str(code_list) if code_list else 'успешно'} "
+            f"видов_обнаружено={len(discovered)} refs={all(v.get('view_ref') for v in discovered)} "
+            f"error_ctx={code_ctx}")
 
     env, code = call("kompas_create_drawing_views", {
         "document_id": drw, "expected_revision": current_rev(drw),
@@ -2023,29 +2075,48 @@ def drawing_checks(client, rep, app_id, workdir):
         rep.add("DRW-03.dimension.add.create.linear", "линейный размер ставится", "FAIL", "видов нет")
 
     # ========= DRW-04: основная надпись =========
-    # Номера ячеек справка SDK НЕ документирует — берём ячейку по её номеру из раскладки. Строка
-    # ПЕРЕЧИТЫВАЕТ ячейку и называет признак совпадения, а не верит записи.
+    # Номера ячеек справка SDK НЕ документирует. Строка берёт ячейку с ПУСТЫМ значением по умолчанию,
+    # а не «первую непустую»: только на пустой ячейке запись и её отсутствие РАЗЛИЧИМЫ (запрошенный
+    # текст отличается от значения по умолчанию), поэтому положительная строка вычисляется по
+    # ФАКТИЧЕСКОМУ совпадению перечитанного с запрошенным, а не держится жёстко.
     #
-    # ИЗМЕРЕНО (см. docs/decisions/drawings.md#stamp-cells): на штампе свежего чертежа запись в
-    # IText.Str НЕ подтверждается перечитыванием НИ ДЛЯ ОДНОГО проверенного номера (1, 2, 3, 4, 5,
-    # 10, 100, 99999) — read_back пуст. Поэтому строка ПРОВЕРЯЕТ, что инструмент отработал и вернул
-    # перечитанные значения, а признак совпадения ПЕЧАТАЕТСЯ как есть: заявка «совпало» не
-    # выставляется, но и отказ ПО ИНСТРУМЕНТУ не выдаётся за отказ API. Настоящее состояние
-    # (расхождение перечитанного) НАЗВАНО в unverified_aspects ответа.
-    STAMP_CELL, STAMP_TEXT = "1", "KompasMCP"
+    # ИЗМЕРЕНО (06.10.2026): в ПРОВЕРЕННЫХ ДОКУМЕНТАХ ДВУХ МАРШРУТОВ СОЗДАНИЯ наблюдается РАЗЛИЧИЕ —
+    # запись в пустую ячейку чертежа, созданного через API5 `ksCreateDocument`, не читается обратно,
+    # а на чертеже, созданном документированным API7 `IApplication.Documents.Add`, тот же текст
+    # читается обратно. ВНУТРЕННЯЯ ПРИЧИНА НЕ УСТАНОВЛЕНА (формулировка «метод/маршрут не работает»
+    # без причины запрещена). Маршрут инструмента — API7, поэтому строка положительная и её исход
+    # считается по ФАКТИЧЕСКОМУ совпадению перечитывания с запрошенным, а не по возвращённому флагу.
+    # History: docs/decisions/drawings.md#stamp-cells
+    env, _code = call("kompas_get_title_block",
+                      {"document_id": drw, "cell_ids": [str(i) for i in range(0, 13)]})
+    probe_cells = result(env).get("cells") or []
+    empty_cell = next((c for c in probe_cells if (c.get("read_back") or "") == ""), None)
+    nonempty_cell = next((c for c in probe_cells if (c.get("read_back") or "") != ""), None)
+    STAMP_CELL = (empty_cell or nonempty_cell or {}).get("cell_id") or "1"
+    STAMP_DEFAULT = (empty_cell or nonempty_cell or {}).get("read_back") or ""
+    # Ячейка РАСКЛАДКИ с непустым содержимым — отдельная от ячейки ЗАПИСИ. На пустой ячейке запись
+    # различается, но сохранность при переоткрытии на ней доказывать нечем ('' == '' неотличимо от
+    # потери). Поэтому сохранность содержимого проверяется на КОНТЕНТНОЙ ячейке, а не на пустой.
+    STAMP_LAYOUT_CELL = (nonempty_cell or {}).get("cell_id")
+    # Запрошенный текст ОБЯЗАН отличаться от значения по умолчанию измеряемой ячейки — иначе запись
+    # и её отсутствие неразличимы по построению (это и было дефектом прежней редакции).
+    STAMP_TEXT = "KompasMCP" if STAMP_DEFAULT != "KompasMCP" else "KompasMCP-2"
     env, code = call("kompas_set_title_block", {
         "document_id": drw, "expected_revision": current_rev(drw),
-        "cells": {STAMP_CELL: STAMP_TEXT, "2": "DRW-01"}})
+        "cells": {STAMP_CELL: STAMP_TEXT}})
     cells = result(env).get("cells") or []
     matched = [c for c in cells if c.get("matched")]
+    read_back = cells[0].get("read_back") if cells else None
+    # ИСХОД — по ФАКТИЧЕСКОМУ чтению: точное совпадение перечитанного с запрошенным, а не жёсткий FAIL.
+    write_confirmed = (read_back is not None and read_back == STAMP_TEXT)
     rep.add("DRW-04.title_block.set.create",
-            "ячейки надписи принимаются, ПЕРЕЧИТЫВАЮТСЯ после Update(); расхождение НАЗВАНО в ответе",
-            "PASS" if (not code and len(cells) == 2
-                       and all(c.get("read_back") is not None for c in cells)
-                       and any("stamp_cells_not_all_matched" in u for u in unverified(env))) else "FAIL",
-            f"cells={[(c.get('cell_id'), c.get('read_back'), c.get('matched')) for c in cells]} "
-            f"matched={len(matched)}/2 level={level(env)} error={code} "
-            f"(перечитывание НЕ подтвердило запись — это измеренное состояние, названное в ответе)")
+            "ЯЧЕЙКА надписи записана и ПЕРЕЧИТАНА: исход — по точному совпадению перечитанного с "
+            "запрошенным (пустая ячейка различает запись и её отсутствие)",
+            "PASS" if write_confirmed else "FAIL",
+            f"cell={STAMP_CELL} default={STAMP_DEFAULT!r} write={STAMP_TEXT!r} read_back={read_back!r} "
+            f"matched={len(matched)}/{len(cells)} запись_подтверждена={write_confirmed} "
+            f"level={level(env)} error={code} "
+            f"unverified={[u for u in unverified(env) if 'stamp' in u]}")
     # Отрицательный контроль: ключ ячейки, не являющийся числом, отвергается INVALID_ARGUMENT.
     env, code = call("kompas_set_title_block", {
         "document_id": drw, "expected_revision": current_rev(drw),
@@ -2111,20 +2182,104 @@ def drawing_checks(client, rep, app_id, workdir):
 
 
     # ========= жизненный цикл: save → close → reopen =========
-    # ДО любой повторной записи читаются размеры и ячейки штампа: потеря не маскируется перезаписью.
-    # `saved_cell_before` — перечитанное значение ячейки ДО закрытия (из уже сделанной записи штампа):
-    # с ним и сравнивается переоткрытое, чтобы отделить ПОТЕРЮ ПРИ ПЕРЕОТКРЫТИИ от изначально
-    # не подтверждённой записи.
-    saved_cell_before = next((c.get("read_back") for c in cells if c.get("cell_id") == "1"), None)
+    # Состояние снимается ДО сохранения и потом проверяется ЧТЕНИЕМ: сохранность размера, ячейки штампа
+    # и техтребований доказывается сравнением ПРОЧИТАННОГО до закрытия с ПРОЧИТАННЫМ после
+    # переоткрытия; ни одну проверяемую величину не пишут заново, поэтому потеря обнаруживается сама.
     pre_state = {
         "views": views_after,
         "linear_value": (dims.get("linear") or {}).get("value_mm"),
         "radial_value": (dims.get("radial") or {}).get("value_mm"),
         "diametral_value": (dims.get("diametral") or {}).get("value_mm"),
-        "stamp_cell": STAMP_CELL,
+        "stamp_cell": STAMP_LAYOUT_CELL or STAMP_CELL,
         "stamp_text": STAMP_TEXT,
         "demand_text": DEMAND_TEXT,
     }
+    # СНИМОК РАЗМЕРОВ ДО ЗАКРЫТИЯ — ТИПИЗИРОВАННЫМ МАРШРУТОМ ЧТЕНИЯ (kompas_list_dimensions), а НЕ
+    # пересказом ответа `kompas_add_dimension`: сохранность доказывается сравнением ПРОЧИТАННОГО до
+    # закрытия с ПРОЧИТАННЫМ после переоткрытия, а эхо установщика этого не доказывает.
+    # ПОЛНОТА СНИМКА — ЧАСТЬ ДОКАЗАТЕЛЬСТВА, А НЕ ПРЕДПОСЫЛКА (U1 проверки REWORK3): два пустых
+    # чтения, два `None` или предупреждение о недоступной коллекции НЕ являются подтверждением
+    # сохранности. Поэтому снимок обязан нести РОВНО три ожидаемых типа (`linear`/`radial`/
+    # `diametral`), у каждого — прочитанный номинал, значимые координаты (у линейного — ОБЕ точки,
+    # U2) и `Valid`; недостача или предупреждение чтения помечают снимок НЕГОДНЫМ, и строка
+    # сохранности не может дать PASS.
+    # Ключ устойчивости — НОМЕР ВИДА (а не `view_ref`: ссылка — свежий uuid на каждое чтение, её
+    # равенство ничего не значит). Номер сохраняется и на reopen вид выбирается ПО НЕМУ, а не по
+    # позиции в списке: иначе другой вид дал бы ложное сравнение.
+    _dim_view_ref = (assoc[0].get("view_ref") if assoc else None)
+    _dim_view_number = (assoc[0].get("number") if assoc else None)
+    env, _code = call("kompas_list_dimensions",
+                      {"document_id": drw, "view_ref": _dim_view_ref})
+
+    def dim_snapshot(env_dims):
+        """Снимок трёх размеров: типы, номиналы, координаты, Valid — плюс ГОДНОСТЬ снимка.
+
+        Годен только полный снимок без предупреждений чтения: ровно три ожидаемых типа, у каждого
+        прочитанный номинал и обе координаты (у радиального/диаметрального — центр, вторая точка
+        отсутствует ПО ФОРМЕ, а не по потере). Предупреждения прибора (недоступная коллекция,
+        неполное чтение) делают снимок негодным.
+
+        ВТОРАЯ ТОЧКА ЛИНЕЙНОГО РАЗМЕРА ВХОДИТ В СНИМОК (U2 проверки REWORK3). MEASURED: при
+        неизменных первой точке и длине второй конец может переместиться по окружности радиуса
+        LENGTH_MM вокруг `point1` — номинала и `point1` для этого недостаточно, и снимок без `point2`
+        пропускал бы такую порчу. `point2` уже отдаётся `kompas_list_dimensions` (маршрут
+        `ILineDimension.X2/Y2`), дополнительный API не нужен. У радиального/диаметрального вторая
+        точка отсутствует ПО ФОРМЕ (`IRadialDimension` публикует центр и радиус) — она не требуется.
+        """
+        rows = result(env_dims).get("dimensions") or []
+        notes = result(env_dims).get("notes") or []
+        by_kind = {}
+        for d in rows:
+            k = d.get("kind")
+            if k:
+                by_kind.setdefault(k, []).append(d)
+        parts = []
+        problems = []
+        for kind in ("linear", "radial", "diametral"):
+            group = by_kind.get(kind) or []
+            if len(group) != 1:
+                problems.append(f"{kind}:{len(group)}")
+                parts.append((kind, None, None, None, None))
+                continue
+            d = group[0]
+            p1 = d.get("point1")
+            p2 = d.get("point2")
+            value = d.get("value_mm")
+            valid = d.get("valid")
+            if not isinstance(value, (int, float)) or not isinstance(p1, (list, tuple)) \
+                    or len(p1) < 2 or valid is None:
+                problems.append(f"{kind}:непрочитано(value={value},p1={p1},valid={valid})")
+            # У ЛИНЕЙНОГО вторая точка ОБЯЗАНА быть прочитана: её отсутствие — не «по форме», а
+            # потеря, и делает снимок негодным (иначе сравнение по ней было бы сравнением пустоты).
+            if kind == "linear" and (not isinstance(p2, (list, tuple)) or len(p2) < 2):
+                problems.append(f"{kind}:вторая_точка_не_прочитана(p2={p2})")
+            parts.append((kind,
+                          round(value, 6) if isinstance(value, (int, float)) else None,
+                          (round(p1[0], 6), round(p1[1], 6)) if isinstance(p1, (list, tuple))
+                          and len(p1) >= 2 else None,
+                          (round(p2[0], 6), round(p2[1], 6)) if isinstance(p2, (list, tuple))
+                          and len(p2) >= 2 else None,
+                          valid))
+        if notes:
+            problems.append("предупреждения=" + "; ".join(str(n) for n in notes))
+        return {"parts": sorted(parts, key=lambda p: p[0]), "problems": problems,
+                "count": len(rows), "notes": notes}
+
+    _pre_snap = dim_snapshot(env)
+    pre_state["dimensions"] = _pre_snap["parts"]
+    pre_state["dimension_count"] = _pre_snap["count"]
+    pre_state["dimension_problems"] = _pre_snap["problems"]
+    pre_state["dimension_view_number"] = _dim_view_number
+    # Прибор обязан отличать «сравнение подтвердило» от «обе стороны пусты»: если снимок до закрытия
+    # уже негоден, сохранность недоказуема в принципе, и строка это НАЗЫВАЕТ, а не выставляет PASS.
+    pre_snapshot_ok = (not _pre_snap["problems"]) and _pre_snap["count"] == 3
+    # ЯЧЕЙКА ШТАМПА ЧИТАЕТСЯ ДО ЗАКРЫТИЯ МАРШРУТОМ ТОЛЬКО ДЛЯ ЧТЕНИЯ: доказательство сохранности — «что
+    # было — то и осталось», а НЕ «достигли ли мы желаемого текста». Сравнение идёт по КОНТЕНТНОЙ ячейке
+    # (непустой `STAMP_LAYOUT_CELL`), потому что на пустой ячейке '' == '' неотличимо от потери.
+    env, _code = call("kompas_get_title_block",
+                      {"document_id": drw, "cell_ids": [STAMP_LAYOUT_CELL or STAMP_CELL]})
+    _pre_cells = result(env).get("cells") or []
+    pre_state["stamp_read_back"] = (_pre_cells[0].get("read_back") if _pre_cells else None)
     # СНИМОК ВИДОВ ОБНОВЛЯЕТСЯ ПЕРЕД СОХРАНЕНИЕМ: после снимка шли ещё мутации (размеры, штамп,
     # техтребования) и правка масштаба в строке ревизий, поэтому `views_after` успел отстать —
     # сравнение с ним объявило бы расхождением СОБСТВЕННУЮ правку прибора, а не потерю при
@@ -2181,59 +2336,128 @@ def drawing_checks(client, rep, app_id, workdir):
             "PASS" if (saved and set(pre_map) == set(re_map)) else "FAIL",
             f"views={len(views_re)} error={code}")
 
-    # РАЗМЕРЫ после переоткрытия читаются ЗАНОВО и сравниваются с номиналами ДО закрытия. Строка
-    # ставит размер тем же view_ref уже ПЕРЕОТКРЫТОГО документа (ссылка живёт в пределах ревизии).
-    dims_re = {}
-    if views_re:
-        re_view_ref = views_re[0].get("view_ref")
-        env, code = call("kompas_add_dimension", {
-            "document_id": drw2, "expected_revision": current_rev(drw2),
-            "view_ref": re_view_ref, "dimension_type": "linear",
-            "point1": [0.0, 0.0, 0.0], "point2": [LENGTH_MM, 0.0, 0.0],
-            "position": [LENGTH_MM / 2.0, -20.0, 0.0]})
-        dims_re["linear"] = result(env).get("dimension") or {}
-        rerr = code
-    else:
-        rerr = "видов нет после переоткрытия"
+    # РАЗМЕРЫ после переоткрытия ПРОВЕРЯЮТСЯ ЧТЕНИЕМ, без повторной постановки. ИЗМЕРЕНО: IView.ObjectCount
+    # растёт при постановке размера (1 → 2) и СОХРАНЯЕТСЯ после save → close → reopen, читаясь тем же
+    # свойством. Поэтому проверка — «число объектов вида не уменьшилось после переоткрытия»: удаление
+    # размера вернуло бы счётчик к 1 и было бы ОБНАРУЖЕНО без какой-либо дозаписи. Прежний вариант
+    # ставил размер заново и объявлял круговорот доказательством — это маскировало потерю, а не ловило её.
+    # ГРАНИЦА, НАЗВАННАЯ ПРЯМО: ObjectCount ловит УДАЛЕНИЕ объекта, но не порчу его ЗНАЧЕНИЯ — читать
+    # номинал размера обратно нечем (типизированного маршрута чтения размеров в поставке нет). Строка
+    # это называет, а не выдаёт подсчёт объектов за чтение значения.
+    # СТРУКТУРНАЯ ПРОВЕРКА ОТДЕЛЕНА ОТ НОМИНАЛЬНОЙ. Число объектов вида (`IView.ObjectCount`) ловит
+    # УДАЛЕНИЕ объекта, но не порчу его ЗНАЧЕНИЯ, и потому идёт своей строкой. Сохранность и НОМИНАЛЫ
+    # размеров проверяются отдельно — типизированным чтением из ПЕРЕОТКРЫТОГО документа: инструмент
+    # берёт размеры ТЕКУЩЕГО дескриптора (`drw2`), поэтому это объекты переоткрытого файла, а не
+    # сохранённый DTO и не освобождённая RCW прежнего документа. Ссылка на прежний вид НЕ
+    # переиспользуется: свежее чтение коллекции даёт новую ссылку после переоткрытия.
+    re_counts = {stable_key(v): v.get("object_count") for v in views_re}
+    pre_counts = {stable_key(v): v.get("object_count") for v in pre_state["views"]}
+    count_ok = bool(pre_counts) and all(
+        isinstance(re_counts.get(k), int) and isinstance(pre_counts.get(k), int)
+        and re_counts[k] >= pre_counts[k]
+        for k in pre_counts)
+    rep.add("DRW-03.dimension.add.save_reopen.objectcount",
+            "удаление объектов вида при переоткрытии обнаруживается (число объектов, прочитанное "
+            "тем же свойством, не уменьшилось); ГРАНИЦА: эта строка — структурная, порчи ЗНАЧЕНИЯ "
+            "она не ловит",
+            "PASS" if (saved and count_ok) else "FAIL",
+            f"object_count до закрытия={pre_counts} после переоткрытия={re_counts} error={code}")
+
+    # ВИД НА ПЕРЕОТКРЫТОМ ДОКУМЕНТЕ ВЫБИРАЕТСЯ ПО СОХРАНЁННОМУ УСТОЙЧИВОМУ КЛЮЧУ (номер вида), а НЕ
+    # по позиции в списке: `association_views(...)[0]` взял бы «первый ассоциативный» и на другом
+    # порядке выдал бы ЛОЖНОЕ сравнение — либо PASS по чужому виду, либо FAIL по своей же перестановке.
+    # Если вида с прежним номером нет, это НАЗЫВАЕТСЯ расхождением, а не подменяется первым.
+    assoc_re = association_views(views_re)
+    dim_view = next((v for v in assoc_re
+                     if v.get("number") == pre_state.get("dimension_view_number")), None)
+    dim_view_ref_re = (dim_view or {}).get("view_ref")
+    env, code = call("kompas_list_dimensions",
+                     {"document_id": drw2, "view_ref": dim_view_ref_re})
+    _re_snap = dim_snapshot(env)
+    re_snapshot = _re_snap["parts"]
+    # СРАВНЕНИЕ ПО ЗНАЧИМЫМ ПОЛЯМ, А НЕ ПО ФАКТУ НАЛИЧИЯ: тип, номинал (с допуском), ОБЕ точки
+    # привязки, `Valid`. Совпадение двух пустых снимков подтверждением не считается — годность ОБОИХ
+    # снимков входит в условие. Допуск — тот же TOL_MM, что у остальных номиналов профиля. Вторая
+    # точка сравнивается тем же допуском: перемещение второго конца обнаруживается, даже если первая
+    # точка и длина не изменились.
+    def _dim_row_eq(a, b):
+        if len(a) != 5 or len(b) != 5:
+            return False
+        kind_a, val_a, pt_a, pt2_a, ok_a = a
+        kind_b, val_b, pt_b, pt2_b, ok_b = b
+        # У радиального/диаметрального второй точки нет ПО ФОРМЕ — там обе стороны `None`, и это
+        # равенство, а не пропуск. У линейного `None` с любой стороны делает сравнение ложным.
+        return (kind_a == kind_b
+                and close_enough(val_a, val_b, TOL_MM)
+                and bool(ok_a) and bool(ok_b)
+                and _pt_eq(pt_a, pt_b)
+                and _pt_eq(pt2_a, pt2_b))
+
+    def _pt_eq(p, q):
+        if p is None or q is None:
+            return p is None and q is None
+        return close_enough(p[0], q[0], TOL_MM) and close_enough(p[1], q[1], TOL_MM)
+
+    dims_re_ok = (code is None
+                  and pre_snapshot_ok
+                  and not _re_snap["problems"]
+                  and dim_view_ref_re is not None
+                  and _re_snap["count"] == pre_state.get("dimension_count") == 3
+                  and len(re_snapshot) == len(pre_state.get("dimensions") or [])
+                  and all(_dim_row_eq(a, b) for a, b in
+                          zip(pre_state.get("dimensions") or [], re_snapshot)))
+    if not dims_re_ok:
+        print("  [diag DRW-03.save_reopen] до закрытия:", pre_state.get("dimensions"),
+              " проблемы_до:", pre_state.get("dimension_problems"),
+              " после переоткрытия:", re_snapshot, " проблемы_после:", _re_snap["problems"],
+              " вид до№:", pre_state.get("dimension_view_number"),
+              " вид после№:", (dim_view or {}).get("number"), " error:", code)
     rep.add("DRW-03.dimension.add.save_reopen",
-            "размер ставится на ПЕРЕОТКРЫТОМ чертеже и его номинал читается и сверяется с эталоном",
-            "PASS" if (not rerr and close_enough(dims_re.get("linear", {}).get("value_mm"),
-                                                 LENGTH_MM, TOL_MM)) else "FAIL",
-            f"value_reopen={dims_re.get('linear', {}).get('value_mm')} эталон={LENGTH_MM} "
-            f"допуск={TOL_MM} error={rerr}")
+            "все три размера (тип, номинал, координаты привязки — у линейного ОБЕ точки, включая "
+            "вторую, — и корректность) переживают save → close → reopen: прочитаны ТИПИЗИРОВАННЫМ "
+            "маршрутом ИЗ ПЕРЕОТКРЫТОГО документа, вид выбран ПО СОХРАНЁННОМУ НОМЕРУ, снимки полны "
+            "(ровно три типа без предупреждений чтения) и совпали по значимым полям — двух пустых "
+            "чтений для PASS недостаточно; перемещение второго конца при сохранённой длине обнаружено",
+            "PASS" if (saved and dims_re_ok) else "FAIL",
+            f"до закрытия={pre_state.get('dimensions')} после переоткрытия={re_snapshot} "
+            f"вид№={pre_state.get('dimension_view_number')}→{(dim_view or {}).get('number')} "
+            f"снимок_до_годен={pre_snapshot_ok} проблемы_до={pre_state.get('dimension_problems')} "
+            f"проблемы_после={_re_snap['problems']} error={code}")
 
-    # Ячейка штампа ЧИТАЕТСЯ до какой-либо записи: перезапись тем же значением скрыла бы потерю.
-    # Чтение идёт через kompas_set_title_block с уже СУЩЕСТВУЮЩИМ значением — сервер возвращает
-    # перечитанное; но чтобы это НЕ было записью, значение ячейки не меняется и сравнивается.
-    env, code = call("kompas_set_title_block", {
-        "document_id": drw2, "expected_revision": current_rev(drw2),
-        "cells": {STAMP_CELL: STAMP_TEXT}})
+    # ЧТЕНИЕ ШТАМПА И ТЕХТРЕБОВАНИЙ НА ПЕРЕОТКРЫТОМ ЧЕРТЕЖЕ — ЧЕРЕЗ МАРШРУТ ТОЛЬКО ДЛЯ ЧТЕНИЯ.
+    # Прежняя редакция вызывала здесь МУТИРУЮЩИЕ kompas_set_title_block / kompas_set_technical_demand
+    # с исходным текстом и называла это перечитыванием — но установщик СНАЧАЛА присваивает IText.Str:
+    # полностью потерянный при reopen блок прошёл бы такую проверку, потому что ожидаемое значение
+    # записывалось ЗАНОВО перед снятием результата (R2 повторного ревью). Теперь читают
+    # kompas_get_title_block / kompas_get_technical_demand: они НЕ несут ожидаемого значения вовсе и
+    # НИЧЕГО не пишут, поэтому совпадение с pre_state доказывает сохранность, а потеря обнаруживается.
+    env, code = call("kompas_get_title_block",
+                     {"document_id": drw2, "cell_ids": [STAMP_LAYOUT_CELL or STAMP_CELL]})
     cells_re = result(env).get("cells") or []
-    cell_re = next((c for c in cells_re if c.get("cell_id") == STAMP_CELL), {})
-    # Ячейка штампа читается на ПЕРЕОТКРЫТОМ чертеже. Совпадение с записанным ДО закрытия —
-    # состояние, а не безусловный PASS: измерение показало, что запись в эту ячейку не подтверждалась
-    # и ДО закрытия (см. decisions#stamp-cells). Строка проверяет, что чтение состоялось и что
-    # переоткрытие не изменило наблюдаемое значение; оно ПЕЧАТАЕТСЯ вместе с состоянием до закрытия.
-    rep.add("DRW-04.title_block.set.save_reopen",
-            "ячейка штампа ЧИТАЕТСЯ на переоткрытом чертеже; расхождение с записанным НАЗВАНО "
-            "(запись не подтверждена и до закрытия — измерено)",
-            "PASS" if (cell_re.get("read_back") is not None
-                       and cell_re.get("read_back") == saved_cell_before) else "FAIL",
-            f"cell={STAMP_CELL} read_back_переоткрыт={cell_re.get('read_back')!r} "
-            f"read_back_до_закрытия={saved_cell_before!r} записано={pre_state['stamp_text']!r} "
-            f"match_записанному={cell_re.get('read_back') == pre_state['stamp_text']} error={code}")
+    _rcell = STAMP_LAYOUT_CELL or STAMP_CELL
+    cell_re = next((c for c in cells_re if c.get("cell_id") == _rcell), {})
 
-    # Технические требования после переоткрытия читаются и сравниваются с состоянием до закрытия.
-    env, code = call("kompas_set_technical_demand", {
-        "document_id": drw2, "expected_revision": current_rev(drw2),
-        "text": pre_state["demand_text"]})
-    demand_re = result(env).get("read_back")
+    rep.add("DRW-04.title_block.set.save_reopen",
+            "ячейка штампа СОХРАНЯЕТ прочитанное до закрытия значение при переоткрытии (сравнение "
+            "МАРШРУТОМ ТОЛЬКО ДЛЯ ЧТЕНИЯ против ПРЕДЫДУЩЕГО ЧТЕНИЯ, а не против задуманного текста; "
+            "потеря/порча содержимого обнаруживается без дозаписи)",
+            "PASS" if (isinstance(pre_state.get("stamp_read_back"), str)
+                       and pre_state.get("stamp_read_back") != ""
+                       and cell_re.get("read_back") == pre_state.get("stamp_read_back")
+                       and code is None) else "FAIL",
+            f"cell={_rcell} read_back_переоткрыт={cell_re.get('read_back')!r} "
+            f"до_закрытия_прочитано={pre_state.get('stamp_read_back')!r} error={code}")
+
+    env, code = call("kompas_get_technical_demand", {"document_id": drw2})
+    demand_re = result(env).get("text")
+    demand_created_re = result(env).get("is_created")
     rep.add("DRW-06.technical_demand.save_reopen",
-            "текст техтребований переживает save → close → reopen (сравнение по нормализованным "
-            "пробелам с состоянием до закрытия)",
-            "PASS" if (norm_demand(demand_re) == norm_demand(pre_state["demand_text"])) else "FAIL",
+            "текст техтребований ПЕРЕЖИЛ save → close → reopen: перечитанное МАРШРУТОМ ТОЛЬКО ДЛЯ "
+            "ЧТЕНИЯ совпадает с записанным до закрытия (потеря обнаруживается)",
+            "PASS" if (code is None and norm_demand(demand_re) == norm_demand(pre_state["demand_text"])
+                       and demand_created_re is True) else "FAIL",
             f"read_back={(demand_re or '')[:70]!r} до_закрытия={(pre_state['demand_text'])[:70]!r} "
-            f"error={code}")
+            f"is_created={demand_created_re} error={code}")
 
     # ========= DRW-05: экспорт в DXF и DWG =========
     # ЭКСПОРТ ИДЁТ ПОСЛЕ СОХРАНЕНИЯ: конвертер берёт входной файл ПО ПУТИ, и чертёж без файла на
@@ -2253,13 +2477,20 @@ def drawing_checks(client, rep, app_id, workdir):
         ok_size = isinstance(size, int) and size > 0 and os.path.isfile(target)
         ok_sig, sig_head = signature_ok(target, fmt)
         export_sizes[fmt] = size
-        export_ok_all = export_ok_all and (not code and ok_size and ok_sig)
         # ЖИВОЙ РЕЗУЛЬТАТ КАЖДОГО ФОРМАТА ПРЕДСТАВЛЕН ОТДЕЛЬНО: документированный успех/неудача
-        # Convert (1/0) и файл на диске печатаются рядом, чтобы расхождение было видно.
+        # Convert (1/0) и файл на диске печатаются рядом, чтобы расхождение было видно. Строка
+        # ТРЕБУЕТ документированного возврата 1 (iconverter_convert.html) ВМЕСТЕ с сигнатурой: файл
+        # правильного формата при коде 0 — расхождение, и оно называется, а не сглаживается.
+        # INVARIANT: convert_ok присваивается ДО своего использования в export_ok_all — иначе
+        # агрегатная строка падала бы UnboundLocalError и «оба формата» молча не проверялись бы.
+        conv = result(env).get("convert_result")
+        conv_ok = conv == 1
+        export_ok_all = export_ok_all and (not code and ok_size and ok_sig and conv_ok)
         rep.add(f"DRW-05.export.create.{fmt}",
-                f"чертёж выгружается в {fmt.upper()} (сигнатура И размер подтверждены на диске)",
-                "PASS" if (not code and ok_size and ok_sig) else "FAIL",
-                f"convert_result={result(env).get('convert_result')} bytes={size} signature={sig} "
+                f"чертёж выгружается в {fmt.upper()} (Convert вернул 1 И сигнатура И размер "
+                f"подтверждены на диске)",
+                "PASS" if (not code and ok_size and ok_sig and conv_ok) else "FAIL",
+                f"convert_result={conv} bytes={size} signature={sig} "
                 f"head={sig_head!r} error={code}")
         rep.add(f"DRW-05.export.geometry_validation.{fmt}",
                 f"подпись {fmt.upper()} подтверждена содержимым файла (не только размером)",
@@ -2337,7 +2568,10 @@ def drawing_checks(client, rep, app_id, workdir):
             "PASS" if (reread.get("dxf", 0) > 0 and reread.get("dwg", 0) > 0) else "FAIL",
             f"sizes={reread}")
 
-    # Идемпотентность.
+    # Идемпотентность на ПЕРЕОТКРЫТОМ чертеже. Требование: повтор того же operation_id НЕ создаёт виды
+    # второй раз, а первый вызов ДОБАВЛЯЕТ ровно один вид. Разрешение API7 переоткрытого документа
+    # переработано (тип документа + путь), поэтому строка проверяет ФАКТ, а не называет границу:
+    # положительный результат — before + created1 == after И created2 == created1.
     op_id = str(uuid.uuid4())
     payload = {"document_id": drw2, "expected_revision": current_rev(drw2),
                "source_path": src, "projections": ["front"], "x": 300.0, "y": 300.0}
@@ -2350,11 +2584,13 @@ def drawing_checks(client, rep, app_id, workdir):
     once = result(env1).get("created_count")
     again = result(env2).get("created_count")
     rep.add("dep.drawing.idempotency.create",
-            "повтор того же operation_id НЕ создаёт виды второй раз",
+            "повтор того же operation_id НЕ создаёт виды второй раз: первый вызов добавляет ровно один "
+            "вид, повтор не меняет коллекцию (проверяется по фактическому перечитыванию коллекции)",
             "PASS" if (not error_code(env1) and before + (once or 0) == after
                        and again == once) else "FAIL",
             f"before={before} created1={once} created2={again} after={after} "
-            f"error1={error_code(env1)} error2={error_code(env2)}")
+            f"error1={error_code(env1)} error2={error_code(env2)} "
+            f"details1={json.dumps(detail_of(env1), ensure_ascii=False)[:1500]}")
 
     p3 = dict(payload); p3["operation_id"] = op_id; p3["projections"] = ["top"]
     _e, env3, _r = client.tool("kompas_create_drawing_views", p3, timeout=300)
@@ -2407,12 +2643,41 @@ def drawing_checks(client, rep, app_id, workdir):
     # Маршрут обновления: IAssociationView.Rebuild (документирован). Мутируем источник (снимаем
     # признак), перестраиваем, читаем вид ЗАНОВО. Объём источника за доказательство НЕ выдаётся:
     # проверяется ФАКТ перестроения и читаемость вида ПОСЛЕ него.
+    # ПЕРЕСТРОЕНИЕ ЧЕРТЕЖА ПОСЛЕ ИЗМЕНЕНИЯ МОДЕЛИ — ЧЕРЕЗ НОВЫЙ ИНСТРУМЕНТ
+    # `kompas_rebuild_drawing_views`. ИЗМЕРЕНО ОТРАЖЕНИЕМ по поставляемому interop: член
+    # `IKompasDocument2D1.RebuildDocument()` объявлен и возвращает Boolean; `IDrawingDocument.
+    # RebuildViews`, названный справкой, НЕ объявлен НИ ОДНИМ типом сборки — отсутствие названо,
+    # а не выдано за рабочий маршрут. `kompas_rebuild` — 3D-операция и к чертежу неприменима
+    # (WRONG_DOCUMENT_KIND; измерено ранее). Доказательство — НЕ возвращённый булев результат и НЕ
+    # читаемость коллекции: строка берёт вид ДО, вызывает перестроение, и требует, чтобы инструмент
+    # ПЕРЕЧИТАЛ тот же вид ИЗ СВЕЖЕГО чтения коллекции (положительный маршрут), а независимо от
+    # этого проверяется, что множество видов после перестроения не потеряло объект.
     model_rebuild_ok = False
     model_rebuild_line = "источник не открылся"
     vol_src = None
     env, code = call("kompas_open_document", {"application_id": app_id, "path": src, "access": "edit"})
     msrc = doc_id(env)
     if msrc:
+        # СНИМОК ПРОЕКЦИИ ДО ИЗМЕНЕНИЯ МОДЕЛИ — ЧЕРЕЗ ДОКУМЕНТИРОВАННЫЙ ЭКСПОРТ ЧЕРТЕЖА. Это и есть
+        # заранее выбранный геометрический признак результата: число сущностей выбранного типа в
+        # выгрузке отражает РЕАЛЬНУЮ проекцию, а не номер вида и не факт читаемости коллекции.
+        # Признак берётся ДО изменения модели, а сравнивается с тем же признаком ПОСЛЕ перестроения.
+        # MEASURED: пара выгрузок НЕИЗМЕНЁННОГО чертежа даёт ОДИН И ТОТ ЖЕ счёт по типам, тогда как
+        # побайтовое сравнение негодно (в заголовке меняются `$TDCREATE`, `$HANDSEED` и GUID).
+        # Выбран `LINE` — проекция детали насыщена отрезками, и снятие единственного признака
+        # источника (выдавливания) устойчиво уменьшает их число; слабый одиночный счётчик дал бы
+        # вырожденный случай «1 → 0», неотличимый от потери чтения. Сравнивается ОДИН тип по имени.
+        GEO_WITNESS = "LINE"
+        drw_before_path = os.path.join(work, "drw-01-before-rebuild.dxf")
+        drw_after_path = os.path.join(work, "drw-01-after-rebuild.dxf")
+        for _p in (drw_before_path, drw_after_path):
+            if os.path.isfile(_p):
+                os.remove(_p)
+        env, code = call("kompas_export_drawing", {
+            "document_id": drw2, "output_path": drw_before_path, "format": "dxf"})
+        before_export_ok = (not code) and os.path.isfile(drw_before_path)
+        witness_before = dxf_entity_counts(drw_before_path).get(GEO_WITNESS, 0) if before_export_ok else None
+
         # ОБЪЁМ ИСТОЧНИКА — ЗДЕСЬ, ПОКА МОДЕЛЬ НЕ ИЗМЕНЕНА: это факт ОБ ИСТОЧНИКЕ, и он не выдаётся
         # за доказательство номинала размера или обновления вида. После снятия признака тела может не
         # быть, и «не прочитано» — это не ноль, поэтому чтение идёт до правки модели.
@@ -2439,32 +2704,65 @@ def drawing_checks(client, rep, app_id, workdir):
                 "document_id": msrc, "expected_revision": current_rev(msrc), "target_path": src})
         call("kompas_close_document", {"document_id": msrc, "dirty_policy": "save"})
 
-        # ПЕРЕСТРОЕНИЕ ЧЕРТЕЖА: `kompas_rebuild` — 3D-операция и к чертежу НЕ применима (отвергает
-        # WRONG_DOCUMENT_KIND; измерено). Документированный маршрут обновления ассоциативного вида —
-        # `IAssociationView.Rebuild`, но инструментом он НЕ выведен. Поэтому строка НАЗЫВАЕТ это
-        # состояние: отказ `kompas_rebuild` на чертеже — ожидаемое поведение, а обновление вида после
-        # изменения модели ОСТАЁТСЯ ОТКРЫТЫМ действием (нет опубликованного инструмента).
-        env, code = call("kompas_rebuild", {"document_id": drw2})
+        # ВИД ДЛЯ ПЕРЕСТРОЕНИЯ — АССОЦИАТИВНЫЙ, выбранный ПО СВОЙСТВУ на переоткрытом чертеже.
+        rebuild_view = next((v for v in views_re if v.get("source_path")), None)
+        rebuild_ref = (rebuild_view or {}).get("view_ref")
+        env, code = call("kompas_rebuild_drawing_views", {
+            "document_id": drw2, "expected_revision": current_rev(drw2),
+            "view_ref": rebuild_ref})
         rebuild_err = code
+        rebuilt_returned = result(env).get("rebuild_returned")
+        r_after = result(env).get("view_after") or {}
+        r_before = result(env).get("view_before") or {}
+        # ПОЛОЖИТЕЛЬНЫЙ МАРШРУТ: инструмент отработал, вернул вид и перечитал ЕГО ЖЕ (тот же номер).
+        rebuild_ok = (not code and rebuilt_returned is True
+                      and r_before.get("number") is not None
+                      and r_after.get("number") == r_before.get("number")
+                      and r_after.get("view_ref"))
+        # НЕЗАВИСИМАЯ ПРОВЕРКА: множество значимых ключей видов не потеряло ассоциативный вид при
+        # перестроении (номер + источник), т.е. перестроение не УДАЛИЛО вид.
+        views_after_rebuild = None
         env, code = call("kompas_list_drawing_views", {"document_id": drw2})
-        views_after_model = result(env).get("views") or []
-        # Модель изменена (признак снят и файл сохранён) — это измерено; вид читается после.
-        model_ok = bool(views_after_model) and all(v.get("view_ref") for v in views_after_model)
-        model_rebuild_line = (f"suppress={sup_err} rebuild_drawing={rebuild_err}(не применим к "
-                              f"чертежу — 3D-операция) views={len(views_after_model)} "
-                              f"обновление_вида=ОТКРЫТО(нет инструмента IAssociationView.Rebuild)")
+        views_after_rebuild = result(env).get("views") or []
+        assoc_after = [v for v in views_after_rebuild if v.get("source_path")]
+        assoc_keys_before = {(v.get("number"), v.get("source_path")) for v in assoc_re}
+        assoc_keys_after = {(v.get("number"), v.get("source_path")) for v in assoc_after}
+        views_survived = bool(assoc_keys_before) and assoc_keys_before <= assoc_keys_after
+        # ПРОЕКЦИЯ ПРОВЕРЯЕТСЯ ПО СУЩЕСТВУ: та же выгрузка ПОСЛЕ перестроения и тот же заранее
+        # выбранный признак. Старая проекция (признак не изменился) даёт FAIL. Требование
+        # `witness_before >= 2` закрывает вырожденный случай «оба нуля»: отсутствие признака с обеих
+        # сторон подтверждением изменения не является (иначе прибор зачёл бы пустоту за успех).
+        env, code = call("kompas_export_drawing", {
+            "document_id": drw2, "output_path": drw_after_path, "format": "dxf"})
+        after_export_ok = (not code) and os.path.isfile(drw_after_path)
+        witness_after = dxf_entity_counts(drw_after_path).get(GEO_WITNESS, 0) if after_export_ok else None
+        geometry_changed = (before_export_ok and after_export_ok
+                            and isinstance(witness_before, int) and witness_before >= 2
+                            and isinstance(witness_after, int) and witness_after < witness_before)
+        model_rebuild_ok = rebuild_ok and views_survived and geometry_changed
+        model_rebuild_line = (
+            f"suppress={sup_err} rebuild_drawing={rebuild_err} "
+            f"details={json.dumps(detail_of(env), ensure_ascii=False)[:300]} "
+            f"rebuild_returned={rebuilt_returned} вид№={r_before.get('number')}→{r_after.get('number')} "
+            f"вид_перечитан={bool(r_after.get('view_ref'))} "
+            f"ассоциативных_видов {len(assoc_keys_before)}→{len(assoc_keys_after)} "
+            f"вид_не_потерян={views_survived} "
+            f"признак={GEO_WITNESS} исходное={witness_before} ожидаемое_изменение=уменьшение "
+            f"прочитано_после={witness_after} проекция_изменилась={geometry_changed} "
+            f"(экспорт_до={before_export_ok} экспорт_после={after_export_ok}) "
+            f"маршрут=IKompasDocument2D1.RebuildDocument "
+            f"(IDrawingDocument.RebuildViews в interop не объявлен — измерено)")
+        if not model_rebuild_ok:
+            print("  [diag DRW-01.rebuild] error:", rebuild_err,
+                  " env:", json.dumps(result(env), ensure_ascii=False)[:400])
     rep.add("DRW-01.views.create_standard.rebuild",
-            "модель-источник ИЗМЕНЕНА (признак снят и файл сохранён) и виды читаются после; "
-            "перестроение чертежа неприменимо (3D-операция), а обновление вида через "
-            "IAssociationView.Rebuild ОСТАЁТСЯ ОТКРЫТЫМ — инструмента нет, и это названо",
-            "PASS" if model_ok else "FAIL", model_rebuild_line)
-
-    # ========= DRW-02.discover: обзор =========
-    env, code = call("kompas_get_context", {"document_id": drw2, "detail": "minimal"})
-    rep.add("DRW-02.views.list.discover",
-            "обзор: тип документа назван «drawing» и виды принадлежат ему",
-            "PASS" if (drw2 and (result(env).get("kind") in (None, "drawing", "Drawing"))) else "FAIL",
-            f"document_id={drw2} kind={result(env).get('kind')} error={code}")
+                "модель-источник ИЗМЕНЕНА (признак снят и файл сохранён); чертёж ПЕРЕСТРОЕН "
+                "документированным маршрутом IKompasDocument2D1.RebuildDocument, вид ПЕРЕЧИТАН из "
+                "СВЕЖЕГО чтения коллекции (тот же номер), независимо подтверждено, что перестроение "
+                "НЕ потеряло ассоциативный вид, И проекция ПРОВЕРЕНА ПО СУЩЕСТВУ: заранее выбранный "
+                "геометрический признак выгрузки (число сущностей LINE — отрезков проекции) "
+                "изменился вслед за моделью; прежняя проекция дала бы FAIL",
+                "PASS" if model_rebuild_ok else "FAIL", model_rebuild_line)
 
     # ========= ГЕОМЕТРИЧЕСКИЙ КОНТРОЛЬ =========
     # У вида нет габарита (IView его не публикует). Объём источника измерен ВЫШЕ, ПОКА МОДЕЛЬ НЕ БЫЛА
@@ -2515,12 +2813,28 @@ def drawing_checks(client, rep, app_id, workdir):
             f"error={code}")
 
     # Ревизии: изменение по актуальной ревизии применяется (edit) — на техтребованиях.
+    # МУТАЦИЯ ПО АКТУАЛЬНОЙ РЕВИЗИИ НА ПЕРЕОТКРЫТОМ ЧЕРТЕЖЕ. Прежнее измерение давало WRONG_DOCUMENT_KIND:
+    # RequireDrawing7 не переносил 2D-дескриптор переоткрытого документа и не находил его в
+    # Application.Documents. Разрешение переработано (тип документа + путь + имя файла как NOTES, а не
+    # решение). Строка проверяет ФАКТ: мутация по актуальной ревизии ПРИМЕНЯЕТСЯ и ПЕРЕЧИТЫВАЕТСЯ, без
+    # повтора эффекта. Если маршрут всё ещё отказывает, строка печатает СТАДИЮ отказа, размер коллекции и
+    # кандидатов — диагностика названа, а не выдана за проверку ревизии.
     env, code = call("kompas_set_technical_demand", {
         "document_id": drw2, "expected_revision": current_rev(drw2), "text": DEMAND_TEXT})
+    _err = (env or {}).get("error") if isinstance((env or {}).get("error"), dict) else {}
+    _details = _err.get("details") if isinstance(_err.get("details"), dict) else {}
     rep.add("dep.drawing.revisions.edit.demand",
-            "мутация по АКТУАЛЬНОЙ ревизии применяется и перечитывается",
+            "мутация по АКТУАЛЬНОЙ ревизии применяется и перечитывается на ПЕРЕОТКРЫТОМ чертеже; "
+            "при отказе называются стадия разрешения API7, размер коллекции документов и кандидаты",
             "PASS" if (not code and result(env).get("read_back") == DEMAND_TEXT) else "FAIL",
-            f"error={code}")
+            f"error={code} message={(_err.get('message') or '')[:200]!r} "
+            f"stage={_details.get('stage')} stage1={_details.get('stage1_transfer')} "
+            f"api7_documents_count={_details.get('api7_documents_count')} "
+            f"api5_side={_details.get('api5_side')} "
+            f"drawing7_resolution={_details.get('drawing7_resolution')} "
+            f"wanted_path={_details.get('wanted_path')} candidates={_details.get('candidates')} "
+            f"document_id={drw2} операция=set_technical_demand read_back="
+            f"{result(env).get('read_back')!r}")
 
     r_before = current_rev(drw2)
     call("kompas_list_drawing_views", {"document_id": drw2})
@@ -2532,6 +2846,771 @@ def drawing_checks(client, rep, app_id, workdir):
 
     call("kompas_close_document", {"document_id": drw2, "dirty_policy": "discard"})
 
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# Группа VM: внешние переменные детали и материал (блок VM, профиль `variables-material-minimal-v1`)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+
+# Описание эталона VM, зафиксированное ДО прогона. Имена, выражение и геометрия совпадают с тем, что
+# строит прибор `--vm-reference` (tools/KompasMcp.Api7Probe/VmReferenceProbe.cs). Подбирать их после
+# FAIL запрещено: строка VM-01 читает ИМЕННО эти имена, а VM-02/VM-03 сверяют геометрию с этими
+# числами. Другая геометрия означает другое описание, записанное здесь же заранее.
+# ИМЕНА ЛАТИНСКИЕ: справка v24 (1862_175_1_sozd_peremen.html) разрешает буквы латинского алфавита,
+# цифры и «_», первый символ — буква или «_». Прежние «Глубина»/«ПолнаяГлубина» этому формату НЕ
+# соответствуют, и ядро отвергает их (IPart7.IsVariableNameValid → False) — исправление ошибочного
+# ОЖИДАНИЯ по документации, а не подгонка требования после FAIL.
+VM_REFERENCE_DEFAULT = {
+    "file": "vm-reference.m3d",
+    "depth_name": "depth",
+    "depth_initial_mm": 10.0,
+    "depth_changed_mm": 20.0,
+    "dependent_name": "full_depth",
+    "dependent_expression": "depth*2",
+    "width_mm": 100.0,
+    "height_mm": 80.0,
+    "volume_initial_mm3": 80000.0,
+    "volume_changed_mm3": 160000.0,
+    "volume_tolerance_mm3": 1.0,
+    "density_kg_per_m3": 7850.0,
+    "density_tolerance_kg_per_m3": 0.5,
+    "mass_tolerance_kg": 1e-6,
+}
+
+
+def variables_material_checks(client, rep, app_id, workdir, reference_path=None):
+    """VM.* — четыре инструмента блока VM через MCP на бинарях поставки.
+
+    ЗАЧЕМ ЭТА ГРУППА. Четыре инструмента (list_variables, set_variable, get_material, set_material)
+    написаны по документированным маршрутам v24 и покрыты модульными тестами. Группа — ЖИВОЕ
+    подтверждение: инструменты вызываются через настоящий MCP, а не «маршрут написан».
+
+    ДВЕ ЧАСТИ, И ЭТО СУЩЕСТВЕННО. Проверки материала, плотности и массы НЕ зависят от внешних
+    переменных, поэтому идут ПЕРВЫМИ и на ОБЫЧНОЙ детали, построенной через MCP: отсутствие эталона
+    переменных не имеет права их пропускать. Вторая часть — переменные — требует эталон и без него
+    называет свои строки `NAMED`, а не подставляет созданную на месте переменную: иначе группа
+    доказывала бы собственное действие, а не продукт.
+
+    ЭТАЛОН. Одна обычная параметризованная `.m3d`, собранная ИСПОЛНИТЕЛЕМ документированным маршрутом
+    `IPart7.AddVariable` (прибор `--vm-reference`), с двумя СУЩЕСТВУЮЩИМИ внешними переменными: `depth`
+    (10 → 20 мм) и зависимая `full_depth` = `depth*2`; прямоугольник 100×80, объём 80000 → 160000 мм³.
+    Имена, выражение и геометрия зафиксированы в VM_REFERENCE_DEFAULT ДО прогона. Группа эталон только
+    ОТКРЫВАЕТ и переменных не создаёт: иначе она доказывала бы собственное действие, а не продукт.
+
+    ЧЕГО ЗДЕСЬ НЕТ. Клиентская приёмка и Trust не трогаются. Создание, удаление и переименование
+    переменных, функциональные/интервальные переменные, переменные компонентов сборки, справочник
+    материалов и материал отдельных тел — вне объёма этого наряда и здесь не проверяются.
+    """
+    import os
+
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def doc_of(env):
+        return ((env or {}).get("result") or {}).get("document_id") or (env or {}).get("document_id")
+
+    def emsg(env):
+        err = (env or {}).get("error") or {}
+        return err.get("message") if isinstance(err, dict) else None
+
+    def ecode(env):
+        err = (env or {}).get("error") or {}
+        return err.get("code") if isinstance(err, dict) else None
+
+    def current_rev(doc):
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return ((env or {}).get("result") or {}).get("revision") or 1
+
+    def bodies_of(doc):
+        _e, env, _r = client.tool("kompas_list_bodies", {"document_id": doc})
+        made = result(env)
+        return made if isinstance(made, list) else (made.get("bodies") or [])
+
+    def measure(doc, properties, density=None):
+        """Независимое измерение тела: объём и/или масса. Масса считается по ПЕРЕДАННОЙ плотности."""
+        bodies = bodies_of(doc)
+        if not bodies:
+            return None, "тела нет"
+        args = {"target_ref": bodies[0].get("body_ref"), "properties": list(properties)}
+        if density is not None:
+            args["density_kg_per_m3"] = density
+        _e, env, _r = client.tool("kompas_measure", args)
+        return result(env), None
+
+    def list_variables(doc):
+        _e, env, _r = client.tool("kompas_list_variables", {"document_id": doc})
+        return result(env), ecode(env)
+
+    def get_material(doc):
+        _e, env, _r = client.tool("kompas_get_material", {"document_id": doc})
+        return result(env), ecode(env)
+
+    def close(doc):
+        if doc:
+            call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+
+    # ── описание эталона и его наличие ────────────────────────────────────────────────────────────
+    ref = dict(VM_REFERENCE_DEFAULT)
+    ref_path = os.path.abspath(reference_path or os.path.join(workdir, "vm-reference", ref["file"]))
+    ref_present = os.path.isfile(ref_path)
+    rep.add("VM.00.reference.present",
+            "эталон VM присутствует: параметризованная .m3d с внешними переменными "
+            f"«{ref['depth_name']}» и «{ref['dependent_name']}» = «{ref['dependent_expression']}»",
+            "PASS" if ref_present else "FAIL",
+            f"reference={ref_path} exists={ref_present} "
+            "(эталон собран исполнителем прибором --vm-reference; группа его только открывает)")
+
+    # ══ ЧАСТЬ 1. НЕЗАВИСИМЫЕ ПРОВЕРКИ: обычная деталь, эталон переменных НЕ нужен ══════════════════
+    # Ревью V1: общий ранний выход «нет эталона» необоснованно пропускал материал, массу и отказы.
+    env, code = call("kompas_create_document", {"application_id": app_id, "kind": "part",
+                                                "name": "VM-ordinary"})
+    plain = doc_of(env)
+    build_error = None if plain else f"create_document: {code}"
+    if plain:
+        env, code = call("kompas_create_sketch", {
+            "document_id": plain, "expected_revision": current_rev(plain),
+            "plane": {"base": "xy", "offset_mm": 0}, "name": "VM-ordinary-sketch"})
+        sketch = result(env).get("id")
+        if not sketch:
+            build_error = f"create_sketch: {code} {emsg(env)}"
+        else:
+            env, code = call("kompas_edit_sketch", {
+                "sketch_ref": sketch, "expected_revision": current_rev(plain), "mode": "append",
+                "entities": [{"kind": "rectangle", "start_mm": [0.0, 0.0],
+                              "width_mm": ref["width_mm"], "height_mm": ref["height_mm"]}]})
+            if code:
+                build_error = f"edit_sketch: {code} {emsg(env)}"
+            else:
+                env, code = call("kompas_finish_sketch", {"sketch_ref": sketch,
+                                                          "require_closed_profile": False})
+                if code:
+                    build_error = f"finish_sketch: {code} {emsg(env)}"
+                else:
+                    env, code = call("kompas_extrude", {
+                        "sketch_ref": sketch, "expected_revision": current_rev(plain),
+                        "operation": "base", "depth_mm": ref["depth_initial_mm"],
+                        "direction": "positive"})
+                    if code:
+                        build_error = f"extrude: {code} {emsg(env)}"
+    rep.add("VM.setup.ordinary_part",
+            "обычная деталь 100×80×10 построена через MCP: материал, плотность и масса проверяются "
+            "БЕЗ эталона переменных",
+            "PASS" if (plain and not build_error) else "FAIL",
+            f"document_id={plain} error={build_error}")
+
+    if not plain or build_error:
+        for cid, desc in (
+            ("VM-04.material.read.discover", "материал и плотность читаются раздельно"),
+            ("VM-04.material.read.negative_tests", "чтение материала на чертеже даёт именованный отказ"),
+            ("VM-05.material.write.create", "материал и плотность назначаются"),
+            ("VM-05.material.write.read", "обе пары материал/плотность перечитаны"),
+            ("VM-05.material.write.negative_tests", "недопустимая плотность отвергается"),
+            ("VM-06.mass.computed_via_measure.read", "плотность взята из ответа get_material"),
+            ("VM-06.mass.computed_via_measure.geometry_validation",
+             "масса через measure согласована с независимым эталоном"),
+            ("dep.vm.units.read", "единицы плотности на входе и на выходе"),
+            ("dep.vm.units.negative_tests", "нулевая плотность не принимается за измеренную"),
+            ("dep.vm.part_addressing.discover", "документ-деталь адресуется как kind=part"),
+            ("dep.vm.part_addressing.read", "чтение материала адресуется document_id"),
+            ("dep.vm.part_addressing.negative_tests", "чертёж даёт WRONG_DOCUMENT_KIND"),
+            ("dep.vm.revisions.read", "чтение ревизию не меняет"),
+            ("dep.vm.revisions.edit", "запись материала поднимает ревизию"),
+            ("dep.vm.revisions.negative_tests", "устаревшая ревизия отвергнута, текущая принята"),
+            ("dep.vm.idempotency.create", "первая запись материала по operation_id"),
+            ("dep.vm.idempotency.read", "повтор payload не выполняет правку дважды"),
+            ("dep.vm.idempotency.negative_tests", "тот же operation_id с другими аргументами конфликтует"),
+            ("VM-01.variables.read.negative_tests",
+             "ошибка чтения переменных не даёт ложного пустого PASS"),
+            ("VM.refusals.contract", "контрактные отказы: оба режима, пустое имя, неизвестное имя"),
+        ):
+            rep.add(cid, desc, "FAIL", f"обычная деталь не построена: {build_error}")
+    else:
+        # ── VM-04.material.read: материал и плотность — два РАЗНЫХ документированных чтения ────────
+        initial, code = get_material(plain)
+        rep.add("VM-04.material.read.discover",
+                "get_material отдаёт имя и плотность РАЗДЕЛЬНО (name_read / density_read) — успешное "
+                "чтение имени не выдаётся за успешное чтение плотности",
+                "PASS" if (not code and "name_read" in initial and "density_read" in initial) else "FAIL",
+                f"material_name={initial.get('material_name')!r} name_read={initial.get('name_read')} "
+                f"density_raw={initial.get('density_raw')} "
+                f"density_read={initial.get('density_read')} error={code}")
+
+        material_pairs = (("Сталь 45 ГОСТ 1050-2013", 7850.0),
+                          ("Латунь ЛС59-1 ГОСТ 15527-2004", 8500.0))
+        first_name, first_density = material_pairs[0]
+        env, code = call("kompas_set_material", {
+            "document_id": plain, "expected_revision": current_rev(plain),
+            "material_name": first_name, "density_kg_per_m3": first_density})
+        created = result(env)
+        rep.add("VM-05.material.write.create",
+                "первая пара материал/плотность назначена; ответ отделяет ПОДТВЕРЖДЁННОЕ имя материала "
+                "от НЕПОДТВЕРЖДЁННОЙ физической плотности: имя совпало, единица чтения названа "
+                "неподтверждённой, нормализованная плотность не выдана, а числовое равенство сырого "
+                "показания — диагностика, а не подтверждение плотности",
+                "PASS" if (not code and created.get("name_matches")
+                           and created.get("density_raw_numeric_matches")
+                           and created.get("density_unit_status") == "unconfirmed"
+                           and created.get("density_normalized_kg_per_m3") is None) else "FAIL",
+                f"requested={first_name}/{first_density} read_name_after={created.get('read_name_after')!r} "
+                f"written_g_per_cm3={created.get('written_density_g_per_cm3')} "
+                f"read_density_raw_after={created.get('read_density_raw_after')} "
+                f"name_matches={created.get('name_matches')} "
+                f"density_raw_numeric_matches={created.get('density_raw_numeric_matches')} "
+                f"density_unit_status={created.get('density_unit_status')} "
+                f"density_normalized_kg_per_m3={created.get('density_normalized_kg_per_m3')} error={code}")
+
+        pair_results = []
+        for material_name, density in material_pairs:
+            if (material_name, density) != (first_name, first_density):
+                env, code = call("kompas_set_material", {
+                    "document_id": plain, "expected_revision": current_rev(plain),
+                    "material_name": material_name, "density_kg_per_m3": density})
+            read, rcode = get_material(plain)
+            pair_results.append({
+                "requested_name": material_name, "requested_density": density,
+                "read_name": read.get("material_name"),
+                "read_density_raw": read.get("density_raw"),
+                "density_unit_documented": read.get("density_raw_unit_documented"),
+                "density_unit_status": read.get("density_unit_status"),
+                "normalized_kg_per_m3": read.get("density_normalized_kg_per_m3"),
+                "name_matches": read.get("material_name") == material_name,
+                # Сырое показание сверяется с записанным в ТОЙ ЖЕ единице, без толкования единицы.
+                "raw_matches_written": read.get("density_raw") is not None
+                                       and abs(read.get("density_raw") - density / 1000.0) <= 5e-4,
+                "error": rcode,
+            })
+        both_ok = all(p["name_matches"] and p["raw_matches_written"] for p in pair_results)
+        distinct = (len({p["read_name"] for p in pair_results}) == 2
+                    and len({p["read_density_raw"] for p in pair_results}) == 2)
+        # Единица НЕ публикуется: справка называет г/куб.мм, ядро отдаёт значение, согласованное с
+        # г/куб.см, официального источника г/куб.см нет. Строка проверяет, что нормализованное значение
+        # НЕ выдано и статус назван — это и есть явное неподтверждение, а не PASS по обходу.
+        unconfirmed_ok = all(p["normalized_kg_per_m3"] is None
+                             and p["density_unit_documented"] == "g/mm3"
+                             and p["density_unit_status"] == "unconfirmed" for p in pair_results)
+        rep.add("VM-05.material.write.read",
+                "две РАЗНЫЕ пары материал/плотность назначены по очереди; обе перечитаны независимо, "
+                "сырое показание совпало с записанным как ДИАГНОСТИКА, а нормализованная плотность НЕ "
+                "выдана — единица названа неподтверждённой, а не подогнана",
+                "PASS" if (both_ok and distinct and unconfirmed_ok) else "FAIL",
+                f"pairs={json.dumps(pair_results, ensure_ascii=False)}")
+
+        # ── dep.vm.units: единица плотности на входе и на выходе ─────────────────────────────────
+        # Справка называет возврат GetDensity в г/куб.мм. ИЗМЕРЕНО (прибор --vm-density-units, на двух
+        # плотностях): установленная сборка отдаёт значение, согласованное с г/куб.см, и ТО ЖЕ отдаёт
+        # документированный IPart7→QI(IMassInertiaParam7)→Density, чья страница тоже называет г/куб.мм;
+        # официального источника г/куб.см нет. Поэтому сырое показание СОХРАНЯЕТСЯ, единица НАЗЫВАЕТСЯ
+        # документированной страницей, а нормализованная плотность НЕ публикуется — явное
+        # неподтверждение, а не собственный перевод.
+        units_read, ucode = get_material(plain)
+        raw = units_read.get("density_raw")
+        rep.add("dep.vm.units.read",
+                "сырое показание плотности сохранено и помечено документированной страницей единицей "
+                "(g/mm3), статус единицы назван «unconfirmed», а нормализованная плотность не выдана: "
+                "единица чтения НЕ подтверждена официальным источником",
+                "PASS" if (not ucode and raw is not None
+                           and units_read.get("density_raw_unit_documented") == "g/mm3"
+                           and units_read.get("density_unit_status") == "unconfirmed"
+                           and units_read.get("density_normalized_kg_per_m3") is None) else "FAIL",
+                f"density_raw={raw} unit_documented={units_read.get('density_raw_unit_documented')} "
+                f"status={units_read.get('density_unit_status')} "
+                f"normalized={units_read.get('density_normalized_kg_per_m3')} error={ucode}")
+
+        # ПРОБА НЕ ИМЕЕТ ПРАВА ПОСЛАТЬ NaN. `json.dumps(float('nan'))` даёт литерал `NaN`, которого в
+        # JSON нет; транспорт отвечает -32700 «Failed to parse the JSON-RPC request» ДО сервера, и
+        # строка падала на дефекте ПРОБЫ, а не на факте о продукте. Нечисловая плотность посылается так,
+        # как её может послать настоящий клиент — строкой, и сервер обязан отвергнуть её ИМЕНОВАННЫМ
+        # кодом до COM.
+        env, code_not_number = call("kompas_set_material", {
+            "document_id": plain, "expected_revision": current_rev(plain),
+            "material_name": "X", "density_kg_per_m3": "nan"})
+        env, code_neg = call("kompas_set_material", {
+            "document_id": plain, "expected_revision": current_rev(plain),
+            "material_name": "X", "density_kg_per_m3": -5.0})
+        env, code_zero = call("kompas_set_material", {
+            "document_id": plain, "expected_revision": current_rev(plain),
+            "material_name": "X", "density_kg_per_m3": 0.0})
+        env, code_empty = call("kompas_set_material", {
+            "document_id": plain, "expected_revision": current_rev(plain),
+            "material_name": "  ", "density_kg_per_m3": 7850.0})
+        bad_density = {"not_a_number": code_not_number, "negative": code_neg, "zero": code_zero,
+                       "empty_name": code_empty}
+        rep.add("VM-05.material.write.negative_tests",
+                "нечисловая (строкой), неположительная и нулевая плотность, а также пустое имя "
+                "материала отвергаются до COM с названным кодом",
+                "PASS" if all(bad_density.values()) else "FAIL",
+                json.dumps(bad_density, ensure_ascii=False))
+
+        rep.add("dep.vm.units.negative_tests",
+                "нулевая плотность отвергается как недопустимая на входе: сервер не принимает ноль за "
+                "измеренную плотность",
+                "PASS" if code_zero else "FAIL",
+                f"zero_error={code_zero} (GetDensity()==0 — документированный признак НЕУДАЧИ)")
+
+        # ── dep.vm.part_addressing ───────────────────────────────────────────────────────────────
+        ctx_ok, ctx_code = None, None
+        _e, cenv, _r = client.tool("kompas_get_context", {"document_id": plain, "detail": "minimal"})
+        ctx = result(cenv)
+        ctx_ok, ctx_code = ctx.get("kind"), ecode(cenv)
+        rep.add("dep.vm.part_addressing.discover",
+                "документ, созданный как part, читается как kind=part — адресация верхнего компонента",
+                "PASS" if (ctx_ok in ("part", "Part")) else "FAIL",
+                f"kind={ctx_ok} error={ctx_code}")
+
+        addr_read, addr_code = get_material(plain)
+        rep.add("dep.vm.part_addressing.read",
+                "чтение материала адресуется ЯВНЫМ document_id, а не «активным документом»",
+                "PASS" if (not addr_code and addr_read.get("density_read") is not None) else "FAIL",
+                f"density_read={addr_read.get('density_read')} error={addr_code}")
+
+        env, code = call("kompas_create_document", {"application_id": app_id, "kind": "drawing",
+                                                    "name": "VM-wrongkind"})
+        drawing = doc_of(env)
+        if drawing:
+            _e, d_env, _r = client.tool("kompas_list_variables", {"document_id": drawing})
+            kind_code = ecode(d_env)
+            _e, s_env, _r = client.tool("kompas_set_material", {
+                "document_id": drawing, "expected_revision": current_rev(drawing),
+                "material_name": "X", "density_kg_per_m3": 7850.0,
+                "operation_id": str(uuid.uuid4())})
+            kind_code2 = ecode(s_env)
+            # ЧТЕНИЕ материала на неподходящем документе — тоже ИМЕНОВАННЫЙ отказ: get_material требует
+            # kind=part, поэтому чертёж отвергается ДО COM, а не отдаёт пустое чтение.
+            _e, g_env, _r = client.tool("kompas_get_material", {"document_id": drawing})
+            kind_code3 = ecode(g_env)
+            rep.add("dep.vm.part_addressing.negative_tests",
+                    "чертёж даёт ИМЕНОВАННЫЙ отказ вида документа (WRONG_DOCUMENT_KIND), а не "
+                    "необработанное исключение COM",
+                    "PASS" if (kind_code == "WRONG_DOCUMENT_KIND"
+                               and kind_code2 == "WRONG_DOCUMENT_KIND") else "FAIL",
+                    f"list_variables={kind_code} set_material={kind_code2}")
+            rep.add("VM-04.material.read.negative_tests",
+                    "чтение материала на чертеже отвергается ИМЕНОВАННЫМ кодом вида документа, а не "
+                    "отдаёт пустое чтение",
+                    "PASS" if kind_code3 == "WRONG_DOCUMENT_KIND" else "FAIL",
+                    f"get_material_on_drawing={kind_code3}")
+            rep.add("VM-01.variables.read.negative_tests",
+                    "ошибка чтения переменных на неподходящем документе не даёт ложного ПУСТОГО PASS: "
+                    "отказ назван кодом, а не пустым списком",
+                    "PASS" if kind_code else "FAIL",
+                    f"error={kind_code} (пустой список и отказ — два разных состояния)")
+            close(drawing)
+        else:
+            rep.add("dep.vm.part_addressing.negative_tests",
+                    "чертёж даёт ИМЕНОВАННЫЙ отказ вида документа", "FAIL",
+                    f"чертёж не создан: error={code}")
+            rep.add("VM-04.material.read.negative_tests",
+                    "чтение материала на чертеже даёт именованный отказ", "FAIL",
+                    f"чертёж не создан: error={code}")
+            rep.add("VM-01.variables.read.negative_tests",
+                    "ошибка чтения переменных не даёт ложного пустого PASS", "FAIL",
+                    f"чертёж не создан: error={code}")
+
+        # ── dep.vm.revisions: чтение ревизию не меняет, запись поднимает ─────────────────────────
+        r_before = current_rev(plain)
+        list_variables(plain)
+        get_material(plain)
+        r_after_reads = current_rev(plain)
+        rep.add("dep.vm.revisions.read",
+                "чтение переменных и материала не меняет ревизию документа",
+                "PASS" if r_before == r_after_reads else "FAIL",
+                f"revision_before={r_before} revision_after_reads={r_after_reads}")
+
+        r_before_write = current_rev(plain)
+        env, code = call("kompas_set_material", {
+            "document_id": plain, "expected_revision": r_before_write,
+            "material_name": first_name, "density_kg_per_m3": first_density})
+        r_after_write = current_rev(plain)
+        rep.add("dep.vm.revisions.edit",
+                "запись материала поднимает ревизию документа через общий механизм мутаций",
+                "PASS" if (not code and r_after_write > r_before_write) else "FAIL",
+                f"revision_before={r_before_write} revision_after={r_after_write} error={code}")
+
+        env, code_stale = call("kompas_set_material", {
+            "document_id": plain, "expected_revision": max(1, current_rev(plain) - 5),
+            "material_name": first_name, "density_kg_per_m3": first_density})
+        env, code_current = call("kompas_set_material", {
+            "document_id": plain, "expected_revision": current_rev(plain),
+            "material_name": first_name, "density_kg_per_m3": first_density})
+        rep.add("dep.vm.revisions.negative_tests",
+                "устаревшая ревизия отвергнута (REVISION_CONFLICT), актуальная принята",
+                "PASS" if (code_stale == "REVISION_CONFLICT" and not code_current) else "FAIL",
+                f"stale_error={code_stale} current_error={code_current}")
+
+        # ── dep.vm.idempotency: НЕИЗМЕНЁННЫЙ payload повторяется как есть ────────────────────────
+        op_id = str(uuid.uuid4())
+        payload = {"document_id": plain, "expected_revision": current_rev(plain),
+                   "material_name": first_name, "density_kg_per_m3": first_density,
+                   "operation_id": op_id}
+        env, code_first = call("kompas_set_material", payload)
+        r_after_first = current_rev(plain)
+        rep.add("dep.vm.idempotency.create",
+                "первая запись материала по operation_id выполнена и подняла ревизию",
+                "PASS" if (not code_first and r_after_first > payload["expected_revision"]) else "FAIL",
+                f"op_id={op_id} revision_before={payload['expected_revision']} "
+                f"revision_after={r_after_first} error={code_first}")
+
+        # ТОТ ЖЕ payload БЕЗ ИЗМЕНЕНИЙ: expected_revision намеренно НЕ пересчитывается, иначе это уже
+        # другие аргументы, и проверялось бы не то (ревью V3).
+        env, code_repeat = call("kompas_set_material", payload)
+        r_after_repeat = current_rev(plain)
+        rep.add("dep.vm.idempotency.read",
+                "повтор ТОГО ЖЕ payload (тот же operation_id и те же аргументы) не выполняет правку "
+                "второй раз и не двигает ревизию",
+                "PASS" if (not code_repeat and r_after_repeat == r_after_first) else "FAIL",
+                f"op_id={op_id} revision_first={r_after_first} revision_repeat={r_after_repeat} "
+                f"error={code_repeat}")
+
+        changed = dict(payload)
+        changed["material_name"] = material_pairs[1][0]
+        changed["density_kg_per_m3"] = material_pairs[1][1]
+        env, code_conflict = call("kompas_set_material", changed)
+        rep.add("dep.vm.idempotency.negative_tests",
+                "тот же operation_id с ДРУГИМИ аргументами даёт конфликт операции",
+                "PASS" if code_conflict == "OPERATION_ID_CONFLICT" else "FAIL",
+                f"op_id={op_id} conflict_error={code_conflict}")
+
+        # ── VM.refusals.contract: чисто контрактные отказы, без обращения к модели ────────────────
+        env, both = call("kompas_set_variable", {
+            "document_id": plain, "expected_revision": current_rev(plain),
+            "name": "ЛюбоеИмя", "value": 1.0, "expression": "2"})
+        env, neither = call("kompas_set_variable", {
+            "document_id": plain, "expected_revision": current_rev(plain), "name": "ЛюбоеИмя"})
+        env, empty_name = call("kompas_set_variable", {
+            "document_id": plain, "expected_revision": current_rev(plain), "name": "", "value": 1.0})
+        env, unknown = call("kompas_set_variable", {
+            "document_id": plain, "expected_revision": current_rev(plain),
+            "name": "ЭтойПеременнойНет_12345", "value": 1.0})
+        contract = {"both_modes": both, "neither_mode": neither, "empty_name": empty_name,
+                    "unknown_name": unknown}
+        rep.add("VM.refusals.contract",
+                "контрактные отказы до COM: оба режима сразу, ни одного режима, пустое имя; и "
+                "неизвестное имя даёт названный отказ на существующей (пустой) коллекции",
+                "PASS" if (both == "INVALID_ARGUMENT" and neither == "INVALID_ARGUMENT"
+                           and empty_name == "INVALID_ARGUMENT" and unknown is not None) else "FAIL",
+                json.dumps(contract, ensure_ascii=False))
+
+        # ── VM-06: масса через существующий measure (СКВОЗНАЯ проверка, не режим профиля) ──────────
+        # РЕВЬЮ §1: нормализованная плотность не публикуется, пока единица чтения не подтверждена
+        # документом. Поэтому цепочка «плотность из ответа get_material → measure» НЕ выполняется и
+        # НАЗЫВАЕТСЯ открытой, а масса проверяется по плотности, которую задаёт САМА проба как
+        # аналитический эталон: так проверяется арифметика measure, независимо от неподтверждённого
+        # чтения, и неподтверждённое не выдаётся за подтверждённое.
+        env, code = call("kompas_set_material", {
+            "document_id": plain, "expected_revision": current_rev(plain),
+            "material_name": first_name, "density_kg_per_m3": ref["density_kg_per_m3"]})
+        chain_material, mcode = get_material(plain)
+        rep.add("VM-06.mass.computed_via_measure.read",
+                "плотность для расчёта массы взята из ОТВЕТА get_material, а не из справочника сервера "
+                "и не из запроса",
+                "NAMED",
+                "единица чтения плотности не подтверждена документом (см. dep.vm.units.read), поэтому "
+                "нормализованная плотность не публикуется и цепочку «плотность модели → масса» "
+                "выполнить нечем. Строка НАЗВАНА непроверенной; ложный PASS не подставляется")
+
+        measured, merr = measure(plain, ["volume", "mass"], density=ref["density_kg_per_m3"])
+        if measured is None:
+            rep.add("VM-06.mass.computed_via_measure.geometry_validation",
+                    "масса из measure согласована с независимым аналитическим эталоном", "FAIL", merr)
+        else:
+            volume_measured = measured.get("volume_mm3")
+            mass_measured = measured.get("mass_kg")
+            volume_ok = (volume_measured is not None
+                         and abs(volume_measured - ref["volume_initial_mm3"])
+                         <= ref["volume_tolerance_mm3"])
+            expected_mass = ref["volume_initial_mm3"] * 1e-9 * ref["density_kg_per_m3"]
+            mass_ok = (mass_measured is not None
+                       and abs(mass_measured - expected_mass) <= ref["mass_tolerance_kg"])
+            rep.add("VM-06.mass.computed_via_measure.geometry_validation",
+                    "объём из measure равен аналитическому 100×80×10, а масса — независимому эталону "
+                    "объём×плотность, где плотность задана ПРОБОЙ (7850 кг/м³), а не прочитана из "
+                    "модели: проверяется арифметика measure, а не единица чтения плотности; значение не "
+                    "подставляется обратно в ту же формулу",
+                    "PASS" if (volume_ok and mass_ok) else "FAIL",
+                    f"volume_mm3={volume_measured} (эталон {ref['volume_initial_mm3']}) "
+                    f"mass_kg={mass_measured} (эталон {expected_mass:.9f}) "
+                    f"stated_density={ref['density_kg_per_m3']} "
+                    f"unverified={measured.get('unverified_aspects')}")
+
+    close(plain)
+
+    # ══ ЧАСТЬ 2. ПЕРЕМЕННЫЕ: требует эталон; без него строки НАЗЫВАЮТСЯ, а не подменяются ══════════
+    reference_rows = (
+        ("VM-01.variables.read.discover",
+         "обе известные внешние переменные найдены; имена, значения и выражения прочитаны"),
+        ("VM-02.variable.set_value.create",
+         "управляющее значение записано; ответ подтверждает запись ПЕРЕЧИТЫВАНИЕМ"),
+        ("VM-02.variable.set_value.read",
+         "значение перечитано независимым list_variables и равно запрошенному"),
+        ("VM-02.variable.set_value.rebuild",
+         "объём детали после применения равен эталону для изменённой глубины"),
+        ("VM-02.variable.set_value.negative_tests",
+         "запись value поверх действующего выражения отклонена, выражение не уничтожено"),
+        ("VM-03.variable.set_expression.create",
+         "допустимое выражение записано и подтверждено перечитыванием"),
+        ("VM-03.variable.set_expression.read",
+         "выражение и вычисленное значение перечитаны из вновь полученной коллекции"),
+        ("VM-03.variable.set_expression.rebuild",
+         "изменение ИСХОДНОЙ переменной меняет ЗАВИСИМУЮ величину: выражение вычислил КОМПАС"),
+        ("VM-03.variable.set_expression.negative_tests",
+         "неверное выражение не даёт ложного успеха; последствия названы"),
+        ("dep.vm.save_reopen.save_reopen",
+         "save → close → reopen возвращает НОВЫЙ документ, файл существует"),
+        ("dep.vm.save_reopen.read",
+         "переменные, выражение, материал и плотность читаются из нового документа ДО повторной записи"),
+        ("dep.vm.save_reopen.negative_tests",
+         "устаревшая ревизия отвергается и после переоткрытия, текущая работает"),
+    )
+    if not ref_present:
+        for cid, desc in reference_rows:
+            rep.add(cid, desc, "NAMED",
+                    "эталон переменных отсутствует — строка не проверена, ложный PASS не подставляется")
+        return
+
+    # ── эталон открывается ЯВНЫМИ path/access, как того требует схема поставки ────────────────────
+    env, code = call("kompas_open_document", {"application_id": app_id, "path": ref_path,
+                                              "access": "edit"})
+    ref_doc = doc_of(env)
+    rep.add("VM.01.open", "эталон открывается через MCP (path + access=edit)",
+            "PASS" if (ref_doc and not code) else "FAIL",
+            f"document_id={ref_doc} error={code}")
+    if not ref_doc:
+        for cid, desc in reference_rows:
+            rep.add(cid, desc, "FAIL", f"эталон не открыт: error={code}")
+        return
+
+    # ── VM-01: чтение переменных по ТОЧНЫМ именам описания ──────────────────────────────────────
+    listing, lcode = list_variables(ref_doc)
+    variables = listing.get("variables") or []
+    by_name = {v.get("name"): v for v in variables}
+    depth = by_name.get(ref["depth_name"])
+    dependent = by_name.get(ref["dependent_name"])
+    fields_ok = all(v.get("name") is not None for v in variables) and all(
+        "value" in v and "expression" in v for v in variables)
+    # РЕВЬЮ §2: наличие ключей value/expression в JSON с возможным null — НЕ подтверждение чтения.
+    # Требуются ДЕЙСТВИТЕЛЬНО прочитанные значения и выражения ОБЕИХ переменных описания, и они должны
+    # совпасть с зафиксированным описанием: depth = 10, full_depth = depth*2 (значение 20).
+    depth_value = (depth or {}).get("value")
+    depth_expression = (depth or {}).get("expression")
+    dependent_value = (dependent or {}).get("value")
+    dependent_expression = (dependent or {}).get("expression")
+    values_read = all(v is not None for v in
+                      (depth_value, depth_expression, dependent_value, dependent_expression))
+    description_ok = (depth_value == ref["depth_initial_mm"]
+                      and dependent_expression == ref["dependent_expression"]
+                      and dependent_value == ref["depth_initial_mm"] * 2.0)
+    rep.add("VM-01.variables.read.discover",
+            f"обе известные переменные («{ref['depth_name']}» и «{ref['dependent_name']}») найдены и "
+            "их значения и выражения ДЕЙСТВИТЕЛЬНО прочитаны (не null) и совпадают с описанием "
+            "эталона; ошибка чтения поля не выдаётся за пустое значение",
+            "PASS" if (not lcode and listing.get("scope") == "external/top_part"
+                       and depth is not None and dependent is not None and fields_ok
+                       and values_read and description_ok) else "FAIL",
+            f"total={listing.get('total')} returned={listing.get('returned')} "
+            f"scope={listing.get('scope')} names={list(by_name)} "
+            f"depth=({depth_value!r}, {depth_expression!r}) "
+            f"dependent=({dependent_value!r}, {dependent_expression!r}) error={lcode} "
+            f"diagnostics={listing.get('diagnostics')}")
+
+    if depth is None or dependent is None:
+        for cid, desc in reference_rows[1:]:
+            rep.add(cid, desc, "FAIL", "эталон не несёт ожидаемых переменных описания")
+        close(ref_doc)
+        return
+
+    # ── VM-02: числовое изменение управляющего значения ─────────────────────────────────────────
+    vol_before, verr = measure(ref_doc, ["volume"])
+    volume_before = (vol_before or {}).get("volume_mm3")
+    r0 = current_rev(ref_doc)
+    env, code = call("kompas_set_variable", {
+        "document_id": ref_doc, "expected_revision": r0,
+        "name": ref["depth_name"], "value": ref["depth_changed_mm"]})
+    written = result(env)
+    rep.add("VM-02.variable.set_value.create",
+            "управляющее значение записано; read_back_verified истинно — подтверждение построено на "
+            "ПРОЧИТАННЫХ полях и исходе применения, а не на существовании объекта",
+            "PASS" if (not code and written.get("read_back_verified") is True
+                       and written.get("value_after") == ref["depth_changed_mm"]) else "FAIL",
+            f"name={ref['depth_name']} value_after={written.get('value_after')} "
+            f"read_back_verified={written.get('read_back_verified')} "
+            f"rebuild={written.get('rebuild_result')} error={code} "
+            f"diagnostics={written.get('diagnostics')}")
+
+    listing2, l2code = list_variables(ref_doc)
+    depth_after = (listing2.get("variables") or [])
+    depth_after = next((v for v in depth_after if v.get("name") == ref["depth_name"]), {})
+    rep.add("VM-02.variable.set_value.read",
+            "значение перечитано НЕЗАВИСИМЫМ list_variables (а не полем ответа сеттера) и равно "
+            "запрошенному",
+            "PASS" if (not l2code and depth_after.get("value") == ref["depth_changed_mm"]) else "FAIL",
+            f"value_re-read={depth_after.get('value')} error={l2code}")
+
+    vol_after, aerr = measure(ref_doc, ["volume"])
+    volume_after = (vol_after or {}).get("volume_mm3")
+    geometry_ok = (volume_after is not None
+                   and abs(volume_after - ref["volume_changed_mm3"]) <= ref["volume_tolerance_mm3"])
+    rep.add("VM-02.variable.set_value.rebuild",
+            "независимое измерение объёма после применения равно ЭТАЛОНУ изменённой глубины "
+            f"({ref['volume_changed_mm3']:.0f} мм³), а не просто «объём изменился»",
+            "PASS" if (written.get("rebuild_result") is True and geometry_ok) else "FAIL",
+            f"rebuild_result={written.get('rebuild_result')} volume_before={volume_before} "
+            f"volume_after={volume_after} (эталон {ref['volume_changed_mm3']}) err={aerr}")
+
+    # value поверх действующего выражения: выражение НЕ уничтожается неявно
+    env, code = call("kompas_set_variable", {
+        "document_id": ref_doc, "expected_revision": current_rev(ref_doc),
+        "name": ref["dependent_name"], "value": 1.0})
+    refused = result(env)
+    expr_kept = (list_variables(ref_doc)[0].get("variables") or [])
+    expr_kept = next((v.get("expression") for v in expr_kept
+                      if v.get("name") == ref["dependent_name"]), None)
+    rep.add("VM-02.variable.set_value.negative_tests",
+            "числовая запись поверх действующего выражения ОТКЛОНЕНА, выражение осталось на месте: "
+            "неявное уничтожение формулы запрещено",
+            "PASS" if (code == "INVALID_ARGUMENT" and expr_kept == ref["dependent_expression"]) else "FAIL",
+            f"error={code} expression_after_attempt={expr_kept!r} "
+            f"current_expression_field={refused.get('expression_before')!r}")
+
+    # ── VM-03: выражение вычисляет КОМПАС ───────────────────────────────────────────────────────
+    # СНАЧАЛА записываем допустимое выражение, затем ПЕРЕЧИТЫВАЕМ его и вычисленное значение, и лишь
+    # потом меняем источник: одного совпадения строки выражения недостаточно (ревью V3).
+    env, code = call("kompas_set_variable", {
+        "document_id": ref_doc, "expected_revision": current_rev(ref_doc),
+        "name": ref["dependent_name"], "expression": ref["dependent_expression"]})
+    expr_written = result(env)
+    computed_expected = ref["depth_changed_mm"] * 2.0
+    rep.add("VM-03.variable.set_expression.create",
+            "допустимое выражение записано; ответ подтверждает сохранение выражения И прочитанное "
+            "вычисленное значение, равное заранее записанному результату формулы",
+            "PASS" if (not code and expr_written.get("read_back_verified") is True
+                       and expr_written.get("expression_after") == ref["dependent_expression"]
+                       and expr_written.get("value_after") == computed_expected) else "FAIL",
+            f"expression_after={expr_written.get('expression_after')!r} "
+            f"value_after={expr_written.get('value_after')} (формула даёт {computed_expected}) "
+            f"read_back_verified={expr_written.get('read_back_verified')} error={code}")
+
+    listing3, l3code = list_variables(ref_doc)
+    expr_row = next((v for v in (listing3.get("variables") or [])
+                     if v.get("name") == ref["dependent_name"]), {})
+    dependent_before = expr_row.get("value")
+    rep.add("VM-03.variable.set_expression.read",
+            "выражение и вычисленное значение перечитаны из вновь полученной коллекции",
+            "PASS" if (not l3code and expr_row.get("expression") == ref["dependent_expression"]
+                       and dependent_before is not None) else "FAIL",
+            f"expression={expr_row.get('expression')!r} value={dependent_before} error={l3code}")
+
+    env, code = call("kompas_set_variable", {
+        "document_id": ref_doc, "expected_revision": current_rev(ref_doc),
+        "name": ref["depth_name"], "value": ref["depth_initial_mm"]})
+    listing4, l4code = list_variables(ref_doc)
+    dependent_after = next((v.get("value") for v in (listing4.get("variables") or [])
+                            if v.get("name") == ref["dependent_name"]), None)
+    # РЕВЬЮ §2: «отличается от прежнего числа» — НЕ доказательство. Зависимая величина должна совпасть
+    # с ЗАРАНЕЕ записанным результатом формулы при обоих значениях источника: 20*2 = 40 и 10*2 = 20.
+    dependent_expected_before = ref["depth_changed_mm"] * 2.0
+    dependent_expected_after = ref["depth_initial_mm"] * 2.0
+    dependent_matches_formula = (dependent_before is not None and dependent_after is not None
+                                 and abs(dependent_before - dependent_expected_before) <= 1e-6
+                                 and abs(dependent_after - dependent_expected_after) <= 1e-6)
+    rep.add("VM-03.variable.set_expression.rebuild",
+            "изменение ИСХОДНОЙ переменной пересчитало ЗАВИСИМУЮ величину и она совпала с заранее "
+            "записанной формулой при обоих значениях источника: выражение вычислило ЯДРО КОМПАС, а не "
+            "совпала строка",
+            "PASS" if (not l4code and dependent_matches_formula) else "FAIL",
+            f"source={ref['depth_name']} {ref['depth_changed_mm']}→{ref['depth_initial_mm']} "
+            f"dependent={ref['dependent_name']} before={dependent_before} "
+            f"(формула даёт {dependent_expected_before}) after={dependent_after} "
+            f"(формула даёт {dependent_expected_after}) error={l4code}")
+
+    # неверное выражение: либо названный отказ, либо явное НЕподтверждение — но не голый PASS
+    env, code = call("kompas_set_variable", {
+        "document_id": ref_doc, "expected_revision": current_rev(ref_doc),
+        "name": ref["dependent_name"], "expression": "(((( неверное выражение *** "})
+    bad = result(env)
+    bad_ok = (code is not None) or (bad.get("read_back_verified") is False)
+    rep.add("VM-03.variable.set_expression.negative_tests",
+            "неверное выражение не даёт ложного успеха: названный отказ ИЛИ явное неподтверждение "
+            "чтением; конкретное недокументированное поведение ядра не требуется",
+            "PASS" if bad_ok else "FAIL",
+            f"error={code} read_back_verified={bad.get('read_back_verified')} "
+            f"diagnostics={bad.get('diagnostics')}")
+
+    # ── dep.vm.save_reopen: снимок → save → close → reopen → чтение ДО повторной записи ─────────
+    snapshot_vars = {v.get("name"): (v.get("value"), v.get("expression"))
+                     for v in (list_variables(ref_doc)[0].get("variables") or [])}
+    snapshot_material = get_material(ref_doc)[0]
+    written_path = os.path.join(workdir, "vm-reference", "vm-reference-saved.m3d")
+    os.makedirs(os.path.dirname(written_path), exist_ok=True)
+    env, code_save = call("kompas_save_document", {
+        "document_id": ref_doc, "expected_revision": current_rev(ref_doc),
+        "target_path": written_path})
+    saved_ok = (not code_save) and os.path.isfile(written_path)
+    close(ref_doc)
+    env, code = call("kompas_open_document", {"application_id": app_id, "path": written_path,
+                                              "access": "edit"})
+    reopened = doc_of(env)
+    rep.add("dep.vm.save_reopen.save_reopen",
+            "save → close → reopen проходит целиком и возвращает НОВЫЙ документ; файл записан",
+            "PASS" if (saved_ok and reopened and reopened != ref_doc) else "FAIL",
+            f"path={written_path} saved={saved_ok} reopened={reopened} error={code}")
+
+    if not reopened:
+        for cid, desc in reference_rows[-2:]:
+            rep.add(cid, desc, "FAIL", f"переоткрытие не дало документ: error={code}")
+        return
+
+    reopened_vars = {v.get("name"): (v.get("value"), v.get("expression"))
+                     for v in (list_variables(reopened)[0].get("variables") or [])}
+    reopened_material = get_material(reopened)[0]
+    vars_match = reopened_vars == snapshot_vars
+    material_match = (reopened_material.get("material_name") == snapshot_material.get("material_name")
+                      and reopened_material.get("density_raw") is not None
+                      and snapshot_material.get("density_raw") is not None
+                      and abs(reopened_material.get("density_raw")
+                              - snapshot_material.get("density_raw")) <= 5e-4)
+    reopened_vol, rverr = measure(reopened, ["volume"])
+    reopened_volume = (reopened_vol or {}).get("volume_mm3")
+    geometry_after_reopen = (reopened_volume is not None
+                             and abs(reopened_volume - ref["volume_initial_mm3"])
+                             <= ref["volume_tolerance_mm3"])
+    rep.add("dep.vm.save_reopen.read",
+            "переменные, выражение, материал и плотность прочитаны из НОВОГО документа ДО всякой "
+            "повторной записи и совпали со снимком; геометрия соответствует управляющему значению",
+            "PASS" if (vars_match and material_match and geometry_after_reopen) else "FAIL",
+            f"vars_match={vars_match} material_match={material_match} "
+            f"geometry_ok={geometry_after_reopen} volume={reopened_volume} "
+            f"snapshot_vars={snapshot_vars} reopened_vars={reopened_vars} "
+            f"snapshot_material={snapshot_material.get('material_name')}/"
+            f"{snapshot_material.get('density_raw')} reopened="
+            f"{reopened_material.get('material_name')}/"
+            f"{reopened_material.get('density_raw')} err={rverr}")
+
+    # Порядок важен и назван: у только что переоткрытого документа ревизия мала (измерено: 1), поэтому
+    # «устаревшая» ревизия вида max(1, r-5) СОВПАЛА бы с текущей и проверяла бы не то. Сначала ПРАВКА по
+    # текущей ревизии (она поднимает счётчик), затем повтор с ревизией, которая теперь устарела.
+    reopened_revision = current_rev(reopened)
+    env, code_current = call("kompas_set_variable", {
+        "document_id": reopened, "expected_revision": reopened_revision,
+        "name": ref["depth_name"], "value": ref["depth_changed_mm"]})
+    revision_after_write = current_rev(reopened)
+    env, code_stale = call("kompas_set_variable", {
+        "document_id": reopened, "expected_revision": reopened_revision,
+        "name": ref["depth_name"], "value": ref["depth_initial_mm"]})
+    rep.add("dep.vm.save_reopen.negative_tests",
+            "после переоткрытия актуальная ревизия принимает ПРАВКУ, а та же ревизия после неё "
+            "отвергается как устаревшая",
+            "PASS" if (not code_current and revision_after_write > reopened_revision
+                       and code_stale == "REVISION_CONFLICT") else "FAIL",
+            f"revision_on_reopen={reopened_revision} revision_after_write={revision_after_write} "
+            f"current_error={code_current} stale_error={code_stale}")
+
+    close(reopened)
 
 def main():
     # x64, not bin\Debug: the solution forces x64 (Directory.Build.props), so `dotnet build`
@@ -2667,6 +3746,14 @@ def main():
     # потоке, — та же причина, что у прочих групп.
     drawing_only = "--drawing-only" in sys.argv
 
+    # Домен ПЕРЕМЕННЫХ И МАТЕРИАЛА (блок VM, профиль `variables-material-minimal-v1`): одна группа,
+    # свой сеанс, своя ветка. Клетка матрицы обязана находиться по ИМЕНИ строки (`VM.<NN>.<действие>`),
+    # а не по номеру в общем потоке, — та же причина, что у прочих групп. Эталон берётся по пути
+    # `--vm-reference-doc <path>`; если путь не задан, группа называет отсутствие эталона строками
+    # `NAMED`, а не подставляет созданную на месте переменную.
+    variables_material_only = "--variables-material-only" in sys.argv
+    vm_reference_doc = argument("--vm-reference-doc")
+
     rep = Report(
         ("Приёмка контракта: схемы, отказы до COM, политика путей" if only_contract
          else "Приёмка SM-11: фаска через MCP" if chamfer_only
@@ -2690,6 +3777,7 @@ def main():
         else "Приёмка ASM: минимальные сборки через MCP (наряд C1, профиль assemblies-minimal-v1)" if assembly_only
         else "Приёмка MATE: сопряжения сборки через MCP (блок C2, профиль mates-minimal-v1)" if mate_only
         else "Приёмка DRW: чертежи — стандартные виды, размеры, основная надпись, экспорт (блок DRW, профиль drawings-minimal-v1)" if drawing_only
+        else "Приёмка VM: внешние переменные детали и материал через MCP (блок VM, профиль variables-material-minimal-v1)" if variables_material_only
         else "Интеграционный прогон вертикального сценария через MCP"),
         os.path.join(workdir, "chamfer-acceptance.json" if chamfer_only
                      else "fillet-acceptance.json" if fillet_only
@@ -2712,6 +3800,7 @@ def main():
                      else "assembly-acceptance.json" if assembly_only
                      else "mate-acceptance.json" if mate_only
                      else "drawing-acceptance.json" if drawing_only
+                     else "variables-material-acceptance.json" if variables_material_only
                      else "smoke-report.json"))
     report_override = argument("--report")
     if report_override:
@@ -3089,6 +4178,14 @@ def main():
 
         if drawing_only:
             drawing_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if variables_material_only:
+            variables_material_checks(client, rep, app_id, workdir, reference_path=vm_reference_doc)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -3609,11 +4706,13 @@ def main():
                 "PASS" if ((im_env or {}).get("verification") or {}).get("level") else "UNKNOWN",
                 f"level={((im_env or {}).get('verification') or {}).get('level')} unverified={((im_env or {}).get('verification') or {}).get('unverified_aspects')}")
 
-        dc_err, dc_env, _ = client.tool("kompas_create_document", {
-            "application_id": app_id, "kind": "drawing", "operation_id": str(uuid.uuid4())})
-        rep.add("V10", "чертёж в v1 не создаётся (capability не выдаётся за реализованный)",
-                "PASS" if error_code(dc_env) == "CAPABILITY_UNAVAILABLE" else "FAIL",
-                f"code={((dc_env or {}).get('error') or {}).get('code')}")
+        # СТРОКА V10 «чертёж в v1 не создаётся» УДАЛЕНА 06.10.2026 как ОШИБОЧНОЕ требование, а не
+        # превращена в PASS. Её посылка («создание чертежа в v1 не реализовано») была верна до блока
+        # DRW; после того как блок DRW реализован и принят (профиль `drawings-minimal-v1` — COMPLETE,
+        # 6/6 режимов), та же проверка требовала бы от продукта НЕ реализовывать документированную и
+        # уже принятую возможность. Измеренный ответ API при этом не переписывается: прежние прогоны
+        # (05.10.2026, `code=CAPABILITY_UNAVAILABLE`) остаются в своих отчётах как есть, а новый
+        # прогон просто не содержит этой строки. Создание чертежа проверяется строками группы DRW.
 
         plane_orientation_checks(client, rep, app_id)
         unit_reading_checks(client, rep, app_id)
@@ -23670,7 +24769,7 @@ def image_checks(client, rep, app_id, workdir):
     # принимала ОБА исхода (A: отказ; B: снимок с возвратом) и этим не могла упасть, если отказ
     # пропадёт вовсе. Требование наряда: строка ожидает ОДИН заранее названный исход.
     #
-    # ИЗМЕРENИЕ, НА КОТОРОМ СТОИТ ОЖИДАНИЕ (проверяется ниже, а не предполагается). Свежий документ
+    # ИЗМЕРЕНИЕ, НА КОТОРОМ СТОИТ ОЖИДАНИЕ (проверяется ниже, а не предполагается). Свежий документ
     # сервера показывает диметрию (`ksViewProjectionType` 8): она ЧИТАЕТСЯ обратным чтением и, после
     # публикации имени `dimetric`, ВОССТАНОВИМА. Значит первый `view` без `keep_view` на свежем
     # документе обязан УСПЕШНО снять снимок и вернуть диметрию — это и есть ожидаемый исход.

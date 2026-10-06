@@ -238,11 +238,15 @@ public sealed record ExportDrawingCommand
 }
 
 /// <summary>Result of exporting a drawing: the file confirmed by existence, size and signature.</summary>
+/// <remarks>DOC: <c>iconverter_convert.html</c> — <c>Convert</c> returns <c>1</c> on success and <c>0</c>
+/// on failure; the documented return is reported alongside the file evidence so the caller can see the
+/// code and the file agree. History: docs/decisions/drawings.md#export-formats</remarks>
 public sealed record ExportDrawingResult(
     string OutputPath,
     string Format,
     long ByteLength,
     string Signature,
+    int ConvertResult,
     VerificationDto Verification);
 
 /// <summary>Write the drawing's technical requirements (технические требования) and apply them.</summary>
@@ -266,4 +270,120 @@ public sealed record SetTechnicalDemandCommand
 public sealed record SetTechnicalDemandResult(
     string? ReadBack,
     bool? IsCreated,
+    VerificationDto Verification);
+
+/// <summary>Read title-block cells WITHOUT writing them.</summary>
+/// <remarks>INVARIANT: this command neither assigns <c>IText.Str</c> nor calls <c>IStamp.Update()</c> —
+/// it only reads the ids it is given. A read-only route is required because a setter cannot witness
+/// persistence: re-writing the same text before reading it back would pass even on a document that lost
+/// the value at reopen. DOC: <c>istamp_text.html</c> — <c>IStamp.Text(Id)</c> is a read-only property
+/// returning the cell's <c>IText</c>; <c>itext_str.html</c> — <c>Str</c> is read/write, so reading it is
+/// non-mutating. History: docs/decisions/drawings.md#stamp-read</remarks>
+public sealed record GetTitleBlockCommand
+{
+    public required string DocumentId { get; init; }
+
+    /// <summary>Numeric cell identifiers to read, as strings (<c>IStamp.Text(Int32 Id)</c>).</summary>
+    public IReadOnlyList<string> CellIds { get; init; } = Array.Empty<string>();
+}
+
+/// <summary>One title-block cell read for its own sake, with no requested value to compare against.</summary>
+public sealed record TitleBlockCellReadingDto(
+    string CellId,
+    string? ReadBack,
+    bool Exists);
+
+/// <summary>Result of a read-only title-block read: the cells as the document holds them.</summary>
+public sealed record GetTitleBlockResult(
+    IReadOnlyList<TitleBlockCellReadingDto> Cells,
+    VerificationDto Verification);
+
+/// <summary>Read the drawing's technical requirements WITHOUT writing them.</summary>
+/// <remarks>INVARIANT: no assignment to <c>IText.Str</c> and no <c>Update()</c> — the block is only read.
+/// DOC: <c>itechnicaldemand_text.html</c> — <c>Text</c> is read-only and returns the block's <c>IText</c>;
+/// <c>itechnicaldemand_iscreated.html</c> — <c>IsCreated</c> reports whether the block is displayed.
+/// History: docs/decisions/drawings.md#technical-demand-read</remarks>
+public sealed record GetTechnicalDemandCommand
+{
+    public required string DocumentId { get; init; }
+}
+
+/// <summary>Result of a read-only technical-requirements read: the text and the display flag.</summary>
+public sealed record GetTechnicalDemandResult(
+    string? Text,
+    bool? IsCreated,
+    VerificationDto Verification);
+
+/// <summary>Enumerate the dimensions of a drawing view WITHOUT creating anything.</summary>
+/// <remarks>INVARIANT: a pure read. It exists because <c>IView.ObjectCount</c> is a view-wide counter
+/// that cannot name a dimension or a nominal (<c>iview_objectcount.html</c>), while survival across
+/// save → close → reopen must be judged on the DIMENSION OBJECTS of the REOPENED document, not on the
+/// live object the setter held. DOC: <c>isymbols2dcontainer.html</c> — <c>LineDimensions</c>/
+/// <c>RadialDimensions</c>/<c>DiametralDimensions</c>; <c>ilinedimensions.html</c> —
+/// <c>X1/Y1/X2/Y2</c>; <c>iradialdimension_props.html</c> — <c>Xc/Yc/Radius</c>;
+/// <c>idrawingobject_props.html</c> — <c>Valid</c>. History: docs/decisions/drawings.md#dimensions-read</remarks>
+public sealed record ListDimensionsCommand
+{
+    public required string DocumentId { get; init; }
+
+    /// <summary>View to read (<c>view_ref</c> from <c>kompas_list_drawing_views</c>).</summary>
+    public required string ViewRef { get; init; }
+
+    /// <summary>Upper bound on the number of dimension rows returned.</summary>
+    public int Limit { get; init; } = 200;
+}
+
+/// <summary>One dimension read back from the view's own collections.</summary>
+public sealed record DimensionReadingDto
+{
+    /// <summary>Kind: <c>linear</c>, <c>radial</c> or <c>diametral</c>.</summary>
+    public required string Kind { get; init; }
+
+    /// <summary>Code from <c>IDrawingObject.DrawingObjectType</c> (vendor enum).</summary>
+    public int? DrawingObjectType { get; init; }
+
+    /// <summary>Whether the object is valid (<c>IDrawingObject.Valid</c>); false after deletion.</summary>
+    public bool? Valid { get; init; }
+
+    /// <summary>Nominal, mm: linear — anchor-point distance; radial/diametral — the radius.</summary>
+    public double? ValueMm { get; init; }
+
+    /// <summary><c>X1,Y1</c> for a linear dimension; the centre <c>Xc,Yc</c> otherwise.</summary>
+    public IReadOnlyList<double>? Point1 { get; init; }
+
+    /// <summary><c>X2,Y2</c> for a linear dimension; null otherwise.</summary>
+    public IReadOnlyList<double>? Point2 { get; init; }
+}
+
+/// <summary>Answer to a dimension enumeration: the rows, the route and named notes.</summary>
+public sealed record ListDimensionsResult(
+    IReadOnlyList<DimensionReadingDto> Dimensions,
+    string Route,
+    IReadOnlyList<string> Notes);
+
+/// <summary>Rebuild the drawing after a model change so associative views pick up the new geometry.</summary>
+/// <remarks>DOC: <c>ikompasdocument2d1_rebuilddocument.html</c> — <c>IKompasDocument2D1.RebuildDocument()</c>
+/// «перестроить документ», returning TRUE on success. MEASURED: the shipped interop declares
+/// <c>IKompasDocument2D1.RebuildDocument()</c> (Boolean), while <c>IDrawingDocument.RebuildViews</c> —
+/// named by the SDK reference — is declared NOWHERE in the assembly, so the documented-but-absent member
+/// is named rather than guessed. The rebuild is applied on the document, and the views are RE-READ
+/// afterwards to show the effect, never assumed. History: docs/decisions/drawings.md#view-rebuild</remarks>
+public sealed record RebuildDrawingViewsCommand
+{
+    public required string DocumentId { get; init; }
+
+    /// <summary>Revision the mutation is based on; a stale value is refused, not silently applied.</summary>
+    public required long ExpectedRevision { get; init; }
+
+    /// <summary>Reference to the associative view whose content is expected to change. It is re-read
+    /// after the rebuild so the effect is measured, not assumed.</summary>
+    public required string ViewRef { get; init; }
+}
+
+/// <summary>Result of a drawing rebuild: the documented return value plus the view re-read afterwards.</summary>
+public sealed record RebuildDrawingViewsResult(
+    bool RebuildReturned,
+    DrawingViewRowDto ViewBefore,
+    DrawingViewRowDto ViewAfter,
+    string Route,
     VerificationDto Verification);

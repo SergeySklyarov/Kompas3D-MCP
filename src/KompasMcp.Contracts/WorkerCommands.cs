@@ -193,6 +193,29 @@ public static class WorkerCommands
     public const string ExportDrawing = "drawing.export";
     public const string SetTechnicalDemand = "drawing.set_technical_demand";
     public const string EditView = "drawing.edit_view";
+    // READ-ONLY siblings of the two setters above. A setter cannot witness persistence: it assigns the
+    // expected value and then reads it back, so it passes even on a document that lost the value at
+    // reopen. These read without carrying any expected value. History: docs/decisions/drawings.md#stamp-read
+    public const string GetTitleBlock = "drawing.get_title_block";
+    public const string GetTechnicalDemand = "drawing.get_technical_demand";
+    // READ-ONLY dimension enumeration of the DRW-03 `read` action: a typed route that pairs each placed
+    // dimension and reads its nominal, so survival across save → close → reopen can be judged on the
+    // dimension objects themselves instead of on the view-wide `IView.ObjectCount`.
+    public const string ListDimensions = "drawing.list_dimensions";
+    // Rebuild the drawing after a model change (DRW-01 `rebuild` action). DOC:
+    // ikompasdocument2d1_rebuilddocument.html. The typed member exists in the shipped interop;
+    // IDrawingDocument.RebuildViews does NOT (measured by reflection).
+    public const string RebuildDrawingViews = "drawing.rebuild_views";
+    // ── block VM "variables and material" (profile variables-material-minimal-v1) ──
+    // var.list → VM-01, var.set_value → VM-02, var.set_expression → VM-03, mat.get → VM-04,
+    // mat.set → VM-04. VM-05 (save → close → reopen) reuses the common lifecycle plus the two
+    // read-only commands, VM-06 measures an existing tool (kompas_measure), VM-07 reuses the shared
+    // mutation/revision/dedup mechanism, VM-08 is the refusal class of all five commands.
+    public const string ListVariables = "var.list";
+    public const string SetVariableValue = "var.set_value";
+    public const string SetVariableExpression = "var.set_expression";
+    public const string GetMaterial = "mat.get";
+    public const string SetMaterial = "mat.set";
     public const string Shutdown = "sys.shutdown";
 
     /// <summary>Creates a part auxiliary-geometry object — a plane, axis or point (<c>dep.refs.planes</c>,

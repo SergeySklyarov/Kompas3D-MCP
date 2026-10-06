@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Runtime.InteropServices;
 using Kompas6API5;
 using Kompas6Constants;
@@ -6,6 +6,7 @@ using KompasAPI7;
 using KompasMcp.Api5Adapter.Api7;
 using KompasMcp.Api5Adapter.Com;
 using KompasMcp.Contracts;
+using KompasMcp.Domain.Files;
 using KompasMcp.Domain.References;
 
 namespace KompasMcp.Api5Adapter;
@@ -280,6 +281,126 @@ public sealed partial class Api5Session
         return new EditViewResult(before, after, verification);
     }
 
+    /// <summary>Rebuild the drawing after a model change so its associative view re-derives its geometry.</summary>
+    /// <remarks>DOC: <c>ikompasdocument2d1_rebuilddocument.html</c> — <c>IKompasDocument2D1.RebuildDocument()</c>
+    /// returns TRUE on success; reached from the API7 drawing document. MEASURED: the shipped interop
+    /// declares <c>IKompasDocument2D1.RebuildDocument()</c>; <c>IDrawingDocument.RebuildViews</c> (named by
+    /// the SDK reference) is declared by NO type of the assembly, so the documented-but-absent member is
+    /// reported rather than guessed. INVARIANT: the returned boolean is a CHECK; the verdict is the view
+    /// RE-READ after the rebuild, because the help's TRUE says "the call completed", not "the projection
+    /// changed". History: docs/decisions/drawings.md#view-rebuild</remarks>
+    public RebuildDrawingViewsResult RebuildDrawingViews(RebuildDrawingViewsCommand command)
+    {
+        var document = RequireDrawing(command.DocumentId, command.ExpectedRevision);
+        var drawing7 = RequireDrawing7(document);
+
+        // The route is resolved BEFORE the call so its availability is a named fact: IView is reached
+        // through the drawing, and the view is re-read from the SAME collection after the rebuild.
+        var view = ResolveView(document, command.ViewRef);
+        try
+        {
+            var before = ReadViewRow(document, view);
+
+            if (drawing7 is not IKompasDocument2D1 document2d)
+            {
+                throw new KompasContractException(
+                    ErrorCodes.CapabilityUnavailable,
+                    "Чертёж не приводится к IKompasDocument2D1: документированного маршрута перестроения "
+                    + "(RebuildDocument) нет. IDrawingDocument.RebuildViews справкой назван, но в "
+                    + "поставляемом interop не объявлен НИ ОДНИМ типом (измерено отражением).",
+                    RetryPolicy.ReacquireContext,
+                    details: new Dictionary<string, object?>
+                    {
+                        ["document_id"] = command.DocumentId,
+                        ["stage"] = "cast_to_ikompasdocument2d1",
+                    });
+            }
+
+            bool rebuilt;
+            try
+            {
+                rebuilt = document2d.RebuildDocument();
+            }
+            catch (COMException ex)
+            {
+                throw new KompasContractException(
+                    ErrorCodes.GeometryFailed,
+                    $"RebuildDocument бросил исключение: {ex.Message}. Перестроение не выполнено.",
+                    RetryPolicy.SameOperationId,
+                    hresult: ex.HResult,
+                    details: new Dictionary<string, object?>
+                    {
+                        ["document_id"] = command.DocumentId,
+                        ["stage"] = "rebuild_document_call",
+                    });
+            }
+
+            BumpRevision(document, "drawing.rebuild_views");
+
+            // The SAME view is re-read from a FRESH collection read: the object handle is not reused
+            // across the rebuild, so the comparison is on the reopened collection, not a stale RCW.
+            var (after, rereadNote) = ReadViewAgain(document, command.ViewRef, before);
+
+            var checks = new List<NamedCheck>
+            {
+                new("rebuild_document_returned_true", rebuilt, rebuilt.ToString(), "true"),
+                new("view_reread_after_rebuild", after is not null,
+                    after is null ? "не перечитан" : "перечитан", "перечитан"),
+            };
+            var unverified = new List<string>
+            {
+                "view_geometry_not_compared — перестроение подтверждено вызовом и перечитыванием вида, "
+                + "а не сверкой геометрии проекции с изменённой моделью (IView габарит не публикует)",
+            };
+            if (!rebuilt)
+            {
+                unverified.Add("rebuild_returned_false — документированный маршрут вернул FALSE");
+            }
+
+            var verification = new VerificationDto(
+                rebuilt && after is not null ? VerificationLevel.StructureChecked : VerificationLevel.CallReturned,
+                checks,
+                unverified);
+
+            var route = "IDrawingDocument(QI IKompasDocument2D1).RebuildDocument() → IViews re-read "
+                        + "(IDrawingDocument.RebuildViews НЕ объявлен в interop — измерено)";
+            return new RebuildDrawingViewsResult(
+                rebuilt, before, after ?? before, route + (rereadNote is null ? "" : "; " + rereadNote),
+                verification);
+        }
+        finally
+        {
+            ComApartment.Release(view);
+        }
+    }
+
+    /// <summary>Re-read a view from a FRESH collection read after a rebuild, keyed by reference then by
+    /// the stable (number + source) key — a rebuild may re-mint references, so the address is not reused.</summary>
+    private (DrawingViewRowDto? Row, string? Note) ReadViewAgain(
+        DocumentEntry document, string viewRef, DrawingViewRowDto before)
+    {
+        var drawing7 = RequireDrawing7(document);
+        var views = (drawing7.ViewsAndLayersManager as IViewsAndLayersManager)?.Views as IViews;
+        if (views is null)
+        {
+            return (null, "views_collection_unavailable_after_rebuild");
+        }
+
+        var rows = ReadViewRows(document, views);
+        var byRef = rows.FirstOrDefault(r => r.ViewRef == viewRef);
+        if (byRef is not null)
+        {
+            return (byRef, null);
+        }
+
+        var byKey = rows.FirstOrDefault(r => r.Number == before.Number
+                                             && string.Equals(r.SourcePath, before.SourcePath,
+                                                 StringComparison.OrdinalIgnoreCase));
+        return byKey is not null
+            ? (byKey, "view_ref_изменился_после_перестроения_вид_найден_по_номеру_и_источнику")
+            : (null, "вид_не_перечитан_после_перестроения");
+    }
+
     /// <summary>Enumerate the views of a drawing as rows re-read from the document.</summary>
     public ListDrawingViewsResult ListDrawingViews(ListDrawingViewsCommand command)
     {
@@ -311,6 +432,206 @@ public sealed partial class Api5Session
         }
 
         return new ListDrawingViewsResult(rows, "IDrawingDocument.ViewsAndLayersManager.Views", notes);
+    }
+
+    /// <summary>Read the dimensions of a view WITHOUT creating any object.</summary>
+    /// <remarks>INVARIANT: a pure read, and no RCW is held across a close-reopen cycle — the caller
+    /// re-resolves the view on the TARGET document, so persistence is judged on the reopened file's
+    /// dimension objects rather than a view-wide counter. DOC: <c>isymbols2dcontainer.html</c> —
+    /// <c>IView</c> yields <c>LineDimensions</c>/<c>RadialDimensions</c>/<c>DiametralDimensions</c>;
+    /// <c>ilinedimensions.html</c>; <c>idrawingobject_props.html</c>. LIMIT: the linear nominal is
+    /// derived from the anchor points; radial and diametral read <c>Radius</c>.
+    /// History: docs/decisions/drawings.md#dimensions-read</remarks>
+    public ListDimensionsResult ListDimensions(ListDimensionsCommand command)
+    {
+        var document = RequireDocument(command.DocumentId);
+        if (document.Kind != DocumentKind.Drawing)
+        {
+            throw new KompasContractException(
+                ErrorCodes.WrongDocumentKind,
+                $"Документ «{document.Id}» имеет тип {document.Kind}: перечень размеров применим только к чертежу.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?> { ["kind"] = document.Kind.ToString() });
+        }
+
+        var view = ResolveView(document, command.ViewRef);
+        try
+        {
+            return ReadDimensions(document, view, command.Limit);
+        }
+        finally
+        {
+            ComApartment.Release(view);
+        }
+    }
+
+    private ListDimensionsResult ReadDimensions(DocumentEntry document, IView view, int limit)
+    {
+        const string route =
+            "IView(QI ISymbols2DContainer).LineDimensions/RadialDimensions/DiametralDimensions "
+            + "→ IDrawingObjects.Count/Item → ILineDimension/IRadialDimension/IDiametralDimension";
+
+        var container = view as ISymbols2DContainer;
+        if (container is null)
+        {
+            return new ListDimensionsResult(
+                Array.Empty<DimensionReadingDto>(), route,
+                new[] { "dimension_container_unavailable — вид не отвечает QI(ISymbols2DContainer)" });
+        }
+
+        var rows = new List<DimensionReadingDto>();
+        var notes = new List<string>();
+
+        ReadLinearDimensions(container.LineDimensions as ILineDimensions, rows, notes, limit);
+        ReadRadialDimensions(container.RadialDimensions as IRadialDimensions, rows, notes, limit);
+        ReadDiametralDimensions(container.DiametralDimensions as IDiametralDimensions, rows, notes, limit);
+
+        if (rows.Count == 0)
+        {
+            notes.Add("dimensions_empty — в виде нет ни одного размера (пустая коллекция)");
+        }
+
+        return new ListDimensionsResult(rows, route, notes);
+    }
+
+    private void ReadLinearDimensions(
+        ILineDimensions? collection, List<DimensionReadingDto> rows, List<string> notes, int limit)
+    {
+        if (collection is null)
+        {
+            notes.Add("linear_dimensions_collection_unavailable");
+            return;
+        }
+
+        var count = SafeInt(() => collection.Count) ?? 0;
+        for (var i = 0; i < count && rows.Count < limit; i++)
+        {
+            ILineDimension? dim = null;
+            try
+            {
+                dim = collection.get_LineDimension((object)i) as ILineDimension;
+                if (dim is null)
+                {
+                    notes.Add($"linear[{i}]: Item вернул null");
+                    continue;
+                }
+
+                var x1 = SafeDouble(() => dim.X1);
+                var y1 = SafeDouble(() => dim.Y1);
+                var x2 = SafeDouble(() => dim.X2);
+                var y2 = SafeDouble(() => dim.Y2);
+                var value = (x1 is { } a && y1 is { } b && x2 is { } c && y2 is { } d)
+                    ? (double?)Math.Sqrt(((c - a) * (c - a)) + ((d - b) * (d - b)))
+                    : null;
+                rows.Add(new DimensionReadingDto
+                {
+                    Kind = "linear",
+                    DrawingObjectType = SafeInt(() => (int)dim.DrawingObjectType),
+                    Valid = SafeBool(() => dim.Valid),
+                    ValueMm = value,
+                    Point1 = (x1 is { } p && y1 is { } q) ? new[] { p, q } : null,
+                    Point2 = (x2 is { } p2 && y2 is { } q2) ? new[] { p2, q2 } : null,
+                });
+            }
+            catch (COMException ex)
+            {
+                notes.Add($"linear[{i}]: {ex.GetType().Name}");
+            }
+            finally
+            {
+                ComApartment.Release(dim);
+            }
+        }
+    }
+
+    private void ReadRadialDimensions(
+        IRadialDimensions? collection, List<DimensionReadingDto> rows, List<string> notes, int limit)
+    {
+        if (collection is null)
+        {
+            notes.Add("radial_dimensions_collection_unavailable");
+            return;
+        }
+
+        var count = SafeInt(() => collection.Count) ?? 0;
+        for (var i = 0; i < count && rows.Count < limit; i++)
+        {
+            IRadialDimension? dim = null;
+            try
+            {
+                dim = collection.get_RadialDimension((object)i) as IRadialDimension;
+                if (dim is null)
+                {
+                    notes.Add($"radial[{i}]: Item вернул null");
+                    continue;
+                }
+
+                var xc = SafeDouble(() => dim.Xc);
+                var yc = SafeDouble(() => dim.Yc);
+                rows.Add(new DimensionReadingDto
+                {
+                    Kind = "radial",
+                    DrawingObjectType = SafeInt(() => (int)dim.DrawingObjectType),
+                    Valid = SafeBool(() => dim.Valid),
+                    ValueMm = SafeDouble(() => dim.Radius),
+                    Point1 = (xc is { } p && yc is { } q) ? new[] { p, q } : null,
+                    Point2 = null,
+                });
+            }
+            catch (COMException ex)
+            {
+                notes.Add($"radial[{i}]: {ex.GetType().Name}");
+            }
+            finally
+            {
+                ComApartment.Release(dim);
+            }
+        }
+    }
+
+    private void ReadDiametralDimensions(
+        IDiametralDimensions? collection, List<DimensionReadingDto> rows, List<string> notes, int limit)
+    {
+        if (collection is null)
+        {
+            notes.Add("diametral_dimensions_collection_unavailable");
+            return;
+        }
+
+        var count = SafeInt(() => collection.Count) ?? 0;
+        for (var i = 0; i < count && rows.Count < limit; i++)
+        {
+            IDiametralDimension? dim = null;
+            try
+            {
+                dim = collection.get_DiametralDimension((object)i) as IDiametralDimension;
+                if (dim is null)
+                {
+                    notes.Add($"diametral[{i}]: Item вернул null");
+                    continue;
+                }
+
+                var xc = SafeDouble(() => dim.Xc);
+                var yc = SafeDouble(() => dim.Yc);
+                rows.Add(new DimensionReadingDto
+                {
+                    Kind = "diametral",
+                    DrawingObjectType = SafeInt(() => (int)dim.DrawingObjectType),
+                    Valid = SafeBool(() => dim.Valid),
+                    ValueMm = SafeDouble(() => dim.Radius),
+                    Point1 = (xc is { } p && yc is { } q) ? new[] { p, q } : null,
+                    Point2 = null,
+                });
+            }
+            catch (COMException ex)
+            {
+                notes.Add($"diametral[{i}]: {ex.GetType().Name}");
+            }
+            finally
+            {
+                ComApartment.Release(dim);
+            }
+        }
     }
 
     /// <summary>Add a dimension to a view and re-read it from the dimension object.</summary>
@@ -523,10 +844,10 @@ public sealed partial class Api5Session
     /// <summary>Fill title-block cells and re-read them after <c>IStamp.Update()</c>.</summary>
     /// <remarks>DOC: <c>ilayoutsheet_stamp.html</c> (the stamp of a sheet), <c>istamp_text.html</c>
     /// (<c>Text(Id)</c> is READ-ONLY and returns an <c>IText</c>), <c>itext_str.html</c>
-    /// (<c>Str</c> is read/write). LIMIT: the SDK reference does NOT document the numeric cell
-    /// identifiers — the caller supplies ids from the drawing's own stamp layout; the tool re-reads each
-    /// cell and reports a mismatch rather than pretending the write landed.
-    /// History: docs/decisions/drawings.md#stamp-cells</remarks>
+    /// (<c>Str</c> is read/write), <c>istamp_update.html</c> (<c>Update()</c> applies the parameters).
+    /// LIMIT: the SDK reference does NOT document the numeric cell identifiers — the caller supplies ids
+    /// from the drawing's own stamp layout; the tool re-reads each cell and reports a mismatch rather
+    /// than pretending the write landed. History: docs/decisions/drawings.md#stamp-cells</remarks>
     public SetTitleBlockResult SetTitleBlock(SetTitleBlockCommand command)
     {
         var document = RequireDrawing(command.DocumentId, command.ExpectedRevision);
@@ -623,15 +944,21 @@ public sealed partial class Api5Session
         var unverified = new List<string>();
         if (matched != readBack.Count)
         {
-            // MEASURED: on the default drawing's stamp the write to IText.Str is NOT confirmed by a
-            // read-back for ANY tested cell id — every probed id returned an empty string while Update()
-            // reported no error. This is named, not hidden: the id→cell mapping is undocumented in the
-            // reference, and no tested id round-trips, so a caller-supplied id is reported as unconfirmed.
+            // MEASURED: with cell, text, write order and re-read expression held identical, the write
+            // round-trips on a drawing created through the API7 route (IDocuments.Add) and does NOT on one
+            // created through API5 ksCreateDocument — there the SAME property reads back the cell's
+            // default. So a mismatch is a property of the CREATION ROUTE; the internal cause is not
+            // established. CreateDrawingDocument now prefers the API7 route precisely so this write can
+            // round-trip; a mismatch on a drawing that still lacks that route stays a mismatch and is named,
+            // never reported as delivered.
             // History: docs/decisions/drawings.md#stamp-cells
             unverified.Add(
-                "stamp_cells_not_all_matched — перечитанное значение не совпало с записанным: "
-                + "соответствие «номер → ячейка» справкой не документировано, и НИ ОДИН проверенный "
-                + "номер не подтверждён перечитыванием. Запись в IText.Str не выдаётся за доставленную");
+                "stamp_write_not_confirmed — перечитанное значение не совпало с записанным: на чертеже, "
+                + "созданном маршрутом API5 ksCreateDocument, присвоение IText.Str ячейке ОСНОВНОЙ НАДПИСИ "
+                + "не меняет то, что возвращает ТО ЖЕ свойство (ячейка читается своим значением по "
+                + "умолчанию). Измерено: на чертеже, созданном маршрутом API7 Documents.Add, та же запись "
+                + "перечитывается. Внутренняя причина различия не установлена — маршрут записи штампа "
+                + "перечитыванием на этом документе НЕ подтверждается и за доставленную не выдаётся");
         }
 
         unverified.Add(
@@ -729,11 +1056,116 @@ public sealed partial class Api5Session
         return new SetTechnicalDemandResult(readBack, isCreated, verification);
     }
 
+    /// <summary>Read title-block cells without writing them.</summary>
+    /// <remarks>INVARIANT: no write to <c>IText.Str</c> and no <c>Update()</c> — reading only. A setter
+    /// cannot witness persistence: it carries the expected value, so a lost value could be re-written
+    /// before the reading is taken. MEASURED: re-reading after a write does not even reflect the write
+    /// (the cell returns its own default), so the setter path proves nothing about persistence either way;
+    /// only a route that carries no expected value can witness it. DOC: <c>istamp_text.html</c> —
+    /// <c>IStamp.Text(Id)</c> is read-only and returns the cell's <c>IText</c>; <c>itext_str.html</c> —
+    /// reading <c>Str</c> changes nothing. History: docs/decisions/drawings.md#stamp-read</remarks>
+    public GetTitleBlockResult GetTitleBlock(GetTitleBlockCommand command)
+    {
+        var document = RequireDrawingKind(command.DocumentId);
+        var stamp = RequireStamp(document);
+        var readings = new List<TitleBlockCellReadingDto>();
+
+        foreach (var cellIdText in command.CellIds)
+        {
+            if (!int.TryParse(cellIdText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var cellId))
+            {
+                throw new KompasContractException(
+                    ErrorCodes.InvalidArgument,
+                    $"Идентификатор ячейки '{cellIdText}' не число: IStamp.Text(Id) принимает Int32.",
+                    RetryPolicy.Never,
+                    details: new Dictionary<string, object?> { ["cell_id"] = cellIdText });
+            }
+
+            IText? cell = null;
+            string? observed = null;
+            try
+            {
+                cell = stamp.get_Text(cellId) as IText;
+                observed = cell?.Str;
+            }
+            catch (COMException)
+            {
+                // A COM refusal on read is reported as "not read", never smoothed into an empty string:
+                // the absence of a value and the absence of a readable cell are different states.
+                observed = null;
+            }
+            finally
+            {
+                ComApartment.Release(cell);
+            }
+
+            // Exists is true only when the cell yielded an IText; an unknown id yields null and reads empty.
+            readings.Add(new TitleBlockCellReadingDto(cellIdText, observed, cell is not null));
+        }
+
+        var checks = new List<NamedCheck>
+        {
+            new("cells_read", readings.Count > 0, readings.Count.ToString(CultureInfo.InvariantCulture), ">0"),
+        };
+        var verification = new VerificationDto(
+            readings.Count > 0 ? VerificationLevel.StructureChecked : VerificationLevel.CallReturned,
+            checks,
+            new List<string>
+            {
+                "stamp_cell_ids_not_documented — соответствие «наименование/обозначение/материал» номерам "
+                + "ячеек справка не документирует; сервер только читает переданные номера",
+            });
+        return new GetTitleBlockResult(readings, verification);
+    }
+
+    /// <summary>Read the drawing's technical requirements without writing them.</summary>
+    /// <remarks>INVARIANT: no assignment to <c>IText.Str</c> and no <c>Update()</c>. DOC:
+    /// <c>itechnicaldemand_text.html</c> — <c>Text</c> is read-only and returns the block's <c>IText</c>;
+    /// <c>itechnicaldemand_iscreated.html</c> — <c>IsCreated</c> reports the block's display state.
+    /// History: docs/decisions/drawings.md#technical-demand-read</remarks>
+    public GetTechnicalDemandResult GetTechnicalDemand(GetTechnicalDemandCommand command)
+    {
+        var document = RequireDrawingKind(command.DocumentId);
+        var demand = RequireTechnicalDemand(document);
+
+        string? text = null;
+        IText? blockText = null;
+        try
+        {
+            blockText = demand.Text as IText;
+            text = blockText?.Str;
+        }
+        catch (COMException)
+        {
+            text = null;
+        }
+        finally
+        {
+            ComApartment.Release(blockText);
+        }
+
+        var isCreated = SafeBool(() => demand.IsCreated);
+        var checks = new List<NamedCheck>
+        {
+            new("is_created", isCreated == true, isCreated?.ToString() ?? "null", "true"),
+        };
+        var verification = new VerificationDto(
+            isCreated == true ? VerificationLevel.StructureChecked : VerificationLevel.CallReturned,
+            checks,
+            new List<string>
+            {
+                "demand_placement_not_checked — сервер не проверяет размещение блока требований на листе",
+            });
+        return new GetTechnicalDemandResult(text, isCreated, verification);
+    }
+
     /// <summary>Export a drawing through the documented converter route.</summary>
-    /// <remarks>DOC: <c>iapplication_converter.html</c> (<c>IApplication.Converter</c>),
-    /// <c>iconverter_convert.html</c> (<c>Convert(InputFile, Outfile, Command, ShowParam)</c>),
-    /// <c>iconverter_getfilter.html</c> (the command codes: FORMAT_DXF=1, FORMAT_DWG=2). PDF is NOT a
-    /// documented programmatic route and is refused by name (<c>FORMAT_UNAVAILABLE</c>), not attempted.
+    /// <remarks>DOC: <c>iapplication_converter.html</c> — <c>IApplication.Converter</c> takes the library
+    /// as its argument and the help says it is a FULL PATH; <c>iconverter_getfilter.html</c> —
+    /// <c>GetFilter(docType, saveAs, out command)</c> returns the library's own command id for the document
+    /// type produced at export; <c>iconverter_convert.html</c> — <c>Convert(InputFile, Outfile, Command,
+    /// ShowParam)</c> returns 1 on success. PDF is NOT a documented programmatic route and is refused by
+    /// name (<c>FORMAT_UNAVAILABLE</c>), not attempted.
     /// History: docs/decisions/drawings.md#export-formats</remarks>
     public ExportDrawingResult ExportDrawing(ExportDrawingCommand command)
     {
@@ -788,37 +1220,98 @@ public sealed partial class Api5Session
 
         var application7 = RequireApplication7(document);
 
-        // IApplication.Converter is an indexed property whose getter takes a library argument
-        // (help: <c>Converter</c> / <c>get_Converter(Object Library)</c>); Type.Missing asks for the
-        // built-in converter, which is what the documented export route uses.
-        var converter = application7.get_Converter(Type.Missing) as IConverter
-            ?? throw new KompasContractException(
+        // INVARIANT: the converter is chosen BY FULL PATH, and the format is chosen by that library's OWN
+        // command id — never by a literal that another call can overwrite.
+        // DOC: iapplication_converter.html — «Library - полный путь к библиотеке» (VARIANT). Passing
+        // Type.Missing asks for the BUILT-IN converter, which has no DXF/DWG commands at all.
+        // MEASURED: with Type.Missing, GetFilter(docType=1..5) returns command=0 and an empty filter for
+        // every document type; with the dwgdxfExp.rtw path, GetFilter(FORMAT_DXF=1) returns command=1 and
+        // « AutoCAD DXF (*.dxf)», GetFilter(FORMAT_DWG=2) returns command=2 and «AutoCAD DWG (*.dwg)».
+        // The library is resolved from the located installation, so a missing library is a named refusal.
+        var libraryPath = KompasInteropResolver.ExportLibraryPath(format);
+        if (libraryPath is null)
+        {
+            throw new KompasContractException(
                 ErrorCodes.FormatUnavailable,
-                "IApplication.Converter недоступен: конвертер не получен, экспорт невозможен.",
-                RetryPolicy.Never);
+                $"Библиотека выгрузки для формата '{format}' не найдена в установке КОМПАС "
+                + "(ожидается Libs\\ImpExp\\dwgdxfExp.rtw). Формат не выгружается угаданной библиотекой: "
+                + "выбор библиотеки — полный путь, и её отсутствие названо, а не обойдено.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["format"] = format,
+                    ["expected_library"] = "Libs\\ImpExp\\dwgdxfExp.rtw",
+                    ["install_root"] = KompasInteropResolver.InstallRoot,
+                });
+        }
 
-        int code;
+        IConverter converter;
         try
         {
-            // GetFilter fills the command code for the pair (docType, saveAs). It is called first so the
-            // code is the engine's own, not a literal — a wrong code silently produces another format.
-            _ = converter.GetFilter(KompasDocumentTypes.Drawing, true, out formatCode);
-            code = formatCode;
+            converter = application7.get_Converter(libraryPath) as IConverter
+                ?? throw new KompasContractException(
+                    ErrorCodes.FormatUnavailable,
+                    $"Конвертер по пути '{libraryPath}' не получен (Converter = null): выгрузка невозможна.",
+                    RetryPolicy.Never,
+                    details: new Dictionary<string, object?> { ["library"] = libraryPath });
         }
         catch (COMException ex)
         {
             throw new KompasContractException(
                 ErrorCodes.FormatUnavailable,
-                $"GetFilter бросил исключение: {ex.Message}",
+                $"Получение конвертера '{libraryPath}' бросило исключение: {ex.Message}",
                 RetryPolicy.Never,
                 hresult: ex.HResult,
-                details: new Dictionary<string, object?> { ["format"] = format });
+                details: new Dictionary<string, object?> { ["library"] = libraryPath });
+        }
+
+        int commandId;
+        string filter;
+        try
+        {
+            // GetFilter is asked for THIS library's command id for the document type the export produces
+            // (FORMAT_DXF=1 / FORMAT_DWG=2 per iconverter_getfilter.html). The returned id is the library's
+            // own; the filter string is the library's declared filter, reported as evidence.
+            filter = converter.GetFilter(formatCode, true, out commandId) ?? string.Empty;
+        }
+        catch (COMException ex)
+        {
+            throw new KompasContractException(
+                ErrorCodes.FormatUnavailable,
+                $"GetFilter(docType={formatCode}) бросил исключение: {ex.Message}",
+                RetryPolicy.Never,
+                hresult: ex.HResult,
+                details: new Dictionary<string, object?>
+                {
+                    ["format"] = format,
+                    ["library"] = libraryPath,
+                    ["doc_type"] = formatCode,
+                });
+        }
+
+        if (commandId <= 0)
+        {
+            // A library that publishes no command for this document type cannot produce this format. That
+            // is a property of the installation, not a transient failure: refused by name with both the
+            // library and the requested type shown.
+            throw new KompasContractException(
+                ErrorCodes.FormatUnavailable,
+                $"Библиотека '{Path.GetFileName(libraryPath)}' не публикует команду для типа документа "
+                + $"{formatCode} (формат '{format}'): GetFilter вернул command={commandId}. Выгрузка не начата.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["format"] = format,
+                    ["library"] = libraryPath,
+                    ["doc_type"] = formatCode,
+                    ["filter"] = filter,
+                });
         }
 
         int converted;
         try
         {
-            converted = converter.Convert(document.Path, command.OutputPath, code, false);
+            converted = converter.Convert(document.Path, command.OutputPath, commandId, false);
         }
         catch (COMException ex)
         {
@@ -860,26 +1353,54 @@ public sealed partial class Api5Session
         }
 
         var file = ConfirmExportedFile(command.OutputPath, format, out var signature);
+        var shapeOk = IsExpectedShape(signature, format);
 
         return new ExportDrawingResult(
             command.OutputPath,
             format,
             file.ByteLength,
             signature,
+            converted,
             new VerificationDto(
-                file.ByteLength > 0 ? VerificationLevel.SyntaxChecked : VerificationLevel.FileCreated,
+                shapeOk && file.ByteLength > 0
+                    ? VerificationLevel.StructureChecked
+                    : VerificationLevel.CallReturned,
                 new List<NamedCheck>
                 {
                     new("file_exists", File.Exists(command.OutputPath), "true", "true"),
                     new("file_non_empty", file.ByteLength > 0,
                         file.ByteLength.ToString(CultureInfo.InvariantCulture), "> 0"),
-                    new("format_signature", signature != "unknown",
-                        signature, format == "dxf" ? "dxf section header" : "dwg signature"),
+                    new("format_signature", shapeOk, signature,
+                        format == "dxf" ? "dxf_section_header" : "dwg_ac10xx"),
+                    new("library_command", commandId > 0, commandId.ToString(CultureInfo.InvariantCulture), "> 0"),
+                    new("convert_returned", converted == 1, converted.ToString(CultureInfo.InvariantCulture), "1"),
                 },
-                new List<string>
-                {
-                    "drawing_content_not_checked — сервер не разбирает содержимое выгрузки построчно",
-                }));
+                BuildExportUnverified(shapeOk, signature, format)));
+    }
+
+    /// <summary>Whether a detected signature is the expected shape for the requested format.</summary>
+    /// <remarks>INVARIANT: the extension is never the evidence; the rule itself lives in the PURE
+    /// <see cref="KompasMcp.Domain.Files.ExportFormatShape"/> so it is testable without KOMPAS. MEASURED:
+    /// a native KOMPAS drawing is a ZIP container, which is expected shape for NO published format.</remarks>
+    private static bool IsExpectedShape(string signature, string format) =>
+        ExportFormatShape.Matches(signature, format);
+
+    /// <summary>Unverified aspects for an export — the named limits of what the file check proves.</summary>
+    private static List<string> BuildExportUnverified(bool shapeOk, string signature, string format)
+    {
+        var unverified = new List<string>
+        {
+            "drawing_content_not_checked — сервер не разбирает содержимое выгрузки построчно",
+        };
+        if (!shapeOk)
+        {
+            unverified.Add(
+                $"export_shape_unexpected — файл не имеет ожидаемой формы '{format}' "
+                + $"(найдено: {signature}); контейнер нативной модели под чужим расширением за успех "
+                + "не принимается");
+        }
+
+        return unverified;
     }
 
     // ------------------------------------------------------------------------------------------------
@@ -898,21 +1419,7 @@ public sealed partial class Api5Session
 
     private DocumentEntry RequireDrawing(string documentId, long expectedRevision)
     {
-        var document = RequireDocument(documentId);
-        if (document.Kind != DocumentKind.Drawing)
-        {
-            // A named refusal, not a COM exception: the kind is known server-side before any call.
-            throw new KompasContractException(
-                ErrorCodes.WrongDocumentKind,
-                $"Документ «{document.Id}» имеет тип {document.Kind}: операция чертежа к нему не применима.",
-                RetryPolicy.Never,
-                details: new Dictionary<string, object?>
-                {
-                    ["kind"] = document.Kind.ToString(),
-                    ["required_kind"] = "drawing",
-                });
-        }
-
+        var document = RequireDrawingKind(documentId);
         if (document.Revision != expectedRevision)
         {
             throw new KompasContractException(
@@ -929,45 +1436,332 @@ public sealed partial class Api5Session
         return document;
     }
 
+    /// <summary>Resolve a drawing WITHOUT a revision check, for READ-ONLY routes.</summary>
+    /// <remarks>INVARIANT: a non-mutating read carries no expected revision, so a stale revision must not
+    /// refuse it — the caller is not about to write. The kind check stays: a read of a drawing's stamp
+    /// against a 3D part is still a named refusal. History: docs/decisions/drawings.md#stamp-read</remarks>
+    private DocumentEntry RequireDrawingKind(string documentId)
+    {
+        var document = RequireDocument(documentId);
+        if (document.Kind != DocumentKind.Drawing)
+        {
+            // A named refusal, not a COM exception: the kind is known server-side before any call.
+            throw new KompasContractException(
+                ErrorCodes.WrongDocumentKind,
+                $"Документ «{document.Id}» имеет тип {document.Kind}: операция чертежа к нему не применима.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["kind"] = document.Kind.ToString(),
+                    ["required_kind"] = "drawing",
+                });
+        }
+
+        return document;
+    }
+
     private IDrawingDocument RequireDrawing7(DocumentEntry document)
     {
+        // STAGE 0 — an API7 handle already held for this document: the NATIVE one captured at creation
+        // through the documented API7 IDocuments.Add route, or one stored here by the FIRST successful
+        // resolution (see below). This stage is tried first because it is the strongest available and it
+        // never depends on a fresh bridge transfer.
+        if (document.Drawing7 is { } native7)
+        {
+            return native7;
+        }
+
         var bridge = BridgeFor(document);
 
         // The API5 2D handle transfers to the API7 document directly. If the transfer does not yield an
         // IDrawingDocument the kind signal is confirmed ABSENT — a named refusal, not a null deref.
         if (document.Drawing is not { } drawing5)
         {
+            // No native API7 handle AND no API5 2D handle: neither route can name this as a drawing.
+            // The earlier failure said "нет 2D-дескриптора" while an API7-created drawing legitimately
+            // has none — the missing piece was the native handle, now checked at stage 0.
             throw new KompasContractException(
                 ErrorCodes.WrongDocumentKind,
-                $"Документ «{document.Id}» не имеет 2D-дескриптора: API7-маршрут чертежа недоступен.",
-                RetryPolicy.Never);
+                $"Документ «{document.Id}» не имеет ни 2D-дескриптора (API5), ни собственного "
+                + "IDrawingDocument (API7): маршрут чертежа недоступен.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?> { ["stage"] = "no_drawing_handle" });
         }
 
-        if (bridge.TransferTo7(drawing5) is IDrawingDocument drawing7)
+        // STAGE 1 — direct transfer of the live API5 2D handle through the CACHED bridge. This path is a
+        // FALLBACK for a document that has no native API7 handle (an API5-created drawing, or one whose
+        // native handle was not captured). MEASURED: for a drawing REOPENED through the documented
+        // `ksOpenDocument` route the native handle from <see cref="OpenDrawingDocument"/> is present, so
+        // resolution normally stops at STAGE 0 and this transfer is not reached.
+        var transferred1 = bridge.TransferTo7(drawing5);
+        if (transferred1 is IDrawingDocument transferred)
         {
-            return drawing7;
+            // CACHE A SUCCESSFUL RESOLUTION so later calls do not depend on a repeat transfer. Only a
+            // SUCCESS is cached: a refusal is never stored, so a genuine absence stays a refusal.
+            document.Drawing7 = transferred;
+            document.Drawing7Resolution = "stage1_cached_bridge_transfer";
+            return transferred;
         }
 
-        // Fallback: locate the document among the API7 documents by path. Documented members:
-        // IDocuments.Count/Item (idocuments.html), IKompasDocument.PathName (ikompasdocument.html).
-        if (bridge.Application()?.Documents is IDocuments documents)
+        var stage1Outcome = transferred1 is null
+            ? "transfer_returned_null"
+            : "transfer_returned_" + transferred1.GetType().FullName;
+        var application5 = RequireApplication(document.ApplicationId);
+
+        // STAGE 1b — the CACHED bridge returned nothing. The resolution is retried on a FRESHLY obtained
+        // application before refusing, so a stale cached IApplication does not turn a resolvable drawing
+        // into a refusal. LIMIT: whether the native handle can go stale after further mutation is not
+        // established; the stages below exist to NAME the real cause when none of them resolves, not to
+        // promise that the cached one always does.
+        var freshBridge = new Api7Bridge(application5.Application);
+        var freshApplication = freshBridge.Application();
+        string? freshStage = null;
+        if (freshApplication is not null)
         {
-            for (var i = 0; i < documents.Count; i++)
+            if (freshBridge.TransferTo7(drawing5) is IDrawingDocument freshTransferred)
             {
-                if (documents[(object)i] is IDrawingDocument candidate
-                    && PathsMatch(candidate.PathName, document.Path))
+                document.Drawing7 = freshTransferred;
+                document.Drawing7Resolution = "stage1b_fresh_bridge_transfer";
+                return freshTransferred;
+            }
+
+            if (ResolveInCollection(document, freshApplication, out var freshResolved, out freshStage)
+                && freshResolved is not null)
+            {
+                document.Drawing7 = freshResolved;
+                document.Drawing7Resolution = "stage1b_fresh_collection_scan";
+                return freshResolved;
+            }
+            else if (freshStage is null)
+            {
+                freshStage = "resolved_non_drawing";
+            }
+        }
+        else
+        {
+            freshStage = "fresh_application_null";
+        }
+
+        // STAGE 2 — the same scan on the CACHED bridge, so the refusal can report BOTH views (cached and
+        // fresh) rather than one number that hides which application answered.
+        if (bridge.Application() is { } application)
+        {
+            if (ResolveInCollection(document, application, out var cachedResolved, out var cachedStage)
+                && cachedResolved is not null)
+            {
+                document.Drawing7 = cachedResolved;
+                document.Drawing7Resolution = "stage2_cached_collection_scan";
+                return cachedResolved;
+            }
+
+            var (count, candidates) = SnapshotCollection(application);
+            throw RefuseDrawing7(document, "document_not_found_in_api7_collection", bridge.BridgeFailure,
+                                 document.Path, count, candidates,
+                                 (cachedStage ?? "no_match") + "; fresh=" + (freshStage ?? "resolved"),
+                                 stage1Outcome, ProbeApi5Side(document, application5));
+        }
+
+        throw RefuseDrawing7(document, "application7_unavailable", bridge.BridgeFailure, null, 0, null,
+                             freshStage, stage1Outcome, ProbeApi5Side(document, application5));
+    }
+
+    /// <summary>What the API5 side still knows about a document whose API7 resolution failed: whether its
+    /// 2D handle is still alive, which document KOMPAS reports as ACTIVE, and how many 3D documents the
+    /// API5 enumeration sees. MEASURED: this is what tells apart "the document is gone" from "the API7
+    /// collection dropped it while API5 still holds it" — the two need different fixes and a bare
+    /// <c>Count = 0</c> cannot distinguish them. Each read is guarded: a dead handle answers with the
+    /// exception type, not with a fabricated value.
+    /// History: docs/decisions/drawings.md#reopen-resolution</summary>
+    private static string ProbeApi5Side(DocumentEntry document, ApplicationEntry? application)
+    {
+        var parts = new List<string>();
+
+        if (document.Drawing is { } drawing5)
+        {
+            // Liveness by RE-TRANSFER on the raw API5 object: if the RCW's document behind it is gone,
+            // TransferInterface answers null (or throws) — so this single read both proves the handle is
+            // still backed by a live document AND says whether the API5→API7 transfer still yields a
+            // drawing. That is exactly the fact the resolution depends on, so no separate probe is run.
+            parts.Add("api5_retransfer=" + ProbeAlive(() =>
+                application is null ? "no_application"
+                : application.Application.TransferInterface(
+                        drawing5, (int)ksAPITypeEnum.ksAPI7Dual, 0) is IDrawingDocument
+                    ? "drawing"
+                    : "not_drawing"));
+        }
+        else
+        {
+            parts.Add("api5_2d_handle=absent");
+        }
+
+        if (application is not null)
+        {
+            parts.Add("api5_active_3d=" + ProbeAlive(() =>
+                application.Application.ActiveDocument3D() is ksDocument3D ? "present" : "none"));
+            parts.Add("api5_visible=" + (application.DocumentsVisible ? "true" : "false"));
+            parts.Add("api5_window_titles=" + ProbeAlive(() =>
+            {
+                var observed = ObserveApplicationWindow(application.Application);
+                return observed is null ? "none" : observed.VisibleChildTitles.Count.ToString();
+            }));
+            // Does a SECOND, freshly obtained 2D interface transfer? MEASURED separately from the cached
+            // handle, because the two can disagree: the cached one can go stale while Document2D() hands
+            // back a different object — or the reverse. Recording both is what names which handle is dead.
+            parts.Add("api5_fresh_document2d=" + ProbeAlive(() =>
+            {
+                if (application.Application.Document2D() is not ksDocument2D fresh)
                 {
-                    return candidate;
+                    return "no_document2d";
                 }
+
+                return application.Application.TransferInterface(
+                    fresh, (int)ksAPITypeEnum.ksAPI7Dual, 0) is IDrawingDocument ? "drawing" : "not_drawing";
+            }));
+        }
+        else
+        {
+            parts.Add("api5_application=absent");
+        }
+
+        return string.Join(" ", parts);
+    }
+
+    /// <summary>Run a liveness probe for the resolution diagnostic; on failure return the exception type
+    /// instead of a value, so the refusal stays a diagnosis rather than becoming a crash of the diagnostic
+    /// itself.</summary>
+    private static string ProbeAlive(Func<string> probe)
+    {
+        try
+        {
+            return probe();
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException or InvalidOperationException)
+        {
+            return "dead:" + ex.GetType().Name;
+        }
+    }
+
+    /// <summary>Resolve the reopened drawing among an API7 application's documents. Identification does
+    /// NOT go through a blind cast: each candidate is classified by <c>IKompasDocument.DocumentType</c>
+    /// (<c>documenttypeenum.html</c>: <c>ksDocumentDrawing = 1</c>) and by <c>PathName</c>; the file NAME
+    /// is a tie-breaker NOTE among typed drawings, and the winner is still re-checked by cast.</summary>
+    private static bool ResolveInCollection(
+        DocumentEntry document, IApplication application, out IDrawingDocument? resolved, out string? note)
+    {
+        resolved = null;
+        note = null;
+        if (application.Documents is not { } documents)
+        {
+            note = "documents_collection_null";
+            return false;
+        }
+
+        var count = documents.Count;
+        IKompasDocument? byPath = null;
+        IKompasDocument? byTypeAndName = null;
+        for (var i = 0; i < count; i++)
+        {
+            if (documents[(object)i] is not { } candidate)
+            {
+                continue;
+            }
+
+            var pathName = SafeString(() => candidate.PathName);
+            if (PathsMatch(pathName, document.Path))
+            {
+                byPath = candidate;
+                break;
+            }
+
+            var kind = SafeDocumentType(candidate);
+            if (byTypeAndName is null && kind == DrawingDocumentType
+                && FileNamesMatch(SafeString(() => candidate.Name), document.Path))
+            {
+                byTypeAndName = candidate;
             }
         }
 
-        throw new KompasContractException(
+        resolved = (byPath ?? byTypeAndName) as IDrawingDocument;
+        note = resolved is not null ? null
+            : byTypeAndName is null ? "no_type_and_name_match" : "matched_non_drawing";
+        return resolved is not null;
+    }
+
+    /// <summary>The collection size and a per-candidate line, for the refusal details.</summary>
+    private static (int Count, List<string> Candidates) SnapshotCollection(IApplication application)
+    {
+        if (application.Documents is not { } documents)
+        {
+            return (0, new List<string>());
+        }
+
+        var count = documents.Count;
+        var candidates = new List<string>();
+        for (var i = 0; i < count; i++)
+        {
+            if (documents[(object)i] is not { } candidate)
+            {
+                continue;
+            }
+
+            candidates.Add($"[{i}] type={SafeDocumentType(candidate)} "
+                + $"path={SafeString(() => candidate.PathName)} name={SafeString(() => candidate.Name)}");
+        }
+
+        return (count, candidates);
+    }
+
+    /// <summary><c>DocumentTypeEnum.ksDocumentDrawing</c> — the API7 type of a drawing sheet
+    /// (<c>documenttypeenum.html</c>). Used to CLASSIFY a candidate, never to mint a drawing from an
+    /// untyped object.</summary>
+    private const int DrawingDocumentType = 1;
+
+    private static int? SafeDocumentType(IKompasDocument candidate)
+    {
+        try
+        {
+            return (int)candidate.DocumentType;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>A named API7-drawing resolution refusal that CARRIES the stage, the collection size and
+    /// the candidates seen — the diagnosis the review demanded instead of a bare "причина не названа".</summary>
+    private static KompasContractException RefuseDrawing7(
+        DocumentEntry document, string stage, string? bridgeFailure, string? wantedPath, int count,
+        IReadOnlyList<string>? candidates, string? extraNote = null, string? stage1Outcome = null,
+        string? api5Side = null)
+    {
+        var details = new Dictionary<string, object?>
+        {
+            ["document_id"] = document.Id,
+            ["stage"] = stage,
+            ["bridge_failure"] = bridgeFailure ?? "none",
+            ["wanted_path"] = wantedPath,
+            ["api7_documents_count"] = count,
+            ["stage1_transfer"] = stage1Outcome ?? "not_run_no_api5_handle",
+            ["api5_side"] = api5Side ?? "not_probed",
+            ["drawing7_resolution"] = document.Drawing7Resolution ?? "never_resolved",
+        };
+        if (candidates is not null)
+        {
+            details["candidates"] = candidates.ToArray();
+        }
+
+        if (extraNote is not null)
+        {
+            details["note"] = extraNote;
+        }
+
+        return new KompasContractException(
             ErrorCodes.WrongDocumentKind,
-            $"Чертёж «{document.Id}» не переносится в API7 как IDrawingDocument "
-            + $"({bridge.BridgeFailure ?? "причина не названа"}).",
-            RetryPolicy.Never,
-            details: new Dictionary<string, object?> { ["document_id"] = document.Id });
+            $"Чертёж «{document.Id}» не разрешён в API7 как IDrawingDocument на стадии {stage} "
+            + $"(документов в API7: {count}, мост: {bridgeFailure ?? "в порядке"}).",
+            RetryPolicy.ReacquireContext,
+            details: details);
     }
 
     private IApplication RequireApplication7(DocumentEntry document)
@@ -990,6 +1784,26 @@ public sealed partial class Api5Session
         try
         {
             return string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Whether a KOMPAS document name equals the file name of a path. Used only as a tie-break
+    /// among documents already classified as drawings by <c>DocumentType</c> — the name is a note, the
+    /// type is the decision. History: docs/decisions/drawings.md#reopen-resolution</summary>
+    private static bool FileNamesMatch(string? documentName, string? path)
+    {
+        if (string.IsNullOrWhiteSpace(documentName) || string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        try
+        {
+            return string.Equals(documentName, Path.GetFileName(path), StringComparison.OrdinalIgnoreCase);
         }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
         {
@@ -1299,22 +2113,28 @@ public sealed partial class Api5Session
         };
     }
 
-    /// <summary>Whether a documentation-named export format is published, and its command code.</summary>
-    private static bool TryResolveExportFormat(string format, out string wire, out int code)
+    /// <summary>Whether a documentation-named export format is published, and the document type the
+    /// converter produces for it.</summary>
+    /// <remarks>DOC: <c>iconverter_getfilter.html</c> — at export the first argument is the document type
+    /// the converter PRODUCES, and the constant block for the DXF/DWG converter publishes
+    /// <c>FORMAT_DXF=1</c> and <c>FORMAT_DWG=2</c>. Those numeric values are the converter's own
+    /// document-type codes; the command id used at the call site is the library's, taken from
+    /// <c>GetFilter</c> and not from here.</remarks>
+    private static bool TryResolveExportFormat(string format, out string wire, out int docType)
     {
         switch (format.Trim().ToLowerInvariant())
         {
             case "dxf":
                 wire = "dxf";
-                code = 1;
+                docType = ExportDocType.Dxf;
                 return true;
             case "dwg":
                 wire = "dwg";
-                code = 2;
+                docType = ExportDocType.Dwg;
                 return true;
             default:
                 wire = format;
-                code = 0;
+                docType = 0;
                 return false;
         }
     }
@@ -1342,12 +2162,12 @@ public sealed partial class Api5Session
     }
 
     /// <summary>Confirm the exported file is the expected format, reporting WHAT was found.</summary>
-    /// <remarks>MEASURED: KOMPAS v24's converter writes DXF and DWG as ZIP containers («PK\x03\x04») that
-    /// carry a <c>Contents</c> member, not as plain text with an <c>AC10xx</c> header. The check therefore
-    /// accepts EITHER a plain file of the expected shape OR a ZIP container with the expected member, and
-    /// REPORTS which shape was found («dxf_section_header», «dwg_ac10xx», «zip:Contents») rather than
-    /// pretending only one shape exists. An unrecognised shape is reported by name, never as success.
-    /// History: docs/decisions/drawings.md#export-formats</remarks>
+    /// <remarks>INVARIANT: the format is read from the file's own CONTENT, never from its extension. A
+    /// file named <c>.dxf</c> that is really something else must be reported as that something else.
+    /// MEASURED: a native KOMPAS drawing (<c>.cdw</c>) is a ZIP container («PK\x03\x04») whose
+    /// <c>FileInfo</c> member declares <c>FileTypeName=Kompas.cdw</c>; the earlier revision presented such
+    /// a container as a successful DXF/DWG export. A container is therefore named as a container and is
+    /// NOT accepted as either published format. History: docs/decisions/drawings.md#export-formats</remarks>
     private static string DetectDxfSignature(string path)
     {
         try
@@ -1403,9 +2223,9 @@ public sealed partial class Api5Session
     }
 
     /// <summary>If the file is a ZIP container, report it by shape and member set; else null.</summary>
-    /// <remarks>The converter's own container is read by its LOCAL HEADER and central directory only — no
-    /// unzip library is used, and the file is not fully decompressed: the check answers "is this the
-    /// container the converter writes", not "is the drawing inside it valid".</remarks>
+    /// <remarks>REPORTING ONLY: the container shape is returned so the caller can NAME what was found —
+    /// it is never treated as success for any published format. The container's member set is read from
+    /// its central directory, not by decompressing the file.</remarks>
     private static string? DetectZipContainer(string path)
     {
         using var stream = File.OpenRead(path);
@@ -1508,10 +2328,14 @@ public sealed partial class Api5Session
     }
 }
 
-/// <summary>Document-type codes for <c>IConverter.GetFilter</c> (<c>iconverter_getfilter.html</c>) —
-/// the vendor's own enumeration, taken from the help rather than from a literal in a call site.</summary>
-internal static class KompasDocumentTypes
+/// <summary>Document-type codes the DXF/DWG converter produces, for <c>IConverter.GetFilter</c>
+/// (<c>iconverter_getfilter.html</c>) — the vendor's own constants, taken from the help rather than from
+/// a literal at a call site.</summary>
+internal static class ExportDocType
 {
-    /// <summary>Drawing sheet document type, as the converter expects it.</summary>
-    public const int Drawing = 1;
+    /// <summary>Document type produced for a DXF export (<c>FORMAT_DXF</c>).</summary>
+    public const int Dxf = 1;
+
+    /// <summary>Document type produced for a DWG export (<c>FORMAT_DWG</c>).</summary>
+    public const int Dwg = 2;
 }

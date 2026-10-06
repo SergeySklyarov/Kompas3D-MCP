@@ -427,6 +427,15 @@ def _git(*args):
     return True, done.stdout.decode("utf-8", "replace").strip()
 
 
+def _porcelain_path(line):
+    """Path part of one `git status --porcelain` line."""
+    # INVARIANT: the path is split off by whitespace, never by a fixed `[3:]` offset. `_git` strips the
+    # whole output, so the FIRST line loses the leading blank of its XY status (" M a" -> "M a"), and
+    # a fixed offset then ate the first letter of the path ("docs/…" -> "ocs/…").
+    parts = line.strip().split(maxsplit=1)
+    return parts[1] if len(parts) == 2 else line.strip()
+
+
 def _source_state():
     """Исходное состояние, из которого собрана поставка.
 
@@ -456,7 +465,7 @@ def _source_state():
         "commit_short": commit[:12],
         "tree_dirty": bool(changed),
         "changed_files": len(changed),
-        "changed_files_sample": [line[3:].strip() for line in changed[:20]],
+        "changed_files_sample": [_porcelain_path(line) for line in changed[:20]],
         "changed_files_truncated": len(changed) > 20,
         "rule": "паспорт издаётся из закоммиченного дерева: грязное дерево означает, что исходник "
                 "поставки из репозитория не восстанавливается, и паспорт не издаётся без явного "

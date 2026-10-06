@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -20,7 +21,14 @@ namespace KompasMcp.Host;
 public static class Program
 {
     public const string ServerName = "kompas-mcp";
-    public const string ServerVersion = "0.1.0-preview";
+
+    /// <summary>Product version the client sees in <c>serverInfo.version</c>.</summary>
+    /// <remarks>INVARIANT: taken from the assembly, i.e. from <c>Version</c> in Directory.Build.props — the
+    /// same number as the release tag. The commit after '+' stays in the binary stamp, not in serverInfo.
+    /// History: docs/decisions/releases.md#versioning</remarks>
+    public static readonly string ServerVersion =
+        (typeof(Program).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+            ?? "0.0.0").Split('+')[0];
 
     public static async Task<int> Main(string[] args)
     {

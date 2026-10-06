@@ -5,6 +5,16 @@
     ADR-001 records why x64 is mandatory (KOMPAS.exe is x64, machine is x64) and why
     net10.0-windows is the baseline. Overridable per-build with -p:TargetFramework=...
   -->
+  <!--
+    INVARIANT: the product version lives here and only here. The release tag is "v" + this value,
+    the MCP serverInfo.version is this value, and the SDK stamps it into every assembly as
+    "<Version>+<commit>". scripts/package-release.py refuses a release when any of them disagree.
+    History: docs/decisions/releases.md#versioning
+  -->
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0-windows</TargetFramework>
     <LangVersion>latest</LangVersion>

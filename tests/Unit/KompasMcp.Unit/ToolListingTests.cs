@@ -4,13 +4,9 @@ using Xunit;
 
 namespace KompasMcp.Unit;
 
-/// <summary>INVARIANT: the tool list published in the overview documents is GENERATED from the catalog,
-/// not written by hand. A manual list drifts silently — the documents named 50 tools while the catalog
-/// held 63, and neither the build nor acceptance compares a document with the registry.</summary>
-/// <remarks>TEST: the same class is guarded for the published index by
-/// <c>scripts/verify-publish-set.py</c> check 16; this test runs without a git index, so it reads the
-/// working tree. Two instruments, one class — the generator itself is checked here against the source
-/// it claims to describe.
+/// <summary>INVARIANT: published tool listings must match the catalog to prevent documentation drift.</summary>
+/// <remarks>TEST: the full generated block is compared with the working tree; publish check 16
+/// compares tool names in the index.
 /// History: docs/decisions/tests.md#tool-listing</remarks>
 public sealed class ToolListingTests
 {
@@ -28,15 +24,21 @@ public sealed class ToolListingTests
             "KompasMcp.sln не найден выше " + AppContext.BaseDirectory);
     }
 
-    /// <summary>The generated body between the markers, as published.</summary>
-    private static string BlockBody(string document)
+    private static string BlockBody(string document) =>
+        BlockBody(File.ReadAllText(Path.Combine(RepoRoot, document)), document);
+
+    /// <summary>INVARIANT: normalize CRLF to LF so checkout line endings cannot cause content failures.</summary>
+    /// <remarks>DOC: .gitattributes specifies CRLF for Markdown; ToolListing.Markdown emits LF.
+    /// TEST: GeneratedBlock_MatchesTheCatalog_WithEitherLineEnding covers both representations.</remarks>
+    private static string BlockBody(string text, string document)
     {
-        var text = File.ReadAllText(Path.Combine(RepoRoot, document));
         var begin = text.IndexOf(ToolListing.BeginMarker, StringComparison.Ordinal);
         var end = text.IndexOf(ToolListing.EndMarker, StringComparison.Ordinal);
 
         Assert.True(begin >= 0 && end > begin, $"{document}: нет блока между метками списка инструментов.");
-        return text[(begin + ToolListing.BeginMarker.Length)..end].Trim('\n', '\r');
+        return text[(begin + ToolListing.BeginMarker.Length)..end]
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Trim('\n');
     }
 
     [Theory]
@@ -46,6 +48,20 @@ public sealed class ToolListingTests
         var expected = ToolListing.Markdown(ToolCatalog.All).TrimEnd('\n');
 
         Assert.Equal(expected, BlockBody(document));
+    }
+
+    [Theory]
+    [InlineData("\n")]
+    [InlineData("\r\n")]
+    public void GeneratedBlock_MatchesTheCatalog_WithEitherLineEnding(string lineEnding)
+    {
+        const string document = "docs/TOOLS.md";
+        var text = File.ReadAllText(Path.Combine(RepoRoot, document))
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace("\n", lineEnding, StringComparison.Ordinal);
+        var expected = ToolListing.Markdown(ToolCatalog.All).TrimEnd('\n');
+
+        Assert.Equal(expected, BlockBody(text, document));
     }
 
     [Fact]

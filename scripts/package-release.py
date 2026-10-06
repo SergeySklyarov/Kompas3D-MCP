@@ -28,10 +28,15 @@ OWN_ASSEMBLIES = [
     "KompasMcp.Api5Adapter.dll", "KompasMcp.Domain.dll", "KompasMcp.Contracts.dll",
 ]
 
+# INVARIANT: the numbers here are the ones acceptance-levels.py measures, not the ones a release
+# would like to claim. A profile whose actions are not all verified is listed with its real ratio and
+# named as open in `not_included`, never rounded up to "closed".
 PROFILES = [
     {"id": "mechanical-core-v1", "title": "Детали: твердотельное моделирование", "modes": "54/54", "deps": "15/15"},
     {"id": "assemblies-minimal-v1", "title": "Сборки", "modes": "7/7", "deps": "5/5"},
     {"id": "mates-minimal-v1", "title": "Сопряжения", "modes": "6/6", "deps": "5/5"},
+    {"id": "drawings-minimal-v1", "title": "Чертежи: виды, размеры, штамп, DXF/DWG, техтребования", "modes": "6/6", "deps": "6/6"},
+    {"id": "variables-material-minimal-v1", "title": "Переменные и материал детали (профиль открыт)", "modes": "3/5", "deps": "4/5"},
 ]
 
 # INVARIANT: vendor binaries never ship; the interop comes from the user's KOMPAS installation.
@@ -101,14 +106,18 @@ def main():
         "platform": "win-x64",
         "zip": zip_name,
         "installer": "Install-KompasMcp.ps1",
-        "scope": "детали + сборки + сопряжения (mechanical-core-v1, assemblies-minimal-v1, mates-minimal-v1)",
+        "scope": "детали + сборки + сопряжения + чертежи (mechanical-core-v1, assemblies-minimal-v1, "
+                 "mates-minimal-v1, drawings-minimal-v1 закрыты полностью); переменные и материал "
+                 "(variables-material-minimal-v1) идут с открытыми действиями",
         "profiles": PROFILES,
         "not_included": [
             "массивы компонентов сборки",
             "полная спецификация (BOM)",
             "расширенные виды сопряжений сверх mates-minimal-v1",
-            "чертежи и 2D-документы",
-            "полный каталог P6 (выпуск закрывает только три профиля выше)",
+            "спецификации и другие 2D-документы, кроме чертежей профиля drawings-minimal-v1",
+            "закрытие профиля variables-material-minimal-v1: открыто 3 действия (единица чтения "
+            "плотности не подтверждена документом), инструменты переменных и материала при этом в пакете",
+            "полный каталог P6 (выпуск закрывает четыре профиля выше)",
         ],
         "tools_count": len(schemas),
         "tools": schemas,

@@ -1,0 +1,15 @@
+<Project>
+
+  <!--
+    INVARIANT: only Platform=x64 may build or run tests. Any other platform writes to or reads from a
+    second output folder (bin\<Configuration>\) that the solution build never refreshes, so tests
+    or the Host would silently use stale binaries. VSTest is guarded too: dotnet test with no-build
+    runs no Build target.
+    History: docs/decisions/build.md#single-platform
+  -->
+  <Target Name="KompasMcpRequireX64Platform" BeforeTargets="Build;VSTest">
+    <Error Condition="'$(Platform)' != 'x64'"
+           Text="KompasMcp builds and tests only with Platform=x64 (got '$(Platform)'). Drop -p:Platform or pass -p:Platform=x64; outputs are in bin\x64\$(Configuration)\." />
+  </Target>
+
+</Project>

@@ -11,14 +11,14 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <!--
-      x64 only. AnyCPU was declared here historically, but the solution defines no AnyCPU
-      configuration, so that platform was never reachable through the solution — while still
-      permitting a stray `-p:Platform=AnyCPU` build to write to a second output folder
-      (bin/Debug/... instead of bin/x64/Debug/...). Those orphaned folders are what caused the
-      September 2026 stale-binary incident: the delivery copy silently kept serving a days-old
-      Worker. Removing AnyCPU makes the mistake a build error rather than a silent divergence.
+      INVARIANT: every build and test of every project uses Platform=x64, so all outputs live in
+      bin\x64\<Configuration>\. The solution maps only x64, but a project-level build or test
+      would otherwise default to AnyCPU and read or write bin\<Configuration>\ instead.
+      Directory.Build.targets fails any other explicit platform.
+      History: docs/decisions/build.md#single-platform
     -->
     <Platforms>x64</Platforms>
+    <Platform Condition="'$(Platform)' == ''">x64</Platform>
     <!-- КОМПАС-3D v24 is an x64 out-of-process server; a 32-bit or AnyCPU-prefer-32 host
          would produce CLASS_E_NOAGGREGATION / EATL_E_* style failures that are impossible
          to diagnose from a COM error alone. Force x64 everywhere. -->

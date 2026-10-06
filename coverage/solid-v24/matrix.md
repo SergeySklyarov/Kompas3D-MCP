@@ -63,32 +63,29 @@
 ### профиль variables-material-minimal-v1 — Внешние переменные и материал детали v24
 
 - **обязательных_режимов:** 5
-- **режимов_закрыто:** 3
+- **режимов_закрыто:** 5
 - **общих_зависимостей:** 5
-- **зависимостей_закрыто:** 4
-- **профиль_закрыт:** нет
-- **готовность_процента:** 70.0%
-- **по_очередям:** VM 3/5
-- **открытые_режимы:**
-  - `VM-04.material.read`
-  - `VM-05.material.write`
-- **открытые_зависимости:**
-  - `dep.vm.units`
+- **зависимостей_закрыто:** 5
+- **профиль_закрыт:** да
+- **готовность_процента:** 100.0%
+- **по_очередям:** VM 5/5
+- **открытые_режимы:** []
+- **открытые_зависимости:** []
 
 ### Метрика 2 — полный нормализованный каталог P6
 
 - **строк_каталога:** 294
-- **строк_полностью_закрыто:** 101
+- **строк_полностью_закрыто:** 105
 - **строк_с_каким_либо_прогрессом:** 120
 - **семейств_в_каталоге:** 36
 - **семейств_без_строк:** 14
 - **операций:** 99
 - **режимов_и_вариантов:** 146
 - **применимых_действий:** 2665
-- **действий_verified:** 830
-- **покрытие_действий:** 31.1%
-- **распределение_статусов:** {'not_started': 1831, 'verified': 830, 'not_applicable': 275, 'implemented': 4}
-- **уровни_каталога_операций:** {'metadata_found': 50, 'mcp_verified': 28, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 6}
+- **действий_verified:** 834
+- **покрытие_действий:** 31.3%
+- **распределение_статусов:** {'not_started': 1831, 'verified': 834, 'not_applicable': 275}
+- **уровни_каталога_операций:** {'metadata_found': 50, 'mcp_verified': 30, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 4}
 - **уровни_каталога_режимов:** {'mcp_verified': 55, 'documented': 19, 'runtime_verified': 3, 'metadata_found': 48, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
@@ -243,8 +240,8 @@
 | `VM-01.variables.read` | VM | practical_required | VM | mcp_implemented | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | VM-01.variables.read.discover, VM-01.variables.read.negative_tests |
 | `VM-02.variable.set_value` | VM | practical_required | VM | mcp_implemented | н/п | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | VM-02.variable.set_value.create, VM-02.variable.set_value.read, VM-02.variable.set_value.rebuild, VM-02.variable.set_value.negative_tests |
 | `VM-03.variable.set_expression` | VM | practical_required | VM | mcp_implemented | н/п | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | VM-03.variable.set_expression.create, VM-03.variable.set_expression.read, VM-03.variable.set_expression.rebuild, VM-03.variable.set_expression.negative_tests |
-| `VM-04.material.read` | VM | practical_required | VM | mcp_implemented | OK | н/п | код | н/п | н/п | н/п | н/п | н/п | OK | н/п | VM-04.material.read.discover, VM-04.material.read.negative_tests, dep.vm.units.read |
-| `VM-05.material.write` | VM | practical_required | VM | mcp_implemented | н/п | OK | код | OK | н/п | OK | н/п | н/п | OK | н/п | VM-05.material.write.create, VM-05.material.write.read, VM-05.material.write.negative_tests |
+| `VM-04.material.read` | VM | practical_required | VM | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | VM-04.material.read.discover, VM-04.material.read.negative_tests, dep.vm.units.read, VM-05.material.write.read |
+| `VM-05.material.write` | VM | practical_required | VM | mcp_verified | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | н/п | VM-05.material.write.create, VM-05.material.write.read, VM-05.material.write.negative_tests |
 
 ### Общие зависимости профиля `variables-material-minimal-v1`
 
@@ -254,7 +251,7 @@
 | `dep.vm.revisions` | да | read, edit, negative_tests | dep.vm.revisions.read, dep.vm.revisions.edit, dep.vm.revisions.negative_tests |
 | `dep.vm.idempotency` | да | create, read, negative_tests | dep.vm.idempotency.create, dep.vm.idempotency.read, dep.vm.idempotency.negative_tests |
 | `dep.vm.save_reopen` | да | save_reopen, read | dep.vm.save_reopen.read, dep.vm.save_reopen.save_reopen, dep.vm.save_reopen.negative_tests |
-| `dep.vm.units` | нет | read, negative_tests | dep.vm.units.read, dep.vm.units.negative_tests |
+| `dep.vm.units` | да | read, negative_tests | dep.vm.units.read, dep.vm.units.negative_tests |
 
 ## Метрика 2 — весь нормализованный каталог
 
@@ -514,9 +511,9 @@
 | `VM-01.variables.read` | VM | practical_required | VM | mcp_implemented | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | VM-01.variables.read.discover, VM-01.variables.read.negative_tests |
 | `VM-02.variable.set_value` | VM | practical_required | VM | mcp_implemented | н/п | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | VM-02.variable.set_value.create, VM-02.variable.set_value.read, VM-02.variable.set_value.rebuild, VM-02.variable.set_value.negative_tests |
 | `VM-03.variable.set_expression` | VM | practical_required | VM | mcp_implemented | н/п | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | VM-03.variable.set_expression.create, VM-03.variable.set_expression.read, VM-03.variable.set_expression.rebuild, VM-03.variable.set_expression.negative_tests |
-| `VM-04.material.read` | VM | practical_required | VM | mcp_implemented | OK | н/п | код | н/п | н/п | н/п | н/п | н/п | OK | н/п | VM-04.material.read.discover, VM-04.material.read.negative_tests, dep.vm.units.read |
-| `VM-05.material.write` | VM | practical_required | VM | mcp_implemented | н/п | OK | код | OK | н/п | OK | н/п | н/п | OK | н/п | VM-05.material.write.create, VM-05.material.write.read, VM-05.material.write.negative_tests |
-| `VM-06.mass.computed_via_measure` | VM | practical_required | VM | mcp_implemented | н/п | н/п | код | н/п | н/п | н/п | н/п | н/п | н/п | OK | VM-06.mass.computed_via_measure.read, VM-06.mass.computed_via_measure.geometry_validation |
+| `VM-04.material.read` | VM | practical_required | VM | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | VM-04.material.read.discover, VM-04.material.read.negative_tests, dep.vm.units.read, VM-05.material.write.read |
+| `VM-05.material.write` | VM | practical_required | VM | mcp_verified | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | н/п | VM-05.material.write.create, VM-05.material.write.read, VM-05.material.write.negative_tests |
+| `VM-06.mass.computed_via_measure` | VM | practical_required | VM | mcp_verified | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | н/п | OK | VM-06.mass.computed_via_measure.read, VM-06.mass.computed_via_measure.geometry_validation |
 | `AUX-SKETCH.plane_and_profile_lifecycle` *(вне каталога)* | AUX-SKETCH | later | — | — | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | V03, V04, V05, G07_xy, G07_xz, G07_yz, V04r, V04d, V04e, V04f, G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, F08.28.discover, F08.28.create, F08.28.read, F08.28.edit, F08.28.rebuild, F08.28.save_reopen, F08.28.negative_tests, F08.28.geometry_validation, AUXS.01.edit, AUXS.02.negative_tests |
 | `SM-04.boss` *(вне каталога)* | SM-04 | later | B5 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `dep.sketch.entities` *(вне каталога)* | AUX-SKETCH | dependency_of | — | — | OK | OK | OK | OK | — | OK | — | — | OK | OK | G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, DEP.DSE.02.create, DEP.DSE.07.geometry_validation, DEP.DSE.06.negative_tests, DEP.DSE.05.save_reopen, DEP.DSE.04.edit, DEP.DSE.01.discover, DEP.DSE.03.read |
@@ -555,7 +552,7 @@
 | `dep.vm.revisions` *(вне каталога)* | — | dependency_of | VM | — | н/п | н/п | OK | OK | н/п | н/п | н/п | н/п | OK | н/п | dep.vm.revisions.read, dep.vm.revisions.edit, dep.vm.revisions.negative_tests |
 | `dep.vm.idempotency` *(вне каталога)* | — | dependency_of | VM | — | н/п | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | dep.vm.idempotency.create, dep.vm.idempotency.read, dep.vm.idempotency.negative_tests |
 | `dep.vm.save_reopen` *(вне каталога)* | — | dependency_of | VM | — | н/п | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | dep.vm.save_reopen.read, dep.vm.save_reopen.save_reopen, dep.vm.save_reopen.negative_tests |
-| `dep.vm.units` *(вне каталога)* | — | dependency_of | VM | — | н/п | н/п | код | н/п | н/п | н/п | н/п | н/п | OK | н/п | dep.vm.units.read, dep.vm.units.negative_tests |
+| `dep.vm.units` *(вне каталога)* | — | dependency_of | VM | — | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | dep.vm.units.read, dep.vm.units.negative_tests |
 
 ## Ограничения и незакрытое
 
@@ -961,18 +958,18 @@
   - Утверждение «выражение применено» требует НЕ только совпадения строки выражения, но и совпадения зависимой величины с ЗАРАНЕЕ записанной формулой: строка VM-03.variable.set_expression.rebuild сверяет 20*2=40 и 10*2=20, а не «величина как-нибудь изменилась».
   - Справка не публикует перечень допустимых имён и функций выражения: недопустимое выражение даёт отказ ядра, который передаётся вызывающему.
   - Сервер НЕ исправляет выражение за клиента и НЕ исполняет строку как код.
-- `VM-04.material.read` — не закрыт
-  - ЕДИНИЦА ПЛОТНОСТИ ЧТЕНИЯ НЕ ПОДТВЕРЖДЕНА ДОКУМЕНТОМ: измерены ОБА документированных getter'а (ksPart.GetDensity и IPart7→QI(IMassInertiaParam7)→Density) на двух плотностях — оба отдают значение, согласованное с г/куб.см, при странице «г/куб.мм». Сырое показание публикуется (density_raw) вместе с единицей СТРАНИЦЫ (density_raw_unit_documented=g/mm3) и статусом density_unit_status=unconfirmed; density_normalized_kg_per_m3 не заполняется. Критерий остаётся ОТКРЫТЫМ, поэтому действие read стоит implemented, а не verified.
-  - Разные единицы у SetMaterial и GetDensity противоречием справки НЕ являются: это разные методы, и справка вправе называть для них разные единицы. Противоречие в опыте — между ДОКУМЕНТИРОВАННОЙ единицей ЧТЕНИЯ и наблюдаемым результатом (7.85 читается как 7.85, а не 0.00785).
-  - Ноль от GetDensity — документированный признак НЕУДАЧИ, а не измеренная нулевая плотность: полем плотности он не подменяется, и плотность из справочника сервера не подставляется.
-- `VM-05.material.write` — не закрыт
-  - ПОДТВЕРЖДЕНЫ ИМЯ материала и исходы вызовов SetMaterial/Update; ФИЗИЧЕСКАЯ плотность НЕ подтверждена: единица чтения не установлена (см. VM-04.material.read), поэтому перечитанное сырое значение сравнивается с записанным только как ЧИСЛОВОЕ равенство — поле density_raw_numeric_matches есть ДИАГНОСТИКА, а не подтверждение. Ответ отделяет подтверждённое от неподтверждённого: density_unit_status=unconfirmed, density_normalized_kg_per_m3=null. Поэтому действие read стоит implemented, а не verified.
-  - PASS числового равенства НЕ закрывает требование перечитать и подтвердить назначенную физическую плотность.
-  - Ноль от GetDensity — документированный признак НЕУДАЧИ, а не измеренная нулевая плотность: полем плотности он не подменяется, и плотность из справочника сервера не подставляется.
-- `VM-06.mass.computed_via_measure` — не закрыт
+- `VM-04.material.read` — закрыт целиком
+  - ЕДИНИЦА ПЛОТНОСТИ ЗАКРЫТА ДОКУМЕНТОМ: маршрут МЦХ API5 задаёт единицу возвращаемых данных АРГУМЕНТОМ вызова, поэтому r при ST_MIX_M|ST_MIX_KG — кг/м³. Живое измерение прибора --vm-density-mci подтвердило это на двух плотностях: 7850/8500 читаются ровно, отношение M|KG к MM|KG равно 1e9, значение переживает save→close→reopen.
+  - Старый ksPart.GetDensity() остаётся ДИАГНОСТИКОЙ: его страница называет г/куб.мм, ядро отдаёт значение, согласованное с г/куб.см; это поле НЕ публикуется как плотность. Нулевая или нечисловая r, а также деталь без тела дают НАЗВАННЫЙ отказ, а не измеренную нулевую плотность; плотность из справочника сервера не подставляется.
+  - Имя и плотность читаются РАЗДЕЛЬНО: успешное чтение имени не означает успешного чтения плотности.
+- `VM-05.material.write` — закрыт целиком
+  - ПОДТВЕРЖДЕНЫ ИМЯ материала и ФИЗИЧЕСКАЯ плотность: плотность перечитывается тем же документированным маршрутом МЦХ, который отдаёт кг/м³ — ту же единицу, что запрошена, поэтому сравнение одноимённое в допуске DensityUnits.ReadBackToleranceKgPerM3. Несовпавшая или непрочитанная плотность подтверждения НЕ даёт.
+  - Ноль или нечисловая r от маршрута чтения — НАЗВАННЫЙ отказ, а не измеренная нулевая плотность: полем плотности он не подменяется, и плотность из справочника сервера не подставляется.
+  - Деталь из библиотеки моделей и стандартный элемент — документированный запрет SetMaterial; отдельной проверки этого класса в блоке нет, запрет назван в описании инструмента.
+- `VM-06.mass.computed_via_measure` — закрыт целиком
   - Это СКВОЗНАЯ проверка УЖЕ принятого инструмента kompas_measure, а не режим профиля VM и не заявление о родном GetMass: собственного родного маршрута массы блок не объявляет. Поэтому строка не входит в знаменатель режимов профиля (см. scenarios SCN-VM-MASS).
-  - ЦЕПОЧКА «плотность модели → масса» НАЗВАНА ОТКРЫТОЙ: единица чтения плотности не подтверждена документом (см. dep.vm.units), нормализованная плотность не публикуется, и передать её в measure нечем. Строка VM-06.mass.computed_via_measure.read стоит NAMED, ложного PASS нет.
-  - Проверено то, что проверяемо: объём из measure равен аналитическому 100×80×10, а масса — независимому эталону объём×плотность при плотности, которую задаёт САМА проба (7850 кг/м³). Совпадение массы с эталоном подтверждает согласованность арифметики measure и геометрии, но НЕ доказывает, что ядро считает массу так же.
+  - ЦЕПОЧКА «плотность модели → масса» ВЫПОЛНЕНА: плотность читается из МОДЕЛИ ответом kompas_get_material (поле density_kg_per_m3, документированный маршрут МЦХ) и передаётся в measure, а объём даёт независимое измерение. Значение не подставляется обратно в ту же формулу.
+  - Совпадение массы с эталоном подтверждает согласованность арифметики measure и геометрии, но НЕ доказывает, что ядро считает массу так же: родного маршрута массы сервер не объявляет.
 - `AUX-SKETCH.plane_and_profile_lifecycle` — закрыт целиком
   - замена и очистка после reopen работают для измеренной области: эскиз на основной XY, профиль — окружность, вырезание сквозное; точка поиска выводится из цилиндрической грани зависимого тела (проба G, строки G10…G10r)
   - вне измеренной области (наклонная плоскость, отрезки, дуги, прямоугольники) отказ явный: CAPABILITY_UNAVAILABLE с derivation=profile_not_circle / plane_not_xy, а не догадка (строка G11)
@@ -1080,11 +1077,11 @@
   - Оба записи (переменная и материал) идут через ОБЩИЙ механизм мутаций, ревизий и журнала: второго механизма блок не заводит.
 - `dep.vm.save_reopen` — закрыт целиком
   - Значения читаются из НОВОГО документа ДО всякой повторной записи: иначе перечитывание подтвердило бы собственную запись, а не сохранность.
-- `dep.vm.units` — не закрыт
-  - ИЗМЕРЕНО прибором --vm-density-units на двух плотностях: оба документированных getter'а отдают значение, согласованное с г/куб.см, при странице «г/куб.мм»; документированный альтернативный getter IPart7→QI(IMassInertiaParam7)→Density — то же. Официального источника г/куб.см нет, поэтому перевод чтения НЕ публикуется как рабочая функция, и действие read стоит implemented, а не verified.
-  - Собственная переинтерпретация единицы не выдаётся за подтверждённую: density_normalized_kg_per_m3 не заполняется, статус единицы назван unconfirmed. Критерий остаётся открытым, а не закрытым обходом.
-  - Разные единицы у SetMaterial (г/куб.см) и GetDensity (г/куб.мм) противоречием справки НЕ являются; противоречие в опыте — между документированной единицей ЧТЕНИЯ и наблюдаемым результатом.
-  - Прежнее решение (перевод ×1000, единица g/cm3) ОТМЕНЕНО как противоречащее справке; исторический замер 7.85/7.856 сохранён и не переписан.
+- `dep.vm.units` — закрыт целиком
+  - ИЗМЕРЕНО прибором --vm-density-mci на двух плотностях: единицу r задаёт аргумент bitVector. При ST_MIX_M|ST_MIX_KG r = 7850/8500 кг/м³, при ST_MIX_MM|ST_MIX_KG r = 7.85e-6/8.5e-6 кг/мм³, отношение 1e9 — то есть переводной множитель МЕЖДУ заданными единицами, а не 1000 «по опыту».
+  - Собственная переинтерпретация единицы не выдаётся за подтверждённую: сервер ничего не пересчитывает, единица приходит из аргумента вызова. Старый getter (ksPart.GetDensity) остаётся диагностикой с единицей СТРАНИЦЫ g/mm3.
+  - Разные единицы у SetMaterial (г/куб.см) и страницы GetDensity (г/куб.мм) противоречием справки НЕ являются; расхождение в опыте между страницей GetDensity и наблюдаемым результатом названо и не сглаживается.
+  - Прежнее решение (перевод чтения ×1000, единица g/cm3) ОТМЕНЕНО как противоречащее справке; исторический замер 7.85/7.856 сохранён и не переписан.
 
 ## Семьи без строк матрицы (инвентаризация не завершена)
 

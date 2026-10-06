@@ -7,6 +7,76 @@
 реализовано, но не проверено, и чего нет. Слово «готово» здесь означает «есть подтверждающий
 прогон», а не «код написан».
 
+## 06.10.2026 · **ДОРАБОТКА ПО РЕВЬЮ ЗАКРЫТИЯ ЕДИНИЦЫ ПЛОТНОСТИ: комментарии очищены, `dep.vm.units.read` проверяет ЧИСЛО**
+
+Наряд `VM_DENSITY_UNIT_REWORK_DEVELOPER_PROMPT.md`. Оба замечания ревью закрыты.
+
+**Замечание 1 (комментарии).** Из кода убраны внутреннее имя прибора `--vm-density-mci` и числа
+прогона (7850/8500/7.85e-6/1e9): `Api5Session.VariablesMaterial.cs`, `DensityUnits.cs`,
+`VariableMaterialCommands.cs`, комментарий `dep.vm.units` в `scripts/mcp-smoke.py`, строка 121→109 в
+`VmDensityMciProbe.cs`. Все `History:` маршрута МЦХ ведут на НОВЫЙ якорь
+`docs/decisions/variables-material.md#units-mci`; прежний раздел `#units` не переписан — под его
+заголовком добавлена строка-указатель. Описание `kompas_get_material` для клиента переписано без
+внутренних сведений (`ToolCatalog.cs:2351`); проверено НА ПРОВОДЕ обеими половинами (прибор
+`scratch/_check_contract_text_vm_density.py`: r3 — rc=0, r2 — rc=1). `docs/TOOLS.md` перегенерирован:
+блок совпал с реестром (правка пришлась на фразу вне списка).
+
+**Замечание 2 (число вместо подписи).** `dep.vm.units.read` теперь сравнивает прочитанную плотность с
+**последней записанной** в документ в допуске, взятом из ответа записи; без записи — FAIL с названной
+причиной. Отрицательный контроль (подмена ожидания `+100 кг/м³`) дал **FAIL**
+(`deviation=100.00000000000182`, `expected=8600.0`); подмена не оставлена в коде.
+`matrix.json` `VM-04.material.read.tests` дополнен `VM-05.material.write.read`.
+
+**Поставка r3** `artifacts/publish-vm-density-r3-20261006` (Host.dll `2fcbaab1…`, Worker.dll
+`7f7ad9cc…` — та же, адаптер `0614d9a5…`, Contracts `b8b232d9…`, Domain.dll `894bc74e…` — та же).
+Сборка 0 Warning / 0 Error, тесты **660/660**. На бинарях r3: группа VM **56 PASS / 0 FAIL / 0 NAMED**,
+полный прогон **1101 PASS / 0 FAIL**; `verify-delivery.py` **PASS** (78 = 78 = 78, `repo_drift []`);
+`acceptance-levels.py` — **COMPLETE 78/78 · 36/36, `open_total` 0, `problems []`**, `--self-test` код 0;
+`emit-coverage-matrix.py` — целостность OK; `verify-publish-set.py` — **PASS**. Паспорт
+`docs/acceptance/delivery-vm-density-r3-20261006/delivery-passport.json`: `functional_acceptance` PASS,
+`mandatory_scope` COMPLETE, `transport_and_delivery` FAIL (`client_entry` не записан),
+`client_acceptance` `not_run` → итог **FAIL**, `fully_ready=false` — ожидаемо. Отчёт:
+`VM_DENSITY_UNIT_REWORK_REPORT_20261006.md`.
+
+**НАЗВАНО: коммит, публикация, установка, Trust и клиентская приёмка НЕ делались** (запрет наряда §4).
+Дерево грязное (18 строк `git status`: 17 изменённых + неотслеживаемый `VmDensityMciProbe.cs`; отчёт
+под `/*.md` в `.gitignore` и не виден), паспорт издан `--allow-dirty-tree`.
+
+## 06.10.2026 · **ЕДИНИЦА ПЛОТНОСТИ ЗАКРЫТА ДОКУМЕНТИРОВАННЫМ МАРШРУТОМ МЦХ: `mandatory_scope` COMPLETE (78/78 · 36/36)**
+
+Наряд `VM_DENSITY_UNIT_CLOSURE_DEVELOPER_PROMPT.md`. **Исход положительный:** документированный
+маршрут API5 `ksPart.CalcMassInertiaProperties(bitVector)` задаёт единицу плотности АРГУМЕНТОМ вызова;
+прочтение справки подтверждено живым измерением прибора `--vm-density-mci` на двух плотностях во всех
+комбинациях (7850/8500 кг/м³ при M|KG; 7.85e-6/8.5e-6 кг/мм³ при MM|KG; отношение 1e9; значение
+переживает save→close→reopen). Продукт переведён на этот маршрут: `get_material` публикует
+`density_kg_per_m3` без пересчёта сервером, `set_material` подтверждает плотность перечитыванием тем же
+маршрутом (одноимённое сравнение в допуске); старый `GetDensity()` оставлен ДИАГНОСТИКОЙ.
+
+**Три прежних открытых действия `read` (`VM-04.material.read`, `VM-05.material.write`, `dep.vm.units`) и
+сквозная `VM-06.mass.computed_via_measure.read` переведены в `verified` по PASS живых строк поставки.**
+`scripts/acceptance-levels.py` — **`mandatory_scope` COMPLETE: 78/78 режимов, 36/36 зависимостей,
+`open_total = 0`, `problems = []`**; `--self-test` код 0. Профиль `variables-material-minimal-v1` —
+ревизия 1.4, `current_level = mcp_verified` у VM-04/VM-05.
+
+Поставка `artifacts/publish-vm-density-r2-20261006` (Host.dll `8a04bc7e…`, Worker.dll `7f7ad9cc…`,
+адаптер `cbbe805e…`, Contracts `87fe8776…`, Domain `894bc74e…`). На её бинарях: группа VM
+**56 PASS / 0 FAIL / 0 NAMED** (прежняя NAMED `VM-06.mass.computed_via_measure.read` стала PASS —
+цепочка «плотность модели → масса» выполнена реально), полный прогон **1101 PASS / 0 FAIL**;
+`verify-delivery.py` **PASS** (78 = 78 = 78, `repo_drift []`); `long-comment-blocks.py src tests` код 0;
+`verify-publish-set.py` **PASS**. Паспорт
+`docs/acceptance/delivery-vm-density-r2-20261006/delivery-passport.json`: `functional_acceptance` PASS
+(1101/1101), `mandatory_scope` COMPLETE, `transport_and_delivery` FAIL (`client_entry` не записан),
+`client_acceptance` `not_run` → итог **FAIL**, `fully_ready=false` — ожидаемо, клиентская приёмка не
+запускалась.
+
+**НАЗВАНО: коммит, публикация, установка, Trust и клиентская приёмка НЕ делались** (запрет наряда §11).
+Дерево грязное (17 файлов), паспорт издан `--allow-dirty-tree` с `tree_dirty: true` — признак записан.
+Первая редакция поставки `artifacts/publish-vm-density-20261006` оставлена исторической: правка
+комментария в `src/KompasMcp.Contracts/VariableMaterialCommands.cs` сдвинула ТОЛЬКО `Contracts.dll`
+(остальные управляемые сборки байт-в-байт те же) — урок: проверка длины комментариев идёт ДО публикации.
+Отчёт — `VM_DENSITY_UNIT_CLOSURE_REPORT_20261006.md`; дословные цитаты справки —
+`docs/04_KOMPAS_API_NOTES.md` §4.44.
+
 ## 06.10.2026 · **КЛИЕНТСКАЯ ПРИЁМКА ВЫПУСКА `v24-core-assemblies-mates-drawings-v1` ПРОЙДЕНА 21/21; ПАСПОРТ ИЗДАН, ИТОГ FAIL — ТОЛЬКО ПО ОТКРЫТОМУ ПРОФИЛЮ VM**
 
 Слово заказчика: «нам нужна клиентская приёмка именно этого выпуска». Принята поставка

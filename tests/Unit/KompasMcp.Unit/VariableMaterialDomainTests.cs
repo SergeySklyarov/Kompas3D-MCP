@@ -128,73 +128,113 @@ public class VariableMaterialDomainTests
     }
 
     [Fact]
-    public void GetMaterial_DescriptionNamesTheUnconfirmedUnitAndTheNoSubstitutionRule()
+    public void GetMaterial_DescriptionNamesTheDocumentedRouteAndTheNoSubstitutionRule()
     {
         var description = Tool("kompas_get_material").Description;
-        // The unit is NOT confirmed, and the client must be able to see that from the description alone:
-        // the page's unit, the measured divergence, the status and the absent normalized field are named.
-        Assert.Contains("г/куб.мм", description, StringComparison.Ordinal);
-        Assert.Contains("НЕ ПОДТВЕРЖДЕНА", description, StringComparison.Ordinal);
-        Assert.Contains("density_raw", description, StringComparison.Ordinal);
-        Assert.Contains("density_raw_unit_documented", description, StringComparison.Ordinal);
-        Assert.Contains("unconfirmed", description, StringComparison.Ordinal);
-        Assert.Contains("density_normalized_kg_per_m3", description, StringComparison.Ordinal);
+        // The density is read through the documented MCI route, whose unit comes from the ARGUMENT: the
+        // description must name that route, the published unit, and the diagnostic-only legacy getter.
+        Assert.Contains("CalcMassInertiaProperties", description, StringComparison.Ordinal);
+        Assert.Contains("ST_MIX_M|ST_MIX_KG", description, StringComparison.Ordinal);
+        Assert.Contains("кг/м³", description, StringComparison.Ordinal);
+        Assert.Contains("density_kg_per_m3", description, StringComparison.Ordinal);
+        Assert.Contains("density_route", description, StringComparison.Ordinal);
+        Assert.Contains("get_density_raw_diagnostic", description, StringComparison.Ordinal);
         Assert.Contains("НЕ подставляется", description, StringComparison.Ordinal);
         Assert.Contains("ИЗМЕРЕНО", description, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void SetMaterial_DescriptionSeparatesTheConfirmedNameFromTheUnconfirmedDensity()
+    public void SetMaterial_DescriptionNamesTheLikeForLikeDensityConfirmation()
     {
         var description = Tool("kompas_set_material").Description;
         Assert.Contains("г/куб.см", description, StringComparison.Ordinal);
-        // The unit of the READING is not confirmed, so the description must not sell the raw equality as a
-        // confirmation of the physical density: the status and the diagnostic-only field are named.
-        Assert.Contains("НЕ ПОДТВЕРЖДЕНА", description, StringComparison.Ordinal);
-        Assert.Contains("unconfirmed", description, StringComparison.Ordinal);
-        Assert.Contains("density_raw_numeric_matches", description, StringComparison.Ordinal);
+        // The density is confirmed like-for-like: the re-read route publishes kg/m3, the same unit as the
+        // request, so the confirmation fields and the tolerance must be visible to the client.
+        Assert.Contains("ST_MIX_M|ST_MIX_KG", description, StringComparison.Ordinal);
+        Assert.Contains("read_density_kg_per_m3_after", description, StringComparison.Ordinal);
+        Assert.Contains("density_matches", description, StringComparison.Ordinal);
+        Assert.Contains("density_tolerance_kg_per_m3", description, StringComparison.Ordinal);
+        Assert.Contains("name_matches", description, StringComparison.Ordinal);
         // The documented limits must be visible, not only in the code.
         Assert.Contains("библиотеки моделей", description, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("ВЕРХНИЙ компонент", description, StringComparison.Ordinal);
     }
 
-    /// <summary>The write response keeps the CONFIRMED name apart from the UNCONFIRMED physical density.</summary>
-    /// <remarks>TEST: with the reading unit unestablished, equal raw numbers prove nothing about the physical
-    /// density, so the response must carry the confirmed name/outcodes separately from the unconfirmed density
-    /// and must never fill a normalized value. History: docs/decisions/variables-material.md#material</remarks>
+    /// <summary>The write response confirms the density like-for-like and withholds it when it did not take.</summary>
+    /// <remarks>TEST: the re-read density comes from the documented M|KG route, i.e. in the SAME unit as the
+    /// request, so the confirmation is a like-for-like comparison inside the tolerance. A density that did not
+    /// take (or could not be re-read) must report <c>DensityMatches=false</c> rather than a smoothed success.
+    /// History: docs/decisions/variables-material.md#material</remarks>
     [Fact]
-    public void SetMaterialResult_KeepsConfirmedNameApartFromUnconfirmedDensity()
+    public void SetMaterialResult_ConfirmsTheDensityLikeForLike()
     {
-        var result = new SetMaterialResult(
+        var confirmed = new SetMaterialResult(
             RequestedName: "Сталь 45",
             RequestedDensityKgPerM3: 7850d,
             WrittenDensityGPerCm3: 7.85d,
             ReadNameAfter: "Сталь 45",
             NameMatches: true,
-            ReadDensityRawAfter: 7.85d,
-            DensityRawUnitDocumented: "g/mm3",
-            DensityUnitStatus: "unconfirmed",
-            DensityNormalizedKgPerM3: null,
-            DensityRawNumericMatches: true,
+            ReadDensityKgPerM3After: 7850d,
+            DensityMatches: true,
+            DensityToleranceKgPerM3: DensityUnits.ReadBackToleranceKgPerM3,
+            DensityUnit: DensityUnits.DocumentedReadUnit,
+            DensityRoute: "ksPart.CalcMassInertiaProperties(ST_MIX_M|ST_MIX_KG).r",
             SetMaterialReturned: true,
             UpdateReturned: true,
             RevisionBefore: 3,
             RevisionAfter: 4,
-            Diagnostics: new[] { "density_unit_unconfirmed" });
+            Diagnostics: Array.Empty<string>());
 
-        Assert.True(result.NameMatches);
-        // The numeric equality is present as a DIAGNOSTIC, and it does not turn into a density confirmation.
-        Assert.True(result.DensityRawNumericMatches);
-        Assert.Equal("unconfirmed", result.DensityUnitStatus);
-        Assert.Null(result.DensityNormalizedKgPerM3);
+        Assert.True(confirmed.NameMatches);
+        Assert.True(confirmed.DensityMatches);
+        Assert.Equal("kg/m3", confirmed.DensityUnit);
+
+        // The same unit on both sides: a density that did NOT take withholds the confirmation by name.
+        var mismatch = new SetMaterialResult(
+            RequestedName: "Сталь 45",
+            RequestedDensityKgPerM3: 7850d,
+            WrittenDensityGPerCm3: 7.85d,
+            ReadNameAfter: "Сталь 45",
+            NameMatches: true,
+            ReadDensityKgPerM3After: 7.85d,
+            DensityMatches: false,
+            DensityToleranceKgPerM3: DensityUnits.ReadBackToleranceKgPerM3,
+            DensityUnit: DensityUnits.DocumentedReadUnit,
+            DensityRoute: "ksPart.CalcMassInertiaProperties(ST_MIX_M|ST_MIX_KG).r",
+            SetMaterialReturned: true,
+            UpdateReturned: true,
+            RevisionBefore: 3,
+            RevisionAfter: 4,
+            Diagnostics: Array.Empty<string>());
+        Assert.False(mismatch.DensityMatches);
+
+        // A density that could not be re-read is NOT a confirmation either.
+        var unread = new SetMaterialResult(
+            RequestedName: "Сталь 45",
+            RequestedDensityKgPerM3: 7850d,
+            WrittenDensityGPerCm3: 7.85d,
+            ReadNameAfter: "Сталь 45",
+            NameMatches: true,
+            ReadDensityKgPerM3After: null,
+            DensityMatches: false,
+            DensityToleranceKgPerM3: DensityUnits.ReadBackToleranceKgPerM3,
+            DensityUnit: DensityUnits.DocumentedReadUnit,
+            DensityRoute: "ksPart.CalcMassInertiaProperties(ST_MIX_M|ST_MIX_KG).r",
+            SetMaterialReturned: true,
+            UpdateReturned: true,
+            RevisionBefore: 3,
+            RevisionAfter: 4,
+            Diagnostics: Array.Empty<string>());
+        Assert.False(unread.DensityMatches);
+        Assert.Null(unread.ReadDensityKgPerM3After);
     }
 
     /// <summary>The ONE documented density conversion, and the absence of the undocumented one.</summary>
     /// <remarks>TEST: <c>SetMaterial</c> documents its density argument in g/cm3, so the caller's kg/m3 is
-    /// divided by 1000. The READ side has no documented unit — the SDK page names g/mm3 for both
-    /// <c>GetDensity</c> and <c>IMassInertiaParam7.Density</c>, while the installed build returns the value in
-    /// g/cm3 — so <c>DensityUnits</c> deliberately exposes NO g/cm3 → kg/m3 conversion: that would be the
-    /// server's own unit claim. History: docs/decisions/variables-material.md#units</remarks>
+    /// divided by 1000. The READ side now has a DOCUMENTED unit — the MCI route publishes <c>r</c> in the unit
+    /// its <c>bitVector</c> selects, kg/m3 at M|KG — so <c>DensityUnits</c> still exposes NO g/cm3 → kg/m3
+    /// conversion: no such conversion is needed, and the legacy raw getter is a diagnostic only.
+    /// History: docs/decisions/variables-material.md#units</remarks>
     [Fact]
     public void DensityWriteConversion_DividesByOneThousand()
     {
@@ -203,6 +243,11 @@ public class VariableMaterialDomainTests
 
         // The undocumented direction must not exist at all: no member may turn a raw reading into kg/m3.
         Assert.Null(typeof(DensityUnits).GetMethod("GramsPerCm3ToKgPerM3"));
+
+        // The published read unit and the legacy page unit are named constants, and they are DIFFERENT.
+        Assert.Equal("kg/m3", DensityUnits.DocumentedReadUnit);
+        Assert.Equal("g/mm3", DensityUnits.GetDensityPageUnit);
+        Assert.NotEqual(DensityUnits.DocumentedReadUnit, DensityUnits.GetDensityPageUnit);
     }
 
     [Theory]
@@ -247,11 +292,12 @@ public class VariableMaterialDomainTests
         Assert.Equal(expected, VariableExpression.IsPlainConstant(expression));
     }
 
-    /// <summary>An unread value must not be representable as a read zero.</summary>
-    /// <remarks>TEST: <see cref="GetMaterialResult"/> carries the name and the raw density as SEPARATE reads
-    /// with their own flags, so a failed density read cannot be mistaken for a measured 0. The normalized
-    /// density is present as a field but never filled, and the unit status says so by name. This is the same
-    /// class of defect as the <c>4/tan</c> instrument fault: the field must not describe itself.
+    /// <summary>An unread density must not be representable as a read zero, and the diagnostic stays apart.</summary>
+    /// <remarks>TEST: <see cref="GetMaterialResult"/> carries the name and the density as SEPARATE reads with
+    /// their own flags, so a failed density read cannot be mistaken for a measured 0. The published density is
+    /// the documented-route reading in kg/m3; the legacy <c>GetDensity()</c> reading travels as a diagnostic
+    /// with the unit its page names, and the two units are different by name. This is the same class of defect
+    /// as the <c>4/tan</c> instrument fault: the field must not describe itself.
     /// History: docs/decisions/variables-material.md#units</remarks>
     [Fact]
     public void GetMaterialResult_SeparatesNameReadFromDensityRead()
@@ -259,20 +305,22 @@ public class VariableMaterialDomainTests
         var result = new GetMaterialResult(
             MaterialName: "Сталь 45",
             NameRead: true,
-            DensityRaw: null,
+            DensityKgPerM3: null,
             DensityRead: false,
-            DensityRawUnitDocumented: "g/mm3",
-            DensityUnitStatus: "unconfirmed",
-            DensityNormalizedKgPerM3: null,
+            DensityUnit: DensityUnits.DocumentedReadUnit,
+            DensityRoute: "ksPart.CalcMassInertiaProperties(ST_MIX_M|ST_MIX_KG).r",
+            GetDensityRawDiagnostic: null,
+            GetDensityRawUnitDocumented: DensityUnits.GetDensityPageUnit,
             Revision: 3,
             Diagnostics: new[] { "density_read_failed" });
 
         Assert.True(result.NameRead);
         Assert.False(result.DensityRead);
-        Assert.Null(result.DensityRaw);
-        Assert.Null(result.DensityNormalizedKgPerM3);
-        Assert.Equal("g/mm3", result.DensityRawUnitDocumented);
-        Assert.Equal("unconfirmed", result.DensityUnitStatus);
+        Assert.Null(result.DensityKgPerM3);
+        Assert.Equal("kg/m3", result.DensityUnit);
+        Assert.Equal("g/mm3", result.GetDensityRawUnitDocumented);
+        Assert.NotEqual(result.DensityUnit, result.GetDensityRawUnitDocumented);
+        Assert.Contains("CalcMassInertiaProperties", result.DensityRoute, StringComparison.Ordinal);
     }
 
     [Fact]

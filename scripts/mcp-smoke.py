@@ -3034,12 +3034,15 @@ def variables_material_checks(client, rep, app_id, workdir, reference_path=None)
         # ── VM-04.material.read: материал и плотность — два РАЗНЫХ документированных чтения ────────
         initial, code = get_material(plain)
         rep.add("VM-04.material.read.discover",
-                "get_material отдаёт имя и плотность РАЗДЕЛЬНО (name_read / density_read) — успешное "
-                "чтение имени не выдаётся за успешное чтение плотности",
-                "PASS" if (not code and "name_read" in initial and "density_read" in initial) else "FAIL",
+                "get_material отдаёт имя и плотность РАЗДЕЛЬНО (name_read / density_read), а плотность — "
+                "документированным маршрутом МЦХ API5 в кг/м³ без пересчёта сервером",
+                "PASS" if (not code and "name_read" in initial and "density_read" in initial
+                           and initial.get("density_unit") == "kg/m3"
+                           and initial.get("density_route")) else "FAIL",
                 f"material_name={initial.get('material_name')!r} name_read={initial.get('name_read')} "
-                f"density_raw={initial.get('density_raw')} "
-                f"density_read={initial.get('density_read')} error={code}")
+                f"density_kg_per_m3={initial.get('density_kg_per_m3')} "
+                f"density_unit={initial.get('density_unit')} density_route={initial.get('density_route')!r} "
+                f"get_density_raw_diagnostic={initial.get('get_density_raw_diagnostic')} error={code}")
 
         material_pairs = (("Сталь 45 ГОСТ 1050-2013", 7850.0),
                           ("Латунь ЛС59-1 ГОСТ 15527-2004", 8500.0))
@@ -3049,78 +3052,99 @@ def variables_material_checks(client, rep, app_id, workdir, reference_path=None)
             "material_name": first_name, "density_kg_per_m3": first_density})
         created = result(env)
         rep.add("VM-05.material.write.create",
-                "первая пара материал/плотность назначена; ответ отделяет ПОДТВЕРЖДЁННОЕ имя материала "
-                "от НЕПОДТВЕРЖДЁННОЙ физической плотности: имя совпало, единица чтения названа "
-                "неподтверждённой, нормализованная плотность не выдана, а числовое равенство сырого "
-                "показания — диагностика, а не подтверждение плотности",
+                "первая пара материал/плотность назначена; имя и ФИЗИЧЕСКАЯ плотность подтверждены "
+                "перечитыванием ТЕМ ЖЕ документированным маршрутом МЦХ в кг/м³ (одноимённое сравнение "
+                "в допуске), а не числовым равенством сырых показаний",
                 "PASS" if (not code and created.get("name_matches")
-                           and created.get("density_raw_numeric_matches")
-                           and created.get("density_unit_status") == "unconfirmed"
-                           and created.get("density_normalized_kg_per_m3") is None) else "FAIL",
+                           and created.get("density_matches")
+                           and created.get("read_density_kg_per_m3_after") is not None
+                           and abs(created.get("read_density_kg_per_m3_after") - first_density)
+                           <= ref["density_tolerance_kg_per_m3"]
+                           and created.get("density_unit") == "kg/m3") else "FAIL",
                 f"requested={first_name}/{first_density} read_name_after={created.get('read_name_after')!r} "
                 f"written_g_per_cm3={created.get('written_density_g_per_cm3')} "
-                f"read_density_raw_after={created.get('read_density_raw_after')} "
-                f"name_matches={created.get('name_matches')} "
-                f"density_raw_numeric_matches={created.get('density_raw_numeric_matches')} "
-                f"density_unit_status={created.get('density_unit_status')} "
-                f"density_normalized_kg_per_m3={created.get('density_normalized_kg_per_m3')} error={code}")
+                f"read_density_kg_per_m3_after={created.get('read_density_kg_per_m3_after')} "
+                f"density_matches={created.get('density_matches')} "
+                f"density_tolerance_kg_per_m3={created.get('density_tolerance_kg_per_m3')} "
+                f"density_unit={created.get('density_unit')} error={code}")
 
         pair_results = []
+        # Последняя плотность, ЗАПИСАННАЯ в этот документ, и допуск из ОТВЕТА записи: нужны строке
+        # dep.vm.units.read, чтобы сравнить прочитанное ЧИСЛО с известным, а не только подписи полей.
+        last_written_density = first_density
+        last_write_tolerance = created.get("density_tolerance_kg_per_m3")
         for material_name, density in material_pairs:
             if (material_name, density) != (first_name, first_density):
                 env, code = call("kompas_set_material", {
                     "document_id": plain, "expected_revision": current_rev(plain),
                     "material_name": material_name, "density_kg_per_m3": density})
+                written = result(env)
+                if not code:
+                    last_written_density = density
+                    last_write_tolerance = written.get("density_tolerance_kg_per_m3")
             read, rcode = get_material(plain)
+            read_kg = read.get("density_kg_per_m3")
             pair_results.append({
                 "requested_name": material_name, "requested_density": density,
                 "read_name": read.get("material_name"),
-                "read_density_raw": read.get("density_raw"),
-                "density_unit_documented": read.get("density_raw_unit_documented"),
-                "density_unit_status": read.get("density_unit_status"),
-                "normalized_kg_per_m3": read.get("density_normalized_kg_per_m3"),
+                "read_density_kg_per_m3": read_kg,
+                "density_unit": read.get("density_unit"),
                 "name_matches": read.get("material_name") == material_name,
-                # Сырое показание сверяется с записанным в ТОЙ ЖЕ единице, без толкования единицы.
-                "raw_matches_written": read.get("density_raw") is not None
-                                       and abs(read.get("density_raw") - density / 1000.0) <= 5e-4,
+                # Плотность сверяется с записанной в ТОЙ ЖЕ единице (кг/м³), заданной аргументом чтения.
+                "density_matches": read_kg is not None
+                                   and abs(read_kg - density) <= ref["density_tolerance_kg_per_m3"],
                 "error": rcode,
             })
-        both_ok = all(p["name_matches"] and p["raw_matches_written"] for p in pair_results)
+        both_ok = all(p["name_matches"] and p["density_matches"] for p in pair_results)
         distinct = (len({p["read_name"] for p in pair_results}) == 2
-                    and len({p["read_density_raw"] for p in pair_results}) == 2)
-        # Единица НЕ публикуется: справка называет г/куб.мм, ядро отдаёт значение, согласованное с
-        # г/куб.см, официального источника г/куб.см нет. Строка проверяет, что нормализованное значение
-        # НЕ выдано и статус назван — это и есть явное неподтверждение, а не PASS по обходу.
-        unconfirmed_ok = all(p["normalized_kg_per_m3"] is None
-                             and p["density_unit_documented"] == "g/mm3"
-                             and p["density_unit_status"] == "unconfirmed" for p in pair_results)
+                    and len({p["read_density_kg_per_m3"] for p in pair_results}) == 2)
+        documented_ok = all(p["density_unit"] == "kg/m3" for p in pair_results)
         rep.add("VM-05.material.write.read",
-                "две РАЗНЫЕ пары материал/плотность назначены по очереди; обе перечитаны независимо, "
-                "сырое показание совпало с записанным как ДИАГНОСТИКА, а нормализованная плотность НЕ "
-                "выдана — единица названа неподтверждённой, а не подогнана",
-                "PASS" if (both_ok and distinct and unconfirmed_ok) else "FAIL",
+                "две РАЗНЫЕ пары материал/плотность назначены по очереди; обе перечитаны независимо "
+                "документированным маршрутом МЦХ в кг/м³ и совпали с запрошенными в допуске",
+                "PASS" if (both_ok and distinct and documented_ok) else "FAIL",
                 f"pairs={json.dumps(pair_results, ensure_ascii=False)}")
 
-        # ── dep.vm.units: единица плотности на входе и на выходе ─────────────────────────────────
-        # Справка называет возврат GetDensity в г/куб.мм. ИЗМЕРЕНО (прибор --vm-density-units, на двух
-        # плотностях): установленная сборка отдаёт значение, согласованное с г/куб.см, и ТО ЖЕ отдаёт
-        # документированный IPart7→QI(IMassInertiaParam7)→Density, чья страница тоже называет г/куб.мм;
-        # официального источника г/куб.см нет. Поэтому сырое показание СОХРАНЯЕТСЯ, единица НАЗЫВАЕТСЯ
-        # документированной страницей, а нормализованная плотность НЕ публикуется — явное
-        # неподтверждение, а не собственный перевод.
+        # ── dep.vm.units: единица плотности задана АРГУМЕНТОМ чтения, а не страницей свойства ───────
+        # Справка v24 (kspart_calcmassinertiaproperties.html, ksmassinertiaparam.html прим. 3, mtypes.html):
+        # размерности длины и массы ВСЕХ возвращаемых интерфейсом данных задаёт bitVector, поэтому при
+        # ST_MIX_M|ST_MIX_KG единица r — кг/м³ и сервер ничего не пересчитывает. Старый getter
+        # ksPart.GetDensity() остаётся ДИАГНОСТИКОЙ и плотностью не публикуется. Живое подтверждение —
+        # docs/decisions/variables-material.md#units-mci. Строка сравнивает прочитанное ЧИСЛО с последней
+        # ЗАПИСАННОЙ плотностью в допуске из ответа записи (не литералом): сервер с неверным числом и
+        # верной подписью поля её не пройдёт; без записи в документ — FAIL с названной причиной.
         units_read, ucode = get_material(plain)
-        raw = units_read.get("density_raw")
+        density_kg = units_read.get("density_kg_per_m3")
+        route = units_read.get("density_route") or ""
+        if last_written_density is None or last_write_tolerance is None:
+            units_reason = ("нет последней записанной плотности или допуска из ответа записи: документ "
+                            "не получил записи до этой строки")
+            units_deviation = None
+            units_expectation_ok = False
+        elif density_kg is None:
+            units_reason = "прочитанная плотность не число (density_kg_per_m3 отсутствует)"
+            units_deviation = None
+            units_expectation_ok = False
+        else:
+            units_deviation = abs(density_kg - last_written_density)
+            units_expectation_ok = units_deviation <= last_write_tolerance
+            units_reason = ("совпала с последней записанной плотностью в допуске" if units_expectation_ok
+                            else "отклонилась от последней записанной плотности сверх допуска")
         rep.add("dep.vm.units.read",
-                "сырое показание плотности сохранено и помечено документированной страницей единицей "
-                "(g/mm3), статус единицы назван «unconfirmed», а нормализованная плотность не выдана: "
-                "единица чтения НЕ подтверждена официальным источником",
-                "PASS" if (not ucode and raw is not None
-                           and units_read.get("density_raw_unit_documented") == "g/mm3"
-                           and units_read.get("density_unit_status") == "unconfirmed"
-                           and units_read.get("density_normalized_kg_per_m3") is None) else "FAIL",
-                f"density_raw={raw} unit_documented={units_read.get('density_raw_unit_documented')} "
-                f"status={units_read.get('density_unit_status')} "
-                f"normalized={units_read.get('density_normalized_kg_per_m3')} error={ucode}")
+                "плотность читается документированным маршрутом МЦХ API5, где единицу возвращаемых данных "
+                "задаёт АРГУМЕНТ вызова: при ST_MIX_M|ST_MIX_KG публикуется кг/м³ (density_unit=kg/m3), "
+                "пересчёт сервером не выполняется, а прочитанное ЧИСЛО совпадает с последней записанной "
+                "плотностью в допуске из ответа записи",
+                "PASS" if (not ucode and density_kg is not None
+                           and units_read.get("density_unit") == "kg/m3"
+                           and "CalcMassInertiaProperties" in route
+                           and "ST_MIX_M|ST_MIX_KG" in route
+                           and units_expectation_ok) else "FAIL",
+                f"density_kg_per_m3={density_kg} expected_last_written_kg_per_m3={last_written_density} "
+                f"deviation={units_deviation} tolerance_from_write={last_write_tolerance} "
+                f"expectation={units_reason} density_unit={units_read.get('density_unit')} "
+                f"density_route={route!r} "
+                f"get_density_raw_diagnostic={units_read.get('get_density_raw_diagnostic')} error={ucode}")
 
         # ПРОБА НЕ ИМЕЕТ ПРАВА ПОСЛАТЬ NaN. `json.dumps(float('nan'))` даёт литерал `NaN`, которого в
         # JSON нет; транспорт отвечает -32700 «Failed to parse the JSON-RPC request» ДО сервера, и
@@ -3297,46 +3321,53 @@ def variables_material_checks(client, rep, app_id, workdir, reference_path=None)
                 json.dumps(contract, ensure_ascii=False))
 
         # ── VM-06: масса через существующий measure (СКВОЗНАЯ проверка, не режим профиля) ──────────
-        # РЕВЬЮ §1: нормализованная плотность не публикуется, пока единица чтения не подтверждена
-        # документом. Поэтому цепочка «плотность из ответа get_material → measure» НЕ выполняется и
-        # НАЗЫВАЕТСЯ открытой, а масса проверяется по плотности, которую задаёт САМА проба как
-        # аналитический эталон: так проверяется арифметика measure, независимо от неподтверждённого
-        # чтения, и неподтверждённое не выдаётся за подтверждённое.
+        # Единица чтения плотности ЗАКРЫТА документом (см. dep.vm.units.read): маршрут МЦХ API5 отдаёт r
+        # в кг/м³ при ST_MIX_M|ST_MIX_KG. Поэтому цепочка выполняется РЕАЛЬНО: плотность берётся из
+        # ОТВЕТА get_material, передаётся в measure, а масса сверяется с аналитическим эталоном
+        # объём×плотность. Значение НЕ подставляется обратно в ту же формулу: плотность приходит из
+        # модели, объём — из независимого измерения measure.
         env, code = call("kompas_set_material", {
             "document_id": plain, "expected_revision": current_rev(plain),
             "material_name": first_name, "density_kg_per_m3": ref["density_kg_per_m3"]})
         chain_material, mcode = get_material(plain)
+        chain_density = chain_material.get("density_kg_per_m3")
+        chain_read_ok = (not mcode and chain_density is not None
+                         and abs(chain_density - ref["density_kg_per_m3"])
+                         <= ref["density_tolerance_kg_per_m3"])
         rep.add("VM-06.mass.computed_via_measure.read",
-                "плотность для расчёта массы взята из ОТВЕТА get_material, а не из справочника сервера "
-                "и не из запроса",
-                "NAMED",
-                "единица чтения плотности не подтверждена документом (см. dep.vm.units.read), поэтому "
-                "нормализованная плотность не публикуется и цепочку «плотность модели → масса» "
-                "выполнить нечем. Строка НАЗВАНА непроверенной; ложный PASS не подставляется")
+                "плотность для расчёта массы взята из ОТВЕТА get_material (поле density_kg_per_m3), а не "
+                "из справочника сервера и не из запроса: она совпала с назначенной в допуске",
+                "PASS" if chain_read_ok else "FAIL",
+                f"density_kg_per_m3={chain_density} (назначено {ref['density_kg_per_m3']}, допуск "
+                f"{ref['density_tolerance_kg_per_m3']}) error={mcode}")
 
-        measured, merr = measure(plain, ["volume", "mass"], density=ref["density_kg_per_m3"])
-        if measured is None:
+        if chain_density is None:
             rep.add("VM-06.mass.computed_via_measure.geometry_validation",
-                    "масса из measure согласована с независимым аналитическим эталоном", "FAIL", merr)
+                    "масса из measure согласована с независимым аналитическим эталоном", "FAIL",
+                    "плотность из get_material не прочитана — цепочку выполнить нечем")
         else:
-            volume_measured = measured.get("volume_mm3")
-            mass_measured = measured.get("mass_kg")
-            volume_ok = (volume_measured is not None
-                         and abs(volume_measured - ref["volume_initial_mm3"])
-                         <= ref["volume_tolerance_mm3"])
-            expected_mass = ref["volume_initial_mm3"] * 1e-9 * ref["density_kg_per_m3"]
-            mass_ok = (mass_measured is not None
-                       and abs(mass_measured - expected_mass) <= ref["mass_tolerance_kg"])
-            rep.add("VM-06.mass.computed_via_measure.geometry_validation",
-                    "объём из measure равен аналитическому 100×80×10, а масса — независимому эталону "
-                    "объём×плотность, где плотность задана ПРОБОЙ (7850 кг/м³), а не прочитана из "
-                    "модели: проверяется арифметика measure, а не единица чтения плотности; значение не "
-                    "подставляется обратно в ту же формулу",
-                    "PASS" if (volume_ok and mass_ok) else "FAIL",
-                    f"volume_mm3={volume_measured} (эталон {ref['volume_initial_mm3']}) "
-                    f"mass_kg={mass_measured} (эталон {expected_mass:.9f}) "
-                    f"stated_density={ref['density_kg_per_m3']} "
-                    f"unverified={measured.get('unverified_aspects')}")
+            measured, merr = measure(plain, ["volume", "mass"], density=chain_density)
+            if measured is None:
+                rep.add("VM-06.mass.computed_via_measure.geometry_validation",
+                        "масса из measure согласована с независимым аналитическим эталоном", "FAIL", merr)
+            else:
+                volume_measured = measured.get("volume_mm3")
+                mass_measured = measured.get("mass_kg")
+                volume_ok = (volume_measured is not None
+                             and abs(volume_measured - ref["volume_initial_mm3"])
+                             <= ref["volume_tolerance_mm3"])
+                expected_mass = ref["volume_initial_mm3"] * 1e-9 * chain_density
+                mass_ok = (mass_measured is not None
+                           and abs(mass_measured - expected_mass) <= ref["mass_tolerance_kg"])
+                rep.add("VM-06.mass.computed_via_measure.geometry_validation",
+                        "объём из measure равен аналитическому 100×80×10, а масса — независимому эталону "
+                        "объём×плотность, где плотность прочитана ИЗ МОДЕЛИ ответом get_material, а объём "
+                        "даёт независимое измерение measure: сквозная цепочка «плотность модели → масса»",
+                        "PASS" if (volume_ok and mass_ok) else "FAIL",
+                        f"volume_mm3={volume_measured} (эталон {ref['volume_initial_mm3']}) "
+                        f"mass_kg={mass_measured} (эталон {expected_mass:.9f}) "
+                        f"model_density={chain_density} "
+                        f"unverified={measured.get('unverified_aspects')}")
 
     close(plain)
 
@@ -3570,10 +3601,11 @@ def variables_material_checks(client, rep, app_id, workdir, reference_path=None)
     reopened_material = get_material(reopened)[0]
     vars_match = reopened_vars == snapshot_vars
     material_match = (reopened_material.get("material_name") == snapshot_material.get("material_name")
-                      and reopened_material.get("density_raw") is not None
-                      and snapshot_material.get("density_raw") is not None
-                      and abs(reopened_material.get("density_raw")
-                              - snapshot_material.get("density_raw")) <= 5e-4)
+                      and reopened_material.get("density_kg_per_m3") is not None
+                      and snapshot_material.get("density_kg_per_m3") is not None
+                      and abs(reopened_material.get("density_kg_per_m3")
+                              - snapshot_material.get("density_kg_per_m3"))
+                      <= ref["density_tolerance_kg_per_m3"])
     reopened_vol, rverr = measure(reopened, ["volume"])
     reopened_volume = (reopened_vol or {}).get("volume_mm3")
     geometry_after_reopen = (reopened_volume is not None
@@ -3587,9 +3619,9 @@ def variables_material_checks(client, rep, app_id, workdir, reference_path=None)
             f"geometry_ok={geometry_after_reopen} volume={reopened_volume} "
             f"snapshot_vars={snapshot_vars} reopened_vars={reopened_vars} "
             f"snapshot_material={snapshot_material.get('material_name')}/"
-            f"{snapshot_material.get('density_raw')} reopened="
+            f"{snapshot_material.get('density_kg_per_m3')} reopened="
             f"{reopened_material.get('material_name')}/"
-            f"{reopened_material.get('density_raw')} err={rverr}")
+            f"{reopened_material.get('density_kg_per_m3')} err={rverr}")
 
     # Порядок важен и назван: у только что переоткрытого документа ревизия мала (измерено: 1), поэтому
     # «устаревшая» ревизия вида max(1, r-5) СОВПАЛА бы с текущей и проверяла бы не то. Сначала ПРАВКА по

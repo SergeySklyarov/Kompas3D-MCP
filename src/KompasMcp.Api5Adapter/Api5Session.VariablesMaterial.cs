@@ -10,17 +10,23 @@ namespace KompasMcp.Api5Adapter;
 /// History: docs/decisions/variables-material.md#adapter</remarks>
 public sealed partial class Api5Session
 {
-    /// <summary>Unit the SDK page NAMES for the raw density reading of a part.</summary>
-    /// <remarks>DOC: <c>kspart_getdensity.html</c> and <c>imassinertiaparam7_density.html</c> both name
-    /// «плотность (г/куб.мм)». MEASURED: neither getter returns that unit — both return the value in g/cm3
-    /// (steel 7850 kg/m3 reads 7.85, and the kernel's own mass agrees) — and no v24 source establishes
-    /// g/cm3. The raw reading is therefore published with THIS unit as the documented one, and the
-    /// normalized value is not published at all.
-    /// History: docs/decisions/variables-material.md#units</remarks>
-    private const string DocumentedRawDensityUnit = "g/mm3";
+    /// <summary>Documented route that publishes the physical density with its unit as an ARGUMENT.</summary>
+    /// <remarks>DOC: <c>kspart_calcmassinertiaproperties.html</c> — <c>bitVector</c> «определяет размерность
+    /// длины, размерность массы»; <c>ksmassinertiaparam.html</c> note 3 — the length and mass dimensions of
+    /// everything the interface returns are set when the interface is obtained; <c>ksmassinertiaparam_props.html</c>
+    /// names <c>r</c> as «Плотность материала». At <c>ST_MIX_M|ST_MIX_KG</c> the value is therefore kg/m3 and
+    /// the server rescales nothing. MEASURED: the reading at M|KG equals the written kg/m3, scales with the
+    /// length unit as its cube, and survives save→close→reopen.
+    /// History: docs/decisions/variables-material.md#units-mci</remarks>
+    private const string DocumentedDensityRoute = "ksPart.CalcMassInertiaProperties(ST_MIX_M|ST_MIX_KG).r";
 
-    /// <summary>Status of the published density: the reading exists, its unit is NOT confirmed.</summary>
-    private const string DensityUnitUnconfirmed = "unconfirmed";
+    /// <summary>Legacy <c>ksPart.GetDensity()</c> — a DIAGNOSTIC, whose page unit the kernel does not return.</summary>
+    /// <remarks>DOC: <c>kspart_getdensity.html</c> names «плотность (г/куб.мм)». MEASURED: the installed build
+    /// returns a value consistent with g/cm3, which no v24 source establishes. The reading is carried as a
+    /// DIAGNOSTIC with the page unit named, so the divergence stays visible; it is NOT the published physical
+    /// density — that comes from <see cref="DocumentedDensityRoute"/>.
+    /// History: docs/decisions/variables-material.md#units-mci</remarks>
+    private const string GetDensityPageUnit = "g/mm3";
 
     /// <summary>Read the external variables of the top component of an open part.</summary>
     /// <remarks>DOC: <c>kspart_variablecollection.html</c> — <c>IPart.VariableCollection()</c> returns «указатель
@@ -355,26 +361,29 @@ public sealed partial class Api5Session
             notes);
     }
 
-    /// <summary>Read the material name and the RAW density reading of the top component of an open part.</summary>
-    /// <remarks>DOC: <c>kspart_material.html</c> — «Обозначение материала можно получить только у детали»;
-    /// <c>kspart_getdensity.html</c> — «0 — в случае неудачи (если компонент — не деталь)», and the return is
-    /// named «плотность (г/куб.мм)». MEASURED: the installed build returns the value in g/cm3 instead, and so
-    /// does <c>IMassInertiaParam7.Density</c>, whose page names g/mm3 as well. No v24 source establishes
-    /// g/cm3, so the normalized value is NOT published (the field is null and the status is named).
+    /// <summary>Read the material name and the PHYSICAL density of the top component of an open part.</summary>
+    /// <remarks>DOC: <c>kspart_material.html</c> — «Обозначение материала можно получить только у детали».
+    /// DOC (density): the documented MCI route (<see cref="DocumentedDensityRoute"/>) publishes <c>r</c> in
+    /// the unit its <c>bitVector</c> selects; at M|KG that unit is kg/m3 and no rescaling happens here.
+    /// MEASURED: the density read at M|KG equals the written kg/m3, the two documented unit combinations
+    /// scale by the factor between them, and the value survives save→close→reopen.
     /// INVARIANT: the name read and the density read are reported SEPARATELY — a successful name read does not
-    /// imply a successful density read. A density of exactly 0 is the documented FAILURE signal, not a
-    /// measured zero density, and the server's reference table is never substituted for it.
-    /// History: docs/decisions/variables-material.md#units</remarks>
+    /// imply a successful density read. A zero or non-finite <c>r</c> is a named failure, not a measured
+    /// density of zero, and the server's reference table is never substituted for it.
+    /// INVARIANT: the legacy <c>GetDensity()</c> reading is a DIAGNOSTIC only, carried with the unit its page
+    /// names; it never becomes the published density.
+    /// History: docs/decisions/variables-material.md#units-mci</remarks>
     public GetMaterialResult GetMaterial(GetMaterialCommand command)
     {
         var document = RequirePartDocument(command.DocumentId);
         var notes = new List<string>();
+        var part = RequireTopPart(document);
 
         string? materialName = null;
         var nameRead = false;
         try
         {
-            materialName = RequireTopPart(document).material;
+            materialName = part.material;
             nameRead = true;
         }
         catch (COMException ex)
@@ -382,42 +391,70 @@ public sealed partial class Api5Session
             notes.Add("material_read_failed — ksPart.material прервался: " + ex.Message);
         }
 
-        double? rawDensity = null;
-        var densityRead = false;
+        var (densityKgPerM3, densityRead) = ReadPhysicalDensity(part, notes);
+
+        // DIAGNOSTIC: the legacy getter, whose page names g/mm3 while the kernel returns a value consistent
+        // with g/cm3 (measured). Kept so the divergence stays visible; it is not the published density.
+        double? rawGetDensity = null;
         try
         {
-            var raw = RequireTopPart(document).density;
+            var raw = part.density;
             if (raw > 0)
             {
-                rawDensity = raw;
-                densityRead = true;
-                notes.Add("density_unit_unconfirmed — сырое чтение " + raw.ToString("R", CultureInfo.InvariantCulture)
-                    + " сохранено, но его единица НЕ подтверждена документацией: справка называет г/куб.мм, "
-                    + "ядро отдаёт значение, согласованное с г/куб.см (измерено на двух плотностях), и "
-                    + "официального источника г/куб.см нет. Нормализованная плотность не публикуется.");
-            }
-            else
-            {
-                // DOC: 0 is the documented failure outcode. It is NOT a measured density of zero.
-                notes.Add("density_read_failed — GetDensity() вернул 0, что документировано как НЕУДАЧА " +
-                          "(компонент — не деталь). Плотность из справочника сервера НЕ подставлена.");
+                rawGetDensity = raw;
             }
         }
         catch (COMException ex)
         {
-            notes.Add("density_read_failed — GetDensity() прервался: " + ex.Message);
+            notes.Add("get_density_diagnostic_failed — ksPart.GetDensity() прервался: " + ex.Message);
         }
 
         return new GetMaterialResult(
             materialName,
             nameRead,
-            rawDensity,
+            densityKgPerM3,
             densityRead,
-            DocumentedRawDensityUnit,
-            DensityUnitUnconfirmed,
-            DensityNormalizedKgPerM3: null,
+            DensityUnits.DocumentedReadUnit,
+            DocumentedDensityRoute,
+            rawGetDensity,
+            GetDensityPageUnit,
             document.Revision,
             notes);
+    }
+
+    /// <summary>Read the physical density through the documented MCI route, naming a failure instead of
+    /// returning a number.</summary>
+    /// <remarks>INVARIANT: a zero or non-finite <c>r</c>, an interface that is not returned, and a COM failure
+    /// each yield <c>(null, false)</c> with a named reason — none of them becomes a published density.
+    /// LIMIT: a part with no body has no MCI to read; that is the documented outcome of the route and is
+    /// reported as a named failure, not as a density of zero.</remarks>
+    private static (double? KgPerM3, bool Read) ReadPhysicalDensity(ksPart part, List<string> notes)
+    {
+        try
+        {
+            if (part.CalcMassInertiaProperties((uint)KompasUnits.MassMKg) is not ksMassInertiaParam properties)
+            {
+                notes.Add("density_read_failed — CalcMassInertiaProperties(M|KG) не вернул ksMassInertiaParam "
+                    + "(у детали нет тела или маршрут недоступен); плотность не публикуется");
+                return (null, false);
+            }
+
+            var density = properties.r;
+            if (density > 0 && double.IsFinite(density))
+            {
+                return (density, true);
+            }
+
+            notes.Add("density_read_failed — CalcMassInertiaProperties(M|KG).r вернул "
+                + density.ToString("R", CultureInfo.InvariantCulture)
+                + ": нулевая или нечисловая плотность не публикуется как измеренная");
+            return (null, false);
+        }
+        catch (COMException ex)
+        {
+            notes.Add("density_read_failed — CalcMassInertiaProperties(M|KG) прервался: " + ex.Message);
+            return (null, false);
+        }
     }
 
     /// <summary>Assign material name and explicit density to the top component of a part.</summary>
@@ -426,8 +463,9 @@ public sealed partial class Api5Session
     /// on the TOP component, «изменение материала вступает в силу после вызова метода ksPart::Update».
     /// INVARIANT: the response is built from a RE-READ after <c>Update</c>, never by echoing the request; the
     /// requested values are carried in their own fields so that a mismatch is visible rather than smoothed.
-    /// INVARIANT: the CONFIRMED (material name, call outcodes) and the UNCONFIRMED (physical density, whose
-    /// reading unit is not established) are reported apart; the raw numeric equality is a diagnostic only.
+    /// INVARIANT: the density is confirmed like-for-like — re-read through the documented M|KG route, which
+    /// is the SAME unit as the request, and compared inside <see cref="DensityUnits.ReadBackToleranceKgPerM3"/>;
+    /// a density that did not take withholds the confirmation by name.
     /// History: docs/decisions/variables-material.md#material</remarks>
     public SetMaterialResult SetMaterial(SetMaterialCommand command)
     {
@@ -459,8 +497,10 @@ public sealed partial class Api5Session
         var part = RequireTopPart(document);
         var revisionBefore = document.Revision;
 
-        // DOC: the call takes g/cm3. MEASURED: the kernel takes exactly that unit (7.85 written for steel
-        // reads back as 7.85), so the caller's kg/m3 goes through the one documented conversion.
+        // DOC: the call takes g/cm3. MEASURED: the kernel takes exactly that unit — a value written in
+        // g/cm3 reads back unchanged through the documented route, so the caller's kg/m3 goes through the
+        // one documented conversion.
+        // History: docs/decisions/variables-material.md#material
         var densityGPerCm3 = DensityUnits.KgPerM3ToGramsPerCm3(command.DensityKgPerM3);
         notes.Add("density_written_g_per_cm3=" + densityGPerCm3.ToString("R", CultureInfo.InvariantCulture) +
                   " — единица, документированная для SetMaterial");
@@ -509,35 +549,19 @@ public sealed partial class Api5Session
             notes.Add("material_reread_failed — ksPart.material прервался: " + ex.Message);
         }
 
-        // DIAGNOSTIC, NOT CONFIRMATION. The re-read raw value is compared with the written raw value as a
-        // NUMERIC equality check only. The unit of the reading is NOT established — the page names g/mm3, the
-        // kernel returns a value consistent with g/cm3, and no v24 source confirms either — so equal numbers
-        // are a fact about two numbers, not proof that the assigned PHYSICAL density took. What the response
-        // CONFIRMS is the material name and the outcodes of the calls; the density is reported unconfirmed.
-        double? readRaw = null;
-        var rawNumericMatches = false;
-        try
+        // CONFIRMATION IS LIKE-FOR-LIKE: the density is re-read through the documented M|KG route, which
+        // publishes kg/m3 — the SAME unit the caller stated — so the comparison needs no interpretation.
+        var (readDensityKgPerM3, densityReread) = ReadPhysicalDensity(part, notes);
+        var densityMatches = densityReread
+            && readDensityKgPerM3 is { } reread
+            && Math.Abs(reread - command.DensityKgPerM3) <= DensityUnits.ReadBackToleranceKgPerM3;
+
+        if (densityReread && !densityMatches)
         {
-            var raw = part.density;
-            if (raw > 0)
-            {
-                readRaw = raw;
-                rawNumericMatches = Math.Abs(raw - densityGPerCm3) < 0.5 / 1000.0;
-                notes.Add("density_unit_unconfirmed — плотность перечитана сырым показанием и сравнена с "
-                          + "записанным только как ЧИСЛОВОЕ равенство (диагностика, не подтверждение): единица "
-                          + "чтения не подтверждена документом (см. get_material), поэтому назначенная "
-                          + "ФИЗИЧЕСКАЯ плотность чтением НЕ подтверждена, а нормализованное значение не "
-                          + "публикуется. Подтверждены имя материала и исходы вызовов.");
-            }
-            else
-            {
-                notes.Add("density_reread_failed — GetDensity() вернул 0 (документированная НЕУДАЧА), "
-                          + "запрошенная плотность не подтверждена чтением");
-            }
-        }
-        catch (COMException ex)
-        {
-            notes.Add("density_reread_failed — GetDensity() прервался: " + ex.Message);
+            notes.Add("density_mismatch — запрошено " + command.DensityKgPerM3.ToString("R", CultureInfo.InvariantCulture)
+                + " кг/м³, перечитано " + (readDensityKgPerM3?.ToString("R", CultureInfo.InvariantCulture) ?? "не прочитано")
+                + " кг/м³ (допуск " + DensityUnits.ReadBackToleranceKgPerM3.ToString("R", CultureInfo.InvariantCulture)
+                + " кг/м³)");
         }
 
         if (!nameMatches)
@@ -554,11 +578,11 @@ public sealed partial class Api5Session
             densityGPerCm3,
             readName,
             nameMatches,
-            readRaw,
-            DocumentedRawDensityUnit,
-            DensityUnitUnconfirmed,
-            DensityNormalizedKgPerM3: null,
-            rawNumericMatches,
+            readDensityKgPerM3,
+            densityMatches,
+            DensityUnits.ReadBackToleranceKgPerM3,
+            DensityUnits.DocumentedReadUnit,
+            DocumentedDensityRoute,
             setReturned,
             updateReturned,
             revisionBefore,

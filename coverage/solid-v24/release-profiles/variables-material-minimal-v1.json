@@ -2,7 +2,7 @@
  "meta": {
   "profile_id": "variables-material-minimal-v1",
   "title": "Внешние переменные и материал детали v24",
-  "revision": "1.3",
+  "revision": "1.4",
   "revision_history": [
    {
     "revision": "1.0",
@@ -23,6 +23,11 @@
     "revision": "1.3",
     "date": "06.10.2026",
     "change": "по ревью VARIABLES_MATERIAL_REWORK2_REVIEW_20261006.md, L1–L2: (L1) ответ записи материала больше не выдаёт числовое равенство сырых показаний за подтверждение физической плотности — подтверждённые имя материала и исходы вызовов отделены от неподтверждённой плотности (density_unit_status=unconfirmed, density_normalized_kg_per_m3=null, density_raw_numeric_matches — диагностика); разные единицы setter/getter больше не называются противоречием справки. (L2) профиль возвращён к ПЯТИ режимам исходного задания §6: объединённая строка VM-04.material.read_write разделена на VM-04.material.read и VM-05.material.write; масса VM-06 вынесена СКВОЗНОЙ проверкой (scenarios SCN-VM-MASS), а не режимом профиля. Материальные режимы и dep.vm.units открыты: единица чтения плотности не подтверждена документом — это и есть фактически невыполненный критерий."
+   },
+   {
+    "revision": "1.4",
+    "date": "06.10.2026",
+    "change": "по наряду VM_DENSITY_UNIT_CLOSURE_DEVELOPER_PROMPT.md: единица плотности чтения ЗАКРЫТА документированным маршрутом МЦХ API5 ksPart.CalcMassInertiaProperties(ST_MIX_M|ST_MIX_KG).r, где единицу возвращаемых данных задаёт АРГУМЕНТ вызова (kspart_calcmassinertiaproperties.html, ksmassinertiaparam.html прим. 3, ksmassinertiaparam_props.html, mtypes.html). Прочтение подтверждено живым измерением прибора --vm-density-mci на двух плотностях. Действия read строк VM-04.material.read, VM-05.material.write, dep.vm.units и сквозной VM-06 переведены в verified по PASS живых строк поставки; профиль COMPLETE."
    }
   ],
   "target_build": "24.0.0.2799",
@@ -88,13 +93,13 @@
    "family": "VM",
    "queue": "VM",
    "priority": "practical_required",
-   "current_level": "mcp_implemented",
+   "current_level": "mcp_verified",
    "required_actions": [
     "discover",
     "read",
     "negative_tests"
    ],
-   "gap": "Реализовано kompas_get_material: ksPart.material и ksPart.GetDensity читаются РАЗДЕЛЬНО. ЕДИНИЦА ЧТЕНИЯ ПЛОТНОСТИ НЕ ПОДТВЕРЖДЕНА ДОКУМЕНТОМ: оба документированных getter'а (ksPart.GetDensity и IPart7→QI(IMassInertiaParam7)→Density) измерены на двух плотностях и отдают значение, согласованное с г/куб.см, при странице «г/куб.мм»; официального источника г/куб.см нет. Сырое показание публикуется, нормализованное — нет; критерий остаётся открытым, поэтому действие read стоит implemented, а не verified."
+   "gap": "Реализовано kompas_get_material: ksPart.material и ФИЗИЧЕСКАЯ плотность читаются РАЗДЕЛЬНО. Плотность — документированным маршрутом МЦХ API5 ksPart.CalcMassInertiaProperties(ST_MIX_M|ST_MIX_KG).r: единицу возвращаемых данных задаёт АРГУМЕНТ вызова, поэтому r публикуется в кг/м³ без пересчёта сервером (поля density_kg_per_m3, density_unit, density_route). ИЗМЕРЕНО (--vm-density-mci): 7850/8500 кг/м³ читаются ровно, отношение M|KG к MM|KG равно 1e9, значение переживает переоткрытие. Старый ksPart.GetDensity() остаётся ДИАГНОСТИКОЙ (get_density_raw_diagnostic, единица страницы g/mm3). Нулевая или нечисловая r — НАЗВАННЫЙ отказ, а не измеренная плотность."
   },
   {
    "ref": "VM-05.material.write",
@@ -102,7 +107,7 @@
    "family": "VM",
    "queue": "VM",
    "priority": "practical_required",
-   "current_level": "mcp_implemented",
+   "current_level": "mcp_verified",
    "required_actions": [
     "create",
     "read",
@@ -110,7 +115,7 @@
     "save_reopen",
     "negative_tests"
    ],
-   "gap": "Реализовано kompas_set_material: ksPart.SetMaterial(name, плотность в документированных г/куб.см) → ksPart.Update → перечитывание имени и сырой плотности. ПОДТВЕРЖДЕНЫ имя материала и исходы вызовов; ФИЗИЧЕСКАЯ плотность НЕ подтверждена (единица чтения не установлена), поэтому числовое равенство сырых показаний — диагностика, а не подтверждение, и действие read стоит implemented. Критерий открыт вместе с VM-04.material.read."
+   "gap": "Реализовано kompas_set_material: ksPart.SetMaterial(name, плотность в документированных г/куб.см) → ksPart.Update → перечитывание имени и плотности. Плотность перечитывается тем же документированным маршрутом МЦХ, который отдаёт кг/м³ — ту же единицу, что запрошена, поэтому сравнение одноимённое в допуске (read_density_kg_per_m3_after, density_matches, density_tolerance_kg_per_m3); имя подтверждается отдельно (name_matches). Несовпавшая или непрочитанная плотность подтверждения не даёт."
   }
  ],
  "scenarios": [
@@ -121,7 +126,7 @@
    "covers": [
     "VM-06.mass.computed_via_measure"
    ],
-   "checks": "плотность передаётся в kompas_measure от ВЫЗЫВАЮЩЕГО, объём измеряется независимо, масса сверяется с аналитическим эталоном объём×плотность. Цепочка «плотность модели → масса» названа открытой, пока единица чтения плотности не подтверждена документом (см. VM-04.material.read и dep.vm.units): строка VM-06.mass.computed_via_measure.read стоит NAMED. Масса VM-06 — сквозная проверка УЖЕ принятого инструмента, а не самостоятельный режим этого профиля (наряд §6)."
+   "checks": "плотность читается из МОДЕЛИ ответом kompas_get_material (поле density_kg_per_m3, документированный маршрут МЦХ) и передаётся в kompas_measure, объём измеряется независимо, масса сверяется с аналитическим эталоном объём×плотность. Цепочка «плотность модели → масса» ВЫПОЛНЕНА (строка VM-06.mass.computed_via_measure.read PASS). Масса VM-06 — сквозная проверка УЖЕ принятого инструмента, а не самостоятельный режим этого профиля (наряд §6)."
   }
  ],
  "common_dependencies": [
@@ -171,7 +176,7 @@
     "read",
     "negative_tests"
    ],
-   "gap": "Зависимость блока: справка называет у SetMaterial г/куб.см, у GetDensity — г/куб.мм. Это РАЗНЫЕ методы, и разные единицы сами по себе противоречием не являются; противоречие в опыте — между документированной единицей ЧТЕНИЯ и наблюдаемым результатом (ядро отдаёт значение, согласованное с г/куб.см). Официального источника г/куб.см нет, поэтому подтверждён только документированный перевод ЗАПИСИ; чтение остаётся СЫРЫМ с неподтверждённой единицей, и действие read стоит implemented, а не verified."
+   "gap": "Зависимость блока: единицу плотности задаёт АРГУМЕНТ чтения. Маршрут МЦХ API5 при ST_MIX_M|ST_MIX_KG отдаёт r в кг/м³, при ST_MIX_MM|ST_MIX_KG — в кг/мм³ (ИЗМЕРЕНО прибором --vm-density-mci на двух плотностях; отношение 1e9 — переводной множитель между заданными единицами). Запись документирована в г/куб.см (ksPart.SetMaterial), перевод кг/м³ → г/см³ делает DensityUnits. Разные единицы у сеттера и страницы GetDensity противоречием справки не являются; старый getter отдаётся диагностикой."
   }
  ],
  "explicitly_out_of_scope": {

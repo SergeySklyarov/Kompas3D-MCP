@@ -25267,5 +25267,31 @@
    ],
    "fix": "часть (1) исправлена 20.09.2026, 21:55: `scripts/mcp-smoke.py`, помощник `probe_sector` — один документ на пробу, отказ измерять при числе тел ≠ 1; группа и полный прогон пересняты на бинарниках поставки `publish-arcrange-20260920` (`src/` НЕ менялся, поэтому поставка та же и переиздание не требуется — измерено: адаптер в поставке байт в байт равен свежей сборке). Правило, выведенное здесь: **адрес объекта, который измеряет проверка, ОБЕСПЕЧИВАЕТСЯ постановкой, а не угадывается по индексу в списке; проверка, читающая „первый элемент“, обязана доказать, что элементов ровно один.** Часть (2) НЕ исправляется в этом наряде по прямому запрету §5 и названа открытой"
   }
+ ],
+ "addenda": [
+  {
+   "id": "A-01",
+   "date": "2026-10-06 (+02:00, часы машины)",
+   "title": "Блок VM: единица плотности закрыта документированным маршрутом МЦХ API5",
+   "scope": "VM-04.material.read, VM-05.material.write, dep.vm.units, VM-06.mass.computed_via_measure",
+   "note": "ДОБАВЛЕНО ПОСЛЕ аудита 05.10.2026 и НЕ входит в его состав: числа разделов 1-8 описывают прогон 05.10.2026 (63 инструмента, 97 строк) и НЕ переписаны. Полное сведение матрицы под живой прогон (scratch/_build_api_compliance.py) в этот наряд не входило; строка `mandatory_scope` переведена в COMPLETE по живому прогону поставки.",
+   "documented_route": "ksPart.CalcMassInertiaProperties(bitVector) — единицу длины и массы ВСЕХ возвращаемых интерфейсом данных задаёт АРГУМЕНТ вызова; при ST_MIX_M|ST_MIX_KG плотность r («Плотность материала») — в кг/м³, пересчёта сервером нет.",
+   "documentation": [
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspart_calcmassinertiaproperties.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksmassinertiaparam.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksmassinertiaparam_props.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksmassinertiaparam_setbitvectorvalue.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/mtypes.html"
+   ],
+   "measured": "прибор --vm-density-mci на бинарях поставки: 7850/8500 кг/м³ читаются ровно при M|KG, 7.85e-6/8.5e-6 при MM|KG, отношение r(M|KG)/r(MM|KG) = 1e9; значение переживает save→close→reopen. Все критерии наряда §5 выполнены при относительном допуске 1e-6.",
+   "delivery": "artifacts/publish-vm-density-r2-20261006",
+   "host_dll_sha256": "8a04bc7eb014b96522c6a0ad8ac879d448f14feaa74989a8aa5e25e016365cfd",
+   "adapter_sha256": "cbbe805e8f18a61b2d56d2dc5bf0c1a6e9625adedcbc340972fb11e9b96c627f",
+   "evidence": "docs/04_KOMPAS_API_NOTES.md §4.44; docs/decisions/variables-material.md#units; docs/acceptance/api7/vm-density-mci.json; scratch/mcp-smoke/delivery-vm-density-r2-20261006/{variables-material,full}.json",
+   "affected_tools": [
+    "kompas_get_material",
+    "kompas_set_material"
+   ]
+  }
  ]
 }

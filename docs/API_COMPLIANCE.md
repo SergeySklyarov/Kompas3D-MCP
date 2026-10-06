@@ -20,6 +20,17 @@
 НЕ выполнялось: строки `DRW-*` и `dep.drawing.*` (15 строк) остаются в состоянии `implemented` -
 реализовано и проходит живую приёмку, но аудитом в `verified` пока не переведено (см. отчёт §2.3, §6).
 
+**Дополнено 06.10.2026 (блок VM: маршрут единицы плотности).** Числа аудита выше относятся к составу
+прогона 05.10.2026 и НЕ переписываются. Блок VM добавлен в поставку после этой даты; его маршрут единицы
+плотности — новый ДОКУМЕНТИРОВАННЫЙ путь, в аудит 05.10.2026 не входивший:
+`ksPart.CalcMassInertiaProperties(bitVector)`, где единицу возвращаемых данных задаёт АРГУМЕНТ вызова
+(страницы `kspart_calcmassinertiaproperties.html`, `ksmassinertiaparam.html`,
+`ksmassinertiaparam_props.html`, `mtypes.html`). Дословные цитаты — `docs/04_KOMPAS_API_NOTES.md` §4.44;
+живое измерение — §4.44.1 и `docs/acceptance/api7/vm-density-mci.json`. Машинная запись дополнения —
+ключ `addenda` в `docs/API_COMPLIANCE.json`. Полное сведение матрицы под живой прогон не выполнялось;
+строка `mandatory_scope` переведена в COMPLETE по живому прогону поставки (78/78 режимов, 36/36
+зависимостей).
+
 ## 1. Сверка полноты
 
 | Что сверялось | Источник | Результат |
@@ -468,6 +479,43 @@
 | Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
 |---|---|---|---|---|
 | `MATE-06.mate.placement_effect` | 10/10 verified | 6 строк · PASS · `303ccf6c` | Подтверждено | - |
+
+### VM-04 / VM-05 - Переменные и материал (блок VM): чтение плотности маршрутом МЦХ API5
+**Инструмент:** `kompas_get_material`, `kompas_set_material` (в блоке также `kompas_list_variables`, `kompas_set_variable`).
+**Место в коде:** `src/KompasMcp.Api5Adapter/Api5Session.VariablesMaterial.cs`.
+**Существенные условия:** единицу длины и массы ВСЕХ данных, возвращаемых `ksMassInertiaParam`, задаёт АРГУМЕНТ `bitVector` вызова, а не страница свойства: при `ST_MIX_M|ST_MIX_KG` плотность `r` — в кг/м³, при `ST_MIX_MM|ST_MIX_KG` — в кг/мм³. Запись `SetMaterial` документирована в г/куб.см, поэтому перевод кг/м³ → г/см³ выполняет `DensityUnits`. Старый `ksPart.GetDensity()` остаётся ДИАГНОСТИКОЙ (единица страницы г/куб.мм) и плотностью не публикуется.
+**Документированные интерфейсы и члены:**
+- `ksPart.CalcMassInertiaProperties` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspart_calcmassinertiaproperties.html>
+- `ksMassInertiaParam.r / m / v` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksmassinertiaparam_props.html>
+- `ksMassInertiaParam.SetBitVectorValue` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksmassinertiaparam_setbitvectorvalue.html>
+- константы `ST_MIX_*` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/mtypes.html>
+- `ksPart.SetMaterial / Update` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspart_setmaterial.html>
+- `ksPart.material` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspart_material.html>
+- `ksPart.VariableCollection` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspart_variablecollection.html>
+- `ksVariable.value / Expression` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksvariable_value.html>
+- `ksDocument3D.RebuildDocument` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_rebuilddocument.html>
+**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера. Цитаты - `docs/04_KOMPAS_API_NOTES.md` §4.44; живое измерение - §4.44.1.
+**Оценка документации:** **Подтверждено** - единицу `r` задаёт аргумент `bitVector` по примечанию 3 `ksmassinertiaparam.html`; прочтение подтверждено живым измерением прибора `--vm-density-mci` на двух плотностях
+
+| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
+|---|---|---|---|---|
+| `VM-04.material.read` | 10/10 verified | 56 строк группы `variables-material` · PASS · `8a04bc7e` | Подтверждено | - |
+| `VM-05.material.write` | 10/10 verified | 56 строк группы `variables-material` · PASS · `8a04bc7e` | Подтверждено | - |
+| `VM-06.mass.computed_via_measure` | сквозная (не режим профиля) | 56 строк группы `variables-material` · PASS · `8a04bc7e` | Подтверждено | - |
+
+### dep.vm.units - Документированные единицы плотности - зависимость блока VM
+**Инструмент:** `kompas_get_material`, `kompas_set_material`.
+**Существенные условия:** единица чтения приходит из аргумента вызова; сервер ничего не пересчитывает. Отношение `r` двух комбинаций равно переводному множителю между заданными единицами (1e9), а не 1000 «по опыту».
+**Документированные интерфейсы и члены:**
+- `ksPart.CalcMassInertiaProperties` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspart_calcmassinertiaproperties.html>
+- константы `ST_MIX_*` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/mtypes.html>
+- `ksPart.SetMaterial` (г/куб.см) - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspart_setmaterial.html>
+**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
+**Оценка документации:** **Подтверждено** - измерено прибором `--vm-density-mci` на двух плотностях в обеих комбинациях
+
+| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
+|---|---|---|---|---|
+| `dep.vm.units` | 10/10 verified | 56 строк группы `variables-material` · PASS · `8a04bc7e` | Подтверждено | - |
 
 ## 3. Запланированные семейства: маршрута в коде нет
 

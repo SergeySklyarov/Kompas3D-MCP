@@ -385,6 +385,18 @@ public static class Program
                     }
                 });
             }
+            else if (options.VmDensityMci)
+            {
+                var vmDensityMci = new VmDensityMciProbe(report, options);
+                pump.Run(() =>
+                {
+                    vmDensityMci.Run();
+                    if (options.KeepRunning)
+                    {
+                        VmDensityMciProbe.Flush(report, options);
+                    }
+                });
+            }
             else if (options.RepositionRead)
             {
                 var repositionRead = new RepositionReadProbe(report, options);
@@ -678,6 +690,12 @@ public sealed class Options
     /// on two pre-set densities. History: docs/decisions/variables-material.md#units</summary>
     public bool VmDensityUnits { get; private set; }
 
+    /// <summary><c>--vm-density-mci</c>: does the API5 MCI route publish the density in the units its
+    /// <c>bitVector</c> ARGUMENT selects — <c>ksPart.CalcMassInertiaProperties(ST_MIX_M|ST_MIX_KG).r</c>
+    /// in kg/m3 and <c>…ST_MIX_MM|ST_MIX_KG….r</c> in kg/mm3 — measured on two pre-set densities with the
+    /// ratio and the mass self-consistency checked. History: docs/decisions/variables-material.md#units</summary>
+    public bool VmDensityMci { get; private set; }
+
     /// <summary><c>--vm-open &lt;path&gt;</c>: which write+rebuild pair moves the geometry of the SAVED
     /// reference file — the question the adapter's behaviour on an opened document turned into.</summary>
     public string? VmOpen { get; private set; }
@@ -725,6 +743,7 @@ public sealed class Options
         var vmVariableRoute = false;
         var vmControlExpression = false;
         var vmDensityUnits = false;
+        var vmDensityMci = false;
         string? vmOpen = null;
 
         for (var i = 0; i < args.Length; i++)
@@ -830,6 +849,9 @@ public sealed class Options
                 case "--vm-density-units":
                     vmDensityUnits = true;
                     break;
+                case "--vm-density-mci":
+                    vmDensityMci = true;
+                    break;
                 case "--vm-open" when i + 1 < args.Length:
                     vmOpen = args[++i];
                     break;
@@ -837,7 +859,7 @@ public sealed class Options
                     workOverride = args[++i];
                     break;
                 case "--help":
-                    Console.WriteLine("KompasMcp.Api7Probe [--passport] [--controls] [--lifecycle] [--extrusion] [--chamfer] [--sketch-reopen] [--fillet-edge-set] [--fillet-base-objects] [--boolean] [--split] [--reposition] [--tree] [--rotation] [--full-turn] [--boss-fuse] [--verify-m3d PATH] [--hole-modes] [--hole-tree] [--sketch-definition] [--identity] [--union] [--b5] [--reposition-read] [--reposition-params] [--cut-area] [--reposition-order] [--sketch-plane] [--vm-reference PATH] [--vm-variable-route] [--vm-control-expression] [--vm-density-units] [--vm-open PATH] [--work DIR] [--keep]");
+                    Console.WriteLine("KompasMcp.Api7Probe [--passport] [--controls] [--lifecycle] [--extrusion] [--chamfer] [--sketch-reopen] [--fillet-edge-set] [--fillet-base-objects] [--boolean] [--split] [--reposition] [--tree] [--rotation] [--full-turn] [--boss-fuse] [--verify-m3d PATH] [--hole-modes] [--hole-tree] [--sketch-definition] [--identity] [--union] [--b5] [--reposition-read] [--reposition-params] [--cut-area] [--reposition-order] [--sketch-plane] [--vm-reference PATH] [--vm-variable-route] [--vm-control-expression] [--vm-density-units] [--vm-density-mci] [--vm-open PATH] [--work DIR] [--keep]");
                     Environment.Exit(0);
                     break;
             }
@@ -868,6 +890,7 @@ public sealed class Options
             : vmVariableRoute ? "vm-variable-route"
             : vmControlExpression ? "vm-control-expression"
             : vmDensityUnits ? "vm-density-units"
+            : vmDensityMci ? "vm-density-mci"
             : controls ? "api7-attribution" : "api7-probe-report";
         var work = workOverride ?? Path.Combine(root, "scratch", $"api7-{stem}-{runId}");
         var reportDir = Path.Combine(root, "docs", "acceptance", "api7");
@@ -913,6 +936,7 @@ public sealed class Options
             VmVariableRoute = vmVariableRoute,
             VmControlExpression = vmControlExpression,
             VmDensityUnits = vmDensityUnits,
+            VmDensityMci = vmDensityMci,
             VmOpen = vmOpen,
         };
     }

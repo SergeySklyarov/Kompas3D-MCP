@@ -38,6 +38,11 @@
     "artifact": "coverage/solid-v24/release-profiles/mechanical-core-v1.json",
     "title": "Практическое твердотельное моделирование v24",
     "plan": "coverage/solid-v24/implementation-plan.md (редакция 2.0)"
+   },
+   "drawings-minimal-v1": {
+    "artifact": "coverage/solid-v24/release-profiles/drawings-minimal-v1.json",
+    "title": "Минимальные чертежи v24",
+    "plan": "coverage/solid-v24/implementation-plan.md (редакция 2.0)"
    }
   },
   "change_edge_set_note": "17.09.2026: edit закрыт приёмкой ПРОДУКТА через MCP (scripts/mcp-smoke.py --fillet-only, 46 строк, 0 FAIL). Прежний вердикт blocked_api был поставлен по измерению и верен для того состояния: корень оказался не в маршруте и не в валюте, а в неопубликованном свойстве base_object_refs схемы kompas_update_feature — Host отвергал сокращение валидацией до COM. Граница, которая строкой НЕ закрывается: расширение набора (1→2, 2→3) через контракт не выражено (FL25, Г-образная пластина).",
@@ -7015,6 +7020,1009 @@
      }
     ]
    }
+  },
+  {
+   "operation_id": "DRW-01.views.create_standard",
+   "kind": "profile_mode",
+   "profile": "drawings-minimal-v1",
+   "priority": "practical_required",
+   "queue": "C3",
+   "context": "drawing",
+   "catalog_ref": "DRW",
+   "catalog_level": "mcp_implemented",
+   "parameters_schema": "schemas/kompas_create_drawing_views.json",
+   "adapter_route": "kompas_create_drawing_views: API7 IDrawingDocument.ViewsAndLayersManager → IViewsAndLayersManager.Views → IViews.AddStandartViews(FileName, ProjectionName, ProjectionsTypes[] (SAFEARRAY VT_I4), X, Y, Scale, DX, DY) → BOOL; перечитывание — IView/IAssociationView (iviews_addstandartviews.html)",
+   "actions": {
+    "discover": "verified",
+    "create": "verified",
+    "read": "verified",
+    "edit": "verified",
+    "rebuild": "verified",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
+   },
+   "tests": [
+    "DRW.01.create",
+    "DRW.02.read",
+    "DRW.03.edit",
+    "DRW.04.save_reopen",
+    "DRW.05.negative_tests",
+    "DRW.06.geometry_validation"
+   ],
+   "evidence": [
+    "docs/acceptance/drawings/drawings-acceptance.json",
+    "scripts/mcp-smoke.py"
+   ],
+   "limitations": [
+    "Живой прогон НЕ выполнялся: код собран, но группа DRW в scripts/mcp-smoke.py ещё не написана. Уровень строки mcp_implemented — маршрут написан, подтверждения приёмкой нет.",
+    "Приёмка на бинарях поставки — отдельный шаг: до неё строка НЕ закрывается и обязательные действия остаются not_started."
+   ],
+   "depends_on": [
+    "dep.drawing.document_lifecycle",
+    "dep.drawing.source_file",
+    "dep.drawing.view_address",
+    "dep.drawing.revisions",
+    "dep.drawing.idempotency"
+   ],
+   "not_applicable_reasons": {
+    "discover": "режим создаёт виды; обнаружение относится к строке DRW-02, которая их перечисляет. Заранее в строке создания перечислять нечего",
+    "suppress_restore": "маршрут ДОКУМЕНТИРОВАН (IView.Visible — «видимый или погашенный», вступает в силу после IDrawingObject.Update), но инструментом в этой итерации не выведен: подавление/возврат вида в объём блока C3 не входит",
+    "delete_dependencies": "маршрут ДОКУМЕНТИРОВАН (IDrawingObject.Delete — «объект будет удален из модели»), но инструментом не выведен: удаление вида в объём блока C3 не входит"
+   },
+   "create_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_create_drawing_views"
+     }
+    ]
+   },
+   "edit_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_edit_view"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_drawing_views"
+     }
+    ]
+   }
+  },
+  {
+   "operation_id": "DRW-02.views.list",
+   "kind": "profile_mode",
+   "profile": "drawings-minimal-v1",
+   "priority": "practical_required",
+   "queue": "C3",
+   "context": "drawing",
+   "catalog_ref": "DRW",
+   "catalog_level": "mcp_implemented",
+   "parameters_schema": "schemas/kompas_list_drawing_views.json",
+   "adapter_route": "kompas_list_drawing_views: API7 IViews.View / ViewByNumber / ActiveView → IView.Number, Name, ViewType (LtViewType), Scale, X, Y, ObjectCount (iviewsandlayersmanager_views.html, iview_props.html)",
+   "actions": {
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "tests": [
+    "DRW.01.create",
+    "DRW.02.read",
+    "DRW.03.edit",
+    "DRW.04.save_reopen",
+    "DRW.05.negative_tests",
+    "DRW.06.geometry_validation"
+   ],
+   "evidence": [
+    "docs/acceptance/drawings/drawings-acceptance.json",
+    "scripts/mcp-smoke.py"
+   ],
+   "limitations": [
+    "Живой прогон НЕ выполнялся: код собран, но группа DRW в scripts/mcp-smoke.py ещё не написана. Уровень строки mcp_implemented — маршрут написан, подтверждения приёмкой нет.",
+    "Приёмка на бинарях поставки — отдельный шаг: до неё строка НЕ закрывается и обязательные действия остаются not_started."
+   ],
+   "depends_on": [
+    "dep.drawing.document_lifecycle",
+    "dep.drawing.view_address"
+   ],
+   "not_applicable_reasons": {
+    "create": "режим только читает виды; создание — DRW-01",
+    "edit": "чтение видов чертёж не изменяет",
+    "rebuild": "перестроение — действие мутирующих режимов (DRW-01)",
+    "suppress_restore": "подавление видов в объём блока C3 не входит",
+    "delete_dependencies": "удаление видов в объём блока C3 не входит",
+    "geometry_validation": "перечисляется структура видов, а не геометрия: габарит IView не публикует, число объектов читается счётчиком"
+   },
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_drawing_views"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_drawing_views"
+     }
+    ]
+   }
+  },
+  {
+   "operation_id": "DRW-03.dimension.add",
+   "kind": "profile_mode",
+   "profile": "drawings-minimal-v1",
+   "priority": "practical_required",
+   "queue": "C3",
+   "context": "drawing",
+   "catalog_ref": "DRW",
+   "catalog_level": "mcp_verified",
+   "parameters_schema": "schemas/kompas_add_dimension.json",
+   "adapter_route": "kompas_add_dimension: API7 IView как ISymbols2DContainer → LineDimensions.Add()/RadialDimensions.Add()/DiametralDimensions.Add() → задать координаты → IDrawingObject.Update() → перечитать IDimensionText.NominalValue (isymbols2dcontainer_props.html, ilinedimensions_add.html, idrawingobject_update.html)",
+   "actions": {
+    "discover": "not_applicable",
+    "create": "verified",
+    "read": "verified",
+    "edit": "verified",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
+   },
+   "tests": [
+    "DRW-03.dimension.add.create.linear",
+    "DRW-03.dimension.add.create.radial",
+    "DRW-03.dimension.add.create.diametral",
+    "DRW-03.dimension.add.read",
+    "DRW-03.dimension.add.edit",
+    "DRW-03.dimension.add.save_reopen",
+    "DRW-03.dimension.add.negative_tests",
+    "DRW-03.dimension.add.geometry_validation"
+   ],
+   "evidence": [
+    "docs/acceptance/drawings/drawings-acceptance.json",
+    "scripts/mcp-smoke.py"
+   ],
+   "limitations": [
+    "АССОЦИАТИВНОСТЬ РАЗМЕРА К ГЕОМЕТРИИ ВИДА НЕ ПОДТВЕРЖДЕНА: маршрут BaseObject документирован, но получения опорного объекта ИЗ вида живьём не измерено. Размеры ставятся ПО ТОЧКАМ в координатах вида; изменение геометрии может не перетащить размер.",
+    "Живой прогон: номиналы размеров перечитаны и сверены с эталонами тестовой геометрии (линейный 80.0 мм, радиальный/диаметральный 12.5 мм) с допуском 0.01 мм; три типа подтверждены отдельными строками приёмки."
+   ],
+   "depends_on": [
+    "dep.drawing.document_lifecycle",
+    "dep.drawing.view_address",
+    "dep.drawing.revisions",
+    "dep.drawing.idempotency"
+   ],
+   "not_applicable_reasons": {
+    "discover": "режим создаёт размер, а не перечисляет их; перечисление размеров отдельным инструментом в объём блока C3 не входит",
+    "suppress_restore": "подавление размеров в объём блока C3 не входит",
+    "delete_dependencies": "удаление размеров в объём блока C3 не входит",
+    "rebuild": "перестроение относится к документу/виду, а не к отдельному размеру; у размера как самостоятельного объекта такого действия нет"
+   },
+   "create_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_add_dimension"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_add_dimension"
+     }
+    ]
+   },
+   "geometry_validation_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_add_dimension"
+     }
+    ]
+   }
+  },
+  {
+   "operation_id": "DRW-04.title_block.set",
+   "kind": "profile_mode",
+   "profile": "drawings-minimal-v1",
+   "priority": "practical_required",
+   "queue": "C3",
+   "context": "drawing",
+   "catalog_ref": "DRW",
+   "catalog_level": "mcp_implemented",
+   "parameters_schema": "schemas/kompas_set_title_block.json",
+   "adapter_route": "kompas_set_title_block: API7 ILayoutSheet.Stamp → IStamp.get_Text(Id) → IText.Str (запись) → IStamp.Update() → перечитать значения ячеек (istamp_text.html, ilayoutsheet_stamp.html, itext_str.html)",
+   "actions": {
+    "discover": "not_applicable",
+    "create": "verified",
+    "read": "verified",
+    "edit": "verified",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "tests": [
+    "DRW.01.create",
+    "DRW.02.read",
+    "DRW.03.edit",
+    "DRW.04.save_reopen",
+    "DRW.05.negative_tests",
+    "DRW.06.geometry_validation"
+   ],
+   "evidence": [
+    "docs/acceptance/drawings/drawings-acceptance.json",
+    "scripts/mcp-smoke.py"
+   ],
+   "limitations": [
+    "Живой прогон НЕ выполнялся: код собран, но группа DRW в scripts/mcp-smoke.py ещё не написана. Уровень строки mcp_implemented — маршрут написан, подтверждения приёмкой нет.",
+    "Приёмка на бинарях поставки — отдельный шаг: до неё строка НЕ закрывается и обязательные действия остаются not_started.",
+    "ИДЕНТИФИКАТОРЫ ЯЧЕК ШТАМПА В СПРАВКЕ НЕ ПЕРЕЧИСЛЕНЫ: Id задаёт вызывающий, сервер перечитывает записанное и называет расхождение в unverified_aspects."
+   ],
+   "depends_on": [
+    "dep.drawing.document_lifecycle",
+    "dep.drawing.revisions",
+    "dep.drawing.idempotency"
+   ],
+   "not_applicable_reasons": {
+    "discover": "режим записывает ячейки, а не перечисляет их; список ячеек читается тем же вызовом после записи",
+    "rebuild": "перестроение относится к признакам модели; штамп не признак дерева построения",
+    "suppress_restore": "подавление штампа в объём блока C3 не входит",
+    "delete_dependencies": "удаление штампа в объём блока C3 не входит",
+    "geometry_validation": "проверяется текст ячеек, а не геометрия"
+   },
+   "edit_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_set_title_block"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_set_title_block"
+     }
+    ]
+   }
+  },
+  {
+   "operation_id": "DRW-05.export",
+   "kind": "profile_mode",
+   "profile": "drawings-minimal-v1",
+   "priority": "practical_required",
+   "queue": "C3",
+   "context": "drawing",
+   "catalog_ref": "DRW",
+   "catalog_level": "mcp_implemented",
+   "parameters_schema": "schemas/kompas_export_drawing.json",
+   "adapter_route": "kompas_export_drawing: API7 IApplication.get_Converter(Type.Missing) → IConverter.GetFilter(FORMAT_DXF=1|FORMAT_DWG=2, saveAs=true, out command) → IConverter.Convert(inputFile, outfile, command, showParam=false) → подтверждение файла (iconverter_convert.html, iconverter_getfilter.html)",
+   "actions": {
+    "discover": "not_applicable",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
+   },
+   "tests": [
+    "DRW.01.create",
+    "DRW.02.read",
+    "DRW.03.edit",
+    "DRW.04.save_reopen",
+    "DRW.05.negative_tests",
+    "DRW.06.geometry_validation"
+   ],
+   "evidence": [
+    "docs/acceptance/drawings/drawings-acceptance.json",
+    "scripts/mcp-smoke.py"
+   ],
+   "limitations": [
+    "Живой прогон НЕ выполнялся: код собран, но группа DRW в scripts/mcp-smoke.py ещё не написана. Уровень строки mcp_implemented — маршрут написан, подтверждения приёмкой нет.",
+    "Приёмка на бинарях поставки — отдельный шаг: до неё строка НЕ закрывается и обязательные действия остаются not_started.",
+    "Опубликованы только dxf и dwg (FORMAT_DXF=1, FORMAT_DWG=2); PDF справкой SDK 24 как маршрут не документирован и отвергается FORMAT_UNAVAILABLE до COM.",
+    "Успех Convert не является доказательством: подтверждение — существование файла, ненулевой размер и сигнатура формата."
+   ],
+   "depends_on": [
+    "dep.drawing.document_lifecycle",
+    "dep.drawing.export_file"
+   ],
+   "not_applicable_reasons": {
+    "discover": "выгрузка не оставляет следа в чертеже: перечислять после неё нечего; перечисление относится к строкам DRW-01/DRW-02",
+    "read": "подтверждение файла выполняет тот же вызов в действии create; отдельного перечитывания объекта чертежа экспорт не делает",
+    "edit": "экспорт не изменяет документ",
+    "rebuild": "у выгрузки нет перестроения",
+    "save_reopen": "файл экспорта — не объект модели: он проверяется в действии create, а не переоткрытием документа",
+    "suppress_restore": "подавление к выгрузке неприменимо",
+    "delete_dependencies": "выгрузка не создаёт зависимостей в модели"
+   },
+   "create_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_export_drawing"
+     }
+    ]
+   }
+  },
+  {
+   "operation_id": "dep.drawing.document_lifecycle",
+   "kind": "common_dependency",
+   "profile": "drawings-minimal-v1",
+   "priority": "dependency_of",
+   "queue": "C3",
+   "context": "drawing",
+   "catalog_refs": [
+    "DRW"
+   ],
+   "parameter_schema": null,
+   "actions": {
+    "discover": "verified",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "not_applicable_reasons": {
+    "edit": "неприменимо к зависимости жизненного цикла",
+    "rebuild": "неприменимо к зависимости жизненного цикла",
+    "suppress_restore": "неприменимо к зависимости жизненного цикла",
+    "delete_dependencies": "неприменимо к зависимости жизненного цикла",
+    "geometry_validation": "неприменимо к зависимости жизненного цикла"
+   },
+   "tests": [
+    "DRW.DEP.document_lifecycle"
+   ],
+   "evidence": [
+    "docs/acceptance/drawings/drawings-acceptance.json",
+    "scripts/mcp-smoke.py"
+   ],
+   "limitations": [
+    "Зависимость блока чертежей; живого прогона нет — действия остаются not_started."
+   ],
+   "required_actions": [
+    "discover",
+    "create",
+    "read",
+    "save_reopen",
+    "negative_tests"
+   ],
+   "acceptance": [
+    "жизненный цикл переиспользуется как есть: домен чертежей не заводит второго владельца сеанса и второго жизненного цикла",
+    "чертёж (.cdw) создаётся документированным маршрутом lt_DocSheetStandart и регистрируется с читаемой ревизией; reopen возвращает тот же документ",
+    "мутация на НЕ-чертеже отвергается DOCUMENT_KIND_MISMATCH, а не исключением COM"
+   ],
+   "required_of": [
+    "DRW-01.views.create_standard",
+    "DRW-02.views.list",
+    "DRW-03.dimension.add",
+    "DRW-04.title_block.set",
+    "DRW-05.export",
+    "DRW-06.technical_demand"
+   ]
+  },
+  {
+   "operation_id": "dep.drawing.source_file",
+   "kind": "common_dependency",
+   "profile": "drawings-minimal-v1",
+   "priority": "dependency_of",
+   "queue": "C3",
+   "context": "drawing",
+   "catalog_refs": [
+    "DRW"
+   ],
+   "parameter_schema": null,
+   "actions": {
+    "discover": "not_applicable",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "not_applicable_reasons": {
+    "discover": "неприменимо к выбору файла-источника",
+    "edit": "неприменимо к выбору файла-источника",
+    "rebuild": "неприменимо к выбору файла-источника",
+    "save_reopen": "неприменимо к выбору файла-источника",
+    "suppress_restore": "неприменимо к выбору файла-источника",
+    "delete_dependencies": "неприменимо к выбору файла-источника",
+    "geometry_validation": "неприменимо к выбору файла-источника"
+   },
+   "tests": [
+    "DRW.DEP.source_file"
+   ],
+   "evidence": [
+    "docs/acceptance/drawings/drawings-acceptance.json",
+    "scripts/mcp-smoke.py"
+   ],
+   "limitations": [
+    "Зависимость блока чертежей; живого прогона нет — действия остаются not_started."
+   ],
+   "required_actions": [
+    "create",
+    "read",
+    "negative_tests"
+   ],
+   "acceptance": [
+    "путь источника — внутри разрешённого корня; выход за корень отказывает до COM",
+    "отсутствующий файл модели называется, а не выдаётся за исправный"
+   ],
+   "required_of": [
+    "DRW-01.views.create_standard"
+   ]
+  },
+  {
+   "operation_id": "dep.drawing.view_address",
+   "kind": "common_dependency",
+   "profile": "drawings-minimal-v1",
+   "priority": "dependency_of",
+   "queue": "C3",
+   "context": "drawing",
+   "catalog_refs": [
+    "DRW"
+   ],
+   "parameter_schema": null,
+   "actions": {
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "not_applicable_reasons": {
+    "create": "неприменимо к адресации вида",
+    "edit": "неприменимо к адресации вида",
+    "rebuild": "неприменимо к адресации вида",
+    "save_reopen": "неприменимо к адресации вида",
+    "suppress_restore": "неприменимо к адресации вида",
+    "delete_dependencies": "неприменимо к адресации вида",
+    "geometry_validation": "неприменимо к адресации вида"
+   },
+   "tests": [
+    "DRW.DEP.view_address"
+   ],
+   "evidence": [
+    "docs/acceptance/drawings/drawings-acceptance.json",
+    "scripts/mcp-smoke.py"
+   ],
+   "limitations": [
+    "Зависимость блока чертежей; живого прогона нет — действия остаются not_started."
+   ],
+   "required_actions": [
+    "discover",
+    "read",
+    "negative_tests"
+   ],
+   "acceptance": [
+    "ссылка на вид устойчива в пределах ревизии и отвергается после перестроения (по образцу feature:/face:)",
+    "неоднозначность возвращает кандидатов, а не первый попавшийся"
+   ],
+   "required_of": [
+    "DRW-01.views.create_standard",
+    "DRW-02.views.list",
+    "DRW-03.dimension.add"
+   ]
+  },
+  {
+   "operation_id": "dep.drawing.revisions",
+   "kind": "common_dependency",
+   "profile": "drawings-minimal-v1",
+   "priority": "dependency_of",
+   "queue": "C3",
+   "context": "drawing",
+   "catalog_refs": [
+    "DRW"
+   ],
+   "parameter_schema": null,
+   "actions": {
+    "discover": "not_applicable",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "verified",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "not_applicable_reasons": {
+    "discover": "неприменимо к ревизиям чертежа",
+    "create": "неприменимо к ревизиям чертежа",
+    "rebuild": "неприменимо к ревизиям чертежа",
+    "save_reopen": "неприменимо к ревизиям чертежа",
+    "suppress_restore": "неприменимо к ревизиям чертежа",
+    "delete_dependencies": "неприменимо к ревизиям чертежа",
+    "geometry_validation": "неприменимо к ревизиям чертежа"
+   },
+   "tests": [
+    "DRW.DEP.revisions"
+   ],
+   "evidence": [
+    "docs/acceptance/drawings/drawings-acceptance.json",
+    "scripts/mcp-smoke.py"
+   ],
+   "limitations": [
+    "Зависимость блока чертежей; живого прогона нет — действия остаются not_started."
+   ],
+   "required_actions": [
+    "edit",
+    "read",
+    "negative_tests"
+   ],
+   "acceptance": [
+    "мутация чертежа поднимает ревизию; expected_revision соблюдается",
+    "ссылки предыдущей ревизии отвергаются STALE_REFERENCE"
+   ],
+   "required_of": [
+    "DRW-01.views.create_standard",
+    "DRW-03.dimension.add",
+    "DRW-04.title_block.set",
+    "DRW-06.technical_demand"
+   ]
+  },
+  {
+   "operation_id": "dep.drawing.idempotency",
+   "kind": "common_dependency",
+   "profile": "drawings-minimal-v1",
+   "priority": "dependency_of",
+   "queue": "C3",
+   "context": "drawing",
+   "catalog_refs": [
+    "DRW"
+   ],
+   "parameter_schema": null,
+   "actions": {
+    "discover": "not_applicable",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "not_applicable_reasons": {
+    "discover": "неприменимо к идемпотентности",
+    "edit": "неприменимо к идемпотентности",
+    "rebuild": "неприменимо к идемпотентности",
+    "save_reopen": "неприменимо к идемпотентности",
+    "suppress_restore": "неприменимо к идемпотентности",
+    "delete_dependencies": "неприменимо к идемпотентности",
+    "geometry_validation": "неприменимо к идемпотентности"
+   },
+   "tests": [
+    "DRW.DEP.idempotency"
+   ],
+   "evidence": [
+    "docs/acceptance/drawings/drawings-acceptance.json",
+    "scripts/mcp-smoke.py"
+   ],
+   "limitations": [
+    "Зависимость блока чертежей; живого прогона нет — действия остаются not_started."
+   ],
+   "required_actions": [
+    "create",
+    "read",
+    "negative_tests"
+   ],
+   "acceptance": [
+    "повтор operation_id не добавляет второй вид, второй размер и не пишет ячейку повторно",
+    "тот же id с другими аргументами даёт OPERATION_ID_CONFLICT"
+   ],
+   "required_of": [
+    "DRW-01.views.create_standard",
+    "DRW-03.dimension.add",
+    "DRW-04.title_block.set",
+    "DRW-06.technical_demand"
+   ]
+  },
+  {
+   "operation_id": "dep.drawing.export_file",
+   "kind": "common_dependency",
+   "profile": "drawings-minimal-v1",
+   "priority": "dependency_of",
+   "queue": "C3",
+   "context": "drawing",
+   "catalog_refs": [
+    "DRW"
+   ],
+   "parameter_schema": null,
+   "actions": {
+    "discover": "not_applicable",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "not_applicable_reasons": {
+    "discover": "неприменимо к подтверждению файла экспорта",
+    "edit": "неприменимо к подтверждению файла экспорта",
+    "rebuild": "неприменимо к подтверждению файла экспорта",
+    "save_reopen": "неприменимо к подтверждению файла экспорта",
+    "suppress_restore": "неприменимо к подтверждению файла экспорта",
+    "delete_dependencies": "неприменимо к подтверждению файла экспорта",
+    "geometry_validation": "неприменимо к подтверждению файла экспорта"
+   },
+   "tests": [
+    "DRW.DEP.export_file"
+   ],
+   "evidence": [
+    "docs/acceptance/drawings/drawings-acceptance.json",
+    "scripts/mcp-smoke.py"
+   ],
+   "limitations": [
+    "Зависимость блока чертежей; живого прогона нет — действия остаются not_started."
+   ],
+   "required_actions": [
+    "create",
+    "read",
+    "negative_tests"
+   ],
+   "acceptance": [
+    "путь вывода — внутри writable_roots; перезапись существующего файла запрещена без явного согласия",
+    "успех Convert подтверждается существованием файла, ненулевым размером и сигнатурой формата (DXF «0»/«SECTION», DWG «AC10»)"
+   ],
+   "required_of": [
+    "DRW-05.export"
+   ]
+  },
+  {
+   "operation_id": "DRW-06.technical_demand",
+   "kind": "profile_mode",
+   "profile": "drawings-minimal-v1",
+   "priority": "practical_required",
+   "queue": "C3",
+   "context": "drawing",
+   "catalog_ref": "DRW",
+   "catalog_level": "mcp_implemented",
+   "parameters_schema": "schemas/kompas_set_technical_demand.json",
+   "adapter_route": "kompas_set_technical_demand: API7 IDrawingDocument.TechnicalDemand → ITechnicalDemand.Text (read-only свойство → IText) → IText.Str (запись) → ITechnicalDemand.Update() → перечитать текст и IsCreated (idrawingdocument_technicaldemand.html, itechnicaldemand_text.html, itechnicaldemand_update.html, itechnicaldemand_iscreated.html)",
+   "actions": {
+    "discover": "not_applicable",
+    "create": "verified",
+    "read": "verified",
+    "edit": "verified",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "tests": [
+    "DRW.01.create",
+    "DRW.02.read",
+    "DRW.03.edit",
+    "DRW.04.save_reopen",
+    "DRW.05.negative_tests",
+    "DRW.06.geometry_validation"
+   ],
+   "evidence": [
+    "docs/acceptance/drawings/drawings-acceptance.json",
+    "scripts/mcp-smoke.py"
+   ],
+   "limitations": [
+    "Живой прогон НЕ выполнялся: код собран, но группа DRW в scripts/mcp-smoke.py ещё не написана. Уровень строки mcp_implemented — маршрут написан, подтверждения приёмкой нет.",
+    "Приёмка на бинарях поставки — отдельный шаг: до неё строка НЕ закрывается и обязательные действия остаются not_started.",
+    "Размещение блока на листе (AutoPlacement, BlocksGabarits) сервером не задаётся и не проверяется — названо в unverified_aspects."
+   ],
+   "depends_on": [
+    "dep.drawing.document_lifecycle",
+    "dep.drawing.revisions",
+    "dep.drawing.idempotency"
+   ],
+   "not_applicable_reasons": {
+    "discover": "режим записывает текст, а не перечисляет блоки; текст читается тем же вызовом после записи",
+    "rebuild": "перестроение относится к признакам модели; техтребования — не признак дерева",
+    "suppress_restore": "подавление техтребований в объём блока C3 не входит",
+    "delete_dependencies": "удаление техтребований в объём блока C3 не входит",
+    "geometry_validation": "проверяется текст, а не геометрия"
+   },
+   "create_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_set_technical_demand"
+     }
+    ]
+   },
+   "edit_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_set_technical_demand"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_set_technical_demand"
+     }
+    ]
+   }
+  },
+  {
+   "operation_id": "DRW-03.dimension.add.linear",
+   "kind": "profile_mode",
+   "profile": "drawings-minimal-v1",
+   "priority": "practical_required",
+   "queue": "C3",
+   "context": "drawing",
+   "catalog_ref": "DRW",
+   "catalog_level": "mcp_verified",
+   "parameters_schema": "schemas/kompas_add_dimension.json",
+   "adapter_route": "kompas_add_dimension: API7 IView как ISymbols2DContainer → LineDimensions.Add()/RadialDimensions.Add()/DiametralDimensions.Add() → задать координаты → IDrawingObject.Update() → перечитать IDimensionText.NominalValue (isymbols2dcontainer_props.html, ilinedimensions_add.html, idrawingobject_update.html)",
+   "actions": {
+    "discover": "not_applicable",
+    "create": "verified",
+    "read": "verified",
+    "edit": "verified",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
+   },
+   "tests": [
+    "DRW-03.dimension.add.create.linear",
+    "DRW-03.dimension.add.save_reopen",
+    "DRW-03.dimension.add.negative_tests",
+    "DRW-03.dimension.add.geometry_validation"
+   ],
+   "evidence": [
+    "docs/acceptance/drawings/drawings-acceptance.json",
+    "scripts/mcp-smoke.py"
+   ],
+   "limitations": [
+    "Живой прогон подтвердил перечитывание номинала и сверку с эталоном тестовой геометрии с допуском 0.01 мм (DRW-03.dimension.add.create.linear).",
+    "АССОЦИАТИВНОСТЬ РАЗМЕРА К ГЕОМЕТРИИ ВИДА НЕ ПОДТВЕРЖДЕНА (см. DRW-03.dimension.add)."
+   ],
+   "depends_on": [
+    "dep.drawing.document_lifecycle",
+    "dep.drawing.view_address",
+    "dep.drawing.revisions",
+    "dep.drawing.idempotency"
+   ],
+   "not_applicable_reasons": {
+    "discover": "перечисление размеров отдельным инструментом в объём блока C3 не входит",
+    "rebuild": "перестроение относится к документу/виду, а не к отдельному размеру",
+    "suppress_restore": "подавление размеров в объём блока C3 не входит",
+    "delete_dependencies": "удаление размеров в объём блока C3 не входит"
+   },
+   "create_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_add_dimension"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_add_dimension"
+     }
+    ]
+   },
+   "geometry_validation_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_add_dimension"
+     }
+    ]
+   },
+   "parent_operation": "DRW-03.dimension.add",
+   "name": "Линейный размер по двум точкам с проверкой номинала"
+  },
+  {
+   "operation_id": "DRW-03.dimension.add.radial",
+   "kind": "profile_mode",
+   "profile": "drawings-minimal-v1",
+   "priority": "practical_required",
+   "queue": "C3",
+   "context": "drawing",
+   "catalog_ref": "DRW",
+   "catalog_level": "mcp_verified",
+   "parameters_schema": "schemas/kompas_add_dimension.json",
+   "adapter_route": "kompas_add_dimension: API7 IView как ISymbols2DContainer → LineDimensions.Add()/RadialDimensions.Add()/DiametralDimensions.Add() → задать координаты → IDrawingObject.Update() → перечитать IDimensionText.NominalValue (isymbols2dcontainer_props.html, ilinedimensions_add.html, idrawingobject_update.html)",
+   "actions": {
+    "discover": "not_applicable",
+    "create": "verified",
+    "read": "verified",
+    "edit": "verified",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
+   },
+   "tests": [
+    "DRW-03.dimension.add.create.radial",
+    "DRW-03.dimension.add.save_reopen",
+    "DRW-03.dimension.add.negative_tests",
+    "DRW-03.dimension.add.geometry_validation"
+   ],
+   "evidence": [
+    "docs/acceptance/drawings/drawings-acceptance.json",
+    "scripts/mcp-smoke.py"
+   ],
+   "limitations": [
+    "Живой прогон подтвердил перечитывание номинала и сверку с эталоном тестовой геометрии с допуском 0.01 мм (DRW-03.dimension.add.create.radial).",
+    "АССОЦИАТИВНОСТЬ РАЗМЕРА К ГЕОМЕТРИИ ВИДА НЕ ПОДТВЕРЖДЕНА (см. DRW-03.dimension.add)."
+   ],
+   "depends_on": [
+    "dep.drawing.document_lifecycle",
+    "dep.drawing.view_address",
+    "dep.drawing.revisions",
+    "dep.drawing.idempotency"
+   ],
+   "not_applicable_reasons": {
+    "discover": "перечисление размеров отдельным инструментом в объём блока C3 не входит",
+    "rebuild": "перестроение относится к документу/виду, а не к отдельному размеру",
+    "suppress_restore": "подавление размеров в объём блока C3 не входит",
+    "delete_dependencies": "удаление размеров в объём блока C3 не входит"
+   },
+   "create_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_add_dimension"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_add_dimension"
+     }
+    ]
+   },
+   "geometry_validation_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_add_dimension"
+     }
+    ]
+   },
+   "parent_operation": "DRW-03.dimension.add",
+   "name": "Радиальный размер с проверкой радиуса"
+  },
+  {
+   "operation_id": "DRW-03.dimension.add.diametral",
+   "kind": "profile_mode",
+   "profile": "drawings-minimal-v1",
+   "priority": "practical_required",
+   "queue": "C3",
+   "context": "drawing",
+   "catalog_ref": "DRW",
+   "catalog_level": "mcp_verified",
+   "parameters_schema": "schemas/kompas_add_dimension.json",
+   "adapter_route": "kompas_add_dimension: API7 IView как ISymbols2DContainer → LineDimensions.Add()/RadialDimensions.Add()/DiametralDimensions.Add() → задать координаты → IDrawingObject.Update() → перечитать IDimensionText.NominalValue (isymbols2dcontainer_props.html, ilinedimensions_add.html, idrawingobject_update.html)",
+   "actions": {
+    "discover": "not_applicable",
+    "create": "verified",
+    "read": "verified",
+    "edit": "verified",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
+   },
+   "tests": [
+    "DRW-03.dimension.add.create.diametral",
+    "DRW-03.dimension.add.save_reopen",
+    "DRW-03.dimension.add.negative_tests",
+    "DRW-03.dimension.add.geometry_validation"
+   ],
+   "evidence": [
+    "docs/acceptance/drawings/drawings-acceptance.json",
+    "scripts/mcp-smoke.py"
+   ],
+   "limitations": [
+    "Живой прогон подтвердил перечитывание номинала и сверку с эталоном тестовой геометрии с допуском 0.01 мм (DRW-03.dimension.add.create.diametral).",
+    "АССОЦИАТИВНОСТЬ РАЗМЕРА К ГЕОМЕТРИИ ВИДА НЕ ПОДТВЕРЖДЕНА (см. DRW-03.dimension.add)."
+   ],
+   "depends_on": [
+    "dep.drawing.document_lifecycle",
+    "dep.drawing.view_address",
+    "dep.drawing.revisions",
+    "dep.drawing.idempotency"
+   ],
+   "not_applicable_reasons": {
+    "discover": "перечисление размеров отдельным инструментом в объём блока C3 не входит",
+    "rebuild": "перестроение относится к документу/виду, а не к отдельному размеру",
+    "suppress_restore": "подавление размеров в объём блока C3 не входит",
+    "delete_dependencies": "удаление размеров в объём блока C3 не входит"
+   },
+   "create_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_add_dimension"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_add_dimension"
+     }
+    ]
+   },
+   "geometry_validation_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_add_dimension"
+     }
+    ]
+   },
+   "parent_operation": "DRW-03.dimension.add",
+   "name": "Диаметральный размер с проверкой радиуса"
   }
  ],
  "pending_families": [

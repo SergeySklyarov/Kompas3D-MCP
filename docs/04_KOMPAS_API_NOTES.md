@@ -3935,3 +3935,110 @@ ProcessTypeEnum)` → BOOL (`…insertcomponentfromfile.html`) - адреса с
   `[X,0][Y,0][Z,0][t,1]`. Различающий контроль назван точно: компонент в `(55,0,0)` с поворотом 90°
   вокруг Z (на чистом переносе раскладку различить нельзя - единичный поворот симметричен). Пока
   раскладка API7 не измерена, матрица не может быть основанием отказа (п. 2 задания 05.10.2026).
+
+## §4.37. Чертежи (блок DRW): маршруты справки v24, названные границы и что НЕ измерено (по справке SDK, 05.10.2026)
+
+Маршруты собраны из справки SDK 24 (`https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/`, база; проверено по
+проводу: 77 из 78 страниц отдали HTTP 200, отчёт — `scratch/docs-wire-20261005-drawings/wire-report.json`).
+Живого прогона на КОМПАС в этом разделе НЕТ: раздел фиксирует, что именно документирует справка и где
+она молчит. Отдельно от этого — приёмочная группа `DRW` в `scripts/mcp-smoke.py`.
+
+- **Создание чертежа (API5, 2D).** `KompasObject.GetParamStruct(35)` (`ko_DocumentParam`) →
+  `ksDocumentParam.Init()` → `type = lt_DocSheetStandart (1)`, `regime` 0/1 → `Document2D()` →
+  `ksDocument2D.ksCreateDocument(par)`. Открытие — `ksOpenDocument(path, !visible)`; сохранение —
+  `ksSaveDocument(path)`; закрытие — `ksCloseDocument()`. Тип документа берётся из `ksDocumentParam`,
+  константы `ko_DocumentParam=35` и `lt_DocSheetStandart=1` — из поставляемого interop.
+- **Стандартные виды (API7).** `IDrawingDocument.ViewsAndLayersManager` → `IViewsAndLayersManager.Views`
+  (`IViews`); `IViews.AddStandartViews(FileName, ProjectionName, ProjectionsTypes, X, Y, Scale, DX, DY)`
+  → `BOOL`. `ProjectionsTypes` — `SAFEARRAY VT_I4` из перечисления `ProjectionType`
+  (`projectiontype.html`): `vp_Front=1, vp_Rear=2, vp_Up=3, vp_Down=4, vp_Left=5, vp_Right=6,
+  vp_IsoXYZ=7, vp_IsoYZX=8, vp_IsoZXY=9, vp_Dio=10`. Опубликованные имена — `front, rear, top, bottom,
+  left, right, isometric, iso_yzx, iso_zxy, dimetric`; имя вне списка отвергается `INVALID_ARGUMENT`
+  ДО обращения к КОМПАС. **ИСТОЧНИК — ФАЙЛ НА ДИСКЕ:** стандартный вид есть проекция файла, и
+  несохранённая модель даёт `DOCUMENT_NOT_FOUND`, а не попытку, падающую глубже.
+- **Чтение видов.** `IViews.View` / `ViewByNumber` / `ActiveView` → `IView` (`Number, Name, ViewType
+  (LtViewType), Scale, X, Y, ObjectCount`) и `IAssociationView` (`SourceFileName, ProjectionName,
+  HiddenLinesVisible, CenterLinesVisible`). `LtViewType`: `vt_System=0 … vt_Section=7`. **ГАБАРИТ ВИДА
+  `IView` НЕ ПУБЛИКУЕТ** — поле остаётся `null` с прямой пометкой, а не заполняется приблизительно.
+- **Размеры (API7).** `IView` как `ISymbols2DContainer` → `LineDimensions.Add()`, `RadialDimensions.Add()`,
+  `DiametralDimensions.Add()` — каждый `Add()` без аргументов возвращает объект, координаты которого
+  задаются затем (`X1,Y1,X2,Y2,X3,Y3,Orientation,Angle,Valid`; радиального/диаметрального —
+  `Xc,Yc,Radius,ShelfX,ShelfY`), затем `IDrawingObject.Update()`. Значение читается через
+  `IDimensionText.NominalValue`. **ГРАНИЦА, НАЗВАННАЯ ПРЯМО:** размер привязан к ТОЧКАМ вида в
+  координатах вида, а не к топологии модели; АССОЦИАТИВНОСТЬ РАЗМЕРА К МОДЕЛИ НЕ ЗАЯВЛЯЕТСЯ — справка
+  документирует точки вида, а не привязку к геометрии. Изменение маршрута модели не обновляет размер
+  автоматически.
+- **Основная надпись (API7).** `ILayoutSheet.Stamp` → `IStamp`: `IStamp.Text(Id)` ВОЗВРАЩАЕТ `IText`
+  (чтение, не установщик), запись — через `IText.Str`, затем `IStamp.Update()`; `Clear(Id)`,
+  `GetNextColumnId(Id)`, `Crossed`. **ГРАНИЦА:** справка SDK НЕ документирует числовые идентификаторы
+  ячеек — соответствие «наименование / обозначение / материал / масштаб / разработал / проверил» номерам
+  отсутствует. Поэтому номера задаёт вызывающий (`cells = {"<номер>": "<значение>"}`), а сервер
+  ПЕРЕЧИТЫВАЕТ каждую ячейку после `Update()`; несовпадение попадает в `unverified_aspects`. Ключ, не
+  являющийся числом, отвергается `INVALID_ARGUMENT` (`Text(Id)` принимает `Int32`).
+- **Экспорт (API7).** `IApplication.get_Converter(Type.Missing)` → `IConverter.GetFilter(docType, saveAs,
+  out command)` → `IConverter.Convert(InputFile, Outfile, Command, ShowParam)`. `FORMAT_DXF=1`,
+  `FORMAT_DWG=2`. **PDF в справке SDK НЕ описан как программный маршрут** и отвергается
+  `FORMAT_UNAVAILABLE` по имени. Файл подтверждается существованием, непустым размером и формой
+  содержимого (см. §4.38).
+- **Изменение вида (API7).** `IView.Scale`, `IView.X`, `IView.Y` — ЗАПИСЫВАЕМЫЕ свойства
+  (`iview_scale.html`, `iview_x.html`, `iview_y.html`; Automation `iObject.Scale = Scale`, COM
+  `put_Scale`); примечание справки: «Свойство вступает в силу после вызова метода
+  `IDrawingObject::Update`». Измерено живьём (см. §4.38).
+- **Технические требования (API7).** `IDrawingDocument.TechnicalDemand` (read-only свойство) →
+  `ITechnicalDemand.Text` (отдаёт `IText`) → `IText.Str` (запись) → `ITechnicalDemand.Update()`;
+  `ITechnicalDemand.IsCreated` (BOOL, read-only) — признак отображения. Маршрут документирован
+  (`idrawingdocument_technicaldemand.html`, `itechnicaldemand_text.html`,
+  `itechnicaldemand_update.html`, `itechnicaldemand_iscreated.html`) и реализован инструментом
+  `kompas_set_technical_demand` (см. §4.38).
+- **Чего здесь НЕ измерено.** Ассоциативность размера к модели (см. выше) непроверена: маршрут
+  `BaseObject` документирован, но получения опорного объекта ИЗ вида живьём не измерено.
+
+## §4.38. Чертежи (блок DRW): ЖИВОЙ ПРОГОН на бинарях поставки (06.10.2026)
+
+Группа `DRW` в `scripts/mcp-smoke.py` (`--drawing-only`) прогнана на поставке
+`artifacts/publish-drawings-20261006` (`KompasMcp.Host.exe` sha256 `3624117f…c500190`, `KompasMcp.Worker.exe`
+sha256 `4d2b0c53…de86ae2`). **78 строк, 78 PASS, 0 FAIL**; отчёты —
+`scratch/mcp-smoke/drawing-acceptance.json` и `…-delivery.json`. Измеренные факты ниже отменяют прежние
+формулировки там, где те стояли под сомнением.
+
+- **Трактовка `Convert` ИСПРАВЛЕНА.** Справка задаёт `1` как успех и `0` как неудачу
+  (`iconverter_convert.html`); прежнее условие `converted != 0` отвергало документированный успех.
+  Приведено к справке. Это исправление ДЕФЕКТА, а не вопрос, который «разрешит эксперимент».
+- **Форма выгрузки ИЗМЕРЕНА.** Конвертер v24 пишет И `dxf`, И `dwg` как **ZIP-контейнер** (первые
+  байты `PK\x03\x04`), а не текстовый DXF и не `AC10xx`-файл; внутри — члены `FileInfo`, `Sources`,
+  `Contents`, `Preview`, `MetaProductInfo`, `Options.xml` и `images/<…>.TechnicalDemand`. Размеры
+  живого прогона: dxf 29660 байт, dwg 29277 байт. Проверка формы принимает и текстовую форму, и
+  контейнер, и НАЗЫВАЕТ найденное (`zip:Contents`), а нераспознанная форма остаётся отказом.
+- **Изменение вида РАБОТАЕТ и подтверждено.** Запись `IView.Scale` + `IDrawingObject.Update()` на
+  ассоциативном виде дала перечитанное 1 → 2 (`structure_checked`). **`Update()` НЕ является надёжным
+  признаком исхода:** на системном виде чертежа та же запись возвращает `false` и не применяется,
+  поэтому булево публикуется отдельной проверкой, а решение об успехе берётся из ПЕРЕЧИТЫВАНИЯ.
+- **Дефект RCW, найденный живым прогоном.** Хранение RCW вида как payload ссылки и его освобождение
+  сразу после чтения давали «COM object that has been separated from its underlying RCW» на СЛЕДУЮЩЕЙ
+  команде. Исправлено: payload — адрес вида (`IView.Reference`), разрешение перечитывает коллекцию.
+- **★ Ячейки штампа: запись НЕ подтверждена перечитыванием.** `IStamp.get_Text(Id).Str` для НИ ОДНОГО
+  проверенного номера (1, 2, 3, 4, 5, 10, 100, 99999) не даёт перечитанного значения после `Update()` —
+  перечитывание возвращает пустую строку, а `Update()` ошибки не сообщает. Это ИЗМЕРЕНО и НАЗВАНО в
+  `unverified_aspects`. Маршрут изменения штампа с проверкой по перечитыванию ОСТАЁТСЯ ОТКРЫТЫМ.
+- **Технические требования РАБОТАЮТ.** `kompas_set_technical_demand` записал текст, применил и
+  перечитал его (`IsCreated=true`); ядро переносит длинные строки, поэтому сверка идёт по нормализованным
+  пробелам. Текст пережил save → close → reopen.
+- **Размеры подтверждены эталонами.** Линейный размер перечитан как `80.0` мм (эталон — ширина
+  прямоугольника тестовой геометрии, допуск 0.01 мм) — значение выведено из РАССТОЯНИЯ точек, а не взято
+  из аргумента. Радиальный и диаметральный перечитаны как `12.5` мм (эталон — радиус отверстия); у них
+  номинал задаёт вызывающий, поэтому сверка означает верность перечитывания, а не независимое измерение.
+- **`kompas_rebuild` к чертежу НЕ применима** (отвергает `WRONG_DOCUMENT_KIND`: 3D-операция). Обновление
+  ассоциативного вида после изменения модели выполняется документированным `IAssociationView.Rebuild`,
+  который инструментом НЕ выведен — действие ОСТАЁТСЯ ОТКРЫТЫМ и названо.
+- **Признака `IsModified` у документа НЕТ** в API v24 (это уже названо в `Api5Session.Inventory`:
+  несохранённость выводится из отпечатка, который ведёт сервер). Требование «представить измерения
+  `IsModified`» исполнено измерением: поля нет.
+- **Чего здесь НЕ измерено.** Ассоциативность РАЗМЕРА к геометрии модели (маршрут `BaseObject`
+  документирован, получения опорного объекта ИЗ вида живьём не измерено). Подавление (`IView.Visible`) и
+  удаление (`IDrawingObject.Delete`) вида документированы, но инструментом не выведены — наличие маршрута
+  изменения масштаба их не подтверждает.
+
+**ПРЕЖНЕЕ УТВЕРЖДЕНИЕ ОПРОВЕРГНУТО (не переписано, а помечено).** Формулировка §4.37 «отдельного
+документированного маршрута ИЗМЕНЕНИЯ вида справка v24 не даёт» была НЕВЕРНА: `IView.Scale` —
+записываемое свойство, и маршрут подтверждён живьём. Прежняя запись оставлена в истории как устаревшая.
+

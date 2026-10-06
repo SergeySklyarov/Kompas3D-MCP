@@ -238,7 +238,7 @@ public sealed partial class Api5Session
                 RetryPolicy.ReacquireContext);
         }
 
-        Api7Bridge.Rebuild(model, target.Document.Document);
+        Api7Bridge.Rebuild(model, target.Document.Document3D);
         BumpRevision(target.Document, "sketch.entity_edit");
 
         // CONFIRMATION — re-resolving the SAME address, not a return code. It was already taken

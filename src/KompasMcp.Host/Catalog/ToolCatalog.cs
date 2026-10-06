@@ -2014,6 +2014,196 @@ public static class ToolCatalog
                 requiresDocument: true,
                 requiresRevision: true),
 
+            // DRW — чертёжный блок. Маршруты документированы справкой v24 (см. коммент-блоки адаптера
+            // и docs/04_KOMPAS_API_NOTES.md). Размеры привязаны к ТОЧКАМ вида, а не к топологии модели:
+            // ассоциативность размера к модели НЕ заявляется — справка её не документирует.
+            // History: docs/decisions/drawings.md#tools
+
+            Mutation("kompas_create_drawing_views", "Создать стандартные виды чертежа",
+                "Строит группу стандартных ассоциативных видов модели документированным маршрутом "
+                + "API7: IDrawingDocument.ViewsAndLayersManager → IViews.AddStandartViews(FileName, "
+                + "ProjectionName, ProjectionsTypes, X, Y, Scale, DX, DY) (справка v24: "
+                + "iviews_addstandartviews.html). ИСТОЧНИК — ФАЙЛ МОДЕЛИ НА ДИСКЕ: стандартный вид есть "
+                + "проекция ФАЙЛА, и несохранённая модель даёт явный отказ DOCUMENT_NOT_FOUND, а не "
+                + "попытку, падающую глубже. Типы видов берутся из перечисления ProjectionType "
+                + "(projectiontype.html): front, rear, top, bottom, left, right, isometric, iso_yzx, "
+                + "iso_zxy, dimetric; имя вне перечня отвергается INVALID_ARGUMENT со списком "
+                + "поддержанных ДО обращения к КОМПАС. Ответ — виды, ПЕРЕЧИТАННЫЕ из чертежа (номер, "
+                + "тип, масштаб, файл-источник, имя проекции), а не пересказ запроса; число СОЗДАННЫХ "
+                + "видов считается сравнением коллекции до и после. Габарит вида не читается: IView "
+                + "его не публикует, и это названо в unverified_aspects, а не оставлено пустым.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("source_path", Sch.Ref("#/$defs/path")),
+                    ("projection_name", Sch.Nullable(Sch.Str(
+                        "Имя проекции из списка проекций документа-источника "
+                        + "(IAssociationView.ProjectionName). Не задано — умолчание КОМПАС «Спереди», "
+                        + "а не догадка сервера."))),
+                    ("projections", Sch.Nullable(Sch.Arr(
+                        Sch.Enum("Тип вида из перечисления ProjectionType (projectiontype.html).",
+                            "front", "rear", "top", "bottom", "left", "right",
+                            "isometric", "iso_yzx", "iso_zxy", "dimetric"),
+                        "Набор типов видов. Пусто — набор по умолчанию документа, а не выдуманный сервером."))),
+                    ("x", Sch.Num("Координата X точки привязки группы видов, в миллиметрах чертежа.", defaultTo: 0d)),
+                    ("y", Sch.Num("Координата Y точки привязки группы видов, в миллиметрах чертежа.", defaultTo: 0d)),
+                    ("scale", Sch.Nullable(Sch.Num(
+                        "Масштаб видов. Не задано — умолчание КОМПАС (1:1), а не догадка сервера.",
+                        exclusiveMin: true, exclusiveMinValue: 0d))),
+                    ("dx", Sch.Nullable(Sch.Num(
+                        "Зазор между видами по X, в миллиметрах чертежа. Не задано — умолчание ядра.",
+                        exclusiveMin: true, exclusiveMinValue: 0d))),
+                    ("dy", Sch.Nullable(Sch.Num(
+                        "Зазор между видами по Y, в миллиметрах чертежа. Не задано — умолчание ядра.",
+                        exclusiveMin: true, exclusiveMinValue: 0d)))),
+                WorkerCommands.CreateDrawingViews,
+                requiresDocument: true,
+                requiresRevision: true),
+
+            ReadOnly("kompas_list_drawing_views", "Перечень видов чертежа",
+                "Читает виды чертежа через IDrawingDocument.ViewsAndLayersManager.Views: номер, имя, "
+                + "тип, масштаб, координаты точки привязки и — для ассоциативных видов — файл-источник, "
+                + "имя проекции, видимость скрытых и осевых линий, число объектов. Только чтение; "
+                + "габарит вида не выдаётся, потому что IView его не публикует (справка маршрута не "
+                + "даёт) — поле остаётся null с прямой пометкой, а не заполняется приблизительно.",
+                Sch.Props(("document_id", Sch.Ref("#/$defs/document_id"))),
+                WorkerCommands.ListDrawingViews,
+                requiresDocument: true),
+
+            Mutation("kompas_add_dimension", "Поставить размер на виде",
+                "Линейный, радиальный или диаметральный размер в выбранном виде через "
+                + "ISymbols2DContainer (справка v24: isymbols2dcontainer.html), полученный из IView: "
+                + "LineDimensions.Add(), RadialDimensions.Add(), DiametralDimensions.Add() — каждый "
+                + "Add() без аргументов возвращает объект, координаты которого затем задаются "
+                + "(ilinedimension_props.html, iradialdimension_props.html). ОГРАНИЧЕНИЕ, НАЗВАННОЕ "
+                + "ПРЯМО: размер привязан к ТОЧКАМ вида в координатах вида, а не к топологии модели; "
+                + "АССОЦИАТИВНОСТЬ РАЗМЕРА К МОДЕЛИ НЕ ЗАЯВЛЯЕТСЯ — справка документирует точки вида, "
+                + "а не привязку размера к геометрии. Ответ — размер, ПЕРЕЧИТАННЫЙ из объекта "
+                + "размера (значение, точки, признак Valid), а не эхо запроса. Изменение маршрута "
+                + "модели влечёт перечитывание вида, но НЕ обновление размера автоматически.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("view_ref", Sch.Ref("#/$defs/reference")),
+                    ("dimension_type", Sch.Enum(
+                        "Тип размера. Перечень проверяется ДО обращения к КОМПАС.",
+                        "linear", "radial", "diametral")),
+                    ("point1", Sch.Vec3(
+                        "Первая точка привязки линейного размера; для радиального и диаметрального — "
+                        + "центр измеряемой дуги или окружности, в координатах вида.")),
+                    ("point2", Sch.Nullable(Sch.Vec3(
+                        "Вторая точка привязки линейного размера. Для радиального и диаметрального "
+                        + "игнорируется (справка описывает центр Xc/Yc и радиус, а не вторую точку)."))),
+                    ("position", Sch.Nullable(Sch.Vec3(
+                        "Положение размерной линии: для линейного — X3/Y3, для радиального и "
+                        + "диаметрального — точка полки. Не задано — член не пишется, и действует "
+                        + "умолчание ядра."))),
+                    ("value_mm", Sch.Nullable(Sch.Num(
+                        "Значение размера: для радиального и диаметрального — радиус. Не задано — "
+                        + "радиус выводится из point2 (точки на окружности); для линейного значение "
+                        + "читается как расстояние между точками.",
+                        exclusiveMin: true, exclusiveMinValue: 0d)))),
+                WorkerCommands.AddDimension,
+                requiresDocument: true,
+                requiresRevision: true),
+
+            Mutation("kompas_set_title_block", "Заполнить основную надпись",
+                "Записывает значения в ячейки основной надписи через ILayoutSheet.Stamp → IStamp "
+                + "(справка v24: ilayoutsheet_stamp.html, istamp_text.html, itext_str.html): "
+                + "IStamp.Text(Id) ВОЗВРАЩАЕТ IText (чтение — не установщик), запись идёт через "
+                + "IText.Str, затем IStamp.Update(). ГРАНИЦА, НАЗВАННАЯ ПРЯМО: справка SDK НЕ "
+                + "документирует числовые идентификаторы ячеек — соответствие «наименование / "
+                + "обозначение / материал / масштаб / разработал / проверил» номерам ячеек в ней "
+                + "отсутствует. Поэтому номера ячеек задаёт вызывающий (cells = {«<номер>»: «значение»}), "
+                + "а сервер ПЕРЕЧИТЫВАЕТ каждую ячейку после Update() и возвращает признак совпадения; "
+                + "несовпадение не скрывается, а попадает в unverified_aspects. Ключ, не являющийся "
+                + "числом, отвергается INVALID_ARGUMENT, потому что Text(Id) принимает Int32.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("cells", Sch.Map(
+                        Sch.Str("Текст ячейки."),
+                        "Объект «номер ячейки» → «текст»: ключ — строковый номер ячейки (Int32), "
+                        + "значение — строка текста. Соответствие понятий (наименование, обозначение, …) "
+                        + "номерам справка не документирует; номера берутся из раскладки самой основной "
+                        + "надписи."))),
+                WorkerCommands.SetTitleBlock,
+                requiresDocument: true,
+                requiresRevision: true),
+
+            Mutation("kompas_export_drawing", "Выгрузить чертёж в DXF или DWG",
+                "Экспорт чертежа документированным маршрутом конвертера: IApplication.Converter → "
+                + "IConverter.GetFilter(docType, saveAs, out command) → "
+                + "IConverter.Convert(InputFile, Outfile, Command, ShowParam) (справка v24: "
+                + "iapplication_converter.html, iconverter_getfilter.html, iconverter_convert.html). "
+                + "Справка задаёт результат Convert прямо: 1 — успешное завершение, 0 — неудача. "
+                + "Опубликованы ТОЛЬКО форматы, для которых справка называет программный маршрут: dxf "
+                + "и dwg (iconverter_getfilter.html: FORMAT_DXF=1, FORMAT_DWG=2). PDF в справке SDK НЕ "
+                + "описан как программный маршрут и отвергается FORMAT_UNAVAILABLE по имени, а не "
+                + "предпринимается вслепую. Результат подтверждается НЕЗАВИСИМОЙ проверкой файла: "
+                + "существование, непустой размер и форма содержимого — конвертер v24 пишет выгрузку "
+                + "ZIP-контейнером (сигнатура «PK»), и это НАЗВАНО в ответе, как и обычные сигнатуры "
+                + "(заголовок секции для DXF, «AC10xx» для DWG). Так документированный успех, не "
+                + "давший файла, не проходит, а документированная неудача не превращается в успех "
+                + "из-за наличия файла. Перезапись существующего файла возможна только с явным "
+                + "overwrite=true.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("output_path", Sch.Ref("#/$defs/output_path")),
+                    ("format", Sch.Enum(
+                        "Формат выгрузки. PDF не документирован как программный маршрут и не принимается.",
+                        "dxf", "dwg")),
+                    ("overwrite", Sch.Nullable(Sch.Bool(
+                        "Перезаписать существующий файл. По умолчанию false: перезапись без явного "
+                        + "согласия — молчаливая потеря данных.", false)))),
+                WorkerCommands.ExportDrawing,
+                requiresDocument: true),
+
+            Mutation("kompas_edit_view", "Изменить вид чертежа",
+                "Изменяет СУЩЕСТВУЮЩИЙ вид документированными записываемыми свойствами: масштаб "
+                + "(IView.Scale) и точку привязки (IView.X / IView.Y). Справка v24 задаёт их прямо "
+                + "записываемыми и требует IDrawingObject.Update: «Свойство вступает в силу после вызова "
+                + "метода IDrawingObject::Update» (iview_scale.html, iview_x.html, iview_y.html, "
+                + "idrawingobject_update.html). Ответ даёт вид ДО и ПОСЛЕ и признак совпадения "
+                + "перечитанных полей с заданными: положительное доказательство — ИЗМЕНЕНИЕ И "
+                + "ПЕРЕЧИТЫВАНИЕ того же объекта, а не добавление нового вида. Не заданное свойство не "
+                + "пишется (null — «не трогать», а не выдуманное умолчание). Отдельно: подавление вида "
+                + "(IView.Visible, «видимый или погашенный») и удаление (IDrawingObject.Delete) "
+                + "документированы, но этим инструментом НЕ выполняются — наличие маршрута изменения "
+                + "масштаба их не подтверждает.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("view_ref", Sch.Ref("#/$defs/reference")),
+                    ("scale", Sch.Nullable(Sch.Num(
+                        "Новый масштаб вида. Не задано — масштаб не трогается.",
+                        exclusiveMin: true, exclusiveMinValue: 0d))),
+                    ("x", Sch.Nullable(Sch.Num("Новая координата привязки по X, в миллиметрах чертежа."))),
+                    ("y", Sch.Nullable(Sch.Num("Новая координата привязки по Y, в миллиметрах чертежа.")))),
+                WorkerCommands.EditView,
+                requiresDocument: true,
+                requiresRevision: true),
+
+            Mutation("kompas_set_technical_demand", "Записать технические требования чертежа",
+                "Пишет блок технических требований документированным маршрутом API7: "
+                + "IDrawingDocument.TechnicalDemand → ITechnicalDemand.Text (read-only свойство, "
+                + "отдающее интерфейс IText) → IText.Str (запись) → ITechnicalDemand.Update() "
+                + "(«применить заданные параметры технических требований») → ПЕРЕЧИТЫВАНИЕ "
+                + "(справка v24: idrawingdocument_technicaldemand.html, itechnicaldemand_text.html, "
+                + "itechnicaldemand_update.html, itechnicaldemand_iscreated.html). Ответ несёт "
+                + "перечитанный текст и признак IsCreated («отображение технических требований в "
+                + "документе»): успех Update() сам по себе доказательством не считается. ГРАНИЦА, "
+                + "НАЗВАННАЯ ПРЯМО: размещение блока на листе (AutoPlacement, BlocksGabarits) "
+                + "сервером не задаётся и не проверяется.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("text", Sch.Str(
+                        "Полный текст технических требований. Строки разделяются переводом строки."))),
+                WorkerCommands.SetTechnicalDemand,
+                requiresDocument: true,
+                requiresRevision: true),
+
             Mutation("kompas_probe_units", "Замер единиц",
                 "Строит известную геометрию и возвращает сырые показания всех измерительных вызовов. Калибровка, а не догадка: именно так подтверждалось, что GetLength(0) — сантиметры.",
                 Sch.Props(

@@ -367,7 +367,7 @@ public partial class Api5Session
         }
 
         // Without the rebuild the API7 write stays a representation.
-        Api7Bridge.Rebuild(container, document.Document);
+        Api7Bridge.Rebuild(container, document.Document3D);
         BumpRevision(document, "pattern." + family);
 
         var volumeAfter = ReadVolume(document);
@@ -593,7 +593,7 @@ public partial class Api5Session
 
     private IModelContainer RequirePatternContainer(Api7Bridge bridge, DocumentEntry document)
     {
-        var container = bridge.ContainerFor(document.Document, document.Id, document.Revision);
+        var container = bridge.ContainerFor(document.Document3D, document.Id, document.Revision);
         if (container is null)
         {
             throw new KompasContractException(

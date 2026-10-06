@@ -110,6 +110,12 @@ public static class ErrorCodes
     /// is possible if the client explicitly acknowledges the unknown state
     /// (<c>acknowledge_unknown_document_state=true</c>); there it is not.</remarks>
     public const string DocumentStateUnknown = "DOCUMENT_STATE_UNKNOWN";
+
+    /// <summary>The requested interchange format has no documented programmatic route in the target version.
+    /// A separate code, not <see cref="InvalidArgument"/>: the FORMAT is a legitimate export target of the
+    /// product (PDF is exported from the UI), so "unknown argument" would misname the reason. The refusal
+    /// names the format and the documented alternatives.</summary>
+    public const string FormatUnavailable = "FORMAT_UNAVAILABLE";
 }
 
 /// <summary>Default Russian wording per error code. Callers may override the message when they have more specific
@@ -147,6 +153,10 @@ public static class ErrorMessages
         [ErrorCodes.ExternalReferences] = "Обнаружены внешние ссылки, требующие явного решения.",
         [ErrorCodes.ExportFailed] = "Экспорт не удался.",
         [ErrorCodes.ImportFailed] = "Импорт не удался.",
+        [ErrorCodes.FormatUnavailable] =
+            "Для запрошенного формата экспорта нет документированного программного маршрута в целевой " +
+            "версии. Справка SDK v24 описывает конвертер только для DXF (команда 1) и DWG (команда 2), " +
+            "поэтому PDF в этот выпуск не входит.",
         [ErrorCodes.RasterRefused] =
             "Ядро отказало в сохранении в растровый формат (SaveAsToRasterFormat вернул false или бросил исключение).",
         [ErrorCodes.RasterEmpty] =

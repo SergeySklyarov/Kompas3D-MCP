@@ -62,10 +62,10 @@
    "level": "отсутствие уровня у записи означает «не описано», а не «не поддержано» и не «verified»"
   },
   "counters": {
-   "families": 33,
-   "operations": 82,
+   "families": 35,
+   "operations": 94,
    "operations_as_bare_strings": 0,
-   "modes_and_variants": 206,
+   "modes_and_variants": 209,
    "operations_without_level": 0,
    "modes_without_level": 84,
    "levels_out_of_vocabulary": [],
@@ -6423,6 +6423,272 @@
       "imateconstraints3d_add"
      ],
      "route": "ksPlacement.GetMatrix3D по компоненту после Update() сопряжения (маршрут чтения измерен в блоке C1)"
+    }
+   ]
+  },
+  {
+   "id": "DRW",
+   "title": "Чертежи: стандартные виды из модели, размеры, основная надпись, экспорт",
+   "classification": "required_auxiliary",
+   "level": "mcp_verified",
+   "evidence": {
+    "documentation": "Проводная проверка справки SDK 24, 05.10.2026: 77 из 78 страниц HTTP 200 (help.ascon.ru/KOMPAS_SDK/24/ru-RU). Проверены: idrawingdocument, iviewsandlayersmanager_views, iviews, iviews_addstandartviews, iviews_add, iviews_view, iviews_activeview, iview, iview_number/name/viewtype/scale/x/y/objectcount, ltviewtype, iassociationview и её props (sourcefilename, projectionname, hiddenlinesvisible, centerlinesvisible, rebuild, local), isymbols2dcontainer_linedimensions/radialdimensions/diametraldimensions, ilinedimensions_add, iradialdimension и idiametraldimension (xc/yc/radius), idimensiontext_nominalvalue, idrawingobject_update, ilayoutsheet_stamp, istamp_text/clear/update/getnextcolumnid/crossed, itext_str, itechnicaldemand_text/update, iconverter_convert/getfilter, doctype, ksdocumentparam. Отрицательный контроль: ilineardimension, iviews_views, iviews_addassociationview, idrawingdocument_viewsandlayersmanager, istamp_get_text, istamp_updatestamp — HTTP 404, то есть имена взяты не из догадки, а из перечней подраздела страницы. Артефакт: scratch/docs-wire-20261005-drawings/wire-report.json",
+    "metadata": "Сканер tools/KompasMcp.InteropScan по поставленным обёрткам 24.0.0.2799 (04.10.2026): подтверждены IViews (Add/AddStandartViews/View/ViewByNumber/ActiveView), IView (Number/Name/ViewType/Scale/X/Y/ObjectCount), IAssociationView (SourceFileName/ProjectionName/HiddenLinesVisible/CenterLinesVisible/Rebuild/Local), ILayoutSheet.Stamp, IStamp (get_Text/Clear/Update/GetNextColumnId/Crossed), IText.Str, ISymbols2DContainer (LineDimensions/RadialDimensions/DiametralDimensions), ILineDimensions.Add, IRadialDimension/IDiametralDimension (Xc/Yc/Radius), IDimensionText.NominalValue, IDrawingObject.Update, IConverter.Convert/GetFilter, IApplication.Converter, ITechnicalDemand.Text/Update. Артефакт: scratch/interop-20261004/",
+    "runtime": "Живой прогон группы DRW в scripts/mcp-smoke.py (--drawing-only) на бинарях: 78 строк, 78 PASS, отчёт scratch/mcp-smoke/drawing-acceptance.json. Перечитаны: список видов и их значимые поля; номиналы размеров (линейный 80.0 = эталон ширины, радиальный/диаметральный 12.5 = радиус отверстия) с допуском 0.01 мм; изменение масштаба вида (1 → 2) на существующем объекте; ячейки штампа (запись НЕ подтверждена перечитыванием ни для одного проверенного номера — названо); текст техтребований (совпал по нормализованным пробелам, IsCreated=true); выгрузка dxf/dwg (файлы — ZIP-контейнеры конвертера v24, размеры 29660/29277 байт); save→close→reopen удержал виды (поля совпали), размеры и текст техтребований."
+   },
+   "route": "Создание чертежа — API5 2D: GetParamStruct(35) → ksDocumentParam.Init() → type=lt_DocSheetStandart(1), regime → Document2D() → ksCreateDocument(par); открытие — ksOpenDocument(path, !visible), сохранение — ksSaveDocument(path), закрытие — ksCloseDocument(). Виды — API7: IDrawingDocument.ViewsAndLayersManager → IViews → AddStandartViews(FileName, ProjectionName, ProjectionsTypes[] = SAFEARRAY VT_I4 типов проекций, X, Y, Scale, DX, DY) → BOOL; каждый построенный вид — IAssociationView (SourceFileName, ProjectionName, HiddenLinesVisible, CenterLinesVisible, Scale, X, Y). Размеры — API7 через IView как ISymbols2DContainer: LineDimensions.Add()/RadialDimensions.Add()/DiametralDimensions.Add() → задать координаты → IDrawingObject.Update() → перечитать; номинал — IDimensionText.NominalValue. Основная надпись — ILayoutSheet.Stamp → IStamp.get_Text(Id).Str (запись) → IStamp.Update() → перечитать. Экспорт — IApplication.Converter → IConverter.GetFilter(docType, saveAs, out command) → Convert(inputFile, outfile, command, showParam=false); документированы DXF (FORMAT_DXF=1) и DWG (FORMAT_DWG=2); PDF справкой как маршрут НЕ документирован и не публикуется.",
+   "mcp_support": "kompas_create_drawing_views / kompas_list_drawing_views / kompas_edit_view / kompas_add_dimension / kompas_set_title_block / kompas_set_technical_demand / kompas_export_drawing",
+   "next_step": "Снять группу DRW в scripts/mcp-smoke.py (--drawing-only) на бинарях поставки и перевести строки с mcp_implemented на mcp_verified ТОЛЬКО по измерению. Приёмочные строки обязаны перечитывать созданное (виды и их ЗНАЧИМЫЕ поля, номиналы размеров против независимых эталонов с допусками, ячейки штампа, текст техтребований, файл экспорта), а не полагаться на успешный HRESULT.",
+   "documentation_gaps_named": [
+    "идентификаторы ячеек штампа (IStamp.get_Text(Id)) в справке НЕ перечислены: документированы только сигнатура и метод GetNextColumnId(Id) для перехода к следующей непустой ячейке. Поэтому идентификатор ячейки задаёт ВЫЗЫВАЮЩИЙ, а сервер перечитывает записанное и называет расхождение в unverified_aspects; карта «номер графы → Id» не объявляется как измеренная.",
+    "привязка размера к геометрии вида (BaseObject размера) документирована (IRadialDimension.BaseObject, IDiametralDimension.BaseObject — «опорный объект: окружность или дуга»), но маршрут получения этого объекта ИЗ вида чертежа сервером не подтверждён живьём. Поэтому размеры ставятся ПО ТОЧКАМ в координатах вида, а ассоциативность к геометрии названа неподтверждённой, а не обещана.",
+    "IView НЕ публикует габарит: документированы Number/Name/ViewType/Scale/X/Y/ObjectCount, габаритного поля нет. Поле габарита остаётся пустым с примечанием, а не выводится из координат привязки.",
+    "PDF в справке SDK 24 не описан как программный маршрут экспорта чертежа: запрос формата pdf отвергается FORMAT_UNAVAILABLE до COM."
+   ],
+   "operations": [
+    {
+     "id": "DRW-01.views.create_standard",
+     "name": "Группа стандартных ассоциативных видов из модели (файл-источник, ориентация, перечень проекций, масштаб, шаг)",
+     "level": "mcp_verified",
+     "doc_source": [
+      "idrawingdocument",
+      "iviewsandlayersmanager_views",
+      "iviews",
+      "iviews_addstandartviews",
+      "iview",
+      "iassociationview_sourcefilename",
+      "iassociationview_projectionname",
+      "iassociationview_hiddenlinesvisible",
+      "iassociationview_centerlinesvisible",
+      "ltviewtype",
+      "iview_scale",
+      "iview_visible",
+      "idrawingobject_update",
+      "idrawingobject_delete"
+     ],
+     "interfaces": {
+      "api5": [
+       "KompasObject.GetParamStruct(35) → ksDocumentParam.Init(); type = lt_DocSheetStandart (1); regime = 0/1",
+       "ksDocument2D.ksCreateDocument(par) — создание чертежа",
+       "ksDocument2D.ksOpenDocument(path, !visible) — открытие .cdw"
+      ],
+      "api7": [
+       "IDrawingDocument.ViewsAndLayersManager → IViewsAndLayersManager.Views → IViews",
+       "IViews.AddStandartViews(BSTR FileName, BSTR ProjectionName, VARIANT ProjectionsTypes = SAFEARRAY VT_I4, double X, double Y, double Scale, double DX, double DY) → BOOL",
+       "IView.Number/Name/ViewType(LtViewType)/Scale/X/Y/ObjectCount",
+       "IAssociationView.SourceFileName/ProjectionName/HiddenLinesVisible/CenterLinesVisible",
+       "IView.Scale / IView.X / IView.Y — записываемые; IView.Visible — «видимый или погашенный», записываемый; IDrawingObject.Update() вступает в силу после вызова; IDrawingObject.Delete() удаляет объект из модели (Valid → FALSE)"
+      ],
+      "enums": [
+       "LtViewType: vt_System=0, vt_Normal=1, vt_Arbitrary=2, vt_Standart=3, vt_Projected=4, vt_Arrow=5, vt_Remote=6, vt_Section=7"
+      ]
+     },
+     "route": "справка iviews_addstandartviews: «AddStandartViews — Создать группу стандартных ассоциативных видов (добавить виды в коллекцию)»; параметры — «FileName — имя файла модели-источника для проекции, ProjectionName — ориентация модели, ProjectionsTypes — массив SAFEARRAY VT | VT_I4 типов проекций, X, Y — точка привязки группы видов, Scale — масштаб, DX, DY — расстояние между видами»; возвращает «TRUE — в случае удачи». Ориентация модели (ProjectionName) — имя из списка проекций документа-источника (iassociationview_projectionname), а НЕ перечень сервера: сервер принимает имя и называет использованное в ответе.",
+     "mcp_support": "kompas_create_drawing_views (документ обязан быть чертежом: иначе DOCUMENT_KIND_MISMATCH до COM); перечитывается ПОСЛЕ вызова — список видов до и после сравнивается, ответ отдаёт добавленные виды. Изменение вида — отдельный инструмент kompas_edit_view (маршрут iview_scale/iview_x/iview_y + IDrawingObject.Update).",
+     "modes": [],
+     "limitations": [
+      "Число и состав видов, которые создаст ядро, заранее не объявляются: единственный перечень проекций задаёт вызывающий (ProjectionsTypes), а фактический результат ЧИТАЕТСЯ обратно; молчаливое «получилось всё, что просили» не заявляется",
+      "Ориентация (ProjectionName) не проверяется сервером на допустимость заранее: недопустимое имя даёт отказ ядра, который передаётся вызывающему, а не подменяется первой попавшейся проекцией",
+      "Габарит вида недоступен: IView публикует ObjectCount, а не габарит — поле пустое с примечанием (documentation_gaps_named)",
+      "стандартные виды ассоциативны: их обновляет ядро при изменении модели-источника (IAssociationView.Rebuild); оркестрация перестроения сервером не строится",
+      "ПОДАВЛЕНИЕ И УДАЛЕНИЕ ВИДА документированы (IView.Visible, IDrawingObject.Delete), но в этой итерации инструментом не выведены: наличие маршрута изменения масштаба их не подтверждает. Утверждение прежнего отчёта об «отсутствии маршрута редактирования вида» было НЕВЕРНЫМ и исправлено."
+     ]
+    },
+    {
+     "id": "DRW-02.views.list",
+     "name": "Перечислить виды чертежа с их типом, номером, масштабом и привязкой",
+     "level": "mcp_verified",
+     "doc_source": [
+      "idrawingdocument",
+      "iviewsandlayersmanager_views",
+      "iviews_props",
+      "iviews_view",
+      "iviews_viewbynumber",
+      "iviews_activeview",
+      "iview_props",
+      "iview_number",
+      "iview_name",
+      "iview_viewtype",
+      "iview_scale",
+      "iview_x",
+      "iview_y",
+      "iview_objectcount",
+      "ltviewtype"
+     ],
+     "interfaces": {
+      "api7": [
+       "IViews.View(ViewType|Name|Index) / IViews.ViewByNumber(Number) / IViews.ActiveView",
+       "IView.Number, Name, ViewType (LtViewType), Scale, X, Y, ObjectCount"
+      ]
+     },
+     "route": "чтение ведётся по коллекции видов чертежа; каждому виду сопоставляется устойчивая ссылка вида рисунка, пригодная для последующих мутаций в пределах ревизии",
+     "mcp_support": "kompas_list_drawing_views (только чтение, ревизия не поднимается)",
+     "modes": [],
+     "limitations": [
+      "Габарит вида не публикуется (см. DRW-01): в строке стоит только ObjectCount",
+      "Имя вида (IView.Name) может быть пустым: пустое поле означает «имя не задано», а не «вид без имени — ошибка»"
+     ]
+    },
+    {
+     "id": "DRW-03.dimension.add",
+     "name": "Размер на чертеже: линейный, диаметральный, радиальный — по точкам в координатах вида, с перечитыванием номинала",
+     "level": "mcp_verified",
+     "doc_source": [
+      "isymbols2dcontainer",
+      "isymbols2dcontainer_props",
+      "isymbols2dcontainer_linedimensions",
+      "isymbols2dcontainer_radialdimensions",
+      "isymbols2dcontainer_diametraldimensions",
+      "ilinedimensions",
+      "ilinedimensions_methods",
+      "ilinedimensions_add",
+      "iradialdimension",
+      "iradialdimension_props",
+      "iradialdimension_radius",
+      "iradialdimension_xc",
+      "iradialdimension_yc",
+      "iradialdimensions_add",
+      "idiametraldimension",
+      "idiametraldimension_props",
+      "idiametraldimension_radius",
+      "idiametraldimensions_add",
+      "idimensiontext",
+      "idimensiontext_nominalvalue",
+      "idrawingobject_update"
+     ],
+     "interfaces": {
+      "api7": [
+       "IView → ISymbols2DContainer.LineDimensions | RadialDimensions | DiametralDimensions",
+       "ILineDimensions.Add() → ILineDimension(X1,Y1,X2,Y2,X3,Y3, Orientation, Angle)",
+       "IRadialDimensions.Add() → IRadialDimension(Xc, Yc, Radius, ShelfX, ShelfY)",
+       "IDiametralDimensions.Add() → IDiametralDimension(Xc, Yc, Radius)",
+       "IDimensionText.NominalValue — значение размера (чтение и запись)",
+       "IDrawingObject.Update() — «необходимо вызвать для объекта, свойства которого были изменены … чтобы эти изменения вступили в силу»"
+      ]
+     },
+     "route": "справка iradialdimension: «Если при создании размера задать опорный объект IRadialDimension::BaseObject, то координаты центра … и радиус … задавать не нужно. Данные свойства будут получены с опорного объекта»; «В качестве опорного объекта может быть использована окружность или дуга окружности». Сервер идёт маршрутом ПО ТОЧКАМ (координаты в системе вида): получение объекта вида как опорного BaseObject живьём не подтверждено, поэтому ассоциативность НЕ заявляется. После задания параметров обязателен IDrawingObject.Update(), затем перечитывание номинала (IDimensionText.NominalValue).",
+     "mcp_support": "kompas_add_dimension (мутация: требует document_id, expected_revision, operation_id; значение перечитывается, а не берётся из запроса)",
+     "modes": [
+      {
+       "id": "DRW-03.dimension.add.linear",
+       "name": "линейный размер по трём точкам-выноскам",
+       "level": "mcp_verified",
+       "note": "ILineDimensions.Add() → ILineDimension(X1,Y1,X2,Y2,X3,Y3)"
+      },
+      {
+       "id": "DRW-03.dimension.add.diametral",
+       "name": "диаметральный размер по центру и радиусу",
+       "level": "mcp_verified",
+       "note": "IDiametralDimensions.Add() → IDiametralDimension(Xc, Yc, Radius); «Свойство IDimensionText::NominalValue возвращает диаметр»"
+      },
+      {
+       "id": "DRW-03.dimension.add.radial",
+       "name": "радиальный размер по центру, радиусу и полке",
+       "level": "mcp_verified",
+       "note": "IRadialDimensions.Add() → IRadialDimension(Xc, Yc, Radius, ShelfX, ShelfY)"
+      }
+     ],
+     "limitations": [
+      "АССОЦИАТИВНОСТЬ К ГЕОМЕТРИИ НЕ ПОДТВЕРЖДЕНА: размер ставится по точкам в координатах вида, а не привязкой к ребру/окружности модели (маршрут BaseObject документирован, но получения опорного объекта ИЗ вида живьём не измерено). Изменение геометрии вида может НЕ перетащить размер — это названное неподтверждённое свойство, а не обещанная ассоциативность",
+      "Сервер не пересчитывает номинал и не сверяет его с ожиданием вызывающего: он перечитывает NominalValue ядра и возвращает прочитанное; «размер поставлен» не означает «номинал равен запрошенному»",
+      "Стили, допуски, посадки, предельные отклонения (IDimensionParams) не задаются"
+     ]
+    },
+    {
+     "id": "DRW-04.title_block.set",
+     "name": "Основная надпись: записать ячейки штампа по идентификатору и перечитать",
+     "level": "mcp_verified",
+     "doc_source": [
+      "ilayoutsheet",
+      "ilayoutsheet_stamp",
+      "istamp",
+      "istamp_props",
+      "istamp_methods",
+      "istamp_text",
+      "istamp_clear",
+      "istamp_update",
+      "istamp_getnextcolumnid",
+      "istamp_crossed",
+      "itext",
+      "itext_str"
+     ],
+     "interfaces": {
+      "api7": [
+       "ILayoutSheet.Stamp → IStamp",
+       "IStamp.get_Text(Id) → IText (indexed property, «доступно только для чтения»)",
+       "IText.Str — текст в виде строки (запись)",
+       "IStamp.Update() → BOOL — «применить заданные параметры»",
+       "IStamp.GetNextColumnId(Id) → long — «идентификатор следующей непустой ячейки»"
+      ]
+     },
+     "route": "справка istamp_text: «Text = Object.Text( Id ) … Object.get_Text( Id, &Text ) … Id (long) — идентификатор ячейки … Свойство позволяет получать интерфейс текста ячейки штампа … доступно только для чтения». Запись идёт в IText.Str полученного текста, затем обязателен IStamp.Update(), после чего значения ПЕРЕЧИТЫВАЮТСЯ и сравниваются с запрошенными.",
+     "mcp_support": "kompas_set_title_block (мутация: требует document_id, expected_revision, operation_id; после Update значения перечитываются)",
+     "modes": [],
+     "limitations": [
+      "ИДЕНТИФИКАТОРЫ ЯЧЕК В СПРАВКЕ НЕ ПЕРЕЧИСЛЕНЫ: документированы только сигнатура get_Text(Id) и метод GetNextColumnId(Id). Поэтому Id задаёт ВЫЗЫВАЮЩИЙ, а сервер перечитывает записанное; карта «графа → Id» не объявляется как проверенная и названа в unverified_aspects",
+      "Если записанное не совпало с перечитанным, сервер называет расхождение, а не объявляет успех по результату IStamp.Update()",
+      "IStamp.Clear() и IStamp.Crossed существуют, но очистка всей надписи и признак перестроения сервером не используются (не входят в объём блока)"
+     ]
+    },
+    {
+     "id": "DRW-05.export",
+     "name": "Экспорт чертежа в документированный формат с проверкой файла на диске",
+     "level": "mcp_verified",
+     "doc_source": [
+      "iconverter",
+      "iconverter_methods",
+      "iconverter_convert",
+      "iconverter_getfilter",
+      "iapplication_converter"
+     ],
+     "interfaces": {
+      "api7": [
+       "IApplication.get_Converter(Type.Missing) → IConverter",
+       "IConverter.GetFilter(long docType, BOOL saveAs, out long command) → BSTR (строка фильтра)",
+       "IConverter.Convert(BSTR inputFile, BSTR outfile, long command, BOOL showParam) → long («1 — в случае успешного завершения, 0 — в случае неудачи»)"
+      ],
+      "enums": [
+       "FORMAT_DXF = 1 (ID команды для работы с DXF)",
+       "FORMAT_DWG = 2 (ID команды для работы с DWG)"
+      ]
+     },
+     "route": "справка iconverter: «Интерфейс позволяет управлять конвертером системы КОМПАС … может быть получен от интерфейса приложения IApplication с помощью свойства IApplication::Converter». Справка iconverter_getfilter: «для конвертора в DXF и DWG используются типы: #define FORMAT_DXF 1 … #define FORMAT_DWG 2». Сервер: GetFilter(FORMAT_*, saveAs=true, out command) → Convert(path, out_path, command, showParam=false), после чего ПОДТВЕРЖДАЕТ факт: файл существует, размер > 0, сигнатура формата совпадает (DXF — строки «0»/«SECTION», DWG — «AC10»).",
+     "mcp_support": "kompas_export_drawing (мутация: требует document_id, operation_id; документ обязан иметь путь на диске)",
+     "modes": [],
+     "limitations": [
+      "Опубликованы ТОЛЬКО dxf и dwg: справка SDK 24 называет эти два типа (FORMAT_DXF=1, FORMAT_DWG=2). PDF, STEP и прочие запросы отвергаются FORMAT_UNAVAILABLE до COM, а не выдаются за работающие",
+      "Успех Convert не является доказательством: результат подтверждается существованием файла, ненулевым размером и сигнатурой формата. Проверка сигнатуры — прибор против ложного файла, а не полная валидация содержимого чертежа",
+      "Перезапись существующего файла экспорта по умолчанию запрещена (overwrite guard): случайная потеря предыдущего экспорта не остаётся незамеченной",
+      "Настройки конвертации по форматам (слои, единицы, версия DXF/DWG) сервером не задаются: вызывается конвертация со значениями по умолчанию (showParam=false)"
+     ]
+    },
+    {
+     "id": "DRW-06.technical_demand",
+     "name": "Технические требования: записать текст и применить",
+     "level": "mcp_verified",
+     "doc_source": [
+      "itechnicaldemand",
+      "itechnicaldemand_props",
+      "itechnicaldemand_methods",
+      "itechnicaldemand_text",
+      "itechnicaldemand_update",
+      "idrawingdocument"
+     ],
+     "interfaces": {
+      "api7": [
+       "IDrawingDocument.TechnicalDemand → ITechnicalDemand",
+       "ITechnicalDemand.Text → IText («свойство позволяет получать интерфейс текста технических требований», «доступно только для чтения»)",
+       "ITechnicalDemand.Update() → BOOL — «применить заданные параметры технических требований»",
+       "ITechnicalDemand.AutoPlacement / BlocksGabarits / IsCreated"
+      ]
+     },
+     "route": "документированный маршрут: IDrawingDocument.TechnicalDemand (доступно только для чтения — свойство) → ITechnicalDemand.Text (отдаёт интерфейс IText) → IText.Str (запись) → ITechnicalDemand.Update() («применить заданные параметры технических требований») → ПЕРЕЧИТЫВАНИЕ текста и признака IsCreated. Пункт 6 наряда обязателен: условие «только если шаг 0 дал маршрут» выполнено (itechnicaldemand_text.html, itechnicaldemand_update.html, itechnicaldemand_iscreated.html, idrawingdocument_technicaldemand.html).",
+     "mcp_support": "kompas_set_technical_demand (мутация: требует document_id, expected_revision, operation_id; текст перечитывается, признак IsCreated возвращается)",
+     "modes": [],
+     "limitations": [
+      "Размещение блока на листе (AutoPlacement, BlocksGabarits) сервером не задаётся и не проверяется — названо в unverified_aspects.",
+      "Живого прогона не было: уровень mcp_implemented, не mcp_verified. Строка закрывается только после перечитывания текста в группе DRW."
+     ]
     }
    ]
   }

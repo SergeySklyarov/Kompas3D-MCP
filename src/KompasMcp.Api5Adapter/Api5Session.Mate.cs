@@ -111,7 +111,7 @@ public sealed partial class Api5Session
                 partialEffects: true);
         }
 
-        document.Document.RebuildDocument();
+        document.Document3D.RebuildDocument();
         var valid = Bool(() => mate.Valid);
         var after = RequireMateCount(document, mates7, "после создания");
 
@@ -239,7 +239,7 @@ public sealed partial class Api5Session
                 partialEffects: true);
         }
 
-        document.Document.RebuildDocument();
+        document.Document3D.RebuildDocument();
         var after = SafeDouble(() => mate.ParamValue);
         BumpRevision(document, "mate.set_parameter");
 
@@ -332,7 +332,7 @@ public sealed partial class Api5Session
                 partialEffects: true);
         }
 
-        document.Document.RebuildDocument();
+        document.Document3D.RebuildDocument();
         var afterRead = TryRead(() => mate.Fixed);
         BumpRevision(document, "mate.set_fixed");
 
@@ -404,7 +404,7 @@ public sealed partial class Api5Session
         bool removed;
         try
         {
-            removed = document.Document.RemoveMateConstraint(payload.ConstraintType, first, second);
+            removed = document.Document3D.RemoveMateConstraint(payload.ConstraintType, first, second);
         }
         catch (COMException ex)
         {
@@ -415,7 +415,7 @@ public sealed partial class Api5Session
                 partialEffects: true);
         }
 
-        document.Document.RebuildDocument();
+        document.Document3D.RebuildDocument();
         var after = MateConstraintCount(document, "после удаления");
 
         if (!removed || after >= before)
@@ -583,7 +583,7 @@ public sealed partial class Api5Session
     /// </summary>
     private static int MateConstraintCount(DocumentEntry document, string stage)
     {
-        var count = SafeInt(() => (document.Document.MateConstraintCollection() as ksMateConstraintCollection)!.GetCount());
+        var count = SafeInt(() => (document.Document3D.MateConstraintCollection() as ksMateConstraintCollection)!.GetCount());
         if (count is not null)
         {
             return count.Value;
@@ -653,7 +653,7 @@ public sealed partial class Api5Session
     {
         try
         {
-            return document.Document.MateConstraintCollection() is ksMateConstraintCollection mates
+            return document.Document3D.MateConstraintCollection() is ksMateConstraintCollection mates
                 && ordinal >= 0 && ordinal < mates.GetCount()
                 && mates.GetByIndex(ordinal) is ksMateConstraint mate
                     ? mate
@@ -686,7 +686,7 @@ public sealed partial class Api5Session
         ksMateConstraintCollection? mates;
         try
         {
-            mates = document.Document.MateConstraintCollection() as ksMateConstraintCollection;
+            mates = document.Document3D.MateConstraintCollection() as ksMateConstraintCollection;
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException)
         {

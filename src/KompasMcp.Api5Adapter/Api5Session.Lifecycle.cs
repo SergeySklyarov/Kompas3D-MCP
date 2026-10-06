@@ -47,7 +47,7 @@ public partial class Api5Session
         var stateBefore = ReadFeatureState(entity);
 
         feature.excluded = command.Suppressed;
-        document.Document.RebuildDocument();
+        document.Document3D.RebuildDocument();
         BumpRevision(document, command.Suppressed ? "feature.suppress" : "feature.restore");
 
         // Re-read from a fresh feature object: the one held during the write may be a cached view, and
@@ -239,7 +239,7 @@ public partial class Api5Session
         bool deleted;
         try
         {
-            deleted = document.Document.DeleteObject(entity);
+            deleted = document.Document3D.DeleteObject(entity);
         }
         catch (COMException ex)
         {
@@ -252,7 +252,7 @@ public partial class Api5Session
                 partialEffects: true);
         }
 
-        document.Document.RebuildDocument();
+        document.Document3D.RebuildDocument();
         BumpRevision(document, "feature.delete");
 
         var treeAfter = FeatureTreeElements(document);

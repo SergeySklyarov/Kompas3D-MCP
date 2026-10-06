@@ -376,7 +376,7 @@ public partial class Api5Session
     {
         try
         {
-            return BridgeFor(document).ContainerFor(document.Document, document.Id, document.Revision);
+            return BridgeFor(document).ContainerFor(document.Document3D, document.Id, document.Revision);
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException or KompasContractException)
         {

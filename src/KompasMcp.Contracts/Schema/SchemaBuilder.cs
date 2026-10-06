@@ -50,8 +50,27 @@ public static class Sch
         return obj;
     }
 
-    public static JsonObject Str(string? description = null, string? pattern = null, int? minLength = null, int? maxLength = null)
+    /// <summary>Free-form object used as a map: arbitrary keys, every value the given schema. A closed object
+    /// with a fixed property list is the wrong shape for a key set the DOCUMENTATION does not enumerate —
+    /// putting <c>additionalProperties</c> inside <c>properties</c> would publish a literal key named
+    /// "additionalProperties" and the schema would no longer be a map. INVARIANT: the value schema lives on the
+    /// object itself, keys stay unconstrained.</summary>
+    public static JsonObject Map(JsonObject valueSchema, string? description = null)
     {
+        var obj = new JsonObject
+        {
+            ["type"] = "object",
+            ["additionalProperties"] = valueSchema,
+        };
+        if (description is not null)
+        {
+            obj["description"] = description;
+        }
+
+        return obj;
+    }
+
+    public static JsonObject Str(string? description = null, string? pattern = null, int? minLength = null, int? maxLength = null)    {
         var obj = new JsonObject { ["type"] = "string" };
         if (description is not null)
         {

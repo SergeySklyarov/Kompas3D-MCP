@@ -76,7 +76,7 @@ public partial class Api5Session
 
         // The order "write → Update() → Rebuild" is part of the route contract: without the rebuild
         // the API7 write stays a representation (the same lesson as with rotation and fillet).
-        Api7Bridge.Rebuild(container, document.Document);
+        Api7Bridge.Rebuild(container, document.Document3D);
         BumpRevision(document, "pattern.update");
 
         var after = Api7Pattern.ReadPattern(PatternAt(container, index));

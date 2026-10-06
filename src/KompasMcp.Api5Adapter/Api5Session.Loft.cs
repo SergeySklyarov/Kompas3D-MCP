@@ -93,7 +93,7 @@ public partial class Api5Session
         }
 
         var bridge = BridgeFor(document);
-        var container = bridge.ContainerFor(document.Document, document.Id, document.Revision);
+        var container = bridge.ContainerFor(document.Document3D, document.Id, document.Revision);
         if (container is null)
         {
             throw new KompasContractException(
@@ -216,7 +216,7 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["named_code"] = "GEOMETRY_FAILED" });
         }
 
-        Api7Bridge.Rebuild(container, document.Document);
+        Api7Bridge.Rebuild(container, document.Document3D);
 
         var reference = References.Register("feature", document.Id, document.Revision, loft);
         BumpRevision(document, "loft.create");

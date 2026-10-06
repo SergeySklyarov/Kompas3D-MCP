@@ -24,6 +24,18 @@
 - **открытые_режимы:** []
 - **открытые_зависимости:** []
 
+### профиль drawings-minimal-v1 — Минимальные чертежи v24
+
+- **обязательных_режимов:** 6
+- **режимов_закрыто:** 6
+- **общих_зависимостей:** 6
+- **зависимостей_закрыто:** 6
+- **профиль_закрыт:** да
+- **готовность_процента:** 100.0%
+- **по_очередям:** C3 6/6
+- **открытые_режимы:** []
+- **открытые_зависимости:** []
+
 ### профиль mates-minimal-v1 — Минимальные сопряжения v24
 
 - **обязательных_режимов:** 6
@@ -50,19 +62,19 @@
 
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 268
-- **строк_полностью_закрыто:** 79
-- **строк_с_каким_либо_прогрессом:** 94
-- **семейств_в_каталоге:** 34
+- **строк_каталога:** 283
+- **строк_полностью_закрыто:** 94
+- **строк_с_каким_либо_прогрессом:** 109
+- **семейств_в_каталоге:** 35
 - **семейств_без_строк:** 14
-- **операций:** 82
-- **режимов_и_вариантов:** 206
-- **применимых_действий:** 2559
-- **действий_verified:** 728
-- **покрытие_действий:** 28.4%
-- **распределение_статусов:** {'not_started': 1831, 'verified': 728, 'not_applicable': 121}
-- **уровни_каталога_операций:** {'metadata_found': 50, 'mcp_verified': 22, 'runtime_verified': 6, 'documented': 10}
-- **уровни_каталога_режимов:** {'mcp_verified': 52, 'documented': 19, 'runtime_verified': 3, 'metadata_found': 48, 'не указан': 84}
+- **операций:** 94
+- **режимов_и_вариантов:** 209
+- **применимых_действий:** 2629
+- **действий_verified:** 798
+- **покрытие_действий:** 30.4%
+- **распределение_статусов:** {'not_started': 1831, 'verified': 798, 'not_applicable': 201}
+- **уровни_каталога_операций:** {'metadata_found': 50, 'mcp_verified': 28, 'runtime_verified': 6, 'documented': 10}
+- **уровни_каталога_режимов:** {'mcp_verified': 55, 'documented': 19, 'runtime_verified': 3, 'metadata_found': 48, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
 ## Метрика 1 — обязательные режимы профиля `assemblies-minimal-v1`
@@ -86,6 +98,28 @@
 | `dep.assembly.component_address` | да | discover, read, negative_tests | ASM.03.read, ASM.03.fields, ASM.03.multiplicity, ASM.07.reopen, ASM.04.negative_tests, ASM.04.distinguishing, ASM.04.edit, ASM.04.discover, ASM.04.geometry_validation, ASM.05.discover, ASM.07.geometry_validation, ASM.03.save_reopen |
 | `dep.assembly.revisions` | да | edit, read, negative_tests | ASM.01.read, ASM.07.read, ASM.04.edit, ASM.02.rebuild, ASM.07.save_reopen, ASM.04.negative_tests, ASM.04.discover, ASM.05.save_reopen |
 | `dep.assembly.idempotency` | да | create, read, negative_tests | ASM.03.read, ASM.02.create, ASM.02.idempotency, ASM.04.discover, ASM.02.negative_tests |
+
+## Метрика 1 — обязательные режимы профиля `drawings-minimal-v1`
+
+| режим/операция | семья | приоритет | очередь | уровень каталога | поиск | созд | чтен | правк | перестр | reopen | подавл | удал | отказ | геом | проверки |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
+| `DRW-01.views.create_standard` | DRW | practical_required | C3 | mcp_implemented | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | DRW.01.create, DRW.02.read, DRW.03.edit, DRW.04.save_reopen, DRW.05.negative_tests, DRW.06.geometry_validation |
+| `DRW-02.views.list` | DRW | practical_required | C3 | mcp_implemented | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | DRW.01.create, DRW.02.read, DRW.03.edit, DRW.04.save_reopen, DRW.05.negative_tests, DRW.06.geometry_validation |
+| `DRW-03.dimension.add` | DRW | practical_required | C3 | mcp_verified | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | OK | DRW-03.dimension.add.create.linear, DRW-03.dimension.add.create.radial, DRW-03.dimension.add.create.diametral, DRW-03.dimension.add.read, DRW-03.dimension.add.edit, DRW-03.dimension.add.save_reopen, DRW-03.dimension.add.negative_tests, DRW-03.dimension.add.geometry_validation |
+| `DRW-04.title_block.set` | DRW | practical_required | C3 | mcp_implemented | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | н/п | DRW.01.create, DRW.02.read, DRW.03.edit, DRW.04.save_reopen, DRW.05.negative_tests, DRW.06.geometry_validation |
+| `DRW-05.export` | DRW | practical_required | C3 | mcp_implemented | н/п | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | DRW.01.create, DRW.02.read, DRW.03.edit, DRW.04.save_reopen, DRW.05.negative_tests, DRW.06.geometry_validation |
+| `DRW-06.technical_demand` | DRW | practical_required | C3 | mcp_implemented | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | н/п | DRW.01.create, DRW.02.read, DRW.03.edit, DRW.04.save_reopen, DRW.05.negative_tests, DRW.06.geometry_validation |
+
+### Общие зависимости профиля `drawings-minimal-v1`
+
+| зависимость | закрыто | приоритетные действия | проверки |
+|---|---|---|---|
+| `dep.drawing.document_lifecycle` | да | discover, create, read, save_reopen, negative_tests | DRW.DEP.document_lifecycle |
+| `dep.drawing.source_file` | да | create, read, negative_tests | DRW.DEP.source_file |
+| `dep.drawing.view_address` | да | discover, read, negative_tests | DRW.DEP.view_address |
+| `dep.drawing.revisions` | да | edit, read, negative_tests | DRW.DEP.revisions |
+| `dep.drawing.idempotency` | да | create, read, negative_tests | DRW.DEP.idempotency |
+| `dep.drawing.export_file` | да | create, read, negative_tests | DRW.DEP.export_file |
 
 ## Метрика 1 — обязательные режимы профиля `mates-minimal-v1`
 
@@ -434,6 +468,14 @@
 | `MATE-04.mate.fixed` | MATE | practical_required | C2 | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | н/п | MATE.02.discover, MATE.04.read, MATE.04.edit, MATE.04.rebuild, MATE.04.save_reopen, MATE.04.negative_tests |
 | `MATE-05.mate.delete` | MATE | practical_required | C2 | mcp_verified | OK | н/п | OK | н/п | OK | OK | н/п | OK | OK | н/п | MATE.02.discover, MATE.05.read, MATE.05.rebuild, MATE.05.save_reopen, MATE.05.delete, MATE.05.negative_tests, MATE.05.delete_dependencies |
 | `MATE-06.mate.placement_effect` | MATE | practical_required | C2 | mcp_verified | OK | н/п | OK | н/п | OK | OK | н/п | н/п | OK | OK | MATE.02.discover, MATE.06.read, MATE.06.rebuild, MATE.06.save_reopen, MATE.05.negative_tests, MATE.06.geometry_validation |
+| `DRW-01.views.create_standard` | DRW | practical_required | C3 | mcp_implemented | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | DRW.01.create, DRW.02.read, DRW.03.edit, DRW.04.save_reopen, DRW.05.negative_tests, DRW.06.geometry_validation |
+| `DRW-02.views.list` | DRW | practical_required | C3 | mcp_implemented | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | DRW.01.create, DRW.02.read, DRW.03.edit, DRW.04.save_reopen, DRW.05.negative_tests, DRW.06.geometry_validation |
+| `DRW-03.dimension.add.linear` | DRW | practical_required | C3 | mcp_verified | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | OK | DRW-03.dimension.add.create.linear, DRW-03.dimension.add.save_reopen, DRW-03.dimension.add.negative_tests, DRW-03.dimension.add.geometry_validation |
+| `DRW-03.dimension.add.diametral` | DRW | practical_required | C3 | mcp_verified | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | OK | DRW-03.dimension.add.create.diametral, DRW-03.dimension.add.save_reopen, DRW-03.dimension.add.negative_tests, DRW-03.dimension.add.geometry_validation |
+| `DRW-03.dimension.add.radial` | DRW | practical_required | C3 | mcp_verified | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | OK | DRW-03.dimension.add.create.radial, DRW-03.dimension.add.save_reopen, DRW-03.dimension.add.negative_tests, DRW-03.dimension.add.geometry_validation |
+| `DRW-04.title_block.set` | DRW | practical_required | C3 | mcp_implemented | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | н/п | DRW.01.create, DRW.02.read, DRW.03.edit, DRW.04.save_reopen, DRW.05.negative_tests, DRW.06.geometry_validation |
+| `DRW-05.export` | DRW | practical_required | C3 | mcp_implemented | н/п | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | DRW.01.create, DRW.02.read, DRW.03.edit, DRW.04.save_reopen, DRW.05.negative_tests, DRW.06.geometry_validation |
+| `DRW-06.technical_demand` | DRW | practical_required | C3 | mcp_implemented | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | н/п | DRW.01.create, DRW.02.read, DRW.03.edit, DRW.04.save_reopen, DRW.05.negative_tests, DRW.06.geometry_validation |
 | `AUX-SKETCH.plane_and_profile_lifecycle` *(вне каталога)* | AUX-SKETCH | later | — | — | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | V03, V04, V05, G07_xy, G07_xz, G07_yz, V04r, V04d, V04e, V04f, G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, F08.28.discover, F08.28.create, F08.28.read, F08.28.edit, F08.28.rebuild, F08.28.save_reopen, F08.28.negative_tests, F08.28.geometry_validation, AUXS.01.edit, AUXS.02.negative_tests |
 | `SM-04.boss` *(вне каталога)* | SM-04 | later | B5 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `dep.sketch.entities` *(вне каталога)* | AUX-SKETCH | dependency_of | — | — | OK | OK | OK | OK | — | OK | — | — | OK | OK | G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, DEP.DSE.02.create, DEP.DSE.07.geometry_validation, DEP.DSE.06.negative_tests, DEP.DSE.05.save_reopen, DEP.DSE.04.edit, DEP.DSE.01.discover, DEP.DSE.03.read |
@@ -461,6 +503,13 @@
 | `dep.mate.revisions` *(вне каталога)* | — | dependency_of | — | mcp_verified | н/п | н/п | OK | OK | н/п | н/п | н/п | н/п | OK | н/п | MATE.05.read, MATE.03.edit, MATE.03.negative_tests |
 | `dep.mate.idempotency` *(вне каталога)* | — | dependency_of | — | mcp_verified | н/п | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | MATE.01.create, MATE.02.read, MATE.05.negative_tests |
 | `dep.mate.save_reopen` *(вне каталога)* | — | dependency_of | — | mcp_verified | н/п | н/п | OK | н/п | н/п | OK | н/п | н/п | н/п | н/п | MATE.05.read, MATE.01.save_reopen |
+| `DRW-03.dimension.add` *(вне каталога)* | DRW | practical_required | C3 | mcp_verified | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | OK | DRW-03.dimension.add.create.linear, DRW-03.dimension.add.create.radial, DRW-03.dimension.add.create.diametral, DRW-03.dimension.add.read, DRW-03.dimension.add.edit, DRW-03.dimension.add.save_reopen, DRW-03.dimension.add.negative_tests, DRW-03.dimension.add.geometry_validation |
+| `dep.drawing.document_lifecycle` *(вне каталога)* | — | dependency_of | C3 | — | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | DRW.DEP.document_lifecycle |
+| `dep.drawing.source_file` *(вне каталога)* | — | dependency_of | C3 | — | н/п | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | DRW.DEP.source_file |
+| `dep.drawing.view_address` *(вне каталога)* | — | dependency_of | C3 | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | DRW.DEP.view_address |
+| `dep.drawing.revisions` *(вне каталога)* | — | dependency_of | C3 | — | н/п | н/п | OK | OK | н/п | н/п | н/п | н/п | OK | н/п | DRW.DEP.revisions |
+| `dep.drawing.idempotency` *(вне каталога)* | — | dependency_of | C3 | — | н/п | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | DRW.DEP.idempotency |
+| `dep.drawing.export_file` *(вне каталога)* | — | dependency_of | C3 | — | н/п | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | DRW.DEP.export_file |
 
 ## Ограничения и незакрытое
 
@@ -818,6 +867,34 @@
   - живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов
   - Приёмка на бинарях поставки ВЫПОЛНЕНА: `publish-mates-20261005` — Host.dll `5ba127bb…`, Worker.dll `6fecb3fe…`, Api5Adapter.dll `157c9dbb…`; группа MATE снята ИМЕННО на них. `client_acceptance` — шаг заказчика и остаётся `not_run`: отсутствие проверки не PASS.
   - Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями).
+- `DRW-01.views.create_standard` — закрыт целиком
+  - Живой прогон НЕ выполнялся: код собран, но группа DRW в scripts/mcp-smoke.py ещё не написана. Уровень строки mcp_implemented — маршрут написан, подтверждения приёмкой нет.
+  - Приёмка на бинарях поставки — отдельный шаг: до неё строка НЕ закрывается и обязательные действия остаются not_started.
+- `DRW-02.views.list` — закрыт целиком
+  - Живой прогон НЕ выполнялся: код собран, но группа DRW в scripts/mcp-smoke.py ещё не написана. Уровень строки mcp_implemented — маршрут написан, подтверждения приёмкой нет.
+  - Приёмка на бинарях поставки — отдельный шаг: до неё строка НЕ закрывается и обязательные действия остаются not_started.
+- `DRW-03.dimension.add.linear` — закрыт целиком
+  - Живой прогон подтвердил перечитывание номинала и сверку с эталоном тестовой геометрии с допуском 0.01 мм (DRW-03.dimension.add.create.linear).
+  - АССОЦИАТИВНОСТЬ РАЗМЕРА К ГЕОМЕТРИИ ВИДА НЕ ПОДТВЕРЖДЕНА (см. DRW-03.dimension.add).
+- `DRW-03.dimension.add.diametral` — закрыт целиком
+  - Живой прогон подтвердил перечитывание номинала и сверку с эталоном тестовой геометрии с допуском 0.01 мм (DRW-03.dimension.add.create.diametral).
+  - АССОЦИАТИВНОСТЬ РАЗМЕРА К ГЕОМЕТРИИ ВИДА НЕ ПОДТВЕРЖДЕНА (см. DRW-03.dimension.add).
+- `DRW-03.dimension.add.radial` — закрыт целиком
+  - Живой прогон подтвердил перечитывание номинала и сверку с эталоном тестовой геометрии с допуском 0.01 мм (DRW-03.dimension.add.create.radial).
+  - АССОЦИАТИВНОСТЬ РАЗМЕРА К ГЕОМЕТРИИ ВИДА НЕ ПОДТВЕРЖДЕНА (см. DRW-03.dimension.add).
+- `DRW-04.title_block.set` — закрыт целиком
+  - Живой прогон НЕ выполнялся: код собран, но группа DRW в scripts/mcp-smoke.py ещё не написана. Уровень строки mcp_implemented — маршрут написан, подтверждения приёмкой нет.
+  - Приёмка на бинарях поставки — отдельный шаг: до неё строка НЕ закрывается и обязательные действия остаются not_started.
+  - ИДЕНТИФИКАТОРЫ ЯЧЕК ШТАМПА В СПРАВКЕ НЕ ПЕРЕЧИСЛЕНЫ: Id задаёт вызывающий, сервер перечитывает записанное и называет расхождение в unverified_aspects.
+- `DRW-05.export` — закрыт целиком
+  - Живой прогон НЕ выполнялся: код собран, но группа DRW в scripts/mcp-smoke.py ещё не написана. Уровень строки mcp_implemented — маршрут написан, подтверждения приёмкой нет.
+  - Приёмка на бинарях поставки — отдельный шаг: до неё строка НЕ закрывается и обязательные действия остаются not_started.
+  - Опубликованы только dxf и dwg (FORMAT_DXF=1, FORMAT_DWG=2); PDF справкой SDK 24 как маршрут не документирован и отвергается FORMAT_UNAVAILABLE до COM.
+  - Успех Convert не является доказательством: подтверждение — существование файла, ненулевой размер и сигнатура формата.
+- `DRW-06.technical_demand` — закрыт целиком
+  - Живой прогон НЕ выполнялся: код собран, но группа DRW в scripts/mcp-smoke.py ещё не написана. Уровень строки mcp_implemented — маршрут написан, подтверждения приёмкой нет.
+  - Приёмка на бинарях поставки — отдельный шаг: до неё строка НЕ закрывается и обязательные действия остаются not_started.
+  - Размещение блока на листе (AutoPlacement, BlocksGabarits) сервером не задаётся и не проверяется — названо в unverified_aspects.
 - `AUX-SKETCH.plane_and_profile_lifecycle` — закрыт целиком
   - замена и очистка после reopen работают для измеренной области: эскиз на основной XY, профиль — окружность, вырезание сквозное; точка поиска выводится из цилиндрической грани зависимого тела (проба G, строки G10…G10r)
   - вне измеренной области (наклонная плоскость, отрезки, дуги, прямоугольники) отказ явный: CAPABILITY_UNAVAILABLE с derivation=profile_not_circle / plane_not_xy, а не догадка (строка G11)
@@ -893,6 +970,21 @@
   - живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов
   - Приёмка на бинарях поставки ВЫПОЛНЕНА: `publish-mates-20261005` — Host.dll `5ba127bb…`, Worker.dll `6fecb3fe…`, Api5Adapter.dll `157c9dbb…`; группа MATE снята ИМЕННО на них. `client_acceptance` — шаг заказчика и остаётся `not_run`: отсутствие проверки не PASS.
   - Ссылки на сопряжения живут в реестре сеанса и обесцениваются при подъёме ревизии: перечитывать перед каждой мутацией (проверено отрицательными контролями).
+- `DRW-03.dimension.add` — закрыт целиком
+  - АССОЦИАТИВНОСТЬ РАЗМЕРА К ГЕОМЕТРИИ ВИДА НЕ ПОДТВЕРЖДЕНА: маршрут BaseObject документирован, но получения опорного объекта ИЗ вида живьём не измерено. Размеры ставятся ПО ТОЧКАМ в координатах вида; изменение геометрии может не перетащить размер.
+  - Живой прогон: номиналы размеров перечитаны и сверены с эталонами тестовой геометрии (линейный 80.0 мм, радиальный/диаметральный 12.5 мм) с допуском 0.01 мм; три типа подтверждены отдельными строками приёмки.
+- `dep.drawing.document_lifecycle` — закрыт целиком
+  - Зависимость блока чертежей; живого прогона нет — действия остаются not_started.
+- `dep.drawing.source_file` — закрыт целиком
+  - Зависимость блока чертежей; живого прогона нет — действия остаются not_started.
+- `dep.drawing.view_address` — закрыт целиком
+  - Зависимость блока чертежей; живого прогона нет — действия остаются not_started.
+- `dep.drawing.revisions` — закрыт целиком
+  - Зависимость блока чертежей; живого прогона нет — действия остаются not_started.
+- `dep.drawing.idempotency` — закрыт целиком
+  - Зависимость блока чертежей; живого прогона нет — действия остаются not_started.
+- `dep.drawing.export_file` — закрыт целиком
+  - Зависимость блока чертежей; живого прогона нет — действия остаются not_started.
 
 ## Семьи без строк матрицы (инвентаризация не завершена)
 

@@ -134,7 +134,7 @@ public partial class Api5Session
 
         SafeBool(entity.Update);
         part.RebuildModel();
-        document.Document.RebuildDocument();
+        document.Document3D.RebuildDocument();
 
         var reference = References.Register("feature", document.Id, document.Revision, entity);
         BumpRevision(document, "shell.create");

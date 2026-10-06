@@ -322,7 +322,7 @@ internal static class ViewSwap
     {
         try
         {
-            return document.Document.GetViewProjectionCollection() as ksViewProjectionCollection;
+            return document.Document3D.GetViewProjectionCollection() as ksViewProjectionCollection;
         }
         catch (COMException ex)
         {

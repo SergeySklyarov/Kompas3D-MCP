@@ -973,7 +973,7 @@ public sealed partial class Api5Session
                 partialEffects: true);
         }
 
-        document.Document.RebuildDocument();
+        document.Document3D.RebuildDocument();
         BumpRevision(document, "extrude");
 
         var bodiesAfter = ReadBodySnapshots(document.PartNow());
@@ -2083,7 +2083,7 @@ public sealed partial class Api5Session
                 partialEffects: true);
         }
 
-        document.Document.RebuildDocument();
+        document.Document3D.RebuildDocument();
         BumpRevision(document, "fillet");
 
         var volumeAfter = ReadVolume(document);
@@ -2295,7 +2295,7 @@ public sealed partial class Api5Session
                 details: new Dictionary<string, object?> { ["object_error"] = objectError });
         }
 
-        document.Document.RebuildDocument();
+        document.Document3D.RebuildDocument();
         BumpRevision(document, "chamfer");
 
         var volumeAfter = ReadVolume(document);
@@ -2498,7 +2498,7 @@ public sealed partial class Api5Session
     public RebuildResult Rebuild(RebuildCommand command)
     {
         var document = RequireDocument(command.DocumentId);
-        if (!document.Document.RebuildDocument())
+        if (!document.Document3D.RebuildDocument())
         {
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
@@ -2507,7 +2507,7 @@ public sealed partial class Api5Session
                 partialEffects: true);
         }
 
-        document.Document.UpdateDocumentParam();
+        document.Document3D.UpdateDocumentParam();
         // A rebuild is exactly the case where handles from the previous revision must stop
         // resolving: the solver may have produced different faces and edges.
         BumpRevision(document, "rebuild", invalidateAll: true);

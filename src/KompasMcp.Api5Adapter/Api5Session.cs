@@ -383,19 +383,27 @@ public sealed partial class Api5Session : IDisposable
     {
         var application = RequireApplication(command.ApplicationId);
 
-        // API5's ksDocument3D.Create makes only a part or an assembly. Reporting success while handing
-        // back an assembly labelled "drawing" is the mutation-stub failure the contract forbids.
-        if (command.Kind is DocumentKind.Drawing or DocumentKind.Fragment)
+        // API5's ksDocument3D.Create makes only a part or an assembly. A DRAWING is created by the
+        // documented 2D route instead: KompasObject.Document2D() + ksDocumentParam (type from DocType,
+        // regime) + ksDocument2D.ksCreateDocument(par) — ksdocument2d_kscreatedocument.html,
+        // ksdocumentparam_type.html, doctype.html (lt_DocSheetStandart = 1).
+        // History: docs/decisions/drawings.md#create-drawing
+        if (command.Kind == DocumentKind.Drawing)
+        {
+            return CreateDrawingDocument(application, command);
+        }
+
+        if (command.Kind == DocumentKind.Fragment)
         {
             throw new KompasContractException(
                 ErrorCodes.CapabilityUnavailable,
-                $"Создание {command.Kind.ToString().ToLowerInvariant()} в этой сборке не реализовано: API5 Document3D.Create даёт только деталь или сборку. " +
-                "Инструмент не выдаётся за поддержанный, чтобы не вернуть сборку под видом нужного типа.",
+                $"Создание {command.Kind.ToString().ToLowerInvariant()} в этой сборке не реализовано: " +
+                "фрагмент не входит в блок DRW, а выдавать деталь или сборку за фрагмент запрещено.",
                 RetryPolicy.Never,
                 details: new Dictionary<string, object?>
                 {
                     ["kind"] = command.Kind.ToString(),
-                    ["supported_kinds"] = new[] { "part", "assembly" },
+                    ["supported_kinds"] = new[] { "part", "assembly", "drawing" },
                 });
         }
 
@@ -442,6 +450,15 @@ public sealed partial class Api5Session : IDisposable
         {
             // Never open the same file twice behind the user's back (spec 2.4).
             return existing;
+        }
+
+        // A DRAWING ('.cdw') is opened through the documented 2D route, not Document3D: the 3D handle
+        // has no parts and would misreport the kind. The extension is the only signal available BEFORE
+        // the open, and it is confirmed by the document's own answer afterwards.
+        // History: docs/decisions/drawings.md#open-drawing
+        if (IsDrawingPath(command.Path))
+        {
+            return OpenDrawingDocument(application, command);
         }
 
         var document = (ksDocument3D)application.Application.Document3D();
@@ -491,6 +508,128 @@ public sealed partial class Api5Session : IDisposable
         }
     }
 
+    /// <summary>Whether a path names a drawing sheet. INVARIANT: the extension only routes the OPEN; the
+    /// kind is confirmed by the document afterwards, so a wrongly-named file becomes a named refusal.</summary>
+    private static bool IsDrawingPath(string path) =>
+        string.Equals(Path.GetExtension(path), ".cdw", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Create a drawing through the documented API5 2D route.</summary>
+    /// <remarks>DOC: <c>ksdocument2d_kscreatedocument.html</c> — <c>ksCreateDocument(par)</c>, where
+    /// <c>par</c> is a <c>ksDocumentParam</c> (<c>ksdocumentparam.html</c>, obtained via
+    /// <c>KompasObject.GetParamStruct</c>); its <c>type</c> is taken from <c>DocType</c>
+    /// (<c>doctype.html</c>: <c>lt_DocSheetStandart</c> = 1) and <c>regime</c> is 0/1
+    /// (<c>ksdocumentparam_regime.html</c>). The API5 <c>Document3D.Create</c> cannot make a drawing,
+    /// which is why the separate route is used rather than mislabelling an assembly.
+    /// History: docs/decisions/drawings.md#create-drawing</remarks>
+    private DocumentEntry CreateDrawingDocument(ApplicationEntry application, CreateDocumentCommand command)
+    {
+        var application5 = application.Application;
+        var param = application5.GetParamStruct(KompasStructTypes.DocumentParam) as ksDocumentParam;
+        if (param is null)
+        {
+            throw new KompasContractException(
+                ErrorCodes.CapabilityUnavailable,
+                "KompasObject.GetParamStruct(ksDocumentParam) не вернул параметры документа: " +
+                "создать чертёж этим маршрутом нельзя.",
+                RetryPolicy.Never);
+        }
+
+        param.Init();
+        param.type = KompasDocTypes.DrawingSheetStandard;
+        param.regime = (short)(application.DocumentsVisible ? 0 : 1);
+        if (command.Name is { Length: > 0 })
+        {
+            // The name is a document attribute, not a file name (fileName would imply saving).
+            param.comment = command.Name;
+        }
+
+        var drawing = application5.Document2D() as ksDocument2D;
+        if (drawing is null)
+        {
+            throw new KompasContractException(
+                ErrorCodes.CapabilityUnavailable,
+                "KompasObject.Document2D() не вернул ksDocument2D: создать чертёж этим маршрутом нельзя.",
+                RetryPolicy.Never);
+        }
+
+        bool created;
+        try
+        {
+            created = drawing.ksCreateDocument(param);
+        }
+        catch (COMException ex)
+        {
+            ComApartment.Release(drawing);
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                $"ksCreateDocument прервался: {ex.Message}. Чертёж не создан.",
+                RetryPolicy.SameOperationId,
+                hresult: ex.HResult);
+        }
+
+        if (!created)
+        {
+            ComApartment.Release(drawing);
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                "ksCreateDocument вернул false: ядро отказало в создании чертежа.",
+                RetryPolicy.SameOperationId);
+        }
+
+        ComApartment.Release(param);
+        return RegisterDocument(
+            document: null, part: null, application, DocumentKind.Drawing, path: null,
+            kindVerified: true, drawing);
+    }
+
+    /// <summary>Open an existing drawing through the documented API5 2D route.</summary>
+    /// <remarks>DOC: <c>ksDocument2D.ksOpenDocument(nameDoc, regim)</c> (ksdocument2d.html);
+    /// <c>regim</c> follows the same 0/1 (visible/"blind") convention as creation.
+    /// History: docs/decisions/drawings.md#open-drawing</remarks>
+    private DocumentEntry OpenDrawingDocument(ApplicationEntry application, OpenDocumentCommand command)
+    {
+        var drawing = application.Application.Document2D() as ksDocument2D;
+        if (drawing is null)
+        {
+            throw new KompasContractException(
+                ErrorCodes.CapabilityUnavailable,
+                "KompasObject.Document2D() не вернул ksDocument2D: открыть чертёж этим маршрутом нельзя.",
+                RetryPolicy.Never);
+        }
+
+        bool opened;
+        try
+        {
+            opened = drawing.ksOpenDocument(command.Path, !application.DocumentsVisible);
+        }
+        catch (COMException ex)
+        {
+            ComApartment.Release(drawing);
+            throw new KompasContractException(
+                ErrorCodes.DocumentNotFound,
+                $"ksOpenDocument прервался: {ex.Message}. Чертёж не открыт.",
+                RetryPolicy.SameOperationId,
+                hresult: ex.HResult,
+                details: new Dictionary<string, object?> { ["path"] = command.Path });
+        }
+
+        if (!opened)
+        {
+            ComApartment.Release(drawing);
+            throw new KompasContractException(
+                ErrorCodes.DocumentNotFound,
+                $"Открыть чертёж не удалось: {command.Path}",
+                RetryPolicy.SameOperationId,
+                details: new Dictionary<string, object?> { ["path"] = command.Path });
+        }
+
+        var entry = RegisterDocument(
+            document: null, part: null, application, DocumentKind.Drawing, command.Path,
+            kindVerified: true, drawing);
+        entry.Access = command.Access;
+        return entry;
+    }
+
     private static bool? CallIsDetail(ksDocument3D document)
     {
         try
@@ -505,20 +644,22 @@ public sealed partial class Api5Session : IDisposable
     }
 
     private DocumentEntry RegisterDocument(
-        ksDocument3D document,
-        ksPart part,
+        ksDocument3D? document,
+        ksPart? part,
         ApplicationEntry application,
         DocumentKind kind,
         string? path,
-        bool kindVerified)
+        bool kindVerified,
+        ksDocument2D? drawing = null)
     {
         var entry = new DocumentEntry(
             Guid.NewGuid().ToString("N"),
             application.Id,
             kind,
-            NormalizePath(path) ?? NormalizePath(SafeFileName(part)),
+            NormalizePath(path) ?? NormalizePath(part is null ? null : SafeFileName(part)),
             document,
-            part)
+            part,
+            drawing)
         {
             Revision = 1,
             KindVerified = kindVerified,
@@ -526,10 +667,14 @@ public sealed partial class Api5Session : IDisposable
         };
 
         // A document can be created "invisibly" and still end up on screen (and vice versa), so its state
-        // is re-read from the document itself.
-        var (activated, _) = PresentDocument(application.Application, document, application.DocumentsVisible);
-        entry.ActiveReported = activated;
-        entry.Visible = application.DocumentsVisible ? ObserveDocumentVisible(document) : false;
+        // is re-read from the document itself. A drawing has no 3D presentation call, so its activation
+        // is left UNREAD (null) rather than substituted by the requested mode.
+        if (document is not null)
+        {
+            var (activated, _) = PresentDocument(application.Application, document, application.DocumentsVisible);
+            entry.ActiveReported = activated;
+            entry.Visible = application.DocumentsVisible ? ObserveDocumentVisible(document) : false;
+        }
 
         entry.Fingerprint = ComputeFingerprint(entry);
 
@@ -674,6 +819,13 @@ public sealed partial class Api5Session : IDisposable
     public bool TryGetGabarit(DocumentEntry document, out double[] dimensions)
     {
         dimensions = Array.Empty<double>();
+        if (document.Document is null)
+        {
+            // A drawing has no 3D model space: there is no gabarit to read, and "not read" is the honest
+            // answer (a zero box would be an invented measurement).
+            return false;
+        }
+
         try
         {
             if (!document.PartNow().GetGabarit(true, true, out var x1, out var y1, out var z1, out var x2, out var y2, out var z2))
@@ -692,6 +844,13 @@ public sealed partial class Api5Session : IDisposable
 
     public int CountBodies(DocumentEntry document)
     {
+        if (document.Document is null)
+        {
+            // A drawing has no body collection. A flat sheet is not "a body", and 0 would read as
+            // "the part has no geometry".
+            return -1;
+        }
+
         try
         {
             var bodies = (ksBodyCollection)document.PartNow().BodyCollection();
@@ -708,6 +867,11 @@ public sealed partial class Api5Session : IDisposable
 
     public int CountFeatures(DocumentEntry document)
     {
+        if (document.Document is null)
+        {
+            return 0;
+        }
+
         try
         {
             var collection = (ksEntityCollection)document.PartNow().EntityCollection(KompasObjectTypes.Of(KompasObjectTypes.OperationElement));
@@ -843,7 +1007,15 @@ public sealed partial class Api5Session : IDisposable
         _documents.Remove(document.Id);
         try
         {
-            document.Document.close();
+            // A drawing closes through its own 2D handle: ksDocument3D.close() would dereference a null.
+            if (document.Document is not null)
+            {
+                document.Document.close();
+            }
+            else
+            {
+                document.Drawing?.ksCloseDocument();
+            }
         }
         catch (Exception ex) when (ex is COMException)
         {
@@ -851,8 +1023,13 @@ public sealed partial class Api5Session : IDisposable
         }
         finally
         {
-            ComApartment.Release(document.PartNow());
+            if (document.Document is not null)
+            {
+                ComApartment.Release(document.PartNow());
+            }
+
             ComApartment.Release(document.Document);
+            ComApartment.Release(document.Drawing);
         }
     }
 
@@ -892,13 +1069,26 @@ public sealed partial class Api5Session : IDisposable
         }
 
         bool ok;
-        if (targetPath is null)
+        if (document.Document is not null)
         {
-            ok = document.Document.Save();
+            ok = targetPath is null
+                ? document.Document.Save()
+                : document.Document.SaveAs(path);
+        }
+        else if (document.Drawing is not null)
+        {
+            // A drawing saves through its documented 2D route: ksDocument2D.ksSaveDocument(fileName)
+            // (ksdocument2d.html). It has no "save to previous name" form, so a document that has a path
+            // but no target_path still passes that path explicitly.
+            ok = document.Drawing.ksSaveDocument(path);
         }
         else
         {
-            ok = document.Document.SaveAs(path);
+            throw new KompasContractException(
+                ErrorCodes.SaveFailed,
+                $"Документ «{document.Id}» не имеет ни 3D-, ни 2D-дескриптора: сохранять нечем.",
+                RetryPolicy.SameOperationId,
+                details: new Dictionary<string, object?> { ["document_id"] = document.Id });
         }
 
         if (!ok)
@@ -923,7 +1113,7 @@ public sealed partial class Api5Session : IDisposable
         }
 
         document.Path = path;
-        document.Document.UpdateDocumentParam();
+        document.Document?.UpdateDocumentParam();
         // "Save as" to a named path was checked by the Host as writable, so writing to the document's file
         // is now allowed: the access flag follows the path rather than staying forever from the open.
         if (targetPath is not null)
@@ -1038,9 +1228,15 @@ public sealed record ApplicationEntry(
 }
 
 /// <summary>A document registered by the server, with its live COM handles and revision.</summary>
+/// <remarks>MEASURED: a DRAWING has no <c>ksDocument3D</c>/<c>ksPart</c> at all — it is an API5
+/// <c>ksDocument2D</c> (created by <c>ksCreateDocument</c>) and an API7 <c>IDrawingDocument</c>. The two
+/// 3D handles are therefore nullable, and every 3D route names its absence instead of dereferencing null.
+/// History: docs/decisions/drawings.md#document-entry</remarks>
 public sealed class DocumentEntry
 {
-    public DocumentEntry(string id, string applicationId, DocumentKind kind, string? path, ksDocument3D document, ksPart part)
+    public DocumentEntry(
+        string id, string applicationId, DocumentKind kind, string? path,
+        ksDocument3D? document, ksPart? part, ksDocument2D? drawing = null)
     {
         Id = id;
         ApplicationId = applicationId;
@@ -1048,6 +1244,7 @@ public sealed class DocumentEntry
         Path = path;
         Document = document;
         Part = part;
+        Drawing = drawing;
     }
 
     public string Id { get; }
@@ -1063,9 +1260,35 @@ public sealed class DocumentEntry
     /// Defaults to <see cref="DocumentAccess.Edit"/> — a created document has no file of its own yet.</summary>
     public DocumentAccess Access { get; set; } = DocumentAccess.Edit;
 
-    public ksDocument3D Document { get; }
+    /// <summary>The API5 3D document handle. Null for a drawing.</summary>
+    public ksDocument3D? Document { get; }
 
-    public ksPart Part { get; }
+    /// <summary>The 3D handle as a NON-NULL value, or a NAMED refusal. Every 3D-only operation reads the
+    /// document through this member so that calling one on a drawing yields <c>DOCUMENT_KIND_MISMATCH</c>
+    /// rather than a null dereference — the crash would be an instrument defect, not a fact about the
+    /// document. Same contract as <see cref="Require3D"/>, kept as a property for call-site ergonomics.</summary>
+    public ksDocument3D Document3D => Document
+        ?? throw new KompasContractException(
+            ErrorCodes.WrongDocumentKind,
+            $"Документ «{Id}» имеет тип {Kind}: трёхмерный маршрут к нему не применим.",
+            RetryPolicy.Never,
+            details: new Dictionary<string, object?> { ["kind"] = Kind.ToString() });
+
+    /// <summary>The API5 root part handle. Null for a drawing.</summary>
+    public ksPart? Part { get; }
+
+    /// <summary>The API5 2D document handle (<c>ksDocument2D</c>). Non-null only for a drawing; a 3D
+    /// document reaches 2D only through a sketch edit, which is a different, transient handle.</summary>
+    public ksDocument2D? Drawing { get; }
+
+    /// <summary>The 3D handle, or a NAMED refusal: a drawing has no <c>ksDocument3D</c>, and a null
+    /// dereference would be an instrument crash, not a fact about the document.</summary>
+    public ksDocument3D Require3D() => Document
+        ?? throw new KompasContractException(
+            ErrorCodes.WrongDocumentKind,
+            $"Документ «{Id}» имеет тип {Kind}: трёхмерный маршрут к нему не применим.",
+            RetryPolicy.Never,
+            details: new Dictionary<string, object?> { ["kind"] = Kind.ToString() });
 
     /// <summary>The visibility mode this document was created or opened in: inherited from the application
     /// instance. Separate from <see cref="Visible"/>: what was requested and what the document reports about
@@ -1085,7 +1308,7 @@ public sealed class DocumentEntry
     /// body. Re-acquiring per operation is what makes reads agree with what KOMPAS holds; <see cref="Part"/>
     /// is kept for identity checks and release bookkeeping only.
     /// History: docs/decisions/adapter-core.md#part-now-reacquire</remarks>
-    public ksPart PartNow() => (ksPart)Document.GetPart(-1);
+    public ksPart PartNow() => (ksPart)Require3D().GetPart(-1);
 
     public long Revision { get; set; }
 
@@ -1112,6 +1335,27 @@ public sealed class DocumentEntry
 }
 
 public sealed record SaveDocumentResult(string? Path, long ByteLength, string Sha256, DocumentContextDto Context, long Revision);
+
+/// <summary>Struct-type selectors for <c>KompasObject.GetParamStruct(Int16)</c>, from
+/// <c>StructType2DEnum</c> (<c>Interop.Kompas6Constants.dll</c>). The member names are the vendor's;
+/// the values are read from the shipped assembly, not guessed — a wrong number returns a different
+/// parameter block or nothing.</summary>
+public static class KompasStructTypes
+{
+    /// <summary><c>StructType2DEnum.ko_DocumentParam</c> — the <c>ksDocumentParam</c> block that
+    /// <c>ksDocument2D.ksCreateDocument</c> consumes: MEASURED 35.</summary>
+    public const short DocumentParam = 35;
+}
+
+/// <summary>Document type selectors for <c>ksDocumentParam.type</c>, from the <c>DocType</c> help
+/// enumeration (<c>doctype.html</c>). They are NOT the same numbers as <c>DocumentTypeEnum</c>:
+/// <c>lt_DocSheetStandart</c> = 1 where <c>DocumentTypeEnum.ksDocumentDrawing</c> is also 1, but the
+/// neighbour values diverge (fragment is 3 here, 2 there), so the two must not be interchanged.</summary>
+public static class KompasDocTypes
+{
+    /// <summary><c>DocType.lt_DocSheetStandart</c> — a drawing on a standard-format sheet.</summary>
+    public const short DrawingSheetStandard = 1;
+}
 
 /// <summary>Entity type numbers, taken from the vendor enum instead of the reference scripts.</summary>
 public static class KompasObjectTypes

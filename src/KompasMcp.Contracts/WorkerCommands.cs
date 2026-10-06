@@ -182,6 +182,17 @@ public static class WorkerCommands
     public const string SetMateParameter = "mate.set_parameter";
     public const string SetMateFixed = "mate.set_fixed";
     public const string DeleteMate = "mate.delete";
+    // ── block DRW "drawings" (profile drawings-minimal-v1) ──
+    // drawing.create_views → DRW-01, drawing.list_views → DRW-02, drawing.add_dimension → DRW-03,
+    // drawing.set_title_block → DRW-04, drawing.export → DRW-05, drawing.set_technical_demand →
+    // DRW-06, drawing.edit_view → the view edit action of DRW-01.
+    public const string CreateDrawingViews = "drawing.create_views";
+    public const string ListDrawingViews = "drawing.list_views";
+    public const string AddDimension = "drawing.add_dimension";
+    public const string SetTitleBlock = "drawing.set_title_block";
+    public const string ExportDrawing = "drawing.export";
+    public const string SetTechnicalDemand = "drawing.set_technical_demand";
+    public const string EditView = "drawing.edit_view";
     public const string Shutdown = "sys.shutdown";
 
     /// <summary>Creates a part auxiliary-geometry object — a plane, axis or point (<c>dep.refs.planes</c>,

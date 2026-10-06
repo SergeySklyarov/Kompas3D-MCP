@@ -8,7 +8,7 @@
      Источник - src/KompasMcp.Host/Catalog/ToolCatalog.cs. -->
 
 <!-- BEGIN TOOL LISTING -->
-Всего инструментов: 63.
+Всего инструментов: 70.
 
 | Инструмент | Назначение | Что делает |
 |---|---|---|
@@ -67,6 +67,13 @@
 | `kompas_export_step` | Экспорт STEP | Экспорт нативным конвертером. |
 | `kompas_import_step` | Импорт STEP | Чтение STEP. |
 | `kompas_export_image` | Снимок модели | Растровый снимок документированным маршрутом API5: ksDocument3D.RasterFormatParam → ksRasterFormatParam → SaveAsToRasterFormat. |
+| `kompas_create_drawing_views` | Создать стандартные виды чертежа | Строит группу стандартных ассоциативных видов модели документированным маршрутом API7: IDrawingDocument.ViewsAndLayersManager → IViews.AddStandartViews(FileName, ProjectionName, ProjectionsTypes, X, Y, Scale, DX, DY) (справка v24:… |
+| `kompas_list_drawing_views` | Перечень видов чертежа | Читает виды чертежа через IDrawingDocument.ViewsAndLayersManager.Views: номер, имя, тип, масштаб, координаты точки привязки и - для ассоциативных видов - файл-источник, имя проекции, видимость скрытых и осевых линий, число объектов. |
+| `kompas_add_dimension` | Поставить размер на виде | Линейный, радиальный или диаметральный размер в выбранном виде через ISymbols2DContainer (справка v24: isymbols2dcontainer.html), полученный из IView: LineDimensions.Add(), RadialDimensions.Add(), DiametralDimensions.Add() - каждый Add()… |
+| `kompas_set_title_block` | Заполнить основную надпись | Записывает значения в ячейки основной надписи через ILayoutSheet.Stamp → IStamp (справка v24: ilayoutsheet_stamp.html, istamp_text.html, itext_str.html): IStamp.Text(Id) ВОЗВРАЩАЕТ IText (чтение - не установщик), запись идёт через… |
+| `kompas_export_drawing` | Выгрузить чертёж в DXF или DWG | Экспорт чертежа документированным маршрутом конвертера: IApplication.Converter → IConverter.GetFilter(docType, saveAs, out command) → IConverter.Convert(InputFile, Outfile, Command, ShowParam) (справка v24: iapplication_converter.html,… |
+| `kompas_edit_view` | Изменить вид чертежа | Изменяет СУЩЕСТВУЮЩИЙ вид документированными записываемыми свойствами: масштаб (IView.Scale) и точку привязки (IView.X / IView.Y). |
+| `kompas_set_technical_demand` | Записать технические требования чертежа | Пишет блок технических требований документированным маршрутом API7: IDrawingDocument.TechnicalDemand → ITechnicalDemand.Text (read-only свойство, отдающее интерфейс IText) → IText.Str (запись) → ITechnicalDemand.Update() («применить… |
 | `kompas_probe_units` | Замер единиц | Строит известную геометрию и возвращает сырые показания всех измерительных вызовов. |
 | `kompas_read_topology` | Топология тела | Грани и рёбра из конечного тела (GetMainBody→FaceCollection→EdgeCollection), а не из EntityCollection: коллекция рёбер модели содержит эскизные и служебные контуры. |
 | `kompas_resolve_selection` | Однозначный выбор | Структурный предикат по граням тела. |

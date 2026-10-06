@@ -573,7 +573,7 @@ public partial class Api5Session
         // P2.3: without Update() the document keeps the old geometry even though every setter said
         // true, so this call is part of the contract, not an optimisation.
         var updated = entity.Update();
-        document.Document.RebuildDocument();
+        document.Document3D.RebuildDocument();
 
         // INVARIANT: the refusal must happen BEFORE the revision bump (row L12: otherwise the document
         // got a new revision with an unchanged model and all references went stale). Read back through a

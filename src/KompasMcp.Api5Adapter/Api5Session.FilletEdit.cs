@@ -94,7 +94,7 @@ public partial class Api5Session
     private FilletReadDto? ReadFilletRadius(DocumentEntry document, double api5Radius, object? definition = null)
     {
         var bridge = BridgeFor(document);
-        var container = bridge.ContainerFor(document.Document, document.Id, document.Revision);
+        var container = bridge.ContainerFor(document.Document3D, document.Id, document.Revision);
         if (container is null)
         {
             return null;
@@ -176,7 +176,7 @@ public partial class Api5Session
         }
 
         var bridge = BridgeFor(document);
-        var container = bridge.ContainerFor(document.Document, document.Id, document.Revision);
+        var container = bridge.ContainerFor(document.Document3D, document.Id, document.Revision);
         if (container is null)
         {
             throw new KompasContractException(
@@ -229,7 +229,7 @@ public partial class Api5Session
 
         // Without a rebuild the IFillet write stays a representation: the same order as on fillet
         // creation and on chamfer-angle edit (F.10 + probe E).
-        Api7Bridge.Rebuild(container, document.Document);
+        Api7Bridge.Rebuild(container, document.Document3D);
         BumpRevision(document, "fillet.update.radius");
 
         var after = Api7Fillet.Read(container, index);
@@ -444,7 +444,7 @@ public partial class Api5Session
         }
 
         var bridge = BridgeFor(document);
-        var container = bridge.ContainerFor(document.Document, document.Id, document.Revision);
+        var container = bridge.ContainerFor(document.Document3D, document.Id, document.Revision);
         if (container is null)
         {
             throw new KompasContractException(
@@ -627,7 +627,7 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["api7_failure"] = write.Failure });
         }
 
-        Api7Bridge.Rebuild(container, document.Document);
+        Api7Bridge.Rebuild(container, document.Document3D);
         BumpRevision(document, "fillet.update.inputs");
 
         var volumeAfter = ReadVolume(document);
@@ -740,7 +740,7 @@ public partial class Api5Session
         // IDENTIFICATION would depend on the very mechanism deemed non-working, so the primary source is the
         // live feature's own inputs in API7 (IFillet.BaseObjects) and the API5 definition stays a fallback.
         var bridge = BridgeFor(document);
-        var container = bridge.ContainerFor(document.Document, document.Id, document.Revision);
+        var container = bridge.ContainerFor(document.Document3D, document.Id, document.Revision);
         if (container is null)
         {
             throw new KompasContractException(
@@ -978,7 +978,7 @@ public partial class Api5Session
 
         // Without a rebuild the IFillet write stays a representation: the same order as on fillet
         // creation and on radius edit (F.10 + probe E).
-        Api7Bridge.Rebuild(container, document.Document);
+        Api7Bridge.Rebuild(container, document.Document3D);
         BumpRevision(document, "fillet.update.edges");
 
         var volumeAfter = ReadVolume(document);

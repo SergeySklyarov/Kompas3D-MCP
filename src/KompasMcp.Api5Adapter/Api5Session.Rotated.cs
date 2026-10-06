@@ -55,7 +55,7 @@ public partial class Api5Session
             : ResolveBodyTarget(document, part, command.TargetBodyRef, bodiesBeforeSnapshot);
 
         var bridge = BridgeFor(document);
-        var container = bridge.ContainerFor(document.Document, document.Id, document.Revision);
+        var container = bridge.ContainerFor(document.Document3D, document.Id, document.Revision);
         if (container is null)
         {
             throw new KompasContractException(
@@ -128,7 +128,7 @@ public partial class Api5Session
         // Without a rebuild the API7 write stays a representation — measured by probe E on
         // IExtrusion.Sketch and repeated here: the order "write → Update() → Rebuild()" is part of
         // the contract, not a style.
-        Api7Bridge.Rebuild(container, document.Document);
+        Api7Bridge.Rebuild(container, document.Document3D);
         BumpRevision(document, "rotated." + operationName);
 
         var volumeAfter = ReadVolume(document);
@@ -376,7 +376,7 @@ public partial class Api5Session
         {
             var part = document.PartNow();
             var bridge = BridgeFor(document);
-            var container = bridge.ContainerFor(document.Document, document.Id, document.Revision);
+            var container = bridge.ContainerFor(document.Document3D, document.Id, document.Revision);
             if (container is null || Api7Rotated.Count(container) is not int count || count <= 0)
             {
                 return null;
@@ -569,7 +569,7 @@ public partial class Api5Session
 
         var part = document.PartNow();
         var bridge = BridgeFor(document);
-        var container = bridge.ContainerFor(document.Document, document.Id, document.Revision);
+        var container = bridge.ContainerFor(document.Document3D, document.Id, document.Revision);
         if (container is null)
         {
             throw new KompasContractException(
@@ -613,7 +613,7 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["api7_failure"] = write.Failure });
         }
 
-        Api7Bridge.Rebuild(container, document.Document);
+        Api7Bridge.Rebuild(container, document.Document3D);
         BumpRevision(document, "rotated.update");
 
         var volumeAfter = ReadVolume(document);

@@ -39,7 +39,7 @@ public sealed partial class Api5Session
                 });
         }
 
-        var parameter = (ksAdditionFormatParam)document.Document.AdditionFormatParam();
+        var parameter = (ksAdditionFormatParam)document.Document3D.AdditionFormatParam();
         parameter.Init();
         parameter.format = FormatStep;
 
@@ -49,7 +49,7 @@ public sealed partial class Api5Session
         bool saved;
         try
         {
-            saved = document.Document.SaveAsToAdditionFormat(destination, parameter);
+            saved = document.Document3D.SaveAsToAdditionFormat(destination, parameter);
         }
         catch (COMException ex)
         {

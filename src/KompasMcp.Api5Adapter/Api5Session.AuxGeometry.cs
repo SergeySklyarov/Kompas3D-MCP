@@ -301,7 +301,7 @@ public sealed partial class Api5Session
 
         // The rebuild is mandatory: without it the object stays in the container but the model does not
         // know it — MEASURED on neighbouring routes (without Update() no hole mode changes).
-        Api7Bridge.Rebuild(model, document.Document);
+        Api7Bridge.Rebuild(model, document.Document3D);
         BumpRevision(document, "aux." + key.Replace('/', '.'));
 
         var counts = AuxCounts(model, auxiliary);
@@ -439,7 +439,7 @@ public sealed partial class Api5Session
                 RetryPolicy.ReacquireContext);
         }
 
-        Api7Bridge.Rebuild(model, document.Document);
+        Api7Bridge.Rebuild(model, document.Document3D);
         BumpRevision(document, "aux.update_plane");
 
         var after = Api7AuxGeometry.ReadPlane(plane, -1);

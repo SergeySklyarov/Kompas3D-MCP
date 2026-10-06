@@ -124,7 +124,7 @@ public sealed partial class Api5Session
                 viewState = ViewSwap.Apply(document, requestedView, command.KeepView);
             }
 
-            parameter = (ksRasterFormatParam)document.Document.RasterFormatParam();
+            parameter = (ksRasterFormatParam)document.Document3D.RasterFormatParam();
             if (parameter is null)
             {
                 throw new KompasContractException(
@@ -154,7 +154,7 @@ public sealed partial class Api5Session
             bool returned;
             try
             {
-                returned = document.Document.SaveAsToRasterFormat(fileName, parameter);
+                returned = document.Document3D.SaveAsToRasterFormat(fileName, parameter);
             }
             catch (COMException ex)
             {

@@ -65,7 +65,7 @@ public partial class Api5Session
         var bodiesBefore = CountBodies(document);
 
         var bridge = BridgeFor(document);
-        var container = bridge.ContainerFor(document.Document, document.Id, document.Revision);
+        var container = bridge.ContainerFor(document.Document3D, document.Id, document.Revision);
         if (container is null)
         {
             throw new KompasContractException(
@@ -106,7 +106,7 @@ public partial class Api5Session
         // Without RebuildModel the API7 write stays a representation: MEASURED by probe E on
         // IExtrusion.Sketch and repeated on the chamfer F.10 and the fillet. The call order is part of
         // the contract, not style.
-        Api7Bridge.Rebuild(container, document.Document);
+        Api7Bridge.Rebuild(container, document.Document3D);
         BumpRevision(document, "hole." + command.Mode.ToString().ToLowerInvariant());
 
         var volumeAfter = ReadVolume(document);
@@ -572,7 +572,7 @@ public partial class Api5Session
     private HoleDto? ReadHole(DocumentEntry document, int index)
     {
         var bridge = BridgeFor(document);
-        var container = bridge.ContainerFor(document.Document, document.Id, document.Revision);
+        var container = bridge.ContainerFor(document.Document3D, document.Id, document.Revision);
         if (container is null || Api7Hole.Count(container) is not int count || index < 0 || index >= count)
         {
             return null;
@@ -611,7 +611,7 @@ public partial class Api5Session
     private HoleDto? ReadHoleFeature(DocumentEntry document)
     {
         var bridge = BridgeFor(document);
-        var container = bridge.ContainerFor(document.Document, document.Id, document.Revision);
+        var container = bridge.ContainerFor(document.Document3D, document.Id, document.Revision);
         if (container is null || Api7Hole.Count(container) != 1)
         {
             return null;
@@ -655,7 +655,7 @@ public partial class Api5Session
             ownFields: new[] { "depth_mm" });
 
         var bridge = BridgeFor(document);
-        var container = bridge.ContainerFor(document.Document, document.Id, document.Revision);
+        var container = bridge.ContainerFor(document.Document3D, document.Id, document.Revision);
         if (container is null)
         {
             throw new KompasContractException(
@@ -750,7 +750,7 @@ public partial class Api5Session
         // The order "write → Update() → rebuild" is part of the contract, not style: without
         // RebuildModel the API7 write stays a representation (MEASURED by probe E and repeated on the
         // chamfer and fillet).
-        Api7Bridge.Rebuild(container, document.Document);
+        Api7Bridge.Rebuild(container, document.Document3D);
         BumpRevision(document, "hole.update");
 
         var volumeAfter = ReadVolume(document);

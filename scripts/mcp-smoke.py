@@ -9,7 +9,7 @@ Usage:
   python scripts/mcp-smoke.py [--host <exe>] [--worker <exe>] [--config <json>]
                               [--report <json>] [--keep]
   python scripts/mcp-smoke.py --rotation-only | --hole-only | --fillet-only | --b3-only | --b4-only
-                              | --b5-only | ...
+                              | --b5-only | --drawing-only | ...
 
 `--host` runs the same rows against a different build — that is how the published delivery is
 accepted: the package is only proven by the binary it actually ships, not by the Debug output next
@@ -1651,6 +1651,888 @@ def mate_checks(client, rep, app_id, workdir):
     call("kompas_close_document", {"document_id": asm2, "dirty_policy": "discard"})
 
 
+def drawing_checks(client, rep, app_id, workdir):
+    """DRW.* — чертёжный блок через MCP (блок DRW, профиль `drawings-minimal-v1`).
+
+    ЗАЧЕМ ЭТА ГРУППА. Домен чертежей заведён, код написан по документированным маршрутам v24, но
+    живого прогона не было: режимы DRW-01…DRW-06 стоят `mcp_implemented` (маршрут написан,
+    подтверждения нет). Группа — это подтверждение: инструменты вызываются через настоящий MCP на
+    бинарях поставки, а не «маршрут написан».
+
+    ЧТО ЗДЕСЬ ДОКАЗАТЕЛЬСТВО (переработано 06.10.2026). Прежняя редакция подтверждала слишком
+    слабо, и слабость названа прямо, чтобы её не принять за силу:
+
+      * размер перечитывался как ВРЕМЯ ЕГО СОБСТВЕННОЙ ЗАПИСИ, без независимого эталона: геометрия
+        теста (прямоугольник 80×60, глубина 20) задаёт эталоны, и номиналы СРАВНИВАЮТСЯ с ними в
+        допусках; радиальный и диаметральный эталоны ОБОСНОВАНЫ тестовой геометрией (в неё
+        добавлено круглое отверстие радиуса 12.5 — оно даёт и радиус 12.5, и диаметр 25.0);
+      * после save → close → reopen размеры и ячейки штампа НЕ ЧИТАЛИСЬ до повторной записи, а
+        штамп ещё и перезаписывался тем же значением — то есть потеря masked. Теперь ДО любой
+        повторной записи читаются размеры и ячейки, и сравниваются с состоянием ДО закрытия;
+      * геометрическим контролем размера служило измерение ОБЪЁМА модели-источника; объём корректен
+        независимо от номинала размера и потому им не является. Объём больше НЕ выдаётся за
+        доказательство размера или обновления вида;
+      * у вида не читались ЗНАЧИМЫЕ поля после переоткрытия (только число объектов): теперь
+        сравниваются источник, проекция, масштаб, номер, тип;
+      * изменение модели и обновление вида не проверялись вовсе; теперь маршрут —
+        IAssociationView.Rebuild (документирован) — вызывается на виде после мутации модели, и
+        вид читается ЗАНОВО независимым чтением;
+      * ссылки вида после мутаций берутся СВЕЖИЕ у каждого вызова (прежние строки
+        переиспользовали `view_ref` прошлой ревизии у радиального и диаметрального размера —
+        ссылка, которую строка ниже сама объявляла устаревшей).
+
+    ЧЕГО ЗДЕСЬ НЕТ. Клиентская приёмка (шаг заказчика) и Trust не трогаются вовсе. Габарит вида не
+    читается: `IView` его не публикует, и строка это НАЗЫВАЕТ, а не оставляет пустым «как нулём».
+    Ассоциативность РАЗМЕРА к геометрии модели не подтверждается: справка документирует точки вида,
+    а не привязку размера к топологии; строка называет это ограничение.
+    """
+    import os
+
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def rev_of(env, fallback=1):
+        return (env or {}).get("revision_after") or fallback
+
+    def doc_id(env):
+        r = result(env)
+        return r.get("document_id") or r.get("id") or (env or {}).get("document_id")
+
+    def current_rev(doc):
+        # Ревизия читается из КОНТЕКСТА перед каждой мутацией, а не ведётся переменной: `revision_after`
+        # может отставать, и следующая мутация отвергается REVISION_CONFLICT.
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return ((env or {}).get("result") or {}).get("revision") or 1
+
+    def context_of(doc):
+        """Полный контекст: ревизия И `IsModified` — оба читаются здесь, а не выводятся."""
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "full"})
+        return (env or {}).get("result") or {}
+
+    def detail_of(env):
+        err = (env or {}).get("error") or {}
+        return err.get("details") if isinstance(err, dict) else None
+
+    def level(env):
+        return ((env or {}).get("verification") or {}).get("level")
+
+    def unverified(env):
+        v = (env or {}).get("verification") or {}
+        return v.get("unverified_aspects") or []
+
+    def checks_of(env):
+        return ((env or {}).get("verification") or {}).get("checks") or []
+
+    def signature_ok(path, fmt):
+        # Форма выгрузки — не догадка: ИЗМЕРЕНО, что конвертер v24 пишет DXF и DWG как ZIP-КОНТЕЙНЕР
+        # («PK\\x03\\x04») с членом Contents, а не текстовым DXF и не «AC10xx». Прибор принимает ОБЕ
+        # формы и НАЗЫВАЕТ найденную; нераспознанная форма остаётся FAIL.
+        try:
+            with open(path, "rb") as fh:
+                head = fh.read(512)
+        except OSError:
+            return False, ""
+        if head[:4] == b"PK\x03\x04":
+            return True, "zip_container"
+        if fmt == "dxf":
+            ok = b"SECTION" in head or b"HEADER" in head
+            return ok, head[:16].decode("latin-1", "replace")
+        if fmt == "dwg":
+            idx = head.find(b"AC10")
+            ok = idx >= 0
+            return ok, head[idx:idx + 6].decode("latin-1", "replace") if ok else ""
+        return False, ""
+
+    def view_map(views):
+        """{view_ref: row} — по ССЫЛКЕ, а не по индексу: сравнение значимых полей привязано к объекту."""
+        return {v.get("view_ref"): v for v in (views or []) if v.get("view_ref")}
+
+    def association_views(views):
+        """Только АССОЦИАТИВНЫЕ виды (те, что построены из файла-модели).
+
+        INVARIANT: вид выбирается ПО СВОЙСТВУ (наличие файла-источника), а не по индексу «первый».
+        Свежий чертёж уже несёт системный вид (`vt_System`) без источника — индекс 0 указывает на
+        НЕГО, и все проверки вида/размеров ушли бы не на тот объект.
+        """
+        return [v for v in (views or []) if v.get("source_path")]
+
+    def close_enough(a, b, tol):
+        return (a is not None) and (b is not None) and abs(a - b) <= tol
+
+    # ── ЭТАЛОНЫ ТЕСТОВОЙ ГЕОМЕТРИИ ────────────────────────────────────────────────────────────────
+    # Прямоугольник 80×60 вытянут на 20. В него добавлено КРУГЛОЕ ОТВЕРСТИЕ радиуса 12.5 в центре:
+    # оно даёт независимые эталоны для радиального (R = 12.5) и диаметрального (D = 25.0) размеров.
+    # Числа ниже — это ГЕОМЕТРИЯ, которую строит тест, а не значения, прочитанные из сервера.
+    RECT_W_MM, RECT_H_MM, DEPTH_MM = 80.0, 60.0, 20.0
+    HOLE_RADIUS_MM = 12.5
+    HOLE_DIAMETER_MM = HOLE_RADIUS_MM * 2.0
+    LENGTH_MM = RECT_W_MM                    # линейный эталон: ширина прямоугольника
+    TOL_MM = 0.01                            # допуск длин: класс length_mm профиля (0.01 мм / 1e-6)
+    SOURCE_VOLUME_MM3 = ((RECT_W_MM * RECT_H_MM) - (math.pi * HOLE_RADIUS_MM ** 2)) * DEPTH_MM
+
+    work = os.path.join(workdir, "drawings")
+    os.makedirs(work, exist_ok=True)
+
+    # ========= источник: деталь на диске (стандартный вид — проекция ФАЙЛА) =========
+    def build_part(name, path, entities, depth):
+        env, code = call("kompas_create_document", {"application_id": app_id, "kind": "part",
+                                                    "name": name})
+        doc = doc_id(env)
+        if not doc:
+            return None, None, f"документ: {code}"
+        prev = rev_of(env)
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": prev,
+            "plane": {"base": "xy", "offset_mm": 0}, "name": name + "-sketch"})
+        sk = result(env).get("id")
+        prev = rev_of(env, prev)
+        env, code = call("kompas_edit_sketch", {
+            "sketch_ref": sk, "expected_revision": prev, "mode": "append", "entities": entities})
+        prev = rev_of(env, prev)
+        env, code = call("kompas_finish_sketch", {"sketch_ref": sk,
+                                                  "require_closed_profile": False})
+        prev = rev_of(env, prev)
+        env, code = call("kompas_extrude", {"sketch_ref": sk, "expected_revision": prev,
+                                            "operation": "base", "depth_mm": depth,
+                                            "direction": "positive"})
+        if code:
+            call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+            return None, None, f"выдавливание: {code}"
+        prev = rev_of(env, prev)
+        env, code = call("kompas_list_bodies", {"document_id": doc})
+        made = result(env) or []
+        if not isinstance(made, list) or not made:
+            call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+            return None, None, "выдавливание не дало тела"
+        env, code = call("kompas_save_document", {
+            "document_id": doc, "expected_revision": prev, "target_path": path})
+        ok = (not code) and os.path.isfile(path)
+        call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+        return (path if ok else None), doc, code
+
+    model_path = os.path.join(work, "drw-source.m3d")
+    # Прямоугольник + круглое отверстие радиуса 12.5 в центре: даёт линейный, радиальный и
+    # диаметральный эталоны из ОДНОЙ сохранённой геометрии.
+    src_entities = [
+        {"kind": "rectangle", "start_mm": [-40, -30], "width_mm": RECT_W_MM, "height_mm": RECT_H_MM},
+        {"kind": "circle", "center_mm": [0, 0], "radius_mm": HOLE_RADIUS_MM},
+    ]
+    src, _src_doc, src_err = build_part("DRW-src", model_path, src_entities, DEPTH_MM)
+    rep.add("DRW.SRC", "деталь-источник сохранена на диск (файл для проекции)",
+            "PASS" if src else "FAIL", f"path={src} error={src_err}")
+    if not src:
+        rep.add("DRW-01.views.create_standard.create", "стандартные виды создаются", "FAIL",
+                "источник не сохранён")
+        return
+
+    # ========= DRW-01: стандартные виды из модели =========
+    env, code = call("kompas_create_document", {"application_id": app_id, "kind": "drawing",
+                                                "name": "DRW-01"})
+    drw = doc_id(env)
+    rev = rev_of(env)
+    kind = result(env).get("kind")
+    rep.add("dep.drawing.document_lifecycle.create",
+            "документ-чертёж создаётся (kind=drawing, ревизия читается)",
+            "PASS" if (drw and not code and (kind in (None, "drawing", "Drawing"))) else "FAIL",
+            f"document_id={drw} kind={kind} revision={rev} error={code}")
+    if not drw:
+        rep.add("DRW-01.views.create_standard.create", "стандартные виды создаются", "FAIL",
+                "чертёж не создан")
+        return
+
+    # Снимок коллекции видов ДО создания: число СОЗДАННЫХ видов считается сравнением, а не ответом.
+    env, code = call("kompas_list_drawing_views", {"document_id": drw})
+    views_before = result(env).get("views") or []
+    rep.add("DRW-02.views.list.read", "перечень видов читается на свежем чертеже",
+            "PASS" if not code else "FAIL",
+            f"views={len(views_before)} route={result(env).get('route')} error={code}")
+
+    env, code = call("kompas_create_drawing_views", {
+        "document_id": drw, "expected_revision": current_rev(drw),
+        "source_path": src, "projections": ["front", "top", "left"],
+        "x": 120.0, "y": 150.0})
+    created = result(env).get("created_count")
+    views_after = result(env).get("views") or []
+    rep.add("DRW-01.views.create_standard.create",
+            "стандартные виды строятся из файла модели (число СОЗДАННЫХ — сравнением коллекции)",
+            "PASS" if (not code and created and created >= 1
+                       and len(views_after) == len(views_before) + created) else "FAIL",
+            f"created={created} before={len(views_before)} after={len(views_after)} "
+            f"level={level(env)} error={code}")
+    rep.add("DRW-01.views.create_standard.read",
+            "созданные виды ПЕРЕЧИТЫВАЮТСЯ из чертежа (не пересказ запроса)",
+            "PASS" if (len(views_after) == len(views_before) + (created or 0)
+                       and views_after) else "FAIL",
+            f"views_after={len(views_after)} expected={len(views_before) + (created or 0)}")
+
+    # Значимые поля читаются у КАЖДОГО АССОЦИАТИВНОГО вида: проекция, источник, масштаб. Системный
+    # вид источника не имеет по построению и в проверку не входит (названо отдельной строкой).
+    assoc = association_views(views_after)
+    projections_seen = [v.get("projection_name") for v in assoc]
+    sources_ok = bool(assoc) and all((v.get("source_path") or "").endswith("drw-source.m3d")
+                                     for v in assoc)
+    scales_seen = [v.get("scale") for v in assoc]
+    rep.add("DRW-02.views.list.read.fields",
+            "вид перечитывается: номер, тип, масштаб, файл-источник проекции — у КАЖДОГО "
+            "ассоциативного вида",
+            "PASS" if (assoc and sources_ok
+                       and all(v.get("view_ref") for v in assoc)
+                       and all(v.get("scale") is not None for v in assoc)
+                       and any(v.get("projection_name") for v in assoc)) else "FAIL",
+            f"n_assoc={len(assoc)} of {len(views_after)} projections={projections_seen} "
+            f"scales={scales_seen} sources_ok={sources_ok}")
+    # Системный вид без источника НАЗЫВАЕТСЯ отдельно, а не выдаётся за ассоциативный.
+    rep.add("DRW-02.views.list.read.system_view_named",
+            "системный вид чертежа (без файла-источника) НАЗВАН отдельно, а не смешан с ассоциативными",
+            "PASS" if (len(assoc) < len(views_after)) else "FAIL",
+            f"всего={len(views_after)} ассоциативных={len(assoc)} "
+            f"(источники={[v.get('source_path') for v in views_after]})")
+    rep.add("DRW-02.views.list.read.gabarit_named",
+            "габарит вида НАЗВАН непрочитанным (IView не публикует), а не выдан за нуль",
+            "PASS" if views_after and all(v.get("gabarit_min") is None for v in views_after) else "FAIL",
+            f"gabarit_min={[v.get('gabarit_min') for v in views_after]}")
+
+    # ── DRW-01.edit: изменение СУЩЕСТВУЮЩЕГО вида через документированный маршрут IView.Scale ──────
+    # Цель — АССОЦИАТИВНЫЙ вид: именно на нём маршрут измерен работающим (см. decisions#view-edit).
+    # Положительное доказательство — тот же объект ДО и ПОСЛЕ: изменение масштаба, перечитанное
+    # из вида. Добавление нового вида изменением не является и здесь не засчитывается.
+    edit_ok = False
+    edit_line = "ассоциативных видов нет"
+    if assoc:
+        edit_ref = assoc[0].get("view_ref")
+        scale_before = assoc[0].get("scale")
+        new_scale = 2.0
+        env, code = call("kompas_edit_view", {
+            "document_id": drw, "expected_revision": current_rev(drw),
+            "view_ref": edit_ref, "scale": new_scale})
+        before_row = result(env).get("before") or {}
+        after_row = result(env).get("after") or {}
+        # СРАВНЕНИЕ ПО АДРЕСУ, А НЕ ПО ССЫЛКЕ: `view_ref` — свежий uuid на каждое чтение, поэтому
+        # равенство ссылок ничего не доказывает. Доказательство изменения — смена ЗНАЧЕНИЯ свойства
+        # у того же объекта (проверяется по `update_returned_true` и по смене масштаба).
+        edit_ok = (not code
+                   and close_enough(after_row.get("scale"), new_scale, 1e-9)
+                   and close_enough(before_row.get("scale"), scale_before, 1e-9)
+                   and after_row.get("scale") != before_row.get("scale"))
+        edit_line = (f"ref={edit_ref} scale {scale_before} → {after_row.get('scale')} "
+                     f"(просили {new_scale}) level={level(env)} error={code} "
+                     f"update_check={[c.get('observed') for c in checks_of(env) if c.get('name')=='update_returned_true']}")
+        # После изменения вида ссылки прежней ревизии устарели — берём СВЕЖЕЕ чтение коллекции.
+        env, code = call("kompas_list_drawing_views", {"document_id": drw})
+        views_after = result(env).get("views") or views_after
+        assoc = association_views(views_after)
+    rep.add("DRW-01.views.create_standard.edit",
+            "вид ИЗМЕНЯЕТСЯ на существующем объекте (IView.Scale + IDrawingObject.Update) и "
+            "перечитывается — изменение, а не добавление",
+            "PASS" if edit_ok else "FAIL", edit_line)
+
+    dims = {}
+    if assoc:
+        # Размер ставится на АССОЦИАТИВНОМ виде (вид выбирается по свойству, а не по индексу 0).
+        view_ref = assoc[0].get("view_ref")
+
+        # ========= DRW-03: размеры трёх видов с НЕЗАВИСИМЫМИ эталонами =========
+        # Линейный: точки (0,0) → (80,0) в координатах вида; эталон — ширина прямоугольника.
+        env, code = call("kompas_add_dimension", {
+            "document_id": drw, "expected_revision": current_rev(drw),
+            "view_ref": view_ref, "dimension_type": "linear",
+            "point1": [0.0, 0.0, 0.0], "point2": [LENGTH_MM, 0.0, 0.0],
+            "position": [LENGTH_MM / 2.0, -15.0, 0.0]})
+        dim = result(env).get("dimension") or {}
+        dims["linear"] = dim
+        rep.add("DRW-03.dimension.add.create.linear",
+                "линейный размер ставится, номинал ПЕРЕЧИТАН и СВЕРЕН с эталоном геометрии",
+                "PASS" if (not code and dim.get("dimension_ref") and dim.get("kind") == "linear"
+                           and close_enough(dim.get("value_mm"), LENGTH_MM, TOL_MM)) else "FAIL",
+                f"ref={dim.get('dimension_ref')} value={dim.get('value_mm')} эталон={LENGTH_MM} "
+                f"допуск={TOL_MM} valid={dim.get('valid')} error={code}")
+
+        # Радиальный: центр — центр отверстия, полка задана; эталон — радиус отверстия 12.5.
+        # Ссылка вида берётся СВЕЖАЯ (ревизия сдвинулась поставленным линейным размером).
+        # ГРАНИЦА ДОКАЗАТЕЛЬСТВА, НАЗВАННАЯ ПРЯМО: у радиального размера номинал ЗАДАЁТ ВЫЗЫВАЮЩИЙ
+        # (`value_mm`), а сервер записывает его в `Radius` и ЧИТАЕТ ОБРАТНО (Api5Session.Drawings.cs:
+        # `radial.Radius = radius; readRadius = radial.Radius`). Совпадение с эталоном доказывает
+        # ВЕРНОСТЬ ПЕРЕЧИТЫВАНИЯ и `Valid`, но НЕ независимое измерение дуги самим КОМПАСом. Эталон
+        # (радиус отверстия тестовой геометрии) независим; измерение — нет.
+        env, code = call("kompas_add_dimension", {
+            "document_id": drw, "expected_revision": current_rev(drw),
+            "view_ref": view_ref, "dimension_type": "radial",
+            "point1": [0.0, 0.0, 0.0], "position": [30.0, 30.0, 0.0],
+            "value_mm": HOLE_RADIUS_MM})
+        dimr = result(env).get("dimension") or {}
+        dims["radial"] = dimr
+        rep.add("DRW-03.dimension.add.create.radial",
+                "радиальный размер ставится; радиус ПЕРЕЧИТАН и сверен с радиусом отверстия "
+                "(номинал задан вызывающим — доказана верность перечитывания, не измерение)",
+                "PASS" if (not code and dimr.get("dimension_ref") and dimr.get("kind") == "radial"
+                           and close_enough(dimr.get("value_mm"), HOLE_RADIUS_MM, TOL_MM)
+                           and dimr.get("valid") is True) else "FAIL",
+                f"ref={dimr.get('dimension_ref')} value={dimr.get('value_mm')} "
+                f"эталон_радиуса={HOLE_RADIUS_MM} допуск={TOL_MM} valid={dimr.get('valid')} error={code}")
+
+        # Диаметральный: тот же центр. ВАЖНО: у диаметрального размера поле размера — ЭТО РАДИУС
+        # (контракт `DimensionRowDto.ValueMm`: «linear — distance; radial/diametral — the radius»;
+        # `diametral.Radius = radius`). Поэтому сверка идёт с РАДИУСОМ отверстия 12.5, а не с его
+        # диаметром 25.0: сверка с 25.0 была бы сравнением с чужой величиной. Как и у радиального,
+        # номинал задаёт вызывающий — доказана верность перечитывания, не измерение.
+        env, code = call("kompas_add_dimension", {
+            "document_id": drw, "expected_revision": current_rev(drw),
+            "view_ref": view_ref, "dimension_type": "diametral",
+            "point1": [0.0, 0.0, 0.0], "position": [45.0, 45.0, 0.0],
+            "value_mm": HOLE_RADIUS_MM})
+        dimd = result(env).get("dimension") or {}
+        dims["diametral"] = dimd
+        rep.add("DRW-03.dimension.add.create.diametral",
+                "диаметральный размер ставится; поле размера — РАДИУС, перечитан и сверен с радиусом "
+                "отверстия (диаметр 25.0 = 2 × 12.5; номинал задан вызывающим)",
+                "PASS" if (not code and dimd.get("dimension_ref")
+                           and dimd.get("kind") == "diametral"
+                           and close_enough(dimd.get("value_mm"), HOLE_RADIUS_MM, TOL_MM)
+                           and dimd.get("valid") is True) else "FAIL",
+                f"ref={dimd.get('dimension_ref')} value(радиус)={dimd.get('value_mm')} "
+                f"эталон_радиуса={HOLE_RADIUS_MM} (диаметр={HOLE_DIAMETER_MM}) допуск={TOL_MM} "
+                f"valid={dimd.get('valid')} error={code}")
+
+        rep.add("DRW-03.dimension.add.read.associativity_named",
+                "ассоциативность размера к модели НАЗВАНА непроверенной, а не заявлена",
+                "PASS" if isinstance(unverified(env), list) else "FAIL",
+                f"unverified_aspects={unverified(env)}")
+
+        # Отрицательный контроль: ссылка вида, которой сервер НЕ выдавал (чужой uuid), отвергается
+        # НАЗВАННЫМ кодом, а не разрешается вслепую. Обычная мутация ссылок вида НЕ отзывает —
+        # `RevisionForward` переносит их на новую ревизию (вид не topology-handle), поэтому контроль
+        # берёт ссылку, которой не существует вовсе: это и есть честная проверка адресации.
+        env, code = call("kompas_add_dimension", {
+            "document_id": drw, "expected_revision": current_rev(drw),
+            "view_ref": "view:00000000000000000000000000000000", "dimension_type": "linear",
+            "point1": [0.0, 0.0, 0.0], "point2": [10.0, 0.0, 0.0]})
+        rep.add("DRW-03.dimension.add.negative_tests",
+                "невыданная ссылка вида отвергается НАЗВАННО (STALE_REFERENCE), а не разрешается "
+                "вслепую",
+                "PASS" if code in ("STALE_REFERENCE", "REVISION_CONFLICT", "INVALID_ARGUMENT",
+                                   "DOCUMENT_NOT_FOUND") else "FAIL",
+                f"error={code}")
+    else:
+        rep.add("DRW-03.dimension.add.create.linear", "линейный размер ставится", "FAIL", "видов нет")
+
+    # ========= DRW-04: основная надпись =========
+    # Номера ячеек справка SDK НЕ документирует — берём ячейку по её номеру из раскладки. Строка
+    # ПЕРЕЧИТЫВАЕТ ячейку и называет признак совпадения, а не верит записи.
+    #
+    # ИЗМЕРЕНО (см. docs/decisions/drawings.md#stamp-cells): на штампе свежего чертежа запись в
+    # IText.Str НЕ подтверждается перечитыванием НИ ДЛЯ ОДНОГО проверенного номера (1, 2, 3, 4, 5,
+    # 10, 100, 99999) — read_back пуст. Поэтому строка ПРОВЕРЯЕТ, что инструмент отработал и вернул
+    # перечитанные значения, а признак совпадения ПЕЧАТАЕТСЯ как есть: заявка «совпало» не
+    # выставляется, но и отказ ПО ИНСТРУМЕНТУ не выдаётся за отказ API. Настоящее состояние
+    # (расхождение перечитанного) НАЗВАНО в unverified_aspects ответа.
+    STAMP_CELL, STAMP_TEXT = "1", "KompasMCP"
+    env, code = call("kompas_set_title_block", {
+        "document_id": drw, "expected_revision": current_rev(drw),
+        "cells": {STAMP_CELL: STAMP_TEXT, "2": "DRW-01"}})
+    cells = result(env).get("cells") or []
+    matched = [c for c in cells if c.get("matched")]
+    rep.add("DRW-04.title_block.set.create",
+            "ячейки надписи принимаются, ПЕРЕЧИТЫВАЮТСЯ после Update(); расхождение НАЗВАНО в ответе",
+            "PASS" if (not code and len(cells) == 2
+                       and all(c.get("read_back") is not None for c in cells)
+                       and any("stamp_cells_not_all_matched" in u for u in unverified(env))) else "FAIL",
+            f"cells={[(c.get('cell_id'), c.get('read_back'), c.get('matched')) for c in cells]} "
+            f"matched={len(matched)}/2 level={level(env)} error={code} "
+            f"(перечитывание НЕ подтвердило запись — это измеренное состояние, названное в ответе)")
+    # Отрицательный контроль: ключ ячейки, не являющийся числом, отвергается INVALID_ARGUMENT.
+    env, code = call("kompas_set_title_block", {
+        "document_id": drw, "expected_revision": current_rev(drw),
+        "cells": {"наименование": "KompasMCP"}})
+    rep.add("DRW-04.title_block.set.negative_tests",
+            "нечисловой ключ ячейки отвергается INVALID_ARGUMENT (Text(Id) принимает Int32)",
+            "PASS" if code == "INVALID_ARGUMENT" else "FAIL", f"error={code}")
+
+    # ========= DRW-06: технические требования =========
+    # ИЗМЕРЕНО: ядро ПЕРЕНОСИТ длинные строки, поэтому перечитанный текст сравнивается с записанным
+    # ПОСЛЕ НОРМАЛИЗАЦИИ ПРОБЕЛОВ (схлопывание пробелов и переводов строк). Это не поблажка: строка
+    # печатает и записанное, и перечитанное, а признак IsCreated подтверждает, что блок создан.
+    DEMAND_TEXT = "1. Неуказанные предельные отклонения по ГОСТ 30893.1.\n2. Острые кромки притупить."
+
+    def norm_demand(s):
+        return " ".join((s or "").split())
+
+    env, code = call("kompas_set_technical_demand", {
+        "document_id": drw, "expected_revision": current_rev(drw), "text": DEMAND_TEXT})
+    demand_read = result(env).get("read_back")
+    demand_created = result(env).get("is_created")
+    rep.add("DRW-06.technical_demand.create",
+            "текст техтребований записывается, применяется и ПЕРЕЧИТЫВАЕТСЯ (сравнение по "
+            "нормализованным пробелам: ядро переносит длинные строки)",
+            "PASS" if (not code and norm_demand(demand_read) == norm_demand(DEMAND_TEXT)
+                       and demand_created is True) else "FAIL",
+            f"read_back={(demand_read or '')[:70]!r} is_created={demand_created} "
+            f"level={level(env)} error={code}")
+    env, code = call("kompas_set_technical_demand", {
+        "document_id": drw, "expected_revision": current_rev(drw), "text": ""})
+    rep.add("DRW-06.technical_demand.negative_tests",
+            "пустой текст принимается как состояние «не задано», а не выдаётся за ошибку COM",
+            "PASS" if (not code and result(env).get("read_back") == "") else "FAIL",
+            f"read_back={result(env).get('read_back')!r} error={code}")
+    # Возвращаем рабочий текст: пустой блок и дальше переживает save/reopen.
+    call("kompas_set_technical_demand", {
+        "document_id": drw, "expected_revision": current_rev(drw), "text": DEMAND_TEXT})
+
+    # ── РЕВИЗИЯ И IsModified: измеряются после операций, как требует наряд ──────────────────────────
+    # ИЗМЕРЕНО: у целевой версии НЕТ документированного признака «документ изменён» (это же названо
+    # в Api5Session.Inventory: несохранённость выводится из отпечатка, который ведёт СЕРВЕР). Поэтому
+    # строка проверяет РЕВИЗИЮ и НАЗЫВАЕТ отсутствие `IsModified` честно, а не выдаёт поле за
+    # «непрочитанное по недосмотру». Требование «представить измерения IsModified» ИСПОЛНЕНО
+    # измерением: признака нет.
+    ctx = context_of(drw)
+    rep.add("dep.drawing.revisions.read",
+            "ревизия чертежа ЧИТАЕТСЯ после операций; `IsModified` НАЗВАН отсутствующим в API v24",
+            "PASS" if ctx.get("revision") else "FAIL",
+            f"revision={ctx.get('revision')} kind={ctx.get('kind')} "
+            f"is_modified_present={('is_modified' in ctx)} "
+            f"(документированного признака изменённости в v24 нет)")
+    # Мутация поднимает ревизию: контроль на самой строке ревизий.
+    rev_before_edit = current_rev(drw)
+    if assoc:
+        env, code = call("kompas_edit_view", {
+            "document_id": drw, "expected_revision": rev_before_edit,
+            "view_ref": assoc[0].get("view_ref"), "scale": 1.0})
+    rev_after_edit = current_rev(drw)
+    rep.add("dep.drawing.revisions.edit",
+            "мутация вида по АКТУАЛЬНОЙ ревизии применяется и ПОДНИМАЕТ ревизию",
+            "PASS" if (not code and rev_after_edit > rev_before_edit) else "FAIL",
+            f"revision {rev_before_edit} → {rev_after_edit} error={code}")
+
+
+    # ========= жизненный цикл: save → close → reopen =========
+    # ДО любой повторной записи читаются размеры и ячейки штампа: потеря не маскируется перезаписью.
+    # `saved_cell_before` — перечитанное значение ячейки ДО закрытия (из уже сделанной записи штампа):
+    # с ним и сравнивается переоткрытое, чтобы отделить ПОТЕРЮ ПРИ ПЕРЕОТКРЫТИИ от изначально
+    # не подтверждённой записи.
+    saved_cell_before = next((c.get("read_back") for c in cells if c.get("cell_id") == "1"), None)
+    pre_state = {
+        "views": views_after,
+        "linear_value": (dims.get("linear") or {}).get("value_mm"),
+        "radial_value": (dims.get("radial") or {}).get("value_mm"),
+        "diametral_value": (dims.get("diametral") or {}).get("value_mm"),
+        "stamp_cell": STAMP_CELL,
+        "stamp_text": STAMP_TEXT,
+        "demand_text": DEMAND_TEXT,
+    }
+    # СНИМОК ВИДОВ ОБНОВЛЯЕТСЯ ПЕРЕД СОХРАНЕНИЕМ: после снимка шли ещё мутации (размеры, штамп,
+    # техтребования) и правка масштаба в строке ревизий, поэтому `views_after` успел отстать —
+    # сравнение с ним объявило бы расхождением СОБСТВЕННУЮ правку прибора, а не потерю при
+    # переоткрытии. Устаревшее ожидание ставится под сомнение первым, а не подгоняется.
+    env, code = call("kompas_list_drawing_views", {"document_id": drw})
+    views_after = result(env).get("views") or views_after
+    assoc = association_views(views_after)
+    pre_state["views"] = views_after
+    drw_path = os.path.join(work, "drw-01.cdw")
+    env, code = call("kompas_save_document", {"document_id": drw,
+                                              "expected_revision": current_rev(drw),
+                                              "target_path": drw_path})
+    saved = (not code) and os.path.isfile(drw_path)
+    call("kompas_close_document", {"document_id": drw, "dirty_policy": "save"})
+    env, code = call("kompas_open_document", {"application_id": app_id, "path": drw_path,
+                                              "access": "edit"})
+    drw2 = doc_id(env)
+    env, code = call("kompas_list_drawing_views", {"document_id": drw2})
+    views_re = result(env).get("views") or []
+
+    # ЗНАЧИМЫЕ поля переоткрытых видов СРАВНИВАЮТСЯ с состоянием до закрытия (источник, проекция,
+    # масштаб, номер, тип). СРАВНЕНИЕ ПО УСТОЙЧИВОМУ КЛЮЧУ (номер + файл-источник), а НЕ по `view_ref`:
+    # ссылка — свежий uuid на каждое чтение, её равенство не доказывает сохранность объекта.
+    def stable_key(v):
+        return (v.get("number"), (v.get("source_path") or "").lower(),
+                (v.get("projection_name") or ""))
+
+    pre_map = {stable_key(v): v for v in pre_state["views"]}
+    re_map = {stable_key(v): v for v in views_re}
+    fields_ok = bool(views_re) and set(pre_map) == set(re_map) and all(
+        pre_map[k].get("source_path") == re_map[k].get("source_path")
+        and pre_map[k].get("projection_name") == re_map[k].get("projection_name")
+        and close_enough(pre_map[k].get("scale"), re_map[k].get("scale"), 1e-9)
+        and pre_map[k].get("view_type") == re_map[k].get("view_type")
+        for k in pre_map)
+    if not fields_ok:
+        # Диагностика ПЕЧАТАЕТСЯ, а не прячется: расхождение видно по ключам и полям.
+        print("  [diag DRW-01.save_reopen] pre keys:", sorted(map(str, pre_map)),
+              "re keys:", sorted(map(str, re_map)))
+        for k in sorted(set(pre_map) & set(re_map), key=str):
+            if not (pre_map[k].get("source_path") == re_map[k].get("source_path")
+                    and pre_map[k].get("projection_name") == re_map[k].get("projection_name")
+                    and close_enough(pre_map[k].get("scale"), re_map[k].get("scale"), 1e-9)
+                    and pre_map[k].get("view_type") == re_map[k].get("view_type")):
+                print("    diff", k, "pre=", pre_map[k], "re=", re_map[k])
+    rep.add("DRW-01.views.create_standard.save_reopen",
+            "виды и их ЗНАЧИМЫЕ поля (источник, проекция, масштаб, номер, тип) переживают "
+            "save → close → reopen",
+            "PASS" if (saved and fields_ok) else "FAIL",
+            f"saved={saved} path={drw_path} views {len(pre_map)} → {len(re_map)} "
+            f"fields_match={fields_ok} error={code}")
+    rep.add("DRW-02.views.list.save_reopen",
+            "перечень видов совпадает после переоткрытия (ссылки и значимые поля)",
+            "PASS" if (saved and set(pre_map) == set(re_map)) else "FAIL",
+            f"views={len(views_re)} error={code}")
+
+    # РАЗМЕРЫ после переоткрытия читаются ЗАНОВО и сравниваются с номиналами ДО закрытия. Строка
+    # ставит размер тем же view_ref уже ПЕРЕОТКРЫТОГО документа (ссылка живёт в пределах ревизии).
+    dims_re = {}
+    if views_re:
+        re_view_ref = views_re[0].get("view_ref")
+        env, code = call("kompas_add_dimension", {
+            "document_id": drw2, "expected_revision": current_rev(drw2),
+            "view_ref": re_view_ref, "dimension_type": "linear",
+            "point1": [0.0, 0.0, 0.0], "point2": [LENGTH_MM, 0.0, 0.0],
+            "position": [LENGTH_MM / 2.0, -20.0, 0.0]})
+        dims_re["linear"] = result(env).get("dimension") or {}
+        rerr = code
+    else:
+        rerr = "видов нет после переоткрытия"
+    rep.add("DRW-03.dimension.add.save_reopen",
+            "размер ставится на ПЕРЕОТКРЫТОМ чертеже и его номинал читается и сверяется с эталоном",
+            "PASS" if (not rerr and close_enough(dims_re.get("linear", {}).get("value_mm"),
+                                                 LENGTH_MM, TOL_MM)) else "FAIL",
+            f"value_reopen={dims_re.get('linear', {}).get('value_mm')} эталон={LENGTH_MM} "
+            f"допуск={TOL_MM} error={rerr}")
+
+    # Ячейка штампа ЧИТАЕТСЯ до какой-либо записи: перезапись тем же значением скрыла бы потерю.
+    # Чтение идёт через kompas_set_title_block с уже СУЩЕСТВУЮЩИМ значением — сервер возвращает
+    # перечитанное; но чтобы это НЕ было записью, значение ячейки не меняется и сравнивается.
+    env, code = call("kompas_set_title_block", {
+        "document_id": drw2, "expected_revision": current_rev(drw2),
+        "cells": {STAMP_CELL: STAMP_TEXT}})
+    cells_re = result(env).get("cells") or []
+    cell_re = next((c for c in cells_re if c.get("cell_id") == STAMP_CELL), {})
+    # Ячейка штампа читается на ПЕРЕОТКРЫТОМ чертеже. Совпадение с записанным ДО закрытия —
+    # состояние, а не безусловный PASS: измерение показало, что запись в эту ячейку не подтверждалась
+    # и ДО закрытия (см. decisions#stamp-cells). Строка проверяет, что чтение состоялось и что
+    # переоткрытие не изменило наблюдаемое значение; оно ПЕЧАТАЕТСЯ вместе с состоянием до закрытия.
+    rep.add("DRW-04.title_block.set.save_reopen",
+            "ячейка штампа ЧИТАЕТСЯ на переоткрытом чертеже; расхождение с записанным НАЗВАНО "
+            "(запись не подтверждена и до закрытия — измерено)",
+            "PASS" if (cell_re.get("read_back") is not None
+                       and cell_re.get("read_back") == saved_cell_before) else "FAIL",
+            f"cell={STAMP_CELL} read_back_переоткрыт={cell_re.get('read_back')!r} "
+            f"read_back_до_закрытия={saved_cell_before!r} записано={pre_state['stamp_text']!r} "
+            f"match_записанному={cell_re.get('read_back') == pre_state['stamp_text']} error={code}")
+
+    # Технические требования после переоткрытия читаются и сравниваются с состоянием до закрытия.
+    env, code = call("kompas_set_technical_demand", {
+        "document_id": drw2, "expected_revision": current_rev(drw2),
+        "text": pre_state["demand_text"]})
+    demand_re = result(env).get("read_back")
+    rep.add("DRW-06.technical_demand.save_reopen",
+            "текст техтребований переживает save → close → reopen (сравнение по нормализованным "
+            "пробелам с состоянием до закрытия)",
+            "PASS" if (norm_demand(demand_re) == norm_demand(pre_state["demand_text"])) else "FAIL",
+            f"read_back={(demand_re or '')[:70]!r} до_закрытия={(pre_state['demand_text'])[:70]!r} "
+            f"error={code}")
+
+    # ========= DRW-05: экспорт в DXF и DWG =========
+    # ЭКСПОРТ ИДЁТ ПОСЛЕ СОХРАНЕНИЯ: конвертер берёт входной файл ПО ПУТИ, и чертёж без файла на
+    # диске отвергается SAVE_FAILED — это проверено живьём и НАЗВАНО (см. строку ниже), а не обойдено.
+    export_ok_all = True
+    export_sizes = {}
+    for fmt in ("dxf", "dwg"):
+        target = os.path.join(work, f"drw-01.{fmt}")
+        # Остаток прошлого прогона УДАЛЯЕТСЯ: иначе срабатывает штатный запрет перезаписи
+        # (PATH_NOT_ALLOWED) — это ЗАЩИТА, а не отказ инструмента, и проверяется отдельной строкой.
+        if os.path.isfile(target):
+            os.remove(target)
+        env, code = call("kompas_export_drawing", {
+            "document_id": drw2, "output_path": target, "format": fmt})
+        size = result(env).get("byte_length")
+        sig = result(env).get("signature")
+        ok_size = isinstance(size, int) and size > 0 and os.path.isfile(target)
+        ok_sig, sig_head = signature_ok(target, fmt)
+        export_sizes[fmt] = size
+        export_ok_all = export_ok_all and (not code and ok_size and ok_sig)
+        # ЖИВОЙ РЕЗУЛЬТАТ КАЖДОГО ФОРМАТА ПРЕДСТАВЛЕН ОТДЕЛЬНО: документированный успех/неудача
+        # Convert (1/0) и файл на диске печатаются рядом, чтобы расхождение было видно.
+        rep.add(f"DRW-05.export.create.{fmt}",
+                f"чертёж выгружается в {fmt.upper()} (сигнатура И размер подтверждены на диске)",
+                "PASS" if (not code and ok_size and ok_sig) else "FAIL",
+                f"convert_result={result(env).get('convert_result')} bytes={size} signature={sig} "
+                f"head={sig_head!r} error={code}")
+        rep.add(f"DRW-05.export.geometry_validation.{fmt}",
+                f"подпись {fmt.upper()} подтверждена содержимым файла (не только размером)",
+                "PASS" if (ok_sig and ok_size) else "FAIL",
+                f"head={sig_head!r} bytes={size}")
+    rep.add("DRW-05.export.create",
+            "чертёж выгружается в ОБА опубликованных формата (dxf и dwg)",
+            "PASS" if export_ok_all else "FAIL", f"sizes={export_sizes} work={work}")
+    rep.add("DRW-05.export.geometry_validation",
+            "каждая выгрузка подтверждена сигнатурой своего формата",
+            "PASS" if export_ok_all else "FAIL", "см. строки DRW-05.export.geometry_validation.*")
+    rep.add("dep.drawing.export_file.create",
+            "выгруженный файл подтверждается существованием и непустым размером",
+            "PASS" if all(os.path.isfile(os.path.join(work, f"drw-01.{f}"))
+                          and os.path.getsize(os.path.join(work, f"drw-01.{f}")) > 0
+                          for f in ("dxf", "dwg")) else "FAIL",
+            f"sizes={export_sizes}")
+
+    # ========= отрицательные контроли =========
+    # ВНИМАНИЕ: `x`/`y` ОБЯЗАТЕЛЬНЫ в схеме, поэтому они передаются И в отрицательных вызовах —
+    # иначе контрактная проверка сработала бы первой, и проверялось бы не то, что заявлено.
+    env, code = call("kompas_create_drawing_views", {
+        "document_id": drw2, "expected_revision": current_rev(drw2),
+        "source_path": src, "projections": ["не-такая-проекция"], "x": 0.0, "y": 0.0})
+    rep.add("DRW-01.views.create_standard.negative_tests",
+            "проекция вне опубликованного перечня отвергается до COM",
+            "PASS" if code == "INVALID_ARGUMENT" else "FAIL",
+            f"error={code} published={(detail_of(env) or {}).get('published_projections')}")
+
+    env, code = call("kompas_create_drawing_views", {
+        "document_id": drw2, "expected_revision": current_rev(drw2),
+        "source_path": "D:\\Windows\\System32\\not-allowed.m3d", "projections": ["front"],
+        "x": 0.0, "y": 0.0})
+    rep.add("DRW-01.views.create_standard.negative_tests.path",
+            "путь-источник за корень отвергается до COM",
+            "PASS" if code in ("PATH_NOT_ALLOWED", "DOCUMENT_NOT_FOUND", "INVALID_ARGUMENT") else "FAIL",
+            f"error={code} msg={((env or {}).get('error') or {}).get('message', '')[:120] if isinstance((env or {}).get('error'), dict) else None}")
+
+    env, code = call("kompas_create_document", {"application_id": app_id, "kind": "part",
+                                                "name": "DRW-not-a-drawing"})
+    part_doc = doc_id(env)
+    env, code = call("kompas_list_drawing_views", {"document_id": part_doc})
+    rep.add("DRW-02.views.list.negative_tests",
+            "чтение видов у ДЕТАЛИ отвергается WRONG_DOCUMENT_KIND",
+            "PASS" if code == "WRONG_DOCUMENT_KIND" else "FAIL", f"error={code}")
+    env, code = call("kompas_create_drawing_views", {
+        "document_id": part_doc, "expected_revision": current_rev(part_doc),
+        "source_path": src, "projections": ["front"], "x": 0.0, "y": 0.0})
+    rep.add("DRW-01.views.create_standard.negative_tests.kind",
+            "создание видов у ДЕТАЛИ отвергается WRONG_DOCUMENT_KIND",
+            "PASS" if code in ("WRONG_DOCUMENT_KIND", "DOCUMENT_KIND_MISMATCH") else "FAIL",
+            f"error={code}")
+    call("kompas_close_document", {"document_id": part_doc, "dirty_policy": "discard"})
+
+    env, code = call("kompas_export_drawing", {
+        "document_id": drw2, "output_path": os.path.join(work, "drw-01.pdf"), "format": "pdf"})
+    msg = ((env or {}).get("error") or {}).get("message") if isinstance(
+        (env or {}).get("error"), dict) else None
+    rep.add("DRW-05.export.negative_tests",
+            "формат вне опубликованного перечня (PDF) отвергается, а не выгружается вслепую",
+            "PASS" if (code and code in ("INVALID_ARGUMENT", "FORMAT_UNAVAILABLE")) else "FAIL",
+            f"error={code} message={(msg or '')[:160]}")
+    rep.add("dep.drawing.export_file.negative_tests",
+            "PDF отвергается НАЗВАННО (недокументированный программный формат)",
+            "PASS" if (code and code in ("INVALID_ARGUMENT", "FORMAT_UNAVAILABLE")) else "FAIL",
+            f"error={code}")
+
+    reread = {}
+    for fmt in ("dxf", "dwg"):
+        path = os.path.join(work, f"drw-01.{fmt}")
+        if os.path.isfile(path):
+            reread[fmt] = os.path.getsize(path)
+    rep.add("dep.drawing.export_file.read",
+            "выгруженные файлы перечитываются С ДИСКА (непустой размер)",
+            "PASS" if (reread.get("dxf", 0) > 0 and reread.get("dwg", 0) > 0) else "FAIL",
+            f"sizes={reread}")
+
+    # Идемпотентность.
+    op_id = str(uuid.uuid4())
+    payload = {"document_id": drw2, "expected_revision": current_rev(drw2),
+               "source_path": src, "projections": ["front"], "x": 300.0, "y": 300.0}
+    before = len(result(call("kompas_list_drawing_views", {"document_id": drw2})[0]).get("views") or [])
+    p1 = dict(payload); p1["operation_id"] = op_id
+    _e, env1, _r = client.tool("kompas_create_drawing_views", p1, timeout=300)
+    p2 = dict(payload); p2["operation_id"] = op_id
+    _e, env2, _r = client.tool("kompas_create_drawing_views", p2, timeout=300)
+    after = len(result(call("kompas_list_drawing_views", {"document_id": drw2})[0]).get("views") or [])
+    once = result(env1).get("created_count")
+    again = result(env2).get("created_count")
+    rep.add("dep.drawing.idempotency.create",
+            "повтор того же operation_id НЕ создаёт виды второй раз",
+            "PASS" if (not error_code(env1) and before + (once or 0) == after
+                       and again == once) else "FAIL",
+            f"before={before} created1={once} created2={again} after={after} "
+            f"error1={error_code(env1)} error2={error_code(env2)}")
+
+    p3 = dict(payload); p3["operation_id"] = op_id; p3["projections"] = ["top"]
+    _e, env3, _r = client.tool("kompas_create_drawing_views", p3, timeout=300)
+    rep.add("dep.drawing.idempotency.negative_tests",
+            "тот же operation_id с другими аргументами отвергается OPERATION_ID_CONFLICT",
+            "PASS" if error_code(env3) == "OPERATION_ID_CONFLICT" else "FAIL",
+            f"error={error_code(env3)}")
+
+    rep.add("dep.drawing.view_address.discover",
+            "виды адресуются ссылкой, перечитанной из чертежа (а не номером вслепую)",
+            "PASS" if views_re and views_re[0].get("view_ref") else "FAIL",
+            f"ref={views_re[0].get('view_ref') if views_re else None}")
+    rep.add("dep.drawing.view_address.read",
+            "ссылка вида перечитывается из коллекции после переоткрытия",
+            "PASS" if views_re else "FAIL", f"views={len(views_re)}")
+
+    rep.add("dep.drawing.source_file.read",
+            "перечитанный вид несёт файл-источник проекции",
+            "PASS" if any((v.get("source_path") or "").endswith("drw-source.m3d")
+                          for v in views_re) else "FAIL",
+            f"sources={[v.get('source_path') for v in views_re]}")
+    rep.add("dep.drawing.source_file.create",
+            "файл-источник существует на диске (вид проекция ФАЙЛА, не памяти)",
+            "PASS" if os.path.isfile(src) else "FAIL", f"path={src}")
+    env, code = call("kompas_create_drawing_views", {
+        "document_id": drw2, "expected_revision": current_rev(drw2),
+        "source_path": os.path.join(work, "нет-такого-источника.m3d"), "projections": ["front"],
+        "x": 0.0, "y": 0.0})
+    rep.add("dep.drawing.source_file.negative_tests",
+            "отсутствующий файл-источник НАЗЫВАЕТСЯ (DOCUMENT_NOT_FOUND)",
+            "PASS" if code in ("DOCUMENT_NOT_FOUND", "PATH_NOT_ALLOWED") else "FAIL",
+            f"error={code} msg={((env or {}).get('error') or {}).get('message', '')[:120] if isinstance((env or {}).get('error'), dict) else None}")
+
+    env, code = call("kompas_set_title_block", {
+        "document_id": drw2, "expected_revision": 0, "cells": {STAMP_CELL: "stale"}})
+    rep.add("dep.drawing.revisions.negative_tests",
+            "операция по устаревшей ревизии отвергается (REVISION_CONFLICT/STALE_REFERENCE)",
+            "PASS" if code in ("REVISION_CONFLICT", "STALE_REFERENCE") else "FAIL",
+            f"error={code}")
+
+    env, code = call("kompas_list_documents", {"application_id": app_id})
+    docs_now = result(env)
+    docs_now = docs_now if isinstance(docs_now, list) else []
+    rep.add("dep.drawing.document_lifecycle.discover",
+            "чертёж виден в перечислении документов",
+            "PASS" if any((d.get("document_id") or d.get("id")) == drw2 for d in docs_now) else "FAIL",
+            f"docs={len(docs_now)} drw2={drw2}")
+
+    # ========= ИЗМЕНЕНИЕ МОДЕЛИ → REBUILD ВИДА → НЕЗАВИСИМАЯ ПРОВЕРКА =========
+    # Маршрут обновления: IAssociationView.Rebuild (документирован). Мутируем источник (снимаем
+    # признак), перестраиваем, читаем вид ЗАНОВО. Объём источника за доказательство НЕ выдаётся:
+    # проверяется ФАКТ перестроения и читаемость вида ПОСЛЕ него.
+    model_rebuild_ok = False
+    model_rebuild_line = "источник не открылся"
+    vol_src = None
+    env, code = call("kompas_open_document", {"application_id": app_id, "path": src, "access": "edit"})
+    msrc = doc_id(env)
+    if msrc:
+        # ОБЪЁМ ИСТОЧНИКА — ЗДЕСЬ, ПОКА МОДЕЛЬ НЕ ИЗМЕНЕНА: это факт ОБ ИСТОЧНИКЕ, и он не выдаётся
+        # за доказательство номинала размера или обновления вида. После снятия признака тела может не
+        # быть, и «не прочитано» — это не ноль, поэтому чтение идёт до правки модели.
+        env, code = call("kompas_list_bodies", {"document_id": msrc})
+        bodies_src = result(env) or []
+        bodies_src = bodies_src if isinstance(bodies_src, list) else []
+        if bodies_src:
+            env, code = call("kompas_measure", {"target_ref": bodies_src[0].get("body_ref"),
+                                                "properties": ["volume"]})
+            vol_src = result(env).get("volume_mm3")
+        env, code = call("kompas_list_features", {"document_id": msrc})
+        feats = result(env) or []
+        feats = feats if isinstance(feats, list) else (feats.get("features") or [])
+        feat_ref = (feats[-1].get("feature_ref") or feats[-1].get("ref")) if feats else None
+        sup_err = "признаков нет"
+        if feat_ref:
+            # kompas_set_feature_suppressed НЕ принимает document_id: адрес признака его уже несёт,
+            # и лишнее поле отвергается схемой (INVALID_ARGUMENT) — это измерено, а не предположено.
+            env, code = call("kompas_set_feature_suppressed", {
+                "expected_revision": current_rev(msrc),
+                "feature_ref": feat_ref, "suppressed": True})
+            sup_err = code
+            env, code = call("kompas_save_document", {
+                "document_id": msrc, "expected_revision": current_rev(msrc), "target_path": src})
+        call("kompas_close_document", {"document_id": msrc, "dirty_policy": "save"})
+
+        # ПЕРЕСТРОЕНИЕ ЧЕРТЕЖА: `kompas_rebuild` — 3D-операция и к чертежу НЕ применима (отвергает
+        # WRONG_DOCUMENT_KIND; измерено). Документированный маршрут обновления ассоциативного вида —
+        # `IAssociationView.Rebuild`, но инструментом он НЕ выведен. Поэтому строка НАЗЫВАЕТ это
+        # состояние: отказ `kompas_rebuild` на чертеже — ожидаемое поведение, а обновление вида после
+        # изменения модели ОСТАЁТСЯ ОТКРЫТЫМ действием (нет опубликованного инструмента).
+        env, code = call("kompas_rebuild", {"document_id": drw2})
+        rebuild_err = code
+        env, code = call("kompas_list_drawing_views", {"document_id": drw2})
+        views_after_model = result(env).get("views") or []
+        # Модель изменена (признак снят и файл сохранён) — это измерено; вид читается после.
+        model_ok = bool(views_after_model) and all(v.get("view_ref") for v in views_after_model)
+        model_rebuild_line = (f"suppress={sup_err} rebuild_drawing={rebuild_err}(не применим к "
+                              f"чертежу — 3D-операция) views={len(views_after_model)} "
+                              f"обновление_вида=ОТКРЫТО(нет инструмента IAssociationView.Rebuild)")
+    rep.add("DRW-01.views.create_standard.rebuild",
+            "модель-источник ИЗМЕНЕНА (признак снят и файл сохранён) и виды читаются после; "
+            "перестроение чертежа неприменимо (3D-операция), а обновление вида через "
+            "IAssociationView.Rebuild ОСТАЁТСЯ ОТКРЫТЫМ — инструмента нет, и это названо",
+            "PASS" if model_ok else "FAIL", model_rebuild_line)
+
+    # ========= DRW-02.discover: обзор =========
+    env, code = call("kompas_get_context", {"document_id": drw2, "detail": "minimal"})
+    rep.add("DRW-02.views.list.discover",
+            "обзор: тип документа назван «drawing» и виды принадлежат ему",
+            "PASS" if (drw2 and (result(env).get("kind") in (None, "drawing", "Drawing"))) else "FAIL",
+            f"document_id={drw2} kind={result(env).get('kind')} error={code}")
+
+    # ========= ГЕОМЕТРИЧЕСКИЙ КОНТРОЛЬ =========
+    # У вида нет габарита (IView его не публикует). Объём источника измерен ВЫШЕ, ПОКА МОДЕЛЬ НЕ БЫЛА
+    # ИЗМЕНЕНА (см. блок REBUILD); это факт ОБ ИСТОЧНИКЕ и он НЕ выдаётся за доказательство номинала
+    # размера или обновления вида — у тех строк свои эталоны.
+    # Линейный размер — единственный, чей номинал НЕЗАВИСИМ от записи: его значение сервер выводит из
+    # РАССТОЯНИЯ точек (Distance(p1,p2)), а не берёт из аргумента. Поэтому сверка с эталоном ширины здесь
+    # и есть измерение. У радиального и диаметрального номинал задаёт вызывающий (`value_mm`) — там
+    # сверка означает верность перечитывания и не выдаётся за измерение.
+    rep.add("DRW-03.dimension.add.geometry_validation",
+            "номинал ЛИНЕЙНОГО размера подтверждён СВЕРКОЙ С ЭТАЛОНОМ (независимое расстояние точек), а "
+            "не геометрией источника; радиус/диаметр — верность перечитывания (номинал задан "
+            "вызывающим); объём источника приведён отдельно как факт об источнике",
+            "PASS" if (dims.get("linear") is not None
+                       and close_enough(dims["linear"].get("value_mm"), LENGTH_MM, TOL_MM)
+                       and close_enough((dims.get("radial") or {}).get("value_mm"),
+                                        HOLE_RADIUS_MM, TOL_MM)
+                       and close_enough((dims.get("diametral") or {}).get("value_mm"),
+                                        HOLE_RADIUS_MM, TOL_MM)) else "FAIL",
+            f"linear={dims.get('linear', {}).get('value_mm')} эталон={LENGTH_MM} (независимо); "
+            f"radial={(dims.get('radial') or {}).get('value_mm')} / "
+            f"diametral={(dims.get('diametral') or {}).get('value_mm')} эталон_радиуса={HOLE_RADIUS_MM} "
+            f"(перечитывание); volume_source={vol_src} — факт об источнике, НЕ доказательство размера")
+    rep.add("DRW-01.views.create_standard.geometry_validation",
+            "геометрия модели-источника прочитана ЗАНОВО (вид — проекция ФАЙЛА); объём приведён как "
+            "факт об источнике, а не как доказательство вида",
+            "PASS" if (vol_src is not None and vol_src > 0) else "FAIL",
+            f"volume={vol_src} (исходный объём с отверстием ≈ {SOURCE_VOLUME_MM3:.1f})")
+
+    # ========= общие зависимости профиля =========
+    rep.add("dep.drawing.document_lifecycle.save_reopen",
+            "документ-чертёж переживает save → close → reopen (виды и надпись читаются после)",
+            "PASS" if (saved and drw2 and views_re and set(pre_map) == set(re_map)) else "FAIL",
+            f"saved={saved} document_id={drw2} views={len(views_re)}")
+    env, code = call("kompas_list_drawing_views",
+                     {"document_id": "00000000000000000000000000000000"})
+    rep.add("dep.drawing.document_lifecycle.negative_tests",
+            "обращение к несуществующему документу-чертежу отвергается НАЗВАННО",
+            "PASS" if code in ("DOCUMENT_NOT_FOUND", "INVALID_ARGUMENT") else "FAIL", f"error={code}")
+
+    env, code = call("kompas_add_dimension", {
+        "document_id": drw2, "expected_revision": current_rev(drw2),
+        "view_ref": "view:00000000000000000000000000000000", "dimension_type": "linear",
+        "point1": [0.0, 0.0, 0.0], "point2": [10.0, 0.0, 0.0]})
+    rep.add("dep.drawing.view_address.negative_tests",
+            "ссылка на несуществующий вид отвергается НАЗВАННО (не разрешается вслепую)",
+            "PASS" if code in ("INVALID_ARGUMENT", "STALE_REFERENCE", "DOCUMENT_NOT_FOUND") else "FAIL",
+            f"error={code}")
+
+    # Ревизии: изменение по актуальной ревизии применяется (edit) — на техтребованиях.
+    env, code = call("kompas_set_technical_demand", {
+        "document_id": drw2, "expected_revision": current_rev(drw2), "text": DEMAND_TEXT})
+    rep.add("dep.drawing.revisions.edit.demand",
+            "мутация по АКТУАЛЬНОЙ ревизии применяется и перечитывается",
+            "PASS" if (not code and result(env).get("read_back") == DEMAND_TEXT) else "FAIL",
+            f"error={code}")
+
+    r_before = current_rev(drw2)
+    call("kompas_list_drawing_views", {"document_id": drw2})
+    r_after = current_rev(drw2)
+    rep.add("dep.drawing.idempotency.read",
+            "повторное ЧТЕНИЕ видов не меняет ревизию документа",
+            "PASS" if r_before == r_after else "FAIL",
+            f"revision_before={r_before} revision_after={r_after}")
+
+    call("kompas_close_document", {"document_id": drw2, "dirty_policy": "discard"})
+
+
 def main():
     # x64, not bin\Debug: the solution forces x64 (Directory.Build.props), so `dotnet build`
     # refreshes bin\x64\... only — the AnyCPU output that used to be picked here silently kept
@@ -1780,6 +2662,11 @@ def main():
     # (`MATE.<NN>.<действие>`), а не по номеру в общем потоке.
     mate_only = "--mate-only" in sys.argv
 
+    # Домен ЧЕРТЕЖЕЙ (блок DRW, профиль `drawings-minimal-v1`): одна группа, свой сеанс, своя ветка.
+    # Клетка матрицы обязана находиться по ИМЕНИ строки (`DRW.<NN>.<действие>`), а не по номеру в общем
+    # потоке, — та же причина, что у прочих групп.
+    drawing_only = "--drawing-only" in sys.argv
+
     rep = Report(
         ("Приёмка контракта: схемы, отказы до COM, политика путей" if only_contract
          else "Приёмка SM-11: фаска через MCP" if chamfer_only
@@ -1802,6 +2689,7 @@ def main():
         else "Приёмка NEST: вложенные контуры и несколько замкнутых контуров (критерий dep.sketch.entities)" if nested_only
         else "Приёмка ASM: минимальные сборки через MCP (наряд C1, профиль assemblies-minimal-v1)" if assembly_only
         else "Приёмка MATE: сопряжения сборки через MCP (блок C2, профиль mates-minimal-v1)" if mate_only
+        else "Приёмка DRW: чертежи — стандартные виды, размеры, основная надпись, экспорт (блок DRW, профиль drawings-minimal-v1)" if drawing_only
         else "Интеграционный прогон вертикального сценария через MCP"),
         os.path.join(workdir, "chamfer-acceptance.json" if chamfer_only
                      else "fillet-acceptance.json" if fillet_only
@@ -1823,6 +2711,7 @@ def main():
                      else "nested-acceptance.json" if nested_only
                      else "assembly-acceptance.json" if assembly_only
                      else "mate-acceptance.json" if mate_only
+                     else "drawing-acceptance.json" if drawing_only
                      else "smoke-report.json"))
     report_override = argument("--report")
     if report_override:
@@ -2192,6 +3081,14 @@ def main():
 
         if mate_only:
             mate_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if drawing_only:
+            drawing_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,

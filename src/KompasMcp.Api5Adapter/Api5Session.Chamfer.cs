@@ -63,7 +63,7 @@ public partial class Api5Session
         HashSet<string> unwrapRoutes)
     {
         var bridge = BridgeFor(document);
-        var container = bridge.ContainerFor(document.Document, document.Id, document.Revision);
+        var container = bridge.ContainerFor(document.Document3D, document.Id, document.Revision);
         if (container is null)
         {
             throw new KompasContractException(
@@ -98,7 +98,7 @@ public partial class Api5Session
         }
 
         // Without RebuildModel the IChamfer write stays a representation (MEASURED on IExtrusion.Sketch).
-        Api7Bridge.Rebuild(container, document.Document);
+        Api7Bridge.Rebuild(container, document.Document3D);
         BumpRevision(document, "chamfer.angle");
 
         var volumeAfter = ReadVolume(document);
@@ -276,7 +276,7 @@ public partial class Api5Session
     private ChamferReadDto? ReadChamferAngle(DocumentEntry document, ChamferParam api5)
     {
         var bridge = BridgeFor(document);
-        var container = bridge.ContainerFor(document.Document, document.Id, document.Revision);
+        var container = bridge.ContainerFor(document.Document3D, document.Id, document.Revision);
         if (container is null || Api7Chamfer.Count(container) is not int count)
         {
             return null;
@@ -321,7 +321,7 @@ public partial class Api5Session
         }
 
         var bridge = BridgeFor(document);
-        var container = bridge.ContainerFor(document.Document, document.Id, document.Revision);
+        var container = bridge.ContainerFor(document.Document3D, document.Id, document.Revision);
         if (container is null)
         {
             throw new KompasContractException(
@@ -378,7 +378,7 @@ public partial class Api5Session
 
         // Without the rebuild the IChamfer write stays a representation (the same order as on
         // creation: F.10 + probe E on IExtrusion.Sketch).
-        Api7Bridge.Rebuild(container, document.Document);
+        Api7Bridge.Rebuild(container, document.Document3D);
         BumpRevision(document, "chamfer.update.angle");
 
         var after = Api7Chamfer.Read(container, index);
@@ -611,7 +611,7 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["applied_writes"] = writes.Count });
         }
 
-        document.Document.RebuildDocument();
+        document.Document3D.RebuildDocument();
         var readBack = (entity.GetDefinition() as ksChamferDefinition) is { } afterDefinition
             ? ReadChamferParam(afterDefinition)
             : null;

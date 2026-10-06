@@ -350,7 +350,7 @@ public partial class Api5Session
         var parts = new List<ksPart>();
         try
         {
-            if (document.Document.PartCollection(true) is not ksPartCollection collection)
+            if (document.Document3D.PartCollection(true) is not ksPartCollection collection)
             {
                 return parts;
             }
@@ -378,7 +378,7 @@ public partial class Api5Session
     /// </summary>
     private object? BuildPlacement(DocumentEntry document, TransformDto? transform)
     {
-        var placement = document.Document.DefaultPlacement();
+        var placement = document.Document3D.DefaultPlacement();
         if (transform is null)
         {
             return placement;
@@ -419,7 +419,7 @@ public partial class Api5Session
         // component gets 1 body / 6 faces and survives save→close→reopen, unlike CreatePartInAssembly.
         // History: docs/decisions/assembly.md#insert-route
         var bridge = BridgeFor(document);
-        if (bridge.TransferTo7(document.Document) is not IKompasDocument3D document7)
+        if (bridge.TransferTo7(document.Document3D) is not IKompasDocument3D document7)
         {
             throw new KompasContractException(
                 ErrorCodes.CapabilityUnavailable,
@@ -575,7 +575,7 @@ public partial class Api5Session
 
         fixedApplied = fixedAfter == command.Fixed;
 
-        document.Document.RebuildDocument();
+        document.Document3D.RebuildDocument();
         BumpRevision(document, "assembly.insert_component");
 
         // A FAILED MANDATORY CHECK IS NOT SUCCESS: the revision is already bumped, so a client reading
@@ -734,7 +734,7 @@ public partial class Api5Session
                 partialEffects: true);
         }
 
-        document.Document.RebuildDocument();
+        document.Document3D.RebuildDocument();
         BumpRevision(document, "assembly.set_placement");
 
         var afterMatrix = ReadPlacementMatrix(part5);
@@ -860,7 +860,7 @@ public partial class Api5Session
                 });
         }
 
-        document.Document.RebuildDocument();
+        document.Document3D.RebuildDocument();
         BumpRevision(document, "assembly.replace_component");
 
         // THE SAME INSTANCE IS RE-READ — by the SAME ORDINAL, not "the first with the same file": a name
@@ -1022,7 +1022,7 @@ public partial class Api5Session
     private IPart7? TopPart7(DocumentEntry document, List<string> notes)
     {
         var bridge = BridgeFor(document);
-        var container = bridge.ContainerFor(document.Document, document.Id, document.Revision);
+        var container = bridge.ContainerFor(document.Document3D, document.Id, document.Revision);
         if (container is IPart7 part7)
         {
             return part7;

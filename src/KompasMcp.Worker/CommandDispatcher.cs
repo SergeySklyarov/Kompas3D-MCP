@@ -69,6 +69,12 @@ public sealed class CommandDispatcher
         WorkerCommands.SetMateParameter,
         WorkerCommands.SetMateFixed,
         WorkerCommands.DeleteMate,
+        WorkerCommands.CreateDrawingViews,
+        WorkerCommands.EditView,
+        WorkerCommands.AddDimension,
+        WorkerCommands.SetTitleBlock,
+        WorkerCommands.ExportDrawing,
+        WorkerCommands.SetTechnicalDemand,
         WorkerCommands.UnitProbe,
     };
 
@@ -206,6 +212,11 @@ public sealed class CommandDispatcher
         // Rebuilds the assembly (Update() + RebuildDocument); enumeration reads every mate object.
         WorkerCommands.ListMates or WorkerCommands.CreateMate or WorkerCommands.SetMateParameter
             or WorkerCommands.SetMateFixed or WorkerCommands.DeleteMate => 240_000,
+        // Drawing views/export go through the API7 bridge (TransferInterface + AddStandartViews or the
+        // converter), which is longer than a pure API5 call; dimensions and the stamp are API7 too.
+        WorkerCommands.CreateDrawingViews or WorkerCommands.ExportDrawing
+            or WorkerCommands.AddDimension or WorkerCommands.SetTitleBlock
+            or WorkerCommands.EditView or WorkerCommands.SetTechnicalDemand => 240_000,
         _ => 120_000,
     };
 
@@ -294,6 +305,13 @@ public sealed class CommandDispatcher
             WorkerCommands.SetMateParameter => _sta.Run(() => SetMateParameter(request), "mate.set_parameter", cancellationToken),
             WorkerCommands.SetMateFixed => _sta.Run(() => SetMateFixed(request), "mate.set_fixed", cancellationToken),
             WorkerCommands.DeleteMate => _sta.Run(() => DeleteMate(request), "mate.delete", cancellationToken),
+            WorkerCommands.CreateDrawingViews => _sta.Run(() => CreateDrawingViews(request), "drawing.create_views", cancellationToken),
+            WorkerCommands.ListDrawingViews => _sta.Run(() => ListDrawingViews(request), "drawing.list_views", cancellationToken),
+            WorkerCommands.AddDimension => _sta.Run(() => AddDimension(request), "drawing.add_dimension", cancellationToken),
+            WorkerCommands.SetTitleBlock => _sta.Run(() => SetTitleBlock(request), "drawing.set_title_block", cancellationToken),
+            WorkerCommands.ExportDrawing => _sta.Run(() => ExportDrawing(request), "drawing.export", cancellationToken),
+            WorkerCommands.SetTechnicalDemand => _sta.Run(() => SetTechnicalDemand(request), "drawing.set_technical_demand", cancellationToken),
+            WorkerCommands.EditView => _sta.Run(() => EditView(request), "drawing.edit_view", cancellationToken),
             WorkerCommands.Shutdown => _sta.Run(ShutdownPayload, "shutdown", cancellationToken),
             _ => throw new KompasContractException(
                 ErrorCodes.CapabilityUnavailable,
@@ -819,6 +837,59 @@ public sealed class CommandDispatcher
         var command = Argument<ExportImageCommand>(request);
         var document = _session.RequireDocument(command.DocumentId);
         return Tagged(document.Id, document.Revision, _session.ExportImage(command));
+    }
+
+    // DRW (block drawings): the three mutating tools go through the common mutation point so the
+    // envelope carries the revision AND the control copy is taken; the read goes through Tagged.
+    // History: docs/decisions/drawings.md#worker
+
+    private object? CreateDrawingViews(IpcFrame request)
+    {
+        var command = Argument<CreateDrawingViewsCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return TaggedAfter(document.Id, () => _session.CreateDrawingViews(command), document);
+    }
+
+    private object? ListDrawingViews(IpcFrame request)
+    {
+        var command = Argument<ListDrawingViewsCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return Tagged(document.Id, document.Revision, _session.ListDrawingViews(command));
+    }
+
+    private object? AddDimension(IpcFrame request)
+    {
+        var command = Argument<AddDimensionCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return TaggedAfter(document.Id, () => _session.AddDimension(command), document);
+    }
+
+    private object? SetTitleBlock(IpcFrame request)
+    {
+        var command = Argument<SetTitleBlockCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return TaggedAfter(document.Id, () => _session.SetTitleBlock(command), document);
+    }
+
+    private object? ExportDrawing(IpcFrame request)
+    {
+        var command = Argument<ExportDrawingCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return Tagged(document.Id, document.Revision, _session.ExportDrawing(command));
+    }
+
+    private object? SetTechnicalDemand(IpcFrame request)
+    {
+        var command = Argument<SetTechnicalDemandCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return TaggedAfter(document.Id, () => _session.SetTechnicalDemand(command), document);
+    }
+
+    private object? EditView(IpcFrame request)
+    {
+        var command = Argument<EditViewCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return TaggedAfter(document.Id, () => _session.EditView(command), document);
     }
 
     private static void GuardRevision(DocumentEntry document, long expectedRevision)

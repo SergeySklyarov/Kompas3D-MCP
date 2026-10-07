@@ -60,7 +60,7 @@ OWN_ASSEMBLIES = [
 # would like to claim. A profile whose actions are not all verified is listed with its real ratio and
 # named as open in `not_included`, never rounded up to "closed".
 PROFILES = [
-    {"id": "mechanical-core-v1", "title": "Детали: твердотельное моделирование", "modes": "54/54", "deps": "15/15"},
+    {"id": "mechanical-core-v1", "title": "Детали: твердотельное моделирование", "modes": "54/54", "deps": "16/16"},
     {"id": "assemblies-minimal-v1", "title": "Сборки", "modes": "7/7", "deps": "5/5"},
     {"id": "mates-minimal-v1", "title": "Сопряжения", "modes": "6/6", "deps": "5/5"},
     {"id": "drawings-minimal-v1", "title": "Чертежи: виды, размеры, штамп, DXF/DWG, техтребования", "modes": "6/6", "deps": "6/6"},

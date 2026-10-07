@@ -243,7 +243,6 @@ ALLOWED_ROOT_MD = {
     "README.md",
     "KOMPAS3D_MCP.md",
     "AGENTS.md",
-    "RELEASE_NOTES_MECHANICAL_CORE_V1.md",
 }
 
 # ── Каталоги, содержимое которых не является текстом. ───────────────────────

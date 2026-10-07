@@ -63,9 +63,22 @@ foreach ($template in $templates) {
 # loadable: --config is parsed before --emit-schemas is handled, so a template the Host cannot read
 # fails HERE with rc=64 instead of failing on the customer's machine.
 $publishedHost = Join-Path $full "KompasMcp.Host.exe"
-& $publishedHost --config (Join-Path $configOut $templates[0].Name) --emit-schemas (Join-Path $full "schemas")
-if ($LASTEXITCODE -ne 0) {
-    throw "опубликованный Host не принял шаблон конфигурации или не выдал схемы (rc=$LASTEXITCODE)"
+# INVARIANT: the Host's verdict is its exit code, not its stderr. The Host reports progress on stderr
+# (stdout is reserved for MCP frames), and Windows PowerShell 5.1 turns any native stderr line into a
+# terminating error under "Stop" — the script then died after a successful emit and skipped
+# inspect-package. "Stop" is lifted for this one call only; the exit code below still decides.
+$previousPreference = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+try {
+    & $publishedHost --config (Join-Path $configOut $templates[0].Name) --emit-schemas (Join-Path $full "schemas") 2>&1 |
+        ForEach-Object { Write-Host "$_" }
+    $hostExit = $LASTEXITCODE
+}
+finally {
+    $ErrorActionPreference = $previousPreference
+}
+if ($hostExit -ne 0) {
+    throw "опубликованный Host не принял шаблон конфигурации или не выдал схемы (rc=$hostExit)"
 }
 
 Write-Host "`nГотово: $full"

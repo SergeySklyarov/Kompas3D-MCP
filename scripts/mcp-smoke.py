@@ -3996,6 +3996,11 @@ def main():
     # (`MATE.<NN>.<действие>`), а не по номеру в общем потоке.
     mate_only = "--mate-only" in sys.argv
 
+    # То же для ориентации экземпляров кругового массива (наряд MCP-015): одна группа PO на своём
+    # сеансе. Отдельная ветка нужна по той же причине, что у прочих групп: доказательство обязано
+    # находиться по ИМЕНИ строки (`PO.<NN>`), а в общем прогоне эти строки тонули бы среди чужих.
+    pattern_orientation_only = "--pattern-orientation" in sys.argv
+
     # Домен ЧЕРТЕЖЕЙ (блок DRW, профиль `drawings-minimal-v1`): одна группа, свой сеанс, своя ветка.
     # Клетка матрицы обязана находиться по ИМЕНИ строки (`DRW.<NN>.<действие>`), а не по номеру в общем
     # потоке, — та же причина, что у прочих групп.
@@ -4033,6 +4038,7 @@ def main():
         else "Приёмка MATE: сопряжения сборки через MCP (блок C2, профиль mates-minimal-v1)" if mate_only
         else "Приёмка DRW: чертежи — стандартные виды, размеры, основная надпись, экспорт (блок DRW, профиль drawings-minimal-v1)" if drawing_only
         else "Приёмка VM: внешние переменные детали и материал через MCP (блок VM, профиль variables-material-minimal-v1)" if variables_material_only
+        else "Приёмка PO: ориентация экземпляров кругового массива через MCP (наряд MCP-015)" if pattern_orientation_only
         else "Интеграционный прогон вертикального сценария через MCP"),
         os.path.join(workdir, "chamfer-acceptance.json" if chamfer_only
                      else "fillet-acceptance.json" if fillet_only
@@ -4056,6 +4062,7 @@ def main():
                      else "mate-acceptance.json" if mate_only
                      else "drawing-acceptance.json" if drawing_only
                      else "variables-material-acceptance.json" if variables_material_only
+                     else "pattern-orientation-acceptance.json" if pattern_orientation_only
                      else "smoke-report.json"))
     report_override = argument("--report")
     if report_override:
@@ -4441,6 +4448,14 @@ def main():
 
         if variables_material_only:
             variables_material_checks(client, rep, app_id, workdir, reference_path=vm_reference_doc)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if pattern_orientation_only:
+            pattern_orientation_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -4993,6 +5008,11 @@ def main():
         b3_consecutive_transform_checks(client, rep, app_id, workdir)
 
         b4_pattern_checks(client, rep, app_id, workdir)
+
+        # Группа PO идёт сразу за B4 и в том же сеансе: та же предметная область (круговой массив),
+        # свои документы и свои имена строк (`PO.<NN>`, наряд MCP-015), поэтому в общем потоке её
+        # доказательство иначе не нашлось бы. Документы B4 она не трогает.
+        pattern_orientation_checks(client, rep, app_id, workdir)
 
         b5_acceptance_checks(client, rep, app_id, workdir)
 
@@ -11708,6 +11728,434 @@ def b4_pattern_checks(client, rep, app_id, workdir):
                          "другой эскиз: снято 1767,145867644 = диск r=7,5 против 981,747704247 = "
                          "кольцо между r=5 и r=7,5 в документе с массивом. Воспроизводится в обоих "
                          "порядках. Причина не установлена; это маршрут правки эскиза, а не массив"})
+# ═══════════ Группа PO: ориентация экземпляров кругового массива (наряд MCP-015) ═══════════
+#
+# Источник - клиентский отчёт OBS-014 и разбор ревьюера MCP-015: диск R20 × 2, паз 19..21 × −0,5..0,5
+# насквозь, массив ВЫРЕЗА count2 = 73 вокруг Z. Флаг save_initial_orientation не был задан, и
+# умолчание продукта (true) переносило экземпляры БЕЗ доворота: объём выходил 2373,607 вместо
+# ожидаемых 2367,578. Дефект - в умолчании MCP, а не в ядре КОМПАС.
+#
+# ЭТАЛОНЫ СЧИТАЮТСЯ ЗДЕСЬ ФОРМУЛАМИ, а не переписываются из наряда: площадь диска πR², площадь
+# пересечения прямоугольника с кругом - точным разрезом по x (первообразная от sqrt(R²−x²)), объём -
+# (площадь диска − удалённая площадь) × толщина. Два варианта удалённой площади:
+#   * экземпляры ПОВЁРНУТЫ (false) - угловой шаг 4,9315° больше углового размаха паза 3,0149°,
+#     поэтому 73 повёрнутые копии не пересекаются и удалённая площадь равна 73 × площадь одного паза;
+#   * экземпляры ТОЛЬКО ПЕРЕНЕСЕНЫ (true) - 73 ОДИНАКОВО ориентированных прямоугольника, удалённая
+#     площадь - площадь их объединения ∩ диск (тот же точный разрез по x).
+PO_R = 20.0
+PO_THICK = 2.0
+PO_HW = 1.0
+PO_HH = 0.5
+PO_CX = 20.0
+PO_CY = 0.0
+PO_COUNT = 73
+PO_STEP_DEG = 360.0 / PO_COUNT
+PO_TOL_REL = 0.0005      # ±0,05 % из таблицы наряда
+
+
+def po_antideriv(x):
+    """Первообразная ∫ sqrt(R² − x²) dx: ею считается площадь пересечения с кругом."""
+    x = max(-PO_R, min(PO_R, x))
+    return 0.5 * (x * math.sqrt(max(0.0, PO_R * PO_R - x * x)) + PO_R * PO_R * math.asin(x / PO_R))
+
+
+def po_h(x):
+    return math.sqrt(max(0.0, PO_R * PO_R - x * x))
+
+
+def po_interval_in_disk(a, b, y1, y2):
+    """Точный интеграл по x от длины ([y1,y2] ∩ [−h(x), h(x)]).
+
+    Интегранда меняет и вид, и знак там, где h(x) пересекает |y1| или |y2|; поэтому режем ровно в
+    этих точках. Разрез ТОЛЬКО по |y2| (первая редакция) терял 2,2 мм² эталона: для интервала выше
+    нуля мера h − y1 обращается в ноль при h = y1, и это пересечение не разрезалось. Это дефект
+    ПРИБОРА, найденный сверкой с численным интегрированием, а не факт о продукте.
+    """
+    crit = {a, b}
+    if a < 0.0 < b:
+        crit.add(0.0)
+    for v in (abs(y1), abs(y2)):
+        if 0.0 <= v < PO_R:
+            s = math.sqrt(PO_R * PO_R - v * v)
+            for c in (s, -s):
+                if a < c < b:
+                    crit.add(c)
+    xs = sorted(crit)
+    total = 0.0
+    for i in range(len(xs) - 1):
+        p, q = xs[i], xs[i + 1]
+        if q - p <= 0:
+            continue
+        hm = po_h(0.5 * (p + q))
+        left_const = y2 <= hm                 # min(y2, h) == y2
+        right_const = y1 >= -hm               # max(y1, -h) == y1
+        g_mid = (y2 if left_const else hm) - (y1 if right_const else -hm)
+        if g_mid <= 0:
+            continue
+        li = y2 * (q - p) if left_const else po_antideriv(q) - po_antideriv(p)
+        ri = y1 * (q - p) if right_const else -(po_antideriv(q) - po_antideriv(p))
+        total += li - ri
+    return total
+
+
+def po_union_area_in_disk(rects):
+    """Площадь (объединение осевых прямоугольников) ∩ диск точным разрезом по x."""
+    tol = 1e-9
+    edges = {-PO_R, PO_R}
+    for (x1, x2, _y1, _y2) in rects:
+        if x2 <= -PO_R or x1 >= PO_R:
+            continue
+        edges.add(max(-PO_R, min(PO_R, x1)))
+        edges.add(max(-PO_R, min(PO_R, x2)))
+    xs = sorted(edges)
+    total = 0.0
+    for i in range(len(xs) - 1):
+        a, b = xs[i], xs[i + 1]
+        if b - a <= 0:
+            continue
+        ivs = sorted((y1, y2) for (x1, x2, y1, y2) in rects if x1 <= a + tol and x2 >= b - tol)
+        merged = []
+        for (y1, y2) in ivs:
+            if merged and y1 <= merged[-1][1] + tol:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], y2))
+            else:
+                merged.append((y1, y2))
+        for (y1, y2) in merged:
+            total += po_interval_in_disk(a, b, y1, y2)
+    return total
+
+
+def po_slot_corners():
+    return [(PO_CX - PO_HW, PO_CY - PO_HH), (PO_CX + PO_HW, PO_CY - PO_HH),
+            (PO_CX + PO_HW, PO_CY + PO_HH), (PO_CX - PO_HW, PO_CY + PO_HH)]
+
+
+def po_translated_rect(k):
+    a = math.radians(PO_STEP_DEG * k)
+    cx, cy = PO_R * math.cos(a), PO_R * math.sin(a)
+    return (cx - PO_HW, cx + PO_HW, cy - PO_HH, cy + PO_HH)
+
+
+def po_references():
+    """Эталоны группы: объём диска и объём при двух смыслах флага, посчитанные здесь."""
+    disk_v = math.pi * PO_R * PO_R * PO_THICK
+    single = po_union_area_in_disk([(PO_CX - PO_HW, PO_CX + PO_HW, PO_CY - PO_HH, PO_CY + PO_HH)])
+    half_angle = max(abs(math.degrees(math.atan2(y, x))) for (x, y) in po_slot_corners())
+    disjoint = PO_STEP_DEG > 2.0 * half_angle
+    rotated_removed = PO_COUNT * single if disjoint else None
+    translated_removed = po_union_area_in_disk([po_translated_rect(k) for k in range(PO_COUNT)])
+    return {
+        "disk_volume": disk_v,
+        "single_slot_area": single,
+        "half_angle_deg": half_angle,
+        "step_deg": PO_STEP_DEG,
+        "rotated_disjoint": disjoint,
+        "rotated_volume": None if rotated_removed is None else disk_v - rotated_removed * PO_THICK,
+        "translated_volume": disk_v - translated_removed * PO_THICK,
+    }
+
+
+def pattern_orientation_checks(client, rep, app_id, workdir):
+    """PO.1-PO.6: умолчание и смысл save_initial_orientation у кругового массива (наряд MCP-015).
+
+    Сценарий ровно клиентский (OBS-014): диск R20 × 2, паз 19..21 × −0,5..0,5 насквозь, массив
+    выреза count2 = 73 вокруг Z. Каждая строка независимо ПЕРЕЧИТЫВАЕТ объём документа через
+    kompas_measure, а не верит ответу инструмента: возврат инструмента - «принято», а не «применено».
+    """
+    ref = po_references()
+    rotated_v = ref["rotated_volume"]
+    translated_v = ref["translated_volume"]
+
+    def near_rel(actual, expected, rel=PO_TOL_REL):
+        if actual is None or expected is None:
+            return False
+        return abs(actual - expected) <= abs(expected) * rel
+
+    def error_of(env):
+        return error_code(env)
+
+    def error_text(env):
+        err = (env or {}).get("error") or {}
+        parts = [str(err.get("message"))]
+        if err.get("details"):
+            parts.append(json.dumps(err["details"], ensure_ascii=False)[:600])
+        return " | ".join(p for p in parts if p and p != "None")
+
+    def new_doc(name):
+        _e, env, _r = client.tool("kompas_create_document", {
+            "application_id": app_id, "kind": "part", "name": name,
+            "operation_id": str(uuid.uuid4())})
+        doc = ((env or {}).get("result") or {}).get("document_id") or (env or {}).get("document_id")
+        return doc, ((env or {}).get("revision_after") or 1), error_of(env)
+
+    def close(doc):
+        if not doc:
+            return None
+        _e, env, _r = client.tool("kompas_close_document", {
+            "document_id": doc, "dirty_policy": "discard", "operation_id": str(uuid.uuid4())})
+        return error_of(env)
+
+    def list_bodies(doc):
+        _e, env, _r = client.tool("kompas_list_bodies", {"document_id": doc})
+        rows = (env or {}).get("result")
+        return rows if isinstance(rows, list) else []
+
+    def doc_volume(doc):
+        """Сумма объёмов ВСЕХ тел документа, прочитанная независимо от операции."""
+        rows = list_bodies(doc)
+        total = 0.0
+        for row in rows:
+            _e, menv, _r = client.tool("kompas_measure", {
+                "target_ref": row.get("body_ref"), "properties": ["volume"]})
+            v = ((menv or {}).get("result") or {}).get("volume_mm3")
+            if v is None:
+                return len(rows), None
+            total += v
+        return len(rows), total
+
+    def body_bbox(doc):
+        rows = list_bodies(doc)
+        if not rows:
+            return {}
+        _e, menv, _r = client.tool("kompas_measure", {
+            "target_ref": rows[0].get("body_ref"), "properties": ["bbox"]})
+        return ((menv or {}).get("result") or {}).get("bbox") or {}
+
+    def feature_rows(doc):
+        _e, env, _r = client.tool("kompas_list_features", {"document_id": doc})
+        rows = (env or {}).get("result")
+        return rows if isinstance(rows, list) else []
+
+    def pattern_ref_from_tree(doc):
+        """Ссылка на признак массива, перечитанная из ДЕРЕВА: ссылка из ответа к следующему вызову
+        уже мертва (создание массива поднимает ревизию). Тип 36 - копирование операций круговым."""
+        for row in feature_rows(doc):
+            if str(row.get("type")) in ("36", "529"):
+                return row.get("feature_ref")
+        return None
+
+    def build_scenario(name):
+        """Диск R20 × 2 со сквозным пазом 19..21 × −0,5..0,5. Возвращает (doc, rev, cut_ref, err)."""
+        doc, rev, err = new_doc(name)
+        if not doc:
+            return None, 1, None, f"документ не создан: {err}"
+        _e, s_env, _r = client.tool("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": rev,
+            "plane": {"base": "xy", "offset_mm": 0.0}, "name": name + "_disk",
+            "operation_id": str(uuid.uuid4())})
+        sk = ((s_env or {}).get("result") or {}).get("id")
+        rev = (s_env or {}).get("revision_after") or rev
+        if not sk:
+            return doc, rev, None, f"эскиз диска не создан: {error_of(s_env)}"
+        _e, e_env, _r = client.tool("kompas_edit_sketch", {
+            "sketch_ref": sk, "expected_revision": rev, "mode": "append",
+            "entities": [{"kind": "circle", "center_mm": [0.0, 0.0], "radius_mm": PO_R}],
+            "operation_id": str(uuid.uuid4())})
+        rev = (e_env or {}).get("revision_after") or rev
+        _e, f_env, _r = client.tool("kompas_finish_sketch", {
+            "sketch_ref": sk, "require_closed_profile": False, "operation_id": str(uuid.uuid4())})
+        rev = (f_env or {}).get("revision_after") or rev
+        _e, x_env, _r = client.tool("kompas_extrude", {
+            "sketch_ref": sk, "expected_revision": rev, "operation": "base",
+            "depth_mm": PO_THICK, "direction": "positive",
+            "operation_id": str(uuid.uuid4())}, timeout=240)
+        rev = (x_env or {}).get("revision_after") or rev
+        if error_of(x_env):
+            return doc, rev, None, f"диск не выдавлен: {error_of(x_env)}"
+        rows = list_bodies(doc)
+        body_ref = rows[0].get("body_ref") if rows else None
+        if not body_ref:
+            return doc, rev, None, "тело диска не найдено"
+        _e, s2_env, _r = client.tool("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": rev,
+            "plane": {"base": "xy", "offset_mm": 0.0}, "name": name + "_slot",
+            "operation_id": str(uuid.uuid4())})
+        sk2 = ((s2_env or {}).get("result") or {}).get("id")
+        rev = (s2_env or {}).get("revision_after") or rev
+        if not sk2:
+            return doc, rev, None, f"эскиз паза не создан: {error_of(s2_env)}"
+        _e, e2_env, _r = client.tool("kompas_edit_sketch", {
+            "sketch_ref": sk2, "expected_revision": rev, "mode": "append",
+            "entities": [{"kind": "rectangle", "start_mm": [PO_CX - PO_HW, PO_CY - PO_HH],
+                          "width_mm": 2.0 * PO_HW, "height_mm": 2.0 * PO_HH}],
+            "operation_id": str(uuid.uuid4())})
+        rev = (e2_env or {}).get("revision_after") or rev
+        _e, f2_env, _r = client.tool("kompas_finish_sketch", {
+            "sketch_ref": sk2, "require_closed_profile": False, "operation_id": str(uuid.uuid4())})
+        rev = (f2_env or {}).get("revision_after") or rev
+        _e, c_env, _r = client.tool("kompas_extrude", {
+            "sketch_ref": sk2, "expected_revision": rev, "operation": "cut",
+            "end_condition": "through", "direction": "symmetric", "target_body_ref": body_ref,
+            "operation_id": str(uuid.uuid4())}, timeout=240)
+        rev = (c_env or {}).get("revision_after") or rev
+        if error_of(c_env):
+            return doc, rev, None, f"паз не вырезан: {error_of(c_env)}"
+        cut_dto = ((c_env or {}).get("result") or {}).get("feature_ref") \
+            or (c_env or {}).get("feature_ref")
+        cut_ref = cut_dto.get("id") if isinstance(cut_dto, dict) else cut_dto
+        if not cut_ref:
+            return doc, rev, None, "ссылка на признак выреза не получена"
+        return doc, rev, cut_ref, None
+
+    def pattern_args(doc, rev, cut_ref, **kw):
+        args = {
+            "document_id": doc, "expected_revision": rev, "copy_kind": "operations",
+            "source_refs": [cut_ref],
+            "axis_point1_mm": [0.0, 0.0, 0.0], "axis_point2_mm": [0.0, 0.0, 1.0],
+            "count1": 1, "count2": PO_COUNT, "step2_deg": PO_STEP_DEG,
+            "expected_body_count": 1,
+            "operation_id": str(uuid.uuid4()),
+        }
+        args.update(kw)
+        return args
+
+    # ── PO.1: поле не передано (действует умолчание) ────────────────────────────────────────
+    doc1, rev1, cut1, err1 = build_scenario("PO01")
+    env1 = None
+    if err1:
+        rep.add("PO.1", "поле не передано: массив доворачивает экземпляры (умолчание false)",
+                "FAIL", f"заготовка не построена: {err1}")
+    else:
+        _e, env1, _r = client.tool("kompas_pattern_circular",
+                                   pattern_args(doc1, rev1, cut1), timeout=300)
+        n1, v1 = doc_volume(doc1)
+        res1 = (env1 or {}).get("result") or {}
+        rb1 = next((c for c in (res1.get("checks") or [])
+                    if c.get("name") == "read_back_save_initial_orientation"), None)
+        ok = (error_of(env1) is None and near_rel(v1, rotated_v)
+              and rb1 is not None and rb1.get("passed") is True)
+        rep.add("PO.1", "поле не передано: массив доворачивает экземпляры (умолчание false)",
+                "PASS" if ok else "FAIL",
+                f"V={v1} (эталон повёрнутого варианта {rotated_v}, допуск ±0,05 %), "
+                f"тел={n1} (ожидание 1), read-back ориентации="
+                f"{None if rb1 is None else rb1.get('passed')}, err={error_of(env1)}"
+                + (f"; отказ: {error_text(env1)}" if error_of(env1) else ""),
+                details={"measured_volume": v1, "expected_rotated": rotated_v,
+                         "expected_translated": translated_v, "reference": ref,
+                         "read_back_check": rb1,
+                         "request": {k: v for k, v in pattern_args(doc1, rev1, cut1).items()
+                                     if k != "operation_id"}})
+
+    # ── PO.5: габарит PO.1 ──────────────────────────────────────────────────────────────────
+    if err1 or env1 is None or error_of(env1):
+        rep.add("PO.5", "габарит массива по умолчанию: Y ±20,000", "FAIL", "массив PO.1 не создан")
+    else:
+        box = body_bbox(doc1)
+        mn = (box or {}).get("min_mm") or []
+        mx = (box or {}).get("max_mm") or []
+        ymin = mn[1] if len(mn) > 1 else None
+        ymax = mx[1] if len(mx) > 1 else None
+        ok = (ymin is not None and ymax is not None
+              and abs(ymin + PO_R) <= 0.001 and abs(ymax - PO_R) <= 0.001)
+        rep.add("PO.5", "габарит массива по умолчанию: Y ±20,000", "PASS" if ok else "FAIL",
+                f"Y={ymin}..{ymax} (ожидание ±{PO_R} в допуске 0,001); bbox="
+                f"{json.dumps(box, ensure_ascii=False)}",
+                details={"bbox": box})
+
+    # ── PO.6: ответ PO.1 называет применённое значение и что оно умолчание ──────────────────
+    if env1 is None:
+        rep.add("PO.6", "ответ называет применённое значение и что оно умолчание", "FAIL",
+                "ответа PO.1 нет")
+    else:
+        res1 = (env1 or {}).get("result") or {}
+        applied = res1.get("save_initial_orientation")
+        defaulted = res1.get("save_initial_orientation_defaulted")
+        ok = (applied is False and defaulted is True)
+        rep.add("PO.6", "ответ называет применённое значение и что оно умолчание",
+                "PASS" if ok else "FAIL",
+                f"save_initial_orientation={applied!r} (ожидание False), "
+                f"save_initial_orientation_defaulted={defaulted!r} (ожидание True)",
+                details={"response_orientation": applied, "response_defaulted": defaulted,
+                         "readout": res1.get("readout")})
+    close(doc1)
+
+    # ── PO.2: false явно ────────────────────────────────────────────────────────────────────
+    doc2, rev2, cut2, err2 = build_scenario("PO02")
+    if err2:
+        rep.add("PO.2", "false явно: тот же доворот, что по умолчанию", "FAIL",
+                f"заготовка не построена: {err2}")
+    else:
+        _e, env2, _r = client.tool("kompas_pattern_circular",
+                                   pattern_args(doc2, rev2, cut2, save_initial_orientation=False),
+                                   timeout=300)
+        n2, v2 = doc_volume(doc2)
+        res2 = (env2 or {}).get("result") or {}
+        ok = (error_of(env2) is None and near_rel(v2, rotated_v)
+              and res2.get("save_initial_orientation") is False
+              and res2.get("save_initial_orientation_defaulted") is False)
+        rep.add("PO.2", "false явно: тот же доворот, что по умолчанию", "PASS" if ok else "FAIL",
+                f"V={v2} (эталон {rotated_v}); save_initial_orientation="
+                f"{res2.get('save_initial_orientation')!r} (ожидание False), "
+                f"defaulted={res2.get('save_initial_orientation_defaulted')!r} (ожидание False); "
+                f"err={error_of(env2)}"
+                + (f"; отказ: {error_text(env2)}" if error_of(env2) else ""),
+                details={"measured_volume": v2, "expected_rotated": rotated_v,
+                         "response_orientation": res2.get("save_initial_orientation"),
+                         "response_defaulted": res2.get("save_initial_orientation_defaulted")})
+        close(doc2)
+
+    # ── PO.3 + PO.4: true явно, затем правка на false ───────────────────────────────────────
+    doc3, rev3, cut3, err3 = build_scenario("PO03")
+    if err3:
+        rep.add("PO.3", "true явно: экземпляры только переносятся (неверная геометрия)", "FAIL",
+                f"заготовка не построена: {err3}")
+        rep.add("PO.4", "правка true→false: объём возвращается к довороту, признаков 3→3", "FAIL",
+                "заготовка PO.3 не построена")
+    else:
+        _e, env3, _r = client.tool("kompas_pattern_circular",
+                                   pattern_args(doc3, rev3, cut3, save_initial_orientation=True),
+                                   timeout=300)
+        rev3 = (env3 or {}).get("revision_after") or rev3
+        n3, v3 = doc_volume(doc3)
+        res3 = (env3 or {}).get("result") or {}
+        ok3 = (error_of(env3) is None and near_rel(v3, translated_v)
+               and res3.get("save_initial_orientation") is True
+               and res3.get("save_initial_orientation_defaulted") is False)
+        rep.add("PO.3", "true явно: экземпляры только переносятся (неверная геометрия)",
+                "PASS" if ok3 else "FAIL",
+                f"V={v3} (эталон перенесённого варианта {translated_v}), "
+                f"save_initial_orientation={res3.get('save_initial_orientation')!r} (ожидание True), "
+                f"defaulted={res3.get('save_initial_orientation_defaulted')!r} (ожидание False); "
+                f"err={error_of(env3)}"
+                + (f"; отказ: {error_text(env3)}" if error_of(env3) else ""),
+                details={"measured_volume": v3, "expected_translated": translated_v,
+                         "expected_rotated": rotated_v,
+                         "response_orientation": res3.get("save_initial_orientation"),
+                         "response_defaulted": res3.get("save_initial_orientation_defaulted")})
+
+        pref3 = pattern_ref_from_tree(doc3)
+        n_before = len(feature_rows(doc3))
+        _e, u_env, _r = client.tool("kompas_update_feature", {
+            "feature_ref": pref3, "expected_revision": rev3,
+            "pattern": {"save_initial_orientation": False},
+            "operation_id": str(uuid.uuid4())}, timeout=300)
+        rev3 = (u_env or {}).get("revision_after") or rev3
+        n4, v4 = doc_volume(doc3)
+        n_after = len(feature_rows(doc3))
+        u_res = (u_env or {}).get("result") or {}
+        # ДЕФЕКТ ПРИБОРА, найденный прогоном: первая редакция читала `result.checks`, а
+        # `kompas_update_feature` кладёт проверки в `result.verification.checks` (тип
+        # `UpdateFeatureResult.Verification`). Строка от этого не падала — она читала НЕ ТО поле и
+        # показывала read-back=None, то есть доказательство было пустым. Путь измерен, а не угадан.
+        u_checks = (u_res.get("verification") or {}).get("checks") or u_res.get("checks") or []
+        rb = next((c for c in u_checks
+                   if c.get("name") == "read_back_save_initial_orientation"), None)
+        ok4 = (error_of(u_env) is None and pref3 is not None
+               and near_rel(v4, rotated_v) and n_before == 3 and n_after == 3
+               and rb is not None and rb.get("passed") is True)
+        rep.add("PO.4", "правка true→false: объём возвращается к довороту, признаков 3→3",
+                "PASS" if ok4 else "FAIL",
+                f"V={v4} (эталон {rotated_v}); признаков {n_before}→{n_after} (ожидание 3→3); "
+                f"ссылка ИЗ ДЕРЕВА={bool(pref3)}; read-back ориентации="
+                f"{None if rb is None else rb.get('passed')}; err={error_of(u_env)}"
+                + (f"; отказ: {error_text(u_env)}" if error_of(u_env) else ""),
+                details={"measured_volume": v4, "expected_rotated": rotated_v,
+                         "features_before": n_before, "features_after": n_after,
+                         "read_back_check": rb,
+                         "edit_request": {"pattern": {"save_initial_orientation": False}}})
+        close(doc3)
+
+
 def sketch_clearing_checks(client, rep, app_id):
     """V04r/V04d: replace и delete_entities делают то, что обещают.
 

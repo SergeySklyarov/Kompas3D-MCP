@@ -156,7 +156,7 @@ public partial class Api5Session
             command.BoundaryInstancesStepFactor1,
             command.BoundaryInstancesStepFactor2,
             command.ReverseDirection,
-            command.SaveInitialOrientation,
+            command.EffectiveSaveInitialOrientation,
             command.BuildingType,
             command.GeometryPattern);
 
@@ -176,7 +176,9 @@ public partial class Api5Session
             command.ExpectedHoleRadiusMm,
             command.ExpectedHoleHeightMm,
             command.ExpectedHoleCentersMm,
-            axis.Notes);
+            axis.Notes,
+            orientationWritten: command.EffectiveSaveInitialOrientation,
+            orientationDefaulted: command.SaveInitialOrientationDefaulted);
     }
 
     /// <summary>Mirror pattern (SM-23).</summary>
@@ -354,7 +356,9 @@ public partial class Api5Session
         double? holeRadius,
         double? holeHeight,
         IReadOnlyList<IReadOnlyList<double>>? expectedCenters,
-        IReadOnlyList<string> routeNotes)
+        IReadOnlyList<string> routeNotes,
+        bool? orientationWritten = null,
+        bool orientationDefaulted = false)
     {
         if (pattern is null)
         {
@@ -437,6 +441,19 @@ public partial class Api5Session
                 Expected: "координаты осей каждого экземпляра совпадают с аналитическим набором"));
         }
 
+        // Read-back of the instance orientation: the value WRITTEN to the feature must be the value READ
+        // back, the same rule the edit path applies. Without it a silent substitution would look like a
+        // success. Only the circular family carries the member.
+        if (readout.Family == "circular" && orientationWritten is bool orientationWanted)
+        {
+            checks.Add(new NamedCheck(
+                "read_back_save_initial_orientation",
+                readout.SaveInitialOrientation is bool orientationGot && orientationGot == orientationWanted,
+                Observed: readout.SaveInitialOrientation is bool o ? o.ToString() : "не читается",
+                Expected: orientationWanted.ToString()
+                    + (orientationDefaulted ? " (умолчание: поле не передано)" : " (задано клиентом)")));
+        }
+
         var unverified = new List<string>();
         if (expectedVolume is null)
         {
@@ -463,7 +480,14 @@ public partial class Api5Session
             HoleAxes: holesAfter.Select(h => new PatternHoleDto(h.CenterMm, h.Radius, h.Height)).ToArray(),
             Checks: checks,
             RouteNotes: routeNotes,
-            UnverifiedAspects: unverified);
+            UnverifiedAspects: unverified)
+        {
+            // The applied orientation is the value READ BACK from the feature, not the requested one: the
+            // caller must be able to see what the model actually holds. The flag says whether the client
+            // omitted the field, so a defaulted value is distinguishable from a deliberate one.
+            SaveInitialOrientation = readout.Family == "circular" ? readout.SaveInitialOrientation : null,
+            SaveInitialOrientationDefaulted = readout.Family == "circular" ? orientationDefaulted : null,
+        };
     }
 
     /// <summary>Common volume tolerance from the profile's <c>tolerance_classes</c>: 0.01 mm³ absolute
@@ -891,6 +915,13 @@ public sealed record PatternResult(
 
     /// <summary>Indexes of bodies touched neither by a source nor by the mirror.</summary>
     public IReadOnlyList<int>? UntouchedBodyIndexes { get; init; }
+
+    /// <summary>Instance orientation READ BACK from the feature (circular only, null otherwise).</summary>
+    public bool? SaveInitialOrientation { get; init; }
+
+    /// <summary>True when the client omitted <c>save_initial_orientation</c> and the default was applied;
+    /// null for families that have no such member.</summary>
+    public bool? SaveInitialOrientationDefaulted { get; init; }
 }
 
 /// <summary>Result of reading pattern parameters by a feature reference.</summary>

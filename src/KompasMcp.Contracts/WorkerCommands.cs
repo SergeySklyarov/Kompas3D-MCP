@@ -1118,10 +1118,25 @@ public sealed record PatternCircularCommand
     /// <summary>Pattern build direction (<c>ReverseDirection</c>).</summary>
     public bool ReverseDirection { get; init; }
 
-    /// <summary>Instance orientation (<c>SaveInitialOrientation</c>). The member exists ONLY on the circular pattern:
-    /// <c>ILinearPattern</c> lacks it in both the help and the interop assembly, so it does not carry over between
-    /// families.</summary>
-    public bool SaveInitialOrientation { get; init; } = true;
+    /// <summary>Instance orientation (<c>SaveInitialOrientation</c>). The member exists ONLY on the circular
+    /// pattern: <c>ILinearPattern</c> lacks it in both the help and the interop assembly, so it does not carry
+    /// over between families. Not set - <see cref="DefaultSaveInitialOrientation"/> applies.</summary>
+    /// <remarks>DOC: <c>icircularpattern_saveinitialorientation.html</c> - «TRUE - сохранять исходную
+    /// ориентацию, FALSE - доворачивать до радиального направления»; the page names no default.
+    /// INVARIANT: the effective default is FALSE, declared in ONE place - the constant below.
+    /// The property is nullable so "the client omitted the field" stays expressible and reportable.
+    /// History: docs/decisions/contracts.md#circular-orientation-default</remarks>
+    public bool? SaveInitialOrientation { get; init; }
+
+    /// <summary>Orientation written when the client omits the field: FALSE - instances turn to the radial
+    /// direction, the usual meaning of a circular pattern for holes, slots and teeth.</summary>
+    public const bool DefaultSaveInitialOrientation = false;
+
+    /// <summary>The orientation actually written to the feature: the client's value, else the default.</summary>
+    public bool EffectiveSaveInitialOrientation => SaveInitialOrientation ?? DefaultSaveInitialOrientation;
+
+    /// <summary>True when the client omitted the field and the default was applied instead.</summary>
+    public bool SaveInitialOrientationDefaulted => SaveInitialOrientation is null;
 
     /// <summary>Build method: <c>save_all</c> (0), <c>chess_order_by_axis1</c> (1), <c>chess_order_by_axis2</c>
     /// (2).</summary>

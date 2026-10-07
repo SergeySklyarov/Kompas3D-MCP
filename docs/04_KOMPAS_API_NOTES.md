@@ -4569,3 +4569,54 @@ ST_MIX_M    0x3    - метры             ST_MIX_RV   0x20  - тело вра�
 - Продуктовое решение — `docs/decisions/mates.md#alignment-geometry-criterion`; приёмочные строки —
   `MATE.07`–`MATE.09` (`scripts/mcp-smoke.py`), отрицательный контроль отказа по геометрии — модульный
   тест `MateAlignmentPolicyTests` (`DotSatisfies`: несовпадение → отказ).
+
+## §4.48. Клиентская приёмка 0.3.0: ссылки, самопроверка выдавливания, вспомогательная геометрия (07.10.2026, по живому сеансу рабочего клиента)
+
+Источник - клиентская приёмка поставки `publish-v0.3.0-895e0b7` (отчёт
+`CLIENT_ACCEPTANCE_REPORT_0_3_0_20261007.md`, машинный `scratch/client-acceptance-20261007-0-3-0/
+client-acceptance.json`). Всё ниже измерено вызовами РАБОЧЕГО КЛИЕНТА, не пробой.
+
+- **Ссылки `sketch:*` переиздаются на каждую мутацию документа.** Ссылка из ответа `create_sketch`
+  (`sketch:68fb2037…`) не равна той, что отдаёт `list_sketches` (`sketch:6633ea15…`), а после
+  сохранения/закрытия/переоткрытия документа ссылка снова другая (`sketch:0bf272de…`); прежняя даёт
+  `STALE_REFERENCE` («не найдена в реестре», `retry_policy=reacquire_context`, `partial_effects=false`).
+  Продуктовое следствие: клиент ОБЯЗАН перечитывать ссылку перед потребляющей её мутацией; сценарий,
+  кэширующий ссылку через мутацию, находит свой дефект, а не дефект продукта.
+- **`create_sketch` НЕ двигает ревизию документа, `edit_sketch` двигает.** Измерено: `create_sketch`
+  отвечает `revision_before=1, revision_after=1`; следующая за ней `edit_sketch {mode:"append"}`
+  переводит 1 -> 2. То есть «создан объект» и «изменено содержимое» различаются по ревизии.
+- **`finish_sketch` не подтверждает замкнутость профиля** и говорит это сам:
+  `profile_closed_confirmed=false`, `unverified_aspects: ["profile_closedness_not_verified - замкнутость
+  профиля проверяется только выдавливанием"]`. Ревизия при этом растёт (2 -> 3).
+- **Самопроверка `kompas_extrude` (operation="base") НЕ считает приращение, хотя оно у неё на руках.**
+  Измерено дважды (окружность R52 и плита 40×40×10): `checks[volume_delta]` и `checks[expected_basis]`
+  отвечают `observed=not_computable, expected=not_computable, passed=false`, тогда как в ТОМ ЖЕ payload
+  присутствуют `volume_delta_mm3` (совпавший с аналитикой до 8·10⁻¹¹ мм³) и
+  `volume_delta_basis="new_body_volume"`, а `profile_area_mm2` был выдан предшествующей `edit_sketch`.
+  Это ЛОЖНОЕ СОМНЕНИЕ (не ложный PASS): геометрия верна, признак недоказанным назван зря. Продуктовое
+  следствие - `verification.level` у выдавливания остаётся `call_returned`; подтверждать объём следует
+  независимым счётом, а не этим признаком.
+- **Вспомогательная геометрия: ссылки УСТОЙЧИВЫ, но перечисление их не отдаёт.** `axis:…` из ответа
+  `create_aux_geometry` принята следующей мутацией документа (A03 использовала `base_axis_ref` из A01
+  после мутации A02) - в отличие от `sketch:*`. При этом строки `kompas_list_aux_geometry` несут
+  `kind/mode/index/name/sub_kind/point_mm/direction_mm/angle_deg/offset_mm/direction/base_name/
+  line_name/notes` и НЕ несут `reference_id`: перечислить и адресовать одним ответом нельзя. Названо
+  находкой `AUXLIST-NO-REFERENCE`.
+- **`mode` читается обратно из модели и это видно в конверте.** У всех четырёх видов вспомогательной
+  геометрии `checks` несёт `mode_read_back` с `passed=true`: `by_2_points` -> `sub_kind=o3d_axis2Points`,
+  `offset` -> `o3d_planeOffset`, `angle` -> `o3d_planeAngle`, `coordinates` -> `sub_kind=ksPParamCoord`.
+  При `mode="angle"` ответ несёт `line_name` оси-опоры (`CA-axis`) - то есть опора подтверждается именем.
+- **`kompas_update_plane` подтверждает правку ПОВТОРНЫМ ЧТЕНИЕМ, а не кодом возврата.** Измерено:
+  `applied=true`, `applied_evidence="offset_mm: запрошено 22, прочитано 22"` (и то же для
+  `angle_deg: 45`); `mode` в ответе правки сохраняется (`offset` / `angle`). Поле чужого вида
+  отвергается `INVALID_ARGUMENT` с `retry_policy=never`, `partial_effects=false` и `details`
+  `{foreign_fields:["offset_mm"], allowed_fields:["angle_deg","direction","base_plane"],
+  plane_mode:"angle", sub_kind:"o3d_planeAngle"}` - отказ называет и лишнее поле, и допустимые.
+- **`kompas_get_context` требует `document_id`** (`pattern ^[0-9a-f]{32}$`), поэтому «прочитать контекст
+  сразу после `connect`» невозможно: контекст читается по документу. Порядок сессии -
+  `acquire_session` -> `connect` -> `create_document`/`open_document` -> `get_context`.
+- **Описания единиц, правленные пунктом A1 наряда `CLIENT_BUGS_20261007_DEVELOPER_PROMPT.md`,
+  подтверждены в поставке:** `kompas_measure.density_kg_per_m3` -> «Плотность материала, кг/м³. Только
+  конечное положительное значение.» (слова «мм» нет); `kompas_chamfer.distance1_mm` -> «Первый катет, мм.
+  При mode=distance_angle это РАССТОЯНИЕ, а не катет. …» («мм» ровно один раз); `$defs.operation_id`
+  несёт `format=uuid` и «UUID v4, 36 символов».

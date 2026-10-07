@@ -85,7 +85,7 @@ public static class ToolCatalog
 
     /// <summary>Definitions shared by every tool, so a document id means the same thing everywhere.</summary>
     public static JsonObject SharedDefinitions { get; } = Sch.Props(
-        ("operation_id", Sch.Uuid("Идентификатор мутации для повторного вызова. Тот же id с теми же аргументами возвращает уже известный результат и повторно не обращается к КОМПАС; тот же id с другими аргументами даёт OPERATION_ID_CONFLICT.")),
+        ("operation_id", Sch.Uuid("UUID v4, 36 символов, например 8f14e45f-ceea-467f-a1b2-000000000001. Идентификатор мутации для повторного вызова: НОВЫЙ id на каждую новую операцию; тот же id с теми же аргументами возвращает уже известный результат и повторно не обращается к КОМПАС; тот же id с другими аргументами даёт OPERATION_ID_CONFLICT.")),
         ("document_id", Sch.Str("UUID документа из kompas_create_document/kompas_open_document. Ни одна команда не использует «активный документ».","^[0-9a-f]{32}$")),
         ("application_id", Sch.Str("UUID экземпляра КОМПАС из kompas_connect.", "^[0-9a-f]{32}$")),
         ("expected_revision", Sch.Int("Ревизия из последнего чтения контекста. Расхождение даёт REVISION_CONFLICT без частичных эффектов.")),
@@ -219,7 +219,10 @@ public static class ToolCatalog
                 WorkerCommands.ListDocuments),
 
             ReadOnly("kompas_get_context", "Контекст документа",
-                "Тип, путь, признак изменения, ревизия, число тел и признаков. Обязательный первый шаг перед любой правкой.",
+                "Тип, путь, признак изменения, ревизия, число тел и признаков. feature_count считает "
+                + "ТЕ ЖЕ операции дерева (o3d_operationElement = 110), что и kompas_list_features, и "
+                + "эскизы в него НЕ входят — их перечисляет kompas_list_sketches. Обязательный первый "
+                + "шаг перед любой правкой.",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id")),
                     ("detail", Sch.Enum("minimal — только счётчики; full — добавает габарит и отпечаток состояния.", "minimal", "full"))),
@@ -246,7 +249,12 @@ public static class ToolCatalog
                 requiresDocument: true),
 
             ReadOnly("kompas_list_features", "Признаки",
-                "Признаки дерева модели с непрозрачными ссылками, привязанными к ревизии.",
+                "ОПЕРАЦИИ дерева модели с непрозрачными ссылками, привязанными к ревизии: "
+                + "перечисляется коллекция типа o3d_operationElement = 110 — по obj3dtype.html "
+                + "«Операции (от o3d_baseExtrusion до o3d_cylindricSpiral)». ЭСКИЗЫ В ЭТОТ ПЕРЕЧЕНЬ "
+                + "НЕ ВХОДЯТ: эскиз — отдельный тип дерева (o3d_sketch = 5, «эскиз»), и перечисляет "
+                + "его kompas_list_sketches. Число операций в том же смысле даёт feature_count из "
+                + "kompas_get_context.",
                 Sch.Props(("document_id", Sch.Ref("#/$defs/document_id"))),
                 WorkerCommands.ListFeatures,
                 requiresDocument: true,
@@ -441,7 +449,7 @@ public static class ToolCatalog
                 Sch.Props(
                     ("target_ref", Sch.Ref("#/$defs/reference")),
                     ("properties", Sch.Arr(Sch.Enum("Свойство", "bbox", "volume", "surface_area", "mass", "centroid"), "Запрашиваемые свойства.", 1, 5)),
-                    ("density_kg_per_m3", Sch.Nullable(Sch.PositiveMm("Плотность материала")))),
+                    ("density_kg_per_m3", Sch.Nullable(Sch.Positive("Плотность материала", "кг/м³")))),
                 WorkerCommands.Measure,
                 requiresDocument: false,
                 requiresOperationId: false),
@@ -525,7 +533,10 @@ public static class ToolCatalog
                         "blind — на глубину depth_mm (значение по умолчанию); through — насквозь. through принят только для cut: измерено на v24, что «насквозь» работает при directionType=symmetric, а число глубины в этом режиме игнорируется.",
                         "blind", "through"))),
                     ("depth_mm", Sch.Nullable(Sch.PositiveMm(
-                        "Глубина. Обязательна при end_condition=blind и запрещена при end_condition=through — сервер не принимает «насквозь с глубиной», потому что КОМПАС это число всё равно отбрасывает."))),
+                        "Глубина",
+                        "Обязательна при end_condition=blind и запрещена при end_condition=through — "
+                        + "сервер не принимает «насквозь с глубиной», потому что КОМПАС это число "
+                        + "всё равно отбрасывает."))),
                     ("direction", Sch.Enum("positive — по нормали эскиза; negative — против; symmetric — в обе стороны.", "positive", "negative", "symmetric")),
                     ("target_body_ref", Sch.Nullable(Sch.Ref("#/$defs/reference")))),
                 WorkerCommands.Extrude,
@@ -569,9 +580,11 @@ public static class ToolCatalog
                     ("mode", Sch.Enum(
                         "two_distances — двумя катетами (API5); distance_angle — расстоянием и углом (API7, угол в градусах).",
                         "two_distances", "distance_angle")),
-                    ("distance1_mm", Sch.PositiveMm("Первый катет (или расстояние для distance_angle), мм")),
+                    ("distance1_mm", Sch.PositiveMm("Первый катет",
+                        "При mode=distance_angle это РАССТОЯНИЕ, а не катет.")),
                     ("distance2_mm", Sch.Nullable(Sch.PositiveMm(
-                        "Второй катет, мм. Обязателен при mode=two_distances, запрещён при mode=distance_angle. " +
+                        "Второй катет",
+                        "Обязателен при mode=two_distances, запрещён при mode=distance_angle. " +
                         "Для фаски под 45° задайте его равным distance1_mm."))),
                     ("angle_deg", Sch.Nullable(Sch.Num(
                         "Угол фаски в ГРАДУСАХ, только строго между 0 и 90. Единицы измерены (проба F.10): " +
@@ -632,20 +645,24 @@ public static class ToolCatalog
                         "насквозь + конус).",
                         "blind_flat", "through_counterbore", "through_countersink")),
                     ("diameter_mm", Sch.PositiveMm(
-                        "Диаметр отверстия. У цековки и зенковки это диаметр ПИЛОТА, а не выточки " +
-                        "и не устья.")),
+                        "Диаметр отверстия",
+                        "У цековки и зенковки это диаметр ПИЛОТА, а не выточки и не устья.")),
                     ("depth_mm", Sch.Nullable(Sch.PositiveMm(
-                        "Глубина, мм. Обязательна при mode=blind_flat, запрещена при сквозных " +
-                        "режимах: сквозное отверстие числа глубины не принимает."))),
+                        "Глубина",
+                        "Обязательна при mode=blind_flat, запрещена при сквозных режимах: сквозное "
+                        + "отверстие числа глубины не принимает."))),
                     ("counterbore_diameter_mm", Sch.Nullable(Sch.PositiveMm(
-                        "Диаметр выточки, мм — только для mode=through_counterbore. Обязателен там " +
-                        "и должен быть БОЛЬШЕ диаметра пилота: выточка уже пилота не снимает " +
-                        "материал, потому что измеренная формула M.2 — кольцо π/4·(D²−d²)·h."))),
+                        "Диаметр выточки",
+                        "Только для mode=through_counterbore. Обязателен там и должен быть БОЛЬШЕ "
+                        + "диаметра пилота: выточка уже пилота не снимает материал, потому что "
+                        + "измеренная формула M.2 — кольцо π/4·(D²−d²)·h."))),
                     ("counterbore_depth_mm", Sch.Nullable(Sch.PositiveMm(
-                        "Глубина выточки, мм — только для mode=through_counterbore, где обязательна."))),
+                        "Глубина выточки",
+                        "Только для mode=through_counterbore, где обязательна."))),
                     ("countersink_diameter_mm", Sch.Nullable(Sch.PositiveMm(
-                        "Диаметр УСТЬЯ зенковки, мм — только для mode=through_countersink. " +
-                        "Обязателен там и должен быть больше диаметра пилота."))),
+                        "Диаметр УСТЬЯ зенковки",
+                        "Только для mode=through_countersink. Обязателен там и должен быть больше "
+                        + "диаметра пилота."))),
                     ("countersink_angle_deg", Sch.Nullable(Sch.Num(
                         "Угол зенковки в ГРАДУСАХ, строго между 0 и 180 — только для " +
                         "mode=through_countersink, где обязателен. Измерялись 60, 90 и 120 (M.3). " +
@@ -789,10 +806,11 @@ public static class ToolCatalog
                         "Update()=False, тел 0.",
                         "normal", "reverse", "both", "middle_plane"))),
                     ("thin_wall_mm", Sch.Nullable(Sch.PositiveMm(
-                        "Толщина тонкой стенки вращения, мм. НЕ поддержана: маршрут измерен только " +
-                        "на СПЛОШНОМ теле (IThinParameters.Thin = false). Любое значение " +
-                        "отвергается CAPABILITY_UNAVAILABLE, потому что записать неизмеренное число " +
-                        "значило бы выдать непроверенную конфигурацию за проверенную."))),
+                        "Толщина тонкой стенки вращения",
+                        "НЕ поддержана: маршрут измерен только на СПЛОШНОМ теле "
+                        + "(IThinParameters.Thin = false). Любое значение отвергается "
+                        + "CAPABILITY_UNAVAILABLE, потому что записать неизмеренное число значило бы "
+                        + "выдать непроверенную конфигурацию за проверенную."))),
                     ("target_body_ref", Sch.Described(
                         Sch.Nullable(Sch.Ref("#/$defs/reference")),
                         "Ссылка на тело, которое операция обязана изменить. Целевое тело вращению " +
@@ -1059,9 +1077,9 @@ public static class ToolCatalog
                         "выбирается один.", 1)),
                     ("axis1_point1_mm", Sch.Vec3("Первая точка оси первого направления, координаты МОДЕЛИ, мм.")),
                     ("axis1_point2_mm", Sch.Vec3("Вторая точка оси первого направления. Точки обязаны различаться.")),
-                    ("step1_mm", Sch.PositiveMm("шага по первой оси",
-                        "Шаг копирования по первой оси, мм. Единица (мм) подтверждается калибровочной " +
-                        "пробой: шаг 20 при трёх экземплярах даёт базу 40 мм между крайними.")),
+                    ("step1_mm", Sch.PositiveMm("Шаг копирования по первой оси",
+                        "Единица (мм) подтверждается калибровочной пробой: шаг 20 при трёх " +
+                        "экземплярах даёт базу 40 мм между крайними.")),
                     ("count1", Sch.Int("Число экземпляров по первой оси, включая исходный. Не меньше 1.", 1, 100_000)),
                     ("angle1_deg", Sch.Nullable(Sch.Num(
                         "Угол наклона первой оси сетки, ГРАДУСЫ. Не задан — значение модели остаётся как " +
@@ -1471,16 +1489,19 @@ public static class ToolCatalog
                 Sch.Props(
                     ("feature_ref", Sch.Ref("#/$defs/reference")),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
-                    ("depth_mm", Sch.Nullable(Sch.PositiveMm("Новая глубина. Только вместе с end_condition=blind."))),
+                    ("depth_mm", Sch.Nullable(Sch.PositiveMm("Новая глубина",
+                        "Только вместе с end_condition=blind."))),
                     ("end_condition", Sch.Nullable(Sch.Enum(
                         "Новое условие конца. through измерен и поддержан только для вырезания.",
                         "blind", "through"))),
                     ("sketch_ref", Sch.Nullable(Sch.Ref("#/$defs/reference"))),
                     ("distance1_mm", Sch.Nullable(Sch.PositiveMm(
-                        "Новый первый катет фаски, мм. Только для семейства chamfer."))),
+                        "Новый первый катет фаски",
+                        "Только для семейства chamfer."))),
                     ("distance2_mm", Sch.Nullable(Sch.PositiveMm(
-                        "Новый второй катет фаски, мм. Только для семейства chamfer; без него при " +
-                        "правке одного катета фаска остаётся равносторонней."))),
+                        "Новый второй катет фаски",
+                        "Только для семейства chamfer; без него при правке одного катета фаска "
+                        + "остаётся равносторонней."))),
                     ("angle_deg", Sch.Nullable(Sch.Num(
                         "Новый угол фаски, градусы (строго между 0 и 90). Правка угла идёт маршрутом " +
                         "API7 (IChamfer на живой модели), потому что в API5 члена «угол» нет вовсе. " +
@@ -1494,7 +1515,8 @@ public static class ToolCatalog
                     ("direction", Sch.Nullable(Sch.Bool(
                         "Новая сторона фаски (API5 transfer). Только для семейства chamfer."))),
                     ("radius_mm", Sch.Nullable(Sch.PositiveMm(
-                        "Новый радиус скругления, мм. Только для семейства скругления. Правится " +
+                        "Новый радиус скругления",
+                        "Только для семейства скругления. Правится " +
                         "маршрутом API7 (IFillet.Radius1 на живой модели), потому что запись в " +
                         "радиус через API5 на существующем признаке не применяется: сеттер " +
                         "ksFilletDefinition.radius и entity.Update() оставляют объём прежним. " +
@@ -1774,11 +1796,13 @@ public static class ToolCatalog
                                 "по оси 2, у кругового — в КОЛЬЦЕВОМ направлении. Минимум 1.",
                                 1, 1_000_000))),
                             ("step1_mm", Sch.Nullable(Sch.PositiveMm(
-                                "Новый шаг по первому направлению, мм. У кругового это РАДИАЛЬНЫЙ шаг."))),
+                                "Новый шаг по первому направлению",
+                                "У кругового это РАДИАЛЬНЫЙ шаг."))),
                             ("step2_mm", Sch.Nullable(Sch.PositiveMm(
-                                "Новый шаг по второму направлению массива ПО СЕТКЕ, мм. У кругового " +
-                                "неприменим: там второе направление кольцевое, и его шаг — " +
-                                "step2_deg. Смешение единиц отвергается INVALID_ARGUMENT до мутации."))),
+                                "Новый шаг по второму направлению массива ПО СЕТКЕ",
+                                "У кругового неприменим: там второе направление кольцевое, и его " +
+                                "шаг — step2_deg. Смешение единиц отвергается INVALID_ARGUMENT до " +
+                                "мутации."))),
                             ("step2_deg", Sch.Nullable(Sch.Num(
                                 "Новый УГЛОВОЙ шаг кольцевого направления кругового массива, " +
                                 "ГРАДУСЫ. У массива по сетке неприменим (там Step2 — миллиметры). " +
@@ -1850,7 +1874,8 @@ public static class ToolCatalog
                         "других семейств (depth_mm, radius_mm, plane, operation и прочими) не " +
                         "сочетается: смешение отвергается INVALID_ARGUMENT до мутации."))),
                     ("diameter_mm", Sch.Nullable(Sch.PositiveMm(
-                        "Новый диаметр ОТВЕРСТИЯ (семейство hole), мм: пилота у цековки и зенковки, " +
+                        "Новый диаметр ОТВЕРСТИЯ (семейство hole)",
+                        "Пилота у цековки и зенковки, " +
                         "самого отверстия у глухого и сквозного цилиндрического. Маршрут измерен " +
                         "20.09.2026 (зонд scratch/_hole_edit_probe.py, шаг M.6): сквозное Ø10 → Ø12 " +
                         "на плите 10 мм сняло 345.575191895 мм³ = π·(36−25)·10, и это пережило " +
@@ -1867,7 +1892,8 @@ public static class ToolCatalog
                         "строит признак без материала при неизменном объёме (тот же класс, что " +
                         "нулевой катет фаски, F.12)."))),
                     ("counterbore_diameter_mm", Sch.Nullable(Sch.PositiveMm(
-                        "Новый диаметр ВЫТОЧКИ цековки (режим through_counterbore), мм. Поле ЧУЖОГО " +
+                        "Новый диаметр ВЫТОЧКИ цековки (режим through_counterbore)",
+                        "Поле ЧУЖОГО " +
                         "режима для остальных: на глухом и на зенковке отвергается INVALID_ARGUMENT " +
                         "до COM с перечнем своих полей. Маршрут измерен 20.09.2026 (шаг M.6): " +
                         "выточка Ø18×4 → Ø20×5 сняла 474.380490692 мм³ сверх прежнего — разность " +
@@ -1875,11 +1901,13 @@ public static class ToolCatalog
                         "Пишется в ISpotfacingHoleParameters.SpotfacingDiameter; у чужого режима " +
                         "этот интерфейс на объекте НЕДОСТИЖИМ — измерено контролем (в) того же зонда."))),
                     ("counterbore_depth_mm", Sch.Nullable(Sch.PositiveMm(
-                        "Новая глубина ВЫТОЧКИ цековки (режим through_counterbore), мм. Записывается " +
+                        "Новая глубина ВЫТОЧКИ цековки (режим through_counterbore)",
+                        "Записывается " +
                         "в ISpotfacingHoleParameters.SpotfacingDepth и читается обратно из модели " +
                         "(counterbore_depth_read_back в checks). Поле чужого режима для остальных."))),
                     ("countersink_diameter_mm", Sch.Nullable(Sch.PositiveMm(
-                        "Новый диаметр УСТЬЯ зенковки (режим through_countersink), мм — устья, а не " +
+                        "Новый диаметр УСТЬЯ зенковки (режим through_countersink)",
+                        "Устья, а не " +
                         "пилота: пилот задаётся diameter_mm. Маршрут измерен 20.09.2026 (шаг M.6): " +
                         "устье Ø20 → Ø24 при 90° сняло 605.280184592 мм³ сверх прежнего — разность " +
                         "π·h/3·(rM² + rP·rM − 2·rP²) при производной h = (rM − rP)/tan(угол/2) " +
@@ -2133,7 +2161,7 @@ public static class ToolCatalog
                         + "диаметрального — точка полки. Не задано — член не пишется, и действует "
                         + "умолчание ядра."))),
                     ("value_mm", Sch.Nullable(Sch.Num(
-                        "Значение размера: для радиального и диаметрального — радиус. Не задано — "
+                        "Значение размера, мм: для радиального и диаметрального — радиус. Не задано — "
                         + "радиус выводится из point2 (точки на окружности); для линейного значение "
                         + "читается как расстояние между точками.",
                         exclusiveMin: true, exclusiveMinValue: 0d)))),
@@ -2708,7 +2736,8 @@ public static class ToolCatalog
     {
         ("min_mm", Sch.Ref("#/$defs/vector3")),
         ("max_mm", Sch.Ref("#/$defs/vector3")),
-    });
+    },
+    "Габарит, мм: min_mm и max_mm в системе координат детали.");
 
     /// <summary>The plane for B3 operations: a ready reference or a point with a normal.</summary>
     /// <remarks>The plane's SIDE is set by the sign <c>s = n·(p − p₀)</c> in the cut command itself,

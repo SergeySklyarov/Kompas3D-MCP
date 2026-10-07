@@ -158,8 +158,22 @@ public static class Sch
         return obj;
     }
 
-    public static JsonObject PositiveMm(string what, string? description = null) =>
-        Num(description ?? $"{what}, мм. Только конечное положительное значение.", exclusiveMin: true, exclusiveMinValue: 0d);
+    /// <summary>Positive number in a NAMED unit. The unit is a parameter, not a suffix baked into the
+    /// helper, because a quantity whose unit is not mm must not be published with "мм".</summary>
+    /// <param name="note">Clarification placed AFTER the unit sentence. It is deliberately not a
+    /// replacement for the whole description: MEASURED defect — the older single-argument form appended
+    /// ", мм" to a <paramref name="what"/> that already carried a unit or ended with a period, and the
+    /// published description read «Первый катет (…), мм, мм» or «…blind., мм». The unit word is written
+    /// exactly once, by this helper.</param>
+    /// <remarks>TEST: ToolDescriptionUnitsTests</remarks>
+    public static JsonObject Positive(string what, string unit, string? note = null) =>
+        Num($"{what}, {unit}.{(note is null ? string.Empty : " " + note)} "
+            + "Только конечное положительное значение.",
+            exclusiveMin: true, exclusiveMinValue: 0d);
+
+    /// <summary>Positive number in millimetres. See <see cref="Positive"/> for the <paramref name="note"/>
+    /// contract.</summary>
+    public static JsonObject PositiveMm(string what, string? note = null) => Positive(what, "мм", note);
 
     public static JsonObject Int(string? description = null, long? min = null, long? max = null, long? defaultTo = null)
     {

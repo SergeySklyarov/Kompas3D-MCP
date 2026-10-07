@@ -94,6 +94,56 @@ public class ToolCatalogTests
         Assert.All(ToolCatalog.All, t => Assert.False(string.IsNullOrWhiteSpace(t.WorkerCommand)));
     }
 
+    /// <summary>INVARIANT: the RESOLVED description of <c>operation_id</c> names the format, because
+    /// <c>format</c>/<c>minLength</c> live in <c>$defs</c> and a client that folds a schema into a
+    /// signature keeps only the text.</summary>
+    /// <remarks>MEASURED: a client sent <c>"omega-phase1-connect"</c> and got INVALID_ARGUMENT — the
+    /// only place the UUID requirement appeared was <c>$defs/operation_id</c>, and the visible signature
+    /// said just <c>operation_id: string</c>. The check is made on the description reached through the
+    /// reference, not on the reference itself.
+    /// History: docs/decisions/contracts.md#operation-id-format</remarks>
+    [Fact]
+    public void OperationId_ResolvedDescriptionNamesTheUuidFormat()
+    {
+        var checkedTools = 0;
+        foreach (var tool in ToolCatalog.All)
+        {
+            var properties = tool.InputSchema["properties"] as JsonObject;
+            if (properties?["operation_id"] is not JsonObject field)
+            {
+                continue;
+            }
+
+            var defs = tool.InputSchema["$defs"] as JsonObject;
+            var resolved = field;
+            if (field["$ref"]?.GetValue<string>() is { } reference && defs is not null)
+            {
+                resolved = defs[reference[(reference.LastIndexOf('/') + 1)..]] as JsonObject;
+            }
+            else if (field["anyOf"] is JsonArray branches)
+            {
+                resolved = branches
+                    .Select(b => b as JsonObject)
+                    .FirstOrDefault(b => b?["$ref"] is not null);
+                if (resolved?["$ref"]?.GetValue<string>() is { } inner && defs is not null)
+                {
+                    resolved = defs[inner[(inner.LastIndexOf('/') + 1)..]] as JsonObject;
+                }
+            }
+
+            var description = resolved?["description"]?.GetValue<string>() ?? string.Empty;
+            Assert.True(description.Contains("UUID", StringComparison.Ordinal),
+                $"{tool.Name}: разрешённое описание operation_id не называет UUID — клиент, "
+                + "сворачивающий схему в сигнатуру, теряет формат.");
+            Assert.True(resolved?["format"]?.GetValue<string>() == "uuid",
+                $"{tool.Name}: разрешённая схема operation_id не несёт format=uuid.");
+            checkedTools++;
+        }
+
+        Assert.True(checkedTools >= 40, $"проверено инструментов с operation_id: {checkedTools} — "
+            + "похоже, разбор ссылки перестал находить поле.");
+    }
+
     [Fact]
     public void SketchStatus_IsAReadThatMintsNoHandles()
     {

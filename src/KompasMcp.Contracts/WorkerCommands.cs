@@ -662,6 +662,17 @@ public sealed record SketchRowDto
     public IReadOnlyList<string> Notes { get; init; } = Array.Empty<string>();
 }
 
+/// <summary>Answer of <c>kompas_list_sketches</c>: the rows, the named route and the collection-level
+/// notes.</summary>
+/// <remarks>An OBJECT, not a bare array, and that is the same shape the neighbouring readers publish
+/// (<c>kompas_list_sketch_entities</c>, <c>kompas_list_aux_geometry</c>): a bare array has nowhere to
+/// put the route, and a client that receives an empty array cannot tell "no sketches" from "the
+/// collection was not read" — the distinction this tool exists to keep.</remarks>
+public sealed record SketchListResult(
+    IReadOnlyList<SketchRowDto> Rows,
+    string Route,
+    IReadOnlyList<string> Notes);
+
 public sealed record ListBodiesCommand
 {
     public required string DocumentId { get; init; }

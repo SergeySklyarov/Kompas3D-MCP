@@ -22,24 +22,34 @@ namespace KompasMcp.Api5Adapter;
 /// </remarks>
 public sealed partial class Api5Session
 {
+    /// <summary>The enumeration route, named once so the response and the acceptance evidence cannot
+    /// drift apart.</summary>
+    private const string SketchEnumerationRoute =
+        "ksPart.EntityCollection(o3d_sketch = 5) → ksEntityCollection.GetCount/GetByIndex";
+
     /// <summary>Every sketch of the document, each with a reference usable by the sketch tools.</summary>
-    public IReadOnlyList<SketchRowDto> ListSketches(ListSketchesCommand command)
+    public SketchListResult ListSketches(ListSketchesCommand command)
     {
         var document = RequireDocument(command.DocumentId);
         var rows = new List<SketchRowDto>();
+        var notes = new List<string>();
 
         var collection = (ksEntityCollection)document.PartNow()
             .EntityCollection(KompasObjectTypes.Of(KompasObjectTypes.Sketch));
 
-        for (var i = 0; i < collection.GetCount(); i++)
+        var count = collection.GetCount();
+        for (var i = 0; i < count; i++)
         {
             if (collection.GetByIndex(i) is not ksEntity entity)
             {
+                // An element that is not a ksEntity is NAMED: skipping it silently would make the
+                // list shorter than the collection and the difference invisible.
+                notes.Add($"элемент коллекции [{i}] не отвечает ksEntity: строка не выдана");
                 continue;
             }
 
-            var notes = new List<string>();
-            var created = TryIsCreated(entity, notes);
+            var rowNotes = new List<string>();
+            var created = TryIsCreated(entity, rowNotes);
 
             string? supportName = null;
             if (entity.GetDefinition() is ksSketchDefinition definition)
@@ -49,12 +59,12 @@ public sealed partial class Api5Session
                 supportName = TryGetPlaneName(definition);
                 if (supportName is null)
                 {
-                    notes.Add("опора эскиза не прочитана (ksSketchDefinition.GetPlane() вернул пусто)");
+                    rowNotes.Add("опора эскиза не прочитана (ksSketchDefinition.GetPlane() вернул пусто)");
                 }
             }
             else
             {
-                notes.Add("ksSketchDefinition эскиза не получен: опора не читалась");
+                rowNotes.Add("ksSketchDefinition эскиза не получен: опора не читалась");
             }
 
             rows.Add(new SketchRowDto
@@ -64,11 +74,16 @@ public sealed partial class Api5Session
                 Index = i,
                 Created = created,
                 SupportPlaneName = supportName,
-                Notes = notes,
+                Notes = rowNotes,
             });
         }
 
-        return rows;
+        if (rows.Count != count)
+        {
+            notes.Add($"в коллекции {count} элементов, строк выдано {rows.Count}: разница названа выше");
+        }
+
+        return new SketchListResult(rows, SketchEnumerationRoute, notes);
     }
 
     /// <summary>The <c>IsCreated()</c> flag, or <c>null</c> when the call itself failed. A failed read is

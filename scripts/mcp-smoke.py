@@ -26710,6 +26710,14 @@ def dep_acceptance_checks(client, rep, app_id, workdir):
              {"volume": vol_now, "bbox_min": mn, "bbox_max": mx, "analytic": 24000.0})
         close(doc)
 
+    def sketch_rows(doc):
+        """Строки перечня эскизов. Ответ — ОБЪЕКТ {rows, route, notes}, а не голый массив: у голого
+        массива нет места для маршрута, и пустой список был бы неотличим от «коллекция не прочитана»."""
+        env, code = call("kompas_list_sketches", {"document_id": doc})
+        body = result(env)
+        rows = body.get("rows") if isinstance(body, dict) else None
+        return (rows if isinstance(rows, list) else []), body, code
+
     def m_dsk(emit):
         """dep.sketches.enumeration: перечисление ЭСКИЗОВ детали и СВЕЖАЯ ссылка на эскиз.
 
@@ -26728,9 +26736,7 @@ def dep_acceptance_checks(client, rep, app_id, workdir):
                                         "DEP-DSK-free")
 
         # ── discover: СВОБОДНЫЙ эскиз и эскиз ПОД ОПЕРАЦИЕЙ оба видны перечню ────────────────
-        env, code_l = call("kompas_list_sketches", {"document_id": doc})
-        listed = result(env)
-        rows = listed if isinstance(listed, list) else []
+        rows, listed, code_l = sketch_rows(doc)
         row = rows[0] if rows else {}
         ref_free = ref_id(row.get("sketch_ref") or row.get("ref"))
         feats_free = features(doc)
@@ -26749,9 +26755,7 @@ def dep_acceptance_checks(client, rep, app_id, workdir):
                 "axis_point1_mm": [0.0, 0.0, 0.0], "axis_point2_mm": [0.0, 40.0, 0.0]})
             rev_rot = (env or {}).get("revision_after") or rev_rot
             rot_vol = volume(main_body(doc_rot))
-        env, code_lr = call("kompas_list_sketches", {"document_id": doc_rot})
-        rows_rot = result(env)
-        rows_rot = rows_rot if isinstance(rows_rot, list) else []
+        rows_rot, listed_rot, code_lr = sketch_rows(doc_rot)
         row_rot = rows_rot[0] if rows_rot else {}
         ref_rot = ref_id(row_rot.get("sketch_ref") or row_rot.get("ref"))
         feats_rot = features(doc_rot)
@@ -26761,13 +26765,14 @@ def dep_acceptance_checks(client, rep, app_id, workdir):
                    and row.get("created") is True
                    and (row.get("support_plane_name") or "") != ""
                    and err_rot is None and rot_code is None and len(rows_rot) == 1 and ref_rot
-                   and ref_rot != ref_free and len(feats_rot) == 1 and rot_types == ["45"])
+                   and ref_rot != ref_free and len(feats_rot) == 1 and rot_types == ["28"])
         emit("discover", "PASS" if ok_disc else "FAIL",
              "эскизы перечисляются ОТДЕЛЬНО от признаков дерева, и это ровно тот случай, на котором "
              "клиент получил list_features=[] и feature_count=0 (MCP-004). СВОБОДНЫЙ эскиз (XY, "
              "окружность R52): признаков типа 110 — %d, строк перечня ЭСКИЗОВ — %d, строка несёт "
              "ссылку=%s, имя «%s», номер=%s, признак создания=%s, опору «%s». ЭСКИЗ ПОД ВРАЩЕНИЕМ "
-             "(полный оборот, V=%s): признаков — %d (типы %s), строк перечня эскизов — %d, ссылка=%s, "
+             "(полный оборот, V=%s): признаков — %d (типы %s, ИЗМЕРЕНО на этом build), строк перечня "
+             "эскизов — %d, ссылка=%s, "
              "и она ОТЛИЧНА от ссылки свободного эскиза. Маршрут — документированный "
              "ksPart.EntityCollection(o3d_sketch = 5) («При создании массив заполняется объектами "
              "указанного типа, содержащимися в компоненте», kspart_entitycollection.html; тип "
@@ -26781,10 +26786,13 @@ def dep_acceptance_checks(client, rep, app_id, workdir):
                        "name": row.get("name"), "index": row.get("index"),
                        "created": row.get("created"),
                        "support_plane_name": row.get("support_plane_name"),
-                       "notes": row.get("notes"), "error": code_l},
+                       "notes": row.get("notes"),
+                       "route": listed.get("route") if isinstance(listed, dict) else None,
+                       "error": code_l},
               "under_rotation": {"features": len(feats_rot), "feature_types": rot_types,
                                  "rows": len(rows_rot), "sketch_ref": ref_rot,
                                  "support_plane_name": row_rot.get("support_plane_name"),
+                                 "route": listed_rot.get("route") if isinstance(listed_rot, dict) else None,
                                  "volume": rot_vol, "error": code_lr, "rotate_error": rot_code},
               "free_sketch_error": err_free})
 
@@ -26797,7 +26805,9 @@ def dep_acceptance_checks(client, rep, app_id, workdir):
         rev, _feat, code_e, env_e = extrude(doc, rev, ref_free, operation="base", depth_mm=10.0,
                                             direction="positive", end_condition="blind")
         vol = volume(main_body(doc))
-        ok_read = (code_r is None and len(erows or []) == 1 and kinds == ["circle"] and addrs
+        # ИМЯ ВИДА ИЗМЕРЕНО, а не выбрано: перечисление сущностей называет окружность `ksDrCircle`
+        # (нативное имя типа примитива), и подстановка «circle» была бы выдуманным ожиданием.
+        ok_read = (code_r is None and len(erows or []) == 1 and kinds == ["ksDrCircle"] and addrs
                    and code_e is None and near(vol, circle_v, tol=1.0))
         emit("read", "PASS" if ok_read else "FAIL",
              "по ссылке ИЗ ПЕРЕЧНЯ эскиз читается: сущностей %d, вид %s, адрес есть=%s. Ссылка ведёт "
@@ -26814,9 +26824,7 @@ def dep_acceptance_checks(client, rep, app_id, workdir):
         doc2, codes, path, open_msg = save_reopen(doc, workdir, "dep-dsk-reopen.m3d")
         ref_after, refs_after, kinds_after, code_l2, code_e2, code_old = None, 0, [], None, None, None
         if doc2:
-            env, code_l2 = call("kompas_list_sketches", {"document_id": doc2})
-            rows2 = result(env)
-            rows2 = rows2 if isinstance(rows2, list) else []
+            rows2, _listed2, code_l2 = sketch_rows(doc2)
             refs_after = len(rows2)
             row2 = rows2[0] if rows2 else {}
             ref_after = ref_id(row2.get("sketch_ref") or row2.get("ref"))
@@ -26828,7 +26836,7 @@ def dep_acceptance_checks(client, rep, app_id, workdir):
             env, code_old = call("kompas_list_sketch_entities", {"sketch_ref": ref_free})
         ok_sr = (codes[0] is None and codes[1] is None and code_l2 is None and refs_after == 1
                  and ref_after and ref_after != ref_free and code_e2 is None
-                 and kinds_after == ["circle"] and code_old == "STALE_REFERENCE")
+                 and kinds_after == ["ksDrCircle"] and code_old == "STALE_REFERENCE")
         emit("save_reopen", "PASS" if ok_sr else "FAIL",
              "ссылка на эскиз ПЕРЕЧЕКАНИВАЕТСЯ переоткрытием: коды сохранения и открытия %s, строк "
              "перечня эскизов после переоткрытия %d, новая ссылка=%s (отличается от прежней %s: %s), "
@@ -26845,15 +26853,14 @@ def dep_acceptance_checks(client, rep, app_id, workdir):
         # ── negative_tests: «нет эскизов» и «нет документа» — РАЗНЫЕ ответы ───────────────────
         env, code_nf = call("kompas_list_sketches", {"document_id": "0" * 32})
         empty_doc, _rev_empty = new_doc("DEP-DSK-empty")
-        env, code_empty = call("kompas_list_sketches", {"document_id": empty_doc})
-        empty_rows = result(env)
+        empty_rows, _empty_body, code_empty = sketch_rows(empty_doc)
         # Различающий контроль охвата — на ЖИВОМ документе с потреблённым эскизом (doc_rot): перечень
         # ПРИЗНАКОВ называет операцию и НЕ называет эскиз.
         feats_now = features(doc_rot)
         feature_types = [str(f.get("type")) for f in feats_now]
         ok_neg = (code_nf == "DOCUMENT_NOT_FOUND" and code_empty is None
-                  and isinstance(empty_rows, list) and len(empty_rows) == 0
-                  and len(feats_now) == 1 and feature_types == ["45"])
+                  and len(empty_rows) == 0
+                  and len(feats_now) == 1 and feature_types == ["28"])
         emit("negative_tests", "PASS" if ok_neg else "FAIL",
              "«эскизов нет» и «документа нет» — РАЗНЫЕ ответы, и это часть контракта: несуществующий "
              "document_id отвергнут кодом %s (пустой список выдал бы «эскизов нет» за «документ не "
@@ -26861,10 +26868,10 @@ def dep_acceptance_checks(client, rep, app_id, workdir):
              "%s). Различающий контроль охвата: в документе с эскизом, потреблённым вращением, "
              "перечень ПРИЗНАКОВ несёт %d строку с типами %s, а эскиза (тип 5) среди них НЕТ — это и "
              "есть граница, названная в описании kompas_list_features и kompas_get_context"
-             % (code_nf, len(empty_rows) if isinstance(empty_rows, list) else -1, code_empty,
+             % (code_nf, len(empty_rows), code_empty,
                 len(feats_now), feature_types),
              {"unknown_document": code_nf,
-              "empty_document_rows": len(empty_rows) if isinstance(empty_rows, list) else None,
+              "empty_document_rows": len(empty_rows),
               "empty_document_error": code_empty,
               "features": len(feats_now), "feature_types": feature_types,
               "sketches_in_features": [f for f in feats_now if str(f.get("type")) == "5"]})

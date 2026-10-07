@@ -343,6 +343,11 @@ public sealed class ToolInvoker : IAsyncDisposable
                     "нет параметра, и принятое число было бы записано и проигнорировано.");
             }
 
+            // THE ALIGNMENT IS NOT JUDGED HERE. A map "mate type → allowed values" used to refuse
+            // combinations before the mate existed; it was measured on the NUMBER read back, not on
+            // the geometry, and it refused `coincidence + opposite` although the faces land opposite.
+            // The single judge is the measured face-normal dot in the adapter, after the solve.
+            // History: docs/decisions/mates.md#alignment-geometry-criterion
             yield break;
         }
 

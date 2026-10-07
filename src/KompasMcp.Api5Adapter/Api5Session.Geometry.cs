@@ -3036,6 +3036,10 @@ public sealed partial class Api5Session
         };
     }
 
+    /// <summary>Resolve a body's faces by a structural predicate. Every field the published schema
+    /// declares is applied below; a field the tool does not offer never reaches this method, because the
+    /// Host validates arguments against the closed tool schema before dispatch.</summary>
+    /// <remarks>History: docs/decisions/adapter-core.md#selection-predicate-fields</remarks>
     public IReadOnlyList<ReferenceDto> ResolveSelection(ResolveSelectionCommand command)
     {
         var document = RequireReferenceDocument(command.BodyRef);
@@ -3043,19 +3047,6 @@ public sealed partial class Api5Session
         if (stored.Payload is not ksBody body)
         {
             throw new KompasContractException(ErrorCodes.InvalidArgument, "body_ref должен указывать на тело.");
-        }
-
-        // A predicate field the server does not apply must be refused, not ignored: a silently dropped
-        // condition lets a candidate through that the caller believes it checked (docs/05 §4.1).
-        var unsupported = UnsupportedPredicateFields(command.Predicate);
-        if (unsupported.Count > 0)
-        {
-            throw new KompasContractException(
-                ErrorCodes.InvalidArgument,
-                "Предикат содержит поля, которые сервер не применяет: " + string.Join(", ", unsupported) +
-                ". Отдать за них молчаливый отказ честнее, чем выбрать грань по половине условия.",
-                RetryPolicy.Never,
-                details: new Dictionary<string, object?> { ["unsupported"] = unsupported.ToArray() });
         }
 
         var candidates = new List<(ReferenceDto Dto, string SurfaceType, double Area, double[]? Normal)>();
@@ -3092,30 +3083,6 @@ public sealed partial class Api5Session
         }
 
         return matched.Select(m => m.Dto).Take(command.Limit).ToArray();
-    }
-
-    /// <summary>Predicate fields the current implementation cannot honour. <c>surface_type</c> and
-    /// <c>area_range_mm2</c>/<c>normal_direction</c> are applied; the rest are refused. Assembly space in
-    /// particular has nothing to be resolved against while v1 has no assemblies at all.</summary>
-    private static List<string> UnsupportedPredicateFields(SelectionPredicateDto predicate)
-    {
-        var unsupported = new List<string>();
-        if (predicate.CoordinateSpace is not null)
-        {
-            unsupported.Add("coordinate_space");
-        }
-
-        if (predicate.ExtremumAxis is { Length: > 0 } || predicate.ExtremumMode is { Length: > 0 })
-        {
-            unsupported.Add("extremum_axis/extremum_mode");
-        }
-
-        if (predicate.BboxRangeMm is { Count: > 0 })
-        {
-            unsupported.Add("bbox_range_mm");
-        }
-
-        return unsupported;
     }
 
     private static bool SelectionMatches(string surfaceType, double area, double[]? normal, SelectionPredicateDto predicate)

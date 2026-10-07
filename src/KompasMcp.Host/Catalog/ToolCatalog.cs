@@ -374,8 +374,16 @@ public static class ToolCatalog
                     ("first_face_index", Sch.Int("Номер грани первого компонента в его FaceCollection.")),
                     ("second_component_ref", Sch.Str("Ссылка на второй компонент.")),
                     ("second_face_index", Sch.Int("Номер грани второго компонента.")),
+                    // INVARIANT: an explicit value is confirmed by the MEASURED orientation of the two
+                    // faces, not by the number the kernel keeps; `closest` names no orientation and is
+                    // never checked. MEASURED on two placements: opposite lands on -1, cooriented on +1.
+                    // History: docs/decisions/mates.md#alignment-geometry-criterion
                     ("alignment", Sch.Nullable(Sch.Enum(
-                        "Вариант выравнивания направлений (ksMateConstraintAlignmentEnum).",
+                        "Вариант выравнивания направлений (ksMateConstraintAlignmentEnum). "
+                        + "opposite и cooriented подтверждаются ИЗМЕРЕННОЙ ориентацией граней "
+                        + "(face_normals_dot: -1 и +1); closest — ориентацию выбирает ядро, сервер её не "
+                        + "проверяет и возвращает измеренную. Перечитанное значение возвращается как "
+                        + "факт и само по себе отказом не является.",
                         "opposite", "cooriented", "closest"))),
                     // INVARIANT: the parameter is bound to the type and checked by the Host. Per
                     // mateconstrainttype.html only mc_Distance (5, «постоянное расстояние») and
@@ -2423,7 +2431,7 @@ public static class ToolCatalog
             // Declaring them through Mutation() with requiresOperationId:false made IsMutation true
             // while the schema never published the field, so every legitimate call died in the journal.
             ReadOnly("kompas_resolve_selection", "Однозначный выбор",
-                "Структурный предикат по граням тела. Два подходящих кандидата — AMBIGUOUS_SELECTION, а не молчаливый выбор первого. Применяются surface_type, area_range_mm2, normal_direction и normal_angle_tolerance_deg; поля, которые сервер не умеет, отвергаются с INVALID_ARGUMENT, а не игнорируются.",
+                "Структурный предикат по граням тела. Два подходящих кандидата — AMBIGUOUS_SELECTION, а не молчаливый выбор первого. Применяются surface_type, area_range_mm2, normal_direction и normal_angle_tolerance_deg — это весь предикат; нормаль задаётся в системе координат детали, которой принадлежит тело. Поле вне этого набора отвергается схемой (additionalProperties=false) с INVALID_ARGUMENT, а не игнорируется.",
                 Sch.Props(
                     ("body_ref", Sch.Ref("#/$defs/reference")),
                     ("predicate", Sch.Ref("#/$defs/selection_predicate")),
@@ -2800,12 +2808,18 @@ public static class ToolCatalog
     {
         ["type"] = "object",
         ["title"] = "selection_predicate",
-        ["description"] = "Структурный предикат. «Верхняя грань» без заданной системы координат не допускается.",
+        ["description"] = "Структурный предикат по граням тела. Все перечисленные поля сервер применяет; "
+            + "лишнее поле отвергается схемой (additionalProperties=false), а не игнорируется.",
         ["properties"] = Sch.Props(
             ("surface_type", Sch.Nullable(Sch.Enum("Тип поверхности.", "plane", "cylinder", "cone", "sphere", "torus", "other"))),
-            ("normal_direction", Sch.Nullable(Sch.Ref("#/$defs/vector3"))),
+            // INVARIANT: the normal is expressed in the coordinate system of the part whose body is
+            // being searched — the tool works from a body reference and has no other frame.
+            // History: docs/decisions/contracts.md#selection-predicate-coordinate-space
+            ("normal_direction", Sch.Described(
+                Sch.Nullable(Sch.Ref("#/$defs/vector3")),
+                "Направление нормали в системе координат детали, которой принадлежит тело: инструмент "
+                + "работает от ссылки на тело и другой системы координат не имеет.")),
             ("normal_angle_tolerance_deg", Sch.Nullable(Sch.Num("Допуск направления нормали, градусы.", 0, 90, defaultTo: 0.5d))),
-            ("coordinate_space", Sch.Nullable(Sch.Enum("Система координат предиката.", "parent", "assembly_world"))),
             ("area_range_mm2", Sch.Nullable(Sch.Arr(Sch.Num("Граница площади, мм².", 0, 1e12), "Диапазон площади [мин, макс].", 2, 2)))),
         ["additionalProperties"] = false,
     };

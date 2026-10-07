@@ -114,10 +114,20 @@ public sealed record ListMatesResult(
     string Route,
     IReadOnlyList<string> Notes);
 
+/// <summary>Result of creating a mate.</summary>
+/// <param name="AlignmentRequested">The alignment asked for, echoed back; <c>null</c> — none was requested.</param>
+/// <param name="AlignmentRead">Read after <c>Update()</c>; a FACT, not a criterion. <c>null</c> — not read.</param>
+/// <param name="FaceNormalsDot">Dot of the two mated faces' normals in assembly coordinates — the MEASURED
+/// orientation. An explicit value is confirmed by it (-1/+1); <c>closest</c> names none, not judged.</param>
+/// <remarks>INVARIANT: an explicit value is confirmed by the dot, never by the number read back; a mismatch is
+/// a refusal with partial effects. History: docs/decisions/mates.md#alignment-geometry-criterion</remarks>
 public sealed record CreateMateResult(
     ReferenceDto MateRef,
     MateRowDto Mate,
     int MateCount,
+    string? AlignmentRequested,
+    string? AlignmentRead,
+    double? FaceNormalsDot,
     VerificationDto Verification);
 
 public sealed record SetMateParameterResult(

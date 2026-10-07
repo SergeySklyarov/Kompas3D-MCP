@@ -1653,6 +1653,229 @@ def mate_checks(client, rep, app_id, workdir):
 
     call("kompas_close_document", {"document_id": asm2, "dirty_policy": "discard"})
 
+    # ========= MATE.07–09: выравнивание подтверждается ГЕОМЕТРИЕЙ =========
+    # ЗАЧЕМ (наряд MATE_ALIGNMENT_GEOMETRY_CRITERION). Прежняя редакция судила выравнивание по
+    # ПЕРЕЧИТАННОМУ ЧИСЛУ: значение, которое ядро не вернуло тем же словом, отвергала карта Хоста ДО
+    # создания. Измерение MAL показало, что карта отсекает ЛОЖНО: запрошенное opposite у coincidence
+    # читается обратно как closest, но грани встают НАВСТРЕЧУ (s ≈ -1), то есть просьба выполнена.
+    # Теперь единственный судья — ИЗМЕРЕННАЯ ОРИЕНТАЦИЯ s = n1·n2 (нормали граней сопряжения в
+    # координатах сборки, где нормаль в сборке = блок поворота матрицы компонента × нормаль грани в
+    # координатах детали), а перечитанное число возвращается как ФАКТ и отказом не является.
+    #
+    # ОЖИДАНИЯ НАЗВАНЫ ДО ПРОГРОНА (наряд §3):
+    #   * opposite  → успех, s ≈ -1 (и у coincidence, хотя перечитано closest);
+    #   * cooriented → успех, s ≈ +1;
+    #   * closest   → успех; ориентацию выбирает ядро, знак s НЕ ожидается — строка записывает
+    #     перечитанное число и измеренную s как факт;
+    #   * ДВЕ ПОСТАНОВКИ: единичная и разворот второго компонента на 180° вокруг X. На одной постановке
+    #     «оставить как есть» и «развернуть» дали бы одно и то же число; две это разводят.
+    # Строка …alignment_orientation сверяет измеренную ориентацию, ВОЗВРАЩЁННУЮ ПРОДУКТОМ
+    # (face_normals_dot), с s, посчитанным ЗДЕСЬ независимо: без этого продукт и прибор считали бы одно
+    # и то же одним и тем же кодом.
+    # History: docs/decisions/mates.md#alignment-geometry-criterion
+    alignment_values = ("opposite", "cooriented", "closest")
+    # Перечитанное число — ФАКТ, а не критерий: проверяется только то, что оно прочитано ИЗВЕСТНЫМ именем.
+    alignment_read_names = ("opposite", "cooriented", "closest", "unknown")
+    dot_tolerance = 1e-3
+
+    def alignment_pair(name, placement):
+        """Своя сборка с двумя компонентами: (doc, ref1, ref2) или (doc|None, None, None)."""
+        env, _c = call("kompas_create_document", {"application_id": app_id, "kind": "assembly",
+                                                  "name": name})
+        doc = doc_id(env)
+        if not doc:
+            return None, None, None
+        for _ in range(2):
+            env, _c = call("kompas_insert_component", {
+                "document_id": doc, "expected_revision": current_rev(doc),
+                "source_path": src_path, "fixed": False})
+            if _c:
+                return doc, None, None
+        env, _c = call("kompas_list_components", {"document_id": doc})
+        rows = result(env).get("components") or []
+        if len(rows) != 2:
+            return doc, None, None
+        # ВТОРАЯ ПОСТАНОВКА: разворот на 180° вокруг X. Она нужна потому, что на одной постановке
+        # «оставить как есть» и «развернуть» дают одно и то же число.
+        y_axis = [0, -1, 0] if placement == "rot180x" else [0, 1, 0]
+        call("kompas_set_component_placement", {
+            "document_id": doc, "expected_revision": current_rev(doc),
+            "component_ref": rows[1].get("component_ref"),
+            "transform": {"origin_mm": [150, 0, 0], "x_axis": [1, 0, 0], "y_axis": y_axis}})
+        return doc, rows[0].get("component_ref"), rows[1].get("component_ref")
+
+    def component_matrices(doc):
+        """ПОЛНЫЕ матрицы ОБОИХ компонентов: s считается по двум граням, значит нужны обе.
+
+        Перенос ориентацию не видит, поэтому берётся весь блок поворота; и брать матрицу второго
+        компонента для ОБЕИХ граней нельзя — это посчитало бы скалярное произведение нормали с собой.
+        """
+        env, _c = call("kompas_list_components", {"document_id": doc})
+        rows = result(env).get("components") or []
+        if len(rows) != 2:
+            return None, None
+        matrices = [r.get("matrix") for r in rows]
+        if not all(isinstance(m, list) and len(m) >= 16 for m in matrices):
+            return None, None
+        return matrices[0], matrices[1]
+
+    def translation_of(matrix):
+        return None if matrix is None else [round(matrix[12], 3), round(matrix[13], 3), round(matrix[14], 3)]
+
+    def rotation_of(matrix):
+        if matrix is None:
+            return None
+        return [round(matrix[i], 6) for i in (0, 1, 2, 4, 5, 6, 8, 9, 10)]
+
+    def assembly_normal(matrix, local):
+        """Нормаль в координатах сборки: блок поворота матрицы × нормаль в координатах детали.
+
+        Раскладка матрицы измерена строками ASM.04: тройки идут НЕ подряд — [X,0][Y,0][Z,0][перенос,1],
+        поэтому оси берутся по 0/4/8, а не по 0/3/6.
+        """
+        if matrix is None or local is None:
+            return None
+        return [matrix[0] * local[0] + matrix[4] * local[1] + matrix[8] * local[2],
+                matrix[1] * local[0] + matrix[5] * local[1] + matrix[9] * local[2],
+                matrix[2] * local[0] + matrix[6] * local[1] + matrix[10] * local[2]]
+
+    def dot_s(matrix1, normal1, matrix2, normal2):
+        a = assembly_normal(matrix1, normal1)
+        b = assembly_normal(matrix2, normal2)
+        if a is None or b is None:
+            return None
+        la = sum(x * x for x in a) ** 0.5
+        lb = sum(x * x for x in b) ** 0.5
+        if la < 1e-9 or lb < 1e-9:
+            return None
+        return sum(a[i] * b[i] for i in range(3)) / (la * lb)
+
+    # Индексы граней ПО НОРМАЛИ берутся у ДЕТАЛИ-ИСТОЧНИКА: чтение faces[] идёт по GetByIndex, поэтому
+    # позиция в списке И ЕСТЬ номер грани в FaceCollection, а компонент — экземпляр ТОГО ЖЕ файла.
+    # Второе — ДОПУЩЕНИЕ, названное здесь, а не выданное за измеренный факт. Нормали читаются вместе с
+    # индексами: без них s нечем считать, а брать их «по виду плиты» запрещено.
+    def source_face_indices():
+        env, _c = call("kompas_open_document", {"application_id": app_id, "path": src_path,
+                                                "access": "read_only"})
+        sdoc = doc_id(env)
+        if not sdoc:
+            return None, None, None, None
+        env, _c = call("kompas_list_bodies", {"document_id": sdoc})
+        bodies = result(env)
+        bodies = bodies if isinstance(bodies, list) else []
+        plus_z = minus_z = None
+        plus_normal = minus_normal = None
+        if bodies:
+            env, _c = call("kompas_read_topology", {"document_id": sdoc,
+                                                    "body_ref": bodies[0].get("body_ref"),
+                                                    "include": "faces"})
+            for index, face in enumerate(result(env).get("faces") or []):
+                normal = face.get("normal_at_center") or []
+                if face.get("surface_type") != "plane" or len(normal) < 3:
+                    continue
+                if abs(normal[2] - 1.0) <= 1e-6 and plus_z is None:
+                    plus_z, plus_normal = index, [normal[0], normal[1], normal[2]]
+                if abs(normal[2] + 1.0) <= 1e-6 and minus_z is None:
+                    minus_z, minus_normal = index, [normal[0], normal[1], normal[2]]
+        call("kompas_close_document", {"document_id": sdoc, "dirty_policy": "discard"})
+        return plus_z, plus_normal, minus_z, minus_normal
+
+    plus_z, plus_normal, minus_z, minus_normal = source_face_indices()
+    rep.add("MATE.07.alignment_faces",
+            "грани для измерения выравнивания найдены ПО НОРМАЛИ (верх первой, низ второй)",
+            "PASS" if (plus_z is not None and minus_z is not None
+                       and plus_normal and minus_normal) else "FAIL",
+            f"нормаль +Z → грань {plus_z} {plus_normal}, нормаль −Z → грань {minus_z} {minus_normal}; "
+            "ожидание — не копланарны (разнесены на толщину плиты), поэтому совпадение обязано "
+            "сдвинуть компонент")
+
+    if plus_z is not None and minus_z is not None and plus_normal and minus_normal:
+        for step, ctype, param in ((7, "coincidence", None), (8, "parallel", None),
+                                   (9, "distance", 50.0)):
+            accepted = []
+            orientation_ok = []
+            for placement in ("identity", "rot180x"):
+                for value in alignment_values:
+                    suffix = "" if placement == "identity" else ".rot180x"
+                    row = f"MATE.0{step}.alignment_{value}{suffix}"
+                    title = f"выравнивание «{value}» ({ctype}, постановка {placement}): "
+                    adoc, aref1, aref2 = alignment_pair(
+                        f"MATE-ALIGN-{ctype}-{value}-{placement}", placement)
+                    if not adoc or not aref1 or not aref2:
+                        rep.add(row, title + "сборка для измерения не собрана", "FAIL",
+                                f"doc={adoc} error={code}")
+                        accepted.append(False)
+                        continue
+                    before1, before2 = component_matrices(adoc)
+                    s_before = dot_s(before1, plus_normal, before2, minus_normal)
+                    payload = {
+                        "document_id": adoc, "expected_revision": current_rev(adoc),
+                        "constraint_type": ctype,
+                        "first_component_ref": aref1, "first_face_index": plus_z,
+                        "second_component_ref": aref2, "second_face_index": minus_z,
+                        "alignment": value}
+                    if param is not None:
+                        payload["param_value"] = param
+                    env, code = call("kompas_create_mate", payload)
+                    res = result(env)
+                    requested, read = res.get("alignment_requested"), res.get("alignment_read")
+                    reported_dot = res.get("face_normals_dot")
+                    after1, after2 = component_matrices(adoc)
+                    s_after = dot_s(after1, plus_normal, after2, minus_normal)
+                    env_m, _cm = call("kompas_list_mates", {"document_id": adoc})
+                    mates_after = len(result(env_m).get("mates") or [])
+                    rot_changed = (rotation_of(before2) != rotation_of(after2))
+                    # Перечитанное число возвращается как ФАКТ: проверяется лишь, что оно прочитано
+                    # известным именем, а не что оно равно запрошенному.
+                    read_known = read in alignment_read_names
+                    if value == "closest":
+                        # Ориентацию выбирает ядро: знак s НЕ ожидается, число и s записываются как факт.
+                        honest = (code is None and requested == value and read_known)
+                        expectation = "успех; ориентация — выбор ядра, знак s не ожидается"
+                    else:
+                        wanted = -1.0 if value == "opposite" else 1.0
+                        honest = (code is None and requested == value and read_known
+                                  and s_after is not None
+                                  and abs(s_after - wanted) <= dot_tolerance)
+                        expectation = f"успех; s ≈ {wanted:+.0f}"
+                    accepted.append(honest)
+                    rep.add(row, title + "выполнено геометрически",
+                            "PASS" if honest else "FAIL",
+                            f"запрошено={requested} перечитано={read} ожидание: {expectation} "
+                            f"s: {s_before} → {s_after} face_normals_dot={reported_dot} "
+                            f"поворот изменился={rot_changed} "
+                            f"перенос: {translation_of(before2)} → {translation_of(after2)} "
+                            f"сопряжений={mates_after} код={code} msg={emsg(env)}",
+                            {"placement": placement, "requested": requested, "read": read,
+                             "dot_before": s_before, "dot_after": s_after,
+                             "face_normals_dot": reported_dot, "rotation_changed": rot_changed,
+                             "translation_before": translation_of(before2),
+                             "translation_after": translation_of(after2),
+                             "mate_count_after": mates_after, "code": code})
+                    # СВЕРКА ПРОДУКТА С НЕЗАВИСИМЫМ СЧЁТОМ: face_normals_dot обязан совпасть с s,
+                    # посчитанным здесь из опубликованных чтений. Иначе продукт и прибор считали одно
+                    # и то же одним кодом, и «совпадение» ничего не доказывает.
+                    if code is None:
+                        orientation_ok.append(
+                            s_after is not None and isinstance(reported_dot, (int, float))
+                            and abs(reported_dot - s_after) <= dot_tolerance)
+                    call("kompas_close_document", {"document_id": adoc, "dirty_policy": "discard"})
+            # СВОДНАЯ СТРОКА: КАЖДОЕ явное значение обязано встать геометрически на обеих постановках,
+            # а closest — пройти без отказа. Без неё набор прошёл бы и при выравнивании, которое не
+            # применяется ни при одном значении.
+            rep.add(f"MATE.0{step}.alignment_applied",
+                    f"выравнивание ({ctype}): все явные значения выполнены геометрически на обеих "
+                    "постановках",
+                    "PASS" if (len(accepted) == 2 * len(alignment_values)
+                               and all(accepted)) else "FAIL",
+                    f"выполнено {sum(1 for a in accepted if a)} из {2 * len(alignment_values)} "
+                    f"({alignment_values} × 2 постановки)")
+            rep.add(f"MATE.0{step}.alignment_orientation",
+                    f"выравнивание ({ctype}): измеренная ориентация продукта совпала с независимым счётом",
+                    "PASS" if (orientation_ok and all(orientation_ok)) else "FAIL",
+                    f"сверено строк: {len(orientation_ok)}, расхождений "
+                    f"{sum(1 for a in orientation_ok if not a)}; допуск {dot_tolerance}")
+
 
 def drawing_checks(client, rep, app_id, workdir):
     """DRW.* — чертёжный блок через MCP (блок DRW, профиль `drawings-minimal-v1`).
@@ -4447,12 +4670,15 @@ def main():
                     "PASS" if isinstance(one, list) and len(one) == 1 else "FAIL",
                     f"n={len(one) if isinstance(one, list) else None} err={error_code(un_env)}{diag}")
 
+            # Схема ЗАКРЫТА (additionalProperties=false), поэтому поле, которого в контракте нет,
+            # отвергается ВАЛИДАЦИЕЙ, а не веткой сервера. Проверяется именно это: снятое поле
+            # `coordinate_space` больше не объявлено, и вызов с ним обязан получить INVALID_ARGUMENT.
             ns_err, ns_env, _ = client.tool("kompas_resolve_selection", {
                 "body_ref": body_ref,
-                "predicate": {"bbox_range_mm": [[0, 0, 0], [100, 80, 10]]},
+                "predicate": {"coordinate_space": "parent"},
                 "require_unique": False, "limit": 5})
             code = error_code(ns_env)
-            rep.add("G05c", "поле предиката, которое сервер не применяет, отвергнуто, а не проигнорировано",
+            rep.add("G05c", "поле предиката вне контракта отвергнуто схемой (additionalProperties=false)",
                     "PASS" if code == "INVALID_ARGUMENT" else "FAIL",
                     f"code={code} msg={((ns_env or {}).get('error') or {}).get('message')}")
 
@@ -26937,10 +27163,11 @@ def dep_acceptance_checks(client, rep, app_id, workdir):
             "require_unique": False, "limit": 10})
         ok_neg = (code_cyl is not None and code_field == "INVALID_ARGUMENT")
         emit("negative_tests", "PASS" if ok_neg else "FAIL",
-             "отверстие на НЕплоской грани отвергнуто кодом %s; неприменяемое поле предиката "
-             "отвергнуто кодом %s (ожидание именованного отказа в обоих случаях)"
+             "отверстие на НЕплоской грани отвергнуто кодом %s; поле предиката ВНЕ контракта "
+             "отвергнуто кодом %s схемой (additionalProperties=false), а не веткой сервера "
+             "(ожидание именованного отказа в обоих случаях)"
              % (code_cyl, code_field),
-             {"hole_on_cylinder": code_cyl, "unsupported_predicate": code_field})
+             {"hole_on_cylinder": code_cyl, "off_contract_predicate_field": code_field})
 
         # РАЗЛИЧАЮЩИЙ КОНТРОЛЬ локальной системы грани: два разных смещения. Грань перечитывается
         # ПЕРЕД КАЖДЫМ отверстием: ссылка умирает вместе с ревизией, и это измерено (STALE_REFERENCE

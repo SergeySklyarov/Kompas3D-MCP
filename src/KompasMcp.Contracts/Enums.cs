@@ -103,13 +103,6 @@ public enum DependencyPolicy
     ReadOnly,
 }
 
-/// <summary>Coordinate space a component transform is expressed in (spec 1.10).</summary>
-public enum CoordinateSpace
-{
-    Parent,
-    AssemblyWorld,
-}
-
 /// <summary>Trustworthiness of external-change detection for a document (spec 1.7).</summary>
 public enum ExternalChangeDetection
 {

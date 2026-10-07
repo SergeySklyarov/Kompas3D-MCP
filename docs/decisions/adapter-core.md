@@ -804,3 +804,20 @@ type EVEN UNDER `keep_view` - the consent covered a CONFIRMED projection, and th
 moved; the outcome is named in the refusal, whose text never ends in an empty tail. The restore itself
 never throws - an exception out of the caller's <c>finally</c> would replace a finished snapshot's result
 with a refusal.
+
+## <a id="selection-predicate-fields"></a>Предикат выбора граней: применяется ровно то, что объявлено (07.10.2026)
+
+**Что было.** `ResolveSelection` начинался с ветки `UnsupportedPredicateFields`: она собирала имена
+полей, которых реализация не применяет (`coordinate_space`, `extremum_axis`/`extremum_mode`,
+`bbox_range_mm`), и отказывала `INVALID_ARGUMENT`, если такие поля пришли.
+
+**Что измерено.** Ни одно из этих имён не достижимо: объект `selection_predicate` в опубликованной
+схеме закрыт (`additionalProperties=false`), а Хост валидирует аргументы против схемы инструмента
+(`ToolInvoker.Validate`) ДО отправки команды в Worker. Ветка отказа не могла сработать ни разу —
+мёртвый код, обещавший проверку, которой нет.
+
+**Что решено.** Ветка и метод удалены; поля `coordinate_space`/`extremum_*`/`bbox_range_mm` убраны из
+контракта (см. `docs/decisions/contracts.md#selection-predicate-coordinate-space`). `ResolveSelection`
+применяет ровно те поля, что объявлены: `surface_type`, `area_range_mm2`, `normal_direction`,
+`normal_angle_tolerance_deg`. Нормаль читается в системе координат детали, которой принадлежит тело, —
+инструмент работает от ссылки на тело и другой системы координат не имеет.

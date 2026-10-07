@@ -5,6 +5,7 @@ using KompasAPI7;
 using KompasMcp.Api5Adapter.Api7;
 using KompasMcp.Api5Adapter.Com;
 using KompasMcp.Contracts;
+using KompasMcp.Domain.Mates;
 using KompasMcp.Domain.References;
 
 namespace KompasMcp.Api5Adapter;
@@ -20,8 +21,22 @@ public sealed partial class Api5Session
 {
     private const string MateRefKind = "mate";
 
+    /// <summary>How far the measured face-normal dot may drift from the value an explicit alignment
+    /// names (-1 or +1) and still count as "landed where the word says".</summary>
+    /// <remarks>MEASURED: the mated faces' dot product lands exactly on +/-1, so the tolerance only has
+    /// to absorb read noise. History: docs/decisions/mates.md#alignment-geometry-criterion</remarks>
+    private const double AlignmentDotTolerance = 1e-3;
+
     /// <summary>Payload of a mate reference: the API5 object, its ordinal and type.</summary>
     private sealed record MatePayload(ksMateConstraint Mate5, int Ordinal, short ConstraintType);
+
+    /// <summary>A face handed to the mate, plus what measuring its ORIENTATION needs.</summary>
+    /// <remarks>MEASURED: a component face's normal is read in the PART frame, not in the assembly
+    /// frame — a component turned 30 deg about X still reports axis-aligned normals — so the assembly
+    /// normal is the component's rotation applied to it. The rotation comes from the SAME documented
+    /// <c>IPart7.GetSummMatrix</c> that <c>kompas_list_components</c> publishes.
+    /// History: docs/decisions/mates.md#alignment-orientation</remarks>
+    private sealed record FaceHandle(IModelObject Model, IPart7 Component7, IPart7? Parent7, double[]? LocalNormal);
 
     // ── MATE-02 ──
     /// <summary>Enumerate the assembly's mates.</summary>
@@ -47,6 +62,10 @@ public sealed partial class Api5Session
         RequireRevision(document, command.ExpectedRevision);
 
         var type = MateTypeFromName(command.ConstraintType);
+        // VALIDATED BEFORE THE MATE EXISTS: an unknown alignment must be refused before Add() creates a
+        // mate. Called inside the try below, it would throw AFTER the mate was already in the model,
+        // leaving the revision unaware of a real change.
+        var alignment = AlignmentFromName(command.Alignment);
         var notes = new List<string>();
 
         var first = FaceObject7(document, command.FirstComponentRef, command.FirstFaceIndex, notes);
@@ -71,11 +90,11 @@ public sealed partial class Api5Session
                     RetryPolicy.SameOperationId);
             }
 
-            mate.BaseObject1 = first;
-            mate.BaseObject2 = second;
-            if (AlignmentFromName(command.Alignment) is { } alignment)
+            mate.BaseObject1 = first.Model;
+            mate.BaseObject2 = second.Model;
+            if (alignment is { } requestedAlignment)
             {
-                mate.Alignment = alignment;
+                mate.Alignment = requestedAlignment;
             }
 
             if (command.ParamValue is { } value)
@@ -115,6 +134,11 @@ public sealed partial class Api5Session
         var valid = Bool(() => mate.Valid);
         var after = RequireMateCount(document, mates7, "после создания");
 
+        // THE READ-BACK IS TAKEN FROM THE SAME API7 OBJECT THAT WAS WRITTEN, not from the ordinal
+        // correspondence API7↔API5 that reading the collection has to assume: a mismatch read from a
+        // foreign mate would accuse the wrong one. It is a FACT for the answer, not a criterion.
+        var alignmentRead = AlignmentName(EnumOrNull<ksMateConstraintAlignmentEnum>(() => mate.Alignment));
+
         // CONFIRMATION IS Valid, not "Update()=true": a mate between two objects of the SAME component
         // also gives Update()=true but Valid=false.
         if (updated != true || valid != true)
@@ -133,6 +157,51 @@ public sealed partial class Api5Session
                     ["constraint_type"] = command.ConstraintType,
                     ["update"] = updated,
                     ["valid"] = valid,
+                    ["mate_count_before"] = before,
+                    ["mate_count_after"] = after,
+                });
+        }
+
+        // THE READ-BACK NUMBER IS A FACT, NOT A CRITERION. MEASURED: a requested `opposite` on
+        // `coincidence` is read back as `closest` while the two faces still land opposite (s = -1), so
+        // a refusal on the number alone would reject a result that is exactly what was asked for. The
+        // number goes back in the answer as read; the judge is the measured orientation below.
+        // History: docs/decisions/mates.md#alignment-geometry-criterion
+
+        // THE MEASURED ORIENTATION, not a retelling of the number: the dot product of the two mated
+        // faces' normals in assembly coordinates, read after the solve. `closest` NAMES NO ORIENTATION
+        // — it asks the kernel to choose — so it is not checked at all and the dot is returned as a
+        // fact. MEASURED: `opposite` lands on -1 and `cooriented` on +1 on both placements.
+        var dotAfter = command.Alignment is null ? null : FaceNormalsDot(first, second);
+
+        // AN EXPLICIT VALUE NAMES AN ORIENTATION, and the geometry must land where the word says. This
+        // is the ONLY gate: a value the type cannot express (perpendicular — the faces are at a right
+        // angle, so the dot is ~0 whatever the value says) yields no decision here and is NAMED in the
+        // notes instead of being refused.
+        var dotSatisfied = MateAlignmentPolicy.DotSatisfies(
+            command.ConstraintType, command.Alignment, dotAfter, AlignmentDotTolerance);
+        var expectedDot = MateAlignmentPolicy.DotConfirmsValue(command.ConstraintType)
+            ? MateAlignmentPolicy.ExpectedDot(command.Alignment)
+            : null;
+
+        if (dotSatisfied == false)
+        {
+            BumpRevision(document, "mate.create.partial", invalidateAll: true);
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                $"Сопряжение создано (сопряжений {before} → {after}, Valid={valid}), но ИЗМЕРЕННАЯ "
+                + $"ориентация граней другая: «{command.Alignment}» требует {expectedDot:0.####}, "
+                + $"измерено {dotAfter:0.####} (перечитано «{alignmentRead ?? "не читается"}»). "
+                + "Геометрия встала не туда, куда просили; успехом это не считается.",
+                RetryPolicy.AfterReconciliation,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["constraint_type"] = command.ConstraintType,
+                    ["alignment_requested"] = command.Alignment,
+                    ["alignment_read"] = alignmentRead,
+                    ["face_normals_dot"] = dotAfter,
+                    ["face_normals_dot_expected"] = expectedDot,
                     ["mate_count_before"] = before,
                     ["mate_count_after"] = after,
                 });
@@ -179,22 +248,56 @@ public sealed partial class Api5Session
             MateRefKind, document.Id, document.Revision,
             new MatePayload(MateAt(document, created.Ordinal ?? 0)!, created.Ordinal ?? 0, (short)type));
 
+        var checks = new List<NamedCheck>
+        {
+            new("mate_created", after > before, Observed: $"{before} → {after}",
+                Expected: $"{before + 1}"),
+            new("mate_valid", true, Observed: "Valid=true"),
+            new("mate_read_back", true,
+                Observed: $"тип «{created.ConstraintType}», объектов два: " +
+                          $"{created.BaseObject1 is not null} / {created.BaseObject2 is not null}"),
+        };
+
+        // AN EXPLICIT VALUE IS CONFIRMED BY THE MEASURED ORIENTATION, where the type allows it. The
+        // read-back number is NOT a check: it is a fact returned in the answer, and a check expecting
+        // "the number was retained" would be the false criterion this order removed.
+        if (dotSatisfied is { } orientationOk && expectedDot is not null && dotAfter is not null)
+        {
+            checks.Add(new("mate_orientation", orientationOk,
+                Observed: $"n1·n2 = {dotAfter.Value:0.####}",
+                Expected: $"{expectedDot.Value:0.####}"));
+        }
+
+        // NOT READ IS NOT CONFIRMED, and it is also not a reason to refuse a call our own instrument
+        // cannot measure: the gap is NAMED here so nobody reads the success as proof of the orientation.
+        var unverified = new List<string>();
+        if (expectedDot is not null && dotAfter is null)
+        {
+            unverified.Add("alignment_orientation_unverified — ориентация граней не прочитана (нет "
+                + "единственной нормали у неплоской грани либо не читается матрица компонента): "
+                + "применение выравнивания К ГЕОМЕТРИИ не подтверждено");
+        }
+
+        // THE VALUE CANNOT BE CONFIRMED BY THIS GEOMETRY: a perpendicular mate keeps the faces at a
+        // right angle, so the dot is ~0 whatever `opposite`/`cooriented` says. The value is neither
+        // confirmed nor refused — the gap is NAMED, so the success is not read as proof of it.
+        if (MateAlignmentPolicy.ExpectedDot(command.Alignment) is not null
+            && !MateAlignmentPolicy.DotConfirmsValue(command.ConstraintType))
+        {
+            unverified.Add("alignment_value_unconfirmable — тип «" + command.ConstraintType + "» не "
+                + "выражает ориентацию знаком скалярного произведения нормалей (грани перпендикулярны, "
+                + "s ≈ 0): запрошенное значение геометрией не подтверждается");
+        }
+
         return new CreateMateResult(
             ToDto(References.Require(stored.Id, document.Id, document.Revision), "mate"),
             created with { MateRef = stored.Id },
             after,
-            new VerificationDto(
-                VerificationLevel.StructureChecked,
-                new List<NamedCheck>
-                {
-                    new("mate_created", after > before, Observed: $"{before} → {after}",
-                        Expected: $"{before + 1}"),
-                    new("mate_valid", true, Observed: "Valid=true"),
-                    new("mate_read_back", true,
-                        Observed: $"тип «{created.ConstraintType}», объектов два: " +
-                                  $"{created.BaseObject1 is not null} / {created.BaseObject2 is not null}"),
-                },
-                notes));
+            command.Alignment,
+            alignmentRead,
+            dotAfter,
+            new VerificationDto(VerificationLevel.StructureChecked, checks,
+                notes.Concat(unverified).ToList()));
     }
 
     // ── MATE-03 ──
@@ -763,7 +866,11 @@ public sealed partial class Api5Session
     /// A component face as <c>IModelObject</c>: the documented
     /// <c>ksPart.BodyCollection() → ksBody.FaceCollection()</c>, then transfer to API7.
     /// </summary>
-    private IModelObject FaceObject7(
+    /// <remarks>Also returns the face's normal IN THE PART FRAME and the component's API7 view, which is
+    /// what measuring the solved orientation needs. MEASURED: the normal read here is in the PART frame
+    /// even for a rotated component, so the assembly normal is the component's rotation applied to it.
+    /// History: docs/decisions/mates.md#alignment-orientation</remarks>
+    private FaceHandle FaceObject7(
         DocumentEntry document, string componentRef, int faceIndex, List<string> notes)
     {
         var stored = References.Require(componentRef, document.Id, document.Revision);
@@ -855,8 +962,58 @@ public sealed partial class Api5Session
                 RetryPolicy.ReacquireContext);
         }
 
+        // A CURVED FACE HAS NO SINGLE NORMAL: the read stays null and the orientation of a mate on it
+        // is named unverified rather than replaced by a guess.
+        var localNormal = AsInterface<ksFaceDefinition>(face) is { } definition && definition.IsPlanar()
+            ? SurfaceNormalAtMiddle(definition)
+            : null;
+
         notes.Add($"грань компонента {payload.Ordinal}[{faceIndex}] перенесена в API7");
-        return model;
+        return new FaceHandle(model, payload.Part7, payload.Parent7, localNormal);
+    }
+
+    /// <summary>The dot product of the two mated faces' normals in ASSEMBLY coordinates.</summary>
+    /// <remarks>Arithmetic over two documented reads — the face normal in the part frame and the
+    /// component's <c>IPart7.GetSummMatrix</c> — not a new API route. The matrix layout is the measured
+    /// <c>[X,0][Y,0][Z,0][translation,1]</c>. <c>null</c> means NOT READ (no single normal on a curved
+    /// face, or no matrix), never zero.
+    /// History: docs/decisions/mates.md#alignment-orientation</remarks>
+    private double? FaceNormalsDot(FaceHandle first, FaceHandle second)
+    {
+        var n1 = AssemblyNormal(first);
+        var n2 = AssemblyNormal(second);
+        if (n1 is null || n2 is null)
+        {
+            return null;
+        }
+
+        var dot = n1[0] * n2[0] + n1[1] * n2[1] + n1[2] * n2[2];
+        var lengths = Math.Sqrt(n1[0] * n1[0] + n1[1] * n1[1] + n1[2] * n1[2])
+            * Math.Sqrt(n2[0] * n2[0] + n2[1] * n2[1] + n2[2] * n2[2]);
+        return lengths <= 1e-9 ? null : dot / lengths;
+    }
+
+    /// <summary>A face's normal in assembly coordinates: the component's rotation applied to the part-frame
+    /// normal, both read fresh so the value follows the CURRENT placement.</summary>
+    private static double[]? AssemblyNormal(FaceHandle face)
+    {
+        if (face.LocalNormal is not { Length: 3 } local || face.Parent7 is null)
+        {
+            return null;
+        }
+
+        if (SummMatrix7(face.Parent7, face.Component7) is not { Length: >= 16 } matrix)
+        {
+            return null;
+        }
+
+        var result = new double[3];
+        for (var row = 0; row < 3; row++)
+        {
+            result[row] = matrix[row] * local[0] + matrix[4 + row] * local[1] + matrix[8 + row] * local[2];
+        }
+
+        return result;
     }
 
     private static MateConstraintType MateTypeFromName(string name) => name switch

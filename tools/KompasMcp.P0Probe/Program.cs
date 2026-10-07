@@ -27,13 +27,16 @@ public static class Program
                 ? "P2 — отчёт измерения COM-маршрутов (отверстие, правка признака, скругление, плоскости эскиза, измерение цилиндрической грани, целевое тело операции, очистка существующего эскиза, ключи сырого чтения единиц)"
                 : options.Suite == "view"
                     ? "VIEW — отчёт измерения маршрута проекции отображения (коллекция проекций, IsCurrent, SetCurrent, побайтовое сравнение снимков, возврат прежнего вида)"
-                    : "P0 — отчёт технического исследования",
+                    : options.Suite == "mate-align"
+                        ? "MAL — ориентация сопряжения: s = n1·n2 против перечитанного выравнивания, две постановки второго компонента"
+                        : "P0 — отчёт технического исследования",
         };
         var sw = Stopwatch.StartNew();
         var reportName = options.Suite switch
         {
             "p2" => "p2-probe-report",
             "view" => "view-probe-report",
+            "mate-align" => "mate-align-probe-report",
             _ => "p0-probe-report",
         };
 
@@ -78,6 +81,14 @@ public static class Program
                     ViewProjectionProbe.Run(report, options);
                     P2Facts.Shutdown(report, options);
                 }, "view").GetAwaiter().GetResult();
+            }
+            else if (options.Suite == "mate-align")
+            {
+                // The suite drives the PRODUCTION adapter (not raw COM, not the Host), so that mate
+                // alignment values the Host's measured map rejects can still be measured: the map must
+                // not be edited just to let an acceptance row pass.
+                sta.Run(() => EnvironmentFacts.Collect(report, options, "MAL.0a"), "env").GetAwaiter().GetResult();
+                sta.Run(() => MateAlignFacts.Run(report, options), "mate-align").GetAwaiter().GetResult();
             }
             else if (options.Suite == "p2")
             {
@@ -255,7 +266,7 @@ public sealed class ProbeOptions
                     workOverride = args[++i];
                     break;
                 case "--help":
-                    Console.WriteLine("P0Probe [--suite p0|p2|view] [--mode launch|attach|none] [--pid N] [--work DIR] [--keep] [--no-import]");
+                    Console.WriteLine("P0Probe [--suite p0|p2|view|mate-align] [--mode launch|attach|none] [--pid N] [--work DIR] [--keep] [--no-import]");
                     Console.WriteLine("        [--view-name NAME] [--view-type N] [--view-state] [--view-visible]  — only for --suite view");
                     Environment.Exit(0);
                     break;

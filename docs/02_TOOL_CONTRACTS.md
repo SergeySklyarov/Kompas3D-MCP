@@ -225,7 +225,9 @@ Worker не убивается: launched-экземпляр КОМПАС - ег�
 | `kompas_snapshot` | document_id, include tree/topology/properties | Структурированный снимок, artifact для большого результата |
 | `kompas_compare_snapshots` | before_id, after_id | Добавленные/изменённые/удалённые элементы и свойства |
 
-Predicate v1 структурный, а не свободный русский текст: surface_type, normal_direction, normal_angle_tolerance_deg, coordinate_space, extremum_axis, extremum_mode, area_range_mm2, bbox_range. «Верхняя» означает явно заданную систему координат и направление. Два одинаковых подходящих кандидата - AMBIGUOUS_SELECTION.
+Predicate v1 структурный, а не свободный русский текст: surface_type, normal_direction, normal_angle_tolerance_deg, area_range_mm2. Нормаль задаётся в системе координат детали, которой принадлежит тело. Объект предиката закрыт (additionalProperties=false): поле вне набора отвергается схемой. Два одинаковых подходящих кандидата - AMBIGUOUS_SELECTION.
+
+_Правка 07.10.2026 (наряд о `coordinate_space` и выравнивании сопряжений). Прежде строка обещала ещё `coordinate_space`, `extremum_axis`, `extremum_mode`, `bbox_range` — этих полей в контракте нет и не было: `coordinate_space` объявлялся, но отвергался при любом значении, а остальные были мёртвыми членами DTO. Ошибочное требование удалено; обоснование — `docs/decisions/contracts.md#selection-predicate-coordinate-space`._
 
 ## 2.6. Геометрические мутации - P2
 

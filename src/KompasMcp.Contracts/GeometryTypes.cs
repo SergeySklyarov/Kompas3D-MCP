@@ -191,24 +191,22 @@ public sealed record ThreadSpecDto
 }
 
 /// <summary>Structural selection predicate (spec 2.5). Deliberately not free text.</summary>
+/// <remarks>Every field here is applied by the server. A field the server would not apply is not
+/// carried at all: the published schema closes the object, so an unknown field is refused by
+/// validation before it can reach this DTO — a nullable member for it would be dead code promising a
+/// choice the tool does not offer.
+/// History: docs/decisions/contracts.md#selection-predicate-coordinate-space</remarks>
 public sealed record SelectionPredicateDto
 {
     public string? SurfaceType { get; init; }
 
-    /// <summary>Unit direction in <see cref="CoordinateSpace"/> the normal must match.</summary>
+    /// <summary>Unit normal direction in the coordinate system of the part that owns the body — the
+    /// tool resolves faces from a body reference and has no other frame.</summary>
     public IReadOnlyList<double>? NormalDirection { get; init; }
 
     public double? NormalAngleToleranceDeg { get; init; }
 
-    public CoordinateSpace? CoordinateSpace { get; init; }
-
-    public string? ExtremumAxis { get; init; }
-
-    public string? ExtremumMode { get; init; }
-
     public IReadOnlyList<double>? AreaRangeMm2 { get; init; }
-
-    public IReadOnlyList<double>? BboxRangeMm { get; init; }
 }
 
 /// <summary>Properties a caller asks <c>kompas_measure</c> to return (spec 2.5).</summary>

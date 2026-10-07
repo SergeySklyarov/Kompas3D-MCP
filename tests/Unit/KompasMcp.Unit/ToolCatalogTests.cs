@@ -157,7 +157,58 @@ public class ToolCatalogTests
         Assert.Contains("STALE_REFERENCE", description, StringComparison.Ordinal);
     }
 
-    // ── the shared `plane` form of kompas_create_sketch / kompas_set_sketch_plane ────────────────
+    // ── the shared `selection_predicate` of kompas_resolve_selection ─────────────────────────────
+
+    /// <summary>INVARIANT: the published predicate carries no field the server refuses — a field in the
+    /// schema that no value of it can satisfy is a promise the tool does not keep, and the caller pays a
+    /// call to learn it.</summary>
+    /// <remarks>MEASURED: <c>coordinate_space</c> was declared with <c>enum [parent, assembly_world]</c>
+    /// while every call carrying it was refused <c>INVALID_ARGUMENT</c>.
+    /// History: docs/decisions/contracts.md#selection-predicate-coordinate-space</remarks>
+    [Fact]
+    public void SelectionPredicate_DeclaresNoUnsupportedField()
+    {
+        var predicate = SelectionPredicate();
+        var properties = (JsonObject)predicate["properties"]!;
+
+        Assert.Equal(
+            new[] { "area_range_mm2", "normal_angle_tolerance_deg", "normal_direction", "surface_type" },
+            properties.Select(p => p.Key).OrderBy(k => k, StringComparer.Ordinal).ToArray());
+        Assert.False(predicate["additionalProperties"]!.GetValue<bool>());
+    }
+
+    /// <summary>INVARIANT: the closure is the gate. A predicate field outside the declared set must fail
+    /// validation of the SAME schema the Host validates against, so the refusal is a schema refusal — not
+    /// a server branch that can drift away from the schema it is meant to mirror.</summary>
+    [Fact]
+    public void SelectionPredicate_UnknownField_IsRefusedByThePublishedSchema()
+    {
+        var payload = JsonNode.Parse("""
+            {"body_ref":"body:0123456789abcdef0123456789abcdef",
+             "predicate":{"surface_type":"plane","coordinate_space":"parent"}}
+            """)!.AsObject();
+
+        Assert.NotEmpty(JsonSchemaValidator.Validate(Tool("kompas_resolve_selection").InputSchema, payload));
+    }
+
+    /// <summary>INVARIANT: <c>normal_direction</c> names the frame it lives in, because the tool resolves
+    /// faces from a body reference and a caller who assumes assembly coordinates gets a silently wrong
+    /// selection.</summary>
+    [Fact]
+    public void SelectionPredicate_NormalDirection_NamesItsFrame()
+    {
+        var properties = (JsonObject)SelectionPredicate()["properties"]!;
+        var normal = (JsonObject)properties["normal_direction"]!;
+
+        Assert.Contains("системе координат детали", normal["description"]!.GetValue<string>(),
+            StringComparison.Ordinal);
+    }
+
+    private static JsonObject SelectionPredicate()
+    {
+        var defs = (JsonObject)Tool("kompas_resolve_selection").InputSchema["$defs"]!;
+        return (JsonObject)defs["selection_predicate"]!;
+    }
 
     private const string SupportTools = "kompas_create_sketch";
 

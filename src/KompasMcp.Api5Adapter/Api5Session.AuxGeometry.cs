@@ -91,8 +91,8 @@ public sealed partial class Api5Session
 
         var diagnostics = new List<string> { $"Маршрут: {Api7AuxEnumeration.Route}." };
         string? referenceId = null;
-        string? kind = null;
-        string? mode = command.Mode;
+        var kind = command.Kind;
+        string? mode = null;
         string? subKind = null;
         string? name = null;
         string? baseName = null;
@@ -122,6 +122,7 @@ public sealed partial class Api5Session
                 var read = Api7AuxGeometry.ReadPlane(plane, -1);
                 referenceId = References.Register("plane", document.Id, document.Revision, plane).Id;
                 kind = read.Kind;
+                mode = read.Mode;
                 subKind = read.SubKind;
                 name = read.Name;
                 point = read.PointMm;
@@ -152,6 +153,7 @@ public sealed partial class Api5Session
                 var read = Api7AuxGeometry.ReadPlane(plane, -1);
                 referenceId = References.Register("plane", document.Id, document.Revision, plane).Id;
                 kind = read.Kind;
+                mode = read.Mode;
                 subKind = read.SubKind;
                 name = read.Name;
                 point = read.PointMm;
@@ -180,6 +182,7 @@ public sealed partial class Api5Session
                 var read = Api7AuxGeometry.ReadAxis(axis, -1);
                 referenceId = References.Register("axis", document.Id, document.Revision, axis).Id;
                 kind = read.Kind;
+                mode = read.Mode;
                 subKind = read.SubKind;
                 name = read.Name;
                 point = read.PointMm;
@@ -202,6 +205,7 @@ public sealed partial class Api5Session
                 var read = Api7AuxGeometry.ReadAxis(axis, -1);
                 referenceId = References.Register("axis", document.Id, document.Revision, axis).Id;
                 kind = read.Kind;
+                mode = read.Mode;
                 subKind = read.SubKind;
                 name = read.Name;
                 baseName = read.BaseName;
@@ -222,6 +226,7 @@ public sealed partial class Api5Session
                 var read = Api7AuxGeometry.ReadAxis(axis, -1);
                 referenceId = References.Register("axis", document.Id, document.Revision, axis).Id;
                 kind = read.Kind;
+                mode = read.Mode;
                 subKind = read.SubKind;
                 name = read.Name;
                 baseName = read.BaseName;
@@ -252,6 +257,12 @@ public sealed partial class Api5Session
                 referenceId = References.Register("point", document.Id, document.Revision, created).Id;
                 kind = "point";
                 subKind = parameterType;
+                mode = Api7AuxGeometry.ModeOfPoint(parameterType);
+                if (mode is null)
+                {
+                    diagnostics.Add("способ построения точки в словаре запроса не назван: " +
+                        $"ParameterType={parameterType ?? "не прочитан"}; mode=null, нативный тип в sub_kind");
+                }
                 name = created.Name;
                 point = readCoordinates;
                 baseName = association;
@@ -284,6 +295,12 @@ public sealed partial class Api5Session
                 referenceId = References.Register("point", document.Id, document.Revision, created).Id;
                 kind = "point";
                 subKind = parameterType;
+                mode = Api7AuxGeometry.ModeOfPoint(parameterType);
+                if (mode is null)
+                {
+                    diagnostics.Add("способ построения точки в словаре запроса не назван: " +
+                        $"ParameterType={parameterType ?? "не прочитан"}; mode=null, нативный тип в sub_kind");
+                }
                 name = created.Name;
                 point = readCoordinates;
                 baseName = association;
@@ -307,9 +324,19 @@ public sealed partial class Api5Session
         var counts = AuxCounts(model, auxiliary);
         diagnostics.Add($"После создания: плоскостей {counts.Planes}, осей {counts.Axes}, точек {counts.Points}.");
 
+        // The mode is what the MODEL says, not what was asked for. A mismatch is published as a FAILED
+        // check with both values, not smoothed over: an object built by another route would otherwise
+        // travel to acceptance wearing the requested mode.
+        var modeMatches = string.Equals(mode, command.Mode, StringComparison.Ordinal);
+        diagnostics.Add(modeMatches
+            ? $"Способ построения прочитан из модели: mode={mode} (запрошен {command.Mode})."
+            : $"СПОСОБ ПОСТРОЕНИЯ НЕ СОВПАЛ С ЗАПРОШЕННЫМ: запрошен {command.Mode}, прочитано "
+              + $"{mode ?? "не выражается словарём запроса"} (нативный тип {subKind}). Значение не "
+              + "подменено запрошенным.");
+
         return new AuxGeometryResult(
-            Kind: kind ?? command.Kind,
-            Mode: mode ?? command.Mode,
+            Kind: kind,
+            Mode: mode,
             ReferenceId: referenceId,
             Name: name,
             SubKind: subKind,
@@ -323,7 +350,11 @@ public sealed partial class Api5Session
             PlaneCount: counts.Planes,
             AxisCount: counts.Axes,
             PointCount: counts.Points,
-            Diagnostics: diagnostics);
+            Diagnostics: diagnostics,
+            Verification: new VerificationDto(
+                VerificationLevel.CallReturned,
+                new[] { new NamedCheck("mode_read_back", modeMatches, Observed: mode, Expected: command.Mode) },
+                new[] { "geometry_not_checked" }));
     }
 
     /// <summary>Edit an existing plane as a part object: offset, angle, sign, support.</summary>
@@ -361,11 +392,13 @@ public sealed partial class Api5Session
         var before = Api7AuxGeometry.ReadPlane(plane, -1);
         diagnostics.AddRange(before.Notes);
 
-        // The kind is taken FROM THE MODEL: the request string is not a kind.
-        var allowed = before.Kind switch
+        // The mode is taken FROM THE MODEL: the request string is not a mode. The choice is made on the
+        // READ mode, which is why a rename of the read values must be mirrored here — a plain string
+        // replacement would leave both branches dead and every plane edit refused.
+        var allowed = before.Mode switch
         {
             "offset" => new[] { "offset_mm", "direction", "base_plane" },
-            "by_angle" => new[] { "angle_deg", "direction", "base_plane" },
+            "angle" => new[] { "angle_deg", "direction", "base_plane" },
             _ => Array.Empty<string>(),
         };
 
@@ -373,10 +406,15 @@ public sealed partial class Api5Session
         {
             throw new KompasContractException(
                 ErrorCodes.CapabilityUnavailable,
-                $"Вид плоскости определён по ModelObjectType={before.SubKind}, и параметров построения " +
-                "этот маршрут у него не читает. Правка не гадает о виде: она его измеряет.",
+                $"Способ построения плоскости не выражается словарём запроса: mode=" +
+                $"{before.Mode ?? "null"}, нативный тип {before.SubKind}. Параметров построения этот " +
+                "маршрут у такой плоскости не читает. Правка не гадает о виде: она его измеряет.",
                 RetryPolicy.ReacquireContext,
-                details: new Dictionary<string, object?> { ["sub_kind"] = before.SubKind });
+                details: new Dictionary<string, object?>
+                {
+                    ["sub_kind"] = before.SubKind,
+                    ["mode"] = before.Mode,
+                });
         }
 
         var sent = new List<string>();
@@ -390,13 +428,15 @@ public sealed partial class Api5Session
         {
             throw new KompasContractException(
                 ErrorCodes.InvalidArgument,
-                $"Поля {string.Join(", ", foreign)} не принадлежат виду плоскости «{before.Kind}» " +
-                $"(измерен по ModelObjectType={before.SubKind}). Его поля: {string.Join(", ", allowed)}.",
+                $"Поля {string.Join(", ", foreign)} не принадлежат способу построения плоскости " +
+                $"«{before.Mode}» (измерен по ModelObjectType={before.SubKind}). Его поля: " +
+                $"{string.Join(", ", allowed)}.",
                 details: new Dictionary<string, object?>
                 {
                     ["foreign_fields"] = foreign,
                     ["allowed_fields"] = allowed,
-                    ["plane_kind"] = before.Kind,
+                    ["plane_mode"] = before.Mode,
+                    ["sub_kind"] = before.SubKind,
                 });
         }
 
@@ -481,6 +521,7 @@ public sealed partial class Api5Session
         return new PlaneUpdateResult(
             ReferenceId: command.PlaneRef,
             Kind: after.Kind,
+            Mode: after.Mode,
             SubKind: after.SubKind,
             Name: after.Name,
             OffsetMm: after.OffsetMm,
@@ -685,7 +726,7 @@ public sealed partial class Api5Session
     // ---------------------------------------------------------------------------------------------
 
     private static AuxGeometryRowDto ToDto(AuxGeomRow row) => new(
-        row.Kind, row.Index, row.Name, row.SubKind, row.PointMm, row.DirectionMm,
+        row.Kind, row.Mode, row.Index, row.Name, row.SubKind, row.PointMm, row.DirectionMm,
         row.AngleDeg, row.OffsetMm, row.Direction, row.BaseName, row.LineName, row.Notes);
 
     private (int Planes, int Axes, int Points) AuxCounts(

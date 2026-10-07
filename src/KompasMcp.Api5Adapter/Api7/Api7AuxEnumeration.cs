@@ -35,7 +35,7 @@ internal static class Api7AuxEnumeration
                 var plane = planes.get_Plane3D(i);
                 if (plane is null)
                 {
-                    rows.Add(new AuxGeomRow("unreadable", i, null, null, null, null, null, null, null,
+                    rows.Add(new AuxGeomRow("unreadable", null, i, null, null, null, null, null, null, null,
                         null, null, ["IPlanes3D.Plane3D[i] → null"]));
                     continue;
                 }
@@ -44,7 +44,7 @@ internal static class Api7AuxEnumeration
             }
             catch (Exception ex) when (ex is COMException or InvalidCastException)
             {
-                rows.Add(new AuxGeomRow("unreadable", i, null, null, null, null, null, null, null,
+                rows.Add(new AuxGeomRow("unreadable", null, i, null, null, null, null, null, null, null,
                     null, null, [$"чтение плоскости бросило {ex.GetType().Name}"]));
             }
         }
@@ -74,7 +74,7 @@ internal static class Api7AuxEnumeration
                 var axis = axes.get_Axis3D(i);
                 if (axis is null)
                 {
-                    rows.Add(new AuxGeomRow("unreadable", i, null, null, null, null, null, null, null,
+                    rows.Add(new AuxGeomRow("unreadable", null, i, null, null, null, null, null, null, null,
                         null, null, ["IAxes3D.Axis3D[i] → null"]));
                     continue;
                 }
@@ -83,7 +83,7 @@ internal static class Api7AuxEnumeration
             }
             catch (Exception ex) when (ex is COMException or InvalidCastException)
             {
-                rows.Add(new AuxGeomRow("unreadable", i, null, null, null, null, null, null, null,
+                rows.Add(new AuxGeomRow("unreadable", null, i, null, null, null, null, null, null, null,
                     null, null, [$"чтение оси бросило {ex.GetType().Name}"]));
             }
         }
@@ -108,20 +108,28 @@ internal static class Api7AuxEnumeration
                 var point = points.get_Point3D(i);
                 if (point is null)
                 {
-                    rows.Add(new AuxGeomRow("unreadable", i, null, null, null, null, null, null, null,
+                    rows.Add(new AuxGeomRow("unreadable", null, i, null, null, null, null, null, null, null,
                         null, null, ["IPoints3D.Point3D[i] → null"]));
                     continue;
                 }
 
                 var (coordinates, parameterType, association, notes) =
                     Api7AuxGeometry.ReadPoint(point);
+                var mode = Api7AuxGeometry.ModeOfPoint(parameterType);
+                var rowNotes = notes.ToList();
+                if (mode is null)
+                {
+                    rowNotes.Add("способ построения точки не выражается словарём запроса: " +
+                        $"ParameterType={parameterType ?? "не прочитан"}; mode=null, нативный тип в sub_kind");
+                }
+
                 rows.Add(new AuxGeomRow(
-                    "point", i, SafeS(() => point.Name), parameterType,
-                    coordinates, null, null, null, null, association, null, notes));
+                    "point", mode, i, SafeS(() => point.Name), parameterType,
+                    coordinates, null, null, null, null, association, null, rowNotes));
             }
             catch (Exception ex) when (ex is COMException or InvalidCastException)
             {
-                rows.Add(new AuxGeomRow("unreadable", i, null, null, null, null, null, null, null,
+                rows.Add(new AuxGeomRow("unreadable", null, i, null, null, null, null, null, null, null,
                     null, null, [$"чтение точки бросило {ex.GetType().Name}"]));
             }
         }

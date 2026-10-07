@@ -6,8 +6,14 @@ namespace KompasMcp.Api5Adapter.Api7;
 
 /// <summary>A row of an auxiliary-geometry enumeration. Fields that could not be read stay
 /// <c>null</c> and are named in <c>Notes</c>: an empty field means "not read", not zero.</summary>
+/// <param name="Kind">WHAT it is: <c>plane</c>, <c>axis</c>, <c>point</c> (or <c>unreadable</c>).</param>
+/// <param name="Mode">HOW it was built, in the request vocabulary of <c>kompas_create_aux_geometry</c>.
+/// <c>null</c> means the native construction is not expressible there (built outside this server, or by
+/// a mode it does not offer); the native type is then in <see cref="SubKind"/> and in the notes. A mode
+/// that does not fit is never guessed: the vocabulary is closed and the model is the answer.</param>
 internal sealed record AuxGeomRow(
     string Kind,
+    string? Mode,
     int Index,
     string? Name,
     string? SubKind,
@@ -314,7 +320,8 @@ internal static class Api7AuxGeometry
         var notes = new List<string>();
         var name = SafeS(() => plane.Name);
         var subKind = SafeS(() => plane.ModelObjectType.ToString());
-        var kind = "plane";
+        const string kind = "plane";
+        string? mode = null;
         double? angle = null;
         double? offset = null;
         bool? direction = null;
@@ -324,7 +331,7 @@ internal static class Api7AuxGeometry
         switch (plane)
         {
             case IPlane3DByAngle byAngle:
-                kind = "by_angle";
+                mode = "angle";
                 angle = SafeD(() => byAngle.Angle);
                 direction = SafeB(() => byAngle.Direction);
                 baseName = SafeS(() => byAngle.BasePlane?.Name);
@@ -341,7 +348,7 @@ internal static class Api7AuxGeometry
 
                 break;
             case IPlane3DByOffset byOffset:
-                kind = "offset";
+                mode = "offset";
                 offset = SafeD(() => byOffset.Offset);
                 direction = SafeB(() => byOffset.Direction);
                 baseName = SafeS(() => byOffset.BasePlane?.Name);
@@ -352,13 +359,15 @@ internal static class Api7AuxGeometry
 
                 break;
             default:
-                notes.Add($"вид плоскости определён по ModelObjectType={subKind}, " +
-                    "параметры построения не читаются этим маршрутом");
+                // Mode stays null: the native type is not in the request vocabulary, and calling it
+                // "offset" or "angle" would be a guess about the model.
+                notes.Add($"способ построения не выражается словарём запроса: нативный тип " +
+                    $"{subKind}; mode=null, параметры построения этим маршрутом не читаются");
                 break;
         }
 
         var (origin, normal) = ReadPlaneSurface(plane, notes);
-        return new AuxGeomRow(kind, index, name, subKind, origin, normal, angle, offset, direction,
+        return new AuxGeomRow(kind, mode, index, name, subKind, origin, normal, angle, offset, direction,
             baseName, lineName, notes);
     }
 
@@ -612,15 +621,16 @@ internal static class Api7AuxGeometry
         }
     }
 
-    /// <summary>Read an axis. The kind is determined by QI; coordinates come from the vertices
-    /// (<c>Point1</c>/<c>Point2</c>) where present; <c>MathCurve</c> is read separately and its
-    /// absence is named, not replaced by zero.</summary>
+    /// <summary>Read an axis: WHAT it is (always <c>axis</c>), HOW it was built (the mode), and the
+    /// native type. Coordinates come from the vertices (<c>Point1</c>/<c>Point2</c>) where present;
+    /// <c>MathCurve</c> is read separately and its absence is named, not replaced by zero.</summary>
     public static AuxGeomRow ReadAxis(IAxis3D axis, int index)
     {
         var notes = new List<string>();
         var name = SafeS(() => axis.Name);
         var subKind = SafeS(() => axis.ModelObjectType.ToString());
-        var kind = "axis";
+        const string kind = "axis";
+        string? mode = null;
         double[]? point1 = null;
         double[]? point2 = null;
         string? baseName = null;
@@ -628,22 +638,25 @@ internal static class Api7AuxGeometry
         switch (axis)
         {
             case IAxis3DBy2Points by2:
-                kind = "by_2_points";
+                mode = "by_2_points";
                 point1 = ReadVertex(by2.Point1, notes, "вершина 1");
                 point2 = ReadVertex(by2.Point2, notes, "вершина 2");
                 break;
             case IAxis3DByConeface byFace:
-                kind = "by_cone_face";
+                mode = "by_face";
                 baseName = SafeS(() => byFace.Face?.Name);
                 break;
             case IAxis3DByEdge byEdge:
-                kind = "by_edge";
+                mode = "by_edge";
                 baseName = SafeS(() => byEdge.Edge?.Name);
                 break;
             case IAxis3DByPointAndObject byPoint:
-                kind = "by_point_and_object";
+                // The request vocabulary has no name for this construction: mode stays null and the
+                // native type is named, rather than calling it "by_face" or "by_edge".
                 point1 = ReadVertex(byPoint.Point, notes, "вершина");
                 baseName = SafeS(() => byPoint.DirectObject?.Name);
+                notes.Add("способ построения оси (точка и объект) в словаре запроса не назван: " +
+                    $"mode=null, нативный тип {subKind}");
                 break;
         }
 
@@ -657,9 +670,22 @@ internal static class Api7AuxGeometry
             notes.Add("IAxis3D.MathCurve не прочитан");
         }
 
-        return new AuxGeomRow(kind, index, name, subKind, point1, point2, null, null, null, baseName,
-            null, notes);
+        return new AuxGeomRow(kind, mode, index, name, subKind, point1, point2, null, null, null,
+            baseName, null, notes);
     }
+
+    /// <summary>The mode of a POINT, from the native <c>IPoint3D.ParameterType</c>.
+    /// DOC: <c>kspoint3dtypeenum.html</c> — «ksPoint3DTypeEnum - Способы построения пространственной
+    /// точки»: <c>ksPParamCoord = 1</c> «По координатам от опорного объекта», <c>ksPDisplace = 2</c>
+    /// «По смещению от опорного объекта». <c>null</c> for every other documented way of building a
+    /// point: those are not modes of this tool, and naming one of them <c>coordinates</c> would be a
+    /// guess. The caller names the native value.</summary>
+    public static string? ModeOfPoint(string? parameterType) => parameterType switch
+    {
+        "ksPParamCoord" => "coordinates",
+        "ksPDisplace" => "displace",
+        _ => null,
+    };
 
     // ------------------------------------------------------- auxiliary-geometry enumeration
 

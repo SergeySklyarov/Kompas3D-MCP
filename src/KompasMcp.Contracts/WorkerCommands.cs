@@ -333,9 +333,14 @@ public sealed record CreateAuxGeometryCommand
 
 /// <summary>Result of creating an auxiliary-geometry object: read BACK from the model, not a restatement of the
 /// request.</summary>
+/// <param name="Kind">WHAT was created: <c>plane</c>, <c>axis</c>, <c>point</c> — read from the model.</param>
+/// <param name="Mode">HOW it was built, read from the model in the request vocabulary. <c>null</c> when the native
+/// construction is not expressible in that vocabulary (then <see cref="SubKind"/> carries the native type and the
+/// reason is in <see cref="Diagnostics"/>). It is NEVER the echoed request: <see cref="Verification"/> carries a
+/// <c>mode_read_back</c> check comparing the two, so a mismatch is visible instead of silently substituted.</param>
 public sealed record AuxGeometryResult(
     string Kind,
-    string Mode,
+    string? Mode,
     string? ReferenceId,
     string? Name,
     string? SubKind,
@@ -349,7 +354,8 @@ public sealed record AuxGeometryResult(
     int PlaneCount,
     int AxisCount,
     int PointCount,
-    IReadOnlyList<string> Diagnostics);
+    IReadOnlyList<string> Diagnostics,
+    VerificationDto? Verification = null);
 
 /// <summary>Request to enumerate auxiliary-geometry objects.</summary>
 public sealed record ListAuxGeometryCommand
@@ -375,8 +381,15 @@ public sealed record AuxGeometryListResult(
 
 /// <summary>Auxiliary-geometry enumeration row. An empty field means "not read", not zero; the reason is named in <see
 /// cref="Notes"/>.</summary>
+/// <param name="Kind">WHAT the object is: <c>plane</c>, <c>axis</c>, <c>point</c> (or <c>unreadable</c> when the
+/// collection element itself did not read).</param>
+/// <param name="Mode">HOW it was built, in the request vocabulary of <c>kompas_create_aux_geometry</c>. <c>null</c>
+/// means the native construction is not expressible in that vocabulary; the native type is then in
+/// <see cref="SubKind"/> and named in <see cref="Notes"/>. The mode is READ from the model, never echoed from the
+/// request.</param>
 public sealed record AuxGeometryRowDto(
     string Kind,
+    string? Mode,
     int Index,
     string? Name,
     string? SubKind,
@@ -420,6 +433,7 @@ public sealed record UpdatePlaneCommand
 public sealed record PlaneUpdateResult(
     string? ReferenceId,
     string? Kind,
+    string? Mode,
     string? SubKind,
     string? Name,
     double? OffsetMm,

@@ -26748,6 +26748,7 @@ def dep_acceptance_checks(client, rep, app_id, workdir):
             res = result(env)
             return {"tag": tag, "error": code,
                     "kind": res.get("kind") if isinstance(res, dict) else None,
+                    "mode": res.get("mode") if isinstance(res, dict) else None,
                     "sub_kind": res.get("sub_kind") if isinstance(res, dict) else None,
                     "offset_mm": res.get("offset_mm") if isinstance(res, dict) else None,
                     "angle_deg": res.get("angle_deg") if isinstance(res, dict) else None,
@@ -26781,19 +26782,28 @@ def dep_acceptance_checks(client, rep, app_id, workdir):
                            "kind": "plane", "mode": "offset", "base_face_ref": face,
                            "offset_mm": 5.0, "name": "DEP-DPL-face"}, "plane/offset+face", "base_face_ref")
 
-        ok_create = (offset_plane["error"] is None and offset_plane["kind"] == "offset"
+        # ОЖИДАНИЕ ПЕРЕПИСАНО: прежде строка требовала kind="offset"/"by_angle" и тем
+        # ЗАКРЕПЛЯЛА дефект (способ построения в kind). Теперь kind отвечает «что это» (plane), а
+        # способ — в mode, прочитанном ИЗ МОДЕЛИ: by_face у оси и angle у плоскости читаются
+        # обратно словами ЗАПРОСА, а не нативными by_cone_face/by_angle.
+        ok_create = (offset_plane["error"] is None and offset_plane["kind"] == "plane"
+                     and offset_plane["mode"] == "offset"
                      and near(offset_plane["offset_mm"], 15.0, tol=1e-9)
-                     and angle_plane["error"] is None and angle_plane["kind"] == "by_angle"
+                     and angle_plane["error"] is None and angle_plane["kind"] == "plane"
+                     and angle_plane["mode"] == "angle"
                      and near(angle_plane["angle_deg"], 30.0, tol=1e-9)
-                     and face_plane["error"] is None and face_plane["kind"] == "offset")
+                     and face_plane["error"] is None and face_plane["kind"] == "plane"
+                     and face_plane["mode"] == "offset")
         emit("create", "PASS" if ok_create else "FAIL",
-             "плоскости созданы КАК ОБЪЕКТЫ ДЕТАЛИ. Смещённая по нормали: вид=%s, смещение=%s "
-             "(запрошено 15), плоскостей в коллекции после создания=%s. НАКЛОННАЯ ОСЬЮ И УГЛОМ: "
-             "вид=%s, угол=%s (запрошено 30), опора=%s. Опора НА ПЛОСКУЮ ГРАНЬ ссылкой: вид=%s, "
-             "опора=%s. Коды: offset=%s, angle=%s, face=%s"
-             % (offset_plane["kind"], offset_plane["offset_mm"], offset_plane["plane_count"],
-                angle_plane["kind"], angle_plane["angle_deg"], angle_plane["base_name"],
-                face_plane["kind"], face_plane["base_name"],
+             "плоскости созданы КАК ОБЪЕКТЫ ДЕТАЛИ. Смещённая по нормали: kind=%s, mode=%s, "
+             "смещение=%s (запрошено 15), плоскостей в коллекции после создания=%s. НАКЛОННАЯ ОСЬЮ "
+             "И УГЛОМ: kind=%s, mode=%s, угол=%s (запрошено 30), опора=%s. Опора НА ПЛОСКУЮ ГРАНЬ "
+             "ссылкой: kind=%s, mode=%s, опора=%s. Коды: offset=%s, angle=%s, face=%s"
+             % (offset_plane["kind"], offset_plane["mode"], offset_plane["offset_mm"],
+                offset_plane["plane_count"],
+                angle_plane["kind"], angle_plane["mode"], angle_plane["angle_deg"],
+                angle_plane["base_name"],
+                face_plane["kind"], face_plane["mode"], face_plane["base_name"],
                 offset_plane["error"], angle_plane["error"], face_plane["error"]),
              {"offset": offset_plane, "angle": angle_plane, "face": face_plane,
               "axis_ref": axis_ref, "face_ref": face})
@@ -26805,17 +26815,18 @@ def dep_acceptance_checks(client, rep, app_id, workdir):
         rrows = read.get("rows") if isinstance(read, dict) else None
         rrow = rrows[0] if isinstance(rrows, list) and rrows else {}
         ok_read = (code_rd is None and len(rrows or []) == 1
-                   and rrow.get("kind") == "by_angle"
+                   and rrow.get("kind") == "plane" and rrow.get("mode") == "angle"
                    and near(rrow.get("angle_deg"), 30.0, tol=1e-9)
                    and rrow.get("name") == "DEP-DPL-angle")
         emit("read", "PASS" if ok_read else "FAIL",
              "параметры СОЗДАННОЙ плоскости читаются ИЗ МОДЕЛИ по имени: найдено объектов с именем "
-             "«DEP-DPL-angle» — %d, вид=%s, угол=%s (запрошено 30), опора=%s. Имя разрешено "
+             "«DEP-DPL-angle» — %d, kind=%s, mode=%s, угол=%s (запрошено 30), опора=%s. Имя разрешено "
              "ПЕРЕЧИСЛЕНИЕМ: справка документирует члены с именем, но в поставленном "
              "Interop.KompasAPI7.dll членов с подстрокой ByName — ноль (измерено прибором "
              "InteropScan), поэтому имя сопоставляется по Count + индексированному свойству + Name"
-             % (len(rrows or []), rrow.get("kind"), rrow.get("angle_deg"), rrow.get("base_name")),
-             {"matches": len(rrows or []), "kind": rrow.get("kind"),
+             % (len(rrows or []), rrow.get("kind"), rrow.get("mode"), rrow.get("angle_deg"),
+                rrow.get("base_name")),
+             {"matches": len(rrows or []), "kind": rrow.get("kind"), "mode": rrow.get("mode"),
               "angle_deg": rrow.get("angle_deg"), "base_name": rrow.get("base_name"),
               "route": read.get("route") if isinstance(read, dict) else None, "error": code_rd})
 
@@ -26968,14 +26979,16 @@ def dep_acceptance_checks(client, rep, app_id, workdir):
         ref = ref_id(made.get("reference_id")) if isinstance(made, dict) else None
         ok_create = (code_c is None and ref and isinstance(made, dict)
                      and near(made.get("axis_count"), 1.0)
-                     and made.get("kind") == "by_2_points")
+                     and made.get("kind") == "axis" and made.get("mode") == "by_2_points")
         emit("create", "PASS" if ok_create else "FAIL",
              "ось создана КАК ОБЪЕКТ ДЕТАЛИ: маршрут IAuxiliaryGeomContainer.GetAxes3D → "
              "IAxes3D.Add(o3d_axis2Points=10) → QI(IAxis3DBy2Points) → Point1/Point2 → Update(), "
-             "затем RebuildModel; ссылка %s, осей в коллекции после создания %s, вид построения %s. "
-             "Прежняя редакция строки называла отсутствие инструмента — он опубликован"
+             "затем RebuildModel; ссылка %s, осей в коллекции после создания %s, kind=%s, mode=%s "
+             "(прочитан из модели, не эхо запроса). Прежняя редакция строки называла отсутствие "
+             "инструмента — он опубликован"
              % (ref, made.get("axis_count") if isinstance(made, dict) else None,
-                made.get("kind") if isinstance(made, dict) else None),
+                made.get("kind") if isinstance(made, dict) else None,
+                made.get("mode") if isinstance(made, dict) else None),
              {"reference": ref, "axis_count": made.get("axis_count") if isinstance(made, dict) else None,
               "error": code_c, "diagnostics": made.get("diagnostics") if isinstance(made, dict) else None})
 
@@ -27075,14 +27088,17 @@ def dep_acceptance_checks(client, rep, app_id, workdir):
         got = (made or {}).get("point_mm") or []
         ok_create = (code_c is None and ref and len(got) == 3
                      and all(abs(a - b) <= 1e-6 for a, b in zip(got, xyz))
+                     and made.get("kind") == "point" and made.get("mode") == "coordinates"
                      and near((made or {}).get("point_count"), 1.0))
         emit("create", "PASS" if ok_create else "FAIL",
              "точка создана КАК ОБЪЕКТ ДЕТАЛИ: маршрут IModelContainer.GetPoints3D → IPoints3D.Add() "
              "→ QI(IPoint3D) → X/Y/Z → SetParameterType(ksPParamCoord) → Update(), затем "
              "RebuildModel; ссылка %s, координаты, ПРОЧИТАННЫЕ ОБРАТНО из модели: %s (записано %s), "
-             "точек в коллекции %s, способ построения %s"
-             % (ref, got, xyz, (made or {}).get("point_count"), (made or {}).get("sub_kind")),
+             "точек в коллекции %s, kind=%s, mode=%s (прочитан из модели), нативный тип %s"
+             % (ref, got, xyz, (made or {}).get("point_count"), made.get("kind"), made.get("mode"),
+                (made or {}).get("sub_kind")),
              {"reference": ref, "coordinates_mm": got, "point_count": (made or {}).get("point_count"),
+              "kind": made.get("kind"), "mode": made.get("mode"),
               "sub_kind": (made or {}).get("sub_kind"), "error": code_c,
               "diagnostics": (made or {}).get("diagnostics")})
 
@@ -27094,14 +27110,16 @@ def dep_acceptance_checks(client, rep, app_id, workdir):
         row = rows[0] if isinstance(rows, list) and rows else {}
         back = row.get("point_mm") or []
         ok_read = (code_r is None and len(rows or []) == 1 and len(back) == 3
-                   and all(abs(a - b) <= 1e-6 for a, b in zip(back, xyz)))
+                   and all(abs(a - b) <= 1e-6 for a, b in zip(back, xyz))
+                   and row.get("kind") == "point" and row.get("mode") == "coordinates")
         emit("read", "PASS" if ok_read else "FAIL",
              "точка прочитана ИЗ МОДЕЛИ по имени: найдено объектов с именем «%s» — %d, координаты "
-             "%s (записано %s), способ построения %s. Имя разрешено ПЕРЕЧИСЛЕНИЕМ: справка "
+             "%s (записано %s), kind=%s, mode=%s. Имя разрешено ПЕРЕЧИСЛЕНИЕМ: справка "
              "документирует IPoints3D.GetPoint3DByName, но в поставленном Interop.KompasAPI7.dll "
              "членов с подстрокой ByName — ноль (измерено прибором InteropScan)"
-             % (point_name, len(rows or []), back, xyz, row.get("sub_kind")),
-             {"matches": len(rows or []), "coordinates_mm": back, "sub_kind": row.get("sub_kind"),
+             % (point_name, len(rows or []), back, xyz, row.get("kind"), row.get("mode")),
+             {"matches": len(rows or []), "coordinates_mm": back, "kind": row.get("kind"),
+              "mode": row.get("mode"), "sub_kind": row.get("sub_kind"),
               "parameter_type": row.get("sub_kind"), "error": code_r})
 
         # ── save_reopen: точка переживает цикл сохранения ──────────────────────────────────────

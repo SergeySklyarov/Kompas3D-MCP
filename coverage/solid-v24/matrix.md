@@ -52,8 +52,8 @@
 
 - **обязательных_режимов:** 54
 - **режимов_закрыто:** 54
-- **общих_зависимостей:** 15
-- **зависимостей_закрыто:** 15
+- **общих_зависимостей:** 16
+- **зависимостей_закрыто:** 16
 - **профиль_закрыт:** да
 - **готовность_процента:** 100.0%
 - **по_очередям:** B1 16/16; B2 11/11; B3 10/10; B4 10/10; B5 7/7
@@ -74,17 +74,17 @@
 
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 294
-- **строк_полностью_закрыто:** 105
-- **строк_с_каким_либо_прогрессом:** 120
+- **строк_каталога:** 295
+- **строк_полностью_закрыто:** 106
+- **строк_с_каким_либо_прогрессом:** 121
 - **семейств_в_каталоге:** 36
 - **семейств_без_строк:** 14
 - **операций:** 99
 - **режимов_и_вариантов:** 146
-- **применимых_действий:** 2665
-- **действий_verified:** 834
-- **покрытие_действий:** 31.3%
-- **распределение_статусов:** {'not_started': 1831, 'verified': 834, 'not_applicable': 275}
+- **применимых_действий:** 2669
+- **действий_verified:** 838
+- **покрытие_действий:** 31.4%
+- **распределение_статусов:** {'not_started': 1831, 'verified': 838, 'not_applicable': 281}
 - **уровни_каталога_операций:** {'metadata_found': 50, 'mcp_verified': 30, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 4}
 - **уровни_каталога_режимов:** {'mcp_verified': 55, 'documented': 19, 'runtime_verified': 3, 'metadata_found': 48, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
@@ -218,6 +218,7 @@
 | зависимость | закрыто | приоритетные действия | проверки |
 |---|---|---|---|
 | `dep.sketch.entities` | да | discover, create, read, edit, save_reopen, negative_tests, geometry_validation | G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, DEP.DSE.02.create, DEP.DSE.07.geometry_validation, DEP.DSE.06.negative_tests, DEP.DSE.05.save_reopen, DEP.DSE.04.edit, DEP.DSE.01.discover, DEP.DSE.03.read |
+| `dep.sketches.enumeration` | да | discover, read, save_reopen, negative_tests | DEP.DSK.01.discover, DEP.DSK.02.read, DEP.DSK.03.save_reopen, DEP.DSK.04.negative_tests |
 | `dep.refs.planes` | да | discover, create, read, edit, save_reopen, negative_tests | DEP.DPL.01.discover, DEP.DPL.06.negative_tests, DEP.DPL.05.save_reopen, DEP.DPL.02.create, DEP.DPL.04.edit, DEP.DPL.03.read |
 | `dep.refs.axes` | да | discover, create, read, save_reopen, negative_tests | DEP.DAX.05.negative_tests, DEP.DAX.02.create, DEP.DAX.01.discover, DEP.DAX.04.save_reopen, DEP.DAX.03.read |
 | `dep.refs.points_axes` | да | create, read, save_reopen | DEP.DPT.01.create, DEP.DPT.03.save_reopen, DEP.DPT.02.read |
@@ -553,6 +554,7 @@
 | `dep.vm.idempotency` *(вне каталога)* | — | dependency_of | VM | — | н/п | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | dep.vm.idempotency.create, dep.vm.idempotency.read, dep.vm.idempotency.negative_tests |
 | `dep.vm.save_reopen` *(вне каталога)* | — | dependency_of | VM | — | н/п | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | dep.vm.save_reopen.read, dep.vm.save_reopen.save_reopen, dep.vm.save_reopen.negative_tests |
 | `dep.vm.units` *(вне каталога)* | — | dependency_of | VM | — | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | dep.vm.units.read, dep.vm.units.negative_tests |
+| `dep.sketches.enumeration` *(вне каталога)* | AUX-SKETCH | dependency_of | — | — | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | DEP.DSK.01.discover, DEP.DSK.02.read, DEP.DSK.03.save_reopen, DEP.DSK.04.negative_tests |
 
 ## Ограничения и незакрытое
 
@@ -1084,6 +1086,9 @@
   - Собственная переинтерпретация единицы не выдаётся за подтверждённую: сервер ничего не пересчитывает, единица приходит из аргумента вызова. Старый getter (ksPart.GetDensity) остаётся диагностикой с единицей СТРАНИЦЫ g/mm3.
   - Разные единицы у SetMaterial (г/куб.см) и страницы GetDensity (г/куб.мм) противоречием справки НЕ являются; расхождение в опыте между страницей GetDensity и наблюдаемым результатом названо и не сглаживается.
   - Прежнее решение (перевод чтения ×1000, единица g/cm3) ОТМЕНЕНО как противоречащее справке; исторический замер 7.85/7.856 сохранён и не переписан.
+- `dep.sketches.enumeration` — закрыт целиком
+  - перечисляются ЭСКИЗЫ детали; операции дерева (тип 110) перечисляет kompas_list_features, и это разные наборы
+  - порядковый номер в коллекции — ПОЗИЦИЯ, а не адрес: перестроение её сдвигает, и она таковой не объявляется
 
 ## Семьи без строк матрицы (инвентаризация не завершена)
 

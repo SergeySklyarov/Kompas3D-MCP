@@ -268,6 +268,26 @@ public static class ToolCatalog
                 requiresDocument: true,
                 requiresOperationId: false),
 
+            ReadOnly("kompas_list_sketches", "Эскизы",
+                "Перечисляет ЭСКИЗЫ детали с непрозрачными ссылками, привязанными к текущей ревизии. "
+                + "Маршрут документирован: ksPart.EntityCollection(o3d_sketch = 5) — «При создании "
+                + "массив заполняется объектами указанного типа, содержащимися в компоненте» "
+                + "(kspart_entitycollection.html); тип «o3d_sketch 5 эскиз» → ksSketchDefinition / "
+                + "ISketch (obj3dtype.html). Тот же набор документирован в API7 "
+                + "(IModelContainer::Sketchs → ISketchs, isketchs.html), но взят маршрут API5: строка "
+                + "обязана нести ТОТ ЖЕ объект, которым адресует эскиз остальной сервер. "
+                + "ЭТО НЕ kompas_list_features: там операции дерева (o3d_operationElement = 110), и "
+                + "эскизы в тот перечень не входят. Строка несёт ссылку, имя, порядковый номер в "
+                + "коллекции (ПОЗИЦИЯ, а не адрес: перестроение её сдвигает), признак создания и имя "
+                + "опорной плоскости, прочитанное ksSketchDefinition.GetPlane(). Непрочитанное поле — "
+                + "null с причиной в notes, а не ноль и не «нет». Ссылка СВЕЖАЯ: именно она возвращает "
+                + "доступ к эскизу после перестроения и переоткрытия, когда прежняя уже отвергается "
+                + "STALE_REFERENCE. Ревизию чтение не поднимает.",
+                Sch.Props(("document_id", Sch.Ref("#/$defs/document_id"))),
+                WorkerCommands.ListSketches,
+                requiresDocument: true,
+                requiresOperationId: false),
+
             ReadOnly("kompas_list_bodies", "Тела",
                 "Тела документа: тип, габарит, число граней и уникальных рёбер. Ссылка на тело — ручка, " +
                 "а не идентификатор: каждый вызов перечисляет заново и выдаёт новую строку для того же тела " +

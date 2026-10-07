@@ -266,6 +266,7 @@ public sealed class CommandDispatcher
             WorkerCommands.SaveDocument => _sta.Run(() => Save(request), "doc.save", cancellationToken),
             WorkerCommands.CloseDocument => _sta.Run(() => Close(request), "doc.close", cancellationToken),
             WorkerCommands.ListFeatures => _sta.Run(() => Features(request), "feat.list", cancellationToken),
+            WorkerCommands.ListSketches => _sta.Run(() => Sketches(request), "sketch.list", cancellationToken),
             WorkerCommands.ListBodies => _sta.Run(() => Bodies(request), "body.list", cancellationToken),
             WorkerCommands.Measure => _sta.Run(() => Measure(request), "geom.measure", cancellationToken),
             WorkerCommands.ResolveSelection => _sta.Run(() => Resolve(request), "geom.resolve", cancellationToken),
@@ -992,6 +993,15 @@ public sealed class CommandDispatcher
     }
 
     private object? Features(IpcFrame request) => _session.ListFeatures(Argument<ListFeaturesCommand>(request));
+
+    /// <summary>Sketches of a part — a READ: the revision is returned but not bumped, because walking the
+    /// collection changes nothing and a bump would invalidate the caller's references.</summary>
+    private object? Sketches(IpcFrame request)
+    {
+        var command = Argument<ListSketchesCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return Tagged(document.Id, document.Revision, _session.ListSketches(command));
+    }
 
     private object? Bodies(IpcFrame request) => _session.ListBodies(Argument<ListBodiesCommand>(request));
 

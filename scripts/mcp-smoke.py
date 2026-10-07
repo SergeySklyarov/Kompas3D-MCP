@@ -25698,6 +25698,7 @@ def image_checks(client, rep, app_id, workdir):
 
 DEP_CODES = {
     "dep.sketch.entities": "DSE",
+    "dep.sketches.enumeration": "DSK",
     "dep.refs.planes": "DPL",
     "dep.refs.axes": "DAX",
     "dep.refs.points_axes": "DPT",
@@ -26708,6 +26709,167 @@ def dep_acceptance_checks(client, rep, app_id, workdir):
              % (vol_now if vol_now is not None else -1, mn, mx),
              {"volume": vol_now, "bbox_min": mn, "bbox_max": mx, "analytic": 24000.0})
         close(doc)
+
+    def m_dsk(emit):
+        """dep.sketches.enumeration: перечисление ЭСКИЗОВ детали и СВЕЖАЯ ссылка на эскиз.
+
+        ПРЕЖНЯЯ РЕДАКЦИЯ ЭТОЙ ВОЗМОЖНОСТИ НЕ ИЗМЕРЯЛАСЬ ВОВСЕ, и это стоит назвать прямо: ссылку на
+        эскиз можно было получить только полем `sketch_ref` строки `kompas_list_features`, и только у
+        выдавливаний. Клиентский агент (отчёт `mcp-bugs.md`, MCP-004) создал эскиз с окружностью R52,
+        получил `list_features = []` и `feature_count = 0` и заново получить ссылку после
+        переоткрытия не мог ничем. Здесь измеряется ровно это: эскиз ЕСТЬ, признаков дерева НЕТ, а
+        перечень эскизов даёт ссылку, по которой эскиз читается — свободный и потреблённый операцией,
+        до и после save → close → reopen.
+        """
+        circle = {"kind": "circle", "center_mm": [0.0, 0.0], "radius_mm": 52.0}
+        circle_v = math.pi * 52.0 * 52.0 * 10.0
+        doc, rev = new_doc("DEP-DSK")
+        sk_free, rev, err_free = sketch(doc, rev, {"base": "xy", "offset_mm": 0.0}, [circle],
+                                        "DEP-DSK-free")
+
+        # ── discover: СВОБОДНЫЙ эскиз и эскиз ПОД ОПЕРАЦИЕЙ оба видны перечню ────────────────
+        env, code_l = call("kompas_list_sketches", {"document_id": doc})
+        listed = result(env)
+        rows = listed if isinstance(listed, list) else []
+        row = rows[0] if rows else {}
+        ref_free = ref_id(row.get("sketch_ref") or row.get("ref"))
+        feats_free = features(doc)
+
+        # Второй документ: эскиз, ПОТРЕБЛЁННЫЙ операцией. Форма профиля и ось взяты те, на которых
+        # вращение уже измерено (прямоугольник 20×40 от оси Y, полный оборот, V = π·400·40).
+        doc_rot, rev_rot = new_doc("DEP-DSK-rot")
+        sk_rot, rev_rot, err_rot = sketch(doc_rot, rev_rot, {"base": "xy", "offset_mm": 0.0},
+                                          [{"kind": "rectangle", "start_mm": [0.0, 0.0],
+                                            "width_mm": 20.0, "height_mm": 40.0}], "DEP-DSK-rot-sk")
+        rot_code, rot_vol = None, None
+        if not err_rot:
+            env, rot_code = call("kompas_rotated", {
+                "sketch_ref": sk_rot, "expected_revision": rev_rot, "operation": "base",
+                "angle_deg": 360.0, "direction": "normal",
+                "axis_point1_mm": [0.0, 0.0, 0.0], "axis_point2_mm": [0.0, 40.0, 0.0]})
+            rev_rot = (env or {}).get("revision_after") or rev_rot
+            rot_vol = volume(main_body(doc_rot))
+        env, code_lr = call("kompas_list_sketches", {"document_id": doc_rot})
+        rows_rot = result(env)
+        rows_rot = rows_rot if isinstance(rows_rot, list) else []
+        row_rot = rows_rot[0] if rows_rot else {}
+        ref_rot = ref_id(row_rot.get("sketch_ref") or row_rot.get("ref"))
+        feats_rot = features(doc_rot)
+        rot_types = [str(f.get("type")) for f in feats_rot]
+        ok_disc = (err_free is None and code_l is None and len(rows) == 1
+                   and len(feats_free) == 0 and ref_free
+                   and row.get("created") is True
+                   and (row.get("support_plane_name") or "") != ""
+                   and err_rot is None and rot_code is None and len(rows_rot) == 1 and ref_rot
+                   and ref_rot != ref_free and len(feats_rot) == 1 and rot_types == ["45"])
+        emit("discover", "PASS" if ok_disc else "FAIL",
+             "эскизы перечисляются ОТДЕЛЬНО от признаков дерева, и это ровно тот случай, на котором "
+             "клиент получил list_features=[] и feature_count=0 (MCP-004). СВОБОДНЫЙ эскиз (XY, "
+             "окружность R52): признаков типа 110 — %d, строк перечня ЭСКИЗОВ — %d, строка несёт "
+             "ссылку=%s, имя «%s», номер=%s, признак создания=%s, опору «%s». ЭСКИЗ ПОД ВРАЩЕНИЕМ "
+             "(полный оборот, V=%s): признаков — %d (типы %s), строк перечня эскизов — %d, ссылка=%s, "
+             "и она ОТЛИЧНА от ссылки свободного эскиза. Маршрут — документированный "
+             "ksPart.EntityCollection(o3d_sketch = 5) («При создании массив заполняется объектами "
+             "указанного типа, содержащимися в компоненте», kspart_entitycollection.html; тип "
+             "«o3d_sketch 5 эскиз» → ksSketchDefinition / ISketch, obj3dtype.html). ЭТО НЕ "
+             "kompas_list_features: там операции дерева, и эскизы в тот перечень не входят"
+             % (len(feats_free), len(rows), ref_free, row.get("name"), row.get("index"),
+                row.get("created"), row.get("support_plane_name"),
+                rot_vol if rot_vol is not None else -1, len(feats_rot), rot_types,
+                len(rows_rot), ref_rot),
+             {"free": {"features": len(feats_free), "rows": len(rows), "sketch_ref": ref_free,
+                       "name": row.get("name"), "index": row.get("index"),
+                       "created": row.get("created"),
+                       "support_plane_name": row.get("support_plane_name"),
+                       "notes": row.get("notes"), "error": code_l},
+              "under_rotation": {"features": len(feats_rot), "feature_types": rot_types,
+                                 "rows": len(rows_rot), "sketch_ref": ref_rot,
+                                 "support_plane_name": row_rot.get("support_plane_name"),
+                                 "volume": rot_vol, "error": code_lr, "rotate_error": rot_code},
+              "free_sketch_error": err_free})
+
+        # ── read: по ссылке из перечня читается СОДЕРЖИМОЕ, и это тот же эскиз ────────────────
+        env, code_r = guarded("kompas_list_sketch_entities", {"sketch_ref": ref_free}, "sketch_ref")
+        read = result(env)
+        erows = read.get("rows") if isinstance(read, dict) else None
+        kinds = [r.get("kind") for r in (erows or [])]
+        addrs = [r.get("address") for r in (erows or []) if r.get("address")]
+        rev, _feat, code_e, env_e = extrude(doc, rev, ref_free, operation="base", depth_mm=10.0,
+                                            direction="positive", end_condition="blind")
+        vol = volume(main_body(doc))
+        ok_read = (code_r is None and len(erows or []) == 1 and kinds == ["circle"] and addrs
+                   and code_e is None and near(vol, circle_v, tol=1.0))
+        emit("read", "PASS" if ok_read else "FAIL",
+             "по ссылке ИЗ ПЕРЕЧНЯ эскиз читается: сущностей %d, вид %s, адрес есть=%s. Ссылка ведёт "
+             "ИМЕННО на этот эскиз, и это подтверждено ЧИСЛОМ, а не именем: выдавливание окружности "
+             "R52 на 10 мм дало объём %s против аналитики π·52²·10 = %.6f (код выдавливания %s). "
+             "Имя адресом не является, поэтому доказательство — объём"
+             % (len(erows or []), kinds, bool(addrs),
+                vol if vol is not None else -1, circle_v, code_e),
+             {"entities": len(erows or []), "kinds": kinds, "address": addrs[0] if addrs else None,
+              "volume": vol, "analytic": circle_v, "extrude_error": code_e,
+              "entities_error": code_r})
+
+        # ── save_reopen: переоткрытие даёт НОВУЮ ссылку, а прежняя честно умирает ─────────────
+        doc2, codes, path, open_msg = save_reopen(doc, workdir, "dep-dsk-reopen.m3d")
+        ref_after, refs_after, kinds_after, code_l2, code_e2, code_old = None, 0, [], None, None, None
+        if doc2:
+            env, code_l2 = call("kompas_list_sketches", {"document_id": doc2})
+            rows2 = result(env)
+            rows2 = rows2 if isinstance(rows2, list) else []
+            refs_after = len(rows2)
+            row2 = rows2[0] if rows2 else {}
+            ref_after = ref_id(row2.get("sketch_ref") or row2.get("ref"))
+            env, code_e2 = guarded("kompas_list_sketch_entities", {"sketch_ref": ref_after},
+                                   "sketch_ref")
+            r2 = result(env)
+            kinds_after = [r.get("kind")
+                           for r in ((r2.get("rows") if isinstance(r2, dict) else None) or [])]
+            env, code_old = call("kompas_list_sketch_entities", {"sketch_ref": ref_free})
+        ok_sr = (codes[0] is None and codes[1] is None and code_l2 is None and refs_after == 1
+                 and ref_after and ref_after != ref_free and code_e2 is None
+                 and kinds_after == ["circle"] and code_old == "STALE_REFERENCE")
+        emit("save_reopen", "PASS" if ok_sr else "FAIL",
+             "ссылка на эскиз ПЕРЕЧЕКАНИВАЕТСЯ переоткрытием: коды сохранения и открытия %s, строк "
+             "перечня эскизов после переоткрытия %d, новая ссылка=%s (отличается от прежней %s: %s), "
+             "по новой ссылке прочитано сущностей с видами %s, а ПРЕЖНЯЯ ссылка отвечает кодом %s "
+             "(ожидание STALE_REFERENCE: она привязана к ревизии прежнего документа). Это и есть "
+             "возможность, которой у клиента не было — заново получить ссылку на эскиз; %s"
+             % (list(codes), refs_after, ref_after, ref_free,
+                ref_after != ref_free, kinds_after, code_old,
+                open_msg or "ошибок нет"),
+             {"codes": list(codes), "rows_after_reopen": refs_after, "new_ref": ref_after,
+              "old_ref": ref_free, "old_ref_error": code_old, "kinds_after_reopen": kinds_after,
+              "list_error": code_l2, "entities_error": code_e2})
+
+        # ── negative_tests: «нет эскизов» и «нет документа» — РАЗНЫЕ ответы ───────────────────
+        env, code_nf = call("kompas_list_sketches", {"document_id": "0" * 32})
+        empty_doc, _rev_empty = new_doc("DEP-DSK-empty")
+        env, code_empty = call("kompas_list_sketches", {"document_id": empty_doc})
+        empty_rows = result(env)
+        # Различающий контроль охвата — на ЖИВОМ документе с потреблённым эскизом (doc_rot): перечень
+        # ПРИЗНАКОВ называет операцию и НЕ называет эскиз.
+        feats_now = features(doc_rot)
+        feature_types = [str(f.get("type")) for f in feats_now]
+        ok_neg = (code_nf == "DOCUMENT_NOT_FOUND" and code_empty is None
+                  and isinstance(empty_rows, list) and len(empty_rows) == 0
+                  and len(feats_now) == 1 and feature_types == ["45"])
+        emit("negative_tests", "PASS" if ok_neg else "FAIL",
+             "«эскизов нет» и «документа нет» — РАЗНЫЕ ответы, и это часть контракта: несуществующий "
+             "document_id отвергнут кодом %s (пустой список выдал бы «эскизов нет» за «документ не "
+             "найден»), а документ без единого эскиза дал пустой список БЕЗ отказа (%s строк, код "
+             "%s). Различающий контроль охвата: в документе с эскизом, потреблённым вращением, "
+             "перечень ПРИЗНАКОВ несёт %d строку с типами %s, а эскиза (тип 5) среди них НЕТ — это и "
+             "есть граница, названная в описании kompas_list_features и kompas_get_context"
+             % (code_nf, len(empty_rows) if isinstance(empty_rows, list) else -1, code_empty,
+                len(feats_now), feature_types),
+             {"unknown_document": code_nf,
+              "empty_document_rows": len(empty_rows) if isinstance(empty_rows, list) else None,
+              "empty_document_error": code_empty,
+              "features": len(feats_now), "feature_types": feature_types,
+              "sketches_in_features": [f for f in feats_now if str(f.get("type")) == "5"]})
+        close(empty_doc)
+        close(doc_rot)
 
     def m_dpl(emit):
         """dep.refs.planes: базовые плоскости, смещение вдоль нормали, НАКЛОННАЯ плоскость осью и
@@ -28207,8 +28369,175 @@ def dep_acceptance_checks(client, rep, app_id, workdir):
               "bbox_equal": boxes_equal})
         close(doc2)
 
+    # ══ ЖИВАЯ РЕГРЕССИЯ ПО ОТЧЁТУ КЛИЕНТА (наряд CLIENT_BUGS_20261007 §6.3) ═══════════════════
+    # Префикс `CB` («client bugs»). Строки стоят ОТДЕЛЬНОЙ ГРУППОЙ, а не внутри строк матрицы: они
+    # измеряют отчёт клиента, а не режим покрытия, и названы своим именем.
+    #
+    # ПОЧЕМУ ИМЕННО ЭТИ ДВЕ СТРОКИ ЗДЕСЬ. Всё остальное из §6.3 измеряется строками матрицы, которые
+    # этот же наряд переписал: перечень эскизов и ссылка после переоткрытия — `DEP.DSK.*`; разделение
+    # kind/mode у осей и плоскостей и правка обеих плоскостей — `DEP.DPL.*`, `DEP.DAX.*`,
+    # `DEP.DPT.*`. Здесь остаётся то, что не принадлежит ни одному режиму: ответ `capabilities`
+    # (MCP-001 и замечание о кандидатах attach) и сквозной оборот трёх осей с двумя плоскостями и
+    # правкой (MCP-005).
+    def cb_capabilities():
+        wire = client.call("tools/list", {}).get("tools", [])
+        wire_names = sorted(str(t.get("name")) for t in wire if t.get("name"))
+        env, code = call("kompas_capabilities", {})
+        caps = result(env)
+        tools = caps.get("tools") if isinstance(caps, dict) else None
+        names = sorted(str(n) for n in tools) if isinstance(tools, list) else None
+        rot = caps.get("rot_kompas_entries") if isinstance(caps, dict) else "нет поля"
+        # ПЕРЕЧЕНЬ СВЕРЯЕТСЯ С `tools/list` ПОИМЁННО, а не по длине: ответ, назвавший то же ЧИСЛО
+        # других инструментов, прошёл бы проверку длины и был бы выдан за верный.
+        ok = (code is None and isinstance(caps, dict) and names == wire_names
+              and caps.get("tool_count") == len(wire_names)
+              and isinstance(caps.get("server_version"), str) and bool(caps.get("server_version"))
+              and "rot_kompas_entries" in caps)
+        rep.add("CB.01.capabilities",
+                "отчёт клиента MCP-001: перечень инструментов, версия сервера и кандидаты attach — в ОДНОМ ответе",
+                "PASS" if ok else "FAIL",
+                "kompas_capabilities отвечает СРЕДОЙ И ПЕРЕЧНЕМ одновременно: инструментов в ответе "
+                "%s, в tools/list %d, совпадение поимённое=%s; tool_count=%s (ожидание %d); "
+                "server_version=%s (непустая строка — ожидание); rot_kompas_entries=%s "
+                "(число записей ROT, из которых выбирает attach; null с причиной — законный ответ, "
+                "отсутствие поля — нет); running_instances=%s (число процессов ОС, ДРУГОЕ число). "
+                "Прежде перечень появлялся только когда Хост не владел сеансом: с Worker вызов уходил "
+                "в env.probe и нёс одну среду"
+                % (len(names) if names is not None else "поля нет", len(wire_names),
+                   names == wire_names, caps.get("tool_count") if isinstance(caps, dict) else None,
+                   len(wire_names),
+                   caps.get("server_version") if isinstance(caps, dict) else None,
+                   rot, caps.get("running_instances") if isinstance(caps, dict) else None),
+                {"tools_count": len(names) if names is not None else None,
+                 "wire_count": len(wire_names), "names_match": names == wire_names,
+                 "tool_count": caps.get("tool_count") if isinstance(caps, dict) else None,
+                 "server_version": caps.get("server_version") if isinstance(caps, dict) else None,
+                 "rot_kompas_entries": rot,
+                 "rot_kompas_entries_unavailable":
+                     caps.get("rot_kompas_entries_unavailable") if isinstance(caps, dict) else None,
+                 "running_instances": caps.get("running_instances") if isinstance(caps, dict) else None,
+                 "error": code})
+
+    def cb_aux_roundtrip():
+        """Три оси `by_2_points` и плоскости `offset`/`angle`: kind, mode и работа правки.
+
+        Строка измеряет ОБОРОТ, а не отдельное поле: ответ создания и строка перечисления обязаны
+        нести ОДНИ И ТЕ ЖЕ kind/mode, mode обязан быть прочитанным, а правка плоскостей после
+        перевода выбора полей на прочитанный mode обязана работать так же, как до правки.
+        """
+        sc = plate("CB-AUX", 40.0, 40.0, 10.0)
+        doc = sc.get("doc")
+        axes = []
+        for i, (p1, p2) in enumerate((([0.0, 0.0, 0.0], [0.0, 20.0, 0.0]),
+                                      ([0.0, 0.0, 0.0], [20.0, 0.0, 0.0]),
+                                      ([0.0, 0.0, 0.0], [0.0, 0.0, 20.0]))):
+            env, code = call("kompas_create_aux_geometry", {
+                "document_id": doc, "expected_revision": ctx(doc), "kind": "axis",
+                "mode": "by_2_points", "point1_mm": p1, "point2_mm": p2,
+                "name": "CB-AUX-axis-%d" % i})
+            made = result(env)
+            axes.append({"error": code, "kind": made.get("kind"), "mode": made.get("mode"),
+                         "sub_kind": made.get("sub_kind"),
+                         "reference_id": ref_id(made.get("reference_id")),
+                         "checks": (made.get("verification") or {}).get("checks")})
+        axis_ref = axes[0]["reference_id"] if axes and axes[0]["reference_id"] else None
+
+        env, code_off = call("kompas_create_aux_geometry", {
+            "document_id": doc, "expected_revision": ctx(doc), "kind": "plane", "mode": "offset",
+            "base_plane": "xy", "offset_mm": 15.0, "name": "CB-AUX-offset"})
+        off = result(env)
+        env, code_ang = call("kompas_create_aux_geometry", {
+            "document_id": doc, "expected_revision": ctx(doc), "kind": "plane", "mode": "angle",
+            "base_plane": "xy", "base_axis_ref": axis_ref, "angle_deg": 30.0, "name": "CB-AUX-angle"})
+        ang = result(env)
+
+        env, code_list = call("kompas_list_aux_geometry", {
+            "document_id": doc, "include": "all", "limit": 50})
+        listed = result(env)
+        lrows = listed.get("rows") if isinstance(listed, dict) else None
+        by_name = {}
+        for r in (lrows or []):
+            if r.get("name"):
+                by_name[r["name"]] = r
+        listed_axes = [by_name.get("CB-AUX-axis-%d" % i) for i in range(3)]
+        listed_off, listed_ang = by_name.get("CB-AUX-offset"), by_name.get("CB-AUX-angle")
+
+        env, code_up_off = guarded("kompas_update_plane", {
+            "document_id": doc, "expected_revision": ctx(doc),
+            "plane_ref": ref_id((off or {}).get("reference_id")), "offset_mm": 22.0}, "plane_ref")
+        up_off = result(env)
+        env, code_up_ang = guarded("kompas_update_plane", {
+            "document_id": doc, "expected_revision": ctx(doc),
+            "plane_ref": ref_id((ang or {}).get("reference_id")), "angle_deg": 45.0}, "plane_ref")
+        up_ang = result(env)
+
+        axes_ok = (all(a["error"] is None and a["kind"] == "axis" and a["mode"] == "by_2_points"
+                       for a in axes)
+                   and all(r and r.get("kind") == "axis" and r.get("mode") == "by_2_points"
+                           for r in listed_axes))
+        planes_ok = (code_off is None and off.get("kind") == "plane" and off.get("mode") == "offset"
+                     and code_ang is None and ang.get("kind") == "plane"
+                     and ang.get("mode") == "angle"
+                     and listed_off and listed_off.get("kind") == "plane"
+                     and listed_off.get("mode") == "offset"
+                     and listed_ang and listed_ang.get("kind") == "plane"
+                     and listed_ang.get("mode") == "angle")
+        # ПРАВКА ОБЕИХ ПЛОСКОСТЕЙ — та самая половина, которую могла сломать замена строк в
+        # `UpdatePlane`: выбор разрешённых полей переведён на прочитанный mode.
+        edits_ok = (code_up_off is None and isinstance(up_off, dict) and up_off.get("applied") is True
+                    and near(up_off.get("offset_mm"), 22.0, tol=1e-9)
+                    and up_off.get("mode") == "offset"
+                    and code_up_ang is None and isinstance(up_ang, dict) and up_ang.get("applied") is True
+                    and near(up_ang.get("angle_deg"), 45.0, tol=1e-9)
+                    and up_ang.get("mode") == "angle")
+        ok = (code_list is None and isinstance(lrows, list) and axes_ok and planes_ok and edits_ok)
+        rep.add("CB.02.aux_roundtrip",
+                "отчёт клиента MCP-005: kind/mode осей и плоскостей в ответе создания И в перечислении, правка обеих плоскостей",
+                "PASS" if ok else "FAIL",
+                "три оси by_2_points: в ответе создания kind/mode = %s, в перечислении = %s (ожидание "
+                "axis/by_2_points в обоих — прежде способ построения лежал в kind, и клиент не мог "
+                "отличить вид от способа). Плоскости: offset в ответе %s/%s, angle в ответе %s/%s, в "
+                "перечислении %s/%s и %s/%s (ожидание plane/offset и plane/angle). ПРАВКА ОБЕИХ: "
+                "смещение 15 -> прочитано %s (код %s), угол 30 -> прочитано %s (код %s); признак "
+                "применения выведен повторным чтением. Прежде mode был ЭХОМ ЗАПРОСА, а выбор полей "
+                "правки шёл по прочитанному kind — перевод на прочитанный mode и есть та половина, "
+                "которую эта строка держит"
+                % ([(a["kind"], a["mode"]) for a in axes],
+                   [(r or {}).get("kind") and ((r or {}).get("kind"), (r or {}).get("mode"))
+                    for r in listed_axes],
+                   off.get("kind"), off.get("mode"), ang.get("kind"), ang.get("mode"),
+                   (listed_off or {}).get("kind"), (listed_off or {}).get("mode"),
+                   (listed_ang or {}).get("kind"), (listed_ang or {}).get("mode"),
+                   up_off.get("offset_mm") if isinstance(up_off, dict) else None, code_up_off,
+                   up_ang.get("angle_deg") if isinstance(up_ang, dict) else None, code_up_ang),
+                {"axes": axes,
+                 "listed_axes": [{"kind": (r or {}).get("kind"), "mode": (r or {}).get("mode")}
+                                 for r in listed_axes],
+                 "offset": {"kind": off.get("kind"), "mode": off.get("mode"),
+                            "sub_kind": off.get("sub_kind"), "error": code_off},
+                 "angle": {"kind": ang.get("kind"), "mode": ang.get("mode"),
+                           "sub_kind": ang.get("sub_kind"), "error": code_ang},
+                 "listed_offset": {"kind": (listed_off or {}).get("kind"),
+                                   "mode": (listed_off or {}).get("mode")},
+                 "listed_angle": {"kind": (listed_ang or {}).get("kind"),
+                                  "mode": (listed_ang or {}).get("mode")},
+                 "update_offset": {"error": code_up_off,
+                                   "applied": up_off.get("applied") if isinstance(up_off, dict) else None,
+                                   "offset_mm": up_off.get("offset_mm") if isinstance(up_off, dict) else None,
+                                   "mode": up_off.get("mode") if isinstance(up_off, dict) else None},
+                 "update_angle": {"error": code_up_ang,
+                                  "applied": up_ang.get("applied") if isinstance(up_ang, dict) else None,
+                                  "angle_deg": up_ang.get("angle_deg") if isinstance(up_ang, dict) else None,
+                                  "mode": up_ang.get("mode") if isinstance(up_ang, dict) else None},
+                 "list_error": code_list})
+        close(doc)
+
+    cb_capabilities()
+    cb_aux_roundtrip()
+
     measures = (
         ("dep.sketch.entities", m_dse),
+        ("dep.sketches.enumeration", m_dsk),
         ("dep.refs.planes", m_dpl),
         ("dep.refs.axes", m_dax),
         ("dep.refs.points_axes", m_dpt),

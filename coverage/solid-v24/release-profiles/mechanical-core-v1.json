@@ -849,6 +849,30 @@
    "known_gap": "в API5 перечисления объектов эскиза нет (P2.6); кандидат — перечисление через API7 (ISketch.BeginEdit → IFragmentDocument/LayoutSheets → IModelObjects). Проба обязательна до закрытия зависимости. ДОПОЛНЕНО 17.09.2026 пробой S (прогон 82880ed0b14a4e299bb0e93d7f8a7f2f): ЧТЕНИЕ определённости эскиза измерено и работает (ISketch.ConstraintsState типа ksConstraintsStateEnum, IID e6bbf50d84014fb3a6b6153d3f447255; все три состояния прочитаны на 46 чужих эскизах — 25 well_constrained, 10 under_defined, 11 unknown; переживает reopen; без побочных эффектов), НО ЗАПИСЬ ограничений и управляющих размеров НЕ найдена: четыре ветки закрыты измерением (ksSetObjConstraint → 0 при подтверждённой адресации; IDrawingObject1.NewConstraint недостижим — FindObjectParameters не зарегистрирован, REGDB_E_CLASSNOTREG; три управляющих размера приняты, но степень свободы не снимают — живая ссылка на размер не доказывает, что размер стал управляющим; ksParametrizeObjects → null). Состояния well_constrained на СВОИХ моделях получить не удалось. Это ОТКРЫТАЯ РАБОТА по обязательному объёму раздела 2.2 (управляющие размеры), а НЕ blocked_api выпуска: чтение работает. Пакет-запрос для АСКОН подготовлен без отправки — docs/research/ascon-sketch-definition-inquiry.md; проверенные интерфейсы и оставшиеся вопросы перечислены в coverage/solid-v24/open-questions.md, Q-SKETCH-DEFINITION-READ (закрыт) и Q-SKETCH-DEFINITION-WRITE (открыт) ДОПОЛНЕНО 18.09.2026: чтение ВЫПУЩЕНО КАК ПРОДУКТ — инструмент kompas_get_sketch_status (32-я схема каталога, только чтение, requiresOperationId=false), вход {sketch_ref}, ответ {definition_status, is_fully_defined (nullable), degrees_of_freedom (всегда null), diagnostics, limitations} плюс сырьё raw_state / native_state_name / sketch_name / transfer_route. Продуктовая приёмка через настоящий MCP: scripts/mcp-smoke.py --sketch-status-only, scratch/mcp-smoke/sketch-status-acceptance.json — PASS 31 · FAIL 0 · UNKNOWN 0 (KS.01…KS.14). Подтверждено то, чего проба S не проверяла: адресация по явной ссылке (KS.04 — два эскиза с разными статусами в одном документе, ответы различимы по имени), чтение НЕ двигает ревизию документа и не меняет объём/число тел (KS.03, KS.14), неизвестная ссылка → STALE_REFERENCE и ссылка на тело → INVALID_ARGUMENT при контрольном успехе на эскизе (KS.10, KS.11 — «не могу ответить» и «ответ — неизвестно» разведены), чтение живо после мутации и не кэшируется между ревизиями (KS.07), переоткрытие подтверждено по ссылке из kompas_list_features, причём ссылка до закрытия умирает (KS.08), документ, записанный отдельным шагом посева вне MCP, читается (KS.09). Преобразование значений проверено юнит-тестами без КОМПАСа (tests/Unit/KompasMcp.Unit/SketchStatusConversionTests.cs): 0→unknown/null, 1→fully_defined/true, 2→under_defined/false, неизвестное значение enum→unknown, значение 3 публикуется консервативно как unknown с причиной unresolved_redundancy_not_verified, пока флаг RedundancyVerified=false. ЧЕГО ЭТО НЕ ЗАКРЫВАЕТ: fully_defined (1) на СВОИХ моделях по-прежнему не получен — зонд перебрал восемь способов объявить эскиз средствами сервера, на всех семи непустых КОМПАС ответил under_defined (2), а накладывать фиксации ради «+» задание запрещает; состояние 3 живьём не получено (маршрут записи отсутствует); соответствие знакам «+ / − / !» в интерфейсе не сверялось. ЗАПИСЬ ограничений и управляющих размеров по-прежнему НЕ найдена, перечисление сущностей эскиза по-прежнему отсутствует, поэтому ЗАВИСИМОСТЬ ОСТАЁТСЯ ОТКРЫТОЙ. Знаменатель профиля НЕ менялся, общий процент НЕ поднимался, not_applicable не подставлялся, blocked_api не пополнялся, пакет АСКОН не отправлялся."
   },
   {
+   "id": "dep.sketches.enumeration",
+   "title": "Эскизы: перечисление эскизов детали и свежая ссылка после перестроения и переоткрытия",
+   "priority": "dependency_of",
+   "catalog_refs": [
+    "AUX-SKETCH"
+   ],
+   "required_actions": [
+    "discover",
+    "read",
+    "save_reopen",
+    "negative_tests"
+   ],
+   "acceptance": [
+    "перечень эскизов детали доступен по документированному маршруту: ksPart.EntityCollection(o3d_sketch = 5) (kspart_entitycollection.html, obj3dtype.html) либо документированный API7-путь IModelContainer::Sketchs → ISketchs (isketchs.html)",
+    "строка перечня несёт СВЕЖУЮ ссылку, привязанную к текущей ревизии: по ней эскиз достижим заново после перестроения и после save → close → reopen, когда прежняя ссылка отвергается STALE_REFERENCE",
+    "непрочитанное поле строки — null с причиной, а не ноль и не «нет»: «признак создания не прочитан» и «эскиз не создан» — разные утверждения о модели"
+   ],
+   "required_of": [
+    "SM-02.base_extrusion.blind",
+    "SM-03.base_rotated.full_turn",
+    "SM-05.base.parallel_sections_order"
+   ]
+  },
+  {
    "id": "dep.refs.planes",
    "title": "Плоскости: базовые, смещённые, наклонные вокруг оси, опора на плоскую грань",
    "priority": "dependency_of",

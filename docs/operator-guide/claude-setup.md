@@ -75,7 +75,7 @@ claude mcp add --transport stdio --scope user kompas -- "<LOCALAPPDATA>\KompasMC
    прошёл рукопожатие MCP.
 2. Начните новую сессию Claude Code (в приложении новый чат во вкладке Code). Команда `/mcp`
    покажет сервер `kompas`.
-3. Попросите вызвать `kompas_health` и `kompas_capabilities`: должно прийти 63 инструмента.
+3. Попросите вызвать `kompas_health` и `kompas_capabilities`: должно прийти 79 инструментов.
    КОМПАС для этого не запускается, он поднимется позже первым `kompas_connect`.
 
 Claude Code спрашивает разрешение на вызов инструментов MCP. Это ваше решение в его интерфейсе;

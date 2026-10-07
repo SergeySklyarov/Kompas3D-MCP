@@ -23,6 +23,18 @@ public static class WorkerCommands
     public const string SaveDocument = "doc.save";
     public const string CloseDocument = "doc.close";
     public const string ListFeatures = "feat.list";
+
+    /// <summary>Enumerates a part's SKETCHES — the objects <c>kompas_list_features</c> deliberately does not
+    /// list.</summary>
+    /// <remarks>DOC: <c>ksPart.EntityCollection(short objType)</c> — «При создании массив заполняется объектами
+    /// указанного типа, содержащимися в компоненте» (<c>kspart_entitycollection.html</c>) with the type
+    /// <c>o3d_sketch = 5</c>, «эскиз» → <c>ksSketchDefinition</c> / <c>ISketch</c> (<c>obj3dtype.html</c>).
+    /// MEASURED: that collection still yields sketches with readable definitions after save → close → reopen
+    /// (probe L), which is exactly what a reference minted at creation time does not survive. A separate
+    /// command, not a wider <c>feat.list</c>: <c>feature_count</c> is asserted unchanged by neighbouring
+    /// operations, so the meaning of that number must not move.
+    /// History: docs/decisions/adapter-sketch.md#sketch-enumeration</remarks>
+    public const string ListSketches = "sketch.list";
     public const string ListBodies = "body.list";
     public const string Measure = "geom.measure";
     public const string ResolveSelection = "geom.resolve";
@@ -620,6 +632,34 @@ public sealed record CloseDocumentCommand
 public sealed record ListFeaturesCommand
 {
     public required string DocumentId { get; init; }
+}
+
+public sealed record ListSketchesCommand
+{
+    public required string DocumentId { get; init; }
+}
+
+/// <summary>One sketch of a part, as a row of <c>kompas_list_sketches</c>.</summary>
+/// <param name="SketchRef">A FRESH reference minted against the current revision — the same kind the
+/// sketch tools accept; it is what makes a sketch reachable again after a rebuild or a reopen.</param>
+/// <param name="Index">Position in the collection. A POSITION, not an address: a rebuild shifts it.</param>
+/// <param name="Created">Whether the object is built. <c>null</c> means the flag did not read — named in
+/// <see cref="Notes"/>, never reported as "not created".</param>
+/// <param name="SupportPlaneName">Name of the support plane, read through <c>ksSketchDefinition.GetPlane()</c>;
+/// <c>null</c> when it did not read, named in <see cref="Notes"/>.</param>
+public sealed record SketchRowDto
+{
+    public required string SketchRef { get; init; }
+
+    public string? Name { get; init; }
+
+    public required int Index { get; init; }
+
+    public bool? Created { get; init; }
+
+    public string? SupportPlaneName { get; init; }
+
+    public IReadOnlyList<string> Notes { get; init; } = Array.Empty<string>();
 }
 
 public sealed record ListBodiesCommand

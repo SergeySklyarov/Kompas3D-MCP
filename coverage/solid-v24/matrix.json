@@ -1,4 +1,4 @@
-﻿{
+{
  "meta": {
   "artifact": "coverage/solid-v24/matrix.json",
   "schema_version": "1.1",
@@ -8861,6 +8861,82 @@
     "VM-06.mass.computed_via_measure"
    ],
    "adapter_route": "Единицы плотности: запись — документированные г/куб.см (ksPart.SetMaterial), перевод кг/м³ → г/см³ делает DensityUnits; чтение — документированный маршрут МЦХ API5, где единицу возвращаемых данных задаёт АРГУМЕНТ (bitVector): при ST_MIX_M|ST_MIX_KG плотность r публикуется в кг/м³ без пересчёта."
+  },
+  {
+   "operation_id": "dep.sketches.enumeration",
+   "kind": "common_dependency",
+   "profile": "mechanical-core-v1",
+   "priority": "dependency_of",
+   "queue": null,
+   "context": "part",
+   "catalog_ref": "AUX-SKETCH",
+   "catalog_refs": [
+    "AUX-SKETCH"
+   ],
+   "title": "Эскизы: перечисление эскизов детали и свежая ссылка после перестроения и переоткрытия",
+   "parameters_schema": "schemas/kompas_list_sketches.json",
+   "adapter_route": "API5 ksPart.EntityCollection(o3d_sketch = 5) — «При создании массив заполняется объектами указанного типа, содержащимися в компоненте» (kspart_entitycollection.html); тип «o3d_sketch 5 эскиз» → ksSketchDefinition / ISketch (obj3dtype.html). Тот же набор документирован в API7 (IModelContainer::Sketchs → ISketchs, isketchs.html), но взят маршрут API5: строка обязана нести тот же ksEntity, которым адресует эскиз остальной сервер, и эта коллекция ИЗМЕРЕНА на переоткрытом документе (проба L: два эскиза с читаемыми ksSketchDefinition после save → close → reopen).",
+   "actions": {
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "required_actions": [
+    "discover",
+    "read",
+    "save_reopen",
+    "negative_tests"
+   ],
+   "tests": [
+    "DEP.DSK.01.discover",
+    "DEP.DSK.02.read",
+    "DEP.DSK.03.save_reopen",
+    "DEP.DSK.04.negative_tests"
+   ],
+   "evidence": [
+    "coverage/solid-v24/release-profiles/mechanical-core-v1.json",
+    "docs/decisions/adapter-sketch.md"
+   ],
+   "limitations": [
+    "перечисляются ЭСКИЗЫ детали; операции дерева (тип 110) перечисляет kompas_list_features, и это разные наборы",
+    "порядковый номер в коллекции — ПОЗИЦИЯ, а не адрес: перестроение её сдвигает, и она таковой не объявляется"
+   ],
+   "acceptance": [
+    "перечень эскизов детали доступен по документированному маршруту: ksPart.EntityCollection(o3d_sketch = 5) (kspart_entitycollection.html, obj3dtype.html) либо документированный API7-путь IModelContainer::Sketchs → ISketchs (isketchs.html)",
+    "строка перечня несёт СВЕЖУЮ ссылку, привязанную к текущей ревизии: по ней эскиз достижим заново после перестроения и после save → close → reopen, когда прежняя ссылка отвергается STALE_REFERENCE",
+    "непрочитанное поле строки — null с причиной, а не ноль и не «нет»: «признак создания не прочитан» и «эскиз не создан» — разные утверждения о модели"
+   ],
+   "required_of": [
+    "SM-02.base_extrusion.blind",
+    "SM-03.base_rotated.full_turn",
+    "SM-05.base.parallel_sections_order"
+   ],
+   "not_applicable_reasons": {
+    "create": "инструмент только читает: эскиз создаётся kompas_create_sketch, и эта строка его перечисления не касается",
+    "edit": "инструмент только читает: правка эскиза идёт kompas_edit_sketch / kompas_set_sketch_plane / kompas_edit_sketch_entity и измеряется их строками",
+    "rebuild": "перечисление ревизию не поднимает и перестроения не выполняет; перестроение измеряется строками операций, которые его вызывают",
+    "suppress_restore": "подавление и восстановление к эскизу как к объекту не применимо",
+    "delete_dependencies": "удаление признака вместе с зависимостями измеряется строкой dep.lifecycle.feature_cycle",
+    "geometry_validation": "инструмент не заявляет геометрического ожидания: он выдаёт ссылки, имена и опору; геометрия зависимого тела проверяется строками операций"
+   },
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_sketches",
+      "require_args": [
+       "document_id"
+      ]
+     }
+    ]
+   }
   }
  ],
  "pending_families": [

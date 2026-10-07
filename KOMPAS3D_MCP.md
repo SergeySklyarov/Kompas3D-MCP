@@ -8,7 +8,7 @@ measured acceptance run, not by the presence of an API.*
 
 ## Текущий выпуск
 
-Выпуск [`v0.1.0`](https://github.com/SergeySklyarov/Kompas3D-MCP/releases/tag/v0.1.0): готовый
+Выпуск [`v0.2.0`](https://github.com/SergeySklyarov/Kompas3D-MCP/releases/tag/v0.2.0): готовый
 пакет Windows x64 с контрольными суммами и установщиком. Объём - пять профилей, все закрыты полностью:
 
 | Профиль | Что закрывает | Режимы | Зависимости |
@@ -21,12 +21,12 @@ measured acceptance run, not by the presence of an API.*
 
 Измерено `scripts/acceptance-levels.py` 07.10.2026: режимов 78/78, зависимостей 36/36, открыто 0,
 `problems: []`. Приёмка на бинарях пакета: полный живой прогон 1104/1104, клиентская приёмка рабочим
-MCP-клиентом 27/27.
+MCP-клиентом 30/30.
 
 Это не весь каталог P6: в каталоге 36 семейств, выпуск закрывает пять профилей выше. В выпуск не
 входят массивы компонентов, полная спецификация (BOM), расширенные виды сопряжений, спецификации и
 прочие 2D-документы кроме чертежей профиля. Компоненты внутри подсборок читаются, но адреса для правки
-у них нет. Заметки выпуска: [docs/distribution/v0.1.0.md](docs/distribution/v0.1.0.md);
+у них нет. Заметки выпуска: [docs/distribution/v0.2.0.md](docs/distribution/v0.2.0.md);
 подключение к Codex: [docs/operator-guide/codex-setup.md](docs/operator-guide/codex-setup.md).
 
 ## Для чего это

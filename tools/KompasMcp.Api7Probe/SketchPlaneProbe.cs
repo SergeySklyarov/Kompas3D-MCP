@@ -8,9 +8,9 @@ namespace KompasMcp.Api7Probe;
 
 /// <summary>Probe SP — changing an existing sketch's BASE plane via the documented
 /// <c>ksSketchDefinition.SetPlane</c> and reading it back with <c>GetPlane</c>.</summary>
-/// <remarks>DOC (base taken 21.09.2026 from the official help root; pages mirrored in
-/// <c>scratch/sdk-docs/</c>): <c>kssketchdefinition_setplane.html</c> — «SetPlane — Изменить базовую
-/// плоскость эскиза», <c>BOOL SetPlane(LPENTITY plane)</c>, the parameter is «указатель на интерфейс
+/// <remarks>DOC (pages taken from the official help root, mirrored in <c>scratch/sdk-docs/</c>):
+/// <c>kssketchdefinition_setplane.html</c> — «SetPlane — Изменить базовую плоскость эскиза»,
+/// <c>BOOL SetPlane(LPENTITY plane)</c>, the parameter is «указатель на интерфейс
 /// базовой плоскости эскиза <c>ksEntity</c> или <c>IEntity</c>»; <c>kssketchdefinition_getplane.html</c>
 /// — «GetPlane — Получить базовую плоскость эскиза», <c>LPENTITY GetPlane()</c>. Both are listed under
 /// «ISketchDefinition — методы» (<c>kssketchdefinition_methods.html</c>) with <c>GetSurface</c>,
@@ -35,6 +35,11 @@ internal sealed class SketchPlaneProbe
     private const double BoxHeight = 10d;
     private const double OffsetMm = 15d;
 
+    /// <summary>Offset of the AUXILIARY plane used by the auxiliary-plane step. Distinct from
+    /// <see cref="OffsetMm"/>, so a support change to it is visible in the extent: the box must land on
+    /// z∈[25,35].</summary>
+    private const double AuxPlaneOffset = 25d;
+
     /// <summary>Box volume: 40·40·10. Equal before and after the support change — NOT a discriminating quantity.</summary>
     private const double BoxVolume = BoxSide * BoxSide * BoxHeight;
 
@@ -48,6 +53,24 @@ internal sealed class SketchPlaneProbe
     private const short EdgeType = 7;
     private const short BaseExtrusion = 24;
     private const int LineStyle = 1;
+
+    /// <summary>DOC: <c>ksapitypeenum.html</c> — <c>ksAPI5Auto = 1</c> («API5 - интерфейсы
+    /// автоматизации»). Named rather than written as a literal, because the value selects which API the
+    /// transferred object belongs to and a wrong one is accepted silently.</summary>
+    private const int Api5Auto = (int)ksAPITypeEnum.ksAPI5Auto;
+
+    /// <summary>DOC: <c>ksapitypeenum.html</c> — <c>ksAPI7Dual = 2</c> («API7 - дуальные интерфейсы»).</summary>
+    private const int Api7Dual = (int)ksAPITypeEnum.ksAPI7Dual;
+
+    /// <summary>DOC: <c>ksapitypeenum.html</c> — <c>ksAPIUndef = 0</c> («Интерфейс неопределённого
+    /// типа»); per <c>kompasobject_transferinterface.html</c> note (3) this asks for the source object
+    /// itself.</summary>
+    private const int ApiUndef = (int)ksAPITypeEnum.ksAPIUndef;
+
+    /// <summary>DOC: <c>ksObj3dTypeEnum</c> — <c>o3d_planeOffset = 14</c>, the object type the transfer
+    /// is asked for. <c>objNewType = 0</c> is what the help's note (6) allows but does not recommend;
+    /// the wanted type is therefore named explicitly.</summary>
+    private const int PlaneOffsetObjectType = (int)ksObj3dTypeEnum.o3d_planeOffset;
 
     private readonly ProbeReport _report;
     private readonly Options _options;
@@ -92,6 +115,8 @@ internal sealed class SketchPlaneProbe
             ReopenThenEditAgain();
             WriteNonPlaneObject();
             WritePlanarFaceCandidate();
+            WriteAuxiliaryPlaneCandidate();
+            WriteApi5PlaneOverFaceCandidate();
         }
         catch (Exception ex)
         {
@@ -633,6 +658,347 @@ internal sealed class SketchPlaneProbe
             + "поставлена на ВСЕХ гранях, а не на одной — иначе эти два объяснения были бы неразличимы.");
     }
 
+    // ── SP.10: an AUXILIARY plane built through API7 (the product's own route) ──────────────────
+    /// <summary>Can an auxiliary plane, created the way <c>kompas_create_aux_geometry</c> creates it,
+    /// serve as the sketch support — and WHICH documented transfer brings it into the API5 object the
+    /// kernel accepts?</summary>
+    /// <remarks>DOC: <c>kssketchdefinition_setplane.html</c> names the parameter «указатель на интерфейс
+    /// базовой плоскости эскиза <c>ksEntity</c> или <c>IEntity</c>» — the plane is not required to come
+    /// from the API5 factory. The product's auxiliary planes are created through the documented API7 route
+    /// (<c>IPlanes3D.Add(o3d_planeOffset)</c> → <c>IPlane3DByOffset</c>,
+    /// <c>ksapi_iplane3dbyoffset_setbaseplane.html</c>), so the question is whether THAT object reaches
+    /// <c>SetPlane</c>, and by which of the documented transfers.
+    /// DOC: <c>kompasobject_transferinterface.html</c> — <c>TransferInterface(obj, apiNewType, objNewType)</c>
+    /// takes <c>apiNewType</c> from <c>ksAPITypeEnum</c> and, per its notes, (2) returns the SOURCE object
+    /// when the new API matches the object's own, (3) also returns it when <c>apiNewType = 0</c>, and (6)
+    /// yields the base object's interface when <c>objNewType = 0</c>, RECOMMENDING an explicit object type.
+    /// EXPECTED (declared BEFORE the run): notes (2) and (3) fix the answer for the SAME-API call and for
+    /// <c>objNewType = 0</c> — the source object comes back, and that is a property of the DOCUMENTED CALL,
+    /// not of the kernel. For the OTHER API with an EXPLICIT object type the help promises nothing, so the
+    /// kernel decides and the step NAMES the branch it landed in instead of assuming one. All three calls
+    /// are therefore made and recorded side by side; none of their answers is averaged with another.
+    /// History: docs/decisions/probes.md#sp-plane</remarks>
+    private void WriteAuxiliaryPlaneCandidate()
+    {
+        var step = _report.Begin("SP.10",
+            "SetPlane вспомогательной плоскостью, созданной API7 (маршрут kompas_create_aux_geometry)",
+            "Каким документированным переносом объект API7-плоскости попадает в опору эскиза?");
+
+        if (_sketch is null || _sketch.GetDefinition() is not ksSketchDefinition definition)
+        {
+            step.Unknown("Определения эскиза нет.");
+            return;
+        }
+
+        var plane = NewAuxOffsetPlane(step);
+        if (plane is null)
+        {
+            step.Unknown("Вспомогательная плоскость API7 не создана — постановка не сделана.");
+            return;
+        }
+
+        step.Data["aux_runtime"] = Api5.RuntimeName(plane);
+        step.Data["aux_is_ksEntity"] = plane is ksEntity;
+        step.Data["aux_is_iplane3d"] = plane is KompasAPI7.IPlane3D;
+
+        // THREE DOCUMENTED CALLS, EACH RECORDED SEPARATELY. The previous revision made only the
+        // same-API call and read its answer as a property of the kernel; the help fixes that answer by
+        // its own notes (2)/(3), so the call measured the DOCUMENT. The main call asks for the other API
+        // with the wanted object type named explicitly — the only form the help leaves open.
+        var main = Transfer(step, plane, Api5Auto, PlaneOffsetObjectType, "main");
+        var baseType = Transfer(step, plane, Api5Auto, ApiUndef, "basetype");
+        var sameApi = Transfer(step, plane, Api7Dual, ApiUndef, "sameapi");
+
+        // Does API5 SEE the plane the API7 factory made? If it does, the product has a second, independent
+        // route to an API5 entity — and it is the reference the transferred object is compared against.
+        var api5Planes = EntitiesOfType(PlaneOffset, 16);
+        step.Data["api5_offset_plane_count"] = api5Planes.Count;
+        step.Data["api5_offset_plane_names"] = string.Join(" | ", api5Planes.Select(p => p.name ?? "?"));
+        var byName = api5Planes.FirstOrDefault(p => p.name == "SP-aux");
+        step.Data["api5_found_by_name"] = byName is not null;
+
+        var before = Snapshot(step, "before");
+        if (before is not { } start)
+        {
+            step.Unknown("Габарит до постановки не прочитан — постановка не оценена.");
+            return;
+        }
+
+        // Main attempt: the object the documented transfer returned, if it is the kind SetPlane takes.
+        bool? acceptedMain = null;
+        var movedMain = false;
+        SnapshotValue? last = null;
+        if (main is ksEntity mainEntity)
+        {
+            acceptedMain = TrySetPlane(definition, mainEntity, step, "main_accepted");
+            var afterMain = RebuildLadder(step, start, "main");
+            var planeAfterMain = TryGetPlane(definition) as ksEntity;
+            movedMain = afterMain is not null && !Same(start, afterMain.Value);
+            step.Data["main_moved"] = movedMain;
+            step.Data["main_plane_after_type"] = planeAfterMain?.type;
+            step.Data["main_plane_after_name"] = planeAfterMain?.name;
+            last = afterMain;
+        }
+        else
+        {
+            // An unmeasured quantity is named unmeasured, not written as "no".
+            step.Data["main_moved"] = null;
+            step.Observe("Основной перенос (ksAPI5Auto, o3d_planeOffset) не дал ksEntity — подавать в "
+                + "опору нечего, и это названо, а не выдано за отказ ядра.");
+        }
+
+        // Is the transferred object the SAME MODEL OBJECT the API5 enumeration shows? Compared on the
+        // quantities that survive COM identity — model type, name, and the kernel's own answers. When the
+        // transfer yielded no ksEntity there is nothing to compare, and that is SAID rather than left as
+        // three false flags that would read as "a different object".
+        if (main is ksEntity transferred && byName is not null)
+        {
+            step.Data["main_matches_byname_type"] = transferred.type == byName.type;
+            step.Data["main_matches_byname_name"] =
+                string.Equals(transferred.name, byName.name, StringComparison.Ordinal);
+            step.Data["main_matches_byname_reference"] = ReferenceEquals(transferred, byName);
+        }
+        else
+        {
+            step.Observe("Сверка перенесённого объекта с перечислением не поставлена: перенос ksEntity "
+                + "не дал — сравнивать не с чем.");
+        }
+
+        // The by-name object is applied as well, so "same model object" is checked by the kernel's own
+        // answer and by the geometry, not by the type/name pair alone.
+        bool? acceptedByName = null;
+        var movedByName = false;
+        if (byName is not null)
+        {
+            var beforeName = Snapshot(step, "byname_before");
+            acceptedByName = TrySetPlane(definition, byName, step, "byname_accepted");
+            var afterName = RebuildLadder(step, beforeName ?? start, "byname");
+            var planeAfterName = TryGetPlane(definition) as ksEntity;
+            movedByName = afterName is not null && !Same(beforeName ?? start, afterName.Value);
+            step.Data["byname_moved"] = movedByName;
+            step.Data["byname_plane_after_type"] = planeAfterName?.type;
+            step.Data["byname_plane_after_name"] = planeAfterName?.name;
+            // With the geometry already moved by the main attempt, the SAME plane must leave it in place:
+            // "did not move" then reads as agreement, not as a refusal, and is named as such.
+            step.Data["byname_agrees_with_main"] = last is { } mainState && afterName is not null
+                && Same(mainState, afterName.Value);
+            last = afterName ?? last;
+        }
+        else
+        {
+            step.Observe("Плоскость «SP-aux» в API5-перечислении o3d_planeOffset не найдена — сверка с "
+                + "перечислением не поставлена, и это названо.");
+        }
+
+        var after = last ?? Snapshot(step, "after");
+        step.Data["gabarit_before"] = start.Describe();
+        step.Data["gabarit_after"] = after?.Describe() ?? "не прочитан";
+        step.Data["expected_if_applied"] = "коробка 40×40×10, тонкое протяжение по Z, z∈[25,35]";
+
+        var appliedBy = movedMain ? "объект API7 принят после переноса ksAPI5Auto/o3d_planeOffset"
+            : movedByName ? "перенос ksAPI5Auto/o3d_planeOffset опору не дал; сработал только объект, "
+                + "взятый из ПЕРЕЧИСЛЕНИЯ API5 по имени"
+            : "ни один заход не сдвинул геометрию";
+
+        step.Pass("Вспомогательная плоскость API7 в опоре: " + appliedBy
+            + ". Переносы: (ksAPI5Auto, o3d_planeOffset) → " + Api5.RuntimeName(main)
+            + " (ksEntity=" + step.Data["main_is_ksEntity"] + ")"
+            + ", (ksAPI5Auto, 0) → " + Api5.RuntimeName(baseType)
+            + " (ksEntity=" + step.Data["basetype_is_ksEntity"] + ")"
+            + ", (ksAPI7Dual, 0) → " + Api5.RuntimeName(sameApi)
+            + " (тот же объект=" + step.Data["sameapi_same_object"] + ", документованное следствие)"
+            + "; SetPlane(перенесённый)=" + (acceptedMain?.ToString() ?? "не подавался")
+            + (acceptedByName is null ? string.Empty : ", SetPlane(объект из перечисления)=" + acceptedByName)
+            + "; сверка с перечислением: " + (step.Data.ContainsKey("main_matches_byname_type")
+                ? "тип=" + step.Data["main_matches_byname_type"]
+                    + ", имя=" + step.Data["main_matches_byname_name"]
+                    + ", тот же объект=" + step.Data["main_matches_byname_reference"]
+                : "не поставлена (перенос ksEntity не дал)")
+            + "; габарит " + step.Data["gabarit_before"] + " → " + step.Data["gabarit_after"] + ".");
+    }
+
+    /// <summary>One documented <c>TransferInterface</c> call, with everything its answer carries: the
+    /// runtime type, whether it answers <c>QI(ksEntity)</c>, whether it IS the source object, and — when
+    /// it is a <c>ksEntity</c> — its model type and name. Named by <paramref name="tag"/> so three
+    /// answers are never merged into one.</summary>
+    private object? Transfer(ProbeStep step, object source, int apiNewType, int objNewType, string tag)
+    {
+        var result = Api5.SafeObject(() => _app.TransferInterface(source, apiNewType, objNewType));
+        step.Data[tag + "_api_new_type"] = apiNewType;
+        step.Data[tag + "_obj_new_type"] = objNewType;
+        step.Data[tag + "_runtime"] = Api5.RuntimeName(result);
+        step.Data[tag + "_is_ksEntity"] = result is ksEntity;
+        step.Data[tag + "_is_iplane3d"] = result is KompasAPI7.IPlane3D;
+        step.Data[tag + "_same_object"] = result is not null && ReferenceEquals(result, source);
+        if (result is ksEntity entity)
+        {
+            step.Data[tag + "_entity_type"] = entity.type;
+            step.Data[tag + "_entity_name"] = Api5.SafeObject(() => entity.name);
+        }
+
+        return result;
+    }
+
+    // ── SP.11: an API5 offset plane built over a FACE ───────────────────────────────────────────
+    /// <summary>Can the documented API5 offset plane be built over a FACE, and does that plane then
+    /// serve as the sketch support? This is the route that yields an API5 <c>ksEntity</c> — the only
+    /// object kind <c>SetPlane</c> has been measured to accept.</summary>
+    /// <remarks>DOC: the API5 member is <c>ksPlaneOffsetDefinition.SetPlane(LPENTITY)</c> — «указатель на
+    /// интерфейс плоскости ksEntity или IEntity» (<c>ksplaneoffsetdefinition_setplane.html</c>); the
+    /// API7 twin is documented wider, «базовая плоскость ИЛИ ПЛОСКАЯ ГРАНЬ»
+    /// (<c>ksapi_iplane3dbyoffset_setbaseplane.html</c>). The two pages do NOT say the same thing, so the
+    /// kernel is asked rather than the documentation read one way.
+    /// History: docs/decisions/probes.md#sp-plane</remarks>
+    private void WriteApi5PlaneOverFaceCandidate()
+    {
+        var step = _report.Begin("SP.11",
+            "Смещённая плоскость API5, построенная ОТ ГРАНИ, как опора эскиза",
+            "Принимает ли API5-маршрут грань базой — и годится ли полученная плоскость в опору?");
+
+        if (_sketch is null || _sketch.GetDefinition() is not ksSketchDefinition definition)
+        {
+            step.Unknown("Определения эскиза нет.");
+            return;
+        }
+
+        var face = FirstEntityOfType(FaceType);
+        if (face is null)
+        {
+            step.Unknown("Граней типа " + FaceType + " в документе нет — постановка не сделана.");
+            return;
+        }
+
+        step.Data["face_name"] = face.name;
+        step.Data["face_type"] = face.type;
+
+        var plane = NewApi5OffsetPlaneOver(face, step);
+        if (plane is null)
+        {
+            step.Pass("API5-маршрут смещённой плоскости грань базой НЕ принял: см. данные шага. "
+                + "Это ФАКТ О МАРШРУТЕ, а не отказ продукта.");
+            return;
+        }
+
+        step.Data["plane_is_ksEntity"] = plane is ksEntity;
+        step.Data["plane_type"] = plane.type;
+
+        var before = Snapshot(step, "before");
+        if (before is not { } start)
+        {
+            step.Unknown("Габарит до постановки не прочитан — постановка не оценена.");
+            return;
+        }
+
+        var accepted = TrySetPlane(definition, plane, step, "accepted");
+        var after = RebuildLadder(step, start, "api5");
+        var planeAfter = TryGetPlane(definition) as ksEntity;
+        var moved = after is not null && !Same(start, after.Value);
+        step.Data["moved"] = moved;
+        step.Data["plane_after_type"] = planeAfter?.type;
+        step.Data["gabarit_before"] = start.Describe();
+        step.Data["gabarit_after"] = after?.Describe() ?? "не прочитан";
+
+        step.Pass("Плоскость API5 от грани: создана (тип " + plane.type + "), в опору SetPlane="
+            + (accepted?.ToString() ?? "исключение") + ", габарит " + step.Data["gabarit_before"]
+            + " → " + step.Data["gabarit_after"] + " (сдвинулся=" + moved + ").");
+    }
+
+    /// <summary>An offset plane created the API5 way over the given entity (a face here):
+    /// <c>NewEntity(o3d_planeOffset)</c> + <c>ksPlaneOffsetDefinition.SetPlane</c> + offset/direction.</summary>
+    private ksEntity? NewApi5OffsetPlaneOver(ksEntity basis, ProbeStep step)
+    {
+        try
+        {
+            if (_part.NewEntity(PlaneOffset) is not ksEntity plane)
+            {
+                step.Observe("NewEntity(o3d_planeOffset=14) не дал ksEntity.");
+                return null;
+            }
+
+            plane.name = "SP-api5-from-face";
+            if (plane.GetDefinition() is not ksPlaneOffsetDefinition offsetDefinition)
+            {
+                step.Observe("определение смещённой плоскости не получено.");
+                return null;
+            }
+
+            var basisAccepted = TrySetBasisPlane(offsetDefinition, basis, step, "basis_accepted");
+            offsetDefinition.offset = AuxPlaneOffset;
+            offsetDefinition.direction = true;
+            step.Data["create"] = Api5.Raw(TryBool(plane.Create));
+            if (basisAccepted != true || TryBool(plane.Create) != true)
+            {
+                step.Observe("грань как база смещённой плоскости: SetPlane=" + basisAccepted);
+                return null;
+            }
+
+            return plane;
+        }
+        catch (Exception ex)
+        {
+            step.Observe("построение плоскости API5 от грани бросило " + ex.GetType().Name + ": " + ex.Message);
+            return null;
+        }
+    }
+
+    /// <summary>An offset plane created exactly the way the product creates auxiliary planes: API7
+    /// <c>IPlanes3D.Add(o3d_planeOffset)</c> over the standard XY plane, then <c>Update()</c>.</summary>
+    private object? NewAuxOffsetPlane(ProbeStep step)
+    {
+        try
+        {
+            if (_app.TransferInterface(_part, Api7Dual, ApiUndef) is not KompasAPI7.IModelObject part7)
+            {
+                step.Observe("деталь не переносится в API7 как IModelObject.");
+                return null;
+            }
+
+            if (part7 is not KompasAPI7.IAuxiliaryGeomContainer auxiliary
+                || auxiliary.Planes3D is not KompasAPI7.IPlanes3D planes)
+            {
+                step.Observe("деталь не отвечает QI(IAuxiliaryGeomContainer)/Planes3D.");
+                return null;
+            }
+
+            if (planes.Add(ksObj3dTypeEnum.o3d_planeOffset) is not KompasAPI7.IPlane3D plane)
+            {
+                step.Observe("IPlanes3D.Add(o3d_planeOffset) не дал IPlane3D.");
+                return null;
+            }
+
+            if (plane is not KompasAPI7.IPlane3DByOffset byOffset)
+            {
+                step.Observe("созданная плоскость не отвечает QI(IPlane3DByOffset).");
+                return null;
+            }
+
+            if (_part.GetDefaultEntity(PlaneXoy) is not { } basePlane
+                || _app.TransferInterface(basePlane, Api7Dual, ApiUndef) is not KompasAPI7.IModelObject basePlane7)
+            {
+                step.Observe("базовая плоскость XY не перенесена в API7.");
+                return null;
+            }
+
+            plane.Name = "SP-aux";
+            byOffset.BasePlane = basePlane7;
+            byOffset.Offset = AuxPlaneOffset;
+            byOffset.Direction = true;
+            step.Data["aux_update"] = Api5.Raw(Api5.SafeBool(() => plane.Update()));
+
+            // The product rebuilds after creating auxiliary geometry, and the probe mirrors it: without
+            // the rebuild the object sits in the container while the model does not know it. Leaving it
+            // out would make a probe defect look like a kernel refusal.
+            TryBool(_part.RebuildModel);
+            _doc.RebuildDocument();
+            return plane;
+        }
+        catch (Exception ex)
+        {
+            step.Observe("создание вспомогательной плоскости бросило " + ex.GetType().Name + ": " + ex.Message);
+            return null;
+        }
+    }
+
     // ── SP.7: save→close→reopen, then edit again ────────────────────────────────────────────────
     private void ReopenThenEditAgain()
     {
@@ -801,15 +1167,12 @@ internal sealed class SketchPlaneProbe
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────────────────────────
-    /// <summary>Rebuild ladder: which routes at all force the dependent body to recompute after the
-    /// support change. Steps are applied in turn, the extent is read AFTER EACH, and the first that moved
-    /// is the one after which it changed.</summary>
-    /// <remarks>A single call cannot be trusted: MEASURED (first run, 21.09.2026, 15:08) gave
-    /// <c>SetPlane(xz) = True</c> with an unchanged extent — "accepted and not applied". That is exactly
-    /// where an instrument defect and a product boundary look alike: the probe's rebuild route might have
-    /// been incomplete. So ALL documented steps are tried first, and only if none moves the geometry does
-    /// it become a fact about the product. The steps are not mixed with the write: the extent is re-read
-    /// between steps, otherwise "moved" could not be attributed to any one of them.
+    /// <summary>Rebuild ladder: which routes force the dependent body to recompute after the support
+    /// change; the first step that moves the extent is the one that applied the edit.</summary>
+    /// <remarks>MEASURED: <c>SetPlane(xz) = True</c> with an unchanged extent — "accepted and not
+    /// applied". A probe defect and a product boundary look alike there, so ALL documented steps are tried
+    /// and only if none moves the geometry does it become a fact about the product. The steps are not
+    /// mixed with the write: the extent is re-read between steps, else "moved" fits no single one.
     /// History: docs/decisions/probes.md#sp-ladder</remarks>
     private SnapshotValue? RebuildLadder(ProbeStep step, SnapshotValue before, string tag)
     {
@@ -1237,6 +1600,24 @@ internal sealed class SketchPlaneProbe
         }
     }
 
+    /// <summary>The same write on the OFFSET plane's definition — the base of a plane, not a sketch
+    /// support. A separate helper because the two members belong to different interfaces.</summary>
+    private bool? TrySetBasisPlane(ksPlaneOffsetDefinition definition, object basis, ProbeStep step, string tag)
+    {
+        try
+        {
+            var result = definition.SetPlane(basis);
+            step.Data[tag] = result;
+            return result;
+        }
+        catch (Exception ex)
+        {
+            step.Data[tag] = "исключение";
+            step.Observe("SetPlane базы плоскости бросил " + ex.GetType().Name + ": " + ex.Message);
+            return null;
+        }
+    }
+
     private ksEntity? FirstEntityOfType(short type)
     {
         var found = EntitiesOfType(type, 1);
@@ -1274,16 +1655,12 @@ internal sealed class SketchPlaneProbe
     }
 
     /// <summary>The dependent feature's sketch after reopen — from the TREE, not the session's memory.</summary>
-    /// <remarks>TWO INSTRUMENT DEFECTS were closed here, and both had been passed off as absence of the
-    /// subject. MEASURED: the first run (15:08) selected elements with <c>type == o3d_baseExtrusion (24)</c>
-    /// and found none at <c>operations = 1</c>: a base extrusion appears in the tree as <b>25</b>
-    /// (<c>o3d_bossExtrusion</c>), not its factory 24 — tree and factory numbers are different systems. The
-    /// second run (15:10) no longer selected by number, but cast the definition to the ONE type
-    /// <c>ksBaseExtrusionDefinition</c>, whereas the 25th element's definition is
-    /// <c>ksBossExtrusionDefinition</c>: per <c>docs/compatibility/kompas-api5-metadata.json</c> these are
-    /// THREE DIFFERENT interfaces with three different IIDs (<c>deefefe1…</c>, <c>deefefe4…</c>,
-    /// <c>deefefe7…</c>) and no inheritance. All three are tried. The element's tree number is recorded in
-    /// the data: it IS the measured quantity, not decoration.
+    /// <remarks>MEASURED, and it closes TWO INSTRUMENT DEFECTS that both looked like absence of the
+    /// subject: a base extrusion appears in the tree under a DIFFERENT number than its factory number, so
+    /// selecting by factory number finds nothing; and the element's definition is a DIFFERENT interface
+    /// from the one its factory name suggests. Tree numbers and factory numbers are separate systems, as
+    /// are the definition interfaces. All three extrusion definitions are tried, and the element's tree
+    /// number is recorded in the data because it IS the measured quantity, not decoration.
     /// History: docs/decisions/probes.md#sp-route</remarks>
     private ksEntity? FindSketchOfFirstExtrusion(ProbeStep step)
     {

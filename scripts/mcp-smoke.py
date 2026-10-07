@@ -22820,8 +22820,21 @@ def f08_action_lifecycle_checks(client, rep, app_id, workdir):
                     face_ref = f["face_ref"]
                     break
             details["face_ref_for_negative"] = face_ref
+            # РЕБРО берётся ЛЮБОЕ ребро этого тела, а не «вертикальное угловое»: на этом шаге тело —
+            # уменьшенный профиль, и угловых рёбер исходной пластины у него уже нет. Признак здесь —
+            # наличие адреса ребра, а не его положение: постановке нужен вид ссылки «ребро», а не
+            # конкретное ребро. Первая редакция брала `corner_edges` и получила `None`, из-за чего
+            # весь блок отказов не построился — отказ ПОСТАНОВКИ, названный в строке, а не отказ
+            # продукта.
+            edge_ref = None
+            for e in edges(doc, body_live):
+                if e.get("edge_ref"):
+                    edge_ref = e["edge_ref"]
+                    break
+            details["edge_ref_for_negative"] = edge_ref
+            details["edges_for_negative"] = len(edges(doc, body_live))
 
-            if plane_ref and face_ref:
+            if plane_ref and face_ref and edge_ref:
                 # 1. base и reference одновременно — ОТКАЗ ПРОДУКТА, названный своими словами.
                 env, code = call("kompas_set_sketch_plane", {
                     "document_id": doc, "sketch_ref": sk, "expected_revision": ctx(doc),
@@ -22867,52 +22880,69 @@ def f08_action_lifecycle_checks(client, rep, app_id, workdir):
                               "geometry_changed": same_res.get("geometry_changed"),
                               "box_before": box2, "box_after": box_same})
 
-                # ГРАНИЦЫ ФОРМЫ `plane` — ИЗМЕРЯЮТСЯ, А НЕ ТРЕБУЮТСЯ. Наряд §3.4 просил отрицание
-                # «не-плоскость в reference». Форма «только reference» контрактом НЕ ПРОПУСКАЕТСЯ:
-                # `base` объявлен обязательным, а `base = null` отвергается перечислением. Значит
-                # требовать отказа ПО ВИДУ ссылки не на чем — исход записывается как измеренный, и
-                # строка этого не скрывает. Одинаково у нового инструмента и у прежнего
-                # `kompas_create_sketch`: форма `plane` у них объявлена дословно одной и той же.
-                for shape_id, plane, tool_name in (
-                        ("только reference (плоскость)", {"reference": plane_ref},
-                         "kompas_set_sketch_plane"),
-                        ("base = null + reference", {"base": None, "reference": plane_ref},
-                         "kompas_set_sketch_plane"),
-                        ("только reference (грань)", {"reference": face_ref},
-                         "kompas_set_sketch_plane"),
-                        ("только reference у kompas_create_sketch", {"reference": plane_ref},
-                         "kompas_create_sketch")):
+                # ГРАНИЦЫ ФОРМЫ `plane` — ТЕПЕРЬ ЭТО ОТКАЗЫ, А НЕ «КОНТРАКТ НЕ ПРОПУСКАЕТ». Прежняя
+                # редакция записывала здесь, что форма «только reference» контрактом не пропускается:
+                # `base` был обязателен, а `base = null` не проходил перечисление, поэтому проверка ВИДА
+                # ссылки была недостижима вовсе. Наряд 07.10.2026 это снял (`base` не обязателен, `null`
+                # входит в перечисление), и все пять форм спрашиваются у ОБОИХ инструментов. Ни одна из
+                # них не имеет права дойти до COM — это видно по НАЗВАННОЙ причине в сообщении, — и все
+                # они обязаны оставить модель неизменной. Форма «только reference» здесь НЕ вызывается:
+                # она законна и МЕНЯЕТ опору, а её доказательство — строки AUXS.03/AUXS.04/AUXS.05.
+                def plane_form(tool_name, plane, name_suffix, expected, case):
                     args = {"plane": plane, "expected_revision": ctx(doc)}
                     if tool_name == "kompas_set_sketch_plane":
                         args.update({"document_id": doc, "sketch_ref": sk})
                     else:
-                        args.update({"document_id": doc, "name": "AUXS02-form"})
+                        args.update({"document_id": doc, "name": name_suffix})
                     env, code = call(tool_name, args)
-                    form_boundaries.append({"shape": shape_id, "tool": tool_name,
-                                            "plane": {k: v for k, v in plane.items()},
-                                            "code": code, "message": describe(env)})
+                    return {"case": case, "tool": tool_name, "plane": dict(plane),
+                            "expected": expected, "code": code, "ok": code == expected,
+                            "message": describe(env)}
+
+                # Ссылка, которой сервер НЕ ВЫДАВАЛ: тем же реестром она отвергается как устаревшая.
+                never_issued = "plane:" + uuid.uuid4().hex
+                for tool_name, suffix in (("kompas_set_sketch_plane", "s"),
+                                          ("kompas_create_sketch", "c")):
+                    for case, plane, expected in (
+                            ("base и reference одновременно",
+                             {"base": "xy", "offset_mm": 0, "reference": plane_ref},
+                             "INVALID_ARGUMENT"),
+                            ("ни base, ни reference", {}, "INVALID_ARGUMENT"),
+                            ("reference — ГРАНЬ (вид ссылки)",
+                             {"reference": face_ref}, "INVALID_ARGUMENT"),
+                            ("reference — РЕБРО (вид ссылки)",
+                             {"reference": edge_ref}, "INVALID_ARGUMENT"),
+                            ("reference и offset_mm ≠ 0",
+                             {"reference": plane_ref, "offset_mm": 5.0}, "INVALID_ARGUMENT"),
+                            ("ссылка, которой сервер не выдавал",
+                             {"reference": never_issued}, "STALE_REFERENCE")):
+                        form_boundaries.append(plane_form(
+                            tool_name, plane, "AUXS02-%s-%s" % (tool_name.split("_")[-1], suffix),
+                            expected, case))
                 details["form_boundaries"] = form_boundaries
             else:
                 problems.append("положительный контроль отрицаний не построен: "
-                                f"plane_ref={plane_ref!r} face_ref={face_ref!r}")
+                                f"plane_ref={plane_ref!r} face_ref={face_ref!r} edge_ref={edge_ref!r}")
 
             n_after = state(doc)
             untouched = (n_before["volumes"] == n_after["volumes"]
                          and n_before["bodies"] == n_after["bodies"])
-            neg_ok = bool(cases) and all(c["ok"] for c in cases) and untouched
+            forms_ok = bool(form_boundaries) and all(b["ok"] for b in form_boundaries)
+            neg_ok = bool(cases) and all(c["ok"] for c in cases) and forms_ok and untouched
             rep.add("AUXS.02.negative_tests",
                     "AUX-SKETCH.plane_and_profile_lifecycle: действие negative_tests — base и "
                     "reference одновременно (плоскостью и гранью); sketch_ref ведёт не на эскиз; "
-                    "чужая expected_revision; опора той же плоскостью (геометрия не меняется). "
-                    "Форма «только reference» контрактом не пропускается — границы измерены и "
-                    "названы, а не выданы за проверку вида ссылки",
+                    "чужая expected_revision; опора той же плоскостью (геометрия не меняется); "
+                    "границы формы plane у ОБОИХ инструментов: «одновременно оба», «ни одного», "
+                    "reference-грань, reference-ребро, reference+offset_mm, ссылка, которой сервер "
+                    "не выдавал — все отказы именованными кодами при неизменной модели",
                     "PASS" if neg_ok else "FAIL",
                     "; ".join(f"{c['case']}: получено {c['got']} (ожидание {c['expected']})"
                               for c in cases)
                     + f"; модель до/после: тел {n_before['bodies']}→{n_after['bodies']} "
-                      f"V {n_before['volumes']}→{n_after['volumes']}; форма «только reference» "
-                      f"отвергнута контрактом у обоих инструментов ("
-                      + "; ".join(f"{b['shape']}→{b['code']}" for b in form_boundaries) + ")",
+                      f"V {n_before['volumes']}→{n_after['volumes']}; границы формы plane ("
+                      + "; ".join(f"{b['tool'].split('_', 1)[1]}/{b['case']}→{b['code']}"
+                                  f"(ожидание {b['expected']})" for b in form_boundaries) + ")",
                     # СОБСТВЕННОЕ ДОКАЗАТЕЛЬСТВО ОТРИЦАНИЙ, А НЕ СОСЕДНЕЕ. Первая редакция клала
                     # в `details` только `cases` и `form_boundaries`, а положительный контроль
                     # (`plane_ref`, `face_ref`) и состояние модели до/после уезжали в `details`
@@ -22921,12 +22951,14 @@ def f08_action_lifecycle_checks(client, rep, app_id, workdir):
                     # Доказательство обязано лежать в той строке, которая им пользуется.
                     details={"plane_ref_for_negative": plane_ref,
                              "face_ref_for_negative": face_ref,
+                             "edge_ref_for_negative": edge_ref,
                              "body_bbox_for_negative": [list(box2[0]), list(box2[1])],
                              "cases": cases,
                              "form_boundaries": form_boundaries,
                              "model_before": n_before,
                              "model_after": n_after,
                              "untouched": untouched,
+                             "form_boundaries_ok": forms_ok,
                              "negatives_ok": neg_ok})
             details["negatives_ok"] = neg_ok
 
@@ -23036,6 +23068,325 @@ def f08_action_lifecycle_checks(client, rep, app_id, workdir):
         finally:
             close(doc)
 
+    # ── AUXS-REF: опора-ССЫЛКА на плоскость — то, что было недостижимо ─────────────────────────
+    #
+    # ПОЧЕМУ ЭТА ПОСТАНОВКА СУЩЕСТВУЕТ. Клиентские приёмки 06.10.2026 назвали: «kompas_create_sketch.plane
+    # не умеет ссылку на грань». Разбор наряда 07.10.2026 показал, что дело НЕ в грани: документированная
+    # опора — ПЛОСКОСТЬ, а плоскость, совпадающая с гранью, строится продуктом (`kompas_create_aux_geometry`,
+    # `plane/offset`, `base_face_ref`). Недостижим был ВТОРОЙ шаг: форма «только reference» отвергалась
+    # схемой клиента (`base` был обязателен, `base = null` не проходил перечисление). Здесь этот шаг
+    # измеряется ЧИСЛОМ, а не исходом вызова: прирост объёма обязан равняться π·r²·h.
+    #
+    # ЧЕМ ЭТО ОТЛИЧАЕТСЯ ОТ БЕЗДЕЙСТВИЯ. Габарит по Z назван ДО прогона: плоскость строится от верхней
+    # грани (z=10) со смещением 0, поэтому бобышка h=15 обязана занять z∈[10,25], а объём вырасти с 80000
+    # до 80000 + π·12.5²·15 = 87363.10778185107. «Вызов прошёл» успехом не считается.
+    def auxs_plane_reference_scenario():
+        """Строки AUXS.03.create / AUXS.04.edit / AUXS.05.save_reopen."""
+        R, H = 12.5, 15.0
+        plate_v = 100.0 * 80.0 * 10.0                 # 80000
+        boss_v = math.pi * R * R * H                  # 7363.10778185107
+        total_v = plate_v + boss_v                    # 87363.10778185107
+        circle = {"kind": "circle", "center_mm": [0.0, 0.0], "radius_mm": R}
+        small_rect = {"kind": "rectangle", "start_mm": [-30, -20], "width_mm": 60, "height_mm": 40}
+        out = {}
+
+        def thin_axis(box):
+            if not box or not box[0] or not box[1]:
+                return None
+            e = [round(box[1][i] - box[0][i], 3) for i in range(3)]
+            return "xyz"[e.index(min(e))]
+
+        # ── A: эскиз на плоскости, ПОСТРОЕННОЙ ОТ ГРАНИ, и бобышка на нём ───────────────────────
+        a = {"expected_volume": total_v, "expected_boss_z": [10.0, 25.0]}
+        problems_a = []
+        doc, rev = new_doc("AUXS-ref")
+        if not doc:
+            return {"create": {"ok": False, "detail": "документ не создан", "details": {}},
+                    "edit": {"ok": False, "detail": "документ не создан", "details": {}},
+                    "save_reopen": {"ok": False, "detail": "документ не создан", "details": {}}}
+        doc2 = None
+        try:
+            rev, body, _ref, code = mk_plate(doc, rev, "AUXS03")
+            rev = ctx(doc)
+            g = state(doc)
+            a["plate_volume"] = (g["volumes"] or [None])[0]
+            if code is not None or not body:
+                problems_a.append(f"плита не построена: err={code} тело={bool(body)}")
+
+            face = top_face(doc, body) if body else None
+            a["face_ref"] = face
+            if not face:
+                problems_a.append("верхняя грань z=10 не найдена — опору строить не от чего")
+
+            plane_ref = None
+            if face:
+                env, aux_code = call("kompas_create_aux_geometry", {
+                    "document_id": doc, "expected_revision": ctx(doc), "kind": "plane",
+                    "mode": "offset", "base_face_ref": face, "offset_mm": 0.0,
+                    "name": "AUXS03-plane"})
+                aux = result(env)
+                plane_ref = aux.get("reference_id")
+                a["aux_plane"] = {"error": aux_code, "reference_id": plane_ref,
+                                  "kind": aux.get("kind"), "offset_mm": aux.get("offset_mm"),
+                                  "base_name": aux.get("base_name"), "name": aux.get("name")}
+                rev = ctx(doc)
+                if aux_code is not None or not plane_ref:
+                    problems_a.append(f"плоскость от грани не создана: err={aux_code}")
+
+            # ГЛАВНЫЙ ШАГ: форма «ТОЛЬКО reference» — та, которую схема прежде не пропускала.
+            sk = None
+            if plane_ref:
+                env, code = call("kompas_create_sketch", {
+                    "document_id": doc, "expected_revision": rev,
+                    "plane": {"reference": plane_ref}, "name": "AUXS03-s"})
+                sk = result(env).get("id")
+                a["sketch_error"] = code
+                a["sketch_ref"] = sk
+                # Ответ обязан НАЗВАТЬ опору: вид и тип плоскости, прочитанные из модели.
+                a["semantic_hint"] = result(env).get("semantic_hint")
+                rev = ctx(doc)
+                if code is not None or not sk:
+                    problems_a.append(f"эскиз по ссылке не создан: err={code}")
+
+            if sk:
+                env, code = call("kompas_edit_sketch", {
+                    "sketch_ref": sk, "expected_revision": rev, "mode": "append",
+                    "entities": [circle]})
+                rev = ctx(doc)
+                if code is not None:
+                    problems_a.append(f"окружность не нарисована: err={code}")
+                env, code = call("kompas_finish_sketch", {"sketch_ref": sk,
+                                                          "require_closed_profile": False})
+                rev = ctx(doc)
+                if code is not None:
+                    problems_a.append(f"эскиз не замкнут: err={code}")
+                rev, boss_ref, code, _e = extrude(doc, rev, sk, operation="boss", depth_mm=H,
+                                                  direction="positive", end_condition="blind",
+                                                  target_body_ref=body)
+                a["boss_error"] = code
+                a["boss_ref"] = boss_ref
+                if code is not None or not boss_ref:
+                    problems_a.append(f"бобышка не построена: err={code}")
+
+            g = state(doc)
+            bb = bbox(body) or {}
+            a["volume"] = (g["volumes"] or [None])[0]
+            a["bbox"] = {"min_mm": bb.get("min_mm"), "max_mm": bb.get("max_mm")}
+            a["bodies"] = g["bodies"]
+            cyl_faces = [f for f in (faces(doc, body) if body else [])
+                         if f.get("surface_type") == "cylinder"
+                         and f.get("radius_mm") is not None
+                         and abs(f["radius_mm"] - R) <= 0.01]
+            a["cylindrical_faces_r"] = len(cyl_faces)
+            if not (a["volume"] is not None and near(a["volume"], total_v)):
+                problems_a.append(f"объём {a['volume']} ≠ ожидания {total_v}")
+            if not (bb.get("min_mm") and bb.get("max_mm")
+                    and near(bb["max_mm"][2], 10.0 + H)):
+                problems_a.append(f"верх бобышки {bb.get('max_mm')} — ожидание z=25")
+            if len(cyl_faces) != 1:
+                problems_a.append(f"цилиндрических граней r={R}: {len(cyl_faces)} (ожидание 1)")
+
+            create_ok = not problems_a
+            out["create"] = {
+                "ok": create_ok,
+                "detail": (f"плита 100×80×10 {a.get('plate_volume')}; плоскость от грани z=10 по ссылке "
+                           f"({a.get('aux_plane', {}).get('kind')}, смещение "
+                           f"{a.get('aux_plane', {}).get('offset_mm')}); эскиз формой «ТОЛЬКО reference» "
+                           f"получен={bool(a.get('sketch_ref'))} (err={a.get('sketch_error')}); бобышка "
+                           f"h={H} r={R}: объём {a['volume']} (ожидание {total_v}), верх z="
+                           f"{(bb.get('max_mm') or [None, None, None])[2]}, цилиндров r={R}: "
+                           f"{len(cyl_faces)}"
+                           + ("; НЕ ВЫПОЛНЕНО: " + "; ".join(problems_a) if problems_a else "")),
+                "details": a}
+
+            # ── B: SAVE→REOPEN — состояние, которое видит клиент, а не сеанс записи ─────────────
+            b = {"expected_volume": total_v}
+            problems_b = []
+            path = os.path.join(workdir, "auxs-ref-%s.m3d" % uuid.uuid4().hex[:8])
+            _e, s_env, _r = client.tool("kompas_save_document", {
+                "document_id": doc, "target_path": path, "expected_revision": ctx(doc),
+                "operation_id": str(uuid.uuid4())}, timeout=240)
+            close(doc)
+            _e, o_env, _r = client.tool("kompas_open_document", {
+                "application_id": app_id, "path": path, "access": "edit",
+                "operation_id": str(uuid.uuid4())}, timeout=240)
+            doc2 = result(o_env).get("document_id") or result(o_env).get("id")
+            b["path"] = path
+            b["document"] = bool(doc2)
+            if not doc2:
+                problems_b.append("документ не переоткрыт")
+            else:
+                g2 = state(doc2)
+                body2 = bodies(doc2)[0]["body_ref"] if bodies(doc2) else None
+                bb2 = bbox(body2) or {}
+                b["volume"] = (g2["volumes"] or [None])[0]
+                b["bbox"] = {"min_mm": bb2.get("min_mm"), "max_mm": bb2.get("max_mm")}
+                sk_from_tree = None
+                tree_sketches = []
+                _e, lf_env, _r = client.tool("kompas_list_features", {"document_id": doc2})
+                for row in ((lf_env or {}).get("result") or []):
+                    if isinstance(row, dict) and row.get("sketch_ref"):
+                        tree_sketches.append({"name": row.get("name"), "sketch_ref": row["sketch_ref"]})
+                        sk_from_tree = row["sketch_ref"]
+                # БЕРЕТСЯ ПОТРЕБИТЕЛЬ, СОЗДАННЫЙ ПОСЛЕДНИМ: в этом документе их ровно два — плита
+                # (эскиз на стандартной XY) и бобышка (эскиз на плоскости от грани). Ошибка выбора
+                # здесь НЕ молчит: опора плитного эскиза читается типом 1, и проверка «тип 14»
+                # немедленно падает — именно так первая редакция и поймала свой промах.
+                b["tree_sketches"] = tree_sketches
+                b["sketch_ref_from_tree"] = sk_from_tree
+                if not (b["volume"] is not None and near(b["volume"], total_v)):
+                    problems_b.append(f"объём после reopen {b['volume']} ≠ {total_v}")
+                if not sk_from_tree:
+                    problems_b.append("эскиз-потребитель после reopen не найден")
+
+                # ОПОРА ЧИТАЕТСЯ ОБРАТНО ИЗ МОДЕЛИ — и читается ДОСТИЖИМОЙ формой. Ссылки прежнего
+                # сеанса после закрытия мертвы, поэтому плоскость строится ЗАНОВО от той же грани, и
+                # ответ называет опору, прочитанную GetPlane ДО правки: если бы опора не пережила
+                # reopen, support_type_before был бы не 14, а опора сменилась бы вместе с геометрией.
+                face2 = top_face(doc2, body2) if body2 else None
+                b["face_ref_after_reopen"] = face2
+                if face2:
+                    env, code = call("kompas_create_aux_geometry", {
+                        "document_id": doc2, "expected_revision": ctx(doc2), "kind": "plane",
+                        "mode": "offset", "base_face_ref": face2, "offset_mm": 0.0,
+                        "name": "AUXS05-plane"})
+                    ref2 = result(env).get("reference_id")
+                    b["aux_plane_after_reopen"] = ref2
+                    if code is None and ref2:
+                        env, code = call("kompas_set_sketch_plane", {
+                            "document_id": doc2, "sketch_ref": sk_from_tree,
+                            "expected_revision": ctx(doc2), "plane": {"reference": ref2}})
+                        res2 = result(env) or {}
+                        b["support_type_before"] = res2.get("support_type_before")
+                        b["geometry_changed"] = res2.get("geometry_changed")
+                        b["apply_route"] = res2.get("apply_route")
+                        b["set_plane_error"] = code
+                        if not (code is None and "14" in str(res2.get("support_type_before"))):
+                            problems_b.append(
+                                f"опора из модели не прочитана: err={code} "
+                                f"support_type_before={res2.get('support_type_before')!r} "
+                                f"(ожидание типа 14)")
+                        if res2.get("geometry_changed") is not False:
+                            problems_b.append(
+                                f"перепривязка на ТУ ЖЕ плоскость изменила геометрию: "
+                                f"geometry_changed={res2.get('geometry_changed')!r}")
+                    else:
+                        problems_b.append(f"плоскость после reopen не создана: err={code}")
+                else:
+                    problems_b.append("верхняя грань после reopen не найдена")
+
+                # ВЫВОД КООРДИНАТ ДЛЯ ПРАВКИ ЭСКИЗА НА ССЫЛОЧНОЙ ПЛОСКОСТИ — ОТКАЗ, А НЕ РАБОТА ПО
+                # НЕВЕРНОЙ ОСИ. Эскиз бобышки лежит на СМЕЩЁННОЙ плоскости и в этом сеансе сервером
+                # не рисовался (документ переоткрыт), значит координату для очистки вывести неоткуда:
+                # перенос 3D→2D измерен только для основной XY. Отказ обязан назвать причину, а не
+                # выдать координату по чужой оси — наряд §2.2.
+                if sk_from_tree:
+                    env, code = call("kompas_edit_sketch", {
+                        "sketch_ref": sk_from_tree, "expected_revision": ctx(doc2),
+                        "mode": "replace", "entities": [circle]})
+                    err_details = ((env or {}).get("error") or {}).get("details") or {}
+                    b["derivation_refusal"] = {"error": code,
+                                               "derivation": err_details.get("derivation"),
+                                               "message": describe(env)}
+                    if not (code == "CAPABILITY_UNAVAILABLE"
+                            and err_details.get("derivation") == "plane_not_xy"):
+                        problems_b.append(
+                            "правка эскиза на ссылочной плоскости не отказала названной причиной: "
+                            f"err={code} derivation={err_details.get('derivation')!r}")
+                    g5 = state(doc2)
+                    b["model_after_refusal"] = g5
+                    if not (g5["volumes"] and near(g5["volumes"][0], total_v)):
+                        problems_b.append(f"после отказа модель изменилась: объём {g5['volumes']}")
+
+            reopen_ok = not problems_b
+            out["save_reopen"] = {
+                "ok": reopen_ok,
+                "detail": (f"файл={os.path.exists(path)} документ={bool(doc2)}; объём "
+                           f"{b.get('volume')} (ожидание {total_v}); эскиз из дерева="
+                           f"{bool(b.get('sketch_ref_from_tree'))}; опора, прочитанная GetPlane из "
+                           f"модели: {b.get('support_type_before')!r}, геометрия изменена="
+                           f"{b.get('geometry_changed')!r}, ступень {b.get('apply_route')!r}; "
+                           f"правка эскиза на ссылочной плоскости отказывает "
+                           f"{b.get('derivation_refusal', {}).get('error')!r} с причиной "
+                           f"{b.get('derivation_refusal', {}).get('derivation')!r}"
+                           + ("; НЕ ВЫПОЛНЕНО: " + "; ".join(problems_b) if problems_b else "")),
+                "details": b}
+
+            if doc2:
+                close(doc2)
+                doc2 = None
+        finally:
+            close(doc)
+            if doc2:
+                close(doc2)
+
+        # ── C: set_sketch_plane ТОЛЬКО с reference — опора МЕНЯЕТСЯ, геометрия ЕДЕТ ─────────────
+        # Отличающая величина та же, что в AUXS.01: у эскиза на xy+15 десятимиллиметровое протяжение
+        # лежит по Z, а после перепривязки на плоскость XZ обязано перейти на Y при сохранённом объёме.
+        c = {"expected_volume": 60.0 * 40.0 * 10.0, "expected_thin_axis": "y"}
+        problems_c = []
+        doc3, rev3 = new_doc("AUXS-ref-edit")
+        try:
+            sk3, rev3, err = sketch(doc3, rev3, [small_rect], "AUXS04-s", offset=15.0, plane="xy")
+            rev3 = ctx(doc3)
+            if err:
+                problems_c.append(f"эскиз на xy+15 не создан: {err}")
+            else:
+                rev3, body3, _r3, code = extrude(doc3, rev3, sk3, operation="base", depth_mm=10,
+                                                 direction="positive", end_condition="blind")
+                rev3 = ctx(doc3)
+                g3 = state(doc3)
+                box3 = g3["boxes"][0] if g3["boxes"] else None
+                c["before"] = {"volume": (g3["volumes"] or [None])[0], "thin_axis": thin_axis(box3),
+                               "box": box3}
+                env, code2 = call("kompas_create_aux_geometry", {
+                    "document_id": doc3, "expected_revision": rev3, "kind": "plane",
+                    "mode": "offset", "base_plane": "xz", "offset_mm": 0.0, "name": "AUXS04-xz"})
+                ref3 = result(env).get("reference_id")
+                c["aux_plane"] = {"error": code2, "reference_id": ref3}
+                rev3 = ctx(doc3)
+                if code2 is not None or not ref3:
+                    problems_c.append(f"плоскость XZ не создана: err={code2}")
+                else:
+                    env, code3 = call("kompas_set_sketch_plane", {
+                        "document_id": doc3, "sketch_ref": sk3, "expected_revision": rev3,
+                        "plane": {"reference": ref3}})
+                    res3 = result(env) or {}
+                    rev3 = ctx(doc3)
+                    g4 = state(doc3)
+                    box4 = g4["boxes"][0] if g4["boxes"] else None
+                    c["error"] = code3
+                    c["after"] = {"volume": (g4["volumes"] or [None])[0], "thin_axis": thin_axis(box4),
+                                  "box": box4, "support_type_after": res3.get("support_type_after"),
+                                  "geometry_changed": res3.get("geometry_changed"),
+                                  "apply_route": res3.get("apply_route")}
+                    thin4 = thin_axis(box4)
+                    if not (code3 is None and thin4 == "y"):
+                        problems_c.append(f"опора по ссылке: err={code3} тонкая ось {thin4} "
+                                          f"(ожидание y)")
+                    if not (c["after"]["volume"] is not None
+                            and near(c["after"]["volume"], c["expected_volume"])):
+                        problems_c.append(f"объём после перепривязки {c['after']['volume']} "
+                                          f"≠ {c['expected_volume']}")
+                    if res3.get("geometry_changed") is not True:
+                        problems_c.append("перепривязка не подтверждена изменением геометрии: "
+                                          f"geometry_changed={res3.get('geometry_changed')!r}")
+        finally:
+            close(doc3)
+
+        out["edit"] = {
+            "ok": not problems_c,
+            "detail": (f"эскиз на xy+15 (тонкая ось {c.get('before', {}).get('thin_axis')}, объём "
+                       f"{c.get('before', {}).get('volume')}); опора сменена формой «ТОЛЬКО reference» "
+                       f"на плоскость XZ: тонкая ось → {c.get('after', {}).get('thin_axis')} "
+                       f"(ожидание y), объём {c.get('after', {}).get('volume')} (ожидание "
+                       f"{c['expected_volume']}), опора прочитана обратно "
+                       f"{c.get('after', {}).get('support_type_after')!r}, ступень "
+                       f"{c.get('after', {}).get('apply_route')!r}"
+                       + ("; НЕ ВЫПОЛНЕНО: " + "; ".join(problems_c) if problems_c else "")),
+            "details": c}
+        return out
+
     # ── AUX-SKETCH: эскиз. `edit` ИЗМЕРЕН (см. AUXS выше), понижение снято ─────────────────────
     def aux_sketch_rows():
         """Строка AUX-SKETCH.plane_and_profile_lifecycle: жизненный цикл эскиза-опоры.
@@ -23133,6 +23484,24 @@ def f08_action_lifecycle_checks(client, rep, app_id, workdir):
             auxs = auxs_plane_lifecycle()
             emit(nn, "edit", row, "PASS" if auxs["ok"] else "FAIL", auxs["detail"],
                  details=auxs["details"])
+            # ── ОПОРА-ССЫЛКА: строки AUXS.03/AUXS.04/AUXS.05 ─────────────────────────────────
+            # То, ради чего выдан наряд 07.10.2026: форма «ТОЛЬКО reference» должна проходить схему
+            # клиента и доводить дело до геометрии, а не до отказа контракта. Каждая строка судится
+            # ЧИСЛОМ (объём, габарит, тонкая ось), а не исходом вызова.
+            refs = auxs_plane_reference_scenario()
+            for test_id, key, what in (
+                    ("AUXS.03.create", "create",
+                     "эскиз на плоскости, ПОСТРОЕННОЙ ОТ ГРАНИ, формой «только reference», и бобышка "
+                     "на нём: объём обязан вырасти на π·12.5²·15, верх — на z=25"),
+                    ("AUXS.04.edit", "edit",
+                     "kompas_set_sketch_plane формой «только reference» на плоскость XZ: опора "
+                     "меняется, тонкое протяжение уезжает с оси Z на Y при сохранённом объёме"),
+                    ("AUXS.05.save_reopen", "save_reopen",
+                     "save→close→reopen: эскиз и тело на месте, а опора читается обратно ИЗ МОДЕЛИ "
+                     "(GetPlane отвечает типом 14) и перепривязка на ту же плоскость геометрию не меняет")):
+                r = refs.get(key) or {"ok": False, "detail": "постановка не выполнена", "details": {}}
+                rep.add(test_id, "AUX-SKETCH.plane_and_profile_lifecycle: " + what,
+                        "PASS" if r["ok"] else "FAIL", r["detail"], details=r["details"])
             # negative_tests: отказ ИМЕНОВАННЫМ кодом при НЕИЗМЕННОЙ модели. Берутся границы,
             # которые контракт эскиза действительно объявляет: чужая ревизия и принимаемая чужая
             # плоскость (принятие — тоже наблюдаемый исход, и он записан рядом с отказами).

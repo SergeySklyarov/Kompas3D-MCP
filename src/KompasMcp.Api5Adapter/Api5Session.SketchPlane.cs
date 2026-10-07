@@ -1,6 +1,9 @@
+using System.Runtime.InteropServices;
 using Kompas6API5;
+using KompasAPI7;
 using KompasMcp.Contracts;
 using KompasMcp.Contracts.Ipc;
+using KompasMcp.Domain.References;
 
 namespace KompasMcp.Api5Adapter;
 
@@ -43,13 +46,23 @@ public sealed partial class Api5Session
     /// a face refusal would look like "kind not recognised" rather than "a face is not a plane".</remarks>
     private static readonly string[] NonPlaneKinds = ["face", "edge", "body", "body_unresolved", "axis", "point"];
 
+    /// <summary>The support a request resolved to: the MODEL OBJECT handed to <c>SetPlane</c> plus, for a
+    /// named base plane only, which of the three it was.</summary>
+    /// <remarks>INVARIANT: <see cref="BasePlane"/> is filled ONLY for a named base plane. A reference
+    /// support must NOT be remembered as a base: the sketch frame of an offset or tilted plane is not one
+    /// of the three standard frames, and remembering XY for it would make the coordinate derivation of
+    /// <c>kompas_edit_sketch</c> work along the wrong axis — the very defect this type closes.
+    /// History: docs/decisions/adapter-sketch.md#sketch-plane-reference</remarks>
+    private readonly record struct SketchSupport(ksEntity Entity, PlaneBase? BasePlane);
+
     public SetSketchPlaneResult SetSketchPlane(SetSketchPlaneCommand command)
     {
         var document = RequireDocument(command.DocumentId);
         var diagnostics = new List<string>();
 
         var sketch = ResolveSketchForPlaneChange(document, command.SketchRef, diagnostics);
-        var planeEntity = ResolveSupportPlane(document, command.Plane, diagnostics);
+        var support = ResolveSupportPlane(document, command.Plane, diagnostics);
+        var planeEntity = support.Entity;
 
         if (sketch.GetDefinition() is not ksSketchDefinition definition)
         {
@@ -136,8 +149,14 @@ public sealed partial class Api5Session
         return entity;
     }
 
-    /// <summary>Request support: a ready reference OR a base plane with an offset.</summary>
-    private ksEntity ResolveSupportPlane(
+    /// <summary>Request support: a ready reference OR a base plane with an offset — ONE rule for both
+    /// <c>kompas_create_sketch</c> and <c>kompas_set_sketch_plane</c>.</summary>
+    /// <remarks>INVARIANT: both tools answer every form below the SAME way. A second, laxer check in
+    /// <c>create_sketch</c> used to accept <c>base</c> and <c>reference</c> together, take the reference
+    /// and remember <c>base</c> — an accepted-and-ignored field surviving to acceptance as a completed
+    /// sketch on the wrong frame. There is one check because there is one question.
+    /// History: docs/decisions/adapter-sketch.md#sketch-plane-reference</remarks>
+    private SketchSupport ResolveSupportPlane(
         DocumentEntry document, PlaneRefDto plane, List<string> diagnostics)
     {
         var hasReference = plane.Reference is { Length: > 0 };
@@ -178,7 +197,7 @@ public sealed partial class Api5Session
                 diagnostics.Add("Опора: стандартная плоскость «" + plane.Base + "».");
             }
 
-            return ResolvePlaneEntity(document, plane);
+            return new SketchSupport(ResolvePlaneEntity(document, plane), plane.Base);
         }
 
         // The offset belongs to the BASE plane, not to a ready reference. When a sketch is created such
@@ -220,18 +239,119 @@ public sealed partial class Api5Session
                 });
         }
 
-        if (stored.Payload is not ksEntity planeEntity)
+        var entity = ResolvePlaneSupportObject(document, stored, plane.Reference!, diagnostics);
+        return new SketchSupport(entity, null);
+    }
+
+    /// <summary>The MODEL object behind a reference of kind <c>plane</c> — the one handed to
+    /// <c>SetPlane</c>. Two payload shapes are NOT interchangeable: the server's own offset-plane route
+    /// carries an API5 <c>ksEntity</c>; <c>kompas_create_aux_geometry</c> carries an API7 <c>IPlane3D</c>.
+    /// MEASURED: the kernel refuses that API7 object in <c>SetPlane</c>, and the documented reverse
+    /// transfer (<c>TransferInterface(…, ksAPI5Auto, o3d_planeOffset)</c>) yields no <c>ksEntity</c>; the
+    /// SAME plane IS visible to API5 in the part's enumeration, and that enumeration is the route taken.
+    /// INVARIANT: the entity is addressed BY ITS OWN NAME AND TYPE; zero or several matches are refused.
+    /// History: docs/decisions/adapter-sketch.md#sketch-plane-reference</summary>
+    private ksEntity ResolvePlaneSupportObject(
+        DocumentEntry document, StoredReference stored, string referenceId, List<string> diagnostics)
+    {
+        if (stored.Payload is ksEntity direct)
+        {
+            diagnostics.Add($"Опора: готовая ссылка '{referenceId}' (вид «{stored.Kind}», тип {direct.type}).");
+            return direct;
+        }
+
+        if (stored.Payload is not IPlane3D plane3d)
         {
             throw new KompasContractException(
                 ErrorCodes.StaleReference,
-                $"Ссылка '{plane.Reference}' вида «{stored.Kind}» не несёт объекта модели.",
+                $"Ссылка '{referenceId}' вида «{stored.Kind}» не несёт ни объекта модели, ни " +
+                "плоскости: опору взять не из чего.",
                 RetryPolicy.ReacquireContext,
                 details: new Dictionary<string, object?> { ["kind"] = stored.Kind });
         }
 
-        diagnostics.Add($"Опора: готовая ссылка '{plane.Reference}' (вид «{stored.Kind}», "
-            + $"тип {planeEntity.type}).");
-        return planeEntity;
+        var (name, type, readFailure) = ReadPlaneIdentity(plane3d);
+        if (readFailure is not null || string.IsNullOrEmpty(name) || type is null)
+        {
+            throw new KompasContractException(
+                ErrorCodes.CapabilityUnavailable,
+                $"У плоскости ссылки '{referenceId}' не прочитаны имя и тип модели" +
+                (readFailure is null ? " (пустое имя или тип)" : $": {readFailure}") +
+                ". Опора ищется по этим двум признакам, и без них подставить другую плоскость значило бы " +
+                "выбрать опору за вызывающего.",
+                RetryPolicy.ReacquireContext,
+                details: new Dictionary<string, object?>
+                {
+                    ["reference"] = referenceId,
+                    ["plane_name"] = name,
+                    ["plane_type"] = type,
+                });
+        }
+
+        // ASSUMPTION: an API5 entity of the same name and type is the same model object. The name is
+        // given by the caller, so two same-named planes in one document are addressed indistinguishably —
+        // a limit of this route, named in the refusal below rather than hidden.
+        var matches = new List<ksEntity>();
+        try
+        {
+            if (document.PartNow().EntityCollection(KompasObjectTypes.Of(type.Value)) is ksEntityCollection collection)
+            {
+                for (var i = 0; i < collection.GetCount(); i++)
+                {
+                    if (collection.GetByIndex(i) is ksEntity candidate
+                        && candidate.type == type.Value
+                        && string.Equals(candidate.name, name, StringComparison.Ordinal))
+                    {
+                        matches.Add(candidate);
+                    }
+                }
+            }
+        }
+        catch (COMException ex)
+        {
+            throw new KompasContractException(
+                ErrorCodes.CapabilityUnavailable,
+                $"Перечисление объектов типа {type} недоступно ({ex.GetType().Name}), поэтому объект " +
+                $"плоскости ссылки '{referenceId}' не найден. Другая плоскость не подставляется.",
+                RetryPolicy.ReacquireContext,
+                details: new Dictionary<string, object?> { ["plane_type"] = type, ["plane_name"] = name });
+        }
+
+        if (matches.Count != 1)
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                $"Плоскость ссылки '{referenceId}' («{name}», тип {type}) отыскана в модели " +
+                $"{matches.Count} раз(а), а опора обязана быть одна: по нулю или нескольким совпадениям " +
+                "сервер не выбирает объект за вызывающего. Назовите плоскость отдельным именем.",
+                details: new Dictionary<string, object?>
+                {
+                    ["reference"] = referenceId,
+                    ["plane_name"] = name,
+                    ["plane_type"] = type,
+                    ["matches"] = matches.Count,
+                });
+        }
+
+        diagnostics.Add($"Опора: ссылка '{referenceId}' (вид «{stored.Kind}») разрешена в объект модели " +
+            $"типа {type} («{name}») по имени и типу из перечисления: объект API7 ядром в опору не " +
+            "принимается (измерено), а объект модели того же имени и типа из перечисления API5 — "
+            + "принимается.");
+        return matches[0];
+    }
+
+    /// <summary>Name and model type of a plane read from the model, with the read failure named instead
+    /// of swallowed.</summary>
+    private static (string? Name, int? Type, string? Failure) ReadPlaneIdentity(IPlane3D plane)
+    {
+        try
+        {
+            return (plane.Name, (int)plane.ModelObjectType, null);
+        }
+        catch (Exception ex)
+        {
+            return (null, null, ex.GetType().Name + ": " + ex.Message);
+        }
     }
 
     /// <summary>Call <c>sketch.Update()</c> — the measured-sufficient step that applies the edit.</summary>

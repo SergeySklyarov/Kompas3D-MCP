@@ -24,12 +24,18 @@ public sealed partial class Api5Session
     public ReferenceDto CreateSketch(CreateSketchCommand command)
     {
         var document = RequireDocument(command.DocumentId);
-        var planeEntity = ResolvePlaneEntity(document, command.Plane);
+
+        // ONE support rule for both tools. This call used to resolve the reference on its own, take it
+        // while IGNORING `base`, and remember `base` as the sketch's frame — an accepted-and-ignored
+        // field that reached acceptance looking like a sketch on the wrong plane. The shared rule is
+        // ResolveSupportPlane (Api5Session.SketchPlane.cs).
+        // History: docs/decisions/adapter-sketch.md#sketch-plane-reference
+        var support = ResolveSupportPlane(document, command.Plane, new List<string>());
 
         var sketch = (ksEntity)document.PartNow().NewEntity(KompasObjectTypes.Of(KompasObjectTypes.Sketch));
         sketch.name = command.Name ?? $"sketch_{document.Revision}";
         var definition = (ksSketchDefinition)sketch.GetDefinition();
-        if (!definition.SetPlane(planeEntity))
+        if (!definition.SetPlane(support.Entity))
         {
             ComApartment.Release(sketch);
             throw new KompasContractException(
@@ -56,12 +62,17 @@ public sealed partial class Api5Session
         _sketchProbePoints[reference.Id] = new List<double[]>();
         _sketchProfileBox.Remove(reference.Id);
         _sketchProfiles.Remove(reference.Id);
-        if (command.Plane.Base is PlaneBase basePlane)
+
+        // ONLY a named base plane is remembered. A reference support must NOT be: the frame of an offset
+        // or tilted plane is not one of the three standard frames, so a remembered XY would send the
+        // coordinate derivation of kompas_edit_sketch along the wrong axis. For a reference the frame is
+        // read back from the model instead (ResolveSketchPlaneBase).
+        if (support.BasePlane is PlaneBase basePlane)
         {
             _sketchPlaneBase[reference.Id] = basePlane;
         }
 
-        return ToDto(reference, PlaneHint(command.Plane));
+        return ToDto(reference, PlaneHint(command.Plane, support.Entity));
     }
 
     private ksEntity ResolvePlaneEntity(DocumentEntry document, PlaneRefDto plane)
@@ -117,9 +128,15 @@ public sealed partial class Api5Session
         return offsetPlane;
     }
 
-    private static string PlaneHint(PlaneRefDto plane) =>
+    /// <summary>What the client is told about the support it got: for a reference, the KIND and the model
+    /// TYPE of the object the reference resolved to, read from the model rather than retold from the
+    /// request.</summary>
+    /// <remarks>MEASURED: the hint used to read «sketch on <c>reference</c>» and nothing else — it named
+    /// neither what the reference became nor whether a plane was behind it at all.
+    /// History: docs/decisions/adapter-sketch.md#sketch-plane-reference</remarks>
+    private static string PlaneHint(PlaneRefDto plane, ksEntity entity) =>
         plane.Reference is not null
-            ? $"sketch on {plane.Reference}"
+            ? $"sketch on {plane.Reference} (вид «plane», тип {entity.type} («{entity.name}») — прочитано из модели)"
             : $"{plane.Base?.ToString().ToUpperInvariant() ?? "plane"}{(Math.Abs(plane.OffsetMm) > 1e-9 ? $" +{plane.OffsetMm:0.###} mm" : string.Empty)}";
 
     /// <summary>The contours this server drew into each sketch, in mm — the expected volume target read by

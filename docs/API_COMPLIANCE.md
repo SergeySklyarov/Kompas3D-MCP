@@ -243,13 +243,15 @@
 
 ### SKETCH - Эскиз: создание, правка геометрии, базовые плоскости
 **Инструмент:** `kompas_create_sketch`, `kompas_edit_sketch`, `kompas_finish_sketch`, `kompas_get_sketch_status`.
-**Место в коде:** `src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs — CreateSketch/EditSketch/FinishSketch`; `src/KompasMcp.Api5Adapter/Api5Session.SketchStatus.cs`.
+**Место в коде:** `src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs — CreateSketch/EditSketch/FinishSketch`; `src/KompasMcp.Api5Adapter/Api5Session.SketchStatus.cs`; `src/KompasMcp.Api5Adapter/Api5Session.SketchPlane.cs — ResolveSupportPlane` (общая проверка опоры).
 **Существенные условия:** Геометрия эскиза строится функциями 2D API на интерфейсе ksDocument2D внутри BeginEdit/EndEdit; базовая плоскость эскиза - SetPlane/GetPlane.
+**Маршрут `SetPlane` с опорой-плоскостью по ССЫЛКЕ (дополнено 07.10.2026).** Опора задаётся формой `plane` у ОБОИХ инструментов (`kompas_create_sketch`, `kompas_set_sketch_plane`): `base` (xy/xz/yz, при необходимости с `offset_mm`) ЛИБО `reference` (ссылка вида `plane`), ровно одно из двух. Документированным членом остаётся `ksSketchDefinition.SetPlane`; ИЗМЕРЕНО, что ядро принимает объект детали, взятый из документированного перечисления `ksPart.EntityCollection(o3d_planeOffset)`, и НЕ принимает объект API7-плоскости (`IPlane3D`). **Уточнено 07.10.2026:** документированный обратный перенос `TransferInterface(…, ksAPI5Auto, o3d_planeOffset)` для плоскости, созданной через API7, `ksEntity` НЕ даёт (ИЗМЕРЕНО, проба SP, шаг SP.10, три вызова записаны отдельно); прежнее «обратный перенос 7→5 возвращает тот же объект» получено вызовом с `apiNewType = ksAPI7Dual = 2`, который просит тот же API, и потому является документированным ответом на такой вызов (примечания 2/3 страницы `kompasobject_transferinterface.html`), а не свойством ядра. Поэтому ссылка разрешается в объект модели по имени и типу — допущение, названное допущением. Плоскость у грани строится документированным `kompas_create_aux_geometry` (`kind=plane`, `mode=offset`, `base_face_ref`). Грань и ребро опорой НЕ являются: отказ `INVALID_ARGUMENT` по виду ссылки ДО COM. Основание — `docs/decisions/adapter-sketch.md#sketch-plane-reference`.
 **Документированные интерфейсы и члены:**
 - `ksSketchDefinition.SetPlane / GetPlane` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kssketchdefinition_setplane.html>
 - `ksSketchDefinition.BeginEdit / EndEdit` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kssketchdefinition_beginedit.html>
 - `ksDocument2D.ksLineSeg / ksCircle / ksArcByAngle` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument2d_kslineseg.html>
 - `ksPlaneOffsetDefinition.SetPlane / GetPlane` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksplaneoffsetdefinition_props.html>
+- `KompasObject.TransferInterface / ksAPITypeEnum` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kompasobject_transferinterface.html> (цитируется для проверки обратного переноса; продуктом НЕ вызывается — измерено, что `ksEntity` он не даёт)
 **Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
 **Оценка документации:** **Подтверждено** - маршрут целиком лежит на документированных интерфейсах и членах
 

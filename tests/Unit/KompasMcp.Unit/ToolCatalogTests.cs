@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using KompasMcp.Domain.Schema;
 using KompasMcp.Host.Catalog;
 using Xunit;
 
@@ -154,5 +155,87 @@ public class ToolCatalogTests
         Assert.Contains("ручка", description, StringComparison.Ordinal);
         Assert.Contains("габарит", description, StringComparison.Ordinal);
         Assert.Contains("STALE_REFERENCE", description, StringComparison.Ordinal);
+    }
+
+    // ── the shared `plane` form of kompas_create_sketch / kompas_set_sketch_plane ────────────────
+
+    private const string SupportTools = "kompas_create_sketch";
+
+    private static JsonObject PlaneProperty(string tool)
+    {
+        var properties = (JsonObject)Tool(tool).InputSchema["properties"]!;
+        return (JsonObject)properties["plane"]!;
+    }
+
+    /// <summary>INVARIANT: the "reference only" support must pass the published schema — it is the form
+    /// the documented scenario «auxiliary plane → sketch by reference» is expressed in.</summary>
+    /// <remarks>MEASURED: <c>base</c> used to be in <c>required</c> AND its own enum did not carry
+    /// <c>null</c>, so this form was refused by the client's schema before the call reached the server.
+    /// The assertion goes through the SAME validator the Host uses, on a parsed payload: a schema read
+    /// as a JSON tree and a schema used to validate are two different claims.
+    /// History: docs/decisions/tests.md#tool-catalog-2</remarks>
+    [Theory]
+    [InlineData("kompas_create_sketch")]
+    [InlineData("kompas_set_sketch_plane")]
+    public void SketchPlane_ReferenceOnlyForm_PassesThePublishedSchema(string tool)
+    {
+        var schema = Tool(tool).InputSchema;
+        var required = schema["required"] as JsonArray;
+        Assert.NotNull(required);
+        Assert.DoesNotContain("base", required!.Select(node => node!.GetValue<string>()));
+
+        var payload = JsonNode.Parse("""
+            {"document_id":"0123456789abcdef0123456789abcdef","expected_revision":1,
+             "operation_id":"11111111-2222-3333-4444-555555555555",
+             "plane":{"reference":"plane:0123456789abcdef0123456789abcdef"}}
+            """)!.AsObject();
+        if (tool == "kompas_set_sketch_plane")
+        {
+            // The support change names the sketch it re-anchors; creation does not.
+            payload["sketch_ref"] = "sketch:0123456789abcdef0123456789abcdef";
+        }
+
+        Assert.Empty(JsonSchemaValidator.Validate(schema, payload));
+    }
+
+    /// <summary>INVARIANT: a client that fills every declared field with <c>null</c> must not be refused
+    /// by the enum of the field it is not using.</summary>
+    /// <remarks>MEASURED: the enum carried only the three plane names while the type already allowed
+    /// <c>null</c>, so <c>base: null</c> failed its own field. History: docs/decisions/tests.md#tool-catalog-2</remarks>
+    [Fact]
+    public void SketchPlane_BaseEnum_CarriesNull()
+    {
+        var baseSchema = (JsonObject)((JsonObject)PlaneProperty(SupportTools)["properties"]!)["base"]!;
+        var types = (JsonArray)baseSchema["type"]!;
+        var values = (JsonArray)baseSchema["enum"]!;
+
+        Assert.Contains("null", types.Select(node => node?.GetValue<string>()));
+        Assert.Contains(values, node => node is null);
+    }
+
+    /// <summary>INVARIANT: the description states the rule the server enforces in words, because
+    /// <c>oneOf</c>/<c>anyOf</c> are not evaluated by every client and a rule the client ignores is a
+    /// rule that does not exist. It also names what is NOT accepted, so the refusal is not a surprise.</summary>
+    [Fact]
+    public void SketchPlane_DescriptionNamesTheRuleAndTheFaceRefusal()
+    {
+        var plane = PlaneProperty(SupportTools);
+        var reference = (JsonObject)((JsonObject)plane["properties"]!)["reference"]!;
+        var text = plane["description"]!.GetValue<string>() + " " + reference["description"]!.GetValue<string>();
+
+        Assert.Contains("ИМЕННО ОДНО", text, StringComparison.Ordinal);
+        Assert.Contains("INVALID_ARGUMENT", text, StringComparison.Ordinal);
+        Assert.Contains("Грань", text, StringComparison.Ordinal);
+        Assert.Contains("kompas_create_aux_geometry", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>INVARIANT: ONE form for both tools. A second dialect would make "the same support" mean
+    /// two different things, and a client reading one tool would learn the wrong rule for the other.</summary>
+    [Fact]
+    public void SketchPlane_IsTheSameFormForBothTools()
+    {
+        Assert.Equal(
+            PlaneProperty("kompas_create_sketch").ToJsonString(),
+            PlaneProperty("kompas_set_sketch_plane").ToJsonString());
     }
 }

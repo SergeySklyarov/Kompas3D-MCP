@@ -464,6 +464,8 @@ public static class Program
         // Three different questions, three different artefacts: the passport, the definitive
         // measurement run, and the attribution run that keeps going after the first match. They must
         // not overwrite one another.
+        // MEASURED: modes missing from this list shared the fallback stem, so their reports overwrote
+        // one another inside that single file. Every mode now names its own artefact.
         var stem = options.PassportOnly ? "env-passport"
             : options.Lifecycle ? "sketch-lifecycle"
             : options.Extrusion ? "extrusion-sketch"
@@ -481,10 +483,13 @@ public static class Program
             : options.VerifyM3d is not null ? "m3d-verification"
             : options.FullTurn ? "full-turn"
             : options.HoleModes ? "hole-modes"
+            : options.HoleTree ? "hole-tree"
             : options.SketchDefinition ? "sketch-definition"
             : options.Identity ? "feature-identity"
             : options.Union ? "disconnected-union"
             : options.B5 ? "b5-sweep-loft-shell"
+            : options.SketchPlane ? "sketch-plane"
+            : options.VmDensityMci ? "vm-density-mci"
             : options.RepositionRead ? "reposition-read"
             : options.RepositionParams ? "reposition-params"
             : options.CutArea ? "cut-area"
@@ -608,15 +613,16 @@ public sealed class Options
     /// §3).</summary>
     public bool BossFuse { get; private set; }
 
-    /// <summary>--hole-modes: the four modes of native SM-07 holes — counterbore, countersink, flat bottom, position (probe M).</summary>
+    /// <summary>--hole-modes: the four modes of native SM-07 holes — counterbore, countersink,
+    /// flat bottom, position (probe M).</summary>
     public bool HoleModes { get; private set; }
 
     /// <summary>--hole-tree: under which number the hole feature appears in the tree (probe N).</summary>
     public bool HoleTree { get; private set; }
 
     /// <summary><c>--identity</c>: how a just-created feature DIFFERS from an existing one when the
-    /// two share the same display name. Client acceptance 19.09.2026 showed that a second reposition
-    /// feature gets the same name, and the "new name" rule drops it.
+    /// two share the same display name. An acceptance showed that a second reposition feature gets the
+    /// same name, and the "new name" rule drops it.
     /// History: docs/decisions/probes.md#identity</summary>
     public bool Identity { get; private set; }
 
@@ -626,12 +632,12 @@ public sealed class Options
     public bool Union { get; private set; }
 
     /// <summary><c>--cut-area</c>: the "application area" of a plane cut — does a route exist that
-    /// directs the operation at SELECTED bodies (probe CA, priority 1 of the 19.09.2026 order). Member
+    /// directs the operation at SELECTED bodies (probe CA, the first priority of its order). Member
     /// names are read from the installed type library, not taken from a candidate list.</summary>
     public bool CutArea { get; private set; }
 
     /// <summary><c>--reposition-order</c>: why a feature at 180° is read as a TRANSLATION (probe RO,
-    /// priority 3 of the 19.09.2026 order). The hypothesis under test is about the ORDER of the API7
+    /// priority 3 of its order). The hypothesis under test is about the ORDER of the API7
     /// collection: a tree feature is matched to a collection element by ordinal number, while only the
     /// NUMBER of elements is checked, so suppressing and restoring a feature can shift the order — and
     /// the read describes the neighbour. History: docs/decisions/probes.md#ro-order</summary>
@@ -663,7 +669,8 @@ public sealed class Options
     /// History: docs/decisions/probes.md#rp-params</summary>
     public bool RepositionParams { get; private set; }
 
-    /// <summary>--sketch-definition: the sketch certainty "+ / − / !" read from the API (probe S). History: docs/decisions/probes.md#sketch-definition</summary>
+    /// <summary>--sketch-definition: the sketch certainty "+ / − / !" read from the API (probe S).
+    /// History: docs/decisions/probes.md#sketch-definition</summary>
     public bool SketchDefinition { get; private set; }
 
     /// <summary><c>--vm-reference &lt;path&gt;</c>: build the VM acceptance reference — a parametrized

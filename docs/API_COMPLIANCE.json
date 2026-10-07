@@ -1,4 +1,4 @@
-{
+﻿{
  "meta": {
   "artifact": "docs/API_COMPLIANCE.json",
   "audit": "соответствие MCP официальной документации КОМПАС",
@@ -25291,6 +25291,31 @@
    "affected_tools": [
     "kompas_get_material",
     "kompas_set_material"
+   ]
+  },
+  {
+   "id": "A-02",
+   "date": "2026-10-07 (+02:00, часы машины)",
+   "title": "Опора эскиза по ссылке на плоскость: форма plane у двух инструментов и общая проверка опоры",
+   "scope": "AUX-SKETCH.plane_and_profile_lifecycle; kompas_create_sketch.plane; kompas_set_sketch_plane.plane",
+   "note": "ДОБАВЛЕНО ПОСЛЕ аудита 05.10.2026 и НЕ входит в его состав: числа разделов 1-8 описывают прогон 05.10.2026 и НЕ переписаны. Полное сведение матрицы под живой прогон (scratch/_build_api_compliance.py) в этот наряд не входило.",
+   "documented_route": "ksSketchDefinition.SetPlane(LPENTITY plane) — «указатель на интерфейс базовой плоскости эскиза ksEntity или IEntity»; опора — ПЛОСКОСТЬ (базовая, смещённая или вспомогательная). Плоскость у грани строится kompas_create_aux_geometry (kind=plane, mode=offset, base_face_ref).",
+   "documentation": [
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kssketchdefinition_setplane.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kssketchdefinition_getplane.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksplaneoffsetdefinition_setplane.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksapi_iplane3dbyoffset_setbaseplane.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kompasobject_transferinterface.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksapitypeenum.html"
+   ],
+   "measured": "Проба SP, шаги SP.10/SP.11 (отчёт docs/acceptance/api7/sketch-plane.json): объект API7-плоскости (IPlane3D) в SetPlane НЕ принимается (False), QI(ksEntity) не отвечает; документированный обратный перенос TransferInterface(…, ksAPI5Auto, o3d_planeOffset) для плоскости, созданной через API7, ksEntity НЕ даёт (ИЗМЕРЕНО 07.10.2026, три вызова записаны отдельно), а прежнее «перенос 7→5 возвращает ТОТ ЖЕ объект» получено вызовом с apiNewType = ksAPI7Dual = 2, который просит тот же API, и потому является документированным ответом на такой вызов (примечания 2/3 страницы kompasobject_transferinterface.html), а не свойством ядра; та же плоскость ВИДНА API5 в ksPart.EntityCollection(o3d_planeOffset) и объект ОТТУДА принимается и применяется (габарит z[10…20] → z[25…35], объём 16000, ступень sketch.Update()). Смещённая плоскость API5, построенная ОТ ГРАНИ (ksPlaneOffsetDefinition.SetPlane), создаётся и служит опорой. Живые строки поставки: AUXS.03.create (объём 80000 → 87363.10778185107 при π·12.5²·15, верх z=25), AUXS.04.edit (тонкая ось z → y при объёме 24000), AUXS.05.save_reopen (опора читается из модели типом 14; правка эскиза на ссылочной плоскости отказывает CAPABILITY_UNAVAILABLE, derivation=plane_not_xy), AUXS.02.negative_tests (12 форм, все ожидаемые коды, модель не изменилась).",
+   "delivery": "artifacts/publish-sketch-plane-ref-20261007",
+   "host_dll_sha256": "6a630eba16eafe8f5b8528cf7811ea188932f2125004631be8142272458cee00",
+   "adapter_sha256": "d16205d349f4a385d2f8e61ef96d3a0e94823a0ef22803cc3e913569bcc6dda3",
+   "evidence": "docs/decisions/adapter-sketch.md#sketch-plane-reference; docs/acceptance/api7/sketch-plane.json; scratch/sketch-plane-ref/f08-r2.json; scratch/mcp-smoke/delivery-publish-sketch-plane-ref-20261007/full.json; SKETCH_PLANE_REFERENCE_REPORT_20261007.md",
+   "affected_tools": [
+    "kompas_create_sketch",
+    "kompas_set_sketch_plane"
    ]
   }
  ]

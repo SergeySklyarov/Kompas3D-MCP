@@ -439,7 +439,11 @@ public static class ToolCatalog
                 requiresOperationId: false),
 
             Mutation("kompas_create_sketch", "Создать эскиз",
-                "Эскиз на базовой или смещённой плоскости. Координаты дальше задаются в локальной системе эскиза.",
+                "Эскиз на плоскости: base (стандартная xy/xz/yz, при необходимости со смещением "
+                + "offset_mm) ЛИБО reference (ссылка вида plane — смещённая или вспомогательная "
+                + "плоскость, например построенная от грани инструментом kompas_create_aux_geometry). "
+                + "Грань и ребро опорой не являются и отвергаются по виду ссылки. Координаты дальше "
+                + "задаются в локальной системе эскиза.",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id")),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
@@ -469,7 +473,9 @@ public static class ToolCatalog
                 + "RebuildDocument после него не добавляют ничего (проба --sketch-plane, отчёт "
                 + "docs/acceptance/image/sketch-plane-probe-report.md). "
                 + "Форма plane — ТА ЖЕ, что у kompas_create_sketch: base+offset_mm ЛИБО reference, "
-                + "одновременно ровно одно; второй диалект опоры не заводится. "
+                + "одновременно ровно одно; второй диалект опоры не заводится. reference годится "
+                + "только вида plane (смещённая или вспомогательная плоскость): грань и ребро "
+                + "отвергаются по виду ссылки ДО COM. "
                 + "ОТКАЗ НЕ-ПЛОСКОСТИ ПРОИСХОДИТ ДО COM И НАЗЫВАЕТСЯ КОДОМ, и это не осторожность, а "
                 + "измерение: ядро ПРИНИМАЕТ в опору плоскую ГРАНЬ (все шесть граней коробки "
                 + "перепривязывают зависимое тело, SP.9) и ОТВЕРГАЕТ ребро и тело (SetPlane=False, "
@@ -2725,18 +2731,49 @@ public static class ToolCatalog
                 + "молча игнорируется.", -1e18d, 1e18d)))),
     };
 
+    /// <summary>The sketch support: a named standard plane (optionally offset) OR a ready plane
+    /// reference — exactly one of the two.</summary>
+    /// <remarks>INVARIANT: the rule is stated in words and enforced by the SERVER, not by
+    /// <c>oneOf</c>/<c>anyOf</c>, which not every MCP client evaluates; the form is ONE for both tools.
+    /// MEASURED: <c>base</c> sat in <c>required</c> and its enum lacked <c>null</c>, so the "reference
+    /// only" form was refused by the client's schema before reaching the server.
+    /// History: docs/decisions/adapter-sketch.md#sketch-plane-reference</remarks>
     private static JsonObject PlaneSchema() => new()
     {
         ["type"] = "object",
         ["title"] = "plane",
-        ["description"] = "Базовая плоскость (base) либо готовая ссылка (reference). Одновременно — только одно.",
+        ["description"] = "Опора эскиза: ИМЕННО ОДНО из двух — base (стандартная плоскость xy/xz/yz, "
+            + "при необходимости со смещением offset_mm) ЛИБО reference (ссылка вида plane). Оба поля "
+            + "сразу или ни одного — INVALID_ARGUMENT до обращения к ядру: сервер не выбирает поле за "
+            + "вызывающего. Форма одна и та же у kompas_create_sketch и kompas_set_sketch_plane.",
         ["properties"] = Sch.Props(
-            ("base", Sch.Nullable(Sch.Enum("Базовая плоскость.", "xy", "xz", "yz"))),
-            ("reference", Sch.Nullable(Sch.Ref("#/$defs/reference"))),
-            ("offset_mm", Sch.Num("Смещение вдоль нормали базовой плоскости, мм (измерено пробою P2.4: direction=true = вдоль нормали для XY/XZ/YZ; нормаль YOZ направлена в -X, поэтому +15 на YZ даёт x=-15).", -1e6, 1e6, defaultTo: 0d))),
-        ["required"] = new JsonArray("base"),
+            ("base", PlaneBaseSchema()),
+            ("reference", Sch.Described(
+                Sch.Nullable(Sch.Ref("#/$defs/reference")),
+                "Ссылка вида plane — смещённая или вспомогательная плоскость. Грань, ребро, тело, ось и "
+                + "точка опорой НЕ являются: такая ссылка отвергается INVALID_ARGUMENT по виду ссылки ДО "
+                + "обращения к ядру (ответ ядра на грань продуктом не наследуется). Плоскость у грани "
+                + "получают инструментом kompas_create_aux_geometry: kind=plane, mode=offset, "
+                + "base_face_ref=<ссылка на грань>, offset_mm=<смещение>; его reference_id и подаётся "
+                + "здесь. offset_mm вместе с reference отвергается, а не игнорируется молча.")),
+            ("offset_mm", Sch.Num("Смещение вдоль нормали базовой плоскости, мм (измерено пробою P2.4: direction=true = вдоль нормали для XY/XZ/YZ; нормаль YOZ направлена в -X, поэтому +15 на YZ даёт x=-15). Имеет смысл только вместе с base.", -1e6, 1e6, defaultTo: 0d))),
         ["additionalProperties"] = false,
     };
+
+    /// <summary>The <c>base</c> field: a named standard plane, or <c>null</c>.</summary>
+    /// <remarks>MEASURED: <c>Nullable(Enum(...))</c> produced <c>type: ["string","null"]</c> with
+    /// <c>enum: ["xy","xz","yz"]</c> — a <c>base: null</c> sent by a client failed the enum of its own
+    /// field. <c>null</c> is added to the enum rather than dropped from the type, so "omitted" and
+    /// "null" stay the same request.
+    /// History: docs/decisions/adapter-sketch.md#sketch-plane-reference</remarks>
+    private static JsonObject PlaneBaseSchema()
+    {
+        var schema = Sch.Nullable(Sch.Enum(
+            "Стандартная плоскость: xy, xz или yz. Не задана — опора берётся из reference.",
+            "xy", "xz", "yz"));
+        ((JsonArray)schema["enum"]!).Add(null);
+        return schema;
+    }
 
     private static JsonObject SketchEntitySchema() => new()
     {

@@ -22,10 +22,11 @@ public sealed class HostSession : IAsyncDisposable
     public const string StatusTool = "kompas_session_status";
     public const string AcquireTool = "kompas_acquire_session";
     public const string ReleaseTool = "kompas_release_session";
+    public const string CapabilitiesTool = "kompas_capabilities";
 
     /// <summary>Diagnostics that take NO ownership: <c>health</c> and <c>capabilities</c> must answer
     /// even when another chat owns the session.</summary>
-    private static readonly string[] DiagnosticTools = { "kompas_health", "kompas_capabilities" };
+    private static readonly string[] DiagnosticTools = { "kompas_health", CapabilitiesTool };
 
     private static readonly TimeSpan InventoryTimeout = TimeSpan.FromSeconds(30);
 
@@ -95,9 +96,18 @@ public sealed class HostSession : IAsyncDisposable
         // owns it, else the second chat could not learn why it has no work.
         if (DiagnosticTools.Contains(tool.Name, StringComparer.Ordinal))
         {
-            return !_ownership.IsOwner
+            var answer = !_ownership.IsOwner
                 ? DiagnosticWithoutOwnership(toolName)
                 : await DispatchAsync(toolName, arguments, cancellationToken).ConfigureAwait(false);
+
+            // INVARIANT: the catalog and the version are added HERE, on both paths, so the answer does
+            // not depend on who produced the environment block. MEASURED defect: with a Worker the call
+            // went to env.probe, which reports the environment only, so tools/tool_count appeared only
+            // while this Host owned no session.
+            // History: docs/decisions/host.md#capabilities-catalog
+            return string.Equals(tool.Name, CapabilitiesTool, StringComparison.Ordinal)
+                ? WithCapabilitiesCatalog(answer)
+                : answer;
         }
 
         if (!_ownership.IsOwner)
@@ -1229,12 +1239,11 @@ public sealed class HostSession : IAsyncDisposable
             ["remedy"] = RemedyFor(probe, state),
         };
 
-        if (string.Equals(toolName, "kompas_capabilities", StringComparison.Ordinal))
+        if (string.Equals(toolName, CapabilitiesTool, StringComparison.Ordinal))
         {
-            // The catalog is published even without ownership: "no tools visible" and "tools exist but
-            // the session is not ours" are different things.
-            node["tools"] = new JsonArray(ToolCatalog.All.Select(t => (JsonNode)JsonValue.Create(t.Name)!).ToArray());
-            node["tool_count"] = ToolCatalog.All.Count;
+            // The catalog is added by WithCapabilitiesCatalog() on BOTH paths, not here: "no tools
+            // visible" and "tools exist but the session is not ours" are different things, and so is
+            // "the catalog appeared only while the Worker was absent".
         }
         else
         {
@@ -1257,6 +1266,30 @@ public sealed class HostSession : IAsyncDisposable
         {
             _log.Write("warn", "ownership record not refreshed", new { record = _ownership.RecordPath, problem });
         }
+    }
+
+    /// <summary>Adds the tool catalog and the server version to a <c>kompas_capabilities</c> answer,
+    /// whichever process produced the environment block.</summary>
+    /// <remarks>INVARIANT: the catalog lives in the Host (<see cref="ToolCatalog.All"/>), so it is
+    /// published without a Worker, without COM and without ownership. MEASURED defect: with a Worker the
+    /// call was routed to <c>env.probe</c>, whose answer carries the environment only — one and the same
+    /// tool answered a different contract depending on the session state, and the client had to read the
+    /// whole <c>tools/list</c> to learn what the build supports.
+    /// History: docs/decisions/host.md#capabilities-catalog</remarks>
+    public static ResultEnvelope<JsonNode?> WithCapabilitiesCatalog(ResultEnvelope<JsonNode?> envelope)
+    {
+        if (envelope.Result is not JsonObject result)
+        {
+            return envelope;
+        }
+
+        var node = (JsonObject)result.DeepClone();
+        node["tools"] = new JsonArray(
+            ToolCatalog.All.Select(t => (JsonNode)JsonValue.Create(t.Name)!).ToArray());
+        node["tool_count"] = ToolCatalog.All.Count;
+        node["server_version"] = Program.ServerVersion;
+
+        return envelope with { Result = node };
     }
 
     private static ResultEnvelope<JsonNode?> Succeeded(

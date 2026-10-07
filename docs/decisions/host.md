@@ -425,3 +425,28 @@ and no document_id, no revision, no error code and no measurement - so §5 of th
 scenario could not be executed at all, while all 671 acceptance rows stayed green because
 mcp-smoke.py reads structuredContent directly. The same blindness as the transport defect: the
 instrument reads what the client does not.
+
+## <a id="capabilities-catalog"></a>`kompas_capabilities` отдаёт перечень инструментов в обоих состояниях (07.10.2026)
+
+**Что было.** Без Worker Хост отвечал сам и добавлял `tools`/`tool_count`; с Worker вызов уходил
+командой `env.probe`, а `EnvironmentSnapshot.Collect()` отдаёт только среду. Один и тот же инструмент
+отвечал разным контрактом в зависимости от состояния сеанса.
+
+**Что измерено.** Клиентский агент (отчёт `mcp-bugs.md`, MCP-001, воспроизведено 2/2 после успешного
+attach): `result` нёс только `worker_runtime`, разрядность, ОС, путь интеропа, `interop_*`,
+`local_server` и `running_instances` — перечня инструментов не было, и разрешённый workflow по ответу
+определить было нельзя. Дефект был записан ещё в `IMAGE_CLIENT_ACCEPTANCE_REPORT_20260921.md` п. 2 и с
+тех пор обходился в нарядах.
+
+**Что решено.** Поля добавляет ХОСТ, на обоих путях, одной функцией
+`HostSession.WithCapabilitiesCatalog`: `tools` (имена из `ToolCatalog.All`), `tool_count` и
+`server_version` — тот же источник, что `serverInfo.version` (`Program.ServerVersion`, читается из
+`Version` в `Directory.Build.props`). Каталог живёт в Хосте, поэтому COM для этого не нужен, а
+состояние сеанса на состав ответа больше не влияет. Поля среды Worker оставлены на месте: слияние
+добавляет поля, а не заменяет блок. Описание инструмента приведено к правде: перечень инструментов,
+версия сервера и среда; режимы и ограничения каждого инструмента читаются из его схемы и описания в
+`tools/list` и здесь не пересказываются — «ограничения» без их выдачи были бы обещанием, которого
+инструмент не исполняет. Тесты: `Capabilities_WithoutOwnership_PublishesTheCatalog` (без Worker, с
+проверкой совпадения `tools` с каталогом и `tool_count` с числом имён) и
+`Capabilities_WorkerAnswer_GetsTheSameCatalogAndKeepsItsEnvironment` (форма ответа Worker'а: среда
+сохранена, каталог добавлен). Живой прогон с настоящим Worker — в наряде §6.

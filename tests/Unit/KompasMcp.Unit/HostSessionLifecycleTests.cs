@@ -112,6 +112,46 @@ public class HostSessionLifecycleTests : IDisposable
         Assert.Contains(HostSession.StatusTool, names);
         Assert.Contains(HostSession.AcquireTool, names);
         Assert.Contains(HostSession.ReleaseTool, names);
+
+        // INVARIANT: the same three fields are present in BOTH session states, and the count is the
+        // count of the published names — not a second, independently maintained number.
+        Assert.Equal(names.Length, Body(envelope)["tool_count"]!.GetValue<int>());
+        Assert.Equal(
+            ToolCatalog.All.Select(t => t.Name),
+            names);
+        Assert.Equal(Program.ServerVersion, Body(envelope)["server_version"]!.GetValue<string>());
+    }
+
+    /// <summary>INVARIANT: a <c>kompas_capabilities</c> answer produced by the WORKER (the environment
+    /// block of <c>env.probe</c>, which knows nothing about the catalog) gets the same three fields,
+    /// and its own environment fields are left alone.</summary>
+    /// <remarks>MEASURED defect: the catalog appeared only while the Host owned no session, so one and
+    /// the same tool answered a different contract depending on who replied. The test drives the merge
+    /// function on the WORKER-answer shape: the test project does not reference KompasMcp.Worker, and the
+    /// live run in the order's §6 covers the real Worker path.
+    /// History: docs/decisions/host.md#capabilities-catalog</remarks>
+    [Fact]
+    public void Capabilities_WorkerAnswer_GetsTheSameCatalogAndKeepsItsEnvironment()
+    {
+        var workerAnswer = new ResultEnvelope<JsonNode?>
+        {
+            Status = OperationStatus.Succeeded,
+            Result = JsonNode.Parse("""
+                {"worker_runtime":"net10.0","running_instances":2,"rot_kompas_entries":1}
+                """)!.AsObject(),
+        };
+
+        var merged = HostSession.WithCapabilitiesCatalog(workerAnswer);
+        var body = (JsonObject)merged.Result!;
+
+        Assert.Equal(ToolCatalog.All.Count, body["tool_count"]!.GetValue<int>());
+        Assert.Equal(ToolCatalog.All.Select(t => t.Name),
+            ((JsonArray)body["tools"]!).Select(n => n!.GetValue<string>()));
+        Assert.Equal(Program.ServerVersion, body["server_version"]!.GetValue<string>());
+
+        // The Worker's own numbers are not overwritten: the merge adds fields, it does not replace the
+        // environment block.
+        Assert.Equal(2, body["running_instances"]!.GetValue<int>());
     }
 
     // Acquire and release.

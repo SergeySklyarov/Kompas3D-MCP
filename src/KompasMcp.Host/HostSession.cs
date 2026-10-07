@@ -1274,12 +1274,10 @@ public sealed class HostSession : IAsyncDisposable
 
     /// <summary>Adds the tool catalog and the server version to a <c>kompas_capabilities</c> answer,
     /// whichever process produced the environment block.</summary>
-    /// <remarks>INVARIANT: the catalog lives in the Host (<see cref="ToolCatalog.All"/>), so it is
-    /// published without a Worker, without COM and without ownership. MEASURED defect: with a Worker the
-    /// call was routed to <c>env.probe</c>, whose answer carries the environment only — one and the same
-    /// tool answered a different contract depending on the session state, and the client had to read the
-    /// whole <c>tools/list</c> to learn what the build supports.
-    /// INVARIANT: <c>rot_kompas_entries</c> is reported as <c>null</c> with a NAMED reason when the
+    /// <remarks>INVARIANT: the catalog lives in the Host (<see cref="ToolCatalog.All"/>), so it needs no
+    /// Worker, no COM and no ownership. MEASURED defect: with a Worker the call went to <c>env.probe</c>,
+    /// whose answer carries the environment only, so one tool answered a different contract depending on
+    /// the session state. INVARIANT: <c>rot_kompas_entries</c> is <c>null</c> with a NAMED reason when the
     /// enumeration did not happen; zero is a different statement ("there are no entries").
     /// History: docs/decisions/host.md#capabilities-catalog</remarks>
     public static ResultEnvelope<JsonNode?> WithCapabilitiesCatalog(ResultEnvelope<JsonNode?> envelope)

@@ -1233,16 +1233,41 @@ public sealed class WorkerLog : IDisposable
 /// kompas_health.</summary>
 internal static class EnvironmentSnapshot
 {
-    public static object Collect() => new
+    public static object Collect()
     {
-        workerRuntime = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
-        processBitness = Environment.Is64BitProcess ? "x64" : "x86",
-        machineBitness = Environment.Is64BitOperatingSystem ? "x64" : "x86",
-        os = System.Runtime.InteropServices.RuntimeInformation.OSDescription,
-        interopDirectory = KompasInteropResolver.ResolvedDirectory,
-        interopProbed = KompasInteropResolver.ProbedDirectories,
-        interopLoaded = KompasInteropResolver.LoadedAssemblies,
-        localServer = KompasInteropResolver.LocalServerPath(Api5Session.KompasProgId),
-        runningInstances = KompasInteropResolver.SnapshotProcessIds("KOMPAS").Length,
-    };
+        var rot = CountRotKompasEntries();
+        return new
+        {
+            workerRuntime = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
+            processBitness = Environment.Is64BitProcess ? "x64" : "x86",
+            machineBitness = Environment.Is64BitOperatingSystem ? "x64" : "x86",
+            os = System.Runtime.InteropServices.RuntimeInformation.OSDescription,
+            interopDirectory = KompasInteropResolver.ResolvedDirectory,
+            interopProbed = KompasInteropResolver.ProbedDirectories,
+            interopLoaded = KompasInteropResolver.LoadedAssemblies,
+            localServer = KompasInteropResolver.LocalServerPath(Api5Session.KompasProgId),
+            runningInstances = KompasInteropResolver.SnapshotProcessIds("KOMPAS").Length,
+            // The number of instances ATTACH can choose from, counted by the SAME enumerator Attach uses.
+            // runningInstances counts OS processes; the two numbers answer different questions, because a
+            // KOMPAS process without a ROT entry is not an attach candidate.
+            // History: docs/decisions/adapter-core.md#attach-candidates
+            rotKompasEntries = rot.Count,
+            rotKompasEntriesFailure = rot.Failure,
+        };
+    }
+
+    /// <summary>ROT entries matching the KOMPAS ProgID, or <c>null</c> with a named reason. A failed
+    /// enumeration is NOT reported as zero: "the enumerator threw" and "KOMPAS is not registered" are
+    /// different diagnoses, and zero would silently claim the second.</summary>
+    private static (int? Count, string? Failure) CountRotKompasEntries()
+    {
+        try
+        {
+            return (RunningObjectTable.EnumerateKompasEntries(Api5Session.KompasProgId).Count, null);
+        }
+        catch (Exception ex)
+        {
+            return (null, ex.GetType().Name + ": " + ex.Message);
+        }
+    }
 }

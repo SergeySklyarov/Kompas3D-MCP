@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using KompasMcp.Contracts;
 using KompasMcp.Domain.Journaling;
@@ -149,9 +150,27 @@ public class HostSessionLifecycleTests : IDisposable
             ((JsonArray)body["tools"]!).Select(n => n!.GetValue<string>()));
         Assert.Equal(Program.ServerVersion, body["server_version"]!.GetValue<string>());
 
-        // The Worker's own numbers are not overwritten: the merge adds fields, it does not replace the
-        // environment block.
+        // The Worker's own numbers are not overwritten, and the two of them are different questions.
         Assert.Equal(2, body["running_instances"]!.GetValue<int>());
+        Assert.Equal(1, body["rot_kompas_entries"]!.GetValue<int>());
+    }
+
+    /// <summary>INVARIANT: an enumeration that did not happen is <c>null</c> with a named reason, never
+    /// zero — zero would claim "there are no entries", which is a different diagnosis.</summary>
+    [Fact]
+    public void Capabilities_WithoutTheEnvironmentBlock_NamesTheMissingRotCount()
+    {
+        var bare = new ResultEnvelope<JsonNode?>
+        {
+            Status = OperationStatus.Succeeded,
+            Result = new JsonObject(),
+        };
+
+        var body = (JsonObject)HostSession.WithCapabilitiesCatalog(bare).Result!;
+
+        Assert.True(body["rot_kompas_entries"] is null
+            || body["rot_kompas_entries"]!.GetValueKind() == JsonValueKind.Null);
+        Assert.False(string.IsNullOrWhiteSpace(body["rot_kompas_entries_unavailable"]!.GetValue<string>()));
     }
 
     // Acquire and release.

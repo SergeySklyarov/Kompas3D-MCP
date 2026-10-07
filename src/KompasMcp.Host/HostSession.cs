@@ -1244,6 +1244,10 @@ public sealed class HostSession : IAsyncDisposable
             // The catalog is added by WithCapabilitiesCatalog() on BOTH paths, not here: "no tools
             // visible" and "tools exist but the session is not ours" are different things, and so is
             // "the catalog appeared only while the Worker was absent".
+            node["rot_kompas_entries"] = null;
+            node["rot_kompas_entries_unavailable"] =
+                "Worker не запущен: перечисление ROT не выполнялось. Ноль здесь означал бы "
+                + "«записей нет» — другое утверждение.";
         }
         else
         {
@@ -1275,6 +1279,8 @@ public sealed class HostSession : IAsyncDisposable
     /// call was routed to <c>env.probe</c>, whose answer carries the environment only — one and the same
     /// tool answered a different contract depending on the session state, and the client had to read the
     /// whole <c>tools/list</c> to learn what the build supports.
+    /// INVARIANT: <c>rot_kompas_entries</c> is reported as <c>null</c> with a NAMED reason when the
+    /// enumeration did not happen; zero is a different statement ("there are no entries").
     /// History: docs/decisions/host.md#capabilities-catalog</remarks>
     public static ResultEnvelope<JsonNode?> WithCapabilitiesCatalog(ResultEnvelope<JsonNode?> envelope)
     {
@@ -1288,6 +1294,14 @@ public sealed class HostSession : IAsyncDisposable
             ToolCatalog.All.Select(t => (JsonNode)JsonValue.Create(t.Name)!).ToArray());
         node["tool_count"] = ToolCatalog.All.Count;
         node["server_version"] = Program.ServerVersion;
+
+        if (!node.ContainsKey("rot_kompas_entries"))
+        {
+            node["rot_kompas_entries"] = null;
+            node["rot_kompas_entries_unavailable"] =
+                "Среда не опрошена: перечисление ROT не выполнялось, поэтому число записей неизвестно. "
+                + "Ноль здесь означал бы «записей нет» — другое утверждение.";
+        }
 
         return envelope with { Result = node };
     }

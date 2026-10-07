@@ -36,8 +36,8 @@
 ## Аварийный набор команд
 
 ```powershell
-# состояние, не трогая модель — из клиента MCP: kompas_health {detail:"diagnostic"}
-# то же без клиента: последние записи журнала Host (путь по умолчанию — системный temp)
+# состояние, не трогая модель - из клиента MCP: kompas_health {detail:"diagnostic"}
+# то же без клиента: последние записи журнала Host (путь по умолчанию - системный temp)
 Get-Content -Path "$env:TEMP\kompas-mcp\logs\host.jsonl" -Tail 20
 
 # чем заняты процессы

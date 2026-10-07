@@ -3,6 +3,7 @@
 Usage:
   python scripts/package-release.py --delivery artifacts/<delivery> --tag vX.Y.Z
                                     --passport docs/acceptance/<delivery>/delivery-passport.json
+                                    --title "KompasMCP X.Y.Z - <темы выпуска>"
                                     [--out artifacts/release/<tag>]
   python scripts/package-release.py --self-test
 
@@ -13,6 +14,11 @@ INVARIANT (release identity), checked before a single file is written:
   - product sources are identical at the build commit and at the passport commit. The SDK stamps HEAD
     even for a dirty tree, so this diff is what reveals a delivery built from uncommitted sources.
 History: docs/decisions/releases.md#versioning
+
+INVARIANT (release text), checked at the same point: the title is "KompasMCP <Version> - <themes>",
+the notes docs/distribution/<tag>.md open with that title, and neither they nor any text file of the
+ZIP carries a long dash (scripts/lint-dashes.py). The release is published with the printed command.
+History: docs/decisions/releases.md#dashes
 
 Writes three assets next to each other, ready for a GitHub Release:
   KompasMCP-<tag>-win-x64.zip   the delivery as is, plus LICENSE, notices, install notes, installer
@@ -25,6 +31,7 @@ binary. A release that needs a different binary needs a new accepted delivery fi
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -32,6 +39,17 @@ import sys
 import zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _load_dash_guard():
+    """scripts/lint-dashes.py as a module: one definition of a long dash for both tools."""
+    spec = importlib.util.spec_from_file_location("lint_dashes", os.path.join(ROOT, "scripts", "lint-dashes.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+DASHES = _load_dash_guard()
 
 OWN_ASSEMBLIES = [
     "KompasMcp.Host.exe", "KompasMcp.Host.dll", "KompasMcp.Worker.exe", "KompasMcp.Worker.dll",
@@ -71,6 +89,32 @@ def tag_problem(tag, version):
     if tag != "v" + version:
         return f"тег «{tag}» не совпадает с версией продукта «{version}» (ожидается «v{version}»)"
     return None
+
+
+def dash_problems(label, text):
+    """One problem per long dash in `text`, named by `label:line:column`."""
+    return [f"{label}:{line}:{col}: {name} - в публикуемом тексте тире пишется дефисом «-»"
+            for line, col, name in DASHES.dash_findings(text)]
+
+
+def title_problems(title, version):
+    """Why `title` cannot name the release of `version`; empty when it can."""
+    problems = dash_problems("заголовок", title)
+    prefix = f"KompasMCP {version} - "
+    if not title.startswith(prefix) or not title[len(prefix):].strip():
+        problems.append(f"заголовок «{title}» не в форме «{prefix}<темы выпуска>»")
+    return problems
+
+
+def notes_problems(notes_name, notes_text, title):
+    """Why the notes cannot go out under `title`; empty when they can."""
+    if notes_text is None:
+        return [f"нет заметок к выпуску {notes_name}"]
+    problems = dash_problems(notes_name, notes_text)
+    first = notes_text.lstrip("﻿").splitlines()[0] if notes_text.strip() else ""
+    if first != "# " + title:
+        problems.append(f"{notes_name}: первая строка «{first}» не совпадает с «# {title}»")
+    return problems
 
 
 def stamps_in(data):
@@ -149,18 +193,30 @@ def self_test():
         (tag_problem("v24-core-assemblies-v1", "0.4.1") is not None, "тег-описание отвергнут"),
         (tag_problem("v0.4", "0.4.1") is not None, "неполный номер отвергнут"),
         (tag_problem("v0.4.2", "0.4.1") is not None, "тег, отличный от версии, отвергнут"),
-        (tag_problem("v0.4.1", None) is not None, "нет <Version> — отказ"),
+        (tag_problem("v0.4.1", None) is not None, "нет <Version> - отказ"),
         (stamps_in(f"x0.4.1+{sha}x".encode("utf-16-le")) == {("0.4.1", sha)}, "штамп UTF-16 читается"),
         (stamps_in(f"x0.4.1+{sha}x".encode("utf-8")) == {("0.4.1", sha)}, "штамп UTF-8 читается"),
         (stamp_problem("a.dll", {("0.4.1", sha)}, "0.4.1") is None, "верный штамп принят"),
         (stamp_problem("a.dll", {("1.0.0", sha)}, "0.4.1") is not None, "чужая версия отвергнута"),
-        (stamp_problem("a.dll", set(), "0.4.1") is not None, "нет штампа — отказ"),
+        (stamp_problem("a.dll", set(), "0.4.1") is not None, "нет штампа - отказ"),
         (build_commit_problem({sha}) is None, "один коммит у всех сборок принят"),
         (build_commit_problem({sha, "b" * 40}) is not None, "разные коммиты у сборок отвергнуты"),
         (passport_problems(good, "h") == [], "годный паспорт принят"),
         (passport_problems(good, "other") != [], "паспорт чужой поставки отвергнут"),
         (passport_problems(dirty, "h") != [], "паспорт из грязного дерева отвергнут"),
         (passport_problems(failed_passport, "h") != [], "паспорт без PASS отвергнут"),
+        (title_problems("KompasMCP 0.4.1 - уклоны", "0.4.1") == [], "заголовок с дефисом принят"),
+        (title_problems("KompasMCP 0.4.1 \u2014 уклоны", "0.4.1") != [], "заголовок с длинным тире отвергнут"),
+        (title_problems("KompasMCP 0.4.1 \u2013 уклоны", "0.4.1") != [], "заголовок со средним тире отвергнут"),
+        (title_problems("KompasMCP 0.4.0 - уклоны", "0.4.1") != [], "заголовок с чужой версией отвергнут"),
+        (title_problems("KompasMCP 0.4.1 - ", "0.4.1") != [], "заголовок без темы отвергнут"),
+        (notes_problems("n.md", "# KompasMCP 0.4.1 - уклоны\n\nтекст - дефис\n",
+                        "KompasMCP 0.4.1 - уклоны") == [], "заметки с дефисом приняты"),
+        (notes_problems("n.md", "# KompasMCP 0.4.1 - уклоны\n\nтекст \u2014 тире\n",
+                        "KompasMCP 0.4.1 - уклоны") != [], "заметки с длинным тире отвергнуты"),
+        (notes_problems("n.md", "# KompasMCP 0.4.1 - другое\n", "KompasMCP 0.4.1 - уклоны") != [],
+         "заметки под другим заголовком отвергнуты"),
+        (notes_problems("n.md", None, "KompasMCP 0.4.1 - уклоны") != [], "нет заметок - отказ"),
     ]
     failed = [title for ok, title in cases if not ok]
     for ok, title in cases:
@@ -195,6 +251,7 @@ def main():
     ap.add_argument("--delivery", required=True)
     ap.add_argument("--tag", required=True)
     ap.add_argument("--passport", required=True)
+    ap.add_argument("--title", required=True)
     ap.add_argument("--out")
     a = ap.parse_args()
 
@@ -204,6 +261,19 @@ def main():
     with open(os.path.join(ROOT, "Directory.Build.props"), encoding="utf-8-sig") as f:
         version = product_version(f.read())
     problems = [p for p in [tag_problem(a.tag, version)] if p]
+    problems += title_problems(a.title, version)
+    notes_rel = f"docs/distribution/{a.tag}.md"
+    notes_path = os.path.join(ROOT, notes_rel)
+    notes_text = None
+    if os.path.isfile(notes_path):
+        with open(notes_path, encoding="utf-8-sig") as f:
+            notes_text = f.read()
+    problems += notes_problems(notes_rel, notes_text, a.title)
+    for rel, src in list(EXTRA_FILES.items()) + [("config/kompas-mcp.example.json", None)]:
+        path = os.path.join(ROOT, src) if src else os.path.join(delivery, rel)
+        if os.path.isfile(path):
+            with open(path, encoding="utf-8-sig") as f:
+                problems += dash_problems(rel, f.read())
     commits = set()
     for name in OWN_ASSEMBLIES:
         with open(os.path.join(delivery, name), "rb") as f:
@@ -294,6 +364,12 @@ def main():
         "integrity_note": "SHA256SUMS.txt проверяет целостность скачанного файла, а не личность издателя: "
                           "цифровой подписи у выпуска нет.",
     }
+    manifest["title"] = a.title
+    # INVARIANT: a refused release leaves no assets, so the ZIP written above goes too.
+    problems = dash_problems("release-manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+    if problems:
+        os.remove(zip_path)
+        sys.exit("ОТКАЗ: выпуск не собран.\n  - " + "\n  - ".join(problems))
     manifest_path = os.path.join(out, "release-manifest.json")
     with open(manifest_path, "w", encoding="utf-8", newline="\n") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
@@ -307,8 +383,14 @@ def main():
         for p in (zip_path, manifest_path, installer):
             f.write(f"{sha256(p)}  {os.path.basename(p)}\n")
 
+    assets = " ".join(f'"{os.path.join(out, n)}"' for n in
+                      (zip_name, "release-manifest.json", "SHA256SUMS.txt", "Install-KompasMcp.ps1"))
     print(json.dumps({"out": out, "zip": zip_name, "zip_sha256": sha256(zip_path), "files": len(files),
-                      "tools": len(schemas)}, ensure_ascii=False, indent=2))
+                      "tools": len(schemas), "title": a.title, "notes": notes_rel,
+                      "publish_command": f'gh release create {a.tag} --title "{a.title}" '
+                                         f'--notes-file {notes_rel} {assets}',
+                      "after_publish_check": f"python scripts/lint-dashes.py --release {a.tag}"},
+                     ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

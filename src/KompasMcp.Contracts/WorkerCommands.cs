@@ -484,15 +484,24 @@ public sealed record SketchEntitiesResult(
     string Route,
     IReadOnlyList<string> Notes);
 
-/// <summary>Sketch-entity enumeration row. An empty field means "not read", not zero; the reason is named in <see
-/// cref="Notes"/>.</summary>
+/// <summary>Sketch-entity enumeration row. An empty field means "not read", not zero; the reason is
+/// named in <see cref="Notes"/>.</summary>
+/// <param name="PointsCount">Vertices of a polyline/spline; <c>null</c> for other kinds and when the
+/// member did not answer. Members and figures: docs/decisions/adapter-sketch.md#sketch-entity-kind</param>
+/// <param name="Closed">Closure of a polyline/spline; <c>null</c> for other kinds and when the member
+/// did not answer.</param>
+/// <param name="EntityKind">Normalised kind in the INPUT contract's vocabulary, so a client need not
+/// know the vendor's <c>DrawingObjectType</c> names; <c>null</c> when the object is none of them.</param>
 public sealed record SketchEntityRowDto(
     int Index,
     string? Address,
     string? Kind,
     string? Name,
     int? TypeCode,
-    IReadOnlyList<string> Notes);
+    IReadOnlyList<string> Notes,
+    int? PointsCount = null,
+    bool? Closed = null,
+    string? EntityKind = null);
 
 /// <summary>Request for an address-targeted sketch-entity edit. <see cref="Address"/> is mandatory: an edit of "the
 /// first entity that comes up" is not address-targeted.</summary>

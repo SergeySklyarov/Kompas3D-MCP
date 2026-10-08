@@ -4856,3 +4856,76 @@ intersectionFaces1, intersectionFaces2, connectedFaces1, connectedFaces2)` → `
 `dx − 5 − 5√2 = 2,9289321881345245`. Совпадение с миллиметрами и НЕсовпадение с переводом того же
 расстояния в метры (в 1000 раз меньше) и сантиметры (в 10 раз) - то, что отличает измеренную единицу
 от её отсутствия. В ответе единица названа измеренной в `units_basis`.
+
+## 4.54. Массовая геометрия эскиза (G2): нативная ломаная, сплайн, пределы и `ksEndObj` (измерено 08.10.2026, наряд `OMEGA_G2_SKETCH_BULK_DEVELOPER_PROMPT.md`)
+
+**Страницы справки, по которым построены маршруты** (проводная проверка 08.10.2026,
+`help.ascon.ru/KOMPAS_SDK/24/ru-RU`, все — HTTP 200; отрицательный контроль `kspolylinebyparam` без
+префикса `ksdocument2d_` — 404):
+
+| Страница | Что взято дословно |
+|---|---|
+| `ksdocument2d_kspolylinebyparam.html` | «long ksPolylineByParam (LPDISPATCH param)»; «param - указатель на интерфейс ломаной линии ksPolylineParam»; возврат — «указатель на ломаную линию - в случае удачного завершения, 0 - в случае неудачи» |
+| `kspolylineparam.html` / `_props` / `_methods` | `closed` — «Признак замкнутости ломаной: TRUE - ломаная замкнута, FALSE - ломаная разомкнута»; `style`; `GetpMathPoint`/`SetpMathPoint` — «динамический массив математических точек ksDynamicArray типа POINT_ARR»; `Init` |
+| `ksdmtypes.html` | `POINT_ARR = 2` — «динамический массив указателей на интерфейсы ksMathPointParam»; `NURBS_POINT_ARR = 13` |
+| `ksdocument2d_kspolyline.html` | «Ломаная линия - составной объект. Объекты ksDocument2D::ksPoint, вводимые между методами ksDocument2D::ksPolyline и ksDocument2D::ksEndObj, принадлежат ломаной линии. ksDocument2D::ksEndObj возвращает указатель на ломаную линию». Параметра замкнутости у `ksPolyline` НЕТ |
+| `ksdocument2d_ksendobj.html` | «long ksEndObj()»; возврат — «указатель на завершенный объект (контур, макроэлемент и т.д.) - в случае удачного завершения, 0 - в случае неудачи» |
+| `ksdocument2d_ksbezier.html` | «long ksBezier (short closed, long style)»; `closed`: 0 — незамкнутый, 1 — замкнутый; «Кривая Безье - составной объект. Объекты ksDocument2D::ksBezierPoint, вводимые между методами ksDocument2D::ksBezier и ksDocument2D::ksEndObj, принадлежат кривой» |
+| `ksbezierpointparam.html` / `_props` | `x, y` — «Координаты базовой точки»; `ang` — «Угол наклона касательной к кривой в базовой точке»; `left`, `right` — «Расстояние от базовой точки до левой/правой точки узла»; `Init` |
+| `ksdocument2d_ksnurbs.html` | «long ksNurbs (short degree, BOOL close, long style)»; `degree` — «порядок NURBS (степень полинома + 1), от 3 до 10»; «Узлы кривой определяются следующими далее методами ksDocument2D::ksPoint или ksDocument2D::ksNurbsPoint» |
+| `ksnurbspointparam.html` / `_props` | `x, y`, `weight` — «Вес точки»; `Init` |
+| `pstyles.html` | стили отрисовки точки: 0 — точка, 1 — крестик, 2 — х-точка, 3 — квадрат, … |
+| `ipolyline2d.html` / `_props` / `_methods` | API7, «Документ 2D > Геометрия»: «Интерфейс полилинии (ломаной)»; свойства `Closed` — «Замкнутость», `PointsCount` — «Количество точек», `Points`; методы `GetPoint` — «Получить параметры точки», `AddPoint`, `Clear`, `DeletePoint` |
+| `inurbs.html` | API7: `Closed`, `Degree`, `PointsCount`, `GetPoint(Index, X, Y, Weight)` |
+| `ksfragment.html` / `_ksfragmentdefinition` / `_ksinsertfragmentex` / `ksplacementparam_props` | «Указатель на интерфейс можно получить при помощи метода ksDocument2D::GetFragment»; `ksFragmentDefinition(fileName, comment, insertType)`; `ksInsertFragmentEx(p, curentLayer, par, scaleProjLinesSize)`; `ksPlacementParam`: `xBase`, `yBase`, `angle`, `scale_` |
+
+**Числа из поставленной библиотеки типов** (сканер `tools/KompasMcp.InteropScan` по
+`Interop.Kompas6API5.dll` и `Interop.Kompas6Constants.dll` целевой сборки 24.0.0.2799):
+`StructType2DEnum` — `ko_PolylineParam = 76`, `ko_MathPointParam = 14`, `ko_NurbsPointParam = 18`,
+`ko_BezierPointParam = 17`, `ko_PlacementParam = 7`; `DrawingObjectTypeEnum` — `ksDrPolyline = 31`,
+`ksDrBezier = 8`, `ksDrNurbs = 33`; `DocType` — `lt_DocFragment = 3`.
+Члены: `ksDocument2D.ksPolylineByParam(Object)`, `ksPolyline/ksPoint/ksEndObj/ksBezier/ksBezierPoint/
+ksNurbs/ksNurbsPoint`, `GetFragment()`; `ksPolylineParam.closed/style/GetpMathPoint/SetpMathPoint`;
+`KompasObject.GetParamStruct(Int16)` и `GetDynamicArray(Int32)`.
+
+**Измеренные пределы (Release этого коммита, `scratch/_g2_limits.py`, 3 повтора, оба режима видимости,
+`sync_budget_ms = 15000`).** `kompas_edit_sketch`, `append`, пустой эскиз:
+
+| Нагрузка | Худший замер, с | Статус |
+|---|---:|---|
+| 2000 отрезков | 1,741 | succeeded |
+| 5000 отрезков | 3,543 | succeeded |
+| 10000 отрезков | 9,186 | succeeded |
+| 512 вершин полилинии | 1,219 | succeeded |
+| 2000 вершин полилинии | 5,338 | succeeded |
+| 5000 вершин полилинии | 12,446 | succeeded |
+| 10000 вершин полилинии | 15,088 | running (вызов перестал быть синхронным) |
+
+Выбраны 5000 примитивов и 2000 вершин — наибольшие проверенные числа, чей худший замер укладывается
+в половину бюджета. Цена нативной полилинии — около двух вызовов COM на вершину
+(`GetParamStruct(ko_MathPointParam)` + `ksAddArrayItem`), тогда как отрезок стоит одного `ksLineSeg`;
+это измеренный расход маршрута, а не ограничение ядра.
+
+**Поведение `ksEndObj`, измеренное.** `ksEndObj` возвращает 0, когда описание кривой неполно, и тогда
+объекта в эскизе НЕ появляется: дегенеративный сплайн из трёх совпадающих точек дал `ksEndObj = 0`,
+ответ `GEOMETRY_FAILED`, а `collection_counts.view0.object_count` остался 0. Это и есть различающий
+контроль «отказ назван, а не подменён раскладкой».
+
+**Что измерено про выбор маршрута сплайна.** Замкнутый правильный 16-угольник R = 20 мм,
+выдавливание 5 мм: `ksNurbs` (узлы — полюса) дал объём 6045,203199444895 и габарит ±19,6157, то есть
+кривая ушла ВНУТРЬ узлов ровно как замкнутая квадратичная B-сплайн-кривая радиуса `R·cos(π/n)`
+(совпадение 0,02 %); `ksBezier` (кривая через базовые точки) дал 6279,5319085485835 при
+`π·R²·5 = 6283,185307179587` и габарит ±20,000000000000004. Выбран Безье — контракт называет точки
+«вершинами», то есть точками, через которые кривая проходит.
+
+**Вставка фрагмента в документ-эскиз — маршрут снят по измерению.** `ksDocument2D.GetFragment` на
+редакторе эскиза отвечает `ksFragment`, но `ksFragmentDefinition` — вызов, открывающий файл, — НЕ
+возвращает управления: команда не уложилась в бюджет 240 с, ответила `OUTCOME_UNKNOWN`, и перечисление
+того же эскиза после неё тоже перестало отвечать (эскиз остался в режиме правки, поток STA занят
+вызовом COM). Справка при этом описывает вставку в «Графический документ» и ни на одной странице не
+говорит ни о документе-эскизе, ни о том, что становится геометрией эскиза. Подробности —
+`docs/decisions/adapter-sketch.md#sketch-fragment-insert`.
+
+**Что НЕ измерено.** Поведение `ksFragmentDefinition` на ЧЕРТЁЖНОМ документе (вставка туда нарядом не
+заказывалась), а также поведение `ksReadFragment` («вставить фрагмент россыпью») на эскизе — эта ветвь
+не пробовалась вовсе, и это названо, а не выдано за отказ ядра.

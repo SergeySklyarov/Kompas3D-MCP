@@ -293,12 +293,15 @@ public sealed partial class Api5Session
         }
 
         var kinds = new List<string>();
+        // The native polyline and the spline are built from PARAMETER BLOCKS, and the factory for those
+        // is the application object, not the sketch editor: the block is fetched here once per call.
+        var application5 = RequireApplication(document.ApplicationId).Application;
         Exception? drawn = null;
         foreach (var entity in command.Entities)
         {
             try
             {
-                kinds.Add(DrawSketchEntity(editor, entity));
+                kinds.Add(DrawSketchEntity(editor, application5, entity));
             }
             catch (Exception ex) when (ex is COMException or KompasContractException)
             {
@@ -744,7 +747,7 @@ public sealed partial class Api5Session
         }
     }
 
-    private static string DrawSketchEntity(ksDocument2D editor, SketchEntityDto entity)
+    private static string DrawSketchEntity(ksDocument2D editor, KompasObject application, SketchEntityDto entity)
     {
         switch (entity.Kind)
         {
@@ -801,7 +804,10 @@ public sealed partial class Api5Session
                 return DrawRectangle(editor, entity);
 
             case SketchEntityKind.Polyline:
-                return DrawPolyline(editor, entity);
+                return DrawPolyline(editor, application, entity);
+
+            case SketchEntityKind.Spline:
+                return DrawSpline(editor, application, entity);
 
             default:
                 throw new KompasContractException(ErrorCodes.InvalidArgument, $"Примитив {entity.Kind} не поддерживается.");
@@ -823,7 +829,20 @@ public sealed partial class Api5Session
         return "rectangle";
     }
 
-    private static string DrawPolyline(ksDocument2D editor, SketchEntityDto entity)
+    /// <summary>One native polyline object, not N segments.</summary>
+    /// <remarks>
+    /// DOC: <c>ksdocument2d_kspolylinebyparam.html</c> — <c>ksPolylineByParam(ksPolylineParam)</c>
+    /// returns a pointer to the polyline, 0 on failure; <c>kspolylineparam_props.html</c> declares
+    /// <c>closed</c> and <c>style</c>, and <c>kspolylineparam_methods.html</c> takes the vertices as a
+    /// <c>POINT_ARR</c> dynamic array of <c>ksMathPointParam</c> («Типы динамических массивов»,
+    /// <c>ksdmtypes.html</c>). The closure is therefore the block's own <c>closed</c> flag, NOT a
+    /// repeated vertex: <c>ksdocument2d_kspolyline.html</c> has no closure parameter at all, and no page
+    /// declares a repeated vertex to mean closure.
+    /// INVARIANT: a kernel answer of 0 is a NAMED refusal, never a quiet fall back to segments — a
+    /// fallback would make "drawn natively" indistinguishable from "drawn as before".
+    /// History: docs/decisions/adapter-sketch.md#native-polyline
+    /// </remarks>
+    private static string DrawPolyline(ksDocument2D editor, KompasObject application, SketchEntityDto entity)
     {
         if (entity.PointsMm is not { Count: >= 2 } points)
         {
@@ -832,16 +851,139 @@ public sealed partial class Api5Session
                 "points_mm должен содержать минимум две точки.");
         }
 
-        var segments = entity.Closed == true ? points.Count : points.Count - 1;
-        for (var i = 0; i < segments; i++)
+        var param = application.GetParamStruct(KompasStructTypes.PolylineParam) as ksPolylineParam
+            ?? throw new KompasContractException(
+                ErrorCodes.CapabilityUnavailable,
+                "KompasObject.GetParamStruct(ko_PolylineParam) не вернул ksPolylineParam: нативную "
+                + "ломаную этим маршрутом построить нельзя, а раскладка на отрезки под её видом "
+                + "запрещена.",
+                RetryPolicy.Never);
+
+        param.Init();
+
+        var array = application.GetDynamicArray(KompasDynamicArrayTypes.PointArr) as ksDynamicArray
+            ?? throw new KompasContractException(
+                ErrorCodes.CapabilityUnavailable,
+                "KompasObject.GetDynamicArray(POINT_ARR) не вернул ksDynamicArray: вершины ломаной "
+                + "передать нечем.",
+                RetryPolicy.Never);
+
+        foreach (var vertex in points)
         {
-            var from = points[i];
-            var to = points[(i + 1) % points.Count];
-            editor.ksLineSeg(from[0], from[1], to[0], to[1], LineStyle);
+            var node = application.GetParamStruct(KompasStructTypes.MathPointParam) as ksMathPointParam
+                ?? throw new KompasContractException(
+                    ErrorCodes.CapabilityUnavailable,
+                    "KompasObject.GetParamStruct(ko_MathPointParam) не вернул ksMathPointParam: "
+                    + "вершину ломаной задать нечем.",
+                    RetryPolicy.Never);
+            node.Init();
+            node.x = vertex[0];
+            node.y = vertex[1];
+            // index -1 appends (ksdynamicarray_ksaddarrayitem.html).
+            array.ksAddArrayItem(-1, node);
         }
 
-        return "polyline";
+        param.SetpMathPoint(array);
+        param.closed = entity.Closed == true;
+        param.style = LineStyle;
+
+        var handle = editor.ksPolylineByParam(param);
+        if (handle == 0)
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                $"ksPolylineByParam вернул 0: ломаная из {points.Count} вершин "
+                + $"(замкнутость {entity.Closed == true}) не создана. Раскладки на отрезки под видом "
+                + "нативной ломаной не делается: это был бы молчаливый откат.",
+                RetryPolicy.AfterReconciliation,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["vertices"] = points.Count,
+                    ["closed"] = entity.Closed == true,
+                    ["route"] = "ksPolylineByParam(ksPolylineParam.closed)",
+                });
+        }
+
+        return NativePolylineKind;
     }
+
+    /// <summary>One native Bezier curve through the given vertices.</summary>
+    /// <remarks>
+    /// DOC: <c>ksdocument2d_ksbezier.html</c> — <c>ksBezier(closed, style)</c>, «Кривая Безье -
+    /// составной объект»; nodes come from <c>ksBezierPoint</c> (<c>ksdocument2d_ksbezierpoint.html</c>,
+    /// block <c>ksBezierPointParam</c>), and <c>ksEndObj</c> returns the pointer. The node block is
+    /// initialised by its own documented <c>Init()</c> and only <c>x</c>, <c>y</c> are written, so the
+    /// tangents are the kernel's own.
+    /// WHY BEZIER AND NOT NURBS: the contract names the points «вершины» — the points the curve passes
+    /// through — and MEASURED, only the Bezier route does that: <c>ksNurbs</c> treats the same nodes as
+    /// POLES, so its closed curve lies inside them and misses the analytic circle by percent, not by
+    /// the fraction of a percent the acceptance allows. The figures are in the decision note.
+    /// INVARIANT: a 0 from either call is a NAMED refusal, never a silent substitution of the other route.
+    /// History: docs/decisions/adapter-sketch.md#sketch-spline
+    /// </remarks>
+    private static string DrawSpline(ksDocument2D editor, KompasObject application, SketchEntityDto entity)
+    {
+        if (entity.PointsMm is not { Count: >= 2 } points)
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                "points_mm должен содержать минимум две вершины сплайна.");
+        }
+
+        var started = editor.ksBezier(entity.Closed == true ? (short)1 : (short)0, LineStyle);
+        if (started == 0)
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                $"ksBezier(closed={entity.Closed == true}) вернул 0: описание кривой не начато.",
+                RetryPolicy.AfterReconciliation,
+                partialEffects: true,
+                details: new Dictionary<string, object?> { ["route"] = "ksBezier" });
+        }
+
+        foreach (var vertex in points)
+        {
+            var node = application.GetParamStruct(KompasStructTypes.BezierPointParam) as ksBezierPointParam
+                ?? throw new KompasContractException(
+                    ErrorCodes.CapabilityUnavailable,
+                    "KompasObject.GetParamStruct(ko_BezierPointParam) не вернул ksBezierPointParam: "
+                    + "узел кривой задать нечем.",
+                    RetryPolicy.Never);
+            node.Init();
+            node.x = vertex[0];
+            node.y = vertex[1];
+            if (editor.ksBezierPoint(node) == 0)
+            {
+                throw new KompasContractException(
+                    ErrorCodes.GeometryFailed,
+                    $"ksBezierPoint отказал на вершине ({vertex[0]}, {vertex[1]}): описание кривой "
+                    + "неполно.",
+                    RetryPolicy.AfterReconciliation,
+                    partialEffects: true);
+            }
+        }
+
+        var handle = editor.ksEndObj();
+        if (handle == 0)
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                $"ksEndObj вернул 0 после {points.Count} узлов: сплайн не создан.",
+                RetryPolicy.AfterReconciliation,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["vertices"] = points.Count,
+                    ["route"] = "ksBezier → ksBezierPoint → ksEndObj",
+                });
+        }
+
+        return "spline";
+    }
+
+    /// <summary>The kind string the edit answer uses for a polyline drawn as ONE native object.</summary>
+    private const string NativePolylineKind = "polyline_native";
 
     public FinishSketchResult FinishSketch(FinishSketchCommand command)
     {

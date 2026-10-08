@@ -9,6 +9,7 @@ public enum SketchEntityKind
     Arc,
     Rectangle,
     Polyline,
+    Spline,
 }
 
 /// <summary>Sketch primitive in sketch-local millimetres (spec 2.6). Each variant uses only the fields its <see
@@ -58,9 +59,12 @@ public sealed record SketchEntityDto
     /// <summary>rectangle height along sketch +Y, mm.</summary>
     public double? HeightMm { get; init; }
 
-    /// <summary>polyline vertices, mm.</summary>
+    /// <summary>polyline/spline vertices, mm.</summary>
     public IReadOnlyList<IReadOnlyList<double>>? PointsMm { get; init; }
 
+    /// <summary>Polyline: the closing edge from the last vertex to the first. Spline: the closing
+    /// segment, passed as the kernel's own closure flag (<c>ksBezier</c>'s <c>closed</c>) rather than as
+    /// a repeated vertex.</summary>
     public bool? Closed { get; init; }
 }
 

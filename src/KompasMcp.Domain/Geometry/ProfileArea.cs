@@ -72,6 +72,17 @@ public static class ProfileArea
 
                     break;
 
+                case SketchEntityKind.Spline:
+                    // INVARIANT: the server does NOT approximate a spline into segments to obtain an
+                    // area — that would be the server's own geometry, not the model's, and the client
+                    // would be told a figure nobody built. The extrusion is verified by MEASURING its
+                    // volume instead, and the gap is named here.
+                    // History: docs/decisions/geometry.md#spline-area
+                    return new ProfileAreaOutcome(null,
+                        "площадь профиля со сплайном на стороне сервера не считается: сплайн не "
+                        + "разбирается на отрезки и дуги. Геометрию подтверждает измерение объёма "
+                        + "выдавливания, а не аналитическая площадь.");
+
                 default:
                     return new ProfileAreaOutcome(null, $"примитив {KindName(entity)} не даёт аналитики");
             }

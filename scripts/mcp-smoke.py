@@ -1161,6 +1161,596 @@ def assembly_checks(client, rep, app_id, workdir):
     call("kompas_close_document", {"document_id": asm2, "dirty_policy": "discard"})
 
 
+def sketch_bulk_checks(client, rep, app_id, workdir):
+    """SB.* — массовая геометрия эскиза: пределы, нативная полилиния, сплайн (блок G2).
+
+    НАРЯД: `OMEGA_G2_SKETCH_BULK_DEVELOPER_PROMPT.md` §6, ветка `--sketch-bulk-only`.
+
+    ЧТО ЗДЕСЬ ДОКАЗЫВАЕТСЯ. Каждая строка сверяет ответ с АНАЛИТИЧЕСКИ известной геометрией, а не с
+    тем, что вернул вызов: объём правильного N-угольника `0,5·N·R²·sin(2π/N)·h`, объём круга
+    `π·R²·h`, площадь и объём контура клиента из приёмки 0.5.0.
+
+    ЭТАЛОНЫ ЗАФИКСИРОВАНЫ ДО ПРОГОНА (наряд §6). Предел берётся ИЗ ОПУБЛИКОВАННОЙ СХЕМЫ, а не из
+    головы: прибор обязан спрашивать поставку. Допуск объёма — действующий класс проекта
+    (1e-3 или 1e-9 относительной); допуск сплайна — 0,5 % от `π·R²·h`, как записано в наряде.
+
+    ЧЕГО ЗДЕСЬ НЕТ. Клиентская приёмка и Trust не трогаются вовсе.
+    """
+    import json as _json
+    import os as _os
+
+    def call(tool, args, timeout=600):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def emsg(env):
+        err = (env or {}).get("error") or {}
+        return err.get("message") if isinstance(err, dict) else None
+
+    def status_of(env):
+        return (env or {}).get("status")
+
+    def rev_of(env, fallback=1):
+        return (env or {}).get("revision_after") or fallback
+
+    def doc_of(env):
+        r = result(env)
+        return r.get("document_id") or r.get("id") or (env or {}).get("document_id")
+
+    def near(a, b, tol):
+        return isinstance(a, (int, float)) and isinstance(b, (int, float)) and abs(a - b) <= tol
+
+    def volume_tolerance(expected):
+        return max(1e-3, 1e-9 * abs(expected))
+
+    def polygon(n, r):
+        return [[r * math.cos(2 * math.pi * i / n), r * math.sin(2 * math.pi * i / n)]
+                for i in range(n)]
+
+    def half_budget_s():
+        """Half of the SYNCHRONOUS budget — read from the config the run actually uses, not assumed."""
+        path = _os.path.abspath(argument("--config") or local_config(ROOT))
+        try:
+            with open(path, encoding="utf-8-sig") as fh:
+                raw = _json.load(fh)
+            return (raw.get("sync_budget_ms") or 10000) / 2000.0
+        except (OSError, ValueError):
+            return 5.0
+
+    def new_part(name):
+        env, code = call("kompas_create_document",
+                         {"application_id": app_id, "kind": "part", "name": name})
+        return doc_of(env), rev_of(env, 1), code
+
+    def new_sketch(doc, rev, name):
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": rev,
+            "plane": {"base": "xy", "offset_mm": 0}, "name": name})
+        ref = result(env).get("id")
+        ref = ref.get("id") if isinstance(ref, dict) else ref
+        return ref, rev_of(env, rev), code
+
+    def edit(sketch, rev, entities, mode="replace"):
+        env, code = call("kompas_edit_sketch", {
+            "sketch_ref": sketch, "expected_revision": rev, "mode": mode, "entities": entities})
+        return env, code, rev_of(env, rev)
+
+    def listing(sketch, limit=500):
+        env, code = call("kompas_list_sketch_entities", {"sketch_ref": sketch, "limit": limit})
+        return result(env), code
+
+    def rows_summary(listed):
+        """Строки перечисления — по РЕЗУЛЬТАТУ (`listing(...)[0]`), а не по конверту: у конверта
+        строк нет, и сводка, взятая с него, молча давала бы пустой список на верном ответе."""
+        return [(r.get("entity_kind"), r.get("kind"), r.get("type_code"), r.get("points_count"),
+                 r.get("closed")) for r in ((listed or {}).get("rows") or [])]
+
+    def object_count(listed):
+        counts = (listed or {}).get("collection_counts") or {}
+        return counts.get("view0.object_count")
+
+    def extrude(sketch, rev, depth):
+        env, code = call("kompas_extrude", {
+            "sketch_ref": sketch, "expected_revision": rev, "operation": "base",
+            "depth_mm": depth, "direction": "positive", "end_condition": "blind"})
+        return env, code, rev_of(env, rev)
+
+    def body_measure(doc):
+        env, _code = call("kompas_list_bodies", {"document_id": doc})
+        rows = result(env)
+        if isinstance(rows, dict):
+            rows = rows.get("rows") or rows.get("bodies") or []
+        if not isinstance(rows, list) or not rows:
+            return None
+        env, _code = call("kompas_measure", {"target_ref": rows[0].get("body_ref"),
+                                             "properties": ["volume", "bbox"]})
+        return result(env)
+
+    def close(doc):
+        call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+
+    def checks_of(env):
+        verification = (env or {}).get("verification") or {}
+        return {c.get("name"): c for c in (verification.get("checks") or [])}
+
+    def context_revision(doc):
+        env, _code = call("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return result(env).get("revision")
+
+    # ── SB-01.discover: инструменты и схемы ────────────────────────────────────────────────
+    tools = client.call("tools/list", {}).get("tools", [])
+    names = sorted(t["name"] for t in tools)
+    edit_schema = None
+    entity_schema = None
+    for entry in tools:
+        if entry["name"] == "kompas_edit_sketch":
+            edit_schema = entry.get("inputSchema") or {}
+    published = _os.path.join(ROOT, "schemas", "kompas_edit_sketch.json")
+    drift = None
+    try:
+        with open(published, encoding="utf-8-sig") as fh:
+            drift = _json.load(fh)
+        drift.pop("$schema", None)
+    except (OSError, ValueError):
+        drift = None
+    schema_matches = drift is not None and edit_schema == drift
+    entities_schema = (((edit_schema or {}).get("properties") or {}).get("entities") or {})
+    entity_ref = entities_schema.get("items", {}).get("$ref", "")
+    entity_def = ((edit_schema or {}).get("$defs") or {}).get("sketch_entity") or {}
+    entity_props = entity_def.get("properties") or {}
+    kinds = (entity_props.get("kind") or {}).get("enum") or []
+    limit_entities = entities_schema.get("maxItems")
+    limit_vertices = (entity_props.get("points_mm") or {}).get("maxItems")
+    entities_desc = entities_schema.get("description") or ""
+    points_desc = (entity_props.get("points_mm") or {}).get("description") or ""
+    named_limits = (str(limit_entities) in entities_desc and str(limit_vertices) in points_desc
+                    and "СХЕМОЙ MCP" in entities_desc and "СХЕМОЙ MCP" in points_desc)
+    rep.add("SB-01.discover",
+            "схемы совпадают с реестром; описания называют новые пределы и вид spline",
+            "PASS" if (schema_matches and "spline" in kinds and "polyline" in kinds
+                       and isinstance(limit_entities, int) and isinstance(limit_vertices, int)
+                       and named_limits and len(names) == 81) else "FAIL",
+            f"инструментов={len(names)} (ожидание 81); схема kompas_edit_sketch совпадает с реестром="
+            f"{schema_matches}; виды={kinds}; предел entities={limit_entities}, "
+            f"предел points_mm={limit_vertices}; описания называют числа и источник={named_limits}",
+            {"entities_max_items": limit_entities, "points_max_items": limit_vertices,
+             "entity_ref": entity_ref})
+
+    if not isinstance(limit_entities, int) or not isinstance(limit_vertices, int):
+        rep.add("SB-02.limits", "пределы объявлены схемой", "FAIL",
+                f"схема не объявляет оба предела: entities={limit_entities}, points_mm={limit_vertices}")
+        return
+
+    half = half_budget_s()
+
+    # ── SB-02.limits: предел, предел+1, ревизия и эскиз без изменений ──────────────────────
+    doc, rev, code = new_part("SB_LIMITS")
+    if code:
+        rep.add("SB-02.limits", "предел entities: один вызов succeeded в половине бюджета; предел+1 отвергнут до COM",
+                "FAIL", f"документ не создан: {code}")
+    else:
+        sk, rev, code = new_sketch(doc, rev, "limits")
+        if code:
+            rep.add("SB-02.limits", "предел entities: один вызов succeeded в половине бюджета; предел+1 отвергнут до COM",
+                    "FAIL", f"эскиз не создан: {code}")
+        else:
+            segments = [{"kind": "line", "start_mm": [float(i), 0.0], "end_mm": [float(i), 1.0]}
+                        for i in range(limit_entities)]
+            t0 = time.perf_counter()
+            env, code, rev = edit(sk, rev, segments, mode="append")
+            elapsed = time.perf_counter() - t0
+            at_limit_ok = (code is None and status_of(env) == "succeeded"
+                           and elapsed <= half)
+            listed_at_limit = listing(sk)[0]
+            count_at_limit = object_count(listed_at_limit)
+            counts_at_limit = listed_at_limit.get("collection_counts") or {}
+            rev_before_over = context_revision(doc)
+            over = segments + [{"kind": "line", "start_mm": [float(limit_entities), 0.0],
+                                "end_mm": [float(limit_entities), 1.0]}]
+            env_over, code_over, _rev = edit(sk, rev, over, mode="append")
+            rev_after_over = context_revision(doc)
+            count_after_over = object_count(listing(sk)[0])
+            rep.add("SB-02.limits",
+                    "предел entities: один вызов succeeded в половине бюджета; предел+1 отвергнут до COM",
+                    "PASS" if (at_limit_ok and code_over == "INVALID_ARGUMENT"
+                               and rev_after_over == rev_before_over
+                               and count_after_over == count_at_limit) else "FAIL",
+                    f"предел={limit_entities}: время {elapsed:.3f} с при половине бюджета {half:.3f} с, "
+                    f"статус={status_of(env)}, ошибка={code}; сущностей в эскизе {count_at_limit}, "
+                    f"collection_counts={counts_at_limit}; предел+1: код={code_over}, "
+                    f"ревизия {rev_before_over}→{rev_after_over}, сущностей {count_after_over} "
+                    f"(ожидание: без изменений)",
+                    {"limit": limit_entities, "seconds": round(elapsed, 3), "half_budget_s": half,
+                     "over_limit_code": code_over, "entities_at_limit": count_at_limit,
+                     "entities_after_refusal": count_after_over,
+                     "revision_before": rev_before_over, "revision_after": rev_after_over})
+            close(doc)
+
+    # ── SB-03: замкнутая нативная полилиния, правильный 360-угольник R=20, h=5 ────────────
+    n360 = 360
+    radius = 20.0
+    depth = 5.0
+    analytic_360 = 0.5 * n360 * radius * radius * math.sin(2 * math.pi / n360) * depth
+    doc, rev, code = new_part("SB_POLY360")
+    if code:
+        rep.add("SB-03.polyline_native", "замкнутая нативная полилиния 360 вершин: один объект, объём по аналитике",
+                "FAIL", f"документ не создан: {code}")
+    else:
+        sk, rev, code = new_sketch(doc, rev, "poly360")
+        env, code, rev = edit(sk, rev, [{"kind": "polyline", "points_mm": polygon(n360, radius),
+                                         "closed": True}])
+        edit_kinds = result(env).get("kinds")
+        listed, _lc = listing(sk)
+        counts = listed.get("collection_counts") or {}
+        rows = listed.get("rows") or []
+        one_object = (len(rows) == 1 and rows[0].get("entity_kind") == "polyline"
+                      and rows[0].get("points_count") == n360 and rows[0].get("closed") is True
+                      and counts.get("view0.poly_lines") == 1)
+        env_x, code_x, rev = extrude(sk, rev, depth)
+        chk = checks_of(env_x)
+        delta = result(env_x).get("volume_delta_mm3")
+        basis = (chk.get("expected_basis") or {}).get("observed")
+        passed = (chk.get("volume_delta") or {}).get("passed") is True
+        area_ok = near(result(env).get("profile_area_mm2"),
+                       0.5 * n360 * radius * radius * math.sin(2 * math.pi / n360),
+                       volume_tolerance(analytic_360))
+        rep.add("SB-03.polyline_native",
+                "замкнутая нативная полилиния 360 вершин: один объект, объём по аналитике",
+                "PASS" if (code is None and one_object and code_x is None and area_ok and passed
+                           and basis == "profile_area_x_depth"
+                           and near(delta, analytic_360, volume_tolerance(analytic_360))
+                           and ((env_x or {}).get("verification") or {}).get("level") == "geometry_checked")
+                else "FAIL",
+                f"виды ответа={edit_kinds}; строк={len(rows)} {rows_summary(listed)}; "
+                f"poly_lines={counts.get('view0.poly_lines')}; площадь="
+                f"{result(env).get('profile_area_mm2')}; объём={delta} ожидание={analytic_360}; "
+                f"базис={basis}, passed={passed}, уровень="
+                f"{((env_x or {}).get('verification') or {}).get('level')}",
+                {"rows": rows_summary(listed), "collection_counts": counts,
+                 "volume_delta_mm3": delta, "expected_volume_mm3": analytic_360,
+                 "profile_area_mm2": result(env).get("profile_area_mm2")})
+        close(doc)
+
+    # ── SB-04: полилиния на пределе числа вершин ──────────────────────────────────────────
+    nlimit = limit_vertices
+    analytic_limit = 0.5 * nlimit * radius * radius * math.sin(2 * math.pi / nlimit) * depth
+    doc, rev, code = new_part("SB_POLYLIMIT")
+    if code:
+        rep.add("SB-04.polyline_limit", "полилиния на пределе числа вершин: один вызов, один объект, объём по формуле",
+                "FAIL", f"документ не создан: {code}")
+    else:
+        sk, rev, code = new_sketch(doc, rev, "polylimit")
+        t0 = time.perf_counter()
+        env, code, rev = edit(sk, rev, [{"kind": "polyline", "points_mm": polygon(nlimit, radius),
+                                         "closed": True}])
+        elapsed = time.perf_counter() - t0
+        listed, _lc = listing(sk)
+        counts = listed.get("collection_counts") or {}
+        rows = listed.get("rows") or []
+        one_object = (len(rows) == 1 and rows[0].get("entity_kind") == "polyline"
+                      and rows[0].get("points_count") == nlimit
+                      and rows[0].get("closed") is True
+                      and counts.get("view0.poly_lines") == 1)
+        env_x, code_x, rev = extrude(sk, rev, depth)
+        delta = result(env_x).get("volume_delta_mm3")
+        rep.add("SB-04.polyline_limit",
+                "полилиния на пределе числа вершин: один вызов, один объект, объём по формуле",
+                "PASS" if (code is None and status_of(env) == "succeeded" and one_object
+                           and code_x is None
+                           and near(delta, analytic_limit, volume_tolerance(analytic_limit)))
+                else "FAIL",
+                f"вершин={nlimit}: время {elapsed:.3f} с, статус={status_of(env)}, ошибка={code}; "
+                f"строк={len(rows)} {rows_summary(listed)}; poly_lines={counts.get('view0.poly_lines')}; "
+                f"объём={delta} ожидание={analytic_limit}",
+                {"vertices": nlimit, "seconds": round(elapsed, 3), "volume_delta_mm3": delta,
+                 "expected_volume_mm3": analytic_limit, "collection_counts": counts})
+        close(doc)
+
+    # ── SB-05: контур клиента из приёмки 0.5.0 (21 дуга + 4 отрезка) ───────────────────────
+    contour_path = _os.path.join(ROOT, "tests", "Unit", "KompasMcp.Unit", "Data",
+                                 "plate_cp04a_mcp.json")
+    expected_area = 8474.982482571266
+    expected_volume = 33899.929930285063
+    if not _os.path.exists(contour_path):
+        rep.add("SB-05.client_contour", "контур клиента: площадь и объём как в приёмке 0.5.0", "FAIL",
+                f"нет файла контура: {contour_path}")
+    else:
+        with open(contour_path, encoding="utf-8-sig") as fh:
+            contour = _json.load(fh)["variants"]["exact_closure"]["entities"]
+        doc, rev, code = new_part("SB_CP04A")
+        sk, rev, code = new_sketch(doc, rev, "cp04a")
+        env, code, rev = edit(sk, rev, contour)
+        area = result(env).get("profile_area_mm2")
+        env_x, code_x, rev = extrude(sk, rev, 4.0)
+        delta = result(env_x).get("volume_delta_mm3")
+        rep.add("SB-05.client_contour",
+                "контур клиента: площадь и объём как в приёмке 0.5.0",
+                "PASS" if (code is None and code_x is None
+                           and near(area, expected_area, volume_tolerance(expected_area))
+                           and near(delta, expected_volume, volume_tolerance(expected_volume)))
+                else "FAIL",
+                f"площадь={area} ожидание={expected_area}; объём={delta} ожидание={expected_volume}; "
+                f"ошибки edit={code}, extrude={code_x}",
+                {"profile_area_mm2": area, "volume_delta_mm3": delta,
+                 "expected_area_mm2": expected_area, "expected_volume_mm3": expected_volume})
+        close(doc)
+
+    # ── SB-06: незамкнутая полилиния из 3 вершин, замыкание второй полилинией ─────────────
+    triangle = [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0]]
+    analytic_triangle = 0.5 * 10.0 * 10.0 * 5.0
+    doc, rev, code = new_part("SB_POLYOPEN")
+    sk, rev, code = new_sketch(doc, rev, "polyopen")
+    env, code, rev = edit(sk, rev, [{"kind": "polyline", "points_mm": triangle, "closed": False}])
+    listed, _lc = listing(sk)
+    rows = listed.get("rows") or []
+    open_ok = (len(rows) == 1 and rows[0].get("entity_kind") == "polyline"
+               and rows[0].get("points_count") == 3 and rows[0].get("closed") is False)
+    env2, code2, rev = edit(sk, rev, [{"kind": "polyline",
+                                       "points_mm": [[10.0, 10.0], [0.0, 0.0]], "closed": False}],
+                            mode="append")
+    env_x, code_x, rev = extrude(sk, rev, 5.0)
+    delta = result(env_x).get("volume_delta_mm3")
+    rep.add("SB-06.polyline_open",
+            "незамкнутая полилиния 3 вершин читается незамкнутой; замыкание второй полилинией даёт выдавливаемый контур",
+            "PASS" if (code is None and open_ok and code2 is None and code_x is None
+                       and near(delta, analytic_triangle, volume_tolerance(analytic_triangle)))
+            else "FAIL",
+            f"первая: ошибка={code}, строки {rows_summary(listed)}; вторая (замыкание): ошибка={code2}; "
+            f"объём={delta} ожидание={analytic_triangle}",
+            {"first_rows": rows_summary(listed), "second_error": code2,
+             "volume_delta_mm3": delta, "expected_volume_mm3": analytic_triangle})
+    close(doc)
+
+    # ── SB-07: замкнутый сплайн 16 вершин на R=20, h=5 ────────────────────────────────────
+    n16 = 16
+    analytic_circle = math.pi * radius * radius * depth
+    spline_tolerance = 0.005 * analytic_circle
+    doc, rev, code = new_part("SB_SPLINE16")
+    sk, rev, code = new_sketch(doc, rev, "spline16")
+    env, code, rev = edit(sk, rev, [{"kind": "spline", "points_mm": polygon(n16, radius),
+                                     "closed": True}])
+    area = result(env).get("profile_area_mm2")
+    listed, _lc = listing(sk)
+    counts = listed.get("collection_counts") or {}
+    rows = listed.get("rows") or []
+    one_object = (len(rows) == 1 and rows[0].get("entity_kind") == "spline"
+                  and rows[0].get("points_count") == n16 and rows[0].get("closed") is True
+                  and counts.get("view0.beziers") == 1)
+    env_x, code_x, rev = extrude(sk, rev, depth)
+    delta = result(env_x).get("volume_delta_mm3")
+    unverified = list(((env_x or {}).get("verification") or {}).get("unverified_aspects") or [])
+    unverified += list(result(env_x).get("unverified_aspects") or [])
+    area_named = any("сплайн" in text for text in unverified)
+    measured = body_measure(doc)
+    bbox = (measured or {}).get("bbox") or {}
+    xmin = ((bbox.get("min_mm") or [None])[0])
+    xmax = ((bbox.get("max_mm") or [None])[0])
+    ymin = ((bbox.get("min_mm") or [None, None])[1])
+    ymax = ((bbox.get("max_mm") or [None, None])[1])
+    bbox_ok = all(isinstance(v, (int, float)) for v in (xmin, xmax, ymin, ymax)) \
+        and abs(abs(xmin) - radius) <= 0.005 * radius and abs(abs(xmax) - radius) <= 0.005 * radius \
+        and abs(abs(ymin) - radius) <= 0.005 * radius and abs(abs(ymax) - radius) <= 0.005 * radius
+    rep.add("SB-07.spline",
+            "замкнутый сплайн 16 вершин: один объект; площадь null с причиной; объём и габарит в 0,5 % от круга",
+            "PASS" if (code is None and one_object and area is None and area_named
+                       and code_x is None
+                       and near(delta, analytic_circle, spline_tolerance) and bbox_ok)
+            else "FAIL",
+            f"строки {rows_summary(listed)}; beziers={counts.get('view0.beziers')}; площадь={area}; "
+            f"причина в unverified_aspects={area_named}; объём={delta} ожидание={analytic_circle} "
+            f"(допуск 0,5 % = {spline_tolerance:.3f}); габарит X[{xmin},{xmax}] Y[{ymin},{ymax}] "
+            f"ожидание ±{radius}",
+            {"rows": rows_summary(listed), "collection_counts": counts, "profile_area_mm2": area,
+             "unverified_aspects": unverified, "volume_delta_mm3": delta,
+             "expected_volume_mm3": analytic_circle, "spline_tolerance_mm3": spline_tolerance,
+             "bbox": bbox})
+    close(doc)
+
+    # ── SB-08: незамкнутый сплайн из 4 вершин ─────────────────────────────────────────────
+    doc, rev, code = new_part("SB_SPLINEOPEN")
+    sk, rev, code = new_sketch(doc, rev, "splineopen")
+    env, code, rev = edit(sk, rev, [{"kind": "spline",
+                                     "points_mm": [[0, 0], [10, 0], [10, 10], [20, 10]],
+                                     "closed": False}])
+    listed, _lc = listing(sk)
+    rows = listed.get("rows") or []
+    rep.add("SB-08.spline_open",
+            "незамкнутый сплайн 4 вершин: один объект, замкнутость false",
+            "PASS" if (code is None and len(rows) == 1 and rows[0].get("entity_kind") == "spline"
+                       and rows[0].get("points_count") == 4 and rows[0].get("closed") is False)
+            else "FAIL",
+            f"ошибка={code}; строки {rows_summary(listed)}",
+            {"rows": rows_summary(listed)})
+    close(doc)
+
+    # ── SB-09: отказы ─────────────────────────────────────────────────────────────────────
+    doc, rev, code = new_part("SB_REFUSALS")
+    sk, rev, code = new_sketch(doc, rev, "refusals")
+    env_below, code_below, rev_below = edit(sk, rev, [
+        {"kind": "spline", "points_mm": [[0, 0], [1, 1]], "closed": False}])
+    env_foreign, code_foreign, rev_foreign = edit(sk, rev, [
+        {"kind": "spline", "points_mm": polygon(5, 5.0), "start_mm": [0, 0]}])
+    # Различающий контроль: ДЕГЕНЕРИРОВАННЫЙ сплайн ядро не строит — ksEndObj возвращает 0, и
+    # ответ обязан быть GEOMETRY_FAILED, а эскиз — остаться ПУСТЫМ. Молчаливой подстановки
+    # (раскладка на отрезки или полилиния) здесь быть не может: именно она выдала бы отказ ядра
+    # за выполненную работу.
+    env_geom, code_geom, _rev_geom = edit(sk, rev, [
+        {"kind": "spline", "points_mm": [[5, 5], [5, 5], [5, 5]], "closed": True}])
+    after_geom = listing(sk)[0]
+    geom_rows = after_geom.get("rows") or []
+    geom_counts = after_geom.get("collection_counts") or {}
+    no_fallback = (code_geom == "GEOMETRY_FAILED" and len(geom_rows) == 0
+                   and (geom_counts.get("view0.object_count") or 0) == 0)
+    # Отказ ДО COM ревизию не поднимает, отказ ПОСЛЕ COM — поднимает, а конверт отказа несёт
+    # revision_after = null: следующая правка берёт ревизию ИЗ ДОКУМЕНТА, а не из прежней
+    # переменной, иначе строка мерила бы собственный промах (REVISION_CONFLICT) вместо отказа
+    # инструмента.
+    rev = context_revision(doc) or rev
+    env_p, code_p, rev = edit(sk, rev, [{"kind": "polyline", "points_mm": polygon(6, 10.0),
+                                         "closed": True}])
+    env_s, code_s, rev = edit(sk, rev, [{"kind": "spline", "points_mm": polygon(8, 4.0),
+                                         "closed": False}], mode="append")
+    listed = listing(sk)[0]
+    by_kind = {r.get("entity_kind"): r for r in (listed.get("rows") or [])}
+    named_refusals = []
+    for kind_name in ("polyline", "spline"):
+        row = by_kind.get(kind_name)
+        if not row or not row.get("address"):
+            named_refusals.append(f"{kind_name}: адреса нет")
+            continue
+        env_e, code_e = call("kompas_edit_sketch_entity", {
+            "sketch_ref": sk, "expected_revision": rev, "address": row["address"],
+            "action": "set_vertices"})
+        message = emsg(env_e) or ""
+        named_refusals.append(f"{kind_name}: {code_e} — {message}")
+    # РАЗЛИЧАЮЩИЙ КОНТРОЛЬ: отказ относится к ДЕЙСТВИЮ, а не к виду сущности. Объявленное действие
+    # на той же полилинии по тому же адресу обязано пройти — иначе «именованный отказ» был бы
+    # отказом по виду, то есть потерей уже объявленной возможности.
+    poly_row = by_kind.get("polyline") or {}
+    control_env, control_code = call("kompas_edit_sketch_entity", {
+        "sketch_ref": sk, "expected_revision": rev, "address": poly_row.get("address"),
+        "action": "set_layer", "layer_number": 0})
+    refusals_named = all(
+        text.startswith(("polyline: INVALID_ARGUMENT", "spline: INVALID_ARGUMENT"))
+        and "не входит в" in text and "set_layer" in text and "delete" in text
+        for text in named_refusals)
+    rep.add("SB-09.refusals",
+            "отказы: сплайн ниже минимума, поле чужого вида, правка геометрии по адресу, GEOMETRY_FAILED без отката",
+            "PASS" if (code_below == "INVALID_ARGUMENT" and code_foreign == "INVALID_ARGUMENT"
+                       and no_fallback and refusals_named and code_p is None and code_s is None
+                       and control_code is None
+                       and result(control_env).get("applied") is True)
+            else "FAIL",
+            f"ниже минимума={code_below} ({emsg(env_below)}); чужое поле={code_foreign} "
+            f"({emsg(env_foreign)}); дегенерат={code_geom} ({emsg(env_geom)}), сущностей после "
+            f"него {len(geom_rows)}, object_count={geom_counts.get('view0.object_count')}; "
+            f"правка по адресу: {'; '.join(named_refusals)}; контроль set_layer на полилинии="
+            f"{control_code}, applied={result(control_env).get('applied')}",
+            {"below_minimum": code_below, "foreign_field": code_foreign,
+             "degenerate": code_geom, "degenerate_message": emsg(env_geom),
+             "degenerate_rows": rows_summary(after_geom), "degenerate_counts": geom_counts,
+             "addressed_edits": named_refusals, "polyline_error": code_p, "spline_error": code_s,
+             "set_layer_control": control_code,
+             "set_layer_applied": result(control_env).get("applied")})
+    close(doc)
+
+    # ── SB-10: сохранение → закрытие → переоткрытие ───────────────────────────────────────
+    save_dir = _os.path.join(workdir, "sketch-bulk")
+    _os.makedirs(save_dir, exist_ok=True)
+    reopen_results = []
+    for case in ("polyline", "spline"):
+        path = _os.path.join(save_dir, f"sb-reopen-{case}.m3d")
+        doc, rev, code = new_part("SB_REOPEN_" + case.upper())
+        sk, rev, code = new_sketch(doc, rev, "reopen-" + case)
+        if case == "polyline":
+            entity = {"kind": "polyline", "points_mm": polygon(12, 15.0), "closed": True}
+        else:
+            entity = {"kind": "spline", "points_mm": polygon(10, 6.0), "closed": True}
+        env, code, rev = edit(sk, rev, [entity])
+        before_rows = rows_summary(listing(sk)[0])
+        env_x, code_x, rev = extrude(sk, rev, 3.0)
+        volume_before = (body_measure(doc) or {}).get("volume_mm3")
+        env_save, code_save = call("kompas_save_document", {
+            "document_id": doc, "expected_revision": rev, "target_path": path})
+        close(doc)
+        env_open, code_open = call("kompas_open_document", {
+            "application_id": app_id, "path": path, "access": "edit"})
+        reopened = doc_of(env_open)
+        env_sk, _code = call("kompas_list_sketches", {"document_id": reopened})
+        sketches = result(env_sk)
+        sketches = sketches.get("rows") if isinstance(sketches, dict) else sketches
+        sk2 = None
+        if sketches:
+            ref = sketches[0].get("id") or sketches[0].get("sketch_ref")
+            sk2 = ref.get("id") if isinstance(ref, dict) else ref
+        after_rows = rows_summary(listing(sk2)[0]) if sk2 else None
+        volume_after = (body_measure(reopened) or {}).get("volume_mm3") if reopened else None
+        reopen_results.append({
+            "case": case, "errors": [code, code_x, code_save, code_open],
+            "before": before_rows, "after": after_rows,
+            "volume_before": volume_before, "volume_after": volume_after,
+            "path_exists": _os.path.isfile(path)})
+        close(reopened)
+    reopen_ok = all(
+        entry["errors"] == [None, None, None, None] and entry["before"] == entry["after"]
+        and entry["before"] and entry["path_exists"]
+        and near(entry["volume_before"], entry["volume_after"], 1e-6) for entry in reopen_results)
+    rep.add("SB-10.reopen",
+            "полилиния и сплайн читаются из переоткрытого документа с теми же числом вершин и замкнутостью; объём тот же",
+            "PASS" if reopen_ok else "FAIL",
+            "; ".join(f"{e['case']}: до={e['before']} после={e['after']} "
+                      f"объём {e['volume_before']}→{e['volume_after']} ошибки={e['errors']}"
+                      for e in reopen_results),
+            {"cases": reopen_results})
+
+    # ── SB-11: идемпотентность и ревизии ──────────────────────────────────────────────────
+    doc, rev, code = new_part("SB_IDEMPOTENT")
+    sk, rev, code = new_sketch(doc, rev, "idempotent")
+    op_id = str(uuid.uuid4())
+    payload = {"sketch_ref": sk, "expected_revision": rev, "mode": "append",
+               "entities": [{"kind": "polyline", "points_mm": polygon(6, 12.0), "closed": True}],
+               "operation_id": op_id}
+    _e, first, _r = client.tool("kompas_edit_sketch", payload, timeout=600)
+    rev = rev_of(first, rev)
+    _e, second, _r = client.tool("kompas_edit_sketch", payload, timeout=600)
+    listed_repeat = listing(sk)[0]
+    rows_after_repeat = listed_repeat.get("rows") or []
+    replay_warned = any("журналь" in text.lower() for text in ((second or {}).get("warnings") or []))
+    stale_env, stale_code, _rev = edit(sk, rev - 1, [
+        {"kind": "circle", "center_mm": [0, 0], "radius_mm": 1.0}], mode="append")
+    listed_stale = listing(sk)[0]
+    rows_after_stale = listed_stale.get("rows") or []
+    rep.add("SB-11.idempotent",
+            "повтор operation_id не рисует вторично; устаревшая ревизия отвергается",
+            "PASS" if (error_code(first) is None and error_code(second) is None and replay_warned
+                       and len(rows_after_repeat) == 1
+                       and stale_code == "REVISION_CONFLICT" and len(rows_after_stale) == 1)
+            else "FAIL",
+            f"первый вызов={error_code(first)}, повтор={error_code(second)} (журнальная запись "
+            f"названа={replay_warned}); сущностей после повтора={len(rows_after_repeat)}; "
+            f"устаревшая ревизия={stale_code}, сущностей после неё={len(rows_after_stale)}",
+            {"first": error_code(first), "second": error_code(second),
+             "replay_warned": replay_warned, "rows_after_repeat": rows_summary(listed_repeat),
+             "stale_code": stale_code, "rows_after_stale": rows_summary(listed_stale)})
+    close(doc)
+
+    # ── SB-12: часть D (вставка фрагмента) — снята с записью ───────────────────────────────
+    # ШАГ 0 ЧАСТИ D (наряд §5) решён ДО кода: справка описывает вставку фрагмента в ГРАФИЧЕСКИЙ
+    # ДОКУМЕНТ (раздел «Графический документ (Интерфейсы - ksDocument2D и IDocument2D)», страница
+    # ksfragment.html: «Указатель на интерфейс можно получить при помощи метода
+    # ksDocument2D::GetFragment») и НИ НА ОДНОЙ странице не говорит ни о вставке в документ-эскиз,
+    # ни о том, что становится геометрией эскиза. Измерение это подтвердило: GetFragment на
+    # редакторе эскиза отвечает ksFragment, а ksFragmentDefinition — то есть вызов, открывающий
+    # файл, — на редакторе эскиза НЕ ВОЗВРАЩАЕТ УПРАВЛЕНИЕ (команда не уложилась в бюджет 240 с и
+    # ответила OUTCOME_UNKNOWN, после чего и перечисление того же эскиза перестало отвечать: эскиз
+    # остался в режиме правки). Отказ, который нельзя назвать, и испорченный сеанс — не то, что
+    # можно отдать клиенту, поэтому часть D снята, а не «отложена».
+    if "kompas_insert_sketch_fragment" in names:
+        rep.add("SB-12.fragment_insert", "часть D: вставка контура из файла фрагмента", "FAIL",
+                "инструмент объявлен, хотя часть D снята: прибор обязан быть обновлён вместе с решением")
+    else:
+        rep.add("SB-12.fragment_insert",
+                "часть D снята: вставка фрагмента в документ-эскиз справкой не описана, а измеренный вызов не возвращает управления",
+                "NAMED",
+                "инструмента kompas_insert_sketch_fragment в реестре нет. Справка v24 описывает "
+                "ksFragment::ksInsertFragmentEx для ГРАФИЧЕСКОГО ДОКУМЕНТА и не описывает ни вставку "
+                "в документ-эскиз, ни то, что становится геометрией эскиза (страницы ksfragment.html, "
+                "ksfragment_ksfragmentdefinition.html, ksfragment_ksinsertfragmentex.html, "
+                "ksplacementparam_props.html). Измерено на бинарях этого коммита: "
+                "ksDocument2D.GetFragment на редакторе эскиза отвечает ksFragment, а следующий шаг "
+                "цепочки ksFragmentDefinition не возвращает управления — команда не уложилась в "
+                "бюджет 240 с, ответила OUTCOME_UNKNOWN, и перечисление того же эскиза после неё "
+                "тоже перестало отвечать. Строка не выдаётся за проверенную; эталонный файл "
+                "фрагмента, на котором это измерено, лежит в tests/Unit/KompasMcp.Unit/Data/ и "
+                "строится прибором --suite fragment.")
+
+
 def interference_checks(client, rep, app_id, workdir):
     """INT.* — пересечения и зазоры между компонентами сборки через MCP (блок G1).
 
@@ -4905,6 +5495,13 @@ def main():
     # (`INT.<NN>.<действие>`), а не по номеру в общем потоке.
     interference_only = "--interference-only" in sys.argv
 
+    # То же для блока G2 (массовая геометрия эскиза: пределы, нативная полилиния, сплайн; профиль
+    # `sketch-bulk-minimal-v1`): одна группа SB на своём сеансе. Отдельная ветка нужна по той же
+    # причине, что у прочих групп: клетка матрицы обязана находиться по ИМЕНИ строки
+    # (`SB.<NN>.<действие>`), а не по номеру в общем потоке. Эта ветка — единственная, которая
+    # вообще вызывает `kompas_edit_sketch` с `kind=polyline` в нативном виде и с `kind=spline`.
+    sketch_bulk_only = "--sketch-bulk-only" in sys.argv
+
     # То же для ориентации экземпляров кругового массива (наряд MCP-015): одна группа PO на своём
     # сеансе. Отдельная ветка нужна по той же причине, что у прочих групп: доказательство обязано
     # находиться по ИМЕНИ строки (`PO.<NN>`), а в общем прогоне эти строки тонули бы среди чужих.
@@ -4957,6 +5554,7 @@ def main():
         else "Приёмка ASM: минимальные сборки через MCP (наряд C1, профиль assemblies-minimal-v1)" if assembly_only
         else "Приёмка MATE: сопряжения сборки через MCP (блок C2, профиль mates-minimal-v1)" if mate_only
         else "Приёмка INT: пересечения и зазоры между компонентами сборки (блок G1, профиль assembly-interference-minimal-v1)" if interference_only
+        else "Приёмка SB: массовая геометрия эскиза — пределы, нативная полилиния, сплайн (блок G2, профиль sketch-bulk-minimal-v1)" if sketch_bulk_only
         else "Приёмка DRW: чертежи — стандартные виды, размеры, основная надпись, экспорт (блок DRW, профиль drawings-minimal-v1)" if drawing_only
         else "Приёмка VM: внешние переменные детали и материал через MCP (блок VM, профиль variables-material-minimal-v1)" if variables_material_only
         else "Приёмка PO: ориентация экземпляров кругового массива через MCP (наряд MCP-015)" if pattern_orientation_only
@@ -4984,6 +5582,7 @@ def main():
                      else "assembly-acceptance.json" if assembly_only
                      else "mate-acceptance.json" if mate_only
                      else "interference-acceptance.json" if interference_only
+                     else "sketch-bulk-acceptance.json" if sketch_bulk_only
                      else "drawing-acceptance.json" if drawing_only
                      else "variables-material-acceptance.json" if variables_material_only
                      else "pattern-orientation-acceptance.json" if pattern_orientation_only
@@ -5366,6 +5965,14 @@ def main():
 
         if interference_only:
             interference_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if sketch_bulk_only:
+            sketch_bulk_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -5973,6 +6580,12 @@ def main():
         # CLIENT_BUGS_20261008), свои документы и свои имена строк (`E08.<NN>`), поэтому в общем
         # потоке её доказательство иначе не нашлось бы. Документы R40 она не трогает.
         e08_checks(client, rep, app_id, workdir)
+
+        # Группа SB идёт сразу за E08 и в том же сеансе: массовая геометрия эскиза (блок G2, наряд
+        # OMEGA_G2_SKETCH_BULK_DEVELOPER_PROMPT.md), свои документы и свои имена строк
+        # (`SB.<NN>.<действие>`), поэтому в общем потоке её доказательство иначе не нашлось бы.
+        # Документы E08 она не трогает.
+        sketch_bulk_checks(client, rep, app_id, workdir)
 
         b5_acceptance_checks(client, rep, app_id, workdir)
 

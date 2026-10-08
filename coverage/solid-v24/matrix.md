@@ -72,6 +72,18 @@
 - **открытые_режимы:** []
 - **открытые_зависимости:** []
 
+### профиль sketch-bulk-minimal-v1 — Массовая геометрия эскиза: пределы, нативная полилиния, сплайн v24
+
+- **обязательных_режимов:** 3
+- **режимов_закрыто:** 3
+- **общих_зависимостей:** 3
+- **зависимостей_закрыто:** 3
+- **профиль_закрыт:** да
+- **готовность_процента:** 100.0%
+- **по_очередям:** G2 3/3
+- **открытые_режимы:** []
+- **открытые_зависимости:** []
+
 ### профиль variables-material-minimal-v1 — Внешние переменные и материал детали v24
 
 - **обязательных_режимов:** 5
@@ -86,18 +98,18 @@
 
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 304
-- **строк_полностью_закрыто:** 115
-- **строк_с_каким_либо_прогрессом:** 130
-- **семейств_в_каталоге:** 37
+- **строк_каталога:** 310
+- **строк_полностью_закрыто:** 121
+- **строк_с_каким_либо_прогрессом:** 136
+- **семейств_в_каталоге:** 38
 - **семейств_без_строк:** 14
 - **операций:** 99
 - **режимов_и_вариантов:** 146
-- **применимых_действий:** 2698
-- **действий_verified:** 867
-- **покрытие_действий:** 32.1%
-- **распределение_статусов:** {'not_started': 1831, 'verified': 867, 'not_applicable': 342}
-- **уровни_каталога_операций:** {'metadata_found': 50, 'mcp_verified': 34, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 4}
+- **применимых_действий:** 2729
+- **действий_verified:** 898
+- **покрытие_действий:** 32.9%
+- **распределение_статусов:** {'not_started': 1831, 'verified': 898, 'not_applicable': 371}
+- **уровни_каталога_операций:** {'metadata_found': 50, 'mcp_verified': 37, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 4}
 - **уровни_каталога_режимов:** {'mcp_verified': 55, 'documented': 19, 'runtime_verified': 3, 'metadata_found': 48, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
@@ -264,6 +276,22 @@
 | `dep.api7.in_same_adapter` | да | discover, read, edit, save_reopen | HO.1, HO.2, HO.3, HO.5r, HO.7t, HO.7, HO.8, HO.8r, HO.9, HO.24, HO.25, DEP.DAP.01.discover, DEP.DAP.02.read, DEP.DAP.03.edit, DEP.DAP.04.save_reopen |
 | `dep.foundation` | да | read, negative_tests | DEP.DFN.02.negative_tests, DEP.DFN.01.read |
 | `dep.preserve_unknown` | да | read, edit, save_reopen, geometry_validation | DEP.DPU.02.edit, DEP.DPU.04.geometry_validation, DEP.DPU.01.read, DEP.DPU.03.save_reopen |
+
+## Метрика 1 — обязательные режимы профиля `sketch-bulk-minimal-v1`
+
+| режим/операция | семья | приоритет | очередь | уровень каталога | поиск | созд | чтен | правк | перестр | reopen | подавл | удал | отказ | геом | проверки |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
+| `SKB-01.limits` | G2 | practical_required | G2 | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | OK | SB-01.discover, SB-02.limits, SB-04.polyline_limit, SB-09.refusals, SB-10.reopen |
+| `SKB-02.polyline_native` | G2 | practical_required | G2 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | SB-03.polyline_native, SB-04.polyline_limit, SB-05.client_contour, SB-06.polyline_open, SB-09.refusals, SB-10.reopen, SB-11.idempotent |
+| `SKB-03.spline` | G2 | practical_required | G2 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | SB-07.spline, SB-08.spline_open, SB-09.refusals, SB-10.reopen |
+
+### Общие зависимости профиля `sketch-bulk-minimal-v1`
+
+| зависимость | закрыто | приоритетные действия | проверки |
+|---|---|---|---|
+| `dep.sketch_bulk.limits_source` | да | discover, read, negative_tests | SB-01.discover, SB-02.limits |
+| `dep.sketch_bulk.entity_read_back` | да | discover, read, negative_tests | SB-03.polyline_native, SB-06.polyline_open, SB-07.spline, SB-08.spline_open, SB-10.reopen |
+| `dep.sketch_bulk.profile_area_rule` | да | read, geometry_validation, negative_tests | SB-03.polyline_native, SB-04.polyline_limit, SB-05.client_contour, SB-07.spline |
 
 ## Метрика 1 — обязательные режимы профиля `variables-material-minimal-v1`
 
@@ -550,6 +578,9 @@
 | `INT-02.pairs.tangent` | G1 | practical_required | G1 | mcp_verified | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | INT.02.read, INT.02.negative_tests, INT.06.read |
 | `INT-03.pairs.faces` | G1 | practical_required | G1 | mcp_verified | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | INT.03.read, INT.03.geometry_validation, INT.FACES, INT.11.negative_tests |
 | `INT-04.gap.min_distance` | G1 | practical_required | G1 | mcp_verified | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | INT.04.read, INT.04.read2, INT.04.geometry_validation, INT.04.geometry_validation2, INT.07.geometry_validation, INT.07.geometry_validation2, INT.08.geometry_validation, INT.11.negative_tests, INT.04.unit |
+| `SKB-01.limits` | G2 | practical_required | G2 | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | OK | SB-01.discover, SB-02.limits, SB-04.polyline_limit, SB-09.refusals, SB-10.reopen |
+| `SKB-02.polyline_native` | G2 | practical_required | G2 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | SB-03.polyline_native, SB-04.polyline_limit, SB-05.client_contour, SB-06.polyline_open, SB-09.refusals, SB-10.reopen, SB-11.idempotent |
+| `SKB-03.spline` | G2 | practical_required | G2 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | SB-07.spline, SB-08.spline_open, SB-09.refusals, SB-10.reopen |
 | `AUX-SKETCH.plane_and_profile_lifecycle` *(вне каталога)* | AUX-SKETCH | later | — | — | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | V03, V04, V05, G07_xy, G07_xz, G07_yz, V04r, V04d, V04e, V04f, G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, F08.28.discover, F08.28.create, F08.28.read, F08.28.edit, F08.28.rebuild, F08.28.save_reopen, F08.28.negative_tests, F08.28.geometry_validation, AUXS.01.edit, AUXS.02.negative_tests, AUXS.03.create, AUXS.04.edit, AUXS.05.save_reopen |
 | `SM-04.boss` *(вне каталога)* | SM-04 | later | B5 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `dep.sketch.entities` *(вне каталога)* | AUX-SKETCH | dependency_of | — | — | OK | OK | OK | OK | — | OK | — | — | OK | OK | G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, DEP.DSE.02.create, DEP.DSE.07.geometry_validation, DEP.DSE.06.negative_tests, DEP.DSE.05.save_reopen, DEP.DSE.04.edit, DEP.DSE.01.discover, DEP.DSE.03.read |
@@ -595,6 +626,9 @@
 | `dep.interference.api7_measurer` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | INT.04.read, INT.04.read2, INT.04.geometry_validation, INT.13.twin_layout |
 | `dep.interference.distance_unit` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | INT.04.geometry_validation, INT.04.geometry_validation2, INT.07.geometry_validation, INT.06.read, INT.04.unit |
 | `dep.interference.read_only` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | INT.09.read, INT.09.negative_tests |
+| `dep.sketch_bulk.limits_source` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | SB-01.discover, SB-02.limits |
+| `dep.sketch_bulk.entity_read_back` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | SB-03.polyline_native, SB-06.polyline_open, SB-07.spline, SB-08.spline_open, SB-10.reopen |
+| `dep.sketch_bulk.profile_area_rule` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | SB-03.polyline_native, SB-04.polyline_limit, SB-05.client_contour, SB-07.spline |
 
 ## Ограничения и незакрытое
 
@@ -1032,6 +1066,14 @@
   - Маршрут зазора опирается на типизированный двойник IPart7.Measurement3D (поставленная Interop.KompasAPI7.dll этого члена не объявляет, docs/04 §4.52); раскладка двойника сверена с установленной библиотекой типов строкой INT.13.twin_layout.
   - Единица Lmin и точек справкой не названа: она ИЗМЕРЕНА строкой INT.04.unit против аналитики в миллиметрах на трёх конфигурациях и названа измеренной в units_basis.
   - Зазор требует КОМПАС v23 и новее: справка объявляет IPart7.Measurement3D начиная с этой версии. Ниже порога и при непрочитанной версии — CAPABILITY_UNAVAILABLE с названной версией и порогом, до вызова двойника. Живой отрицательный случай недоступен: КОМПАС ниже v23 на машине нет, порог держится модульным тестом разбора строки версии.
+- `SKB-01.limits` — закрыт целиком
+  - Пределы измерены на этой машине и этой сборке; на другой машине их числа могут быть иными, и это названо в описании поля как предел схемы MCP, а не ядра.
+- `SKB-02.polyline_native` — закрыт целиком
+  - Нативная ломаная стоит около двух вызовов COM на вершину (блок параметров плюс элемент массива) — измеренный расход, из-за которого её предел ниже предела по числу примитивов.
+- `SKB-03.spline` — закрыт целиком
+  - Площадь профиля со сплайном на стороне сервера НЕ считается: собственной аппроксимации кривой сервер не делает, и это названо в unverified_aspects, а не выдано за проверку.
+  - Поле on_poles не объявлено: у маршрута ksBezier нет признака «по полюсам», а кривая всегда проходит через заданные вершины.
+  - Поле degree не объявлено: у ksBezier нет порядка; порядок принадлежит маршруту ksNurbs, который отвергнут по измерению.
 - `AUX-SKETCH.plane_and_profile_lifecycle` — закрыт целиком
   - замена и очистка после reopen работают для измеренной области: эскиз на основной XY, профиль — окружность, вырезание сквозное; точка поиска выводится из цилиндрической грани зависимого тела (проба G, строки G10…G10r)
   - вне измеренной области (наклонная плоскость, отрезки, дуги, прямоугольники) отказ явный: CAPABILITY_UNAVAILABLE с derivation=profile_not_circle / plane_not_xy, а не догадка (строка G11)
@@ -1159,6 +1201,12 @@
   - Зависимость подтверждается строками группы INT; до живого прогона она открыта.
 - `dep.interference.read_only` — закрыт целиком
   - Зависимость подтверждается строками группы INT; до живого прогона она открыта.
+- `dep.sketch_bulk.limits_source` — закрыт целиком
+  - Зависимость подтверждается строками группы SB.
+- `dep.sketch_bulk.entity_read_back` — закрыт целиком
+  - Поля points_count и closed у прочих видов — null: непрочитанное не выдаётся за ноль.
+- `dep.sketch_bulk.profile_area_rule` — закрыт целиком
+  - Сплайн не разбирается на отрезки и дуги: собственной аппроксимации сервер не делает.
 
 ## Семьи без строк матрицы (инвентаризация не завершена)
 

@@ -1467,6 +1467,32 @@ public static class KompasStructTypes
     /// <summary><c>StructType2DEnum.ko_DocumentParam</c> — the <c>ksDocumentParam</c> block that
     /// <c>ksDocument2D.ksCreateDocument</c> consumes: MEASURED 35.</summary>
     public const short DocumentParam = 35;
+
+    /// <summary><c>StructType2DEnum.ko_PolylineParam</c> — the <c>ksPolylineParam</c> block that
+    /// <c>ksDocument2D.ksPolylineByParam</c> consumes: MEASURED 76. The block is the ONLY documented
+    /// way to ask for a CLOSED polyline — <c>ksdocument2d_kspolyline.html</c> has no closure parameter,
+    /// while <c>kspolylineparam_closed.html</c> declares one.</summary>
+    public const short PolylineParam = 76;
+
+    /// <summary><c>StructType2DEnum.ko_MathPointParam</c> — one vertex of the <c>POINT_ARR</c> the
+    /// polyline block carries: MEASURED 14.</summary>
+    public const short MathPointParam = 14;
+
+    /// <summary><c>StructType2DEnum.ko_NurbsPointParam</c> — one node of a NURBS curve
+    /// (<c>ksdocument2d_ksnurbspoint.html</c>): MEASURED 18.</summary>
+    public const short NurbsPointParam = 18;
+
+    /// <summary><c>StructType2DEnum.ko_BezierPointParam</c> — one node of a Bezier curve
+    /// (<c>ksdocument2d_ksbezierpoint.html</c>): MEASURED 17.</summary>
+    public const short BezierPointParam = 17;
+}
+
+/// <summary>Dynamic-array selectors for <c>KompasObject.GetDynamicArray(Int32)</c>, from the help page
+/// «Типы динамических массивов» (<c>ksdmtypes.html</c>) — the values are the vendor's, not inferred:
+/// <c>POINT_ARR</c> = 2, «динамический массив указателей на интерфейсы ksMathPointParam».</summary>
+public static class KompasDynamicArrayTypes
+{
+    public const int PointArr = 2;
 }
 
 /// <summary>Document type selectors for <c>ksDocumentParam.type</c>, from the <c>DocType</c> help

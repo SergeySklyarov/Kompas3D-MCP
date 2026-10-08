@@ -1,4 +1,4 @@
-﻿{
+{
  "meta": {
   "artifact": "coverage/solid-v24/matrix.json",
   "schema_version": "1.1",
@@ -9446,6 +9446,332 @@
    "acceptance": [
     "ревизия, признак изменения, число признаков и состав дерева после вызова не меняются",
     "изменение документа вызовом чтения — FAIL, а не допустимый побочный эффект"
+   ]
+  },
+  {
+   "operation_id": "SKB-01.limits",
+   "kind": "profile_mode",
+   "profile": "sketch-bulk-minimal-v1",
+   "priority": "practical_required",
+   "queue": "G2",
+   "context": "part.sketch",
+   "catalog_ref": "G2",
+   "catalog_level": "mcp_verified",
+   "parameters_schema": "schemas/kompas_edit_sketch.json",
+   "adapter_route": "Схема и описание поля берут число из KompasMcp.Contracts.SketchLimits; превышение отвергается Host'ом до COM (INVALID_ARGUMENT).",
+   "actions": {
+    "discover": "verified",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
+   },
+   "not_applicable_reasons": {
+    "delete_dependencies": "удаление не входит в наряд: строка проверяет объём вызова",
+    "edit": "предел не правится: правка относится к геометрии, а не к объёму вызова",
+    "rebuild": "предел — свойство контракта MCP; состояние модели на него не влияет",
+    "suppress_restore": "подавлять нечего: предел не является признаком дерева модели"
+   },
+   "tests": [
+    "SB-01.discover",
+    "SB-02.limits",
+    "SB-04.polyline_limit",
+    "SB-09.refusals",
+    "SB-10.reopen"
+   ],
+   "evidence": [
+    "docs/acceptance/sketch-bulk/sketch-bulk-acceptance.json",
+    "scripts/mcp-smoke.py",
+    "docs/04_KOMPAS_API_NOTES.md"
+   ],
+   "limitations": [
+    "Пределы измерены на этой машине и этой сборке; на другой машине их числа могут быть иными, и это названо в описании поля как предел схемы MCP, а не ядра."
+   ],
+   "acceptance": [
+    "схема и описание называют одно и то же число, и оно взято из одного места",
+    "предел принимается одним вызовом со статусом succeeded внутри половины бюджета синхронизации",
+    "предел + 1 отвергается INVALID_ARGUMENT до COM; ревизия и эскиз не меняются"
+   ]
+  },
+  {
+   "operation_id": "SKB-02.polyline_native",
+   "kind": "profile_mode",
+   "profile": "sketch-bulk-minimal-v1",
+   "priority": "practical_required",
+   "queue": "G2",
+   "context": "part.sketch",
+   "catalog_ref": "G2",
+   "catalog_level": "mcp_verified",
+   "parameters_schema": "schemas/kompas_edit_sketch.json",
+   "adapter_route": "ksPolylineByParam(ksPolylineParam.closed) — один объект; чтение IPolyLine2D.Closed/PointsCount.",
+   "actions": {
+    "discover": "verified",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "verified",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
+   },
+   "not_applicable_reasons": {
+    "delete_dependencies": "удаление сущности эскиза — отдельное действие kompas_edit_sketch_entity, в объём наряда не входит",
+    "edit": "правка вершин существующей полилинии по адресу — вне объёма наряда: инструмент объявленной правки геометрии не имеет и отвечает именованным отказом",
+    "suppress_restore": "подавление относится к признакам дерева модели; объект эскиза признаком не является"
+   },
+   "tests": [
+    "SB-03.polyline_native",
+    "SB-04.polyline_limit",
+    "SB-05.client_contour",
+    "SB-06.polyline_open",
+    "SB-09.refusals",
+    "SB-10.reopen",
+    "SB-11.idempotent"
+   ],
+   "evidence": [
+    "docs/acceptance/sketch-bulk/sketch-bulk-acceptance.json",
+    "scripts/mcp-smoke.py",
+    "docs/04_KOMPAS_API_NOTES.md"
+   ],
+   "limitations": [
+    "Нативная ломаная стоит около двух вызовов COM на вершину (блок параметров плюс элемент массива) — измеренный расход, из-за которого её предел ниже предела по числу примитивов."
+   ],
+   "acceptance": [
+    "один вызов даёт ОДИН объект: строка вида ksDrPolyline с points_count и closed, collection_counts.poly_lines = 1, а не N отрезков",
+    "замкнутый контур выдавливается с объёмом 0,5·N·R²·sin(2π/N)·h в допуске профиля",
+    "площадь профиля и ожидаемый объём считаются прежней формулой по вершинам и для того же контура не меняются"
+   ]
+  },
+  {
+   "operation_id": "SKB-03.spline",
+   "kind": "profile_mode",
+   "profile": "sketch-bulk-minimal-v1",
+   "priority": "practical_required",
+   "queue": "G2",
+   "context": "part.sketch",
+   "catalog_ref": "G2",
+   "catalog_level": "mcp_verified",
+   "parameters_schema": "schemas/kompas_edit_sketch.json",
+   "adapter_route": "ksBezier(closed) + ksBezierPoint(ksBezierPointParam) + ksEndObj — один объект; чтение IBezier.Closed/PointsCount.",
+   "actions": {
+    "discover": "verified",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "verified",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
+   },
+   "not_applicable_reasons": {
+    "delete_dependencies": "удаление сущности эскиза — отдельное действие kompas_edit_sketch_entity, в объём наряда не входит",
+    "edit": "правка узлов существующего сплайна по адресу — вне объёма наряда: инструмент объявленной правки геометрии не имеет и отвечает именованным отказом",
+    "suppress_restore": "подавление относится к признакам дерева модели; объект эскиза признаком не является"
+   },
+   "tests": [
+    "SB-07.spline",
+    "SB-08.spline_open",
+    "SB-09.refusals",
+    "SB-10.reopen"
+   ],
+   "evidence": [
+    "docs/acceptance/sketch-bulk/sketch-bulk-acceptance.json",
+    "scripts/mcp-smoke.py",
+    "docs/04_KOMPAS_API_NOTES.md"
+   ],
+   "limitations": [
+    "Площадь профиля со сплайном на стороне сервера НЕ считается: собственной аппроксимации кривой сервер не делает, и это названо в unverified_aspects, а не выдано за проверку.",
+    "Поле on_poles не объявлено: у маршрута ksBezier нет признака «по полюсам», а кривая всегда проходит через заданные вершины.",
+    "Поле degree не объявлено: у ksBezier нет порядка; порядок принадлежит маршруту ksNurbs, который отвергнут по измерению."
+   ],
+   "acceptance": [
+    "один вызов даёт один объект: строка вида ksDrBezier с entity_kind=spline, points_count и closed",
+    "замкнутый сплайн выдавливается с объёмом в пределах 0,5 % от π·R²·h и габаритом ±R",
+    "площадь профиля null с причиной, пометка в unverified_aspects, а не passed=false"
+   ]
+  },
+  {
+   "operation_id": "dep.sketch_bulk.limits_source",
+   "kind": "common_dependency",
+   "profile": "sketch-bulk-minimal-v1",
+   "priority": "dependency_of",
+   "queue": null,
+   "context": "part.sketch",
+   "catalog_ref": null,
+   "catalog_refs": [
+    "G2"
+   ],
+   "title": "Один источник пределов: константа, схема и описание",
+   "parameters_schema": null,
+   "adapter_route": "KompasMcp.Contracts.SketchLimits → ToolCatalog (maxItems и текст описания) → валидация схемы Host'ом до COM",
+   "actions": {
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "not_applicable_reasons": {
+    "create": "константа ничего не создаёт",
+    "delete_dependencies": "удаление не входит в наряд",
+    "edit": "константа не изменяется вызовом инструмента",
+    "geometry_validation": "числовой сверки геометрии у самой константы нет: она у режимов",
+    "rebuild": "перестроение на предел не влияет",
+    "save_reopen": "предел не зависит от сохранённости документа",
+    "suppress_restore": "подавлять нечего"
+   },
+   "required_actions": [
+    "discover",
+    "read",
+    "negative_tests"
+   ],
+   "tests": [
+    "SB-01.discover",
+    "SB-02.limits"
+   ],
+   "evidence": [
+    "docs/acceptance/sketch-bulk/sketch-bulk-acceptance.json",
+    "scripts/mcp-smoke.py",
+    "docs/04_KOMPAS_API_NOTES.md"
+   ],
+   "limitations": [
+    "Зависимость подтверждается строками группы SB."
+   ],
+   "acceptance": [
+    "число живёт в одном месте; схема и описание берут его оттуда, а не повторяют литералом",
+    "описание называет число и говорит, что предел задан схемой MCP, а не ядром"
+   ]
+  },
+  {
+   "operation_id": "dep.sketch_bulk.entity_read_back",
+   "kind": "common_dependency",
+   "profile": "sketch-bulk-minimal-v1",
+   "priority": "dependency_of",
+   "queue": null,
+   "context": "part.sketch",
+   "catalog_ref": null,
+   "catalog_refs": [
+    "G2"
+   ],
+   "title": "Чтение объекта эскиза: вид, число вершин и замкнутость",
+   "parameters_schema": null,
+   "adapter_route": "ISketch.BeginEditEx(true) → IDrawingContainer.GetObjects(ksAllObj) → IPolyLine2D / IBezier / INurbs (Closed, PointsCount) → IKompasDocument1.GetObjectId",
+   "actions": {
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "not_applicable_reasons": {
+    "create": "чтение ничего не создаёт",
+    "delete_dependencies": "удаление не входит в наряд",
+    "edit": "чтение не изменяет модель",
+    "geometry_validation": "числовая сверка геометрии — у режимов, а не у чтения",
+    "rebuild": "чтение берёт текущее состояние; перестроения не требует",
+    "suppress_restore": "подавлять нечего"
+   },
+   "required_actions": [
+    "discover",
+    "read",
+    "negative_tests"
+   ],
+   "tests": [
+    "SB-03.polyline_native",
+    "SB-06.polyline_open",
+    "SB-07.spline",
+    "SB-08.spline_open",
+    "SB-10.reopen"
+   ],
+   "evidence": [
+    "docs/acceptance/sketch-bulk/sketch-bulk-acceptance.json",
+    "scripts/mcp-smoke.py",
+    "docs/04_KOMPAS_API_NOTES.md"
+   ],
+   "limitations": [
+    "Поля points_count и closed у прочих видов — null: непрочитанное не выдаётся за ноль."
+   ],
+   "acceptance": [
+    "полилиния и сплайн читаются ОДНИМ объектом с entity_kind, points_count и closed",
+    "непрочитанное поле остаётся null с причиной в notes",
+    "collection_counts показывает poly_lines и beziers по видам"
+   ]
+  },
+  {
+   "operation_id": "dep.sketch_bulk.profile_area_rule",
+   "kind": "common_dependency",
+   "profile": "sketch-bulk-minimal-v1",
+   "priority": "dependency_of",
+   "queue": null,
+   "context": "part.sketch",
+   "catalog_ref": null,
+   "catalog_refs": [
+    "G2"
+   ],
+   "title": "Правило площади профиля: аналитика по вершинам и честный null для сплайна",
+   "parameters_schema": null,
+   "adapter_route": "KompasMcp.Domain.Geometry.ProfileArea — общая формула профиля; сплайн аналитики не даёт",
+   "actions": {
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
+   },
+   "not_applicable_reasons": {
+    "create": "правило ничего не создаёт",
+    "delete_dependencies": "удаление не входит в наряд",
+    "edit": "правило не изменяется вызовом",
+    "rebuild": "перестроение на правило не влияет",
+    "save_reopen": "правило не зависит от сохранённости документа",
+    "suppress_restore": "подавлять нечего"
+   },
+   "required_actions": [
+    "read",
+    "geometry_validation",
+    "negative_tests"
+   ],
+   "tests": [
+    "SB-03.polyline_native",
+    "SB-04.polyline_limit",
+    "SB-05.client_contour",
+    "SB-07.spline"
+   ],
+   "evidence": [
+    "docs/acceptance/sketch-bulk/sketch-bulk-acceptance.json",
+    "scripts/mcp-smoke.py",
+    "docs/04_KOMPAS_API_NOTES.md"
+   ],
+   "limitations": [
+    "Сплайн не разбирается на отрезки и дуги: собственной аппроксимации сервер не делает."
+   ],
+   "acceptance": [
+    "площадь замкнутой полилинии считается прежней формулой по вершинам и совпадает с аналитической",
+    "у сплайна площадь null с причиной, и проверка объёма честно помечена в unverified_aspects"
    ]
   }
  ],

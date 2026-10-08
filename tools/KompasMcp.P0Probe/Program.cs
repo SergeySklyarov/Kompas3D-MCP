@@ -29,6 +29,8 @@ public static class Program
                     ? "VIEW — отчёт измерения маршрута проекции отображения (коллекция проекций, IsCurrent, SetCurrent, побайтовое сравнение снимков, возврат прежнего вида)"
                     : options.Suite == "mate-align"
                         ? "MAL — ориентация сопряжения: s = n1·n2 против перечитанного выравнивания, две постановки второго компонента"
+                        : options.Suite == "fragment"
+                            ? "FRW — эталонный файл фрагмента: создание документированным маршрутом и его площадь"
                         : "P0 — отчёт технического исследования",
         };
         var sw = Stopwatch.StartNew();
@@ -37,6 +39,7 @@ public static class Program
             "p2" => "p2-probe-report",
             "view" => "view-probe-report",
             "mate-align" => "mate-align-probe-report",
+            "fragment" => "fragment-probe-report",
             _ => "p0-probe-report",
         };
 
@@ -89,6 +92,18 @@ public static class Program
                 // not be edited just to let an acceptance row pass.
                 sta.Run(() => EnvironmentFacts.Collect(report, options, "MAL.0a"), "env").GetAwaiter().GetResult();
                 sta.Run(() => MateAlignFacts.Run(report, options), "mate-align").GetAwaiter().GetResult();
+            }
+            else if (options.Suite == "fragment")
+            {
+                // The FRW suite builds the REFERENCE fragment file the fragment-insertion acceptance
+                // is measured against. It is self-contained: it starts its own instance and closes it.
+                sta.Run(() => EnvironmentFacts.Collect(report, options, "FRW.0a"), "env").GetAwaiter().GetResult();
+                sta.Run(() =>
+                {
+                    P2Facts.Connect(report, options);
+                    FragmentFacts.Run(report, options);
+                    P2Facts.Shutdown(report, options);
+                }, "fragment").GetAwaiter().GetResult();
             }
             else if (options.Suite == "p2")
             {

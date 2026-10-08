@@ -91,7 +91,8 @@ public sealed partial class Api5Session
 
         return new SketchEntitiesResult(
             rows.Select(r => new SketchEntityRowDto(
-                r.Index, r.Address, r.Kind, r.Name, r.TypeCode, r.Notes)).ToList(),
+                r.Index, r.Address, r.Kind, r.Name, r.TypeCode, r.Notes,
+                r.PointsCount, r.Closed, r.EntityKind)).ToList(),
             read.CollectionCounts,
             read.Route,
             notes);
@@ -122,7 +123,10 @@ public sealed partial class Api5Session
         {
             throw new KompasContractException(
                 ErrorCodes.InvalidArgument,
-                $"Действие '{command.Action}' не объявлено. Объявлены: set_layer, delete.",
+                $"Действие '{command.Action}' не объявлено. Объявлены: set_layer, delete. "
+                + "ПРАВКА ГЕОМЕТРИИ СУЩНОСТИ — вершин полилинии, узлов сплайна, концов отрезка — "
+                + "не объявлена НИ ДЛЯ ОДНОГО вида: такого действия у инструмента нет, и молчаливое "
+                + "принятие запроса выдало бы неизменённую геометрию за изменённую.",
                 details: new Dictionary<string, object?>
                 {
                     ["action"] = command.Action,

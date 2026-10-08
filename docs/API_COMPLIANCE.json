@@ -1,4 +1,4 @@
-﻿{
+{
  "meta": {
   "artifact": "docs/API_COMPLIANCE.json",
   "audit": "соответствие MCP официальной документации КОМПАС",
@@ -25316,6 +25316,51 @@
    "affected_tools": [
     "kompas_create_sketch",
     "kompas_set_sketch_plane"
+   ]
+  },
+  {
+   "id": "A-03",
+   "date": "2026-10-08 (+02:00, часы машины)",
+   "title": "Массовая геометрия эскиза (G2): нативная полилиния, сплайн, пределы и снятая вставка фрагмента",
+   "scope": "kompas_edit_sketch.entities; kompas_edit_sketch.entities[].kind=polyline; kompas_edit_sketch.entities[].kind=spline; kompas_list_sketch_entities",
+   "note": "ДОБАВЛЕНО ПОСЛЕ аудита 05.10.2026 и НЕ входит в его состав: числа разделов 1-8 описывают прогон 05.10.2026 и НЕ переписаны. Полное сведение матрицы под живой прогон в этот наряд не входило.",
+   "documented_route": "Полилиния - ksDocument2D.ksPolylineByParam(ksPolylineParam) с блоком POINT_ARR из ksMathPointParam; замкнутость - собственный признак блока (ksPolylineParam.closed). Сплайн - ksBezier(closed) + ksBezierPoint(ksBezierPointParam) + ksEndObj, то есть кривая ЧЕРЕЗ заданные вершины. Чтение обоих - IPolyLine2D / IBezier того же объекта эскиза. Пределы объёма вызова заданы СХЕМОЙ MCP, а не ядром.",
+   "documentation": [
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument2d_kspolylinebyparam.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspolylineparam.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspolylineparam_props.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspolylineparam_methods.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspolylineparam_closed.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdmtypes.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument2d_kspolyline.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument2d_ksendobj.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument2d_ksbezier.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument2d_ksbezierpoint.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksbezierpointparam.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksbezierpointparam_props.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument2d_ksnurbs.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument2d_ksnurbspoint.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksnurbspointparam.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument2d_kspoint.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/pstyles.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ipolyline2d.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ipolyline2d_props.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ipolyline2d_methods.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/inurbs.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksfragment.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksfragment_ksfragmentdefinition.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksfragment_ksinsertfragmentex.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksplacementparam.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksplacementparam_props.html",
+    "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/doctype.html"
+   ],
+   "negative_control": "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspolylinebyparam.html → 404 (страница называется ksdocument2d_kspolylinebyparam); https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument2d_zzzabsent.html → 404",
+   "verdict": "Документация: Подтверждено для полилинии, сплайна и чтения. Реализация: Подтверждено живым прогоном группы --sketch-bulk-only (32 PASS, 0 FAIL, 1 NAMED).",
+   "not_implemented": "Вставка контура из файла фрагмента (.frw) в эскиз: справка описывает вставку в ГРАФИЧЕСКИЙ документ и ни на одной странице не описывает документ-эскиз; измерено, что ksFragmentDefinition на редакторе эскиза не возвращает управления (бюджет 240 с, OUTCOME_UNKNOWN, эскиз остался в режиме правки). Инструмент не публикуется. Дословные цитаты - docs/04_KOMPAS_API_NOTES.md §4.54.",
+   "evidence": [
+    "docs/acceptance/sketch-bulk/sketch-bulk-acceptance.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "coverage/solid-v24/release-profiles/sketch-bulk-minimal-v1.json"
    ]
   }
  ]

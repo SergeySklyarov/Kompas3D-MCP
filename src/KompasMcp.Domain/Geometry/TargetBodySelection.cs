@@ -75,6 +75,24 @@ public readonly record struct ProfileBox(double MinU, double MinV, double MaxU, 
                     points.Max(p => p[0]),
                     points.Max(p => p[1]));
 
+            case SketchEntityKind.Spline:
+                // Over-approximation on the same footing as the arc's full circle: the nodes handed to
+                // the kernel are the NURBS control points, and a NURBS curve lies inside the convex hull
+                // of its control points, so the rectangle around them contains the curve. Never an
+                // under-approximation — the consumer of this box only ever refuses an operation.
+                // History: docs/decisions/geometry.md#spline-box
+                if (entity.PointsMm is not { Count: >= 2 } splinePoints
+                    || splinePoints.Any(p => p.Count < 2))
+                {
+                    return null;
+                }
+
+                return new ProfileBox(
+                    splinePoints.Min(p => p[0]),
+                    splinePoints.Min(p => p[1]),
+                    splinePoints.Max(p => p[0]),
+                    splinePoints.Max(p => p[1]));
+
             default:
                 return null;
         }

@@ -17,7 +17,10 @@ internal sealed record SketchEntityRow(
     string? Kind,
     string? Name,
     int? TypeCode,
-    IReadOnlyList<string> Notes);
+    IReadOnlyList<string> Notes,
+    int? PointsCount = null,
+    bool? Closed = null,
+    string? EntityKind = null);
 
 /// <summary>Result of enumerating sketch entities: rows, route and per-collection counts.</summary>
 internal sealed record SketchEntitiesRead(
@@ -185,6 +188,8 @@ internal static class Api7SketchEntities
                 counts[$"view{v}.circles"] = SafeI(() => container.Circles?.Count);
                 counts[$"view{v}.arcs"] = SafeI(() => container.Arcs?.Count);
                 counts[$"view{v}.poly_lines"] = SafeI(() => container.PolyLines2D?.Count);
+                counts[$"view{v}.nurbses"] = SafeI(() => container.Nurbses?.Count);
+                counts[$"view{v}.beziers"] = SafeI(() => container.Beziers?.Count);
                 counts[$"view{v}.rectangles"] = SafeI(() => container.Rectangles?.Count);
                 counts[$"view{v}.points"] = SafeI(() => container.Points?.Count);
 
@@ -258,6 +263,9 @@ internal static class Api7SketchEntities
         string? name = null;
         int? typeCode = null;
         string? kind = null;
+        int? pointsCount = null;
+        bool? closed = null;
+        string? entityKind = null;
 
         if (item is IKompasAPIObject apiObject)
         {
@@ -327,8 +335,35 @@ internal static class Api7SketchEntities
             name = ReadString(() => model.Name, local, "имя объекта модели");
         }
 
+        // A polyline, a spline and a NURBS are the entities whose VERTEX COUNT and CLOSURE the client
+        // reads back, and each publishes them on its own 2D interface. DOC: <c>ipolyline2d_props.html</c>
+        // (Closed, PointsCount) and <c>inurbs</c> (Closed, PointsCount). A member that did not answer
+        // leaves the field NULL with the reason in Notes — "not read", never zero.
+        // INVARIANT: `spline` is the INPUT-contract name of the curve this server builds with
+        // <c>ksBezier</c>; the read-back kind stays the measured <c>DrawingObjectType</c> name, and the
+        // normalised name is published next to it so a client need not know the vendor's enumeration.
+        // History: docs/decisions/adapter-sketch.md#sketch-entity-kind
+        if (item is IPolyLine2D polyLine)
+        {
+            pointsCount = ReadInt(() => polyLine.PointsCount, local, "число вершин полилинии");
+            closed = ReadBool(() => polyLine.Closed, local, "замкнутость полилинии");
+            entityKind = "polyline";
+        }
+        else if (item is IBezier bezier)
+        {
+            pointsCount = ReadInt(() => bezier.PointsCount, local, "число вершин сплайна");
+            closed = ReadBool(() => bezier.Closed, local, "замкнутость сплайна");
+            entityKind = "spline";
+        }
+        else if (item is INurbs nurbs)
+        {
+            pointsCount = ReadInt(() => nurbs.PointsCount, local, "число вершин сплайна NURBS");
+            closed = ReadBool(() => nurbs.Closed, local, "замкнутость сплайна NURBS");
+            entityKind = "spline";
+        }
+
         notes.AddRange(local.Select(n => $"объект {index}: {n}"));
-        return new SketchEntityRow(index, address, kind, name, typeCode, local);
+        return new SketchEntityRow(index, address, kind, name, typeCode, local, pointsCount, closed, entityKind);
     }
 
     private static string? ReadString(Func<string?> read, List<string> notes, string what)
@@ -365,6 +400,19 @@ internal static class Api7SketchEntities
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException)
         {
+            return null;
+        }
+    }
+
+    private static bool? ReadBool(Func<bool> read, List<string> notes, string what)
+    {
+        try
+        {
+            return read();
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            notes.Add($"{what} не прочитана: {ex.GetType().Name}");
             return null;
         }
     }

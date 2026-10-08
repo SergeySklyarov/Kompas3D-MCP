@@ -14,6 +14,7 @@ public static class SketchValidation
 
     public static void Validate(SketchEntityDto entity)
     {
+        RequireNoForeignFields(entity);
         switch (entity.Kind)
         {
             case SketchEntityKind.Line:
@@ -114,10 +115,150 @@ public static class SketchValidation
 
                 break;
 
+            case SketchEntityKind.Spline:
+                // DOC: <c>ksdocument2d_ksbezier.html</c> — the sketch spline is a Bezier curve through
+                // the given vertices (<c>ksBezier(closed, style)</c> plus one <c>ksBezierPoint</c> per
+                // vertex). A curve through two points has no shape, so the minimum is three — and it is
+                // stated as a number here, not left to the kernel's own refusal.
+                var splinePoints = entity.PointsMm
+                    ?? throw Bad("points_mm", "Сплайн требует список вершин.");
+                if (splinePoints.Count < MinimumSplineVertices)
+                {
+                    throw Bad("points_mm", $"Сплайну нужно минимум {MinimumSplineVertices} вершин, "
+                        + $"получено {splinePoints.Count}.");
+                }
+
+                for (var i = 0; i < splinePoints.Count; i++)
+                {
+                    RequirePoint(splinePoints[i], $"points_mm[{i}]");
+                }
+
+                break;
+
             default:
                 throw Bad("kind", $"Примитив {entity.Kind} не поддерживается контрактом v1.");
         }
     }
+
+    /// <summary>Vertices below which a spline has no shape. Three points are the smallest set that
+    /// defines a curve segment pair; two would make the "curve" the segment between them.</summary>
+    public const int MinimumSplineVertices = 3;
+
+    /// <summary>The published <c>sketch_entity</c> object says "лишние поля отклоняются": a field that
+    /// belongs to another kind is refused by NAME instead of being accepted and ignored, which would
+    /// make an applied parameter indistinguishable from a dropped one.</summary>
+    /// <remarks>INVARIANT: the allowed set is exactly what the drawing route APPLIES for that kind —
+    /// e.g. a rectangle legitimately takes either <c>start_mm</c> or <c>center_mm</c> as its corner, so
+    /// both are allowed and neither is a foreign field.
+    /// History: docs/decisions/adapter-sketch.md#sketch-entity-foreign-fields</remarks>
+    private static void RequireNoForeignFields(SketchEntityDto entity)
+    {
+        var (allowed, sent) = entity.Kind switch
+        {
+            SketchEntityKind.Line => (new[] { "kind", "start_mm", "end_mm" }, Sent(entity)),
+            SketchEntityKind.Circle => (new[] { "kind", "center_mm", "radius_mm" }, Sent(entity)),
+            SketchEntityKind.Arc => (
+                new[]
+                {
+                    "kind", "center_mm", "radius_mm", "start_deg", "sweep_deg",
+                    "start_point_mm", "end_point_mm", "clockwise",
+                },
+                Sent(entity)),
+            SketchEntityKind.Rectangle => (
+                new[] { "kind", "start_mm", "center_mm", "width_mm", "height_mm" }, Sent(entity)),
+            SketchEntityKind.Polyline => (new[] { "kind", "points_mm", "closed" }, Sent(entity)),
+            SketchEntityKind.Spline => (new[] { "kind", "points_mm", "closed" }, Sent(entity)),
+            _ => (Array.Empty<string>(), Sent(entity)),
+        };
+
+        var foreign = sent.Where(f => !allowed.Contains(f, StringComparer.Ordinal)).ToArray();
+        if (foreign.Length > 0)
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                $"Поля {string.Join(", ", foreign)} не принадлежат виду {KindName(entity.Kind)}: "
+                + "принятое и проигнорированное поле выглядело бы как выполненная правка. КОМПАС не вызывался.",
+                details: new Dictionary<string, object?>
+                {
+                    ["foreign_fields"] = foreign,
+                    ["allowed_fields"] = allowed,
+                    ["kind"] = KindName(entity.Kind),
+                });
+        }
+    }
+
+    private static IReadOnlyList<string> Sent(SketchEntityDto entity)
+    {
+        var fields = new List<string> { "kind" };
+        if (entity.StartMm is not null)
+        {
+            fields.Add("start_mm");
+        }
+
+        if (entity.EndMm is not null)
+        {
+            fields.Add("end_mm");
+        }
+
+        if (entity.CenterMm is not null)
+        {
+            fields.Add("center_mm");
+        }
+
+        if (entity.RadiusMm is not null)
+        {
+            fields.Add("radius_mm");
+        }
+
+        if (entity.StartDeg is not null)
+        {
+            fields.Add("start_deg");
+        }
+
+        if (entity.SweepDeg is not null)
+        {
+            fields.Add("sweep_deg");
+        }
+
+        if (entity.StartPointMm is not null)
+        {
+            fields.Add("start_point_mm");
+        }
+
+        if (entity.EndPointMm is not null)
+        {
+            fields.Add("end_point_mm");
+        }
+
+        if (entity.Clockwise is not null)
+        {
+            fields.Add("clockwise");
+        }
+
+        if (entity.WidthMm is not null)
+        {
+            fields.Add("width_mm");
+        }
+
+        if (entity.HeightMm is not null)
+        {
+            fields.Add("height_mm");
+        }
+
+        if (entity.PointsMm is not null)
+        {
+            fields.Add("points_mm");
+        }
+
+        if (entity.Closed is not null)
+        {
+            fields.Add("closed");
+        }
+
+        return fields;
+    }
+
+    private static string KindName(SketchEntityKind kind) => kind.ToString().ToLowerInvariant();
 
     private static void RequirePoint(IReadOnlyList<double>? point, string field)
     {

@@ -1,4 +1,4 @@
-﻿{
+{
  "meta": {
   "artifact": "coverage/solid-v24/catalog.json",
   "stage": "P6.0",
@@ -6953,6 +6953,68 @@
      "modes": [],
      "mcp_support": "kompas_measure_gap",
      "next_step": "Живой прогон группы --interference-only."
+    }
+   ]
+  },
+  {
+   "id": "G2",
+   "title": "Массовая геометрия эскиза: пределы, нативная полилиния, сплайн",
+   "classification": "solid",
+   "level": "mcp_verified",
+   "evidence": {
+    "documentation": "Проводная проверка справки SDK 24 (help.ascon.ru/KOMPAS_SDK/24/ru-RU), 08.10.2026: ksdocument2d_kspolyline, ksendobj, kspolylinebyparam, kspolylineparam, kspolylineparam_closed, kspolylineparam_methods, ksdmtypes, ksdocument2d_ksbezier, ksbezierpoint, ksbezierpointparam_props, ksnurbs, ksnurbspoint, ksnurbspointparam, ipolyline2d, inurbs, pstyles, ksdocument2d_kspoint, ksdocument2d_ksnurbs — HTTP 200; отрицательный контроль kspolylinebyparam (без префикса ksdocument2d_) → 404",
+    "metadata": "Сканер tools/KompasMcp.InteropScan по поставленной Interop.Kompas6API5.dll и Interop.Kompas6Constants.dll целевой сборки, 08.10.2026: ksDocument2D.GetFragment/ksPolyline/ksPolylineByParam/ksEndObj/ksBezier/ksBezierPoint/ksNurbs/ksNurbsPoint/ksPoint, ksPolylineParam.closed, ksMathPointParam, ksNurbsPointParam, ksBezierPointParam, ksPlacementParam; StructType2DEnum ko_PolylineParam=76, ko_MathPointParam=14, ko_NurbsPointParam=18, ko_BezierPointParam=17, ko_PlacementParam=7; DrawingObjectTypeEnum ksDrPolyline=31, ksDrBezier=8, ksDrNurbs=33",
+    "runtime": "Живой прогон 08.10.2026, группа SB (scripts/mcp-smoke.py --sketch-bulk-only)"
+   },
+   "route": "Полилиния — API5 ksDocument2D.ksPolylineByParam(ksPolylineParam) с блоком POINT_ARR; сплайн — API5 ksDocument2D.ksBezier(closed) + ksBezierPoint(ksBezierPointParam) + ksEndObj. Чтение обоих — IPolyLine2D / IBezier того же объекта эскиза. Пределы — константы контракта, а не ядра.",
+   "mcp_support": "kompas_edit_sketch, kompas_list_sketch_entities",
+   "next_step": "Живой прогон группы --sketch-bulk-only.",
+   "operations": [
+    {
+     "id": "SKB-01.limits",
+     "name": "Пределы объёма вызова: число примитивов и число вершин",
+     "level": "mcp_verified",
+     "doc_source": [
+      "ksdocument2d_kspolylinebyparam",
+      "kspolylineparam_props",
+      "ksdmtypes"
+     ],
+     "route": "Пределы заданы СХЕМОЙ MCP, а не ядром: одно место — KompasMcp.Contracts.SketchLimits, из него их берут и схема, и описание поля. Выбранное число — наибольший измеренный объём, чей худший замер укладывается в половину бюджета синхронизации.",
+     "modes": [],
+     "mcp_support": "kompas_edit_sketch",
+     "next_step": "Живой прогон группы --sketch-bulk-only."
+    },
+    {
+     "id": "SKB-02.polyline_native",
+     "name": "Нативная полилиния одним объектом (ksPolylineByParam)",
+     "level": "mcp_verified",
+     "doc_source": [
+      "ksdocument2d_kspolylinebyparam",
+      "kspolylineparam_closed",
+      "kspolylineparam_methods",
+      "ksdmtypes",
+      "ipolyline2d_props"
+     ],
+     "route": "KompasObject.GetParamStruct(ko_PolylineParam=76) → ksPolylineParam.Init → GetDynamicArray(POINT_ARR=2) + ksMathPointParam(ko_MathPointParam=14) по вершине → SetpMathPoint → closed/style → ksDocument2D.ksPolylineByParam. Замкнутость — собственный признак блока (ksPolylineParam.closed), а не повторённая вершина. Чтение — IPolyLine2D.Closed / IPolyLine2D.PointsCount / IPolyLine2D.GetPoint.",
+     "modes": [],
+     "mcp_support": "kompas_edit_sketch",
+     "next_step": "Живой прогон группы --sketch-bulk-only."
+    },
+    {
+     "id": "SKB-03.spline",
+     "name": "Сплайн одним объектом: кривая Безье через заданные вершины",
+     "level": "mcp_verified",
+     "doc_source": [
+      "ksdocument2d_ksbezier",
+      "ksdocument2d_ksbezierpoint",
+      "ksbezierpointparam_props",
+      "ipolyline2d_props",
+      "inurbs"
+     ],
+     "route": "ksDocument2D.ksBezier(closed, style) → ksBezierPoint(ksBezierPointParam) по вершине → ksEndObj. Маршрут NURBS (ksNurbs + ksNurbsPoint) ИЗМЕРЕН и отвергнут: его узлы — полюса, и замкнутая кривая уходит ВНУТРЬ контура (объём 6045,2 против 6283,19 аналитических, 3,79 %), тогда как Безье проходит ЧЕРЕЗ вершины (6279,53, 0,058 %). Чтение — IBezier.Closed / IBezier.PointsCount.",
+     "modes": [],
+     "mcp_support": "kompas_edit_sketch",
+     "next_step": "Живой прогон группы --sketch-bulk-only."
     }
    ]
   }

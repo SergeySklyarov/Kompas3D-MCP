@@ -26454,8 +26454,11 @@ def nested_contour_checks(client, rep, app_id, workdir):
 
     КОНТРОЛИ РАЗЛИЧАЮЩИЕ, А НЕ ПОДТВЕРЖДАЮЩИЕ. (а) РАЗНЕСЁННЫЕ контуры обязаны по-прежнему
     СКЛАДЫВАТЬСЯ — если бы правка сломала и этот случай, контроль поймал бы это. (б) ПЕРЕКРЫВАЮЩИЕСЯ
-    и КАСАЮЩИЕСЯ контуры обязаны НЕ складываться молча: продукт обязан назвать величину невычислимой
-    (`not_computable`) и понизить уровень, а не выдать сумму. Оба плеча нужны: одно без другого
+    и КАСАЮЩИЕСЯ контуры обязаны НЕ складываться молча: продукт обязан назвать причину
+    (`expected_volume_not_computable` в `unverified_aspects`) и понизить уровень, а не выдать сумму.
+    С наряда RELEASE_040 §3.3 невычислимое ожидание НЕ выдаётся проверкой с `passed=false`: прежнее
+    ожидание требовало строку `not_computable` внутри проваленной проверки, то есть называло
+    «проверено и не совпало» там, где верно «не проверено». Оба плеча нужны: одно без другого
     прошло бы либо на «ничего не считает», либо на «всё суммирует».
 
     ПОЧЕМУ КАЖДЫЙ СЛУЧАЙ — СВОЙ ДОКУМЕНТ. Адрес тела не переживает мутацию, а `bs[0]` — не адрес
@@ -26495,6 +26498,12 @@ def nested_contour_checks(client, rep, app_id, workdir):
     def check_named(env, name):
         return next((c for c in (((env or {}).get("verification") or {}).get("checks") or [])
                      if c.get("name") == name), {})
+
+    def unverified_of(env):
+        """Причины, по которым ответ НЕ объявлен проверенным. С наряда RELEASE_040 невычислимое
+        ожидание живёт ЗДЕСЬ, а не в проверке с `passed=false`: «не подтверждено» и «проверено и не
+        совпало» — разные состояния, и проваленная проверка называла второе вместо первого."""
+        return list(((env or {}).get("verification") or {}).get("unverified_aspects") or [])
 
     def confirmed(env):
         """Доказанность, которая и есть предмет проверки: уровень поднялся до `geometry_checked`
@@ -26727,17 +26736,23 @@ def nested_contour_checks(client, rep, app_id, workdir):
                                      direction="positive", end_condition="blind")
             vol = volume(fresh_body(doc))
             vd = check_named(env, "volume_delta")
-            # Геометрия верна (объединение измерено), но ПОДТВЕРЖДЕНИЕ обязано быть отозвано:
-            # уровень ниже `geometry_checked`, величина названа невычислимой.
+            unv = unverified_of(env)
+            # Геометрия верна (объединение измерено), но ПОДТВЕРЖДЕНИЕ обязано быть отозвано: уровень
+            # ниже `geometry_checked`, проверки `volume_delta` НЕТ вовсе, а причина названа в
+            # `unverified_aspects` (наряд RELEASE_040 §3.3). Прежнее ожидание требовало строку
+            # `not_computable` ВНУТРИ проваленной проверки — то есть ложное сомнение вместо честного
+            # «не посчитано».
             ok_ovl = (code is None and near(vol, union_analytic)
                       and level(env) != "geometry_checked"
-                      and vd.get("observed") == "not_computable")
-            ovl_note = ("объём %s против НЕЗАВИСИМОГО объединения %.10f; уровень %s; "
-                        "volume_delta obs=%s — подтверждение отозвано, а не подменено суммой; код=%s"
+                      and not vd
+                      and any(str(u).startswith("expected_volume_not_computable") for u in unv))
+            ovl_note = ("объём %s против НЕЗАВИСИМОГО объединения %.10f; уровень %s; проверки "
+                        "volume_delta нет=%s; unverified=%s — подтверждение отозвано, а не подменено "
+                        "суммой; код=%s"
                         % ("%.10f" % vol if vol is not None else "не прочитан", union_analytic,
-                           level(env), vd.get("observed"), code))
+                           level(env), not vd, unv, code))
             ovl_details = {"volume_mm3": vol, "union_analytic_mm3": union_analytic,
-                           "level": level(env), "volume_delta": vd}
+                           "level": level(env), "volume_delta": vd, "unverified_aspects": unv}
         close(doc)
 
     ok_pair = ok_sep and ok_ovl
@@ -26765,14 +26780,20 @@ def nested_contour_checks(client, rep, app_id, workdir):
                                      direction="positive", end_condition="blind")
             vol = volume(fresh_body(doc))
             vd = check_named(env, "volume_delta")
+            unv = unverified_of(env)
+            # Тот же контракт, что и в NEST.05: подтверждение отозвано ОТСУТСТВИЕМ проверки
+            # `volume_delta` и названной причиной в `unverified_aspects`, а не строкой `not_computable`
+            # в проваленной проверке.
             ok_tan = (code is None and vol is not None and vol > 0.0
                       and level(env) != "geometry_checked"
-                      and vd.get("observed") == "not_computable")
-            tan_note = ("объём %s (тело построено); уровень %s; volume_delta obs=%s — сумма "
-                        "π(100+25)*10=%.4f НЕ объявлена; код=%s"
+                      and not vd
+                      and any(str(u).startswith("expected_volume_not_computable") for u in unv))
+            tan_note = ("объём %s (тело построено); уровень %s; проверки volume_delta нет=%s; "
+                        "unverified=%s — сумма π(100+25)*10=%.4f НЕ объявлена; код=%s"
                         % ("%.10f" % vol if vol is not None else "не прочитан", level(env),
-                           vd.get("observed"), math.pi * 125.0 * PLATE_D, code))
-            tan_details = {"volume_mm3": vol, "level": level(env), "volume_delta": vd}
+                           not vd, unv, math.pi * 125.0 * PLATE_D, code))
+            tan_details = {"volume_mm3": vol, "level": level(env), "volume_delta": vd,
+                           "unverified_aspects": unv}
         close(doc)
     emit("NEST.06.negative_tests",
          "касающиеся контуры: величина названа невычислимой, а не суммой; тело при этом построено",

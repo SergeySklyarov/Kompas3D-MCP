@@ -55,7 +55,7 @@ public sealed partial class Api5Session
                 partialEffects: true);
         }
 
-        var reference = References.Register("sketch", document.Id, document.Revision, sketch);
+        var reference = ReferenceForObject("sketch", document, sketch);
 
         // A sketch created here is empty by construction, so replace and delete_entities are meaningful
         // from the start; a sketch this server never drew is refused instead of quietly appending.
@@ -73,6 +73,26 @@ public sealed partial class Api5Session
         }
 
         return ToDto(reference, PlaneHint(command.Plane, support.Entity));
+    }
+
+    /// <summary>The reference to hand out for a model object: the one ALREADY live for this same
+    /// object, or a newly minted one.</summary>
+    /// <remarks>INVARIANT: one live reference per object per revision. A read tool must not mint a second
+    /// address for an object the session already addressed: the client then holds two strings for one object,
+    /// and state remembered under one looks absent from the other — how a just-drawn profile read as
+    /// "not recorded". Identity is the COM object's own (<see cref="ComIdentity"/>).
+    /// <para>INVARIANT: an object whose identity cannot be stated gets a new reference, never a shared one.</para>
+    /// History: docs/decisions/adapter-sketch.md#one-live-reference</remarks>
+    private StoredReference ReferenceForObject(string kind, DocumentEntry document, object payload)
+    {
+        var identity = ComIdentity.Of(payload);
+        if (identity is not null
+            && References.FindLiveByIdentity(kind, document.Id, document.Revision, identity) is StoredReference live)
+        {
+            return live;
+        }
+
+        return References.Register(kind, document.Id, document.Revision, payload, identity: identity);
     }
 
     private ksEntity ResolvePlaneEntity(DocumentEntry document, PlaneRefDto plane)
@@ -1096,80 +1116,101 @@ public sealed partial class Api5Session
             }
         }
 
-        // Expected change = the analytic area of the profile the server itself drew × depth. The area is the
-        // region the contours enclose (a contour inside another is a hole), recomputed from the whole profile
-        // rather than remembered as a number. When the region is not analytically known (arcs, free polylines,
-        // touching contours, a profile drawn outside this session), the answer says so.
+        // Expected change = the analytic area of the profile the server itself drew × depth: the region the
+        // contours enclose (a contour inside another is a hole), recomputed from the whole profile rather than
+        // remembered as a number. When the region is not analytically known (arcs, free polylines, touching
+        // contours, a profile drawn outside this session), the answer says so.
+        // INVARIANT: an expectation that CANNOT be computed yields NO expected_basis / volume_delta check with
+        // passed=false; its reason goes to unverified_aspects instead. "Not confirmed" and "checked and did not
+        // match" are different states, and a not_computable check on a correct feature named the second.
+        // History: docs/decisions/adapter-core.md#extrude-self-check
         double? expected = null;
-        string expectedBasis = "not_computable";
-        if (_sketchProfiles.TryGetValue(command.SketchRef, out var profile)
-            && profile.AreaMm2 is double profileAreaMm2
-            && profileAreaMm2 > 0d)
+        string? expectedBasis = null;
+        string? expectedUnavailable = null;
+        if (!_sketchProfiles.TryGetValue(command.SketchRef, out var profile))
         {
-            if (command.EndCondition == ExtrudeEndCondition.Through)
+            expectedUnavailable = "expected_volume_not_computable — профиль эскиза не записан этим "
+                + "сеансом (ссылки нет в реестре профилей), поэтому ожидаемый объём посчитать не из чего";
+        }
+        else if (profile.AreaMm2 is not double profileAreaMm2 || profileAreaMm2 <= 0d)
+        {
+            expectedUnavailable = "expected_volume_not_computable — площадь нарисованного профиля "
+                + "аналитически не вычислена (дуги, полилинии, соприкасающиеся контуры или неполный контур)";
+        }
+        else if (command.EndCondition == ExtrudeEndCondition.Through)
+        {
+            // Through mode has no caller-supplied depth, so the traversed material is taken from the body
+            // itself: its extent along the sketch normal. That is a property of the model, not a guess,
+            // and it fails loudly when the profile is not centred in the material. "The body itself" means
+            // the resolved target body, not whatever GetMainBody returns in a multi-body part.
+            if (ThroughExtentMm(document, target.Sketch, bodyTarget?.Body) is double extentMm)
             {
-                // Through mode has no caller-supplied depth, so the traversed material is taken from the body
-                // itself: its extent along the sketch normal. That is a property of the model, not a guess,
-                // and it fails loudly when the profile is not centred in the material. "The body itself" means
-                // the resolved target body, not whatever GetMainBody returns in a multi-body part.
-                if (ThroughExtentMm(document, target.Sketch, bodyTarget?.Body) is double extentMm)
-                {
-                    expected = profileAreaMm2 * extentMm;
-                    expectedBasis = $"profile_area_x_body_extent_{extentMm:0.####}mm";
-                }
+                expected = profileAreaMm2 * extentMm;
+                expectedBasis = $"profile_area_x_body_extent_{extentMm:0.####}mm";
             }
             else
             {
-                expected = profileAreaMm2 * DepthOf(command);
-                expectedBasis = "profile_area_x_depth";
+                expectedUnavailable = "expected_volume_not_computable — протяжённость тела вдоль "
+                    + "нормали эскиза не прочитана, поэтому проходимый материал не посчитан";
             }
+        }
+        else
+        {
+            expected = profileAreaMm2 * DepthOf(command);
+            expectedBasis = "profile_area_x_depth";
         }
 
         var checks = new List<NamedCheck>
         {
             new("feature_created", true),
             new("body_present", bodyCount >= 1, Observed: bodyCount.ToString(System.Globalization.CultureInfo.InvariantCulture)),
-            new("expected_basis", expected is not null, Observed: expectedBasis),
-            // Reported always, gated only for a boss. A cut may divide one body into two (a through slot
-            // across a plate does exactly that), so counting bodies is evidence to show there, not a
-            // condition. A boss has no such excuse: the caller named the body to grow, and an extra body
-            // means material went elsewhere (probe P2.6, choose type left at ksNewBody).
-            new(
-                "body_count",
-                command.Operation switch
-                {
-                    ExtrudeOperation.Boss => bodiesBefore.Count == bodyCount,
-                    _ => bodyCount >= 1,
-                },
-                Observed: $"{bodiesBefore.Count}→{bodyCount}"),
         };
+
+        if (expectedBasis is not null)
+        {
+            // Emitted ONLY when the expectation exists: a check with passed=false here said "the basis is
+            // wrong" where the truth was "there is no basis to state".
+            checks.Add(new NamedCheck("expected_basis", true, Observed: expectedBasis));
+        }
+
+        // Reported always, gated only for a boss. A cut may divide one body into two (a through slot
+        // across a plate does exactly that), so counting bodies is evidence to show there, not a
+        // condition. A boss has no such excuse: the caller named the body to grow, and an extra body
+        // means material went elsewhere (probe P2.6, choose type left at ksNewBody).
+        checks.Add(new NamedCheck(
+            "body_count",
+            command.Operation switch
+            {
+                ExtrudeOperation.Boss => bodiesBefore.Count == bodyCount,
+                _ => bodyCount >= 1,
+            },
+            Observed: $"{bodiesBefore.Count}→{bodyCount}"));
 
         checks.AddRange(attribution);
 
         var geometryConfirmed = false;
-        if (expected is not double expectedDelta)
+        if (expected is double expectedDelta)
         {
-            checks.Add(new NamedCheck("volume_delta", false, Observed: "not_computable", Expected: "not_computable"));
-        }
-        else if (measuredDelta is not double measured)
-        {
-            // An unread delta is "not confirmed", not zero: zero would pass off the unverified as measured.
-            checks.Add(new NamedCheck(
-                "volume_delta",
-                false,
-                Observed: measuredDelta is null && measuredBasis == "not_attributable"
-                    ? "no_single_body_changed"
-                    : "no_delta_reading",
-                Expected: expectedDelta.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)));
-        }
-        else
-        {
-            geometryConfirmed = Math.Abs(measured - expectedDelta) <= ProfileArea.Tolerance(expectedDelta);
-            checks.Add(new NamedCheck(
-                "volume_delta",
-                geometryConfirmed,
-                Observed: measured.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture),
-                Expected: expectedDelta.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)));
+            if (measuredDelta is not double measured)
+            {
+                // An unread delta is "not confirmed", not zero: zero would pass off the unverified as measured.
+                checks.Add(new NamedCheck(
+                    "volume_delta",
+                    false,
+                    Observed: measuredBasis == "not_attributable"
+                        ? "no_single_body_changed"
+                        : "no_delta_reading",
+                    Expected: expectedDelta.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)));
+            }
+            else
+            {
+                geometryConfirmed = Math.Abs(measured - expectedDelta) <= ProfileArea.Tolerance(expectedDelta);
+                checks.Add(new NamedCheck(
+                    "volume_delta",
+                    geometryConfirmed,
+                    Observed: measured.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture),
+                    Expected: expectedDelta.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)));
+            }
         }
 
         // Attribution is required exactly where it was computed: base has no target, and without it "a delta
@@ -1178,6 +1219,13 @@ public sealed partial class Api5Session
         geometryConfirmed &= attribution.All(c => c.Passed);
 
         var unverified = new List<string>();
+        if (expectedUnavailable is not null)
+        {
+            // Named BEFORE the other aspects: this is why the feature is not geometry_checked, and it is
+            // a statement about the expectation, not about the geometry that was built.
+            unverified.Add(expectedUnavailable);
+        }
+
         if (bodyTarget is not null)
         {
             // The declaration is worth anything only if the kernel consults the body list it was offered:
@@ -1251,7 +1299,7 @@ public sealed partial class Api5Session
             unverified.Add("profile_inside_target_not_proven — сверены габариты профиля и тела по двум осям плоскости, вхождение контура в материал не проверялось");
         }
 
-        if (!geometryConfirmed)
+        if (expected is not null && !geometryConfirmed)
         {
             unverified.Add("volume_delta_not_confirmed — КОМПАС сообщает только об успехе вызова; пока измерение не совпало, признак считается недоказанным");
         }
@@ -2130,6 +2178,7 @@ public sealed partial class Api5Session
         var volumeDecreased = volumeBefore is double beforeVolume && volumeAfter is double afterVolume
             && afterVolume < beforeVolume;
         bool? numericMatch = null;
+        var volumePairRead = volumeBefore is double && volumeAfter is double;
         if (command.ExpectedVolumeDeltaMm3 is double expectedDelta
             && volumeBefore is double vBefore && volumeAfter is double vAfter)
         {
@@ -2141,14 +2190,14 @@ public sealed partial class Api5Session
                 Observed: measured.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture),
                 Expected: expectedDelta.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)));
         }
-        else
+        else if (volumeBefore is double b && volumeAfter is double a)
         {
+            // Direction only, and only when BOTH volumes were read: an unread pair is not a failed
+            // check, it is an unperformed one (the reason travels in unverified_aspects).
             checks.Add(new NamedCheck(
                 "volume_delta",
                 volumeDecreased,
-                Observed: volumeBefore is double b && volumeAfter is double a
-                    ? (b - a).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)
-                    : "not_computable",
+                Observed: (b - a).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture),
                 Expected: "не задано — проверено только направление"));
         }
 
@@ -2162,7 +2211,13 @@ public sealed partial class Api5Session
             && numericMatch is not false;
 
         var unverified = new List<string>();
-        if (!geometryConfirmed)
+        if (!volumePairRead)
+        {
+            unverified.Add(
+                "volume_delta_not_computable — объём до или после операции не прочитан: ни аналитическое "
+                + "ожидание, ни направление изменения материала проверить нечем");
+        }
+        else if (!geometryConfirmed)
         {
             unverified.Add("volume_delta_not_confirmed — КОМПАС сообщил об успехе, но измерение не подтвердило ожидаемую геометрию");
         }
@@ -2348,6 +2403,7 @@ public sealed partial class Api5Session
         };
 
         var materialRemoved = volumeBefore is double b && volumeAfter is double a && a < b;
+        var volumePairRead = volumeBefore is double && volumeAfter is double;
         bool? numericMatch = null;
         if (command.ExpectedVolumeDeltaMm3 is double expectedDelta
             && volumeBefore is double vBefore && volumeAfter is double vAfter)
@@ -2360,14 +2416,14 @@ public sealed partial class Api5Session
                 Observed: measured.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture),
                 Expected: expectedDelta.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)));
         }
-        else
+        else if (volumeBefore is double cb && volumeAfter is double ca)
         {
+            // Direction only, and only when BOTH volumes were read: an unread pair is an unperformed
+            // check, not a failed one.
             checks.Add(new NamedCheck(
                 "volume_delta",
                 materialRemoved,
-                Observed: volumeBefore is double cb && volumeAfter is double ca
-                    ? (cb - ca).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)
-                    : "not_computable",
+                Observed: (cb - ca).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture),
                 Expected: "не задано — проверено только направление"));
         }
 
@@ -2380,7 +2436,13 @@ public sealed partial class Api5Session
             && numericMatch is not false;
 
         var unverified = new List<string>();
-        if (!geometryConfirmed)
+        if (!volumePairRead)
+        {
+            unverified.Add(
+                "volume_delta_not_computable — объём до или после операции не прочитан: ни аналитическое "
+                + "ожидание, ни направление изменения материала проверить нечем");
+        }
+        else if (!geometryConfirmed)
         {
             unverified.Add("volume_delta_not_confirmed — КОМПАС сообщил об успехе, но измерение не подтвердило ожидаемую геометрию");
         }
@@ -2563,9 +2625,10 @@ public sealed partial class Api5Session
 
     /// <summary>Reference to the sketch an extrusion is built on, or null when the feature has none or the
     /// read-back fails.</summary>
-    /// <remarks>Always a freshly minted reference against the current revision: a handle stored before a
-    /// rebuild is dropped by the registry, and minting here is what makes the row usable on a reopened
-    /// document. A failure to read the sketch is reported as null, not an error — <c>kompas_list_features</c>
+    /// <remarks>The reference is the session's own live one for that sketch when it has one, and a
+    /// freshly minted one otherwise: a handle stored before a rebuild is dropped by the registry, and
+    /// minting on demand is what makes the row usable on a reopened document. A failure to read the
+    /// sketch is reported as null, not an error — <c>kompas_list_features</c>
     /// must keep listing a document whose features it cannot fully describe.</remarks>
     private string? SketchRefOfFeature(DocumentEntry document, ksEntity entity)
     {
@@ -2581,7 +2644,7 @@ public sealed partial class Api5Session
 
             return sketch is null
                 ? null
-                : References.Register("sketch", document.Id, document.Revision, sketch).Id;
+                : ReferenceForObject("sketch", document, sketch).Id;
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException)
         {

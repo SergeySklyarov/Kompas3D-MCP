@@ -156,6 +156,7 @@ public partial class Api5Session
         }
 
         var materialRemoved = volumeBefore is double b && volumeAfter is double a && a < b;
+        var volumePairRead = volumeBefore is double && volumeAfter is double;
         bool? numericMatch = null;
         if (command.ExpectedVolumeDeltaMm3 is double expectedDelta
             && volumeBefore is double vBefore && volumeAfter is double vAfter)
@@ -168,14 +169,14 @@ public partial class Api5Session
                 Observed: measured.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture),
                 Expected: expectedDelta.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)));
         }
-        else
+        else if (volumeBefore is double cb && volumeAfter is double ca)
         {
+            // Direction only, and only when BOTH volumes were read: an unread pair is an unperformed
+            // check, not a failed one.
             checks.Add(new NamedCheck(
                 "volume_delta",
                 materialRemoved,
-                Observed: volumeBefore is double cb && volumeAfter is double ca
-                    ? (cb - ca).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)
-                    : "not_computable",
+                Observed: (cb - ca).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture),
                 Expected: "не задано — проверено только направление"));
         }
 
@@ -186,7 +187,13 @@ public partial class Api5Session
             && checks.TrueForAll(c => c.Name != "position_applied" || c.Passed);
 
         var unverified = new List<string>();
-        if (!geometryConfirmed)
+        if (!volumePairRead)
+        {
+            unverified.Add(
+                "volume_delta_not_computable — объём до или после операции не прочитан: ни аналитическое "
+                + "ожидание, ни направление изменения материала проверить нечем");
+        }
+        else if (!geometryConfirmed)
         {
             unverified.Add(
                 "geometry_not_confirmed — КОМПАС принял запись, но измерение не подтвердило ожидаемую геометрию");
@@ -844,30 +851,48 @@ public partial class Api5Session
         bool? deltaMatched = null;
         if (command.ExpectedVolumeDeltaMm3 is double expectedDelta)
         {
-            deltaMatched = removedDelta is double measuredDelta
-                           && Math.Abs(measuredDelta - expectedDelta) <= ProfileArea.Tolerance(expectedDelta);
-            checks.Add(new NamedCheck(
-                "volume_delta",
-                deltaMatched.Value,
-                Observed: removedDelta is double observedDelta
-                    ? observedDelta.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)
-                    : "not_computable",
-                Expected: expectedDelta.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)));
+            // The check is emitted ONLY when the delta was read: an unread volume pair is an unperformed
+            // check, not a failed one, and its reason travels in unverified_aspects below.
+            if (removedDelta is double measuredDelta)
+            {
+                deltaMatched = Math.Abs(measuredDelta - expectedDelta) <= ProfileArea.Tolerance(expectedDelta);
+                checks.Add(new NamedCheck(
+                    "volume_delta",
+                    deltaMatched.Value,
+                    Observed: measuredDelta.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture),
+                    Expected: expectedDelta.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)));
+            }
         }
 
         bool? volumeMatched = null;
         if (command.ExpectedVolumeMm3 is double expectedVolume)
         {
-            volumeMatched = volumeAfter is double measuredVolume
-                            && Math.Abs(measuredVolume - expectedVolume) <= ProfileArea.Tolerance(expectedVolume);
-            checks.Add(new NamedCheck(
-                "volume_expected", volumeMatched.Value,
-                Observed: Fmt(volumeAfter),
-                Expected: expectedVolume.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)));
+            if (volumeAfter is double measuredVolume)
+            {
+                volumeMatched = Math.Abs(measuredVolume - expectedVolume) <= ProfileArea.Tolerance(expectedVolume);
+                checks.Add(new NamedCheck(
+                    "volume_expected", volumeMatched.Value,
+                    Observed: measuredVolume.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture),
+                    Expected: expectedVolume.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)));
+            }
         }
 
         var declared = command.ExpectedVolumeDeltaMm3 is not null || command.ExpectedVolumeMm3 is not null;
         var unverified = new List<string>();
+        if (command.ExpectedVolumeDeltaMm3 is not null && removedDelta is null)
+        {
+            unverified.Add(
+                "volume_delta_not_computable — ожидание дельты задано, но объём до или после правки не " +
+                "прочитан: сравнить нечем, и это «не проверено», а не «не совпало»");
+        }
+
+        if (command.ExpectedVolumeMm3 is not null && volumeAfter is null)
+        {
+            unverified.Add(
+                "volume_expected_not_computable — ожидание объёма задано, но объём после правки не " +
+                "прочитан: сравнить нечем");
+        }
+
         if (!declared)
         {
             unverified.Add(

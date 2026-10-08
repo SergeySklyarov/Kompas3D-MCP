@@ -3,13 +3,18 @@ using System.Collections.Concurrent;
 namespace KompasMcp.Domain.References;
 
 /// <summary>A minted reference and the state it was valid for.</summary>
+/// <param name="Identity">Identity of the OBJECT the reference points at, as the layer that owns the
+/// object states it (for a COM object: its IUnknown). <c>null</c> when the object has no identity to
+/// state. Two references to one object share it, which is what lets enumeration hand back the handle
+/// it already issued instead of minting a second live address for the same object.</param>
 public sealed record StoredReference(
     string Id,
     string Kind,
     string DocumentId,
     long Revision,
     string? PersistentFeatureId,
-    object? Payload)
+    object? Payload,
+    string? Identity = null)
 {
     /// <summary>The COM payload is opaque to this layer; only the Worker knows what it points at.</summary>
     public T PayloadAs<T>() =>
@@ -33,7 +38,12 @@ public sealed class ReferenceRegistry
     public int Count => _byId.Count;
 
     /// <summary>Mint an opaque reference id ("<c>kind:uuid</c>") bound to a revision.</summary>
-    public StoredReference Register(string kind, string documentId, long revision, object? payload, string? persistentFeatureId = null)
+    /// <param name="identity">Identity of the object, when the caller can state one. Stored so that
+    /// <see cref="FindLiveByIdentity"/> can hand this reference back instead of minting a second live
+    /// address for the same object.</param>
+    public StoredReference Register(
+        string kind, string documentId, long revision, object? payload, string? persistentFeatureId = null,
+        string? identity = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(kind);
         ArgumentException.ThrowIfNullOrWhiteSpace(documentId);
@@ -42,7 +52,8 @@ public sealed class ReferenceRegistry
             throw new ArgumentOutOfRangeException(nameof(revision), "Ревизия не может быть отрицательной.");
         }
 
-        var stored = new StoredReference($"{kind}:{Guid.NewGuid():N}", kind, documentId, revision, persistentFeatureId, payload);
+        var stored = new StoredReference(
+            $"{kind}:{Guid.NewGuid():N}", kind, documentId, revision, persistentFeatureId, payload, identity);
         if (!_byId.TryAdd(stored.Id, stored))
         {
             throw new InvalidOperationException("Ссылка с таким идентификатором уже существует.");
@@ -53,6 +64,27 @@ public sealed class ReferenceRegistry
     }
 
     public bool TryGet(string id, out StoredReference? reference) => _byId.TryGetValue(id, out reference);
+
+    /// <summary>The live reference to the SAME object, if this document already has one.</summary>
+    /// <remarks>INVARIANT: "live" means bound to the CURRENT revision — an older one would be refused as stale
+    /// the moment it was used, and two addresses for one object hide the state remembered under the other.
+    /// <para>INVARIANT: an unknown identity returns <c>null</c> and a new reference is minted — "no identity to
+    /// state" must never collapse two objects into one address.</para>
+    /// <para>INVARIANT: the search reads the CURRENT records, never the insertion-order map, which
+    /// <see cref="RevisionForward"/> leaves un-restamped.</para>
+    /// History: docs/decisions/adapter-sketch.md#one-live-reference</remarks>
+    public StoredReference? FindLiveByIdentity(string kind, string documentId, long revision, string identity)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(kind);
+        ArgumentException.ThrowIfNullOrWhiteSpace(documentId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(identity);
+
+        return _byId.Values.FirstOrDefault(v =>
+            string.Equals(v.Kind, kind, StringComparison.Ordinal)
+            && string.Equals(v.DocumentId, documentId, StringComparison.Ordinal)
+            && v.Revision == revision
+            && string.Equals(v.Identity, identity, StringComparison.Ordinal));
+    }
 
     /// <summary>Register a reference whose identifier is DETERMINED BY THE SUBJECT, not by a fresh uuid.</summary>
     /// <remarks>Most references are opaque: the caller gets a uuid and hands it back. A fillet's own input

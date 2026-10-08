@@ -391,14 +391,13 @@ public sealed record AuxGeometryListResult(
     string Route,
     IReadOnlyList<string> Notes);
 
-/// <summary>Auxiliary-geometry enumeration row. An empty field means "not read", not zero; the reason is named in <see
-/// cref="Notes"/>.</summary>
-/// <param name="Kind">WHAT the object is: <c>plane</c>, <c>axis</c>, <c>point</c> (or <c>unreadable</c> when the
-/// collection element itself did not read).</param>
-/// <param name="Mode">HOW it was built, in the request vocabulary of <c>kompas_create_aux_geometry</c>. <c>null</c>
-/// means the native construction is not expressible in that vocabulary; the native type is then in
-/// <see cref="SubKind"/> and named in <see cref="Notes"/>. The mode is READ from the model, never echoed from the
-/// request.</param>
+/// <summary>Auxiliary-geometry enumeration row: an empty field means "not read", not zero.</summary>
+/// <param name="Kind">WHAT it is: <c>plane</c>, <c>axis</c>, <c>point</c> (or <c>unreadable</c>).</param>
+/// <param name="Mode">HOW it was built, in the request vocabulary of <c>kompas_create_aux_geometry</c>;
+/// <c>null</c> when not expressible there (native type then in <see cref="SubKind"/>, reason in the notes).</param>
+/// <param name="ReferenceId">Reference to this object, of the SAME kind the consuming tools accept
+/// (<c>kompas_create_sketch</c>, <c>kompas_create_aux_geometry</c>, <c>kompas_update_plane</c>). <c>null</c>
+/// when it could not be registered — the reason is then in <see cref="Notes"/>, and the row stays published.</param>
 public sealed record AuxGeometryRowDto(
     string Kind,
     string? Mode,
@@ -412,6 +411,7 @@ public sealed record AuxGeometryRowDto(
     bool? Direction,
     string? BaseName,
     string? LineName,
+    string? ReferenceId,
     IReadOnlyList<string> Notes);
 
 /// <summary>Request to edit an existing plane. Exactly ONE of <see cref="OffsetMm"/> and <see cref="AngleDeg"/> is set,

@@ -7,10 +7,11 @@ namespace KompasMcp.Api5Adapter.Api7;
 /// <summary>A row of an auxiliary-geometry enumeration. Fields that could not be read stay
 /// <c>null</c> and are named in <c>Notes</c>: an empty field means "not read", not zero.</summary>
 /// <param name="Kind">WHAT it is: <c>plane</c>, <c>axis</c>, <c>point</c> (or <c>unreadable</c>).</param>
-/// <param name="Mode">HOW it was built, in the request vocabulary of <c>kompas_create_aux_geometry</c>.
-/// <c>null</c> means the native construction is not expressible there (built outside this server, or by
-/// a mode it does not offer); the native type is then in <see cref="SubKind"/> and in the notes. A mode
-/// that does not fit is never guessed: the vocabulary is closed and the model is the answer.</param>
+/// <param name="Mode">HOW it was built, in the request vocabulary of <c>kompas_create_aux_geometry</c>;
+/// <c>null</c> when not expressible there (native type then in <see cref="SubKind"/> and in the notes).</param>
+/// <param name="Payload">The MODEL OBJECT this row describes, or <c>null</c> for a row that did not read;
+/// carried so the enumeration can register it as a reference, exactly as creation does.</param>
+/// <param name="LineName">Name of the base line of a tilted plane, when the model names one.</param>
 internal sealed record AuxGeomRow(
     string Kind,
     string? Mode,
@@ -24,7 +25,8 @@ internal sealed record AuxGeomRow(
     bool? Direction,
     string? BaseName,
     string? LineName,
-    IReadOnlyList<string> Notes);
+    IReadOnlyList<string> Notes,
+    object? Payload = null);
 
 /// <summary>A part's auxiliary geometry as MODEL OBJECTS: planes, axes, points.</summary>
 /// <remarks>DOC: the route is from the official v24 help, not a guess:
@@ -368,7 +370,7 @@ internal static class Api7AuxGeometry
 
         var (origin, normal) = ReadPlaneSurface(plane, notes);
         return new AuxGeomRow(kind, mode, index, name, subKind, origin, normal, angle, offset, direction,
-            baseName, lineName, notes);
+            baseName, lineName, notes, plane);
     }
 
     private static (double[]? Origin, double[]? Normal) ReadPlaneSurface(IPlane3D plane, List<string> notes)
@@ -671,7 +673,7 @@ internal static class Api7AuxGeometry
         }
 
         return new AuxGeomRow(kind, mode, index, name, subKind, point1, point2, null, null, null,
-            baseName, null, notes);
+            baseName, null, notes, axis);
     }
 
     /// <summary>The mode of a POINT, from the native <c>IPoint3D.ParameterType</c>.

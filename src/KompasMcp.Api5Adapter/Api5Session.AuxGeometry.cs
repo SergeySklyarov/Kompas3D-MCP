@@ -654,7 +654,7 @@ public sealed partial class Api5Session
                 notes.Add(planeFailure);
             }
 
-            rows.AddRange(planeRows.Select(ToDto));
+            rows.AddRange(planeRows.Select(row => ToDto(document, row, notes)));
         }
 
         if (include is "axes" or "all")
@@ -667,7 +667,7 @@ public sealed partial class Api5Session
                 notes.Add(axisFailure);
             }
 
-            rows.AddRange(axisRows.Select(ToDto));
+            rows.AddRange(axisRows.Select(row => ToDto(document, row, notes)));
         }
 
         if (include is "points" or "all")
@@ -686,7 +686,7 @@ public sealed partial class Api5Session
                     notes.Add(pointFailure);
                 }
 
-                rows.AddRange(pointRows.Select(ToDto));
+                rows.AddRange(pointRows.Select(row => ToDto(document, row, notes)));
             }
         }
 
@@ -725,9 +725,32 @@ public sealed partial class Api5Session
 
     // ---------------------------------------------------------------------------------------------
 
-    private static AuxGeometryRowDto ToDto(AuxGeomRow row) => new(
-        row.Kind, row.Mode, row.Index, row.Name, row.SubKind, row.PointMm, row.DirectionMm,
-        row.AngleDeg, row.OffsetMm, row.Direction, row.BaseName, row.LineName, row.Notes);
+    /// <summary>A row as the client sees it, carrying a REFERENCE to the object when one can be stated.</summary>
+    /// <remarks>INVARIANT: the reference kind is the one the consuming tools accept, and an already-live
+    /// reference for the SAME object is handed back rather than a second one minted — one object, one address.
+    /// <para>INVARIANT: an object that cannot be registered keeps its row, gets <c>reference_id = null</c> and a
+    /// named reason. The row never disappears: a missing row is indistinguishable from "no such object".</para>
+    /// History: docs/decisions/adapter-sketch.md#aux-enumeration-references</remarks>
+    private AuxGeometryRowDto ToDto(DocumentEntry document, AuxGeomRow row, List<string> notes)
+    {
+        string? referenceId = null;
+        if (row.Kind is "plane" or "axis" or "point")
+        {
+            if (row.Payload is { } payload)
+            {
+                referenceId = ReferenceForObject(row.Kind, document, payload).Id;
+            }
+            else
+            {
+                notes.Add($"{row.Kind}[{row.Index}] не зарегистрирован как ссылка: объект строки не "
+                    + "прочитан (reference_id=null, строка сохранена)");
+            }
+        }
+
+        return new AuxGeometryRowDto(
+            row.Kind, row.Mode, row.Index, row.Name, row.SubKind, row.PointMm, row.DirectionMm,
+            row.AngleDeg, row.OffsetMm, row.Direction, row.BaseName, row.LineName, referenceId, row.Notes);
+    }
 
     private (int Planes, int Axes, int Points) AuxCounts(
         IModelContainer model, IAuxiliaryGeomContainer auxiliary)

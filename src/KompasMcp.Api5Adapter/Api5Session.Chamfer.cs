@@ -142,6 +142,7 @@ public partial class Api5Session
         };
 
         var materialRemoved = volumeBefore is double b && volumeAfter is double a && a < b;
+        var volumePairRead = volumeBefore is double && volumeAfter is double;
         bool? numericMatch = null;
         if (command.ExpectedVolumeDeltaMm3 is double expectedDelta
             && volumeBefore is double vBefore && volumeAfter is double vAfter)
@@ -154,14 +155,14 @@ public partial class Api5Session
                 Observed: measured.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture),
                 Expected: expectedDelta.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)));
         }
-        else
+        else if (volumeBefore is double cb && volumeAfter is double ca)
         {
+            // Direction only, and only when BOTH volumes were read: an unread pair is an unperformed
+            // check, not a failed one (the reason travels in unverified_aspects).
             checks.Add(new NamedCheck(
                 "volume_delta",
                 materialRemoved,
-                Observed: volumeBefore is double cb && volumeAfter is double ca
-                    ? (cb - ca).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)
-                    : "not_computable",
+                Observed: (cb - ca).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture),
                 Expected: "не задано — проверено только направление"));
         }
 
@@ -176,7 +177,13 @@ public partial class Api5Session
             "angle_units_measured_once — градусы подтверждены одним замером на прямых рёбрах " +
             "перпендикулярных граней (F.10); на дугах и наклонных рёбрах единица не проверялась",
         };
-        if (!geometryConfirmed)
+        if (!volumePairRead)
+        {
+            unverified.Insert(0,
+                "volume_delta_not_computable — объём до или после операции не прочитан: ни аналитическое "
+                + "ожидание, ни направление изменения материала проверить нечем");
+        }
+        else if (!geometryConfirmed)
         {
             unverified.Insert(0, "geometry_not_confirmed — КОМПАС принял запись, но измерение не подтвердило ожидаемую геометрию");
         }

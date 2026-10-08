@@ -149,8 +149,7 @@ public partial class Api5Session
 
         if (!readBackOk)
         {
-            unverified.Insert(0,
-                "parameter_not_read_back — запись принята сеттером, но модель отдаёт другое значение");
+            unverified.Insert(0, PatternReadBackMarks.ParameterNotReadBack);
         }
 
         if (!volumeMatched)

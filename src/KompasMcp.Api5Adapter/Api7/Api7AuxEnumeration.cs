@@ -125,7 +125,7 @@ internal static class Api7AuxEnumeration
 
                 rows.Add(new AuxGeomRow(
                     "point", mode, i, SafeS(() => point.Name), parameterType,
-                    coordinates, null, null, null, null, association, null, rowNotes));
+                    coordinates, null, null, null, null, association, null, rowNotes, point));
             }
             catch (Exception ex) when (ex is COMException or InvalidCastException)
             {

@@ -16,7 +16,9 @@ namespace KompasMcp.Api5Adapter;
 /// sketches with readable definitions after save → close → reopen (probe L).
 /// INVARIANT: this is a READ — no <c>BeginEdit</c>, no <c>Update</c>, no rebuild, and the revision is not
 /// bumped. A sketch reference minted here is bound to the current revision, so the usual staleness rules
-/// apply to it unchanged.
+/// apply to it unchanged. When the session ALREADY holds a live reference to the same sketch (same COM
+/// object), that reference is handed back rather than a second one minted: one object has one live
+/// address, and a second address would hide the state remembered under the first.
 /// INVARIANT: an unread field is <c>null</c> and named in the row notes, never zero and never "no".
 /// History: docs/decisions/adapter-sketch.md#sketch-enumeration
 /// </remarks>
@@ -69,7 +71,11 @@ public sealed partial class Api5Session
 
             rows.Add(new SketchRowDto
             {
-                SketchRef = References.Register("sketch", document.Id, document.Revision, entity).Id,
+                // The SAME live reference the session already holds for this sketch, when there is
+                // one: minting a second address for one object is what made a just-drawn profile
+                // read as "not recorded" by the extrusion. A fresh reference is minted only when the
+                // object has no live one (a reopened document, or a sketch this session never named).
+                SketchRef = ReferenceForObject("sketch", document, entity).Id,
                 Name = entity.name,
                 Index = i,
                 Created = created,

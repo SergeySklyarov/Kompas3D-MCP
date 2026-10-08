@@ -4001,6 +4001,11 @@ def main():
     # находиться по ИМЕНИ строки (`PO.<NN>`), а в общем прогоне эти строки тонули бы среди чужих.
     pattern_orientation_only = "--pattern-orientation" in sys.argv
 
+    # То же для находок клиентской приёмки 0.3.0 и ссылок (наряд RELEASE_040_COMPLETION): одна группа
+    # R40 на своём сеансе. Отдельная ветка нужна по той же причине, что у прочих групп: доказательство
+    # обязано находиться по ИМЕНИ строки (`R40.<NN>`), а в общем прогоне эти строки тонули бы среди чужих.
+    release_040_only = "--release-040" in sys.argv
+
     # Домен ЧЕРТЕЖЕЙ (блок DRW, профиль `drawings-minimal-v1`): одна группа, свой сеанс, своя ветка.
     # Клетка матрицы обязана находиться по ИМЕНИ строки (`DRW.<NN>.<действие>`), а не по номеру в общем
     # потоке, — та же причина, что у прочих групп.
@@ -4039,6 +4044,7 @@ def main():
         else "Приёмка DRW: чертежи — стандартные виды, размеры, основная надпись, экспорт (блок DRW, профиль drawings-minimal-v1)" if drawing_only
         else "Приёмка VM: внешние переменные детали и материал через MCP (блок VM, профиль variables-material-minimal-v1)" if variables_material_only
         else "Приёмка PO: ориентация экземпляров кругового массива через MCP (наряд MCP-015)" if pattern_orientation_only
+        else "Приёмка R40: ссылки на эскиз и вспомогательную геометрию, честная самопроверка (наряд RELEASE_040)" if release_040_only
         else "Интеграционный прогон вертикального сценария через MCP"),
         os.path.join(workdir, "chamfer-acceptance.json" if chamfer_only
                      else "fillet-acceptance.json" if fillet_only
@@ -4063,6 +4069,7 @@ def main():
                      else "drawing-acceptance.json" if drawing_only
                      else "variables-material-acceptance.json" if variables_material_only
                      else "pattern-orientation-acceptance.json" if pattern_orientation_only
+                     else "release-040-acceptance.json" if release_040_only
                      else "smoke-report.json"))
     report_override = argument("--report")
     if report_override:
@@ -4456,6 +4463,14 @@ def main():
 
         if pattern_orientation_only:
             pattern_orientation_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if release_040_only:
+            release_040_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -12154,6 +12169,217 @@ def pattern_orientation_checks(client, rep, app_id, workdir):
                          "read_back_check": rb,
                          "edit_request": {"pattern": {"save_initial_orientation": False}}})
         close(doc3)
+
+
+def release_040_checks(client, rep, app_id, workdir):
+    """Группа R40: находки клиентской приёмки 0.3.0 и ссылки (наряд RELEASE_040_COMPLETION).
+
+    C1/C2 стоят на ОДНОМ эскизе: create -> edit -> list -> extrude. Тождество ссылки из create и из
+    перечня делает самопроверку выдавливания вычислимой; без него ожидаемый объём посчитать не из
+    чего, и это НЕ провал проверки, а невыполненная проверка. C3: ссылки из перечня вспомогательной
+    геометрии принимаются потребителями после переоткрытия. Каждая строка перечитывает ответ
+    инструмента, а не верит ему: «принято» не равно «применено».
+    """
+    def tool(name, args, timeout=240):
+        _e, env, _r = client.tool(name, args, timeout=timeout)
+        return env or {}
+
+    def result(env):
+        return env.get("result") or {}
+
+    def ref_id(value):
+        return value.get("id") if isinstance(value, dict) else value
+
+    def verification(env):
+        return result(env).get("verification") or {}
+
+    def checks_of(env):
+        return {c.get("name"): c for c in (verification(env).get("checks") or [])}
+
+    def unverified_of(env):
+        return list(verification(env).get("unverified_aspects") or [])
+
+    def new_part(name):
+        env = tool("kompas_create_document", {
+            "application_id": app_id, "kind": "part", "name": name,
+            "operation_id": str(uuid.uuid4())})
+        return (env.get("document_id") or result(env).get("id")), (env.get("revision_after") or 1), env
+
+    def sketch_rows(doc):
+        env = tool("kompas_list_sketches", {"document_id": doc})
+        rows = result(env).get("rows")
+        return (rows if isinstance(rows, list) else []), env
+
+    def aux_rows(doc):
+        env = tool("kompas_list_aux_geometry", {"document_id": doc, "include": "all"})
+        rows = result(env).get("rows")
+        return (rows if isinstance(rows, list) else []), env
+
+    def aux_ref(rows, kind, name):
+        for row in rows:
+            if row.get("kind") == kind and (name is None or row.get("name") == name):
+                return row.get("reference_id")
+        return None
+
+    # ── C1/C2: один эскиз — одна живая ссылка, и ожидаемый объём от неё вычислим ───────────
+    doc, rev, env = new_part("R040_C1")
+    if not doc:
+        for rid, what in (
+            ("R40.01", "ссылка из create и ссылка из list_sketches — одна и та же"),
+            ("R40.02", "выдавливание по ссылке из перечня подтверждено измерением"),
+            ("R40.03", "после перестроения прежняя ссылка отвергается, перечень даёт новую"),
+            ("R40.04", "невычислимое ожидание — невыданная проверка, а не проваленная"),
+        ):
+            rep.add(rid, what, "FAIL", "документ не создан: %s" % error_code(env))
+    else:
+        env = tool("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": rev, "plane": {"base": "xy", "offset_mm": 0.0},
+            "name": "r040-profile", "operation_id": str(uuid.uuid4())})
+        create_ref = ref_id(result(env).get("id"))
+        rev = env.get("revision_after") or rev
+        env = tool("kompas_edit_sketch", {
+            "sketch_ref": create_ref, "expected_revision": rev, "mode": "replace",
+            "entities": [{"kind": "circle", "center_mm": [0.0, 0.0], "radius_mm": 52.0}],
+            "operation_id": str(uuid.uuid4())})
+        rev = env.get("revision_after") or rev
+        env = tool("kompas_finish_sketch", {
+            "sketch_ref": create_ref, "require_closed_profile": False,
+            "operation_id": str(uuid.uuid4())})
+        rev = env.get("revision_after") or rev
+
+        rows, l_env = sketch_rows(doc)
+        list_ref = rows[0].get("sketch_ref") if rows else None
+        same = bool(create_ref and list_ref and create_ref == list_ref)
+        rep.add("R40.01", "ссылка из create и ссылка из list_sketches — одна и та же",
+                "PASS" if same else "FAIL",
+                "create=%s list=%s строк=%d" % (create_ref, list_ref, len(rows)))
+
+        x_env = tool("kompas_extrude", {
+            "sketch_ref": list_ref, "expected_revision": rev, "operation": "base",
+            "depth_mm": 10.0, "direction": "positive", "operation_id": str(uuid.uuid4())})
+        x_checks = checks_of(x_env)
+        want = math.pi * 52.0 * 52.0 * 10.0
+        delta = result(x_env).get("volume_delta_mm3")
+        passed = (x_checks.get("volume_delta") or {}).get("passed") is True
+        basis_ok = (x_checks.get("expected_basis") or {}).get("observed") == "profile_area_x_depth"
+        measured_ok = isinstance(delta, (int, float)) and abs(delta - want) <= abs(want) * 1e-6
+        rep.add("R40.02", "выдавливание по ссылке из перечня подтверждено измерением",
+                "PASS" if (passed and basis_ok and measured_ok
+                           and verification(x_env).get("level") == "geometry_checked") else "FAIL",
+                "err=%s уровень=%s volume_delta=%s базис=%s дельта=%s ожидание=%.4f"
+                % (error_code(x_env), verification(x_env).get("level"),
+                   (x_checks.get("volume_delta") or {}).get("observed"),
+                   (x_checks.get("expected_basis") or {}).get("observed"), delta, want))
+
+        rb_env = tool("kompas_rebuild", {"document_id": doc, "operation_id": str(uuid.uuid4())})
+        rev = rb_env.get("revision_after") or rev
+        rows2, _ = sketch_rows(doc)
+        list_ref2 = rows2[0].get("sketch_ref") if rows2 else None
+        stale_env = tool("kompas_extrude", {
+            "sketch_ref": create_ref, "expected_revision": rev, "operation": "base",
+            "depth_mm": 5.0, "direction": "positive", "operation_id": str(uuid.uuid4())})
+        stale_code = error_code(stale_env)
+        rep.add("R40.03", "после перестроения прежняя ссылка отвергается, перечень даёт новую",
+                "PASS" if (list_ref2 and list_ref2 != create_ref
+                           and stale_code == "STALE_REFERENCE") else "FAIL",
+                "прежняя=%s новая=%s код_прежней=%s" % (create_ref, list_ref2, stale_code))
+
+        x2_env = tool("kompas_extrude", {
+            "sketch_ref": list_ref2, "expected_revision": rev, "operation": "base",
+            "depth_mm": 5.0, "direction": "positive", "operation_id": str(uuid.uuid4())})
+        c2 = checks_of(x2_env)
+        unv = unverified_of(x2_env)
+        named = any(str(u).startswith("expected_volume_not_computable") for u in unv)
+        rep.add("R40.04", "невычислимое ожидание — невыданная проверка, а не проваленная",
+                "PASS" if (error_code(x2_env) is None and "expected_basis" not in c2
+                           and "volume_delta" not in c2 and named) else "FAIL",
+                "err=%s проверки=%s unverified=%s" % (error_code(x2_env), sorted(c2), unv))
+
+    # ── C3: ссылки из перечня вспомогательной геометрии, в том числе после переоткрытия ────
+    doc2, rev2, env = new_part("R040_C3")
+    if not doc2:
+        for rid, what in (
+            ("R40.05", "строки list_aux_geometry несут reference_id вида plane/axis"),
+            ("R40.06", "create_sketch по ссылке на плоскость из перечня после переоткрытия"),
+            ("R40.07", "update_plane по ссылке из перечня перечитывается"),
+            ("R40.08", "create_aux_geometry plane/angle с base_axis_ref из перечня"),
+        ):
+            rep.add(rid, what, "FAIL", "документ не создан: %s" % error_code(env))
+        return
+
+    env = tool("kompas_create_aux_geometry", {
+        "document_id": doc2, "expected_revision": rev2, "kind": "plane", "mode": "offset",
+        "base_plane": "xy", "offset_mm": 40.0, "name": "r040-plane",
+        "operation_id": str(uuid.uuid4())})
+    rev2 = env.get("revision_after") or rev2
+    env = tool("kompas_create_aux_geometry", {
+        "document_id": doc2, "expected_revision": rev2, "kind": "axis", "mode": "by_2_points",
+        "point1_mm": [0.0, 0.0, 0.0], "point2_mm": [0.0, 20.0, 0.0], "name": "r040-axis",
+        "operation_id": str(uuid.uuid4())})
+    rev2 = env.get("revision_after") or rev2
+
+    rows, _ = aux_rows(doc2)
+    plane_ref0 = aux_ref(rows, "plane", "r040-plane")
+    axis_ref0 = aux_ref(rows, "axis", "r040-axis")
+    rep.add("R40.05", "строки list_aux_geometry несут reference_id вида plane/axis",
+            "PASS" if (plane_ref0 or "").startswith("plane:") and (axis_ref0 or "").startswith("axis:")
+            else "FAIL",
+            "plane=%s axis=%s строк=%d" % (plane_ref0, axis_ref0, len(rows)))
+
+    path = os.path.join(workdir, "release040-aux.m3d")
+    env = tool("kompas_save_document", {
+        "document_id": doc2, "expected_revision": rev2, "target_path": path,
+        "operation_id": str(uuid.uuid4())})
+    save_err = error_code(env)
+    rev2 = env.get("revision_after") or rev2
+    tool("kompas_close_document", {
+        "document_id": doc2, "dirty_policy": "discard", "operation_id": str(uuid.uuid4())})
+    o_env = tool("kompas_open_document", {
+        "application_id": app_id, "path": path, "access": "edit",
+        "operation_id": str(uuid.uuid4())})
+    doc3 = o_env.get("document_id") or result(o_env).get("document_id")
+    rev3 = o_env.get("revision_after") or 1
+    if not doc3:
+        for rid, what in (
+            ("R40.06", "create_sketch по ссылке на плоскость из перечня после переоткрытия"),
+            ("R40.07", "update_plane по ссылке из перечня перечитывается"),
+            ("R40.08", "create_aux_geometry plane/angle с base_axis_ref из перечня"),
+        ):
+            rep.add(rid, what, "FAIL",
+                    "документ не переоткрыт: open=%s save=%s path=%s file=%s"
+                    % (error_code(o_env), save_err, path, os.path.exists(path)))
+        return
+
+    rows, _ = aux_rows(doc3)
+    plane_ref = aux_ref(rows, "plane", "r040-plane")
+    axis_ref = aux_ref(rows, "axis", "r040-axis")
+
+    s_env = tool("kompas_create_sketch", {
+        "document_id": doc3, "expected_revision": rev3, "plane": {"reference": plane_ref},
+        "name": "r040-on-plane", "operation_id": str(uuid.uuid4())})
+    rev3 = s_env.get("revision_after") or rev3
+    rep.add("R40.06", "create_sketch по ссылке на плоскость из перечня после переоткрытия",
+            "PASS" if error_code(s_env) is None and ref_id(result(s_env).get("id")) else "FAIL",
+            "plane=%s err=%s эскиз=%s" % (plane_ref, error_code(s_env), ref_id(result(s_env).get("id"))))
+
+    u_env = tool("kompas_update_plane", {
+        "document_id": doc3, "expected_revision": rev3, "plane_ref": plane_ref,
+        "offset_mm": 55.0, "operation_id": str(uuid.uuid4())})
+    rev3 = u_env.get("revision_after") or rev3
+    applied = result(u_env).get("applied") is True and result(u_env).get("offset_mm") == 55.0
+    rep.add("R40.07", "update_plane по ссылке из перечня перечитывается",
+            "PASS" if error_code(u_env) is None and applied else "FAIL",
+            "plane=%s err=%s applied=%s offset=%s"
+            % (plane_ref, error_code(u_env), result(u_env).get("applied"), result(u_env).get("offset_mm")))
+
+    a_env = tool("kompas_create_aux_geometry", {
+        "document_id": doc3, "expected_revision": rev3, "kind": "plane", "mode": "angle",
+        "base_plane": "xy", "base_axis_ref": axis_ref, "angle_deg": 30.0, "name": "r040-tilted",
+        "operation_id": str(uuid.uuid4())})
+    rep.add("R40.08", "create_aux_geometry plane/angle с base_axis_ref из перечня",
+            "PASS" if error_code(a_env) is None and ref_id(result(a_env).get("reference_id")) else "FAIL",
+            "axis=%s err=%s ссылка=%s"
+            % (axis_ref, error_code(a_env), ref_id(result(a_env).get("reference_id"))))
 
 
 def sketch_clearing_checks(client, rep, app_id):

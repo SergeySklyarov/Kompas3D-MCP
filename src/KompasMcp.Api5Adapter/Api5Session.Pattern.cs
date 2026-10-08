@@ -5,6 +5,7 @@ using KompasAPI7;
 using KompasMcp.Api5Adapter.Api7;
 using KompasMcp.Contracts;
 using KompasMcp.Contracts.Ipc;
+using KompasMcp.Domain.Geometry;
 
 namespace KompasMcp.Api5Adapter;
 
@@ -469,6 +470,10 @@ public partial class Api5Session
         {
             unverified.Add("mirror_has_no_skipped_instances");
         }
+
+        // Creation answers the edit path's rule: a failed read-back of any written parameter is MARKED,
+        // not left as a lone failed check. Same string, same position, so the two paths cannot drift.
+        PatternReadBackMarks.MarkUnreadBack(unverified, checks);
 
         return new PatternResult(
             FeatureRef: ToDto(reference, $"{family} pattern"),

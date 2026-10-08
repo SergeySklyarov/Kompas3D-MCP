@@ -228,6 +228,12 @@ public static class WorkerCommands
     public const string SetVariableExpression = "var.set_expression";
     public const string GetMaterial = "mat.get";
     public const string SetMaterial = "mat.set";
+    // ── block G1 "assembly interference and gaps" (profile assembly-interference-minimal-v1) ──
+    // asm.check_interference → INT-01/INT-02/INT-03, asm.measure_gap → INT-04. Both are READ: no
+    // operation_id, no revision bump. INT-05…INT-08 are a SCENARIO over these two commands plus the
+    // existing asm.set_placement, so no third command is introduced for the placement series.
+    public const string CheckInterference = "asm.check_interference";
+    public const string MeasureGap = "asm.measure_gap";
     public const string Shutdown = "sys.shutdown";
 
     /// <summary>Creates a part auxiliary-geometry object — a plane, axis or point (<c>dep.refs.planes</c>,

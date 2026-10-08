@@ -296,6 +296,48 @@ set_transform не считается успешным по одному воз�
 
 Пример проверки пересечений: касание двух пластин по Z=1 при толщине1 - contact; перекрытие0,25 - overlap; разнесение10 - clear. Ошибка COM - unknown, не clear.
 
+### 2.7.1. Пересечения и зазоры между компонентами (блок G1, 08.10.2026)
+
+Таблица выше - редакция ПЛАНА: имена в ней (`kompas_set_component_transform`,
+`kompas_check_intersections`) в поставке не заведены, а `AABB+exact ядро` из её последней строки
+нарядом G1 прямо запрещено (старые пороги 0,005/0,015 мм теряли малые пересечения). Действующие
+контракты блока G1:
+
+| Инструмент | Параметры и поведение |
+|---|---|
+| `kompas_check_interference` | `document_id`, `component_refs` (необязательно; по умолчанию все адресуемые компоненты верхнего уровня; не менее двух РАЗНЫХ), `check_tangent` (bool, умолчание false), `include_faces` (bool, умолчание false), `timeout_ms`. READ: `requires_operation_id: false` |
+| `kompas_measure_gap` | `document_id`, `object1` и `object2` - каждый `{component_ref}` или `{component_ref, face_index}`, `timeout_ms`. READ: `requires_operation_id: false` |
+
+**Что возвращает `kompas_check_interference`.** `pairs_checked`, `pairs` (по строке на пару:
+`component_a`, `component_b`, `intersecting`, `volumetric`, `intersections` с `body_a`/`body_b`/`type`
+и, при `include_faces`, номерами пересекаемых и совпадающих граней каждого тела в нумерации
+`FaceCollection`, `basis`), `check_tangent` эхом и в смысле, `route`, `revision`, `notes`.
+
+**Что возвращает `kompas_measure_gap`.** `measure_result` (имя из `ksMeasureResultEnum`),
+`min_distance_mm` и `min_points_mm`, `angle_deg` при `is_angle_valid`, `units_basis`, `route`,
+`revision`, `notes`.
+
+**Правила, отличающие эти инструменты от «просто вызова ядра».**
+
+- `NULL` от `ksBody.CheckIntersectionWithBody` - ДОКУМЕНТИРОВАННЫЙ ответ «пересечений нет»
+  (`ksbody_checkintersectionwithbody.html`: «Интерфейс ksIntersectionResult - в случае успеха, NULL -
+  если пересечений нет»), и он даёт `intersecting = false` с основанием
+  `kernel_null_documented_as_no_intersection`. COM-исключение - НЕ «нет пересечений»: пара остаётся
+  НЕИЗВЕСТНОЙ (`intersecting = null`) с основанием `kernel_call_failed`, а остальные пары считаются.
+- `itBody` (4) - объёмное пересечение; `itTangentPoint` (1), `itTangentCurve` (2),
+  `itTangentSurface` (3) - касания, и они появляются только при `check_tangent = true`.
+- Непрочитанное расстояние и непрочитанный отрезок приходят как `null` с причиной в `notes`, а не
+  как `0`: справка оговаривает «Система определяет значение расстояния между объектами (если оно не
+  нулевое)».
+- Единица `Lmin` и точек справкой НЕ названа: `units_basis` называет её допущением, а живая строка
+  INT-04 сверяет числа с аналитически известным зазором.
+- Адресация - только компоненты ВЕРХНЕГО уровня; вложенный компонент отвергается
+  `CAPABILITY_UNAVAILABLE`, потому что `ksDocument3D.PartCollection(true)` перечисляет компоненты
+  плоско и адреса API5 у вложенного нет.
+- Документ не-сборка - `WRONG_DOCUMENT_KIND` (см. `docs/decisions/contracts.md#wrong-document-kind`).
+- Серия положений компонента отдельным инструментом НЕ вводится: она делается связкой с
+  `kompas_set_component_placement` и повторным вызовом проверки на каждом шаге.
+
 ## 2.8. Экспорт - P4
 
 | Инструмент | Параметры | Особенности |

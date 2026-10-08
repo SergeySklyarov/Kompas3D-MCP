@@ -4741,3 +4741,79 @@ client-acceptance.json`). Всё ниже измерено вызовами РА
 `1e-6` мм (у клиента концы совпадают до `2·10⁻¹⁴` мм). Открытая или ветвящаяся цепочка отвергается
 САМИМ ядром (`GEOMETRY_FAILED`) ещё до вопроса о площади — измерено зондом; поэтому «невычислимо с
 названной причиной» проверяется на контуре, который ядро принимает (касающиеся контуры).
+
+## 4.52. Пересечения и зазор между компонентами (G1): маршруты справки, поставленная обёртка СТАРШЕ установленной библиотеки типов (измерено 08.10.2026, наряд `OMEGA_G1_INTERFERENCE`)
+
+**Версия и доступность страниц.** `KOMPAS.exe` = `24.0.0.2799`. Страницы §2 наряда прочитаны по
+проводу и отдали `200`: `ksbody_checkintersectionwithbody`, `ksintersectionresult`,
+`ksintersectionresult_getcount`, `ksintersectionresult_getintersectiontype`, `intersection_type`,
+`ksbody_getintersectionfaceswithbody`, `ibody7_checkintersectionwithbody`,
+`ibody7_checkintersectionwithbodyex`, `ipart7_measurement3d`, `imeasurement3d`,
+`imeasurement3d_object1/2`, `imeasurement3d_calculate`, `imeasurement3d_lmin`,
+`imeasurement3d_getminpoint1/2`, `imeasurement3d_propers`, `ksmeasureresultenum`,
+`kspart_bodycollection`, `ksdocument3d_partcollection`. Отрицательный контроль
+(`ksbody_checkintersectionwithbody_absent_xyz`, `qwerty_not_a_page`) - `404`, то есть `200` здесь
+что-то значит.
+
+**Пересечения, API5 (основной маршрут наряда) - доступен в поставке.**
+`ksBody.CheckIntersectionWithBody(otherBody, checkTangent)` (обёртка: `Object
+CheckIntersectionWithBody(Object otherBody, Boolean checkTangent)`); справка дословно:
+«Интерфейс ksIntersectionResult - в случае успеха, NULL - если пересечений нет». `ksIntersectionResult`
+- «Интерфейс используется при проверке наличия пересечения тел в сборке», «Два тела в сборке могут
+иметь более одного пересечения»; методы `long GetCount()` и `long GetIntersectionType(long index)`.
+`Intersection_Type`: `itTangentPoint=1`, `itTangentCurve=2`, `itTangentSurface=3`, `itBody=4`
+«Пересечение образует тело». Грани: `ksBody.GetIntersectionFacesWithBody(otherBody,
+intersectionFaces1, intersectionFaces2, connectedFaces1, connectedFaces2)` → `Int32`; справка
+называет выходы «пересекаемые грани первого/второго тела» и «совпадающие грани первого/второго
+тела» и оговаривает упаковку: одна грань - `VT_DISPATCH`, несколько - `VT_ARRAY | VT_DISPATCH`,
+«Количество граней в массивах intersectionFaces1 и intersectionFaces2 совпадают и образуют пары».
+
+**Зазор, API7 (маршрут §2.2 наряда) - в поставленной обёртке ОТСУТСТВУЕТ.** Справка:
+`IPart7.Measurement3D` → `IMeasurement3D`, «Версия Компас v23»; `IMeasurement3D`: «Объекты могут быть
+следующих типов: … грани, ребра, вершины, … тела, компоненты», «Объекты можно указывать в любой
+комбинации, например, … тело и компонент, компонент и компонент и т.д.», «Система определяет значение
+расстояния между объектами (если оно не нулевое) и значение угла между ними (если объекты не
+параллельны)»; `Calculate()` → `ksMeasureResultEnum`; `Lmin` (double, только чтение),
+`GetMinPoint1/2(X, Y, Z)` → `BOOL`, `Angle` при `IsAngleValid`. Единица длины и точек на страницах
+НЕ названа.
+
+**Что измерено двумя независимыми приборами.** (1) Сканер метаданных по поставленной
+`Interop.KompasAPI7.dll` (03.03.2025): `IPart7` - 154 члена, `Measurement3D` среди них НЕТ;
+`IMeasurement3D` в сборке НЕТ вовсе; `IBody7` - 46 членов, `CheckIntersectionWithBody`/`Ex` НЕТ.
+(2) Сборка, сгенерированная `TlbImp` из установленного `Bin/kAPI7.tlb` (21.04.2025): `IPart7` - 178
+членов, среди них `get_Measurement3D`; `IMeasurement3D` - IID `f59ff609-45c2-4afb-b3c4-08184b9900ff`,
+46 членов, включая `Calculate`, `Lmin`, `Lmax`, `LNormal`, `Angle`, `IsAngleValid`, `GetMinPoint1/2`,
+`Gap`, `DirectionObject`, `DirectionVector`; `IBody7` - 53 члена, включая
+`CheckIntersectionWithBody(Body7, Boolean)` и `CheckIntersectionWithBodyEx(...)`.
+
+**Форма расхождения.** `IPart7` установленного TLB = поставленный `IPart7` ПЛЮС 18 методов,
+дописанных В КОНЕЦ списка (`get_DoubleClickEditable`, `set_DoubleClickEditable`, `set_NeedRebuild`,
+`get_NeedRebuild`, `get_PropertyObjectEditable`, `set_PropertyObjectEditable`, `VisualCreateObject`,
+`RunCreateObjectProcess`, `VisualEditObject`, `GetGabarit`, `get_Measurement3D`, `CurveIntersection`,
+`GetObjectByName`, `SetSourceVariables`, `set_/get_ShowExternalVariables`, `set_/get_UseSourceLayers`).
+Первые 106 слотов совпадают, поэтому поставленная обёртка не «сдвинута», а просто неполна. Тот же
+набор имён найден в самом сервере API7 `Bin\kAPI7.DLL` (а также в `ksAPI.dll`, `KsAPIC.dll`,
+`KsAPICLink.dll`), то есть **сервер полный, устарела только .NET-обёртка**.
+
+**Что решено (решение заказчика 08.10.2026).** Маршрут §2.2 сохраняется: недостающий интерфейс
+объявляется в адаптере как типизированный `[ComImport]`-двойник, IID и раскладка сняты с
+машинно-сгенерированного интеропа установленного TLB (не «по памяти»); `IDispatch` не используется
+(ADR-004: вызов через `IDispatch` в общем процессе ронял его с `0xC0000409`). Двойник `IPart7`
+объявляется до `get_Measurement3D` включительно, поэтому слоты совпадают с сервером.
+
+**Запасной маршрут зазора, доступный в поставке, но нарядом запрещён.** API5 `ksPart.GetMeasurer()`
+→ `ksMeasurer` (в поставленной PIA: `SetObject1/SetObject2(Object)`, `Calc()`, `MinDistance`,
+`GetMinPoint1/2`, `MeasureResult`, `IsAngleValid`, `angle`, `unit`); справка `ksmeasurer.html`:
+«Интерфейс применим для граней, ребер, вершин». Маршрут наряда им не заменяется.
+
+**Второй маршрут зазора, доступный в поставке, но нарядом исключён.** `IMeasurementContainer` -
+«Интерфейс является дополнительным для компонента IPart7», получается через
+`IUnknown::QueryInterface` (`imeasurementcontainer.html`, «КОМПАС версия v18»);
+`IDistanceAngleMeasurements3D.Add()` создаёт элемент коллекции, то есть объект модели - это нарушает
+требование «только чтение» §3 наряда.
+
+**Чего здесь НЕ измерено.** Применимость `IMeasurement3D` к объектам двух РАЗНЫХ компонентов и
+единица `Lmin` - измеряются живым прогоном группы `--interference-only` (INT-04/INT-06/INT-07).
+Адресация ГРАНИ в API7 отдельным маршрутом справкой не описана: `IFace` достижим только через
+`IEdge.AdjacentFace`, а `TransferReference` документирован «для документов и объектов вида
+графического документа, в остальных случаях возвращается NULL» - это проверяется в INT-04.

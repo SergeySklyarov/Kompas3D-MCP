@@ -1,9 +1,51 @@
 {
   "type": "object",
-  "title": "\u041F\u0435\u0440\u0435\u0447\u0435\u043D\u044C \u0432\u0438\u0434\u043E\u0432 \u0447\u0435\u0440\u0442\u0435\u0436\u0430",
+  "title": "\u041C\u0438\u043D\u0438\u043C\u0430\u043B\u044C\u043D\u043E\u0435 \u0440\u0430\u0441\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u043C\u0435\u0436\u0434\u0443 \u043A\u043E\u043C\u043F\u043E\u043D\u0435\u043D\u0442\u0430\u043C\u0438",
   "properties": {
     "document_id": {
       "$ref": "#/$defs/document_id"
+    },
+    "object1": {
+      "type": "object",
+      "title": "\u041F\u0435\u0440\u0432\u044B\u0439 \u0438\u0437\u043C\u0435\u0440\u044F\u0435\u043C\u044B\u0439 \u043E\u0431\u044A\u0435\u043A\u0442",
+      "properties": {
+        "component_ref": {
+          "type": "string",
+          "description": "\u0421\u0441\u044B\u043B\u043A\u0430 \u043D\u0430 \u043A\u043E\u043C\u043F\u043E\u043D\u0435\u043D\u0442 \u0438\u0437 kompas_list_components."
+        },
+        "face_index": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "\u041D\u043E\u043C\u0435\u0440 \u0433\u0440\u0430\u043D\u0438 \u0432 FaceCollection \u043A\u043E\u043C\u043F\u043E\u043D\u0435\u043D\u0442\u0430. \u041D\u0435 \u0437\u0430\u0434\u0430\u043D \u2014 \u0438\u0437\u043C\u0435\u0440\u044F\u0435\u0442\u0441\u044F \u043A\u043E\u043C\u043F\u043E\u043D\u0435\u043D\u0442 \u0446\u0435\u043B\u0438\u043A\u043E\u043C."
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "component_ref"
+      ]
+    },
+    "object2": {
+      "type": "object",
+      "title": "\u0412\u0442\u043E\u0440\u043E\u0439 \u0438\u0437\u043C\u0435\u0440\u044F\u0435\u043C\u044B\u0439 \u043E\u0431\u044A\u0435\u043A\u0442",
+      "properties": {
+        "component_ref": {
+          "type": "string",
+          "description": "\u0421\u0441\u044B\u043B\u043A\u0430 \u043D\u0430 \u043A\u043E\u043C\u043F\u043E\u043D\u0435\u043D\u0442 \u0438\u0437 kompas_list_components."
+        },
+        "face_index": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "\u041D\u043E\u043C\u0435\u0440 \u0433\u0440\u0430\u043D\u0438 \u0432 FaceCollection \u043A\u043E\u043C\u043F\u043E\u043D\u0435\u043D\u0442\u0430. \u041D\u0435 \u0437\u0430\u0434\u0430\u043D \u2014 \u0438\u0437\u043C\u0435\u0440\u044F\u0435\u0442\u0441\u044F \u043A\u043E\u043C\u043F\u043E\u043D\u0435\u043D\u0442 \u0446\u0435\u043B\u0438\u043A\u043E\u043C."
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "component_ref"
+      ]
     },
     "timeout_ms": {
       "anyOf": [
@@ -18,7 +60,9 @@
   },
   "additionalProperties": false,
   "required": [
-    "document_id"
+    "document_id",
+    "object1",
+    "object2"
   ],
   "$defs": {
     "operation_id": {

@@ -24,6 +24,18 @@
 - **открытые_режимы:** []
 - **открытые_зависимости:** []
 
+### профиль assembly-interference-minimal-v1 — Пересечения и зазоры между компонентами сборки v24
+
+- **обязательных_режимов:** 4
+- **режимов_закрыто:** 4
+- **общих_зависимостей:** 5
+- **зависимостей_закрыто:** 5
+- **профиль_закрыт:** да
+- **готовность_процента:** 100.0%
+- **по_очередям:** G1 4/4
+- **открытые_режимы:** []
+- **открытые_зависимости:** []
+
 ### профиль drawings-minimal-v1 — Минимальные чертежи v24
 
 - **обязательных_режимов:** 6
@@ -74,18 +86,18 @@
 
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 295
-- **строк_полностью_закрыто:** 106
-- **строк_с_каким_либо_прогрессом:** 121
-- **семейств_в_каталоге:** 36
+- **строк_каталога:** 304
+- **строк_полностью_закрыто:** 115
+- **строк_с_каким_либо_прогрессом:** 130
+- **семейств_в_каталоге:** 37
 - **семейств_без_строк:** 14
 - **операций:** 99
 - **режимов_и_вариантов:** 146
-- **применимых_действий:** 2669
-- **действий_verified:** 838
-- **покрытие_действий:** 31.4%
-- **распределение_статусов:** {'not_started': 1831, 'verified': 838, 'not_applicable': 281}
-- **уровни_каталога_операций:** {'metadata_found': 50, 'mcp_verified': 30, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 4}
+- **применимых_действий:** 2698
+- **действий_verified:** 867
+- **покрытие_действий:** 32.1%
+- **распределение_статусов:** {'not_started': 1831, 'verified': 867, 'not_applicable': 342}
+- **уровни_каталога_операций:** {'metadata_found': 50, 'mcp_verified': 34, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 4}
 - **уровни_каталога_режимов:** {'mcp_verified': 55, 'documented': 19, 'runtime_verified': 3, 'metadata_found': 48, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
@@ -110,6 +122,25 @@
 | `dep.assembly.component_address` | да | discover, read, negative_tests | ASM.03.read, ASM.03.fields, ASM.03.multiplicity, ASM.07.reopen, ASM.04.negative_tests, ASM.04.distinguishing, ASM.04.edit, ASM.04.discover, ASM.04.geometry_validation, ASM.05.discover, ASM.07.geometry_validation, ASM.03.save_reopen |
 | `dep.assembly.revisions` | да | edit, read, negative_tests | ASM.01.read, ASM.07.read, ASM.04.edit, ASM.02.rebuild, ASM.07.save_reopen, ASM.04.negative_tests, ASM.04.discover, ASM.05.save_reopen |
 | `dep.assembly.idempotency` | да | create, read, negative_tests | ASM.03.read, ASM.02.create, ASM.02.idempotency, ASM.04.discover, ASM.02.negative_tests |
+
+## Метрика 1 — обязательные режимы профиля `assembly-interference-minimal-v1`
+
+| режим/операция | семья | приоритет | очередь | уровень каталога | поиск | созд | чтен | правк | перестр | reopen | подавл | удал | отказ | геом | проверки |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
+| `INT-01.pairs.volumetric` | G1 | practical_required | G1 | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | INT.01.discover, INT.01.read, INT.05.read, INT.11.negative_tests, INT.11.negative_tests_nested, INT.12.read, INT.12.read2 |
+| `INT-02.pairs.tangent` | G1 | practical_required | G1 | mcp_verified | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | INT.02.read, INT.02.negative_tests, INT.06.read |
+| `INT-03.pairs.faces` | G1 | practical_required | G1 | mcp_verified | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | INT.03.read, INT.03.geometry_validation, INT.FACES, INT.11.negative_tests |
+| `INT-04.gap.min_distance` | G1 | practical_required | G1 | mcp_verified | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | INT.04.read, INT.04.read2, INT.04.geometry_validation, INT.04.geometry_validation2, INT.07.geometry_validation, INT.07.geometry_validation2, INT.08.geometry_validation, INT.11.negative_tests |
+
+### Общие зависимости профиля `assembly-interference-minimal-v1`
+
+| зависимость | закрыто | приоритетные действия | проверки |
+|---|---|---|---|
+| `dep.interference.component_address` | да | discover, read, negative_tests | INT.01.read, INT.11.negative_tests, INT.11.negative_tests_nested, INT.09.read |
+| `dep.interference.face_address` | да | discover, read, negative_tests | INT.03.geometry_validation, INT.FACES, INT.11.negative_tests |
+| `dep.interference.api7_measurer` | да | discover, read, negative_tests | INT.04.read, INT.04.read2, INT.04.geometry_validation |
+| `dep.interference.distance_unit` | да | read, geometry_validation, negative_tests | INT.04.geometry_validation, INT.04.geometry_validation2, INT.07.geometry_validation, INT.06.read |
+| `dep.interference.read_only` | да | read, negative_tests | INT.09.read, INT.09.negative_tests |
 
 ## Метрика 1 — обязательные режимы профиля `drawings-minimal-v1`
 
@@ -515,6 +546,10 @@
 | `VM-04.material.read` | VM | practical_required | VM | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | VM-04.material.read.discover, VM-04.material.read.negative_tests, dep.vm.units.read, VM-05.material.write.read |
 | `VM-05.material.write` | VM | practical_required | VM | mcp_verified | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | н/п | VM-05.material.write.create, VM-05.material.write.read, VM-05.material.write.negative_tests |
 | `VM-06.mass.computed_via_measure` | VM | practical_required | VM | mcp_verified | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | н/п | OK | VM-06.mass.computed_via_measure.read, VM-06.mass.computed_via_measure.geometry_validation |
+| `INT-01.pairs.volumetric` | G1 | practical_required | G1 | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | INT.01.discover, INT.01.read, INT.05.read, INT.11.negative_tests, INT.11.negative_tests_nested, INT.12.read, INT.12.read2 |
+| `INT-02.pairs.tangent` | G1 | practical_required | G1 | mcp_verified | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | INT.02.read, INT.02.negative_tests, INT.06.read |
+| `INT-03.pairs.faces` | G1 | practical_required | G1 | mcp_verified | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | INT.03.read, INT.03.geometry_validation, INT.FACES, INT.11.negative_tests |
+| `INT-04.gap.min_distance` | G1 | practical_required | G1 | mcp_verified | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | INT.04.read, INT.04.read2, INT.04.geometry_validation, INT.04.geometry_validation2, INT.07.geometry_validation, INT.07.geometry_validation2, INT.08.geometry_validation, INT.11.negative_tests |
 | `AUX-SKETCH.plane_and_profile_lifecycle` *(вне каталога)* | AUX-SKETCH | later | — | — | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | V03, V04, V05, G07_xy, G07_xz, G07_yz, V04r, V04d, V04e, V04f, G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, F08.28.discover, F08.28.create, F08.28.read, F08.28.edit, F08.28.rebuild, F08.28.save_reopen, F08.28.negative_tests, F08.28.geometry_validation, AUXS.01.edit, AUXS.02.negative_tests, AUXS.03.create, AUXS.04.edit, AUXS.05.save_reopen |
 | `SM-04.boss` *(вне каталога)* | SM-04 | later | B5 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `dep.sketch.entities` *(вне каталога)* | AUX-SKETCH | dependency_of | — | — | OK | OK | OK | OK | — | OK | — | — | OK | OK | G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, DEP.DSE.02.create, DEP.DSE.07.geometry_validation, DEP.DSE.06.negative_tests, DEP.DSE.05.save_reopen, DEP.DSE.04.edit, DEP.DSE.01.discover, DEP.DSE.03.read |
@@ -555,6 +590,11 @@
 | `dep.vm.save_reopen` *(вне каталога)* | — | dependency_of | VM | — | н/п | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | dep.vm.save_reopen.read, dep.vm.save_reopen.save_reopen, dep.vm.save_reopen.negative_tests |
 | `dep.vm.units` *(вне каталога)* | — | dependency_of | VM | — | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | dep.vm.units.read, dep.vm.units.negative_tests |
 | `dep.sketches.enumeration` *(вне каталога)* | AUX-SKETCH | dependency_of | — | — | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | DEP.DSK.01.discover, DEP.DSK.02.read, DEP.DSK.03.save_reopen, DEP.DSK.04.negative_tests |
+| `dep.interference.component_address` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | OK | INT.01.read, INT.11.negative_tests, INT.11.negative_tests_nested, INT.09.read |
+| `dep.interference.face_address` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | INT.03.geometry_validation, INT.FACES, INT.11.negative_tests |
+| `dep.interference.api7_measurer` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | INT.04.read, INT.04.read2, INT.04.geometry_validation |
+| `dep.interference.distance_unit` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | INT.04.geometry_validation, INT.04.geometry_validation2, INT.07.geometry_validation, INT.06.read |
+| `dep.interference.read_only` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | INT.09.read, INT.09.negative_tests |
 
 ## Ограничения и незакрытое
 
@@ -972,6 +1012,22 @@
   - Это СКВОЗНАЯ проверка УЖЕ принятого инструмента kompas_measure, а не режим профиля VM и не заявление о родном GetMass: собственного родного маршрута массы блок не объявляет. Поэтому строка не входит в знаменатель режимов профиля (см. scenarios SCN-VM-MASS).
   - ЦЕПОЧКА «плотность модели → масса» ВЫПОЛНЕНА: плотность читается из МОДЕЛИ ответом kompas_get_material (поле density_kg_per_m3, документированный маршрут МЦХ) и передаётся в measure, а объём даёт независимое измерение. Значение не подставляется обратно в ту же формулу.
   - Совпадение массы с эталоном подтверждает согласованность арифметики measure и геометрии, но НЕ доказывает, что ядро считает массу так же: родного маршрута массы сервер не объявляет.
+- `INT-01.pairs.volumetric` — закрыт целиком
+  - Живой прогон группы INT и приёмка на бинарях поставки — отдельные шаги; до них строка открыта.
+  - Маршрут зазора опирается на типизированный двойник IPart7.Measurement3D: поставленная Interop.KompasAPI7.dll этого члена не объявляет (docs/04 §4.52).
+  - Единица Lmin и точек справкой не названа: до строки INT-04 это допущение, после — измерение.
+- `INT-02.pairs.tangent` — закрыт целиком
+  - Живой прогон группы INT и приёмка на бинарях поставки — отдельные шаги; до них строка открыта.
+  - Маршрут зазора опирается на типизированный двойник IPart7.Measurement3D: поставленная Interop.KompasAPI7.dll этого члена не объявляет (docs/04 §4.52).
+  - Единица Lmin и точек справкой не названа: до строки INT-04 это допущение, после — измерение.
+- `INT-03.pairs.faces` — закрыт целиком
+  - Живой прогон группы INT и приёмка на бинарях поставки — отдельные шаги; до них строка открыта.
+  - Маршрут зазора опирается на типизированный двойник IPart7.Measurement3D: поставленная Interop.KompasAPI7.dll этого члена не объявляет (docs/04 §4.52).
+  - Единица Lmin и точек справкой не названа: до строки INT-04 это допущение, после — измерение.
+- `INT-04.gap.min_distance` — закрыт целиком
+  - Живой прогон группы INT и приёмка на бинарях поставки — отдельные шаги; до них строка открыта.
+  - Маршрут зазора опирается на типизированный двойник IPart7.Measurement3D: поставленная Interop.KompasAPI7.dll этого члена не объявляет (docs/04 §4.52).
+  - Единица Lmin и точек справкой не названа: до строки INT-04 это допущение, после — измерение.
 - `AUX-SKETCH.plane_and_profile_lifecycle` — закрыт целиком
   - замена и очистка после reopen работают для измеренной области: эскиз на основной XY, профиль — окружность, вырезание сквозное; точка поиска выводится из цилиндрической грани зависимого тела (проба G, строки G10…G10r)
   - вне измеренной области (наклонная плоскость, отрезки, дуги, прямоугольники) отказ явный: CAPABILITY_UNAVAILABLE с derivation=profile_not_circle / plane_not_xy, а не догадка (строка G11)
@@ -1089,6 +1145,16 @@
 - `dep.sketches.enumeration` — закрыт целиком
   - перечисляются ЭСКИЗЫ детали; операции дерева (тип 110) перечисляет kompas_list_features, и это разные наборы
   - порядковый номер в коллекции — ПОЗИЦИЯ, а не адрес: перестроение её сдвигает, и она таковой не объявляется
+- `dep.interference.component_address` — закрыт целиком
+  - Зависимость подтверждается строками группы INT; до живого прогона она открыта.
+- `dep.interference.face_address` — закрыт целиком
+  - Зависимость подтверждается строками группы INT; до живого прогона она открыта.
+- `dep.interference.api7_measurer` — закрыт целиком
+  - Зависимость подтверждается строками группы INT; до живого прогона она открыта.
+- `dep.interference.distance_unit` — закрыт целиком
+  - Зависимость подтверждается строками группы INT; до живого прогона она открыта.
+- `dep.interference.read_only` — закрыт целиком
+  - Зависимость подтверждается строками группы INT; до живого прогона она открыта.
 
 ## Семьи без строк матрицы (инвентаризация не завершена)
 

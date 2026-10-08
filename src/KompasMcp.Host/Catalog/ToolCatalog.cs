@@ -380,6 +380,67 @@ public static class ToolCatalog
                 requiresDocument: true,
                 requiresOperationId: false),
 
+            // ===== interference and gaps (block G1, profile assembly-interference-minimal-v1) =====
+            // Routes measured from the help over the wire and from the installed type library; both
+            // commands only READ, so neither declares operation_id.
+            // History: docs/decisions/assembly.md#interference-contracts
+            ReadOnly("kompas_check_interference", "Пересечения компонентов сборки",
+                "Проверяет тела компонентов сборки по парам документированным "
+                + "ksBody.CheckIntersectionWithBody и называет тип каждого пересечения по "
+                + "Intersection_Type (itBody — пересечение образует тело). Адресуются только "
+                + "компоненты ВЕРХНЕГО уровня: ссылки берутся из kompas_list_components, вложенный "
+                + "компонент отвергается. check_tangent = true означает «считать касания "
+                + "пересечениями» и меняет смысл ответа, поэтому он возвращается эхом. "
+                + "include_faces добавляет номера пересекаемых и совпадающих граней в нумерации "
+                + "FaceCollection того же тела. Отсутствие пересечения (NULL ядра) отличается от "
+                + "непрочитанного исхода: у такой пары intersecting = null, а причина названа в basis. "
+                + "Серия положений компонента делается связкой с kompas_set_component_placement: "
+                + "перемещение шагами и повторный вызов этого инструмента на каждом шаге.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("component_refs", Sch.Nullable(Sch.Arr(
+                        Sch.Str("Ссылка на компонент из kompas_list_components."),
+                        "Пары составляются по этому списку. Не задан — проверяются все адресуемые "
+                        + "компоненты верхнего уровня. Нужно не менее двух РАЗНЫХ компонентов.",
+                        2, 64, true))),
+                    ("check_tangent", Sch.Nullable(Sch.Bool(
+                        "Считать касания пересечениями. По умолчанию false.", false))),
+                    ("include_faces", Sch.Nullable(Sch.Bool(
+                        "Дочитывать номера пересекаемых и совпадающих граней каждого тела.", false)))),
+                WorkerCommands.CheckInterference,
+                requiresDocument: true,
+                requiresOperationId: false),
+
+            ReadOnly("kompas_measure_gap", "Минимальное расстояние между компонентами",
+                "Измеряет минимальное расстояние (и угол, где он определён) между двумя компонентами "
+                + "сборки или их гранями документированным IMeasurement3D: справка прямо называет "
+                + "комбинации «тело и компонент», «компонент и компонент». Объект — компонент "
+                + "верхнего уровня из kompas_list_components либо его грань по номеру в FaceCollection "
+                + "(та же нумерация, что у kompas_create_mate). Результат называется именем из "
+                + "ksMeasureResultEnum; неопределённое расстояние приходит как null с причиной, а не "
+                + "нулём. Единица длины справкой не названа и указывается в units_basis.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("object1", Sch.Obj(
+                        "Первый измеряемый объект",
+                        new[] { "component_ref" },
+                        Sch.Props(
+                            ("component_ref", Sch.Str("Ссылка на компонент из kompas_list_components.")),
+                            ("face_index", Sch.Nullable(Sch.Int(
+                                "Номер грани в FaceCollection компонента. Не задан — измеряется "
+                                + "компонент целиком.")))))),
+                    ("object2", Sch.Obj(
+                        "Второй измеряемый объект",
+                        new[] { "component_ref" },
+                        Sch.Props(
+                            ("component_ref", Sch.Str("Ссылка на компонент из kompas_list_components.")),
+                            ("face_index", Sch.Nullable(Sch.Int(
+                                "Номер грани в FaceCollection компонента. Не задан — измеряется "
+                                + "компонент целиком."))))))),
+                WorkerCommands.MeasureGap,
+                requiresDocument: true,
+                requiresOperationId: false),
+
             // ===== mate domain (block C2, profile mates-minimal-v1) =====
             // Route = customer's decision: documented API7 path IPart7.MateConstraints →
             // IMateConstraints3D.Add → BaseObject1/2 → Update(). ksDocument3D.AddMateConstraint is NOT

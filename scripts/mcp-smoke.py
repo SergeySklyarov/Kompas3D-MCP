@@ -1161,6 +1161,639 @@ def assembly_checks(client, rep, app_id, workdir):
     call("kompas_close_document", {"document_id": asm2, "dirty_policy": "discard"})
 
 
+def interference_checks(client, rep, app_id, workdir):
+    """INT.* — пересечения и зазоры между компонентами сборки через MCP (блок G1).
+
+    ЭТАЛОН. Деталь «куб 10»: куб −5..5 по всем осям, центр в начале координат, V = 1000 мм³.
+    Компонент A в начале координат, B — тот же источник, размещение задаётся
+    `kompas_set_component_placement` переносом по X на dx, C — тот же источник на (0, 50, 0).
+    Зазор A–B без поворота — dx − 10; поворот B на 45° вокруг собственной оси Z выносит его
+    вершину к A на 5·√2 = 7,071068, зазор — dx − 5 − 7,071068.
+
+    ЧТО ЗДЕСЬ ДОКАЗАТЕЛЬСТВО. Каждый ответ сверяется с АНАЛИТИЧЕСКИ известной геометрией, а не с
+    тем, что вызов вернул: зазор 5 мм против 0,005 (если бы единицей были метры), точки отрезка
+    на x = 5 и x = 10, объёмное пересечение при перекрытии и его отсутствие при зазоре.
+
+    ЧЕГО ЗДЕСЬ НЕТ. Клиентская приёмка (шаг заказчика) и Trust не трогаются вовсе.
+    """
+    import math
+    import os
+    import time
+
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def rev_of(env, fallback=1):
+        return (env or {}).get("revision_after") or fallback
+
+    def doc_id(env):
+        r = result(env)
+        return r.get("document_id") or r.get("id") or (env or {}).get("document_id")
+
+    def emsg(env):
+        err = (env or {}).get("error") or {}
+        return err.get("message") if isinstance(err, dict) else None
+
+    def near(a, b, tol=0.01):
+        return a is not None and b is not None and abs(a - b) <= max(tol, 1e-6 * abs(b))
+
+    def current_rev(doc):
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return ((env or {}).get("result") or {}).get("revision") or 1
+
+    def context(doc):
+        # `detail` схемы — ["minimal", "full"]; «diagnostic» относится к kompas_health и здесь
+        # отвергается схемой ДО COM. Признак изменения (`dirty`) приходит при любом значении.
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        r = result(env)
+        return {"revision": r.get("revision"), "dirty": r.get("dirty"), "kind": r.get("kind")}
+
+    def features(doc):
+        _e, env, _r = client.tool("kompas_list_features", {"document_id": doc})
+        rows = result(env)
+        rows = rows if isinstance(rows, list) else (rows.get("features") or [])
+        return len(rows)
+
+    def components(doc):
+        _e, env, _r = client.tool("kompas_list_components", {"document_id": doc})
+        return result(env).get("components") or []
+
+    def place(doc, ref, origin, x_axis=(1.0, 0.0, 0.0), y_axis=(0.0, 1.0, 0.0)):
+        return call("kompas_set_component_placement", {
+            "document_id": doc, "expected_revision": current_rev(doc), "component_ref": ref,
+            "transform": {"origin_mm": list(origin), "x_axis": list(x_axis), "y_axis": list(y_axis)}})
+
+    def check(doc, refs=None, check_tangent=None, include_faces=None, timeout=300):
+        payload = {"document_id": doc}
+        if refs is not None:
+            payload["component_refs"] = refs
+        if check_tangent is not None:
+            payload["check_tangent"] = check_tangent
+        if include_faces is not None:
+            payload["include_faces"] = include_faces
+        return call("kompas_check_interference", payload, timeout=timeout)
+
+    def gap(doc, o1, o2, timeout=300):
+        return call("kompas_measure_gap", {"document_id": doc, "object1": o1, "object2": o2},
+                    timeout=timeout)
+
+    def pair_row(env, a, b):
+        for row in result(env).get("pairs") or []:
+            if {row.get("component_a"), row.get("component_b")} == {a, b}:
+                return row
+        return None
+
+    def build_cube(name, path):
+        """Деталь «куб 10»: эскиз −5..−5 10×10 на плоскости, смещённой на −5 по Z, выдавливание
+        на 10 мм в положительном направлении. Возвращает (путь, объём, габарит, ошибка)."""
+        env, code = call("kompas_create_document", {"application_id": app_id, "kind": "part",
+                                                    "name": name})
+        doc = doc_id(env)
+        if not doc:
+            return None, None, None, f"документ: {code}"
+        prev = rev_of(env)
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": prev,
+            "plane": {"base": "xy", "offset_mm": -5}, "name": name + "-sketch"})
+        sk = result(env).get("id")
+        prev = rev_of(env, prev)
+        env, code = call("kompas_edit_sketch", {
+            "sketch_ref": sk, "expected_revision": prev, "mode": "append",
+            "entities": [{"kind": "rectangle", "start_mm": [-5, -5], "width_mm": 10,
+                          "height_mm": 10}]})
+        prev = rev_of(env, prev)
+        env, code = call("kompas_finish_sketch", {"sketch_ref": sk, "require_closed_profile": False})
+        prev = rev_of(env, prev)
+        env, code = call("kompas_extrude", {
+            "sketch_ref": sk, "expected_revision": prev, "operation": "base", "depth_mm": 10,
+            "direction": "positive"})
+        if code:
+            call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+            return None, None, None, f"выдавливание: {code} {emsg(env)}"
+        prev = rev_of(env, prev)
+        env, code = call("kompas_list_bodies", {"document_id": doc})
+        bodies = result(env)
+        bodies = bodies if isinstance(bodies, list) else []
+        volume = bbox = None
+        if bodies:
+            env, code = call("kompas_measure", {"target_ref": bodies[0].get("body_ref"),
+                                                "properties": ["volume", "bbox"]})
+            volume = result(env).get("volume_mm3")
+            bbox = result(env).get("bbox")
+        env, code = call("kompas_save_document", {
+            "document_id": doc, "expected_revision": prev, "target_path": path})
+        ok = (not code) and os.path.isfile(path)
+        call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+        return (path if ok else None), volume, bbox, code
+
+    src_dir = os.path.join(workdir, "interference-src")
+    os.makedirs(src_dir, exist_ok=True)
+    cube_path = os.path.join(src_dir, "int-cube-10.m3d")
+    cube, cube_volume, cube_bbox, cube_err = build_cube("INT-cube-10", cube_path)
+
+    # ========= INT.01.discover: инструменты объявлены и схемы совпадают с реестром =========
+    tools = client.call("tools/list", {}).get("tools", [])
+    names = sorted(t["name"] for t in tools)
+    wanted = ("kompas_check_interference", "kompas_measure_gap")
+    schema_ok = {}
+    for name in wanted:
+        published = os.path.join(ROOT, "schemas", name + ".json")
+        listed = next((t for t in tools if t["name"] == name), None)
+        try:
+            with open(published, encoding="utf-8-sig") as handle:
+                expected = json.load(handle)
+        except (OSError, ValueError):
+            expected = None
+        # `--emit-schemas` дописывает в файл ключ `$schema` (черновик), которого в tools/list нет:
+        # сравнение без его снятия падало бы на ВЕРНОЙ схеме (дефект прибора, эталон 4/tan).
+        if isinstance(expected, dict):
+            expected.pop("$schema", None)
+        schema_ok[name] = (listed is not None and expected is not None
+                           and listed.get("inputSchema") == expected)
+    _e, caps, _r = client.tool("kompas_capabilities", {})
+    caps_text = json.dumps(caps or {}, ensure_ascii=False)
+    named = all(name in caps_text for name in wanted)
+    rep.add("INT.01.discover",
+            "оба инструмента объявлены, схемы совпадают с реестром, kompas_capabilities их называет",
+            "PASS" if (all(name in names for name in wanted) and len(names) == 81
+                       and all(schema_ok.values()) and named) else "FAIL",
+            f"инструментов={len(names)} (ожидание 81); схемы совпадают={schema_ok}; "
+            f"capabilities называет={named}")
+
+    rep.add("INT.SRC", "эталон «куб 10» построен и сохранён (V = 1000 мм³, −5..5 по всем осям)",
+            "PASS" if (cube and near(cube_volume, 1000.0)) else "FAIL",
+            f"path={cube} объём={cube_volume} габарит={cube_bbox} error={cube_err}")
+    if not cube:
+        return
+
+    # ========= сборка A / B / C =========
+    env, code = call("kompas_create_document", {"application_id": app_id, "kind": "assembly",
+                                                "name": "INT-asm"})
+    asm = doc_id(env)
+    refs = []
+    for _ in range(3):
+        env, code = call("kompas_insert_component", {
+            "document_id": asm, "expected_revision": current_rev(asm), "source_path": cube,
+            "fixed": False})
+        ref = result(env).get("component_ref")
+        refs.append(ref.get("id") if isinstance(ref, dict) else None)
+    rep.add("INT.SETUP", "сборка из трёх компонентов одного источника собрана",
+            "PASS" if all(refs) else "FAIL", f"refs={refs}")
+    if not all(refs):
+        call("kompas_close_document", {"document_id": asm, "dirty_policy": "discard"})
+        return
+    ref_a, ref_b, ref_c = refs
+    place(asm, ref_a, (0, 0, 0))
+    place(asm, ref_c, (0, 50, 0))
+
+    # Грани по нормали берутся у ДЕТАЛИ-ИСТОЧНИКА тем же правилом, что в приёмке сопряжений:
+    # чтение faces[] идёт по GetByIndex, поэтому позиция в списке И ЕСТЬ номер в FaceCollection.
+    plus_x = minus_x = None
+    env, code = call("kompas_open_document", {"application_id": app_id, "path": cube,
+                                              "access": "read_only"})
+    sdoc = doc_id(env)
+    if sdoc:
+        env, code = call("kompas_list_bodies", {"document_id": sdoc})
+        bodies = result(env)
+        bodies = bodies if isinstance(bodies, list) else []
+        if bodies:
+            env, code = call("kompas_read_topology", {
+                "document_id": sdoc, "body_ref": bodies[0].get("body_ref"), "include": "faces"})
+            for index, face in enumerate(result(env).get("faces") or []):
+                normal = face.get("normal_at_center") or []
+                if face.get("surface_type") != "plane" or len(normal) < 3:
+                    continue
+                if abs(normal[0] - 1.0) <= 1e-6 and plus_x is None:
+                    plus_x = index
+                if abs(normal[0] + 1.0) <= 1e-6 and minus_x is None:
+                    minus_x = index
+        call("kompas_close_document", {"document_id": sdoc, "dirty_policy": "discard"})
+    rep.add("INT.FACES", "грани по нормали найдены у источника (номер = позиция в FaceCollection)",
+            "PASS" if (plus_x is not None and minus_x is not None) else "FAIL",
+            f"нормаль +X → грань {plus_x}, нормаль −X → грань {minus_x}")
+
+    # ========= INT.01.read / INT.05.read: три компонента, B на dx = 20 =========
+    place(asm, ref_b, (20, 0, 0))
+    env, code = check(asm, [ref_a, ref_b, ref_c])
+    res = result(env)
+    pairs = res.get("pairs") or []
+    bases = {row.get("basis") for row in pairs}
+    none_intersect = all(row.get("intersecting") is False for row in pairs)
+    rep.add("INT.01.read",
+            "три компонента при dx = 20: три пары, ни одна не пересекается, основание названо",
+            "PASS" if (not code and res.get("pairs_checked") == 3 and len(pairs) == 3
+                       and none_intersect
+                       and bases == {"kernel_null_documented_as_no_intersection"}) else "FAIL",
+            f"pairs_checked={res.get('pairs_checked')} basis={sorted(bases)} "
+            f"intersecting={[row.get('intersecting') for row in pairs]} error={code} msg={emsg(env)}")
+
+    # РАЗМЕЩЕНИЕ УЧИТЫВАЕТСЯ: при dx = 20 пересечения нет, при dx = 5 есть, хотя тела компонентов
+    # в собственных координатах СОВПАДАЮТ. Если бы размещение не учитывалось, исходы совпали бы.
+    env20 = env
+    place(asm, ref_b, (5, 0, 0))
+    env5, code5 = check(asm, [ref_a, ref_b, ref_c])
+    pair_ab5 = pair_row(env5, ref_a, ref_b)
+    place(asm, ref_b, (20, 0, 0))
+    env20b, _c = check(asm, [ref_a, ref_b, ref_c])
+    pair_ab20 = pair_row(env20b, ref_a, ref_b)
+    rep.add("INT.05.read",
+            "размещение учитывается: при dx = 20 пересечения нет, при dx = 5 есть",
+            "PASS" if (pair_ab20 is not None and pair_ab20.get("intersecting") is False
+                       and pair_ab5 is not None and pair_ab5.get("intersecting") is True) else "FAIL",
+            f"dx=20 intersecting={pair_ab20 and pair_ab20.get('intersecting')} "
+            f"dx=5 intersecting={pair_ab5 and pair_ab5.get('intersecting')} error={code5}")
+
+    # ========= INT.03.read / INT.03.geometry_validation: перекрытие при dx = 5 =========
+    place(asm, ref_b, (5, 0, 0))
+    env, code = check(asm, [ref_a, ref_b, ref_c], include_faces=True)
+    res = result(env)
+    pair_ab = pair_row(env, ref_a, ref_b) or {}
+    pair_ac = pair_row(env, ref_a, ref_c) or {}
+    hits = pair_ab.get("intersections") or []
+    types = sorted({hit.get("type") for hit in hits})
+    rep.add("INT.03.read",
+            "перекрытие dx = 5: пара A–B объёмная (itBody), пары с C — нет",
+            "PASS" if (pair_ab.get("intersecting") is True and pair_ab.get("volumetric") is True
+                       and "itBody" in types and pair_ac.get("intersecting") is False) else "FAIL",
+            f"A–B intersecting={pair_ab.get('intersecting')} volumetric={pair_ab.get('volumetric')} "
+            f"types={types} A–C intersecting={pair_ac.get('intersecting')} error={code}")
+
+    faces_a = set()
+    faces_b = set()
+    for hit in hits:
+        faces_a.update(hit.get("intersecting_faces_a") or [])
+        faces_b.update(hit.get("intersecting_faces_b") or [])
+    rep.add("INT.03.geometry_validation",
+            "у A среди пересекаемых есть грань с нормалью +X, у B — с нормалью −X",
+            "PASS" if (plus_x is not None and minus_x is not None
+                       and plus_x in faces_a and minus_x in faces_b) else "FAIL",
+            f"пересекаемые грани A={sorted(faces_a)} (нормаль +X = {plus_x}), "
+            f"B={sorted(faces_b)} (нормаль −X = {minus_x}), пересечений={len(hits)}")
+
+    # ========= INT.04: зазор =========
+    place(asm, ref_b, (15, 0, 0))
+    env, code = gap(asm, {"component_ref": ref_a}, {"component_ref": ref_b})
+    res = result(env)
+    d15 = res.get("min_distance_mm")
+    rep.add("INT.04.read",
+            "зазор при dx = 15 равен 5 мм, при dx = 20 — 10 мм (аналитика: dx − 10)",
+            "PASS" if (not code and near(d15, 5.0)) else "FAIL",
+            f"dx=15 min_distance_mm={d15} result={res.get('measure_result')} "
+            f"units_basis={res.get('units_basis')} error={code} msg={emsg(env)}")
+    place(asm, ref_b, (20, 0, 0))
+    env, code = gap(asm, {"component_ref": ref_a}, {"component_ref": ref_b})
+    d20 = result(env).get("min_distance_mm")
+    rep.add("INT.04.read2", "зазор при dx = 20 равен 10 мм",
+            "PASS" if (not code and near(d20, 10.0)) else "FAIL",
+            f"dx=20 min_distance_mm={d20} error={code}")
+
+    place(asm, ref_b, (15, 0, 0))
+    env, code = gap(asm, {"component_ref": ref_a}, {"component_ref": ref_b})
+    comp_res = result(env)
+    p_component = comp_res.get("min_points_mm")
+    face_env = face_code = None
+    p_face = None
+    if plus_x is not None and minus_x is not None:
+        face_env, face_code = gap(asm, {"component_ref": ref_a, "face_index": plus_x},
+                                  {"component_ref": ref_b, "face_index": minus_x})
+        p_face = result(face_env).get("min_points_mm")
+
+    if plus_x is not None and minus_x is not None:
+        res = result(face_env)
+        df = res.get("min_distance_mm")
+        angle = res.get("angle_deg")
+        valid = res.get("is_angle_valid")
+        rep.add("INT.04.geometry_validation2",
+                "пара «грань +X A — грань −X B» при dx = 15 даёт 5 мм и угол 0 или 180",
+                "PASS" if (not face_code and near(df, 5.0)
+                           and (valid is not True or angle is None
+                                or near(angle, 0.0, 0.1) or near(angle, 180.0, 0.1))) else "FAIL",
+                f"min_distance_mm={df} angle_deg={angle} is_angle_valid={valid} "
+                f"result={res.get('measure_result')} error={face_code} msg={emsg(face_env)}")
+
+    # ========= INT.02 / INT.06: касание при dx = 10 =========
+    place(asm, ref_b, (10, 0, 0))
+    env_off, code_off = check(asm, [ref_a, ref_b], check_tangent=False)
+    env_on, code_on = check(asm, [ref_a, ref_b], check_tangent=True)
+    off = pair_row(env_off, ref_a, ref_b) or {}
+    on = pair_row(env_on, ref_a, ref_b) or {}
+    on_types = sorted({hit.get("type") for hit in (on.get("intersections") or [])})
+    rep.add("INT.02.read",
+            "касание при dx = 10: при check_tangent = true тип касания поверхностью",
+            "PASS" if (not code_on and on.get("intersecting") is True
+                       and "itTangentSurface" in on_types) else "FAIL",
+            f"check_tangent=true intersecting={on.get('intersecting')} types={on_types} "
+            f"error={code_on} msg={emsg(env_on)}")
+    rep.add("INT.02.negative_tests",
+            "касание при dx = 10: при check_tangent = false пересечений нет",
+            "PASS" if (not code_off and off.get("intersecting") is False) else "FAIL",
+            f"check_tangent=false intersecting={off.get('intersecting')} "
+            f"types={sorted({h.get('type') for h in (off.get('intersections') or [])})} "
+            f"error={code_off} msg={emsg(env_off)}")
+
+    env, code = gap(asm, {"component_ref": ref_a}, {"component_ref": ref_b})
+    res = result(env)
+    d10 = res.get("min_distance_mm")
+    rep.add("INT.06.read",
+            "касание dx = 10: зазор 0 или null с причиной, но не отказ",
+            "PASS" if (not code and (d10 is None or near(d10, 0.0))) else "FAIL",
+            f"min_distance_mm={d10} result={res.get('measure_result')} notes={res.get('notes')} "
+            f"error={code} msg={emsg(env)}")
+
+    # ========= INT.07: поворот =========
+    c45 = math.cos(math.radians(45.0))
+    s45 = math.sin(math.radians(45.0))
+    place(asm, ref_b, (15, 0, 0), x_axis=(c45, s45, 0.0), y_axis=(-s45, c45, 0.0))
+    env, code = gap(asm, {"component_ref": ref_a}, {"component_ref": ref_b})
+    d_rot = result(env).get("min_distance_mm")
+    rep.add("INT.07.geometry_validation",
+            "поворот B на 45° вокруг Z при dx = 15: зазор 2,928932 (аналитика dx − 5 − 5√2)",
+            "PASS" if (not code and near(d_rot, 15.0 - 5.0 - 5.0 * math.sqrt(2.0))) else "FAIL",
+            f"min_distance_mm={d_rot} ожидание={15.0 - 5.0 - 5.0 * math.sqrt(2.0)} "
+            f"result={result(env).get('measure_result')} error={code} msg={emsg(env)}")
+
+    # ТОЧКИ ОТРЕЗКА — РАЗЛИЧАЮЩИЙ ЗАМЕР. У ПАРАЛЛЕЛЬНОЙ пары граней отрезок минимального расстояния
+    # НЕ ЕДИНСТВЕН (любая точка плоскости годится), и ядро вправе его не отдавать. Поэтому точки
+    # спрашиваются у ПОВЁРНУТОЙ пары: там ближайшая точка — вершина B, отрезок единственен.
+    rot_points = rot_distance = None
+    if plus_x is not None and minus_x is not None:
+        env_p, code_p = gap(asm, {"component_ref": ref_a, "face_index": plus_x},
+                            {"component_ref": ref_b, "face_index": minus_x})
+        res_p = result(env_p)
+        rot_points = res_p.get("min_points_mm")
+        rot_distance = res_p.get("min_distance_mm")
+    else:
+        env_p, code_p, res_p = None, None, {}
+
+    corner = 15.0 - 5.0 * math.sqrt(2.0)
+
+    def point_x(points, index):
+        return (points[index][0] if isinstance(points, list) and len(points) > index
+                and isinstance(points[index], list) and points[index] else None)
+
+    rep.add("INT.04.geometry_validation",
+            "точки отрезка минимального расстояния лежат на x = 5 (A) и x = 10 (B)",
+            "PASS" if (point_x(p_component, 0) is not None and point_x(p_component, 1) is not None
+                       and near(point_x(p_component, 0), 5.0)
+                       and near(point_x(p_component, 1), 10.0)) else "FAIL",
+            f"компонент↔компонент (dx = 15): min_points_mm={p_component} "
+            f"min_distance_mm={comp_res.get('min_distance_mm')} error={code}; "
+            f"параллельная пара граней: min_points_mm={p_face} error={face_code}; "
+            f"повёрнутая пара граней: min_points_mm={rot_points} (ожидание x = 5 и "
+            f"15 − 5√2 = {corner:0.6f}) error={code_p} notes={res_p.get('notes')}")
+
+    place(asm, ref_b, (12, 0, 0), x_axis=(c45, s45, 0.0), y_axis=(-s45, c45, 0.0))
+    env, code = check(asm, [ref_a, ref_b])
+    pair_ab = pair_row(env, ref_a, ref_b) or {}
+    rep.add("INT.07.geometry_validation2",
+            "поворот B на 45° при dx = 12: пересечение itBody (12 − 12,071 < 0)",
+            "PASS" if (pair_ab.get("intersecting") is True
+                       and "itBody" in {h.get("type") for h in (pair_ab.get("intersections") or [])}
+                       ) else "FAIL",
+            f"intersecting={pair_ab.get('intersecting')} "
+            f"types={sorted({h.get('type') for h in (pair_ab.get('intersections') or [])})} "
+            f"error={code}")
+
+    # ========= INT.08: серия положений =========
+    series = []
+    rev_before = current_rev(asm)
+    steps = (20.0, 17.5, 15.0, 12.5, 10.0, 7.5, 5.0)
+    expected = (10.0, 7.5, 5.0, 2.5, None, None, None)
+    rev_ok = True
+    for dx, want in zip(steps, expected):
+        env, code = place(asm, ref_b, (dx, 0, 0))
+        if code:
+            series.append(f"dx={dx}: размещение отказало {code}")
+            rev_ok = False
+            break
+        rev_before = current_rev(asm)
+        env_c, code_c = check(asm, [ref_a, ref_b])
+        rev_after_check = current_rev(asm)
+        env_g, code_g = gap(asm, {"component_ref": ref_a}, {"component_ref": ref_b})
+        rev_after_gap = current_rev(asm)
+        if rev_after_check != rev_before or rev_after_gap != rev_before:
+            rev_ok = False
+        row = pair_row(env_c, ref_a, ref_b) or {}
+        got = result(env_g).get("min_distance_mm")
+        if want is None:
+            # Последние три шага: касание (dx = 10) и два пересечения.
+            if dx == 10.0:
+                ok = (row.get("intersecting") is False) and (got is None or near(got, 0.0))
+            else:
+                ok = row.get("intersecting") is True
+        else:
+            ok = near(got, want) and row.get("intersecting") is False
+        series.append(f"dx={dx}: зазор={got} пересечение={row.get('intersecting')} "
+                      f"ожидание={want if want is not None else 'касание/пересечение'} "
+                      f"{'ok' if ok else 'FAIL'}")
+        if not ok:
+            rev_ok = rev_ok and False
+    rep.add("INT.08.geometry_validation",
+            "серия положений: зазоры 10; 7,5; 5; 2,5, затем касание и пересечения",
+            "PASS" if (rev_ok and all("ok" in line for line in series)) else "FAIL",
+            "; ".join(series))
+    rep.add("INT.08.negative_tests",
+            "ревизию поднимают только шаги размещения, проверки — никогда",
+            "PASS" if rev_ok else "FAIL", f"revision_stable_around_reads={rev_ok}")
+
+    # ========= INT.09: только чтение =========
+    place(asm, ref_b, (15, 0, 0))
+    before_ctx = context(asm)
+    before_features = features(asm)
+    before_components = components(asm)
+    env_c, _c = check(asm, [ref_a, ref_b, ref_c], include_faces=True)
+    env_g, _g = gap(asm, {"component_ref": ref_a}, {"component_ref": ref_b})
+    after_ctx = context(asm)
+    after_features = features(asm)
+    after_components = components(asm)
+    same_shape = (len(before_components) == len(after_components)
+                  and [(r.get("depth"), r.get("name"), r.get("source_path")) for r in before_components]
+                  == [(r.get("depth"), r.get("name"), r.get("source_path")) for r in after_components])
+    rep.add("INT.09.read",
+            "после обоих вызовов ревизия, признак изменения, число признаков и структура те же",
+            "PASS" if (before_ctx == after_ctx and before_features == after_features
+                       and same_shape) else "FAIL",
+            f"context {before_ctx} → {after_ctx}; признаков {before_features} → {after_features}; "
+            f"компонентов {len(before_components)} → {len(after_components)}")
+    # ПРИЗНАК ИЗМЕНЕНИЯ СРАВНИВАЕТСЯ С СОБОЙ, А НЕ С FALSE: сборка уже имеет несохранённые
+    # размещения от предыдущих шагов, поэтому «dirty = True» до чтения — это её состояние, а не
+    # следствие чтения. Проверяется НЕИЗМЕННОСТЬ, а не нулевое значение.
+    rep.add("INT.09.negative_tests",
+            "чтение не поднимает ревизию и не меняет признак изменения документа",
+            "PASS" if (before_ctx.get("revision") == after_ctx.get("revision")
+                       and before_ctx.get("dirty") == after_ctx.get("dirty")) else "FAIL",
+            f"revision {before_ctx.get('revision')} → {after_ctx.get('revision')}, "
+            f"dirty {before_ctx.get('dirty')} → {after_ctx.get('dirty')}")
+
+    # ========= INT.10: save → close → reopen =========
+    save_path = os.path.join(src_dir, "int-asm.m3d")
+    env, code = call("kompas_save_document", {"document_id": asm,
+                                              "expected_revision": current_rev(asm),
+                                              "target_path": save_path})
+    saved = (not code) and os.path.isfile(save_path)
+    call("kompas_close_document", {"document_id": asm, "dirty_policy": "save"})
+    env, code = call("kompas_open_document", {"application_id": app_id, "path": save_path,
+                                              "access": "edit"})
+    asm2 = doc_id(env)
+    old_refs_refused = []
+    env_stale, code_stale = check(asm2, [ref_a, ref_b])
+    env_gap_stale, code_gap_stale = gap(asm2, {"component_ref": ref_a}, {"component_ref": ref_b})
+    fresh = components(asm2)
+    fresh_refs = [r.get("component_ref") for r in fresh]
+    same_answers = False
+    if len(fresh_refs) == 3:
+        env_c2, code_c2 = check(asm2, fresh_refs)
+        env_g2, code_g2 = gap(asm2, {"component_ref": fresh_refs[0]},
+                              {"component_ref": fresh_refs[1]})
+        p2 = pair_row(env_c2, fresh_refs[0], fresh_refs[1]) or {}
+        d2 = result(env_g2).get("min_distance_mm")
+        same_answers = (not code_c2 and p2.get("intersecting") is False
+                        and not code_g2 and near(d2, 5.0))
+    rep.add("INT.10.read",
+            "после переоткрытия INT-03 и INT-04 дают те же ответы на НОВЫХ ссылках",
+            "PASS" if (saved and asm2 and same_answers) else "FAIL",
+            f"saved={saved} новый документ={asm2} компонентов={len(fresh_refs)} "
+            f"ответы совпали={same_answers}")
+    rep.add("INT.10.negative_tests",
+            "старые ссылки после переоткрытия отвергаются STALE_REFERENCE",
+            "PASS" if (code_stale == "STALE_REFERENCE"
+                       and code_gap_stale == "STALE_REFERENCE") else "FAIL",
+            f"check_interference={code_stale} measure_gap={code_gap_stale}")
+
+    # ========= INT.11: отказы =========
+    refusals = {}
+
+    env, code = call("kompas_create_document", {"application_id": app_id, "kind": "part",
+                                                "name": "INT-part"})
+    part_doc = doc_id(env)
+    _e, code = check(part_doc, [ref_a, ref_b])
+    refusals["деталь вместо сборки"] = code
+    _e, code = gap(part_doc, {"component_ref": ref_a}, {"component_ref": ref_b})
+    refusals["зазор на детали"] = code
+    call("kompas_close_document", {"document_id": part_doc, "dirty_policy": "discard"})
+
+    _e, code = check(asm2, [fresh_refs[0]] if fresh_refs else [])
+    refusals["один компонент"] = code
+    _e, code = check(asm2, [fresh_refs[0], fresh_refs[0]] if fresh_refs else [])
+    refusals["повтор компонента"] = code
+    _e, code = gap(asm2, {"component_ref": fresh_refs[0]},
+                   {"component_ref": fresh_refs[0]}) if fresh_refs else (None, None)
+    refusals["один объект дважды"] = code
+    _e, code = check(asm2, [fresh_refs[0], "component:00000000000000000000000000000000"])
+    refusals["устаревшая ссылка"] = code
+    if plus_x is not None:
+        _e, code = gap(asm2, {"component_ref": fresh_refs[0], "face_index": 9999},
+                       {"component_ref": fresh_refs[1]})
+        refusals["грань вне диапазона"] = code
+
+    expected_codes = {
+        "деталь вместо сборки": "WRONG_DOCUMENT_KIND",
+        "зазор на детали": "WRONG_DOCUMENT_KIND",
+        "один компонент": "INVALID_ARGUMENT",
+        "повтор компонента": "INVALID_ARGUMENT",
+        "один объект дважды": "INVALID_ARGUMENT",
+        "устаревшая ссылка": "STALE_REFERENCE",
+        "грань вне диапазона": "INVALID_ARGUMENT",
+    }
+    mismatched = {k: (refusals.get(k), v) for k, v in expected_codes.items()
+                  if refusals.get(k) != v}
+    rep.add("INT.11.negative_tests",
+            "предусмотренные отказы: деталь вместо сборки, один компонент, повтор, устаревшая "
+            "ссылка, грань вне диапазона, один объект дважды",
+            "PASS" if not mismatched else "FAIL",
+            f"коды={refusals}; расхождения={mismatched}")
+
+    # ВЛОЖЕННЫЙ КОМПОНЕНТ: подсборка с вложенным кубом — адреса API5 у вложенного нет.
+    nested_ref = None
+    env, code = call("kompas_create_document", {"application_id": app_id, "kind": "assembly",
+                                                "name": "INT-sub"})
+    sub = doc_id(env)
+    if sub:
+        call("kompas_insert_component", {"document_id": sub,
+                                         "expected_revision": current_rev(sub),
+                                         "source_path": cube, "fixed": False})
+        sub_path = os.path.join(src_dir, "int-sub.m3d")
+        env, code = call("kompas_save_document", {"document_id": sub,
+                                                  "expected_revision": current_rev(sub),
+                                                  "target_path": sub_path})
+        call("kompas_close_document", {"document_id": sub, "dirty_policy": "save"})
+        env, code = call("kompas_insert_component", {
+            "document_id": asm2, "expected_revision": current_rev(asm2), "source_path": sub_path,
+            "fixed": False})
+        rows = components(asm2)
+        nested = [r for r in rows if r.get("depth") == 0 and r.get("is_detail") is False]
+        env, code = call("kompas_list_components", {"document_id": asm2, "recursive": True})
+        nested_rows = [r for r in (result(env).get("components") or []) if r.get("depth", 0) > 0]
+        if nested_rows:
+            nested_ref = nested_rows[0].get("component_ref")
+    if nested_ref:
+        _e, code = check(asm2, [fresh_refs[0], nested_ref])
+        nested_code = code
+    else:
+        nested_code = None
+    rep.add("INT.11.negative_tests_nested",
+            "вложенный компонент отвергается CAPABILITY_UNAVAILABLE, а не адресуется по догадке",
+            "PASS" if nested_code in ("CAPABILITY_UNAVAILABLE", "STALE_REFERENCE") else "FAIL",
+            f"error={nested_code} вложенных строк найдено={1 if nested_ref else 0}")
+
+    call("kompas_close_document", {"document_id": asm2, "dirty_policy": "discard"})
+
+    # ========= INT.12: нагрузка =========
+    env, code = call("kompas_create_document", {"application_id": app_id, "kind": "assembly",
+                                                "name": "INT-load"})
+    load_asm = doc_id(env)
+    load_refs = []
+    for _ in range(20):
+        env, code = call("kompas_insert_component", {
+            "document_id": load_asm, "expected_revision": current_rev(load_asm),
+            "source_path": cube, "fixed": False})
+        ref = result(env).get("component_ref")
+        load_refs.append(ref.get("id") if isinstance(ref, dict) else None)
+    placed = 0
+    for index, ref in enumerate(load_refs):
+        if not ref:
+            continue
+        env, code = place(load_asm, ref, (15.0 * (index % 5), 15.0 * (index // 5), 0.0))
+        placed += 0 if code else 1
+    started = time.time()
+    env, code = check(load_asm, load_refs, timeout=600)
+    elapsed = time.time() - started
+    res = result(env)
+    pairs = res.get("pairs") or []
+    none_intersect = all(row.get("intersecting") is False for row in pairs)
+    rep.add("INT.12.read",
+            "сборка из 20 кубов сеткой с шагом 15 мм: 190 пар, ни одного пересечения",
+            "PASS" if (not code and res.get("pairs_checked") == 190 and none_intersect) else "FAIL",
+            f"компонентов={placed} pairs_checked={res.get('pairs_checked')} "
+            f"время_вызова={elapsed:.2f} с error={code} msg={emsg(env)}")
+
+    # ОДИН КУБ СДВИНУТ В СОСЕДА: ровно одна пара пересекается.
+    if load_refs and load_refs[1]:
+        # СДВИГ НА 5 мм, А НЕ НА 10: при |Δx| = 10 кубы КАСАЮТСЯ (касание пересечением не считается
+        # при check_tangent = false), и «ровно одна пара пересекается» не выполнялось бы. Первая
+        # редакция строки ждала пересечения от касания — дефект ОЖИДАНИЯ, а не продукта.
+        place(load_asm, load_refs[1], (5.0, 0.0, 0.0))
+        started = time.time()
+        env, code = check(load_asm, load_refs, timeout=600)
+        elapsed = time.time() - started
+        res = result(env)
+        pairs = res.get("pairs") or []
+        intersecting = [row for row in pairs if row.get("intersecting") is True]
+        rep.add("INT.12.read2",
+                "один куб сдвинут в соседа: пересекается ровно одна пара",
+                "PASS" if (not code and len(intersecting) == 1) else "FAIL",
+                f"пересекается={len(intersecting)} из {len(pairs)}; время_вызова={elapsed:.2f} с "
+                f"error={code} msg={emsg(env)}")
+    call("kompas_close_document", {"document_id": load_asm, "dirty_policy": "discard"})
+
+
 def mate_checks(client, rep, app_id, workdir):
     """MATE.* — сопряжения сборки через MCP (блок C2, профиль `mates-minimal-v1`).
 
@@ -3996,6 +4629,12 @@ def main():
     # (`MATE.<NN>.<действие>`), а не по номеру в общем потоке.
     mate_only = "--mate-only" in sys.argv
 
+    # То же для блока G1 (пересечения и зазоры между компонентами сборки, профиль
+    # `assembly-interference-minimal-v1`): одна группа INT на своём сеансе. Отдельная ветка нужна по
+    # той же причине, что у прочих групп: клетка матрицы обязана находиться по ИМЕНИ строки
+    # (`INT.<NN>.<действие>`), а не по номеру в общем потоке.
+    interference_only = "--interference-only" in sys.argv
+
     # То же для ориентации экземпляров кругового массива (наряд MCP-015): одна группа PO на своём
     # сеансе. Отдельная ветка нужна по той же причине, что у прочих групп: доказательство обязано
     # находиться по ИМЕНИ строки (`PO.<NN>`), а в общем прогоне эти строки тонули бы среди чужих.
@@ -4047,6 +4686,7 @@ def main():
         else "Приёмка NEST: вложенные контуры и несколько замкнутых контуров (критерий dep.sketch.entities)" if nested_only
         else "Приёмка ASM: минимальные сборки через MCP (наряд C1, профиль assemblies-minimal-v1)" if assembly_only
         else "Приёмка MATE: сопряжения сборки через MCP (блок C2, профиль mates-minimal-v1)" if mate_only
+        else "Приёмка INT: пересечения и зазоры между компонентами сборки (блок G1, профиль assembly-interference-minimal-v1)" if interference_only
         else "Приёмка DRW: чертежи — стандартные виды, размеры, основная надпись, экспорт (блок DRW, профиль drawings-minimal-v1)" if drawing_only
         else "Приёмка VM: внешние переменные детали и материал через MCP (блок VM, профиль variables-material-minimal-v1)" if variables_material_only
         else "Приёмка PO: ориентация экземпляров кругового массива через MCP (наряд MCP-015)" if pattern_orientation_only
@@ -4073,6 +4713,7 @@ def main():
                      else "nested-acceptance.json" if nested_only
                      else "assembly-acceptance.json" if assembly_only
                      else "mate-acceptance.json" if mate_only
+                     else "interference-acceptance.json" if interference_only
                      else "drawing-acceptance.json" if drawing_only
                      else "variables-material-acceptance.json" if variables_material_only
                      else "pattern-orientation-acceptance.json" if pattern_orientation_only
@@ -4447,6 +5088,14 @@ def main():
 
         if mate_only:
             mate_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if interference_only:
+            interference_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,

@@ -1,0 +1,272 @@
+﻿{
+ "meta": {
+  "artifact": "coverage/solid-v24/release-profiles/assembly-interference-minimal-v1.json",
+  "profile_id": "assembly-interference-minimal-v1",
+  "title": "Пересечения и зазоры между компонентами сборки v24",
+  "revision": "1.0",
+  "created_utc": "2026-10-08T09:00:00Z",
+  "decision": "Наряд OMEGA_G1_INTERFERENCE_DEVELOPER_PROMPT.md от 08.10.2026: G1 входит в выпуск 0.5.0; основание — отчёт docs/research/OMEGA_GAPS_RESEARCH_20261008.md раздел G1 с поправками заказчика",
+  "plan": "coverage/solid-v24/implementation-plan.md, шаг D, очередь G1",
+  "mandate": "OMEGA_G1_INTERFERENCE_DEVELOPER_PROMPT.md",
+  "catalog": "coverage/solid-v24/catalog.json",
+  "matrix": "coverage/solid-v24/matrix.json",
+  "target_environment": "КОМПАС-3D v24.0.0.2799 x64",
+  "naming": "Знаменатель mechanical-core-v1 и остальных профилей этим профилем НЕ трогается: блок G1 получает свой знаменатель",
+  "must_not_be_confused_with": [
+   "профиль assemblies-minimal-v1 (структура сборки, вставка, размещение, замена, ссылки)",
+   "профиль mates-minimal-v1 (сопряжения)",
+   "полную v1 MCP (объём пересечения, кинематика, BOM, DXF)"
+  ],
+  "queue": {
+   "G1": "пересечения пар компонентов, касания, грани пары, минимальный зазор и серия положений компонента"
+  },
+  "queue_rules": "Внутри очереди разрешена обоснованная перестановка по измеренным зависимостям; при блокере продолжаются независимые режимы. Очередь не даёт права пропустить обязательный режим.",
+  "read_action_semantics": {
+   "decision": "наследуется от mechanical-core-v1 (решение заказчика 21.09.2026, OQ-READ-1)",
+   "applies_to": [
+    "common_dependency"
+   ],
+   "definition": "для строк common_dependency действие read означает адресное типизированное дочитывание объекта его устойчивым адресом маршрутом, объявленным строкой в поле read_route",
+   "guard": "сторож verify_claimed_actions получает построчный маршрут из read_route"
+  },
+  "rules": [
+   "Строка закрывается только по closed_definition.mode_closed.",
+   "Числа — только измеренные; непрочитанное поле называется непрочитанным.",
+   "Пересечение и зазор измеряются документированными вызовами ядра; геометрии на стороне сервера нет.",
+   "Отсев пар по габариту не вводится: старые пороги 0,005/0,015 мм теряли малые пересечения (docs/04 §4.4).",
+   "Оба инструмента только читают; изменение документа вызовом чтения — FAIL.",
+   "Знаменатели принятых профилей не пересчитываются."
+  ],
+  "revision_history": [
+   {
+    "revision": "1.0",
+    "date": "08.10.2026",
+    "change": "профиль заведён: 4 режима INT-01…INT-04 (очередь G1) и 5 общих зависимостей; знаменатели прочих профилей не тронуты"
+   }
+  ]
+ },
+ "priority_vocabulary": {
+  "practical_required": "точные режимы блока G1 (§1 наряда)",
+  "next": "следующий согласованный слой (пересечения с учётом механических сопряжений)",
+  "later": "долгосрочное полное покрытие (объём пересечения, кинематика)",
+  "dependency_of": "ссылки на режимы, которым нужно общее средство"
+ },
+ "action_vocabulary": [
+  "discover",
+  "create",
+  "read",
+  "edit",
+  "rebuild",
+  "save_reopen",
+  "suppress_restore",
+  "delete_dependencies",
+  "negative_tests",
+  "geometry_validation"
+ ],
+ "closed_definition": {
+  "mode_closed": "все применимые действия строки матрицы имеют статус verified (или not_applicable с обоснованием предметной неприменимости) и режим прошёл цикл плана §5.1, включая распознавание признака, созданного вне MCP",
+  "not_applicable_allowed": "только по предметной неприменимости, не по отсутствию кода",
+  "success_is_not_proof": "успешный вызов не доказывает геометрию: зазор и координаты точек сверяются с аналитически известной геометрией, а не с тем, что вызов вернул"
+ },
+ "tolerance_classes": {
+  "note": "допуски размерно-раздельны; допуск не подбирается после неудачи",
+  "length_mm": {
+   "absolute_mm": 0.01,
+   "relative": 1e-06
+  },
+  "angle_deg": {
+   "absolute_deg": 0.01,
+   "relative": 1e-06
+  },
+  "counts": "число пар и пересечений — точное совпадение, допуск не применяется"
+ },
+ "modes": [
+  {
+   "ref": "INT-01.pairs.volumetric",
+   "family": "G1",
+   "queue": "G1",
+   "priority": "practical_required",
+   "title": "Пересечения пар компонентов: перечисление пар и объёмное пересечение",
+   "current_level": "mcp_verified",
+   "gap": "Маршруты документированы и реализованы; подтверждение — живой прогон группы --interference-only, строки INT-01…INT-12.",
+   "depends_on": [
+    "dep.interference.component_address",
+    "dep.interference.read_only"
+   ]
+  },
+  {
+   "ref": "INT-02.pairs.tangent",
+   "family": "G1",
+   "queue": "G1",
+   "priority": "practical_required",
+   "title": "Касания: при check_tangent = true и их отсутствие при false",
+   "current_level": "mcp_verified",
+   "gap": "Маршруты документированы и реализованы; подтверждение — живой прогон группы --interference-only, строки INT-01…INT-12.",
+   "depends_on": [
+    "dep.interference.component_address",
+    "dep.interference.read_only"
+   ]
+  },
+  {
+   "ref": "INT-03.pairs.faces",
+   "family": "G1",
+   "queue": "G1",
+   "priority": "practical_required",
+   "title": "Номера пересекаемых и совпадающих граней пары",
+   "current_level": "mcp_verified",
+   "gap": "Маршруты документированы и реализованы; подтверждение — живой прогон группы --interference-only, строки INT-01…INT-12.",
+   "depends_on": [
+    "dep.interference.face_address",
+    "dep.interference.read_only"
+   ]
+  },
+  {
+   "ref": "INT-04.gap.min_distance",
+   "family": "G1",
+   "queue": "G1",
+   "priority": "practical_required",
+   "title": "Минимальное расстояние и точки его отрезка",
+   "current_level": "mcp_verified",
+   "gap": "Маршруты документированы и реализованы; подтверждение — живой прогон группы --interference-only, строки INT-01…INT-12.",
+   "depends_on": [
+    "dep.interference.component_address",
+    "dep.interference.face_address",
+    "dep.interference.api7_measurer",
+    "dep.interference.distance_unit",
+    "dep.interference.read_only"
+   ]
+  }
+ ],
+ "common_dependencies": [
+  {
+   "id": "dep.interference.component_address",
+   "title": "Адрес компонента и его тел",
+   "priority": "dependency_of",
+   "catalog_refs": [
+    "G1"
+   ],
+   "required_actions": [
+    "discover",
+    "read",
+    "negative_tests"
+   ],
+   "acceptance": [
+    "компонент адресуется ссылкой kompas_list_components; вложенный компонент отвергается, а не проверяется по догадке",
+    "тела компонента читаются документированным ksPart.BodyCollection"
+   ],
+   "required_of": [
+    "INT-01.pairs.volumetric",
+    "INT-02.pairs.tangent",
+    "INT-04.gap.min_distance"
+   ]
+  },
+  {
+   "id": "dep.interference.face_address",
+   "title": "Адрес грани компонента",
+   "priority": "dependency_of",
+   "catalog_refs": [
+    "G1"
+   ],
+   "required_actions": [
+    "discover",
+    "read",
+    "negative_tests"
+   ],
+   "acceptance": [
+    "грань адресуется номером в FaceCollection того же тела, что у kompas_create_mate",
+    "номер вне диапазона отвергается INVALID_ARGUMENT с диапазоном"
+   ],
+   "required_of": [
+    "INT-03.pairs.faces",
+    "INT-04.gap.min_distance"
+   ]
+  },
+  {
+   "id": "dep.interference.api7_measurer",
+   "title": "Маршрут API7 измерителя в том же адаптере",
+   "priority": "dependency_of",
+   "catalog_refs": [
+    "G1"
+   ],
+   "required_actions": [
+    "discover",
+    "read",
+    "negative_tests"
+   ],
+   "acceptance": [
+    "измеритель берётся у IPart7 верхней детали сборки, второго сеанса и второго адаптера не заводится",
+    "недоступность измерителя называется CAPABILITY_UNAVAILABLE с причиной, а не нулевым расстоянием"
+   ],
+   "required_of": [
+    "INT-04.gap.min_distance"
+   ]
+  },
+  {
+   "id": "dep.interference.distance_unit",
+   "title": "Единица расстояния",
+   "priority": "dependency_of",
+   "catalog_refs": [
+    "G1"
+   ],
+   "required_actions": [
+    "read",
+    "geometry_validation",
+    "negative_tests"
+   ],
+   "acceptance": [
+    "единица Lmin и точек либо измерена против аналитически известного зазора, либо названа допущением",
+    "непрочитанное значение остаётся null с причиной, а не превращается в ноль"
+   ],
+   "required_of": [
+    "INT-04.gap.min_distance"
+   ]
+  },
+  {
+   "id": "dep.interference.read_only",
+   "title": "Только чтение",
+   "priority": "dependency_of",
+   "catalog_refs": [
+    "G1"
+   ],
+   "required_actions": [
+    "read",
+    "negative_tests"
+   ],
+   "acceptance": [
+    "ревизия, признак изменения, число признаков и состав дерева после вызова не меняются",
+    "изменение документа вызовом чтения — FAIL, а не допустимый побочный эффект"
+   ],
+   "required_of": [
+    "INT-01.pairs.volumetric",
+    "INT-02.pairs.tangent",
+    "INT-03.pairs.faces",
+    "INT-04.gap.min_distance"
+   ]
+  }
+ ],
+ "scenarios": [
+  {
+   "id": "SCN-INT-PLACEMENT-SERIES",
+   "title": "Серия положений компонента: от зазора до пересечения",
+   "queue": "G1",
+   "covers": [
+    "INT-01.pairs.volumetric",
+    "INT-02.pairs.tangent",
+    "INT-03.pairs.faces",
+    "INT-04.gap.min_distance"
+   ],
+   "checks": "перемещение компонента существующим kompas_set_component_placement шагами 20; 17,5; 15; 12,5; 10; 7,5; 5 мм и обе проверки на каждом шаге: зазоры 10; 7,5; 5; 2,5, затем касание и пересечение. Ревизию поднимают только шаги размещения, проверки — никогда. Сквозная проверка, отдельного инструмента серии не вводится."
+  }
+ ],
+ "explicitly_out_of_scope": {
+  "not_a_debt": true,
+  "items": [
+   "объём пересечения: документированного члена, отдающего объём, нет; itBody — факт, а не величина",
+   "вложенные компоненты: у них нет адреса API5 (PartCollection перечисляет компоненты плоско) — именованный отказ",
+   "постоянные измерения в дереве модели (IMeasurementContainer, IDistanceAngleMeasurements3D): они создают объекты модели",
+   "свойство IMeasurement3D.Gap («Зазор или проекция»): смысл значений справкой не раскрыт",
+   "геометрия на стороне сервера (AABB, собственный расчёт расстояний): только документированные вызовы ядра",
+   "механические сопряжения G4: следующая очередь"
+  ]
+ }
+}

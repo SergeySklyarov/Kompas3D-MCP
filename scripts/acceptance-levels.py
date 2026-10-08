@@ -82,6 +82,11 @@ PROFILES = (
     ("drawings-minimal-v1", "coverage/solid-v24/release-profiles/drawings-minimal-v1.json"),
     ("variables-material-minimal-v1",
      "coverage/solid-v24/release-profiles/variables-material-minimal-v1.json"),
+    # `assembly-interference-minimal-v1` (блок G1) подключён 08.10.2026 тем же правилом, что DRW и VM:
+    # профиль заведён, закрыт собственными строками приёмки и входит в объём выпуска. `COMPLETE` по
+    # прежним профилям доказательством готовности блока G1 не является: у блока свои строки приёмки.
+    ("assembly-interference-minimal-v1",
+     "coverage/solid-v24/release-profiles/assembly-interference-minimal-v1.json"),
 )
 
 # Профили, ЗАВЕДЁННЫЕ, но в объём выпуска пока не подключённые. Названы явно, чтобы отсутствие не

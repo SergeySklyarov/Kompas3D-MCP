@@ -6874,6 +6874,87 @@
      ]
     }
    ]
+  },
+  {
+   "id": "G1",
+   "title": "Пересечения и зазоры между компонентами сборки",
+   "classification": "solid",
+   "level": "mcp_verified",
+   "evidence": {
+    "documentation": "Проводная проверка справки SDK 24 (help.ascon.ru/KOMPAS_SDK/24/ru-RU), 08.10.2026: 17 страниц §2 наряда — HTTP 200, отрицательный контроль ksbody_checkintersectionwithbody_absent_xyz → 404",
+    "metadata": "Сканер tools/KompasMcp.InteropScan по поставленной Interop.KompasAPI7.dll (03.03.2025) и по сборке, сгенерированной TlbImp из установленного Bin/kAPI7.tlb (21.04.2025), 08.10.2026: поставленная обёртка НЕ объявляет IPart7.Measurement3D, IMeasurement3D и IBody7.CheckIntersectionWithBody, установленная библиотека типов объявляет все три, а сам сервер Bin\\kAPI7.DLL несёт те же имена",
+    "runtime": "живой прогон 08.10.2026, группа INT (scripts/mcp-smoke.py --interference-only)"
+   },
+   "route": "Пересечения — API5: ksDocument3D.PartCollection(true) → ksPart.BodyCollection → ksBody.CheckIntersectionWithBody → ksIntersectionResult; грани — ksBody.GetIntersectionFacesWithBody. Зазор — API7: IKompasDocument3D.TopPart → IPart7.Measurement3D → IMeasurement3D. Оба маршрута в одной паре не смешиваются.",
+   "mcp_support": "kompas_check_interference / kompas_measure_gap",
+   "next_step": "Живой прогон группы --interference-only; далее — приёмка на бинарях поставки вместе с выпуском 0.5.0.",
+   "operations": [
+    {
+     "id": "INT-01.pairs.volumetric",
+     "name": "Пересечения пар компонентов: перечисление пар и объёмное пересечение",
+     "level": "mcp_verified",
+     "doc_source": [
+      "ksbody_checkintersectionwithbody",
+      "ksintersectionresult",
+      "ksintersectionresult_getcount",
+      "ksintersectionresult_getintersectiontype",
+      "intersection_type",
+      "ksdocument3d_partcollection",
+      "kspart_bodycollection"
+     ],
+     "route": "ksDocument3D.PartCollection(true) → ksPart.BodyCollection → ksBody.CheckIntersectionWithBody(other, checkTangent) → ksIntersectionResult.GetCount/GetIntersectionType; объёмным считается тип itBody=4",
+     "modes": [],
+     "mcp_support": "kompas_check_interference",
+     "next_step": "Живой прогон группы --interference-only."
+    },
+    {
+     "id": "INT-02.pairs.tangent",
+     "name": "Касания: при check_tangent = true и их отсутствие при false",
+     "level": "mcp_verified",
+     "doc_source": [
+      "ksbody_checkintersectionwithbody",
+      "intersection_type"
+     ],
+     "route": "ksBody.CheckIntersectionWithBody(other, checkTangent); справка: «checkTangent - считать касания пересечениями»; касание поверхностью — itTangentSurface=3",
+     "modes": [],
+     "mcp_support": "kompas_check_interference",
+     "next_step": "Живой прогон группы --interference-only."
+    },
+    {
+     "id": "INT-03.pairs.faces",
+     "name": "Номера пересекаемых и совпадающих граней пары",
+     "level": "mcp_verified",
+     "doc_source": [
+      "ksbody_getintersectionfaceswithbody",
+      "kspart_bodycollection"
+     ],
+     "route": "ksBody.GetIntersectionFacesWithBody(other, intersectionFaces1, intersectionFaces2, connectedFaces1, connectedFaces2); номера — позиции граней в ksBody.FaceCollection",
+     "modes": [],
+     "mcp_support": "kompas_check_interference",
+     "next_step": "Живой прогон группы --interference-only."
+    },
+    {
+     "id": "INT-04.gap.min_distance",
+     "name": "Минимальное расстояние и точки его отрезка",
+     "level": "mcp_verified",
+     "doc_source": [
+      "ipart7_measurement3d",
+      "imeasurement3d",
+      "imeasurement3d_object1",
+      "imeasurement3d_object2",
+      "imeasurement3d_calculate",
+      "imeasurement3d_lmin",
+      "imeasurement3d_getminpoint1",
+      "imeasurement3d_getminpoint2",
+      "imeasurement3d_propers",
+      "ksmeasureresultenum"
+     ],
+     "route": "IKompasDocument3D.TopPart → IPart7.Measurement3D → IMeasurement3D.Object1/Object2 → Calculate() → ksMeasureResultEnum; Lmin, GetMinPoint1/2, Angle при IsAngleValid",
+     "modes": [],
+     "mcp_support": "kompas_measure_gap",
+     "next_step": "Живой прогон группы --interference-only."
+    }
+   ]
   }
  ],
  "families_pending_entry": {

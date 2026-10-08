@@ -683,11 +683,22 @@ internal static class Api7Pattern
         }
     }
 
+    /// <summary>How many objects the pattern copies.</summary>
+    /// <remarks>DOC: <c>ifeaturepattern_initialobjects.html</c> — <c>InitialObjects</c> is a VARIANT that
+    /// comes back as <c>VT_DISPATCH</c> when ONE object is copied and as <c>VT_ARRAY | VT_DISPATCH</c> when
+    /// several are. Accepting only the array shape read a one-source pattern (a single cut, say) as "no
+    /// source objects" and failed a check on a correct feature.
+    /// History: docs/decisions/adapter-core.md#pattern-initial-objects</remarks>
     private static int? InitialObjectCount(IFeaturePattern pattern)
     {
         try
         {
-            return pattern.InitialObjects is Array array ? array.Length : null;
+            return pattern.InitialObjects switch
+            {
+                null or DBNull => null,
+                Array array => array.Length,
+                _ => 1,
+            };
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException)
         {

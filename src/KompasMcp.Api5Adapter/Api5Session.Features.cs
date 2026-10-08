@@ -175,10 +175,19 @@ public partial class Api5Session
         var level = parametersRead && state.IsValid is not null
             ? VerificationLevel.StructureChecked
             : VerificationLevel.CallReturned;
-        var unverified = new List<string>
+        var unverified = new List<string>();
+
+        // The sketch reference is READ BACK by the same helper kompas_list_features uses, so one object
+        // gets one live address from both tools. Only a real failure to resolve it is named; the line is
+        // no longer unconditional, because an extrusion whose sketch resolves is not an open aspect.
+        // History: docs/decisions/adapter-core.md#feature-read-sketch-ref
+        var sketchRef = SketchRefOfFeature(document, entity);
+        if (sketchRef is null)
         {
-            "sketch_reference_not_resolved — GetSketch() отдаёт объект, но обратно в ссылку сервера он пока не отображается",
-        };
+            unverified.Add("sketch_reference_not_resolved — GetSketch() не отдал объект эскиза "
+                + "для этого признака: семейство не выдавливание, либо чтение ссылки не удалось");
+        }
+
         if (family is null)
         {
             unverified.Insert(0,
@@ -245,7 +254,10 @@ public partial class Api5Session
             solid,
             sweep,
             loft,
-            shell);
+            shell)
+        {
+            SketchRef = sketchRef,
+        };
     }
 
     public UpdateFeatureResult UpdateFeature(UpdateFeatureCommand command)

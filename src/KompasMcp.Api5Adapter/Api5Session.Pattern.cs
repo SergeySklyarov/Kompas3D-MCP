@@ -460,6 +460,17 @@ public partial class Api5Session
         {
             unverified.Add("analytical_volume_not_declared");
         }
+        else
+        {
+            // The declared expectation did not hold. This is the SAME rule the extrusion applies
+            // (Api5Session.Geometry.cs, `volume_delta_not_confirmed`): a failed declared expectation is
+            // named in unverified_aspects, not left as a lone failed entry in `checks` — "checked and did
+            // not match" must be visible where a client reads the unverified aspects, and the feature is
+            // not geometry_checked. A mutation already applied is not turned into a refusal.
+            // History: docs/decisions/adapter-core.md#pattern-declared-volume
+            DeclaredVolumeMarks.MarkVolumeNotConfirmed(
+                unverified, expectedVolume, volumeAfter, VolumeToleranceMm3(expectedVolume.Value));
+        }
 
         if (expectedCenters is null && expectedHoles is not null)
         {

@@ -1455,7 +1455,14 @@ public sealed record FeatureReadDto(
     /// <c>ksShellDefinition</c>. From API7 (<c>IShells</c> → <c>IShell</c>) the same quantities appear in the other
     /// half: two independent halves of one setup.
     /// History: docs/decisions/contracts.md#shell-tree-number</remarks>
-    ShellDto? Shell = null);
+    ShellDto? Shell = null,
+    /// <summary>Reference to the sketch an extrusion is built on, the SAME address <c>kompas_list_features</c> hands
+    /// out for that sketch. Trailing and optional: filled only where <c>GetSketch()</c> answers, null otherwise.
+    /// </summary> <remarks>INVARIANT: one live reference per object — the read uses the shared
+    /// <c>SketchRefOfFeature</c> helper, so the two tools cannot mint two addresses for one sketch. Null means "no
+    /// sketch read back" and is named in <c>verification.unverified_aspects</c>, never left silent.
+    /// History: docs/decisions/contracts.md#sketch-ref-readback</remarks>
+    string? SketchRef = null);
 
 public sealed record GetFeatureCommand
 {

@@ -1327,6 +1327,220 @@ def interference_checks(client, rep, app_id, workdir):
             f"инструментов={len(names)} (ожидание 81); схемы совпадают={schema_ok}; "
             f"capabilities называет={named}")
 
+    # ========= INT.13: раскладка двойника сверена с УСТАНОВЛЕННОЙ библиотекой типов =========
+    #
+    # ЗАЧЕМ. Типизированный двойник вызывается по НОМЕРУ СЛОТА, а номер слота — это позиция в vtable,
+    # которую задаёт сама установленная библиотека типов. Перестановка члена в двойнике или ДРУГАЯ
+    # сборка КОМПАС сдвигает слот, и вызов уходит в другую функцию того же интерфейса: ошибка при этом
+    # не выглядит ошибкой. Поэтому прибор читает раскладку установленного kAPI7.tlb, раскладка двойника
+    # берётся из СОБРАННОГО адаптера, и сверяются IID, порядок слотов и сигнатуры используемых членов.
+    #
+    # ЧЕГО ЗДЕСЬ НЕТ. Живого КОМПАС НИЖЕ порога версии: такой сборки на машине нет, и порог проверяется
+    # модульным тестом на разобранной строке версии. Отсутствие проверки не выдаётся за её прохождение.
+    vt_by_type = {"Void": {24}, "Boolean": {11}, "Double": {5}, "Int32": {3},
+                  "String": {8, 30, 31}, "Object": {12, 9, 13, 26}}
+    twin_used = {
+        "IPart7Twin": {"get_Measurement3D": 123},
+        "IMeasurement3DTwin": {"get_Object1": 11, "set_Object1": 12, "get_Object2": 13,
+                               "set_Object2": 14, "Calculate": 19, "get_Lmin": 20,
+                               "get_IsAngleValid": 23, "get_Angle": 24, "GetMinPoint1": 25,
+                               "GetMinPoint2": 26},
+    }
+
+    def interop_scan():
+        """Прибор метаданных той же конфигурации, что и проверяемая сборка."""
+        override = os.environ.get("KOMPAS_MCP_INTEROPSCAN")
+        if override:
+            return override
+        segments = (rep.context.get("worker_path") or "").replace("\\", "/").split("/")
+        configuration = segments[segments.index("x64") + 1] if "x64" in segments else "Release"
+        return os.path.join(ROOT, "tools", "KompasMcp.InteropScan", "bin", "x64", configuration,
+                            "net10.0-windows", "KompasMcp.InteropScan.exe")
+
+    def scan(args, timeout=180):
+        """Прибор метаданных: сборка либо установленная библиотека типов. Ни КОМПАС, ни COM-сессии."""
+        proc = subprocess.run([interop_scan(), *args], capture_output=True, text=True,
+                              encoding="utf-8", errors="replace", timeout=timeout)
+        return proc.returncode, (proc.stdout or ""), (proc.stderr or "")
+
+    def normalized(member):
+        """Имя члена без свойства-обёртки: библиотека называет пару get/set ОДНИМ именем."""
+        for prefix in ("get_", "set_"):
+            if member.startswith(prefix):
+                return member[len(prefix):]
+        return member
+
+    def accepted_vts(cs_type):
+        """Какие VARTYPE библиотеки типов допустимы для объявленного типа C#.
+
+        Наборы, а не одно значение: интерфейс приходит указателем либо как VT_DISPATCH/VT_UNKNOWN/
+        VT_USERDEFINED, и выбор между ними — свойство библиотеки, а не утверждение о двойнике.
+        """
+        name = cs_type.strip()
+        if name.endswith("Enum"):
+            return {29, 3, 22, 19}
+        return vt_by_type.get(name, {26, 9, 13, 29})
+
+    def accepted_parameter_vts(cs_type):
+        # Параметр по ссылке приходит указателем; на что он указывает — отдельное чтение, и здесь оно
+        # не угадывается.
+        if cs_type.endswith("&"):
+            return {26} | accepted_vts(cs_type.rstrip("&"))
+        return accepted_vts(cs_type)
+
+    def parse_tlb(text):
+        """{тип: [iid, dual, [(слот, имя, cParams, ret, [vts])]]} — в порядке библиотеки."""
+        types = {}
+        for line in text.splitlines():
+            if line.startswith("TYPE "):
+                parts = line.split()
+                fields = dict(p.split("=", 1) for p in parts[2:] if "=" in p)
+                types[parts[1]] = [fields.get("iid", ""), fields.get("dual") == "true", []]
+            elif line.startswith("member|"):
+                _, owner, name, rest = line.split("|", 3)
+                fields = dict(p.split("=", 1) for p in rest.split() if "=" in p)
+                types.setdefault(owner, ["", False, []])[2].append((
+                    int(fields.get("slot", "-1")), name, int(fields.get("cParams", "0")),
+                    int(fields.get("ret", "-1")),
+                    [int(v) for v in fields.get("params", "").split(",") if v]))
+        return types
+
+    def parse_twin(text):
+        """{тип: [iid, dual, [(слот, имя, сигнатура)]]} в порядке ОБЪЯВЛЕНИЯ."""
+        types = {}
+        for line in text.splitlines():
+            if line.startswith("attrs|"):
+                parts = line.split("|")
+                fields = dict(p.split("=", 1) for p in parts[2:] if "=" in p)
+                types[parts[1]] = [fields.get("Guid", ""),
+                                   fields.get("InterfaceType", "").startswith("InterfaceIsDual"), []]
+            elif line.startswith("member|"):
+                _, owner, name, rest = line.split("|", 3)
+                signature, _, slot = rest.rpartition(" slot=")
+                types.setdefault(owner, ["", False, []])[2].append((
+                    int(slot) if slot.isdigit() else None, name, signature))
+        return types
+
+    def declared(signature):
+        """(возвращаемый тип, [типы параметров]) объявленной сигнатуры C#."""
+        match = re.match(r"^(\S+)\s+\w+\((.*)\)$", signature)
+        if not match:
+            return None, None
+        return match.group(1), [p.strip().split(" ")[0]
+                                for p in match.group(2).split(",") if p.strip()]
+
+    def twin_layout_check():
+        """([расхождение, …], [наблюдение, …]): пустой первый список означает совпадение."""
+        problems, notes = [], []
+        scan_exe = interop_scan()
+        if not os.path.isfile(scan_exe):
+            return [f"прибор метаданных не собран: {scan_exe} — раскладку сверять нечем"], notes
+        tlb = os.path.join(KOMPAS_INSTALL, "Bin", "kAPI7.tlb")
+        interop_dir = os.path.join(KOMPAS_INSTALL, "Libs", "PolynomLib", "Bin", "Client")
+        adapter = os.path.join(os.path.dirname(rep.context.get("worker_path") or ""),
+                               "KompasMcp.Api5Adapter.dll")
+        if not os.path.isfile(tlb):
+            return [f"установленная библиотека типов не найдена: {tlb}"], notes
+        if not os.path.isfile(adapter):
+            return [f"сборка адаптера не найдена: {adapter}"], notes
+
+        code, out, err = scan(["--tlb", tlb, "--type-members", "IPart7",
+                               "--type-members", "IMeasurement3D"])
+        if code != 0:
+            return [f"чтение установленной библиотеки типов отказало (код {code}): {err.strip()}"], notes
+        installed = parse_tlb(out)
+
+        code, out, err = scan([adapter, "--type-members", "IPart7Twin",
+                               "--type-members", "IMeasurement3DTwin", "--order", "--csv",
+                               "--com-slots", "--resolve", interop_dir])
+        if code != 0:
+            return [f"чтение раскладки двойника отказало (код {code}): {err.strip()}"], notes
+        twin = parse_twin(out)
+
+        for twin_name, tlb_name in (("IPart7Twin", "IPart7"),
+                                    ("IMeasurement3DTwin", "IMeasurement3D")):
+            if tlb_name not in installed:
+                problems.append(f"{tlb_name} отсутствует в установленной библиотеке типов")
+                continue
+            if twin_name not in twin:
+                problems.append(f"{twin_name} не прочитан из собранного адаптера")
+                continue
+            tlb_iid, tlb_dual, tlb_members = installed[tlb_name]
+            twin_iid, twin_dual, twin_members = twin[twin_name]
+
+            if tlb_iid != twin_iid:
+                problems.append(f"{twin_name}: IID {twin_iid} не равен IID библиотеки {tlb_iid}")
+            if not (tlb_dual and twin_dual):
+                problems.append(f"{twin_name}: двойник и библиотека должны быть dual "
+                                f"(библиотека {tlb_dual}, двойник {twin_dual})")
+
+            # Только СОБСТВЕННЫЕ члены интерфейса: список библиотеки начинается с семи членов
+            # IUnknown/IDispatch, которых двойник не объявляет и объявлять не должен.
+            by_slot = {member[0]: member for member in tlb_members if member[0] >= 7}
+            mismatch = None
+            for slot, name, _signature in twin_members:
+                counterpart = by_slot.get(slot)
+                if counterpart is None:
+                    mismatch = f"слот {slot} («{name}») в библиотеке отсутствует"
+                elif normalized(name) != normalized(counterpart[1]):
+                    mismatch = (f"слот {slot}: двойник объявляет «{name}», библиотека — "
+                                f"«{counterpart[1]}»")
+                if mismatch:
+                    break
+            if mismatch:
+                problems.append(f"{twin_name}: {mismatch}")
+            else:
+                notes.append(f"{twin_name}: слоты 7…{twin_members[-1][0]} совпали "
+                             f"({len(twin_members)} членов)")
+
+            # СИГНАТУРЫ ИСПОЛЬЗУЕМЫХ ЧЛЕНОВ: имя, число параметров и VARTYPE. Сверяются только те,
+            # что адаптер действительно вызывает: «на будущее» двойник не расширяется.
+            checked = 0
+            for member, slot in twin_used[twin_name].items():
+                if slot not in by_slot:
+                    problems.append(f"{twin_name}.{member}: слот {slot} в библиотеке отсутствует")
+                    continue
+                _slot, _name, tlb_params, tlb_ret, tlb_vts = by_slot[slot]
+                declared_member = next((m for m in twin_members if m[0] == slot), None)
+                if declared_member is None:
+                    problems.append(f"{twin_name}.{member}: слот {slot} не объявлен двойником")
+                    continue
+                ret, params = declared(declared_member[2])
+                if ret is None:
+                    problems.append(f"{twin_name}.{member}: сигнатура "
+                                    f"«{declared_member[2]}» не разобрана")
+                    continue
+                if len(params) != tlb_params:
+                    problems.append(f"{twin_name}.{member}: параметров {len(params)}, "
+                                    f"в библиотеке {tlb_params}")
+                    continue
+                if tlb_ret not in accepted_vts(ret):
+                    problems.append(f"{twin_name}.{member}: возвращаемый тип {ret} не соответствует "
+                                    f"VARTYPE {tlb_ret}")
+                    continue
+                wrong = [index for index, (cs_type, vt)
+                         in enumerate(zip(params, tlb_vts))
+                         if vt not in accepted_parameter_vts(cs_type)]
+                if wrong:
+                    problems.append(f"{twin_name}.{member}: параметр {wrong[0]} типа "
+                                    f"«{params[wrong[0]]}» не соответствует VARTYPE "
+                                    f"{tlb_vts[wrong[0]]}")
+                    continue
+                checked += 1
+            notes.append(f"{twin_name}: сигнатуры используемых членов сверены ({checked})")
+
+        return problems, notes
+
+    layout_problems, layout_notes = twin_layout_check()
+    rep.add("INT.13.twin_layout",
+            "раскладка двойника совпадает с установленной kAPI7.tlb: IID, порядок слотов, "
+            "сигнатуры используемых членов",
+            "PASS" if not layout_problems else "FAIL",
+            "; ".join(layout_notes) if not layout_problems else "; ".join(layout_problems),
+            details={"problems": layout_problems, "notes": layout_notes,
+                     "tlb": os.path.join(KOMPAS_INSTALL, "Bin", "kAPI7.tlb"),
+                     "scanner": interop_scan()})
+
     rep.add("INT.SRC", "эталон «куб 10» построен и сохранён (V = 1000 мм³, −5..5 по всем осям)",
             "PASS" if (cube and near(cube_volume, 1000.0)) else "FAIL",
             f"path={cube} объём={cube_volume} габарит={cube_bbox} error={cube_err}")
@@ -1453,6 +1667,62 @@ def interference_checks(client, rep, app_id, workdir):
     rep.add("INT.04.read2", "зазор при dx = 20 равен 10 мм",
             "PASS" if (not code and near(d20, 10.0)) else "FAIL",
             f"dx=20 min_distance_mm={d20} error={code}")
+
+    # ========= INT.04.unit: ЕДИНИЦА РАССТОЯНИЯ ИЗМЕРЕНА, А НЕ НАЗВАНА ДОПУЩЕНИЕМ =========
+    #
+    # ОЖИДАНИЯ ЗАПИСАНЫ ДО ПРОГОНА. Эталон «куб 10» даёт аналитику в МИЛЛИМЕТРАХ: dx − 10 при переносе
+    # и dx − 5 − 5√2 при повороте B на 45° вокруг собственной оси Z. Если бы ядро отдавало метры, те же
+    # расстояния были бы в 1000 раз меньше (0,005 / 0,01 / 0,0029289…), сантиметры — в 10 раз
+    # (0,5 / 1 / 0,2928932…). Проверка требует ОБОИХ условий: совпадения с миллиметрами и НЕсовпадения с
+    # переводом, — иначе строка не отличала бы измеренную единицу от её отсутствия.
+    unit_cos = math.cos(math.radians(45.0))
+    unit_sin = math.sin(math.radians(45.0))
+    unit_cases = []
+    for unit_label, unit_dx, unit_rotated in (("dx = 15", 15.0, False), ("dx = 20", 20.0, False),
+                                              ("поворот 45° при dx = 15", 15.0, True)):
+        # Отказ размещения НЕ оставляет прежнюю конфигурацию молча: без него замер шёл бы по прошлому
+        # положению и «совпал» с аналитикой не той постановки.
+        if unit_rotated:
+            _place_env, place_code = place(asm, ref_b, (unit_dx, 0, 0),
+                                           x_axis=(unit_cos, unit_sin, 0.0),
+                                           y_axis=(-unit_sin, unit_cos, 0.0))
+        else:
+            _place_env, place_code = place(asm, ref_b, (unit_dx, 0, 0))
+        env, code = gap(asm, {"component_ref": ref_a}, {"component_ref": ref_b})
+        code = code or place_code
+        res = result(env)
+        value = res.get("min_distance_mm")
+        millimetres = (unit_dx - 5.0 - 5.0 * math.sqrt(2.0) if unit_rotated else unit_dx - 10.0)
+        unit_cases.append({
+            "configuration": unit_label,
+            "value": value,
+            "millimetres": millimetres,
+            "metres": millimetres / 1000.0,
+            "centimetres": millimetres / 10.0,
+            "matches_mm": near(value, millimetres),
+            "matches_m": near(value, millimetres / 1000.0),
+            "matches_cm": near(value, millimetres / 10.0),
+            "units_basis": res.get("units_basis"),
+            "error": code,
+        })
+    unit_ok = all(case["error"] is None and case["matches_mm"]
+                  and not case["matches_m"] and not case["matches_cm"] for case in unit_cases)
+    # ЕДИНОЕ УТВЕРЖДЕНИЕ ВО ВСЕХ МЕСТАХ: ответ обязан называть единицу ИЗМЕРЕННОЙ. Пока в нём стоит
+    # «допущение», строка единицы и ответ расходятся, и это расхождение — FAIL, а не примечание.
+    basis_ok = all(isinstance(case["units_basis"], str)
+                   and case["units_basis"].lower().startswith("измерено")
+                   and "assumption" not in case["units_basis"].lower() for case in unit_cases)
+    rep.add("INT.04.unit",
+            "единица Lmin — миллиметры: три конфигурации совпали с аналитикой в мм и НЕ совпали с "
+            "переводом в метры или сантиметры, а ответ называет единицу измеренной",
+            "PASS" if (unit_ok and basis_ok) else "FAIL",
+            "; ".join(f"{case['configuration']}: {case['value']} "
+                      f"(мм {case['millimetres']:.6f}, м {case['metres']:.6f}, "
+                      f"см {case['centimetres']:.6f}; совпало мм={case['matches_mm']} "
+                      f"м={case['matches_m']} см={case['matches_cm']})" for case in unit_cases)
+            + f"; units_basis измерена={basis_ok}",
+            details={"cases": unit_cases,
+                     "units_basis": [case["units_basis"] for case in unit_cases]})
 
     place(asm, ref_b, (15, 0, 0))
     env, code = gap(asm, {"component_ref": ref_a}, {"component_ref": ref_b})

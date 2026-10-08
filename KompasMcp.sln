@@ -16,6 +16,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KompasMcp.P0Probe", "tools\
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KompasMcp.Unit", "tests\Unit\KompasMcp.Unit\KompasMcp.Unit.csproj", "{A1000000-0000-4000-8000-000000000007}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KompasMcp.InteropScan", "tools\KompasMcp.InteropScan\KompasMcp.InteropScan.csproj", "{A1000000-0000-4000-8000-000000000008}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -50,6 +52,10 @@ Global
 		{A1000000-0000-4000-8000-000000000007}.Debug|x64.Build.0 = Debug|x64
 		{A1000000-0000-4000-8000-000000000007}.Release|x64.ActiveCfg = Release|x64
 		{A1000000-0000-4000-8000-000000000007}.Release|x64.Build.0 = Release|x64
+		{A1000000-0000-4000-8000-000000000008}.Debug|x64.ActiveCfg = Debug|x64
+		{A1000000-0000-4000-8000-000000000008}.Debug|x64.Build.0 = Debug|x64
+		{A1000000-0000-4000-8000-000000000008}.Release|x64.ActiveCfg = Release|x64
+		{A1000000-0000-4000-8000-000000000008}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

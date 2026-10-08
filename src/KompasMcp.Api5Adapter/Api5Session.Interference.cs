@@ -29,7 +29,8 @@ public sealed partial class Api5Session
     /// <summary>The gap route as one line. The measurement interface is a typed twin of the installed
     /// type library because the shipped wrapper is older (docs/04 §4.52).</summary>
     private const string GapRoute =
-        "api7:IKompasDocument3D.TopPart → IPart7.Measurement3D (типизированный двойник установленного TLB) " +
+        "api7:IKompasDocument3D.TopPart → проверка версии КОМПАС (не ниже 23) → " +
+        "IPart7.Measurement3D (типизированный двойник установленного TLB) " +
         "→ IMeasurement3D.Object1/Object2 → Calculate → Lmin/GetMinPoint1/2/Angle";
 
     // ── INT-01…INT-03 ──
@@ -417,14 +418,19 @@ public sealed partial class Api5Session
             notes.Add("angle_not_applicable — IsAngleValid = FALSE: угол для этой пары смысла не имеет");
         }
 
+        // MEASURED: the help does not name the unit of Lmin or of the segment points, so the unit is
+        // not read out of it but measured against a geometry whose size is known analytically: the
+        // number matches millimetres and does NOT match the same distance in metres or centimetres.
+        // TEST: acceptance row INT.04.unit. History: docs/decisions/assembly.md#interference-contracts
         return new MeasureGapResult(
             measureName,
             minDistance,
             minPoints,
             angleValid == true ? angle : null,
             angleValid,
-            "ASSUMPTION: единица Lmin и точек — миллиметры. Справка единицу НЕ называет; допущение " +
-            "измеряется строкой INT-04 (зазор 5 мм против 0,005, если бы это были метры)",
+            "измерено: миллиметры (строка приёмки INT.04.unit — прочитанное расстояние совпало с " +
+            "аналитикой в миллиметрах на трёх конфигурациях и не совпало с переводом в метры или " +
+            "сантиметры)",
             GapRoute,
             document.Revision,
             notes);
@@ -433,9 +439,11 @@ public sealed partial class Api5Session
     /// <summary>The API7 measurement service of the assembly's top part.</summary>
     /// <remarks>MEASURED: the shipped <c>Interop.KompasAPI7.dll</c> does not declare
     /// <c>IPart7.Measurement3D</c> while the installed type library and <c>Bin\kAPI7.DLL</c> do, so the
-    /// service is reached through the typed twin (<see cref="IPart7Twin"/>). A direct QI for the
-    /// measurement IID is tried first because it can only fail, never mis-call.
-    /// History: docs/decisions/assembly.md#api7-twin</remarks>
+    /// service is reached through the typed twin (<see cref="IPart7Twin"/>).
+    /// INVARIANT: the twin is called only after the application version is at or above the documented
+    /// threshold: it carries the SAME IID as the shipped <c>IPart7</c>, so the cast succeeds wherever
+    /// <c>IPart7</c> exists, including a version whose slot 116 is another member. No direct QI is made:
+    /// the help obtains it as a PROPERTY of <c>IPart7</c>. History: docs/decisions/assembly.md#api7-twin</remarks>
     private IMeasurement3DTwin Measurement3D(DocumentEntry document, List<string> notes)
     {
         var top = TopPart7(document, notes);
@@ -448,10 +456,23 @@ public sealed partial class Api5Session
                 RetryPolicy.ReacquireContext);
         }
 
-        if ((object)top is IMeasurement3DTwin direct)
+        // DOC: ipart7_measurement3d.html / imeasurement3d.html — «Версия Компас v23». Below the
+        // threshold the property does not exist, and "not read" refuses exactly like "too old".
+        var version = RequireApplication(document.ApplicationId).Version;
+        if (!InterferenceRules.Measurement3DAvailable(version))
         {
-            notes.Add("measurement3d_route — объект отвечает на QI(IMeasurement3D) напрямую");
-            return direct;
+            throw new KompasContractException(
+                ErrorCodes.CapabilityUnavailable,
+                $"Зазор требует КОМПАС v{InterferenceRules.Measurement3DMinimumMajorVersion} и новее: " +
+                $"IPart7.Measurement3D объявлен справкой начиная с этой версии, а подключён " +
+                $"v«{version}». Ниже порога инструмент отказывает, а не вызывает слот, которого " +
+                "на этой версии нет.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["application_version"] = version,
+                    ["minimum_major_version"] = InterferenceRules.Measurement3DMinimumMajorVersion,
+                });
         }
 
         if ((object)top is not IPart7Twin twin)
@@ -485,7 +506,9 @@ public sealed partial class Api5Session
                 RetryPolicy.ReacquireContext);
         }
 
-        notes.Add("measurement3d_route — IPart7.Measurement3D (типизированный двойник установленного TLB)");
+        notes.Add($"measurement3d_route — IPart7.Measurement3D (типизированный двойник установленного " +
+                  $"TLB), версия приложения {version} не ниже порога " +
+                  $"{InterferenceRules.Measurement3DMinimumMajorVersion}");
         return measurement;
     }
 

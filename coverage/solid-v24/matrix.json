@@ -8985,8 +8985,9 @@
    ],
    "limitations": [
     "Живой прогон группы INT и приёмка на бинарях поставки — отдельные шаги; до них строка открыта.",
-    "Маршрут зазора опирается на типизированный двойник IPart7.Measurement3D: поставленная Interop.KompasAPI7.dll этого члена не объявляет (docs/04 §4.52).",
-    "Единица Lmin и точек справкой не названа: до строки INT-04 это допущение, после — измерение."
+    "Маршрут зазора опирается на типизированный двойник IPart7.Measurement3D (поставленная Interop.KompasAPI7.dll этого члена не объявляет, docs/04 §4.52); раскладка двойника сверена с установленной библиотекой типов строкой INT.13.twin_layout.",
+    "Единица Lmin и точек справкой не названа: она ИЗМЕРЕНА строкой INT.04.unit против аналитики в миллиметрах на трёх конфигурациях и названа измеренной в units_basis.",
+    "Зазор требует КОМПАС v23 и новее: справка объявляет IPart7.Measurement3D начиная с этой версии. Ниже порога и при непрочитанной версии — CAPABILITY_UNAVAILABLE с названной версией и порогом, до вызова двойника. Живой отрицательный случай недоступен: КОМПАС ниже v23 на машине нет, порог держится модульным тестом разбора строки версии."
    ],
    "depends_on": [
     "dep.interference.component_address",
@@ -9037,8 +9038,9 @@
    ],
    "limitations": [
     "Живой прогон группы INT и приёмка на бинарях поставки — отдельные шаги; до них строка открыта.",
-    "Маршрут зазора опирается на типизированный двойник IPart7.Measurement3D: поставленная Interop.KompasAPI7.dll этого члена не объявляет (docs/04 §4.52).",
-    "Единица Lmin и точек справкой не названа: до строки INT-04 это допущение, после — измерение."
+    "Маршрут зазора опирается на типизированный двойник IPart7.Measurement3D (поставленная Interop.KompasAPI7.dll этого члена не объявляет, docs/04 §4.52); раскладка двойника сверена с установленной библиотекой типов строкой INT.13.twin_layout.",
+    "Единица Lmin и точек справкой не названа: она ИЗМЕРЕНА строкой INT.04.unit против аналитики в миллиметрах на трёх конфигурациях и названа измеренной в units_basis.",
+    "Зазор требует КОМПАС v23 и новее: справка объявляет IPart7.Measurement3D начиная с этой версии. Ниже порога и при непрочитанной версии — CAPABILITY_UNAVAILABLE с названной версией и порогом, до вызова двойника. Живой отрицательный случай недоступен: КОМПАС ниже v23 на машине нет, порог держится модульным тестом разбора строки версии."
    ],
    "depends_on": [
     "dep.interference.component_address",
@@ -9090,8 +9092,9 @@
    ],
    "limitations": [
     "Живой прогон группы INT и приёмка на бинарях поставки — отдельные шаги; до них строка открыта.",
-    "Маршрут зазора опирается на типизированный двойник IPart7.Measurement3D: поставленная Interop.KompasAPI7.dll этого члена не объявляет (docs/04 §4.52).",
-    "Единица Lmin и точек справкой не названа: до строки INT-04 это допущение, после — измерение."
+    "Маршрут зазора опирается на типизированный двойник IPart7.Measurement3D (поставленная Interop.KompasAPI7.dll этого члена не объявляет, docs/04 §4.52); раскладка двойника сверена с установленной библиотекой типов строкой INT.13.twin_layout.",
+    "Единица Lmin и точек справкой не названа: она ИЗМЕРЕНА строкой INT.04.unit против аналитики в миллиметрах на трёх конфигурациях и названа измеренной в units_basis.",
+    "Зазор требует КОМПАС v23 и новее: справка объявляет IPart7.Measurement3D начиная с этой версии. Ниже порога и при непрочитанной версии — CAPABILITY_UNAVAILABLE с названной версией и порогом, до вызова двойника. Живой отрицательный случай недоступен: КОМПАС ниже v23 на машине нет, порог держится модульным тестом разбора строки версии."
    ],
    "depends_on": [
     "dep.interference.face_address",
@@ -9108,7 +9111,7 @@
    "catalog_ref": "G1",
    "catalog_level": "mcp_verified",
    "parameters_schema": "schemas/kompas_measure_gap.json",
-   "adapter_route": "IKompasDocument3D.TopPart → IPart7.Measurement3D → IMeasurement3D.Object1/Object2 → Calculate() → ksMeasureResultEnum; Lmin, GetMinPoint1/2, Angle при IsAngleValid",
+   "adapter_route": "IKompasDocument3D.TopPart → проверка версии КОМПАС (не ниже 23) → IPart7.Measurement3D → IMeasurement3D.Object1/Object2 → Calculate() → ksMeasureResultEnum; Lmin, GetMinPoint1/2, Angle при IsAngleValid",
    "actions": {
     "discover": "not_applicable",
     "create": "not_applicable",
@@ -9138,7 +9141,8 @@
     "INT.07.geometry_validation",
     "INT.07.geometry_validation2",
     "INT.08.geometry_validation",
-    "INT.11.negative_tests"
+    "INT.11.negative_tests",
+    "INT.04.unit"
    ],
    "evidence": [
     "docs/acceptance/interference/interference-acceptance.json",
@@ -9146,8 +9150,9 @@
    ],
    "limitations": [
     "Живой прогон группы INT и приёмка на бинарях поставки — отдельные шаги; до них строка открыта.",
-    "Маршрут зазора опирается на типизированный двойник IPart7.Measurement3D: поставленная Interop.KompasAPI7.dll этого члена не объявляет (docs/04 §4.52).",
-    "Единица Lmin и точек справкой не названа: до строки INT-04 это допущение, после — измерение."
+    "Маршрут зазора опирается на типизированный двойник IPart7.Measurement3D (поставленная Interop.KompasAPI7.dll этого члена не объявляет, docs/04 §4.52); раскладка двойника сверена с установленной библиотекой типов строкой INT.13.twin_layout.",
+    "Единица Lmin и точек справкой не названа: она ИЗМЕРЕНА строкой INT.04.unit против аналитики в миллиметрах на трёх конфигурациях и названа измеренной в units_basis.",
+    "Зазор требует КОМПАС v23 и новее: справка объявляет IPart7.Measurement3D начиная с этой версии. Ниже порога и при непрочитанной версии — CAPABILITY_UNAVAILABLE с названной версией и порогом, до вызова двойника. Живой отрицательный случай недоступен: КОМПАС ниже v23 на машине нет, порог держится модульным тестом разбора строки версии."
    ],
    "depends_on": [
     "dep.interference.component_address",
@@ -9283,7 +9288,7 @@
    ],
    "title": "Маршрут API7 измерителя в том же адаптере",
    "parameters_schema": null,
-   "adapter_route": "IKompasDocument3D.TopPart → IPart7.Measurement3D (типизированный двойник установленного kAPI7.tlb: поставленная Interop.KompasAPI7.dll члена не объявляет)",
+   "adapter_route": "IKompasDocument3D.TopPart → проверка версии КОМПАС (не ниже 23) → IPart7.Measurement3D (типизированный двойник установленного kAPI7.tlb: поставленная Interop.KompasAPI7.dll члена не объявляет)",
    "actions": {
     "discover": "verified",
     "create": "not_applicable",
@@ -9313,7 +9318,8 @@
    "tests": [
     "INT.04.read",
     "INT.04.read2",
-    "INT.04.geometry_validation"
+    "INT.04.geometry_validation",
+    "INT.13.twin_layout"
    ],
    "evidence": [
     "docs/acceptance/interference/interference-acceptance.json",
@@ -9324,7 +9330,9 @@
    ],
    "acceptance": [
     "измеритель берётся у IPart7 верхней детали сборки, второго сеанса и второго адаптера не заводится",
-    "недоступность измерителя называется CAPABILITY_UNAVAILABLE с причиной, а не нулевым расстоянием"
+    "недоступность измерителя называется CAPABILITY_UNAVAILABLE с причиной, а не нулевым расстоянием",
+    "раскладка двойника — IID, порядок слотов до последнего объявленного члена и сигнатуры используемых членов — совпадает с УСТАНОВЛЕННОЙ библиотекой типов; расхождение называется номером первого несовпавшего слота (строка INT.13.twin_layout)",
+    "ниже порога версии и при непрочитанной версии измеритель НЕ вызывается: CAPABILITY_UNAVAILABLE с названной версией и порогом"
    ]
   },
   {
@@ -9340,7 +9348,7 @@
    ],
    "title": "Единица расстояния",
    "parameters_schema": null,
-   "adapter_route": "IMeasurement3D.Lmin / GetMinPoint1/2; единица справкой не названа и указывается в units_basis",
+   "adapter_route": "IMeasurement3D.Lmin / GetMinPoint1/2; единица справкой не названа — ИЗМЕРЕНА строкой INT.04.unit (миллиметры) и названа в units_basis",
    "actions": {
     "discover": "verified",
     "create": "not_applicable",
@@ -9370,7 +9378,8 @@
     "INT.04.geometry_validation",
     "INT.04.geometry_validation2",
     "INT.07.geometry_validation",
-    "INT.06.read"
+    "INT.06.read",
+    "INT.04.unit"
    ],
    "evidence": [
     "docs/acceptance/interference/interference-acceptance.json",
@@ -9380,7 +9389,7 @@
     "Зависимость подтверждается строками группы INT; до живого прогона она открыта."
    ],
    "acceptance": [
-    "единица Lmin и точек либо измерена против аналитически известного зазора, либо названа допущением",
+    "единица Lmin и точек ИЗМЕРЕНА против аналитически известного зазора на трёх конфигурациях: совпала с миллиметрами и НЕ совпала с переводом в метры или сантиметры (строка INT.04.unit)",
     "непрочитанное значение остаётся null с причиной, а не превращается в ноль"
    ]
   },

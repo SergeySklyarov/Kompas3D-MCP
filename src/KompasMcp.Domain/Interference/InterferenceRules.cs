@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace KompasMcp.Domain.Interference;
 
 /// <summary>What a pair-wise interference check concluded, and on what basis.</summary>
@@ -81,6 +83,39 @@ public static class InterferenceRules
     /// <summary>Whether the two measurement requests address the same component AND the same face.</summary>
     public static bool SameObject(string aRef, int? aFace, string bRef, int? bFace) =>
         string.Equals(aRef, bRef, StringComparison.Ordinal) && aFace == bFace;
+
+    /// <summary>The smallest КОМПАС major version whose API7 declares <c>IPart7.Measurement3D</c> and
+    /// the measurement service behind it.</summary>
+    /// <remarks>DOC: <c>ipart7_measurement3d.html</c> and <c>imeasurement3d.html</c> both carry «Версия
+    /// Компас v23». The threshold is a constant because the twin's slot 116 is a POSITION: below the
+    /// version that declares the member, the same slot holds a different function of the same interface,
+    /// and calling it would reach the wrong member rather than fail.
+    /// History: docs/decisions/assembly.md#api7-twin</remarks>
+    public const int Measurement3DMinimumMajorVersion = 23;
+
+    /// <summary>The major version read out of the adapter's version string, or <c>null</c> when it cannot
+    /// be read — "not read" is not a value.</summary>
+    /// <remarks>MEASURED: the adapter records <c>ksGetSystemVersion</c> as «major.minor.build.revision»
+    /// and answers the literal <c>unknown</c> when the call is not available.</remarks>
+    public static int? MajorVersion(string? version)
+    {
+        if (string.IsNullOrWhiteSpace(version))
+        {
+            return null;
+        }
+
+        var head = version.Split('.', 2)[0].Trim();
+        return int.TryParse(head, NumberStyles.None, CultureInfo.InvariantCulture, out var major)
+            ? major
+            : null;
+    }
+
+    /// <summary>Whether the gap route may be attempted on an application reporting this version.</summary>
+    /// <remarks>INVARIANT: an unread version refuses exactly like an old one. «Не прочитана» - не
+    /// «подходит»: the alternative would attempt a slot that nothing confirmed.
+    /// TEST: InterferenceRulesTests.</remarks>
+    public static bool Measurement3DAvailable(string? applicationVersion) =>
+        MajorVersion(applicationVersion) is { } major && major >= Measurement3DMinimumMajorVersion;
 
     /// <summary>The minimum-distance segment, or <c>null</c> when either end was not defined.</summary>
     /// <remarks>A HALF-READ SEGMENT IS NOT PUBLISHED: one point alone is not the segment the help

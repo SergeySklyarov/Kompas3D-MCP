@@ -123,4 +123,33 @@ public class InterferenceRulesTests
         Assert.Null(InterferenceRules.Segment(true, first, false, Array.Empty<double>()));
         Assert.Null(InterferenceRules.Segment(false, Array.Empty<double>(), true, second));
     }
+
+    /// <summary>The version gate in front of the twin. The live negative case does not exist: no КОМПАС
+    /// below the threshold is installed, so the threshold is checked on the PARSED string.</summary>
+    /// <remarks>DOC: the help names the threshold («Версия Компас v23»), and the adapter reads the
+    /// application version through <c>ksGetSystemVersion</c> as «major.minor.build.revision».
+    /// INVARIANT: an unread version refuses exactly like an old one.</remarks>
+    [Theory]
+    [InlineData("23.0.0.0", true)]
+    [InlineData("23.0.0.2799", true)]
+    [InlineData("24.0.0.2799", true)]
+    [InlineData("22.9.9.9999", false)]
+    [InlineData("22.0.0.0", false)]
+    [InlineData("7.0.0.0", false)]
+    [InlineData("unknown", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void Measurement3DAvailable_ReadsTheMajorVersionAndRefusesBelowTheThreshold(
+        string? version, bool expected) =>
+        Assert.Equal(expected, InterferenceRules.Measurement3DAvailable(version));
+
+    [Theory]
+    [InlineData("23.0.0.2799", 23)]
+    [InlineData("24.0.0.2799", 24)]
+    [InlineData("22.1.0.0", 22)]
+    [InlineData("unknown", null)]
+    [InlineData("", null)]
+    [InlineData(null, null)]
+    public void MajorVersion_ReturnsNullWhenTheStringIsNotAVersion(string? version, int? expected) =>
+        Assert.Equal(expected, InterferenceRules.MajorVersion(version));
 }

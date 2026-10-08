@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Read-only metadata scanner for interop assemblies (managed, no COM, no КОМПАС session).
+
+    Why it exists: "the member is absent" and "the member is absent from THIS wrapper" are different
+    claims, and ADR-003 §4 requires the project to distinguish the first from the second. A wrapper
+    that hides a member would otherwise be reported as a missing API. This tool can point at the
+    prebuilt wrapper shipped with the installation AND at a wrapper generated from the authoritative
+    .tlb, and dump exactly what each declares.
+
+    It loads assemblies for reflection only (Assembly.LoadFrom + metadata). It never instantiates a
+    COM object, never touches a document and never starts КОМПАС.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>KompasMcp.InteropScan</RootNamespace>
+    <AssemblyName>KompasMcp.InteropScan</AssemblyName>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Platforms>x64</Platforms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+</Project>

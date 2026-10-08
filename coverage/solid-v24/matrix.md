@@ -130,7 +130,7 @@
 | `INT-01.pairs.volumetric` | G1 | practical_required | G1 | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | INT.01.discover, INT.01.read, INT.05.read, INT.11.negative_tests, INT.11.negative_tests_nested, INT.12.read, INT.12.read2 |
 | `INT-02.pairs.tangent` | G1 | practical_required | G1 | mcp_verified | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | INT.02.read, INT.02.negative_tests, INT.06.read |
 | `INT-03.pairs.faces` | G1 | practical_required | G1 | mcp_verified | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | INT.03.read, INT.03.geometry_validation, INT.FACES, INT.11.negative_tests |
-| `INT-04.gap.min_distance` | G1 | practical_required | G1 | mcp_verified | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | INT.04.read, INT.04.read2, INT.04.geometry_validation, INT.04.geometry_validation2, INT.07.geometry_validation, INT.07.geometry_validation2, INT.08.geometry_validation, INT.11.negative_tests |
+| `INT-04.gap.min_distance` | G1 | practical_required | G1 | mcp_verified | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | INT.04.read, INT.04.read2, INT.04.geometry_validation, INT.04.geometry_validation2, INT.07.geometry_validation, INT.07.geometry_validation2, INT.08.geometry_validation, INT.11.negative_tests, INT.04.unit |
 
 ### Общие зависимости профиля `assembly-interference-minimal-v1`
 
@@ -138,8 +138,8 @@
 |---|---|---|---|
 | `dep.interference.component_address` | да | discover, read, negative_tests | INT.01.read, INT.11.negative_tests, INT.11.negative_tests_nested, INT.09.read |
 | `dep.interference.face_address` | да | discover, read, negative_tests | INT.03.geometry_validation, INT.FACES, INT.11.negative_tests |
-| `dep.interference.api7_measurer` | да | discover, read, negative_tests | INT.04.read, INT.04.read2, INT.04.geometry_validation |
-| `dep.interference.distance_unit` | да | read, geometry_validation, negative_tests | INT.04.geometry_validation, INT.04.geometry_validation2, INT.07.geometry_validation, INT.06.read |
+| `dep.interference.api7_measurer` | да | discover, read, negative_tests | INT.04.read, INT.04.read2, INT.04.geometry_validation, INT.13.twin_layout |
+| `dep.interference.distance_unit` | да | read, geometry_validation, negative_tests | INT.04.geometry_validation, INT.04.geometry_validation2, INT.07.geometry_validation, INT.06.read, INT.04.unit |
 | `dep.interference.read_only` | да | read, negative_tests | INT.09.read, INT.09.negative_tests |
 
 ## Метрика 1 — обязательные режимы профиля `drawings-minimal-v1`
@@ -549,7 +549,7 @@
 | `INT-01.pairs.volumetric` | G1 | practical_required | G1 | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | INT.01.discover, INT.01.read, INT.05.read, INT.11.negative_tests, INT.11.negative_tests_nested, INT.12.read, INT.12.read2 |
 | `INT-02.pairs.tangent` | G1 | practical_required | G1 | mcp_verified | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | INT.02.read, INT.02.negative_tests, INT.06.read |
 | `INT-03.pairs.faces` | G1 | practical_required | G1 | mcp_verified | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | INT.03.read, INT.03.geometry_validation, INT.FACES, INT.11.negative_tests |
-| `INT-04.gap.min_distance` | G1 | practical_required | G1 | mcp_verified | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | INT.04.read, INT.04.read2, INT.04.geometry_validation, INT.04.geometry_validation2, INT.07.geometry_validation, INT.07.geometry_validation2, INT.08.geometry_validation, INT.11.negative_tests |
+| `INT-04.gap.min_distance` | G1 | practical_required | G1 | mcp_verified | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | INT.04.read, INT.04.read2, INT.04.geometry_validation, INT.04.geometry_validation2, INT.07.geometry_validation, INT.07.geometry_validation2, INT.08.geometry_validation, INT.11.negative_tests, INT.04.unit |
 | `AUX-SKETCH.plane_and_profile_lifecycle` *(вне каталога)* | AUX-SKETCH | later | — | — | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | V03, V04, V05, G07_xy, G07_xz, G07_yz, V04r, V04d, V04e, V04f, G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, F08.28.discover, F08.28.create, F08.28.read, F08.28.edit, F08.28.rebuild, F08.28.save_reopen, F08.28.negative_tests, F08.28.geometry_validation, AUXS.01.edit, AUXS.02.negative_tests, AUXS.03.create, AUXS.04.edit, AUXS.05.save_reopen |
 | `SM-04.boss` *(вне каталога)* | SM-04 | later | B5 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `dep.sketch.entities` *(вне каталога)* | AUX-SKETCH | dependency_of | — | — | OK | OK | OK | OK | — | OK | — | — | OK | OK | G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, DEP.DSE.02.create, DEP.DSE.07.geometry_validation, DEP.DSE.06.negative_tests, DEP.DSE.05.save_reopen, DEP.DSE.04.edit, DEP.DSE.01.discover, DEP.DSE.03.read |
@@ -592,8 +592,8 @@
 | `dep.sketches.enumeration` *(вне каталога)* | AUX-SKETCH | dependency_of | — | — | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | DEP.DSK.01.discover, DEP.DSK.02.read, DEP.DSK.03.save_reopen, DEP.DSK.04.negative_tests |
 | `dep.interference.component_address` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | OK | INT.01.read, INT.11.negative_tests, INT.11.negative_tests_nested, INT.09.read |
 | `dep.interference.face_address` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | INT.03.geometry_validation, INT.FACES, INT.11.negative_tests |
-| `dep.interference.api7_measurer` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | INT.04.read, INT.04.read2, INT.04.geometry_validation |
-| `dep.interference.distance_unit` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | INT.04.geometry_validation, INT.04.geometry_validation2, INT.07.geometry_validation, INT.06.read |
+| `dep.interference.api7_measurer` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | INT.04.read, INT.04.read2, INT.04.geometry_validation, INT.13.twin_layout |
+| `dep.interference.distance_unit` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | INT.04.geometry_validation, INT.04.geometry_validation2, INT.07.geometry_validation, INT.06.read, INT.04.unit |
 | `dep.interference.read_only` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | INT.09.read, INT.09.negative_tests |
 
 ## Ограничения и незакрытое
@@ -1014,20 +1014,24 @@
   - Совпадение массы с эталоном подтверждает согласованность арифметики measure и геометрии, но НЕ доказывает, что ядро считает массу так же: родного маршрута массы сервер не объявляет.
 - `INT-01.pairs.volumetric` — закрыт целиком
   - Живой прогон группы INT и приёмка на бинарях поставки — отдельные шаги; до них строка открыта.
-  - Маршрут зазора опирается на типизированный двойник IPart7.Measurement3D: поставленная Interop.KompasAPI7.dll этого члена не объявляет (docs/04 §4.52).
-  - Единица Lmin и точек справкой не названа: до строки INT-04 это допущение, после — измерение.
+  - Маршрут зазора опирается на типизированный двойник IPart7.Measurement3D (поставленная Interop.KompasAPI7.dll этого члена не объявляет, docs/04 §4.52); раскладка двойника сверена с установленной библиотекой типов строкой INT.13.twin_layout.
+  - Единица Lmin и точек справкой не названа: она ИЗМЕРЕНА строкой INT.04.unit против аналитики в миллиметрах на трёх конфигурациях и названа измеренной в units_basis.
+  - Зазор требует КОМПАС v23 и новее: справка объявляет IPart7.Measurement3D начиная с этой версии. Ниже порога и при непрочитанной версии — CAPABILITY_UNAVAILABLE с названной версией и порогом, до вызова двойника. Живой отрицательный случай недоступен: КОМПАС ниже v23 на машине нет, порог держится модульным тестом разбора строки версии.
 - `INT-02.pairs.tangent` — закрыт целиком
   - Живой прогон группы INT и приёмка на бинарях поставки — отдельные шаги; до них строка открыта.
-  - Маршрут зазора опирается на типизированный двойник IPart7.Measurement3D: поставленная Interop.KompasAPI7.dll этого члена не объявляет (docs/04 §4.52).
-  - Единица Lmin и точек справкой не названа: до строки INT-04 это допущение, после — измерение.
+  - Маршрут зазора опирается на типизированный двойник IPart7.Measurement3D (поставленная Interop.KompasAPI7.dll этого члена не объявляет, docs/04 §4.52); раскладка двойника сверена с установленной библиотекой типов строкой INT.13.twin_layout.
+  - Единица Lmin и точек справкой не названа: она ИЗМЕРЕНА строкой INT.04.unit против аналитики в миллиметрах на трёх конфигурациях и названа измеренной в units_basis.
+  - Зазор требует КОМПАС v23 и новее: справка объявляет IPart7.Measurement3D начиная с этой версии. Ниже порога и при непрочитанной версии — CAPABILITY_UNAVAILABLE с названной версией и порогом, до вызова двойника. Живой отрицательный случай недоступен: КОМПАС ниже v23 на машине нет, порог держится модульным тестом разбора строки версии.
 - `INT-03.pairs.faces` — закрыт целиком
   - Живой прогон группы INT и приёмка на бинарях поставки — отдельные шаги; до них строка открыта.
-  - Маршрут зазора опирается на типизированный двойник IPart7.Measurement3D: поставленная Interop.KompasAPI7.dll этого члена не объявляет (docs/04 §4.52).
-  - Единица Lmin и точек справкой не названа: до строки INT-04 это допущение, после — измерение.
+  - Маршрут зазора опирается на типизированный двойник IPart7.Measurement3D (поставленная Interop.KompasAPI7.dll этого члена не объявляет, docs/04 §4.52); раскладка двойника сверена с установленной библиотекой типов строкой INT.13.twin_layout.
+  - Единица Lmin и точек справкой не названа: она ИЗМЕРЕНА строкой INT.04.unit против аналитики в миллиметрах на трёх конфигурациях и названа измеренной в units_basis.
+  - Зазор требует КОМПАС v23 и новее: справка объявляет IPart7.Measurement3D начиная с этой версии. Ниже порога и при непрочитанной версии — CAPABILITY_UNAVAILABLE с названной версией и порогом, до вызова двойника. Живой отрицательный случай недоступен: КОМПАС ниже v23 на машине нет, порог держится модульным тестом разбора строки версии.
 - `INT-04.gap.min_distance` — закрыт целиком
   - Живой прогон группы INT и приёмка на бинарях поставки — отдельные шаги; до них строка открыта.
-  - Маршрут зазора опирается на типизированный двойник IPart7.Measurement3D: поставленная Interop.KompasAPI7.dll этого члена не объявляет (docs/04 §4.52).
-  - Единица Lmin и точек справкой не названа: до строки INT-04 это допущение, после — измерение.
+  - Маршрут зазора опирается на типизированный двойник IPart7.Measurement3D (поставленная Interop.KompasAPI7.dll этого члена не объявляет, docs/04 §4.52); раскладка двойника сверена с установленной библиотекой типов строкой INT.13.twin_layout.
+  - Единица Lmin и точек справкой не названа: она ИЗМЕРЕНА строкой INT.04.unit против аналитики в миллиметрах на трёх конфигурациях и названа измеренной в units_basis.
+  - Зазор требует КОМПАС v23 и новее: справка объявляет IPart7.Measurement3D начиная с этой версии. Ниже порога и при непрочитанной версии — CAPABILITY_UNAVAILABLE с названной версией и порогом, до вызова двойника. Живой отрицательный случай недоступен: КОМПАС ниже v23 на машине нет, порог держится модульным тестом разбора строки версии.
 - `AUX-SKETCH.plane_and_profile_lifecycle` — закрыт целиком
   - замена и очистка после reopen работают для измеренной области: эскиз на основной XY, профиль — окружность, вырезание сквозное; точка поиска выводится из цилиндрической грани зависимого тела (проба G, строки G10…G10r)
   - вне измеренной области (наклонная плоскость, отрезки, дуги, прямоугольники) отказ явный: CAPABILITY_UNAVAILABLE с derivation=profile_not_circle / plane_not_xy, а не догадка (строка G11)

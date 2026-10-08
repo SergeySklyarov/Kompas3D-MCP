@@ -418,7 +418,10 @@ public static class ToolCatalog
                 + "верхнего уровня из kompas_list_components либо его грань по номеру в FaceCollection "
                 + "(та же нумерация, что у kompas_create_mate). Результат называется именем из "
                 + "ksMeasureResultEnum; неопределённое расстояние приходит как null с причиной, а не "
-                + "нулём. Единица длины справкой не названа и указывается в units_basis.",
+                + "нулём. Единица длины справкой не названа: она измерена живым прогоном как "
+                + "миллиметры и названа в units_basis. Требуется КОМПАС v23 и новее — с этой версии "
+                + "справка объявляет IPart7.Measurement3D; ниже порога инструмент отказывает "
+                + "CAPABILITY_UNAVAILABLE, а не вызывает слот, которого на той версии нет.",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id")),
                     ("object1", Sch.Obj(

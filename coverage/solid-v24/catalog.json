@@ -6882,10 +6882,10 @@
    "level": "mcp_verified",
    "evidence": {
     "documentation": "Проводная проверка справки SDK 24 (help.ascon.ru/KOMPAS_SDK/24/ru-RU), 08.10.2026: 17 страниц §2 наряда — HTTP 200, отрицательный контроль ksbody_checkintersectionwithbody_absent_xyz → 404",
-    "metadata": "Сканер tools/KompasMcp.InteropScan по поставленной Interop.KompasAPI7.dll (03.03.2025) и по сборке, сгенерированной TlbImp из установленного Bin/kAPI7.tlb (21.04.2025), 08.10.2026: поставленная обёртка НЕ объявляет IPart7.Measurement3D, IMeasurement3D и IBody7.CheckIntersectionWithBody, установленная библиотека типов объявляет все три, а сам сервер Bin\\kAPI7.DLL несёт те же имена",
+    "metadata": "Сканер tools/KompasMcp.InteropScan по поставленной Interop.KompasAPI7.dll (03.03.2025) и по сборке, сгенерированной TlbImp из установленного Bin/kAPI7.tlb (21.04.2025), 08.10.2026: поставленная обёртка НЕ объявляет IPart7.Measurement3D, IMeasurement3D и IBody7.CheckIntersectionWithBody, установленная библиотека типов объявляет все три, а сам сервер Bin\\kAPI7.DLL несёт те же имена; 08.10.2026 (наряд OMEGA_G1_TWIN_GUARD): прибор читает и установленную kAPI7.tlb напрямую (режим --tlb), а строка INT.13.twin_layout сверяет с двойником IID, порядок слотов и сигнатуры используемых членов",
     "runtime": "живой прогон 08.10.2026, группа INT (scripts/mcp-smoke.py --interference-only)"
    },
-   "route": "Пересечения — API5: ksDocument3D.PartCollection(true) → ksPart.BodyCollection → ksBody.CheckIntersectionWithBody → ksIntersectionResult; грани — ksBody.GetIntersectionFacesWithBody. Зазор — API7: IKompasDocument3D.TopPart → IPart7.Measurement3D → IMeasurement3D. Оба маршрута в одной паре не смешиваются.",
+   "route": "Пересечения — API5: ksDocument3D.PartCollection(true) → ksPart.BodyCollection → ksBody.CheckIntersectionWithBody → ksIntersectionResult; грани — ksBody.GetIntersectionFacesWithBody. Зазор — API7: IKompasDocument3D.TopPart → проверка версии КОМПАС (не ниже 23) → IPart7.Measurement3D (типизированный двойник установленной библиотеки типов) → IMeasurement3D. Оба маршрута в одной паре не смешиваются.",
    "mcp_support": "kompas_check_interference / kompas_measure_gap",
    "next_step": "Живой прогон группы --interference-only; далее — приёмка на бинарях поставки вместе с выпуском 0.5.0.",
    "operations": [

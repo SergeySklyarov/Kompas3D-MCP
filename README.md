@@ -11,11 +11,11 @@
 
 > *English summary.* A Model Context Protocol server that lets an AI agent drive a real, licensed
 > KOMPAS-3D v24 (x64) over COM: parts, sketches, features, patterns, booleans, assemblies and mates,
-> drawings (views, dimensions, title block, DXF/DWG export), external variables and material, STEP
-> and image export. Every mutating call reports a measured verification level (volume, bodies,
-> faces, re-read parameters, save/reopen), journals operations for idempotent retries, rejects stale
-> revisions, and is confined to configured disk roots. No arbitrary code execution. 78 tools,
-> MIT licensed. Documentation is in Russian.
+> assembly interference and clearance checks, drawings (views, dimensions, title block, DXF/DWG
+> export), external variables and material, STEP and image export. Every mutating call reports a
+> measured verification level (volume, bodies, faces, re-read parameters, save/reopen), journals
+> operations for idempotent retries, rejects stale revisions, and is confined to configured disk
+> roots. No arbitrary code execution. 81 tools, MIT licensed. Documentation is in Russian.
 
 ## Быстрая установка через ChatGPT Codex
 
@@ -39,7 +39,7 @@ https://github.com/SergeySklyarov/Kompas3D-MCP
 Codex проверит зависимости, скачает готовый пакет из Releases, сверит контрольную сумму, создаст
 конфигурацию и подключит сервер. Разрешите ему скачивание и запуск установщика, когда он спросит.
 В конце перезапустите Codex (в приложении **Restart**) и в новом чате напишите
-«вызови kompas_health и kompas_capabilities»: должно прийти 79 инструментов. Подробности и ручной
+«вызови kompas_health и kompas_capabilities»: должно прийти 81 инструмент. Подробности и ручной
 путь: [подключение к Codex](docs/operator-guide/codex-setup.md).
 
 <sub>ChatGPT, Codex и логотип OpenAI являются товарными знаками OpenAI. Проект не связан с OpenAI и
@@ -63,7 +63,7 @@ https://github.com/SergeySklyarov/Kompas3D-MCP
 Claude проверит зависимости, скачает готовый пакет, сверит контрольную сумму, создаст конфигурацию
 и зарегистрирует сервер командой `claude mcp add`. Разрешите ему скачивание и запуск команд, когда
 он спросит. Затем начните новую сессию и попросите вызвать `kompas_health` и `kompas_capabilities`:
-должно прийти 79 инструментов. Подробности и вариант для обычного чата Claude Desktop:
+должно прийти 81 инструмент. Подробности и вариант для обычного чата Claude Desktop:
 [подключение к Claude](docs/operator-guide/claude-setup.md).
 
 <sub>Claude и логотип Claude являются товарными знаками Anthropic. Проект не связан с Anthropic и не
@@ -202,14 +202,14 @@ JSON-конфигурацией:
 
 ## Инструменты
 
-79 инструментов с названием и назначением каждого: [docs/TOOLS.md](docs/TOOLS.md).
+81 инструмент с названием и назначением каждого: [docs/TOOLS.md](docs/TOOLS.md).
 Схемы аргументов лежат в [`schemas/`](schemas/).
 
 ## Состояние и планы
 
 Целевая версия: КОМПАС-3D v24.0.0.2799 x64. Текущий выпуск -
-[`v0.2.0`](https://github.com/SergeySklyarov/Kompas3D-MCP/releases/tag/v0.2.0), заметки:
-[docs/distribution/v0.2.0.md](docs/distribution/v0.2.0.md). Теги выпусков - версия продукта
+[`v0.5.0`](https://github.com/SergeySklyarov/Kompas3D-MCP/releases/tag/v0.5.0), заметки:
+[docs/distribution/v0.5.0.md](docs/distribution/v0.5.0.md). Теги выпусков - версия продукта
 `vMAJOR.MINOR.PATCH` ([правило](AGENTS.md)). Обязательный объём закрывается, только когда каждое применимое
 действие режима (создание, чтение, правка, перестроение, сохранение и повторное открытие,
 подавление, удаление зависимостей, отрицательные проверки, проверка геометрии) подтверждено живым
@@ -217,21 +217,20 @@ JSON-конфигурацией:
 
 | Профиль | Режимы | Общие зависимости |
 |---|---|---|
-| Твердотельное моделирование деталей (`mechanical-core-v1`) | 54/54 | 15/15 |
+| Твердотельное моделирование деталей (`mechanical-core-v1`) | 54/54 | 16/16 |
 | Сборки (`assemblies-minimal-v1`) | 7/7 | 5/5 |
 | Сопряжения (`mates-minimal-v1`) | 6/6 | 5/5 |
 | Чертежи (`drawings-minimal-v1`) | 6/6 | 6/6 |
 | Переменные и материал детали (`variables-material-minimal-v1`) | 5/5 | 5/5 |
+| Пересечения и зазоры сборки (`assembly-interference-minimal-v1`) | 4/4 | 5/5 |
 
-Закрыты все пять профилей: режимов **78/78**, зависимостей **36/36**, открыто **0**,
-`problems: []` (`scripts/acceptance-levels.py`, 07.10.2026). Профиль переменных и материала закрыт
-документированным маршрутом: плотность читается расчётом МЦХ, где единицу задаёт аргумент вызова,
-поэтому она приходит в кг/м³ без пересчёта сервером.
+Закрыты все шесть профилей: режимов **82/82**, зависимостей **42/42**, открыто **0**,
+`problems: []` (`scripts/acceptance-levels.py`, 08.10.2026).
 
-**Приёмка выпуска 0.2.0** (07.10.2026, на бинарях пакета): полный живой прогон **1104/1104**;
-клиентская приёмка рабочим MCP-клиентом - **30 сценариев из 30**, включая плотность в кг/м³, цепочку
-«плотность → масса», эскиз на плоскости, построенной от грани, и выравнивание сопряжений,
-подтверждённое измеренной ориентацией граней. Паспорт поставки - итог PASS по всем
+**Приёмка выпуска 0.5.0** (08.10.2026, на бинарях пакета): полный живой прогон **1133/1133**;
+группы вне полного прогона (сборки, сопряжения, чертежи, переменные и материал, пересечения и
+зазоры) - все PASS; клиентская приёмка рабочим MCP-клиентом - **38 сценариев из 38**. Паспорт
+поставки - итог PASS по всем
 уровням: доставка, функциональная приёмка, обязательный объём и клиентская приёмка. Текущее состояние и измеренные числа:
 [`docs/STATUS.md`](docs/STATUS.md); каталог операций, матрица покрытия и
 профили: [`coverage/solid-v24/`](coverage/solid-v24/).
@@ -256,8 +255,8 @@ JSON-конфигурацией:
   существующей внешней переменной.
 - Родные приклеивание и вырезание по траектории (`SM-04.boss`) отложены; сохранение копии базового
   объекта при объединении (`SM-15.union.mode_save_base_copy`) запланировано следующим этапом.
-- Пять профилей из таблицы выше - это не весь каталог операций P6: в каталоге
-  **36 семейств**, из них **18** в обязательном объёме (**78** обязательных режимов). План:
+- Шесть профилей из таблицы выше - это не весь каталог операций P6: в каталоге
+  **37 семейств**, из них **19** в обязательном объёме (**82** обязательных режима). План:
   [implementation-plan.md](coverage/solid-v24/implementation-plan.md).
 - Сервер не правит произвольную операцию КОМПАС: то, что не подтверждено, возвращается как
   `CAPABILITY_UNAVAILABLE` с объяснением, а не как успех.

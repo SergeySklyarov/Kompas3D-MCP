@@ -4006,6 +4006,12 @@ def main():
     # обязано находиться по ИМЕНИ строки (`R40.<NN>`), а в общем прогоне эти строки тонули бы среди чужих.
     release_040_only = "--release-040" in sys.argv
 
+    # То же для находок клиента после 0.4.0 (наряд CLIENT_BUGS_20261008): одна группа E08 на своём
+    # сеансе — площадь профиля из дуг и отрезков, смысл знака sweep_deg, полилиния, самопроверка
+    # массива операций, sketch_ref в get_feature. Отдельная ветка нужна по той же причине, что у
+    # прочих групп: доказательство обязано находиться по ИМЕНИ строки (`E08.<NN>`).
+    client_bugs_only = "--e08-only" in sys.argv
+
     # Домен ЧЕРТЕЖЕЙ (блок DRW, профиль `drawings-minimal-v1`): одна группа, свой сеанс, своя ветка.
     # Клетка матрицы обязана находиться по ИМЕНИ строки (`DRW.<NN>.<действие>`), а не по номеру в общем
     # потоке, — та же причина, что у прочих групп.
@@ -4045,6 +4051,7 @@ def main():
         else "Приёмка VM: внешние переменные детали и материал через MCP (блок VM, профиль variables-material-minimal-v1)" if variables_material_only
         else "Приёмка PO: ориентация экземпляров кругового массива через MCP (наряд MCP-015)" if pattern_orientation_only
         else "Приёмка R40: ссылки на эскиз и вспомогательную геометрию, честная самопроверка (наряд RELEASE_040)" if release_040_only
+        else "Приёмка E08: находки клиента после 0.4.0 — площадь из дуг, знак sweep_deg, массив операций, sketch_ref (наряд CLIENT_BUGS_20261008)" if client_bugs_only
         else "Интеграционный прогон вертикального сценария через MCP"),
         os.path.join(workdir, "chamfer-acceptance.json" if chamfer_only
                      else "fillet-acceptance.json" if fillet_only
@@ -4070,6 +4077,7 @@ def main():
                      else "variables-material-acceptance.json" if variables_material_only
                      else "pattern-orientation-acceptance.json" if pattern_orientation_only
                      else "release-040-acceptance.json" if release_040_only
+                     else "client-bugs-20261008-acceptance.json" if client_bugs_only
                      else "smoke-report.json"))
     report_override = argument("--report")
     if report_override:
@@ -4471,6 +4479,14 @@ def main():
 
         if release_040_only:
             release_040_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if client_bugs_only:
+            e08_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -5033,6 +5049,11 @@ def main():
         # (наряд RELEASE_040_COMPLETION), свои документы и свои имена строк (`R40.<NN>`), поэтому в
         # общем потоке её доказательство иначе не нашлось бы. Документы PO она не трогает.
         release_040_checks(client, rep, app_id, workdir)
+
+        # Группа E08 идёт сразу за R40 и в том же сеансе: находки клиента после 0.4.0 (наряд
+        # CLIENT_BUGS_20261008), свои документы и свои имена строк (`E08.<NN>`), поэтому в общем
+        # потоке её доказательство иначе не нашлось бы. Документы R40 она не трогает.
+        e08_checks(client, rep, app_id, workdir)
 
         b5_acceptance_checks(client, rep, app_id, workdir)
 
@@ -12385,6 +12406,344 @@ def release_040_checks(client, rep, app_id, workdir):
             "PASS" if error_code(a_env) is None and ref_id(result(a_env).get("reference_id")) else "FAIL",
             "axis=%s err=%s ссылка=%s"
             % (axis_ref, error_code(a_env), ref_id(result(a_env).get("reference_id"))))
+
+
+def e08_checks(client, rep, app_id, workdir):
+    """Группа E08: оставшиеся находки клиента после 0.4.0 (наряд `CLIENT_BUGS_20261008`).
+
+    E1 (GAP-012): площадь профиля из замкнутой цепочки отрезков и дуг. Строка E08.01 берёт контур
+    реальной детали клиента (21 дуга и 4 отрезка) и требует не «ответ получен», а совпадения
+    измеренного объёма с АНАЛИТИЧЕСКИМ ожиданием: 33899,929930285063 мм³ при выдавливании на 4 мм.
+    E08.02 различает смысл знака `sweep_deg` четырьмя случаями; различает их ОБЪЁМ, а не чтение
+    ответа адаптера, потому что при |sweep| < 180° обе дуги идут по одним и тем же точкам.
+    E08.06 — честный `null`: причина невычислимости обязана дойти до `unverified_aspects` текстом.
+    E4 (OBS-014): E08.03 — исходные объекты массива операций с ОДНИМ источником, E08.04 — заведомо
+    неверное заявленное ожидание объёма. E5: E08.05 — `sketch_ref` из `kompas_get_feature`.
+    """
+    def tool(name, args, timeout=300):
+        _e, env, _r = client.tool(name, args, timeout=timeout)
+        return env or {}
+
+    def result(env):
+        return env.get("result") or {}
+
+    def ref_id(value):
+        return value.get("id") if isinstance(value, dict) else value
+
+    def verification(env):
+        return env.get("verification") or {}
+
+    def checks_of(env):
+        return {c.get("name"): c for c in (verification(env).get("checks") or [])}
+
+    def unverified_of(env):
+        found = list(result(env).get("unverified_aspects") or [])
+        found += list(verification(env).get("unverified_aspects") or [])
+        return found
+
+    def checks_of(env):
+        # Проверки лежат в РАЗНЫХ местах у разных инструментов (измерено, та же причина, что в
+        # module-level checks_of): у выдавливания — в verification.checks, у массива — на верхнем
+        # уровне result.checks. Читать только одно значит пропустить доказательство второй половины.
+        top = result(env).get("checks")
+        if isinstance(top, list) and top:
+            return {c.get("name"): c for c in top}
+        return {c.get("name"): c for c in (verification(env).get("checks") or [])}
+
+    def new_part(name):
+        env = tool("kompas_create_document", {
+            "application_id": app_id, "kind": "part", "name": name,
+            "operation_id": str(uuid.uuid4())})
+        return (env.get("document_id") or result(env).get("id")), (env.get("revision_after") or 1)
+
+    def draw(doc, rev, entities, name):
+        env = tool("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": rev,
+            "plane": {"base": "xy", "offset_mm": 0.0}, "name": name,
+            "operation_id": str(uuid.uuid4())})
+        sketch = ref_id(result(env).get("id"))
+        rev = env.get("revision_after") or rev
+        env = tool("kompas_edit_sketch", {
+            "sketch_ref": sketch, "expected_revision": rev, "mode": "replace",
+            "entities": entities, "operation_id": str(uuid.uuid4())})
+        rev = env.get("revision_after") or rev
+        return sketch, rev
+
+    def close(doc):
+        tool("kompas_close_document", {
+            "document_id": doc, "dirty_policy": "discard", "operation_id": str(uuid.uuid4())})
+
+    def segment_volume(r, sweep_deg, depth):
+        """Аналитический объём сегмента, отсечённого хордой дуги размаха sweep_deg: 0,5·r²(θ−sinθ)·h."""
+        theta = math.radians(abs(sweep_deg))
+        return 0.5 * r * r * (theta - math.sin(theta)) * depth
+
+    # ── E1.8: контур реальной детали клиента — 21 дуга и 4 отрезка ──────────────────────────
+    contour_path = os.path.join(ROOT, "tests", "Unit", "KompasMcp.Unit", "Data", "plate_cp04a_mcp.json")
+    expected_area = 8474.982482571266
+    depth_mm = 4.0
+    expected_volume = expected_area * depth_mm
+    if not os.path.exists(contour_path):
+        rep.add("E08.01", "выдавливание по контуру клиента (21 дуга + 4 отрезка) подтверждено измерением",
+                "FAIL", "нет файла контура: %s" % contour_path)
+    else:
+        with open(contour_path, encoding="utf-8-sig") as fh:
+            contour = json.load(fh)["variants"]["exact_closure"]["entities"]
+        doc, rev = new_part("E08_CP04A")
+        if not doc:
+            rep.add("E08.01", "выдавливание по контуру клиента (21 дуга + 4 отрезка) подтверждено измерением",
+                    "FAIL", "документ не создан")
+        else:
+            sk, rev = draw(doc, rev, contour, "cp04a")
+            env = tool("kompas_extrude", {
+                "sketch_ref": sk, "expected_revision": rev, "operation": "base",
+                "depth_mm": depth_mm, "direction": "positive", "operation_id": str(uuid.uuid4())})
+            chk = checks_of(env)
+            delta = result(env).get("volume_delta_mm3")
+            basis_ok = (chk.get("expected_basis") or {}).get("observed") == "profile_area_x_depth"
+            passed = (chk.get("volume_delta") or {}).get("passed") is True
+            measured_ok = isinstance(delta, (int, float)) \
+                and abs(delta - expected_volume) <= max(1e-3, abs(expected_volume) * 1e-9)
+            rep.add("E08.01", "выдавливание по контуру клиента (21 дуга + 4 отрезка) подтверждено измерением",
+                    "PASS" if (error_code(env) is None and basis_ok and passed and measured_ok
+                               and verification(env).get("level") == "geometry_checked") else "FAIL",
+                    "err=%s уровень=%s базис=%s volume_delta=%s дельта=%s ожидание=%.9f"
+                    % (error_code(env), verification(env).get("level"),
+                       (chk.get("expected_basis") or {}).get("observed"),
+                       (chk.get("volume_delta") or {}).get("observed"), delta, expected_volume))
+            close(doc)
+
+    # ── E2.2: смысл знака sweep_deg, четыре различающих случая ──────────────────────────────
+    radius = 30.0
+    cases = ((30.0, 60.0), (30.0, -60.0), (30.0, 270.0), (30.0, -270.0))
+    case_rows = []
+    all_ok = True
+    for start, sweep in cases:
+        doc, rev = new_part("E08_ARC_%d" % int(start + sweep))
+        if not doc:
+            all_ok = False
+            case_rows.append("(%g,%g): документ не создан" % (start, sweep))
+            continue
+        a0 = math.radians(start)
+        a1 = math.radians(start + sweep)
+        entities = [
+            {"kind": "arc", "center_mm": [0.0, 0.0], "radius_mm": radius,
+             "start_deg": start, "sweep_deg": sweep},
+            {"kind": "line",
+             "start_mm": [radius * math.cos(a1), radius * math.sin(a1)],
+             "end_mm": [radius * math.cos(a0), radius * math.sin(a0)]},
+        ]
+        sk, rev = draw(doc, rev, entities, "arc")
+        env = tool("kompas_extrude", {
+            "sketch_ref": sk, "expected_revision": rev, "operation": "base",
+            "depth_mm": 10.0, "direction": "positive", "operation_id": str(uuid.uuid4())})
+        want = segment_volume(radius, sweep, 10.0)
+        complement = (math.pi * radius * radius - (want / 10.0)) * 10.0
+        got = result(env).get("volume_delta_mm3")
+        ok = (error_code(env) is None and isinstance(got, (int, float))
+              and abs(got - want) <= max(1e-3, abs(want) * 1e-9))
+        all_ok = all_ok and ok
+        case_rows.append("(%g°, %+g°): измерено %s против сегмента %.6f (дополняющая дала бы %.6f)"
+                         % (start, sweep, got, want, complement))
+        close(doc)
+    rep.add("E08.02", "смысл знака sweep_deg: конец = start + sweep, размах = |sweep| (четыре случая)",
+            "PASS" if all_ok else "FAIL", "; ".join(case_rows))
+
+    # ── E2.4: дуга по концам (документированный ksArcByPoint) ───────────────────────────────
+    doc, rev = new_part("E08_ARC_POINTS")
+    if not doc:
+        rep.add("E08.08", "дуга по концам (ksArcByPoint): та же геометрия, что дуга по углам", "FAIL",
+                "документ не создан")
+    else:
+        sk, rev = draw(doc, rev, [
+            {"kind": "arc", "center_mm": [0.0, 0.0], "radius_mm": 5.0,
+             "start_point_mm": [5.0, 0.0], "end_point_mm": [-5.0, 0.0], "clockwise": False},
+            {"kind": "line", "start_mm": [-5.0, 0.0], "end_mm": [5.0, 0.0]},
+        ], "arc_points")
+        env = tool("kompas_extrude", {"sketch_ref": sk, "expected_revision": rev, "operation": "base",
+                                      "depth_mm": 10.0, "direction": "positive",
+                                      "operation_id": str(uuid.uuid4())})
+        want = (math.pi * 25.0 / 2.0) * 10.0
+        got = result(env).get("volume_delta_mm3")
+        rep.add("E08.08", "дуга по концам (ksArcByPoint): та же геометрия, что дуга по углам",
+                "PASS" if (error_code(env) is None and isinstance(got, (int, float))
+                           and abs(got - want) <= max(1e-3, want * 1e-9)) else "FAIL",
+                "err=%s измерено=%s ожидание полукруга %.6f" % (error_code(env), got, want))
+        close(doc)
+
+    # Смешение двух форм дуги отвергается ДО COM. Эскиз берётся ЖИВОЙ: на несуществующей ссылке
+    # ответом был бы STALE_REFERENCE, и отказ прибора выдал бы себя за отказ продукта (измерено
+    # первым прогоном этой строки).
+    mix_doc, mix_rev = new_part("E08_ARC_MIX")
+    mix_sketch, mix_rev = draw(mix_doc, mix_rev, [{"kind": "circle", "center_mm": [0.0, 0.0],
+                                                   "radius_mm": 1.0}], "mix")
+    mix_err, mix_env, _ = client.tool("kompas_edit_sketch", {
+        "sketch_ref": mix_sketch, "expected_revision": mix_rev, "mode": "replace",
+        "entities": [{"kind": "arc", "center_mm": [0.0, 0.0], "radius_mm": 5.0,
+                      "start_deg": 0.0, "sweep_deg": 90.0,
+                      "start_point_mm": [5.0, 0.0], "end_point_mm": [0.0, 5.0], "clockwise": False}],
+        "operation_id": str(uuid.uuid4())})
+    rep.add("E08.09", "дуга: смешение углов и концов отвергается INVALID_ARGUMENT до COM",
+            "PASS" if error_code(mix_env) == "INVALID_ARGUMENT" else "FAIL",
+            "код=%s" % error_code(mix_env))
+    close(mix_doc)
+
+    # ── E4.1: массив операций с ОДНИМ исходным объектом ─────────────────────────────────────
+    doc, rev = new_part("E08_PATTERN")
+    if not doc:
+        rep.add("E08.03", "массив операций: исходные объекты привязаны (один источник)", "FAIL",
+                "документ не создан")
+    else:
+        # Пластина ровно та, на которой группа B4 измерила четыре экземпляра: x ∈ [0, 100],
+        # y ∈ [-40, 40]. Ось массива идёт через (50, 0), поэтому смещение пластины по X или по Y
+        # уводит часть экземпляров за материал, и они снимают ноль (измерено зондом).
+        sk, rev = draw(doc, rev, [{"kind": "rectangle", "start_mm": [0.0, -40.0],
+                                   "width_mm": 100.0, "height_mm": 80.0}], "plate")
+        env = tool("kompas_extrude", {"sketch_ref": sk, "expected_revision": rev, "operation": "base",
+                                      "depth_mm": 10.0, "direction": "positive",
+                                      "operation_id": str(uuid.uuid4())})
+        rev = env.get("revision_after") or rev
+        rows = result(tool("kompas_list_bodies", {"document_id": doc}))
+        body_ref = rows[0].get("body_ref") if isinstance(rows, list) and rows else None
+        hsk, rev = draw(doc, rev, [{"kind": "circle", "center_mm": [20.0, 20.0], "radius_mm": 5.0}], "hole")
+        cut = tool("kompas_extrude", {"sketch_ref": hsk, "expected_revision": rev, "operation": "cut",
+                                      "end_condition": "through", "direction": "symmetric",
+                                      "target_body_ref": body_ref, "operation_id": str(uuid.uuid4())})
+        rev = cut.get("revision_after") or rev
+        cut_ref = ref_id(result(cut).get("feature_ref") or cut.get("feature_ref"))
+        plate_v = 100.0 * 80.0 * 10.0
+        hole_v = math.pi * 25.0 * 10.0
+        penv = tool("kompas_pattern_circular", {
+            "document_id": doc, "expected_revision": rev, "copy_kind": "operations",
+            "source_refs": [cut_ref],
+            "axis_point1_mm": [50.0, 0.0, 0.0], "axis_point2_mm": [50.0, 0.0, 10.0],
+            "count2": 4, "step2_deg": 90.0, "save_initial_orientation": False,
+            "expected_volume_mm3": plate_v - (4.0 * hole_v), "expected_body_count": 1,
+            "expected_hole_radius_mm": 5.0, "expected_hole_height_mm": 10.0,
+            "expected_hole_count": 4,
+            "operation_id": str(uuid.uuid4())})
+        pchk = checks_of(penv)
+        bound = pchk.get("initial_objects_bound") or {}
+        rep.add("E08.03", "массив операций: исходные объекты привязаны (один источник)",
+                "PASS" if error_code(penv) is None and bound.get("passed") is True else "FAIL",
+                "err=%s initial_objects_bound=%s observed=%s initial_object_count=%s"
+                % (error_code(penv), bound.get("passed"), bound.get("observed"),
+                   (result(penv).get("readout") or {}).get("initial_object_count")))
+        close(doc)
+
+    # ── E4.2.3: заведомо неверное заявленное ожидание объёма ────────────────────────────────
+    doc, rev = new_part("E08_PATTERN_WRONG")
+    if not doc:
+        rep.add("E08.04", "массив: провал заявленного объёма назван в unverified_aspects", "FAIL",
+                "документ не создан")
+    else:
+        # Пластина ровно та, на которой группа B4 измерила четыре экземпляра: x ∈ [0, 100],
+        # y ∈ [-40, 40]. Ось массива идёт через (50, 0), поэтому смещение пластины по X или по Y
+        # уводит часть экземпляров за материал, и они снимают ноль (измерено зондом).
+        sk, rev = draw(doc, rev, [{"kind": "rectangle", "start_mm": [0.0, -40.0],
+                                   "width_mm": 100.0, "height_mm": 80.0}], "plate")
+        env = tool("kompas_extrude", {"sketch_ref": sk, "expected_revision": rev, "operation": "base",
+                                      "depth_mm": 10.0, "direction": "positive",
+                                      "operation_id": str(uuid.uuid4())})
+        rev = env.get("revision_after") or rev
+        rows = result(tool("kompas_list_bodies", {"document_id": doc}))
+        body_ref = rows[0].get("body_ref") if isinstance(rows, list) and rows else None
+        hsk, rev = draw(doc, rev, [{"kind": "circle", "center_mm": [20.0, 20.0], "radius_mm": 5.0}], "hole")
+        cut = tool("kompas_extrude", {"sketch_ref": hsk, "expected_revision": rev, "operation": "cut",
+                                      "end_condition": "through", "direction": "symmetric",
+                                      "target_body_ref": body_ref, "operation_id": str(uuid.uuid4())})
+        rev = cut.get("revision_after") or rev
+        cut_ref = ref_id(result(cut).get("feature_ref") or cut.get("feature_ref"))
+        penv = tool("kompas_pattern_circular", {
+            "document_id": doc, "expected_revision": rev, "copy_kind": "operations",
+            "source_refs": [cut_ref],
+            "axis_point1_mm": [50.0, 0.0, 0.0], "axis_point2_mm": [50.0, 0.0, 10.0],
+            "count2": 4, "step2_deg": 90.0, "save_initial_orientation": False,
+            "expected_volume_mm3": (100.0 * 80.0 * 10.0) + 1000.0, "expected_body_count": 1,
+            "operation_id": str(uuid.uuid4())})
+        pchk = checks_of(penv)
+        volume_check = pchk.get("document_volume") or {}
+        marks = unverified_of(penv)
+        named = any(str(m).startswith("document_volume_not_confirmed") for m in marks)
+        rep.add("E08.04", "массив: провал заявленного объёма назван в unverified_aspects",
+                "PASS" if (error_code(penv) is None and volume_check.get("passed") is False and named)
+                else "FAIL",
+                "err=%s document_volume=%s observed=%s unverified=%s"
+                % (error_code(penv), volume_check.get("passed"), volume_check.get("observed"), marks))
+        close(doc)
+
+    # ── E5.3: sketch_ref в kompas_get_feature ───────────────────────────────────────────────
+    doc, rev = new_part("E08_FEATURE")
+    if not doc:
+        rep.add("E08.05", "get_feature отдаёт ту же ссылку на эскиз, что create_sketch и list_sketches",
+                "FAIL", "документ не создан")
+    else:
+        sk, rev = draw(doc, rev, [{"kind": "circle", "center_mm": [0.0, 0.0], "radius_mm": 20.0}], "e08")
+        env = tool("kompas_extrude", {"sketch_ref": sk, "expected_revision": rev, "operation": "base",
+                                      "depth_mm": 6.0, "direction": "positive",
+                                      "operation_id": str(uuid.uuid4())})
+        rev = env.get("revision_after") or rev
+        feature_ref = ref_id(result(env).get("feature_ref") or env.get("feature_ref"))
+        fenv = tool("kompas_get_feature", {"feature_ref": feature_ref})
+        from_feature = result(fenv).get("sketch_ref")
+        listed = result(tool("kompas_list_sketches", {"document_id": doc}))
+        listed = listed.get("rows") if isinstance(listed, dict) else None
+        from_list = listed[0].get("sketch_ref") if listed else None
+        marks = unverified_of(fenv)
+        still_marked = any(str(m).startswith("sketch_reference_not_resolved") for m in marks)
+        same = bool(sk and from_feature and from_feature == sk and from_list == sk)
+        rep.add("E08.05", "get_feature отдаёт ту же ссылку на эскиз, что create_sketch и list_sketches",
+                "PASS" if (error_code(fenv) is None and same and not still_marked) else "FAIL",
+                "create=%s get_feature=%s list=%s пометка=%s" % (sk, from_feature, from_list, still_marked))
+        close(doc)
+
+    # ── E1.4: честный null с названной причиной ─────────────────────────────────────────────
+    # Касание, а не открытая цепочка: открытую или ветвящуюся цепочку ядро ОТВЕРГАЕТ до всякой
+    # площади (измерено зондом `scratch/_e08_probe2.py`: extrude отвечает GEOMETRY_FAILED), поэтому
+    # «null с названной причиной» измеряется на контуре, который ядро ПРИНИМАЕТ, а аналитика не
+    # разрешает: прямоугольник с КАСАЮЩИМСЯ кругом. Строка E08.07 называет отказ ядра отдельно.
+    doc, rev = new_part("E08_TOUCH")
+    if not doc:
+        rep.add("E08.06", "касающиеся контуры: причина невычислимости названа текстом", "FAIL",
+                "документ не создан")
+    else:
+        sk, rev = draw(doc, rev, [
+            {"kind": "rectangle", "start_mm": [0.0, 0.0], "width_mm": 20.0, "height_mm": 20.0},
+            {"kind": "circle", "center_mm": [30.0, 10.0], "radius_mm": 10.0},
+        ], "touch")
+        env = tool("kompas_extrude", {"sketch_ref": sk, "expected_revision": rev, "operation": "base",
+                                      "depth_mm": 5.0, "direction": "positive",
+                                      "operation_id": str(uuid.uuid4())})
+        marks = unverified_of(env)
+        chk = checks_of(env)
+        named = [m for m in marks if str(m).startswith("expected_volume_not_computable")]
+        reason_named = bool(named) and "—" in str(named[0]) and len(str(named[0]).split("—", 1)[1].strip()) > 20
+        rep.add("E08.06", "касающиеся контуры: причина невычислимости названа текстом",
+                "PASS" if (error_code(env) is None and reason_named
+                           and "expected_basis" not in chk and "volume_delta" not in chk) else "FAIL",
+                "err=%s проверки=%s unverified=%s" % (error_code(env), sorted(chk), marks))
+        close(doc)
+
+    # ── E1.4, вторая половина: что делает ядро с открытой (ветвящейся) цепочкой ─────────────
+    doc, rev = new_part("E08_OPEN")
+    if not doc:
+        rep.add("E08.07", "открытая ветвящаяся цепочка: ядро отказывает, проверок геометрии нет",
+                "FAIL", "документ не создан")
+    else:
+        sk, rev = draw(doc, rev, [
+            {"kind": "line", "start_mm": [0.0, 0.0], "end_mm": [10.0, 0.0]},
+            {"kind": "line", "start_mm": [0.0, 0.0], "end_mm": [0.0, 10.0]},
+            {"kind": "line", "start_mm": [0.0, 0.0], "end_mm": [-10.0, 0.0]},
+        ], "open")
+        env = tool("kompas_extrude", {"sketch_ref": sk, "expected_revision": rev, "operation": "base",
+                                      "depth_mm": 5.0, "direction": "positive",
+                                      "operation_id": str(uuid.uuid4())})
+        chk = checks_of(env)
+        rep.add("E08.07", "открытая ветвящаяся цепочка: ядро отказывает, проверок геометрии нет",
+                "PASS" if (error_code(env) == "GEOMETRY_FAILED"
+                           and verification(env).get("level") != "geometry_checked") else "FAIL",
+                "err=%s уровень=%s проверки=%s" % (error_code(env), verification(env).get("level"), sorted(chk)))
+        close(doc)
 
 
 def sketch_clearing_checks(client, rep, app_id):

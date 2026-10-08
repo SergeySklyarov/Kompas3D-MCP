@@ -5029,6 +5029,11 @@ def main():
         # доказательство иначе не нашлось бы. Документы B4 она не трогает.
         pattern_orientation_checks(client, rep, app_id, workdir)
 
+        # Группа R40 идёт сразу за PO и в том же сеансе: находки клиентской приёмки 0.3.0 и ссылки
+        # (наряд RELEASE_040_COMPLETION), свои документы и свои имена строк (`R40.<NN>`), поэтому в
+        # общем потоке её доказательство иначе не нашлось бы. Документы PO она не трогает.
+        release_040_checks(client, rep, app_id, workdir)
+
         b5_acceptance_checks(client, rep, app_id, workdir)
 
         sketch_status_checks(client, rep, app_id, workdir)

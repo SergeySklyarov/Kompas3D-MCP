@@ -36,8 +36,42 @@ public static class SketchValidation
             case SketchEntityKind.Arc:
                 RequirePoint(entity.CenterMm, "center_mm");
                 RequirePositive(entity.RadiusMm, "radius_mm");
+                // DOC: <c>ksdocument2d_ksarcbypoint.html</c> documents a second route — centre, radius,
+                // start point, end point, direction. The two forms are MUTUALLY EXCLUSIVE: mixing them
+                // would leave it undecided which geometry was asked for, and the adapter would have to
+                // guess. Every refusal here happens before COM.
+                var byAngles = entity.StartDeg is not null || entity.SweepDeg is not null;
+                var byPoints = entity.StartPointMm is not null || entity.EndPointMm is not null;
+                if (byAngles && byPoints)
+                {
+                    throw Bad("arc", "Дуга задаётся ЛИБО углами (start_deg/sweep_deg), ЛИБО концами "
+                        + "(start_point_mm/end_point_mm/clockwise), не обоими сразу.");
+                }
+
+                if (byPoints)
+                {
+                    RequirePoint(entity.StartPointMm, "start_point_mm");
+                    RequirePoint(entity.EndPointMm, "end_point_mm");
+                    RequireDistance(entity.StartPointMm!, entity.EndPointMm!, "start_point_mm/end_point_mm");
+                    RequireOnCircle(entity, entity.StartPointMm!, "start_point_mm");
+                    RequireOnCircle(entity, entity.EndPointMm!, "end_point_mm");
+                    if (entity.Clockwise is null)
+                    {
+                        throw Bad("clockwise", "Для дуги по концам направление обязательно: те же две точки "
+                            + "называют две разные дуги, и умолчание нарисовало бы дополняющую.");
+                    }
+
+                    break;
+                }
+
                 RequireFinite(entity.StartDeg, "start_deg");
                 RequireFinite(entity.SweepDeg, "sweep_deg");
+                if (entity.Clockwise is not null)
+                {
+                    throw Bad("clockwise", "clockwise задаётся только у дуги по концам; при задании углами "
+                        + "направление несёт знак sweep_deg.");
+                }
+
                 if (Math.Abs(entity.SweepDeg!.Value) < MinimumExtentMm)
                 {
                     throw Bad("sweep_deg", "Нулевой дуге не соответствует ни один элемент.");
@@ -100,6 +134,23 @@ public static class SketchValidation
         foreach (var value in point)
         {
             RequireFiniteValue(value, field);
+        }
+    }
+
+    /// <summary>An arc given by its end points must have both of them ON the circle: the kernel draws the
+    /// arc through them, so a point off the circle would silently change the radius.</summary>
+    private static void RequireOnCircle(SketchEntityDto entity, IReadOnlyList<double> point, string field)
+    {
+        var center = entity.CenterMm!;
+        var radius = entity.RadiusMm!.Value;
+        var dx = point[0] - center[0];
+        var dy = point[1] - center[1];
+        var distance = Math.Sqrt((dx * dx) + (dy * dy));
+        var tolerance = Math.Max(MinimumExtentMm, radius * 1e-6);
+        if (Math.Abs(distance - radius) > tolerance)
+        {
+            throw Bad(field, $"Точка лежит на расстоянии {distance:R} мм от центра, а радиус {radius:R} мм: "
+                + $"допуск {tolerance:R} мм. Дуга по концам строится по окружности (center_mm, radius_mm).");
         }
     }
 

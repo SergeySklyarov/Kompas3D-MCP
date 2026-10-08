@@ -22,4 +22,10 @@
     <ProjectReference Include="..\..\..\src\KompasMcp.Host\KompasMcp.Host.csproj" />
   </ItemGroup>
 
+  <!-- The client contour of card GAP-012 (CP04a): 21 arcs and 4 lines, embedded so the area test is
+       deterministic and needs no file system at run time. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Data\plate_cp04a_mcp.json" />
+  </ItemGroup>
+
 </Project>

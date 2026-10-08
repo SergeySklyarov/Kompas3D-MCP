@@ -334,13 +334,14 @@ public sealed partial class Api5Session
         }
 
         // The remembered profile is the LIST of contours drawn so far; its area is derived from them, not a
-        // running sum, which cannot express that one contour is a hole in another. An unknown or partially
-        // cleared shape clears the entry.
+        // running sum, which cannot express that one contour is a hole in another. Only a PARTIALLY cleared
+        // shape drops the entry: there the stored list no longer describes the model. An entry whose area is
+        // merely not computable is KEPT, because the contour list is what lets the extrusion name WHY the
+        // expectation is missing — dropping it made a drawn profile report "never recorded".
         // History: docs/decisions/adapter-core.md#sketch-profiles-contour-list
-        var analytic = ProfileArea.Of(command.Entities);
         var freshPoints = ProbePointsOf(command.Entities);
         var partialClear = command.Mode == SketchEditMode.Replace && !cleared;
-        if (analytic is null || partialClear)
+        if (partialClear)
         {
             _sketchProfiles.Remove(command.SketchRef);
         }
@@ -756,21 +757,43 @@ public sealed partial class Api5Session
                 return "circle";
 
             case SketchEntityKind.Arc:
+                // DOC: <c>ksdocument2d_ksarcbypoint.html</c> — a second route takes the centre, the radius
+                // and the two end POINTS with an explicit direction (1 CCW, −1 CW). It is offered so a
+                // caller holding two points of a real contour need not convert them to angles.
+                if (entity.StartPointMm is { Count: 2 } arcStart && entity.EndPointMm is { Count: 2 } arcEnd)
+                {
+                    editor.ksArcByPoint(
+                        Point(entity.CenterMm, 0),
+                        Point(entity.CenterMm, 1),
+                        Required(entity.RadiusMm, "radius_mm"),
+                        arcStart[0],
+                        arcStart[1],
+                        arcEnd[0],
+                        arcEnd[1],
+                        entity.Clockwise == true ? (short)-1 : (short)1,
+                        LineStyle);
+                    return "arc";
+                }
+
                 // INVARIANT: the end angle is start_deg + sweep_deg WITH its sign, so a NEGATIVE sweep goes
                 // to the other side of start_deg. History: docs/decisions/adapter-core.md#arc-sign
                 var sweep = Required(entity.SweepDeg, "sweep_deg");
                 var start = Required(entity.StartDeg, "start_deg");
                 // INVARIANT: the kernel takes TWO angles and REFUSES when the end leaves [−360°, 360°],
-                // though the schema allows [−720, 720]; with a negative sweep the SMALLER angle goes first.
+                // though the schema allows [−720, 720]; angles are shifted by whole turns, order kept.
                 // History: docs/decisions/adapter-core.md#arc-sign
                 var (first, second) = ArcEndpoints(start, sweep);
+                // DOC: <c>ksdocument2d_ksarcbyangle.html</c> — f1/f2 are the START and END angle, and
+                // `direction` is 1 (counter-clockwise) or -1 (clockwise). The sign of the sweep picks the
+                // direction; the kernel is never handed the undocumented 0.
+                // History: docs/decisions/adapter-core.md#arc-direction-documented
                 editor.ksArcByAngle(
                     Point(entity.CenterMm, 0),
                     Point(entity.CenterMm, 1),
                     Required(entity.RadiusMm, "radius_mm"),
-                    Math.Min(first, second),
-                    Math.Max(first, second),
-                    sweep >= 0 ? (short)1 : (short)0,
+                    first,
+                    second,
+                    sweep >= 0 ? (short)1 : (short)-1,
                     LineStyle);
                 return "arc";
 
@@ -1127,15 +1150,21 @@ public sealed partial class Api5Session
         double? expected = null;
         string? expectedBasis = null;
         string? expectedUnavailable = null;
-        if (!_sketchProfiles.TryGetValue(command.SketchRef, out var profile))
+        var profileOutcome = _sketchProfiles.TryGetValue(command.SketchRef, out var profile)
+            ? profile.Outcome
+            : null;
+        if (profileOutcome is null)
         {
             expectedUnavailable = "expected_volume_not_computable — профиль эскиза не записан этим "
                 + "сеансом (ссылки нет в реестре профилей), поэтому ожидаемый объём посчитать не из чего";
         }
-        else if (profile.AreaMm2 is not double profileAreaMm2 || profileAreaMm2 <= 0d)
+        else if (profileOutcome.AreaMm2 is not double profileAreaMm2 || profileAreaMm2 <= 0d)
         {
+            // The reason the region is unknown travels with it: "not computable" alone told the caller
+            // nothing about which primitive or which relation defeated the analytic area.
             expectedUnavailable = "expected_volume_not_computable — площадь нарисованного профиля "
-                + "аналитически не вычислена (дуги, полилинии, соприкасающиеся контуры или неполный контур)";
+                + "аналитически не вычислена: "
+                + (profileOutcome.UnavailableReason ?? "причина не названа");
         }
         else if (command.EndCondition == ExtrudeEndCondition.Through)
         {

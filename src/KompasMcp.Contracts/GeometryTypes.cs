@@ -36,6 +36,22 @@ public sealed record SketchEntityDto
     /// adapter (spec 2.6).</summary>
     public double? SweepDeg { get; init; }
 
+    /// <summary>Arc by END POINTS: the start point on the circle. An alternative to <see cref="StartDeg"/> and
+    /// <see cref="SweepDeg"/> — the two forms are mutually exclusive.</summary> <remarks>DOC:
+    /// <c>ksdocument2d_ksarcbypoint.html</c> documents the route (centre, radius, start point, end point,
+    /// direction), so a caller holding two points of a real contour need not convert them to angles.
+    /// History: docs/decisions/adapter-core.md#arc-by-endpoints</remarks>
+    public IReadOnlyList<double>? StartPointMm { get; init; }
+
+    /// <summary>Arc by END POINTS: the end point on the circle. Required together with
+    /// <see cref="StartPointMm"/> and <see cref="Clockwise"/>.</summary>
+    public IReadOnlyList<double>? EndPointMm { get; init; }
+
+    /// <summary>Arc by END POINTS: draw direction — <c>true</c> clockwise, <c>false</c> counter-clockwise. It is
+    /// REQUIRED with the end-point form (no silent default): the same two points name two different arcs, and
+    /// guessing one would draw the complement of what the caller meant.</summary>
+    public bool? Clockwise { get; init; }
+
     /// <summary>rectangle width along sketch +X, mm.</summary>
     public double? WidthMm { get; init; }
 

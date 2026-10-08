@@ -18,7 +18,11 @@ public sealed class SketchProfile
 
     /// <summary>Area of the region the whole profile encloses, in mm², or null when it is not analytically
     /// determined (see <see cref="ProfileArea"/>).</summary>
-    public double? AreaMm2 => ProfileArea.Of(_entities);
+    public double? AreaMm2 => Outcome.AreaMm2;
+
+    /// <summary>The area together with the reason it is unavailable, so an extrusion can name the gap
+    /// instead of reporting a bare "not computable".</summary>
+    public ProfileAreaOutcome Outcome => ProfileArea.Compute(_entities);
 
     public void Replace(IReadOnlyList<SketchEntityDto> entities)
     {

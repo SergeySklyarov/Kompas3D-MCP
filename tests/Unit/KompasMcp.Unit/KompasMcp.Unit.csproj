@@ -28,11 +28,12 @@
     <EmbeddedResource Include="Data\plate_cp04a_mcp.json" />
   </ItemGroup>
 
-  <!-- The client part of card OBS-026 (Omega CP06, 3004019): the pinion contour that was refused and the
-       escape wheel contour that was extruded. Verbatim copy, so the profile diagnosis is measured on the
-       contour the client actually sent rather than on a figure built to suit the detector. -->
+  <!-- The client contours of card OBS-026 (Omega CP06, 3004019): the pinion contour that was refused and
+       the escape wheel contour that was extruded. ONLY those contours are kept, cut verbatim out of the
+       client's file; the full client file does not enter the repository (its path and SHA-256 are named in
+       the cut). The diagnosis is therefore still measured on the contour the client actually sent. -->
   <ItemGroup>
-    <EmbeddedResource Include="Data\wheels_cp05_3004019.json" />
+    <EmbeddedResource Include="Data\cp06_profiles.json" />
   </ItemGroup>
 
 </Project>

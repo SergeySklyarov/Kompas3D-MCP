@@ -260,17 +260,20 @@ public partial class Api5Session
                 Expected: isCut ? "материал снят (Cut)" : "материал добавлен (Boss)"));
         }
 
-        bool? numericMatch = null;
-        if (command.ExpectedVolumeMm3 is double expected)
+        // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
+        // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
+        var declared = DeclaredExpectation.Evaluate(command.ExpectedVolumeMm3, volumeAfter);
+        if (declared.IsDeclared)
         {
-            numericMatch = volumeAfter is double measured
-                && Math.Abs(measured - expected) <= ProfileArea.Tolerance(expected);
-            checks.Add(new NamedCheck(
-                "volume_expected",
-                numericMatch.Value,
-                Observed: Num(volumeAfter),
-                Expected: Num(expected)));
+            checks.Add(DeclaredExpectation.Check("volume_expected", declared));
+            if (declared.IsRefusal)
+            {
+                throw DeclaredExpectation.Refusal(
+                    declared, "kompas_rotated", "объём после операции", document.Revision);
+            }
         }
+
+        var numericMatch = declared.IsDeclared ? declared.IsConfirmed : (bool?)null;
 
         // Geometry is confirmed when the parameters read back, the surface of revolution actually
         // appeared, the material sign is right and — if the caller supplied an expectation — the volume
@@ -282,14 +285,18 @@ public partial class Api5Session
             && numericMatch is not false;
 
         var unverified = new List<string>();
-        if (!geometryConfirmed)
+        if (declared.IsUnverifiable)
+        {
+            unverified.Add(DeclaredExpectation.UnreadableReason("объём после операции"));
+        }
+        else if (!geometryConfirmed)
         {
             unverified.Add(
                 "geometry_not_confirmed — КОМПАС принял запись, но измерение не подтвердило " +
                 "ожидаемую геометрию");
         }
 
-        if (command.ExpectedVolumeMm3 is null)
+        if (!declared.IsDeclared)
         {
             unverified.Add(
                 "expected_volume_not_supplied — аналитическое ожидание объёма не задавал вызывающий, " +
@@ -638,16 +645,26 @@ public partial class Api5Session
                 Observed: Num(readBack?.AngleDeg), Expected: Num(wanted)));
         }
 
-        var matched = command.ExpectedVolumeMm3 is double expected
-            && volumeAfter is double measured
-            && Math.Abs(measured - expected) <= ProfileArea.Tolerance(expected);
-        if (command.ExpectedVolumeMm3 is double exp)
+        // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
+        // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
+        var declared = DeclaredExpectation.Evaluate(command.ExpectedVolumeMm3, volumeAfter);
+        if (declared.IsDeclared)
         {
-            checks.Add(new NamedCheck("volume_expected", matched, Observed: Num(volumeAfter), Expected: Num(exp)));
+            checks.Add(DeclaredExpectation.Check("volume_expected", declared));
+            if (declared.IsRefusal)
+            {
+                throw DeclaredExpectation.Refusal(
+                    declared, "kompas_update_feature/" + RotationFamily, "объём после правки",
+                    document.Revision);
+            }
         }
 
         var unverified = new List<string>();
-        if (command.ExpectedVolumeMm3 is null)
+        if (declared.IsUnverifiable)
+        {
+            unverified.Add(DeclaredExpectation.UnreadableReason("объём после правки"));
+        }
+        else if (!declared.IsDeclared)
         {
             unverified.Add("expected_volume_not_supplied — без аналитического ожидания объёма правка не " +
                            "может быть подтверждена геометрически");
@@ -655,7 +672,7 @@ public partial class Api5Session
         unverified.Add("dependent_features_not_enumerated — сохранность зависимых признаков здесь не " +
                        "проверяется; для этого существует приёмочная строка G03");
 
-        var geometryConfirmed = command.ExpectedVolumeMm3 is not null && matched
+        var geometryConfirmed = declared.IsConfirmed
             && checks.TrueForAll(c => c.Name != "angle_read_back" || c.Passed);
 
         return new UpdateFeatureResult(

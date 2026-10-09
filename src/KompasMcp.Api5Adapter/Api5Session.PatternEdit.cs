@@ -96,27 +96,18 @@ public partial class Api5Session
                       $"updateStamp {stateBefore.UpdateStamp}→{stateAfter.UpdateStamp}",
             Expected: $"признаков {featuresBefore}, имя «{stateBefore.Name}»"));
 
-        var volumeMatched = false;
-        if (command.Pattern!.ExpectedVolumeMm3 is double expected && volumeAfter is double measured)
+        // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
+        // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
+        var declared = DeclaredExpectation.Evaluate(command.Pattern!.ExpectedVolumeMm3, volumeAfter);
+        checks.Add(DeclaredExpectation.Check("volume_after_update", declared));
+        if (declared.IsRefusal)
         {
-            volumeMatched = Math.Abs(measured - expected) <= ProfileArea.Tolerance(expected);
-            checks.Add(new NamedCheck(
-                "volume_after_update",
-                volumeMatched,
-                Observed: measured.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture),
-                Expected: expected.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)));
+            throw DeclaredExpectation.Refusal(
+                declared, "kompas_update_feature/" + PatternFamily, "объём после правки",
+                document.Revision);
         }
-        else
-        {
-            // A missing expectation does not "pass by default": without analytics the edit is
-            // confirmed by the parameter read-back alone.
-            checks.Add(new NamedCheck(
-                "volume_after_update",
-                false,
-                Observed: volumeAfter?.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)
-                          ?? "не читается",
-                Expected: "не задано"));
-        }
+
+        var volumeMatched = declared.IsConfirmed;
 
         var bodyCountMatched = true;
         if (command.Pattern.ExpectedBodyCount is int expectedBodies)
@@ -152,10 +143,9 @@ public partial class Api5Session
             unverified.Insert(0, PatternReadBackMarks.ParameterNotReadBack);
         }
 
-        if (!volumeMatched)
+        if (declared.IsUnverifiable)
         {
-            unverified.Insert(0,
-                "volume_not_as_expected — параметры перечитаны, но измерение объёма не совпало с ожиданием");
+            unverified.Insert(0, DeclaredExpectation.UnreadableReason("объём после правки"));
         }
 
         var geometryConfirmed = readBackOk && sameFeature && volumeMatched && bodyCountMatched;

@@ -135,11 +135,18 @@ public sealed partial class Api5Session
         consumed.AddRange(command.ToolBodyRefs);
 
         var unverified = new List<string>();
-        if (command.ExpectedVolumeMm3 is double expected && !VolumeMatches(totalVolume, expected))
+        // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
+        // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
+        var declared = DeclaredExpectation.Evaluate(command.ExpectedVolumeMm3, totalVolume);
+        if (declared.IsRefusal)
         {
-            // The expectation is named but not confirmed. This is NOT a reason to weaken the check
-            // nor to declare success: the mismatch goes into the response as an unverified aspect.
-            unverified.Add("expected_volume_mismatch");
+            throw DeclaredExpectation.Refusal(
+                declared, "kompas_boolean", "суммарный объём тел документа", document.Revision);
+        }
+
+        if (declared.IsUnverifiable)
+        {
+            unverified.Add(DeclaredExpectation.UnreadableReason("суммарный объём тел документа"));
         }
 
         return new BooleanResultDto
@@ -474,19 +481,21 @@ public sealed partial class Api5Session
         };
 
         var unverified = new List<string>();
-        if (command.ExpectedVolumeMm3 is double expected
-            && remaining.VolumeMm3 is double actual)
+        // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
+        // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
+        var declared = DeclaredExpectation.Evaluate(command.ExpectedVolumeMm3, remaining.VolumeMm3);
+        if (declared.IsDeclared)
         {
-            var matched = VolumeMatches(actual, expected);
-            checks.Add(new NamedCheck(
-                "volume_expected",
-                matched,
-                Observed: Num(remaining.VolumeMm3),
-                Expected: Num(expected)));
-            if (!matched)
+            checks.Add(DeclaredExpectation.Check("volume_expected", declared));
+            if (declared.IsRefusal)
             {
-                unverified.Add("expected_volume_mismatch — объявленный объём остатка "
-                               + Num(expected) + " не совпал с измеренным " + Num(remaining.VolumeMm3));
+                throw DeclaredExpectation.Refusal(
+                    declared, "kompas_cut_by_plane", "объём остатка", document.Revision);
+            }
+
+            if (declared.IsUnverifiable)
+            {
+                unverified.Add(DeclaredExpectation.UnreadableReason("объём остатка"));
             }
         }
         else
@@ -1685,13 +1694,13 @@ public sealed partial class Api5Session
                 Expected: BoxText(command.ExpectedBboxMm)));
         }
 
-        if (command.ExpectedVolumeMm3 is double expected)
+        // The declared expectation goes through the ONE shared rule. This path ALREADY refused a failed
+        // declaration; its code NO_GEOMETRY_CHANGE is kept (acceptance rows assert it) and the shared code
+        // is added in details (docs/decisions/adapter-core.md#declared-expectation-rule).
+        var declaredVolume = DeclaredExpectation.Evaluate(command.ExpectedVolumeMm3, volumeAfter);
+        if (declaredVolume.IsDeclared)
         {
-            checks.Add(new NamedCheck(
-                "volume_expected",
-                volumeAfter is double measured && Math.Abs(measured - expected) <= ProfileArea.Tolerance(expected),
-                Observed: Num(volumeAfter),
-                Expected: Num(expected)));
+            checks.Add(DeclaredExpectation.Check("volume_expected", declaredVolume));
         }
 
         var unverified = new List<string>();
@@ -1757,22 +1766,25 @@ public sealed partial class Api5Session
         // A declared expectation did not match — this is a refusal, not "not checked". Returning "success
         // at a lower level" would pass the unreached off as reached: the edit has a caller who declared
         // the number, and he is entitled to learn that the number was not obtained.
-        if (command.ExpectedVolumeMm3 is double declared
-            && (volumeAfter is not double measuredAfter
-                || Math.Abs(measuredAfter - declared) > ProfileArea.Tolerance(declared)))
+        if (declaredVolume.IsRefusal || declaredVolume.IsUnverifiable)
         {
             throw new KompasContractException(
                 ErrorCodes.NoGeometryChange,
-                "Правка выполнена, но объём не совпал с объявленным: ожидалось " + Num(declared)
-                + ", измерено " + Num(volumeAfter) + ". У жёсткого преобразования объём — инвариант, "
-                + "поэтому расхождение означает, что записанное преобразование не является "
-                + "преобразованием положения.",
+                declaredVolume.IsRefusal
+                    ? "Правка выполнена, но объём не совпал с объявленным: ожидалось "
+                      + Num(declaredVolume.ExpectedMm3) + ", измерено " + Num(volumeAfter)
+                      + ". У жёсткого преобразования объём — инвариант, поэтому расхождение означает, что "
+                      + "записанное преобразование не является преобразованием положения."
+                    : "Правка выполнена, но объявленный объём не с чем сравнить: объём после правки не "
+                      + "прочитан. У жёсткого преобразования объём — инвариант, поэтому отсутствие "
+                      + "измерения означает, что подтвердить объявленное число нечем.",
                 RetryPolicy.SameOperationId,
                 partialEffects: true,
                 details: new Dictionary<string, object?>
                 {
+                    ["code"] = DeclaredExpectation.NotConfirmedCode,
                     ["revision_after"] = document.Revision,
-                    ["expected_volume_mm3"] = declared,
+                    ["expected_volume_mm3"] = declaredVolume.ExpectedMm3,
                     ["volume_after_mm3"] = volumeAfter,
                     ["volume_before_mm3"] = volumeBefore,
                     ["bbox_after"] = rowsAfter.Count == 0 ? null : BoxText(rowsAfter[0].Bbox),
@@ -2526,14 +2538,18 @@ public sealed partial class Api5Session
             checks.Add(new NamedCheck("no_bodies_created", createdBodies.Count == 0,
                 Observed: Num(createdBodies.Count), Expected: "0"));
 
-            if (declaredVolume is double expected)
+            // The declared expectation goes through the ONE shared rule. This path already refuses a
+            // failed declaration through the aggregate check below (code NO_GEOMETRY_CHANGE, asserted by
+            // acceptance rows); the shared code is named in the details.
+            // History: docs/decisions/adapter-core.md#declared-expectation-rule
+            var declaredRemaining = DeclaredExpectation.Evaluate(declaredVolume, remaining.VolumeMm3);
+            if (declaredRemaining.IsDeclared)
             {
-                checks.Add(new NamedCheck(
-                    "volume_expected",
-                    remaining.VolumeMm3 is double measured
-                        && Math.Abs(measured - expected) <= ProfileArea.Tolerance(expected),
-                    Observed: Num(remaining.VolumeMm3),
-                    Expected: Num(expected)));
+                checks.Add(DeclaredExpectation.Check("volume_expected", declaredRemaining));
+                if (declaredRemaining.IsUnverifiable)
+                {
+                    unverified.Add(DeclaredExpectation.UnreadableReason("объём остатка"));
+                }
             }
 
             if (command.ExpectedBboxMm is BoundingBoxDto expectedBox)
@@ -2777,17 +2793,18 @@ public sealed partial class Api5Session
                 Expected: "ровно одно тело, изменившееся или появившееся в этой операции"));
         }
 
-        if (command.ExpectedVolumeMm3 is double expected)
+        // The declared expectation goes through the ONE shared rule. This path already refuses a failed
+        // declaration through the aggregate check below (code NO_GEOMETRY_CHANGE, asserted by acceptance
+        // rows); the shared code is named in the details.
+        // History: docs/decisions/adapter-core.md#declared-expectation-rule
+        var declaredDocument = DeclaredExpectation.Evaluate(command.ExpectedVolumeMm3, volumeAfter);
+        if (declaredDocument.IsDeclared)
         {
             // The DOCUMENT volume and the RESULT volume are different quantities, and they must not be
             // mixed. Here the document-volume expectation is declared (that is how the caller declares it
             // for a boolean operation), so the document volume is what is observed; the result volume is
             // published by a separate check, not substituted into the same row.
-            checks.Add(new NamedCheck(
-                "volume_expected",
-                volumeAfter is double measured && Math.Abs(measured - expected) <= ProfileArea.Tolerance(expected),
-                Observed: Num(volumeAfter) + " (объём документа)",
-                Expected: Num(expected)));
+            checks.Add(DeclaredExpectation.Check("volume_expected", declaredDocument));
 
             if (resultBody is not null)
             {
@@ -2799,9 +2816,7 @@ public sealed partial class Api5Session
             }
         }
 
-        var volumeMatched = command.ExpectedVolumeMm3 is null
-            || (volumeAfter is double m && Math.Abs(m - command.ExpectedVolumeMm3.Value)
-                <= ProfileArea.Tolerance(command.ExpectedVolumeMm3.Value));
+        var volumeMatched = !declaredDocument.IsRefusal && !declaredDocument.IsUnverifiable;
         var bboxOk = command.ExpectedBboxMm is null || bboxMatched;
 
         if (!volumeMatched || !bboxOk)

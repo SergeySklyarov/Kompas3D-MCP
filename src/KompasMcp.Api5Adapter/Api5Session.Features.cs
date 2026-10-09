@@ -718,24 +718,17 @@ public partial class Api5Session
                 Expected: $"«{expectedSketchName}»"));
         }
 
-        var volumeMatched = false;
-        if (command.ExpectedVolumeMm3 is double expected && volumeAfter is double measured)
+        // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
+        // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
+        var declared = DeclaredExpectation.Evaluate(command.ExpectedVolumeMm3, volumeAfter);
+        checks.Add(DeclaredExpectation.Check("volume_after_update", declared));
+        if (declared.IsRefusal)
         {
-            volumeMatched = Math.Abs(measured - expected) <= ProfileArea.Tolerance(expected);
-            checks.Add(new NamedCheck(
-                "volume_after_update",
-                volumeMatched,
-                Observed: measured.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture),
-                Expected: expected.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)));
+            throw DeclaredExpectation.Refusal(
+                declared, "kompas_update_feature/extrusion", "объём после правки", document.Revision);
         }
-        else
-        {
-            checks.Add(new NamedCheck(
-                "volume_after_update",
-                false,
-                Observed: volumeAfter?.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture) ?? "не читается",
-                Expected: "не задано"));
-        }
+
+        var volumeMatched = declared.IsConfirmed;
 
         var unverified = new List<string>
         {
@@ -755,13 +748,17 @@ public partial class Api5Session
                                "COM-объект из нового RCW не обязан быть тем же .NET-объектом");
             }
         }
-        if (!geometryConfirmed)
+        if (declared.IsUnverifiable)
+        {
+            unverified.Insert(0, DeclaredExpectation.UnreadableReason("объём после правки"));
+        }
+        else if (!geometryConfirmed)
         {
             unverified.Insert(0, valueStored
                 ? "volume_not_as_expected — значение записано и перечитано, но измерение объёма не совпало с ожиданием"
                 : "value_not_read_back — параметр не перечитался с нового объекта определения");
         }
-        if (command.ExpectedVolumeMm3 is null)
+        if (!declared.IsDeclared)
         {
             unverified.Add("expected_volume_not_supplied — без аналитического ожидания объёма правка не может быть подтверждена геометрически");
         }

@@ -143,29 +143,34 @@ public partial class Api5Session
 
         var materialRemoved = volumeBefore is double b && volumeAfter is double a && a < b;
         var volumePairRead = volumeBefore is double && volumeAfter is double;
-        bool? numericMatch = null;
-        if (command.ExpectedVolumeDeltaMm3 is double expectedDelta
-            && volumeBefore is double vBefore && volumeAfter is double vAfter)
+        // The declared delta is the geometry check of this tool: a mismatch is a REFUSAL, an unreadable
+        // pair is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
+        var measuredDelta = volumeBefore is double vBefore && volumeAfter is double vAfter
+            ? vBefore - vAfter
+            : (double?)null;
+        var declared = DeclaredExpectation.Evaluate(command.ExpectedVolumeDeltaMm3, measuredDelta);
+        if (declared.IsDeclared)
         {
-            var measured = vBefore - vAfter;
-            numericMatch = Math.Abs(measured - expectedDelta) <= ProfileArea.Tolerance(expectedDelta);
-            checks.Add(new NamedCheck(
-                "volume_delta",
-                numericMatch.Value,
-                Observed: measured.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture),
-                Expected: expectedDelta.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)));
+            checks.Add(DeclaredExpectation.Check("volume_delta", declared));
+            if (declared.IsRefusal)
+            {
+                throw DeclaredExpectation.Refusal(
+                    declared, "kompas_chamfer", "уменьшение объёма", document.Revision);
+            }
         }
-        else if (volumeBefore is double cb && volumeAfter is double ca)
+        else if (volumePairRead)
         {
             // Direction only, and only when BOTH volumes were read: an unread pair is an unperformed
             // check, not a failed one (the reason travels in unverified_aspects).
             checks.Add(new NamedCheck(
                 "volume_delta",
                 materialRemoved,
-                Observed: (cb - ca).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture),
+                Observed: ((volumeBefore!.Value) - volumeAfter!.Value)
+                    .ToString("0.####", System.Globalization.CultureInfo.InvariantCulture),
                 Expected: "не задано — проверено только направление"));
         }
 
+        var numericMatch = declared.IsDeclared ? declared.IsConfirmed : (bool?)null;
         var geometryConfirmed = created.Created
             && parametersStored
             && checks.Exists(c => c.Name == "face_count_grew" && c.Passed)
@@ -177,7 +182,11 @@ public partial class Api5Session
             "angle_units_measured_once — градусы подтверждены одним замером на прямых рёбрах " +
             "перпендикулярных граней (F.10); на дугах и наклонных рёбрах единица не проверялась",
         };
-        if (!volumePairRead)
+        if (declared.IsUnverifiable)
+        {
+            unverified.Insert(0, DeclaredExpectation.UnreadableReason("уменьшение объёма"));
+        }
+        else if (!volumePairRead)
         {
             unverified.Insert(0,
                 "volume_delta_not_computable — объём до или после операции не прочитан: ни аналитическое "
@@ -460,24 +469,17 @@ public partial class Api5Session
                 Expected: $"признаков {featuresBefore}, имя «{stateBefore.Name}»"),
         };
 
-        var volumeMatched = false;
-        if (command.ExpectedVolumeMm3 is double expected && volumeAfter is double measured)
+        // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
+        // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
+        var declared = DeclaredExpectation.Evaluate(command.ExpectedVolumeMm3, volumeAfter);
+        checks.Add(DeclaredExpectation.Check("volume_after_update", declared));
+        if (declared.IsRefusal)
         {
-            volumeMatched = Math.Abs(measured - expected) <= ProfileArea.Tolerance(expected);
-            checks.Add(new NamedCheck(
-                "volume_after_update",
-                volumeMatched,
-                Observed: measured.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture),
-                Expected: expected.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)));
+            throw DeclaredExpectation.Refusal(
+                declared, "kompas_update_feature/" + ChamferFamily, "объём после правки", document.Revision);
         }
-        else
-        {
-            checks.Add(new NamedCheck(
-                "volume_after_update",
-                false,
-                Observed: volumeAfter?.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture) ?? "не читается",
-                Expected: "не задано"));
-        }
+
+        var volumeMatched = declared.IsConfirmed;
 
         var unverified = new List<string>
         {
@@ -492,11 +494,14 @@ public partial class Api5Session
 
         var geometryConfirmed = angleStored && distance1Stored && derivedStored && buildingTypeKept
             && sameFeature && volumeMatched;
-        if (!geometryConfirmed)
+        if (declared.IsUnverifiable)
         {
-            unverified.Insert(0, geometryConfirmed is false
-                ? "geometry_not_confirmed — правка применена, но измерение не подтвердило ожидаемую геометрию"
-                : "geometry_not_confirmed");
+            unverified.Insert(0, DeclaredExpectation.UnreadableReason("объём после правки"));
+        }
+        else if (!geometryConfirmed)
+        {
+            unverified.Insert(0,
+                "geometry_not_confirmed — правка применена, но измерение не подтвердило ожидаемую геометрию");
         }
 
         return new UpdateFeatureResult(
@@ -652,31 +657,28 @@ public partial class Api5Session
                 Expected: $"признаков {featuresBefore}, имя «{stateBefore.Name}»"),
         };
 
-        var volumeMatched = false;
-        if (command.ExpectedVolumeMm3 is double expected && volumeAfter is double measured)
+        // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
+        // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
+        var declared = DeclaredExpectation.Evaluate(command.ExpectedVolumeMm3, volumeAfter);
+        checks.Add(DeclaredExpectation.Check("volume_after_update", declared));
+        if (declared.IsRefusal)
         {
-            volumeMatched = Math.Abs(measured - expected) <= ProfileArea.Tolerance(expected);
-            checks.Add(new NamedCheck(
-                "volume_after_update",
-                volumeMatched,
-                Observed: measured.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture),
-                Expected: expected.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)));
+            throw DeclaredExpectation.Refusal(
+                declared, "kompas_update_feature/" + ChamferFamily, "объём после правки", document.Revision);
         }
-        else
-        {
-            checks.Add(new NamedCheck(
-                "volume_after_update",
-                false,
-                Observed: volumeAfter?.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture) ?? "не читается",
-                Expected: "не задано"));
-        }
+
+        var volumeMatched = declared.IsConfirmed;
 
         var unverified = new List<string>
         {
             "dependent_features_not_enumerated — сохранность зависимых признаков здесь не проверяется",
         };
         var geometryConfirmed = valueStored && sameFeature && volumeMatched;
-        if (!geometryConfirmed)
+        if (declared.IsUnverifiable)
+        {
+            unverified.Insert(0, DeclaredExpectation.UnreadableReason("объём после правки"));
+        }
+        else if (!geometryConfirmed)
         {
             unverified.Insert(0, valueStored
                 ? "volume_not_as_expected — значение записано и перечитано, но измерение объёма не совпало с ожиданием"

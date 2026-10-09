@@ -407,16 +407,29 @@ public partial class Api5Session
                 Expected: $"после операции тел ровно {wanted} (счётная величина, допуск не применяется)"));
         }
 
-        // Document volume. Comparison is with the analytic expectation, not the previous state:
-        // "became larger" does not tell a correct grid from a wrong one.
-        if (expectedVolume is double target && volumeAfter is double actual)
+        // Document volume. The declared expectation is the geometry check of this tool: a mismatch is a
+        // REFUSAL, an unreadable volume is a NAMED gap. This REPLACES the earlier pattern rule
+        // (docs/decisions/adapter-core.md#pattern-declared-volume), where a failed declaration only
+        // MARKED the result — replaced by the customer decision recorded in the decision doc.
+        // History: docs/decisions/adapter-core.md#declared-expectation-rule
+        var declared = DeclaredExpectation.Evaluate(expectedVolume, volumeAfter);
+        if (declared.IsDeclared)
         {
-            var delta = Math.Abs(actual - target);
-            checks.Add(new NamedCheck(
-                "document_volume",
-                delta <= VolumeToleranceMm3(target),
-                Observed: $"{Num(actual)} мм³ (расхождение {Num(delta)})",
-                Expected: $"{Num(target)} мм³ в допуске {Num(VolumeToleranceMm3(target))}"));
+            checks.Add(DeclaredExpectation.Check("document_volume", declared));
+            if (declared.IsRefusal)
+            {
+                throw DeclaredExpectation.Refusal(
+                    declared,
+                    family switch
+                    {
+                        "linear" => "kompas_pattern_grid",
+                        "circular" => "kompas_pattern_circular",
+                        "mirror" => "kompas_pattern_mirror",
+                        _ => "kompas_pattern_" + family,
+                    },
+                    "объём документа после операции",
+                    document.Revision);
+            }
         }
 
         // NAMED per-instance check: the set of cylindrical-face axes. Volume does not tell four holes
@@ -456,20 +469,13 @@ public partial class Api5Session
         }
 
         var unverified = new List<string>();
-        if (expectedVolume is null)
+        if (declared.IsUnverifiable)
+        {
+            unverified.Add(DeclaredExpectation.UnreadableReason("объём документа после операции"));
+        }
+        else if (!declared.IsDeclared)
         {
             unverified.Add("analytical_volume_not_declared");
-        }
-        else
-        {
-            // The declared expectation did not hold. This is the SAME rule the extrusion applies
-            // (Api5Session.Geometry.cs, `volume_delta_not_confirmed`): a failed declared expectation is
-            // named in unverified_aspects, not left as a lone failed entry in `checks` — "checked and did
-            // not match" must be visible where a client reads the unverified aspects, and the feature is
-            // not geometry_checked. A mutation already applied is not turned into a refusal.
-            // History: docs/decisions/adapter-core.md#pattern-declared-volume
-            DeclaredVolumeMarks.MarkVolumeNotConfirmed(
-                unverified, expectedVolume, volumeAfter, VolumeToleranceMm3(expectedVolume.Value));
         }
 
         if (expectedCenters is null && expectedHoles is not null)

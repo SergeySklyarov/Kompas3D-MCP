@@ -6,6 +6,7 @@ using KompasAPI7;
 using KompasMcp.Api5Adapter.Api7;
 using KompasMcp.Contracts;
 using KompasMcp.Contracts.Ipc;
+using KompasMcp.Domain.Geometry;
 using KompasMcp.Domain.References;
 
 namespace KompasMcp.Api5Adapter;
@@ -238,14 +239,26 @@ public partial class Api5Session
             + "проверяется; для этого существует отдельная приёмочная строка",
         };
 
+        // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
+        // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
         var geometryConfirmed = false;
-        if (command.ExpectedVolumeMm3 is { } expected)
+        var declared = DeclaredExpectation.Evaluate(command.ExpectedVolumeMm3, volumeAfter);
+        if (declared.IsDeclared)
         {
-            var matches = volumeAfter is { } value
-                          && Math.Abs(value - expected) <= VolumeToleranceMm3(expected);
-            checks.Add(new NamedCheck("expected_volume", matches,
-                "объём " + Num(volumeAfter) + " мм³", "ожидание " + Num(expected) + " мм³"));
-            geometryConfirmed = matches;
+            checks.Add(DeclaredExpectation.Check("expected_volume", declared));
+            if (declared.IsRefusal)
+            {
+                throw DeclaredExpectation.Refusal(
+                    declared, "kompas_update_feature/" + EvolutionFamily, "объём после правки",
+                    document.Revision);
+            }
+
+            if (declared.IsUnverifiable)
+            {
+                unverified.Add(DeclaredExpectation.UnreadableReason("объём после правки"));
+            }
+
+            geometryConfirmed = declared.IsConfirmed;
         }
         else
         {
@@ -747,14 +760,26 @@ public partial class Api5Session
                 + "отвергнут по имени)");
         }
 
+        // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
+        // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
         var geometryConfirmed = false;
-        if (command.ExpectedVolumeMm3 is { } expected)
+        var declared = DeclaredExpectation.Evaluate(command.ExpectedVolumeMm3, volumeAfter);
+        if (declared.IsDeclared)
         {
-            var matches = volumeAfter is { } value
-                          && Math.Abs(value - expected) <= VolumeToleranceMm3(expected);
-            checks.Add(new NamedCheck("expected_volume", matches,
-                "объём " + Num(volumeAfter) + " мм³", "ожидание " + Num(expected) + " мм³"));
-            geometryConfirmed = matches;
+            checks.Add(DeclaredExpectation.Check("expected_volume", declared));
+            if (declared.IsRefusal)
+            {
+                throw DeclaredExpectation.Refusal(
+                    declared, "kompas_update_feature/" + LoftFamily, "объём после правки",
+                    document.Revision);
+            }
+
+            if (declared.IsUnverifiable)
+            {
+                unverified.Add(DeclaredExpectation.UnreadableReason("объём после правки"));
+            }
+
+            geometryConfirmed = declared.IsConfirmed;
         }
         else
         {
@@ -1226,14 +1251,26 @@ public partial class Api5Session
             unverified.Add(readNote);
         }
 
+        // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
+        // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
         var geometryConfirmed = false;
-        if (command.ExpectedVolumeMm3 is { } expected)
+        var declared = DeclaredExpectation.Evaluate(command.ExpectedVolumeMm3, volumeAfter);
+        if (declared.IsDeclared)
         {
-            var matches = volumeAfter is { } value
-                          && Math.Abs(value - expected) <= VolumeToleranceMm3(expected);
-            checks.Add(new NamedCheck("expected_volume", matches,
-                "объём " + Num(volumeAfter) + " мм³", "ожидание " + Num(expected) + " мм³"));
-            geometryConfirmed = matches;
+            checks.Add(DeclaredExpectation.Check("expected_volume", declared));
+            if (declared.IsRefusal)
+            {
+                throw DeclaredExpectation.Refusal(
+                    declared, "kompas_update_feature/" + ShellFamily, "объём после правки",
+                    document.Revision);
+            }
+
+            if (declared.IsUnverifiable)
+            {
+                unverified.Add(DeclaredExpectation.UnreadableReason("объём после правки"));
+            }
+
+            geometryConfirmed = declared.IsConfirmed;
         }
         else
         {

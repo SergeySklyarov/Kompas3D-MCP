@@ -94,27 +94,22 @@ public partial class Api5Session
             "перечисляет: достоверного перечня зависимых в API нет (проба L.8)",
         };
 
-        var geometryConfirmed = false;
-        if (command.ExpectedVolumeMm3 is double expected && volumeAfter is double measured)
+        // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
+        // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
+        var declaredVolume = DeclaredExpectation.Evaluate(command.ExpectedVolumeMm3, volumeAfter);
+        checks.Add(DeclaredExpectation.Check("volume_after_suppression", declaredVolume));
+        if (declaredVolume.IsUnverifiable)
         {
-            var tolerance = ProfileArea.Tolerance(expected);
-            geometryConfirmed = Math.Abs(measured - expected) <= tolerance;
-            checks.Add(new NamedCheck(
-                "volume_after_suppression",
-                geometryConfirmed,
-                Observed: measured.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture),
-                Expected: expected.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)));
+            unverified.Add(DeclaredExpectation.UnreadableReason("объём после изменения подавления"));
         }
-        else
+
+        if (!declaredVolume.IsDeclared)
         {
             unverified.Add("expected_volume_not_supplied — без аналитического ожидания объёма " +
                            "изменение геометрии не подтверждается");
-            checks.Add(new NamedCheck(
-                "volume_after_suppression",
-                false,
-                Observed: volumeAfter?.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture) ?? "не читается",
-                Expected: "не задано"));
         }
+
+        var geometryConfirmed = declaredVolume.IsConfirmed;
 
         // Suppressing a boss decreases the volume, suppressing a cut increases it (MEASURED). The direction
         // is not asserted: the observed fact is that the volume CHANGED, and what it must be is declared by
@@ -126,38 +121,22 @@ public partial class Api5Session
             effectObserved,
             Observed: $"{volumeBefore?.ToString("0.####") ?? "нет"} → {volumeAfter?.ToString("0.####") ?? "нет"}"));
 
-        // A DECLARED EXPECTATION THAT DID NOT HOLD IS A REFUSAL HERE, and this is deliberately NOT the
-        // rule the pattern family follows (docs/decisions/adapter-core.md#pattern-declared-volume, where a
-        // failed declaration only MARKS the result). WHY THE DIFFERENCE: a pattern answers with a readable
-        // witness of its own shape (per-instance axes, counts, a second parameter), so a wrong model is
-        // caught even when the declared volume is off; suppress/restore has NO such witness — the caller
-        // declared the volume precisely because there is nothing else to compare. MEASURED on a live run:
-        // the tool returned "succeeded / structure_checked" while the restored model had lost BOTH holes.
-        // History: docs/decisions/adapter-core.md#suppression-restore-comparison
-        if (command.ExpectedVolumeMm3 is double declaredExpected
-            && DeclaredVolumeMarks.Mismatched(declaredExpected, volumeAfter,
-                ProfileArea.Tolerance(declaredExpected)))
+        // A DECLARED EXPECTATION THAT DID NOT HOLD IS A REFUSAL, and this is deliberately NOT the old
+        // rule the pattern family followed (docs/decisions/adapter-core.md#pattern-declared-volume, where
+        // a failed declaration only MARKED the result). The customer decision recorded in the decision doc unified the
+        // rule: a declared expectation is the geometry check of the tool, so a mismatch refuses the call.
+        // History: docs/decisions/adapter-core.md#declared-expectation-rule
+        if (declaredVolume.IsRefusal)
         {
-            throw new KompasContractException(
-                ErrorCodes.GeometryFailed,
-                (command.Suppressed
-                    ? "Подавление применено, но объём после него не совпал с заявленным: "
-                    : "Снятие подавления применено, но объём после него не совпал с заявленным: ")
-                + $"измерено {Num(volumeAfter)}, ожидалось {Num(declaredExpected)} "
-                + $"(допуск {Num(ProfileArea.Tolerance(declaredExpected))}). Вызов НЕ считается "
-                + "успешным: заявленное ожидание и есть проверка геометрии этого инструмента. Модель "
-                + "осталась в измеренном состоянии — сервер её молча не откатывает; для возврата "
-                + "подавление нужно снять или применить заново решением клиента.",
-                RetryPolicy.AfterReconciliation,
-                partialEffects: true,
-                details: new Dictionary<string, object?>
+            throw DeclaredExpectation.Refusal(
+                declaredVolume,
+                "kompas_set_feature_suppressed",
+                command.Suppressed ? "объём после подавления" : "объём после снятия подавления",
+                document.Revision,
+                consequence: "Для возврата подавление нужно снять или применить заново решением клиента.",
+                extraDetails: new Dictionary<string, object?>
                 {
-                    ["code"] = "declared_volume_not_confirmed",
-                    ["operation"] = command.Suppressed ? "suppress" : "restore",
-                    ["expected_volume_mm3"] = declaredExpected,
-                    ["measured_volume_mm3"] = volumeAfter,
-                    ["volume_delta_mm3"] = volumeAfter is double measuredNow ? measuredNow - declaredExpected : null,
-                    ["volume_before_mm3"] = volumeBefore,
+                    ["suppress_operation"] = command.Suppressed ? "suppress" : "restore",
                     ["feature_name"] = stateAfter.Name,
                     ["feature_excluded"] = stateAfter.Excluded,
                     ["feature_is_valid"] = stateAfter.IsValid,
@@ -472,20 +451,27 @@ public partial class Api5Session
                 + "объекты этим вызовом не проверены");
         }
 
-        var geometryConfirmed = false;
-        if (command.ExpectedVolumeMm3 is double expected && volumeAfter is double measured)
+        // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
+        // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
+        var declaredVolume = DeclaredExpectation.Evaluate(command.ExpectedVolumeMm3, volumeAfter);
+        checks.Add(DeclaredExpectation.Check("volume_after_delete", declaredVolume));
+        if (declaredVolume.IsRefusal)
         {
-            geometryConfirmed = Math.Abs(measured - expected) <= ProfileArea.Tolerance(expected);
-            checks.Add(new NamedCheck(
-                "volume_after_delete",
-                geometryConfirmed,
-                Observed: measured.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture),
-                Expected: expected.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)));
+            throw DeclaredExpectation.Refusal(
+                declaredVolume, "kompas_delete_feature", "объём после удаления", document.Revision);
         }
-        else
+
+        if (declaredVolume.IsUnverifiable)
+        {
+            unverified.Add(DeclaredExpectation.UnreadableReason("объём после удаления"));
+        }
+
+        if (!declaredVolume.IsDeclared)
         {
             unverified.Add("expected_volume_not_supplied — без ожидания объёма геометрия не подтверждена");
         }
+
+        var geometryConfirmed = declaredVolume.IsConfirmed;
 
         // The verification level answers "what exactly was proved": removing the target is structure;
         // geometry is added only when the cascade and the preservation of independent objects are both

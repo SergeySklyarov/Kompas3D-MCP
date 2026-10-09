@@ -44,6 +44,16 @@ public sealed record ToolBehaviour(
 /// failure mode the contract explicitly forbids (spec 2.1).</summary>
 public static class ToolCatalog
 {
+    /// <summary>The ONE wording of the declared-expectation rule, appended to every field description
+    /// that carries an expectation, so the tools cannot describe the same rule differently.</summary>
+    /// <remarks>INVARIANT: a declared expectation that did not hold is a REFUSAL, not a lowered level —
+    /// see docs/decisions/adapter-core.md#declared-expectation-rule (customer decision recorded in the decision doc).
+    /// </remarks>
+    private const string DeclaredExpectationRule =
+        " Если задано и не совпало с измеренным в допуске проекта, вызов ОТКЛОНЯЕТСЯ (GEOMETRY_FAILED, "
+        + "partial_effects=true, details.code=declared_expectation_not_confirmed), а не помечается; "
+        + "если сравнить нечем (величина не прочитана) — аспект называется непроверенным.";
+
     /// <summary>The section-coupling schema — ONE for creation (<c>kompas_loft</c>) and edit
     /// (<c>kompas_update_feature</c>), so the descriptions cannot drift between tools.</summary>
     /// <remarks>MEASURED: <c>ICoupling.SetPoint</c> is documented (<c>icoupling_setpoint.html</c>:
@@ -696,7 +706,7 @@ public static class ToolCatalog
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
                     ("radius_mm", Sch.PositiveMm("Радиус скругления")),
                     ("expected_volume_delta_mm3", Sch.Nullable(Sch.Num(
-                        "Аналитическое ожидание уменьшения объёма, если выводимо у вызывающего (например 4·(1−π/4)·r²·h для четырёх параллельных рёбер). С ним проверка численная, без него — только направление изменения.",
+                        "Аналитическое ожидание уменьшения объёма, если выводимо у вызывающего (например 4·(1−π/4)·r²·h для четырёх параллельных рёбер). С ним проверка численная, без него — только направление изменения." + DeclaredExpectationRule,
                         0d, 1e18d)))),
                 WorkerCommands.Fillet,
                 requiresDocument: false,
@@ -740,7 +750,7 @@ public static class ToolCatalog
                         "Без поля — false.", false))),
                     ("expected_volume_delta_mm3", Sch.Nullable(Sch.Num(
                         "Аналитическое ожидание уменьшения объёма: N·(d₁·d₂/2)·L для N параллельных рёбер длиной L. " +
-                        "С ним проверка численная, без него — только направление изменения.",
+                        "С ним проверка численная, без него — только направление изменения." + DeclaredExpectationRule,
                         0d, 1e18d)))),
                 WorkerCommands.Chamfer,
                 requiresDocument: false,
@@ -828,7 +838,7 @@ public static class ToolCatalog
                         "π·r²·h + π/4·(D²−d²)·h_выточки для цековки; " +
                         "π·r²·h + π·h_факт/3·(rM² + rP·rM − 2·rP²) для зенковки, причём h_факт — " +
                         "глубина, которую ВЕРНУЛ объект, а не запрошенная. С ним проверка " +
-                        "численная, без него — только направление изменения.",
+                        "численная, без него — только направление изменения." + DeclaredExpectationRule,
                         0d, 1e18d)))),
                 WorkerCommands.Hole,
                 requiresDocument: false,
@@ -970,7 +980,7 @@ public static class ToolCatalog
                         "сектора r²/2·(α − sin α)·h при α в радианах и оси, смещённой от центра; " +
                         "для измеренного эталона (цилиндр R20 H40, ось по диаметру) полуоборот даёт " +
                         "π·r²·h/2 = 50265.4824574367, четверть — π·r²·h/4 = 25132.7412287183. С ним " +
-                        "проверка численная, без него — только форма и знак изменения.",
+                        "проверка численная, без него — только форма и знак изменения." + DeclaredExpectationRule,
                         0d, 1e18d)))),
                 WorkerCommands.Rotated,
                 requiresDocument: false,
@@ -1021,7 +1031,7 @@ public static class ToolCatalog
                         "Аналитическое ожидание объёма детали после операции, мм³. Для прямой " +
                         "траектории и постоянного профиля это S × L: измеренный эталон — окружность " +
                         "R10 по отрезку 100 мм даёт π·10²·100 = 31415.926535897932. С ним проверка " +
-                        "численная, без него — только число тел и направление изменения.",
+                        "численная, без него — только число тел и направление изменения." + DeclaredExpectationRule,
                         0d, 1e18d))),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision"))),
                 WorkerCommands.Sweep,
@@ -1093,7 +1103,7 @@ public static class ToolCatalog
                         "Аналитическое ожидание объёма детали после операции, мм³, по формуле усечённой " +
                         "пирамиды V = h/3·(A₁ + A₂ + √(A₁A₂)): измеренный эталон 40×40 → 20×20 при " +
                         "h = 30 даёт 28000. С ним проверка численная, без него — только число тел и " +
-                        "изменение объёма.", 0d, 1e18d))),
+                        "изменение объёма." + DeclaredExpectationRule, 0d, 1e18d))),
                     ("couplings", Sch.Nullable(Sch.Described(
                         (JsonObject)CouplingsSchema.DeepClone(),
                         "Цепочки соответствия сечений (SM-05.base.mode_couplings). " +
@@ -1160,7 +1170,7 @@ public static class ToolCatalog
                         "Аналитическое ожидание объёма детали после операции, мм³. Измеренные эталоны " +
                         "на коробе 100×80×10 с удалённой верхней гранью: внутрь t = 2 → 21632, наружу " +
                         "t = 2 → 24832, внутрь t = 4 → 40256. С ним проверка численная, без него — " +
-                        "только направление изменения и число граней.", 0d, 1e18d))),
+                        "только направление изменения и число граней." + DeclaredExpectationRule, 0d, 1e18d))),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision"))),
                 WorkerCommands.Shell,
                 requiresDocument: true,
@@ -1202,7 +1212,8 @@ public static class ToolCatalog
                 "заданы expected_hole_radius_mm/expected_hole_height_mm, дополнительно читаются оси " +
                 "цилиндрических граней: это и есть проверка ПО КАЖДОМУ ЭКЗЕМПЛЯРУ — объём не отличает " +
                 "четыре отверстия от трёх и одного наложенного, а набор координат отличает. " +
-                "Объём сверяется с expected_volume_mm3 в допуске 0,01 мм³ / 1e-6 отн. (больший из двух); " +
+                "Объём сверяется с expected_volume_mm3 в ЕДИНОМ допуске проекта (ProfileArea.Tolerance: " +
+                "1e-3 мм³ или 1e-9 отн., больший), а несовпадение — ОТКАЗ, а не пометка; " +
                 "числа экземпляров и тел сверяются ТОЧНО, допуск к счётным величинам не применяется.",
                 Sch.Props(
                     ("document_id", Sch.Ref("#/$defs/document_id")),
@@ -1265,7 +1276,7 @@ public static class ToolCatalog
                         "Аналитическое ожидание объёма документа после операции, мм³. На эталонной " +
                         "пластине 100×80×10 (V0 = 80 000) со сквозным отверстием Ø10 " +
                         "(π·25·10 = 785,398163) три отверстия дают 77 643,806470, шесть — 75 287,611810. " +
-                        "Без него численная проверка объёма не выполняется.", 0d, 1e18d))),
+                        "Без него численная проверка объёма не выполняется." + DeclaredExpectationRule, 0d, 1e18d))),
                     ("expected_body_count", Sch.Nullable(Sch.Int(
                         "Ожидаемое число тел после операции. Для массива операций оно равно числу тел до " +
                         "операции, для массива тел — растёт. Сравнение точное.", 0, 100_000))),
@@ -1359,7 +1370,7 @@ public static class ToolCatalog
                         "100×80×10 со сквозным отверстием Ø10 четыре отверстия по 90° дают " +
                         "76 858,407347; при ошибочной трактовке шага как 360/(count2−1) четвёртый " +
                         "экземпляр ложится на первый и объём равен 77 643,806470 — расхождение ровно " +
-                        "785,398163 мм³, и это и есть различающее измерение.", 0d, 1e18d))),
+                        "785,398163 мм³, и это и есть различающее измерение." + DeclaredExpectationRule, 0d, 1e18d))),
                     ("expected_body_count", Sch.Nullable(Sch.Int("Ожидаемое число тел после операции.", 0, 100_000))),
                     ("expected_hole_radius_mm", Sch.Nullable(Sch.Num("Радиус цилиндрической грани-экземпляра, мм.", 0d, 1e6d))),
                     ("expected_hole_height_mm", Sch.Nullable(Sch.Num("Высота цилиндрической грани-экземпляра, мм.", 0d, 1e6d))),
@@ -1427,7 +1438,7 @@ public static class ToolCatalog
                         "20×20×10), у false исходники заменяются отражёнными (2 тела по 4 000). " +
                         "Суммарный объём при зеркале один и тот же, поэтому одноё суммы недостаточно. " +
                         "При mode=selected_operations половины НЕ различаются — справка ограничивает " +
-                        "свойство только o3d_mirrorAllOperation.",
+                        "свойство только o3d_mirrorAllOperation." + DeclaredExpectationRule,
                         0d, 1e18d))),
                     ("expected_body_count", Sch.Nullable(Sch.Int("Ожидаемое число тел после операции.", 0, 100_000))),
                     ("expected_hole_radius_mm", Sch.Nullable(Sch.Num("Радиус цилиндрической грани-экземпляра, мм.", 0d, 1e6d))),
@@ -1493,8 +1504,7 @@ public static class ToolCatalog
                         "(IBoolean.SaveCopyModifyObjects); false — потребляются операцией. " +
                         "Копия цели не поддерживается: это отдельный режим вне обязательного объёма.")),
                     ("expected_volume_mm3", Sch.Nullable(Sch.Num(
-                        "Аналитическое ожидание объёма результата. Расхождение не отменяет операцию, но " +
-                        "попадает в ответ как неподтверждённый аспект, а не замалчивается.", 0d, 1e18d))),
+                        "Аналитическое ожидание объёма результата." + DeclaredExpectationRule, 0d, 1e18d))),
                     ("document_id", Sch.Ref("#/$defs/document_id")),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision"))),
                 WorkerCommands.SolidBoolean,
@@ -1517,7 +1527,11 @@ public static class ToolCatalog
                     ("target_body_ref", Sch.Ref("#/$defs/reference")),
                     ("plane", Sch.Ref("#/$defs/cut_plane")),
                     ("expected_volume_mm3", Sch.Nullable(Sch.Num(
-                        "Аналитическое ожидание суммарного объёма частей, мм³.", 0d, 1e18d))),
+                        "Аналитическое ожидание суммарного объёма частей, мм³. НЕ единое правило "
+                        + "заявленного ожидания: при создании это признак «сверить сумму частей с "
+                        + "исходным телом» (сумма частей равна объёму исходного тела, поэтому сверка "
+                        + "прошла бы и на бездействии), а при ПРАВКЕ поле отвергается INVALID_ARGUMENT — "
+                        + "для состава частей служит expected_part_volumes_mm3.", 0d, 1e18d))),
                     ("document_id", Sch.Ref("#/$defs/document_id")),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision"))),
                 WorkerCommands.SolidSplit,
@@ -1541,7 +1555,7 @@ public static class ToolCatalog
                         "смотрит нормаль), negative — s<0.",
                         "positive", "negative")),
                     ("expected_volume_mm3", Sch.Nullable(Sch.Num(
-                        "Аналитическое ожидание объёма остатка, мм³.", 0d, 1e18d))),
+                        "Аналитическое ожидание объёма остатка, мм³." + DeclaredExpectationRule, 0d, 1e18d))),
                     ("document_id", Sch.Ref("#/$defs/document_id")),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision"))),
                 WorkerCommands.SolidCutByPlane,
@@ -1876,7 +1890,7 @@ public static class ToolCatalog
                         "на четырёх рёбрах h=10: 80000 − 20·3·3 = 79820). Без него правка не может быть " +
                         "подтверждена геометрически. У семейства reposition объём — ИНВАРИАНТ жёсткого " +
                         "преобразования, поэтому там он подтверждает лишь то, что преобразование " +
-                        "осталось жёстким; положение подтверждает expected_bbox_mm.",
+                        "осталось жёстким; положение подтверждает expected_bbox_mm." + DeclaredExpectationRule,
                         0d, 1e18d))),
                     ("expected_bbox_mm", Sch.Nullable(Sch.Ref("#/$defs/bbox"))),
                     ("plane", Sch.Nullable(Sch.Described(
@@ -2005,7 +2019,7 @@ public static class ToolCatalog
                             ("expected_volume_mm3", Sch.Nullable(Sch.Num(
                                 "Аналитическое ожидание объёма документа ПОСЛЕ правки. Без него " +
                                 "применение подтверждается только чтением параметров обратно, и это " +
-                                "честно помечается в unverified_aspects.", 0d, 1e18d))),
+                                "честно помечается в unverified_aspects." + DeclaredExpectationRule, 0d, 1e18d))),
                             ("expected_body_count", Sch.Nullable(Sch.Int(
                                 "Аналитическое ожидание числа тел после правки. Сравнение точное: к " +
                                 "счётным величинам допуск не применяется.", 0, 1_000_000)))),
@@ -2082,7 +2096,7 @@ public static class ToolCatalog
                         "различает «применилось ровно запрошенное» от «применилось не то»; " +
                         "expected_volume_mm3 принимается наравне и проверяется отдельно. Без " +
                         "объявленного ожидания уровень остаётся call_returned, а в " +
-                        "unverified_aspects появляется expected_volume_delta_not_supplied.",
+                        "unverified_aspects появляется expected_volume_delta_not_supplied." + DeclaredExpectationRule,
                         -1e18d, 1e18d)))),
                 WorkerCommands.UpdateFeature,
                 requiresDocument: false,
@@ -2091,14 +2105,14 @@ public static class ToolCatalog
             Mutation("kompas_set_feature_suppressed", "Подавить или восстановить признак",
                 "excluded=true отключает признак, false включает обратно. Эффект измерен прогонами 12.09.2026 (проба L.7 и строки L04…L06 приёмки): подавление сквозного окна 40×20 вернуло пластине 80000 мм³, восстановление — обратно 72000 мм³. Направление изменения объёма зависит от типа признака (приклейка — меньше, вырезание — больше), поэтому сверяется число, а не знак. Это не удаление: имя и объект признака сохраняются, НО подавленный признак исчезает из EntityCollection(o3d_operationElement=110) — kompas_list_features его не показывает, пока подавление не снято. "
                 + "ПРИ СНЯТИИ ПОДАВЛЕНИЯ ГЕОМЕТРИЯ СВЕРЯЕТСЯ С СОСТОЯНИЕМ ДО ПОДАВЛЕНИЯ: сервер запоминает объём, число тел и число граней на момент подавления (проверка pre_suppression_state_recorded) и при снятии сравнивает с ними (проверка restored_to_pre_suppression_state). Не совпало — вызов НЕ считается успешным: отказ GEOMETRY_FAILED с partial_effects=true и числами «до подавления / подавлено / после снятия» в details. Модель при отказе НЕ откатывается молча. Если сверка невозможна (подавление выполнено вне этого сеанса, либо модель менялась между подавлением и снятием) — это названо в unverified_aspects, а не пропущено. "
-                + "ЗАЯВЛЕННЫЙ expected_volume_mm3, который не совпал с измеренным, — ТОЖЕ ОТКАЗ (GEOMETRY_FAILED), и для подавления, и для снятия: у этого инструмента нет другого свидетеля геометрии, поэтому несбывшееся ожидание клиента не понижает уровень, а отклоняет вызов.",
+                + "ЗАЯВЛЕННЫЙ expected_volume_mm3, который не совпал с измеренным, — ОТКАЗ (GEOMETRY_FAILED, details.code=declared_expectation_not_confirmed), и для подавления, и для снятия: у этого инструмента нет другого свидетеля геометрии, поэтому несбывшееся ожидание клиента не понижает уровень, а отклоняет вызов. Это то же единое правило, что и у остальных инструментов.",
                 Sch.Props(
                     ("feature_ref", Sch.Ref("#/$defs/reference")),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
                     ("suppressed", Sch.Bool("true — подавить, false — восстановить.")),
                     ("expected_volume_mm3", Sch.Nullable(Sch.Num(
                         "Аналитическое ожидание объёма после изменения. Без него геометрия не подтверждается; "
-                        + "если задано и не совпало — вызов отклоняется кодом GEOMETRY_FAILED.",
+                        + "если задано и не совпало — вызов отклоняется кодом GEOMETRY_FAILED." + DeclaredExpectationRule,
                         0d, 1e18d)))),
                 WorkerCommands.SuppressFeature,
                 requiresDocument: false,
@@ -2111,7 +2125,7 @@ public static class ToolCatalog
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
                     ("confirm_dependents", Sch.Bool("Согласие удалить признак, после которого в дереве есть другие.", false)),
                     ("expected_volume_mm3", Sch.Nullable(Sch.Num(
-                        "Аналитическое ожидание объёма после удаления.", 0d, 1e18d)))),
+                        "Аналитическое ожидание объёма после удаления." + DeclaredExpectationRule, 0d, 1e18d)))),
                 WorkerCommands.DeleteFeature,
                 requiresDocument: false,
                 requiresRevision: true),

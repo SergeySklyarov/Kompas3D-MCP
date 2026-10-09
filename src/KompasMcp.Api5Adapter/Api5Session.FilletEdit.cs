@@ -265,24 +265,17 @@ public partial class Api5Session
                 Expected: $"признаков {featuresBefore}, имя «{stateBefore.Name}»"),
         };
 
-        var volumeMatched = false;
-        if (command.ExpectedVolumeMm3 is double expected && volumeAfter is double measured)
+        // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
+        // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
+        var declared = DeclaredExpectation.Evaluate(command.ExpectedVolumeMm3, volumeAfter);
+        checks.Add(DeclaredExpectation.Check("volume_after_update", declared));
+        if (declared.IsRefusal)
         {
-            volumeMatched = Math.Abs(measured - expected) <= ProfileArea.Tolerance(expected);
-            checks.Add(new NamedCheck(
-                "volume_after_update",
-                volumeMatched,
-                Observed: measured.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture),
-                Expected: expected.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)));
+            throw DeclaredExpectation.Refusal(
+                declared, "kompas_update_feature/" + FilletFamily, "объём после правки", document.Revision);
         }
-        else
-        {
-            checks.Add(new NamedCheck(
-                "volume_after_update",
-                false,
-                Observed: volumeAfter?.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture) ?? "не читается",
-                Expected: "не задано"));
-        }
+
+        var volumeMatched = declared.IsConfirmed;
 
         var unverified = new List<string>
         {
@@ -296,14 +289,18 @@ public partial class Api5Session
         }
 
         var geometryConfirmed = api7RadiusStored && sameFeature && volumeMatched;
-        if (!geometryConfirmed)
+        if (declared.IsUnverifiable)
+        {
+            unverified.Insert(0, DeclaredExpectation.UnreadableReason("объём после правки"));
+        }
+        else if (!geometryConfirmed)
         {
             unverified.Insert(0, api7RadiusStored
                 ? "volume_not_as_expected — радиус записан и перечитан, но измерение объёма не совпало с ожиданием"
                 : "radius_not_read_back — радиус не перечитался из IFillet");
         }
 
-        if (command.ExpectedVolumeMm3 is null)
+        if (!declared.IsDeclared)
         {
             unverified.Add(
                 "expected_volume_not_supplied — без аналитического ожидания объёма правка не может быть " +
@@ -640,11 +637,16 @@ public partial class Api5Session
         var inputsSet = afterRefs is not null && SameSet(afterRefs, targetRefs);
         var sameFeature = featuresBefore == featuresAfter && stateBefore.Name == stateAfter.Name;
 
-        var volumeMatched = false;
-        if (command.ExpectedVolumeMm3 is double expected && volumeAfter is double measured)
+        // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
+        // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
+        var declared = DeclaredExpectation.Evaluate(command.ExpectedVolumeMm3, volumeAfter);
+        if (declared.IsRefusal)
         {
-            volumeMatched = Math.Abs(measured - expected) <= ProfileArea.Tolerance(expected);
+            throw DeclaredExpectation.Refusal(
+                declared, "kompas_update_feature/" + FilletFamily, "объём после правки", document.Revision);
         }
+
+        var volumeMatched = declared.IsConfirmed;
 
         var checks = new List<NamedCheck>
         {
@@ -660,11 +662,7 @@ public partial class Api5Session
             new("same_feature", sameFeature,
                 Observed: $"признаков {featuresBefore}→{featuresAfter}, имя «{stateAfter.Name}»",
                 Expected: $"признаков {featuresBefore}, имя «{stateBefore.Name}»"),
-            new("volume_after_update", volumeMatched,
-                Observed: volumeAfter?.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)
-                          ?? "не читается",
-                Expected: command.ExpectedVolumeMm3?.ToString(
-                              "0.####", System.Globalization.CultureInfo.InvariantCulture) ?? "не задано"),
+            DeclaredExpectation.Check("volume_after_update", declared),
         };
 
         var unverified = new List<string>
@@ -675,13 +673,17 @@ public partial class Api5Session
         {
             unverified.Add("edges_not_read_back — набор не перечитался в ожидаемом составе");
         }
+        else if (declared.IsUnverifiable)
+        {
+            unverified.Add(DeclaredExpectation.UnreadableReason("объём после правки"));
+        }
         else if (!volumeMatched)
         {
             unverified.Add(
                 "volume_not_as_expected — набор записан и перечитан, но объём не совпал с ожиданием");
         }
 
-        if (command.ExpectedVolumeMm3 is null)
+        if (!declared.IsDeclared)
         {
             unverified.Add(
                 "expected_volume_not_supplied — без аналитического ожидания объёма правка набора не " +
@@ -1012,37 +1014,34 @@ public partial class Api5Session
                 Expected: $"признаков {featuresBefore}, имя «{stateBefore.Name}»"),
         };
 
-        var volumeMatched = false;
-        if (command.ExpectedVolumeMm3 is double expected && volumeAfter is double measured)
+        // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
+        // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
+        var declared = DeclaredExpectation.Evaluate(command.ExpectedVolumeMm3, volumeAfter);
+        checks.Add(DeclaredExpectation.Check("volume_after_update", declared));
+        if (declared.IsRefusal)
         {
-            volumeMatched = Math.Abs(measured - expected) <= ProfileArea.Tolerance(expected);
-            checks.Add(new NamedCheck(
-                "volume_after_update",
-                volumeMatched,
-                Observed: measured.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture),
-                Expected: expected.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)));
+            throw DeclaredExpectation.Refusal(
+                declared, "kompas_update_feature/" + FilletFamily, "объём после правки", document.Revision);
         }
-        else
-        {
-            checks.Add(new NamedCheck(
-                "volume_after_update",
-                false,
-                Observed: volumeAfter?.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture) ?? "не читается",
-                Expected: "не задано"));
-        }
+
+        var volumeMatched = declared.IsConfirmed;
 
         var unverified = new List<string>
         {
             "dependent_features_not_enumerated — сохранность зависимых признаков здесь не проверяется",
         };
-        if (!volumeMatched)
+        if (declared.IsUnverifiable)
+        {
+            unverified.Add(DeclaredExpectation.UnreadableReason("объём после правки"));
+        }
+        else if (!volumeMatched)
         {
             unverified.Add(edgesSet
                 ? "volume_not_as_expected — набор записан и перечитан, но измерение объёма не совпало с ожиданием"
                 : "edges_not_read_back — набор не перечитался в ожидаемом составе");
         }
 
-        if (command.ExpectedVolumeMm3 is null)
+        if (!declared.IsDeclared)
         {
             unverified.Add(
                 "expected_volume_not_supplied — без аналитического ожидания объёма правка набора не " +

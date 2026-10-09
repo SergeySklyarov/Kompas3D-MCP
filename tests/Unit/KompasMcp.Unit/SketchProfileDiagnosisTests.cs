@@ -17,18 +17,18 @@ namespace KompasMcp.Unit;
 public class SketchProfileDiagnosisTests
 {
     /// <summary>The client file carries the pinion contour TWICE. LIMIT: at the commit this test was
-    /// written the file had been regenerated after the reviewer's fix, so `outline_mcp` holds the REPAIRED
-    /// contour and the client's original input lives under `outline_mcp_before_R067`. The counts are
-    /// asserted below rather than assumed, so the day the file changes again the test says so instead of
-    /// silently measuring another contour.</summary>
-    private const string PinionCp06 = "outline_mcp_before_R067";
+    /// written the file had been regenerated after the reviewer's fix, so the repaired contour and the
+    /// client's original input are two separate entries. The counts are asserted below rather than
+    /// assumed, so the day the cut changes again the test says so instead of silently measuring another
+    /// contour.</summary>
+    private const string PinionCp06 = "pinion_before_r067";
 
-    private const string PinionRepaired = "outline_mcp";
+    private const string PinionRepaired = "pinion_repaired";
 
     [Fact]
     public void ClientPinionContour_NamesTheSelfIntersectionAtPrimitives58And59And66And67()
     {
-        var entities = Contour("pinion", PinionCp06);
+        var entities = Contour(PinionCp06);
 
         Assert.Equal(100, entities.Count);
 
@@ -53,7 +53,7 @@ public class SketchProfileDiagnosisTests
     {
         // The same file after the generator fix: no crossing, and the area the client's own tooling
         // reports for it.
-        var entities = Contour("pinion", PinionRepaired);
+        var entities = Contour(PinionRepaired);
 
         Assert.Equal(257, entities.Count);
 
@@ -71,7 +71,7 @@ public class SketchProfileDiagnosisTests
     {
         // The paired positive control: the contour the client DID extrude in CP06, 141 primitives, area
         // 63.29497 mm² in its own answer.
-        var entities = Contour("escape_wheel", "outline_mcp");
+        var entities = Contour("escape_wheel");
 
         Assert.Equal(141, entities.Count);
 
@@ -190,16 +190,16 @@ public class SketchProfileDiagnosisTests
         SweepDeg = sweepDeg,
     };
 
-    /// <summary>One contour out of the client's file, deserialized with the client's own wire names.</summary>
-    private static IReadOnlyList<SketchEntityDto> Contour(string level, string key)
+    /// <summary>One contour out of the cut of the client's file, deserialized with the client's own wire
+    /// names.</summary>
+    private static IReadOnlyList<SketchEntityDto> Contour(string key)
     {
         var assembly = typeof(SketchProfileDiagnosisTests).Assembly;
         var name = assembly.GetManifestResourceNames()
-            .Single(n => n.EndsWith("wheels_cp05_3004019.json", StringComparison.Ordinal));
+            .Single(n => n.EndsWith("cp06_profiles.json", StringComparison.Ordinal));
         using var stream = assembly.GetManifestResourceStream(name)!;
         using var document = JsonDocument.Parse(stream);
-        var entities = document.RootElement
-            .GetProperty("levels").GetProperty(level).GetProperty(key);
+        var entities = document.RootElement.GetProperty("contours").GetProperty(key);
         var options = new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,

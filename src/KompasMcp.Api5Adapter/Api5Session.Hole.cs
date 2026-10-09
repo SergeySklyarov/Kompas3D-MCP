@@ -157,29 +157,34 @@ public partial class Api5Session
 
         var materialRemoved = volumeBefore is double b && volumeAfter is double a && a < b;
         var volumePairRead = volumeBefore is double && volumeAfter is double;
-        bool? numericMatch = null;
-        if (command.ExpectedVolumeDeltaMm3 is double expectedDelta
-            && volumeBefore is double vBefore && volumeAfter is double vAfter)
+        // The declared delta is the geometry check of this tool: a mismatch is a REFUSAL, an unreadable
+        // pair is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
+        var measuredDelta = volumeBefore is double vBefore && volumeAfter is double vAfter
+            ? vBefore - vAfter
+            : (double?)null;
+        var declared = DeclaredExpectation.Evaluate(command.ExpectedVolumeDeltaMm3, measuredDelta);
+        if (declared.IsDeclared)
         {
-            var measured = vBefore - vAfter;
-            numericMatch = Math.Abs(measured - expectedDelta) <= ProfileArea.Tolerance(expectedDelta);
-            checks.Add(new NamedCheck(
-                "volume_delta",
-                numericMatch.Value,
-                Observed: measured.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture),
-                Expected: expectedDelta.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)));
+            checks.Add(DeclaredExpectation.Check("volume_delta", declared));
+            if (declared.IsRefusal)
+            {
+                throw DeclaredExpectation.Refusal(
+                    declared, "kompas_hole", "уменьшение объёма", document.Revision);
+            }
         }
-        else if (volumeBefore is double cb && volumeAfter is double ca)
+        else if (volumePairRead)
         {
             // Direction only, and only when BOTH volumes were read: an unread pair is an unperformed
             // check, not a failed one.
             checks.Add(new NamedCheck(
                 "volume_delta",
                 materialRemoved,
-                Observed: (cb - ca).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture),
+                Observed: (volumeBefore!.Value - volumeAfter!.Value)
+                    .ToString("0.####", System.Globalization.CultureInfo.InvariantCulture),
                 Expected: "не задано — проверено только направление"));
         }
 
+        var numericMatch = declared.IsDeclared ? declared.IsConfirmed : (bool?)null;
         var geometryConfirmed = readBack is not null
             && checks.Exists(c => c.Name == "parameters_read_back" && c.Passed)
             && materialRemoved
@@ -187,7 +192,11 @@ public partial class Api5Session
             && checks.TrueForAll(c => c.Name != "position_applied" || c.Passed);
 
         var unverified = new List<string>();
-        if (!volumePairRead)
+        if (declared.IsUnverifiable)
+        {
+            unverified.Add(DeclaredExpectation.UnreadableReason("уменьшение объёма"));
+        }
+        else if (!volumePairRead)
         {
             unverified.Add(
                 "volume_delta_not_computable — объём до или после операции не прочитан: ни аналитическое "
@@ -848,49 +857,45 @@ public partial class Api5Session
             ? beforeVolume - afterVolume
             : (double?)null;
 
-        bool? deltaMatched = null;
-        if (command.ExpectedVolumeDeltaMm3 is double expectedDelta)
+        // Each declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
+        // unreadable value is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
+        var declaredDelta = DeclaredExpectation.Evaluate(command.ExpectedVolumeDeltaMm3, removedDelta);
+        if (declaredDelta.IsDeclared)
         {
-            // The check is emitted ONLY when the delta was read: an unread volume pair is an unperformed
-            // check, not a failed one, and its reason travels in unverified_aspects below.
-            if (removedDelta is double measuredDelta)
+            checks.Add(DeclaredExpectation.Check("volume_delta", declaredDelta));
+            if (declaredDelta.IsRefusal)
             {
-                deltaMatched = Math.Abs(measuredDelta - expectedDelta) <= ProfileArea.Tolerance(expectedDelta);
-                checks.Add(new NamedCheck(
-                    "volume_delta",
-                    deltaMatched.Value,
-                    Observed: measuredDelta.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture),
-                    Expected: expectedDelta.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)));
+                throw DeclaredExpectation.Refusal(
+                    declaredDelta, "kompas_update_feature/" + HoleFamily, "уменьшение объёма",
+                    document.Revision);
             }
         }
 
-        bool? volumeMatched = null;
-        if (command.ExpectedVolumeMm3 is double expectedVolume)
+        var declaredVolume = DeclaredExpectation.Evaluate(command.ExpectedVolumeMm3, volumeAfter);
+        if (declaredVolume.IsDeclared)
         {
-            if (volumeAfter is double measuredVolume)
+            checks.Add(DeclaredExpectation.Check("volume_expected", declaredVolume));
+            if (declaredVolume.IsRefusal)
             {
-                volumeMatched = Math.Abs(measuredVolume - expectedVolume) <= ProfileArea.Tolerance(expectedVolume);
-                checks.Add(new NamedCheck(
-                    "volume_expected", volumeMatched.Value,
-                    Observed: measuredVolume.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture),
-                    Expected: expectedVolume.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)));
+                throw DeclaredExpectation.Refusal(
+                    declaredVolume, "kompas_update_feature/" + HoleFamily, "объём после правки",
+                    document.Revision);
             }
         }
+
+        var deltaMatched = declaredDelta.IsDeclared ? declaredDelta.IsConfirmed : (bool?)null;
+        var volumeMatched = declaredVolume.IsDeclared ? declaredVolume.IsConfirmed : (bool?)null;
 
         var declared = command.ExpectedVolumeDeltaMm3 is not null || command.ExpectedVolumeMm3 is not null;
         var unverified = new List<string>();
-        if (command.ExpectedVolumeDeltaMm3 is not null && removedDelta is null)
+        if (declaredDelta.IsUnverifiable)
         {
-            unverified.Add(
-                "volume_delta_not_computable — ожидание дельты задано, но объём до или после правки не " +
-                "прочитан: сравнить нечем, и это «не проверено», а не «не совпало»");
+            unverified.Add(DeclaredExpectation.UnreadableReason("уменьшение объёма"));
         }
 
-        if (command.ExpectedVolumeMm3 is not null && volumeAfter is null)
+        if (declaredVolume.IsUnverifiable)
         {
-            unverified.Add(
-                "volume_expected_not_computable — ожидание объёма задано, но объём после правки не " +
-                "прочитан: сравнить нечем");
+            unverified.Add(DeclaredExpectation.UnreadableReason("объём после правки"));
         }
 
         if (!declared)

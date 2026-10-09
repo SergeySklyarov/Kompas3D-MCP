@@ -30456,7 +30456,7 @@ def suppress_restore_checks(client, rep, app_id, workdir, k):
         bad = declared_cycle(name, 2, "SR-declared-bad-%s" % name, wrong=True)
         bad_details = bad.get("suppress_details") or {}
         bad_ok = (bad.get("suppress_code") == "GEOMETRY_FAILED"
-                  and bad_details.get("code") == "declared_volume_not_confirmed"
+                  and bad_details.get("code") == "declared_expectation_not_confirmed"
                   and bad_details.get("expected_volume_mm3") is not None
                   and bad_details.get("measured_volume_mm3") is not None)
         emit("SR.%s.declared_wrong" % name,
@@ -34436,15 +34436,16 @@ def dep_acceptance_checks(client, rep, app_id, workdir):
 # НАБЛЮДАЕМОСТЬ: причина и её МЕСТО видны и в правке эскиза, и в завершении, и в самом отказе, а
 # модель после отказа цела. Это НЕ дефект геометрии и не ложный успех — наряд про наблюдаемость.
 #
-# ЭТАЛОН. Контуры берутся из клиентского файла, скопированного в тестовые данные репозитория
-# (`tests/Unit/KompasMcp.Unit/Data/wheels_cp05_3004019.json`, копия без изменений), а не из
-# пересобранной на месте фигуры: строка обязана мерить ТОТ контур, на котором отказал клиент.
-# РАСХОЖДЕНИЕ НАЗВАНО: в текущем файле `levels.pinion.outline_mcp` несёт 257 примитивов (контур
-# после правки генератора R-067), а клиентский вход CP06 из 100 примитивов лежит под
-# `levels.pinion.outline_mcp_before_R067`; строка сверяет именно его и называет оба числа.
+# ЭТАЛОН. Контуры берутся из выреза клиентского файла, лежащего в тестовых данных репозитория
+# (`tests/Unit/KompasMcp.Unit/Data/cp06_profiles.json`), а не из пересобранной на месте фигуры: строка
+# обязана мерить ТОТ контур, на котором отказал клиент. Полный клиентский файл в репозиторий не входит
+# (он остался вне выреза); путь и SHA-256 исходного файла названы внутри самого выреза.
+# РАСХОЖДЕНИЕ НАЗВАНО: контур триба лежит в двух видах — клиентский вход CP06 (100 примитивов,
+# `pinion_before_r067`) и тот же контур после правки генератора R-067 (257 примитивов,
+# `pinion_repaired`); строка сверяет именно клиентский вход.
 
 SPD_REFERENCE = os.path.join(
-    ROOT, "tests", "Unit", "KompasMcp.Unit", "Data", "wheels_cp05_3004019.json")
+    ROOT, "tests", "Unit", "KompasMcp.Unit", "Data", "cp06_profiles.json")
 
 # Ключи details отказа SetSketch. Сверяются как МНОЖЕСТВО: пропущенный ключ неотличим от «забыли
 # заполнить», а ради этого различия разбор профиля в отказе и заведён.
@@ -34480,12 +34481,12 @@ def sketch_profile_checks(client, rep, app_id, workdir):
     def warnings(env):
         return [str(x) for x in ((env or {}).get("warnings") or []) if isinstance(x, str)]
 
-    def reference(level, key):
-        """Контур из клиентского файла; (None, причина), если файла нет или ключа в нём нет."""
+    def reference(key):
+        """Контур из выреза клиентского файла; (None, причина), если файла нет или ключа в нём нет."""
         try:
             with open(SPD_REFERENCE, encoding="utf-8-sig") as fh:
                 data = json.load(fh)
-            return data["levels"][level][key], None
+            return data["contours"][key], None
         except Exception as ex:  # noqa: BLE001 — отсутствие эталона обязано быть названо, а не падать
             return None, "%s: %s" % (type(ex).__name__, ex)
 
@@ -34544,8 +34545,8 @@ def sketch_profile_checks(client, rep, app_id, workdir):
                 total += float(value)
         return len(rows), total
 
-    pinion, pinion_error = reference("pinion", "outline_mcp_before_R067")
-    escape, escape_error = reference("escape_wheel", "outline_mcp")
+    pinion, pinion_error = reference("pinion_before_r067")
+    escape, escape_error = reference("escape_wheel")
     if pinion_error or escape_error:
         rep.add("SPD.00.reference", "клиентский эталон контуров доступен", "NAMED",
                 "файл %s: %s" % (SPD_REFERENCE, pinion_error or escape_error))

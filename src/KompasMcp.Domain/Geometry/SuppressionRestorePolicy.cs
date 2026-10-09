@@ -56,14 +56,13 @@ public sealed record RestoreComparison(RestoreVerdict Verdict, string? Reason, d
 }
 
 /// <summary>The rule that decides whether removing a suppression may be reported as a success.</summary>
-/// <remarks>INVARIANT: a restore is compared with the state the SAME session recorded before it applied the
-/// suppression. A mismatch is a REFUSAL, never a lowered verification level: the client asked for the
-/// suppression to be removed and got a model that is not the one it started from, and "the volume changed"
-/// is true of that wrong model too. An unavailable comparison is NAMED, not silently skipped — "we could
-/// not check" and "we checked and it matched" must not read the same.
-/// INVARIANT: the decision is a pure function of the record, the handle, the revision and the measured
-/// state, so a SUBSTITUTED read result exercises every branch without a CAD session.
-/// History: docs/decisions/adapter-core.md#suppression-restore-comparison</remarks>
+/// <remarks>INVARIANT: a restore is compared with the state the SAME session recorded before applying
+/// the suppression. A mismatch is a REFUSAL, never a lowered level: the client asked for the suppression
+/// to be removed and got a different model, and "the volume changed" is true of a wrong model too. An
+/// unavailable comparison is NAMED, not skipped — "we could not check" and "we checked and it matched"
+/// must not read the same. INVARIANT: the decision is a pure function of the record, the handle, the
+/// revision and the measured state, so a SUBSTITUTED read result exercises every branch without a CAD
+/// session. History: docs/decisions/adapter-core.md#suppression-restore-comparison</remarks>
 public static class SuppressionRestorePolicy
 {
     public static RestoreComparison Compare(

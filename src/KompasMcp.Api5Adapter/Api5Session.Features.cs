@@ -284,7 +284,7 @@ public partial class Api5Session
     /// the sketch normal read by the documented route. Null with a named reason when either is unreadable.</summary>
     /// <remarks>A read feature has no gabarit before/after, so the sketch-normal rule is the only source — and
     /// it is exactly what covers a cut made inside a body. DOC: kssketchdefinition_getsurface.html → …
-    /// → ksplacement_getaxis.html. History: docs/decisions/adapter-core.md#material-direction-toward</remarks>
+    /// → ksplacement_getvector.html. History: docs/decisions/adapter-core.md#material-direction-toward</remarks>
     private static (string? Toward, string? Source, double[]? Normal, string? Reason) ReadFeatureMaterialToward(
         object definition, short? directionType)
     {

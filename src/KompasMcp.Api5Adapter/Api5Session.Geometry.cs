@@ -1600,7 +1600,7 @@ public sealed partial class Api5Session
     /// INSIDE a body — the commonest cut — left the field silent. The normal is readable for every planar
     /// support, so the rule names the side there too. The box is kept as an INDEPENDENT check: when both are
     /// available and disagree the answer says so and the acceptance row is a FAIL, never a silent pick.
-    /// DOC: kssketchdefinition_getsurface.html → … → ksplacement_getaxis.html.
+    /// DOC: kssketchdefinition_getsurface.html → … → ksplacement_getvector.html.
     /// History: docs/decisions/adapter-core.md#material-direction-toward</remarks>
     private MaterialDirection DescribeMaterialDirection(
         ExtrudeCommand command, SketchTarget target, BodyTarget? bodyTarget, BodyComparison changes)
@@ -1734,9 +1734,10 @@ public sealed partial class Api5Session
     /// <remarks>DOC: <c>kssketchdefinition_getsurface.html</c> (<c>GetSurface → ksSurface</c>),
     /// <c>kssurface_isplane.html</c>, <c>kssurface_getsurfaceparam.html</c> (<c>→ ksPlaneParam</c>),
     /// <c>ksplaneparam_getplacement.html</c> (<c>→ ksPlacement</c>; «Оси X и Y системы координат лежат в
-    /// плоскости», so the OZ axis is the plane's normal), <c>ksplacement_getaxis.html</c> (type: 0=OX, 1=OY,
-    /// &gt;1=OZ), <c>ksplacement_getorigin.html</c>. The sign of that OZ axis is MEASURED against the box
-    /// shift, not assumed. History: docs/decisions/adapter-core.md#material-direction-toward</remarks>
+    /// плоскости», so the OZ axis is the plane's normal), <c>ksplacement_getvector.html</c> (type: 0=OX,
+    /// 1=OY, &gt;1=OZ; the answer is the axis DIRECTION), <c>ksplacement_getorigin.html</c>. The sign of that
+    /// OZ axis is MEASURED against the box shift, not assumed.
+    /// History: docs/decisions/adapter-core.md#material-direction-toward</remarks>
     private static (double[]? Normal, double[]? Origin, string? Reason) ReadSketchPlaneFrame(ksSketchDefinition definition)
     {
         try
@@ -1761,14 +1762,17 @@ public sealed partial class Api5Session
                 return (null, null, "ksPlaneParam.GetPlacement() не дал ksPlacement");
             }
 
-            if (!placement.GetAxis(out var nx, out var ny, out var nz, 2))
+            // INVARIANT: the plane's normal is the OZ axis DIRECTION of its placement, so it is read with
+            // GetVector — the help gives that member as «X, Y, Z — компоненты вектора направления оси».
+            // GetAxis is NOT used: its triple is not a direction on a placement that is not at the origin.
+            // LIMIT: the help does not promise a UNIT vector, so the direction is normalised before any
+            // axis-alignment test. MEASURED: GetVector(OZ) answered a unit vector on every support tried
+            // (base planes at 0 and ±5, top/bottom/side faces), so the normalisation is a no-op there.
+            if (!placement.GetVector(2, out var nx, out var ny, out var nz))
             {
-                return (null, null, "ksPlacement.GetAxis(OZ) вернул false");
+                return (null, null, "ksPlacement.GetVector(OZ) вернул false");
             }
 
-            // MEASURED: for an OFFSET plane GetAxis(OZ) returns a NON-unit vector (magnitude grows with the
-            // offset), while for a base plane it is unit. The SIDE is a direction, so the vector is
-            // normalized here; the axis-alignment tolerance then works for every support.
             var magnitude = Math.Sqrt(nx * nx + ny * ny + nz * nz);
             if (magnitude <= MaterialDirectionRule.AxisTolerance)
             {
@@ -1810,7 +1814,7 @@ public sealed partial class Api5Session
     /// <summary>Builds the no-change hint from the documented sketch-normal rule (the side the operation went
     /// to) and the target body's box against the plane origin (which side the body is on). The operation is
     /// NOT re-run with the opposite direction — that would be a behaviour change with no customer decision.</summary>
-    /// <remarks>DOC for the normal: kssketchdefinition_getsurface.html → … → ksplacement_getaxis.html.
+    /// <remarks>DOC for the normal: kssketchdefinition_getsurface.html → … → ksplacement_getvector.html.
     /// History: docs/decisions/adapter-core.md#material-direction-toward</remarks>
     private NoChangeHint BuildNoChangeHint(ExtrudeCommand command, SketchTarget target, BodyTarget? bodyTarget)
     {

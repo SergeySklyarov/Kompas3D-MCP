@@ -15051,6 +15051,219 @@ def cb9_checks(client, rep, app_id, workdir):
             "PASS" if not mismatches else "FAIL",
             "; ".join(readings) + ("" if not mismatches else " || РАСХОЖДЕНИЯ: " + "; ".join(mismatches)))
 
+    # ── CB9.15: нормаль эскиза на СМЕЩЁННОЙ базовой плоскости, в том числе В ОТРИЦАТЕЛЬНУЮ СТОРОНУ ────
+    # Знак нормали измеряется АБСОЛЮТНО и БЕЗ догадки о начале плоскости: на ОДНОЙ и той же опоре
+    # строятся ДВА тела — base/positive и base/negative одной глубины. Материал «positive» ложится ВДОЛЬ
+    # нормали, поэтому направление от центра отрицательного тела к центру положительного И ЕСТЬ нормаль.
+    # Прочитанная нормаль обязана совпасть с этим направлением, а сама опора — дать один и тот же вектор
+    # при любом смещении. Отрицательное смещение — отдельный случай: у плоскости xy со смещением −5 точка
+    # (0, 0, −5) + (0, 0, 1) = (0, 0, −4) нормируется в −z при истинной +z.
+    mism_15, reads_15 = [], []
+    for base, offset in (("xy", 0.0), ("xz", 0.0), ("yz", 0.0),
+                         ("xy", 5.0), ("xz", 5.0), ("yz", 5.0),
+                         ("xy", -5.0), ("xz", -5.0), ("yz", -5.0)):
+        tag = "%s%+g" % (base, offset)
+        doc, rev = new_part("CB9-nrmo-" + tag.replace("+", "p").replace("-", "m").replace(".", "_"))
+        if not doc:
+            mism_15.append(tag + ": документ не создан")
+            continue
+        normal, seen, err = None, {}, None
+        for direction in ("positive", "negative"):
+            known = {r["body_ref"] for r in bodies(doc)}
+            sk, rev, derr = draw_plane(doc, rev, {"base": base, "offset_mm": offset},
+                                       [{"kind": "rectangle", "start_mm": [-20.0, -10.0],
+                                         "width_mm": 40.0, "height_mm": 20.0}],
+                                       "nrmo-%s-%s" % (base, direction))
+            if derr:
+                err = derr
+                break
+            rev, env = extrude(doc, rev, sk, operation="base", depth_mm=5.0, direction=direction,
+                               end_condition="blind")
+            if error_code(env) is not None:
+                err = "base/%s: %s" % (direction, error_code(env))
+                break
+            if direction == "positive":
+                normal = result(env).get("material_toward_sketch_normal")
+            fresh = [r for r in bodies(doc) if r["body_ref"] not in known]
+            seen[direction] = bbox(fresh[-1]["body_ref"]) if fresh else None
+        if err is not None:
+            mism_15.append(tag + ": " + err)
+            close(doc)
+            continue
+        pos, neg = seen.get("positive"), seen.get("negative")
+        if (not isinstance(normal, list) or len(normal) != 3
+                or not isinstance(pos, dict) or not isinstance(neg, dict)):
+            mism_15.append("%s: нормаль=%r тела=%r" % (tag, normal, [bool(pos), bool(neg)]))
+            close(doc)
+            continue
+        delta = [(pos["min_mm"][i] + pos["max_mm"][i]) / 2.0
+                 - (neg["min_mm"][i] + neg["max_mm"][i]) / 2.0 for i in range(3)]
+        axis = max(range(3), key=lambda i: abs(delta[i]))   # ось, вдоль которой тела разнесены
+        measured = 1.0 if delta[axis] > 0 else -1.0
+        off_axis = max(abs(normal[j]) for j in range(3) if j != axis)
+        reads_15.append("%s: read=(%.3f,%.3f,%.3f) тела разнесены по %s на %+.3f → знак %s"
+                        % (tag, normal[0], normal[1], normal[2], "xyz"[axis], delta[axis],
+                           "+" if measured > 0 else MINUS))
+        if normal[axis] * measured <= 0.999 or off_axis > 1e-6:
+            mism_15.append("%s: read=(%.3f,%.3f,%.3f) против измеренного направления %s%s "
+                           "(вне оси %.4f)"
+                           % (tag, normal[0], normal[1], normal[2],
+                              "+" if measured > 0 else MINUS, "xyz"[axis], off_axis))
+        close(doc)
+    rep.add("CB9.15", "нормаль эскиза на СМЕЩЁННОЙ базовой плоскости (в том числе в −сторону): "
+                      "прочитанное = измеренному",
+            "PASS" if not mism_15 else "FAIL",
+            "; ".join(reads_15) + ("" if not mism_15 else " || РАСХОЖДЕНИЯ: " + "; ".join(mism_15)),
+            details={"reads": reads_15, "mismatches": mism_15})
+
+    # ── CB9.16: нормаль эскиза на ГРАНЯХ пластины, СМЕЩЁННОЙ от начала координат ─────────────────────
+    # Пластина 40×40×10 с центром (30, 20, 0): её грань +x лежит в x=50, грань −y — в y=0, верх — в
+    # z=10. Нормаль эскиза на грани обязана совпасть с нормалью САМОЙ ГРАНИ, прочитанной НЕЗАВИСИМО из
+    # топологии (normal_at_center): у грани, чья плоскость не проходит через начало координат по
+    # касательным осям, нормализованная «точка + направление» нормалью уже не является.
+    mism_16, reads_16 = [], []
+    for face_name, axis, sign in (("top", 2, 1.0), ("side+x", 0, 1.0), ("side-y", 1, -1.0)):
+        doc, rev = new_part("CB9-nrmf-off-" + face_name.replace("+", "p").replace("-", "m"))
+        if not doc:
+            mism_16.append(face_name + ": документ не создан")
+            continue
+        sk, rev, derr = draw(doc, rev, [{"kind": "rectangle", "start_mm": [10.0, 0.0],
+                                         "width_mm": 40.0, "height_mm": 40.0}],
+                             "nrmf-off-base", 0.0)
+        if derr:
+            mism_16.append(face_name + ": " + derr)
+            close(doc)
+            continue
+        rev, env = extrude(doc, rev, sk, operation="base", depth_mm=10.0, direction="positive",
+                           end_condition="blind")
+        body_rows = bodies(doc)
+        if error_code(env) is not None or not body_rows:
+            mism_16.append(face_name + ": пластина не создана (%s)" % error_code(env))
+            close(doc)
+            continue
+        body = body_rows[0]["body_ref"]
+        face, face_normal, face_area = None, None, -1.0
+        for f in faces_of(doc, body):
+            n = f.get("normal_at_center") or []
+            a = f.get("area_mm2")
+            if (f.get("surface_type") == "plane" and a is not None and len(n) >= 3
+                    and abs(n[axis] - sign) <= 1e-6 and a > face_area):
+                face, face_normal, face_area = f.get("face_ref"), n, a
+        if not face:
+            mism_16.append("%s: грань %s%s не найдена"
+                           % (face_name, "+" if sign > 0 else MINUS, "xyz"[axis]))
+            close(doc)
+            continue
+        pref, rev, perr = plane_from_face(doc, rev, face, "nrmf-off-plane-" + face_name)
+        if perr:
+            mism_16.append(face_name + ": " + perr)
+            close(doc)
+            continue
+        sk, rev, derr = draw_plane(doc, rev, {"reference": pref},
+                                   [{"kind": "circle", "center_mm": [0.0, 0.0], "radius_mm": 3.0}],
+                                   "nrmf-off-sk-" + face_name)
+        if derr:
+            mism_16.append(face_name + ": " + derr)
+            close(doc)
+            continue
+        rev, env = extrude(doc, rev, sk, operation="base", depth_mm=3.0, direction="positive",
+                           end_condition="blind")
+        normal = result(env).get("material_toward_sketch_normal")
+        dot = None
+        if (isinstance(normal, list) and len(normal) == 3
+                and isinstance(face_normal, list) and len(face_normal) == 3):
+            dot = sum(normal[i] * face_normal[i] for i in range(3))
+        reads_16.append("%s: read=%s грань=%s скаляр=%s"
+                        % (face_name, normal, face_normal,
+                           "%.4f" % dot if dot is not None else "n/a"))
+        if dot is None or dot <= 0.999:
+            mism_16.append("%s: прочитанная нормаль против нормали грани (скаляр=%s)"
+                           % (face_name, "%.4f" % dot if dot is not None else "n/a"))
+        close(doc)
+    rep.add("CB9.16", "нормаль эскиза на гранях пластины, СМЕЩЁННОЙ от начала координат: "
+                      "прочитанное = нормали грани",
+            "PASS" if not mism_16 else "FAIL",
+            "; ".join(reads_16) + ("" if not mism_16 else " || РАСХОЖДЕНИЯ: " + "; ".join(mism_16)),
+            details={"reads": reads_16, "mismatches": mism_16})
+
+    # ── CB9.17: сторона материала у выреза на СМЕЩЁННОЙ В −сторону плоскости, габарит НЕ двигается ────
+    # Тело z=[−10,0] строится base/negative от плоскости XY; эскиз круга R5 кладётся на XY со смещением
+    # −5, то есть ВНУТРИ тела, и вырез cut/positive/blind 3 снимает z=[−8,−5] внутри тела — габарит НЕ
+    # двигается, поэтому сторона берётся ТОЛЬКО правилом нормали эскиза. Ожидание: снято π·25·3, сторона
+    # «−z» (у выреза positive материал уходит ПРОТИВ нормали +z), источник sketch_normal_rule. Та же
+    # сторона обязана читаться обратно инструментом kompas_get_feature (поля material_toward и
+    # material_toward_source), то есть знак держится не только в ответе создания.
+    doc, rev = new_part("CB9-nrmc-cut")
+    if not doc:
+        rep.add("CB9.17", "вырез с плоскости, смещённой в −сторону: сторона по правилу нормали и тем же "
+                          "знаком у kompas_get_feature", "FAIL", "документ не создан")
+    else:
+        sk, rev, derr = draw(doc, rev, [{"kind": "rectangle", "start_mm": [-20.0, -20.0],
+                                         "width_mm": 40.0, "height_mm": 40.0}], "nrmc-base", 0.0)
+        if derr:
+            rep.add("CB9.17", "вырез с плоскости, смещённой в −сторону: сторона по правилу нормали и тем "
+                              "же знаком у kompas_get_feature", "FAIL", derr)
+            close(doc)
+        else:
+            rev, env = extrude(doc, rev, sk, operation="base", depth_mm=10.0,
+                               direction="negative", end_condition="blind")
+            body_rows = bodies(doc)
+            body = body_rows[0]["body_ref"] if body_rows else None
+            bb = bbox(body)
+            body_ok = (isinstance(bb, dict) and abs(bb["max_mm"][2]) <= 1e-6
+                       and abs(bb["min_mm"][2] + 10.0) <= 1e-6)
+            if error_code(env) is not None or not body or not body_ok:
+                rep.add("CB9.17", "вырез с плоскости, смещённой в −сторону: сторона по правилу нормали и "
+                                  "тем же знаком у kompas_get_feature", "FAIL",
+                        "тело z=[−10,0] не построено: code=%s габарит=%s" % (error_code(env), bb))
+                close(doc)
+            else:
+                v_before = volume(body)
+                sk, rev, derr = draw(doc, rev, [{"kind": "circle", "center_mm": [0.0, 0.0],
+                                                 "radius_mm": 5.0}], "nrmc-cut", -5.0)
+                if derr:
+                    rep.add("CB9.17", "вырез с плоскости, смещённой в −сторону: сторона по правилу "
+                                      "нормали и тем же знаком у kompas_get_feature", "FAIL", derr)
+                    close(doc)
+                else:
+                    rev, env = extrude(doc, rev, sk, operation="cut", depth_mm=3.0,
+                                       direction="positive", end_condition="blind",
+                                       target_body_ref=body)
+                    after = bodies(doc)
+                    v_after = volume(after[0]["body_ref"]) if after else None
+                    removed = None if None in (v_before, v_after) else v_before - v_after
+                    want = math.pi * 25.0 * 3.0
+                    toward = result(env).get("material_removed_toward")
+                    source = result(env).get("material_toward_source")
+                    normal = result(env).get("material_toward_sketch_normal")
+                    bb_after = bbox(after[0]["body_ref"]) if after else None
+                    box_still = (isinstance(bb_after, dict) and isinstance(bb, dict)
+                                 and bb_after["min_mm"] == bb["min_mm"]
+                                 and bb_after["max_mm"] == bb["max_mm"])
+                    fref = ref_id(result(env).get("feature_ref"))
+                    feat = tool("kompas_get_feature", {"feature_ref": fref}) if fref else {}
+                    f_toward = result(feat).get("material_toward")
+                    f_source = result(feat).get("material_toward_source")
+                    f_normal = result(feat).get("material_toward_sketch_normal")
+                    normal_up = isinstance(normal, list) and len(normal) == 3 and normal[2] > 0.999
+                    f_normal_up = (isinstance(f_normal, list) and len(f_normal) == 3
+                                   and f_normal[2] > 0.999)
+                    ok = (error_code(env) is None and removed is not None
+                          and abs(removed - want) <= 1e-4 and toward == MINUS + "z"
+                          and source == "sketch_normal_rule" and normal_up and box_still
+                          and f_toward == MINUS + "z" and f_source == "sketch_normal_rule"
+                          and f_normal_up)
+                    rep.add("CB9.17", "вырез с плоскости, смещённой в −сторону: сторона по правилу "
+                                      "нормали и тем же знаком у kompas_get_feature",
+                            "PASS" if ok else "FAIL",
+                            "code=%s снято=%s ожидание=%.9f toward=%r source=%r normal=%r "
+                            "габарит_не_двинулся=%s; get_feature: toward=%r source=%r normal=%r"
+                            % (error_code(env), removed, want, toward, source, normal, box_still,
+                               f_toward, f_source, f_normal),
+                            details={"extrude_normal": normal, "feature_normal": f_normal,
+                                     "box_before": bb, "box_after": bb_after})
+                    close(doc)
+
 
 def sketch_clearing_checks(client, rep, app_id):
     """V04r/V04d: replace и delete_entities делают то, что обещают.

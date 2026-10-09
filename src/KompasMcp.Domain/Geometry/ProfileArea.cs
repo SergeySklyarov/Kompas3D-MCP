@@ -1,3 +1,4 @@
+using System.Globalization;
 using KompasMcp.Contracts;
 
 namespace KompasMcp.Domain.Geometry;
@@ -26,37 +27,37 @@ public static class ProfileArea
     public static double? Of(IReadOnlyList<SketchEntityDto> entities) => Compute(entities).AreaMm2;
 
     /// <summary>The area together with the reason it could not be computed, so the caller can name the gap
-    /// in <c>unverified_aspects</c> instead of reporting a bare "not computable".</summary>
+    /// in <c>unverified_aspects</c> instead of reporting a bare "not computable", and the state that
+    /// separates a defect of the caller's contour from a figure the server cannot analyse at all.</summary>
     public static ProfileAreaOutcome Compute(IReadOnlyList<SketchEntityDto> entities)
     {
         if (entities.Count == 0)
         {
-            return new ProfileAreaOutcome(null, "профиль пуст — примитивов нет");
+            return new ProfileAreaOutcome(null, "профиль пуст — примитивов нет", ProfileInputState.NotAnalysable);
         }
 
         var contours = new List<Contour>(entities.Count);
         var edges = new List<Edge>();
         var pool = new VertexPool();
-        foreach (var entity in entities)
+        for (var index = 0; index < entities.Count; index++)
         {
+            var entity = entities[index];
             switch (entity.Kind)
             {
                 case SketchEntityKind.Circle:
                 case SketchEntityKind.Rectangle:
-                    if (ContourOf(entity) is not Contour closed)
+                    if (ContourOf(entity, index, out var closedReason, out var closedState) is not Contour closed)
                     {
-                        return new ProfileAreaOutcome(null,
-                            $"примитив {KindName(entity)} не разобран: не хватает полей для площади");
+                        return new ProfileAreaOutcome(null, closedReason, closedState);
                     }
 
                     contours.Add(closed);
                     break;
 
                 case SketchEntityKind.Polyline when entity.Closed == true:
-                    if (ContourOf(entity) is not Contour polygon)
+                    if (ContourOf(entity, index, out var polygonReason, out var polygonState) is not Contour polygon)
                     {
-                        return new ProfileAreaOutcome(null,
-                            "замкнутая полилиния не разобрана: нужно не меньше трёх вершин без самопересечения");
+                        return new ProfileAreaOutcome(null, polygonReason, polygonState);
                     }
 
                     contours.Add(polygon);
@@ -65,9 +66,9 @@ public static class ProfileArea
                 case SketchEntityKind.Line:
                 case SketchEntityKind.Arc:
                 case SketchEntityKind.Polyline:
-                    if (!AppendEdges(entity, edges, pool, out var edgeReason))
+                    if (!AppendEdges(entity, index, edges, pool, out var edgeReason))
                     {
-                        return new ProfileAreaOutcome(null, edgeReason);
+                        return new ProfileAreaOutcome(null, edgeReason, ProfileInputState.NotAnalysable);
                     }
 
                     break;
@@ -81,21 +82,24 @@ public static class ProfileArea
                     return new ProfileAreaOutcome(null,
                         "площадь профиля со сплайном на стороне сервера не считается: сплайн не "
                         + "разбирается на отрезки и дуги. Геометрию подтверждает измерение объёма "
-                        + "выдавливания, а не аналитическая площадь.");
+                        + "выдавливания, а не аналитическая площадь.", ProfileInputState.NotAnalysable);
 
                 default:
-                    return new ProfileAreaOutcome(null, $"примитив {KindName(entity)} не даёт аналитики");
+                    return new ProfileAreaOutcome(null,
+                        $"примитив {KindName(entity)} не даёт аналитики", ProfileInputState.NotAnalysable);
             }
         }
 
-        if (edges.Count > 0 && !BuildChains(edges, contours, out var chainReason))
+        if (edges.Count > 0
+            && !BuildChains(edges, pool, contours, out var chainReason, out var chainState))
         {
-            return new ProfileAreaOutcome(null, chainReason);
+            return new ProfileAreaOutcome(null, chainReason, chainState);
         }
 
         if (contours.Count == 0)
         {
-            return new ProfileAreaOutcome(null, "замкнутый контур не собран из примитивов");
+            return new ProfileAreaOutcome(null,
+                "замкнутый контур не собран из примитивов", ProfileInputState.NotAnalysable);
         }
 
         // Depth = how many contours strictly contain this one. Even-odd: a contour at an odd depth is
@@ -121,7 +125,8 @@ public static class ProfileArea
                     default:
                         // Touching or overlapping: the region is not this formula's business.
                         return new ProfileAreaOutcome(null,
-                            "отношение контуров не определяется надёжно: они касаются или пересекаются");
+                            "отношение контуров не определяется надёжно: они касаются или пересекаются",
+                            ProfileInputState.Defect);
                 }
             }
         }
@@ -135,8 +140,9 @@ public static class ProfileArea
         // A non-positive total means the contours cancelled out (coincident or nested-equal
         // figures), which is a degenerate profile rather than a measured region of zero.
         return double.IsFinite(total) && total > 0d
-            ? new ProfileAreaOutcome(total, null)
-            : new ProfileAreaOutcome(null, "контуры взаимно уничтожились: площадь региона не положительна");
+            ? new ProfileAreaOutcome(total, null, ProfileInputState.Consistent)
+            : new ProfileAreaOutcome(null,
+                "контуры взаимно уничтожились: площадь региона не положительна", ProfileInputState.Defect);
     }
 
     public static double Shoelace(IReadOnlyList<IReadOnlyList<double>> points)
@@ -199,9 +205,17 @@ public static class ProfileArea
             Points.Max(p => p[0]),
             Points.Max(p => p[1]));
 
-    /// <summary>One primitive as a contour, or null when its region is not determined by the primitive alone.</summary>
-    private static Contour? ContourOf(SketchEntityDto entity)
+    /// <summary>One primitive as a contour, or null when its region is not determined by the primitive
+    /// alone; <paramref name="reason"/> then names what was missing or where the primitive crosses itself,
+    /// and <paramref name="state"/> separates the two.</summary>
+    private static Contour? ContourOf(
+        SketchEntityDto entity,
+        int entityIndex,
+        out string? reason,
+        out ProfileInputState state)
     {
+        reason = null;
+        state = ProfileInputState.NotAnalysable;
         switch (entity.Kind)
         {
             case SketchEntityKind.Circle:
@@ -209,6 +223,7 @@ public static class ProfileArea
                     || entity.RadiusMm is not double radius
                     || !(radius > 0d))
                 {
+                    reason = "примитив окружность не разобран: не хватает полей для площади";
                     return null;
                 }
 
@@ -221,29 +236,40 @@ public static class ProfileArea
                     || !(width > 0d)
                     || !(height > 0d))
                 {
+                    reason = "примитив прямоугольник не разобран: не хватает полей для площади";
                     return null;
                 }
 
-                return PolygonOf(new[]
-                {
-                    new[] { corner[0], corner[1] },
-                    new[] { corner[0] + width, corner[1] },
-                    new[] { corner[0] + width, corner[1] + height },
-                    new[] { corner[0], corner[1] + height },
-                });
+                return PolygonOf(
+                    new[]
+                    {
+                        new[] { corner[0], corner[1] },
+                        new[] { corner[0] + width, corner[1] },
+                        new[] { corner[0] + width, corner[1] + height },
+                        new[] { corner[0], corner[1] + height },
+                    },
+                    $"примитив {entityIndex} (прямоугольник)",
+                    out reason,
+                    out state);
 
             case SketchEntityKind.Polyline:
                 if (entity.Closed != true || entity.PointsMm is not { Count: >= 3 } points)
                 {
+                    reason = "замкнутая полилиния не разобрана: нужно не меньше трёх вершин";
                     return null;
                 }
 
                 if (points.Any(p => p.Count < 2 || !double.IsFinite(p[0]) || !double.IsFinite(p[1])))
                 {
+                    reason = "замкнутая полилиния не разобрана: не все вершины конечны";
                     return null;
                 }
 
-                return PolygonOf(points.Select(p => new[] { p[0], p[1] }).ToArray());
+                return PolygonOf(
+                    points.Select(p => new[] { p[0], p[1] }).ToArray(),
+                    $"примитив {entityIndex} (замкнутая полилиния)",
+                    out reason,
+                    out state);
 
             // A circle or rectangle is a contour on its own; lines, arcs and open polylines are joined
             // into a chain by Compute().
@@ -253,8 +279,14 @@ public static class ProfileArea
     }
 
     /// <summary>An edge of a chain: its two welded vertices, its contribution to the signed double area
-    /// (∮ x·dy − y·dx) and the points that approximate it for the topological predicates.</summary>
-    private sealed record Edge(int From, int To, double Contribution, IReadOnlyList<double[]> Samples);
+    /// (∮ x·dy − y·dx), the points that approximate it for the topological predicates, and the index of the
+    /// caller's primitive it came from (a polyline yields several edges carrying the same index).</summary>
+    private sealed record Edge(
+        int From,
+        int To,
+        double Contribution,
+        IReadOnlyList<double[]> Samples,
+        int EntityIndex);
 
     /// <summary>A pool of chain vertices, welded by proximity: two ends within <see cref="WeldMm"/> are the
     /// same point.</summary>
@@ -275,10 +307,19 @@ public static class ProfileArea
             _points.Add(new[] { x, y });
             return _points.Count - 1;
         }
+
+        public double[] Point(int id) => _points[id];
     }
 
-    /// <summary>Turns one line, arc or open polyline into chain edges.</summary>
-    private static bool AppendEdges(SketchEntityDto entity, List<Edge> edges, VertexPool pool, out string? reason)
+    /// <summary>Turns one line, arc or open polyline into chain edges. <paramref name="entityIndex"/> is
+    /// carried onto every edge the primitive produces, so a refusal can name the PRIMITIVE the caller
+    /// passed rather than an internal edge number.</summary>
+    private static bool AppendEdges(
+        SketchEntityDto entity,
+        int entityIndex,
+        List<Edge> edges,
+        VertexPool pool,
+        out string? reason)
     {
         reason = null;
         switch (entity.Kind)
@@ -291,7 +332,7 @@ public static class ProfileArea
                     return false;
                 }
 
-                edges.Add(SegmentEdge(pool, lineStart[0], lineStart[1], lineEnd[0], lineEnd[1]));
+                edges.Add(SegmentEdge(pool, lineStart[0], lineStart[1], lineEnd[0], lineEnd[1], entityIndex));
                 return true;
 
             case SketchEntityKind.Arc:
@@ -338,7 +379,7 @@ public static class ProfileArea
                     return false;
                 }
 
-                edges.Add(ArcEdge(pool, center[0], center[1], radius, startDeg, sweepDeg));
+                edges.Add(ArcEdge(pool, center[0], center[1], radius, startDeg, sweepDeg, entityIndex));
                 return true;
 
             case SketchEntityKind.Polyline:
@@ -351,7 +392,7 @@ public static class ProfileArea
 
                 for (var i = 0; i + 1 < path.Count; i++)
                 {
-                    edges.Add(SegmentEdge(pool, path[i][0], path[i][1], path[i + 1][0], path[i + 1][1]));
+                    edges.Add(SegmentEdge(pool, path[i][0], path[i][1], path[i + 1][0], path[i + 1][1], entityIndex));
                 }
 
                 return true;
@@ -364,13 +405,21 @@ public static class ProfileArea
 
     // The vertex pool lives for the duration of one Compute() call: the ids it hands out index into it, so
     // it must not outlive the edge list that references them.
-    private static Edge SegmentEdge(VertexPool pool, double ax, double ay, double bx, double by) =>
-        new(pool.Id(ax, ay), pool.Id(bx, by), (ax * by) - (bx * ay), new[] { new[] { ax, ay }, new[] { bx, by } });
+    private static Edge SegmentEdge(VertexPool pool, double ax, double ay, double bx, double by, int entityIndex) =>
+        new(pool.Id(ax, ay), pool.Id(bx, by), (ax * by) - (bx * ay),
+            new[] { new[] { ax, ay }, new[] { bx, by } }, entityIndex);
 
     /// <summary>A circular arc as a chain edge: Green's contribution is the chord term plus r²(θ−sinθ) for
     /// the signed sweep θ, and the samples lie ON the arc so a containment test against them is exact at
     /// the vertices and conservative between them.</summary>
-    private static Edge ArcEdge(VertexPool pool, double cx, double cy, double r, double startDeg, double sweepDeg)
+    private static Edge ArcEdge(
+        VertexPool pool,
+        double cx,
+        double cy,
+        double r,
+        double startDeg,
+        double sweepDeg,
+        int entityIndex)
     {
         var a0 = startDeg * Math.PI / 180d;
         var a1 = (startDeg + sweepDeg) * Math.PI / 180d;
@@ -380,7 +429,8 @@ public static class ProfileArea
         var by = cy + (r * Math.Sin(a1));
         var delta = sweepDeg * Math.PI / 180d;
         var contribution = ((ax * by) - (bx * ay)) + (r * r * (delta - Math.Sin(delta)));
-        return new Edge(pool.Id(ax, ay), pool.Id(bx, by), contribution, ArcSamples(cx, cy, r, startDeg, sweepDeg));
+        return new Edge(pool.Id(ax, ay), pool.Id(bx, by), contribution,
+            ArcSamples(cx, cy, r, startDeg, sweepDeg), entityIndex);
     }
 
     /// <summary>Points along an arc for the topological predicates. At most one per degree and never more
@@ -403,10 +453,20 @@ public static class ProfileArea
     /// <summary>Welds the edges into closed chains. Every vertex must carry exactly two edge ends — a
     /// vertex with one is an open chain, one with three or more is a branch — and the resulting polygon
     /// must not cross itself. Each chain becomes a contour whose area is exact while its points are the
-    /// approximation the nesting predicates work on.</summary>
-    private static bool BuildChains(List<Edge> edges, List<Contour> contours, out string? reason)
+    /// approximation the nesting predicates work on.
+    /// <para>INVARIANT: a refusal names the PLACE — the caller's primitive numbers, zero-based, in the
+    /// order the entities were passed, and the coordinate of the offending point. A contour defect is only
+    /// actionable with them; the caller cannot search a hundred-primitive chain by eye.</para>
+    /// History: docs/decisions/adapter-sketch.md#profile-input-diagnosis</remarks>
+    private static bool BuildChains(
+        List<Edge> edges,
+        VertexPool pool,
+        List<Contour> contours,
+        out string? reason,
+        out ProfileInputState state)
     {
         reason = null;
+        state = ProfileInputState.Consistent;
         var incidence = new Dictionary<int, List<int>>();
         foreach (var (edge, index) in edges.Select((e, i) => (e, i)))
         {
@@ -414,12 +474,21 @@ public static class ProfileArea
             Add(incidence, edge.To, index);
         }
 
-        var branching = incidence.Where(kv => kv.Value.Count != 2).ToList();
+        // A branch is reported before an open end: a chain that branches is not a simple contour whatever
+        // its closure, and naming the branch is the more specific fact.
+        var branching = incidence.Where(kv => kv.Value.Count > 2).OrderBy(kv => kv.Key).ToList();
         if (branching.Count > 0)
         {
-            var worst = branching.Max(kv => kv.Value.Count);
-            reason = $"цепочка контура не замкнута или ветвится: в {branching.Count} вершинах "
-                + $"сходится не два конца (больше всего — {worst})";
+            reason = DescribeVertices("цепочка контура ветвится", branching, edges, pool, "концов");
+            state = ProfileInputState.Defect;
+            return false;
+        }
+
+        var loose = incidence.Where(kv => kv.Value.Count == 1).OrderBy(kv => kv.Key).ToList();
+        if (loose.Count > 0)
+        {
+            reason = DescribeVertices("цепочка контура не замкнута", loose, edges, pool, "свободных концов");
+            state = ProfileInputState.Defect;
             return false;
         }
 
@@ -432,6 +501,11 @@ public static class ProfileArea
             }
 
             var points = new List<double[]>();
+            // INVARIANT: owners[i] is the caller's primitive the segment (i, i+1) belongs to, not the
+            // primitive that produced the vertex. At a welded vertex the segment LEAVING it belongs to the
+            // next edge, so the shared sample is re-labelled — otherwise a crossing just past a joint
+            // would be blamed on the previous primitive.
+            var owners = new List<int>();
             var contribution = 0d;
             var current = edges[start].From;
             var index = start;
@@ -446,10 +520,12 @@ public static class ProfileArea
                 {
                     if (points.Count > 0 && Near(points[^1], point))
                     {
+                        owners[^1] = edge.EntityIndex;
                         continue;
                     }
 
                     points.Add(point);
+                    owners.Add(edge.EntityIndex);
                 }
 
                 current = forward ? edge.To : edge.From;
@@ -465,17 +541,20 @@ public static class ProfileArea
             if (points.Count > 1 && Near(points[0], points[^1]))
             {
                 points.RemoveAt(points.Count - 1);
+                owners.RemoveAt(owners.Count - 1);
             }
 
             if (points.Count < 3)
             {
                 reason = "контур вырожден: у собранной цепочки меньше трёх точек";
+                state = ProfileInputState.Defect;
                 return false;
             }
 
-            if (SelfIntersects(points))
+            if (FindSelfCrossing(points, owners) is SelfCrossing crossing)
             {
-                reason = "контур самопересекается";
+                reason = crossing.Describe(null);
+                state = ProfileInputState.Defect;
                 return false;
             }
 
@@ -483,6 +562,7 @@ public static class ProfileArea
             if (!(area > 0d) || !double.IsFinite(area))
             {
                 reason = "площадь собранного контура не положительна";
+                state = ProfileInputState.Defect;
                 return false;
             }
 
@@ -490,6 +570,34 @@ public static class ProfileArea
         }
 
         return true;
+    }
+
+    /// <summary>Names the vertices where the chain ends or branches, with the caller's primitive numbers.
+    /// LIMIT: at most three vertices are listed and the rest are counted — a diagnostic line, not a
+    /// report, and an unbounded list would be useless to the caller anyway.</summary>
+    private static string DescribeVertices(
+        string lead,
+        List<KeyValuePair<int, List<int>>> vertices,
+        List<Edge> edges,
+        VertexPool pool,
+        string noun)
+    {
+        const int Listed = 3;
+        var shown = new List<string>();
+        foreach (var vertex in vertices.Take(Listed))
+        {
+            var point = pool.Point(vertex.Key);
+            var primitives = string.Join(", ", vertex.Value
+                .Select(index => edges[index].EntityIndex)
+                .Distinct()
+                .OrderBy(value => value));
+            shown.Add($"{Point(point)} (примитивы {primitives})");
+        }
+
+        var rest = vertices.Count > Listed ? $"; и ещё {vertices.Count - Listed}" : string.Empty;
+        return $"{lead}: {vertices.Count} {noun}, больше всего концов — "
+            + $"{vertices.Max(v => v.Value.Count)}; в " + string.Join("; ", shown) + rest
+            + ". Нумерация примитивов с нуля, в порядке передачи в профиль.";
     }
 
     private static void Add(Dictionary<int, List<int>> map, int key, int value)
@@ -512,15 +620,31 @@ public static class ProfileArea
 
     private static string KindName(SketchEntityDto entity) => entity.Kind.ToString().ToLowerInvariant();
 
-    private static Ring? PolygonOf(IReadOnlyList<double[]> points)
+    private static Ring? PolygonOf(
+        IReadOnlyList<double[]> points,
+        string label,
+        out string? reason,
+        out ProfileInputState state)
     {
-        if (SelfIntersects(points))
+        reason = null;
+        state = ProfileInputState.NotAnalysable;
+        var owners = Enumerable.Repeat(-1, points.Count).ToArray();
+        if (FindSelfCrossing(points, owners) is SelfCrossing crossing)
         {
+            reason = crossing.Describe(label);
+            state = ProfileInputState.Defect;
             return null;
         }
 
         var area = Shoelace(points);
-        return area > 0d ? new Ring(points, area) : null;
+        if (!(area > 0d))
+        {
+            reason = $"{label} не разобран: площадь не положительна";
+            state = ProfileInputState.Defect;
+            return null;
+        }
+
+        return new Ring(points, area);
     }
 
     private static Relation RelationOf(Contour first, Contour second)
@@ -691,9 +815,64 @@ public static class ProfileArea
         return false;
     }
 
-    /// <summary>True when a closed polygon crosses or touches itself.</summary>
-    private static bool SelfIntersects(IReadOnlyList<double[]> points)
+    /// <summary>One place where a closed contour crosses itself: the two caller primitives whose segments
+    /// meet and the point at which they meet. A negative primitive index means the crossing was found
+    /// inside a figure built from one primitive, where the caller's index is not per-segment.</summary>
+    private sealed record Crossing(int FirstEntity, int SecondEntity, double X, double Y);
+
+    /// <summary>Where a closed contour crosses itself: the places in walk order, and how many there are.
+    /// LIMIT: at most <see cref="Listed"/> places are named — a diagnostic line, not a report, and a
+    /// contour with a hundred crossings would otherwise produce a hundred-line refusal. The count is
+    /// always stated when it exceeds the list, so a truncated list never looks complete.
+    /// History: docs/decisions/adapter-sketch.md#profile-input-diagnosis</summary>
+    private sealed record SelfCrossing(IReadOnlyList<Crossing> Places, int Count)
     {
+        private const int Listed = 3;
+
+        /// <summary>The refusal line. <paramref name="label"/> names the single primitive a self-crossing
+        /// polygon was built from; null means a chain, where the two primitives are named instead.</summary>
+        public string Describe(string? label)
+        {
+            var first = Point(new[] { Places[0].X, Places[0].Y });
+            if (label is not null)
+            {
+                var single = $"{label} самопересекается у точки {first}";
+                return Count > 1 ? single + $" Всего мест самопересечения — {Count}." : single;
+            }
+
+            var parts = new List<string>(Places.Count);
+            foreach (var place in Places)
+            {
+                var where = Point(new[] { place.X, place.Y });
+                if (place.FirstEntity < 0 || place.SecondEntity < 0)
+                {
+                    parts.Add("место без восстановленного номера примитива у точки " + where);
+                }
+                else if (place.FirstEntity == place.SecondEntity)
+                {
+                    parts.Add($"примитив {place.FirstEntity} пересекает сам себя у точки {where}");
+                }
+                else
+                {
+                    parts.Add($"примитивы {place.FirstEntity} и {place.SecondEntity} пересекаются у точки {where}");
+                }
+            }
+
+            var lead = "контур самопересекается: " + string.Join("; ", parts) + ".";
+            return Count > Places.Count ? lead + $" Всего мест самопересечения — {Count}." : lead;
+        }
+    }
+
+    /// <summary>The self-crossings of a closed contour, or null when there are none.
+    /// <paramref name="owners"/> is parallel to <paramref name="points"/> and names the caller's primitive
+    /// each segment belongs to.</summary>
+    private static SelfCrossing? FindSelfCrossing(
+        IReadOnlyList<double[]> points,
+        IReadOnlyList<int> owners)
+    {
+        const int Listed = 3;
+        var places = new List<Crossing>(Listed);
+        var count = 0;
         for (var i = 0; i < points.Count; i++)
         {
             var a1 = points[i];
@@ -707,15 +886,55 @@ public static class ProfileArea
                     continue;
                 }
 
-                if (SegmentsMeet(a1, a2, points[j], points[(j + 1) % points.Count]))
+                var b1 = points[j];
+                var b2 = points[(j + 1) % points.Count];
+                if (!SegmentsMeet(a1, a2, b1, b2))
                 {
-                    return true;
+                    continue;
+                }
+
+                count++;
+                if (places.Count < Listed)
+                {
+                    var (x, y) = MeetingPoint(a1, a2, b1, b2);
+                    places.Add(new Crossing(owners[i], owners[j], x, y));
                 }
             }
         }
 
-        return false;
+        return count == 0 ? null : new SelfCrossing(places, count);
     }
+
+    /// <summary>Where two meeting segments meet. For a proper crossing the intersection is computed; for a
+    /// collinear overlap, which has no single crossing point, the midpoint of the closest pair of ends is
+    /// named — a place on the contour either way, and never an invented intersection.</summary>
+    private static (double X, double Y) MeetingPoint(double[] p1, double[] p2, double[] q1, double[] q2)
+    {
+        var d = ((p2[0] - p1[0]) * (q2[1] - q1[1])) - ((p2[1] - p1[1]) * (q2[0] - q1[0]));
+        if (Math.Abs(d) > 1e-18)
+        {
+            var t = (((q1[0] - p1[0]) * (q2[1] - q1[1])) - ((q1[1] - p1[1]) * (q2[0] - q1[0]))) / d;
+            return (p1[0] + (t * (p2[0] - p1[0])), p1[1] + (t * (p2[1] - p1[1])));
+        }
+
+        var pairs = new[]
+        {
+            (A: p1, B: q1),
+            (A: p1, B: q2),
+            (A: p2, B: q1),
+            (A: p2, B: q2),
+        };
+        var best = pairs.OrderBy(pair => Distance(pair.A[0], pair.A[1], pair.B[0], pair.B[1])).First();
+        return ((best.A[0] + best.B[0]) / 2d, (best.A[1] + best.B[1]) / 2d);
+    }
+
+    /// <summary>A point as the client reads it. INVARIANT: invariant culture and at most six decimals — the
+    /// same figure must read the same way in every locale, and six decimals is the weld scale of this
+    /// analysis.</summary>
+    private static string Point(double[] point) =>
+        "(" + Num(point[0]) + "; " + Num(point[1]) + ") мм";
+
+    private static string Num(double value) => value.ToString("0.######", CultureInfo.InvariantCulture);
 
     /// <summary>Whether two segments cross or touch. Touching counts as meeting on purpose: a shared point
     /// or edge makes the enclosed region depend on the kernel's resolution.</summary>
@@ -759,6 +978,28 @@ public static class ProfileArea
         && p[1] <= Math.Max(a[1], b[1]) + eps;
 }
 
-/// <summary>The enclosed area in mm² and, when it could not be computed, the reason in words — so the
-/// caller names the gap instead of reporting a bare "not computable".</summary>
-public sealed record ProfileAreaOutcome(double? AreaMm2, string? UnavailableReason);
+/// <summary>How the server's own analysis of the INPUT profile ended. It separates a defect of the caller's
+/// contour, which the caller can repair, from a figure the server cannot analyse at all (a spline, an
+/// unknown primitive, a missing field) — two different answers to "why is there no area?".</summary>
+public enum ProfileInputState
+{
+    /// <summary>The chain is assembled, closed, unbranched and free of self-intersections, and the region
+    /// was determined.</summary>
+    Consistent,
+
+    /// <summary>A structural defect of the contour: self-intersection, a branch, an open end, a degenerate
+    /// chain, or contours that touch or cancel.</summary>
+    Defect,
+
+    /// <summary>The server cannot analyse this input: an empty profile, a spline, a primitive without
+    /// analytics, or a missing field.</summary>
+    NotAnalysable,
+}
+
+/// <summary>The enclosed area in mm², the reason it could not be computed, and the state that says whether
+/// the reason is a defect of the caller's contour or a figure the server does not analyse — so the caller
+/// names the gap instead of reporting a bare "not computable".</summary>
+public sealed record ProfileAreaOutcome(
+    double? AreaMm2,
+    string? UnavailableReason,
+    ProfileInputState State);

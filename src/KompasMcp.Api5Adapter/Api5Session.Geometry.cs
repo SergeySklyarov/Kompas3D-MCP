@@ -377,10 +377,15 @@ public sealed partial class Api5Session
 
         // What the caller is told is the area of the PROFILE, not of this call's batch: it is the
         // figure the extrusion will use as its expectation, and for a second append the two differ.
+        // The reason travels WITH the missing figure: a bare null sends the caller back to guessing,
+        // and the server has already computed why (see ProfileArea).
         double? profileAreaMm2 = null;
+        string? profileAreaUnavailable = null;
         if (!partialClear && _sketchProfiles.TryGetValue(command.SketchRef, out var drawnProfile))
         {
-            profileAreaMm2 = drawnProfile.AreaMm2;
+            var outcome = drawnProfile.Outcome;
+            profileAreaMm2 = outcome.AreaMm2;
+            profileAreaUnavailable = outcome.UnavailableReason;
         }
 
         // The same bookkeeping for the profile's extent, with the same rule about a partial clear: an extent
@@ -420,7 +425,8 @@ public sealed partial class Api5Session
             ProfileAreaMm2: profileAreaMm2,
             DeletedEntities: deleted,
             ExpectedDeleted: deleteAttempts,
-            ProbePointsFromModel: derivedFrom is not null);
+            ProbePointsFromModel: derivedFrom is not null,
+            ProfileAreaUnavailable: profileAreaUnavailable);
     }
 
     /// <summary>Which base plane a sketch sits on: from memory when the server chose it, otherwise read back
@@ -999,15 +1005,54 @@ public sealed partial class Api5Session
         var target = RequireSketch(command.SketchRef);
         BumpRevision(target.Document, "sketch.finish");
 
-        // ksSketchDefinition exposes no profile/loop count in this interop version, so closedness
-        // cannot be asserted here. The extrusion is where it actually surfaces, and the caller is
-        // told that rather than handed a vacuous "profile is closed".
+        // INVARIANT: what the server read about the input is published AS the server's reading, never as
+        // the kernel's confirmation — `profile_closed_confirmed` stays false, because ksSketchDefinition
+        // exposes no profile or loop count in this interop version. A failed check is NOT a refusal: the
+        // server does not reject the caller's contour, the extrusion does (the kernel is the judge).
+        // History: docs/decisions/adapter-sketch.md#finish-sketch-input-check
+        var (check, reason) = DescribeProfileInput(command.SketchRef);
+        var warnings = new List<string>();
+        if (check == SketchInputCheck.Failed && command.RequireClosedProfile)
+        {
+            // FIRST line, deliberately: a caller that reads one warning must read this one.
+            warnings.Add(
+                "Требование замкнутости не подтверждено анализом сервера: " + reason
+                + " Это анализ ВХОДА сервером, а не ответ ядра — замкнутость ядром не подтверждалась, "
+                + "и выдавливание всё равно покажет настоящий отказ.");
+        }
+
         return new FinishSketchResult(
             ProfileClosedConfirmed: false,
             new[]
             {
                 "profile_closedness_not_verified — замкнутость профиля проверяется только выдавливанием",
-            });
+            },
+            ProfileInputCheck: check,
+            ProfileInputReason: reason,
+            Warnings: warnings);
+    }
+
+    /// <summary>What the server's own reading of the sketch's accumulated profile says about the INPUT, and
+    /// the reason in words when it is not consistent. INVARIANT: an unrecorded profile is
+    /// <see cref="SketchInputCheck.NotAvailable"/> with the reason said out loud — the server never guesses
+    /// about a contour it did not draw.
+    /// History: docs/decisions/adapter-sketch.md#finish-sketch-input-check</summary>
+    private (SketchInputCheck Check, string? Reason) DescribeProfileInput(string sketchRef)
+    {
+        if (!_sketchProfiles.TryGetValue(sketchRef, out var profile))
+        {
+            return (SketchInputCheck.NotAvailable,
+                "профиль эскиза этим сеансом не записан — анализировать нечего: эскиз нарисован другим "
+                + "клиентом или документ переоткрыт, а перечислять объекты эскиза API5 не умеет");
+        }
+
+        var outcome = profile.Outcome;
+        return outcome.State switch
+        {
+            ProfileInputState.Consistent => (SketchInputCheck.Passed, null),
+            ProfileInputState.Defect => (SketchInputCheck.Failed, outcome.UnavailableReason),
+            _ => (SketchInputCheck.NotAvailable, outcome.UnavailableReason),
+        };
     }
 
     private SketchTarget RequireSketch(string sketchRef)
@@ -1164,9 +1209,9 @@ public sealed partial class Api5Session
         var selector = new List<string>();
         var configured = definition switch
         {
-            ksBaseExtrusionDefinition baseExtrusion => ConfigureBase(baseExtrusion, target.Sketch, direction, command),
-            ksBossExtrusionDefinition boss => ConfigureBoss(boss, target.Sketch, direction, command, bodyTarget, selector),
-            ksCutExtrusionDefinition cut => ConfigureCut(cut, target.Sketch, direction, command, bodyTarget, selector),
+            ksBaseExtrusionDefinition baseExtrusion => ConfigureBase(baseExtrusion, target.Sketch, direction, command, document),
+            ksBossExtrusionDefinition boss => ConfigureBoss(boss, target.Sketch, direction, command, bodyTarget, selector, document),
+            ksCutExtrusionDefinition cut => ConfigureCut(cut, target.Sketch, direction, command, bodyTarget, selector, document),
             _ => throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
                 $"Определение выдавливания вернуло неожиданный интерфейс: {definition?.GetType().Name ?? "null"}.",
@@ -2341,12 +2386,14 @@ public sealed partial class Api5Session
     /// <summary>Order follows the sequence proven against v24 in P0.7: attach the sketch, then set
     /// directionType, then the side parameters. Reporting which of the three refused matters:
     /// "SetSketch returned false" and "SetSideParam returned false" are different defects.</summary>
-    private static bool ConfigureBase(ksBaseExtrusionDefinition definition, ksEntity sketch, short direction, ExtrudeCommand command)
+    private bool ConfigureBase(
+        ksBaseExtrusionDefinition definition,
+        ksEntity sketch,
+        short direction,
+        ExtrudeCommand command,
+        DocumentEntry document)
     {
-        if (!definition.SetSketch(sketch))
-        {
-            throw Refused("SetSketch", command);
-        }
+        AttachSketch(() => definition.SetSketch(sketch), document, command);
 
         // dtNormal=0, dtReverse=1, dtBoth=2, dtMiddlePlane=3 (kAPI5.tlb, ksDirectionTypeEnum).
         // directionType IS the direction; it is not a "which side to draw" selector. Negative must therefore
@@ -2374,23 +2421,21 @@ public sealed partial class Api5Session
         return true;
     }
 
-    private static bool ConfigureBoss(
+    private bool ConfigureBoss(
         ksBossExtrusionDefinition definition,
         ksEntity sketch,
         short direction,
         ExtrudeCommand command,
         BodyTarget? bodyTarget,
-        List<string> selectorEvidence)
+        List<string> selectorEvidence,
+        DocumentEntry document)
     {
         // The choice is made before SetSketch: that is the order probe P2.6 recorded as the minimal working
         // sequence, and the opposite order produced the same ΔV, so this is documented, not a superstition.
         ApplyBodyChoice(command, bodyTarget, selectorEvidence, type => definition.chooseType = type,
             () => definition.chooseType, () => definition.ChooseBodies());
 
-        if (!definition.SetSketch(sketch))
-        {
-            throw Refused("SetSketch", command);
-        }
+        AttachSketch(() => definition.SetSketch(sketch), document, command);
 
         definition.directionType = direction;
         var depth = DepthOf(command);
@@ -2412,21 +2457,19 @@ public sealed partial class Api5Session
         return true;
     }
 
-    private static bool ConfigureCut(
+    private bool ConfigureCut(
         ksCutExtrusionDefinition definition,
         ksEntity sketch,
         short direction,
         ExtrudeCommand command,
         BodyTarget? bodyTarget,
-        List<string> selectorEvidence)
+        List<string> selectorEvidence,
+        DocumentEntry document)
     {
         ApplyBodyChoice(command, bodyTarget, selectorEvidence, type => definition.chooseType = type,
             () => definition.chooseType, () => definition.ChooseBodies());
 
-        if (!definition.SetSketch(sketch))
-        {
-            throw Refused("SetSketch", command);
-        }
+        AttachSketch(() => definition.SetSketch(sketch), document, command);
 
         definition.directionType = direction;
 
@@ -2531,20 +2574,94 @@ public sealed partial class Api5Session
             ErrorCodes.InvalidArgument,
             "Для end_condition=blind поле depth_mm обязательно.");
 
-    private static KompasContractException Refused(string step, ExtrudeCommand command) => new(
-        ErrorCodes.GeometryFailed,
-        $"Выдавливание не настроено: {step} вернул false (operation={command.Operation}, " +
-        $"end_condition={command.EndCondition.ToString().ToLowerInvariant()}, " +
-        $"depth={FormatDepth(command)}, direction={command.Direction}). " +
-        "Частая причина — профиль эскиза пуст или не замкнут.",
-        RetryPolicy.ReacquireContext,
-        partialEffects: true,
-        details: new Dictionary<string, object?>
+    /// <summary>A refusal of one step of the extrusion's configuration, as the client reads it.
+    /// <para>INVARIANT: a refusal that can name the profile's defect names it FIRST, and calls it what it
+    /// is — the server's analysis of the INPUT. It is never presented as the kernel's reason: the kernel
+    /// answers a bare false here and names nothing (the code below is the library-program result, read
+    /// only where the caller actually read it).</para>
+    /// History: docs/decisions/adapter-sketch.md#set-sketch-refusal</summary>
+    private KompasContractException Refused(
+        string step,
+        ExtrudeCommand command,
+        DocumentEntry? document = null,
+        int? kompasResultCode = null,
+        string? kompasResultText = null,
+        string? kompasResultUnavailable = null)
+    {
+        var reads = ReadSketchAndProfile(command.SketchRef);
+        var details = new Dictionary<string, object?>
         {
             ["step"] = step,
             ["depth_mm"] = command.DepthMm,
             ["end_condition"] = command.EndCondition.ToString().ToLowerInvariant(),
-        });
+            // The same reads the Create()=false snapshot carries, in the part that applies BEFORE a feature
+            // exists: what the model says about the sketch and what the server knows about the profile it
+            // drew. A route that could not answer is NAMED, never dropped.
+            ["sketch_state"] = reads.State
+                ?? (reads.StateUnavailable ?? "не прочитано: причина не названа"),
+            ["sketch_profile_entities"] = reads.ProfileEntities
+                ?? (object)"не прочитано: адаптер не рисовал этот эскиз",
+            ["sketch_profile_area_mm2"] = reads.ProfileArea
+                ?? (object)(reads.ProfileAreaUnavailable ?? "не прочитано: причина не названа"),
+            ["sketch_profile_area_unavailable"] = reads.ProfileAreaUnavailable
+                ?? (object)"причина не названа: площадь вычислена либо профиль не записан",
+        };
+
+        if (document is not null)
+        {
+            details["kompas_result_code"] = kompasResultCode.HasValue
+                ? kompasResultCode.Value
+                : kompasResultUnavailable ?? "не прочитано: причина не названа";
+            details["kompas_result_text"] = string.IsNullOrWhiteSpace(kompasResultText)
+                ? "КОМПАС кода ошибки не вернул — текста нет"
+                : kompasResultText;
+        }
+
+        var profile = reads.ProfileAreaUnavailable is null
+            ? "Анализ входа сервером: профиль эскиза записан этим сеансом, площадь вычислена — "
+                + "самопересечения и разрывов в нём нет."
+            : "Анализ входа сервером: " + reads.ProfileAreaUnavailable.TrimEnd('.', ' ') + ".";
+        if (reads.ProfileEntities is null)
+        {
+            profile = "Профиль эскиза этим сеансом не записан — сервер о нём ничего не знает и "
+                + "догадываться не будет.";
+        }
+
+        var kernel = document is null
+            ? string.Empty
+            : " " + RefusalReason(kompasResultCode, kompasResultText, kompasResultUnavailable);
+
+        return new KompasContractException(
+            ErrorCodes.GeometryFailed,
+            $"Выдавливание не настроено: {step} вернул false (operation={command.Operation}, "
+            + $"end_condition={command.EndCondition.ToString().ToLowerInvariant()}, "
+            + $"depth={FormatDepth(command)}, direction={command.Direction}). "
+            + profile + kernel
+            + " Частая причина — профиль эскиза пуст или не замкнут."
+            + " Состояние эскиза и профиля на момент отказа — в details.",
+            RetryPolicy.ReacquireContext,
+            partialEffects: true,
+            details: details);
+    }
+
+    /// <summary>Attaches the sketch to an extrusion definition, reading the kernel's own library-program
+    /// result code around the call so a refusal can say whether the kernel named anything at all.
+    /// DOC: KompasObject::ksReturnResult — «Код ошибки … при выполнении библиотечной программы»
+    /// (kompasobject_ksreturnresult.html). The help does not tie the code to one method, so the same
+    /// documented route is used here as for a refused Create(); the code is cleared first so what is read
+    /// belongs to THIS call, and a zero is reported as "no code returned", never as a cause.
+    /// History: docs/decisions/adapter-sketch.md#set-sketch-refusal</summary>
+    private void AttachSketch(Func<bool> setSketch, DocumentEntry document, ExtrudeCommand command)
+    {
+        ClearKompasResult(document);
+        if (setSketch())
+        {
+            return;
+        }
+
+        var (code, text, unavailable) = ReadKompasResult(document);
+        throw Refused("SetSketch", command, document, code, text, unavailable);
+    }
 
     private static string FormatDepth(ExtrudeCommand command) =>
         command.DepthMm is double depth ? $"{depth:0.###} мм" : "не задана (насквозь)";
@@ -2572,29 +2689,7 @@ public sealed partial class Api5Session
         var endCondition = (through ? "through" : "blind")
             + $" ({(through ? EndConditionThrough : EndConditionBlind)})";
 
-        string? sketchState = null;
-        string? sketchStateUnavailable = null;
-        try
-        {
-            var status = GetSketchStatus(new GetSketchStatusCommand { SketchRef = command.SketchRef });
-            sketchState = $"{status.DefinitionStatus} ({status.NativeStateName ?? "имя не объявлено"}, "
-                + $"raw={status.RawState?.ToString() ?? "null"})";
-        }
-        catch (KompasContractException ex)
-        {
-            sketchStateUnavailable = "не прочитано: " + ex.Message;
-        }
-
-        int? profileEntities = null;
-        double? profileArea = null;
-        string? profileAreaUnavailable = null;
-        if (_sketchProfiles.TryGetValue(command.SketchRef, out var profile))
-        {
-            profileEntities = profile.Entities.Count;
-            var outcome = profile.Outcome;
-            profileArea = outcome.AreaMm2;
-            profileAreaUnavailable = outcome.UnavailableReason;
-        }
+        var reads = ReadSketchAndProfile(command.SketchRef);
 
         return new FeatureCreateFailure.Observation(
             Operation: operationName,
@@ -2606,17 +2701,57 @@ public sealed partial class Api5Session
             SketchPlane: _sketchPlaneHint.TryGetValue(command.SketchRef, out var hint) ? hint : null,
             FeatureCount: TryCountFeatures(document),
             BodyCount: TryCountBodies(document),
-            SketchState: sketchState,
-            SketchStateUnavailable: sketchStateUnavailable,
-            SketchProfileEntities: profileEntities,
-            SketchProfileAreaMm2: profileArea,
-            SketchProfileAreaUnavailable: profileAreaUnavailable,
+            SketchState: reads.State,
+            SketchStateUnavailable: reads.StateUnavailable,
+            SketchProfileEntities: reads.ProfileEntities,
+            SketchProfileAreaMm2: reads.ProfileArea,
+            SketchProfileAreaUnavailable: reads.ProfileAreaUnavailable,
             KompasResultCode: kompasResultCode,
             KompasResultText: kompasResultText,
             KompasResultUnavailable: kompasResultUnavailable,
             SessionSeconds: _sessionClock.Elapsed.TotalSeconds,
             OperationOrdinal: ordinal,
             CreateFalseCount: _extrudeCreateFalseCount);
+    }
+
+    /// <summary>What a refusal can say about the sketch and the profile the server drew into it.
+    /// <paramref name="State"/> is the state read out of the model, <paramref name="StateUnavailable"/> the
+    /// reason when that read failed; the profile numbers come from session memory, and their absence means
+    /// this session did not draw the sketch — which is said out loud, not guessed around.
+    /// INVARIANT: every route here is a READ; nothing here changes the model.
+    /// History: docs/decisions/adapter-sketch.md#set-sketch-refusal</summary>
+    private (
+        string? State,
+        string? StateUnavailable,
+        int? ProfileEntities,
+        double? ProfileArea,
+        string? ProfileAreaUnavailable) ReadSketchAndProfile(string sketchRef)
+    {
+        string? sketchState = null;
+        string? sketchStateUnavailable = null;
+        try
+        {
+            var status = GetSketchStatus(new GetSketchStatusCommand { SketchRef = sketchRef });
+            sketchState = $"{status.DefinitionStatus} ({status.NativeStateName ?? "имя не объявлено"}, "
+                + $"raw={status.RawState?.ToString() ?? "null"})";
+        }
+        catch (KompasContractException ex)
+        {
+            sketchStateUnavailable = "не прочитано: " + ex.Message;
+        }
+
+        int? profileEntities = null;
+        double? profileArea = null;
+        string? profileAreaUnavailable = null;
+        if (_sketchProfiles.TryGetValue(sketchRef, out var profile))
+        {
+            profileEntities = profile.Entities.Count;
+            var outcome = profile.Outcome;
+            profileArea = outcome.AreaMm2;
+            profileAreaUnavailable = outcome.UnavailableReason;
+        }
+
+        return (sketchState, sketchStateUnavailable, profileEntities, profileArea, profileAreaUnavailable);
     }
 
     /// <summary>Clear a previous NON-FATAL KOMPAS error before a call whose code will be read.</summary>
@@ -4185,11 +4320,12 @@ public sealed partial class Api5Session
 
 /// <summary>Result of a sketch edit. <see cref="DeletedEntities"/> counts what was actually deleted (vendor
 /// convention 1 = success; by the object found at the stored coordinate), <see cref="ExpectedDeleted"/> how
-/// many were expected — the difference is not smoothed away: a partial cleanup means a dirty profile.</summary>
-/// <param name="ProbePointsFromModel">True when the coordinates for finding the objects to delete are derived
-/// from the dependent body's geometry rather than session memory — the route works for a sketch the server
-/// did not draw, but only in the measured configuration (see <c>SketchPointDerivation</c>).
-/// History: docs/decisions/adapter-core.md#edit-sketch-result</param>
+/// many were expected — the difference is not smoothed away: a partial cleanup means a dirty profile.
+/// <see cref="ProfileAreaUnavailable"/> is why <see cref="ProfileAreaMm2"/> is null: the SERVER's reading of
+/// the input, with the PLACE (the caller's primitive numbers and where they meet), never the kernel's
+/// verdict. <paramref name="ProbePointsFromModel"/>: the delete coordinates came from the dependent body
+/// rather than session memory.
+/// History: docs/decisions/adapter-core.md#edit-sketch-result, adapter-sketch.md#profile-input-diagnosis</summary>
 public sealed record EditSketchResult(
     int EntityCount,
     IReadOnlyList<string> Kinds,
@@ -4197,9 +4333,36 @@ public sealed record EditSketchResult(
     double? ProfileAreaMm2,
     int DeletedEntities = 0,
     int ExpectedDeleted = 0,
-    bool ProbePointsFromModel = false);
+    bool ProbePointsFromModel = false,
+    string? ProfileAreaUnavailable = null);
 
-public sealed record FinishSketchResult(bool ProfileClosedConfirmed, IReadOnlyList<string> UnverifiedAspects);
+/// <summary>What the server's own analysis of the sketch INPUT says. It is deliberately NOT a confirmation
+/// of the kernel: <c>passed</c> means "the server's reading is consistent", not "КОМПАС accepted it".</summary>
+public enum SketchInputCheck
+{
+    /// <summary>The chain is assembled, closed, unbranched and free of self-intersections.</summary>
+    Passed,
+
+    /// <summary>A structural defect of the caller's contour, named with its place.</summary>
+    Failed,
+
+    /// <summary>The server cannot analyse this input — an empty profile, a spline, or a profile this
+    /// session did not draw.</summary>
+    NotAvailable,
+}
+
+/// <summary>Result of closing a sketch edit. <see cref="ProfileClosedConfirmed"/> stays false: closedness is
+/// not readable from <c>ksSketchDefinition</c>, so the kernel's confirmation is never claimed.
+/// <see cref="ProfileInputCheck"/> is the SERVER's reading of the input, with its reason in
+/// <see cref="ProfileInputReason"/>; <see cref="Warnings"/> carries the non-fatal note when the caller
+/// required a closed profile and the server's reading disagrees.
+/// History: docs/decisions/adapter-sketch.md#finish-sketch-input-check</summary>
+public sealed record FinishSketchResult(
+    bool ProfileClosedConfirmed,
+    IReadOnlyList<string> UnverifiedAspects,
+    SketchInputCheck ProfileInputCheck,
+    string? ProfileInputReason = null,
+    IReadOnlyList<string>? Warnings = null);
 
 /// <summary>Result of an extrusion. <see cref="TargetBodyIndex"/> is the index of the body the caller
 /// declared as the target, and <see cref="BodyChanges"/> is what the before/after measurements for each body

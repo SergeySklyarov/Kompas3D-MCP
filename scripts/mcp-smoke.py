@@ -462,6 +462,10 @@ RUN_GROUPS = (
      "Приёмка EC9: нерегулярный Entity.Create()=false — профиль клиента OBS-019, долгий сеанс, откат, "
      "код ошибки КОМПАС в снимке, устойчивость ссылки на тело, ревизия после отказа "
      "(наряды ENTITY_CREATE_FALSE и ENTITY_CREATE_FALSE_FOLLOWUP)"),
+    ("sketch_profile", "sketch-profile", "sketch-profile-acceptance.json",
+     "Приёмка SPD: причина непригодности профиля видна клиенту до выдавливания и в отказе SetSketch — "
+     "profile_area_unavailable с местом, profile_input_check в finish_sketch, разбор профиля в details "
+     "отказа, контур триба и контур спуска клиента OBS-026 (наряд SKETCH_PROFILE_DIAGNOSIS)"),
 )
 
 VERTICAL_GROUP = ("vertical", "smoke-report.json",
@@ -5783,6 +5787,12 @@ def main():
     # групп: доказательство обязано находиться по ИМЕНИ строки (`EC9.<NN>`).
     entity_create_only = "--entity-create-20261009" in sys.argv
 
+    # Группа наряда SKETCH_PROFILE_DIAGNOSIS: одна группа SPD на своём сеансе — наблюдаемость причины
+    # непригодности профиля (клиентская карточка OBS-026). Профиль триба и профиль спуска берутся из
+    # клиентского файла. Отдельная ветка нужна по той же причине, что у прочих групп: доказательство
+    # обязано находиться по ИМЕНИ строки (`SPD.<NN>`).
+    sketch_profile_only = "--sketch-profile" in sys.argv
+
     # Домен ЧЕРТЕЖЕЙ (блок DRW, профиль `drawings-minimal-v1`): одна группа, свой сеанс, своя ветка.
     # Клетка матрицы обязана находиться по ИМЕНИ строки (`DRW.<NN>.<действие>`), а не по номеру в общем
     # потоке, — та же причина, что у прочих групп.
@@ -5830,6 +5840,7 @@ def main():
         "client_bugs_20261008": client_bugs_only,
         "client_bugs_20261009": client_bugs_20261009_only,
         "entity_create": entity_create_only,
+        "sketch_profile": sketch_profile_only,
     }
     group, report_filename, report_title = selected_run_group(selected)
 
@@ -6316,6 +6327,14 @@ def main():
 
         if entity_create_only:
             entity_create_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if sketch_profile_only:
+            sketch_profile_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -6924,6 +6943,11 @@ def main():
         # Группа NEST идёт после IMG по той же причине: строки называются по имени
         # (`NEST.<NN>.<действие>`), каждый случай строит СВОЙ документ и закрывает его сам.
         nested_contour_checks(client, rep, app_id, workdir)
+
+        # Группа SPD идёт перед EC9 и по существу, и по порядку: она строит свои документы и закрывает
+        # их сама, а EC9 остаётся ПОСЛЕДНЕЙ группой общего сеанса — его постановка требует САМОГО
+        # старого сеанса прогона, и вклинивание перед ним этой причины не отменяет.
+        sketch_profile_checks(client, rep, app_id, workdir)
 
         # Группа EC9 идёт ПОСЛЕДНЕЙ из групп общего сеанса и по существу своего наряда: клиентский
         # отказ пришёл глубоко в длинном сеансе, поэтому и постановка клиента, и детерминированный
@@ -33126,6 +33150,318 @@ def dep_acceptance_checks(client, rep, app_id, workdir):
                     "%s: сбой прибора при измерении" % dep_id, "FAIL",
                     "исключение прибора: %s: %s" % (type(ex).__name__, clip(str(ex), 300)),
                     details={"exception": type(ex).__name__})
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# Группа SPD: причина непригодности профиля видна клиенту (наряд SKETCH_PROFILE_DIAGNOSIS)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# ЗАЧЕМ ГРУППА. Клиент (карточка OBS-026, CP06) провёл `edit_sketch` и `finish_sketch` со статусом
+# `succeeded` на контуре триба из 100 примитивов, а `extrude boss` отказал `GEOMETRY_FAILED:
+# SetSketch вернул false` с общей подсказкой «профиль пуст или не замкнут». Контур при этом замкнут
+# (каждая из 100 вершин несёт ровно два конца) и не пуст, а причина — самопересечение на стыках
+# СОСЕДНИХ дуг. Сервер эту причину вычислял и никому её не показывал. Строки ниже меряют
+# НАБЛЮДАЕМОСТЬ: причина и её МЕСТО видны и в правке эскиза, и в завершении, и в самом отказе, а
+# модель после отказа цела. Это НЕ дефект геометрии и не ложный успех — наряд про наблюдаемость.
+#
+# ЭТАЛОН. Контуры берутся из клиентского файла, скопированного в тестовые данные репозитория
+# (`tests/Unit/KompasMcp.Unit/Data/wheels_cp05_3004019.json`, копия без изменений), а не из
+# пересобранной на месте фигуры: строка обязана мерить ТОТ контур, на котором отказал клиент.
+# РАСХОЖДЕНИЕ НАЗВАНО: в текущем файле `levels.pinion.outline_mcp` несёт 257 примитивов (контур
+# после правки генератора R-067), а клиентский вход CP06 из 100 примитивов лежит под
+# `levels.pinion.outline_mcp_before_R067`; строка сверяет именно его и называет оба числа.
+
+SPD_REFERENCE = os.path.join(
+    ROOT, "tests", "Unit", "KompasMcp.Unit", "Data", "wheels_cp05_3004019.json")
+
+# Ключи details отказа SetSketch. Сверяются как МНОЖЕСТВО: пропущенный ключ неотличим от «забыли
+# заполнить», а ради этого различия разбор профиля в отказе и заведён.
+SPD_REFUSAL_KEYS = {
+    "step", "depth_mm", "end_condition", "sketch_state", "sketch_profile_entities",
+    "sketch_profile_area_mm2", "sketch_profile_area_unavailable",
+    "kompas_result_code", "kompas_result_text",
+}
+
+# Ожидание на контуре спуска — из ответа клиента CP06, а не пересчитано: 63,29497 мм².
+SPD_ESCAPE_AREA_MM2 = 63.29497
+
+
+def sketch_profile_checks(client, rep, app_id, workdir):
+    """SPD: разбор входа профиля в `edit_sketch`, `finish_sketch` и в отказе `SetSketch`."""
+
+    def tool(name, args, timeout=300):
+        _e, env, _r = client.tool(name, args, timeout=timeout)
+        return env or {}
+
+    def res(env):
+        return (env or {}).get("result") or {}
+
+    def err(env):
+        return error_code(env)
+
+    def msg(env):
+        return str(((env or {}).get("error") or {}).get("message") or "")
+
+    def details(env):
+        return ((env or {}).get("error") or {}).get("details") or {}
+
+    def warnings(env):
+        return [str(x) for x in ((env or {}).get("warnings") or []) if isinstance(x, str)]
+
+    def reference(level, key):
+        """Контур из клиентского файла; (None, причина), если файла нет или ключа в нём нет."""
+        try:
+            with open(SPD_REFERENCE, encoding="utf-8-sig") as fh:
+                data = json.load(fh)
+            return data["levels"][level][key], None
+        except Exception as ex:  # noqa: BLE001 — отсутствие эталона обязано быть названо, а не падать
+            return None, "%s: %s" % (type(ex).__name__, ex)
+
+    def new_part(name):
+        env = tool("kompas_create_document", {
+            "application_id": app_id, "kind": "part", "name": name,
+            "operation_id": str(uuid.uuid4())})
+        return env.get("document_id") or res(env).get("id"), (env.get("revision_after") or 1)
+
+    def draw(doc, rev, entities, name, offset):
+        env = tool("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": rev,
+            "plane": {"base": "xy", "offset_mm": offset}, "name": name,
+            "operation_id": str(uuid.uuid4())})
+        sketch = res(env).get("id")
+        rev = env.get("revision_after") or rev
+        if not sketch:
+            return None, rev, env
+        env = tool("kompas_edit_sketch", {
+            "sketch_ref": sketch, "expected_revision": rev, "mode": "replace",
+            "entities": entities, "operation_id": str(uuid.uuid4())})
+        rev = env.get("revision_after") or rev
+        return sketch, rev, env
+
+    def extrude(doc, rev, sketch, **kw):
+        args = {"sketch_ref": sketch, "expected_revision": rev, "operation_id": str(uuid.uuid4())}
+        args.update(kw)
+        env = tool("kompas_extrude", args)
+        # У отказа `revision_after` = null, а мутации при отказе настройки не было вовсе: ревизия
+        # берётся перечитыванием только когда вызов отказал.
+        if err(env) is None:
+            return env, env.get("revision_after") or rev
+        env2 = tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return env, env2.get("revision_after") or rev
+
+    def finish_sketch(sketch, rev):
+        """Завершение эскиза ПОДНИМАЕТ ревизию: следующий вызов обязан взять её из ответа, иначе
+        получит REVISION_CONFLICT — и строка измерила бы отказ контракта вместо отказа ядра."""
+        env = tool("kompas_finish_sketch", {
+            "sketch_ref": sketch, "require_closed_profile": True,
+            "operation_id": str(uuid.uuid4())})
+        return env, (env.get("revision_after") or rev)
+
+    def bodies(doc):
+        rows = res(tool("kompas_list_bodies", {"document_id": doc}))
+        return rows if isinstance(rows, list) else []
+
+    def model_state(doc):
+        """(число тел, суммарный объём) — «модель цела» проверяется числами, а не отсутствием ошибки."""
+        rows = bodies(doc)
+        total = 0.0
+        for row in rows:
+            value = res(tool("kompas_measure", {
+                "target_ref": row.get("body_ref"), "properties": ["volume"]})).get("volume_mm3")
+            if isinstance(value, (int, float)):
+                total += float(value)
+        return len(rows), total
+
+    pinion, pinion_error = reference("pinion", "outline_mcp_before_R067")
+    escape, escape_error = reference("escape_wheel", "outline_mcp")
+    if pinion_error or escape_error:
+        rep.add("SPD.00.reference", "клиентский эталон контуров доступен", "NAMED",
+                "файл %s: %s" % (SPD_REFERENCE, pinion_error or escape_error))
+        return
+
+    # ── Контур триба: клиентский вход CP06 ────────────────────────────────────────────────────────
+    doc, rev = new_part("SPD-pinion")
+    base_sketch, rev, env = draw(
+        doc, rev, [{"kind": "circle", "center_mm": [0.0, 0.0], "radius_mm": 3.0}],
+        "SPD-pinion-body", 0.0)
+    if not base_sketch:
+        rep.add("SPD.01.profile_reason", "edit_sketch: причина пустой площади названа с местом",
+                "FAIL", "опорный эскиз не создан: %s (%s)" % (err(env), clip(msg(env), 200)))
+        return
+
+    env, rev = extrude(doc, rev, base_sketch, operation="base", depth_mm=2.0,
+                       direction="positive", end_condition="blind")
+    if err(env):
+        rep.add("SPD.01.profile_reason", "edit_sketch: причина пустой площади названа с местом",
+                "FAIL", "опорное тело не создано: %s (%s)" % (err(env), clip(msg(env), 200)))
+        return
+
+    bodies_before, volume_before = model_state(doc)
+
+    pinion_sketch, rev, env = draw(doc, rev, pinion, "SPD-pinion-profile", 1.0)
+    result = res(env)
+    reason = result.get("profile_area_unavailable")
+    placed = [v for v in (result.get("kinds") or []) if v]
+    ok = (err(env) is None and result.get("entity_count") == len(pinion)
+          and result.get("profile_area_mm2") is None
+          and isinstance(reason, str)
+          and "самопересекается" in reason
+          and "примитивы 58 и 59" in reason and "66 и 67" in reason)
+    rep.add("SPD.01.profile_reason",
+            "edit_sketch: причина пустой площади названа с местом (триб CP06, %d примитивов)" % len(pinion),
+            "PASS" if ok else "FAIL",
+            "entity_count=%r, profile_area_mm2=%r, profile_area_unavailable=%s"
+            % (result.get("entity_count"), result.get("profile_area_mm2"), clip(str(reason), 300)),
+            details={"profile_area_unavailable": reason, "kinds_placed": len(placed),
+                     "expected_primitives": len(pinion), "error": err(env)})
+
+    if not pinion_sketch:
+        rep.add("SPD.02.finish_check", "finish_sketch: разбор входа предупреждением, а не отказом",
+                "FAIL", "эскиз триба не создан: %s (%s)" % (err(env), clip(msg(env), 200)))
+        return
+
+    env, rev = finish_sketch(pinion_sketch, rev)
+    result = res(env)
+    warn = warnings(env)
+    ok = (err(env) is None
+          and result.get("profile_closed_confirmed") is False
+          and result.get("profile_input_check") == "failed"
+          and isinstance(result.get("profile_input_reason"), str)
+          and bool(warn) and "не подтверждено анализом сервера" in warn[0])
+    rep.add("SPD.02.finish_check",
+            "finish_sketch(require_closed_profile=true): profile_input_check=failed и предупреждение "
+            "первой строкой, а не отказ",
+            "PASS" if ok else "FAIL",
+            "profile_closed_confirmed=%r, profile_input_check=%r, warnings[0]=%s"
+            % (result.get("profile_closed_confirmed"), result.get("profile_input_check"),
+               clip(warn[0] if warn else "", 220)),
+            details={"profile_input_reason": result.get("profile_input_reason"),
+                     "unverified_aspects": result.get("unverified_aspects"),
+                     "warnings": warn, "error": err(env)})
+
+    target_ref = (bodies(doc) or [{}])[0].get("body_ref")
+    env, rev = extrude(doc, rev, pinion_sketch, operation="boss", depth_mm=1.0,
+                       direction="positive", end_condition="blind", target_body_ref=target_ref)
+    text = msg(env)
+    det = details(env)
+    missing = sorted(SPD_REFUSAL_KEYS - set(det.keys()))
+    first_profile = text.find("Анализ входа сервером")
+    generic = text.find("Частая причина")
+    ok = (err(env) == "GEOMETRY_FAILED"
+          and "SetSketch" in text
+          and first_profile >= 0 and generic >= 0 and first_profile < generic
+          and "примитивы 58 и 59" in text
+          and not missing)
+    rep.add("SPD.03.extrude_refusal",
+            "extrude boss: отказ SetSketch=false несёт разбор профиля в details и первым в тексте",
+            "PASS" if ok else "FAIL",
+            "error=%s, отсутствующие ключи details=%s, порядок текста: разбор@%d < подсказка@%d"
+            % (err(env), missing or "нет", first_profile, generic),
+            details={"message": text, "details": det, "target_body_ref": target_ref})
+
+    bodies_after, volume_after = model_state(doc)
+    ok = (bodies_after == bodies_before
+          and abs(volume_after - volume_before) <= 1e-6)
+    rep.add("SPD.04.model_intact",
+            "модель после отказа цела: тел столько же, объём тот же, признак не создан",
+            "PASS" if ok else "FAIL",
+            "тел %d → %d, объём %.9f → %.9f" % (bodies_before, bodies_after, volume_before, volume_after),
+            details={"bodies_before": bodies_before, "bodies_after": bodies_after,
+                     "volume_before_mm3": volume_before, "volume_after_mm3": volume_after})
+
+    # ── Контур спуска: парная строка, всё проходит ────────────────────────────────────────────────
+    doc2, rev2 = new_part("SPD-escape")
+    escape_sketch, rev2, env = draw(doc2, rev2, escape, "SPD-escape-profile", 0.0)
+    result = res(env)
+    area = result.get("profile_area_mm2")
+    ok = (err(env) is None and result.get("entity_count") == len(escape)
+          and result.get("profile_area_unavailable") is None
+          and isinstance(area, (int, float))
+          and abs(float(area) - SPD_ESCAPE_AREA_MM2) <= 5e-5)
+    rep.add("SPD.05.escape_area",
+            "edit_sketch: контур спуска (%d примитивов) — площадь есть, разбора нет" % len(escape),
+            "PASS" if ok else "FAIL",
+            "entity_count=%r, profile_area_mm2=%r против ожидания клиента %.5f, "
+            "profile_area_unavailable=%r"
+            % (result.get("entity_count"), area, SPD_ESCAPE_AREA_MM2,
+               result.get("profile_area_unavailable")),
+            details={"error": err(env), "expected_area_mm2": SPD_ESCAPE_AREA_MM2})
+
+    if not escape_sketch:
+        rep.add("SPD.06.escape_finish", "finish_sketch: вход согласован, предупреждений нет",
+                "FAIL", "эскиз спуска не создан: %s (%s)" % (err(env), clip(msg(env), 200)))
+        return
+
+    env, rev2 = finish_sketch(escape_sketch, rev2)
+    result = res(env)
+    warn = warnings(env)
+    ok = (err(env) is None
+          and result.get("profile_closed_confirmed") is False
+          and result.get("profile_input_check") == "passed"
+          and result.get("profile_input_reason") is None
+          and not warn)
+    rep.add("SPD.06.escape_finish",
+            "finish_sketch(require_closed_profile=true): profile_input_check=passed, предупреждений нет",
+            "PASS" if ok else "FAIL",
+            "profile_input_check=%r, reason=%r, warnings=%r"
+            % (result.get("profile_input_check"), result.get("profile_input_reason"), warn),
+            details={"error": err(env)})
+
+    env, rev2 = extrude(doc2, rev2, escape_sketch, operation="base", depth_mm=1.0,
+                        direction="positive", end_condition="blind")
+    delta = res(env).get("volume_delta_mm3")
+    ok = (err(env) is None and isinstance(delta, (int, float))
+          and isinstance(area, (int, float))
+          and abs(float(delta) - float(area)) <= 1e-3)
+    rep.add("SPD.07.escape_extrude",
+            "extrude base: контур спуска выдавливается, приращение равно площади на глубину",
+            "PASS" if ok else "FAIL",
+            "error=%s, volume_delta_mm3=%r против площади %r при глубине 1 мм"
+            % (err(env), delta, area),
+            details={"volume_mm3": res(env).get("volume_mm3"),
+                     "verification_level": ((env or {}).get("verification") or {}).get("level")})
+
+    # ── «Анализировать нечего» и «цепочка разомкнута» — свои причины ──────────────────────────────
+    doc3, rev3 = new_part("SPD-not-analysable")
+    spline_sketch, rev3, env = draw(
+        doc3, rev3,
+        [{"kind": "spline", "points_mm": [[0.0, 0.0], [5.0, 6.0], [10.0, 0.0], [15.0, 6.0]],
+          "closed": False}],
+        "SPD-spline-profile", 0.0)
+    if spline_sketch:
+        env = tool("kompas_finish_sketch", {
+            "sketch_ref": spline_sketch, "require_closed_profile": True,
+            "operation_id": str(uuid.uuid4())})
+    result = res(env)
+    warn = warnings(env)
+    ok = (spline_sketch is not None and err(env) is None
+          and result.get("profile_input_check") == "not_available"
+          and result.get("profile_closed_confirmed") is False
+          and not warn)
+    rep.add("SPD.08.not_available",
+            "сплайн в профиле: profile_input_check=not_available, предупреждения нет "
+            "(серверу нечего анализировать, и он этого не скрывает)",
+            "PASS" if ok else "FAIL",
+            "profile_input_check=%r, reason=%s"
+            % (result.get("profile_input_check"), clip(str(result.get("profile_input_reason")), 220)),
+            details={"error": err(env), "warnings": warn})
+
+    doc4, rev4 = new_part("SPD-open-chain")
+    open_sketch, rev4, env = draw(
+        doc4, rev4,
+        [{"kind": "line", "start_mm": [-10.0, 5.0], "end_mm": [10.0, 5.0]},
+         {"kind": "arc", "center_mm": [10.0, 0.0], "radius_mm": 5.0,
+          "start_deg": 90.0, "sweep_deg": -180.0},
+         {"kind": "line", "start_mm": [10.0, -5.0], "end_mm": [0.0, -5.0]}],
+        "SPD-open-profile", 0.0)
+    result = res(env)
+    reason = str(result.get("profile_area_unavailable") or "")
+    ok = (err(env) is None and "не замкнута" in reason and "ветвится" not in reason
+          and "самопересекается" not in reason and "(-10; 5) мм" in reason)
+    rep.add("SPD.09.open_chain",
+            "разомкнутая цепочка: своя причина с местом, отличная от ветвления и самопересечения",
+            "PASS" if ok else "FAIL",
+            "profile_area_unavailable=%s" % clip(reason, 300),
+            details={"error": err(env), "open_sketch": open_sketch})
 
 
 def finish(rep, client):

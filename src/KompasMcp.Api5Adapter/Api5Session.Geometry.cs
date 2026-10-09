@@ -3111,11 +3111,6 @@ public sealed partial class Api5Session
         if (declared.IsDeclared)
         {
             checks.Add(DeclaredExpectation.Check("volume_delta", declared));
-            if (declared.IsRefusal)
-            {
-                throw DeclaredExpectation.Refusal(
-                    declared, "kompas_fillet", "уменьшение объёма", document.Revision);
-            }
         }
         else if (volumePairRead)
         {
@@ -3144,6 +3139,10 @@ public sealed partial class Api5Session
         {
             unverified.Add(DeclaredExpectation.UnverifiableReason("уменьшение объёма", declared));
         }
+        else if (declared.IsNotConfirmed)
+        {
+            unverified.Add(DeclaredExpectation.NotConfirmedReason("уменьшение объёма", declared));
+        }
         else if (!volumePairRead)
         {
             unverified.Add(
@@ -3160,7 +3159,7 @@ public sealed partial class Api5Session
         }
 
         var reference2 = References.Register("feature", document.Id, document.Revision, feature);
-        return new FilletResult(
+            return new FilletResult(
             ToDto(reference2, $"fillet r{command.RadiusMm:0.###} × {entities.Count}"),
             entities.Count,
             radiusReadBack,
@@ -3170,7 +3169,8 @@ public sealed partial class Api5Session
                 geometryConfirmed ? VerificationLevel.GeometryChecked : VerificationLevel.CallReturned,
                 checks,
                 unverified),
-            string.Join(", ", unwrapRoutes));
+            string.Join(", ", unwrapRoutes),
+            Warnings: DeclaredExpectation.Warnings(declared));
     }
 
     /// <summary>Chamfer over the explicitly referenced edges of the final body (docs/05 SM-11).</summary>
@@ -3347,11 +3347,6 @@ public sealed partial class Api5Session
         if (declared.IsDeclared)
         {
             checks.Add(DeclaredExpectation.Check("volume_delta", declared));
-            if (declared.IsRefusal)
-            {
-                throw DeclaredExpectation.Refusal(
-                    declared, "kompas_chamfer", "уменьшение объёма", document.Revision);
-            }
         }
         else if (volumePairRead)
         {
@@ -3379,6 +3374,10 @@ public sealed partial class Api5Session
         {
             unverified.Add(DeclaredExpectation.UnverifiableReason("уменьшение объёма", declared));
         }
+        else if (declared.IsNotConfirmed)
+        {
+            unverified.Add(DeclaredExpectation.NotConfirmedReason("уменьшение объёма", declared));
+        }
         else if (!volumePairRead)
         {
             unverified.Add(
@@ -3396,7 +3395,7 @@ public sealed partial class Api5Session
         }
 
         var reference2 = References.Register("feature", document.Id, document.Revision, feature);
-        return new ChamferResult(
+            return new ChamferResult(
             ToDto(reference2, $"chamfer {command.Distance1Mm:0.###}×{distance2:0.###} × {entities.Count}"),
             entities.Count,
             readBack?.Distance1Mm,
@@ -3408,7 +3407,8 @@ public sealed partial class Api5Session
                 geometryConfirmed ? VerificationLevel.GeometryChecked : VerificationLevel.CallReturned,
                 checks,
                 unverified),
-            string.Join(", ", unwrapRoutes));
+            string.Join(", ", unwrapRoutes),
+            Warnings: DeclaredExpectation.Warnings(declared));
     }
 
     /// <summary>"Field ↔ mode" rules. Rejected before COM: KOMPAS accepts a zero leg and creates a feature
@@ -3501,7 +3501,8 @@ public sealed partial class Api5Session
         int BodyCount,
         double? VolumeMm3,
         VerificationDto Verification,
-        string EdgeUnwrapRoute);
+        string EdgeUnwrapRoute,
+        IReadOnlyList<string>? Warnings = null);
 
     /// <summary>Chamfer result. The legs are returned re-read from the model, not as passed: "we called
     /// SetChamferParam" is not a geometric fact. <c>feature_ref</c> is empty when the feature was created but
@@ -3515,7 +3516,8 @@ public sealed partial class Api5Session
         int BodyCount,
         double? VolumeMm3,
         VerificationDto Verification,
-        string EdgeUnwrapRoute);
+        string EdgeUnwrapRoute,
+        IReadOnlyList<string>? Warnings = null);
 
     public RebuildResult Rebuild(RebuildCommand command)
     {

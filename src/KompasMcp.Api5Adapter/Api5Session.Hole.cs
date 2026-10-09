@@ -167,11 +167,6 @@ public partial class Api5Session
         if (declared.IsDeclared)
         {
             checks.Add(DeclaredExpectation.Check("volume_delta", declared));
-            if (declared.IsRefusal)
-            {
-                throw DeclaredExpectation.Refusal(
-                    declared, "kompas_hole", "уменьшение объёма", document.Revision);
-            }
         }
         else if (volumePairRead)
         {
@@ -196,6 +191,10 @@ public partial class Api5Session
         if (declared.IsUnverifiable)
         {
             unverified.Add(DeclaredExpectation.UnverifiableReason("уменьшение объёма", declared));
+        }
+        else if (declared.IsNotConfirmed)
+        {
+            unverified.Add(DeclaredExpectation.NotConfirmedReason("уменьшение объёма", declared));
         }
         else if (!volumePairRead)
         {
@@ -249,7 +248,8 @@ public partial class Api5Session
                 bodiesAfter,
                 volumeAfter,
                 new VerificationDto(VerificationLevel.CallReturned, checks, unverified),
-                string.Join(", ", placementNotes));
+                string.Join(", ", placementNotes),
+                Warnings: DeclaredExpectation.Warnings(declared));
         }
 
         return new HoleResult(
@@ -266,7 +266,8 @@ public partial class Api5Session
                 geometryConfirmed ? VerificationLevel.GeometryChecked : VerificationLevel.CallReturned,
                 checks,
                 unverified),
-            string.Join(", ", placementNotes));
+            string.Join(", ", placementNotes),
+            Warnings: DeclaredExpectation.Warnings(declared));
     }
 
     /// <summary>One mode — one branch. Returns (created, failure cause, reported countersink depth): a
@@ -858,19 +859,14 @@ public partial class Api5Session
             ? beforeVolume - afterVolume
             : (double?)null;
 
-        // Each declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
-        // unreadable value is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
+        // Each declared expectation is the geometry check of this tool: a mismatch is a FAILED CHECK with
+        // a warning, an unreadable value is a NAMED gap — neither is a refusal.
+        // History: docs/decisions/adapter-core.md#declared-expectation-rule
         var declaredDelta = DeclaredExpectation.Evaluate(
             command.ExpectedVolumeDeltaMm3, removedDelta, () => ReReadDelta(volumeBefore, document));
         if (declaredDelta.IsDeclared)
         {
             checks.Add(DeclaredExpectation.Check("volume_delta", declaredDelta));
-            if (declaredDelta.IsRefusal)
-            {
-                throw DeclaredExpectation.Refusal(
-                    declaredDelta, "kompas_update_feature/" + HoleFamily, "уменьшение объёма",
-                    document.Revision);
-            }
         }
 
         var declaredVolume = DeclaredExpectation.Evaluate(
@@ -878,12 +874,17 @@ public partial class Api5Session
         if (declaredVolume.IsDeclared)
         {
             checks.Add(DeclaredExpectation.Check("volume_expected", declaredVolume));
-            if (declaredVolume.IsRefusal)
-            {
-                throw DeclaredExpectation.Refusal(
-                    declaredVolume, "kompas_update_feature/" + HoleFamily, "объём после правки",
-                    document.Revision);
-            }
+        }
+
+        // INVARIANT: a declared expectation that did not hold is NOT a refusal — the call succeeded, and
+        // the mismatch is published as a failed check, a warning and a lowered level. MEASURED: the model
+        // sometimes reads one operation behind, so refusing here rejected a correct model.
+        if (declaredDelta.IsNotConfirmed)
+        {
+        }
+
+        if (declaredVolume.IsNotConfirmed)
+        {
         }
 
         var deltaMatched = declaredDelta.IsDeclared ? declaredDelta.IsConfirmed : (bool?)null;
@@ -895,10 +896,18 @@ public partial class Api5Session
         {
             unverified.Add(DeclaredExpectation.UnverifiableReason("уменьшение объёма", declaredDelta));
         }
+        else if (declaredDelta.IsNotConfirmed)
+        {
+            unverified.Add(DeclaredExpectation.NotConfirmedReason("уменьшение объёма", declaredDelta));
+        }
 
         if (declaredVolume.IsUnverifiable)
         {
             unverified.Add(DeclaredExpectation.UnverifiableReason("объём после правки", declaredVolume));
+        }
+        else if (declaredVolume.IsNotConfirmed)
+        {
+            unverified.Add(DeclaredExpectation.NotConfirmedReason("объём после правки", declaredVolume));
         }
 
         if (!declared)
@@ -944,9 +953,14 @@ public partial class Api5Session
             readBack?.DepthMm,
             null,
             new VerificationDto(
-                geometryConfirmed ? VerificationLevel.GeometryChecked : VerificationLevel.CallReturned,
+                DeclaredExpectation.CapLevel(
+                    DeclaredExpectation.CapLevel(
+                        geometryConfirmed ? VerificationLevel.GeometryChecked : VerificationLevel.CallReturned,
+                        declaredDelta),
+                    declaredVolume),
                 checks,
-                unverified));
+                unverified),
+            Warnings: DeclaredExpectation.Warnings(declaredDelta, declaredVolume));
     }
 
     /// <summary>The mode of an existing hole by the read <c>IHole3D.HoleType</c>.</summary>
@@ -1083,4 +1097,5 @@ public sealed record HoleResult(
     int BodyCount,
     double? VolumeMm3,
     VerificationDto Verification,
-    string PlacementRoute);
+    string PlacementRoute,
+    IReadOnlyList<string>? Warnings = null);

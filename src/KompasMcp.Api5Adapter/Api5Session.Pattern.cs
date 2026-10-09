@@ -417,20 +417,6 @@ public partial class Api5Session
         if (declared.IsDeclared)
         {
             checks.Add(DeclaredExpectation.Check("document_volume", declared));
-            if (declared.IsRefusal)
-            {
-                throw DeclaredExpectation.Refusal(
-                    declared,
-                    family switch
-                    {
-                        "linear" => "kompas_pattern_grid",
-                        "circular" => "kompas_pattern_circular",
-                        "mirror" => "kompas_pattern_mirror",
-                        _ => "kompas_pattern_" + family,
-                    },
-                    "объём документа после операции",
-                    document.Revision);
-            }
         }
 
         // NAMED per-instance check: the set of cylindrical-face axes. Volume does not tell four holes
@@ -474,6 +460,10 @@ public partial class Api5Session
         {
             unverified.Add(DeclaredExpectation.UnverifiableReason("объём документа после операции", declared));
         }
+        else if (declared.IsNotConfirmed)
+        {
+            unverified.Add(DeclaredExpectation.NotConfirmedReason("объём документа после операции", declared));
+        }
         else if (!declared.IsDeclared)
         {
             unverified.Add("analytical_volume_not_declared");
@@ -510,6 +500,7 @@ public partial class Api5Session
             // omitted the field, so a defaulted value is distinguishable from a deliberate one.
             SaveInitialOrientation = readout.Family == "circular" ? readout.SaveInitialOrientation : null,
             SaveInitialOrientationDefaulted = readout.Family == "circular" ? orientationDefaulted : null,
+            Warnings = DeclaredExpectation.Warnings(declared),
         };
     }
 
@@ -945,6 +936,10 @@ public sealed record PatternResult(
     /// <summary>True when the client omitted <c>save_initial_orientation</c> and the default was applied;
     /// null for families that have no such member.</summary>
     public bool? SaveInitialOrientationDefaulted { get; init; }
+
+    /// <summary>Non-fatal findings the caller must not miss — a declared expectation that did not
+    /// hold is the one this release publishes.</summary>
+    public IReadOnlyList<string>? Warnings { get; init; }
 }
 
 /// <summary>Result of reading pattern parameters by a feature reference.</summary>

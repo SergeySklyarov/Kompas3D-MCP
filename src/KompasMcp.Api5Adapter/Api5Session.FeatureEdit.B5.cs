@@ -247,16 +247,14 @@ public partial class Api5Session
         if (declared.IsDeclared)
         {
             checks.Add(DeclaredExpectation.Check("expected_volume", declared));
-            if (declared.IsRefusal)
-            {
-                throw DeclaredExpectation.Refusal(
-                    declared, "kompas_update_feature/" + EvolutionFamily, "объём после правки",
-                    document.Revision);
-            }
 
             if (declared.IsUnverifiable)
             {
                 unverified.Add(DeclaredExpectation.UnverifiableReason("объём после правки", declared));
+            }
+            else if (declared.IsNotConfirmed)
+            {
+                unverified.Add(DeclaredExpectation.NotConfirmedReason("объём после правки", declared));
             }
 
             geometryConfirmed = declared.IsConfirmed;
@@ -274,7 +272,7 @@ public partial class Api5Session
                 + "различаются на 8966.047734774369 мм³). Проверять этот режим следует на дуге");
         }
 
-        return new UpdateFeatureResult(
+            return new UpdateFeatureResult(
             ToDto(References.Require(command.FeatureRef, document.Id, document.Revision), stateAfter.Name),
             EvolutionFamily,
             sameFeature,
@@ -287,7 +285,8 @@ public partial class Api5Session
             new VerificationDto(
                 geometryConfirmed ? VerificationLevel.GeometryChecked : VerificationLevel.CallReturned,
                 checks,
-                unverified));
+                unverified),
+            Warnings: DeclaredExpectation.Warnings(declared));
     }
 
     /// <summary>Write the section-shift mode into the definition that answered one of the two interfaces.
@@ -769,16 +768,14 @@ public partial class Api5Session
         if (declared.IsDeclared)
         {
             checks.Add(DeclaredExpectation.Check("expected_volume", declared));
-            if (declared.IsRefusal)
-            {
-                throw DeclaredExpectation.Refusal(
-                    declared, "kompas_update_feature/" + LoftFamily, "объём после правки",
-                    document.Revision);
-            }
 
             if (declared.IsUnverifiable)
             {
                 unverified.Add(DeclaredExpectation.UnverifiableReason("объём после правки", declared));
+            }
+            else if (declared.IsNotConfirmed)
+            {
+                unverified.Add(DeclaredExpectation.NotConfirmedReason("объём после правки", declared));
             }
 
             geometryConfirmed = declared.IsConfirmed;
@@ -796,7 +793,7 @@ public partial class Api5Session
                 Expected: "набор сечений заменён целиком"));
         }
 
-        return new UpdateFeatureResult(
+            return new UpdateFeatureResult(
             ToDto(References.Require(command.FeatureRef, document.Id, document.Revision), stateAfter.Name),
             LoftFamily,
             sameFeature,
@@ -808,7 +805,8 @@ public partial class Api5Session
             new VerificationDto(
                 geometryConfirmed ? VerificationLevel.GeometryChecked : VerificationLevel.CallReturned,
                 checks,
-                unverified));
+                unverified),
+            Warnings: DeclaredExpectation.Warnings(declared));
     }
 
     /// <summary>Write the section set into <c>ILoft.Sketchs</c> — a SAFEARRAY of IDispatch pointers.</summary>
@@ -1261,16 +1259,14 @@ public partial class Api5Session
         if (declared.IsDeclared)
         {
             checks.Add(DeclaredExpectation.Check("expected_volume", declared));
-            if (declared.IsRefusal)
-            {
-                throw DeclaredExpectation.Refusal(
-                    declared, "kompas_update_feature/" + ShellFamily, "объём после правки",
-                    document.Revision);
-            }
 
             if (declared.IsUnverifiable)
             {
                 unverified.Add(DeclaredExpectation.UnverifiableReason("объём после правки", declared));
+            }
+            else if (declared.IsNotConfirmed)
+            {
+                unverified.Add(DeclaredExpectation.NotConfirmedReason("объём после правки", declared));
             }
 
             geometryConfirmed = declared.IsConfirmed;
@@ -1281,7 +1277,7 @@ public partial class Api5Session
                 + "геометрия правки не подтверждена числом, и уровень честно остаётся call_returned");
         }
 
-        return new UpdateFeatureResult(
+            return new UpdateFeatureResult(
             ToDto(References.Require(command.FeatureRef, document.Id, document.Revision), stateAfter.Name),
             ShellFamily,
             sameFeature,
@@ -1293,7 +1289,8 @@ public partial class Api5Session
             new VerificationDto(
                 geometryConfirmed ? VerificationLevel.GeometryChecked : VerificationLevel.CallReturned,
                 checks,
-                unverified));
+                unverified),
+            Warnings: DeclaredExpectation.Warnings(declared));
     }
 
     /// <summary>Write BOTH shell mode parameters. Written together on purpose: the mode is a pair, and

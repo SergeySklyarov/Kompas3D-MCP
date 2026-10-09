@@ -98,14 +98,20 @@ public partial class Api5Session
             "перечисляет: достоверного перечня зависимых в API нет (проба L.8)",
         };
 
-        // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
-        // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
+        // The declared expectation is a FAILED CHECK with a warning when it did not hold, and a NAMED gap
+        // when it could not be compared — neither is a refusal. The RESTORE comparison below STAYS a
+        // refusal: it caught a genuinely wrong model.
+        // History: docs/decisions/adapter-core.md#declared-expectation-rule
         var declaredVolume = DeclaredExpectation.Evaluate(
             command.ExpectedVolumeMm3, volumeAfter, () => ReadModelState(document).VolumeMm3);
         checks.Add(DeclaredExpectation.Check("volume_after_suppression", declaredVolume));
         if (declaredVolume.IsUnverifiable)
         {
             unverified.Add(DeclaredExpectation.UnverifiableReason("объём после изменения подавления", declaredVolume));
+        }
+        else if (declaredVolume.IsNotConfirmed)
+        {
+            unverified.Add(DeclaredExpectation.NotConfirmedReason("объём после изменения подавления", declaredVolume));
         }
 
         if (!declaredVolume.IsDeclared)
@@ -125,29 +131,6 @@ public partial class Api5Session
             command.Suppressed ? "volume_changed_on_suppress" : "volume_changed_on_restore",
             effectObserved,
             Observed: $"{volumeBefore?.ToString("0.####") ?? "нет"} → {volumeAfter?.ToString("0.####") ?? "нет"}"));
-
-        // A DECLARED EXPECTATION THAT DID NOT HOLD IS A REFUSAL, and this is deliberately NOT the old
-        // rule the pattern family followed (docs/decisions/adapter-core.md#pattern-declared-volume, where
-        // a failed declaration only MARKED the result). The customer decision recorded in the decision doc unified the
-        // rule: a declared expectation is the geometry check of the tool, so a mismatch refuses the call.
-        // History: docs/decisions/adapter-core.md#declared-expectation-rule
-        if (declaredVolume.IsRefusal)
-        {
-            throw DeclaredExpectation.Refusal(
-                declaredVolume,
-                "kompas_set_feature_suppressed",
-                command.Suppressed ? "объём после подавления" : "объём после снятия подавления",
-                document.Revision,
-                consequence: "Для возврата подавление нужно снять или применить заново решением клиента.",
-                extraDetails: new Dictionary<string, object?>
-                {
-                    ["suppress_operation"] = command.Suppressed ? "suppress" : "restore",
-                    ["feature_name"] = stateAfter.Name,
-                    ["feature_excluded"] = stateAfter.Excluded,
-                    ["feature_is_valid"] = stateAfter.IsValid,
-                    ["feature_object_error"] = stateAfter.ObjectError,
-                });
-        }
 
         // WHAT THE RESTORE IS CHECKED AGAINST. The state before the suppression was captured by THIS
         // session; the restore is compared with it, and a model that did not come back is a refusal.
@@ -306,7 +289,8 @@ public partial class Api5Session
             countAfter,
             volumeBefore,
             volumeAfter,
-            new VerificationDto(level, checks, unverified));
+            new VerificationDto(DeclaredExpectation.CapLevel(level, declaredVolume), checks, unverified),
+            Warnings: DeclaredExpectation.Warnings(declaredVolume));
     }
 
     public DeleteFeatureResult DeleteFeature(DeleteFeatureCommand command)
@@ -468,20 +452,19 @@ public partial class Api5Session
                 + "объекты этим вызовом не проверены");
         }
 
-        // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
-        // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
+        // The declared expectation is a FAILED CHECK with a warning when it did not hold, and a NAMED gap
+        // when it could not be compared — neither is a refusal.
+        // History: docs/decisions/adapter-core.md#declared-expectation-rule
         var declaredVolume = DeclaredExpectation.Evaluate(
             command.ExpectedVolumeMm3, volumeAfter, () => ReadModelState(document).VolumeMm3);
         checks.Add(DeclaredExpectation.Check("volume_after_delete", declaredVolume));
-        if (declaredVolume.IsRefusal)
-        {
-            throw DeclaredExpectation.Refusal(
-                declaredVolume, "kompas_delete_feature", "объём после удаления", document.Revision);
-        }
-
         if (declaredVolume.IsUnverifiable)
         {
             unverified.Add(DeclaredExpectation.UnverifiableReason("объём после удаления", declaredVolume));
+        }
+        else if (declaredVolume.IsNotConfirmed)
+        {
+            unverified.Add(DeclaredExpectation.NotConfirmedReason("объём после удаления", declaredVolume));
         }
 
         if (!declaredVolume.IsDeclared)
@@ -503,11 +486,14 @@ public partial class Api5Session
             volumeBefore,
             volumeAfter,
             new VerificationDto(
-                structural && geometryConfirmed ? VerificationLevel.GeometryChecked
-                    : featureRemoved ? VerificationLevel.StructureChecked
-                    : VerificationLevel.CallReturned,
+                DeclaredExpectation.CapLevel(
+                    structural && geometryConfirmed ? VerificationLevel.GeometryChecked
+                        : featureRemoved ? VerificationLevel.StructureChecked
+                        : VerificationLevel.CallReturned,
+                    declaredVolume),
                 checks,
-                unverified));
+                unverified),
+            Warnings: DeclaredExpectation.Warnings(declaredVolume));
     }
 
     /// <summary>Names of objects that WERE in the tree before the operation and are gone after.</summary>
@@ -544,7 +530,8 @@ public partial class Api5Session
         int FeatureCount,
         double? VolumeBeforeMm3,
         double? VolumeAfterMm3,
-        VerificationDto Verification);
+        VerificationDto Verification,
+        IReadOnlyList<string>? Warnings = null);
 
     public sealed record DeleteFeatureResult(
         string FeatureName,
@@ -554,7 +541,8 @@ public partial class Api5Session
         IReadOnlyList<string> CandidateDependents,
         double? VolumeBeforeMm3,
         double? VolumeAfterMm3,
-        VerificationDto Verification);
+        VerificationDto Verification,
+        IReadOnlyList<string>? Warnings = null);
 
     /// <summary>Feature tree elements in the walk order of <c>EntityCollection(110)</c>, with their index
     /// and object.</summary>

@@ -752,11 +752,6 @@ public partial class Api5Session
         var declared = DeclaredExpectation.Evaluate(
             command.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
         checks.Add(DeclaredExpectation.Check("volume_after_update", declared));
-        if (declared.IsRefusal)
-        {
-            throw DeclaredExpectation.Refusal(
-                declared, "kompas_update_feature/extrusion", "объём после правки", document.Revision);
-        }
 
         var volumeMatched = declared.IsConfirmed;
 
@@ -782,6 +777,10 @@ public partial class Api5Session
         {
             unverified.Insert(0, DeclaredExpectation.UnverifiableReason("объём после правки", declared));
         }
+        else if (declared.IsNotConfirmed)
+        {
+            unverified.Insert(0, DeclaredExpectation.NotConfirmedReason("объём после правки", declared));
+        }
         else if (!geometryConfirmed)
         {
             unverified.Insert(0, valueStored
@@ -795,7 +794,7 @@ public partial class Api5Session
 
         BumpRevision(document, "feature.update");
 
-        return new UpdateFeatureResult(
+            return new UpdateFeatureResult(
             ToDto(References.Require(command.FeatureRef, document.Id, document.Revision), stateAfter.Name),
             family,
             sameFeature,
@@ -807,7 +806,8 @@ public partial class Api5Session
             new VerificationDto(
                 geometryConfirmed ? VerificationLevel.GeometryChecked : VerificationLevel.CallReturned,
                 checks,
-                unverified));
+                unverified),
+            Warnings: DeclaredExpectation.Warnings(declared));
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -836,7 +836,10 @@ public partial class Api5Session
         /// the field belongs only to a SET edit of the <c>fillet</c> family and stays null for the others,
         /// not "zero". It is null for a radius edit too — radius and edge set are edited by different
         /// routes, and the response must not hint that the other changed.</summary>
-        int? EdgesReadBack = null);
+        int? EdgesReadBack = null,
+        /// <summary>Non-fatal findings the caller must not miss — a declared expectation that did
+        /// not hold is the one this release publishes.</summary>
+        IReadOnlyList<string>? Warnings = null);
 
     private (DocumentEntry Document, ksEntity Entity) RequireFeatureEntity(string featureRef)
     {

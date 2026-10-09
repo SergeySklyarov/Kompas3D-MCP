@@ -270,11 +270,6 @@ public partial class Api5Session
         var declared = DeclaredExpectation.Evaluate(
             command.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
         checks.Add(DeclaredExpectation.Check("volume_after_update", declared));
-        if (declared.IsRefusal)
-        {
-            throw DeclaredExpectation.Refusal(
-                declared, "kompas_update_feature/" + FilletFamily, "объём после правки", document.Revision);
-        }
 
         var volumeMatched = declared.IsConfirmed;
 
@@ -294,6 +289,10 @@ public partial class Api5Session
         {
             unverified.Insert(0, DeclaredExpectation.UnverifiableReason("объём после правки", declared));
         }
+        else if (declared.IsNotConfirmed)
+        {
+            unverified.Insert(0, DeclaredExpectation.NotConfirmedReason("объём после правки", declared));
+        }
         else if (!geometryConfirmed)
         {
             unverified.Insert(0, api7RadiusStored
@@ -308,7 +307,7 @@ public partial class Api5Session
                 "подтверждена геометрически");
         }
 
-        return new UpdateFeatureResult(
+            return new UpdateFeatureResult(
             ToDto(References.Require(command.FeatureRef, document.Id, document.Revision), stateAfter.Name),
             FilletFamily,
             sameFeature,
@@ -324,7 +323,8 @@ public partial class Api5Session
                 unverified),
             // The radius re-read from the model. As a separate trailing parameter — like the chamfer
             // angle.
-            RadiusReadBackMm: after?.RadiusMm);
+            RadiusReadBackMm: after?.RadiusMm,
+            Warnings: DeclaredExpectation.Warnings(declared));
     }
 
     /// <summary>
@@ -642,11 +642,6 @@ public partial class Api5Session
         // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
         var declared = DeclaredExpectation.Evaluate(
             command.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
-        if (declared.IsRefusal)
-        {
-            throw DeclaredExpectation.Refusal(
-                declared, "kompas_update_feature/" + FilletFamily, "объём после правки", document.Revision);
-        }
 
         var volumeMatched = declared.IsConfirmed;
 
@@ -679,6 +674,10 @@ public partial class Api5Session
         {
             unverified.Add(DeclaredExpectation.UnverifiableReason("объём после правки", declared));
         }
+        else if (declared.IsNotConfirmed)
+        {
+            unverified.Add(DeclaredExpectation.NotConfirmedReason("объём после правки", declared));
+        }
         else if (!volumeMatched)
         {
             unverified.Add(
@@ -692,7 +691,7 @@ public partial class Api5Session
                 "может быть подтверждена геометрически");
         }
 
-        return new UpdateFeatureResult(
+            return new UpdateFeatureResult(
             ToDto(References.Require(command.FeatureRef, document.Id, document.Revision), stateAfter.Name),
             FilletFamily,
             sameFeature,
@@ -708,7 +707,8 @@ public partial class Api5Session
                 checks,
                 unverified),
             RadiusReadBackMm: null,
-            EdgesReadBack: afterRefs?.Count);
+            EdgesReadBack: afterRefs?.Count,
+            Warnings: DeclaredExpectation.Warnings(declared));
     }
 
     /// <summary>Edge-set edit by BODY edges (<c>edge_refs</c>) — the measurably valid currency for REPLACING the
@@ -1099,11 +1099,6 @@ public partial class Api5Session
         var declared = DeclaredExpectation.Evaluate(
             command.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
         checks.Add(DeclaredExpectation.Check("volume_after_update", declared));
-        if (declared.IsRefusal)
-        {
-            throw DeclaredExpectation.Refusal(
-                declared, "kompas_update_feature/" + FilletFamily, "объём после правки", document.Revision);
-        }
 
         var volumeMatched = declared.IsConfirmed;
 
@@ -1114,6 +1109,10 @@ public partial class Api5Session
         if (declared.IsUnverifiable)
         {
             unverified.Add(DeclaredExpectation.UnverifiableReason("объём после правки", declared));
+        }
+        else if (declared.IsNotConfirmed)
+        {
+            unverified.Add(DeclaredExpectation.NotConfirmedReason("объём после правки", declared));
         }
         else if (!volumeMatched)
         {
@@ -1131,7 +1130,7 @@ public partial class Api5Session
 
         var geometryConfirmed = edgesSet && sameFeature && volumeMatched;
 
-        return new UpdateFeatureResult(
+            return new UpdateFeatureResult(
             ToDto(References.Require(command.FeatureRef, document.Id, document.Revision), stateAfter.Name),
             FilletFamily,
             sameFeature,
@@ -1147,7 +1146,8 @@ public partial class Api5Session
             // The radius was not touched: the edge set and the radius are different edit subjects, and the
             // answer must not look as if both changed.
             RadiusReadBackMm: null,
-            EdgesReadBack: afterRefs?.Count);
+            EdgesReadBack: afterRefs?.Count,
+            Warnings: DeclaredExpectation.Warnings(declared));
     }
 
     /// <summary>Compare compositions as sets: the collection's output order is non-deterministic.</summary>

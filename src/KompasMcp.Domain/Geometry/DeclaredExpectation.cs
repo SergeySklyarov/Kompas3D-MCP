@@ -15,15 +15,15 @@ public enum DeclaredExpectationVerdict
     /// <summary>Declared and matched within <see cref="ProfileArea.Tolerance"/>.</summary>
     Confirmed,
 
-    /// <summary>Declared and contradicted by the measurement: the call must not answer as a success.</summary>
+    /// <summary>Declared and contradicted by the measurement: a FAILED check, not a refusal.</summary>
     NotConfirmed,
 
     /// <summary>Declared but not comparable — the measured value could not be read.</summary>
     Unverifiable,
 }
 
-/// <summary>The outcome of comparing a declared expectation with a measurement, with the numbers a refusal
-/// or a named gap must carry.</summary>
+/// <summary>The outcome of comparing a declared expectation with a measurement, with the numbers the failed
+/// check and the named gap must carry.</summary>
 public readonly record struct DeclaredExpectationOutcome(
     DeclaredExpectationVerdict Verdict,
     double? ExpectedMm3,
@@ -35,8 +35,8 @@ public readonly record struct DeclaredExpectationOutcome(
 
     public bool IsConfirmed => Verdict == DeclaredExpectationVerdict.Confirmed;
 
-    /// <summary>Declared and contradicted — the caller must be told "not a success".</summary>
-    public bool IsRefusal => Verdict == DeclaredExpectationVerdict.NotConfirmed;
+    /// <summary>Declared and contradicted — a failed check, a warning and a lowered level, NOT a refusal.</summary>
+    public bool IsNotConfirmed => Verdict == DeclaredExpectationVerdict.NotConfirmed;
 
     /// <summary>Declared but not comparable — named in <c>unverified_aspects</c>, never a refusal.</summary>
     public bool IsUnverifiable => Verdict == DeclaredExpectationVerdict.Unverifiable;
@@ -48,16 +48,16 @@ public readonly record struct DeclaredExpectationOutcome(
 }
 
 /// <summary>The single rule that turns a client-declared expectation of a mutation's result into a verdict.</summary>
-/// <remarks>INVARIANT: a declared expectation that did not hold within the project tolerance makes the call
-/// NOT a success — a refusal, not a lowered level: the declared expectation IS the geometry check of such
-/// a tool, so without it a wrong model would be reported as a success. An expectation that could not be
-/// compared is NAMED, not refused. INVARIANT (order): the comparison is the geometry check of an operation
-/// that HAPPENED, so a "route was not applied" refusal comes first, else the declared mismatch masks it.
-/// The decision is a pure function of two numbers, so a SUBSTITUTED read result exercises every branch.
+/// <remarks>INVARIANT: a declared expectation that did not hold within the project tolerance does NOT make
+/// the call a failure. The call succeeded; the mismatch is published as a failed named check, a warning, a
+/// level no higher than <c>structure_checked</c> and a named gap. MEASURED: the model sometimes reads one
+/// operation behind, so a refusal here rejected a CORRECT model.
+/// INVARIANT (order): the comparison is the geometry check of an operation that HAPPENED, so a "route was
+/// not applied" refusal comes first, else the declared mismatch would mask it.
 /// History: docs/decisions/adapter-core.md#declared-expectation-rule</remarks>
 public static class DeclaredExpectation
 {
-    /// <summary>The one code every refusal by this rule carries, whatever the tool.</summary>
+    /// <summary>The one code the failed check and the named gap carry, whatever the tool.</summary>
     public const string NotConfirmedCode = "declared_expectation_not_confirmed";
 
     /// <summary>The one tolerance, shared with the profile area: an absolute floor plus a relative part.</summary>
@@ -90,9 +90,9 @@ public static class DeclaredExpectation
     /// <summary>Compare a declared expectation with a measurement that may be RE-READ once when the first
     /// read did not confirm it; <paramref name="rereadMm3"/> repeats the MEASUREMENT by the same route.</summary>
     /// <remarks>WHY A SECOND READ. MEASURED: the model state sometimes reads one operation behind, so a
-    /// single read can disagree while the model is correct. INVARIANT: a refusal needs BOTH reads readable,
-    /// in AGREEMENT, and both missing the expectation; reads that DISAGREE are a NAMED gap, not a refusal —
-    /// a stale read must not become a false refusal.
+    /// single read can disagree while the model is correct. INVARIANT: the mismatch is published only when
+    /// BOTH reads are readable and in AGREEMENT; reads that DISAGREE are a NAMED gap, not a mismatch — a
+    /// stale read must not become a false finding.
     /// History: docs/decisions/adapter-core.md#declared-expectation-rule</remarks>
     public static DeclaredExpectationOutcome Evaluate(
         double? expectedMm3, double? measuredMm3, Func<double?>? rereadMm3)
@@ -112,7 +112,7 @@ public static class DeclaredExpectation
         if (first.MeasuredMm3 is double a && second.MeasuredMm3 is double b
             && Math.Abs(a - b) <= Tolerance(first.ExpectedMm3 ?? 0d))
         {
-            // Both reads readable and in agreement, and neither matched: a genuine refusal.
+            // Both reads readable and in agreement, and neither matched: a genuine mismatch.
             return first;
         }
 
@@ -139,70 +139,60 @@ public static class DeclaredExpectation
     /// repeatable, so neither number can be held against the declared expectation.</summary>
     public static string DivergentReadsReason(double? firstMm3, double? secondMm3) =>
         "declared_expectation_reads_diverged — два чтения объёма разошлись: " + Num(firstMm3)
-        + " и " + Num(secondMm3) + ". Отказ НЕ выдаётся: расхождение означает, что измерение "
-        + "неповторяемо (устаревшее чтение), а не что модель не совпала с заявленным; уровень "
-        + "оставлен не выше structure_checked.";
+        + " и " + Num(secondMm3) + ". Расхождение означает, что измерение неповторяемо (устаревшее "
+        + "чтение), а не что модель не совпала с заявленным; уровень оставлен не выше structure_checked.";
+
+    /// <summary>The named gap for a declared expectation that did not hold: the same numbers as the
+    /// failed check, and the reason the call is still a success.</summary>
+    public static string NotConfirmedReason(string quantity, DeclaredExpectationOutcome outcome) =>
+        NotConfirmedCode + " — заявленное ожидание (" + quantity + ") не подтверждено: заявлено "
+        + Num(outcome.ExpectedMm3) + ", измерено " + Num(outcome.MeasuredMm3) + ", разность "
+        + Num(outcome.DifferenceMm3) + ", допуск " + Num(outcome.ToleranceMm3) + ". Вызов НЕ отвергнут: "
+        + "модель могла отстать на одну операцию.";
+
+    /// <summary>The warning a caller reads first among the geometry-related ones.</summary>
+    public static string NotConfirmedWarning(DeclaredExpectationOutcome outcome) =>
+        "Заявленное ожидание не подтверждено: заявлено " + Num(outcome.ExpectedMm3) + ", измерено "
+        + Num(outcome.MeasuredMm3) + ", разность " + Num(outcome.DifferenceMm3) + "; модель могла "
+        + "отстать на одну операцию - перечитайте объём перед выводом.";
+
+    /// <summary>The warning list a result publishes: empty unless an outcome did not hold. One entry per
+    /// unconfirmed outcome, so a tool with two declared expectations names both.</summary>
+    public static IReadOnlyList<string>? Warnings(params DeclaredExpectationOutcome[] outcomes)
+    {
+        var list = new List<string>();
+        foreach (var outcome in outcomes)
+        {
+            if (outcome.IsNotConfirmed)
+            {
+                list.Add(NotConfirmedWarning(outcome));
+            }
+        }
+
+        return list.Count == 0 ? null : list;
+    }
 
     /// <summary>The reason to publish for an unverifiable outcome: the divergence text when the two reads
     /// disagreed, otherwise the standard "could not be compared" text.</summary>
     public static string UnverifiableReason(string quantity, DeclaredExpectationOutcome outcome) =>
         outcome.Reason ?? UnreadableReason(quantity);
 
-    /// <summary>The refusal for a declared expectation that did not hold. <paramref name="operation"/>
-    /// names the tool/family, <paramref name="quantity"/> what was compared ("volume after the operation",
-    /// "volume delta", …), and <paramref name="consequence"/> optionally adds what the client should know
-    /// about the model that was left behind. <paramref name="extraDetails"/> carries tool-specific numbers
-    /// (a feature's name, its state, …) beside the shared ones.</summary>
-    public static KompasContractException Refusal(
-        DeclaredExpectationOutcome outcome,
-        string operation,
-        string quantity,
-        long? revisionAfter,
-        string? consequence = null,
-        IReadOnlyDictionary<string, object?>? extraDetails = null)
-    {
-        var message = "Операция «" + operation + "» применена, но " + quantity
-            + " не совпала с заявленной: измерено " + Num(outcome.MeasuredMm3)
-            + ", ожидалось " + Num(outcome.ExpectedMm3)
-            + " (разность " + Num(outcome.DifferenceMm3)
-            + ", допуск " + Num(outcome.ToleranceMm3) + "). Вызов НЕ считается успешным: заявленное "
-            + "ожидание и есть проверка геометрии этого инструмента. Модель оставлена в измеренном "
-            + "состоянии — сервер её молча не откатывает."
-            + (string.IsNullOrEmpty(consequence) ? string.Empty : " " + consequence);
-
-        var details = new Dictionary<string, object?>
-        {
-            ["code"] = NotConfirmedCode,
-            ["operation"] = operation,
-            ["quantity"] = quantity,
-            ["expected_volume_mm3"] = outcome.ExpectedMm3,
-            ["measured_volume_mm3"] = outcome.MeasuredMm3,
-            ["volume_delta_mm3"] = outcome.DifferenceMm3,
-            ["tolerance_mm3"] = outcome.ToleranceMm3,
-            ["revision_after"] = revisionAfter,
-        };
-        if (extraDetails is not null)
-        {
-            foreach (var (key, value) in extraDetails)
-            {
-                details[key] = value;
-            }
-        }
-
-        return new KompasContractException(
-            ErrorCodes.GeometryFailed,
-            message,
-            RetryPolicy.AfterReconciliation,
-            partialEffects: true,
-            details: details);
-    }
+    /// <summary>Lower a level when the declared expectation did not hold: a mismatch never reads as
+    /// <c>geometry_checked</c>. A level already at or below <c>structure_checked</c> is returned as is.</summary>
+    public static VerificationLevel CapLevel(VerificationLevel level, DeclaredExpectationOutcome outcome) =>
+        outcome.IsNotConfirmed && level > VerificationLevel.StructureChecked
+            ? VerificationLevel.StructureChecked
+            : level;
 
     /// <summary>The short check name a tool adds for the comparison, so the response reads the same way
-    /// whatever the tool.</summary>
+    /// whatever the tool. A mismatch carries the difference and the tolerance in <c>observed</c>.</summary>
     public static NamedCheck Check(string name, DeclaredExpectationOutcome outcome) =>
         new(name,
             outcome.IsConfirmed,
-            Observed: Num(outcome.MeasuredMm3),
+            Observed: outcome.IsNotConfirmed
+                ? Num(outcome.MeasuredMm3) + " (разность " + Num(outcome.DifferenceMm3)
+                    + ", допуск " + Num(outcome.ToleranceMm3) + ")"
+                : Num(outcome.MeasuredMm3),
             Expected: outcome.IsDeclared ? Num(outcome.ExpectedMm3) : "не задано");
 
     private static string Num(double? value) => value is double number

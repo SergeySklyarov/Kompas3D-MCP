@@ -7429,6 +7429,45 @@ def check_names(res):
     return [item.get("name") for item in checks_of(res)]
 
 
+_LEVEL_RANK = {"none": 0, "argument_validated": 1, "call_returned": 2, "file_created": 3,
+               "syntax_checked": 4, "structure_checked": 5, "geometry_checked": 6}
+
+
+def verification_level(res):
+    """Уровень проверки, как его публикует САМА полезная нагрузка; None — поля нет.
+
+    Читается из нагрузки, а не из подстановки хоста: у семейств B3 блока `verification` в ответе нет
+    вовсе, и подставленный хостом уровень описывает не ответ адаптера (см. `unverified_of`).
+    """
+    if not isinstance(res, dict):
+        return None
+    return (res.get("verification") or {}).get("level") or res.get("level")
+
+
+def level_at_most(res, ceiling):
+    """Уровень не выше названного. Поле не публикуется — ограничение не нарушено (его не заявляли)."""
+    level = verification_level(res)
+    return level is None or _LEVEL_RANK.get(level, 99) <= _LEVEL_RANK[ceiling]
+
+
+def check_failed(res, name):
+    for item in checks_of(res):
+        if item.get("name") == name:
+            return item.get("passed") is False
+    return False
+
+
+def check_field(res, name, field):
+    for item in checks_of(res):
+        if item.get("name") == name:
+            return item.get(field)
+    return None
+
+
+def warnings_of_envelope(envelope):
+    return [str(x) for x in ((envelope or {}).get("warnings") or []) if isinstance(x, str)]
+
+
 def check_rows(res):
     """Поля проверок целиком: имя, вердикт, наблюдение, ожидание.
 
@@ -11315,14 +11354,15 @@ def b3_solid_ops_checks(client, rep, app_id, workdir):
     # ═══════════ B3.40 ОТРИЦАТЕЛЬНЫЙ КОНТРОЛЬ к проверке подтверждения объёма ═══════════
     # Зачем отдельная строка. Проверка, которая НИ РАЗУ не сработала, ничего не доказывает: она может
     # быть написана так, что всегда отвечает «подтверждено». Поэтому здесь объявляется заведомо
-    # НЕВЕРНАЯ величина — объём результата (36000) при сумме тел 37000. ЕДИНОЕ ПРАВИЛО (решение
-    # заказчика 09.10.2026): несбывшееся заявленное ожидание — ОТКАЗ с числами, а не пометка.
-    # Прежняя редакция строки требовала пометки `expected_volume_mismatch` при успешном вызове; это
-    # правило ЗАМЕНЕНО. Это тот же приём, что и у контрольной строки `4/tan`: у прибора обязан быть
-    # опыт, на котором он обязан отказать.
+    # НЕВЕРНАЯ величина — объём результата (36000) при сумме тел 37000. ДЕЙСТВУЮЩЕЕ ПРАВИЛО (решение
+    # заказчика 09.10.2026, смягчение после стопа выпуска 0.6.0): несбывшееся заявленное ожидание —
+    # УСПЕХ с проваленной проверкой, предупреждением и уровнем не выше structure_checked, а не отказ.
+    # Прежние редакции строки требовали сначала пометки `expected_volume_mismatch`, затем ОТКАЗА; оба
+    # правила ЗАМЕНЕНЫ. Это тот же приём, что и у контрольной строки `4/tan`: у прибора обязан быть
+    # опыт, на котором он обязан назвать несовпадение.
     doc, rev, refs, err = blank("B3_unconfirmed", {"A": (A_LO, A_HI), "B": (B_LO, B_HI), "S": (S_LO, S_HI)})
     if err:
-        rep.add("B3.40", "объявленный объём, не подтверждённый моделью, — ОТКАЗ с числами",
+        rep.add("B3.40", "объявленный объём, не подтверждённый моделью, — проваленная проверка с числами",
                 "FAIL", f"заготовка: {err}")
     else:
         _e, env, _r = client.tool("kompas_boolean", {
@@ -11330,28 +11370,35 @@ def b3_solid_ops_checks(client, rep, app_id, workdir):
             "target_body_ref": refs["A"], "tool_body_refs": [refs["B"]],
             "operation": "union", "keep_tools": False,
             "expected_volume_mm3": 36000.0, "operation_id": str(uuid.uuid4())}, timeout=240)
-        b_err = (env or {}).get("error") or {}
-        b_details = b_err.get("details") or {}
-        b_partial = b_err.get("partial_effects")
+        b_res = (env or {}).get("result") or {}
+        # The check keeps the tool's own name; the CODE `declared_expectation_not_confirmed` travels in
+        # unverified_aspects and in the warning, so every tool names the mismatch the same way.
+        b_code = "volume_expected"
+        b_check = check_rows(b_res)
+        b_warn = warnings_of_envelope(env)
+        b_unver = unverified_of(env)
         count, total = totals(doc)
         # Геометрия при этом ПРАВИЛЬНАЯ (одно тело 36000 и целый куб 1000): строка доказывает не то,
-        # что продукт отказал «на всякий случай», а то, что неотвеченное ожидание названо отказом с
-        # числами, а не выдано за успех.
+        # что продукт отказал «на всякий случай», а то, что неотвеченное ожидание НАЗВАНО числами, а не
+        # выдано за подтверждённое и не превращено в отказ.
         rows = list_bodies(doc)
         merged = find(rows, (0.0, 0.0, 0.0), (60.0, 30.0, 20.0))
         v_merged = body_volume(merged.get("body_ref")) if merged else None
         rep.add("B3.40",
-                "объявленный объём, не подтверждённый моделью, — ОТКАЗ GEOMETRY_FAILED с числами: "
-                "объявлено 36000 (объём результата) при сумме тел 37000, геометрия при этом верна",
-                "PASS" if (error_code(env) == "GEOMETRY_FAILED" and b_partial is True
-                           and b_details.get("code") == "declared_expectation_not_confirmed"
-                           and b_details.get("expected_volume_mm3") == 36000.0
-                           and b_details.get("measured_volume_mm3") == 37000.0
+                "объявленный объём, не подтверждённый моделью, назван ПРОВАЛЕННОЙ проверкой "
+                "declared_expectation_not_confirmed (объявлено 36000 при сумме тел 37000), с "
+                "предупреждением и уровнем не выше structure_checked; вызов успешен, геометрия верна",
+                "PASS" if (error_code(env) is None
+                           and check_failed(b_res, b_code)
+                           and "36000" in str(check_field(b_res, b_code, "expected"))
+                           and "37000" in str(check_field(b_res, b_code, "observed"))
+                           and any("Заявленное ожидание не подтверждено" in w for w in b_warn)
+                           and any("declared_expectation_not_confirmed" in str(u) for u in b_unver)
+                           and level_at_most(b_res, "structure_checked")
                            and count == 2 and near(v_merged, 36000.0) and near(total, 37000.0))
                 else "FAIL",
-                f"err={error_code(env)} partial={b_partial} details.code={b_details.get('code')} "
-                f"ожидание={b_details.get('expected_volume_mm3')} измерено={b_details.get('measured_volume_mm3')} "
-                f"тел={count} сумма={total} результат V={v_merged}")
+                f"err={error_code(env)} проверки={b_check} warnings={b_warn} unverified={b_unver} "
+                f"level={verification_level(b_res)} тел={count} сумма={total} результат V={v_merged}")
         close(doc)
 
     # ═══════════ B3.41 многотельное выдавливание: приращение ОТДЕЛЬНО от суммы по документу ═══════════
@@ -14971,24 +15018,28 @@ def e08_checks(client, rep, app_id, workdir):
             "expected_volume_mm3": (100.0 * 80.0 * 10.0) + 1000.0, "expected_body_count": 1,
             "operation_id": str(uuid.uuid4())})
         pchk = checks_of(penv)
-        volume_check = pchk.get("document_volume") or {}
-        p_err = (penv or {}).get("error") or {}
-        p_details = p_err.get("details") or {}
-        p_partial = p_err.get("partial_effects")
-        # ЕДИНОЕ ПРАВИЛО (решение заказчика 09.10.2026): заведомо неверное заявленное ожидание
-        # объёма — ОТКАЗ с числами, а не пометка. Прежняя редакция строки требовала пометки
-        # `document_volume_not_confirmed` и успешного вызова; это правило ЗАМЕНЕНО.
-        ok = (error_code(penv) == "GEOMETRY_FAILED" and p_partial is True
-              and p_details.get("code") == "declared_expectation_not_confirmed"
-              and p_details.get("expected_volume_mm3") is not None
-              and p_details.get("measured_volume_mm3") is not None
-              and p_details.get("volume_delta_mm3") is not None)
-        rep.add("E08.04", "массив: заведомо неверное заявленное ожидание объёма — ОТКАЗ с числами",
+        declared_check = pchk.get("document_volume") or {}
+        # ДЕЙСТВУЮЩЕЕ ПРАВИЛО (решение заказчика 09.10.2026, смягчение после стопа выпуска 0.6.0):
+        # заведомо неверное заявленное ожидание объёма — УСПЕХ с проваленной проверкой,
+        # предупреждением и уровнем не выше structure_checked, а не отказ. Прежние редакции строки
+        # требовали сначала пометки `document_volume_not_confirmed`, затем ОТКАЗА; оба правила ЗАМЕНЕНЫ.
+        p_warn = warnings_of_envelope(penv)
+        p_unver = unverified_of(penv)
+        p_res = result(penv)
+        ok = (error_code(penv) is None
+              and declared_check.get("passed") is False
+              and declared_check.get("expected") is not None
+              and declared_check.get("observed") is not None
+              and any("Заявленное ожидание не подтверждено" in w for w in p_warn)
+              and any("declared_expectation_not_confirmed" in str(u) for u in p_unver)
+              and level_at_most(p_res, "structure_checked"))
+        rep.add("E08.04",
+                "массив: заведомо неверное заявленное ожидание объёма названо ПРОВАЛЕННОЙ проверкой "
+                "declared_expectation_not_confirmed с числами, предупреждением и уровнем не выше "
+                "structure_checked; вызов успешен",
                 "PASS" if ok else "FAIL",
-                "err=%s partial=%s details.code=%s ожидание=%s измерено=%s разность=%s"
-                % (error_code(penv), p_partial, p_details.get("code"),
-                   p_details.get("expected_volume_mm3"), p_details.get("measured_volume_mm3"),
-                   p_details.get("volume_delta_mm3")))
+                "err=%s проверка=%s warnings=%s unverified=%s level=%s"
+                % (error_code(penv), declared_check, p_warn, p_unver, verification_level(p_res)))
         close(doc)
 
     # ── E5.3: sketch_ref в kompas_get_feature ───────────────────────────────────────────────
@@ -30435,7 +30486,8 @@ def suppress_restore_checks(client, rep, app_id, workdir, k):
         return rec
 
     def declared_cycle(setup_name, index, label, wrong):
-        """Цикл с ЗАЯВЛЕННЫМ ожиданием объёма: верное ожидание обязано пройти, неверное — отказать."""
+        """Цикл с ЗАЯВЛЕННЫМ ожиданием объёма: верное ожидание обязано пройти, неверное — назвать
+        несовпадение проваленной проверкой, предупреждением и пониженным уровнем, НЕ отказом."""
         doc, fref, analytic = SETUPS[setup_name](label)
         rec = {"i": index, "setup": setup_name, "document": doc, "wrong_expected": wrong}
         if not doc or not fref or analytic is None:
@@ -30450,6 +30502,10 @@ def suppress_restore_checks(client, rep, app_id, workdir, k):
                 "expected_volume_mm3": declared_sup})
             rec["suppress_code"] = code
             rec["suppress_details"] = ((env or {}).get("error") or {}).get("details")
+            rec["suppress_checks"] = check_rows(result(env))
+            rec["suppress_warnings"] = warnings_of_envelope(env)
+            rec["suppress_unverified"] = unverified_of(env)
+            rec["suppress_level"] = verification_level(result(env))
             rec["declared_suppressed_mm3"] = declared_sup
             rec["suppressed_volume_mm3"] = state_of(doc)["volume_total"]
             if code is not None:
@@ -30607,18 +30663,28 @@ def suppress_restore_checks(client, rep, app_id, workdir, k):
              details=good)
 
         bad = declared_cycle(name, 2, "SR-declared-bad-%s" % name, wrong=True)
-        bad_details = bad.get("suppress_details") or {}
-        bad_ok = (bad.get("suppress_code") == "GEOMETRY_FAILED"
-                  and bad_details.get("code") == "declared_expectation_not_confirmed"
-                  and bad_details.get("expected_volume_mm3") is not None
-                  and bad_details.get("measured_volume_mm3") is not None)
+        bad_checks = bad.get("suppress_checks") or []
+        bad_declared = [c for c in bad_checks if c.get("имя") == "volume_after_suppression"]
+        bad_warn = bad.get("suppress_warnings") or []
+        bad_unver = bad.get("suppress_unverified") or []
+        # ДЕЙСТВУЮЩЕЕ ПРАВИЛО (решение заказчика 09.10.2026, смягчение после стопа выпуска 0.6.0):
+        # неверное заявленное ожидание — успех с проваленной проверкой, предупреждением и уровнем не
+        # выше structure_checked, а не отказ. Прежняя редакция строки требовала отказа; ЗАМЕНЕНА.
+        bad_ok = (bad.get("suppress_code") is None
+                  and len(bad_declared) == 1 and bad_declared[0].get("прошла") is False
+                  and bad_declared[0].get("ожидание") is not None
+                  and bad_declared[0].get("наблюдение") is not None
+                  and any("Заявленное ожидание не подтверждено" in w for w in bad_warn)
+                  and any("declared_expectation_not_confirmed" in str(u) for u in bad_unver)
+                  and bad.get("suppress_level") in (None, "none", "argument_validated", "call_returned",
+                                                    "file_created", "syntax_checked", "structure_checked"))
         emit("SR.%s.declared_wrong" % name,
-             "постановка %s: НЕВЕРНОЕ expected_volume_mm3 на подавлении — отказ GEOMETRY_FAILED с "
-             "числами, а не понижение уровня" % name,
+             "постановка %s: НЕВЕРНОЕ expected_volume_mm3 на подавлении названо ПРОВАЛЕННОЙ проверкой "
+             "declared_expectation_not_confirmed с числами и предупреждением; вызов успешен, уровень "
+             "не выше structure_checked" % name,
              "PASS" if bad_ok else "FAIL",
-             "код=%s; details.code=%s ожидание=%s измерено=%s"
-             % (bad.get("suppress_code"), bad_details.get("code"),
-                bad_details.get("expected_volume_mm3"), bad_details.get("measured_volume_mm3")),
+             "код=%s; проверка=%s warnings=%s unverified=%s level=%s"
+             % (bad.get("suppress_code"), bad_declared, bad_warn, bad_unver, bad.get("suppress_level")),
              details=bad)
 
         unavailable = unavailable_cycle(name, 3, "SR-unavailable-%s" % name)

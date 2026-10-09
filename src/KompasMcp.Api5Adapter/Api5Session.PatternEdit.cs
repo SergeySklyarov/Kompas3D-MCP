@@ -101,12 +101,6 @@ public partial class Api5Session
         var declared = DeclaredExpectation.Evaluate(
             command.Pattern!.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
         checks.Add(DeclaredExpectation.Check("volume_after_update", declared));
-        if (declared.IsRefusal)
-        {
-            throw DeclaredExpectation.Refusal(
-                declared, "kompas_update_feature/" + PatternFamily, "объём после правки",
-                document.Revision);
-        }
 
         var volumeMatched = declared.IsConfirmed;
 
@@ -148,6 +142,10 @@ public partial class Api5Session
         {
             unverified.Insert(0, DeclaredExpectation.UnverifiableReason("объём после правки", declared));
         }
+        else if (declared.IsNotConfirmed)
+        {
+            unverified.Insert(0, DeclaredExpectation.NotConfirmedReason("объём после правки", declared));
+        }
 
         var geometryConfirmed = readBackOk && sameFeature && volumeMatched && bodyCountMatched;
 
@@ -164,7 +162,8 @@ public partial class Api5Session
             new VerificationDto(
                 geometryConfirmed ? VerificationLevel.GeometryChecked : VerificationLevel.CallReturned,
                 checks,
-                unverified));
+                unverified),
+            Warnings: DeclaredExpectation.Warnings(declared));
     }
 
     /// <summary>The live pattern object by collection index.</summary>

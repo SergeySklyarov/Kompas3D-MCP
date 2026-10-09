@@ -46,13 +46,16 @@ public static class ToolCatalog
 {
     /// <summary>The ONE wording of the declared-expectation rule, appended to every field description
     /// that carries an expectation, so the tools cannot describe the same rule differently.</summary>
-    /// <remarks>INVARIANT: a declared expectation that did not hold is a REFUSAL, not a lowered level —
-    /// see docs/decisions/adapter-core.md#declared-expectation-rule (customer decision recorded in the decision doc).
-    /// </remarks>
+    /// <remarks>INVARIANT: a declared expectation that did not hold is a FAILED CHECK with a warning and a
+    /// level no higher than structure_checked — NOT a refusal. MEASURED: the model sometimes reads one
+    /// operation behind, so refusing here rejected a correct model.
+    /// History: docs/decisions/adapter-core.md#declared-expectation-rule</remarks>
     private const string DeclaredExpectationRule =
-        " Если задано и не совпало с измеренным в допуске проекта, вызов ОТКЛОНЯЕТСЯ (GEOMETRY_FAILED, "
-        + "partial_effects=true, details.code=declared_expectation_not_confirmed), а не помечается; "
-        + "если сравнить нечем (величина не прочитана) — аспект называется непроверенным.";
+        " Если задано и не совпало с измеренным в допуске проекта, вызов ОСТАЁТСЯ успешным, но проверка "
+        + "объявляется непройденной (checks: declared_expectation_not_confirmed, с заявленным, "
+        + "измеренным, разностью и допуском), в warnings идёт предупреждение, а уровень не поднимается "
+        + "выше structure_checked: модель могла отстать на одну операцию — перечитайте объём перед "
+        + "выводом. Если сравнить нечем (величина не прочитана) — аспект называется непроверенным.";
 
     /// <summary>The section-coupling schema — ONE for creation (<c>kompas_loft</c>) and edit
     /// (<c>kompas_update_feature</c>), so the descriptions cannot drift between tools.</summary>
@@ -2109,7 +2112,7 @@ public static class ToolCatalog
             Mutation("kompas_set_feature_suppressed", "Подавить или восстановить признак",
                 "excluded=true отключает признак, false включает обратно. Эффект измерен прогонами 12.09.2026 (проба L.7 и строки L04…L06 приёмки): подавление сквозного окна 40×20 вернуло пластине 80000 мм³, восстановление — обратно 72000 мм³. Направление изменения объёма зависит от типа признака (приклейка — меньше, вырезание — больше), поэтому сверяется число, а не знак. Это не удаление: имя и объект признака сохраняются, НО подавленный признак исчезает из EntityCollection(o3d_operationElement=110) — kompas_list_features его не показывает, пока подавление не снято. "
                 + "ПРИ СНЯТИИ ПОДАВЛЕНИЯ ГЕОМЕТРИЯ СВЕРЯЕТСЯ С СОСТОЯНИЕМ ДО ПОДАВЛЕНИЯ: сервер запоминает объём, число тел и число граней на момент подавления (проверка pre_suppression_state_recorded) и при снятии сравнивает с ними (проверка restored_to_pre_suppression_state). Не совпало — вызов НЕ считается успешным: отказ GEOMETRY_FAILED с partial_effects=true и числами «до подавления / подавлено / после снятия» в details. Модель при отказе НЕ откатывается молча. Если сверка невозможна (подавление выполнено вне этого сеанса, либо модель менялась между подавлением и снятием) — это названо в unverified_aspects, а не пропущено. "
-                + "ЗАЯВЛЕННЫЙ expected_volume_mm3, который не совпал с измеренным, — ОТКАЗ (GEOMETRY_FAILED, details.code=declared_expectation_not_confirmed), и для подавления, и для снятия: у этого инструмента нет другого свидетеля геометрии, поэтому несбывшееся ожидание клиента не понижает уровень, а отклоняет вызов. Это то же единое правило, что и у остальных инструментов.",
+                + "ЗАЯВЛЕННЫЙ expected_volume_mm3, который не совпал с измеренным, подчиняется ОБЩЕМУ правилу заявленного ожидания: вызов остаётся успешным, проверка объявляется непройденной (declared_expectation_not_confirmed с числами), в warnings идёт предупреждение, уровень не поднимается выше structure_checked. Отказом остаётся только сверка снятия с состоянием до подавления — она ловила настоящую неверную модель.",
                 Sch.Props(
                     ("feature_ref", Sch.Ref("#/$defs/reference")),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision")),

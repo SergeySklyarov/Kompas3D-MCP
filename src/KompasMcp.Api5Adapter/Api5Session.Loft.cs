@@ -300,15 +300,14 @@ public partial class Api5Session
         if (declared.IsDeclared)
         {
             checks.Add(DeclaredExpectation.Check("expected_volume", declared));
-            if (declared.IsRefusal)
-            {
-                throw DeclaredExpectation.Refusal(
-                    declared, "kompas_loft", "объём после операции", document.Revision);
-            }
 
             if (declared.IsUnverifiable)
             {
                 unverified.Add(DeclaredExpectation.UnverifiableReason("объём после операции", declared));
+            }
+            else if (declared.IsNotConfirmed)
+            {
+                unverified.Add(DeclaredExpectation.NotConfirmedReason("объём после операции", declared));
             }
 
             geometryConfirmed = declared.IsConfirmed;
@@ -341,7 +340,8 @@ public partial class Api5Session
                 chainsWritten + ", прочитано из модели " +
                 (couplingsInModel?.Count.ToString(CultureInfo.InvariantCulture) ?? "не прочитано") +
                 " (смещения в мм вдоль контуров сечений)",
-            });
+            },
+            Warnings: DeclaredExpectation.Warnings(declared));
     }
 
     /// <summary>Result of reading the normal axes of the section planes.</summary>

@@ -2131,6 +2131,14 @@ public sealed record BooleanResultDto
     public required long Revision { get; init; }
 
     public IReadOnlyList<string>? UnverifiedAspects { get; init; }
+
+    /// <summary>Named checks of this call. The declared-expectation check is here, with
+    /// <c>passed=false</c> when the declared volume was not confirmed.</summary>
+    public IReadOnlyList<NamedCheck>? Checks { get; init; }
+
+    /// <summary>Non-fatal findings the caller must not miss — a declared expectation that did
+    /// not hold is the one this release publishes.</summary>
+    public IReadOnlyList<string>? Warnings { get; init; }
 }
 
 /// <summary>Split result: the full list of parts, each with its own reference.</summary>
@@ -2154,6 +2162,10 @@ public sealed record SplitResultDto
     public required long Revision { get; init; }
 
     public IReadOnlyList<string>? UnverifiedAspects { get; init; }
+
+    /// <summary>Non-fatal findings the caller must not miss — a declared expectation that did
+    /// not hold is the one this release publishes.</summary>
+    public IReadOnlyList<string>? Warnings { get; init; }
 }
 
 /// <summary>Cut result: what remained and what was removed, named explicitly.</summary>
@@ -2177,6 +2189,10 @@ public sealed record CutByPlaneResultDto
     public required long Revision { get; init; }
 
     public IReadOnlyList<string>? UnverifiedAspects { get; init; }
+
+    /// <summary>Non-fatal findings the caller must not miss — a declared expectation that did
+    /// not hold is the one this release publishes.</summary>
+    public IReadOnlyList<string>? Warnings { get; init; }
 
     /// <summary> The checks the verdict rests on: addressing (material removed from the NAMED body) and the integrity
     /// of unrelated bodies. They are published separately from <see cref="UnverifiedAspects"/>, because an empty
@@ -2612,7 +2628,8 @@ public sealed record SweepResult(
     double? VolumeMm3,
     BoundingBoxDto? BoundsMm,
     VerificationDto Verification,
-    IReadOnlyList<string> Notes);
+    IReadOnlyList<string> Notes,
+    IReadOnlyList<string>? Warnings = null);
 
 /// <summary>Loft result.</summary>
 public sealed record LoftResult(
@@ -2626,7 +2643,8 @@ public sealed record LoftResult(
     double? VolumeMm3,
     BoundingBoxDto? BoundsMm,
     VerificationDto Verification,
-    IReadOnlyList<string> Notes);
+    IReadOnlyList<string> Notes,
+    IReadOnlyList<string>? Warnings = null);
 
 /// <summary>Shell result.</summary>
 public sealed record ShellResult(
@@ -2638,7 +2656,8 @@ public sealed record ShellResult(
     double? VolumeMm3,
     BoundingBoxDto? BoundsMm,
     VerificationDto Verification,
-    IReadOnlyList<string> Notes);
+    IReadOnlyList<string> Notes,
+    IReadOnlyList<string>? Warnings = null);
 
 /// <summary>Sweep parameters read from the model. All fields are nullable: an empty field means "NOT READ", not
 /// zero.</summary>

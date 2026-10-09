@@ -153,11 +153,6 @@ public partial class Api5Session
         if (declared.IsDeclared)
         {
             checks.Add(DeclaredExpectation.Check("volume_delta", declared));
-            if (declared.IsRefusal)
-            {
-                throw DeclaredExpectation.Refusal(
-                    declared, "kompas_chamfer", "уменьшение объёма", document.Revision);
-            }
         }
         else if (volumePairRead)
         {
@@ -186,6 +181,10 @@ public partial class Api5Session
         if (declared.IsUnverifiable)
         {
             unverified.Insert(0, DeclaredExpectation.UnverifiableReason("уменьшение объёма", declared));
+        }
+        else if (declared.IsNotConfirmed)
+        {
+            unverified.Insert(0, DeclaredExpectation.NotConfirmedReason("уменьшение объёма", declared));
         }
         else if (!volumePairRead)
         {
@@ -217,7 +216,8 @@ public partial class Api5Session
                 bodiesAfter,
                 volumeAfter,
                 new VerificationDto(VerificationLevel.CallReturned, checks, unverified),
-                string.Join(", ", unwrapRoutes));
+                string.Join(", ", unwrapRoutes),
+                Warnings: DeclaredExpectation.Warnings(declared));
         }
 
         var reference = References.Register("feature", document.Id, document.Revision, api5Feature);
@@ -233,7 +233,8 @@ public partial class Api5Session
                 geometryConfirmed ? VerificationLevel.GeometryChecked : VerificationLevel.CallReturned,
                 checks,
                 unverified),
-            string.Join(", ", unwrapRoutes));
+            string.Join(", ", unwrapRoutes),
+            Warnings: DeclaredExpectation.Warnings(declared));
     }
 
     /// <summary>The last operation element with <c>type = 33</c> in the API5 tree; search by type and
@@ -475,11 +476,6 @@ public partial class Api5Session
         var declared = DeclaredExpectation.Evaluate(
             command.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
         checks.Add(DeclaredExpectation.Check("volume_after_update", declared));
-        if (declared.IsRefusal)
-        {
-            throw DeclaredExpectation.Refusal(
-                declared, "kompas_update_feature/" + ChamferFamily, "объём после правки", document.Revision);
-        }
 
         var volumeMatched = declared.IsConfirmed;
 
@@ -500,13 +496,17 @@ public partial class Api5Session
         {
             unverified.Insert(0, DeclaredExpectation.UnverifiableReason("объём после правки", declared));
         }
+        else if (declared.IsNotConfirmed)
+        {
+            unverified.Insert(0, DeclaredExpectation.NotConfirmedReason("объём после правки", declared));
+        }
         else if (!geometryConfirmed)
         {
             unverified.Insert(0,
                 "geometry_not_confirmed — правка применена, но измерение не подтвердило ожидаемую геометрию");
         }
 
-        return new UpdateFeatureResult(
+            return new UpdateFeatureResult(
             ToDto(References.Require(command.FeatureRef, document.Id, document.Revision), stateAfter.Name),
             ChamferFamily,
             sameFeature,
@@ -520,7 +520,8 @@ public partial class Api5Session
                 geometryConfirmed ? VerificationLevel.GeometryChecked : VerificationLevel.CallReturned,
                 checks,
                 unverified),
-            AngleReadBackDeg: after?.AngleDeg);
+            AngleReadBackDeg: after?.AngleDeg,
+            Warnings: DeclaredExpectation.Warnings(declared));
     }
 
     /// <summary>Edit the legs and side of an existing chamfer; the value is read back from the new
@@ -664,11 +665,6 @@ public partial class Api5Session
         var declared = DeclaredExpectation.Evaluate(
             command.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
         checks.Add(DeclaredExpectation.Check("volume_after_update", declared));
-        if (declared.IsRefusal)
-        {
-            throw DeclaredExpectation.Refusal(
-                declared, "kompas_update_feature/" + ChamferFamily, "объём после правки", document.Revision);
-        }
 
         var volumeMatched = declared.IsConfirmed;
 
@@ -681,6 +677,10 @@ public partial class Api5Session
         {
             unverified.Insert(0, DeclaredExpectation.UnverifiableReason("объём после правки", declared));
         }
+        else if (declared.IsNotConfirmed)
+        {
+            unverified.Insert(0, DeclaredExpectation.NotConfirmedReason("объём после правки", declared));
+        }
         else if (!geometryConfirmed)
         {
             unverified.Insert(0, valueStored
@@ -690,7 +690,7 @@ public partial class Api5Session
 
         BumpRevision(document, "chamfer.update");
 
-        return new UpdateFeatureResult(
+            return new UpdateFeatureResult(
             ToDto(References.Require(command.FeatureRef, document.Id, document.Revision), stateAfter.Name),
             ChamferFamily,
             sameFeature,
@@ -702,6 +702,7 @@ public partial class Api5Session
             new VerificationDto(
                 geometryConfirmed ? VerificationLevel.GeometryChecked : VerificationLevel.CallReturned,
                 checks,
-                unverified));
+                unverified),
+            Warnings: DeclaredExpectation.Warnings(declared));
     }
 }

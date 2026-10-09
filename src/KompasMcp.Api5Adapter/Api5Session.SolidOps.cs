@@ -135,19 +135,25 @@ public sealed partial class Api5Session
         consumed.AddRange(command.ToolBodyRefs);
 
         var unverified = new List<string>();
-        // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
-        // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
+        var checks = new List<NamedCheck>();
+        // The declared expectation is a FAILED CHECK with a warning when it did not hold, and a NAMED gap
+        // when it could not be compared — neither is a refusal.
+        // History: docs/decisions/adapter-core.md#declared-expectation-rule
         var declared = DeclaredExpectation.Evaluate(
             command.ExpectedVolumeMm3, totalVolume, () => ReReadTotalVolume(document));
-        if (declared.IsRefusal)
+
+        if (declared.IsDeclared)
         {
-            throw DeclaredExpectation.Refusal(
-                declared, "kompas_boolean", "суммарный объём тел документа", document.Revision);
+            checks.Add(DeclaredExpectation.Check("volume_expected", declared));
         }
 
         if (declared.IsUnverifiable)
         {
             unverified.Add(DeclaredExpectation.UnverifiableReason("суммарный объём тел документа", declared));
+        }
+        else if (declared.IsNotConfirmed)
+        {
+            unverified.Add(DeclaredExpectation.NotConfirmedReason("суммарный объём тел документа", declared));
         }
 
         return new BooleanResultDto
@@ -162,7 +168,9 @@ public sealed partial class Api5Session
             VolumeNote = "Сумма индивидуальных объёмов всех тел документа. Объём пространственного "
                 + "объединения — другая величина, и смешивать их нельзя.",
             Revision = document.Revision,
+            Checks = checks.Count == 0 ? null : checks,
             UnverifiedAspects = unverified.Count == 0 ? null : unverified,
+            Warnings = DeclaredExpectation.Warnings(declared),
         };
     }
 
@@ -489,15 +497,14 @@ public sealed partial class Api5Session
         if (declared.IsDeclared)
         {
             checks.Add(DeclaredExpectation.Check("volume_expected", declared));
-            if (declared.IsRefusal)
-            {
-                throw DeclaredExpectation.Refusal(
-                    declared, "kompas_cut_by_plane", "объём остатка", document.Revision);
-            }
 
             if (declared.IsUnverifiable)
             {
                 unverified.Add(DeclaredExpectation.UnverifiableReason("объём остатка", declared));
+            }
+            else if (declared.IsNotConfirmed)
+            {
+                unverified.Add(DeclaredExpectation.NotConfirmedReason("объём остатка", declared));
             }
         }
         else
@@ -524,6 +531,7 @@ public sealed partial class Api5Session
             UntouchedBodies = untouched,
             Revision = document.Revision,
             UnverifiedAspects = unverified.Count == 0 ? null : unverified,
+            Warnings = DeclaredExpectation.Warnings(declared),
             Checks = checks,
         };
     }
@@ -1788,12 +1796,16 @@ public sealed partial class Api5Session
 
         // A declared expectation did not match — this is a refusal, not "not checked". Returning "success
         // at a lower level" would pass the unreached off as reached: the edit has a caller who declared
-        // the number, and he is entitled to learn that the number was not obtained.
-        if (declaredVolume.IsRefusal || declaredVolume.IsUnverifiable)
+        // the number, and he is entitled to learn that the number was not obtained. INVARIANT: this
+        // refusal predates the softening of the declared-expectation rule and is deliberately NOT
+        // softened — under a rigid transformation the volume is an invariant, so a mismatch means the
+        // recorded transform was not a placement transform.
+        // History: docs/decisions/adapter-core.md#declared-expectation-rule
+        if (declaredVolume.IsNotConfirmed || declaredVolume.IsUnverifiable)
         {
             throw new KompasContractException(
                 ErrorCodes.NoGeometryChange,
-                declaredVolume.IsRefusal
+                declaredVolume.IsNotConfirmed
                     ? "Правка выполнена, но объём не совпал с объявленным: ожидалось "
                       + Num(declaredVolume.ExpectedMm3) + ", измерено " + Num(volumeAfter)
                       + ". У жёсткого преобразования объём — инвариант, поэтому расхождение означает, что "
@@ -2574,6 +2586,10 @@ public sealed partial class Api5Session
                 {
                     unverified.Add(DeclaredExpectation.UnverifiableReason("объём остатка", declaredRemaining));
                 }
+                else if (declaredRemaining.IsNotConfirmed)
+                {
+                    unverified.Add(DeclaredExpectation.NotConfirmedReason("объём остатка", declaredRemaining));
+                }
             }
 
             if (command.ExpectedBboxMm is BoundingBoxDto expectedBox)
@@ -2841,7 +2857,11 @@ public sealed partial class Api5Session
             }
         }
 
-        var volumeMatched = !declaredDocument.IsRefusal && !declaredDocument.IsUnverifiable;
+        // INVARIANT: this NO_GEOMETRY_CHANGE refusal predates the softening of the declared-expectation
+        // rule and is deliberately NOT softened by it: on a boolean EDIT the mismatch means the rewritten
+        // kind did not produce the declared geometry.
+        // History: docs/decisions/adapter-core.md#declared-expectation-rule
+        var volumeMatched = !declaredDocument.IsNotConfirmed && !declaredDocument.IsUnverifiable;
         var bboxOk = command.ExpectedBboxMm is null || bboxMatched;
 
         if (!volumeMatched || !bboxOk)

@@ -178,15 +178,14 @@ public partial class Api5Session
         if (declared.IsDeclared)
         {
             checks.Add(DeclaredExpectation.Check("expected_volume", declared));
-            if (declared.IsRefusal)
-            {
-                throw DeclaredExpectation.Refusal(
-                    declared, "kompas_shell", "объём после операции", document.Revision);
-            }
 
             if (declared.IsUnverifiable)
             {
                 unverified.Add(DeclaredExpectation.UnverifiableReason("объём после операции", declared));
+            }
+            else if (declared.IsNotConfirmed)
+            {
+                unverified.Add(DeclaredExpectation.NotConfirmedReason("объём после операции", declared));
             }
 
             geometryConfirmed = declared.IsConfirmed;
@@ -218,7 +217,8 @@ public partial class Api5Session
                 geometryConfirmed ? VerificationLevel.GeometryChecked : VerificationLevel.CallReturned,
                 checks,
                 unverified),
-            new List<string>());
+            new List<string>(),
+            Warnings: DeclaredExpectation.Warnings(declared));
     }
 
     /// <summary>Attach the removed faces to the definition. Returns the attached count: fewer than

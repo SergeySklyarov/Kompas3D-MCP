@@ -267,11 +267,6 @@ public partial class Api5Session
         if (declared.IsDeclared)
         {
             checks.Add(DeclaredExpectation.Check("volume_expected", declared));
-            if (declared.IsRefusal)
-            {
-                throw DeclaredExpectation.Refusal(
-                    declared, "kompas_rotated", "объём после операции", document.Revision);
-            }
         }
 
         var numericMatch = declared.IsDeclared ? declared.IsConfirmed : (bool?)null;
@@ -289,6 +284,10 @@ public partial class Api5Session
         if (declared.IsUnverifiable)
         {
             unverified.Add(DeclaredExpectation.UnverifiableReason("объём после операции", declared));
+        }
+        else if (declared.IsNotConfirmed)
+        {
+            unverified.Add(DeclaredExpectation.NotConfirmedReason("объём после операции", declared));
         }
         else if (!geometryConfirmed)
         {
@@ -352,7 +351,8 @@ public partial class Api5Session
                     geometryConfirmed ? VerificationLevel.GeometryChecked : VerificationLevel.CallReturned,
                     checks,
                     unverified),
-                axisHandle.Notes);
+                axisHandle.Notes,
+                Warnings: DeclaredExpectation.Warnings(declared));
         }
 
         return new RotatedResult(
@@ -369,7 +369,8 @@ public partial class Api5Session
                 geometryConfirmed ? VerificationLevel.GeometryChecked : VerificationLevel.CallReturned,
                 checks,
                 unverified),
-            axisHandle.Notes);
+            axisHandle.Notes,
+            Warnings: DeclaredExpectation.Warnings(declared));
     }
 
     /// <summary>Read the parameters of an EXISTING rotation feature for <c>kompas_get_feature</c>.</summary>
@@ -653,18 +654,16 @@ public partial class Api5Session
         if (declared.IsDeclared)
         {
             checks.Add(DeclaredExpectation.Check("volume_expected", declared));
-            if (declared.IsRefusal)
-            {
-                throw DeclaredExpectation.Refusal(
-                    declared, "kompas_update_feature/" + RotationFamily, "объём после правки",
-                    document.Revision);
-            }
         }
 
         var unverified = new List<string>();
         if (declared.IsUnverifiable)
         {
             unverified.Add(DeclaredExpectation.UnverifiableReason("объём после правки", declared));
+        }
+        else if (declared.IsNotConfirmed)
+        {
+            unverified.Add(DeclaredExpectation.NotConfirmedReason("объём после правки", declared));
         }
         else if (!declared.IsDeclared)
         {
@@ -689,7 +688,8 @@ public partial class Api5Session
             new VerificationDto(
                 geometryConfirmed ? VerificationLevel.GeometryChecked : VerificationLevel.CallReturned,
                 checks,
-                unverified));
+                unverified),
+            Warnings: DeclaredExpectation.Warnings(declared));
     }
 
     /// <summary>Read one slot of the <c>IRotated.Angle</c> pair without failing the read.</summary>
@@ -1046,4 +1046,5 @@ public sealed record RotatedResult(
     double? VolumeMm3,
     BoundingBoxDto? BoundsMm,
     VerificationDto Verification,
-    IReadOnlyList<string> AxisNotes);
+    IReadOnlyList<string> AxisNotes,
+    IReadOnlyList<string>? Warnings = null);

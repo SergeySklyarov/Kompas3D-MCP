@@ -72,6 +72,10 @@ public sealed partial class Api5Session
             _sketchPlaneBase[reference.Id] = basePlane;
         }
 
+        // The plane as it was DECLARED is kept for one purpose: a refused extrusion has to say where the
+        // profile lay. It is the same string the create answer carries, so the two records cannot drift.
+        _sketchPlaneHint[reference.Id] = PlaneHint(command.Plane, support.Entity);
+
         return ToDto(reference, PlaneHint(command.Plane, support.Entity));
     }
 
@@ -184,6 +188,11 @@ public sealed partial class Api5Session
     /// built on a referenced plane has no entry: the mapping from sketch axes to model axes for
     /// that case is not measured, so the target check reports "not checked" instead of assuming it.</summary>
     private readonly Dictionary<string, PlaneBase> _sketchPlaneBase = new(StringComparer.Ordinal);
+
+    /// <summary>The support plane as it was DECLARED when the sketch was created, in the same wording the
+    /// create answer carries. Kept for one purpose: a refused extrusion has to say where the profile lay,
+    /// and the declared offset is not readable back from the model.</summary>
+    private readonly Dictionary<string, string> _sketchPlaneHint = new(StringComparer.Ordinal);
 
     public EditSketchResult EditSketch(EditSketchCommand command)
     {
@@ -1056,6 +1065,12 @@ public sealed partial class Api5Session
         var document = target.Document;
         var operationName = command.Operation.ToString().ToLowerInvariant();
 
+        // The ordinal of this extrusion inside the session, taken before anything is touched: it is one of
+        // the two numbers that tell a refusal early in a fresh session from one deep into a long run, and
+        // it has to be the ordinal of the ATTEMPT, not of the successes.
+        // History: docs/decisions/adapter-features.md#create-false-snapshot
+        var ordinal = ++_extrudeOrdinal;
+
         // <c>base</c> creates the first body, so a target sent with it names nothing. The Host refuses the
         // pair before COM; repeated here because a hand-built IPC frame bypasses the Host's rule table, and
         // accepting the field only to ignore it would claim a target had been honoured.
@@ -1167,12 +1182,20 @@ public sealed partial class Api5Session
 
         if (!feature.Create())
         {
+            var snapshot = ObserveRefusedCreate(document, command, operationName, direction, ordinal);
             ComApartment.Release(feature);
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
-                "Entity.Create() выдавливания вернул false: признак не появился.",
+                "Entity.Create() выдавливания вернул false: признак не появился. ПРИЧИНА НЕ УСТАНОВЛЕНА: " +
+                "документированного маршрута её чтения (код последней ошибки, сообщение ядра) в справке " +
+                "установленной версии нет. Состояние документа, эскиза и сеанса на момент отказа — в " +
+                "details." + FeatureCreateFailure.DetailKey + ".",
                 RetryPolicy.SameOperationId,
-                partialEffects: true);
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    [FeatureCreateFailure.DetailKey] = FeatureCreateFailure.Snapshot(snapshot),
+                });
         }
 
         document.Document3D.RebuildDocument();
@@ -2514,6 +2537,98 @@ public sealed partial class Api5Session
 
     private static string FormatDepth(ExtrudeCommand command) =>
         command.DepthMm is double depth ? $"{depth:0.###} мм" : "не задана (насквозь)";
+
+    /// <summary>What is read about the document, the sketch and the session at a refused
+    /// <c>Create()</c>.</summary>
+    /// <remarks>INVARIANT: every route here is a READ; the only state this method changes is its own
+    /// counters. A route that cannot answer is NAMED inside the snapshot rather than dropped, so the same
+    /// keys appear on every refusal. LIMIT: the reason for the refusal is not read — the installed help
+    /// documents no route for it.
+    /// History: docs/decisions/adapter-features.md#create-false-snapshot</remarks>
+    private FeatureCreateFailure.Observation ObserveRefusedCreate(
+        DocumentEntry document,
+        ExtrudeCommand command,
+        string operationName,
+        short directionType,
+        int ordinal)
+    {
+        _extrudeCreateFalseCount++;
+
+        var through = command.EndCondition == ExtrudeEndCondition.Through;
+        var endCondition = (through ? "through" : "blind")
+            + $" ({(through ? EndConditionThrough : EndConditionBlind)})";
+
+        string? sketchState = null;
+        string? sketchStateUnavailable = null;
+        try
+        {
+            var status = GetSketchStatus(new GetSketchStatusCommand { SketchRef = command.SketchRef });
+            sketchState = $"{status.DefinitionStatus} ({status.NativeStateName ?? "имя не объявлено"}, "
+                + $"raw={status.RawState?.ToString() ?? "null"})";
+        }
+        catch (KompasContractException ex)
+        {
+            sketchStateUnavailable = "не прочитано: " + ex.Message;
+        }
+
+        int? profileEntities = null;
+        double? profileArea = null;
+        string? profileAreaUnavailable = null;
+        if (_sketchProfiles.TryGetValue(command.SketchRef, out var profile))
+        {
+            profileEntities = profile.Entities.Count;
+            var outcome = profile.Outcome;
+            profileArea = outcome.AreaMm2;
+            profileAreaUnavailable = outcome.UnavailableReason;
+        }
+
+        return new FeatureCreateFailure.Observation(
+            Operation: operationName,
+            DirectionType: directionType,
+            EndCondition: endCondition,
+            DepthMm: through ? null : command.DepthMm,
+            DraftMm: null,
+            TargetBodyRef: command.TargetBodyRef,
+            SketchPlane: _sketchPlaneHint.TryGetValue(command.SketchRef, out var hint) ? hint : null,
+            FeatureCount: TryCountFeatures(document),
+            BodyCount: TryCountBodies(document),
+            SketchState: sketchState,
+            SketchStateUnavailable: sketchStateUnavailable,
+            SketchProfileEntities: profileEntities,
+            SketchProfileAreaMm2: profileArea,
+            SketchProfileAreaUnavailable: profileAreaUnavailable,
+            SessionSeconds: _sessionClock.Elapsed.TotalSeconds,
+            OperationOrdinal: ordinal,
+            CreateFalseCount: _extrudeCreateFalseCount);
+    }
+
+    /// <summary>Feature count that keeps "could not be read" apart from "zero features".</summary>
+    /// <remarks>Why not <see cref="CountFeatures"/>: it answers 0 when the collection refuses, and in this
+    /// snapshot 0 is a legitimate reading — merging the two would make an unread count look measured.
+    /// The route is the same one <c>kompas_get_context</c> uses, including the refresh.</remarks>
+    private int? TryCountFeatures(DocumentEntry document)
+    {
+        try
+        {
+            var collection = (ksEntityCollection)document.PartNow()
+                .EntityCollection(KompasObjectTypes.Of(KompasObjectTypes.OperationElement));
+            collection.refresh();
+            return collection.GetCount();
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Body count that keeps "could not be read" apart from "no bodies".</summary>
+    /// <remarks><see cref="CountBodies"/> already answers -1 on failure; that value is turned into null
+    /// here so the snapshot does not publish a number that only means "not read".</remarks>
+    private int? TryCountBodies(DocumentEntry document)
+    {
+        var count = CountBodies(document);
+        return count < 0 ? null : count;
+    }
 
     /// <summary>Extent of the material a through operation traverses, in mm, along the axis the sketch is
     /// normal to. Null when the plane resolves to none of the three model axes: the expectation then stays

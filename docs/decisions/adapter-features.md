@@ -502,3 +502,50 @@ Selection runs not by name and not by index but by the entity having a profile a
 **Дословно из кода (verbatim, EN).** The first revision relied on QI alone and thus silently lost the feature: the branch name ("by QI") was passed off as the recognition result. The type number is the route for a FEATURE FROM THE TREE, not an identifier: it changes between creation time and the tree (for an extrusion 24 → 25, MEASURED P2.3), so recognition must use the SET of numbers of the three rotation kinds, not a single number remembered at creation.
 
 The question "does a `ksEntity` from the tree answer to QI(IRotated)" was tested on 18.09.2026 in three ways: an `is` cast, a runtime-type cast to the interface, and a direct call of the `Angle` member with interception - all three REFUSED on a feature that demonstrably reads from the model (angle 360, type 29, live UpdateStamp). So the QI branch is kept here as a fallback for a payload from the reference registry, but the RELIANCE is on the tree number: otherwise recognition would fall back to a means the tree object does not answer.
+
+## <a id="create-false-snapshot"></a>Отказ `Entity.Create()`: что читается и чего прочитать нельзя (наряд ENTITY_CREATE_FALSE)
+
+**Зачем.** Клиент (OBS-019) получил `GEOMETRY_FAILED: Entity.Create=false` на вырезе cut/blind/positive
+по явному телу, тогда как through/symmetric тем же профилем у него прошли. В первом полном прогоне
+доводки 09.10.2026 тем же сообщением упали строки F08.05/06/07 (каскад 30 FAIL), повторные прогоны и
+`--f08-only` прошли. Отказ единичный и по требованию не воспроизводится — поэтому снимок пишется В
+МОМЕНТ отказа, а не разбирается потом по уцелевшим журналам.
+
+**Документированного маршрута причины отказа НЕТ — это измерено, а не предположено.** Полнотекстовый
+поиск по установленной справке v24 (`Help/KOMPAS_ru-RU.zip`, 11 088 страниц) дал ноль вхождений на
+`GetLastError`, `LastError`, `ErrorCode`, `HRESULT`, «код возврата», «обработка ошибок» и `objectError`.
+Справочник SDK (страницы вида `ksplacement_getvector.html`, `ievolutions_add.html`), на который
+ссылается `docs/API_COMPLIANCE.md`, в установке ОТСУТСТВУЕТ: поиск по `D://Programs` не находит ни
+одной такой страницы. Причина отказа поэтому не читается, и по §0 наряда маршрут не угадывается.
+
+**Что читается вместо неё** (`FeatureCreateFailure.Snapshot`, `Api5Session.ObserveRefusedCreate`):
+параметры, переданные в определение (`direction_type`, `end_condition`, `depth_mm`, `draft_mm`,
+`target_body_ref`, плоскость эскиза в той же формулировке, что несёт ответ `kompas_create_sketch`);
+состояние документа (`feature_count`, `body_count`); состояние эскиза (`ISketch.ConstraintsState` тем
+же маршрутом, что `kompas_get_sketch_status`); профиль, нарисованный этим сеансом (число примитивов и
+аналитическая площадь с причиной её отсутствия); возраст сеанса и порядковый номер выдавливания.
+
+**INVARIANT.** Набор ключей ОДИН И ТОТ ЖЕ на каждом отказе; непрочитанное значение — строка с
+причиной, а не `null` и не пропущенный ключ. Различие «не задано» (тело не выбиралось) и «не
+прочитано» (маршрут не ответил) сохранено: это разные утверждения о разных вещах.
+
+**Чего снимок НЕ содержит и почему.** `ksFeature.objectError` и `IsValid()` объявлены в TLB и уже
+публикуются инструментом `kompas_get_feature` как `object_error`/`is_valid`, но ни одной цитируемой
+страницы у них в установленном наборе документации нет, а в `docs/API_COMPLIANCE.*` член
+`objectError` не значится вовсе. Добавлять новый диагностический маршрут без документации §0
+запрещает, поэтому он не добавлен; вопрос «покрыт ли документацией уже существующий чтение в
+`kompas_get_feature`» назван отдельной находкой, а не закрыт здесь.
+
+**Порядковый номер считает ВЫДАВЛИВАНИЯ, а не команды** (`_extrudeOrdinal`), а возраст сеанса — от
+создания `Api5Session`, то есть от старта процесса Worker. Обе величины сравнимы только между
+прогонами этого прибора, и это названо в самом ответе.
+
+**Отказ упавшей мутации двигает ревизию.** Измерено на этом же наряде: `kompas_extrude`, отказавший
+`NO_GEOMETRY_CHANGE`, вернул `revision_after = null`, и следующий вызов с прежней ревизией получил
+`REVISION_CONFLICT` («ожидалась 6, фактически 7»). Причина: признак СОЗДАН и остался в дереве, модель
+изменилась. Клиент обязан перечитать контекст после отказа; прибор делает это перечитыванием
+(`rev_now`), а не выдумыванием номера.
+
+**Ссылка на тело не является устойчивым идентификатором.** Измерено на сырых ответах клиента: два
+`list_bodies` подряд на ОДНОЙ ревизии 12 вернули РАЗНЫЕ `body_ref` для тех же тел. Поэтому строки
+группы `EC9` опознают тело по ГАБАРИТУ, а ссылку берут из свежего чтения.

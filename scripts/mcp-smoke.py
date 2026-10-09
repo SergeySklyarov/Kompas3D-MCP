@@ -7,7 +7,8 @@ hide.
 
 Usage:
   python scripts/mcp-smoke.py [--host <exe>] [--worker <exe>] [--config <json>]
-                              [--report <json>] [--keep]
+                              [--report <json>] [--report-overwrite] [--keep]
+  python scripts/mcp-smoke.py --self-test
   python scripts/mcp-smoke.py --rotation-only | --hole-only | --fillet-only | --b3-only | --b4-only
                               | --b5-only | --drawing-only | ...
 
@@ -16,6 +17,12 @@ accepted: the package is only proven by the binary it actually ships, not by the
 to the sources. With an explicit `--host` the Worker is taken from beside that Host unless
 `--worker` says otherwise; the Debug Worker path below would otherwise silently redirect a delivery
 acceptance back onto the developer's build tree.
+
+Every run writes its report into its OWN directory, `scratch/mcp-smoke/runs/<UTC>-<group>-<commit>/`,
+together with the Host and Worker journals of that run; the former shared name stays behind as a copy
+of the LAST run. `--report` names the delivery acceptance path and refuses to overwrite an existing
+file unless `--report-overwrite` is passed. `--self-test` checks the instrument itself and needs
+neither a built Host nor a configuration.
 """
 
 import base64
@@ -25,6 +32,7 @@ import json
 import math
 import os
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -219,6 +227,10 @@ class Report:
         # отчёта о прогоне дерева исходников: одинаковые строки, одинаковая метрика, разные
         # бинари. Заполняется в main(), когда пути уже разрешены.
         self.context = {}
+        # КОПИИ отчёта по другим путям. Основной путь — каталог ЭТОГО прогона; сюда попадают
+        # прежнее общее имя («последний прогон») и явный путь приёмки поставки (`--report`).
+        # Копия, а не перемещение: единственный экземпляр доказательств у прогона уже есть.
+        self.mirror_paths = []
 
     def add(self, cid, desc, verdict, detail="", details=None):
         """`detail` — короткая сводка для строки; `details` — полные данные измерения.
@@ -260,6 +272,13 @@ class Report:
                 "действие названо именем строки (scratch/_build_api_compliance.py, action_signatures).")
         with open(self.path, "w", encoding="utf-8") as fh:
             json.dump(payload, fh, ensure_ascii=False, indent=2)
+        for mirror in self.mirror_paths:
+            target = os.path.abspath(mirror)
+            if target == os.path.abspath(self.path):
+                continue
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            shutil.copyfile(self.path, target)
+            print(f"  копия отчёта: {target}")
         counts = {}
         for r in self.rows:
             counts[r["verdict"]] = counts.get(r["verdict"], 0) + 1
@@ -363,6 +382,232 @@ def file_sha256(path):
         return digest.hexdigest()
     except OSError:
         return ""
+
+
+# -----------------------------------------------------------------------------------------------
+# КАТАЛОГ ПРОГОНА: у каждого запуска СВОЙ отчёт и СВОИ журналы
+# -----------------------------------------------------------------------------------------------
+#
+# ЗАЧЕМ. До 09.10.2026 отчёт прогона лежал под одним общим именем, и повторный прогон затирал
+# прежний. Измерено 09.10.2026: отчёт первого полного прогона доводки (30 FAIL в F08) исчез -
+# уцелели только журнал хоста и журнал операций сеанса, и причину отказа пришлось разбирать по ним.
+# Правило «упавший прогон сохраняется и называется» было невыполнимо технически, пока имя одно на
+# все прогоны. Здесь у каждого запуска свой каталог `runs/<UTC>-<группа>-<коммит>[-dirty]/`, а
+# прежнее имя остаётся КОПИЕЙ последнего прогона: привычный путь не пропадает, но перестаёт быть
+# единственным экземпляром. Ничего не удаляется - накопление называет отчёт, решение за заказчиком.
+
+RUN_GROUPS = (
+    # (ключ ветки, слаг каталога, имя файла отчёта, заголовок). Порядок = приоритет: набор
+    # `--a-only --b-only` разрешается первым совпадением, ровно как в прежней цепочке условий.
+    ("contract", "contract", "smoke-report.json",
+     "Приёмка контракта: схемы, отказы до COM, политика путей"),
+    ("chamfer", "chamfer", "chamfer-acceptance.json", "Приёмка SM-11: фаска через MCP"),
+    ("fillet", "fillet", "fillet-acceptance.json", "Приёмка SM-09: скругление через MCP"),
+    ("extrusion", "extrusion", "extrusion-acceptance.json", "Приёмка SM-02: выдавливания через MCP"),
+    ("hole", "hole", "hole-acceptance.json", "Приёмка SM-07: родное отверстие через MCP"),
+    ("rotation", "rotation", "rotation-acceptance.json", "Приёмка SM-03: вращение через MCP"),
+    ("sketch_status", "sketch-status", "sketch-status-acceptance.json",
+     "Приёмка определённости эскиза через MCP"),
+    ("b3", "b3", "b3-acceptance.json",
+     "Приёмка B3: булевы операции, разделение, отсечение и перенос через MCP"),
+    ("b3l", "b3l", "b3l-acceptance.json",
+     "Приёмка B3L: жизненный цикл признаков B3 (discover, подавление, удаление) через MCP"),
+    ("b3m", "b3m", "b3m-acceptance.json",
+     "Приёмка B3M: десять действий наряда §7 по каждому из 10 режимов B3 через MCP"),
+    ("b3c", "b3c", "b3c-acceptance.json",
+     "Приёмка B3C: последовательные преобразования с одинаковым отображаемым именем (наряд §4.3)"),
+    ("dirty", "dirty", "dirty-acceptance.json",
+     "Приёмка DL: сохранённость документа и политика закрытия (refuse/save/discard)"),
+    ("b4", "b4", "b4-acceptance.json",
+     "Приёмка B4: массивы по сетке, по концентрической сетке и зеркальный массив через MCP"),
+    ("b5", "b5", "b5-acceptance.json",
+     "Приёмка B5: кинематика (SM-04), сечения (SM-05) и оболочка (SM-13) через MCP"),
+    ("f08", "f08", "f08-acceptance.json",
+     "Приёмка F08: десять действий по каждому режиму B1/B2 и эскизу (остаток F-08)"),
+    ("mania", "mania", "mania-acceptance.json",
+     "Приёмка MANIA: сценарий «Скоба Model Mania 2021» от эскиза до переоткрытия"),
+    ("dep", "dep", "dep-acceptance.json",
+     "Приёмка DEP: обязательный объём общих зависимостей профиля через MCP"),
+    ("image", "image", "image-acceptance.json",
+     "Приёмка IMG: растровый снимок модели (строка AUX-IMAGE.raster_export) через MCP"),
+    ("nested", "nested", "nested-acceptance.json",
+     "Приёмка NEST: вложенные контуры и несколько замкнутых контуров (критерий dep.sketch.entities)"),
+    ("assembly", "assembly", "assembly-acceptance.json",
+     "Приёмка ASM: минимальные сборки через MCP (наряд C1, профиль assemblies-minimal-v1)"),
+    ("mate", "mate", "mate-acceptance.json",
+     "Приёмка MATE: сопряжения сборки через MCP (блок C2, профиль mates-minimal-v1)"),
+    ("interference", "interference", "interference-acceptance.json",
+     "Приёмка INT: пересечения и зазоры между компонентами сборки (блок G1, профиль "
+     "assembly-interference-minimal-v1)"),
+    ("sketch_bulk", "sketch-bulk", "sketch-bulk-acceptance.json",
+     "Приёмка SB: массовая геометрия эскиза — пределы, нативная полилиния, сплайн (блок G2, профиль "
+     "sketch-bulk-minimal-v1)"),
+    ("drawing", "drawing", "drawing-acceptance.json",
+     "Приёмка DRW: чертежи — стандартные виды, размеры, основная надпись, экспорт (блок DRW, профиль "
+     "drawings-minimal-v1)"),
+    ("variables_material", "variables-material", "variables-material-acceptance.json",
+     "Приёмка VM: внешние переменные детали и материал через MCP (блок VM, профиль "
+     "variables-material-minimal-v1)"),
+    ("pattern_orientation", "pattern-orientation", "pattern-orientation-acceptance.json",
+     "Приёмка PO: ориентация экземпляров кругового массива через MCP (наряд MCP-015)"),
+    ("release_040", "release-040", "release-040-acceptance.json",
+     "Приёмка R40: ссылки на эскиз и вспомогательную геометрию, честная самопроверка (наряд RELEASE_040)"),
+    ("client_bugs_20261008", "client-bugs-20261008", "client-bugs-20261008-acceptance.json",
+     "Приёмка E08: находки клиента после 0.4.0 — площадь из дуг, знак sweep_deg, массив операций, "
+     "sketch_ref (наряд CLIENT_BUGS_20261008)"),
+    ("client_bugs_20261009", "client-bugs-20261009", "client-bugs-20261009-acceptance.json",
+     "Приёмка CB9: находки клиента в CP05/CP05b — направление выреза, ложное NO_GEOMETRY_CHANGE, "
+     "габарит контекста, занятый файл (наряд CLIENT_BUGS_20261009)"),
+    ("entity_create", "entity-create-20261009", "entity-create-20261009-acceptance.json",
+     "Приёмка EC9: нерегулярный Entity.Create()=false — профиль клиента OBS-019, долгий сеанс, откат "
+     "(наряд ENTITY_CREATE_FALSE)"),
+)
+
+VERTICAL_GROUP = ("vertical", "smoke-report.json",
+                  "Интеграционный прогон вертикального сценария через MCP")
+
+
+def selected_run_group(selected):
+    """(слаг, имя файла отчёта, заголовок) для набора выбранных веток.
+
+    Чистая функция, а не цепочка условий в `main()`: имя отчёта и имя каталога прогона обязаны
+    выводиться из ОДНОГО решения, иначе каталог назовёт одну группу, а отчёт внутри — другую.
+    """
+    for key, slug, filename, title in RUN_GROUPS:
+        if selected.get(key):
+            return slug, filename, title
+    return VERTICAL_GROUP
+
+
+def run_directory_name(started_utc, group, commit, dirty):
+    """Имя каталога прогона: `<UTC-время>-<группа>-<короткий коммит>[-dirty]`.
+
+    `-dirty` не украшение. Коммит в имени описывает ДЕРЕВО ИСХОДНИКОВ, а собранный бинарь при
+    незакоммиченных правках этому коммиту не соответствует: имя, которое об этом молчит, читается
+    как «прогон шёл на коммите X», и доказательство пришлось бы разбирать заново.
+    """
+    stamp = started_utc.replace("-", "").replace(":", "").replace("T", "-")[:15]
+    return f"{stamp}-{group}-{commit}" + ("-dirty" if dirty else "")
+
+
+def create_run_directory(workdir, started_utc, group, commit, dirty):
+    """Создать каталог ЭТОГО прогона и вернуть путь.
+
+    Различитель `-2`, `-3`, … нужен потому, что два прогона одной группы подряд — обычное дело
+    (сверка «до/после»), а время в имени имеет точность до секунды. Без различителя второй прогон
+    лёг бы в каталог первого и снова стал бы его единственным экземпляром.
+    """
+    runs = os.path.join(workdir, "runs")
+    os.makedirs(runs, exist_ok=True)
+    base = run_directory_name(started_utc, group, commit, dirty)
+    name, index = base, 1
+    while os.path.exists(os.path.join(runs, name)):
+        index += 1
+        name = f"{base}-{index}"
+    path = os.path.join(runs, name)
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def git_state(root):
+    """(короткий коммит, признак грязного дерева) рабочего дерева исходников.
+
+    Коммит берётся у ДЕРЕВА, а не у собранного бинаря: имя каталога прогона нужно раньше, чем Хост
+    ответит `serverInfo`, а журналы Хоста обязаны лежать уже внутри этого каталога. Штамп собранного
+    бинаря (`<Version>+<коммит>`) читается позже и кладётся рядом в `run.json`: расхождение между
+    ними и есть признак сборки не из этого дерева.
+    """
+    def run(*args):
+        try:
+            done = subprocess.run(["git"] + list(args), cwd=root, capture_output=True,
+                                  text=True, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            return ""
+        return done.stdout.strip() if done.returncode == 0 else ""
+
+    return (run("rev-parse", "--short", "HEAD") or "nocommit"), bool(run("status", "--porcelain"))
+
+
+def report_path_decision(path, overwrite):
+    """(можно ли писать, объяснение) для ЯВНОГО пути приёмки (`--report`).
+
+    Отказ, а не подстановка «похожего» имени: путь приёмки поставки называет заказчик, и подмена его
+    на соседнее имя сделала бы доказательство ненаходимым по объявленному пути. Отказ обязан назвать
+    занятый файл и оба выхода из положения, иначе он неотличим от «прибор не смог записать».
+    """
+    if os.path.exists(path) and not overwrite:
+        return False, (
+            f"Отчёт по пути {path} уже есть — он НЕ затирается. Прогон, оставивший его, — "
+            f"единственный экземпляр своих доказательств. Дайте другой путь или повторите с "
+            f"--report-overwrite, если прежний отчёт сохранять не нужно.")
+    return True, f"Отчёт приёмки: {path}"
+
+
+def write_run_manifest(run_dir, payload):
+    """`run.json` каталога прогона: чем этот прогон был и на чём шёл."""
+    path = os.path.join(run_dir, "run.json")
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, ensure_ascii=False, indent=2)
+    return path
+
+
+def instrument_self_test():
+    """Самопроверка прибора прогонов (наряд ENTITY_CREATE_FALSE, п. 1.5).
+
+    Проверяются обе половины каждой из трёх вещей: имя каталога обязано РАЗЛИЧАТЬ два прогона и
+    повторять объявленный формат; явный путь приёмки обязан отказывать на занятом файле и писать на
+    свободном; каталог второго прогона подряд обязан быть другим и оба обязаны быть читаемы.
+    Отрицательные контроли стоят рядом с положительными: прибор, который проходит только
+    положительную половину, не отличает «различает» от «всегда пишет в одно место».
+    """
+    import tempfile
+
+    failures = []
+    checks = 0
+
+    def check(name, condition, detail=""):
+        nonlocal checks
+        checks += 1
+        print(f"  [{'PASS' if condition else 'FAIL'}] {name}" + (f" — {detail}" if detail else ""))
+        if not condition:
+            failures.append(name)
+
+    started = "2026-10-09T06:49:00+00:00"
+    plain = run_directory_name(started, "f08", "28d4610", False)
+    dirty = run_directory_name(started, "f08", "28d4610", True)
+    check("имя каталога: <UTC>-<группа>-<коммит>",
+          plain == "20261009-064900-f08-28d4610", plain)
+    check("грязное дерево названо в имени", dirty == plain + "-dirty", dirty)
+    check("разные группы дают разные имена",
+          run_directory_name(started, "b5", "28d4610", False) != plain)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        first = create_run_directory(tmp, started, "f08", "28d4610", False)
+        second = create_run_directory(tmp, started, "f08", "28d4610", False)
+        check("два прогона одной группы — два разных каталога", first != second,
+              f"{os.path.basename(first)} / {os.path.basename(second)}")
+        check("оба каталога существуют и читаемы",
+              os.path.isdir(first) and os.path.isdir(second))
+        check("различитель стоит рядом с первым каталогом",
+              os.path.dirname(first) == os.path.dirname(second)
+              and os.path.basename(second).startswith(os.path.basename(first)))
+
+        free = os.path.join(tmp, "delivery", "cb9-acceptance.json")
+        ok, message = report_path_decision(free, False)
+        check("свободный путь приёмки принимается", ok, message)
+        os.makedirs(os.path.dirname(free), exist_ok=True)
+        with open(free, "w", encoding="utf-8") as fh:
+            fh.write("{}")
+        ok, message = report_path_decision(free, False)
+        check("занятый путь приёмки отвергнут", not ok, message)
+        check("отказ называет занятый файл", free in message)
+        check("отказ называет выход (--report-overwrite)", "--report-overwrite" in message)
+        ok, message = report_path_decision(free, True)
+        check("--report-overwrite снимает отказ", ok, message)
+
+    print(f"\nСамопроверка прибора: {checks} проверок, "
+          f"{len(failures)} FAIL" + (f" — {failures}" if failures else ""))
+    return 1 if failures else 0
 
 
 def list_documents_check(client, rep, app_id, row_id="S02c", expect_nonempty=False):
@@ -5361,6 +5606,12 @@ def variables_material_checks(client, rep, app_id, workdir, reference_path=None)
     close(reopened)
 
 def main():
+    if "--self-test" in sys.argv[1:]:
+        # Самопроверка прибора прогонов (наряд ENTITY_CREATE_FALSE, п. 1.5). Стоит ПЕРВОЙ строкой:
+        # иначе она требовала бы собранного Хоста и конфигурации, то есть проверяла бы среду, а не
+        # прибор.
+        return instrument_self_test()
+
     # x64, not bin\Debug: the solution forces x64 (Directory.Build.props), so `dotnet build`
     # refreshes bin\x64\... only — the AnyCPU output that used to be picked here silently kept
     # running whatever was last compiled by an unrelated `dotnet test`.
@@ -5524,6 +5775,13 @@ def main():
     # групп: доказательство обязано находиться по ИМЕНИ строки (`CB9.<NN>`).
     client_bugs_20261009_only = "--client-bugs-20261009" in sys.argv
 
+    # Группа наряда ENTITY_CREATE_FALSE: одна группа EC9 на своём сеансе — нерегулярный
+    # `Entity.Create()=false`. Профиль клиента OBS-019 (смещённая плоскость, 16 примитивов,
+    # cut/blind/positive, явное тело), контроль того же профиля насквозь и в обратную сторону,
+    # строка отката и строка «что отказало». Отдельная ветка нужна по той же причине, что у прочих
+    # групп: доказательство обязано находиться по ИМЕНИ строки (`EC9.<NN>`).
+    entity_create_only = "--entity-create-20261009" in sys.argv
+
     # Домен ЧЕРТЕЖЕЙ (блок DRW, профиль `drawings-minimal-v1`): одна группа, свой сеанс, своя ветка.
     # Клетка матрицы обязана находиться по ИМЕНИ строки (`DRW.<NN>.<действие>`), а не по номеру в общем
     # потоке, — та же причина, что у прочих групп.
@@ -5537,72 +5795,71 @@ def main():
     variables_material_only = "--variables-material-only" in sys.argv
     vm_reference_doc = argument("--vm-reference-doc")
 
-    rep = Report(
-        ("Приёмка контракта: схемы, отказы до COM, политика путей" if only_contract
-         else "Приёмка SM-11: фаска через MCP" if chamfer_only
-         else "Приёмка SM-09: скругление через MCP" if fillet_only
-         else "Приёмка SM-02: выдавливания через MCP" if extrusion_only
-         else "Приёмка SM-07: родное отверстие через MCP" if hole_only
-         else "Приёмка SM-03: вращение через MCP" if rotation_only
-         else "Приёмка определённости эскиза через MCP" if sketch_status_only
-         else "Приёмка B3: булевы операции, разделение, отсечение и перенос через MCP" if b3_only
-         else "Приёмка B3L: жизненный цикл признаков B3 (discover, подавление, удаление) через MCP" if b3l_only
-         else "Приёмка B3M: десять действий наряда §7 по каждому из 10 режимов B3 через MCP" if b3m_only
-         else "Приёмка B3C: последовательные преобразования с одинаковым отображаемым именем (наряд §4.3)" if b3c_only
-         else "Приёмка DL: сохранённость документа и политика закрытия (refuse/save/discard)" if dirty_only
-         else "Приёмка B4: массивы по сетке, по концентрической сетке и зеркальный массив через MCP" if b4_only
-         else "Приёмка B5: кинематика (SM-04), сечения (SM-05) и оболочка (SM-13) через MCP" if b5_only
-         else "Приёмка F08: десять действий по каждому режиму B1/B2 и эскизу (остаток F-08)" if f08_only
-         else "Приёмка MANIA: сценарий «Скоба Model Mania 2021» от эскиза до переоткрытия" if mania_only
-         else "Приёмка DEP: обязательный объём общих зависимостей профиля через MCP" if dep_only
-        else "Приёмка IMG: растровый снимок модели (строка AUX-IMAGE.raster_export) через MCP" if image_only
-        else "Приёмка NEST: вложенные контуры и несколько замкнутых контуров (критерий dep.sketch.entities)" if nested_only
-        else "Приёмка ASM: минимальные сборки через MCP (наряд C1, профиль assemblies-minimal-v1)" if assembly_only
-        else "Приёмка MATE: сопряжения сборки через MCP (блок C2, профиль mates-minimal-v1)" if mate_only
-        else "Приёмка INT: пересечения и зазоры между компонентами сборки (блок G1, профиль assembly-interference-minimal-v1)" if interference_only
-        else "Приёмка SB: массовая геометрия эскиза — пределы, нативная полилиния, сплайн (блок G2, профиль sketch-bulk-minimal-v1)" if sketch_bulk_only
-        else "Приёмка DRW: чертежи — стандартные виды, размеры, основная надпись, экспорт (блок DRW, профиль drawings-minimal-v1)" if drawing_only
-        else "Приёмка VM: внешние переменные детали и материал через MCP (блок VM, профиль variables-material-minimal-v1)" if variables_material_only
-        else "Приёмка PO: ориентация экземпляров кругового массива через MCP (наряд MCP-015)" if pattern_orientation_only
-        else "Приёмка R40: ссылки на эскиз и вспомогательную геометрию, честная самопроверка (наряд RELEASE_040)" if release_040_only
-        else "Приёмка E08: находки клиента после 0.4.0 — площадь из дуг, знак sweep_deg, массив операций, sketch_ref (наряд CLIENT_BUGS_20261008)" if client_bugs_only
-        else "Приёмка CB9: находки клиента в CP05/CP05b — направление выреза, ложное NO_GEOMETRY_CHANGE, габарит контекста, занятый файл (наряд CLIENT_BUGS_20261009)" if client_bugs_20261009_only
-        else "Интеграционный прогон вертикального сценария через MCP"),
-        os.path.join(workdir, "chamfer-acceptance.json" if chamfer_only
-                     else "fillet-acceptance.json" if fillet_only
-                     else "extrusion-acceptance.json" if extrusion_only
-                     else "hole-acceptance.json" if hole_only
-                     else "rotation-acceptance.json" if rotation_only
-                     else "sketch-status-acceptance.json" if sketch_status_only
-                     else "b3-acceptance.json" if b3_only
-                     else "b3l-acceptance.json" if b3l_only
-                     else "b3m-acceptance.json" if b3m_only
-                     else "b3c-acceptance.json" if b3c_only
-                     else "dirty-acceptance.json" if dirty_only
-                     else "b4-acceptance.json" if b4_only
-                     else "b5-acceptance.json" if b5_only
-                     else "f08-acceptance.json" if f08_only
-                     else "mania-acceptance.json" if mania_only
-                     else "dep-acceptance.json" if dep_only
-                     else "image-acceptance.json" if image_only
-                     else "nested-acceptance.json" if nested_only
-                     else "assembly-acceptance.json" if assembly_only
-                     else "mate-acceptance.json" if mate_only
-                     else "interference-acceptance.json" if interference_only
-                     else "sketch-bulk-acceptance.json" if sketch_bulk_only
-                     else "drawing-acceptance.json" if drawing_only
-                     else "variables-material-acceptance.json" if variables_material_only
-                     else "pattern-orientation-acceptance.json" if pattern_orientation_only
-                     else "release-040-acceptance.json" if release_040_only
-                     else "client-bugs-20261008-acceptance.json" if client_bugs_only
-                     else "client-bugs-20261009-acceptance.json" if client_bugs_20261009_only
-                     else "smoke-report.json"))
+    # Набор выбранных веток -> ОДНО решение об имени группы. Заголовок, имя файла отчёта и имя
+    # каталога прогона выводятся из него вместе, поэтому каталог не может назвать одну группу, а
+    # отчёт внутри — другую.
+    selected = {
+        "contract": only_contract,
+        "chamfer": chamfer_only,
+        "fillet": fillet_only,
+        "extrusion": extrusion_only,
+        "hole": hole_only,
+        "rotation": rotation_only,
+        "sketch_status": sketch_status_only,
+        "b3": b3_only,
+        "b3l": b3l_only,
+        "b3m": b3m_only,
+        "b3c": b3c_only,
+        "dirty": dirty_only,
+        "b4": b4_only,
+        "b5": b5_only,
+        "f08": f08_only,
+        "mania": mania_only,
+        "dep": dep_only,
+        "image": image_only,
+        "nested": nested_only,
+        "assembly": assembly_only,
+        "mate": mate_only,
+        "interference": interference_only,
+        "sketch_bulk": sketch_bulk_only,
+        "drawing": drawing_only,
+        "variables_material": variables_material_only,
+        "pattern_orientation": pattern_orientation_only,
+        "release_040": release_040_only,
+        "client_bugs_20261008": client_bugs_only,
+        "client_bugs_20261009": client_bugs_20261009_only,
+        "entity_create": entity_create_only,
+    }
+    group, report_filename, report_title = selected_run_group(selected)
+
+    # КАТАЛОГ ЭТОГО ПРОГОНА создаётся ДО запуска Хоста: журналы Хоста и Воркера обязаны лежать
+    # внутри него, иначе упавший прогон снова оставит доказательства врозь от отчёта.
+    started_utc = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+    commit, tree_dirty = git_state(ROOT)
+    run_dir = create_run_directory(workdir, started_utc, group, commit, tree_dirty)
+    rep = Report(report_title, os.path.join(run_dir, report_filename))
+    # Прежнее общее имя остаётся КОПИЕЙ последнего прогона: привычный путь не пропадает, но и не
+    # является больше единственным экземпляром доказательств.
+    rep.mirror_paths.append(os.path.join(workdir, report_filename))
+
     report_override = argument("--report")
     if report_override:
         # Приёмка поставки обязана лежать отдельно от прогонов дерева исходников: общий путь
         # означал бы, что отчёт одной приёмки затирает отчёт другой и «до/после» неразличимы.
-        rep.path = os.path.abspath(report_override)
+        # Занятый путь не затирается молча: он назван, и названы оба выхода (см. решение ниже).
+        target = os.path.abspath(report_override)
+        allowed, message = report_path_decision(target, "--report-overwrite" in sys.argv)
+        print(message)
+        if not allowed:
+            return 2
+        rep.mirror_paths.append(target)
+
+    print(f"Каталог прогона: {run_dir}")
+    print(f"Дерево исходников: {commit}"
+          + (" — ГРЯЗНОЕ: есть незакоммиченные изменения, собранный бинарь этому коммиту может не "
+             "соответствовать" if tree_dirty else " — чистое"))
     os.makedirs(os.path.dirname(rep.path), exist_ok=True)
+
 
     if not os.path.exists(host):
         print("Host не собран:", host)
@@ -5619,9 +5876,17 @@ def main():
     # сервер, запущенный КЛИЕНТОМ. Измерено 18.09.2026: прогон приёмки по общей конфигурации добавил
     # в общий журнал 27 705 строк, то есть доказательство клиентского сеанса перестало быть
     # отличимым от шума прибора. В отчёт идёт ИСХОДНЫЙ путь: по нему отчёт привязывается к поставке.
-    measured_config = isolate_config(config, workdir, "smoke")
+    measured_config = isolate_config(config, run_dir, "smoke")
     rep.context = {
-        "started_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+        "started_utc": started_utc,
+        "run_directory": run_dir,
+        "run_group": group,
+        "source_commit": commit,
+        "source_tree_dirty": tree_dirty,
+        # Штамп собранного бинаря (`<Version>+<коммит>`) читается из serverInfo при initialize и
+        # кладётся сюда ниже: он называет, ЧТО исполнялось, тогда как `source_commit` — какое дерево
+        # запускало прибор. При грязном дереве эти два коммита расходятся, и это видно.
+        "build_stamp": None,
         "host_path": host,
         # И .exe, и .dll: apphost-заглушка не меняется при правках кода, и «хеш Host» по одному
         # .exe остался бы прежним после пересборки — то есть ничего не доказывал бы.
@@ -5634,7 +5899,10 @@ def main():
         "config_path": config,
         "config_path_effective": measured_config,
         "worker_path_env": os.environ.get("KOMPAS_MCP_WORKER_PATH", ""),
+        "report_path": rep.path,
+        "report_copies": rep.mirror_paths,
     }
+    write_run_manifest(run_dir, {"state": "started", "context": rep.context})
     print("Измеряется: " + json.dumps(rep.context, ensure_ascii=False))
 
     client = Client(host, measured_config)
@@ -5647,6 +5915,11 @@ def main():
             "clientInfo": {"name": "mcp-smoke", "version": "0"},
         }, timeout=60)
         info = init.get("serverInfo", {})
+        # Штамп сборки — единственное доказательство того, ЧТО исполнилось: `adapter_sha256` не
+        # различает исходники (измерено 09.10.2026: две сборки одного дерева с одним штампом дают
+        # разные хеши PE). Поэтому штамп идёт и в отчёт, и в консоль, и в `run.json`.
+        rep.context["build_stamp"] = info.get("version")
+        print(f"Штамп сборки (serverInfo.version): {info.get('version')}")
         rep.add("S01", "initialize: handshake проходит, serverInfo заполнен",
                 "PASS" if info.get("name") else "FAIL", json.dumps(info, ensure_ascii=False))
         client.notify("notifications/initialized")
@@ -6029,6 +6302,14 @@ def main():
 
         if client_bugs_20261009_only:
             cb9_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if entity_create_only:
+            entity_create_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -6637,6 +6918,12 @@ def main():
         # Группа NEST идёт после IMG по той же причине: строки называются по имени
         # (`NEST.<NN>.<действие>`), каждый случай строит СВОЙ документ и закрывает его сам.
         nested_contour_checks(client, rep, app_id, workdir)
+
+        # Группа EC9 идёт ПОСЛЕДНЕЙ из групп общего сеанса и по существу своего наряда: клиентский
+        # отказ пришёл глубоко в длинном сеансе, поэтому и постановка клиента, и детерминированный
+        # отказ измеряются на САМОМ СТАРОМ сеансе прогона — рядом со строками F08, которые упали в
+        # том же полном прогоне 09.10.2026. Свои документы она закрывает сама.
+        entity_create_checks(client, rep, app_id, workdir)
 
         if not keep and app_id:
             client.tool("kompas_disconnect", {"application_id": app_id, "close_owned_application": True, "operation_id": str(uuid.uuid4())}, timeout=120)
@@ -16732,6 +17019,436 @@ def base_extrusion_lifecycle_checks(client, rep, app_id, workdir):
 
     close(doc)
     close(doc2)
+
+
+def entity_create_checks(client, rep, app_id, workdir):
+    """EC9: нерегулярный `Entity.Create()=false` — постановка клиента, снимок отказа, откат.
+
+    ЗАЧЕМ ГРУППА. Клиент (OBS-019) получил `GEOMETRY_FAILED: Entity.Create=false` на вырезе
+    cut/blind/positive по явному телу, тогда как through/symmetric тем же профилем у него прошли; в
+    нашей приёмке это не воспроизводилось, а в первом полном прогоне доводки так же упали
+    F08.05/06/07, и причина осталась не установленной. Строки ниже делают три вещи, каждая из
+    которых нужна отдельно: (1) повторяют ПОСТАНОВКУ клиента — та же плоскость, тот же профиль, то
+    же тело, та же операция; (2) дают РАЗЛИЧАЮЩИЕ контроли (глубина меньше высоты тела и клиентская
+    пара through/symmetric), чтобы «отказало» было отличимо от «профиль не область»; (3) вызывают
+    отказ ДЕТЕРМИНИРОВАННО — профилем-отрезком, который областью не является, — и на нём проверяют
+    снимок состояния и откат. Без (3) снимок отказа нельзя было бы проверить ни разу.
+
+    Числа профиля и тела взяты из СЫРЫХ ответов клиента
+    (`Omega-Calibre-8800/Analysis/checkpoint-05-r043-30014-mcp.json`), а не пересчитаны: плоскость
+    XY+3,7395, 16 примитивов, площадь 1,213102401338439 мм², тело-цилиндр R=3,7418880533566004
+    высотой 2,5288, операция cut/blind/positive. Отличие от документа клиента НАЗВАНО: второе тело
+    (обод) воспроизведено простым диском того же радиуса и толщины, его массив из 73 окон не
+    повторяется — роль второго тела (выбор цели из нескольких тел) сохранена, топология обода нет.
+
+    ГАБАРИТ, А НЕ ССЫЛКА. Тело опознаётся по габариту: измерено на сырых ответах клиента, что два
+    `list_bodies` подряд на ОДНОЙ ревизии 12 дали РАЗНЫЕ `body_ref` для тех же тел, то есть ссылка на
+    тело — не устойчивый идентификатор между чтениями. Каждый опыт ставит своё тело на СВОЮ высоту,
+    поэтому габарит различает их однозначно.
+    """
+    # --- постановка клиента: числа из сырых ответов ---
+    PINION_R = 3.7418880533566004
+    PINION_PLANE_MM = 3.7395
+    PINION_HEIGHT_MM = 2.5288
+    CROWN_R = 10.620775319799685
+    CROWN_HEIGHT_MM = 0.6130319999994565
+    CLIENT_PROFILE_AREA_MM2 = 1.213102401338439
+    # Высоты контрольных тел: своя у каждого опыта, чтобы тело находилось по габариту однозначно.
+    THROUGH_PLANE_MM = PINION_PLANE_MM + 20.0
+    SHORT_PLANE_MM = PINION_PLANE_MM + 40.0
+    NEGATIVE_PLANE_MM = PINION_PLANE_MM + 60.0
+    REFUSE_PLANE_MM = PINION_PLANE_MM + 80.0
+    # Полный набор ключей снимка отказа. Сверяется как МНОЖЕСТВО: пропущенный ключ неотличим от
+    # «забыли заполнить», а это ровно та потеря, ради которой снимок и заведён.
+    SNAPSHOT_KEYS = {
+        "operation", "direction_type", "end_condition", "depth_mm", "draft_mm", "target_body_ref",
+        "sketch_plane", "feature_count", "body_count", "sketch_state", "sketch_profile_entities",
+        "sketch_profile_area_mm2", "session_seconds", "operation_ordinal", "create_false_count",
+    }
+    # Профиль впадины триба: 16 примитивов ровно в том виде, в каком клиент передал их в
+    # `kompas_edit_sketch`. Порядок и знаки сохранены: у четырёх дуг sweep_deg отрицательный.
+    CLIENT_PROFILE = (
+        {"kind": "arc", "center_mm": [0, 0], "radius_mm": 3.902995052089549,
+         "start_deg": 14.370532421911003, "sweep_deg": 22.577056657911314},
+        {"kind": "line", "start_mm": [3.1192177625156936, 2.346028756567594],
+         "end_mm": [2.947545220307587, 2.2169102559059217]},
+        {"kind": "arc", "center_mm": [1.4630501401623937, 2.7079170891703415],
+         "radius_mm": 1.5635898929347294, "start_deg": -18.301983932733293,
+         "sweep_deg": -12.35190759205092},
+        {"kind": "arc", "center_mm": [2.316607472805089, 2.166220259406667],
+         "radius_mm": 0.5539793631726001, "start_deg": -27.4652016031559,
+         "sweep_deg": -22.374158080720683},
+        {"kind": "line", "start_mm": [2.6738869574310646, 1.7428474866796844],
+         "end_mm": [2.513531572381695, 1.6030588936922492]},
+        {"kind": "arc", "center_mm": [2.729141632827864, 1.212601614371975],
+         "radius_mm": 0.4460320449696314, "start_deg": 118.9074292997486,
+         "sweep_deg": 32.42171596145393},
+        {"kind": "arc", "center_mm": [2.502220752963243, 1.3691912925176832],
+         "radius_mm": 0.17415659109867582, "start_deg": 160.7539899767486,
+         "sweep_deg": 49.98634078647975},
+        {"kind": "arc", "center_mm": [2.7718806484877803, 1.4394724215566086],
+         "radius_mm": 0.44858447539312046, "start_deg": -159.19925403308793,
+         "sweep_deg": 17.041530166124343},
+        {"kind": "arc", "center_mm": [2.667599289468915, 1.1976355330718502],
+         "radius_mm": 0.2521838805531658, "start_deg": -172.3971965780503,
+         "sweep_deg": 30.560097241071805},
+        {"kind": "arc", "center_mm": [2.5589376485338624, 1.0515796268935909],
+         "radius_mm": 0.0901505326717328, "start_deg": -173.77943494210692,
+         "sweep_deg": 53.69269273710212},
+        {"kind": "arc", "center_mm": [2.6071045564757944, 1.0471011412400435],
+         "radius_mm": 0.11883685343683242, "start_deg": -141.77783177858757,
+         "sweep_deg": 31.42975653824562},
+        {"kind": "arc", "center_mm": [2.6486202346575696, 1.2692324755564532],
+         "radius_mm": 0.34368499044238615, "start_deg": -103.9472591833899,
+         "sweep_deg": 36.798585503907},
+        {"kind": "line", "start_mm": [2.7820872928039, 0.9525213815841167],
+         "end_mm": [2.9925218155028928, 0.9915447320192513]},
+        {"kind": "arc", "center_mm": [3.130356508832949, 0.47968899051616853],
+         "radius_mm": 0.5300893347305352, "start_deg": 105.07134564836178,
+         "sweep_deg": -26.05883219230208},
+        {"kind": "arc", "center_mm": [3.0449278203863828, -0.48214114730248636],
+         "radius_mm": 1.4938846531579462, "start_deg": 82.82986415293543,
+         "sweep_deg": -13.52196669659712},
+        {"kind": "line", "start_mm": [3.5727858406143143, 0.9153771056809475],
+         "end_mm": [3.780873989287189, 0.9686910001476619]},
+    )
+
+    def tool(name, args, timeout=300):
+        _e, env, _r = client.tool(name, args, timeout=timeout)
+        return env or {}
+
+    def res(env):
+        return (env or {}).get("result") or {}
+
+    def err(env):
+        return error_code(env)
+
+    def msg(env):
+        return str(((env or {}).get("error") or {}).get("message") or "")[:220]
+
+    def details(env):
+        return ((env or {}).get("error") or {}).get("details") or {}
+
+    def new_part(name):
+        env = tool("kompas_create_document", {
+            "application_id": app_id, "kind": "part", "name": name,
+            "operation_id": str(uuid.uuid4())})
+        return (env.get("document_id") or res(env).get("id")), (env.get("revision_after") or 1)
+
+    def rev_now(doc):
+        """Текущая ревизия документа. Нужна ПОСЛЕ отказа: упавшая мутация ревизию всё равно двигает
+        (признак остаётся в дереве), а в самом отказе `revision_after` равен null."""
+        env = tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return env.get("revision_after")
+
+    def draw(doc, rev, entities, name, offset):
+        """Эскиз + контур на смещённой плоскости XY. Без finish_sketch — как у клиента."""
+        env = tool("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": rev,
+            "plane": {"base": "xy", "offset_mm": offset}, "name": name,
+            "operation_id": str(uuid.uuid4())})
+        sketch = res(env).get("id")
+        rev = env.get("revision_after") or rev
+        if not sketch:
+            return None, rev, env
+        env = tool("kompas_edit_sketch", {
+            "sketch_ref": sketch, "expected_revision": rev, "mode": "replace",
+            "entities": entities, "operation_id": str(uuid.uuid4())})
+        rev = env.get("revision_after") or rev
+        return sketch, rev, env
+
+    def extrude(doc, rev, sketch, **kw):
+        args = {"sketch_ref": sketch, "expected_revision": rev, "operation_id": str(uuid.uuid4())}
+        args.update(kw)
+        env = tool("kompas_extrude", args)
+        # Ревизия берётся перечитыванием, если вызов отказал: у отказа `revision_after` = null, а
+        # модель при этом уже изменилась (признак создан и остался в дереве).
+        return (env.get("revision_after") or (rev_now(doc) if err(env) else rev)), env
+
+    def bodies(doc):
+        rows = res(tool("kompas_list_bodies", {"document_id": doc}))
+        return rows if isinstance(rows, list) else []
+
+    def pinion_box(plane_mm):
+        return {"min_mm": [-PINION_R, -PINION_R, plane_mm],
+                "max_mm": [PINION_R, PINION_R, plane_mm + PINION_HEIGHT_MM]}
+
+    def box_matches(row, expected):
+        box = (row or {}).get("bbox") or {}
+        try:
+            return all(abs(box["min_mm"][i] - expected["min_mm"][i]) <= 1e-6
+                       and abs(box["max_mm"][i] - expected["max_mm"][i]) <= 1e-6 for i in range(3))
+        except (KeyError, IndexError, TypeError):
+            return False
+
+    def find_body(doc, plane_mm):
+        expected = pinion_box(plane_mm)
+        return next((r for r in bodies(doc) if box_matches(r, expected)), None)
+
+    def body_volume(doc, plane_mm):
+        row = find_body(doc, plane_mm)
+        if not row:
+            return None, None
+        ref = row.get("body_ref")
+        return res(tool("kompas_measure", {"target_ref": ref, "properties": ["volume"]})).get("volume_mm3"), ref
+
+    def make_body(doc, rev, name, plane_mm):
+        """Тело клиента на СВОЕЙ высоте плюс его собственный эскиз основания."""
+        sk, rev, env = draw(doc, rev,
+                            [{"kind": "circle", "center_mm": [0.0, 0.0], "radius_mm": PINION_R}],
+                            name + "-body", plane_mm)
+        if not sk:
+            return None, rev, "эскиз тела не создан: %s (%s)" % (err(env), msg(env))
+        rev, env = extrude(doc, rev, sk, operation="base", depth_mm=PINION_HEIGHT_MM,
+                           direction="positive", end_condition="blind")
+        if err(env):
+            return None, rev, "тело не создано: %s (%s)" % (err(env), msg(env))
+        row = find_body(doc, plane_mm)
+        if not row:
+            return None, rev, "тело не найдено по габариту на высоте %s" % plane_mm
+        return row.get("body_ref"), rev, None
+
+    def close(doc):
+        tool("kompas_close_document", {
+            "document_id": doc, "dirty_policy": "discard", "operation_id": str(uuid.uuid4())})
+
+    # --- 01: документ клиента: два тела, целевое — цилиндр клиента ---
+    doc, rev = new_part("entity-create-20261009")
+    crown_err = None
+    if doc:
+        sk, rev, env = draw(doc, rev,
+                            [{"kind": "circle", "center_mm": [0.0, 0.0], "radius_mm": CROWN_R}],
+                            "crown", 0.0)
+        if not sk:
+            crown_err = "эскиз обода не создан: %s (%s)" % (err(env), msg(env))
+        else:
+            rev, env = extrude(doc, rev, sk, operation="base", depth_mm=CROWN_HEIGHT_MM,
+                               direction="positive", end_condition="blind")
+            if err(env):
+                crown_err = "обод не создан: %s (%s)" % (err(env), msg(env))
+    pinion_ref, pinion_err = (None, None)
+    if doc and not crown_err:
+        pinion_ref, rev, pinion_err = make_body(doc, rev, "pinion", PINION_PLANE_MM)
+    rows = bodies(doc) if doc else []
+    pinion_row = find_body(doc, PINION_PLANE_MM) if doc else None
+    box = (pinion_row or {}).get("bbox") or {}
+    rep.add("EC9.01.create",
+            "документ клиента воспроизведён: два тела, целевое — цилиндр R=3,7418880533566004 "
+            "на XY+3,7395 высотой 2,5288",
+            "PASS" if (doc and not crown_err and pinion_row) else "FAIL",
+            f"doc={doc} тел={len(rows)} целевое={pinion_ref} габарит={json.dumps(box, ensure_ascii=False)} "
+            f"ожидание={json.dumps(pinion_box(PINION_PLANE_MM), ensure_ascii=False)} "
+            f"обод={crown_err or 'построен'} тело={pinion_err or 'построено'}",
+            details={"crown_approximation": "обод воспроизведён простым диском R=10,620775319799685 "
+                                            "толщиной 0,613032; массив из 73 окон клиента не повторён",
+                     "body_refs_not_stable": "ссылки на тела перечитываются и не совпадают между "
+                                             "чтениями — тело опознаётся по габариту"})
+
+    # --- 02: профиль клиента на его плоскости ---
+    profile_sketch, rev, profile_env = (None, rev, {})
+    if doc and not crown_err:
+        profile_sketch, rev, profile_env = draw(doc, rev, CLIENT_PROFILE, "pinion_gap", PINION_PLANE_MM)
+    p_res = res(profile_env)
+    area = p_res.get("profile_area_mm2")
+    area_ok = isinstance(area, (int, float)) and abs(area - CLIENT_PROFILE_AREA_MM2) <= 1e-9
+    rep.add("EC9.02.create",
+            "профиль клиента нанесён на XY+3,7395: 16 примитивов, контур замкнут, площадь совпала с "
+            "площадью из ответа клиента",
+            "PASS" if (profile_sketch and p_res.get("entity_count") == 16
+                       and p_res.get("edit_closed_out") is True and area_ok) else "FAIL",
+            f"примитивов={p_res.get('entity_count')} замкнут={p_res.get('edit_closed_out')} "
+            f"площадь={area} ожидание={CLIENT_PROFILE_AREA_MM2} err={err(profile_env)}")
+
+    # --- 03: ПОСТАНОВКА КЛИЕНТА: cut/blind/positive 2,5288 по явному телу ---
+    volume_before, _ref = body_volume(doc, PINION_PLANE_MM) if doc else (None, None)
+    rev, client_env = (rev, {})
+    if doc and profile_sketch and pinion_ref:
+        rev, client_env = extrude(doc, rev, profile_sketch, operation="cut", direction="positive",
+                                  end_condition="blind", depth_mm=PINION_HEIGHT_MM,
+                                  target_body_ref=pinion_ref)
+    client_code = err(client_env)
+    snapshot = details(client_env).get("failure_snapshot")
+    snapshot_complete = (isinstance(snapshot, dict) and set(snapshot.keys()) == SNAPSHOT_KEYS
+                         and all(v is not None for v in snapshot.values()))
+    # Строка НЕ требует отказа и НЕ требует успеха: она требует, чтобы исход был НАЗВАН. Общее
+    # `GEOMETRY_FAILED` без снимка — именно то состояние, из которого 09.10.2026 нельзя было
+    # разобрать причину, поэтому оно и есть FAIL. `NO_GEOMETRY_CHANGE` — названный и измеряемый
+    # вердикт; его правдивость проверяет следующая строка, а не эта.
+    named = (client_code in (None, "NO_GEOMETRY_CHANGE")
+             or (client_code == "GEOMETRY_FAILED" and snapshot_complete))
+    rep.add("EC9.03.create",
+            "клиентская постановка cut/blind/positive 2,5288 по явному телу: исход назван, при отказе "
+            "ответ несёт полный снимок состояния, а не общее GEOMETRY_FAILED",
+            "PASS" if named else "FAIL",
+            f"код={client_code} снимок_полон={snapshot_complete} msg={msg(client_env)}",
+            details={"client_call": "cut/blind/positive depth_mm=2.5288, цель — тело клиента",
+                     "snapshot": snapshot})
+
+    # --- 04: инвариант исхода постановки клиента ---
+    volume_after, _ref2 = body_volume(doc, PINION_PLANE_MM) if doc else (None, None)
+    measured_pair = isinstance(volume_before, (int, float)) and isinstance(volume_after, (int, float))
+    if client_code is None:
+        # Ответ объявил успех ⇒ материал обязан быть снят.
+        outcome_ok = measured_pair and volume_after < volume_before - 1e-6
+    else:
+        # Ответ объявил «ничего не изменилось» или отказ ⇒ объём обязан быть ТЕМ ЖЕ. Для
+        # NO_GEOMETRY_CHANGE это проверка собственного утверждения продукта, а не повтор его текста.
+        outcome_ok = measured_pair and abs(volume_after - volume_before) <= 1e-6
+    rep.add("EC9.04.geometry_validation",
+            "инвариант исхода: успех ⇒ объём целевого тела УМЕНЬШИЛСЯ; «не изменилось» и отказ ⇒ объём "
+            "ТОТ ЖЕ — вердикт ответа проверен измерением, а не повторён",
+            "PASS" if outcome_ok else "FAIL",
+            f"код={client_code} объём {volume_before} → {volume_after} пара_измерена={measured_pair}")
+
+    # --- 05: КОНТРОЛЬ клиента: тот же профиль, cut/through/symmetric (у клиента прошёл) ---
+    through_ref, rev, through_err = (None, rev, None)
+    if doc:
+        through_ref, rev, through_err = make_body(doc, rev, "pinion-through", THROUGH_PLANE_MM)
+    through_sketch, rev, through_draw = draw(doc, rev, CLIENT_PROFILE, "pinion_gap-through",
+                                             THROUGH_PLANE_MM) if through_ref else (None, rev, {})
+    t_before, _r = body_volume(doc, THROUGH_PLANE_MM) if through_ref else (None, None)
+    rev, through_env = (rev, {})
+    if through_sketch and through_ref:
+        rev, through_env = extrude(doc, rev, through_sketch, operation="cut", direction="symmetric",
+                                   end_condition="through", target_body_ref=through_ref)
+    t_after, _r2 = body_volume(doc, THROUGH_PLANE_MM) if through_ref else (None, None)
+    through_ok = (through_ref and through_sketch and err(through_env) is None
+                  and isinstance(t_before, (int, float)) and isinstance(t_after, (int, float))
+                  and t_after < t_before - 1e-6)
+    rep.add("EC9.05.negative_tests",
+            "контроль клиента: тот же профиль на своём теле, cut/through/symmetric строится и снимает "
+            "материал — «профиль не область» как причина отказа исключено",
+            "PASS" if through_ok else "FAIL",
+            f"тело={through_ref} ошибка={err(through_env)} объём {t_before} → {t_after} "
+            f"подготовка={through_err or (through_draw and msg(through_draw)) or 'ок'}")
+
+    # --- 06: РАЗЛИЧАЮЩИЙ КОНТРОЛЬ: глубина исключена, причина — СТОРОНА ---
+    # Две половины одного утверждения, обе выведены из документированного правила стороны у выреза
+    # («для вырезаемого элемента направление противоположно нормали», справка v24 directionType), а
+    # не подогнаны под наблюдение: при cut/positive материал лежит по другую сторону плоскости,
+    # поэтому НИ ОДНА из двух глубин его не снимает; материал снимает смена стороны на negative.
+    short_depth = PINION_HEIGHT_MM - 0.5
+    short_ref, rev, short_err = (None, rev, None)
+    if doc:
+        short_ref, rev, short_err = make_body(doc, rev, "pinion-short", SHORT_PLANE_MM)
+    short_sketch, rev, short_draw = draw(doc, rev, CLIENT_PROFILE, "pinion_gap-short",
+                                         SHORT_PLANE_MM) if short_ref else (None, rev, {})
+    s_before, _r = body_volume(doc, SHORT_PLANE_MM) if short_ref else (None, None)
+    rev, short_env = (rev, {})
+    if short_sketch and short_ref:
+        rev, short_env = extrude(doc, rev, short_sketch, operation="cut", direction="positive",
+                                 end_condition="blind", depth_mm=short_depth,
+                                 target_body_ref=short_ref)
+    s_after, _r2 = body_volume(doc, SHORT_PLANE_MM) if short_ref else (None, None)
+    short_removed = (isinstance(s_before, (int, float)) and isinstance(s_after, (int, float))
+                     and s_after < s_before - 1e-6)
+
+    negative_ref, rev, negative_err = (None, rev, None)
+    if doc:
+        negative_ref, rev, negative_err = make_body(doc, rev, "pinion-negative", NEGATIVE_PLANE_MM)
+    negative_sketch, rev, negative_draw = draw(doc, rev, CLIENT_PROFILE, "pinion_gap-negative",
+                                               NEGATIVE_PLANE_MM) if negative_ref else (None, rev, {})
+    n_before, _r = body_volume(doc, NEGATIVE_PLANE_MM) if negative_ref else (None, None)
+    rev, negative_env = (rev, {})
+    if negative_sketch and negative_ref:
+        rev, negative_env = extrude(doc, rev, negative_sketch, operation="cut", direction="negative",
+                                    end_condition="blind", depth_mm=PINION_HEIGHT_MM,
+                                    target_body_ref=negative_ref)
+    n_after, _r2 = body_volume(doc, NEGATIVE_PLANE_MM) if negative_ref else (None, None)
+    negative_removed = (isinstance(n_before, (int, float)) and isinstance(n_after, (int, float))
+                        and n_after < n_before - 1e-6)
+
+    rep.add("EC9.06.negative_tests",
+            f"различающий контроль: глубина причиной НЕ является — при cut/positive глубина "
+            f"{short_depth:0.4f} (меньше высоты {PINION_HEIGHT_MM}) снимает материал так же, как "
+            f"глубина {PINION_HEIGHT_MM}; материал снимает СМЕНА СТОРОНЫ на negative",
+            "PASS" if ((not short_removed) and negative_removed) else "FAIL",
+            f"positive/{short_depth:0.4f}: объём {s_before} → {s_after} снято={short_removed}; "
+            f"negative/{PINION_HEIGHT_MM}: объём {n_before} → {n_after} снято={negative_removed}; "
+            f"ошибки={err(short_env)}/{err(negative_env)} "
+            f"подготовка={short_err or negative_err or 'ок'}")
+
+    # --- 07: ДЕТЕРМИНИРОВАННЫЙ ОТКАЗ: профиль-отрезок областью не является ---
+    # Документ сохраняется на диск ДО опыта: контрольная копия снимается с ФАЙЛА документа, и у
+    # несохранённого документа восстанавливать нечего — строка отката тогда проверяла бы не откат.
+    refuse_path = os.path.join(workdir, "entity-create-refusal-%s.m3d" % uuid.uuid4().hex[:8])
+    save_env = {}
+    if doc:
+        save_env = tool("kompas_save_document", {
+            "document_id": doc, "expected_revision": rev, "target_path": refuse_path,
+            "operation_id": str(uuid.uuid4())})
+        rev = save_env.get("revision_after") or rev
+    hash_before = file_sha256(refuse_path)
+    refuse_ref, rev, refuse_prep = (None, rev, None)
+    if doc:
+        refuse_ref, rev, refuse_prep = make_body(doc, rev, "pinion-refuse", REFUSE_PLANE_MM)
+    refuse_sketch, rev, refuse_draw = draw(doc, rev, [{"kind": "line", "start_mm": [-1.0, 0.0],
+                                                       "end_mm": [1.0, 0.0]}],
+                                           "not-a-region", REFUSE_PLANE_MM) if refuse_ref else (None, rev, {})
+    refuse_before, _r = body_volume(doc, REFUSE_PLANE_MM) if refuse_ref else (None, None)
+    rev, refuse_env = (rev, {})
+    if refuse_sketch and refuse_ref:
+        rev, refuse_env = extrude(doc, rev, refuse_sketch, operation="cut", direction="positive",
+                                  end_condition="blind", depth_mm=0.5, target_body_ref=refuse_ref)
+    refuse_code = err(refuse_env)
+    refuse_snapshot = details(refuse_env).get("failure_snapshot")
+    rep.add("EC9.07.negative_tests",
+            "отказ воспроизведён ДЕТЕРМИНИРОВАННО: профиль-отрезок (не область) даёт "
+            "GEOMETRY_FAILED с Create()=false — на нём проверяются снимок и откат",
+            "PASS" if refuse_code == "GEOMETRY_FAILED" else "FAIL",
+            f"код={refuse_code} msg={msg(refuse_env)} сохранение={err(save_env)} "
+            f"подготовка={refuse_prep or (refuse_draw and msg(refuse_draw)) or 'ок'}")
+
+    # --- 08: снимок отказа: полный набор ключей, ни одного пустого ---
+    refuse_keys = set(refuse_snapshot.keys()) if isinstance(refuse_snapshot, dict) else set()
+    empty = sorted(k for k, v in (refuse_snapshot or {}).items() if v is None) \
+        if isinstance(refuse_snapshot, dict) else []
+    rep.add("EC9.08.read",
+            "снимок отказа читается целиком: набор ключей полный, ни одно поле не пусто (непрочитанное "
+            "названо строкой с причиной)",
+            "PASS" if (refuse_keys == SNAPSHOT_KEYS and not empty) else "FAIL",
+            f"ключей={len(refuse_keys)} из {len(SNAPSHOT_KEYS)} пустых={empty} "
+            f"лишние={sorted(refuse_keys - SNAPSHOT_KEYS)}",
+            details={"snapshot": refuse_snapshot})
+
+    # --- 09: откат после отказа ---
+    refuse_after, _r = body_volume(doc, REFUSE_PLANE_MM) if refuse_ref else (None, None)
+    features_now = res(tool("kompas_list_features", {"document_id": doc})) if doc else []
+    refuse_feature_present = any(
+        isinstance(r, dict) and "not-a-region" in str(r.get("name", "")) for r in features_now) \
+        if isinstance(features_now, list) else False
+    rollback = details(refuse_env)
+    hash_after = file_sha256(refuse_path)
+    rollback_ok = (refuse_code == "GEOMETRY_FAILED" and not refuse_feature_present
+                   and isinstance(refuse_before, (int, float)) and isinstance(refuse_after, (int, float))
+                   and abs(refuse_after - refuse_before) <= 1e-9
+                   and rollback.get("restore_attempted") is True and rollback.get("restored") is True
+                   and hash_before and hash_before == hash_after)
+    rep.add("EC9.09.negative_tests",
+            "откат после отказа: признака в дереве нет, объём целевого тела не изменился, контрольная "
+            "копия снята, файл документа возвращён к состоянию до мутации (совпал по SHA-256)",
+            "PASS" if rollback_ok else "FAIL",
+            f"признак_в_дереве={refuse_feature_present} объём {refuse_before} → {refuse_after} "
+            f"копия={rollback.get('control_copy_made')} попытка={rollback.get('restore_attempted')} "
+            f"восстановлено={rollback.get('restored')} хеш {hash_before[:12]}→{hash_after[:12]} "
+            f"причина={rollback.get('restore_failure')}",
+            details={"rollback": {k: v for k, v in rollback.items() if k != "failure_snapshot"},
+                     "document_path": refuse_path})
+
+    # --- 10: возраст сеанса и порядковый номер операции ---
+    ordinal = (refuse_snapshot or {}).get("operation_ordinal") if isinstance(refuse_snapshot, dict) else None
+    seconds = (refuse_snapshot or {}).get("session_seconds") if isinstance(refuse_snapshot, dict) else None
+    rep.add("EC9.10.diagnostics",
+            "снимок несёт возраст сеанса и порядковый номер операции: «отказала постановка» и "
+            "«сеанс долгий» различимы числом, а не рассуждением",
+            "PASS" if (isinstance(ordinal, int) and ordinal >= 1
+                       and isinstance(seconds, (int, float)) and seconds > 0) else "FAIL",
+            f"порядковый={ordinal} возраст_сеанса_с={seconds}",
+            details={"note": "ordinal считает ВЫДАВЛИВАНИЯ этого сеанса, а не команды: он сравнивает "
+                             "между собой только прогоны этого прибора"})
+
+    if doc:
+        close(doc)
 
 
 def extrusion_direction_and_target_checks(client, rep, app_id, workdir):
@@ -32151,6 +32868,14 @@ def dep_acceptance_checks(client, rep, app_id, workdir):
 
 def finish(rep, client):
     counts = rep.save()
+    if rep.context.get("run_directory"):
+        write_run_manifest(rep.context["run_directory"], {
+            "state": "finished",
+            "counts": counts,
+            "report_path": rep.path,
+            "report_copies": rep.mirror_paths,
+            "context": rep.context,
+        })
     if client.log:
         print("\nЗаметки транспорта:")
         for line in client.log[:10]:

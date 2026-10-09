@@ -24,6 +24,19 @@ public sealed partial class Api5Session : IDisposable
 
     public KompasMcp.Domain.References.ReferenceRegistry References { get; } = new();
 
+    /// <summary>Age of this session, the ordinal of the current extrusion and how many extrusions have
+    /// been refused by <c>Create() = false</c> in it.</summary>
+    /// <remarks>MEASURED: one <see cref="Api5Session"/> lives for the whole Worker process, so the clock
+    /// measures the age of the CAD session rather than of one command. These three numbers are what
+    /// separates "this configuration is refused" from "this session has gone stale": the same call at
+    /// ordinal 5 of a fresh session and at ordinal 400 of a long one is the discriminating comparison,
+    /// and a failure message cannot carry it.
+    /// History: docs/decisions/adapter-features.md#create-false-snapshot</remarks>
+    private readonly System.Diagnostics.Stopwatch _sessionClock = System.Diagnostics.Stopwatch.StartNew();
+
+    private int _extrudeOrdinal;
+    private int _extrudeCreateFalseCount;
+
     public bool IsConnected => _applications.Count > 0;
 
     public IReadOnlyCollection<ApplicationEntry> Applications => _applications.Values;
@@ -1157,6 +1170,11 @@ public sealed partial class Api5Session : IDisposable
             foreach (var orphan in _sketchPlaneBase.Keys.Where(key => !References.TryGet(key, out _)).ToArray())
             {
                 _sketchPlaneBase.Remove(orphan);
+            }
+
+            foreach (var orphan in _sketchPlaneHint.Keys.Where(key => !References.TryGet(key, out _)).ToArray())
+            {
+                _sketchPlaneHint.Remove(orphan);
             }
         }
 

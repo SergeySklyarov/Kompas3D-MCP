@@ -133,6 +133,14 @@ public sealed class CommandDispatcher
 
             Interlocked.Increment(ref _failed);
             _log.Write("warn", "command refused", new { command = request.Command, code = contract.Code, message = contract.Message });
+            // The refusal's own measurements go to the journal too, not only to the client: a refusal that
+            // happens once in dozens of runs is investigated long after the session is gone, and the
+            // response is not kept. Written as a separate line so the existing line's shape is unchanged.
+            if (contract.Details is not null)
+            {
+                _log.Write("warn", "command refused details", new { command = request.Command, code = contract.Code, details = contract.Details });
+            }
+
             return Failure(request, contract.ToErrorDto());
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

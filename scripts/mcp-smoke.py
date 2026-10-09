@@ -610,6 +610,42 @@ def instrument_self_test():
         ok, message = report_path_decision(free, True)
         check("--report-overwrite снимает отказ", ok, message)
 
+    # Отказ обязан быть ВИДЕН в строке отчёта (наряд NEST_CREATE_FALSE, N3). Обе половины: у отказа
+    # со снимком снимок доходит, у отказа без снимка на его месте стоит причина, а не пустое поле.
+    success = {"error": None}
+    check("успех не выдаётся за отказ",
+          refusal_fields(success, None) == {"message": None, "failure_snapshot": None})
+    snapshot = {"operation": "base", "kompas_result_code": 54}
+    with_snapshot = {"error": {"code": "GEOMETRY_FAILED", "message": "Create() вернул false",
+                               "details": {"failure_snapshot": snapshot}}}
+    fields = refusal_fields(with_snapshot, "GEOMETRY_FAILED")
+    check("отказ несёт текст", fields["message"] == "Create() вернул false")
+    check("отказ несёт снимок", fields["failure_snapshot"] == snapshot)
+    without = {"error": {"code": "NO_GEOMETRY_CHANGE", "message": "ничего не изменилось",
+                         "details": None}}
+    fields = refusal_fields(without, "NO_GEOMETRY_CHANGE")
+    check("отказ без снимка называет причину, а не молчит",
+          isinstance(fields["failure_snapshot"], str) and bool(fields["failure_snapshot"]),
+          str(fields["failure_snapshot"]))
+
+    # Режим повтора: план обязан быть воспроизводим, а доля — не выдумывать значение на пустом списке.
+    check("план повтора чередует виды профиля",
+          nested_repeat_plan(7) == ("nested", "circle", "rectangle", "nested", "circle",
+                                    "rectangle", "nested"),
+          str(nested_repeat_plan(7)))
+    check("пустой план повтора пуст", nested_repeat_plan(0) == ())
+    check("доля отказов на пустом списке не равна нулю",
+          refusal_fraction([]) == (0, 0, None))
+    check("доля отказов считается по отказам",
+          refusal_fraction([{"code": None}, {"code": "GEOMETRY_FAILED"}]) == (1, 2, 0.5))
+    check("K повтора без флага выключен",
+          nested_repeat_argument([]) == (0, None))
+    check("K повтора принимает число", nested_repeat_argument(["--nested-repeat", "60"])
+          == (60, None))
+    check("нечисловой K назван, а не проглочен",
+          nested_repeat_argument(["--nested-repeat", "много"])[0] == 0
+          and nested_repeat_argument(["--nested-repeat", "много"])[1] is not None)
+
     print(f"\nСамопроверка прибора: {checks} проверок, "
           f"{len(failures)} FAIL" + (f" — {failures}" if failures else ""))
     return 1 if failures else 0
@@ -667,6 +703,78 @@ def argument(name, default=None):
         if index + 1 < len(sys.argv):
             return sys.argv[index + 1]
     return default
+
+
+def refusal_fields(envelope, code):
+    """`message` и `details.failure_snapshot` отказа — в САМОЙ строке отчёта, а не только в журнале.
+
+    ЗАЧЕМ. 09.10.2026 строки `NEST.01/02` отказали `GEOMETRY_FAILED`, и разбор причины по отчёту
+    прибора был невозможен: строка писала ТОЛЬКО код. Снимок состояния при отказе
+    (`FeatureCreateFailure.Snapshot`) при этом существовал и лежал в журнале воркера — отчёт о нём
+    просто не говорил. Поэтому строка, которая может отказать, обязана нести и текст отказа, и снимок.
+
+    INVARIANT: успех и отказ различимы. У успеха оба поля `None` (отказа не было — и это факт, а не
+    незаполненное поле); у отказа без снимка на месте снимка стоит ПРИЧИНА строкой, потому что
+    пустое неотличимо от «забыли заполнить». Снимок даёт только отказ `Entity.Create()=false`
+    выдавливания; `NO_GEOMETRY_CHANGE` и отказы до COM его не собирают, и это названо, а не спрятано.
+    """
+    if code is None:
+        return {"message": None, "failure_snapshot": None}
+    error = (envelope or {}).get("error")
+    error = error if isinstance(error, dict) else {}
+    snapshot = (error.get("details") or {}).get("failure_snapshot")
+    return {
+        "message": error.get("message"),
+        "failure_snapshot": snapshot if snapshot is not None
+        else "не прочитан: отказ не Entity.Create() либо снимок не собран",
+    }
+
+
+# Виды профиля повтора NEST. ПЕРВЫЙ — та самая постановка, что отказала 09.10.2026 (кольцо R10/r5
+# базовым выдавливанием); второй и третий — различающие контроли «тот же профиль без вложенности» и
+# «прямоугольник»: если отказывает ТОЛЬКО вложенный контур, вывод иной, чем «отказывает любое
+# выдавливание». Порядок фиксирован: план повтора обязан быть воспроизводим, иначе доля отказов
+# считается по разным наборам.
+NEST_REPEAT_KINDS = ("nested", "circle", "rectangle")
+
+
+def nested_repeat_plan(k):
+    """K попыток повтора с чередованием вида профиля — чистая функция, чтобы её проверяла
+    самопроверка прибора, а не живой прогон."""
+    return tuple(NEST_REPEAT_KINDS[index % len(NEST_REPEAT_KINDS)] for index in range(k))
+
+
+def refusal_fraction(attempts):
+    """(отказов, попыток, доля) по списку попыток.
+
+    Доля при НУЛЕ попыток — `None`, а не `0.0`: «ноль отказов из нуля» и «ноль отказов из ста» —
+    разные утверждения, и одно число, поставленное на их место, стёрло бы это различие.
+    """
+    total = len(attempts)
+    refused = sum(1 for attempt in attempts if attempt.get("code"))
+    return refused, total, (refused / total if total else None)
+
+
+def nested_repeat_argument(argv=None):
+    """K повтора NEST из `--nested-repeat K`. Отсутствие флага — 0 (режим выключен), а не ошибка:
+    флаг необязателен. Нечисловое или неположительное значение НАЗЫВАЕТСЯ, а не превращается в 0
+    молча, — иначе опечатка выглядела бы как выключенный режим. `argv` принимается, чтобы эту
+    половину проверяла самопроверка прибора, а не живой прогон.
+    """
+    argv = sys.argv if argv is None else argv
+    if "--nested-repeat" not in argv:
+        return 0, None
+    index = argv.index("--nested-repeat")
+    if index + 1 >= len(argv):
+        return 0, "--nested-repeat без значения: режим повтора не включён"
+    raw = argv[index + 1]
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return 0, f"--nested-repeat {raw!r}: не целое число — режим повтора не включён"
+    if value <= 0:
+        return 0, f"--nested-repeat {value}: не положительное — режим повтора не включён"
+    return value, None
 
 
 def assembly_checks(client, rep, app_id, workdir):
@@ -5733,6 +5841,12 @@ def main():
     # эти строки тонули бы среди чужих. Полный прогон всё равно обязателен — эта ветка не заменяет
     # релизную приёмку.
     nested_only = "--nested-only" in sys.argv
+    # Режим повтора NEST (наряд NEST_CREATE_FALSE, N2): K попыток той же постановки в ОДНОМ сеансе.
+    # Флаг НЕ заводит своей группы: он ДОПОЛНЯЕТ группу NEST, а не заменяет её, — иначе повторы
+    # считались бы отдельной приёмкой, а полный прогон их бы не увидел. Нечисловой K назван ниже.
+    nested_repeat_k, nested_repeat_note = nested_repeat_argument()
+    if nested_repeat_note:
+        print(nested_repeat_note)
     # То же для домена СБОРОК (наряд C1): одна группа ASM на своём сеансе. Отдельная ветка нужна по
     # той же причине, что у B3M/B4/B5/F08/MANIA/DEP/IMG/NEST: клетка матрицы обязана находиться по
     # ИМЕНИ строки (`ASM.<NN>.<действие>`), а не по номеру в общем потоке. Полный прогон всё равно
@@ -6238,7 +6352,7 @@ def main():
             return finish(rep, client)
 
         if nested_only:
-            nested_contour_checks(client, rep, app_id, workdir)
+            nested_contour_checks(client, rep, app_id, workdir, repeat_k=nested_repeat_k)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -6942,7 +7056,7 @@ def main():
 
         # Группа NEST идёт после IMG по той же причине: строки называются по имени
         # (`NEST.<NN>.<действие>`), каждый случай строит СВОЙ документ и закрывает его сам.
-        nested_contour_checks(client, rep, app_id, workdir)
+        nested_contour_checks(client, rep, app_id, workdir, repeat_k=nested_repeat_k)
 
         # Группа SPD идёт перед EC9 и по существу, и по порядку: она строит свои документы и закрывает
         # их сама, а EC9 остаётся ПОСЛЕДНЕЙ группой общего сеанса — его постановка требует САМОГО
@@ -30316,7 +30430,7 @@ DEP_UNKNOWN_SCAN_LIMIT = 32
 # формулировке. Группа входит и в полный прогон; отдельной веткой она стоит затем, чтобы её отказ
 # был виден по имени, а не растворялся среди тысячи строк.
 # ══════════════════════════════════════════════════════════════════════════════════════════════════
-def nested_contour_checks(client, rep, app_id, workdir):
+def nested_contour_checks(client, rep, app_id, workdir, repeat_k=0):
     """NEST.* — критерий зависимости `dep.sketch.entities`: «несколько замкнутых контуров и
     вложенные отверстия там, где это допустимо для операции».
 
@@ -30359,6 +30473,19 @@ def nested_contour_checks(client, rep, app_id, workdir):
     PLATE_W, PLATE_H, PLATE_D = 100.0, 80.0, 10.0
     PLATE_V = PLATE_W * PLATE_H * PLATE_D
     HOLE_R = 10.0
+
+    def refusal(env, code):
+        """Отказ как он пришёл — код, текст и снимок состояния. Отказ, о котором строка отчёта
+        молчит, разобрать нельзя: именно это и произошло 09.10.2026 (наряд NEST_CREATE_FALSE, N1)."""
+        return refusal_fields(env, code)
+
+    def open_documents():
+        """Сколько документов СЕЙЧАС видит сеанс — документированным чтением
+        (`kompas_list_documents`), а не своим счётчиком: счётчик прибора уже расходился с сеансом
+        (дефект строки S02c). Непрочитанный список назван причиной, а не нулём."""
+        env, code = call("kompas_list_documents", {"application_id": app_id})
+        docs = result(env)
+        return len(docs) if isinstance(docs, list) else "не прочитано: " + str(code)
 
     def call(tool, args, timeout=300):
         payload = dict(args)
@@ -30475,6 +30602,23 @@ def nested_contour_checks(client, rep, app_id, workdir):
                 % ("%.10f" % vol if vol is not None else "не прочитан", analytic, level(env),
                    vd.get("observed"), vd.get("expected")))
 
+    def refusal_note(env, code):
+        """Чем именно отказал — в ТЕКСТЕ строки, а не только в `details`: по отчёту 09.10.2026
+        причина была неразбираема именно потому, что строка называла один код."""
+        if code is None:
+            return ""
+        error = (env or {}).get("error")
+        message = str((error or {}).get("message") or "") if isinstance(error, dict) else ""
+        return "; сообщение=%s" % (message[:240] or "отказ без текста")
+
+    def row_details(env, code, **measured):
+        """Поля строки: измеренное плюс отказ как он пришёл. ОДНА точка сборки на все строки группы:
+        «строка не сказала, что отказало» не должно возвращаться в одну строку из девяти."""
+        fields = {"error": code}
+        fields.update(refusal(env, code))
+        fields.update(measured)
+        return fields
+
     def one_shot(row_id, title, entities, depth, analytic, offset=0.0):
         """Базовое выдавливание ОДНИМ контуром-профилем в своём документе."""
         doc, rev = new_doc("NEST-" + row_id.replace(".", "-"))
@@ -30491,9 +30635,9 @@ def nested_contour_checks(client, rep, app_id, workdir):
         vol = volume(fresh_body(doc))
         ok = code is None and near(vol, analytic) and confirmed(env)
         emit(row_id, title, "PASS" if ok else "FAIL",
-             summary(env, vol, analytic) + "; код=%s" % code,
-             details={"volume_mm3": vol, "analytic_mm3": analytic, "level": level(env),
-                      "volume_delta": check_named(env, "volume_delta"), "error": code})
+             summary(env, vol, analytic) + "; код=%s" % code + refusal_note(env, code),
+             details=row_details(env, code, volume_mm3=vol, analytic_mm3=analytic,
+                                 level=level(env), volume_delta=check_named(env, "volume_delta")))
         close(doc)
 
     def on_plate(row_id, title, operation, depth, analytic_total, offset, entities=None):
@@ -30515,7 +30659,9 @@ def nested_contour_checks(client, rep, app_id, workdir):
         rev, env1, code1 = extrude(rev, sk1, operation="base", depth_mm=PLATE_D,
                                    direction="positive", end_condition="blind")
         if code1 is not None:
-            emit(row_id, title, "FAIL", "базовое выдавливание пластины: " + str(code1))
+            emit(row_id, title, "FAIL",
+                 "базовое выдавливание пластины: " + str(code1) + refusal_note(env1, code1),
+                 details=row_details(env1, code1, step="base_extrusion"))
             close(doc)
             return
         sk2, rev, err2 = sketch(doc, rev, profile, row_id + "-ring", offset=offset)
@@ -30530,11 +30676,89 @@ def nested_contour_checks(client, rep, app_id, workdir):
         vol = volume(fresh_body(doc))
         ok = code2 is None and near(vol, analytic_total) and confirmed(env2)
         emit(row_id, title, "PASS" if ok else "FAIL",
-             summary(env2, vol, analytic_total) + "; код=%s" % code2,
-             details={"volume_mm3": vol, "analytic_mm3": analytic_total, "level": level(env2),
-                      "volume_delta": check_named(env2, "volume_delta"), "error": code2,
-                      "operation": operation})
+             summary(env2, vol, analytic_total) + "; код=%s" % code2 + refusal_note(env2, code2),
+             details=row_details(env2, code2, volume_mm3=vol, analytic_mm3=analytic_total,
+                                 level=level(env2),
+                                 volume_delta=check_named(env2, "volume_delta"),
+                                 operation=operation))
         close(doc)
+
+    def nested_repeat(rep, k):
+        """K попыток ОДНОЙ И ТОЙ ЖЕ постановки в ОДНОМ сеансе — доля отказов и её контроль.
+
+        ЗАЧЕМ. 09.10.2026 базовое выдавливание кольца R10/r5 в СВЕЖЕМ документе отказало
+        `Entity.Create()=false` (код 54) на первой и второй строке группы NEST и прошло на третьей;
+        в одиннадцати других прогонах тех же бинарей — ни одного отказа. Отказ наблюдён ОДИН раз.
+        Повтор отделяет «редкое состояние СЕАНСА» от «редкой ПОСТАНОВКИ»: если доля отказов в
+        длинном сеансе и в свежем не различается, гипотеза «дело в длине сеанса» не подтверждается
+        ЧИСЛОМ, а не отсутствием данных.
+
+        ГДЕ СТОИТ. В КОНЦЕ группы NEST — то есть в полном прогоне сразу после группы IMG, где отказ
+        и наблюдался. Позиция названа: повторы идут примерно на пятнадцать выдавливаний ПОЗЖЕ места
+        отказа, и это расхождение не скрывается.
+
+        ЧТО ПИШЕТСЯ НА КАЖДУЮ ПОПЫТКУ. Код отказа, его текст, снимок состояния (порядковый номер
+        выдавливания, возраст сеанса, счётчик `Create()=false`), объём против аналитики и число
+        документов, которые сеанс видит в этот момент. Без этих чисел «отказ не воспроизвёлся» —
+        не измерение, а молчание.
+
+        ЧЕГО ЗДЕСЬ НЕТ. Прибор НЕ повторяет отказавший вызов автоматически внутри строки приёмки:
+        скрытый от клиента повтор запрещён нарядом. Повтор — отдельный режим, и его строки названы
+        `NEST.REPEAT.*`, а не `NEST.<NN>.*`, чтобы их нельзя было принять за строки матрицы.
+        """
+        ring_analytic = RING_AREA * PLATE_D
+        # Окружность ТОЙ ЖЕ площади, что кольцо: πr² = π(100−25) → r = √75. Контроль отделяет
+        # «отказывает вложенный контур» от «отказывает любое выдавливание этой площади».
+        circle_r = math.sqrt((R_OUT * R_OUT) - (R_IN * R_IN))
+        profiles = {
+            "nested": (ring(), ring_analytic),
+            "circle": (circles((0.0, 0.0, circle_r)), ring_analytic),
+            "rectangle": (plate_profile(), PLATE_V),
+        }
+        attempts = []
+        for index, kind in enumerate(nested_repeat_plan(k), start=1):
+            entities, analytic = profiles[kind]
+            doc, rev = new_doc("NEST-repeat-%03d-%s" % (index, kind))
+            record = {"i": index, "kind": kind, "analytic_mm3": analytic, "document": doc,
+                      "failure_snapshot": None}
+            if not doc:
+                record.update({"code": "DOCUMENT_NOT_CREATED",
+                               "message": "документ не создан — измерять нечего"})
+                attempts.append(record)
+                continue
+            sk, rev, err = sketch(doc, rev, entities, "NEST-repeat-%03d-sk" % index)
+            if err:
+                record.update({"code": "SKETCH_NOT_BUILT", "message": err})
+                attempts.append(record)
+                close(doc)
+                continue
+            record["documents"] = open_documents()
+            rev, env, code = extrude(rev, sk, operation="base", depth_mm=PLATE_D,
+                                     direction="positive", end_condition="blind")
+            vol = volume(fresh_body(doc))
+            record.update({"code": code, "volume_mm3": vol})
+            record.update(refusal(env, code))
+            record["matched"] = code is None and near(vol, analytic) and confirmed(env)
+            attempts.append(record)
+            close(doc)
+
+        for kind in NEST_REPEAT_KINDS:
+            rows = [a for a in attempts if a["kind"] == kind]
+            refused, total, fraction = refusal_fraction(rows)
+            failed = [a["i"] for a in rows if not a.get("matched")]
+            emit("NEST.REPEAT." + kind,
+                 "повтор в ОДНОМ сеансе, вид профиля «%s»: доля отказов и совпадение объёма" % kind,
+                 "PASS" if (total and refused == 0 and not failed) else "FAIL",
+                 "попыток=%d отказов=%d доля=%s не_совпало=%s" % (total, refused, fraction, failed),
+                 details={"kind": kind, "attempts": rows, "refused": refused, "total": total,
+                          "fraction": fraction})
+        refused, total, fraction = refusal_fraction(attempts)
+        emit("NEST.REPEAT.summary",
+             "повтор в ОДНОМ сеансе: суммарная доля отказов по всем видам профиля",
+             "PASS" if (total and refused == 0) else "FAIL",
+             "попыток=%d отказов=%d доля=%s" % (total, refused, fraction),
+             details={"attempts": total, "refused": refused, "fraction": fraction,
+                      "kinds": list(NEST_REPEAT_KINDS), "plan": list(nested_repeat_plan(k))})
 
     # ── NEST.01: вложенный контур базовым выдавливанием — внутренний контур есть ОТВЕРСТИЕ ───────
     one_shot("NEST.01.create",
@@ -30593,9 +30817,10 @@ def nested_contour_checks(client, rep, app_id, workdir):
                                      direction="positive", end_condition="blind")
             vol = volume(fresh_body(doc))
             ok_sep = code is None and near(vol, separate_analytic) and confirmed(env)
-            sep_note = summary(env, vol, separate_analytic) + "; код=%s" % code
-            sep_details = {"volume_mm3": vol, "analytic_mm3": separate_analytic,
-                           "level": level(env), "volume_delta": check_named(env, "volume_delta")}
+            sep_note = summary(env, vol, separate_analytic) + "; код=%s" % code + refusal_note(env, code)
+            sep_details = row_details(env, code, volume_mm3=vol, analytic_mm3=separate_analytic,
+                                      level=level(env),
+                                      volume_delta=check_named(env, "volume_delta"))
         close(doc)
 
     # Объединение двух окружностей R10 с центрами в 15 мм: аналитика выведена в приборе отдельной
@@ -30631,19 +30856,29 @@ def nested_contour_checks(client, rep, app_id, workdir):
                         "volume_delta нет=%s; unverified=%s — подтверждение отозвано, а не подменено "
                         "суммой; код=%s"
                         % ("%.10f" % vol if vol is not None else "не прочитан", union_analytic,
-                           level(env), not vd, unv, code))
-            ovl_details = {"volume_mm3": vol, "union_analytic_mm3": union_analytic,
-                           "level": level(env), "volume_delta": vd, "unverified_aspects": unv}
+                           level(env), not vd, unv, code)) + refusal_note(env, code)
+            ovl_details = row_details(env, code, volume_mm3=vol, union_analytic_mm3=union_analytic,
+                                      level=level(env), volume_delta=vd, unverified_aspects=unv)
         close(doc)
 
+    # Отказ пары называется на ВЕРХНЕМ уровне `details` вместе с рукой, которая отказала: у строки две
+    # руки, и «message без имени руки» читалось бы как «отказала вся строка целиком».
+    pair_refused = next((name for name, arm in (("separate", sep_details), ("overlap", ovl_details))
+                         if arm.get("error")), None)
+    pair_refusal = ({"message": (sep_details if pair_refused == "separate" else ovl_details).get("message"),
+                     "failure_snapshot": (sep_details if pair_refused == "separate"
+                                          else ovl_details).get("failure_snapshot"),
+                     "refused_arm": pair_refused}
+                    if pair_refused else {"message": None, "failure_snapshot": None})
     ok_pair = ok_sep and ok_ovl
     emit("NEST.05.geometry_validation",
          "различающая пара: РАЗНЕСЁННЫЕ контуры складываются (подтверждено), ПЕРЕКРЫВАЮЩИЕСЯ "
          "складываться не дают (подтверждение отозвано, объём назван невычислимым)",
          "PASS" if ok_pair else "FAIL",
          "разнесённые: " + sep_note + " | перекрывающиеся: " + ovl_note,
-         details={"separate": sep_details, "overlap": ovl_details,
-                  "separate_analytic_mm3": separate_analytic, "union_analytic_mm3": union_analytic})
+         details=dict({"separate": sep_details, "overlap": ovl_details,
+                       "separate_analytic_mm3": separate_analytic,
+                       "union_analytic_mm3": union_analytic}, **pair_refusal))
 
     # ── NEST.06: КАСАЮЩИЕСЯ контуры — ни сумма, ни разность не объявляются ────────────────────────
     # Внутренняя окружность r5 с центром (5,0) касается внешней R10 изнутри. Область зависит от
@@ -30672,9 +30907,9 @@ def nested_contour_checks(client, rep, app_id, workdir):
             tan_note = ("объём %s (тело построено); уровень %s; проверки volume_delta нет=%s; "
                         "unverified=%s — сумма π(100+25)*10=%.4f НЕ объявлена; код=%s"
                         % ("%.10f" % vol if vol is not None else "не прочитан", level(env),
-                           not vd, unv, math.pi * 125.0 * PLATE_D, code))
-            tan_details = {"volume_mm3": vol, "level": level(env), "volume_delta": vd,
-                           "unverified_aspects": unv}
+                           not vd, unv, math.pi * 125.0 * PLATE_D, code)) + refusal_note(env, code)
+            tan_details = row_details(env, code, volume_mm3=vol, level=level(env),
+                                      volume_delta=vd, unverified_aspects=unv)
         close(doc)
     emit("NEST.06.negative_tests",
          "касающиеся контуры: величина названа невычислимой, а не суммой; тело при этом построено",
@@ -30703,15 +30938,19 @@ def nested_contour_checks(client, rep, app_id, workdir):
                      and near(vol, RING_AREA * PLATE_D))
             sr_note = ("после reopen объём %s против аналитики %.10f; сохранение=%s открытие=%s"
                        % ("%.10f" % vol if vol is not None else "не прочитан",
-                          RING_AREA * PLATE_D, code_save, code_open))
-            sr_details = {"volume_mm3": vol, "analytic_mm3": RING_AREA * PLATE_D,
-                          "save": code_save, "open": code_open}
+                          RING_AREA * PLATE_D, code_save, code_open)) + refusal_note(env, code)
+            sr_details = dict(row_details(env, code), volume_mm3=vol,
+                              analytic_mm3=RING_AREA * PLATE_D, save=code_save, open=code_open)
             if opened:
                 call("kompas_close_document", {"document_id": opened, "dirty_policy": "discard"})
         close(doc)
     emit("NEST.07.save_reopen",
          "вложенный профиль (кольцо) переживает сохранение, закрытие и повторное открытие",
          "PASS" if ok_sr else "FAIL", sr_note, details=sr_details)
+
+    # ── ПОВТОР: доля отказов на попытку, а не «получилось/не получилось» ─────────────────────────
+    if repeat_k > 0:
+        nested_repeat(rep, repeat_k)
 
 
 def dep_required_actions(root):

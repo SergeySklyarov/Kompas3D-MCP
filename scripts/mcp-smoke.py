@@ -33346,12 +33346,15 @@ def sketch_profile_checks(client, rep, app_id, workdir):
     missing = sorted(SPD_REFUSAL_KEYS - set(det.keys()))
     first_profile = text.find("Анализ входа сервером")
     generic = text.find("Частая причина")
-    # Нулевой код и НЕПУСТАЯ строка ksStrResult: измерено, что после отказа SetSketch ядро отвечает
-    # кодом 0, а текст остаётся от прежнего вызова («Успешное завершение»). Голая строка внутри отказа
-    # читалась бы как успех, поэтому она обязана быть НАЗВАНА остатком.
+    # Нулевой код: строка ksStrResult — ОСТАТОК прежнего вызова, и её содержимое зависит от сеанса.
+    # Измерено дважды и по-разному: в групповом прогоне она вернула «Успешное завершение», в полном —
+    # ничего. Голая непустая строка внутри отказа читалась бы как успех, поэтому сервер обязан либо
+    # назвать её остатком, либо сказать, что текста нет; третьего ответа строка не принимает.
     code = det.get("kompas_result_code")
     result_text = str(det.get("kompas_result_text") or "")
-    leftover_ok = code != 0 or not result_text or "предыдущего вызова" in result_text
+    leftover_ok = (code != 0
+                   or "предыдущего вызова" in result_text
+                   or "КОМПАС кода ошибки не вернул" in result_text)
     ok = (err(env) == "GEOMETRY_FAILED"
           and "SetSketch" in text
           and first_profile >= 0 and generic >= 0 and first_profile < generic

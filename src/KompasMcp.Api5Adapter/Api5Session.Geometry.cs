@@ -1180,16 +1180,21 @@ public sealed partial class Api5Session
             throw Refused("configuration", command);
         }
 
+        // The documented reason route is cleared BEFORE the call, so the code read after a refusal is this
+        // call's own and not a stale one from an earlier operation.
+        ClearKompasResult(document);
         if (!feature.Create())
         {
-            var snapshot = ObserveRefusedCreate(document, command, operationName, direction, ordinal);
+            var (resultCode, resultText, resultUnavailable) = ReadKompasResult(document);
+            var snapshot = ObserveRefusedCreate(
+                document, command, operationName, direction, ordinal, resultCode, resultText, resultUnavailable);
             ComApartment.Release(feature);
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
-                "Entity.Create() выдавливания вернул false: признак не появился. ПРИЧИНА НЕ УСТАНОВЛЕНА: " +
-                "документированного маршрута её чтения (код последней ошибки, сообщение ядра) в справке " +
-                "установленной версии нет. Состояние документа, эскиза и сеанса на момент отказа — в " +
-                "details." + FeatureCreateFailure.DetailKey + ".",
+                "Entity.Create() выдавливания вернул false: признак не появился. "
+                + RefusalReason(resultCode, resultText, resultUnavailable)
+                + " Состояние документа, эскиза и сеанса на момент отказа — в details."
+                + FeatureCreateFailure.DetailKey + ".",
                 RetryPolicy.SameOperationId,
                 partialEffects: true,
                 details: new Dictionary<string, object?>
@@ -2067,6 +2072,12 @@ public sealed partial class Api5Session
                 RetryPolicy.ReacquireContext);
         }
 
+        // LIMIT: a body reference is NOT checked against the gabarit it was issued at. That check was
+        // built and MEASURED to refuse legitimate work: a client that moves a body and then addresses the
+        // SAME body again with the same reference (rows B3.56, B3.59) gets STALE_REFERENCE, because the
+        // gabarit legitimately changed. Without a documented stable body identifier, a changed gabarit
+        // cannot be told apart from a re-used pointer, so the check is left out rather than shipped
+        // refusing correct calls. History: docs/decisions/adapter-features.md#body-ref-lifetime
         if (index.Value >= bodiesBefore.Count)
         {
             throw new KompasContractException(
@@ -2542,15 +2553,18 @@ public sealed partial class Api5Session
     /// <c>Create()</c>.</summary>
     /// <remarks>INVARIANT: every route here is a READ; the only state this method changes is its own
     /// counters. A route that cannot answer is NAMED inside the snapshot rather than dropped, so the same
-    /// keys appear on every refusal. LIMIT: the reason for the refusal is not read — the installed help
-    /// documents no route for it.
+    /// keys appear on every refusal. The reason itself comes from the KOMPAS result code, read by the
+    /// caller right after the refused call (see <see cref="ReadKompasResult"/>).
     /// History: docs/decisions/adapter-features.md#create-false-snapshot</remarks>
     private FeatureCreateFailure.Observation ObserveRefusedCreate(
         DocumentEntry document,
         ExtrudeCommand command,
         string operationName,
         short directionType,
-        int ordinal)
+        int ordinal,
+        int? kompasResultCode,
+        string? kompasResultText,
+        string? kompasResultUnavailable)
     {
         _extrudeCreateFalseCount++;
 
@@ -2597,9 +2611,86 @@ public sealed partial class Api5Session
             SketchProfileEntities: profileEntities,
             SketchProfileAreaMm2: profileArea,
             SketchProfileAreaUnavailable: profileAreaUnavailable,
+            KompasResultCode: kompasResultCode,
+            KompasResultText: kompasResultText,
+            KompasResultUnavailable: kompasResultUnavailable,
             SessionSeconds: _sessionClock.Elapsed.TotalSeconds,
             OperationOrdinal: ordinal,
             CreateFalseCount: _extrudeCreateFalseCount);
+    }
+
+    /// <summary>Clear a previous NON-FATAL KOMPAS error before a call whose code will be read.</summary>
+    /// <remarks>DOC: KompasObject::ksResultNULL
+    /// (help.ascon.ru/KOMPAS_SDK/24/ru-RU/kompasobject_ksresultnull.html) - "Обнулить результат работы
+    /// библиотеки, если ошибка не фатальная"; returns 1 when an error was cleared. Without the reset a
+    /// code left by an earlier call would be read as this refusal's reason.
+    /// INVARIANT: a failure of the reset itself is not fatal to the operation and is not reported as one;
+    /// the code read afterwards is then simply less trustworthy, and ksStrResult's own note states it also
+    /// clears the flag of a non-fatal error.
+    /// History: docs/decisions/adapter-features.md#create-false-snapshot</remarks>
+    private void ClearKompasResult(DocumentEntry document)
+    {
+        try
+        {
+            RequireApplication(document.ApplicationId).Application.ksResultNULL();
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException or KompasContractException)
+        {
+            // Nothing to report here: the refusal itself is what the caller must see, and an unreadable
+            // reset only weakens the code read next - it does not make the operation fail differently.
+        }
+    }
+
+    /// <summary>The KOMPAS result code and message of a call that has just returned.</summary>
+    /// <remarks>DOC: KompasObject::ksReturnResult and KompasObject::ksStrResult
+    /// (help.ascon.ru/KOMPAS_SDK/24/ru-RU/kompasobject_ksreturnresult.html,
+    /// .../kompasobject_ksstrresult.html) - "Код ошибки ... при выполнении библиотечной программы",
+    /// "Ошибка с номером >0 не является фатальной. Отрицательный номер ошибки приводит к завершению
+    /// программы", text via ksStrResult. INVARIANT: an unreadable route returns a REASON, never a zero -
+    /// "KOMPAS returned no code" and "we could not read the code" are different facts.
+    /// History: docs/decisions/adapter-features.md#create-false-snapshot</remarks>
+    private (int? Code, string? Text, string? Unavailable) ReadKompasResult(DocumentEntry document)
+    {
+        try
+        {
+            var application = RequireApplication(document.ApplicationId).Application;
+            var code = application.ksReturnResult();
+            string? text;
+            try
+            {
+                text = application.ksStrResult();
+            }
+            catch (Exception ex) when (ex is COMException or InvalidCastException)
+            {
+                text = null;
+            }
+
+            return (code, text, null);
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException or KompasContractException)
+        {
+            return (null, null, "не прочитано: " + ex.Message);
+        }
+    }
+
+    /// <summary>The refusal's reason line as the client sees it. INVARIANT: "ПРИЧИНА НЕ УСТАНОВЛЕНА" is
+    /// kept ONLY for the case where KOMPAS returned no code at all - a named code is the cause, and saying
+    /// "not established" next to it would be false.</summary>
+    private static string RefusalReason(int? code, string? text, string? unavailable)
+    {
+        if (code is int named && named != 0)
+        {
+            var message = string.IsNullOrWhiteSpace(text) ? string.Empty : $" («{text.Trim()}»)";
+            return $"КОМПАС вернул код ошибки {named}{message}.";
+        }
+
+        if (code == 0)
+        {
+            return "ПРИЧИНА НЕ УСТАНОВЛЕНА: КОМПАС кода ошибки не вернул (ksReturnResult = 0).";
+        }
+
+        return "ПРИЧИНА НЕ УСТАНОВЛЕНА: код ошибки КОМПАС прочитать не удалось ("
+            + (unavailable ?? "причина не названа") + ").";
     }
 
     /// <summary>Feature count that keeps "could not be read" apart from "zero features".</summary>
@@ -3350,7 +3441,7 @@ public sealed partial class Api5Session
             var edgeCount = CountUniqueEdges(mainBody, out var mainFaceCount);
             rows.Add(new BodyRowDto
             {
-                BodyRef = References.Register("body", document.Id, document.Revision, mainBody).Id,
+                BodyRef = BodyReference(document, mainBody),
                 Kind = SafeIsSolid(mainBody) ? "solid" : "sheet",
                 Bbox = ReadBodyBox(mainBody),
                 FaceCount = mainFaceCount,
@@ -3382,7 +3473,7 @@ public sealed partial class Api5Session
             var edgeCount = CountUniqueEdges(element, out var faceCount);
             rows.Add(new BodyRowDto
             {
-                BodyRef = References.Register("body", document.Id, document.Revision, element).Id,
+                BodyRef = BodyReference(document, element),
                 Kind = SafeIsSolid(element) ? "solid" : "sheet",
                 Bbox = ReadBodyBox(element),
                 FaceCount = faceCount,
@@ -3392,6 +3483,14 @@ public sealed partial class Api5Session
 
         return rows;
     }
+
+    /// <summary>The reference to hand out for a body.</summary>
+    /// <remarks>INVARIANT: the SAME reference for the same body on one revision. A read tool that minted a
+    /// fresh id on every call gave the client two strings for one body, and state remembered under one looked
+    /// absent from the other - the same rule that already holds for sketches.
+    /// History: docs/decisions/adapter-features.md#body-ref-lifetime</remarks>
+    private string BodyReference(DocumentEntry document, ksBody body) =>
+        ReferenceForObject("body", document, body).Id;
 
     public TopologyReadResult ReadTopology(ReadTopologyCommand command)
     {

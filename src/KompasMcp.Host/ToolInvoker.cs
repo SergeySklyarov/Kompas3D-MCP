@@ -810,7 +810,12 @@ public sealed class ToolInvoker : IAsyncDisposable
             ApplicationId = applicationId,
             DocumentId = documentId,
             RevisionBefore = ReadLong(arguments, "expected_revision") ?? ReadLong(result, "revision_before"),
-            RevisionAfter = ReadLong(result, "revision") ?? ReadLong(result, "revision_after"),
+            // A FAILED mutation carries no result payload, so its revision travels inside the error's
+            // details: the Worker reads the document's current revision at the refusal and puts it there.
+            // Without this fallback the envelope said `revision_after: null` while the model had already
+            // moved, and the client's next call failed REVISION_CONFLICT until it re-read the context.
+            // History: docs/decisions/adapter-features.md#create-false-snapshot
+            RevisionAfter = EnvelopeRevisions.After(result, error?.Details),
             Result = result,
             // The Worker actually observed the model or the file, so its verification level wins. The
             // Host's own value is a floor, never a ceiling: claiming "geometry_checked" here would be

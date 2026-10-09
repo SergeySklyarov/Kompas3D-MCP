@@ -6,8 +6,13 @@ namespace KompasMcp.Domain.Geometry;
 /// at the refusal itself, so the NEXT refusal carries its own evidence.
 /// INVARIANT: the SAME keys on every failure. A key that could not be read carries a string saying why,
 /// never <c>null</c> and never a missing entry - an absent field is indistinguishable from "we forgot to
-/// fill it". LIMIT: the installed v24 help documents no route for the REASON of a refusal, so this
-/// reports the state around it. History: docs/decisions/adapter-features.md#create-false-snapshot</remarks>
+/// fill it".
+/// DOC: the KOMPAS result code and its message come from <c>KompasObject::ksReturnResult</c> /
+/// <c>ksStrResult</c> (help.ascon.ru/KOMPAS_SDK/24/ru-RU/kompasobject_ksreturnresult.html): "Код ошибки в
+/// зависимости от типа документа: графического или документа-модели при выполнении библиотечной
+/// программы"; text via ksStrResult, reset of a non-fatal error via ksResultNULL. A zero code at a
+/// refusal is a fact too - it is NAMED as "no code returned", never replaced by an invented reason.
+/// History: docs/decisions/adapter-features.md#create-false-snapshot</remarks>
 public static class FeatureCreateFailure
 {
     /// <summary>Key under which the snapshot travels inside an error's <c>details</c>.</summary>
@@ -30,6 +35,9 @@ public static class FeatureCreateFailure
         int? SketchProfileEntities,
         double? SketchProfileAreaMm2,
         string? SketchProfileAreaUnavailable,
+        int? KompasResultCode,
+        string? KompasResultText,
+        string? KompasResultUnavailable,
         double SessionSeconds,
         int OperationOrdinal,
         int CreateFalseCount);
@@ -59,6 +67,13 @@ public static class FeatureCreateFailure
             ["sketch_profile_area_mm2"] = Number(
                 observation.SketchProfileAreaMm2,
                 observation.SketchProfileAreaUnavailable ?? "не прочитано: причина не названа"),
+            // The documented reason route: the KOMPAS result code and its message, read right after the
+            // refused Create(). A zero code is NOT a missing value - it is the fact "KOMPAS returned no
+            // code", named as such; only an unreadable route becomes a reason string.
+            ["kompas_result_code"] = observation.KompasResultCode.HasValue
+                ? observation.KompasResultCode.Value
+                : observation.KompasResultUnavailable ?? "не прочитано: причина не названа",
+            ["kompas_result_text"] = ResultText(observation),
             // Session age and the ordinal of this operation are the two numbers that separate "this
             // configuration is refused" from "this session has gone stale": the same call at ordinal 5 of
             // a fresh session and at ordinal 400 of a long one is the discriminating comparison.
@@ -66,6 +81,29 @@ public static class FeatureCreateFailure
             ["operation_ordinal"] = observation.OperationOrdinal,
             ["create_false_count"] = observation.CreateFalseCount,
         };
+
+    /// <summary>The message KOMPAS returned for the refusal, or a named reason why there is none.
+    /// INVARIANT: a code of zero is reported as "no code returned", never as an empty text and never as an
+    /// invented cause; an unread route carries the route's own reason.</summary>
+    private static object ResultText(Observation observation)
+    {
+        if (!string.IsNullOrWhiteSpace(observation.KompasResultText))
+        {
+            return observation.KompasResultText;
+        }
+
+        if (observation.KompasResultCode == 0)
+        {
+            return "КОМПАС кода ошибки не вернул — текста нет";
+        }
+
+        if (observation.KompasResultCode.HasValue)
+        {
+            return "код ошибки прочитан, строка сообщения пуста";
+        }
+
+        return observation.KompasResultUnavailable ?? "не прочитано: причина не названа";
+    }
 
     /// <summary>The value as measured. INVARIANT: no rounding — a diagnostic figure that was rounded in
     /// the instrument cannot be compared with the same figure published unrounded elsewhere.</summary>

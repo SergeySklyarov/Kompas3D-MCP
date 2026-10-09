@@ -26,6 +26,9 @@ public class FeatureCreateFailureTests
         SketchProfileEntities: 16,
         SketchProfileAreaMm2: 1.213102401338439,
         SketchProfileAreaUnavailable: null,
+        KompasResultCode: 126,
+        KompasResultText: "Контур не разбивает ни одну из граней или совпадает с кромкой грани",
+        KompasResultUnavailable: null,
         SessionSeconds: 412.5,
         OperationOrdinal: 37,
         CreateFalseCount: 1);
@@ -45,6 +48,9 @@ public class FeatureCreateFailureTests
         SketchProfileEntities: null,
         SketchProfileAreaMm2: null,
         SketchProfileAreaUnavailable: "профиль не замкнут",
+        KompasResultCode: null,
+        KompasResultText: null,
+        KompasResultUnavailable: "не прочитано: мост к KompasObject не построился",
         SessionSeconds: 1.0,
         OperationOrdinal: 1,
         CreateFalseCount: 1);
@@ -78,13 +84,46 @@ public class FeatureCreateFailureTests
             new[]
             {
                 "body_count", "create_false_count", "depth_mm", "direction_type", "draft_mm",
-                "end_condition", "feature_count", "operation", "operation_ordinal", "session_seconds",
+                "end_condition", "feature_count", "kompas_result_code", "kompas_result_text",
+                "operation", "operation_ordinal", "session_seconds",
                 "sketch_plane", "sketch_profile_area_mm2", "sketch_profile_entities", "sketch_state",
                 "target_body_ref",
             },
             keys);
         Assert.DoesNotContain("sketch_state_unavailable", keys);
         Assert.DoesNotContain("sketch_profile_area_unavailable", keys);
+        Assert.DoesNotContain("kompas_result_unavailable", keys);
+    }
+
+    [Fact]
+    public void ZeroResultCodeIsAFact_NotAMissingValue()
+    {
+        // DOC: ksReturnResult returns 0 when KOMPAS recorded no error. Publishing the reason string for a
+        // measured zero would merge "KOMPAS gave no code" with "we could not read the code" - the exact
+        // conflation this snapshot exists to end. The code travels as the NUMBER 0.
+        var zero = FeatureCreateFailure.Snapshot(
+            Full() with { KompasResultCode = 0, KompasResultText = null });
+        Assert.Equal(0, zero["kompas_result_code"]);
+        var text = Assert.IsType<string>(zero["kompas_result_text"]);
+        Assert.Contains("кода ошибки не вернул", text);
+    }
+
+    [Fact]
+    public void UnreadableResultRouteIsNamed_NotReportedAsZero()
+    {
+        var unread = FeatureCreateFailure.Snapshot(NothingRead());
+        Assert.Contains("не прочитано", Assert.IsType<string>(unread["kompas_result_code"]));
+        Assert.Contains("не прочитано", Assert.IsType<string>(unread["kompas_result_text"]));
+    }
+
+    [Fact]
+    public void ReadResultCodeAndTextSurvive()
+    {
+        var full = FeatureCreateFailure.Snapshot(Full());
+        Assert.Equal(126, full["kompas_result_code"]);
+        Assert.Equal(
+            "Контур не разбивает ни одну из граней или совпадает с кромкой грани",
+            full["kompas_result_text"]);
     }
 
     [Fact]

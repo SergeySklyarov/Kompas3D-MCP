@@ -438,7 +438,14 @@ public sealed class CommandDispatcher
             var restoreFailure = decision.Restore
                 ? _controlCopies.Restore(document.Path, copy.Path, document.Access)
                 : null;
-            throw Reclassify(ex, copy, decision, restoreFailure);
+
+            // The revision the client needs for its NEXT call is read here, where the document is known,
+            // and travels in the refusal itself. A refused mutation can leave the model changed (the
+            // feature stayed in the tree, or the rollback restores only the FILE, never the in-memory
+            // model), so a null revision_after made the client's next call fail REVISION_CONFLICT until
+            // it re-read the context. The number is the document's CURRENT revision: the mutation already
+            // bumped it if it changed anything, and an unchanged model reads back its old revision.
+            throw Reclassify(ex, copy, decision, restoreFailure, document.Revision);
         }
 
         // SUCCESS: THE COPY IS DELETED. It was there for the failure case; left behind, it would
@@ -466,7 +473,8 @@ public sealed class CommandDispatcher
     /// UNEXPECTED mutation exception the policy is "after reconciliation", not "same operation_id": partialEffects=true
     /// means repeating would apply the mutation twice.</remarks>
     private static Exception Reclassify(
-        Exception ex, ControlCopyResult copy, RestoreDecision decision, string? restoreFailure)
+        Exception ex, ControlCopyResult copy, RestoreDecision decision, string? restoreFailure,
+        long revisionAfter)
     {
         var details = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
@@ -481,6 +489,13 @@ public sealed class CommandDispatcher
             ["restored"] = decision.Restore && restoreFailure is null,
             ["restore_failure"] = restoreFailure,
             ["rollback_scope"] = "файл документа; модель в памяти КОМПАСа не откатывается",
+            // INVARIANT: a refused MUTATION always states the revision to continue from. The number is the
+            // document's current revision at the refusal — the mutation already bumped it when it changed
+            // anything, and the rollback restores only the file, so this is the factual model state.
+            // An adapter that read its own revision puts that value here and it wins over this one.
+            ["revision_after"] = revisionAfter,
+            ["revision_after_note"] = "ревизия документа на момент отказа; модель в памяти КОМПАСа не "
+                + "откатывается, поэтому продолжать нужно с неё, а не с прежней",
         };
 
         if (ex is KompasContractException contract)

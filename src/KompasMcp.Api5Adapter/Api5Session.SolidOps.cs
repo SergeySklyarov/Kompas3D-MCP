@@ -1038,9 +1038,12 @@ public sealed partial class Api5Session
             }
 
             var edgeCount = CountUniqueEdges(element, out var faces);
+            // The same route as kompas_list_bodies: one live reference per body per revision, so a client
+            // that read bodies through either tool holds one string for one body.
+            // History: docs/decisions/adapter-features.md#body-ref-lifetime
             rows.Add(new SolidBodyDto
             {
-                BodyRef = References.Register("body", document.Id, document.Revision, element).Id,
+                BodyRef = BodyReference(document, element),
                 Kind = SafeIsSolid(element) ? "solid" : "sheet",
                 VolumeMm3 = SafeDouble(() => MassProperties(element, (uint)KompasUnits.MassMmKg)?.v
                     ?? throw new InvalidCastException("объём недоступен")),

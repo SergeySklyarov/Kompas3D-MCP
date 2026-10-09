@@ -459,8 +459,9 @@ RUN_GROUPS = (
      "Приёмка CB9: находки клиента в CP05/CP05b — направление выреза, ложное NO_GEOMETRY_CHANGE, "
      "габарит контекста, занятый файл (наряд CLIENT_BUGS_20261009)"),
     ("entity_create", "entity-create-20261009", "entity-create-20261009-acceptance.json",
-     "Приёмка EC9: нерегулярный Entity.Create()=false — профиль клиента OBS-019, долгий сеанс, откат "
-     "(наряд ENTITY_CREATE_FALSE)"),
+     "Приёмка EC9: нерегулярный Entity.Create()=false — профиль клиента OBS-019, долгий сеанс, откат, "
+     "код ошибки КОМПАС в снимке, устойчивость ссылки на тело, ревизия после отказа "
+     "(наряды ENTITY_CREATE_FALSE и ENTITY_CREATE_FALSE_FOLLOWUP)"),
 )
 
 VERTICAL_GROUP = ("vertical", "smoke-report.json",
@@ -16946,16 +16947,21 @@ def base_extrusion_lifecycle_checks(client, rep, app_id, workdir):
     rs_res = (rs_env or {}).get("result") or {}
     rs_ver = (rs_env or {}).get("verification") or {}
     bodies_restored = bodies(doc)
-    # Ссылка на тело ДРУГАЯ: прежний объект тела уничтожен вместе с признаком, восстановление
-    # создаёт новое тело. Поэтому объём читается по новому body_ref, а не по сохранённому.
+    # Объём читается ПЕРЕЧИТАННОЙ ссылкой. Прежняя редакция требовала ещё и `new_body != body_ref`
+    # («ссылка ДРУГАЯ, потому что тело пересоздано») — и это требование СНЯТО 09.10.2026 как
+    # неверное: оно выполнялось только потому, что реестр порождал ссылку заново на каждый вызов, и
+    # мерило поведение реестра, а не продукт. После исправления (одна живая ссылка на тело на
+    # ревизию, строка EC9.11) ссылка та же — тело опознано по IUnknown, и объём по ней читается
+    # верно. Сам факт записан в доказательство, но условием строки не является: пересоздано ли тело
+    # — не требование контракта, требование — аналитический объём по рабочей ссылке.
     new_body = bodies_restored[0].get("body_ref") if bodies_restored else None
     v_restored = volume(new_body)
     rep.add("BG20", "восстановление возвращает тело и аналитический объём",
             "PASS" if error_code(rs_env) is None and len(bodies_restored) == 1 and v_restored is not None
             and abs(v_restored - plate) <= max(0.01, 1e-6 * plate)
-            and rs_ver.get("level") == "geometry_checked" and new_body != body_ref else "FAIL",
+            and rs_ver.get("level") == "geometry_checked" else "FAIL",
             f"тел={len(bodies_restored)} V={v_restored} ожидание={plate} "
-            f"новое_тело={new_body != body_ref} level={rs_ver.get('level')} err={error_code(rs_env)}")
+            f"ссылка_сменилась={new_body != body_ref} level={rs_ver.get('level')} err={error_code(rs_env)}")
 
     # ═════════ BG21/BG22: удаление базового выдавливания ═════════
     # Отдельный документ: удаление базового уничтожает тело, и продолжать на нём нечем.
@@ -17049,7 +17055,14 @@ def entity_create_checks(client, rep, app_id, workdir):
     ГАБАРИТ, А НЕ ССЫЛКА. Тело опознаётся по габариту: измерено на сырых ответах клиента, что два
     `list_bodies` подряд на ОДНОЙ ревизии 12 дали РАЗНЫЕ `body_ref` для тех же тел, то есть ссылка на
     тело — не устойчивый идентификатор между чтениями. Каждый опыт ставит своё тело на СВОЮ высоту,
-    поэтому габарит различает их однозначно.
+    поэтому габарит различает их однозначно. Строки EC9.11…EC9.14 это ИЗМЕРЯЮТ отдельно и требуют
+    обратного: устойчивость ссылки на одной ревизии, честный отказ на устаревшей ссылке и адресацию
+    ссылкой, как это делает клиент. Опознание по габариту остаётся контролем, а не заменой адресации.
+
+    СНИМОК ОТКАЗА. 17 ключей: причина читается документированным маршрутом SDK
+    (`KompasObject::ksReturnResult` / `ksStrResult` — код ошибки и её текст) и лежит рядом с
+    состоянием документа, эскиза и сеанса. Строки EC9.16/EC9.17 добавляют к снимку ревизию: отказ,
+    оставивший признак в дереве, обязан назвать ревизию, с которой продолжать.
     """
     # --- постановка клиента: числа из сырых ответов ---
     PINION_R = 3.7418880533566004
@@ -17065,10 +17078,15 @@ def entity_create_checks(client, rep, app_id, workdir):
     REFUSE_PLANE_MM = PINION_PLANE_MM + 80.0
     # Полный набор ключей снимка отказа. Сверяется как МНОЖЕСТВО: пропущенный ключ неотличим от
     # «забыли заполнить», а это ровно та потеря, ради которой снимок и заведён.
+    # 17 ключей: 15 прежних плюс `kompas_result_code` / `kompas_result_text` — код ошибки и её текст,
+    # которые документированы справкой SDK (KompasObject::ksReturnResult / ksStrResult) и читаются
+    # сразу после отказавшего Create(). Число ключей НАЗВАНО здесь явно, потому что строка EC9.08
+    # сверяет именно множество, и «стало 17» обязано быть видно, а не выведено из длины.
     SNAPSHOT_KEYS = {
         "operation", "direction_type", "end_condition", "depth_mm", "draft_mm", "target_body_ref",
         "sketch_plane", "feature_count", "body_count", "sketch_state", "sketch_profile_entities",
-        "sketch_profile_area_mm2", "session_seconds", "operation_ordinal", "create_false_count",
+        "sketch_profile_area_mm2", "kompas_result_code", "kompas_result_text",
+        "session_seconds", "operation_ordinal", "create_false_count",
     }
     # Профиль впадины триба: 16 примитивов ровно в том виде, в каком клиент передал их в
     # `kompas_edit_sketch`. Порядок и знаки сохранены: у четырёх дуг sweep_deg отрицательный.
@@ -17246,8 +17264,9 @@ def entity_create_checks(client, rep, app_id, workdir):
             f"обод={crown_err or 'построен'} тело={pinion_err or 'построено'}",
             details={"crown_approximation": "обод воспроизведён простым диском R=10,620775319799685 "
                                             "толщиной 0,613032; массив из 73 окон клиента не повторён",
-                     "body_refs_not_stable": "ссылки на тела перечитываются и не совпадают между "
-                                             "чтениями — тело опознаётся по габариту"})
+                     "body_addressing": "тело опознаётся по габариту — это КОНТРОЛЬ, а не замена "
+                                        "адресации: строки EC9.11…EC9.14 адресуют тело ссылкой, как "
+                                        "клиент, и проверяют её устойчивость"})
 
     # --- 02: профиль клиента на его плоскости ---
     profile_sketch, rev, profile_env = (None, rev, {})
@@ -17397,11 +17416,25 @@ def entity_create_checks(client, rep, app_id, workdir):
                                   end_condition="blind", depth_mm=0.5, target_body_ref=refuse_ref)
     refuse_code = err(refuse_env)
     refuse_snapshot = details(refuse_env).get("failure_snapshot")
+    # Наряд §1.4: причина отказа НАЗВАНА — либо ненулевой код КОМПАС с непустым текстом, либо прямое
+    # «КОМПАС кода ошибки не вернул». Справка SDK документирует этот маршрут (KompasObject::
+    # ksReturnResult / ksStrResult), поэтому «причина не установлена» при ненулевом коде была бы
+    # неправдой, и это проверяется здесь же, а не только читается.
+    kompas_code = (refuse_snapshot or {}).get("kompas_result_code") if isinstance(refuse_snapshot, dict) else None
+    kompas_text = (refuse_snapshot or {}).get("kompas_result_text") if isinstance(refuse_snapshot, dict) else None
+    code_named = ((isinstance(kompas_code, int) and kompas_code != 0
+                   and isinstance(kompas_text, str) and bool(kompas_text.strip()))
+                  or (kompas_code == 0 and isinstance(kompas_text, str) and "не вернул" in kompas_text))
+    reason_honest = (("ПРИЧИНА НЕ УСТАНОВЛЕНА" not in msg(refuse_env))
+                     if (isinstance(kompas_code, int) and kompas_code != 0) else True)
     rep.add("EC9.07.negative_tests",
             "отказ воспроизведён ДЕТЕРМИНИРОВАННО: профиль-отрезок (не область) даёт "
-            "GEOMETRY_FAILED с Create()=false — на нём проверяются снимок и откат",
-            "PASS" if refuse_code == "GEOMETRY_FAILED" else "FAIL",
-            f"код={refuse_code} msg={msg(refuse_env)} сохранение={err(save_env)} "
+            "GEOMETRY_FAILED с Create()=false — на нём проверяются снимок, откат и НАЗВАННАЯ "
+            "причина (код ошибки КОМПАС и её текст)",
+            "PASS" if (refuse_code == "GEOMETRY_FAILED" and code_named and reason_honest) else "FAIL",
+            f"код={refuse_code} компас_код={kompas_code} текст={clip(str(kompas_text), 60)} "
+            f"причина_названа={code_named} без_отговорки={reason_honest} msg={msg(refuse_env)} "
+            f"сохранение={err(save_env)} "
             f"подготовка={refuse_prep or (refuse_draw and msg(refuse_draw)) or 'ок'}")
 
     # --- 08: снимок отказа: полный набор ключей, ни одного пустого ---
@@ -17440,6 +17473,23 @@ def entity_create_checks(client, rep, app_id, workdir):
             details={"rollback": {k: v for k, v in rollback.items() if k != "failure_snapshot"},
                      "document_path": refuse_path})
 
+    # Наряд §3.4: ревизия отказа с успешным откатом снимается ЗДЕСЬ, пока она ещё актуальна: модель
+    # после отказа не изменилась, поэтому revision_after обязан совпасть с текущей ревизией, а вызов
+    # с этой ревизией — пройти. Позже ревизия уйдёт вперёд, и проверять это будет не на чем.
+    refuse_rev_after_at_refusal = (refuse_env or {}).get("revision_after")
+    refuse_rev_now_at_refusal = rev_now(doc) if doc else None
+    refuse_next_env = {}
+    if doc and refuse_rev_after_at_refusal is not None:
+        refuse_next_env = tool("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": refuse_rev_after_at_refusal,
+            "plane": {"base": "xy", "offset_mm": REFUSE_PLANE_MM + 30.0}, "name": "after-refusal",
+            "operation_id": str(uuid.uuid4())})
+        rev = refuse_next_env.get("revision_after") or rev
+    refuse_next_code = err(refuse_next_env) if refuse_next_env else None
+    refuse_next_ok = (refuse_rev_after_at_refusal is not None
+                      and refuse_rev_after_at_refusal == refuse_rev_now_at_refusal
+                      and refuse_next_code is None)
+
     # --- 10: возраст сеанса и порядковый номер операции ---
     ordinal = (refuse_snapshot or {}).get("operation_ordinal") if isinstance(refuse_snapshot, dict) else None
     seconds = (refuse_snapshot or {}).get("session_seconds") if isinstance(refuse_snapshot, dict) else None
@@ -17451,6 +17501,213 @@ def entity_create_checks(client, rep, app_id, workdir):
             f"порядковый={ordinal} возраст_сеанса_с={seconds}",
             details={"note": "ordinal считает ВЫДАВЛИВАНИЯ этого сеанса, а не команды: он сравнивает "
                              "между собой только прогоны этого прибора"})
+
+    # --- 11: устойчивость ссылки на теле на ОДНОЙ ревизии (наряд §2.5) ---
+    # Наряд §2.1: два чтения на одной ревизии не имеют права выдать разные строки для одного тела.
+    # Тело опознаётся по ГАБАРИТУ: индекс в коллекции — это порядок, а порядок адресом не является.
+    def refs_by_box(doc_id):
+        return {json.dumps(r.get("bbox"), sort_keys=True): r.get("body_ref") for r in bodies(doc_id)}
+
+    def find_box(doc_id, box):
+        return next((r for r in bodies(doc_id) if box_matches(r, box)), None)
+
+    first_refs, second_refs, third_refs = {}, {}, {}
+    stability_ok = None
+    stability_detail = "документ не построен"
+    if doc:
+        rev_before_reads = rev_now(doc)
+        first_refs = refs_by_box(doc)
+        # Между чтениями — ТОЛЬКО чтения: они не меняют модель и не имеют права менять ссылку.
+        tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        second_refs = refs_by_box(doc)
+        sample = next(iter(first_refs.values()), None)
+        if sample:
+            tool("kompas_measure", {"target_ref": sample, "properties": ["bbox", "volume"]})
+            tool("kompas_read_topology", {"document_id": doc, "body_ref": sample, "include": "faces"})
+        third_refs = refs_by_box(doc)
+        rev_after_reads = rev_now(doc)
+        # Считаются ИМЕННО расхождения ссылок: боксы совпадают по построению (тело то же), и
+        # «различий=0» по ключам словаря скрыло бы дефект, ради которого строка заведена.
+        ref_diff = [box for box in first_refs
+                    if box in second_refs and first_refs[box] != second_refs[box]]
+        stability_ok = (bool(first_refs) and first_refs == second_refs == third_refs
+                        and rev_before_reads == rev_after_reads)
+        stability_detail = (f"тел={len(first_refs)} чтений=3 совпали={first_refs == second_refs == third_refs} "
+                            f"ревизия {rev_before_reads}→{rev_after_reads} "
+                            f"тел_со_сменившейся_ссылкой={len(ref_diff)}")
+    rep.add("EC9.11.read",
+            "ссылка на тело УСТОЙЧИВА на одной ревизии: три чтения подряд (включая get_context, "
+            "measure и read_topology между ними) дают для одного тела одну и ту же строку",
+            "PASS" if stability_ok else "FAIL", stability_detail,
+            details={"first": first_refs, "second": second_refs, "third": third_refs})
+
+    # --- 12: устаревшая ссылка отвергается, а не переадресуется (наряд §2.3) ---
+    stale_ok = None
+    stale_detail = "документ не построен"
+    if doc:
+        target = find_body(doc, PINION_PLANE_MM)
+        stale_ref = (target or {}).get("body_ref")
+        # kompas_rebuild перечитывает модель: ссылки прежней ревизии отзываются (измерено B3.16).
+        tool("kompas_rebuild", {"document_id": doc, "operation_id": str(uuid.uuid4())})
+        rev = rev_now(doc)
+        stale_code = err(tool("kompas_measure", {"target_ref": stale_ref, "properties": ["volume"]})) \
+            if stale_ref else None
+        fresh = find_body(doc, PINION_PLANE_MM)
+        fresh_ref = (fresh or {}).get("body_ref")
+        fresh_env = tool("kompas_measure", {"target_ref": fresh_ref, "properties": ["volume"]}) \
+            if fresh_ref else {}
+        stale_ok = (stale_ref is not None and stale_code in ("STALE_REFERENCE", "DOCUMENT_NOT_FOUND")
+                    and fresh_ref is not None and err(fresh_env) is None)
+        stale_detail = (f"устаревшая={stale_ref} код={stale_code}; свежая={fresh_ref} "
+                        f"код={err(fresh_env)}")
+    rep.add("EC9.12.negative_tests",
+            "устаревшая ссылка на тело даёт ЧЕСТНЫЙ отказ (STALE_REFERENCE), а не молча уводит "
+            "операцию в другое тело; после перечитывания тел свежая ссылка работает",
+            "PASS" if stale_ok else "FAIL", stale_detail)
+
+    # --- 13: операция ПО ССЫЛКЕ попадает в заявленное тело (как у клиента) ---
+    addressing_ok = None
+    addressing_detail = "документ не построен"
+    if doc:
+        pinion = find_body(doc, PINION_PLANE_MM)
+        crown = find_box(doc, {"min_mm": [-CROWN_R, -CROWN_R, 0.0],
+                               "max_mm": [CROWN_R, CROWN_R, CROWN_HEIGHT_MM]})
+        ref_p = (pinion or {}).get("body_ref")
+        ref_c = (crown or {}).get("body_ref")
+        v_p_before = res(tool("kompas_measure", {"target_ref": ref_p, "properties": ["volume"]})).get("volume_mm3") \
+            if ref_p else None
+        v_c_before = res(tool("kompas_measure", {"target_ref": ref_c, "properties": ["volume"]})).get("volume_mm3") \
+            if ref_c else None
+        cut_sketch, rev, cut_draw = draw(doc, rev, CLIENT_PROFILE, "pinion_gap-byref", PINION_PLANE_MM) \
+            if ref_p else (None, rev, {})
+        rev, cut_env = (rev, {})
+        if cut_sketch and ref_p:
+            # Сторона negative — измерено (EC9.06), что материал снимается именно сменой стороны.
+            rev, cut_env = extrude(doc, rev, cut_sketch, operation="cut", direction="negative",
+                                   end_condition="blind", depth_mm=PINION_HEIGHT_MM,
+                                   target_body_ref=ref_p)
+        v_p_after = res(tool("kompas_measure", {"target_ref": ref_p, "properties": ["volume"]})).get("volume_mm3") \
+            if ref_p else None
+        v_c_after = res(tool("kompas_measure", {"target_ref": ref_c, "properties": ["volume"]})).get("volume_mm3") \
+            if ref_c else None
+        addressing_ok = (ref_p is not None and ref_c is not None and err(cut_env) is None
+                         and isinstance(v_p_before, (int, float)) and isinstance(v_p_after, (int, float))
+                         and v_p_after < v_p_before - 1e-6
+                         and isinstance(v_c_before, (int, float)) and isinstance(v_c_after, (int, float))
+                         and abs(v_c_after - v_c_before) <= 1e-6)
+        addressing_detail = (f"цель={ref_p} V {v_p_before} → {v_p_after}; "
+                             f"постороннее={ref_c} V {v_c_before} → {v_c_after}; "
+                             f"вырез err={err(cut_env)} подготовка={cut_draw and msg(cut_draw) or 'ок'}")
+    rep.add("EC9.13.create",
+            "адресация ССЫЛКОЙ, как у клиента: вырез по target_body_ref снимает материал ИМЕННО с "
+            "заявленного тела, а постороннее тело не меняется",
+            "PASS" if addressing_ok else "FAIL", addressing_detail)
+
+    # --- 14: ссылка переживает мутацию и продолжает адресовать ТО ЖЕ тело (наряд §2.3) ---
+    # Наряд предлагал отвергать такую ссылку по габариту. Проверено и НЕ внедрено: отказ ломает
+    # законную работу — строки B3.56/B3.59 переносят тело и ЗАТЕМ адресуют его той же ссылкой,
+    # потому что клиент вправе продолжать работу над тем же телом. Измерено здесь: адресация по
+    # ссылке после мутации попадает в ТО ЖЕ тело (сопоставление по IUnknown), а не в другое.
+    ref_survives_ok = None
+    ref_survives_detail = "документ не построен"
+    if doc:
+        before_move = find_body(doc, PINION_PLANE_MM)
+        ref_m = (before_move or {}).get("body_ref")
+        others_before = {json.dumps(r.get("bbox"), sort_keys=True): r.get("body_ref")
+                         for r in bodies(doc)}
+        if ref_m:
+            move_env = tool("kompas_reposition", {
+                "document_id": doc, "expected_revision": rev, "target_body_ref": ref_m,
+                "kind": "translate", "vector_mm": [0.0, 0.0, 50.0],
+                "operation_id": str(uuid.uuid4())})
+            rev = move_env.get("revision_after") or rev_now(doc)
+            move_err = err(move_env)
+            # Второй перенос ТОЙ ЖЕ ссылкой: то же тело, ещё на +1 мм по z.
+            again = tool("kompas_reposition", {
+                "document_id": doc, "expected_revision": rev, "target_body_ref": ref_m,
+                "kind": "translate", "vector_mm": [0.0, 0.0, 1.0],
+                "operation_id": str(uuid.uuid4())})
+            rev = again.get("revision_after") or rev_now(doc)
+            moved = find_body(doc, PINION_PLANE_MM + 51.0)
+            others_after = {json.dumps(r.get("bbox"), sort_keys=True): r.get("body_ref")
+                            for r in bodies(doc)}
+            others_same = all(others_after.get(box) is not None for box in others_before
+                              if box != json.dumps(before_move.get("bbox"), sort_keys=True))
+            ref_survives_ok = (move_err is None and err(again) is None and moved is not None
+                               and others_same)
+            ref_survives_detail = (f"ссылка={ref_m} перенос err={move_err}; повтор той же ссылкой "
+                                   f"err={err(again)}; тело на z+51 найдено={moved is not None}; "
+                                   f"остальные тела на месте={others_same}")
+        else:
+            ref_survives_detail = "тело не найдено по габариту"
+    rep.add("EC9.14.create",
+            "ссылка на тело переживает мутацию и продолжает адресовать ТО ЖЕ тело: повторный перенос "
+            "той же ссылкой попадает в сдвинутое тело, а не в другое (защита по габариту проверена и "
+            "НЕ внедрена — она отвергала бы такую законную работу, см. отчёт)",
+            "PASS" if ref_survives_ok else "FAIL", ref_survives_detail)
+
+    # --- 15: снимок отказа несёт код и текст ошибки КОМПАС (наряд §1.2) ---
+    rep.add("EC9.15.read",
+            "снимок отказа несёт `kompas_result_code` и `kompas_result_text`: причина либо названа "
+            "кодом КОМПАС с текстом, либо прямо сказано, что кода не было",
+            "PASS" if code_named else "FAIL",
+            f"компас_код={kompas_code} текст={clip(str(kompas_text), 80)}",
+            details={"kompas_result_code": kompas_code, "kompas_result_text": kompas_text})
+
+    # --- 16: ревизия отказа NO_GEOMETRY_CHANGE (наряд §3.4) ---
+    # Отказ, оставивший признак в дереве, обязан нести ФАКТИЧЕСКУЮ ревизию: иначе следующий вызов
+    # клиента с прежней ревизией получает REVISION_CONFLICT, хотя ответил не он.
+    nogeo_plane = REFUSE_PLANE_MM + 200.0
+    nogeo_ok = None
+    nogeo_detail = "документ не построен"
+    if doc:
+        # Ревизия перечитывается: предыдущие строки могли сдвинуть её отказом, и тогда заготовка
+        # упала бы REVISION_CONFLICT на ровном месте, измерив не то, что объявлено.
+        rev = rev_now(doc)
+        nb_ref, rev, nb_err = make_body(doc, rev, "pinion-nogeo", nogeo_plane)
+        nb_sketch, rev, nb_draw = draw(doc, rev, CLIENT_PROFILE, "pinion_gap-nogeo", nogeo_plane) \
+            if nb_ref else (None, rev, {})
+        rev, nogeo_env = (rev, {})
+        if nb_sketch and nb_ref:
+            rev, nogeo_env = extrude(doc, rev, nb_sketch, operation="cut", direction="positive",
+                                     end_condition="blind", depth_mm=PINION_HEIGHT_MM,
+                                     target_body_ref=nb_ref)
+        nogeo_code = err(nogeo_env)
+        env_ra = (nogeo_env or {}).get("revision_after")
+        cur_ra = rev_now(doc)
+        nxt = {}
+        if env_ra is not None:
+            nxt = tool("kompas_create_sketch", {
+                "document_id": doc, "expected_revision": env_ra,
+                "plane": {"base": "xy", "offset_mm": nogeo_plane + 30.0}, "name": "after-nogeo",
+                "operation_id": str(uuid.uuid4())})
+            rev = nxt.get("revision_after") or rev
+        nogeo_ok = (nogeo_code == "NO_GEOMETRY_CHANGE" and env_ra is not None
+                    and env_ra == cur_ra and err(nxt) is None)
+        nogeo_detail = (f"код={nogeo_code} revision_after отказа={env_ra} get_context={cur_ra} "
+                        f"следующий вызов={err(nxt)} подготовка={nb_err or (nb_draw and msg(nb_draw)) or 'ок'}")
+    rep.add("EC9.16.diagnostics",
+            "отказ NO_GEOMETRY_CHANGE (признак остался в дереве) несёт ФАКТИЧЕСКУЮ ревизию: она равна "
+            "той, что затем вернёт get_context, и следующий вызов с ней проходит без REVISION_CONFLICT",
+            "PASS" if nogeo_ok else "FAIL", nogeo_detail)
+
+    # --- 17: ревизия отказа с успешным откатом (наряд §3.4) ---
+    # Тот же вопрос для отказа Create()=false, где откат сработал: модель не изменилась, но ответ
+    # обязан назвать ревизию, с которой продолжать, а не оставить её пустой.
+    rollback_rev_ok = None
+    rollback_rev_detail = "документ не построен"
+    if doc:
+        ra = (refuse_env or {}).get("revision_after")
+        # Значения сняты сразу после отказа EC9.07 (`refuse_rev_after_at_refusal`, `refuse_next_env`) —
+        # здесь они только сопоставляются, потому что ревизия с тех пор ушла вперёд.
+        rollback_rev_ok = (ra is not None and ra == refuse_rev_after_at_refusal
+                           and refuse_next_ok)
+        rollback_rev_detail = (f"revision_after отказа={ra} get_context тогда={refuse_rev_after_at_refusal} "
+                               f"следующий вызов тогда={refuse_next_code}")
+    rep.add("EC9.17.diagnostics",
+            "отказ с успешным откатом (Create()=false) несёт ревизию, с которой можно продолжать: она "
+            "равна ревизии документа после отката, и следующий вызов с ней проходит",
+            "PASS" if rollback_rev_ok else "FAIL", rollback_rev_detail)
 
     if doc:
         close(doc)

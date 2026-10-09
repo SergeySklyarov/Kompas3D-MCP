@@ -5832,6 +5832,21 @@ def main():
     }
     group, report_filename, report_title = selected_run_group(selected)
 
+    # Явный путь приёмки проверяется ДО создания каталога прогона: отказ обязан оставить дерево
+    # таким, каким он его нашёл, — пустой каталог прогона после отказа выглядел бы как состоявшийся
+    # запуск без доказательств.
+    report_override = argument("--report")
+    override_target = None
+    if report_override:
+        # Приёмка поставки обязана лежать отдельно от прогонов дерева исходников: общий путь
+        # означал бы, что отчёт одной приёмки затирает отчёт другой и «до/после» неразличимы.
+        # Занятый путь не затирается молча: он назван, и названы оба выхода (см. решение ниже).
+        override_target = os.path.abspath(report_override)
+        allowed, message = report_path_decision(override_target, "--report-overwrite" in sys.argv)
+        print(message)
+        if not allowed:
+            return 2
+
     # КАТАЛОГ ЭТОГО ПРОГОНА создаётся ДО запуска Хоста: журналы Хоста и Воркера обязаны лежать
     # внутри него, иначе упавший прогон снова оставит доказательства врозь от отчёта.
     started_utc = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
@@ -5841,18 +5856,8 @@ def main():
     # Прежнее общее имя остаётся КОПИЕЙ последнего прогона: привычный путь не пропадает, но и не
     # является больше единственным экземпляром доказательств.
     rep.mirror_paths.append(os.path.join(workdir, report_filename))
-
-    report_override = argument("--report")
-    if report_override:
-        # Приёмка поставки обязана лежать отдельно от прогонов дерева исходников: общий путь
-        # означал бы, что отчёт одной приёмки затирает отчёт другой и «до/после» неразличимы.
-        # Занятый путь не затирается молча: он назван, и названы оба выхода (см. решение ниже).
-        target = os.path.abspath(report_override)
-        allowed, message = report_path_decision(target, "--report-overwrite" in sys.argv)
-        print(message)
-        if not allowed:
-            return 2
-        rep.mirror_paths.append(target)
+    if override_target:
+        rep.mirror_paths.append(override_target)
 
     print(f"Каталог прогона: {run_dir}")
     print(f"Дерево исходников: {commit}"

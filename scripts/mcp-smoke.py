@@ -1,4 +1,4 @@
-﻿"""Drives KompasMcp.Host over the real MCP stdio transport for the vertical scenario.
+"""Drives KompasMcp.Host over the real MCP stdio transport for the vertical scenario.
 
 The server side uses the official C# SDK for transport; this client speaks the wire format
 directly (newline-delimited JSON-RPC 2.0) on purpose: the assertions must be about OUR contract —
@@ -649,6 +649,44 @@ def instrument_self_test():
     check("число выдавливаний считается по журналу вызовов",
           extrudes_so_far() == sum(1 for c in CALL_LOG if c.get("tool") == "kompas_extrude"))
 
+    # Опыт «второй экземпляр»: план, разбор плеч и умолчания сужения. Все три — чистые функции, и
+    # проверяются здесь, а не живым прогоном: живой прогон проверяет среду, а не прибор.
+    check("план опыта: K циклов по три попытки",
+          second_instance_plan(2) == ((1, 1), (1, 2), (1, 3), (2, 1), (2, 2), (2, 3)),
+          str(second_instance_plan(2)))
+    check("пустой план опыта пуст", second_instance_plan(0) == ())
+    check("плечо A без флага выключено",
+          positive_int_argument([], SECOND_INSTANCE_FLAG_A) == (0, None))
+    check("плечо A принимает число",
+          positive_int_argument([SECOND_INSTANCE_FLAG_A, "12"], SECOND_INSTANCE_FLAG_A) == (12, None))
+    check("нечисловой K опыта назван, а не проглочен",
+          positive_int_argument([SECOND_INSTANCE_FLAG_A, "много"], SECOND_INSTANCE_FLAG_A)[0] == 0
+          and positive_int_argument([SECOND_INSTANCE_FLAG_A, "много"],
+                                    SECOND_INSTANCE_FLAG_A)[1] is not None)
+    check("плечо B принимает число",
+          positive_int_argument([SECOND_INSTANCE_FLAG_B, "12"], SECOND_INSTANCE_FLAG_B) == (12, None))
+    default_options, default_notes = second_instance_options([])
+    check("умолчания сужения воспроизводят наблюдавшийся случай",
+          default_options == SECOND_INSTANCE_DEFAULTS and default_notes == [],
+          str(default_options))
+    narrowed, _ = second_instance_options(["--second-instance-visible", "false"])
+    check("сужающий флаг снимает видимость", narrowed["visible"] is False)
+    bad, bad_notes = second_instance_options(["--second-instance-visible", "flase"])
+    check("нелогическое значение сужения названо, а не проглочено",
+          bad["visible"] is True and bad_notes and "flase" in bad_notes[0], str(bad_notes))
+    negative, negative_notes = second_instance_options(["--second-instance-delay", "-3"])
+    check("отрицательная пауза названа, а не проглочена",
+          negative["delay"] == 0.0 and negative_notes and "-3" in negative_notes[0],
+          str(negative_notes))
+    check("различие долей внутри разброса не подтверждается",
+          second_instance_conclusion(1, 36, 0, 36)[0] is False)
+    check("различие долей больше разброса подтверждается",
+          second_instance_conclusion(18, 36, 0, 36)[0] is True)
+    check("обратное направление подтверждением не объявляется",
+          second_instance_conclusion(0, 36, 18, 36)[0] is False)
+    check("нулевая доля при нуле попыток не выдумывается",
+          second_instance_conclusion(0, 0, 0, 36)[0] is False)
+
     print(f"\nСамопроверка прибора: {checks} проверок, "
           f"{len(failures)} FAIL" + (f" — {failures}" if failures else ""))
     return 1 if failures else 0
@@ -780,26 +818,153 @@ def refusal_fraction(attempts):
     return refused, total, (refused / total if total else None)
 
 
-def nested_repeat_argument(argv=None):
-    """K повтора NEST из `--nested-repeat K`. Отсутствие флага — 0 (режим выключен), а не ошибка:
-    флаг необязателен. Нечисловое или неположительное значение НАЗЫВАЕТСЯ, а не превращается в 0
-    молча, — иначе опечатка выглядела бы как выключенный режим. `argv` принимается, чтобы эту
-    половину проверяла самопроверка прибора, а не живой прогон.
+def positive_int_argument(argv, flag):
+    """K из `--flag K`. Отсутствие флага — 0 (режим выключен), а не ошибка: флаг необязателен.
+    Нечисловое или неположительное значение НАЗЫВАЕТСЯ, а не превращается в 0 молча, — иначе
+    опечатка выглядела бы как выключенный режим. `argv` передаётся явно, чтобы эту половину
+    проверяла самопроверка прибора, а не живой прогон.
     """
-    argv = sys.argv if argv is None else argv
-    if "--nested-repeat" not in argv:
+    if flag not in argv:
         return 0, None
-    index = argv.index("--nested-repeat")
+    index = argv.index(flag)
     if index + 1 >= len(argv):
-        return 0, "--nested-repeat без значения: режим повтора не включён"
+        return 0, f"{flag} без значения: режим не включён"
     raw = argv[index + 1]
     try:
         value = int(raw)
     except (TypeError, ValueError):
-        return 0, f"--nested-repeat {raw!r}: не целое число — режим повтора не включён"
+        return 0, f"{flag} {raw!r}: не целое число — режим не включён"
     if value <= 0:
-        return 0, f"--nested-repeat {value}: не положительное — режим повтора не включён"
+        return 0, f"{flag} {value}: не положительное — режим не включён"
     return value, None
+
+
+def nested_repeat_argument(argv=None):
+    """K повтора NEST из `--nested-repeat K`. Разбор общий с прочими режимами повтора
+    (`positive_int_argument`), чтобы у трёх флагов не было трёх разных дисциплин опечатки."""
+    return positive_int_argument(sys.argv if argv is None else argv, "--nested-repeat")
+
+
+# ── Опыт «второй экземпляр» (наряд NEST_SECOND_INSTANCE) ──────────────────────────────────────────
+# Плечо A поднимает и закрывает ВТОРОЙ экземпляр КОМПАС, плечо B вместо этого просто ждёт столько же.
+# Имена строк — `NEST.SI.*`, а не `NEST.<NN>.<действие>`: это строки ОПЫТА, и принять их за строки
+# матрицы нельзя.
+SECOND_INSTANCE_ATTEMPTS = (1, 2, 3)
+SECOND_INSTANCE_FLAG_A = "--second-instance-repeat"
+SECOND_INSTANCE_FLAG_B = "--second-instance-control"
+# Умолчания сужения названы ЗДЕСЬ, а не спрятаны в разборе: цикл опыта обязан быть воспроизводим.
+SECOND_INSTANCE_DEFAULTS = {"visible": True, "document": True, "close_owned": True, "delay": 0.0}
+# Пауза плеча B, когда плечо A в том же прогоне НЕ запускалось: измерять её не у чего, и умолчание
+# называется вместе с происхождением, а не выдаётся за измеренную длительность.
+SECOND_INSTANCE_DEFAULT_PAUSE = 12.0
+
+
+def second_instance_plan(k):
+    """План опыта: K циклов, в каждом — три попытки. Чистая функция — её проверяет самопроверка.
+
+    Три попытки в цикле не украшение: отказ наблюдался как СЕРИЯ из двух-трёх подряд на свежих
+    документах, поэтому одна попытка на цикл не отличила бы «отказал первый документ» от «отказала
+    серия».
+    """
+    return tuple((cycle, attempt) for cycle in range(1, k + 1) for attempt in SECOND_INSTANCE_ATTEMPTS)
+
+
+def boolean_argument(argv, flag, default):
+    """Значение `--flag true|false` из argv → (значение, причина_отказа).
+
+    Неверное значение НАЗЫВАЕТСЯ, а не превращается в умолчание молча: `--second-instance-visible
+    flase` иначе выглядело бы как «флаг не задан», и сужение опыта пошло бы не тем плечом.
+    """
+    if flag not in argv:
+        return default, None
+    index = argv.index(flag)
+    if index + 1 >= len(argv):
+        return default, f"{flag} без значения: взято умолчание {default}"
+    raw = argv[index + 1].strip().lower()
+    if raw in ("true", "1", "yes", "on"):
+        return True, None
+    if raw in ("false", "0", "no", "off"):
+        return False, None
+    return default, f"{flag} {raw!r}: не логическое значение — взято умолчание {default}"
+
+
+def number_argument(argv, flag, default):
+    """Неотрицательное число из `--flag <число>` → (значение, причина_отказа). См. `boolean_argument`."""
+    if flag not in argv:
+        return default, None
+    index = argv.index(flag)
+    if index + 1 >= len(argv):
+        return default, f"{flag} без значения: взято умолчание {default}"
+    raw = argv[index + 1]
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return default, f"{flag} {raw!r}: не число — взято умолчание {default}"
+    if value < 0:
+        return default, f"{flag} {value}: отрицательное — взято умолчание {default}"
+    return value, None
+
+
+def second_instance_options(argv=None):
+    """Настройки сужения опыта: видимость второго экземпляра, документ в нём, закрытие владельца,
+    пауза после отключения. Возвращает (настройки, список причин отказа разбора).
+
+    Каждая настройка — отдельный фактор сужения наряда §1.3: (а) `visible=false`, (б) `document=false`,
+    (в) `close_owned=false`, (г) `delay` 0/1/3/10. Значение по умолчанию воспроизводит НАБЛЮДЁННЫЙ
+    случай IMG.23: видимый второй экземпляр, документ в нём, закрытие владельца, без паузы.
+    """
+    argv = sys.argv if argv is None else argv
+    notes = []
+    options = dict(SECOND_INSTANCE_DEFAULTS)
+    options["visible"], note = boolean_argument(argv, "--second-instance-visible", options["visible"])
+    notes += [note] if note else []
+    options["document"], note = boolean_argument(argv, "--second-instance-document", options["document"])
+    notes += [note] if note else []
+    options["close_owned"], note = boolean_argument(argv, "--second-instance-close-owned",
+                                                    options["close_owned"])
+    notes += [note] if note else []
+    options["delay"], note = number_argument(argv, "--second-instance-delay", options["delay"])
+    notes += [note] if note else []
+    return options, notes
+
+
+def two_proportion_z(refused_a, total_a, refused_b, total_b):
+    """|z| разности двух долей — насколько различие БОЛЬШЕ разброса. `None`, если доля не определена.
+
+    Без этого числа «доля A выше доли B» неотличимо от разброса: один отказ из 36 и ноль из 36 —
+    различие в 1,0 сигмы, то есть шум. Считается по объединённой доле (обычная проверка двух долей).
+    """
+    if not total_a or not total_b:
+        return None
+    p_a, p_b = refused_a / total_a, refused_b / total_b
+    pooled = (refused_a + refused_b) / (total_a + total_b)
+    spread = math.sqrt(pooled * (1.0 - pooled) * (1.0 / total_a + 1.0 / total_b))
+    if spread == 0.0:
+        return 0.0
+    return (p_a - p_b) / spread
+
+
+def second_instance_conclusion(refused_a, total_a, refused_b, total_b, threshold=1.96):
+    """(различие подтверждено?, объяснение) по двум плечам.
+
+    Правило названо, а не выведено из «похоже»: различие ПОДТВЕРЖДЕНО, когда отказов в плече A
+    больше, чем в плече B, и |z| разности долей не меньше порога (1,96 — 95 %). Плечо без отказов —
+    это измеренный НОЛЬ, а не отсутствие данных: у него есть число попыток, и доля считается по нему.
+    Обратное направление (B выше A) подтверждением не объявляется: второго экземпляра в B не было,
+    и «в контроле отказало чаще» — шум, а не влияние окна.
+    """
+    if not total_a or not total_b:
+        return False, "одно из плеч не запускалось — сравнивать нечего"
+    z = two_proportion_z(refused_a, total_a, refused_b, total_b)
+    if refused_a == 0 and refused_b == 0:
+        return False, "оба плеча дали ноль отказов на %d и %d попытках — различие не подтверждено" \
+            % (total_a, total_b)
+    if z is not None and z >= threshold and refused_a > refused_b:
+        return True, ("плечо A %d/%d против B %d/%d, z=%.2f — различие больше разброса"
+                      % (refused_a, total_a, refused_b, total_b, z))
+    return False, ("плечо A %d/%d против B %d/%d, z=%s — различие внутри разброса"
+                   % (refused_a, total_a, refused_b, total_b,
+                      "н/д" if z is None else "%.2f" % z))
 
 
 def assembly_checks(client, rep, app_id, workdir):
@@ -5872,6 +6037,20 @@ def main():
     nested_repeat_k, nested_repeat_note = nested_repeat_argument()
     if nested_repeat_note:
         print(nested_repeat_note)
+    # Опыт «второй экземпляр» (наряд NEST_SECOND_INSTANCE): плечо A поднимает и закрывает второй
+    # экземпляр КОМПАС, плечо B ждёт столько же. Оба флага ДОПОЛНЯЮТ группу NEST, как и повтор, и
+    # своей группы не заводят. Нечисловой K и неверное значение сужения НАЗЫВАЮТСЯ, а не глотаются.
+    second_instance_a, second_instance_a_note = positive_int_argument(sys.argv, SECOND_INSTANCE_FLAG_A)
+    second_instance_b, second_instance_b_note = positive_int_argument(sys.argv, SECOND_INSTANCE_FLAG_B)
+    second_instance_opts, second_instance_opt_notes = second_instance_options()
+    second_instance_pause, second_instance_pause_note = number_argument(
+        sys.argv, "--second-instance-pause", SECOND_INSTANCE_DEFAULT_PAUSE)
+    for note in (second_instance_a_note, second_instance_b_note, second_instance_pause_note,
+                 *second_instance_opt_notes):
+        if note:
+            print(note)
+    second_instance = {"k_a": second_instance_a, "k_b": second_instance_b,
+                       "pause_b": second_instance_pause, "options": second_instance_opts}
     # То же для домена СБОРОК (наряд C1): одна группа ASM на своём сеансе. Отдельная ветка нужна по
     # той же причине, что у B3M/B4/B5/F08/MANIA/DEP/IMG/NEST: клетка матрицы обязана находиться по
     # ИМЕНИ строки (`ASM.<NN>.<действие>`), а не по номеру в общем потоке. Полный прогон всё равно
@@ -6381,7 +6560,8 @@ def main():
             return finish(rep, client)
 
         if nested_only:
-            nested_contour_checks(client, rep, app_id, workdir, repeat_k=nested_repeat_k)
+            nested_contour_checks(client, rep, app_id, workdir, repeat_k=nested_repeat_k,
+                                   second_instance=second_instance)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -7085,7 +7265,8 @@ def main():
 
         # Группа NEST идёт после IMG по той же причине: строки называются по имени
         # (`NEST.<NN>.<действие>`), каждый случай строит СВОЙ документ и закрывает его сам.
-        nested_contour_checks(client, rep, app_id, workdir, repeat_k=nested_repeat_k)
+        nested_contour_checks(client, rep, app_id, workdir, repeat_k=nested_repeat_k,
+                                   second_instance=second_instance)
 
         # Группа SPD идёт перед EC9 и по существу, и по порядку: она строит свои документы и закрывает
         # их сама, а EC9 остаётся ПОСЛЕДНЕЙ группой общего сеанса — его постановка требует САМОГО
@@ -30459,7 +30640,7 @@ DEP_UNKNOWN_SCAN_LIMIT = 32
 # формулировке. Группа входит и в полный прогон; отдельной веткой она стоит затем, чтобы её отказ
 # был виден по имени, а не растворялся среди тысячи строк.
 # ══════════════════════════════════════════════════════════════════════════════════════════════════
-def nested_contour_checks(client, rep, app_id, workdir, repeat_k=0):
+def nested_contour_checks(client, rep, app_id, workdir, repeat_k=0, second_instance=None):
     """NEST.* — критерий зависимости `dep.sketch.entities`: «несколько замкнутых контуров и
     вложенные отверстия там, где это допустимо для операции».
 
@@ -30570,11 +30751,16 @@ def nested_contour_checks(client, rep, app_id, workdir, repeat_k=0):
     def near(a, b, tol=0.01):
         return a is not None and abs(a - b) <= max(tol, 1e-6 * abs(b))
 
-    def new_doc(name):
-        env, _ = call("kompas_create_document", {"application_id": app_id, "kind": "part",
-                                                 "name": name})
+    def document_in(app, name):
+        """Свежий документ в НАЗВАННОМ приложении. Отдельная функция, потому что опыт «второй
+        экземпляр» заводит документы и в ОСНОВНОМ приложении (`app_id`), и во ВТОРОМ — общая
+        `new_doc` знала только первое и не годилась бы для второго."""
+        env, _ = call("kompas_create_document", {"application_id": app, "kind": "part", "name": name})
         r = result(env)
         return r.get("document_id") or r.get("id"), rev_of(env)
+
+    def new_doc(name):
+        return document_in(app_id, name)
 
     def sketch(doc, rev, entities, name, offset=0.0):
         env, code = call("kompas_create_sketch", {
@@ -30793,6 +30979,189 @@ def nested_contour_checks(client, rep, app_id, workdir, repeat_k=0):
              details={"attempts": total, "refused": refused, "fraction": fraction,
                       "kinds": list(NEST_REPEAT_KINDS), "plan": list(nested_repeat_plan(k))})
 
+    def second_instance_experiment(settings):
+        """Опыт «второй экземпляр»: выдавливания СРАЗУ после закрытия второго экземпляра КОМПАС.
+
+        ЗАЧЕМ. Нерегулярный отказ `Entity.Create()=false` (код 54) на ГОДНОМ профиле наблюдался в
+        основном приложении сразу после того, как был поднят и закрыт ВТОРОЙ экземпляр КОМПАС
+        (случай `IMG.23`): `kompas_connect(make_visible=true)`, затем `kompas_disconnect(
+        close_owned_application=true)`, и через 1,3 с отказало выдавливание `NEST.01`, за ним
+        `NEST.02`; `NEST.03` уже прошло. Прежний повтор `--nested-repeat` стоял на пятнадцать
+        выдавливаний ПОЗЖЕ и это окно не захватывал. Здесь выдавливания идут СРАЗУ после отключения,
+        без пауз прибора, и это ЕДИНСТВЕННОЕ отличие опыта от прежнего повтора.
+
+        ЧТО СЧИТАЕТСЯ ПОПЫТКОЙ В ОКНЕ. Три выдавливания подряд, каждое в СВЕЖЕМ документе ОСНОВНОГО
+        приложения, сразу после отключения второго экземпляра. Три, а не одно: наблюдённый отказ был
+        СЕРИЕЙ из двух-трёх подряд, и одна попытка на цикл не отличила бы «отказал первый документ»
+        от «отказала серия».
+
+        КОНТРОЛЬ (плечо B) НЕ ПУСТОЙ. Вместо второго экземпляра — пауза ТОЙ ЖЕ длительности (средняя
+        длительность цикла A, измеренная в этом же прогоне). Иначе «отказ в окне» неотличим от
+        фоновой частоты отказов этого сеанса, а она ненулевая и измерена отдельно.
+
+        ЧЕГО ЗДЕСЬ НЕТ. Никакого скрытого повтора внутри строки приёмки: строки `NEST.SI.*` —
+        строки ОПЫТА, они появляются только при явном флаге и строками матрицы не являются.
+
+        History: docs/decisions/adapter-features.md#create-false-snapshot
+        """
+        ring_analytic = RING_AREA * PLATE_D
+        options = dict(settings.get("options") or SECOND_INSTANCE_DEFAULTS)
+
+        def second_instance_start():
+            """Поднять ВТОРОЙ экземпляр КОМПАС и назвать его исход — вход как у IMG.23."""
+            env, code = call("kompas_connect", {"mode": "launch",
+                                                "make_visible": bool(options["visible"])})
+            return {"application_id": result(env).get("application_id")
+                    or (env or {}).get("application_id"),
+                    "code": code, "visible": bool(options["visible"]),
+                    "process_id": result(env).get("process_id")}
+
+        def second_instance_work(second_app):
+            """Документ и ОДНО выдавливание во втором экземпляре — как IMG.23, без снимков."""
+            doc, rev = document_in(second_app, "NEST-SI-second")
+            record = {"document": doc, "code": None, "message": None, "failure_snapshot": None}
+            if not doc:
+                record.update({"code": "DOCUMENT_NOT_CREATED",
+                               "message": "документ второго экземпляра не создан"})
+                return record
+            sk, rev, err = sketch(doc, rev, plate_profile(), "NEST-SI-second-sk")
+            if err:
+                record.update({"code": "SKETCH_NOT_BUILT", "message": err})
+                close(doc)
+                return record
+            _rev, env, code = extrude(rev, sk, operation="base", depth_mm=PLATE_D,
+                                      direction="positive", end_condition="blind")
+            record.update({"code": code})
+            record.update(refusal(env, code))
+            close(doc)
+            return record
+
+        def second_instance_release(second_app):
+            """Отпустить второй экземпляр и вернуть МОМЕНТ (часы прибора) — от него считается
+            задержка до выдавливания. Пауза сужения стоит ПОСЛЕ отключения и ВХОДИТ в задержку:
+            иначе «пауза 10 с» выглядела бы как «задержка 0 с»."""
+            if second_app:
+                call("kompas_disconnect", {"application_id": second_app,
+                                           "close_owned_application": bool(options["close_owned"])})
+            if options["delay"]:
+                time.sleep(float(options["delay"]))
+            return time.time()
+
+        def cycle(cycle_index, arm, pause_seconds):
+            record = {"cycle": cycle_index, "arm": arm, "attempts": [], "second_instance": None,
+                      "pause_seconds": pause_seconds if arm == "B" else None}
+            started = time.time()
+            # Шаг 1. Рабочий документ ОСНОВНОГО приложения — то же состояние, что было перед NEST.01.
+            work_doc, _rev = new_doc("NEST-SI-%03d-work" % cycle_index)
+            if not work_doc:
+                record["note"] = "рабочий документ основного приложения не создан"
+                return record
+            # Шаг 2. Второй экземпляр (плечо A) либо пауза той же длительности (плечо B).
+            second_app = None
+            if arm == "A":
+                second = second_instance_start()
+                second_app = second.get("application_id")
+                record["second_instance"] = second
+                if second_app and options["document"]:
+                    record["second_instance_work"] = second_instance_work(second_app)
+                t_release = second_instance_release(second_app)
+            else:
+                time.sleep(max(0.0, float(pause_seconds or 0.0)))
+                t_release = time.time()
+            record["release_at_seconds"] = session_seconds()
+            # Шаг 3. Три выдавливания подряд в СВЕЖИХ документах основного приложения, СРАЗУ.
+            close(work_doc)
+            for attempt in SECOND_INSTANCE_ATTEMPTS:
+                entry = {"attempt": attempt, "analytic_mm3": ring_analytic, "failure_snapshot": None}
+                doc, rev = new_doc("NEST-SI-%03d-%d" % (cycle_index, attempt))
+                if not doc:
+                    entry.update({"code": "DOCUMENT_NOT_CREATED",
+                                  "message": "документ не создан — измерять нечего"})
+                    record["attempts"].append(entry)
+                    continue
+                sk, rev, err = sketch(doc, rev, ring(), "NEST-SI-%03d-%d-sk" % (cycle_index, attempt))
+                if err:
+                    entry.update({"code": "SKETCH_NOT_BUILT", "message": err})
+                    record["attempts"].append(entry)
+                    close(doc)
+                    continue
+                entry["documents"] = open_documents()
+                entry["extrude_ordinal"] = extrudes_so_far() + 1
+                entry["session_seconds"] = session_seconds()
+                entry["since_release_s"] = round(time.time() - t_release, 3)
+                _rev, env, code = extrude(rev, sk, operation="base", depth_mm=PLATE_D,
+                                          direction="positive", end_condition="blind")
+                vol = volume(fresh_body(doc))
+                entry.update({"code": code, "volume_mm3": vol})
+                entry.update(refusal(env, code))
+                entry["matched"] = code is None and near(vol, ring_analytic) and confirmed(env)
+                record["attempts"].append(entry)
+                close(doc)
+            # Экземпляр, оставленный открытым сужением (в), закрывается ЗДЕСЬ и НАЗЫВАЕТСЯ отдельно:
+            # его закрытие — УЖЕ ДРУГОЕ событие, а не то, которое проверял цикл.
+            if arm == "A" and second_app and not options["close_owned"]:
+                record["cleanup_release"] = second_instance_release(second_app)
+            record["cycle_seconds"] = round(time.time() - started, 3)
+            return record
+
+        def arm_run(k, arm, pause_seconds):
+            cycles = [cycle(index, arm, pause_seconds) for index in range(1, k + 1)]
+            attempts = [a for c in cycles for a in c["attempts"]]
+            refused, total, fraction = refusal_fraction(attempts)
+            durations = [c["cycle_seconds"] for c in cycles if c.get("cycle_seconds") is not None]
+            return {"arm": arm, "cycles": cycles, "attempts": attempts, "refused": refused,
+                    "total": total, "fraction": fraction,
+                    "mean_cycle_seconds": (round(sum(durations) / len(durations), 3)
+                                           if durations else None)}
+
+        result_a = arm_run(settings["k_a"], "A", 0.0) if settings.get("k_a") else None
+        pause_b = ((result_a or {}).get("mean_cycle_seconds") or settings.get("pause_b")
+                   or SECOND_INSTANCE_DEFAULT_PAUSE)
+        result_b = arm_run(settings["k_b"], "B", pause_b) if settings.get("k_b") else None
+
+        for label, res in (("A", result_a), ("B", result_b)):
+            if res is None:
+                continue
+            failed = [[c["cycle"], a["attempt"]] for c in res["cycles"] for a in c["attempts"]
+                      if not a.get("matched")]
+            emit("NEST.SI.arm" + label,
+                 "плечо %s: %d циклов по %d выдавливания сразу после %s — доля отказов и объём"
+                 % (label, len(res["cycles"]), len(SECOND_INSTANCE_ATTEMPTS),
+                    "закрытия второго экземпляра" if label == "A"
+                    else "паузы %.3f с" % pause_b),
+                 "PASS" if (res["total"] and res["refused"] == 0 and not failed) else "FAIL",
+                 "циклов=%d попыток=%d отказов=%d доля=%s не_совпало=%s средний_цикл_с=%s"
+                 % (len(res["cycles"]), res["total"], res["refused"], res["fraction"], failed,
+                    res["mean_cycle_seconds"]),
+                 details={"arm": label, "refused": res["refused"], "total": res["total"],
+                          "fraction": res["fraction"],
+                          "options": options if label == "A" else {"pause_seconds": pause_b},
+                          "cycles": res["cycles"]})
+
+        if result_a is not None and result_b is not None:
+            difference_confirmed, note = second_instance_conclusion(
+                result_a["refused"], result_a["total"], result_b["refused"], result_b["total"])
+            emit("NEST.SI.summary",
+                 "опыт «второй экземпляр»: различие долей плеча A (со вторым экземпляром) и плеча B "
+                 "(пауза той же длительности) — подтверждено или нет",
+                 "FAIL" if difference_confirmed else "PASS", note,
+                 details={"confirmed": difference_confirmed,
+                          "arm_a": {"refused": result_a["refused"], "total": result_a["total"],
+                                    "fraction": result_a["fraction"]},
+                          "arm_b": {"refused": result_b["refused"], "total": result_b["total"],
+                                    "fraction": result_b["fraction"]},
+                          "pause_b_seconds": pause_b})
+        else:
+            res = result_a or result_b
+            emit("NEST.SI.summary",
+                 "опыт «второй экземпляр»: запущено ОДНО плечо — сравнивать его не с чем, и это "
+                 "названо, а не выдано за контроль",
+                 "PASS" if (res["total"] and res["refused"] == 0) else "FAIL",
+                 "плечо=%s попыток=%d отказов=%d доля=%s (второе плечо не запускалось)"
+                 % (res["arm"], res["total"], res["refused"], res["fraction"]),
+                 details={"arm": res["arm"], "refused": res["refused"], "total": res["total"],
+                          "fraction": res["fraction"]})
+
     # ── NEST.01: вложенный контур базовым выдавливанием — внутренний контур есть ОТВЕРСТИЕ ───────
     one_shot("NEST.01.create",
              "кольцо R10/r5 базовым выдавливанием: внутренний контур — отверстие, а не второе тело",
@@ -30984,6 +31353,13 @@ def nested_contour_checks(client, rep, app_id, workdir, repeat_k=0):
     # ── ПОВТОР: доля отказов на попытку, а не «получилось/не получилось» ─────────────────────────
     if repeat_k > 0:
         nested_repeat(rep, repeat_k)
+
+    # ── ОПЫТ «ВТОРОЙ ЭКЗЕМПЛЯР»: отказ в окне сразу после закрытия второго экземпляра ───────────
+    # Стоит ПОСЛЕ повтора и в том же сеансе: цикл сам поднимает и закрывает второй экземпляр, поэтому
+    # место внутри группы на исход не влияет — важна только задержка ОТ ОТКЛЮЧЕНИЯ ДО ВЫДАВЛИВАНИЯ,
+    # и она внутри цикла. Строки `NEST.SI.*` появляются ТОЛЬКО при явном флаге.
+    if second_instance and (second_instance.get("k_a") or second_instance.get("k_b")):
+        second_instance_experiment(second_instance)
 
 
 def dep_required_actions(root):

@@ -1504,7 +1504,10 @@ public static class ToolCatalog
                         "(IBoolean.SaveCopyModifyObjects); false — потребляются операцией. " +
                         "Копия цели не поддерживается: это отдельный режим вне обязательного объёма.")),
                     ("expected_volume_mm3", Sch.Nullable(Sch.Num(
-                        "Аналитическое ожидание объёма результата." + DeclaredExpectationRule, 0d, 1e18d))),
+                        "Аналитическое ожидание СУММАРНОГО объёма тел документа после операции, мм³ "
+                        + "(не объём тела-результата: он публикуется отдельной проверкой "
+                        + "result_body_volume и служит наблюдением, а не ожиданием)." + DeclaredExpectationRule,
+                        0d, 1e18d))),
                     ("document_id", Sch.Ref("#/$defs/document_id")),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision"))),
                 WorkerCommands.SolidBoolean,

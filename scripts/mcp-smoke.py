@@ -11264,15 +11264,16 @@ def b3_solid_ops_checks(client, rep, app_id, workdir):
                  {"T": (t_lo, t_hi)}, [1000.0], "Изменение положения")
 
     # ═══════════ B3.40 ОТРИЦАТЕЛЬНЫЙ КОНТРОЛЬ к проверке подтверждения объёма ═══════════
-    # Зачем отдельная строка. `volume_unconfirmed` читает `unverified_aspects` и признаётся виновной,
-    # если расхождение объявленного объёма там есть. Но проверка, которая НИ РАЗУ не сработала,
-    # ничего не доказывает: она может быть написана так, что всегда отвечает «подтверждено». Поэтому
-    # здесь объявляется заведомо НЕВЕРНАЯ величина — объём результата (36000) при сумме тел 37000, —
-    # и строка обязана увидеть `expected_volume_mismatch`. Это тот же приём, что и у контрольной
-    # строки `4/tan`: у прибора обязан быть опыт, на котором он обязан отказать.
+    # Зачем отдельная строка. Проверка, которая НИ РАЗУ не сработала, ничего не доказывает: она может
+    # быть написана так, что всегда отвечает «подтверждено». Поэтому здесь объявляется заведомо
+    # НЕВЕРНАЯ величина — объём результата (36000) при сумме тел 37000. ЕДИНОЕ ПРАВИЛО (решение
+    # заказчика 09.10.2026): несбывшееся заявленное ожидание — ОТКАЗ с числами, а не пометка.
+    # Прежняя редакция строки требовала пометки `expected_volume_mismatch` при успешном вызове; это
+    # правило ЗАМЕНЕНО. Это тот же приём, что и у контрольной строки `4/tan`: у прибора обязан быть
+    # опыт, на котором он обязан отказать.
     doc, rev, refs, err = blank("B3_unconfirmed", {"A": (A_LO, A_HI), "B": (B_LO, B_HI), "S": (S_LO, S_HI)})
     if err:
-        rep.add("B3.40", "объявленный объём, не подтверждённый моделью, назван в unverified_aspects",
+        rep.add("B3.40", "объявленный объём, не подтверждённый моделью, — ОТКАЗ с числами",
                 "FAIL", f"заготовка: {err}")
     else:
         _e, env, _r = client.tool("kompas_boolean", {
@@ -11280,25 +11281,28 @@ def b3_solid_ops_checks(client, rep, app_id, workdir):
             "target_body_ref": refs["A"], "tool_body_refs": [refs["B"]],
             "operation": "union", "keep_tools": False,
             "expected_volume_mm3": 36000.0, "operation_id": str(uuid.uuid4())}, timeout=240)
-        aspects = unverified_of(env)
-        res_aspects = ((env or {}).get("result") or {}).get("unverified_aspects")
-        ver_aspects = ((env or {}).get("verification") or {}).get("unverified_aspects")
+        b_err = (env or {}).get("error") or {}
+        b_details = b_err.get("details") or {}
+        b_partial = b_err.get("partial_effects")
         count, total = totals(doc)
         # Геометрия при этом ПРАВИЛЬНАЯ (одно тело 36000 и целый куб 1000): строка доказывает не то,
-        # что продукт отказал, а то, что он НАЗВАЛ неотвеченное ожидание вместо молчания.
+        # что продукт отказал «на всякий случай», а то, что неотвеченное ожидание названо отказом с
+        # числами, а не выдано за успех.
         rows = list_bodies(doc)
         merged = find(rows, (0.0, 0.0, 0.0), (60.0, 30.0, 20.0))
         v_merged = body_volume(merged.get("body_ref")) if merged else None
         rep.add("B3.40",
-                "объявленный объём, не подтверждённый моделью, назван в unverified_aspects: "
-                "объявлено 36000 (объём результата) при сумме тел 37000 — расхождение видно, "
-                "геометрия верна, а вызов не выдаёт неподтверждённое за подтверждённое",
-                "PASS" if (error_code(env) is None and "expected_volume_mismatch" in aspects
+                "объявленный объём, не подтверждённый моделью, — ОТКАЗ GEOMETRY_FAILED с числами: "
+                "объявлено 36000 (объём результата) при сумме тел 37000, геометрия при этом верна",
+                "PASS" if (error_code(env) == "GEOMETRY_FAILED" and b_partial is True
+                           and b_details.get("code") == "declared_expectation_not_confirmed"
+                           and b_details.get("expected_volume_mm3") == 36000.0
+                           and b_details.get("measured_volume_mm3") == 37000.0
                            and count == 2 and near(v_merged, 36000.0) and near(total, 37000.0))
                 else "FAIL",
-                f"err={error_code(env)} unverified_aspects={aspects} тел={count} сумма={total} "
-                f"результат V={v_merged} — ожидание: расхождение названо, при верной геометрии; "
-                f"место публикации: result={res_aspects} verification={ver_aspects}")
+                f"err={error_code(env)} partial={b_partial} details.code={b_details.get('code')} "
+                f"ожидание={b_details.get('expected_volume_mm3')} измерено={b_details.get('measured_volume_mm3')} "
+                f"тел={count} сумма={total} результат V={v_merged}")
         close(doc)
 
     # ═══════════ B3.41 многотельное выдавливание: приращение ОТДЕЛЬНО от суммы по документу ═══════════
@@ -14919,13 +14923,23 @@ def e08_checks(client, rep, app_id, workdir):
             "operation_id": str(uuid.uuid4())})
         pchk = checks_of(penv)
         volume_check = pchk.get("document_volume") or {}
-        marks = unverified_of(penv)
-        named = any(str(m).startswith("document_volume_not_confirmed") for m in marks)
-        rep.add("E08.04", "массив: провал заявленного объёма назван в unverified_aspects",
-                "PASS" if (error_code(penv) is None and volume_check.get("passed") is False and named)
-                else "FAIL",
-                "err=%s document_volume=%s observed=%s unverified=%s"
-                % (error_code(penv), volume_check.get("passed"), volume_check.get("observed"), marks))
+        p_err = (penv or {}).get("error") or {}
+        p_details = p_err.get("details") or {}
+        p_partial = p_err.get("partial_effects")
+        # ЕДИНОЕ ПРАВИЛО (решение заказчика 09.10.2026): заведомо неверное заявленное ожидание
+        # объёма — ОТКАЗ с числами, а не пометка. Прежняя редакция строки требовала пометки
+        # `document_volume_not_confirmed` и успешного вызова; это правило ЗАМЕНЕНО.
+        ok = (error_code(penv) == "GEOMETRY_FAILED" and p_partial is True
+              and p_details.get("code") == "declared_expectation_not_confirmed"
+              and p_details.get("expected_volume_mm3") is not None
+              and p_details.get("measured_volume_mm3") is not None
+              and p_details.get("volume_delta_mm3") is not None)
+        rep.add("E08.04", "массив: заведомо неверное заявленное ожидание объёма — ОТКАЗ с числами",
+                "PASS" if ok else "FAIL",
+                "err=%s partial=%s details.code=%s ожидание=%s измерено=%s разность=%s"
+                % (error_code(penv), p_partial, p_details.get("code"),
+                   p_details.get("expected_volume_mm3"), p_details.get("measured_volume_mm3"),
+                   p_details.get("volume_delta_mm3")))
         close(doc)
 
     # ── E5.3: sketch_ref в kompas_get_feature ───────────────────────────────────────────────

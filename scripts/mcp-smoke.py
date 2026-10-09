@@ -645,6 +645,9 @@ def instrument_self_test():
     check("нечисловой K назван, а не проглочен",
           nested_repeat_argument(["--nested-repeat", "много"])[0] == 0
           and nested_repeat_argument(["--nested-repeat", "много"])[1] is not None)
+    check("возраст сеанса до старта сеанса не выдумывается", session_seconds() is None)
+    check("число выдавливаний считается по журналу вызовов",
+          extrudes_so_far() == sum(1 for c in CALL_LOG if c.get("tool") == "kompas_extrude"))
 
     print(f"\nСамопроверка прибора: {checks} проверок, "
           f"{len(failures)} FAIL" + (f" — {failures}" if failures else ""))
@@ -703,6 +706,28 @@ def argument(name, default=None):
         if index + 1 < len(sys.argv):
             return sys.argv[index + 1]
     return default
+
+
+# Точка отсчёта часов сеанса ПРИБОРА. `session_seconds` ПРОДУКТА считает Worker от своего старта, и
+# эта величина видна только в снимке отказа; своя точка отсчёта позволяет назвать возраст сеанса у
+# КАЖДОЙ попытки повтора, а не только у отказавшей. Обе величины называются своими именами, и
+# подменять одну другой запрещено: они отсчитаны от разных событий.
+SESSION_CLOCK_START = None
+
+
+def session_seconds():
+    """Возраст сеанса по часам ПРИБОРА (от `kompas_connect`) или `None`, если сеанс не поднимался."""
+    return None if SESSION_CLOCK_START is None else round(time.time() - SESSION_CLOCK_START, 3)
+
+
+def extrudes_so_far():
+    """Сколько выдавливаний прибор отправил в этом прогоне — по своему журналу вызовов.
+
+    Порядковый номер выдавливания продукта (`operation_ordinal` в снимке отказа) прибору на успехе
+    недоступен: его считает адаптер внутри Worker. Своё число называется СВОИМ, а не выдаётся за
+    продуктовое — иначе два разных счётчика носили бы одно имя.
+    """
+    return sum(1 for entry in CALL_LOG if entry.get("tool") == "kompas_extrude")
 
 
 def refusal_fields(envelope, code):
@@ -6240,6 +6265,10 @@ def main():
                 f"err={((c_env or {}).get('error') or {}).get('code')}")
         if not app_id:
             return finish(rep, client)
+
+        # Часы сеанса прибора стартуют здесь — там же, где продукт регистрирует сеанс.
+        global SESSION_CLOCK_START
+        SESSION_CLOCK_START = time.time()
 
         # Поведенческая половина пары S02b/S02c: список документов читается на ЖИВОМ сеансе, и
         # каждая запись несёт id/kind/revision. Стоит здесь, а не в контрактной группе, потому что
@@ -30733,6 +30762,10 @@ def nested_contour_checks(client, rep, app_id, workdir, repeat_k=0):
                 close(doc)
                 continue
             record["documents"] = open_documents()
+            # Номер ЭТОГО выдавливания и возраст сеанса — по часам прибора, у КАЖДОЙ попытки, а не
+            # только у отказавшей: без них «отказ не воспроизвёлся» нельзя отнести к месту в сеансе.
+            record["extrude_ordinal"] = extrudes_so_far() + 1
+            record["session_seconds"] = session_seconds()
             rev, env, code = extrude(rev, sk, operation="base", depth_mm=PLATE_D,
                                      direction="positive", end_condition="blind")
             vol = volume(fresh_body(doc))

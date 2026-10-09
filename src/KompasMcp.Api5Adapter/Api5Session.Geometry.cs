@@ -2612,9 +2612,7 @@ public sealed partial class Api5Session
             details["kompas_result_code"] = kompasResultCode.HasValue
                 ? kompasResultCode.Value
                 : kompasResultUnavailable ?? "не прочитано: причина не названа";
-            details["kompas_result_text"] = string.IsNullOrWhiteSpace(kompasResultText)
-                ? "КОМПАС кода ошибки не вернул — текста нет"
-                : kompasResultText;
+            details["kompas_result_text"] = ResultTextOf(kompasResultCode, kompasResultText);
         }
 
         var profile = reads.ProfileAreaUnavailable is null
@@ -2642,6 +2640,27 @@ public sealed partial class Api5Session
             RetryPolicy.ReacquireContext,
             partialEffects: true,
             details: details);
+    }
+
+    /// <summary>The library-program message that goes next to the code, with a zero code handled as what it
+    /// is. MEASURED: after a refused <c>SetSketch</c> with <c>ksReturnResult = 0</c>, <c>ksStrResult</c>
+    /// still answered «Успешное завершение» — the text of an EARLIER call. Publishing it bare inside a
+    /// refusal would read as a success, so a non-empty text under a zero code is named as a leftover
+    /// instead of being repeated as this refusal's message.
+    /// History: docs/decisions/adapter-sketch.md#set-sketch-refusal</summary>
+    private static string ResultTextOf(int? code, string? text)
+    {
+        if (code == 0)
+        {
+            return string.IsNullOrWhiteSpace(text)
+                ? "КОМПАС кода ошибки не вернул — текста нет"
+                : $"код ошибки не назван (ksReturnResult = 0); ksStrResult вернул «{text.Trim()}» — "
+                    + "это текст предыдущего вызова, к этому отказу он не относится";
+        }
+
+        return string.IsNullOrWhiteSpace(text)
+            ? "код ошибки прочитан, строка сообщения пуста"
+            : text;
     }
 
     /// <summary>Attaches the sketch to an extrusion definition, reading the kernel's own library-program

@@ -33346,16 +33346,24 @@ def sketch_profile_checks(client, rep, app_id, workdir):
     missing = sorted(SPD_REFUSAL_KEYS - set(det.keys()))
     first_profile = text.find("Анализ входа сервером")
     generic = text.find("Частая причина")
+    # Нулевой код и НЕПУСТАЯ строка ksStrResult: измерено, что после отказа SetSketch ядро отвечает
+    # кодом 0, а текст остаётся от прежнего вызова («Успешное завершение»). Голая строка внутри отказа
+    # читалась бы как успех, поэтому она обязана быть НАЗВАНА остатком.
+    code = det.get("kompas_result_code")
+    result_text = str(det.get("kompas_result_text") or "")
+    leftover_ok = code != 0 or not result_text or "предыдущего вызова" in result_text
     ok = (err(env) == "GEOMETRY_FAILED"
           and "SetSketch" in text
           and first_profile >= 0 and generic >= 0 and first_profile < generic
           and "примитивы 58 и 59" in text
-          and not missing)
+          and not missing
+          and leftover_ok)
     rep.add("SPD.03.extrude_refusal",
             "extrude boss: отказ SetSketch=false несёт разбор профиля в details и первым в тексте",
             "PASS" if ok else "FAIL",
-            "error=%s, отсутствующие ключи details=%s, порядок текста: разбор@%d < подсказка@%d"
-            % (err(env), missing or "нет", first_profile, generic),
+            "error=%s, отсутствующие ключи details=%s, порядок текста: разбор@%d < подсказка@%d, "
+            "код=%r текст=%r"
+            % (err(env), missing or "нет", first_profile, generic, code, clip(result_text, 120)),
             details={"message": text, "details": det, "target_body_ref": target_ref})
 
     bodies_after, volume_after = model_state(doc)

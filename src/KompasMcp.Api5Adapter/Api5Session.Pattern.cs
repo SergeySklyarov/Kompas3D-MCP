@@ -412,7 +412,8 @@ public partial class Api5Session
         // (docs/decisions/adapter-core.md#pattern-declared-volume), where a failed declaration only
         // MARKED the result — replaced by the customer decision recorded in the decision doc.
         // History: docs/decisions/adapter-core.md#declared-expectation-rule
-        var declared = DeclaredExpectation.Evaluate(expectedVolume, volumeAfter);
+        var declared = DeclaredExpectation.Evaluate(
+            expectedVolume, volumeAfter, () => ReadVolume(document));
         if (declared.IsDeclared)
         {
             checks.Add(DeclaredExpectation.Check("document_volume", declared));
@@ -471,7 +472,7 @@ public partial class Api5Session
         var unverified = new List<string>();
         if (declared.IsUnverifiable)
         {
-            unverified.Add(DeclaredExpectation.UnreadableReason("объём документа после операции"));
+            unverified.Add(DeclaredExpectation.UnverifiableReason("объём документа после операции", declared));
         }
         else if (!declared.IsDeclared)
         {

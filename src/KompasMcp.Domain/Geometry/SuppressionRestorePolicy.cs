@@ -22,19 +22,20 @@ public readonly record struct ModelStateSnapshot(double? VolumeMm3, int BodyCoun
         && other.FaceCount == FaceCount;
 }
 
-/// <summary>What THIS session recorded when it suppressed a feature: the handle the caller used, the
-/// revision the suppression left behind, and both states — before the write and after it.</summary>
-/// <remarks>WHY THE REVISION IS PART OF THE RECORD. The comparison is only meaningful while the model has
-/// not moved between the two calls: any other mutation rebuilds the model and the "state before" is then a
-/// statement about an older model. The revision is the session's own counter, so "no mutation happened
-/// since" is decided from a number the server owns, not from a guess.
+/// <summary>What THIS session recorded when it suppressed a feature: the handle, the revision the
+/// suppression left behind, and both states — before the write and after it.</summary>
+/// <remarks>WHY THE REVISION IS PART OF THE RECORD: the comparison is meaningful only while the model has
+/// not moved — any other mutation rebuilds it, and "state before" is then about an older model. WHY
+/// <see cref="BeforeRecheck"/>: MEASURED that a state read can lag by one operation, so "before" is read
+/// twice and a DISAGREEMENT makes the comparison unavailable rather than a false refusal.
 /// History: docs/decisions/adapter-core.md#suppression-restore-comparison</remarks>
 public sealed record SuppressionRecord(
     string FeatureRef,
     string FeatureName,
     long RevisionAfterSuppress,
     ModelStateSnapshot Before,
-    ModelStateSnapshot Suppressed);
+    ModelStateSnapshot Suppressed,
+    ModelStateSnapshot? BeforeRecheck = null);
 
 public enum RestoreVerdict
 {
@@ -98,6 +99,17 @@ public static class SuppressionRestorePolicy
                 + "— сравнение чисел невозможно.");
         }
 
+        // The "before" state was read TWICE. Two reads that disagree mean the measurement is not
+        // repeatable, so comparing against either of them could produce a FALSE refusal — the comparison
+        // is named unavailable instead (naryad PRE_RELEASE_0_6_0 П2.2).
+        if (record.BeforeRecheck is { } recheck && !record.Before.Matches(recheck))
+        {
+            return Unavailable("состояние «до подавления» прочитано ДВАЖДЫ и чтения разошлись: "
+                + Describe(record.Before) + " и " + Describe(recheck)
+                + ". Сверка с недостоверным «до» дала бы ложный отказ, поэтому сравнение названо "
+                + "недоступным.");
+        }
+
         var delta = after.VolumeMm3!.Value - record.Before.VolumeMm3!.Value;
         if (record.Before.Matches(after))
         {
@@ -126,6 +138,47 @@ public static class SuppressionRestorePolicy
             "снятие подавления не вернуло модель к состоянию ДО подавления: " + string.Join("; ", reasons),
             delta);
     }
+
+    /// <summary>Compare the restore with the recorded state, RE-READING the after-state once when the first
+    /// comparison says Mismatched.</summary>
+    /// <remarks>WHY A SECOND READ. MEASURED: the model state sometimes reads one operation behind, so a
+    /// single read of "after" can differ from the record while the model is in fact correct. INVARIANT: a
+    /// refusal needs BOTH after-reads to be readable and to AGREE with each other; two reads that DISAGREE
+    /// are a NAMED gap, not a refusal — an unrepeatable measurement must not become a false refusal.
+    /// History: docs/decisions/adapter-core.md#suppression-restore-comparison</remarks>
+    public static RestoreComparison Compare(
+        SuppressionRecord? record, string featureRef, long revisionBeforeRestore,
+        ModelStateSnapshot after, Func<ModelStateSnapshot>? rereadAfter)
+    {
+        var first = Compare(record, featureRef, revisionBeforeRestore, after);
+        if (rereadAfter is null || first.Verdict != RestoreVerdict.Mismatched)
+        {
+            return first;
+        }
+
+        var afterAgain = rereadAfter();
+        var second = Compare(record, featureRef, revisionBeforeRestore, afterAgain);
+        if (second.Verdict != RestoreVerdict.Mismatched)
+        {
+            // Matched on the second read, or the comparison itself became unavailable: take it.
+            return second;
+        }
+
+        if (after.IsReadable && afterAgain.IsReadable && after.Matches(afterAgain))
+        {
+            // Both reads readable and in agreement, and neither returned to the record: a genuine refusal.
+            return first;
+        }
+
+        return Unavailable("два чтения состояния ПОСЛЕ снятия разошлись: " + Describe(after) + " и "
+            + Describe(afterAgain) + ". Отказ НЕ выдаётся: расхождение означает, что измерение "
+            + "неповторяемо (устаревшее чтение), а не что модель не вернулась.");
+    }
+
+    private static string Describe(ModelStateSnapshot state) =>
+        state.IsReadable
+            ? $"объём {state.VolumeMm3!.Value:0.######}, тел {state.BodyCount}, граней {state.FaceCount}"
+            : "состояние не прочитано";
 
     private static RestoreComparison Unavailable(string reason) =>
         new(RestoreVerdict.Unavailable, reason, null);

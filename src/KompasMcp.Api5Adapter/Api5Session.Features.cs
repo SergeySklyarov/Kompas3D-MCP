@@ -718,9 +718,39 @@ public partial class Api5Session
                 Expected: $"«{expectedSketchName}»"));
         }
 
+        // ORDER OF REFUSALS. A refusal that means "the route was NOT applied" comes BEFORE the
+        // declared-expectation comparison: that comparison is the geometry check of an operation that
+        // HAPPENED, and running it first let the declared mismatch MASK the named CAPABILITY_UNAVAILABLE
+        // (row L11). INVARIANT for every DeclaredExpectation call site.
+        // History: docs/decisions/adapter-core.md#declared-expectation-rule
+        if (command.SketchRef is not null && !sketchConfirmed
+            && volumeBefore is double vb && volumeAfter is double va
+            && Math.Abs(va - vb) <= ProfileArea.Tolerance(vb))
+        {
+            // KOMPAS accepted SetSketch and did not change the model; reporting "success" would lie
+            // about the support edit, so the route refuses after the read-back.
+            throw new KompasContractException(
+                ErrorCodes.CapabilityUnavailable,
+                "Смена опорного эскиза существующего признака не применена: GetSketch() перечитал " +
+                "прежний эскиз, объём не изменился. Отказ принадлежит измеренным маршрутам " +
+                "перепривязки профиля (API5 SetSketch+Update+RebuildDocument, строка L11; API7 " +
+                "IExtrusion.Sketch и IExtrusion1.Profile, проба E) и НЕ означает, что признаки " +
+                "неправимы через API: правка параметров этого же признака работает (G03). " +
+                "Признак и документ не тронуты.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["sketch_read_back"] = expectedSketchName,
+                    ["volume_mm3"] = va,
+                    ["scope"] = "profile_retarget_of_existing_api5_feature",
+                    ["route_attempted"] = "ksExtrusionDefinition.SetSketch + entity.Update + RebuildDocument",
+                });
+        }
+
         // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
         // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
-        var declared = DeclaredExpectation.Evaluate(command.ExpectedVolumeMm3, volumeAfter);
+        var declared = DeclaredExpectation.Evaluate(
+            command.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
         checks.Add(DeclaredExpectation.Check("volume_after_update", declared));
         if (declared.IsRefusal)
         {
@@ -750,7 +780,7 @@ public partial class Api5Session
         }
         if (declared.IsUnverifiable)
         {
-            unverified.Insert(0, DeclaredExpectation.UnreadableReason("объём после правки"));
+            unverified.Insert(0, DeclaredExpectation.UnverifiableReason("объём после правки", declared));
         }
         else if (!geometryConfirmed)
         {
@@ -761,30 +791,6 @@ public partial class Api5Session
         if (!declared.IsDeclared)
         {
             unverified.Add("expected_volume_not_supplied — без аналитического ожидания объёма правка не может быть подтверждена геометрически");
-        }
-
-        if (command.SketchRef is not null && !sketchConfirmed
-            && volumeBefore is double vb && volumeAfter is double va
-            && Math.Abs(va - vb) <= ProfileArea.Tolerance(vb))
-        {
-            // KOMPAS accepted SetSketch and did not change the model; reporting "success" would lie
-            // about the support edit, so the route refuses after the read-back.
-            throw new KompasContractException(
-                ErrorCodes.CapabilityUnavailable,
-                "Смена опорного эскиза существующего признака не применена: GetSketch() перечитал " +
-                "прежний эскиз, объём не изменился. Отказ принадлежит измеренным маршрутам " +
-                "перепривязки профиля (API5 SetSketch+Update+RebuildDocument, строка L11; API7 " +
-                "IExtrusion.Sketch и IExtrusion1.Profile, проба E) и НЕ означает, что признаки " +
-                "неправимы через API: правка параметров этого же признака работает (G03). " +
-                "Признак и документ не тронуты.",
-                RetryPolicy.Never,
-                details: new Dictionary<string, object?>
-                {
-                    ["sketch_read_back"] = expectedSketchName,
-                    ["volume_mm3"] = va,
-                    ["scope"] = "profile_retarget_of_existing_api5_feature",
-                    ["route_attempted"] = "ksExtrusionDefinition.SetSketch + entity.Update + RebuildDocument",
-                });
         }
 
         BumpRevision(document, "feature.update");

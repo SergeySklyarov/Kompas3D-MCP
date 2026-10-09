@@ -48,8 +48,12 @@ public partial class Api5Session
         // The state the model is in BEFORE the write, and the revision it is at. Both are needed by the
         // comparison a later restore performs: the state is what "came back" is measured against, and the
         // revision is how the session knows no other mutation moved the model in between.
+        // The state is read TWICE: a single read can lag by one operation, and a record built on a stale
+        // read would produce a FALSE refusal on the restore. A disagreement makes the comparison
+        // unavailable instead (naryad PRE_RELEASE_0_6_0 П2.2).
         // History: docs/decisions/adapter-core.md#suppression-restore-comparison
         var modelBefore = ReadModelState(document);
+        var modelBeforeRecheck = ReadModelState(document);
         var revisionBeforeWrite = document.Revision;
 
         feature.excluded = command.Suppressed;
@@ -96,11 +100,12 @@ public partial class Api5Session
 
         // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
         // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
-        var declaredVolume = DeclaredExpectation.Evaluate(command.ExpectedVolumeMm3, volumeAfter);
+        var declaredVolume = DeclaredExpectation.Evaluate(
+            command.ExpectedVolumeMm3, volumeAfter, () => ReadModelState(document).VolumeMm3);
         checks.Add(DeclaredExpectation.Check("volume_after_suppression", declaredVolume));
         if (declaredVolume.IsUnverifiable)
         {
-            unverified.Add(DeclaredExpectation.UnreadableReason("объём после изменения подавления"));
+            unverified.Add(DeclaredExpectation.UnverifiableReason("объём после изменения подавления", declaredVolume));
         }
 
         if (!declaredVolume.IsDeclared)
@@ -151,7 +156,8 @@ public partial class Api5Session
         var comparison = command.Suppressed
             ? null
             : SuppressionRestorePolicy.Compare(
-                document.Suppression, command.FeatureRef, revisionBeforeWrite, modelAfter);
+                document.Suppression, command.FeatureRef, revisionBeforeWrite, modelAfter,
+                () => ReadModelState(document));
         if (comparison is { Verdict: RestoreVerdict.Mismatched })
         {
             throw new KompasContractException(
@@ -199,7 +205,8 @@ public partial class Api5Session
             else if (modelBefore.IsReadable && modelAfter.IsReadable)
             {
                 document.Suppression = new SuppressionRecord(
-                    command.FeatureRef, stateAfter.Name, document.Revision, modelBefore, modelAfter);
+                    command.FeatureRef, stateAfter.Name, document.Revision, modelBefore, modelAfter,
+                    modelBeforeRecheck);
                 checks.Add(new NamedCheck(
                     "pre_suppression_state_recorded",
                     true,
@@ -208,6 +215,16 @@ public partial class Api5Session
                               + $"{Num(modelAfter.VolumeMm3)}, тел {modelAfter.BodyCount}, "
                               + $"граней {modelAfter.FaceCount}",
                     Expected: "состояние до подавления запомнено сеансом — снятие будет сверено с ним"));
+                if (!modelBefore.Matches(modelBeforeRecheck))
+                {
+                    // The two reads of "before" disagreed: the record is kept (a later restore may still
+                    // re-read), but the comparison will be NAMED unavailable rather than give a false
+                    // refusal. Naming it here makes the disagreement visible at suppression time too.
+                    unverified.Add("pre_suppression_state_unreliable — состояние «до подавления» прочитано "
+                        + "ДВАЖДЫ и чтения разошлись: объём " + Num(modelBefore.VolumeMm3)
+                        + " и " + Num(modelBeforeRecheck.VolumeMm3) + ". Сверка при снятии будет названа "
+                        + "недоступной, чтобы устаревшее чтение не стало ложным отказом");
+                }
             }
             else
             {
@@ -453,7 +470,8 @@ public partial class Api5Session
 
         // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
         // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
-        var declaredVolume = DeclaredExpectation.Evaluate(command.ExpectedVolumeMm3, volumeAfter);
+        var declaredVolume = DeclaredExpectation.Evaluate(
+            command.ExpectedVolumeMm3, volumeAfter, () => ReadModelState(document).VolumeMm3);
         checks.Add(DeclaredExpectation.Check("volume_after_delete", declaredVolume));
         if (declaredVolume.IsRefusal)
         {
@@ -463,7 +481,7 @@ public partial class Api5Session
 
         if (declaredVolume.IsUnverifiable)
         {
-            unverified.Add(DeclaredExpectation.UnreadableReason("объём после удаления"));
+            unverified.Add(DeclaredExpectation.UnverifiableReason("объём после удаления", declaredVolume));
         }
 
         if (!declaredVolume.IsDeclared)

@@ -3106,7 +3106,8 @@ public sealed partial class Api5Session
         var measuredDelta = volumeBefore is double vBefore && volumeAfter is double vAfter
             ? vBefore - vAfter
             : (double?)null;
-        var declared = DeclaredExpectation.Evaluate(command.ExpectedVolumeDeltaMm3, measuredDelta);
+        var declared = DeclaredExpectation.Evaluate(
+            command.ExpectedVolumeDeltaMm3, measuredDelta, () => ReReadDelta(volumeBefore, document));
         if (declared.IsDeclared)
         {
             checks.Add(DeclaredExpectation.Check("volume_delta", declared));
@@ -3141,7 +3142,7 @@ public sealed partial class Api5Session
         var unverified = new List<string>();
         if (declared.IsUnverifiable)
         {
-            unverified.Add(DeclaredExpectation.UnreadableReason("уменьшение объёма"));
+            unverified.Add(DeclaredExpectation.UnverifiableReason("уменьшение объёма", declared));
         }
         else if (!volumePairRead)
         {
@@ -3341,7 +3342,8 @@ public sealed partial class Api5Session
         var measuredDelta = volumeBefore is double vBefore && volumeAfter is double vAfter
             ? vBefore - vAfter
             : (double?)null;
-        var declared = DeclaredExpectation.Evaluate(command.ExpectedVolumeDeltaMm3, measuredDelta);
+        var declared = DeclaredExpectation.Evaluate(
+            command.ExpectedVolumeDeltaMm3, measuredDelta, () => ReReadDelta(volumeBefore, document));
         if (declared.IsDeclared)
         {
             checks.Add(DeclaredExpectation.Check("volume_delta", declared));
@@ -3375,7 +3377,7 @@ public sealed partial class Api5Session
         var unverified = new List<string>();
         if (declared.IsUnverifiable)
         {
-            unverified.Add(DeclaredExpectation.UnreadableReason("уменьшение объёма"));
+            unverified.Add(DeclaredExpectation.UnverifiableReason("уменьшение объёма", declared));
         }
         else if (!volumePairRead)
         {
@@ -4307,6 +4309,13 @@ public sealed partial class Api5Session
             return null;
         }
     }
+
+    /// <summary>Re-read a volume DELTA by the same route as the first read: the "before" volume is a
+    /// pre-operation number and is NOT re-read, only the volume after the operation is. Used as the
+    /// second measurement of the declared-expectation rule when the first read did not confirm.
+    /// History: docs/decisions/adapter-core.md#declared-expectation-rule</summary>
+    private double? ReReadDelta(double? volumeBefore, DocumentEntry document) =>
+        volumeBefore is double before && ReadVolume(document) is double after ? before - after : (double?)null;
 
     private static bool SafeIsCreated(ksEntity entity)
     {

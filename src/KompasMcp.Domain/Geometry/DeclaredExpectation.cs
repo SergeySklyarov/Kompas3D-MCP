@@ -28,7 +28,8 @@ public readonly record struct DeclaredExpectationOutcome(
     DeclaredExpectationVerdict Verdict,
     double? ExpectedMm3,
     double? MeasuredMm3,
-    double ToleranceMm3)
+    double ToleranceMm3,
+    string? Reason = null)
 {
     public bool IsDeclared => Verdict != DeclaredExpectationVerdict.NotDeclared;
 
@@ -48,11 +49,11 @@ public readonly record struct DeclaredExpectationOutcome(
 
 /// <summary>The single rule that turns a client-declared expectation of a mutation's result into a verdict.</summary>
 /// <remarks>INVARIANT: a declared expectation that did not hold within the project tolerance makes the call
-/// NOT a success — a refusal, not a lowered verification level. The reason is that the declared expectation
-/// IS the geometry check of such a tool: without it there is nothing else to compare, so a wrong model would
-/// otherwise be reported as a success. An expectation that could not be compared is NAMED, not refused.
-/// The decision is a pure function of two numbers, so a SUBSTITUTED read result exercises every branch
-/// without a CAD session.
+/// NOT a success — a refusal, not a lowered level: the declared expectation IS the geometry check of such
+/// a tool, so without it a wrong model would be reported as a success. An expectation that could not be
+/// compared is NAMED, not refused. INVARIANT (order): the comparison is the geometry check of an operation
+/// that HAPPENED, so a "route was not applied" refusal comes first, else the declared mismatch masks it.
+/// The decision is a pure function of two numbers, so a SUBSTITUTED read result exercises every branch.
 /// History: docs/decisions/adapter-core.md#declared-expectation-rule</remarks>
 public static class DeclaredExpectation
 {
@@ -86,10 +87,66 @@ public static class DeclaredExpectation
                 DeclaredExpectationVerdict.NotConfirmed, expected, measured, tolerance);
     }
 
+    /// <summary>Compare a declared expectation with a measurement that may be RE-READ once when the first
+    /// read did not confirm it; <paramref name="rereadMm3"/> repeats the MEASUREMENT by the same route.</summary>
+    /// <remarks>WHY A SECOND READ. MEASURED: the model state sometimes reads one operation behind, so a
+    /// single read can disagree while the model is correct. INVARIANT: a refusal needs BOTH reads readable,
+    /// in AGREEMENT, and both missing the expectation; reads that DISAGREE are a NAMED gap, not a refusal —
+    /// a stale read must not become a false refusal.
+    /// History: docs/decisions/adapter-core.md#declared-expectation-rule</remarks>
+    public static DeclaredExpectationOutcome Evaluate(
+        double? expectedMm3, double? measuredMm3, Func<double?>? rereadMm3)
+    {
+        var first = Evaluate(expectedMm3, measuredMm3);
+        if (rereadMm3 is null || !first.IsDeclared || first.IsConfirmed)
+        {
+            return first;
+        }
+
+        var second = Evaluate(expectedMm3, rereadMm3());
+        if (second.IsConfirmed)
+        {
+            return second;
+        }
+
+        if (first.MeasuredMm3 is double a && second.MeasuredMm3 is double b
+            && Math.Abs(a - b) <= Tolerance(first.ExpectedMm3 ?? 0d))
+        {
+            // Both reads readable and in agreement, and neither matched: a genuine refusal.
+            return first;
+        }
+
+        if (first.MeasuredMm3 is null && second.MeasuredMm3 is null)
+        {
+            // Both reads failed: that is "could not be compared", not "two reads disagreed".
+            return first;
+        }
+
+        return new DeclaredExpectationOutcome(
+            DeclaredExpectationVerdict.Unverifiable,
+            first.ExpectedMm3,
+            first.MeasuredMm3,
+            first.ToleranceMm3,
+            DivergentReadsReason(first.MeasuredMm3, second.MeasuredMm3));
+    }
+
     /// <summary>The named gap for a declared expectation that could not be compared.</summary>
     public static string UnreadableReason(string quantity) =>
         "declared_expectation_unreadable — заявленное ожидание (" + quantity + ") не с чем сравнить: "
         + "величина после операции не прочитана. Это НЕ подтверждение и НЕ отказ: сравнивать было нечего.";
+
+    /// <summary>The named gap for two reads of the same quantity that DISAGREE — the measurement is not
+    /// repeatable, so neither number can be held against the declared expectation.</summary>
+    public static string DivergentReadsReason(double? firstMm3, double? secondMm3) =>
+        "declared_expectation_reads_diverged — два чтения объёма разошлись: " + Num(firstMm3)
+        + " и " + Num(secondMm3) + ". Отказ НЕ выдаётся: расхождение означает, что измерение "
+        + "неповторяемо (устаревшее чтение), а не что модель не совпала с заявленным; уровень "
+        + "оставлен не выше structure_checked.";
+
+    /// <summary>The reason to publish for an unverifiable outcome: the divergence text when the two reads
+    /// disagreed, otherwise the standard "could not be compared" text.</summary>
+    public static string UnverifiableReason(string quantity, DeclaredExpectationOutcome outcome) =>
+        outcome.Reason ?? UnreadableReason(quantity);
 
     /// <summary>The refusal for a declared expectation that did not hold. <paramref name="operation"/>
     /// names the tool/family, <paramref name="quantity"/> what was compared ("volume after the operation",

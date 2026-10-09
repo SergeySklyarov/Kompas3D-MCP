@@ -98,7 +98,8 @@ public partial class Api5Session
 
         // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
         // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
-        var declared = DeclaredExpectation.Evaluate(command.Pattern!.ExpectedVolumeMm3, volumeAfter);
+        var declared = DeclaredExpectation.Evaluate(
+            command.Pattern!.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
         checks.Add(DeclaredExpectation.Check("volume_after_update", declared));
         if (declared.IsRefusal)
         {
@@ -145,7 +146,7 @@ public partial class Api5Session
 
         if (declared.IsUnverifiable)
         {
-            unverified.Insert(0, DeclaredExpectation.UnreadableReason("объём после правки"));
+            unverified.Insert(0, DeclaredExpectation.UnverifiableReason("объём после правки", declared));
         }
 
         var geometryConfirmed = readBackOk && sameFeature && volumeMatched && bodyCountMatched;

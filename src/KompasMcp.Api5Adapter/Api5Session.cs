@@ -554,6 +554,11 @@ public sealed partial class Api5Session : IDisposable
         }
         catch (IOException ex)
         {
+            // The holder lookup has its OWN budget: a slow lookup must not delay the refusal, because a
+            // refusal that arrives after the client's sync budget is reported as `running` and cannot be
+            // told from a hang. A holder the budget cannot reach is named UNREAD with the reason.
+            // History: docs/decisions/files.md#file-locked-guard
+            var owner = FileLockOwnerLookup.Within(path, FileLockOwner.TryFind, FileLockOwnerLookup.DefaultBudget);
             throw new KompasContractException(
                 ErrorCodes.FileLocked,
                 $"Файл '{path}' занят другим процессом и не открывается на запись ({ex.GetType().Name}: " +
@@ -565,7 +570,9 @@ public sealed partial class Api5Session : IDisposable
                     ["path"] = path,
                     ["probe"] = "File.Open(ReadWrite, FileShare.None)",
                     ["os_error"] = ex.Message,
-                    ["owner_process"] = FileLockOwner.TryFind(path),
+                    ["owner_process"] = owner.Owner,
+                    ["owner_process_note"] = owner.UnavailableReason,
+                    ["owner_lookup_budget_ms"] = (int)FileLockOwnerLookup.DefaultBudget.TotalMilliseconds,
                     ["code"] = "document_file_locked",
                 });
         }

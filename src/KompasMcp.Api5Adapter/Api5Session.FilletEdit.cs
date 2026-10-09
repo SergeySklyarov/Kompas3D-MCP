@@ -267,7 +267,8 @@ public partial class Api5Session
 
         // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
         // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
-        var declared = DeclaredExpectation.Evaluate(command.ExpectedVolumeMm3, volumeAfter);
+        var declared = DeclaredExpectation.Evaluate(
+            command.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
         checks.Add(DeclaredExpectation.Check("volume_after_update", declared));
         if (declared.IsRefusal)
         {
@@ -291,7 +292,7 @@ public partial class Api5Session
         var geometryConfirmed = api7RadiusStored && sameFeature && volumeMatched;
         if (declared.IsUnverifiable)
         {
-            unverified.Insert(0, DeclaredExpectation.UnreadableReason("объём после правки"));
+            unverified.Insert(0, DeclaredExpectation.UnverifiableReason("объём после правки", declared));
         }
         else if (!geometryConfirmed)
         {
@@ -639,7 +640,8 @@ public partial class Api5Session
 
         // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
         // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
-        var declared = DeclaredExpectation.Evaluate(command.ExpectedVolumeMm3, volumeAfter);
+        var declared = DeclaredExpectation.Evaluate(
+            command.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
         if (declared.IsRefusal)
         {
             throw DeclaredExpectation.Refusal(
@@ -675,7 +677,7 @@ public partial class Api5Session
         }
         else if (declared.IsUnverifiable)
         {
-            unverified.Add(DeclaredExpectation.UnreadableReason("объём после правки"));
+            unverified.Add(DeclaredExpectation.UnverifiableReason("объём после правки", declared));
         }
         else if (!volumeMatched)
         {
@@ -1014,41 +1016,12 @@ public partial class Api5Session
                 Expected: $"признаков {featuresBefore}, имя «{stateBefore.Name}»"),
         };
 
-        // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
-        // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
-        var declared = DeclaredExpectation.Evaluate(command.ExpectedVolumeMm3, volumeAfter);
-        checks.Add(DeclaredExpectation.Check("volume_after_update", declared));
-        if (declared.IsRefusal)
-        {
-            throw DeclaredExpectation.Refusal(
-                declared, "kompas_update_feature/" + FilletFamily, "объём после правки", document.Revision);
-        }
-
-        var volumeMatched = declared.IsConfirmed;
-
-        var unverified = new List<string>
-        {
-            "dependent_features_not_enumerated — сохранность зависимых признаков здесь не проверяется",
-        };
-        if (declared.IsUnverifiable)
-        {
-            unverified.Add(DeclaredExpectation.UnreadableReason("объём после правки"));
-        }
-        else if (!volumeMatched)
-        {
-            unverified.Add(edgesSet
-                ? "volume_not_as_expected — набор записан и перечитан, но измерение объёма не совпало с ожиданием"
-                : "edges_not_read_back — набор не перечитался в ожидаемом составе");
-        }
-
-        if (!declared.IsDeclared)
-        {
-            unverified.Add(
-                "expected_volume_not_supplied — без аналитического ожидания объёма правка набора не " +
-                "может быть подтверждена геометрически");
-        }
-
-        var geometryConfirmed = edgesSet && sameFeature && volumeMatched;
+        // ORDER OF REFUSALS. The two "the set was not applied" refusals below come BEFORE the
+        // declared-expectation comparison: that comparison is the geometry check of an operation that
+        // HAPPENED, so it must not run when the route did not take. Running it first would let a declared
+        // mismatch MASK the named CAPABILITY_UNAVAILABLE / the erasure refusal. INVARIANT for every
+        // DeclaredExpectation call site (row L11, naryad PRE_RELEASE_0_6_0 П1.3).
+        // History: docs/decisions/adapter-core.md#declared-expectation-rule
 
         // FEATURE ERASURE IS A REFUSAL, NOT A "SUCCESS AT A LOWER LEVEL". MEASURED: a presented set of
         // BODY edges can describe corners the feature does NOT hold, meaning "build the fillet anew on
@@ -1120,6 +1093,43 @@ public partial class Api5Session
                     ["feature_state_survived"] = sameFeature,
                 });
         }
+
+        // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
+        // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
+        var declared = DeclaredExpectation.Evaluate(
+            command.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
+        checks.Add(DeclaredExpectation.Check("volume_after_update", declared));
+        if (declared.IsRefusal)
+        {
+            throw DeclaredExpectation.Refusal(
+                declared, "kompas_update_feature/" + FilletFamily, "объём после правки", document.Revision);
+        }
+
+        var volumeMatched = declared.IsConfirmed;
+
+        var unverified = new List<string>
+        {
+            "dependent_features_not_enumerated — сохранность зависимых признаков здесь не проверяется",
+        };
+        if (declared.IsUnverifiable)
+        {
+            unverified.Add(DeclaredExpectation.UnverifiableReason("объём после правки", declared));
+        }
+        else if (!volumeMatched)
+        {
+            unverified.Add(edgesSet
+                ? "volume_not_as_expected — набор записан и перечитан, но измерение объёма не совпало с ожиданием"
+                : "edges_not_read_back — набор не перечитался в ожидаемом составе");
+        }
+
+        if (!declared.IsDeclared)
+        {
+            unverified.Add(
+                "expected_volume_not_supplied — без аналитического ожидания объёма правка набора не " +
+                "может быть подтверждена геометрически");
+        }
+
+        var geometryConfirmed = edgesSet && sameFeature && volumeMatched;
 
         return new UpdateFeatureResult(
             ToDto(References.Require(command.FeatureRef, document.Id, document.Revision), stateAfter.Name),

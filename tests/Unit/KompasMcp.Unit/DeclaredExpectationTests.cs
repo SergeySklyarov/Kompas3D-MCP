@@ -94,4 +94,80 @@ public class DeclaredExpectationTests
         Assert.Equal(1e-3d, DeclaredExpectation.Tolerance(1d));
         Assert.Equal(1e-9d * 1e9, DeclaredExpectation.Tolerance(1e9d));
     }
+
+    [Fact]
+    public void AConfirmedFirstRead_DoesNotReReadTheVolume()
+    {
+        // The second read is a repeat of the MEASUREMENT and is only worth its cost when the first read
+        // disagreed: a confirmed read must not pay for it (naryad PRE_RELEASE_0_6_0 П2.3).
+        var rereadCalls = 0;
+
+        var outcome = DeclaredExpectation.Evaluate(80000d, 80000d, () =>
+        {
+            rereadCalls++;
+            return 80000d;
+        });
+
+        Assert.Equal(DeclaredExpectationVerdict.Confirmed, outcome.Verdict);
+        Assert.Equal(0, rereadCalls);
+    }
+
+    [Fact]
+    public void TwoReadsThatAgree_AndBothMissTheExpectation_AreARefusal()
+    {
+        // Both reads readable and equal, and neither matched: a genuine refusal with the numbers.
+        var outcome = DeclaredExpectation.Evaluate(80214.60183660255d, 79214.60183660254d,
+            () => 79214.60183660254d);
+
+        Assert.Equal(DeclaredExpectationVerdict.NotConfirmed, outcome.Verdict);
+        Assert.True(outcome.IsRefusal);
+        Assert.Equal(79214.60183660254d, outcome.MeasuredMm3);
+    }
+
+    [Fact]
+    public void TwoReadsThatDisagree_AreANamedGap_NotARefusal()
+    {
+        // MEASURED: the model state can read one operation behind. A second read that differs from the
+        // first means the measurement is not repeatable, so neither number may be held against the
+        // declared expectation — this is a NAMED gap, never a false refusal.
+        var first = 79123.456789d;
+        var second = 80321.987654d;
+
+        var outcome = DeclaredExpectation.Evaluate(80000d, first, () => second);
+
+        Assert.Equal(DeclaredExpectationVerdict.Unverifiable, outcome.Verdict);
+        Assert.True(outcome.IsUnverifiable);
+        Assert.False(outcome.IsRefusal);
+        Assert.NotNull(outcome.Reason);
+        Assert.Contains("declared_expectation_reads_diverged", outcome.Reason!, StringComparison.Ordinal);
+        Assert.Contains("79123.456789", outcome.Reason!, StringComparison.Ordinal);
+        Assert.Contains("80321.987654", outcome.Reason!, StringComparison.Ordinal);
+
+        // The published reason prefers the divergence text over the generic "could not be compared".
+        var reason = DeclaredExpectation.UnverifiableReason("объём после правки", outcome);
+        Assert.Contains("declared_expectation_reads_diverged", reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ASecondReadThatConfirms_TheExpectation_IsAConfirmation()
+    {
+        // The stale first read disagreed; the repeat of the MEASUREMENT confirmed the expectation.
+        var outcome = DeclaredExpectation.Evaluate(127564.6153839594d, 128334.30559701854d,
+            () => 127564.6153839594d);
+
+        Assert.Equal(DeclaredExpectationVerdict.Confirmed, outcome.Verdict);
+        Assert.True(outcome.IsConfirmed);
+        Assert.Equal(127564.6153839594d, outcome.MeasuredMm3);
+    }
+
+    [Fact]
+    public void AnUnreadableFirstRead_WithADifferentSecondRead_IsANamedGap()
+    {
+        // One readable and one unreadable read cannot be "in agreement", so the outcome is a named gap.
+        var outcome = DeclaredExpectation.Evaluate(80000d, null, () => 90000d);
+
+        Assert.Equal(DeclaredExpectationVerdict.Unverifiable, outcome.Verdict);
+        Assert.False(outcome.IsRefusal);
+        Assert.Contains("declared_expectation_reads_diverged", outcome.Reason!, StringComparison.Ordinal);
+    }
 }

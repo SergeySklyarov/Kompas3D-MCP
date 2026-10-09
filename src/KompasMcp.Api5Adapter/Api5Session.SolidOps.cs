@@ -137,7 +137,8 @@ public sealed partial class Api5Session
         var unverified = new List<string>();
         // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
         // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
-        var declared = DeclaredExpectation.Evaluate(command.ExpectedVolumeMm3, totalVolume);
+        var declared = DeclaredExpectation.Evaluate(
+            command.ExpectedVolumeMm3, totalVolume, () => ReReadTotalVolume(document));
         if (declared.IsRefusal)
         {
             throw DeclaredExpectation.Refusal(
@@ -146,7 +147,7 @@ public sealed partial class Api5Session
 
         if (declared.IsUnverifiable)
         {
-            unverified.Add(DeclaredExpectation.UnreadableReason("суммарный объём тел документа"));
+            unverified.Add(DeclaredExpectation.UnverifiableReason("суммарный объём тел документа", declared));
         }
 
         return new BooleanResultDto
@@ -483,7 +484,8 @@ public sealed partial class Api5Session
         var unverified = new List<string>();
         // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
         // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
-        var declared = DeclaredExpectation.Evaluate(command.ExpectedVolumeMm3, remaining.VolumeMm3);
+        var declared = DeclaredExpectation.Evaluate(
+            command.ExpectedVolumeMm3, remaining.VolumeMm3, () => ReReadBodyVolumeAt(document, rows.IndexOf(remaining)));
         if (declared.IsDeclared)
         {
             checks.Add(DeclaredExpectation.Check("volume_expected", declared));
@@ -495,7 +497,7 @@ public sealed partial class Api5Session
 
             if (declared.IsUnverifiable)
             {
-                unverified.Add(DeclaredExpectation.UnreadableReason("объём остатка"));
+                unverified.Add(DeclaredExpectation.UnverifiableReason("объём остатка", declared));
             }
         }
         else
@@ -1065,6 +1067,26 @@ public sealed partial class Api5Session
         }
 
         return rows;
+    }
+
+    /// <summary>Re-read the TOTAL volume of the document's solid bodies by the same route as the first
+    /// read (<see cref="ReadSolidBodies"/>), as the second measurement of the declared-expectation rule.
+    /// An unread body yields null, never a partial sum, so a partial sum cannot pass for a full one.
+    /// History: docs/decisions/adapter-core.md#declared-expectation-rule</summary>
+    private double? ReReadTotalVolume(DocumentEntry document)
+    {
+        var rows = ReadSolidBodies(document);
+        return rows.Any(r => r.VolumeMm3 is null) ? null : rows.Sum(r => r.VolumeMm3!.Value);
+    }
+
+    /// <summary>Re-read ONE body's volume by its POSITION in the body list, the same route as the first
+    /// read. Position, not a stored body_ref: a rebuild between the two reads may hand back a fresh
+    /// reference for the same body, so a string match would be a different fact. History:
+    /// docs/decisions/adapter-core.md#declared-expectation-rule</summary>
+    private double? ReReadBodyVolumeAt(DocumentEntry document, int position)
+    {
+        var rows = ReadSolidBodies(document);
+        return position >= 0 && position < rows.Count ? rows[position].VolumeMm3 : null;
     }
 
     /// <summary>Whether the body matches the result of the transformation: the bounding box computed BEFORE the
@@ -1697,7 +1719,8 @@ public sealed partial class Api5Session
         // The declared expectation goes through the ONE shared rule. This path ALREADY refused a failed
         // declaration; its code NO_GEOMETRY_CHANGE is kept (acceptance rows assert it) and the shared code
         // is added in details (docs/decisions/adapter-core.md#declared-expectation-rule).
-        var declaredVolume = DeclaredExpectation.Evaluate(command.ExpectedVolumeMm3, volumeAfter);
+        var declaredVolume = DeclaredExpectation.Evaluate(
+            command.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
         if (declaredVolume.IsDeclared)
         {
             checks.Add(DeclaredExpectation.Check("volume_expected", declaredVolume));
@@ -2542,13 +2565,14 @@ public sealed partial class Api5Session
             // failed declaration through the aggregate check below (code NO_GEOMETRY_CHANGE, asserted by
             // acceptance rows); the shared code is named in the details.
             // History: docs/decisions/adapter-core.md#declared-expectation-rule
-            var declaredRemaining = DeclaredExpectation.Evaluate(declaredVolume, remaining.VolumeMm3);
+            var declaredRemaining = DeclaredExpectation.Evaluate(
+                declaredVolume, remaining.VolumeMm3, () => ReReadBodyVolumeAt(document, rows.IndexOf(remaining)));
             if (declaredRemaining.IsDeclared)
             {
                 checks.Add(DeclaredExpectation.Check("volume_expected", declaredRemaining));
                 if (declaredRemaining.IsUnverifiable)
                 {
-                    unverified.Add(DeclaredExpectation.UnreadableReason("объём остатка"));
+                    unverified.Add(DeclaredExpectation.UnverifiableReason("объём остатка", declaredRemaining));
                 }
             }
 
@@ -2797,7 +2821,8 @@ public sealed partial class Api5Session
         // declaration through the aggregate check below (code NO_GEOMETRY_CHANGE, asserted by acceptance
         // rows); the shared code is named in the details.
         // History: docs/decisions/adapter-core.md#declared-expectation-rule
-        var declaredDocument = DeclaredExpectation.Evaluate(command.ExpectedVolumeMm3, volumeAfter);
+        var declaredDocument = DeclaredExpectation.Evaluate(
+            command.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
         if (declaredDocument.IsDeclared)
         {
             // The DOCUMENT volume and the RESULT volume are different quantities, and they must not be

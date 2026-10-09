@@ -262,7 +262,8 @@ public partial class Api5Session
 
         // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
         // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
-        var declared = DeclaredExpectation.Evaluate(command.ExpectedVolumeMm3, volumeAfter);
+        var declared = DeclaredExpectation.Evaluate(
+            command.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
         if (declared.IsDeclared)
         {
             checks.Add(DeclaredExpectation.Check("volume_expected", declared));
@@ -287,7 +288,7 @@ public partial class Api5Session
         var unverified = new List<string>();
         if (declared.IsUnverifiable)
         {
-            unverified.Add(DeclaredExpectation.UnreadableReason("объём после операции"));
+            unverified.Add(DeclaredExpectation.UnverifiableReason("объём после операции", declared));
         }
         else if (!geometryConfirmed)
         {
@@ -647,7 +648,8 @@ public partial class Api5Session
 
         // The declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
         // unreadable volume is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
-        var declared = DeclaredExpectation.Evaluate(command.ExpectedVolumeMm3, volumeAfter);
+        var declared = DeclaredExpectation.Evaluate(
+            command.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
         if (declared.IsDeclared)
         {
             checks.Add(DeclaredExpectation.Check("volume_expected", declared));
@@ -662,7 +664,7 @@ public partial class Api5Session
         var unverified = new List<string>();
         if (declared.IsUnverifiable)
         {
-            unverified.Add(DeclaredExpectation.UnreadableReason("объём после правки"));
+            unverified.Add(DeclaredExpectation.UnverifiableReason("объём после правки", declared));
         }
         else if (!declared.IsDeclared)
         {

@@ -68,6 +68,26 @@ class McpError(Exception):
 # поэтому окно `calls_window` строки и есть её доказательство.
 CALL_LOG = []
 
+# Как часто прибор переспрашивает исход операции, ответившей `status = running` (наряд
+# PRE_RELEASE_0_6_0 П3.3). Полсекунды — компромисс: операция, упёршаяся в бюджет синхронизации,
+# завершается вскоре после него, а частый опрос не забивает канал.
+RUNNING_POLL_INTERVAL_S = 0.5
+
+
+def sync_budget_ms():
+    """Бюджет синхронизации Хоста ИЗ КОНФИГА этого прогона, а не предположение.
+
+    Нужен строке `CB9.7`: опоздавший отказ Хост отдаёт как `running`, поэтому «отказ пришёл быстрее
+    бюджета» — это проверка против фактического числа, а не против вписанной константы (наряд
+    PRE_RELEASE_0_6_0 П3.2).
+    """
+    path = os.path.abspath(argument("--config") or local_config(ROOT))
+    try:
+        with open(path, encoding="utf-8-sig") as fh:
+            return int(json.load(fh).get("sync_budget_ms") or 10000)
+    except (OSError, ValueError):
+        return 10000
+
 
 class Client:
     def __init__(self, host_exe, config):
@@ -146,7 +166,27 @@ class Client:
         self._write(msg)
 
     def tool(self, name, arguments, timeout=180):
-        """tools/call → (is_error, structured envelope, raw result)."""
+        """tools/call → (is_error, structured envelope, raw result).
+
+        `status = running` — НЕ вердикт (наряд PRE_RELEASE_0_6_0 П3.3). Хост отвечает им, когда операция
+        не уложилась в бюджет синхронизации; исход опрашивается ПОВТОРОМ ТОГО ЖЕ вызова с ТЕМ ЖЕ
+        `operation_id` — журнал реплеит записанный исход, пока операция идёт, статус остаётся running.
+        Строка, читающая `running` как не-успех, падает на медленной машине при ВЕРНОМ продукте:
+        измерено, что латентность отказа «занятый файл» доходила до 15 с и упиралась ровно в бюджет.
+        Опрос ограничен бюджетом самого вызова и делается только когда `operation_id` передан: без него
+        повтор создал бы НОВУЮ операцию, то есть повторил бы мутацию.
+        """
+        deadline = time.monotonic() + max(1.0, float(timeout))
+        while True:
+            is_error, env, result = self._tool_once(name, arguments, timeout)
+            if (env or {}).get("status") != "running" or "operation_id" not in (arguments or {}):
+                break
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(RUNNING_POLL_INTERVAL_S)
+        return is_error, env, result
+
+    def _tool_once(self, name, arguments, timeout):
         result = self.call("tools/call", {"name": name, "arguments": arguments}, timeout=timeout)
         env = result.get("structuredContent")
         # Запись делается ДО возврата: окно строки должно содержать вызов даже тогда, когда строка
@@ -11207,33 +11247,42 @@ def b3_solid_ops_checks(client, rep, app_id, workdir):
                     ((env or {}).get("revision_after") or rev), error_code(env))
         return build
 
-    # 4.1 SM-15.union.explicit_target_and_tools
+    # ОБЪЯВЛЕННОЕ ОЖИДАНИЕ ЗДЕСЬ — СУММА ОБЪЁМОВ ТЕЛ ДОКУМЕНТА, посчитанная аналитически в строке,
+    # а не объём тела-результата. Так решено заказчиком 09.10.2026 (наряд PRE_RELEASE_0_6_0, П1.1):
+    # смысл `expected_volume_mm3` — тот, что продукт ДЕЙСТВИТЕЛЬНО сверяет, то есть сумма по документу
+    # (решение группы B3M от 18.09.2026, см. врезку в `volume_unconfirmed` и строки B3.01…B3.05,
+    # B3.20). Прежние ожидания этих строк объявляли объём РЕЗУЛЬТАТА, и под прежним правилом (пометка)
+    # расхождение не замечалось. Формула: слагаемые — тела, которые строка ожидает в документе после
+    # операции (S — посторонний куб 1000; сохранённый инструмент B — 24000).
+    #
+    # 4.1 SM-15.union.explicit_target_and_tools — A∪B = 36000 плюс посторонний S = 1000
     rebuild_case("B3.29", "SM-15.union.explicit_target_and_tools",
-                 build_boolean_mode("union", False, ["B"], 36000.0),
+                 build_boolean_mode("union", False, ["B"], 36000.0 + 1000.0),
                  {"A": (A_LO, A_HI), "B": (B_LO, B_HI), "S": (S_LO, S_HI)},
                  [1000.0, 36000.0], "Булева")
 
-    # 4.2 SM-15.subtract
+    # 4.2 SM-15.subtract — A−B = 12000 плюс посторонний S = 1000
     rebuild_case("B3.30", "SM-15.subtract",
-                 build_boolean_mode("difference", False, ["B"], 12000.0),
+                 build_boolean_mode("difference", False, ["B"], 12000.0 + 1000.0),
                  {"A": (A_LO, A_HI), "B": (B_LO, B_HI), "S": (S_LO, S_HI)},
                  [1000.0, 12000.0], "Булева")
 
-    # 4.3 SM-15.intersect
+    # 4.3 SM-15.intersect — A∩B = 12000 плюс посторонний S = 1000
     rebuild_case("B3.31", "SM-15.intersect",
-                 build_boolean_mode("intersect", False, ["B"], 12000.0),
+                 build_boolean_mode("intersect", False, ["B"], 12000.0 + 1000.0),
                  {"A": (A_LO, A_HI), "B": (B_LO, B_HI), "S": (S_LO, S_HI)},
                  [1000.0, 12000.0], "Булева")
 
-    # 4.4 SM-15.union.mode_save_tools — инструмент остаётся отдельным телом, поэтому тел три
+    # 4.4 SM-15.union.mode_save_tools — инструмент остаётся отдельным телом, поэтому тел три:
+    # результат 36000 + сохранённый инструмент 24000 + посторонний S 1000
     rebuild_case("B3.32", "SM-15.union.mode_save_tools",
-                 build_boolean_mode("union", True, ["B"], 36000.0),
+                 build_boolean_mode("union", True, ["B"], 36000.0 + 24000.0 + 1000.0),
                  {"A": (A_LO, A_HI), "B": (B_LO, B_HI), "S": (S_LO, S_HI)},
                  [1000.0, 24000.0, 36000.0], "Булева")
 
-    # 4.5 SM-15.union.mode_multi_tools — два инструмента ОДНИМ признаком
+    # 4.5 SM-15.union.mode_multi_tools — два инструмента ОДНИМ признаком: A∪L∪R = 36000 плюс S = 1000
     rebuild_case("B3.33", "SM-15.union.mode_multi_tools",
-                 build_boolean_mode("union", False, ["L", "R"], 36000.0),
+                 build_boolean_mode("union", False, ["L", "R"], 36000.0 + 1000.0),
                  {"A": (A_LO, A_HI), "L": (l_lo, l_hi), "R": (r_lo, r_hi), "S": (S_LO, S_HI)},
                  [1000.0, 36000.0], "Булева")
 
@@ -15421,6 +15470,13 @@ def cb9_checks(client, rep, app_id, workdir):
     # ── CB9.7 (OBS-025): занятый файл отвергается ДО COM кодом FILE_LOCKED ──────────────────────────
     # Документ сохраняется в sandbox-путь, закрывается, файл удерживается открытым на запись ЭТИМ
     # процессом (то есть другим по отношению к Worker), затем open. КОМПАС при этом не вызывается.
+    #
+    # ЧТО ЗДЕСЬ ИЗМЕНЕНО (наряд PRE_RELEASE_0_6_0 П3.2). Прежняя редакция читала ответ Хоста как есть:
+    # когда отказ опаздывал, Хост отдавал `status = running` без ошибки, и строка падала с `code=None`
+    # — на ВЕРНОМ продукте, потому что задержку давал поиск владельца через Restart Manager (измерено:
+    # до 15 с, ровно бюджет синхронизации). Теперь строка: (1) измеряет, что отказ пришёл БЫСТРЕЕ
+    # бюджета синхронизации, и (2) требует, чтобы владелец был назван ИЛИ была названа причина. Опрос
+    # по `operation_id` при `running` делает общий помощник `Client.tool`, а не эта строка.
     locked_path = os.path.join(workdir, "cb9-locked.m3d")
     if os.path.exists(locked_path):
         try:
@@ -15438,16 +15494,25 @@ def cb9_checks(client, rep, app_id, workdir):
         close(doc)
         holder = open(locked_path, "r+b")
         try:
+            budget_ms = sync_budget_ms()
+            t0 = time.monotonic()
             env2 = tool("kompas_open_document", {
                 "application_id": app_id, "path": locked_path, "access": "edit",
                 "operation_id": str(uuid.uuid4())})
+            elapsed_ms = int((time.monotonic() - t0) * 1000)
             det = details_of(env2)
-            rep.add("CB9.7", "занятый файл: FILE_LOCKED до обращения к КОМПАС (OBS-025)",
+            owner = det.get("owner_process")
+            note = det.get("owner_process_note")
+            named = bool(owner) or bool(note)
+            rep.add("CB9.7", "занятый файл: FILE_LOCKED до обращения к КОМПАС, быстрее бюджета "
+                             "синхронизации, владелец назван или названа причина (OBS-025)",
                     "PASS" if (error_code(env2) == "FILE_LOCKED"
-                               and det.get("code") == "document_file_locked") else "FAIL",
-                    "code=%s details.code=%s owner=%r os=%r"
-                    % (error_code(env2), det.get("code"), det.get("owner_process"),
-                       str(det.get("os_error"))[:60]))
+                               and det.get("code") == "document_file_locked"
+                               and elapsed_ms < budget_ms and named) else "FAIL",
+                    "code=%s details.code=%s elapsed=%dмс (бюджет синхронизации %dмс) "
+                    "owner=%r note=%r os=%r"
+                    % (error_code(env2), det.get("code"), elapsed_ms, budget_ms,
+                       owner, note, str(det.get("os_error"))[:60]))
         finally:
             holder.close()
         try:
@@ -19983,10 +20048,14 @@ def fillet_checks(client, rep, app_id, workdir):
                                 "FAIL", f"свободных угловых рёбер {len(free_after_ab)} — заменять нечем")
                     else:
                         a_refs_before = fillet_input_refs(fil_a) or []
+                        # ОБЪЯВЛЕННОЕ ОЖИДАНИЕ — ЭТАЛОН ДВУХ УГЛОВ (after_2), а не одного (after_1):
+                        # на теле ЕСТЬ второе скругление (B), и перенос A его не убирает, поэтому объём
+                        # обязан остаться на эталоне ДВУХ углов. Наряд PRE_RELEASE_0_6_0 П1.2; прежде
+                        # объявлялся эталон одного угла, и на ВЕРНОЙ геометрии приходил ложный отказ.
                         _e, mv_env, _r = client.tool("kompas_update_feature", {
                             "feature_ref": fil_a, "expected_revision": rev_ab_now,
                             "edge_refs": free_after_ab[:1],
-                            "expected_volume_mm3": after_1,
+                            "expected_volume_mm3": after_2,
                             "operation_id": str(uuid.uuid4())}, timeout=300)
                         rev_ab = (mv_env or {}).get("revision_after") or rev_ab
                         mv_ver = (mv_env or {}).get("verification") or {}
@@ -29002,6 +29071,12 @@ def mania_references():
     # обязано удлиниться само. Добавка = кольцо π·(30²−25²)·5. Измерено: +4319.689902 против
     # 4319.689899 — то есть зависимое обновление СРАБОТАЛО (иначе было бы +π·30²·5 = 14137.166941).
     boss_grow = math.pi * (boss_r ** 2 - bore_r ** 2) * 5.0
+    # ОБЪЁМ ТЕЛА-ИНСТРУМЕНТА ПРОПИЛА, посчитанный аналитически от той же геометрии, что и постановка:
+    # прямоугольник 11 × 28 (см. шаг 09), выдавленный симметрично на SAWCUT_W/2, то есть толщиной
+    # SAWCUT_W. Инструмент остаётся отдельным телом (keep_tools=true), поэтому объявленное ожидание
+    # многотельной детали — СУММА по документу, и инструмент в неё входит (наряд PRE_RELEASE_0_6_0,
+    # П1.1; решение группы B3M от 18.09.2026).
+    sawcut_tool = 11.0 * 28.0 * MANIA_SAWCUT_W
     return {
         "contour_area_green": a_out,
         "contour_area_segments": a_out2,
@@ -29025,6 +29100,7 @@ def mania_references():
         "v_fillet": v_fillet,
         "boss_grow": boss_grow,
         "v_edit": v_fillet + boss_grow,
+        "sawcut_tool": sawcut_tool,
         "arc_quarter": math.pi * 30.0 ** 2 / 4.0 * 20.0,
         # Полный круг той же дугой R30: доля круга = 360/360 = 1, то есть объём цилиндра целиком.
         # Формула, а не число «на глаз»: π·R²·h. Измерено 20.09.2026: дуга (0°, +360°) и дуга
@@ -29392,11 +29468,14 @@ def mania_scenario_checks(client, rep, app_id, workdir):
                     tool = x["ref"]
         c9b = "инструмент не найден по габариту"
         if tool:
+            # ОБЪЯВЛЕННОЕ ОЖИДАНИЕ — СУММА ПО ДОКУМЕНТУ, а не объём главного тела: инструмент пропила
+            # сохранён отдельным телом (keep_tools=true), и продукт сверяет сумму (наряд PRE_RELEASE_0_6_0
+            # П1.1; решение группы B3M 18.09.2026). Слагаемые посчитаны аналитически в `mania_references`.
             env, c9b = call("kompas_boolean", {
                 "document_id": doc, "expected_revision": revision(),
                 "target_body_ref": main_row()["ref"], "tool_body_refs": [tool],
                 "operation": "difference", "keep_tools": True,
-                "expected_volume_mm3": ref["v_sawcut"]})
+                "expected_volume_mm3": ref["v_sawcut"] + ref["sawcut_tool"]})
         v = mv()
         emit(9, "create", "пропил 3 мм булевой разностью с сохранением инструмента",
              "PASS" if (c9 is None and c9b is None and near(v, ref["v_sawcut"])) else "FAIL",
@@ -29499,10 +29578,14 @@ def mania_scenario_checks(client, rep, app_id, workdir):
         # ── 12: правка поддержанного признака с зависимым обновлением ────────────────────────
         c12 = "признак ступицы не найден в дереве"
         if boss_feat:
+            # ОБЪЯВЛЕННОЕ ОЖИДАНИЕ — СУММА ПО ДОКУМЕНТУ: на многотельной детали (главное тело +
+            # сохранённый инструмент пропила) продукт сверяет сумму, а не объём главного тела
+            # (наряд PRE_RELEASE_0_6_0 П1.1). Правка глубины инструмент не трогает, поэтому к
+            # ожидаемому объёму главного тела прибавляется тот же `sawcut_tool`.
             env, c12 = call("kompas_update_feature", {
                 "feature_ref": boss_feat, "expected_revision": revision(),
                 "depth_mm": (MANIA_PART_H - MANIA_PLATE_T) + 5.0, "end_condition": "blind",
-                "expected_volume_mm3": ref["v_edit"]})
+                "expected_volume_mm3": ref["v_edit"] + ref["sawcut_tool"]})
         v12 = mv()
         emit(12, "edit", "правка глубины ступицы 40→45 с зависимым обновлением",
              "PASS" if (c12 is None and near(v12, ref["v_edit"])) else "FAIL",

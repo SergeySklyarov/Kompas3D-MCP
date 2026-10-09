@@ -14,10 +14,12 @@ public class SuppressionRestorePolicyTests
 
     private static SuppressionRecord Record(
         double before = 78429.20367320509d, int bodies = 1, int faces = 8,
-        double suppressed = 79214.60183660254d, string featureRef = Ref, long revision = Revision) =>
+        double suppressed = 79214.60183660254d, string featureRef = Ref, long revision = Revision,
+        ModelStateSnapshot? beforeRecheck = null) =>
         new(featureRef, "Зеркальный массив:1", revision,
             new ModelStateSnapshot(before, bodies, faces),
-            new ModelStateSnapshot(suppressed, bodies, faces));
+            new ModelStateSnapshot(suppressed, bodies, faces),
+            beforeRecheck);
 
     private static ModelStateSnapshot After(double volume = 78429.20367320509d, int bodies = 1, int faces = 8) =>
         new(volume, bodies, faces);
@@ -131,5 +133,61 @@ public class SuppressionRestorePolicyTests
 
         Assert.True(empty.IsReadable);
         Assert.False(empty.Matches(new ModelStateSnapshot(0d, 1, 6)));
+    }
+
+    [Fact]
+    public void ABeforeReadThatDisagrees_IsUnavailable_NotARefusal()
+    {
+        // MEASURED: a read of the model state can lag by one operation. The state "before" is read twice;
+        // when the two reads disagree the comparison must be NAMED unavailable — comparing against a
+        // stale "before" would produce a FALSE refusal on a correct model (naryad PRE_RELEASE_0_6_0 П2.2).
+        var record = Record(beforeRecheck: new ModelStateSnapshot(128334.30559701854d, 1, 8));
+
+        var comparison = SuppressionRestorePolicy.Compare(record, Ref, Revision, After());
+
+        Assert.Equal(RestoreVerdict.Unavailable, comparison.Verdict);
+        Assert.False(comparison.IsMatched);
+        Assert.Contains("разошлись", comparison.Reason!, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ABeforeRecheckThatAgrees_ComparesNormally()
+    {
+        var record = Record(beforeRecheck: new ModelStateSnapshot(78429.20367320509d, 1, 8));
+
+        Assert.Equal(RestoreVerdict.Matched,
+            SuppressionRestorePolicy.Compare(record, Ref, Revision, After()).Verdict);
+        Assert.Equal(RestoreVerdict.Mismatched,
+            SuppressionRestorePolicy.Compare(record, Ref, Revision, After(79999.99999999999d)).Verdict);
+    }
+
+    [Fact]
+    public void ASecondAfterReadThatConfirms_IsMatched()
+    {
+        // The first read of "after" was stale; the repeat of the MEASUREMENT returned the recorded state.
+        var comparison = SuppressionRestorePolicy.Compare(
+            Record(), Ref, Revision, After(128334.30559701854d), () => After());
+
+        Assert.Equal(RestoreVerdict.Matched, comparison.Verdict);
+    }
+
+    [Fact]
+    public void TwoAfterReadsThatDisagree_AreUnavailable_NotARefusal()
+    {
+        var comparison = SuppressionRestorePolicy.Compare(
+            Record(), Ref, Revision, After(79999.99999999999d), () => After(81000d));
+
+        Assert.Equal(RestoreVerdict.Unavailable, comparison.Verdict);
+        Assert.Contains("разошлись", comparison.Reason!, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TwoAfterReadsThatAgreeAndBothMiss_AreARefusal()
+    {
+        var comparison = SuppressionRestorePolicy.Compare(
+            Record(), Ref, Revision, After(79999.99999999999d), () => After(79999.99999999999d));
+
+        Assert.Equal(RestoreVerdict.Mismatched, comparison.Verdict);
+        Assert.NotNull(comparison.VolumeDeltaMm3);
     }
 }

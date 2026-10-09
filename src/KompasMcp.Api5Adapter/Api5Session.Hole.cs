@@ -162,7 +162,8 @@ public partial class Api5Session
         var measuredDelta = volumeBefore is double vBefore && volumeAfter is double vAfter
             ? vBefore - vAfter
             : (double?)null;
-        var declared = DeclaredExpectation.Evaluate(command.ExpectedVolumeDeltaMm3, measuredDelta);
+        var declared = DeclaredExpectation.Evaluate(
+            command.ExpectedVolumeDeltaMm3, measuredDelta, () => ReReadDelta(volumeBefore, document));
         if (declared.IsDeclared)
         {
             checks.Add(DeclaredExpectation.Check("volume_delta", declared));
@@ -194,7 +195,7 @@ public partial class Api5Session
         var unverified = new List<string>();
         if (declared.IsUnverifiable)
         {
-            unverified.Add(DeclaredExpectation.UnreadableReason("уменьшение объёма"));
+            unverified.Add(DeclaredExpectation.UnverifiableReason("уменьшение объёма", declared));
         }
         else if (!volumePairRead)
         {
@@ -859,7 +860,8 @@ public partial class Api5Session
 
         // Each declared expectation is the geometry check of this tool: a mismatch is a REFUSAL, an
         // unreadable value is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
-        var declaredDelta = DeclaredExpectation.Evaluate(command.ExpectedVolumeDeltaMm3, removedDelta);
+        var declaredDelta = DeclaredExpectation.Evaluate(
+            command.ExpectedVolumeDeltaMm3, removedDelta, () => ReReadDelta(volumeBefore, document));
         if (declaredDelta.IsDeclared)
         {
             checks.Add(DeclaredExpectation.Check("volume_delta", declaredDelta));
@@ -871,7 +873,8 @@ public partial class Api5Session
             }
         }
 
-        var declaredVolume = DeclaredExpectation.Evaluate(command.ExpectedVolumeMm3, volumeAfter);
+        var declaredVolume = DeclaredExpectation.Evaluate(
+            command.ExpectedVolumeMm3, volumeAfter, () => ReadVolume(document));
         if (declaredVolume.IsDeclared)
         {
             checks.Add(DeclaredExpectation.Check("volume_expected", declaredVolume));
@@ -890,12 +893,12 @@ public partial class Api5Session
         var unverified = new List<string>();
         if (declaredDelta.IsUnverifiable)
         {
-            unverified.Add(DeclaredExpectation.UnreadableReason("уменьшение объёма"));
+            unverified.Add(DeclaredExpectation.UnverifiableReason("уменьшение объёма", declaredDelta));
         }
 
         if (declaredVolume.IsUnverifiable)
         {
-            unverified.Add(DeclaredExpectation.UnreadableReason("объём после правки"));
+            unverified.Add(DeclaredExpectation.UnverifiableReason("объём после правки", declaredVolume));
         }
 
         if (!declared)

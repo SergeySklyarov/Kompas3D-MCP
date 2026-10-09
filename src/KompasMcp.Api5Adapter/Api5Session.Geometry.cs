@@ -2620,13 +2620,11 @@ public sealed partial class Api5Session
     }
 
     /// <summary>Clear a previous NON-FATAL KOMPAS error before a call whose code will be read.</summary>
-    /// <remarks>DOC: KompasObject::ksResultNULL
-    /// (help.ascon.ru/KOMPAS_SDK/24/ru-RU/kompasobject_ksresultnull.html) - "Обнулить результат работы
-    /// библиотеки, если ошибка не фатальная"; returns 1 when an error was cleared. Without the reset a
+    /// <remarks>DOC: KompasObject::ksResultNULL (kompasobject_ksresultnull.html) - «Обнулить результат
+    /// работы библиотеки, если ошибка не фатальная»; returns 1 when an error was cleared. Without it a
     /// code left by an earlier call would be read as this refusal's reason.
-    /// INVARIANT: a failure of the reset itself is not fatal to the operation and is not reported as one;
-    /// the code read afterwards is then simply less trustworthy, and ksStrResult's own note states it also
-    /// clears the flag of a non-fatal error.
+    /// INVARIANT: a failed reset is not fatal and is not reported as one - the code read afterwards is
+    /// then merely less trustworthy, and ksStrResult's note says it clears the non-fatal flag too.
     /// History: docs/decisions/adapter-features.md#create-false-snapshot</remarks>
     private void ClearKompasResult(DocumentEntry document)
     {

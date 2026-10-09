@@ -1,17 +1,13 @@
 namespace KompasMcp.Domain.Geometry;
 
 /// <summary>What was observed at the moment a solid feature's <c>Create()</c> answered false.</summary>
-/// <remarks>WHY THIS EXISTS. A refusal that happens once in dozens of runs and cannot be reproduced
-/// afterwards is unusable: by the time it is investigated the session is gone. This snapshot is written
-/// at the refusal itself, so the NEXT refusal carries its own evidence.
-/// INVARIANT: the SAME keys on every failure. A key that could not be read carries a string saying why,
-/// never <c>null</c> and never a missing entry - an absent field is indistinguishable from "we forgot to
-/// fill it".
-/// DOC: the KOMPAS result code and its message come from <c>KompasObject::ksReturnResult</c> /
-/// <c>ksStrResult</c> (help.ascon.ru/KOMPAS_SDK/24/ru-RU/kompasobject_ksreturnresult.html): "Код ошибки в
-/// зависимости от типа документа: графического или документа-модели при выполнении библиотечной
-/// программы"; text via ksStrResult, reset of a non-fatal error via ksResultNULL. A zero code at a
-/// refusal is a fact too - it is NAMED as "no code returned", never replaced by an invented reason.
+/// <remarks>WHY. A refusal that happens once in dozens of runs and cannot be reproduced afterwards is
+/// unusable - the session is gone by the time it is investigated; this snapshot is written AT the
+/// refusal, so the next one carries its own evidence.
+/// INVARIANT: the SAME keys on every failure; an unread key carries a reason string, never <c>null</c>.
+/// DOC: the reason comes from <c>KompasObject::ksReturnResult</c> / <c>ksStrResult</c> -
+/// «Код ошибки в зависимости от типа документа: графического или документа-модели при выполнении
+/// библиотечной программы»; a zero code is NAMED as "no code returned", never invented.
 /// History: docs/decisions/adapter-features.md#create-false-snapshot</remarks>
 public static class FeatureCreateFailure
 {

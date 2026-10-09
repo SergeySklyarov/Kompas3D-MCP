@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using KompasMcp.Contracts;
 using KompasMcp.Contracts.Ipc;
 using KompasMcp.Domain.Geometry;
@@ -45,6 +45,12 @@ public partial class Api5Session
         var volumeBefore = ReadVolume(document);
         var countBefore = CountFeatures(document);
         var stateBefore = ReadFeatureState(entity);
+        // The state the model is in BEFORE the write, and the revision it is at. Both are needed by the
+        // comparison a later restore performs: the state is what "came back" is measured against, and the
+        // revision is how the session knows no other mutation moved the model in between.
+        // History: docs/decisions/adapter-core.md#suppression-restore-comparison
+        var modelBefore = ReadModelState(document);
+        var revisionBeforeWrite = document.Revision;
 
         feature.excluded = command.Suppressed;
         document.Document3D.RebuildDocument();
@@ -55,6 +61,7 @@ public partial class Api5Session
         var stateAfter = ReadFeatureState(entity);
         var volumeAfter = ReadVolume(document);
         var countAfter = CountFeatures(document);
+        var modelAfter = ReadModelState(document);
 
         var readBack = stateAfter.Excluded == command.Suppressed;
 
@@ -119,10 +126,145 @@ public partial class Api5Session
             effectObserved,
             Observed: $"{volumeBefore?.ToString("0.####") ?? "нет"} → {volumeAfter?.ToString("0.####") ?? "нет"}"));
 
+        // A DECLARED EXPECTATION THAT DID NOT HOLD IS A REFUSAL HERE, and this is deliberately NOT the
+        // rule the pattern family follows (docs/decisions/adapter-core.md#pattern-declared-volume, where a
+        // failed declaration only MARKS the result). WHY THE DIFFERENCE: a pattern answers with a readable
+        // witness of its own shape (per-instance axes, counts, a second parameter), so a wrong model is
+        // caught even when the declared volume is off; suppress/restore has NO such witness — the caller
+        // declared the volume precisely because there is nothing else to compare. MEASURED on a live run:
+        // the tool returned "succeeded / structure_checked" while the restored model had lost BOTH holes.
+        // History: docs/decisions/adapter-core.md#suppression-restore-comparison
+        if (command.ExpectedVolumeMm3 is double declaredExpected
+            && DeclaredVolumeMarks.Mismatched(declaredExpected, volumeAfter,
+                ProfileArea.Tolerance(declaredExpected)))
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                (command.Suppressed
+                    ? "Подавление применено, но объём после него не совпал с заявленным: "
+                    : "Снятие подавления применено, но объём после него не совпал с заявленным: ")
+                + $"измерено {Num(volumeAfter)}, ожидалось {Num(declaredExpected)} "
+                + $"(допуск {Num(ProfileArea.Tolerance(declaredExpected))}). Вызов НЕ считается "
+                + "успешным: заявленное ожидание и есть проверка геометрии этого инструмента. Модель "
+                + "осталась в измеренном состоянии — сервер её молча не откатывает; для возврата "
+                + "подавление нужно снять или применить заново решением клиента.",
+                RetryPolicy.AfterReconciliation,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["code"] = "declared_volume_not_confirmed",
+                    ["operation"] = command.Suppressed ? "suppress" : "restore",
+                    ["expected_volume_mm3"] = declaredExpected,
+                    ["measured_volume_mm3"] = volumeAfter,
+                    ["volume_delta_mm3"] = volumeAfter is double measuredNow ? measuredNow - declaredExpected : null,
+                    ["volume_before_mm3"] = volumeBefore,
+                    ["feature_name"] = stateAfter.Name,
+                    ["feature_excluded"] = stateAfter.Excluded,
+                    ["feature_is_valid"] = stateAfter.IsValid,
+                    ["feature_object_error"] = stateAfter.ObjectError,
+                });
+        }
+
+        // WHAT THE RESTORE IS CHECKED AGAINST. The state before the suppression was captured by THIS
+        // session; the restore is compared with it, and a model that did not come back is a refusal.
+        // A comparison that cannot be made is NAMED in unverified_aspects, never skipped silently.
+        // History: docs/decisions/adapter-core.md#suppression-restore-comparison
+        var comparison = command.Suppressed
+            ? null
+            : SuppressionRestorePolicy.Compare(
+                document.Suppression, command.FeatureRef, revisionBeforeWrite, modelAfter);
+        if (comparison is { Verdict: RestoreVerdict.Mismatched })
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                comparison.Reason + ". Вызов НЕ считается успешным: клиент просил вернуть геометрию, "
+                + "а получил другую модель. Модель оставлена в измеренном состоянии — молчаливого "
+                + "отката (повторного подавления) сервер не делает.",
+                RetryPolicy.AfterReconciliation,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["code"] = "restored_to_pre_suppression_state",
+                    ["operation"] = "restore",
+                    ["volume_before_suppression_mm3"] = document.Suppression?.Before.VolumeMm3,
+                    ["volume_suppressed_mm3"] = document.Suppression?.Suppressed.VolumeMm3,
+                    ["volume_after_restore_mm3"] = modelAfter.VolumeMm3,
+                    ["bodies_before_suppression"] = document.Suppression?.Before.BodyCount,
+                    ["bodies_suppressed"] = document.Suppression?.Suppressed.BodyCount,
+                    ["bodies_after_restore"] = modelAfter.BodyCount,
+                    ["faces_before_suppression"] = document.Suppression?.Before.FaceCount,
+                    ["faces_suppressed"] = document.Suppression?.Suppressed.FaceCount,
+                    ["faces_after_restore"] = modelAfter.FaceCount,
+                    ["volume_delta_mm3"] = comparison.VolumeDeltaMm3,
+                    ["revision_after_suppression"] = document.Suppression?.RevisionAfterSuppress,
+                    ["revision_before_restore"] = revisionBeforeWrite,
+                    ["feature_name"] = stateAfter.Name,
+                    ["feature_excluded"] = stateAfter.Excluded,
+                    ["feature_is_valid"] = stateAfter.IsValid,
+                    ["feature_object_error"] = stateAfter.ObjectError,
+                });
+        }
+
+        if (command.Suppressed)
+        {
+            if (stateBefore.Excluded)
+            {
+                // The feature was ALREADY suppressed when this call arrived. Its pre-suppression state was
+                // not observed by this call, and inventing one from the current (already suppressed) model
+                // would compare a state with itself. The record is left untouched; the consequence is named.
+                unverified.Add("pre_suppression_state_unavailable — признак был подавлен ДО этого вызова, "
+                    + "поэтому состояние «до подавления» этим вызовом не наблюдалось и сверка при снятии "
+                    + "будет недоступна (запомнить состояние уже подавленной модели значило бы сравнить "
+                    + "её саму с собой)");
+            }
+            else if (modelBefore.IsReadable && modelAfter.IsReadable)
+            {
+                document.Suppression = new SuppressionRecord(
+                    command.FeatureRef, stateAfter.Name, document.Revision, modelBefore, modelAfter);
+                checks.Add(new NamedCheck(
+                    "pre_suppression_state_recorded",
+                    true,
+                    Observed: $"объём {Num(modelBefore.VolumeMm3)}, тел {modelBefore.BodyCount}, "
+                              + $"граней {modelBefore.FaceCount}; после подавления объём "
+                              + $"{Num(modelAfter.VolumeMm3)}, тел {modelAfter.BodyCount}, "
+                              + $"граней {modelAfter.FaceCount}",
+                    Expected: "состояние до подавления запомнено сеансом — снятие будет сверено с ним"));
+            }
+            else
+            {
+                unverified.Add("pre_suppression_state_unreadable — состояние модели прочитать не удалось, "
+                    + "поэтому сверка при снятии подавления будет недоступна");
+            }
+        }
+        else if (comparison is { Verdict: RestoreVerdict.Matched })
+        {
+            checks.Add(new NamedCheck(
+                "restored_to_pre_suppression_state",
+                true,
+                Observed: $"объём {Num(modelAfter.VolumeMm3)}, тел {modelAfter.BodyCount}, "
+                          + $"граней {modelAfter.FaceCount}",
+                Expected: $"объём {Num(document.Suppression!.Before.VolumeMm3)}, "
+                          + $"тел {document.Suppression.Before.BodyCount}, "
+                          + $"граней {document.Suppression.Before.FaceCount} — состояние до подавления, "
+                          + "запомненное сеансом"));
+            document.Suppression = null;
+        }
+        else if (comparison is not null)
+        {
+            // The record is KEPT: an unavailable comparison now does not mean it will stay unavailable —
+            // a later restore of the recorded handle at the recorded revision is still comparable.
+            unverified.Add("restore_comparison_unavailable — " + comparison.Reason);
+        }
+
         // The verification level rests on checkable claims: the state re-read, the feature object alive,
         // the geometry or effect measured. The counter is not part of it: a cascade is a property of the
-        // dependencies, not a loss of evidence (E3, probe I).
-        var level = readBack && survived && (geometryConfirmed || effectObserved)
+        // dependencies, not a loss of evidence (E3, probe I). On a RESTORE the comparison with the recorded
+        // pre-suppression state replaces "the volume changed" whenever it is available: "it changed" is
+        // true of a wrong model too (docs/decisions/adapter-core.md#suppression-restore-comparison).
+        var geometryWitness = !command.Suppressed && comparison is { IsAvailable: true }
+            ? comparison.IsMatched
+            : effectObserved;
+        var level = readBack && survived && (geometryConfirmed || geometryWitness)
             ? geometryConfirmed ? VerificationLevel.GeometryChecked : VerificationLevel.StructureChecked
             : VerificationLevel.CallReturned;
         if (!readBack)
@@ -148,7 +290,7 @@ public partial class Api5Session
                                  "а перечислить их API не умеет. Состояние ПОСЛЕ достигается снятием " +
                                  "подавления с КАЖДОГО подавленного признака по отдельности");
         }
-        if (!effectObserved && !geometryConfirmed)
+        if (!geometryWitness && !geometryConfirmed)
         {
             unverified.Insert(0, "no_measured_volume_effect — изменение состояния признака не отразилось " +
                                  "на объёме: геометрия не подтверждена");
@@ -448,6 +590,85 @@ public partial class Api5Session
                    is ksEntityCollection collection
                 ? collection.FindIt(entity)
                 : -1;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return -1;
+        }
+    }
+
+    /// <summary>The three numbers a suppression is checked against: the TOTAL volume of the solid bodies,
+    /// their count and their face count.</summary>
+    /// <remarks>WHY THE TOTAL, NOT THE MAIN BODY: <see cref="ReadVolume"/> answers with the main body, and
+    /// MEASURED that suppressing a pattern of BODIES takes whole bodies away. The total sums
+    /// <c>ksPart.BodyCollection()</c> after its own <c>refresh()</c>, and the face count uses the same
+    /// documented call <c>CountUniqueEdges</c> already makes. INVARIANT: an unread body or volume yields
+    /// <see cref="ModelStateSnapshot.Unreadable"/>, never a partial sum — a partial sum would look smaller.
+    /// History: docs/decisions/adapter-core.md#suppression-restore-comparison</remarks>
+    private ModelStateSnapshot ReadModelState(DocumentEntry document)
+    {
+        try
+        {
+            var part = document.PartNow();
+            var bodies = (ksBodyCollection)part.BodyCollection();
+            bodies.refresh();
+            var count = bodies.GetCount();
+
+            // BodyCollection reporting empty while the part still hands back a main body is a measured
+            // shape (see ListBodies): the fallback keeps the count and the volume from contradicting each
+            // other, which is what a comparison must not do.
+            if (count == 0)
+            {
+                if (part.GetMainBody() is not ksBody only)
+                {
+                    return new ModelStateSnapshot(0d, 0, 0);
+                }
+
+                var onlyVolume = MassProperties(only, (uint)KompasUnits.MassMmKg)?.v;
+                var onlyFaces = FaceCountOf(only);
+                return onlyVolume is null || onlyFaces < 0
+                    ? ModelStateSnapshot.Unreadable
+                    : new ModelStateSnapshot(onlyVolume, 1, onlyFaces);
+            }
+
+            var total = 0d;
+            var faces = 0;
+            for (var i = 0; i < count; i++)
+            {
+                var body = AsInterface<ksBody>(bodies.GetByIndex(i))
+                           ?? (i == 0 ? AsInterface<ksBody>(part.GetMainBody()) : null);
+                if (body is null)
+                {
+                    return ModelStateSnapshot.Unreadable;
+                }
+
+                var volume = MassProperties(body, (uint)KompasUnits.MassMmKg)?.v;
+                var faceCount = FaceCountOf(body);
+                if (volume is null || faceCount < 0)
+                {
+                    return ModelStateSnapshot.Unreadable;
+                }
+
+                total += volume.Value;
+                faces += faceCount;
+            }
+
+            return new ModelStateSnapshot(total, count, faces);
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return ModelStateSnapshot.Unreadable;
+        }
+    }
+
+    /// <summary>Face count of one body through the documented <c>ksBody.FaceCollection()</c>; <c>−1</c>
+    /// when the collection cannot be read, which makes the whole snapshot unreadable rather than "fewer
+    /// faces".</summary>
+    private static int FaceCountOf(ksBody body)
+    {
+        try
+        {
+            return body.FaceCollection() is ksFaceCollection faces ? faces.GetCount() : -1;
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException)
         {

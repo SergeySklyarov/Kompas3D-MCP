@@ -5028,7 +5028,12 @@
     "B4.03",
     "B4.03b",
     "B4.04",
-    "B4.08"
+    "B4.08",
+    "SR.b4m09.repeat",
+    "SR.b4m09.control",
+    "SR.b4m09.declared_correct",
+    "SR.b4m09.declared_wrong",
+    "SR.b4m09.comparison_unavailable"
    ],
    "evidence": [
     "docs/acceptance/INDEX.md",

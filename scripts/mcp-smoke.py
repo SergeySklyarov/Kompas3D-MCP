@@ -466,6 +466,9 @@ RUN_GROUPS = (
      "Приёмка SPD: причина непригодности профиля видна клиенту до выдавливания и в отказе SetSketch — "
      "profile_area_unavailable с местом, profile_input_check в finish_sketch, разбор профиля в details "
      "отказа, контур триба и контур спуска клиента OBS-026 (наряд SKETCH_PROFILE_DIAGNOSIS)"),
+    ("suppress", "suppress", "suppress-acceptance.json",
+     "Приёмка SR: повтор «подавить → снять» для B4M.09 и MANIA.20 — воспроизведение молчаливой "
+     "неверной геометрии и контроль в свежем сеансе (наряд SUPPRESS_RESTORE)"),
 )
 
 VERTICAL_GROUP = ("vertical", "smoke-report.json",
@@ -687,6 +690,23 @@ def instrument_self_test():
     check("нулевая доля при нуле попыток не выдумывается",
           second_instance_conclusion(0, 0, 0, 36)[0] is False)
 
+    # Режим повтора «подавить → снять»: разбор K и граница, которая печатается рядом с нулём.
+    check("K повтора подавления без флага выключен",
+          suppress_repeat_argument([]) == (0, None))
+    check("K повтора подавления принимает число",
+          suppress_repeat_argument([SUPPRESS_REPEAT_FLAG, "20"]) == (20, None))
+    check("нечисловой K повтора подавления назван, а не проглочен",
+          suppress_repeat_argument([SUPPRESS_REPEAT_FLAG, "много"])[0] == 0
+          and suppress_repeat_argument([SUPPRESS_REPEAT_FLAG, "много"])[1] is not None)
+    check("постановки повтора подавления названы",
+          SUPPRESS_REPEAT_SETUPS == ("b4m09", "mania20"))
+    check("граница нуля отказов считается, а не берётся на глаз",
+          abs(zero_failure_bound(20) - 0.13909) < 5e-5
+          and abs(zero_failure_bound(60) - 0.04872) < 5e-5,
+          f"{zero_failure_bound(20)!r} {zero_failure_bound(60)!r}")
+    check("граница нуля отказов на нуле попыток не выдумывается",
+          zero_failure_bound(0) is None)
+
     print(f"\nСамопроверка прибора: {checks} проверок, "
           f"{len(failures)} FAIL" + (f" — {failures}" if failures else ""))
     return 1 if failures else 0
@@ -843,6 +863,29 @@ def nested_repeat_argument(argv=None):
     """K повтора NEST из `--nested-repeat K`. Разбор общий с прочими режимами повтора
     (`positive_int_argument`), чтобы у трёх флагов не было трёх разных дисциплин опечатки."""
     return positive_int_argument(sys.argv if argv is None else argv, "--nested-repeat")
+
+
+# ── Режим повтора «подавить → снять» (наряд SUPPRESS_RESTORE) ─────────────────────────────────────
+# K циклов в ОДНОМ сеансе плюс контроль в СВЕЖЕМ. Строки называются `SR.*`, а не `B4M.<NN>.*` /
+# `MANIA.<NN>.*`: это строки ОПЫТА, и принять их за строки матрицы нельзя.
+SUPPRESS_REPEAT_FLAG = "--suppress-repeat"
+SUPPRESS_REPEAT_SETUPS = ("b4m09", "mania20")
+
+
+def suppress_repeat_argument(argv=None):
+    """K повтора «подавить → снять» из `--suppress-repeat K`."""
+    return positive_int_argument(sys.argv if argv is None else argv, SUPPRESS_REPEAT_FLAG)
+
+
+def zero_failure_bound(k):
+    """Верхняя граница доли, которую НОЛЬ отказов на K попытках исключает на уровне 95 %.
+
+    (1 − p)^K ≤ 0,05  ⇒  p ≥ 1 − 0,05^(1/K). Печатается рядом с нулём отказов, потому что «ноль из
+    K» без границы читается как «события нет», а это утверждение сильнее измерения.
+    """
+    if k <= 0:
+        return None
+    return 1.0 - (0.05 ** (1.0 / k))
 
 
 # ── Опыт «второй экземпляр» (наряд NEST_SECOND_INSTANCE) ──────────────────────────────────────────
@@ -6037,6 +6080,13 @@ def main():
     nested_repeat_k, nested_repeat_note = nested_repeat_argument()
     if nested_repeat_note:
         print(nested_repeat_note)
+    # Режим повтора «подавить → снять» (наряд SUPPRESS_RESTORE, §S2): K циклов в одном сеансе плюс
+    # контроль в свежем. Флаг заводит СВОЮ группу `SR.*`, потому что постановки (B4M.09 и MANIA.20)
+    # принадлежат разным группам матрицы, и приписать их одной из них значило бы соврать о том, чья
+    # это строка. Нечисловой K назван, а не превращён в молчаливое «режим выключен».
+    suppress_repeat_k, suppress_repeat_note = suppress_repeat_argument()
+    if suppress_repeat_note:
+        print(suppress_repeat_note)
     # Опыт «второй экземпляр» (наряд NEST_SECOND_INSTANCE): плечо A поднимает и закрывает второй
     # экземпляр КОМПАС, плечо B ждёт столько же. Оба флага ДОПОЛНЯЮТ группу NEST, как и повтор, и
     # своей группы не заводят. Нечисловой K и неверное значение сужения НАЗЫВАЮТСЯ, а не глотаются.
@@ -6159,6 +6209,7 @@ def main():
         "client_bugs_20261009": client_bugs_20261009_only,
         "entity_create": entity_create_only,
         "sketch_profile": sketch_profile_only,
+        "suppress": bool(suppress_repeat_k),
     }
     group, report_filename, report_title = selected_run_group(selected)
 
@@ -6562,6 +6613,17 @@ def main():
         if nested_only:
             nested_contour_checks(client, rep, app_id, workdir, repeat_k=nested_repeat_k,
                                    second_instance=second_instance)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if suppress_repeat_k:
+            # Группа поднимает СВОЙ свежий сеанс для контроля, поэтому возвращает id, с которым
+            # дальше работают: закрывать прежний (уже закрытый) значило бы писать в журнал отказ,
+            # которого не было.
+            app_id = suppress_restore_checks(client, rep, app_id, workdir, suppress_repeat_k)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -29861,6 +29923,569 @@ def mania_scenario_checks(client, rep, app_id, workdir):
     finally:
         if doc:
             call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+# Группа SR: повтор «подавить → снять» (наряд SUPPRESS_RESTORE)
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+def suppress_restore_checks(client, rep, app_id, workdir, k):
+    """SR.* — повтор «подавить → снять» для B4M.09 и MANIA.20 плюс контроль в СВЕЖЕМ сеансе.
+
+    ЗАЧЕМ. Прогон `20261009-104230-vertical-122e328-dirty` дал `B4M.09.suppress_restore` FAIL
+    МОЛЧА: вызов снятия подавления (4876) вернул `succeeded`/`structure_checked`, отказа и записи в
+    журнале воркера не было, а модель потеряла ОБА отверстия — объём 79214,60183660254 стал
+    79999,99999999999 вместо 78429,20367320509 (голая плита 100×80×10). Тот же класс строки
+    `MANIA.20.suppress_restore` падал «один раз из трёх» (docs/STATUS.md, 21.09.2026 и далее).
+    Причина ни разу не разбиралась; здесь она воспроизводится ЧИСЛОМ, а не пересказом.
+
+    ЧТО ДЕЛАЕТ. K циклов ПОДРЯД в ОДНОМ сеансе. Каждый цикл строит постановку в СВЕЖЕМ документе и
+    записывает на КАЖДУЮ попытку: объём до / подавлено / после снятия (и по каждому телу), состав
+    тел, состояние признака (`excluded`, `is_valid`, `object_error`) ДО и ПОСЛЕ, код ответа снятия и
+    `details` отказа. Затем те же постановки проходят ОДИН раз в СВЕЖЕМ сеансе — контроль: он
+    отделяет «редкое состояние длинного сеанса» от «редкой постановки».
+
+    ЧТО СЧИТАЕТСЯ ИСХОДОМ. Снятие, вернувшее геометрию, — `succeeded`; снятие, НЕ вернувшее её, —
+    отказ `GEOMETRY_FAILED` с числами (после правки продукта). Строка PASS, если НИ ОДНА попытка не
+    вернула «успех» при неверной геометрии: молчаливая неверная геометрия и есть дефект.
+
+    ЧЕГО ЗДЕСЬ НЕТ. Ожидание объёма в повтор НЕ передаётся намеренно: именно так был сделан вызов
+    4876, и повтор измеряет ветвь «сверка с состоянием до подавления», а не ветвь «заявленное
+    ожидание». Ветвь с заявленным ожиданием — отдельные строки `SR.<постановка>.declared_*`.
+    """
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def near(a, b, tol=0.01):
+        return a is not None and b is not None and abs(a - b) <= max(tol, 1e-6 * abs(b))
+
+    def emit(tag, desc, verdict, detail, details=None):
+        rep.add(tag, "SR: " + desc, verdict, detail, details=details)
+
+    def close(doc):
+        if doc:
+            call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+
+    def revision(doc):
+        env, _ = call("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return result(env).get("revision") or 1
+
+    def body_rows(doc):
+        env, _ = call("kompas_list_bodies", {"document_id": doc})
+        rows = result(env)
+        return rows if isinstance(rows, list) else []
+
+    def volume_of(refr):
+        if not refr:
+            return None
+        env, _ = call("kompas_measure", {"target_ref": refr, "properties": ["volume"]})
+        return result(env).get("volume_mm3")
+
+    def state_of(doc):
+        """Объём каждого тела, суммарный объём и габариты: этим «вернулось» отличается от «не вернулось»."""
+        per, total = [], 0.0
+        for row in body_rows(doc):
+            v = volume_of(row.get("body_ref"))
+            total += v or 0.0
+            per.append({"ref": row.get("body_ref"), "v": v, "bbox": row.get("bbox")})
+        return {"bodies": len(per), "volume_total": total, "per_body": per}
+
+    def main_volume(doc, min_x):
+        """Объём ГЛАВНОГО тела — ПО ГАБАРИТУ, а не по порядку: у MANIA в документе остаётся и
+        тело-инструмент (булева разность с `keep_tools=true`), и «первое» может оказаться им."""
+        for row in body_rows(doc):
+            mn = (row.get("bbox") or {}).get("min_mm") or []
+            if mn and abs(mn[0] - min_x) <= 1e-3:
+                return volume_of(row.get("body_ref"))
+        return None
+
+    def feature_state(fref):
+        """`excluded`, `is_valid`, `object_error` — состояние признака документированным чтением."""
+        if not fref:
+            return {"err": "ссылка не найдена"}
+        env, code = call("kompas_get_feature", {"feature_ref": fref})
+        r = result(env)
+        return {"err": code, "name": r.get("name"), "excluded": r.get("excluded"),
+                "is_valid": r.get("is_valid"), "object_error": r.get("object_error")}
+
+    def feature_ref_of_type(doc, types):
+        env, _ = call("kompas_list_features", {"document_id": doc})
+        rows = result(env)
+        rows = rows if isinstance(rows, list) else []
+        for row in rows:
+            if str(row.get("type")) in types:
+                return row.get("feature_ref")
+        return None
+
+    # ── Постановки ────────────────────────────────────────────────────────────────────────────────
+    B4M09_LO, B4M09_HI = (0.0, -40.0, 0.0), (100.0, 40.0, 10.0)
+    B4M09_PLATE_V = 100.0 * 80.0 * 10.0
+    B4M09_HOLE_R = 5.0
+    B4M09_HOLE_V = math.pi * B4M09_HOLE_R * B4M09_HOLE_R * 10.0
+
+    def setup_b4m09(name):
+        """Пластина 100×80×10 + сквозное отверстие Ø10 в (20,20) + ЗЕРКАЛЬНЫЙ МАССИВ этого выреза
+        относительно XZ — ровно постановка строки `B4M.09` (SM-23.mirror_array.selected_operations)."""
+        env, _ = call("kompas_create_document", {"application_id": app_id, "kind": "part", "name": name})
+        doc = result(env).get("document_id") or result(env).get("id")
+        if not doc:
+            return None, None, None
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": revision(doc), "name": name + "-plate",
+            "plane": {"base": "xy", "offset_mm": 0.0}})
+        sk = result(env).get("id")
+        if code or not sk:
+            return doc, None, None
+        env, code = call("kompas_edit_sketch", {
+            "sketch_ref": sk, "expected_revision": revision(doc), "mode": "append",
+            "entities": [{"kind": "rectangle", "start_mm": [B4M09_LO[0], B4M09_LO[1]],
+                          "width_mm": B4M09_HI[0] - B4M09_LO[0],
+                          "height_mm": B4M09_HI[1] - B4M09_LO[1]}]})
+        if code:
+            return doc, None, None
+        env, code = call("kompas_finish_sketch", {"sketch_ref": sk, "require_closed_profile": True})
+        if code:
+            return doc, None, None
+        env, code = call("kompas_extrude", {
+            "sketch_ref": sk, "expected_revision": revision(doc), "operation": "base",
+            "depth_mm": B4M09_HI[2] - B4M09_LO[2], "direction": "positive"})
+        if code:
+            return doc, None, None
+        rows = body_rows(doc)
+        if not rows:
+            return doc, None, None
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": revision(doc), "name": name + "-hole",
+            "plane": {"base": "xy", "offset_mm": 0.0}})
+        hsk = result(env).get("id")
+        if code or not hsk:
+            return doc, None, None
+        env, code = call("kompas_edit_sketch", {
+            "sketch_ref": hsk, "expected_revision": revision(doc), "mode": "append",
+            "entities": [{"kind": "circle", "center_mm": [20.0, 20.0], "radius_mm": B4M09_HOLE_R}]})
+        if code:
+            return doc, None, None
+        env, code = call("kompas_finish_sketch", {"sketch_ref": hsk, "require_closed_profile": True})
+        if code:
+            return doc, None, None
+        env, code = call("kompas_extrude", {
+            "sketch_ref": hsk, "expected_revision": revision(doc), "operation": "cut",
+            "end_condition": "through", "direction": "symmetric",
+            "target_body_ref": rows[0].get("body_ref")})
+        if code:
+            return doc, None, None
+        cut = result(env).get("feature_ref") or (env or {}).get("feature_ref")
+        cut_ref = cut.get("id") if isinstance(cut, dict) else cut
+        env, code = call("kompas_pattern_mirror", {
+            "document_id": doc, "expected_revision": revision(doc), "mode": "selected_operations",
+            "source_refs": [cut_ref], "plane": {"base": "xz", "offset_mm": 0.0},
+            "save_initial_objects": True})
+        if code:
+            return doc, None, None
+        fref = feature_ref_of_type(doc, {"48"})
+        analytic = {"before": B4M09_PLATE_V - 2.0 * B4M09_HOLE_V,
+                    "suppressed": B4M09_PLATE_V - B4M09_HOLE_V, "min_x": B4M09_LO[0]}
+        return doc, fref, analytic
+
+    def setup_mania20(name):
+        """Скоба Model Mania 2021, шаги 01–09: контур касательными дугами, плита, ступица Ø60,
+        отверстие Ø50, оболочка t=5, четыре отверстия Ø14, боковое ушко, Ø9 с цековкой и ПРОПИЛ
+        булевой разностью. Подавляемый признак — булева операция (тип 69), ровно как в `MANIA.20`."""
+        ref = mania_references()
+        env, _ = call("kompas_create_document", {"application_id": app_id, "kind": "part", "name": name})
+        doc = result(env).get("document_id") or result(env).get("id")
+        if not doc:
+            return None, None, None
+
+        def mk_sketch(nm, plane, offset, entities):
+            env, code = call("kompas_create_sketch", {
+                "document_id": doc, "expected_revision": revision(doc), "name": nm,
+                "plane": {"base": plane, "offset_mm": offset}})
+            sk = result(env).get("id")
+            if code or not sk:
+                return None, code
+            env, code = call("kompas_edit_sketch", {
+                "sketch_ref": sk, "expected_revision": revision(doc), "mode": "append",
+                "entities": entities})
+            if code:
+                return None, code
+            env, code = call("kompas_finish_sketch", {"sketch_ref": sk, "require_closed_profile": True})
+            return (None, code) if code else (sk, None)
+
+        def extrude(sk, **kw):
+            args = {"sketch_ref": sk, "expected_revision": revision(doc)}
+            args.update(kw)
+            env, code = call("kompas_extrude", args)
+            return code, result(env).get("feature_ref")
+
+        def faces_of(refr):
+            env, _ = call("kompas_read_topology", {"document_id": doc, "body_ref": refr,
+                                                   "include": "faces"})
+            return result(env).get("faces") or []
+
+        def main_ref():
+            for row in body_rows(doc):
+                mn = (row.get("bbox") or {}).get("min_mm") or []
+                if mn and abs(mn[0] + (MANIA_EAR_PITCH + MANIA_EAR_R)) <= 1e-3:
+                    return row.get("body_ref")
+            return None
+
+        arcs = mania_arcs()
+        ents = [{"kind": "arc", "center_mm": [a[0], a[1]], "radius_mm": a[2],
+                 "start_deg": round(a[3], 6), "sweep_deg": round(a[4], 6)} for a in arcs]
+        sk, code = mk_sketch(name + "-01", "xy", 0.0, ents)
+        if not sk:
+            return doc, None, None
+        code, _ = extrude(sk, operation="base", depth_mm=MANIA_PLATE_T, direction="positive")
+        if code:
+            return doc, None, None
+        sk, code = mk_sketch(name + "-03", "xy", MANIA_PLATE_T,
+                             [{"kind": "circle", "center_mm": [0.0, 0.0],
+                               "radius_mm": MANIA_BOSS_D / 2.0}])
+        if not sk:
+            return doc, None, None
+        code, _ = extrude(sk, operation="boss", target_body_ref=main_ref(),
+                          depth_mm=MANIA_PART_H - MANIA_PLATE_T, direction="positive")
+        if code:
+            return doc, None, None
+        sk, code = mk_sketch(name + "-04", "xy", 0.0,
+                             [{"kind": "circle", "center_mm": [0.0, 0.0],
+                               "radius_mm": MANIA_BORE_D / 2.0}])
+        if not sk:
+            return doc, None, None
+        code, _ = extrude(sk, operation="cut", target_body_ref=main_ref(),
+                          end_condition="through", direction="symmetric")
+        if code:
+            return doc, None, None
+        bottom = None
+        for f in faces_of(main_ref()):
+            n = f.get("normal_at_center") or []
+            if f.get("surface_type") == "plane" and len(n) >= 3 and abs(n[2] + 1) <= 1e-6:
+                bottom = f.get("face_ref")
+        if not bottom:
+            return doc, None, None
+        env, code = call("kompas_shell", {
+            "document_id": doc, "expected_revision": revision(doc), "face_refs": [bottom],
+            "thickness_mm": MANIA_WALL_T, "thin_direction": "inward"})
+        if code:
+            return doc, None, None
+        for x, y in ((40.0, 40.0), (-40.0, 40.0), (-40.0, -40.0), (40.0, -40.0)):
+            top, best = None, -1.0
+            for f in faces_of(main_ref()):
+                n = f.get("normal_at_center") or []
+                a = f.get("area_mm2")
+                if (f.get("surface_type") == "plane" and a and len(n) >= 3
+                        and abs(n[2] - 1) <= 1e-6 and a > best):
+                    top, best = f.get("face_ref"), a
+            if not top:
+                return doc, None, None
+            env, code = call("kompas_hole", {
+                "face_ref": top, "expected_revision": revision(doc), "mode": "blind_flat",
+                "diameter_mm": MANIA_EAR_HOLE_D, "depth_mm": MANIA_PART_H,
+                "offset_x_mm": x, "offset_y_mm": y})
+            if code:
+                return doc, None, None
+        lug_r = MANIA_LUG_R
+        for suffix, entities in (
+                ("07a", [{"kind": "rectangle",
+                          "start_mm": [MANIA_LUG_X0, -(MANIA_LUG_Z + lug_r)],
+                          "width_mm": MANIA_LUG_X1 - MANIA_LUG_X0, "height_mm": 2 * lug_r}]),
+                ("07b", [{"kind": "circle", "center_mm": [MANIA_LUG_X1, -MANIA_LUG_Z],
+                          "radius_mm": lug_r}])):
+            sk, code = mk_sketch(name + "-" + suffix, "xz", 0.0, entities)
+            if not sk:
+                return doc, None, None
+            code, _ = extrude(sk, operation="boss", target_body_ref=main_ref(),
+                              depth_mm=MANIA_LUG_W / 2.0, direction="symmetric")
+            if code:
+                return doc, None, None
+        yface = None
+        for f in faces_of(main_ref()):
+            n = f.get("normal_at_center") or []
+            if f.get("surface_type") == "plane" and len(n) >= 3 and n[1] > 0.99:
+                yface = f.get("face_ref")
+        if not yface:
+            return doc, None, None
+        env, code = call("kompas_hole", {
+            "face_ref": yface, "expected_revision": revision(doc),
+            "mode": "through_counterbore", "diameter_mm": MANIA_LUG_HOLE_D,
+            "counterbore_diameter_mm": MANIA_CBORE_D, "counterbore_depth_mm": MANIA_CBORE_T,
+            "offset_x_mm": MANIA_LUG_X1, "offset_y_mm": -MANIA_LUG_Z})
+        if code:
+            return doc, None, None
+        sk, code = mk_sketch(name + "-09", "xz", 0.0,
+                             [{"kind": "rectangle",
+                               "start_mm": [MANIA_SAWCUT_X, -(MANIA_LUG_Z + 14.0)],
+                               "width_mm": 11.0, "height_mm": 28.0}])
+        if not sk:
+            return doc, None, None
+        code, _ = extrude(sk, operation="base", depth_mm=MANIA_SAWCUT_W / 2.0, direction="symmetric")
+        if code:
+            return doc, None, None
+        tool = None
+        for row in body_rows(doc):
+            mn = (row.get("bbox") or {}).get("min_mm") or []
+            if mn and abs(mn[0] - MANIA_SAWCUT_X) <= 1e-3:
+                tool = row.get("body_ref")
+        if not tool:
+            return doc, None, None
+        env, code = call("kompas_boolean", {
+            "document_id": doc, "expected_revision": revision(doc),
+            "target_body_ref": main_ref(), "tool_body_refs": [tool],
+            "operation": "difference", "keep_tools": True})
+        if code:
+            return doc, None, None
+        fref = feature_ref_of_type(doc, {"69"})
+        # ОЖИДАНИЕ — СУММА ПО ВСЕМ ТЕЛАМ, а не объём главного тела: булева разность сделана с
+        # `keep_tools=true`, поэтому в документе остаётся тело-инструмент (прямоугольник 11×28×3 =
+        # 924 мм³), и продукт сравнивает именно сумму. Измерено первым прогоном: сумма 127564,6153839594
+        # против объёма главного тела 126640,6153839594 — расхождение ровно 924.
+        tool_volume = 11.0 * 28.0 * MANIA_SAWCUT_W
+        analytic = {"before": ref["v_sawcut"] + tool_volume,
+                    "suppressed": ref["v_cbore"] + tool_volume,
+                    "min_x": -(MANIA_EAR_PITCH + MANIA_EAR_R)}
+        return doc, fref, analytic
+
+    SETUPS = {"b4m09": setup_b4m09, "mania20": setup_mania20}
+
+    def cycle(setup_name, index, label):
+        """Один цикл «построить → подавить → снять» в СВЕЖЕМ документе."""
+        doc, fref, analytic = SETUPS[setup_name](label)
+        rec = {"i": index, "setup": setup_name, "document": doc}
+        if not doc or not fref or analytic is None:
+            rec.update({"stage": "setup", "code": "SETUP_FAILED",
+                        "message": "постановка не построена — измерять нечего"})
+            close(doc)
+            return rec
+        try:
+            rec["analytic_before_mm3"] = analytic["before"]
+            rec["analytic_suppressed_mm3"] = analytic["suppressed"]
+            before = state_of(doc)
+            rec["state_before"] = before
+            rec["main_before_mm3"] = main_volume(doc, analytic["min_x"])
+            rec["feature_before"] = feature_state(fref)
+            rev = revision(doc)
+            env_sup, code_sup = call("kompas_set_feature_suppressed", {
+                "feature_ref": fref, "expected_revision": rev, "suppressed": True})
+            rec["suppress_code"] = code_sup
+            rec["suppress_details"] = ((env_sup or {}).get("error") or {}).get("details")
+            suppressed = state_of(doc)
+            rec["state_suppressed"] = suppressed
+            rec["main_suppressed_mm3"] = main_volume(doc, analytic["min_x"])
+            rec["feature_suppressed"] = feature_state(fref)
+            rev = (env_sup or {}).get("revision_after") or rev
+            env_res, code_res = call("kompas_set_feature_suppressed", {
+                "feature_ref": fref, "expected_revision": rev, "suppressed": False})
+            rec["restore_code"] = code_res
+            rec["restore_details"] = ((env_res or {}).get("error") or {}).get("details")
+            rec["restore_unverified"] = ((env_res or {}).get("verification") or {}).get(
+                "unverified_aspects")
+            after = state_of(doc)
+            rec["state_after"] = after
+            rec["main_after_mm3"] = main_volume(doc, analytic["min_x"])
+            rec["feature_after"] = feature_state(fref)
+            returned = (near(after["volume_total"], before["volume_total"])
+                        and after["bodies"] == before["bodies"])
+            rec["returned"] = returned
+            # ИСХОД. «Вернулось и успех» либо «не вернулось и отказ» — норма. «Успех при неверной
+            # геометрии» и есть дефект наряда; он назван отдельным исходом, а не спрятан в FAIL.
+            if code_res is None and returned:
+                rec["outcome"] = "restored"
+            elif code_res is not None and not returned:
+                rec["outcome"] = "refused_with_data"
+            elif code_res is None and not returned:
+                rec["outcome"] = "silent_wrong_geometry"
+            else:
+                rec["outcome"] = "refused_but_restored"
+        finally:
+            close(doc)
+        return rec
+
+    def declared_cycle(setup_name, index, label, wrong):
+        """Цикл с ЗАЯВЛЕННЫМ ожиданием объёма: верное ожидание обязано пройти, неверное — отказать."""
+        doc, fref, analytic = SETUPS[setup_name](label)
+        rec = {"i": index, "setup": setup_name, "document": doc, "wrong_expected": wrong}
+        if not doc or not fref or analytic is None:
+            rec.update({"stage": "setup", "code": "SETUP_FAILED"})
+            close(doc)
+            return rec
+        try:
+            declared_sup = analytic["suppressed"] + (1000.0 if wrong else 0.0)
+            rev = revision(doc)
+            env, code = call("kompas_set_feature_suppressed", {
+                "feature_ref": fref, "expected_revision": rev, "suppressed": True,
+                "expected_volume_mm3": declared_sup})
+            rec["suppress_code"] = code
+            rec["suppress_details"] = ((env or {}).get("error") or {}).get("details")
+            rec["declared_suppressed_mm3"] = declared_sup
+            rec["suppressed_volume_mm3"] = state_of(doc)["volume_total"]
+            if code is not None:
+                return rec
+            rev = (env or {}).get("revision_after") or rev
+            declared_res = analytic["before"] + (1000.0 if wrong else 0.0)
+            env, code = call("kompas_set_feature_suppressed", {
+                "feature_ref": fref, "expected_revision": rev, "suppressed": False,
+                "expected_volume_mm3": declared_res})
+            rec["restore_code"] = code
+            rec["restore_details"] = ((env or {}).get("error") or {}).get("details")
+            rec["declared_restored_mm3"] = declared_res
+            rec["restored_volume_mm3"] = state_of(doc)["volume_total"]
+        finally:
+            close(doc)
+        return rec
+
+    def unavailable_cycle(setup_name, index, label):
+        """Цикл, в котором МЕЖДУ подавлением и снятием прошла другая мутация: сверка обязана быть
+        НАЗВАНА недоступной, а вызов — остаться успешным, если геометрия вернулась."""
+        doc, fref, analytic = SETUPS[setup_name](label)
+        rec = {"i": index, "setup": setup_name, "document": doc}
+        if not doc or not fref or analytic is None:
+            rec.update({"stage": "setup", "code": "SETUP_FAILED"})
+            close(doc)
+            return rec
+        try:
+            rev = revision(doc)
+            env, code = call("kompas_set_feature_suppressed", {
+                "feature_ref": fref, "expected_revision": rev, "suppressed": True})
+            rec["suppress_code"] = code
+            if code is not None:
+                return rec
+            # ДРУГАЯ МУТАЦИЯ. Выбрано СОХРАНЕНИЕ: документированный маршрут, двигающий ревизию и НЕ
+            # трогающий модель, поэтому ссылка на подавленный признак переживает его (после
+            # kompas_rebuild ссылки отзываются, и снять подавление было бы нечем). Модель-меняющая
+            # мутация покрыта модульными тестами решающей функции.
+            path = os.path.join(workdir, "sr-%s-%03d.m3d" % (setup_name, index))
+            rev = (env or {}).get("revision_after") or rev
+            env2, code2 = call("kompas_save_document", {
+                "document_id": doc, "target_path": path, "expected_revision": rev})
+            rec["intervening_mutation"] = {"tool": "kompas_save_document", "code": code2,
+                                           "path": path}
+            rev = (env2 or {}).get("revision_after") or rev
+            env3, code3 = call("kompas_set_feature_suppressed", {
+                "feature_ref": fref, "expected_revision": rev, "suppressed": False})
+            rec["restore_code"] = code3
+            rec["restore_unverified"] = ((env3 or {}).get("verification") or {}).get(
+                "unverified_aspects")
+            rec["restored_volume_mm3"] = state_of(doc)["volume_total"]
+            rec["named_unavailable"] = any(
+                "restore_comparison_unavailable" in str(u)
+                for u in (rec["restore_unverified"] or []))
+        finally:
+            close(doc)
+        return rec
+
+    # ── Прогон ────────────────────────────────────────────────────────────────────────────────────
+    attempts = {name: [] for name in SUPPRESS_REPEAT_SETUPS}
+    for name in SUPPRESS_REPEAT_SETUPS:
+        for index in range(1, k + 1):
+            attempts[name].append(cycle(name, index, "SR-%s-%03d" % (name, index)))
+
+    for name in SUPPRESS_REPEAT_SETUPS:
+        rows = attempts[name]
+        silent = [a["i"] for a in rows if a.get("outcome") == "silent_wrong_geometry"]
+        refused = [a["i"] for a in rows if a.get("outcome") == "refused_with_data"]
+        restored = [a["i"] for a in rows if a.get("outcome") == "restored"]
+        other = [a["i"] for a in rows if a.get("outcome") not in
+                 ("restored", "refused_with_data", "silent_wrong_geometry")]
+        setup_failed = [a["i"] for a in rows if a.get("stage") == "setup"]
+        emit("SR.%s.repeat" % name,
+             "постановка %s: K=%d циклов «подавить → снять» в ОДНОМ сеансе, свежий документ на цикл"
+             % (name, k),
+             "PASS" if (len(rows) == k and not silent and not other and not setup_failed) else "FAIL",
+             "попыток=%d восстановилось=%d отказало_с_данными=%d молча_неверная_геометрия=%d "
+             "прочее=%s постановка_не_построена=%s; при нуле «молча» ноль исключает долю >= %.4f "
+             "(95 %%)" % (len(rows), len(restored), len(refused), len(silent), other,
+                          setup_failed, zero_failure_bound(k) or 0.0),
+             details={"setup": name, "k": k, "attempts": rows,
+                      "restored": restored, "refused_with_data": refused,
+                      "silent_wrong_geometry": silent,
+                      "zero_failure_bound": zero_failure_bound(k)})
+
+    total_rows = [a for name in SUPPRESS_REPEAT_SETUPS for a in attempts[name]]
+    silent_all = [a["i"] for a in total_rows if a.get("outcome") == "silent_wrong_geometry"]
+    emit("SR.summary",
+         "повтор «подавить → снять»: суммарно по обеим постановкам",
+         "PASS" if (total_rows and not silent_all) else "FAIL",
+         "попыток=%d молча_неверная_геометрия=%s" % (len(total_rows), silent_all),
+         details={"attempts": len(total_rows), "silent_wrong_geometry": silent_all,
+                  "k": k, "setups": list(SUPPRESS_REPEAT_SETUPS)})
+
+    # ── Контроль в СВЕЖЕМ сеансе ──────────────────────────────────────────────────────────────────
+    call("kompas_disconnect", {"application_id": app_id, "close_owned_application": True})
+    env, code = call("kompas_connect", {"mode": "launch", "make_visible": False})
+    fresh_app = result(env).get("application_id")
+    emit("SR.control.session",
+         "контроль: поднят СВЕЖИЙ сеанс (прежний экземпляр закрыт) — повтор отделён от длины сеанса",
+         "PASS" if fresh_app else "FAIL",
+         "прежний application_id=%s; новый=%s; err=%s" % (app_id, fresh_app, code))
+    if not fresh_app:
+        return app_id
+    app_id = fresh_app
+    for name in SUPPRESS_REPEAT_SETUPS:
+        rec = cycle(name, 1, "SR-control-%s" % name)
+        emit("SR.%s.control" % name,
+             "постановка %s: один цикл в СВЕЖЕМ сеансе — контроль к K циклам длинного" % name,
+             "PASS" if rec.get("outcome") in ("restored", "refused_with_data") else "FAIL",
+             "исход=%s код_снятия=%s объём_до=%s подавлено=%s после=%s"
+             % (rec.get("outcome"), rec.get("restore_code"),
+                (rec.get("state_before") or {}).get("volume_total"),
+                (rec.get("state_suppressed") or {}).get("volume_total"),
+                (rec.get("state_after") or {}).get("volume_total")),
+             details=rec)
+
+    # ── Заявленное ожидание объёма: верное проходит, неверное отклоняется ─────────────────────────
+    for name in SUPPRESS_REPEAT_SETUPS:
+        good = declared_cycle(name, 1, "SR-declared-good-%s" % name, wrong=False)
+        good_ok = (good.get("suppress_code") is None and good.get("restore_code") is None)
+        emit("SR.%s.declared_correct" % name,
+             "постановка %s: верное expected_volume_mm3 на подавлении И на снятии — вызовы успешны"
+             % name,
+             "PASS" if good_ok else "FAIL",
+             "подавление код=%s (ожидание %s, измерено %s); снятие код=%s (ожидание %s, измерено %s)"
+             % (good.get("suppress_code"), good.get("declared_suppressed_mm3"),
+                good.get("suppressed_volume_mm3"), good.get("restore_code"),
+                good.get("declared_restored_mm3"), good.get("restored_volume_mm3")),
+             details=good)
+
+        bad = declared_cycle(name, 2, "SR-declared-bad-%s" % name, wrong=True)
+        bad_details = bad.get("suppress_details") or {}
+        bad_ok = (bad.get("suppress_code") == "GEOMETRY_FAILED"
+                  and bad_details.get("code") == "declared_volume_not_confirmed"
+                  and bad_details.get("expected_volume_mm3") is not None
+                  and bad_details.get("measured_volume_mm3") is not None)
+        emit("SR.%s.declared_wrong" % name,
+             "постановка %s: НЕВЕРНОЕ expected_volume_mm3 на подавлении — отказ GEOMETRY_FAILED с "
+             "числами, а не понижение уровня" % name,
+             "PASS" if bad_ok else "FAIL",
+             "код=%s; details.code=%s ожидание=%s измерено=%s"
+             % (bad.get("suppress_code"), bad_details.get("code"),
+                bad_details.get("expected_volume_mm3"), bad_details.get("measured_volume_mm3")),
+             details=bad)
+
+        unavailable = unavailable_cycle(name, 3, "SR-unavailable-%s" % name)
+        un_ok = (unavailable.get("suppress_code") is None
+                 and unavailable.get("restore_code") is None
+                 and unavailable.get("named_unavailable") is True)
+        emit("SR.%s.comparison_unavailable" % name,
+             "постановка %s: мутация между подавлением и снятием — сверка НАЗВАНА недоступной, "
+             "вызов успешен, если геометрия вернулась" % name,
+             "PASS" if un_ok else "FAIL",
+             "подавление код=%s; вмешательство=%s; снятие код=%s; названо=%s; unverified=%s"
+             % (unavailable.get("suppress_code"),
+                (unavailable.get("intervening_mutation") or {}).get("code"),
+                unavailable.get("restore_code"), unavailable.get("named_unavailable"),
+                json.dumps(unavailable.get("restore_unverified"), ensure_ascii=False)[:300]),
+             details=unavailable)
+
+    return app_id
+
+
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════

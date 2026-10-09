@@ -8,6 +8,7 @@ using KompasMcp.Contracts;
 using KompasMcp.Contracts.Ipc;
 using KompasMcp.Domain.Documents;
 using KompasMcp.Domain.Files;
+using KompasMcp.Domain.Geometry;
 using KompasMcp.Domain.Paths;
 
 namespace KompasMcp.Api5Adapter;
@@ -1588,6 +1589,16 @@ public sealed class DocumentEntry
     public DateTime? SavedAtUtc { get; set; }
 
     public string LastRevisionReason { get; set; } = "create";
+
+    /// <summary>What THIS session observed when it suppressed a feature, so that removing the suppression
+    /// can be compared with the state the model was in before it. Null when this session suppressed
+    /// nothing, or after a suppression was removed.</summary>
+    /// <remarks>INVARIANT: only the LAST suppression is remembered. A second suppression replaces the
+    /// record, and the comparison for the earlier feature is then UNAVAILABLE and named as such — losing a
+    /// record may never turn into "matched". MEASURED: a suppressed feature leaves collection 110, so it
+    /// cannot be asked about by position after the write; the caller's handle and the revision tie the
+    /// record to a feature. History: docs/decisions/adapter-core.md#suppression-restore-comparison</remarks>
+    public SuppressionRecord? Suppression { get; set; }
 
     /// <summary>False when the kind had to be assumed rather than read from the document.</summary>
     public bool KindVerified { get; init; }

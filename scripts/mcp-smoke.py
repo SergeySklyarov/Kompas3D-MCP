@@ -30317,6 +30317,36 @@ def suppress_restore_checks(client, rep, app_id, workdir, k):
                 rec["outcome"] = "silent_wrong_geometry"
             else:
                 rec["outcome"] = "refused_but_restored"
+
+            # ── ЧАСТЬ C наряда: что может сделать КЛИЕНТ после отказа ─────────────────────────────
+            # Модель осталась неверной, и сервер её молча не откатывает. Измеряется, возвращает ли
+            # верную геометрию ДОКУМЕНТИРОВАННЫЙ маршрут — kompas_rebuild, а если нет, то повторное
+            # подавление и снятие. Ничего из этого продукт не выполняет сам: это измерение того, что
+            # можно ПОРЕКОМЕНДОВАТЬ клиенту в тексте отказа, а не автоматическая починка.
+            if rec["outcome"] in ("refused_with_data", "refused_but_restored", "silent_wrong_geometry"):
+                recovery = {}
+                _er, code_rb = call("kompas_rebuild", {"document_id": doc})
+                recovery["rebuild_code"] = code_rb
+                st_rb = state_of(doc)
+                recovery["rebuild_volume_total"] = st_rb["volume_total"]
+                recovery["rebuild_bodies"] = st_rb["bodies"]
+                recovery["rebuild_restored"] = (near(st_rb["volume_total"], before["volume_total"])
+                                                and st_rb["bodies"] == before["bodies"])
+                if not recovery["rebuild_restored"]:
+                    rev2 = revision(doc)
+                    _es, code_s2 = call("kompas_set_feature_suppressed", {
+                        "feature_ref": fref, "expected_revision": rev2, "suppressed": True})
+                    recovery["resuppress_code"] = code_s2
+                    rev2 = (_es or {}).get("revision_after") or rev2
+                    _er2, code_r2 = call("kompas_set_feature_suppressed", {
+                        "feature_ref": fref, "expected_revision": rev2, "suppressed": False})
+                    recovery["rerestore_code"] = code_r2
+                    st_r2 = state_of(doc)
+                    recovery["rerestore_volume_total"] = st_r2["volume_total"]
+                    recovery["rerestore_bodies"] = st_r2["bodies"]
+                    recovery["rerestore_restored"] = (near(st_r2["volume_total"], before["volume_total"])
+                                                      and st_r2["bodies"] == before["bodies"])
+                rec["recovery"] = recovery
         finally:
             close(doc)
         return rec
@@ -30429,6 +30459,32 @@ def suppress_restore_checks(client, rep, app_id, workdir, k):
          "попыток=%d молча_неверная_геометрия=%s" % (len(total_rows), silent_all),
          details={"attempts": len(total_rows), "silent_wrong_geometry": silent_all,
                   "k": k, "setups": list(SUPPRESS_REPEAT_SETUPS)})
+
+    # ── ЧАСТЬ C: чем клиент может вернуть верную геометрию после отказа ───────────────────────────
+    # Измеряется НА ТЕХ ЖЕ циклах, что отказали: возвращает ли верную геометрию kompas_rebuild, а
+    # если нет — повторное подавление и снятие. Наряд требует НАЗВАТЬ это в тексте отказа как
+    # рекомендацию клиенту; продукт этого сам не делает.
+    failed_cycles = [a for name in SUPPRESS_REPEAT_SETUPS for a in attempts[name]
+                     if a.get("outcome") in ("refused_with_data", "refused_but_restored",
+                                             "silent_wrong_geometry")]
+    if failed_cycles:
+        rebuild_ok = [a["i"] for a in failed_cycles
+                      if (a.get("recovery") or {}).get("rebuild_restored")]
+        rerestore_ok = [a["i"] for a in failed_cycles
+                        if (a.get("recovery") or {}).get("rerestore_restored")]
+        emit("SR.recovery",
+             "после отказа верную геометрию возвращает: kompas_rebuild или повторное подавление+снятие",
+             "PASS" if (rebuild_ok or rerestore_ok) else "NAMED",
+             "отказавших циклов=%d; kompas_rebuild вернул верную геометрию в %s; повторное "
+             "подавление+снятие — в %s" % (len(failed_cycles), rebuild_ok or "ни в одном",
+                                           rerestore_ok or "ни в одном"),
+             details={"failed_cycles": [a["i"] for a in failed_cycles],
+                      "rebuild_restored": rebuild_ok, "rerestore_restored": rerestore_ok,
+                      "recovery": [a.get("recovery") for a in failed_cycles]})
+    else:
+        emit("SR.recovery",
+             "после отказа верную геометрию возвращает: kompas_rebuild или повторное подавление+снятие",
+             "NAMED", "ни один цикл не отказал — измерять нечего")
 
     # ── Контроль в СВЕЖЕМ сеансе ──────────────────────────────────────────────────────────────────
     call("kompas_disconnect", {"application_id": app_id, "close_owned_application": True})

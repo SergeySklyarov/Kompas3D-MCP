@@ -49,12 +49,24 @@ public partial class Api5Session
         IReadOnlyList<FeatureSideDto> sides = Array.Empty<FeatureSideDto>();
         FeatureThinDto? thin = null;
         short? directionType = null;
+        string? materialToward = null;
+        string? materialTowardSource = null;
+        double[]? materialTowardNormal = null;
+        string? materialTowardReason = null;
         if (ExtrusionFamily.Of(definition) is not null
             && ReadExtrusion(definition!) is var read && read is not null)
         {
             directionType = read.Value.DirectionType;
             sides = read.Value.Sides;
             thin = read.Value.Thin;
+            // The side of the material for a READ feature: recorded directionType + the sketch normal read by
+            // the documented route. The gabarit is not available here (the feature is already built), so the
+            // rule is the only source — and it works for a cut inside a body, where the box says nothing.
+            var toward = ReadFeatureMaterialToward(definition!, directionType);
+            materialToward = toward.Toward;
+            materialTowardSource = toward.Source;
+            materialTowardNormal = toward.Normal;
+            materialTowardReason = toward.Reason;
         }
 
         // A chamfer is read separately: it has no sides or thin wall, but it has the leg lengths and a
@@ -188,6 +200,11 @@ public partial class Api5Session
                 + "для этого признака: семейство не выдавливание, либо чтение ссылки не удалось");
         }
 
+        if (materialTowardReason is not null)
+        {
+            unverified.Add(materialTowardReason);
+        }
+
         if (family is null)
         {
             unverified.Insert(0,
@@ -257,7 +274,57 @@ public partial class Api5Session
             shell)
         {
             SketchRef = sketchRef,
+            MaterialToward = materialToward,
+            MaterialTowardSource = materialTowardSource,
+            MaterialTowardSketchNormal = materialTowardNormal,
         };
+    }
+
+    /// <summary>The side an EXISTING extrusion moved material to, from its recorded <c>directionType</c> and
+    /// the sketch normal read by the documented route. Null with a named reason when either is unreadable.</summary>
+    /// <remarks>A read feature has no gabarit before/after, so the sketch-normal rule is the only source — and
+    /// it is exactly what covers a cut made inside a body. DOC: kssketchdefinition_getsurface.html → …
+    /// → ksplacement_getaxis.html. History: docs/decisions/adapter-core.md#material-direction-toward</remarks>
+    private static (string? Toward, string? Source, double[]? Normal, string? Reason) ReadFeatureMaterialToward(
+        object definition, short? directionType)
+    {
+        var sketch = definition switch
+        {
+            ksBaseExtrusionDefinition b => b.GetSketch() as ksEntity,
+            ksBossExtrusionDefinition o => o.GetSketch() as ksEntity,
+            ksCutExtrusionDefinition c => c.GetSketch() as ksEntity,
+            _ => null,
+        };
+        if (sketch is null)
+        {
+            return (null, null, null, "material_toward_not_named — эскиз признака не прочитан");
+        }
+
+        if (sketch.GetDefinition() is not ksSketchDefinition sketchDefinition)
+        {
+            return (null, null, null, "material_toward_not_named — определение эскиза признака не прочитано");
+        }
+
+        var frame = ReadSketchPlaneFrame(sketchDefinition);
+        if (frame.Normal is null)
+        {
+            return (null, null, null, "material_toward_not_named — нормаль плоскости эскиза не прочитана: "
+                + (frame.Reason ?? "причина не названа"));
+        }
+
+        if (directionType is null)
+        {
+            return (null, "sketch_normal_rule", frame.Normal,
+                "material_toward_not_named — directionType признака не прочитан, знак стороны неизвестен");
+        }
+
+        var removing = definition is ksCutExtrusionDefinition;
+        var negative = directionType == 1;   // dtReverse
+        var symmetric = directionType == 2;  // dtBoth
+        var toward = symmetric
+            ? MaterialDirectionRule.DescribeSymmetric(frame.Normal)
+            : MaterialDirectionRule.Describe(MaterialDirectionRule.Toward(frame.Normal, removing, negative, false)!, false);
+        return (toward, "sketch_normal_rule", frame.Normal, null);
     }
 
     public UpdateFeatureResult UpdateFeature(UpdateFeatureCommand command)

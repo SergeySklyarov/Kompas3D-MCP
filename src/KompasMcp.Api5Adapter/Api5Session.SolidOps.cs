@@ -454,14 +454,16 @@ public sealed partial class Api5Session
         }
 
         var untouched = rows.Where(r => !ReferenceEquals(r, remaining)).ToList();
-        var targetMoved = changes.DeltaOf(targetIndex) is double moved
-                          && Math.Abs(moved) > VolumeChangeFloorMm3;
+        var targetMoved = VolumeMoved(changes.DeltaOf(targetIndex),
+                              bodiesBefore.FirstOrDefault(b => b.Index == targetIndex)?.Volume)
+                          || changes.BoxChangedOf(targetIndex)
+                          || changes.TopologyChangedOf(targetIndex);
 
         var checks = new List<NamedCheck>
         {
             new("target_body_affected", targetMoved,
-                Observed: "тел" + targetIndex + ": ΔV=" + Num(changes.DeltaOf(targetIndex)),
-                Expected: "изменение объёма названного тела"),
+                Observed: "тел" + targetIndex + ": ΔV(после−до)=" + Num(changes.DeltaOf(targetIndex)),
+                Expected: "изменение объёма, габарита или топологии названного тела"),
             new("nontarget_bodies_unchanged", otherMoved.Count == 0,
                 Observed: untouched.Count == 0 ? "<посторонних тел нет>" : BodyVolumesText(untouched),
                 Expected: "объёмы посторонних тел не изменились"),

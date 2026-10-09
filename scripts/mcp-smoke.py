@@ -5518,6 +5518,12 @@ def main():
     # прочих групп: доказательство обязано находиться по ИМЕНИ строки (`E08.<NN>`).
     client_bugs_only = "--e08-only" in sys.argv
 
+    # То же для находок клиента в CP05/CP05b (наряд CLIENT_BUGS_20261009): одна группа CB9 на своём
+    # сеансе — направление выреза, ложное NO_GEOMETRY_CHANGE на малом признаке, габарит контекста,
+    # занятый файл, откат контрольной копии. Отдельная ветка нужна по той же причине, что у прочих
+    # групп: доказательство обязано находиться по ИМЕНИ строки (`CB9.<NN>`).
+    client_bugs_20261009_only = "--client-bugs-20261009" in sys.argv
+
     # Домен ЧЕРТЕЖЕЙ (блок DRW, профиль `drawings-minimal-v1`): одна группа, свой сеанс, своя ветка.
     # Клетка матрицы обязана находиться по ИМЕНИ строки (`DRW.<NN>.<действие>`), а не по номеру в общем
     # потоке, — та же причина, что у прочих групп.
@@ -5560,6 +5566,7 @@ def main():
         else "Приёмка PO: ориентация экземпляров кругового массива через MCP (наряд MCP-015)" if pattern_orientation_only
         else "Приёмка R40: ссылки на эскиз и вспомогательную геометрию, честная самопроверка (наряд RELEASE_040)" if release_040_only
         else "Приёмка E08: находки клиента после 0.4.0 — площадь из дуг, знак sweep_deg, массив операций, sketch_ref (наряд CLIENT_BUGS_20261008)" if client_bugs_only
+        else "Приёмка CB9: находки клиента в CP05/CP05b — направление выреза, ложное NO_GEOMETRY_CHANGE, габарит контекста, занятый файл (наряд CLIENT_BUGS_20261009)" if client_bugs_20261009_only
         else "Интеграционный прогон вертикального сценария через MCP"),
         os.path.join(workdir, "chamfer-acceptance.json" if chamfer_only
                      else "fillet-acceptance.json" if fillet_only
@@ -5588,6 +5595,7 @@ def main():
                      else "pattern-orientation-acceptance.json" if pattern_orientation_only
                      else "release-040-acceptance.json" if release_040_only
                      else "client-bugs-20261008-acceptance.json" if client_bugs_only
+                     else "client-bugs-20261009-acceptance.json" if client_bugs_20261009_only
                      else "smoke-report.json"))
     report_override = argument("--report")
     if report_override:
@@ -6013,6 +6021,14 @@ def main():
 
         if client_bugs_only:
             e08_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if client_bugs_20261009_only:
+            cb9_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -6580,6 +6596,11 @@ def main():
         # CLIENT_BUGS_20261008), свои документы и свои имена строк (`E08.<NN>`), поэтому в общем
         # потоке её доказательство иначе не нашлось бы. Документы R40 она не трогает.
         e08_checks(client, rep, app_id, workdir)
+
+        # Группа CB9 идёт сразу за E08 и в том же сеансе: находки клиента в CP05/CP05b (наряд
+        # CLIENT_BUGS_20261009), свои документы и свои имена строк (`CB9.<NN>`). Свои пути в
+        # scratch она создаёт и удаляет сама, поэтому общий поток она не засоряет.
+        cb9_checks(client, rep, app_id, workdir)
 
         # Группа SB идёт сразу за E08 и в том же сеансе: массовая геометрия эскиза (блок G2, наряд
         # OMEGA_G2_SKETCH_BULK_DEVELOPER_PROMPT.md), свои документы и свои имена строк
@@ -14276,6 +14297,759 @@ def e08_checks(client, rep, app_id, workdir):
                            and verification(env).get("level") != "geometry_checked") else "FAIL",
                 "err=%s уровень=%s проверки=%s" % (error_code(env), verification(env).get("level"), sorted(chk)))
         close(doc)
+
+
+def cb9_checks(client, rep, app_id, workdir):
+    """Группа CB9: находки клиента Omega в CP05/CP05b (наряд `CLIENT_BUGS_20261009`).
+
+    F1 (OBS-021/OBS-019): направление выреза. Решение заказчика — ВАРИАНТ B: поведение КОМПАС НЕ
+    меняется (справка v24 `directionType`: «для вырезаемого элемента выдавливания направление
+    противоположно нормали»), но схема описывает его отдельно для cut, а ответ называет ФАКТИЧЕСКУЮ
+    сторону материала в координатах детали (`material_removed_toward` / `material_added_toward`),
+    выведенную из ИЗМЕРЕННОГО сдвига габарита, а не из запрошенного `direction`.
+    F2 (OBS-022): ложное NO_GEOMETRY_CHANGE на малом признаке — порог «изменилось/нет» снижен до шума
+    измерения и дополнен габаритом и числом граней.
+    F3 (OBS-024): габарит `get_context` — теперь двумя блоками с НАЗВАННОЙ областью.
+    F4 (OBS-025): занятый файл — отказ `FILE_LOCKED` ДО обращения к КОМПАС; откат контрольной копии
+    называет настоящую причину ОС.
+
+    Числа — аналитика (π·r²·h), допуск 1e-4, как в соседних группах; ожидания под факт не подгоняются.
+    """
+    # The minus sign the surface uses in `material_*_toward` (U+2212), not the ASCII hyphen.
+    MINUS = "\u2212"
+
+    def tool(name, args, timeout=300):
+        _e, env, _r = client.tool(name, args, timeout=timeout)
+        return env or {}
+
+    def result(env):
+        return env.get("result") or {}
+
+    def ref_id(value):
+        return value.get("id") if isinstance(value, dict) else value
+
+    def verification(env):
+        return env.get("verification") or {}
+
+    def checks_of(env):
+        top = result(env).get("checks")
+        if isinstance(top, list) and top:
+            return {c.get("name"): c for c in top}
+        return {c.get("name"): c for c in (verification(env).get("checks") or [])}
+
+    def details_of(env):
+        return ((env or {}).get("error") or {}).get("details") or {}
+
+    def new_part(name):
+        env = tool("kompas_create_document", {
+            "application_id": app_id, "kind": "part", "name": name,
+            "operation_id": str(uuid.uuid4())})
+        return (env.get("document_id") or result(env).get("id")), (env.get("revision_after") or 1)
+
+    def draw(doc, rev, entities, name, offset=0.0):
+        env = tool("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": rev,
+            "plane": {"base": "xy", "offset_mm": offset}, "name": name,
+            "operation_id": str(uuid.uuid4())})
+        sketch = ref_id(result(env).get("id"))
+        if not sketch:
+            return None, rev, "эскиз не создан: %s (%s)" % (
+                error_code(env), str(((env or {}).get("error") or {}).get("message"))[:140])
+        rev = env.get("revision_after") or rev
+        env = tool("kompas_edit_sketch", {
+            "sketch_ref": sketch, "expected_revision": rev, "mode": "replace",
+            "entities": entities, "operation_id": str(uuid.uuid4())})
+        if error_code(env):
+            return None, rev, "контур не нарисован: %s (%s)" % (
+                error_code(env), str(((env or {}).get("error") or {}).get("message"))[:140])
+        rev = env.get("revision_after") or rev
+        env = tool("kompas_finish_sketch", {
+            "sketch_ref": sketch, "require_closed_profile": True,
+            "operation_id": str(uuid.uuid4())})
+        if error_code(env):
+            return None, rev, "эскиз не завершён: %s (%s)" % (
+                error_code(env), str(((env or {}).get("error") or {}).get("message"))[:140])
+        rev = env.get("revision_after") or rev
+        return sketch, rev, None
+
+    def extrude(doc, rev, sketch, **kw):
+        args = {"sketch_ref": sketch, "expected_revision": rev, "operation_id": str(uuid.uuid4())}
+        args.update(kw)
+        env = tool("kompas_extrude", args)
+        return (env.get("revision_after") or rev), env
+
+    def bodies(doc):
+        env = tool("kompas_list_bodies", {"document_id": doc})
+        rows = result(env)
+        return rows if isinstance(rows, list) else []
+
+    def volume(ref):
+        if not ref:
+            return None
+        env = tool("kompas_measure", {"target_ref": ref, "properties": ["volume"]})
+        return result(env).get("volume_mm3")
+
+    def bbox(ref):
+        if not ref:
+            return None
+        env = tool("kompas_measure", {"target_ref": ref, "properties": ["bbox"]})
+        return result(env).get("bbox")
+
+    def close(doc):
+        tool("kompas_close_document", {
+            "document_id": doc, "dirty_policy": "discard", "operation_id": str(uuid.uuid4())})
+
+    def cylinder(name, radius, height):
+        """Цилиндр base/positive: тело z=[0,h], габарит x,y=±r. Возвращает (doc, rev, body_ref, err)."""
+        doc, rev = new_part(name)
+        if not doc:
+            return None, None, None, "документ не создан"
+        sk, rev, derr = draw(doc, rev, [{"kind": "circle", "center_mm": [0.0, 0.0], "radius_mm": radius}],
+                             name + "-base", 0.0)
+        if derr:
+            return doc, rev, None, derr
+        rev, env = extrude(doc, rev, sk, operation="base", depth_mm=height,
+                           direction="positive", end_condition="blind")
+        if error_code(env):
+            return doc, rev, None, "цилиндр не создан: %s (%s)" % (
+                error_code(env), str(((env or {}).get("error") or {}).get("message"))[:160])
+        rows = bodies(doc)
+        return doc, rev, (rows[0]["body_ref"] if rows else None), None
+
+    circle_r2 = {"kind": "circle", "center_mm": [0.0, 0.0], "radius_mm": 2.0}
+    disc = math.pi * 4.0            # круг R2
+    tiny_d = 0.1172
+    tiny_h = 0.0842
+    tiny_delta = math.pi * (tiny_d / 2.0) ** 2 * tiny_h
+
+    def plate(name, side=40.0, height=10.0):
+        """Пластина side×side×height на XY (base/positive): тело z=[0,height]."""
+        doc, rev = new_part(name)
+        if not doc:
+            return None, None, None, "документ не создан"
+        half = side / 2.0
+        sk, rev, derr = draw(doc, rev, [{"kind": "rectangle", "start_mm": [-half, -half],
+                                         "width_mm": side, "height_mm": side}], name + "-base", 0.0)
+        if derr:
+            return doc, rev, None, derr
+        rev, env = extrude(doc, rev, sk, operation="base", depth_mm=height, direction="positive",
+                           end_condition="blind")
+        if error_code(env):
+            return doc, rev, None, "пластина не создана: %s" % error_code(env)
+        rows = bodies(doc)
+        return doc, rev, (rows[0]["body_ref"] if rows else None), None
+
+    def faces_of(doc, body):
+        env = tool("kompas_read_topology", {"document_id": doc, "body_ref": body, "include": "faces"})
+        return result(env).get("faces") or []
+
+    def face_by_normal(doc, body, axis, sign):
+        """Плоская грань с нормалью ≈ axis*sign, самая большая по площади."""
+        best, best_area = None, -1.0
+        for f in faces_of(doc, body):
+            n = f.get("normal_at_center") or []
+            a = f.get("area_mm2")
+            if (f.get("surface_type") == "plane" and a is not None and len(n) >= 3
+                    and abs(n[axis] - sign) <= 1e-6 and a > best_area):
+                best, best_area = f.get("face_ref"), a
+        return best
+
+    def plane_from_face(doc, rev, face, name):
+        """Вспомогательная плоскость, совпадающая с гранью (offset 0), и её ссылка из перечня."""
+        env = tool("kompas_create_aux_geometry", {
+            "document_id": doc, "expected_revision": rev, "kind": "plane", "mode": "offset",
+            "base_face_ref": face, "offset_mm": 0.0, "name": name, "operation_id": str(uuid.uuid4())})
+        if error_code(env):
+            return None, rev, "плоскость от грани: %s (%s)" % (
+                error_code(env), str(((env or {}).get("error") or {}).get("message"))[:120])
+        rev = env.get("revision_after") or rev
+        env = tool("kompas_list_aux_geometry", {"document_id": doc, "include": "all"})
+        for row in (result(env).get("rows") or []):
+            if row.get("kind") == "plane" and row.get("name") == name:
+                return row.get("reference_id"), rev, None
+        return None, rev, "ссылка на плоскость от грани не найдена в перечне"
+
+    def draw_plane(doc, rev, plane, entities, name):
+        env = tool("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": rev, "plane": plane, "name": name,
+            "operation_id": str(uuid.uuid4())})
+        sketch = ref_id(result(env).get("id"))
+        if not sketch:
+            return None, rev, "эскиз не создан: %s (%s)" % (
+                error_code(env), str(((env or {}).get("error") or {}).get("message"))[:140])
+        rev = env.get("revision_after") or rev
+        env = tool("kompas_edit_sketch", {
+            "sketch_ref": sketch, "expected_revision": rev, "mode": "replace",
+            "entities": entities, "operation_id": str(uuid.uuid4())})
+        if error_code(env):
+            return None, rev, "контур не нарисован: %s (%s)" % (
+                error_code(env), str(((env or {}).get("error") or {}).get("message"))[:140])
+        rev = env.get("revision_after") or rev
+        env = tool("kompas_finish_sketch", {
+            "sketch_ref": sketch, "require_closed_profile": True, "operation_id": str(uuid.uuid4())})
+        if error_code(env):
+            return None, rev, "эскиз не завершён: %s (%s)" % (
+                error_code(env), str(((env or {}).get("error") or {}).get("message"))[:140])
+        rev = env.get("revision_after") or rev
+        return sketch, rev, None
+
+    def warnings_of(env):
+        return list((env or {}).get("warnings") or [])
+
+
+    # ── CB9.1 (OBS-021): вырез positive от плоскости эскиза материала в +z не снимает ────────────────
+    # Диск R10 x 1 (тело z=[0,1]), эскиз круга R2 на XY (z=0). positive у cut идёт ПРОТИВ нормали,
+    # то есть в -z, где материала нет: КОМПАС создаёт признак и не меняет тело. Это ДОКУМЕНТИРОВАННОЕ
+    # поведение (справка directionType), а не дефект; ответ обязан назвать, почему сторона не названа.
+    doc, rev, body, err = cylinder("CB9-disc", 10.0, 1.0)
+    if err:
+        rep.add("CB9.1", "cut/blind/positive от плоскости эскиза материала в +z не снимает (OBS-021)",
+                "FAIL", err)
+        close(doc)
+    else:
+        v_before = volume(body)
+        sk, rev, derr = draw(doc, rev, [circle_r2], "cb9-pos", 0.0)
+        if derr:
+            rep.add("CB9.1", "cut/blind/positive от плоскости эскиза материала в +z не снимает (OBS-021)",
+                    "FAIL", derr)
+        else:
+            rev, env = extrude(doc, rev, sk, operation="cut", depth_mm=1.0, direction="positive",
+                               end_condition="blind", target_body_ref=body)
+            after = bodies(doc)
+            v_after = volume(after[0]["body_ref"]) if after else None
+            det = details_of(env)
+            reason = det.get("material_toward_unavailable")
+            attempted = det.get("attempted_material_toward")
+            opposite = det.get("opposite_direction")
+            body_side = det.get("body_side")
+            lies_opposite = det.get("body_lies_opposite")
+            message = str(((env or {}).get("error") or {}).get("message") or "")
+            names_side = ("лежит целиком в стороне" in message) and ("direction: negative" in message)
+            rep.add("CB9.1", "cut/blind/positive от плоскости эскиза: NO_GEOMETRY_CHANGE и подсказка со стороной (OBS-021)",
+                    "PASS" if (error_code(env) == "NO_GEOMETRY_CHANGE"
+                               and v_before is not None and v_after is not None
+                               and abs(v_after - v_before) <= 1e-6
+                               and attempted == MINUS + "z"
+                               and opposite == "negative"
+                               and body_side == "+z"
+                               and lies_opposite is True
+                               and names_side
+                               and isinstance(reason, str) and reason) else "FAIL",
+                    "code=%s V %s → %s attempted=%r opposite=%r body_side=%r lies_opposite=%r names_side=%s"
+                    % (error_code(env), v_before, v_after, attempted, opposite, body_side, lies_opposite, names_side))
+        close(doc)
+
+    # ── CB9.2 (OBS-021, зеркальная половина): negative снимает ровно π·R²·h ─────────────────────────
+    # Тот же диск и тот же эскиз, но negative: материал уходит в +z, то есть в тело. Ожидание —
+    # аналитический объём, а не «ответ получен».
+    doc, rev, body, err = cylinder("CB9-disc-neg", 10.0, 1.0)
+    if err:
+        rep.add("CB9.2", "тот же вырез negative снимает ровно π·R²·h по измерению", "FAIL", err)
+        close(doc)
+    else:
+        v_before = volume(body)
+        sk, rev, derr = draw(doc, rev, [circle_r2], "cb9-neg", 0.0)
+        if derr:
+            rep.add("CB9.2", "тот же вырез negative снимает ровно π·R²·h по измерению", "FAIL", derr)
+        else:
+            rev, env = extrude(doc, rev, sk, operation="cut", depth_mm=1.0, direction="negative",
+                               end_condition="blind", target_body_ref=body)
+            after = bodies(doc)
+            v_after = volume(after[0]["body_ref"]) if after else None
+            removed = None if None in (v_before, v_after) else v_before - v_after
+            want = disc * 1.0
+            toward = result(env).get("material_removed_toward")
+            source = result(env).get("material_toward_source")
+            reason = result(env).get("material_toward_unavailable")
+            rep.add("CB9.2", "тот же вырез negative: снято π·R²·h, сторона названа правилом нормали эскиза",
+                    "PASS" if (error_code(env) is None and removed is not None
+                               and abs(removed - want) <= 1e-4
+                               and toward == "+z" and source == "sketch_normal_rule"
+                               and reason is None) else "FAIL",
+                    "code=%s снято=%s ожидание=%.9f toward=%r source=%r unavailable=%r"
+                    % (error_code(env), removed, want, toward, source, reason))
+        close(doc)
+
+    # ── CB9.3 (OBS-019): вырез от СМЕЩЁННОЙ плоскости внутри тела, явное тело ───────────────────────
+    # Цилиндр R2 x 1, эскиз круга R1.5 на z=0.5 (внутри тела), cut/blind/positive глубины 0.5: снимает
+    # z=[0,0.5] в пределах R1.5. Строка держит две вещи: признак вообще создаётся (OBS-019 отдавал
+    # Entity.Create=false) и ответ называет сторону материала в координатах детали.
+    doc, rev, body, err = cylinder("CB9-inner", 2.0, 1.0)
+    if err:
+        rep.add("CB9.3", "вырез от смещённой плоскости внутри тела создаётся и называет сторону материала",
+                "FAIL", err)
+        close(doc)
+    else:
+        v_before = volume(body)
+        sk, rev, derr = draw(doc, rev, [{"kind": "circle", "center_mm": [0.0, 0.0], "radius_mm": 1.5}],
+                             "cb9-inner", 0.5)
+        if derr:
+            rep.add("CB9.3", "вырез от смещённой плоскости внутри тела создаётся и называет сторону материала",
+                    "FAIL", derr)
+        else:
+            rev, env = extrude(doc, rev, sk, operation="cut", depth_mm=0.5, direction="positive",
+                               end_condition="blind", target_body_ref=body)
+            after = bodies(doc)
+            v_after = volume(after[0]["body_ref"]) if after else None
+            removed = None if None in (v_before, v_after) else v_before - v_after
+            want = math.pi * 1.5 ** 2 * 0.5
+            toward = result(env).get("material_removed_toward")
+            source = result(env).get("material_toward_source")
+            normal = result(env).get("material_toward_sketch_normal")
+            reason = result(env).get("material_toward_unavailable")
+            # The read normal of the offset plane must be the model +z, and the side must be −z (cut positive).
+            normal_up = isinstance(normal, list) and len(normal) == 3 and normal[2] > 0.999
+            rep.add("CB9.3", "вырез от смещённой плоскости внутри тела: снято по аналитике, сторона по правилу совпала со знаком нормали",
+                    "PASS" if (error_code(env) is None and removed is not None
+                               and abs(removed - want) <= 1e-4
+                               and toward == MINUS + "z" and source == "sketch_normal_rule"
+                               and normal_up and reason is None) else "FAIL",
+                    "code=%s снято=%s ожидание=%.9f toward=%r source=%r normal=%r unavailable=%r"
+                    % (error_code(env), removed, want, toward, source, normal, reason))
+        close(doc)
+
+    # ── CB9.4 (OBS-022): малый boss не объявляется «ничего не изменилось» ───────────────────────────
+    # Цилиндр R2 x 1, boss Ø0,1172 x 0,0842 на торце. Прежний порог 0,01 мм³ называл это no-op;
+    # теперь порог — шум измерения, и признак проходит с измеренным приращением.
+    doc, rev, body, err = cylinder("CB9-tiny", 2.0, 1.0)
+    if err:
+        rep.add("CB9.4", "малый boss (Ø0,1172 x 0,0842) проходит с измеренным приращением (OBS-022)",
+                "FAIL", err)
+        close(doc)
+    else:
+        sk, rev, derr = draw(doc, rev, [{"kind": "circle", "center_mm": [0.0, 0.0], "radius_mm": tiny_d / 2.0}],
+                             "cb9-tiny", 1.0)
+        if derr:
+            rep.add("CB9.4", "малый boss (Ø0,1172 x 0,0842) проходит с измеренным приращением (OBS-022)",
+                    "FAIL", derr)
+        else:
+            rev, env = extrude(doc, rev, sk, operation="boss", depth_mm=tiny_h, direction="positive",
+                               end_condition="blind", target_body_ref=body)
+            chk = checks_of(env)
+            delta = result(env).get("volume_delta_mm3")
+            affected = (chk.get("target_body_affected") or {}).get("passed")
+            added_toward = result(env).get("material_added_toward")
+            rep.add("CB9.4", "малый boss (Ø0,1172 x 0,0842) проходит с измеренным приращением (OBS-022)",
+                    "PASS" if (error_code(env) is None and affected is True
+                               and isinstance(delta, (int, float))
+                               and abs(delta - tiny_delta) <= 1e-9
+                               and added_toward == "+z") else "FAIL",
+                    "code=%s delta=%.12f ожидание=%.12f target_body_affected=%s material_added_toward=%r"
+                    % (error_code(env), delta if isinstance(delta, (int, float)) else -1, tiny_delta,
+                       affected, added_toward))
+        close(doc)
+
+    # ── CB9.5: вырез, не задевающий тело, отдаёт feature_ref для удаления ───────────────────────────
+    # Цилиндр R2 x 1, эскиз круга R2 на торце (z=1), cut/blind/NEGATIVE: материал ушёл бы в +z, где
+    # его нет. Контур при этом лежит НА теле, поэтому предварительная сверка габаритов проходит и
+    # отказ приходит от измерения, а не от валидатора.
+    doc, rev, body, err = cylinder("CB9-air", 2.0, 1.0)
+    if err:
+        rep.add("CB9.5", "вырез в пустоту: NO_GEOMETRY_CHANGE и feature_ref в details", "FAIL", err)
+        close(doc)
+    else:
+        sk, rev, derr = draw(doc, rev, [circle_r2], "cb9-air", 1.0)
+        if derr:
+            rep.add("CB9.5", "вырез в пустоту: NO_GEOMETRY_CHANGE и feature_ref в details", "FAIL", derr)
+        else:
+            rev, env = extrude(doc, rev, sk, operation="cut", depth_mm=0.5, direction="negative",
+                               end_condition="blind", target_body_ref=body)
+            det = details_of(env)
+            rep.add("CB9.5", "вырез в пустоту: NO_GEOMETRY_CHANGE и feature_ref в details",
+                    "PASS" if (error_code(env) == "NO_GEOMETRY_CHANGE"
+                               and isinstance(det.get("feature_ref"), str) and det.get("feature_ref")) else "FAIL",
+                    "code=%s feature_ref=%r partial_effects=%s"
+                    % (error_code(env), det.get("feature_ref"),
+                       ((env or {}).get("error") or {}).get("partial_effects")))
+        close(doc)
+
+    # ── CB9.6 (OBS-024): габарит контекста назван по области, тела — отдельно ───────────────────────
+    # Тело ±2 по X/Y и z=[0,1]; затем эскиз с окружностью далеко в стороне (центр 50,50). Полный
+    # габарит документа обязан вырасти, габарит ТЕЛ — нет: это и есть разница областей.
+    doc, rev, body, err = cylinder("CB9-gabarit", 2.0, 1.0)
+    if err:
+        rep.add("CB9.6", "get_context: габарит тел отдельно от полного, области названы", "FAIL", err)
+        close(doc)
+    else:
+        _far_sk, _far_rev, far_err = draw(doc, rev, [{"kind": "circle", "center_mm": [50.0, 50.0], "radius_mm": 1.0}], "cb9-far", 0.0)
+        if far_err:
+            rep.add("CB9.6", "get_context: габарит тел отдельно от полного, области названы", "FAIL", far_err)
+            close(doc)
+            env = None
+        else:
+            env = tool("kompas_get_context", {"document_id": doc, "detail": "full"})
+        if env is not None:
+            gab = result(env).get("gabarit") or {}
+            full = gab.get("full") or {}
+            bodies_box = gab.get("bodies") or {}
+            measured = bbox(body)
+            size = bodies_box.get("size_mm")
+            full_size = full.get("size_mm")
+            bodies_ok = (isinstance(size, list) and len(size) == 3
+                         and abs(size[0] - 4.0) <= 1e-6 and abs(size[1] - 4.0) <= 1e-6
+                         and abs(size[2] - 1.0) <= 1e-6)
+            full_ok = isinstance(full_size, list) and full_size and full_size[0] > 40.0
+            scopes_ok = (isinstance(full.get("scope"), str) and "эскиз" in full["scope"]
+                         and isinstance(bodies_box.get("scope"), str) and "тел" in bodies_box["scope"])
+            match_measure = (isinstance(size, list) and isinstance(measured, dict)
+                             and abs(size[0] - (measured["max_mm"][0] - measured["min_mm"][0])) <= 1e-6)
+            rep.add("CB9.6", "get_context: габарит тел отдельно от полного, области названы",
+                    "PASS" if (error_code(env) is None and bodies_ok and full_ok and scopes_ok and match_measure)
+                    else "FAIL",
+                    "bodies=%s (ожидание [4,4,1]) full=%s (ожидание >40 по X) области=%s/%s сверка с measure=%s"
+                    % (size, full_size, (full.get("scope") or "")[:24], (bodies_box.get("scope") or "")[:24],
+                       match_measure))
+            close(doc)
+
+    # ── CB9.7 (OBS-025): занятый файл отвергается ДО COM кодом FILE_LOCKED ──────────────────────────
+    # Документ сохраняется в sandbox-путь, закрывается, файл удерживается открытым на запись ЭТИМ
+    # процессом (то есть другим по отношению к Worker), затем open. КОМПАС при этом не вызывается.
+    locked_path = os.path.join(workdir, "cb9-locked.m3d")
+    if os.path.exists(locked_path):
+        try:
+            os.remove(locked_path)
+        except OSError:
+            pass
+    doc, rev, body, err = cylinder("CB9-lock", 2.0, 1.0)
+    if err:
+        rep.add("CB9.7", "занятый файл: FILE_LOCKED до обращения к КОМПАС (OBS-025)", "FAIL", err)
+        close(doc)
+    else:
+        env = tool("kompas_save_document", {
+            "document_id": doc, "expected_revision": rev, "target_path": locked_path,
+            "operation_id": str(uuid.uuid4())})
+        close(doc)
+        holder = open(locked_path, "r+b")
+        try:
+            env2 = tool("kompas_open_document", {
+                "application_id": app_id, "path": locked_path, "access": "edit",
+                "operation_id": str(uuid.uuid4())})
+            det = details_of(env2)
+            rep.add("CB9.7", "занятый файл: FILE_LOCKED до обращения к КОМПАС (OBS-025)",
+                    "PASS" if (error_code(env2) == "FILE_LOCKED"
+                               and det.get("code") == "document_file_locked") else "FAIL",
+                    "code=%s details.code=%s owner=%r os=%r"
+                    % (error_code(env2), det.get("code"), det.get("owner_process"),
+                       str(det.get("os_error"))[:60]))
+        finally:
+            holder.close()
+        try:
+            os.remove(locked_path)
+        except OSError:
+            pass
+
+    # ── CB9.8: откат контрольной копии называет настоящую причину ОС ────────────────────────────────
+    # Тот же «вырез в пустоту» на СОХРАНЁННОМ документе: отказ несёт partial_effects, поэтому файл
+    # возвращается из контрольной копии. Строка требует либо успешного восстановления, либо НАЗВАННОЙ
+    # причины, а не прежнего «недоступен для записи» при живом save_document.
+    restore_path = os.path.join(workdir, "cb9-restore.m3d")
+    if os.path.exists(restore_path):
+        try:
+            os.remove(restore_path)
+        except OSError:
+            pass
+    doc, rev, body, err = cylinder("CB9-restore", 2.0, 1.0)
+    if err:
+        rep.add("CB9.8", "откат контрольной копии: восстановление проходит или причина названа",
+                "FAIL", err)
+        close(doc)
+    else:
+        env = tool("kompas_save_document", {
+            "document_id": doc, "expected_revision": rev, "target_path": restore_path,
+            "operation_id": str(uuid.uuid4())})
+        rev = env.get("revision_after") or rev
+        rows = bodies(doc)
+        body_now = rows[0]["body_ref"] if rows else None
+        sk, rev, derr = draw(doc, rev, [circle_r2], "cb9-restore-air", 1.0)
+        if derr:
+            rep.add("CB9.8", "откат контрольной копии: восстановление проходит или причина названа",
+                    "FAIL", derr)
+        else:
+            rev, env2 = extrude(doc, rev, sk, operation="cut", depth_mm=0.5, direction="negative",
+                                end_condition="blind", target_body_ref=body_now)
+            det = details_of(env2)
+            attempted = det.get("restore_attempted")
+            restored = det.get("restored")
+            failure = det.get("restore_failure")
+            named = isinstance(failure, str) and failure
+            rep.add("CB9.8", "откат контрольной копии: восстановление проходит или причина названа",
+                    "PASS" if (error_code(env2) == "NO_GEOMETRY_CHANGE" and attempted is True
+                               and (restored is True or named)) else "FAIL",
+                    "code=%s restore_attempted=%s restored=%s restore_failure=%r"
+                    % (error_code(env2), attempted, restored, str(failure)[:110]))
+        close(doc)
+        try:
+            os.remove(restore_path)
+        except OSError:
+            pass
+
+
+    # ── CB9.9: вырез, СДВИНУВШИЙ габарит, называет сторону материала в координатах детали ───────────
+    # Цилиндр R2 x 1, эскиз круга R2 на торце (z=1), cut/blind/positive глубины 0.5: снимается весь
+    # верх z=[0.5,1], габарит тела становится z=[0,0.5]. Сторона названа как «−z»: у выреза positive
+    # материал уходит ПРОТИВ нормали эскиза (+z), то есть в −z. Это ЕДИНЫЙ смысл поля «куда ушёл
+    # материал»: измеренный сдвиг габарита (верхняя граница вниз) и правило нормали дают один знак.
+    # ПРЕЖНЯЯ редакция строки ждала «+z» (наименование СДВИНУВШЕЙСЯ границы, а не направления снятия) —
+    # знак исправлен вместе с унификацией смысла поля (доводка F1); строка осталась строгой.
+    doc, rev, body, err = cylinder("CB9-toward", 2.0, 1.0)
+    if err:
+        rep.add("CB9.9", "cut, сдвинувший габарит, называет сторону материала (−z)", "FAIL", err)
+        close(doc)
+    else:
+        v_before = volume(body)
+        sk, rev, derr = draw(doc, rev, [circle_r2], "cb9-toward", 1.0)
+        if derr:
+            rep.add("CB9.9", "cut, сдвинувший габарит, называет сторону материала (−z)", "FAIL", derr)
+        else:
+            rev, env = extrude(doc, rev, sk, operation="cut", depth_mm=0.5, direction="positive",
+                               end_condition="blind", target_body_ref=body)
+            after = bodies(doc)
+            v_after = volume(after[0]["body_ref"]) if after else None
+            removed = None if None in (v_before, v_after) else v_before - v_after
+            want = disc * 0.5
+            toward = result(env).get("material_removed_toward")
+            source = result(env).get("material_toward_source")
+            rep.add("CB9.9", "cut, сдвинувший габарит, называет сторону материала (−z)",
+                    "PASS" if (error_code(env) is None and removed is not None
+                               and abs(removed - want) <= 1e-4
+                               and toward == MINUS + "z" and source == "measured_box_shift") else "FAIL",
+                    "code=%s снято=%s ожидание=%.9f material_removed_toward=%r source=%r"
+                    % (error_code(env), removed, want, toward, source))
+        close(doc)
+
+    # ── CB9.10: отверстие с ВЕРХНЕЙ плоскости пластины, cut/positive, глубина меньше толщины ─────────
+    # Пластина 40x40x10 (z=[0,10]); эскиз круга R2 на плоскости z=10 (совпадает с верхней гранью);
+    # cut/blind/positive глубины 5 снимает z=[5,10] внутри R2. Габарит НЕ двигается (отверстие внутри),
+    # поэтому сторону называет только правило нормали. Это и есть самый частый вырез.
+    doc, rev, body, err = plate("CB9-plate-top", 40.0, 10.0)
+    if err:
+        rep.add("CB9.10", "отверстие с верхней плоскости: снято pi*r^2*h, сторона по правилу нормали", "FAIL", err)
+        close(doc)
+    else:
+        v_before = volume(body)
+        sk, rev, derr = draw(doc, rev, [circle_r2], "cb9-top", 10.0)
+        if derr:
+            rep.add("CB9.10", "отверстие с верхней плоскости: снято pi*r^2*h, сторона по правилу нормали", "FAIL", derr)
+        else:
+            rev, env = extrude(doc, rev, sk, operation="cut", depth_mm=5.0, direction="positive",
+                               end_condition="blind", target_body_ref=body)
+            rows = bodies(doc)
+            v_after = volume(rows[0]["body_ref"]) if rows else None
+            removed = None if None in (v_before, v_after) else v_before - v_after
+            want = math.pi * 4.0 * 5.0
+            toward = result(env).get("material_removed_toward")
+            source = result(env).get("material_toward_source")
+            rep.add("CB9.10", "отверстие с верхней плоскости: снято pi*r^2*h, сторона по правилу нормали",
+                    "PASS" if (error_code(env) is None and removed is not None
+                               and abs(removed - want) <= 1e-4
+                               and toward == MINUS + "z" and source == "sketch_normal_rule") else "FAIL",
+                    "code=%s снято=%s ожидание=%.9f toward=%r source=%r"
+                    % (error_code(env), removed, want, toward, source))
+        close(doc)
+
+    # ── CB9.11: то же с НИЖНЕЙ плоскости пластины, cut/negative ─────────────────────────────────────
+    # Материал уходит в +z (в тело): у выреза negative снимает ПО нормали эскиза (+z у плоскости XY).
+    doc, rev, body, err = plate("CB9-plate-bot", 40.0, 10.0)
+    if err:
+        rep.add("CB9.11", "отверстие с нижней плоскости: снято pi*r^2*h, сторона +z", "FAIL", err)
+        close(doc)
+    else:
+        v_before = volume(body)
+        sk, rev, derr = draw(doc, rev, [circle_r2], "cb9-bot", 0.0)
+        if derr:
+            rep.add("CB9.11", "отверстие с нижней плоскости: снято pi*r^2*h, сторона +z", "FAIL", derr)
+        else:
+            rev, env = extrude(doc, rev, sk, operation="cut", depth_mm=5.0, direction="negative",
+                               end_condition="blind", target_body_ref=body)
+            rows = bodies(doc)
+            v_after = volume(rows[0]["body_ref"]) if rows else None
+            removed = None if None in (v_before, v_after) else v_before - v_after
+            want = math.pi * 4.0 * 5.0
+            toward = result(env).get("material_removed_toward")
+            source = result(env).get("material_toward_source")
+            rep.add("CB9.11", "отверстие с нижней плоскости: снято pi*r^2*h, сторона +z",
+                    "PASS" if (error_code(env) is None and removed is not None
+                               and abs(removed - want) <= 1e-4
+                               and toward == "+z" and source == "sketch_normal_rule") else "FAIL",
+                    "code=%s снято=%s ожидание=%.9f toward=%r source=%r"
+                    % (error_code(env), removed, want, toward, source))
+        close(doc)
+
+    # ── CB9.12: boss на БОКОВОЙ грани (нормаль по +-x или +-y): сторона = измеренный сдвиг, оба источника ──
+    # Пластина 40x40x10, эскиз круга R2 на плоскости боковой грани (вспомогательная плоскость от грани).
+    # boss/positive глубины 3 растит габарит по оси грани; измеренный сдвиг и правило нормали обязаны
+    # совпасть (иначе ответ называет расхождение в warnings — и строка падает).
+    doc, rev, body, err = plate("CB9-side", 40.0, 10.0)
+    if err:
+        rep.add("CB9.12", "boss на боковой грани: сторона = измеренный сдвиг габарита, оба источника совпали", "FAIL", err)
+        close(doc)
+    else:
+        side_face = None
+        for axis, sign in ((0, 1.0), (0, -1.0), (1, 1.0), (1, -1.0)):
+            side_face = face_by_normal(doc, body, axis, sign)
+            if side_face:
+                break
+        if not side_face:
+            rep.add("CB9.12", "boss на боковой грани: сторона = измеренный сдвиг габарита, оба источника совпали",
+                    "FAIL", "боковая плоская грань (нормаль по +-x/+-y) не найдена")
+            close(doc)
+        else:
+            bb_before = bbox(body)
+            plane_ref, rev, perr = plane_from_face(doc, rev, side_face, "cb9-side-plane")
+            if perr:
+                rep.add("CB9.12", "boss на боковой грани: сторона = измеренный сдвиг габарита, оба источника совпали",
+                        "FAIL", perr)
+            else:
+                sk, rev, derr = draw_plane(doc, rev, {"reference": plane_ref}, [circle_r2], "cb9-side")
+                if derr:
+                    rep.add("CB9.12", "boss на боковой грани: сторона = измеренный сдвиг габарита, оба источника совпали",
+                            "FAIL", derr)
+                else:
+                    rev, env = extrude(doc, rev, sk, operation="boss", depth_mm=3.0, direction="positive",
+                                       end_condition="blind", target_body_ref=body)
+                    rows = bodies(doc)
+                    bb_after = bbox(rows[0]["body_ref"]) if rows else None
+                    toward = result(env).get("material_added_toward")
+                    source = result(env).get("material_toward_source")
+                    warns = warnings_of(env)
+                    diverged = any("material_toward_divergence" in w for w in warns)
+                    measured = None
+                    if isinstance(bb_before, dict) and isinstance(bb_after, dict):
+                        deltas = [abs(bb_after["max_mm"][i] - bb_before["max_mm"][i])
+                                  + abs(bb_after["min_mm"][i] - bb_before["min_mm"][i]) for i in range(3)]
+                        mi = max(range(3), key=lambda i: deltas[i])
+                        grew = (bb_after["max_mm"][mi] - bb_before["max_mm"][mi]) > (bb_before["min_mm"][mi] - bb_after["min_mm"][mi])
+                        measured = ("+" if grew else MINUS) + "xyz"[mi]
+                    rep.add("CB9.12", "boss на боковой грани: сторона = измеренный сдвиг габарита, оба источника совпали",
+                            "PASS" if (error_code(env) is None and source == "measured_box_shift"
+                                       and measured is not None and toward == measured
+                                       and not diverged) else "FAIL",
+                            "code=%s toward=%r source=%r измерено по габариту=%r расхождение=%s warnings=%s"
+                            % (error_code(env), toward, source, measured, diverged, warns))
+            close(doc)
+
+    # ── CB9.13: cut/symmetric ВНУТРИ тела: сторона названа как ОБЕ стороны, а не null ────────────────
+    # Диск R10x1, эскиз круга R2 на XY, cut/symmetric глубины 1: снимает цилиндр R2 насквозь, габарит
+    # не двигается. Симметрия — это ЗНАЧЕНИЕ («в обе стороны»), а не отсутствие стороны.
+    doc, rev, body, err = cylinder("CB9-sym", 10.0, 1.0)
+    if err:
+        rep.add("CB9.13", "cut/symmetric внутри тела: сторона названа как обе стороны", "FAIL", err)
+        close(doc)
+    else:
+        v_before = volume(body)
+        sk, rev, derr = draw(doc, rev, [circle_r2], "cb9-sym", 0.0)
+        if derr:
+            rep.add("CB9.13", "cut/symmetric внутри тела: сторона названа как обе стороны", "FAIL", derr)
+        else:
+            rev, env = extrude(doc, rev, sk, operation="cut", depth_mm=1.0, direction="symmetric",
+                               end_condition="blind", target_body_ref=body)
+            rows = bodies(doc)
+            v_after = volume(rows[0]["body_ref"]) if rows else None
+            removed = None if None in (v_before, v_after) else v_before - v_after
+            toward = result(env).get("material_removed_toward")
+            rep.add("CB9.13", "cut/symmetric внутри тела: сторона названа как обе стороны",
+                    "PASS" if (error_code(env) is None and removed is not None and removed > 1.0
+                               and isinstance(toward, str) and toward.startswith("±") and "обе стороны" in toward)
+                    else "FAIL",
+                    "code=%s снято=%s toward=%r" % (error_code(env), removed, toward))
+        close(doc)
+
+    # ── CB9.14: знак нормали эскиза по видам плоскостей — прочитанное обязано совпасть с измеренным ───
+    # Для базовых плоскостей XY/XZ/YZ и смещённой параллельной строится base/positive: новое тело
+    # ложится ВДОЛЬ нормали эскиза, поэтому его габарит ИЗМЕРЯЕТ знак нормали. Прочитанная нормаль
+    # (material_toward_sketch_normal) обязана совпасть с измеренной на КАЖДОМ виде — иначе сторона из
+    # правила не выводится ни для какого вида (ветвь остановки §5).
+    mismatches = []
+    readings = []
+    for base, offset in (("xy", 0.0), ("xz", 0.0), ("yz", 0.0), ("xy", 5.0)):
+        tag = "%s+%s" % (base, offset)
+        # The plane ORIGIN along its own normal, so "which side of the plane the new body lies on" is
+        # measured against the plane, not against the model origin.
+        plane_origin = {"xy": [0.0, 0.0, offset], "xz": [0.0, offset, 0.0], "yz": [offset, 0.0, 0.0]}[base]
+        doc, rev = new_part("CB9-nrm-" + base + "-" + str(offset).replace(".", "_"))
+        if not doc:
+            mismatches.append(tag + ": документ не создан")
+            continue
+        sk, rev, derr = draw_plane(doc, rev, {"base": base, "offset_mm": offset},
+                                   [{"kind": "rectangle", "start_mm": [-20.0, -10.0],
+                                     "width_mm": 40.0, "height_mm": 20.0}], "nrm-" + base)
+        if derr:
+            mismatches.append(tag + ": " + derr)
+            close(doc)
+            continue
+        rev, env = extrude(doc, rev, sk, operation="base", depth_mm=5.0, direction="positive",
+                           end_condition="blind")
+        normal = result(env).get("material_toward_sketch_normal")
+        rows = bodies(doc)
+        bb = bbox(rows[0]["body_ref"]) if rows else None
+        measured_axis, measured_sign = None, None
+        if isinstance(bb, dict):
+            extents = [bb["max_mm"][i] - bb["min_mm"][i] for i in range(3)]
+            measured_axis = min(range(3), key=lambda i: extents[i])   # тонкая ось = нормаль
+            mid = (bb["min_mm"][measured_axis] + bb["max_mm"][measured_axis]) / 2.0
+            measured_sign = 1.0 if mid >= plane_origin[measured_axis] else -1.0
+        if (error_code(env) is not None or not isinstance(normal, list) or len(normal) != 3
+                or measured_axis is None):
+            mismatches.append("%s: нормаль=%r ось=%r code=%s"
+                              % (tag, normal, measured_axis, error_code(env)))
+        else:
+            readings.append("%s: read=(%.3f,%.3f,%.3f) измерено ось %s знак %s"
+                            % (tag, normal[0], normal[1], normal[2], "xyz"[measured_axis],
+                               "+" if measured_sign > 0 else MINUS))
+            if normal[measured_axis] * measured_sign <= 0.999:
+                mismatches.append("%s: read=(%.3f,%.3f,%.3f) против измеренной оси %s знак %s"
+                                  % (tag, normal[0], normal[1], normal[2], "xyz"[measured_axis],
+                                     "+" if measured_sign > 0 else MINUS))
+        close(doc)
+    # Faces: the support is the FACE itself (an auxiliary plane coincident with the face, offset 0). The
+    # MEASURED face normal comes from the topology read (normal_at_center); the sketch normal read by the
+    # documented route must match it — the route must cover a flat face, not only a base plane.
+    for face_name, axis, sign in (("top", 2, 1.0), ("bottom", 2, -1.0), ("side", 0, 1.0)):
+        doc, rev, body, perr = plate("CB9-nrmf-" + face_name, 40.0, 10.0)
+        if perr:
+            mismatches.append("face " + face_name + ": " + perr)
+            close(doc)
+            continue
+        face, face_normal, face_area = None, None, -1.0
+        for f in faces_of(doc, body):
+            n = f.get("normal_at_center") or []
+            a = f.get("area_mm2")
+            if (f.get("surface_type") == "plane" and a is not None and len(n) >= 3
+                    and abs(n[axis] - sign) <= 1e-6 and a > face_area):
+                face, face_normal, face_area = f.get("face_ref"), n, a
+        if not face:
+            mismatches.append("face %s: грань %s%s не найдена"
+                              % (face_name, "+" if sign > 0 else MINUS, "xyz"[axis]))
+            close(doc)
+            continue
+        pref, rev, perr2 = plane_from_face(doc, rev, face, "nrmf-plane-" + face_name)
+        if perr2:
+            mismatches.append("face " + face_name + ": " + perr2)
+            close(doc)
+            continue
+        sk, rev, derr = draw_plane(doc, rev, {"reference": pref},
+                                   [{"kind": "circle", "center_mm": [0.0, 0.0], "radius_mm": 3.0}],
+                                   "nrmf-sk-" + face_name)
+        if derr:
+            mismatches.append("face " + face_name + ": " + derr)
+            close(doc)
+            continue
+        rev, env = extrude(doc, rev, sk, operation="base", depth_mm=5.0, direction="positive",
+                           end_condition="blind")
+        normal = result(env).get("material_toward_sketch_normal")
+        dot = None
+        if (isinstance(normal, list) and len(normal) == 3
+                and isinstance(face_normal, list) and len(face_normal) == 3):
+            dot = sum(normal[i] * face_normal[i] for i in range(3))
+        readings.append("face %s: read=%s грань=%s скаляр=%s"
+                        % (face_name, normal, face_normal, "%.4f" % dot if dot is not None else "n/a"))
+        if dot is None or dot <= 0.999:
+            mismatches.append("face %s: прочитанная нормаль против нормали грани (скаляр=%s)"
+                              % (face_name, "%.4f" % dot if dot is not None else "n/a"))
+        close(doc)
+    rep.add("CB9.14", "знак нормали эскиза по видам плоскостей: прочитанное = измеренному",
+            "PASS" if not mismatches else "FAIL",
+            "; ".join(readings) + ("" if not mismatches else " || РАСХОЖДЕНИЯ: " + "; ".join(mismatches)))
 
 
 def sketch_clearing_checks(client, rep, app_id):

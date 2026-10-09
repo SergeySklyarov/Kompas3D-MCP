@@ -1477,7 +1477,16 @@ public sealed record FeatureReadDto(
     /// <c>SketchRefOfFeature</c> helper, so the two tools cannot mint two addresses for one sketch. Null means "no
     /// sketch read back" and is named in <c>verification.unverified_aspects</c>, never left silent.
     /// History: docs/decisions/contracts.md#sketch-ref-readback</remarks>
-    string? SketchRef = null);
+    string? SketchRef = null,
+    /// <summary>Side of the sketch plane this extrusion moved material to, in part coordinates, read from the
+    /// recorded <c>directionType</c> and the sketch normal (documented route). Null when unreadable — the
+    /// reason then travels in <c>verification.unverified_aspects</c>. Extrusion families only.
+    /// History: docs/decisions/adapter-core.md#material-direction-toward</summary>
+    string? MaterialToward = null,
+    /// <summary>Source of <see cref="MaterialToward"/>: <c>sketch_normal_rule</c> for a read feature.</summary>
+    string? MaterialTowardSource = null,
+    /// <summary>The sketch normal read in part coordinates, or null when unreadable.</summary>
+    double[]? MaterialTowardSketchNormal = null);
 
 public sealed record GetFeatureCommand
 {

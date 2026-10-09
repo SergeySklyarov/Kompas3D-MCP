@@ -1203,6 +1203,10 @@ public sealed partial class Api5Session
 
         var changes = CompareBodySnapshots(bodiesBefore, bodiesAfter);
 
+        // The feature is in the tree from here on, so a failure below can still NAME it: "the feature was
+        // created but changed nothing" is only actionable if the caller can delete it in one call.
+        var featureReference = References.Register("feature", document.Id, document.Revision, feature);
+
         // THREE DIFFERENT QUANTITIES that used to be one number (defect EXTRUDE-VOLUME-DELTA-ON-MULTIBODY):
         // (a) the SUM of all document bodies; (b) the volume of the body the operation concerns; (c) the
         // MATERIAL ADDED by this feature — the only quantity comparable with `profile_area × depth`. The sum
@@ -1236,8 +1240,8 @@ public sealed partial class Api5Session
             // is not enough, since an error in one body can be balanced by an error in another. Both a new
             // body and a changed existing one are accepted.
             var priorMoved = bodiesBefore
+                .Where(s => VolumeMoved(changes.DeltaOf(s.Index), s.Volume))
                 .Select(s => s.Index)
-                .Where(i => changes.DeltaOf(i) is double moved && Math.Abs(moved) > VolumeChangeFloorMm3)
                 .ToArray();
 
             if (createdBodies.Count == 1 && priorMoved.Length == 0)
@@ -1411,12 +1415,22 @@ public sealed partial class Api5Session
             geometryConfirmed &= selectorDeclared;
 
             var targetDelta = changes.DeltaOf(bodyTarget.Index);
-            var movedAsExpected = targetDelta is double moved && Math.Abs(moved) > VolumeChangeFloorMm3;
+            var targetBoxMoved = changes.BoxChangedOf(bodyTarget.Index);
+            var targetTopologyMoved = changes.TopologyChangedOf(bodyTarget.Index);
+            // "The body was affected" is a statement about the KERNEL, not about a coarse threshold: a
+            // feature may add 9e-4 mm³, far below any "meaningful" floor, and the body HAS changed. Volume
+            // beyond the measured noise, a moved gabarit or a changed face count all count — a body can shift
+            // without its volume changing (a boolean `intersect`), and topology can change with both intact.
+            var movedAsExpected = BodyChangePolicy.Changed(
+                targetDelta, bodyTarget.Snapshot.Volume, targetBoxMoved, targetTopologyMoved);
             checks.Add(new NamedCheck(
                 "target_body_affected",
                 movedAsExpected,
-                Observed: $"тело {bodyTarget.Index}: {Range(bodyTarget.Snapshot.Volume)} → {Range(affectedAfter?.Volume)}, ΔV={Range(targetDelta)} из {changes.Rows.Count}",
-                Expected: "|ΔV| > 0.01 мм³"));
+                Observed: $"тело {bodyTarget.Index}: {Range(bodyTarget.Snapshot.Volume)} → {Range(affectedAfter?.Volume)}, "
+                          + $"ΔV(после−до)={Range(targetDelta)}, габарит изменился={targetBoxMoved}, "
+                          + $"граней {Range(bodyTarget.Snapshot.FaceCount)} → {Range(affectedAfter?.FaceCount)}, "
+                          + $"порог шума={BodyChangePolicy.VolumeNoiseMm3:0.#####e+0} мм³",
+                Expected: "|ΔV| > шума измерения ИЛИ сдвинулся габарит ИЛИ изменилась топология"));
             geometryConfirmed &= movedAsExpected;
 
             var others = changes.UnchangedViolations(exceptIndex: bodyTarget.Index);
@@ -1433,24 +1447,70 @@ public sealed partial class Api5Session
             // profile lies (P2.6): Create and RebuildDocument say true and no body changes. Only an explicit
             // failure keeps that from being read as success. An unreadable volume is not a measured no-op: it
             // fails the check and says why.
-            if (targetDelta is double targetMoved && Math.Abs(targetMoved) <= VolumeChangeFloorMm3)
+            // INVARIANT: "no change" means volume AND gabarit AND face count all stayed within their noise —
+            // a small but real feature (9e-4 mm³) is NOT a no-op, and reporting it as one was the defect.
+            if (!movedAsExpected)
             {
+                // For a one-sided extrusion that changed nothing, name WHERE the operation went and whether
+                // the body lies wholly on the other side of the sketch plane — a checkable fact about the
+                // gabarit. The operation is NOT repeated with the other direction automatically: that is a
+                // behaviour change and no customer decision covers it.
+                var noChange = BuildNoChangeHint(command, target, bodyTarget);
+                var sideLine = noChange.BodyLiesOpposite == true
+                    ? $" Операция ушла в сторону, где у тела нет материала: запрошенное направление "
+                        + $"{noChange.RequestedDirection} снимает/добавляет материал в сторону "
+                        + $"{noChange.AttemptedToward}, а габарит тела лежит целиком в стороне {noChange.BodySide}. "
+                        + $"Для работы по телу задайте direction: {noChange.OppositeDirection}."
+                    : noChange.AttemptedToward is not null
+                        ? $" Операция идёт в сторону {noChange.AttemptedToward} (по правилу нормали эскиза); "
+                            + "лежит ли тело целиком по другую сторону плоскости — не проверено."
+                        : string.Empty;
                 throw new KompasContractException(
                     ErrorCodes.NoGeometryChange,
-                    $"Признак создан (Create=true), но заявленное тело {bodyTarget.Index} не изменилось: ΔV={Range(targetDelta)} мм³. " +
+                    $"Признак создан (Create=true), но заявленное тело {bodyTarget.Index} не изменилось ни объёмом, ни габаритом, ни числом граней: " +
+                    $"ΔV(после−до)={Range(targetDelta)} мм³ при пороге шума {BodyChangePolicy.VolumeNoiseMm3:0.#####e+0} мм³, габарит изменился={targetBoxMoved}, " +
+                    $"граней {Range(bodyTarget.Snapshot.FaceCount)} → {Range(affectedAfter?.FaceCount)}. " +
                     "Так КОМПАС ведёт себя, когда заявленное тело противоречит расположению контура: ошибка не возвращается, " +
-                    "не меняется ни одно тело. Успехом это быть не может.",
+                    "не меняется ни одно тело. Успехом это быть не может. Признак ОСТАЛСЯ в дереве — удалите его вызовом " +
+                    "kompas_delete_feature по feature_ref." + sideLine,
                     RetryPolicy.ReacquireContext,
                     partialEffects: true,
                     details: new Dictionary<string, object?>
                     {
                         ["target_body_ref"] = command.TargetBodyRef,
                         ["target_body_index"] = bodyTarget.Index,
+                        // The feature the caller must delete: the operation created it and it did nothing.
+                        ["feature_ref"] = ToDto(featureReference, $"{command.Operation} {FormatDepth(command)}").Id,
+                        // AFTER minus BEFORE, the same convention as every other delta in this response:
+                        // positive = material added, negative = material removed.
                         ["target_delta_mm3"] = targetDelta,
+                        ["target_delta_meaning"] = "объём целевого тела: после − до (положительное — материал добавлен, отрицательное — снят)",
+                        ["volume_noise_mm3"] = BodyChangePolicy.VolumeNoiseMm3,
+                        ["target_box_changed"] = targetBoxMoved,
+                        ["target_face_count"] = bodyTarget.Snapshot.FaceCount,
+                        ["target_face_count_after"] = affectedAfter?.FaceCount,
                         ["changed_body_indexes"] = changes.Changed.ToArray(),
                         ["moved_body_indexes"] = changes.Moved.ToArray(),
+                        ["touched_body_indexes"] = changes.Touched.ToArray(),
                         ["per_body"] = changes.Rows.ToArray(),
                         ["profile_target_agreement"] = AgreementName(agreement),
+                        // Where the operation went and what to try instead: the side is named by the documented
+                        // sketch-normal rule when the normal is readable, and the body's side is a measured
+                        // fact from its box and the plane origin. Nothing here is a guess; unreadable parts are
+                        // left null rather than asserted.
+                        ["requested_direction"] = noChange.RequestedDirection,
+                        ["attempted_material_toward"] = noChange.AttemptedToward,
+                        ["opposite_direction"] = noChange.OppositeDirection,
+                        ["body_side"] = noChange.BodySide,
+                        ["body_lies_opposite"] = noChange.BodyLiesOpposite,
+                        // The side of the material is NAMED as not determined, rather than left absent:
+                        // an absent field is indistinguishable from a forgotten write, and here the reason
+                        // is substantive — nothing was removed or added, so no side exists to name.
+                        ["material_removed_toward"] = null,
+                        ["material_added_toward"] = null,
+                        ["material_toward_unavailable"] =
+                            "признак не изменил ни объём, ни габарит, ни число граней: материала не снято и не "
+                            + "добавлено, поэтому сторона в координатах детали не определяется",
                         ["code"] = "target_body_not_affected",
                     });
             }
@@ -1485,7 +1545,20 @@ public sealed partial class Api5Session
                 + "ошибка в одном теле может быть уравновешена ошибкой в другом");
         }
 
-        var reference = References.Register("feature", document.Id, document.Revision, feature);
+        var reference = featureReference;
+        var material = DescribeMaterialDirection(command, target, bodyTarget, changes);
+        if (material.Reason is not null)
+        {
+            unverified.Add(material.Reason);
+        }
+
+        if (material.Divergence is not null)
+        {
+            // The two independent sources name opposite sides: not a silent pick — the caller is told, and
+            // the acceptance row that exercises it is a FAIL.
+            unverified.Add(material.Divergence);
+        }
+
         var verification = new VerificationDto(
             geometryConfirmed ? VerificationLevel.GeometryChecked : VerificationLevel.CallReturned,
             checks,
@@ -1512,7 +1585,291 @@ public sealed partial class Api5Session
             + "объём пространственного объединения: у перекрывающихся тел сумма и объединение "
             + "различаются). Приращение материала этим признаком — volume_delta_mm3, его основание "
             + "(тело цели, новое тело или изменившееся прежнее) — volume_delta_basis; объёмы до и "
-            + "после по документу — document_volume_before_mm3 / document_volume_after_mm3.");
+            + "после по документу — document_volume_before_mm3 / document_volume_after_mm3.",
+            material.RemovedToward,
+            material.AddedToward,
+            material.Reason,
+            material.Source,
+            material.SketchNormal,
+            material.Divergence is null ? null : new[] { material.Divergence });
+    }
+
+    /// <summary>Which way, in PART coordinates, this operation moved material: the documented sketch-normal
+    /// rule, cross-checked against the MEASURED shift of the target body's gabarit.</summary>
+    /// <remarks>WHY the rule, not the box alone: the box names a side only when a bound moves, so a hole cut
+    /// INSIDE a body — the commonest cut — left the field silent. The normal is readable for every planar
+    /// support, so the rule names the side there too. The box is kept as an INDEPENDENT check: when both are
+    /// available and disagree the answer says so and the acceptance row is a FAIL, never a silent pick.
+    /// DOC: kssketchdefinition_getsurface.html → … → ksplacement_getaxis.html.
+    /// History: docs/decisions/adapter-core.md#material-direction-toward</remarks>
+    private MaterialDirection DescribeMaterialDirection(
+        ExtrudeCommand command, SketchTarget target, BodyTarget? bodyTarget, BodyComparison changes)
+    {
+        var removing = command.Operation == ExtrudeOperation.Cut;
+        var negative = command.Direction == ExtrudeDirection.Negative;
+        var symmetric = command.Direction == ExtrudeDirection.Symmetric;
+
+        var frame = ReadSketchPlaneFrame(target.Definition);
+        double[]? ruleDirection = frame.Normal is null
+            ? null
+            : MaterialDirectionRule.Toward(frame.Normal, removing, negative, symmetric);
+
+        var boxDirection = BoxDirection(command, target, bodyTarget, changes, frame.Normal, out var boxReason);
+
+        // Name the side and its source. The measured box is preferred when it exists (it is the observed
+        // fact); the rule fills in where the box is silent.
+        string? source;
+        string? toward;
+        if (boxDirection is not null)
+        {
+            source = "measured_box_shift";
+            toward = MaterialDirectionRule.Describe(boxDirection, symmetric);
+        }
+        else if (ruleDirection is not null || symmetric && frame.Normal is not null)
+        {
+            source = "sketch_normal_rule";
+            toward = symmetric ? MaterialDirectionRule.DescribeSymmetric(frame.Normal!) : MaterialDirectionRule.Describe(ruleDirection!, false);
+        }
+        else
+        {
+            source = null;
+            toward = null;
+        }
+
+        // Divergence between the two INDEPENDENT sources is not a silent pick: it is named, and the row that
+        // exercises it is a FAIL. Only comparable when both are single-sided directions.
+        string? divergence = null;
+        if (boxDirection is not null && ruleDirection is not null && !MaterialDirectionRule.SameSide(boxDirection, ruleDirection))
+        {
+            divergence = "material_toward_divergence — сторона по измеренному сдвигу габарита ("
+                + MaterialDirectionRule.Describe(boxDirection, false) + ") расходится со стороной по правилу "
+                + "нормали эскиза (" + MaterialDirectionRule.Describe(ruleDirection, false)
+                + "); расхождение двух независимых источников не выбирается молча";
+        }
+
+        string? reason = null;
+        if (toward is null)
+        {
+            reason = "material_toward_unavailable — сторона в координатах детали не определена: "
+                + "источник measured_box_shift недоступен (" + (boxReason ?? "нет целевого тела")
+                + "), а документированное чтение нормали эскиза не удалось ("
+                + (frame.Reason ?? "причина не названа") + ")";
+        }
+
+        return new MaterialDirection(
+            removing ? toward : null,
+            removing ? null : toward,
+            reason,
+            source,
+            frame.Normal,
+            divergence);
+    }
+
+    /// <summary>The direction material moved, from the MEASURED shift of the target body's gabarit: the bound
+    /// that moved names the side — the max bound going out (base/boss) or in (cut) means toward +axis.
+    /// Null when no target body, no axis-aligned support, or no bound moved.</summary>
+    /// <remarks>The direction is the MOVEMENT, not "which end of the box changed": a cut from the top moves
+    /// the max bound inward and removes material toward −axis, so both operations use the same
+    /// <c>sign(delta)</c>; naming the moved end would invert every cut against the rule. The axis comes from
+    /// the sketch normal when it is axis-aligned (covering a flat face), else from the base plane.
+    /// History: docs/decisions/adapter-core.md#material-direction-toward</remarks>
+    private double[]? BoxDirection(
+        ExtrudeCommand command, SketchTarget target, BodyTarget? bodyTarget, BodyComparison changes,
+        double[]? normal, out string? reason)
+    {
+        reason = null;
+        if (bodyTarget is null)
+        {
+            reason = "нет целевого тела, габарит которого назвал бы сторону";
+            return null;
+        }
+
+        var index = MaterialDirectionRule.AxisIndex(normal)
+            ?? ResolveSketchPlaneBase(command.SketchRef, target) switch
+            {
+                PlaneBase.Xy => 2,
+                PlaneBase.Xz => 1,
+                PlaneBase.Yz => 0,
+                _ => (int?)null,
+            };
+        if (index is not int axisIndex)
+        {
+            reason = "плоскость эскиза не сведена к одной из трёх базовых осей (наклонная плоскость или нормаль не прочитана), поэтому сдвиг габарита сторону не называет";
+            return null;
+        }
+
+        var after = changes.MatchedOf(bodyTarget.Index);
+        if (after?.Min is null || after.Max is null
+            || bodyTarget.Snapshot.Min is null || bodyTarget.Snapshot.Max is null)
+        {
+            reason = "габарит целевого тела до или после операции не прочитан";
+            return null;
+        }
+
+        var deltaMin = after.Min[axisIndex] - bodyTarget.Snapshot.Min[axisIndex];
+        var deltaMax = after.Max[axisIndex] - bodyTarget.Snapshot.Max[axisIndex];
+        var lowMoved = Math.Abs(deltaMin) > BoxChangeFloorMm;
+        var highMoved = Math.Abs(deltaMax) > BoxChangeFloorMm;
+        if (!lowMoved && !highMoved)
+        {
+            reason = "габарит целевого тела не сдвинулся (материал снят внутри тела либо не тронут)";
+            return null;
+        }
+
+        var direction = new double[3];
+        if (lowMoved && highMoved)
+        {
+            // Both bounds moved: material went to both sides. Kept as a both-sides direction.
+            direction[axisIndex] = 1d;
+            return direction;
+        }
+
+        direction[axisIndex] = (lowMoved ? deltaMin : deltaMax) > 0d ? 1d : -1d;
+        return direction;
+    }
+
+    /// <summary>The sketch plane's normal and origin in PART coordinates, read by the documented v24 route
+    /// from the support's SURFACE, so a base plane, an offset plane and a flat face are all covered. A failure
+    /// is NAMED, never replaced by a guessed axis.</summary>
+    /// <remarks>DOC: <c>kssketchdefinition_getsurface.html</c> (<c>GetSurface → ksSurface</c>),
+    /// <c>kssurface_isplane.html</c>, <c>kssurface_getsurfaceparam.html</c> (<c>→ ksPlaneParam</c>),
+    /// <c>ksplaneparam_getplacement.html</c> (<c>→ ksPlacement</c>; «Оси X и Y системы координат лежат в
+    /// плоскости», so the OZ axis is the plane's normal), <c>ksplacement_getaxis.html</c> (type: 0=OX, 1=OY,
+    /// &gt;1=OZ), <c>ksplacement_getorigin.html</c>. The sign of that OZ axis is MEASURED against the box
+    /// shift, not assumed. History: docs/decisions/adapter-core.md#material-direction-toward</remarks>
+    private static (double[]? Normal, double[]? Origin, string? Reason) ReadSketchPlaneFrame(ksSketchDefinition definition)
+    {
+        try
+        {
+            if (definition.GetSurface() is not ksSurface surface)
+            {
+                return (null, null, "GetSurface() не дал ksSurface");
+            }
+
+            if (!surface.IsPlane())
+            {
+                return (null, null, "поверхность опоры эскиза не плоская");
+            }
+
+            if (surface.GetSurfaceParam() is not ksPlaneParam plane)
+            {
+                return (null, null, "GetSurfaceParam() не дал ksPlaneParam");
+            }
+
+            if (plane.GetPlacement() is not ksPlacement placement)
+            {
+                return (null, null, "ksPlaneParam.GetPlacement() не дал ksPlacement");
+            }
+
+            if (!placement.GetAxis(out var nx, out var ny, out var nz, 2))
+            {
+                return (null, null, "ksPlacement.GetAxis(OZ) вернул false");
+            }
+
+            // MEASURED: for an OFFSET plane GetAxis(OZ) returns a NON-unit vector (magnitude grows with the
+            // offset), while for a base plane it is unit. The SIDE is a direction, so the vector is
+            // normalized here; the axis-alignment tolerance then works for every support.
+            var magnitude = Math.Sqrt(nx * nx + ny * ny + nz * nz);
+            if (magnitude <= MaterialDirectionRule.AxisTolerance)
+            {
+                return (null, null, "нормаль плоскости эскиза вырождена (нулевой вектор)");
+            }
+
+            double[] normal = [nx / magnitude, ny / magnitude, nz / magnitude];
+
+            double[]? origin = placement.GetOrigin(out var ox, out var oy, out var oz)
+                ? [ox, oy, oz]
+                : null;
+            return (normal, origin, null);
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return (null, null, "чтение поверхности опоры эскиза бросило " + ex.GetType().Name);
+        }
+    }
+
+    /// <summary>Where the material went, in part coordinates, with the reason it could not be named and the
+    /// source that named it.</summary>
+    private sealed record MaterialDirection(
+        string? RemovedToward,
+        string? AddedToward,
+        string? Reason,
+        string? Source,
+        double[]? SketchNormal,
+        string? Divergence);
+
+    /// <summary>Where a one-sided extrusion that changed nothing went, and whether the target body lies wholly
+    /// on the other side of the sketch plane. Every field is measured or read; an unreadable part stays null.</summary>
+    private sealed record NoChangeHint(
+        string RequestedDirection,
+        string? AttemptedToward,
+        string? OppositeDirection,
+        string? BodySide,
+        bool? BodyLiesOpposite);
+
+    /// <summary>Builds the no-change hint from the documented sketch-normal rule (the side the operation went
+    /// to) and the target body's box against the plane origin (which side the body is on). The operation is
+    /// NOT re-run with the opposite direction — that would be a behaviour change with no customer decision.</summary>
+    /// <remarks>DOC for the normal: kssketchdefinition_getsurface.html → … → ksplacement_getaxis.html.
+    /// History: docs/decisions/adapter-core.md#material-direction-toward</remarks>
+    private NoChangeHint BuildNoChangeHint(ExtrudeCommand command, SketchTarget target, BodyTarget? bodyTarget)
+    {
+        var requested = command.Direction switch
+        {
+            ExtrudeDirection.Positive => "positive",
+            ExtrudeDirection.Negative => "negative",
+            _ => "symmetric",
+        };
+        var opposite = command.Direction == ExtrudeDirection.Positive ? "negative"
+            : command.Direction == ExtrudeDirection.Negative ? "positive"
+            : null;
+
+        var frame = ReadSketchPlaneFrame(target.Definition);
+        if (frame.Normal is null)
+        {
+            return new NoChangeHint(requested, null, opposite, null, null);
+        }
+
+        var removing = command.Operation == ExtrudeOperation.Cut;
+        var negative = command.Direction == ExtrudeDirection.Negative;
+        var symmetric = command.Direction == ExtrudeDirection.Symmetric;
+        var attempted = MaterialDirectionRule.Toward(frame.Normal, removing, negative, symmetric);
+        if (attempted is null)
+        {
+            // symmetric acts on both sides, so no single side "went nowhere" and there is no opposite to offer.
+            return new NoChangeHint(requested, null, null, null, null);
+        }
+
+        string? bodySide = null;
+        bool? liesOpposite = null;
+        if (bodyTarget?.Snapshot.Min is double[] lo && bodyTarget.Snapshot.Max is double[] hi
+            && frame.Origin is double[] origin)
+        {
+            // Project every box corner onto the attempted direction, measured from the plane origin. All
+            // corners on the negative side means the body is wholly where the operation did not go.
+            var minProjection = double.PositiveInfinity;
+            var maxProjection = double.NegativeInfinity;
+            for (var mask = 0; mask < 8; mask++)
+            {
+                var projection = 0d;
+                for (var a = 0; a < 3; a++)
+                {
+                    var corner = ((mask >> a) & 1) == 0 ? lo[a] : hi[a];
+                    projection += (corner - origin[a]) * attempted[a];
+                }
+
+                minProjection = Math.Min(minProjection, projection);
+                maxProjection = Math.Max(maxProjection, projection);
+            }
+
+            liesOpposite = maxProjection <= BoxChangeFloorMm;
+            if (liesOpposite == true)
+            {
+                bodySide = MaterialDirectionRule.Describe([-attempted[0], -attempted[1], -attempted[2]], false);
+            }
+        }
+
+        return new NoChangeHint(requested, MaterialDirectionRule.Describe(attempted, false), opposite, bodySide, liesOpposite);
     }
 
     /// <summary>How the pre-mutation agreement test resolved, in words for the details block.</summary>
@@ -1528,15 +1885,19 @@ public sealed partial class Api5Session
     private static string Range(double? value) =>
         value?.ToString("R", System.Globalization.CultureInfo.InvariantCulture) ?? "нет";
 
+    /// <summary>An integer reading for a report row: "нет" is "not read", never 0.</summary>
+    private static string Range(int? value) =>
+        value?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "нет";
+
     private static string Range(double[]? values) =>
         values is null
             ? "нет"
             : string.Join(", ", values.Select(v => v.ToString("R", System.Globalization.CultureInfo.InvariantCulture)));
 
-    /// <summary>How much a body's volume must move for it to count as "the body that changed", in mm³:
-    /// the floor of docs/03 §3.3's volume tolerance, the same threshold probe P2.6 used.
-    /// Matching an analytic expectation stays on <see cref="ProfileArea.Tolerance"/>.</summary>
-    private const double VolumeChangeFloorMm3 = 0.01d;
+    /// <summary>Whether a volume delta is larger than the measured noise. The rule itself lives in the
+    /// Domain (<see cref="BodyChangePolicy"/>) so it can be tested without COM; this is the call site's name
+    /// for it. <paramref name="volume"/> is the body's own volume, so the relative part scales with it.</summary>
+    private static bool VolumeMoved(double? delta, double? volume) => BodyChangePolicy.VolumeMoved(delta, volume);
 
     /// <summary>The body an extrusion was told to act on: where it sits in <c>BodyCollection</c> right now,
     /// the raw collection element <c>ksBodyCollection.Add</c> accepts, and its state before the
@@ -1546,7 +1907,7 @@ public sealed partial class Api5Session
     /// comes from that same enumeration so index and element cannot disagree.</remarks>
     private sealed record BodyTarget(int Index, object RawElement, ksBody Body, BodySnapshot Snapshot);
 
-    /// <summary>One body as a snapshot reader saw it: volume in mm³ and its gabarit.</summary>
+    /// <summary>One body as a snapshot reader saw it: volume in mm³, its gabarit, and its face count.</summary>
     private sealed class BodySnapshot
     {
         public required int Index { get; init; }
@@ -1556,6 +1917,12 @@ public sealed partial class Api5Session
         public double[]? Min { get; init; }
 
         public double[]? Max { get; init; }
+
+        /// <summary>Faces of the body, or null when the collection did not answer. A TOPOLOGY signal:
+        /// a feature can add or remove faces while leaving the volume and the box unchanged (measured:
+        /// the wheel's edge count changed with volume and gabarit intact), so volume and box alone would
+        /// call such a change a no-op.</summary>
+        public int? FaceCount { get; init; }
 
         public double[]? Center => Min is null || Max is null
             ? null
@@ -1583,6 +1950,7 @@ public sealed partial class Api5Session
                 double? volume = null;
                 double[]? min = null;
                 double[]? max = null;
+                int? faceCount = null;
                 if (body is not null)
                 {
                     volume = SafeDouble(() => MassProperties(body, (uint)KompasUnits.MassMmKg)?.v
@@ -1600,9 +1968,16 @@ public sealed partial class Api5Session
                         // No box: the snapshot keeps its volume, and the comparison degrades to
                         // volume alone rather than dropping the body from the report.
                     }
+
+                    faceCount = SafeInt(() =>
+                    {
+                        var faces = (ksFaceCollection)body.FaceCollection();
+                        faces.refresh();
+                        return faces.GetCount();
+                    });
                 }
 
-                rows.Add(new BodySnapshot { Index = i, Volume = volume, Min = min, Max = max });
+                rows.Add(new BodySnapshot { Index = i, Volume = volume, Min = min, Max = max, FaceCount = faceCount });
             }
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException)
@@ -1738,8 +2113,10 @@ public sealed partial class Api5Session
 
             // A body with no counterpart after the rebuild is "unknown", not "unchanged": 0 would read as a
             // no-op, and conflating the two is the kind of laundering this file exists to avoid.
+            // SIGN: the delta is AFTER minus BEFORE — positive means material was ADDED to the body. One
+            // convention everywhere in this report, so a reader never has to know which operation ran.
             double? delta = reference.Volume is double low && match?.Volume is double high
-                ? low - high
+                ? high - low
                 : null;
             report.Record(reference, match, delta);
         }
@@ -1804,6 +2181,8 @@ public sealed partial class Api5Session
 
         private readonly Dictionary<int, double?> _boxShift = new();
 
+        private readonly Dictionary<int, bool> _topologyChanged = new();
+
         public List<string> Rows { get; } = new();
 
         /// <summary>Bodies whose VOLUME changed — the "material worked here" signal, kept separate from
@@ -1814,8 +2193,9 @@ public sealed partial class Api5Session
         /// because "the body moved" and "the body lost material" are different observations.</summary>
         public List<int> Moved { get; } = new();
 
-        /// <summary>Bodies whose volume OR box changed — the correct predicate for "the result of this
-        /// operation", not fitted to an expectation and not dependent on the operation kind.</summary>
+        /// <summary>Bodies whose volume OR box OR face count changed — the correct predicate for "the result
+        /// of this operation", not fitted to an expectation and not dependent on the operation kind. The face
+        /// count is in the predicate because a feature can change topology while leaving volume and box equal.</summary>
         public List<int> Touched { get; } = new();
 
         /// <summary>Bodies that appeared AFTER the operation and were matched to no "before". An empty list is
@@ -1830,6 +2210,11 @@ public sealed partial class Api5Session
 
         public bool BoxChangedOf(int index) => _boxChanged.TryGetValue(index, out var changed) && changed;
 
+        /// <summary>Whether this body's face count changed. Null on either side is "unknown", never "changed":
+        /// an unreadable count must not be reported as a topology change.</summary>
+        public bool TopologyChangedOf(int index) =>
+            _topologyChanged.TryGetValue(index, out var changed) && changed;
+
         /// <summary>Largest difference in this body's box coordinates, in mm.</summary>
         public double? BoxShiftOf(int index) => _boxShift.TryGetValue(index, out var shift) ? shift : null;
 
@@ -1838,24 +2223,29 @@ public sealed partial class Api5Session
             _delta[before.Index] = delta;
             _matched[before.Index] = after;
             var shift = BoxShift(before, after);
-            var volumeMoved = delta is double moved && Math.Abs(moved) > VolumeChangeFloorMm3;
+            var volumeMoved = VolumeMoved(delta, before.Volume);
             var boxMoved = shift is double movedMm && movedMm > BoxChangeFloorMm;
+            var topologyMoved = before.FaceCount is int facesBefore
+                && after?.FaceCount is int facesAfter
+                && facesBefore != facesAfter;
             _boxChanged[before.Index] = boxMoved;
             _boxShift[before.Index] = shift;
-            Rows.Add($"тел{before.Index}: V {Range(before.Volume)} → {Range(after?.Volume)}, ΔV={Range(delta)}, " +
-                     $"габарит [{Range(before.Min)}|{Range(before.Max)}] → [{Range(after?.Min)}|{Range(after?.Max)}]" +
+            _topologyChanged[before.Index] = topologyMoved;
+            Rows.Add($"тел{before.Index}: V {Range(before.Volume)} → {Range(after?.Volume)}, ΔV(после−до)={Range(delta)}, " +
+                     $"габарит [{Range(before.Min)}|{Range(before.Max)}] → [{Range(after?.Min)}|{Range(after?.Max)}], " +
+                     $"граней {Range(before.FaceCount)} → {Range(after?.FaceCount)}" +
                      (boxMoved ? $", сдвиг {Range(shift)} мм" : string.Empty));
             if (volumeMoved)
             {
                 Changed.Add(before.Index);
             }
 
-            if (!volumeMoved && boxMoved)
+            if (!volumeMoved && (boxMoved || topologyMoved))
             {
                 Moved.Add(before.Index);
             }
 
-            if (volumeMoved || boxMoved)
+            if (volumeMoved || boxMoved || topologyMoved)
             {
                 Touched.Add(before.Index);
             }
@@ -1890,9 +2280,9 @@ public sealed partial class Api5Session
             foreach (var index in _delta.Keys.Where(k => k != exceptIndex).OrderBy(k => k))
             {
                 var parts = new List<string>();
-                if (_delta[index] is double moved && Math.Abs(moved) > VolumeChangeFloorMm3)
+                if (VolumeMoved(_delta[index], MatchedOf(index)?.Volume))
                 {
-                    parts.Add("ΔV=" + moved.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture) + " мм³");
+                    parts.Add("ΔV(после−до)=" + (_delta[index] ?? 0d).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture) + " мм³");
                 }
 
                 if (BoxChangedOf(index))
@@ -3617,7 +4007,26 @@ public sealed record ExtrudeResult(
     /// <c>existing_body_N_delta</c> or <c>not_attributable</c>.</summary>
     string? VolumeDeltaBasis = null,
     /// <summary>What <see cref="VolumeMm3"/> means.</summary>
-    string? VolumeNote = null);
+    string? VolumeNote = null,
+    /// <summary>Where the material this feature REMOVED lay, in part coordinates — <c>+z</c>/<c>−z</c> and so
+    /// on. Cut only; null for base/boss and when the gabarit did not name a side. MEASURED from the target
+    /// body's box, not mapped from <c>direction</c>: for a cut, <c>positive</c> removes material AGAINST the
+    /// sketch normal (v24 help), so the request alone would mislead.</summary>
+    string? MaterialRemovedToward = null,
+    /// <summary>Where the material this feature ADDED lies, in part coordinates. Base/boss only.</summary>
+    string? MaterialAddedToward = null,
+    /// <summary>Why <see cref="MaterialRemovedToward"/>/<see cref="MaterialAddedToward"/> is not named, when
+    /// it is not. Named rather than left empty, so "not determined" is not read as "no direction".</summary>
+    string? MaterialTowardUnavailable = null,
+    /// <summary>Which source named the side: <c>measured_box_shift</c> (the measured shift of the target
+    /// body's gabarit) or <c>sketch_normal_rule</c> (the documented sketch-normal rule, which also works when
+    /// the gabarit does not move). Null when neither source was available.</summary>
+    string? MaterialTowardSource = null,
+    /// <summary>The sketch normal read in part coordinates by the documented route, or null when unreadable.
+    /// The basis of <c>sketch_normal_rule</c>, published so the side can be audited rather than trusted.</summary>
+    double[]? MaterialTowardSketchNormal = null,
+    /// <summary>Non-fatal findings that the caller must not miss — e.g. the two side sources disagreeing.</summary>
+    IReadOnlyList<string>? Warnings = null);
 
 public sealed record RebuildResult(long NewRevision, DocumentContextDto Context);
 

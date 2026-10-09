@@ -36,12 +36,16 @@ public sealed partial class Api5Session : IDisposable
         {
             throw new KompasContractException(
                 ErrorCodes.DocumentNotFound,
-                $"Документ '{documentId}' не зарегистрирован в этой сессии сервера.",
+                $"Документ '{documentId}' не зарегистрирован в этой сессии сервера. Сессия видит ТОЛЬКО " +
+                "документы того экземпляра КОМПАС, к которому подключена: файл, открытый в ДРУГОМ экземпляре " +
+                "(другое окно КОМПАС), здесь не появится — его нужно открыть через kompas_open_document или " +
+                "подключиться к тому экземпляру.",
                 RetryPolicy.ReacquireContext,
                 details: new Dictionary<string, object?>
                 {
                     ["document_id"] = documentId,
                     ["known_documents"] = _documents.Keys.ToArray(),
+                    ["scope"] = "сессия видит документы только своего экземпляра КОМПАС",
                 });
         }
 
@@ -459,16 +463,20 @@ public sealed partial class Api5Session : IDisposable
         // History: docs/decisions/drawings.md#open-drawing
         if (IsDrawingPath(command.Path))
         {
+            GuardFileNotLocked(command.Path);
             return OpenDrawingDocument(application, command);
         }
 
+        GuardFileNotLocked(command.Path);
         var document = (ksDocument3D)application.Application.Document3D();
         if (!document.Open(command.Path, !application.DocumentsVisible))
         {
             ComApartment.Release(document);
             throw new KompasContractException(
                 ErrorCodes.DocumentNotFound,
-                $"Открыть документ не удалось: {command.Path}",
+                $"Открыть документ не удалось: {command.Path}. Файла нет, он повреждён или занят; " +
+                "занятость проверяется ДО вызова, поэтому сюда она не доходит. Документ, открытый в другом " +
+                "экземпляре КОМПАС, этим вызовом тоже не открывается — подключитесь к тому экземпляру.",
                 RetryPolicy.SameOperationId,
                 details: new Dictionary<string, object?> { ["path"] = command.Path });
         }
@@ -506,6 +514,55 @@ public sealed partial class Api5Session : IDisposable
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return false;
+        }
+    }
+
+    /// <summary>Refuses an open BEFORE KOMPAS is asked when another process holds the file.</summary>
+    /// <remarks>WHY BEFORE COM. A file that another process has open on write makes KOMPAS show a MODAL
+    /// DIALOG («документ редактируется пользователем …») and the <c>Open</c> call does not return until a
+    /// human closes it — the call stays in flight and the client sees only "running". The v24 SDK documents
+    /// no way to suppress that dialog (<c>ksdocument3d_open.html</c> declares only <c>invisible</c>), so the
+    /// boundary is drawn here: the file is probed with a shared-write-exclusive open, and a refusal names the
+    /// holder where the OS can supply one.
+    /// INVARIANT: a MISSING file is not this refusal — that stays the open's own DOCUMENT_NOT_FOUND, so the
+    /// two states keep two different remedies.
+    /// History: docs/decisions/files.md#file-locked-guard</remarks>
+    private static void GuardFileNotLocked(string path)
+    {
+        if (!File.Exists(path))
+        {
+            return;
+        }
+
+        try
+        {
+            using var stream = File.Open(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        }
+        catch (IOException ex)
+        {
+            throw new KompasContractException(
+                ErrorCodes.FileLocked,
+                $"Файл '{path}' занят другим процессом и не открывается на запись ({ex.GetType().Name}: " +
+                $"{ex.Message}). КОМПАС на такой файл отвечает модальным диалогом и не возвращает управление, " +
+                "поэтому открытие не начато. Закройте файл в другом приложении и повторите.",
+                RetryPolicy.SameOperationId,
+                details: new Dictionary<string, object?>
+                {
+                    ["path"] = path,
+                    ["probe"] = "File.Open(ReadWrite, FileShare.None)",
+                    ["os_error"] = ex.Message,
+                    ["owner_process"] = FileLockOwner.TryFind(path),
+                    ["code"] = "document_file_locked",
+                });
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Read-only attribute or an ACL: the file is not held by another process. KOMPAS may still open
+            // it (read-only), so this is not the lock refusal and is left to the open itself.
+        }
+        catch (Exception ex) when (ex is NotSupportedException or ArgumentException)
+        {
+            // A path the OS cannot even open is named by the open call, not here.
         }
     }
 
@@ -828,6 +885,10 @@ public sealed partial class Api5Session : IDisposable
             UnitSystem = "mm",
             Origin = new double[] { 0, 0, 0 },
             Fingerprint = document.Fingerprint,
+            // Only for detail=full: the box of the whole document AND the box of the solid bodies, each with
+            // its scope named. The fingerprint alone carried the full box, and a caller read it as the box of
+            // the part — a sketch 89 mm across inflates it without any body changing.
+            Gabarit = includeTopology ? ReadGabarits(document) : null,
             // Document visibility is separate: the application can be shown while the document is not.
             DocumentVisible = document.Visible,
             DocumentsVisibleMode = document.DocumentsVisible,
@@ -900,14 +961,72 @@ public sealed partial class Api5Session : IDisposable
             return false;
         }
 
+        if (!TryReadGabaritCorners(document, full: true, customizable: true, out var min, out var max))
+        {
+            return false;
+        }
+
+        dimensions = new[]
+        {
+            max[0] - min[0], max[1] - min[1], max[2] - min[2],
+            min[0], min[1], min[2],
+            max[0], max[1], max[2],
+        };
+        return true;
+    }
+
+    /// <summary>Both boxes a caller needs to read a part's extent without guessing: the whole document
+    /// (<c>GetGabarit(full=true)</c> — sketches and auxiliary geometry included) and the solid bodies only
+    /// (<c>GetGabarit(full=false)</c>, the documented "только тела" mode). Each carries its scope in words.</summary>
+    /// <remarks>DOC: <c>kspart_getgabarit.html</c> — «full — TRUE — полный, FALSE — только тела; customizable
+    /// — TRUE — с учетом настроек видимости, FALSE — без учета; при full == false игнорируется».
+    /// History: docs/decisions/adapter-core.md#gabarit-scope</remarks>
+    private static GabaritDto? ReadGabarits(DocumentEntry document)
+    {
+        if (document.Document is null)
+        {
+            return null;
+        }
+
+        var full = DescribeBox(document, full: true,
+            "весь документ-модель: сплошные тела, эскизы и вспомогательная геометрия (ksPart.GetGabarit(full=true))");
+        var bodies = DescribeBox(document, full: false,
+            "только сплошные тела, без эскизов и вспомогательной геометрии (ksPart.GetGabarit(full=false))");
+        return full is null || bodies is null ? null : new GabaritDto(full, bodies);
+    }
+
+    private static GabaritBoxDto? DescribeBox(DocumentEntry document, bool full, string scope)
+    {
+        // customizable=true for the full box, as before this change: it folds the document's visibility
+        // settings into the box, and the fingerprint that uses it is meant to notice a UI edit.
+        if (!TryReadGabaritCorners(document, full, customizable: full, out var min, out var max))
+        {
+            return null;
+        }
+
+        return new GabaritBoxDto(
+            scope,
+            min,
+            max,
+            new[] { max[0] - min[0], max[1] - min[1], max[2] - min[2] });
+    }
+
+    /// <summary>Corners of the document box; <paramref name="full"/> chooses the documented mode. Corners are
+    /// normalised (min ≤ max on every axis): the kernel does not promise which corner is which.</summary>
+    private static bool TryReadGabaritCorners(
+        DocumentEntry document, bool full, bool customizable, out double[] min, out double[] max)
+    {
+        min = Array.Empty<double>();
+        max = Array.Empty<double>();
         try
         {
-            if (!document.PartNow().GetGabarit(true, true, out var x1, out var y1, out var z1, out var x2, out var y2, out var z2))
+            if (!document.PartNow().GetGabarit(full, customizable, out var x1, out var y1, out var z1, out var x2, out var y2, out var z2))
             {
                 return false;
             }
 
-            dimensions = new[] { x2 - x1, y2 - y1, z2 - z1, x1, y1, z1, x2, y2, z2 };
+            min = new[] { Math.Min(x1, x2), Math.Min(y1, y2), Math.Min(z1, z2) };
+            max = new[] { Math.Max(x1, x2), Math.Max(y1, y2), Math.Max(z1, z2) };
             return true;
         }
         catch (Exception ex) when (ex is COMException or TargetInvocationException)

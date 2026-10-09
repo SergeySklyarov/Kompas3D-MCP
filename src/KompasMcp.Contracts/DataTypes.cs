@@ -19,6 +19,28 @@ public sealed record BoundingBoxDto(
         new double[] { double.NaN, double.NaN, double.NaN });
 }
 
+/// <summary>One bounding box WITH the scope it covers named, in mm.</summary>
+/// <remarks>INVARIANT: a box is never published without its scope. <c>ksPart.GetGabarit(full=true)</c> covers the
+/// WHOLE part document — sketches and auxiliary geometry included — so the "gabarit" of a part is NOT the box of
+/// its solid bodies: a sketch far from the material inflates it while no body changes. <c>full=false</c> is the
+/// documented "тела" mode and gives the solid bodies only.
+/// History: docs/decisions/adapter-core.md#gabarit-scope</remarks>
+public sealed record GabaritBoxDto(
+    /// <summary>What the box covers, in words; the caller must not have to guess.</summary>
+    string Scope,
+    IReadOnlyList<double>? MinMm,
+    IReadOnlyList<double>? MaxMm,
+    /// <summary>Extent along x/y/z in mm, or null when the box was not read.</summary>
+    IReadOnlyList<double>? SizeMm);
+
+/// <summary>Both boxes a part's extent is read from, each with its scope: the whole document-model and the solid
+/// bodies alone. The two differ exactly when a sketch or auxiliary geometry lies outside the material.</summary>
+public sealed record GabaritDto(
+    /// <summary>Whole document-model: bodies + sketches + auxiliary geometry (<c>GetGabarit(full=true)</c>).</summary>
+    GabaritBoxDto Full,
+    /// <summary>Solid bodies only (<c>GetGabarit(full=false)</c>). Compare THIS with <c>list_bodies</c>.</summary>
+    GabaritBoxDto Bodies);
+
 /// <summary> Everything a caller needs to address a document safely (spec 2.3). Commands must carry <see cref="Id"/>
 /// and, for mutations, <see cref="Revision"/> — never rely on the active tab. </summary>
 public sealed record DocumentContextDto
@@ -51,6 +73,11 @@ public sealed record DocumentContextDto
 
     /// <summary>Opaque fingerprint of geometry state, used when events are unavailable.</summary>
     public string? Fingerprint { get; init; }
+
+    /// <summary>Gabarit of the document with its scope named: the WHOLE part document (sketches and auxiliary
+    /// geometry included) and, separately, the solid bodies only. Populated for <c>detail=full</c>; null when the
+    /// document has no 3D model space or the boxes could not be read.</summary>
+    public GabaritDto? Gabarit { get; init; }
 
     /// <summary>Re-read state of the document itself: <c>!invisibleMode</c>; null means the document did not answer.
     /// INVARIANT: separate from application visibility — showing the application and showing the document are two

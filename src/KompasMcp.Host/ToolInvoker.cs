@@ -779,6 +779,20 @@ public sealed class ToolInvoker : IAsyncDisposable
     {
         var merged = new List<string>(warnings ?? Array.Empty<string>());
 
+        // A Worker result may carry its own non-fatal findings in a top-level `warnings` array (e.g. two
+        // independent sources naming opposite sides of a material change). They are merged into the envelope
+        // so a caller reading only `warnings` cannot miss them. Absent or non-array: nothing to merge.
+        if (result is JsonObject payload && payload["warnings"] is JsonArray carried)
+        {
+            foreach (var item in carried)
+            {
+                if (item is JsonValue value && value.TryGetValue<string>(out var text) && !string.IsNullOrEmpty(text))
+                {
+                    merged.Add(text);
+                }
+            }
+        }
+
         // Identity fields come from the caller first, the Worker's answer second: kompas_connect has
         // no application_id in its arguments (it invents one), and leaving the envelope null there
         // would hide the session id from the response whose job is to report it.

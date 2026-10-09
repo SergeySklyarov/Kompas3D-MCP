@@ -200,6 +200,83 @@ public class ControlCopyTests : IDisposable
         Assert.Null(copies.DeleteAfterSuccess(null));
     }
 
+    /// <summary>A document file held open by ANOTHER handle is still restored when the OS permits the
+    /// overwrite: the old probe opened the file with <c>FileShare.None</c> and refused a perfectly writable
+    /// path with "вне записываемого корня".</summary>
+    /// <remarks>MEASURED in client acceptance: <c>restore_attempted=true</c> and <c>restored=false</c> while
+    /// <c>save_document</c> wrote the same path happily. The holder here stands in for KOMPAS, which keeps the
+    /// document file open while the document is loaded.
+    /// History: docs/decisions/files.md#control-copies</remarks>
+    [Fact]
+    public void Restore_SucceedsWhileAnotherHandleHoldsTheFileOpenForWriting()
+    {
+        var copies = Copies();
+        var document = DocumentFile("original");
+        var copy = copies.Before(document, "doc-1", 1);
+        Assert.True(copy.Made);
+
+        File.WriteAllText(document, "mutated");
+
+        // A holder that permits readers and writers: exactly how the old probe's false negative arose.
+        string? failure;
+        using (var holder = new FileStream(document, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite))
+        {
+            failure = copies.Restore(document, copy.Path, DocumentAccess.Edit);
+        }
+
+        Assert.Null(failure);
+        Assert.Equal("original", File.ReadAllText(document));
+    }
+
+    /// <summary>When the overwrite really is refused, the reason is the OS one — never a claim about the path
+    /// policy, which the restore does not evaluate at all.</summary>
+    [Fact]
+    public void Restore_WhenTheOverwriteIsRefused_NamesTheOsReasonNotThePathPolicy()
+    {
+        var copies = Copies();
+        var document = DocumentFile("original");
+        var copy = copies.Before(document, "doc-1", 1);
+        Assert.True(copy.Made);
+
+        File.WriteAllText(document, "mutated");
+
+        // A holder that forbids writing: the overwrite must fail, and it must say so with the OS message.
+        string? failure;
+        using (var holder = new FileStream(document, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            failure = copies.Restore(document, copy.Path, DocumentAccess.Edit);
+        }
+
+        Assert.NotNull(failure);
+        Assert.DoesNotContain("вне записываемого корня", failure, StringComparison.Ordinal);
+        Assert.Contains("занят", failure, StringComparison.Ordinal);
+        Assert.Equal("mutated", File.ReadAllText(document));
+    }
+
+    [Fact]
+    public void Restore_RefusesAFileCarryingTheReadOnlyAttribute()
+    {
+        var copies = Copies();
+        var document = DocumentFile("original");
+        var copy = copies.Before(document, "doc-1", 1);
+        Assert.True(copy.Made);
+
+        File.WriteAllText(document, "mutated");
+        File.SetAttributes(document, FileAttributes.ReadOnly);
+        try
+        {
+            var failure = copies.Restore(document, copy.Path, DocumentAccess.Edit);
+
+            Assert.NotNull(failure);
+            Assert.Contains("только чтение", failure, StringComparison.Ordinal);
+            Assert.Equal("mutated", File.ReadAllText(document));
+        }
+        finally
+        {
+            File.SetAttributes(document, FileAttributes.Normal);
+        }
+    }
+
     public void Dispose()
     {
         try

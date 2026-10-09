@@ -116,6 +116,12 @@ public static class ErrorCodes
     /// product (PDF is exported from the UI), so "unknown argument" would misname the reason. The refusal
     /// names the format and the documented alternatives.</summary>
     public const string FormatUnavailable = "FORMAT_UNAVAILABLE";
+
+    /// <summary>The document file is held by ANOTHER process and cannot be opened for writing. A separate code,
+    /// not <see cref="DocumentNotFound"/>: the file exists and is readable — the caller's remedy is to close the
+    /// other process, not to check the path. The check runs BEFORE KOMPAS is asked, because KOMPAS answers a
+    /// locked file with a MODAL DIALOG ("the file is edited by user ...") and the COM call then never returns.</summary>
+    public const string FileLocked = "FILE_LOCKED";
 }
 
 /// <summary>Default Russian wording per error code. Callers may override the message when they have more specific
@@ -157,6 +163,10 @@ public static class ErrorMessages
             "Для запрошенного формата экспорта нет документированного программного маршрута в целевой " +
             "версии. Справка SDK v24 описывает конвертер только для DXF (команда 1) и DWG (команда 2), " +
             "поэтому PDF в этот выпуск не входит.",
+        [ErrorCodes.FileLocked] =
+            "Файл документа занят другим процессом и не открывается на запись. КОМПАС на занятый файл " +
+            "отвечает модальным диалогом «документ редактируется пользователем», и вызов открытия не " +
+            "возвращается, пока диалог не закроют вручную, поэтому отказ сделан ДО обращения к КОМПАС.",
         [ErrorCodes.RasterRefused] =
             "Ядро отказало в сохранении в растровый формат (SaveAsToRasterFormat вернул false или бросил исключение).",
         [ErrorCodes.RasterEmpty] =

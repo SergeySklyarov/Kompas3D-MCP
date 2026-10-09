@@ -351,8 +351,8 @@ public sealed class CommandDispatcher
             _log.Write("error", "command budget expired", new { command = request.Command, budget_ms = budgetMs });
             throw new KompasContractException(
                 ErrorCodes.OutcomeUnknown,
-                $"Команда '{request.Command}' не завершилась за {budgetMs / 1000} с. КОМПАС может продолжать её выполнять; " +
-                "повтор запрещён, требуется согласование по фактическому состоянию модели.",
+                $"Команда '{request.Command}' не завершилась за {budgetMs / 1000} с. " + TimedOutHint(request.Command) +
+                " КОМПАС может продолжать её выполнять; повтор запрещён, требуется согласование по фактическому состоянию модели.",
                 RetryPolicy.AfterReconciliation,
                 partialEffects: true);
         }
@@ -361,8 +361,19 @@ public sealed class CommandDispatcher
         return outcome is null ? null : KompJson.ToNode(outcome);
     }
 
-    private static T Argument<T>(IpcFrame request)
-    {
+    /// <summary>The command-specific part of a budget-expiry message.</summary>
+    /// <remarks>WHY open has its own wording. The SDK documents no way to suppress a KOMPAS dialog
+    /// (<c>ksdocument3d_open.html</c> declares only <c>invisible</c>), and on a file another process holds KOMPAS
+    /// shows «документ редактируется пользователем» and the COM call never returns. Without this sentence the
+    /// caller reads "budget expired" and cannot tell a modal dialog from a slow document.
+    /// History: docs/decisions/files.md#file-locked-guard</remarks>
+    private static string TimedOutHint(string command) => command == WorkerCommands.OpenDocument
+        ? "Наиболее вероятная причина — КОМПАС показывает модальный диалог (например, «документ редактируется " +
+          "пользователем») и ждёт ответа человека: в этом режиме вызов открытия не возвращается. Занятость файла " +
+          "проверяется до вызова, поэтому диалог возможен по другой причине (например, лицензия или восстановление)."
+        : string.Empty;
+
+    private static T Argument<T>(IpcFrame request)    {
         if (request.Payload is null)
         {
             throw new KompasContractException(ErrorCodes.InvalidArgument, $"Команда '{request.Command}' не получила payload.");

@@ -204,11 +204,13 @@ public partial class Api5Session
         {
             var targetDelta = bodyComparison.DeltaOf(bodyTarget.Index);
             var violations = bodyComparison.UnchangedViolations(bodyTarget.Index);
-            var targetMoved = targetDelta is double moved && Math.Abs(moved) > VolumeChangeFloorMm3;
+            var targetMoved = VolumeMoved(targetDelta, bodyTarget.Snapshot.Volume)
+                || bodyComparison.BoxChangedOf(bodyTarget.Index)
+                || bodyComparison.TopologyChangedOf(bodyTarget.Index);
             checks.Add(new NamedCheck(
                 "target_body_is_the_one_touched",
                 targetMoved && violations.Count == 0,
-                Observed: $"тел{bodyTarget.Index}: ΔV={Num(targetDelta)}; изменения посторонних тел: "
+                Observed: $"тел{bodyTarget.Index}: ΔV(после−до)={Num(targetDelta)}; изменения посторонних тел: "
                     + (violations.Count == 0 ? "нет" : string.Join("; ", violations)),
                 Expected: "изменилось ровно объявленное тело, посторонние не тронуты"));
 

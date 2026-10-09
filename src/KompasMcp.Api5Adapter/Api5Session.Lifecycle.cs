@@ -112,8 +112,8 @@ public partial class Api5Session
         // Suppressing a boss decreases the volume, suppressing a cut increases it (MEASURED). The direction
         // is not asserted: the observed fact is that the volume CHANGED, and what it must be is declared by
         // the caller via expected_volume_mm3.
-        var effectObserved = volumeBefore is double && volumeAfter is double
-                             && Math.Abs(volumeAfter.Value - volumeBefore.Value) > VolumeChangeFloorMm3;
+        var effectObserved = volumeBefore is double before && volumeAfter is double after
+                             && VolumeMoved(after - before, before);
         checks.Add(new NamedCheck(
             command.Suppressed ? "volume_changed_on_suppress" : "volume_changed_on_restore",
             effectObserved,

@@ -90,11 +90,10 @@ public sealed class DocumentControlCopies
             return $"восстановление не выполнено: копии '{copyPath}' на диске нет";
         }
 
-        if (!CanWrite(documentPath))
+        if (IsMarkedReadOnly(documentPath))
         {
-            return $"восстановление не выполнено: файл документа '{documentPath}' недоступен для " +
-                   "записи (документ вне записываемого корня или защищён) — возвращать файл к " +
-                   "состоянию до мутации нельзя";
+            return $"восстановление не выполнено: файл документа '{documentPath}' помечен «только чтение» " +
+                   "(атрибут файла) — возвращать его к состоянию до мутации нельзя";
         }
 
         try
@@ -105,7 +104,11 @@ public sealed class DocumentControlCopies
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
             or NotSupportedException or ArgumentException)
         {
-            return $"восстановление не выполнено: {ex.GetType().Name}: {ex.Message}";
+            // The REAL OS reason, not a guess. The document file is usually held open by KOMPAS itself while
+            // the document is loaded, so an external overwrite can fail with a sharing violation; reporting
+            // "вне записываемого корня" for that named the wrong cause (defect found in client acceptance).
+            return $"восстановление не выполнено: {ex.GetType().Name}: {ex.Message}. " +
+                   "Файл документа занят (обычно самим КОМПАС, пока документ открыт) или недоступен для записи";
         }
     }
 
@@ -137,25 +140,23 @@ public sealed class DocumentControlCopies
         }
     }
 
-    /// <summary>Whether the file is writable. Checked by OPENING for write, not by a "read-only" flag:
-    /// the flag ignores directory rights and server policy.</summary>
-    private static bool CanWrite(string path)
+    /// <summary>Whether the file carries the read-only ATTRIBUTE. Checked without OPENING the file.</summary>
+    /// <remarks>WHY not an exclusive open. The earlier probe opened the document for read-write with
+    /// <c>FileShare.None</c> and read its failure as "the path is not writable" — but the document file is
+    /// normally held open by KOMPAS itself while the document is loaded, so a correctly writable path was
+    /// refused and the reason named the wrong cause. The attribute check is free of that false negative, and
+    /// any remaining failure is reported by the copy itself with the OS message.
+    /// History: docs/decisions/files.md#control-copies</remarks>
+    private static bool IsMarkedReadOnly(string path)
     {
         try
         {
-            if (!File.Exists(path))
-            {
-                // No file — File.Copy would create a new file in the document folder, i.e. write where
-                // only a mutation was requested.
-                return false;
-            }
-
-            using var stream = File.Open(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
-            return stream.CanWrite;
+            return File.Exists(path) && new FileInfo(path).IsReadOnly;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
             or NotSupportedException or ArgumentException)
         {
+            // An unreadable attribute is not a read-only claim; the copy below reports the real failure.
             return false;
         }
     }

@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using KompasMcp.Contracts;
 using KompasMcp.Domain.Schema;
 using KompasMcp.Host.Catalog;
 using Xunit;
@@ -338,5 +339,48 @@ public class ToolCatalogTests
         Assert.Equal(
             PlaneProperty("kompas_create_sketch").ToJsonString(),
             PlaneProperty("kompas_set_sketch_plane").ToJsonString());
+    }
+
+    /// <summary>The published <c>direction</c> text must state the measured cut inversion, not the old
+    /// "positive means along the sketch normal" claim that misled a client.</summary>
+    /// <remarks>MEASURED on v24 and DOCUMENTED in the help for <c>directionType</c>: «Для вырезаемого элемента
+    /// выдавливания направление противоположно нормали». The schema now says so for cut and points at the
+    /// field that names the side in part coordinates.
+    /// History: docs/decisions/adapter-core.md#material-direction-toward</remarks>
+    [Fact]
+    public void Extrude_DirectionDescription_NamesTheCutInversionAndTheMeasuredSideField()
+    {
+        var direction = (JsonObject)((JsonObject)Tool("kompas_extrude").InputSchema["properties"]!)["direction"]!;
+        var text = direction["description"]!.GetValue<string>();
+
+        Assert.Contains("противоположно нормали", text, StringComparison.Ordinal);
+        Assert.Contains("material_removed_toward", text, StringComparison.Ordinal);
+        Assert.Contains("material_added_toward", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>The <c>detail=full</c> text must name BOTH gabarit scopes, so the whole-document box is not
+    /// read as the box of the solid bodies.</summary>
+    [Fact]
+    public void GetContext_DetailDescription_NamesBothGabaritScopes()
+    {
+        var detail = (JsonObject)((JsonObject)Tool("kompas_get_context").InputSchema["properties"]!)["detail"]!;
+        var text = detail["description"]!.GetValue<string>();
+
+        Assert.Contains("gabarit.full", text, StringComparison.Ordinal);
+        Assert.Contains("gabarit.bodies", text, StringComparison.Ordinal);
+        Assert.Contains("эскизы", text, StringComparison.Ordinal);
+        Assert.Contains("list_bodies", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>A locked document file gets its own code with its own wording: "not found" would send the
+    /// caller looking for a missing path, and the remedy is to close the other process.</summary>
+    [Fact]
+    public void FileLocked_IsACodeWithItsOwnMessage()
+    {
+        var message = ErrorMessages.For(ErrorCodes.FileLocked);
+
+        Assert.NotEqual("Неизвестная ошибка.", message);
+        Assert.Contains("занят", message, StringComparison.Ordinal);
+        Assert.Contains("диалог", message, StringComparison.Ordinal);
     }
 }

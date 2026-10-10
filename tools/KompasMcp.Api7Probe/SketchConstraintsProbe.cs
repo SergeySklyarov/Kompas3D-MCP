@@ -1237,7 +1237,6 @@ internal sealed class SketchConstraintsProbe
             // kernel assigns its own variable (measured: `v9`). The variable's name is therefore READ
             // BACK from the stored constraint and only then changed.
             string? variableName = null;
-            KompasAPI7.IVariable7? variable = null;
 
             var readings = new Dictionary<string, string>(StringComparer.Ordinal);
 
@@ -1350,67 +1349,95 @@ internal sealed class SketchConstraintsProbe
             _doc!.RebuildDocument();
             var afterValue = ReadLength("после значения 50");
 
-            // 3. The VARIABLE changes — the geometry must follow. The variable is found by the name the
-            //    kernel assigned, through the part's own variable table.
+            // 3. The VARIABLE changes — the geometry must follow. The route is the one block G3 proved:
+            //    API5 ksPart.VariableCollection() → GetByName → ksVariable, then the DOCUMENT rebuild
+            //    (ksDocument3D.RebuildDocument()), which is the call that carries the change into the
+            //    model; ksPart.RebuildModel() does NOT move variable-driven geometry on this build.
             double? afterVariable = null;
-            double?[]? variableValue = null;
-            if (variable is null && variableName is not null && _part is not null)
+            var variableNotes = new List<string>();
+            if (variableName is null)
             {
+                variableNotes.Add("имя переменной не прочитано — смену выполнить нечем");
+            }
+            else if (_part is null)
+            {
+                variableNotes.Add("деталь недоступна — смену выполнить нечем");
+            }
+            else
+            {
+                ksVariable? target = null;
                 try
                 {
-                    if (_app.TransferInterface(_part, (int)ksAPITypeEnum.ksAPI7Dual, 0)
-                        is KompasAPI7.IPart7 part7b
-                        && part7b.VariableTable is KompasAPI7.IVariableTable table)
+                    if (_part.VariableCollection() is ksVariableCollection collection)
                     {
-                        var columns = Api5.SafeInt(() => table.ColumnsCount) ?? 0;
-                        var rows = Api5.SafeInt(() => table.RowsCount) ?? 0;
-                        notes.Add($"таблица переменных детали: строк {rows}, столбцов {columns}");
-                        for (var column = 1; column <= columns; column++)
+                        // `refresh()` is called first: the collection is a VIEW of the document's
+                        // variables, and a variable added by the kernel during this session may not be
+                        // in that view yet. Without it an empty count would be read as "there is no such
+                        // variable", which is a different statement.
+                        variableNotes.Add("refresh() коллекции → " + Api5.Raw(Api5.SafeBool(() => collection.refresh())));
+                        var count = Api5.SafeInt(() => collection.GetCount());
+                        variableNotes.Add("переменных в коллекции детали: " + Api5.Raw(count));
+                        for (var i = 0; i < (count ?? 0); i++)
                         {
-                            var name = Api5.SafeObject(() => table.VarName[column]) as string;
-                            notes.Add($"  столбец {column}: '{name}'");
-                            if (!string.Equals(name, variableName, StringComparison.Ordinal))
+                            if (collection.GetByIndex(i) is ksVariable candidate)
                             {
-                                continue;
+                                var name = Api5.SafeObject(() => candidate.name) as string;
+                                variableNotes.Add($"  [{i}] '{name}' = " +
+                                                  Api5.Num(Api5.SafeDouble(() => candidate.value)));
+                                if (string.Equals(name, variableName, StringComparison.Ordinal))
+                                {
+                                    target = candidate;
+                                }
                             }
-
-                            variableValue = new[]
-                            {
-                                Api5.SafeDouble(() => table.Cell[1, column]),
-                                Api5.SafeDouble(() => table.Cell[2, column]),
-                            };
-                            notes.Add($"переменная '{name}' найдена в таблице детали: " +
-                                      $"{Api5.Num(variableValue[0])} / {Api5.Num(variableValue[1])}");
                         }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    notes.Add("поиск переменной: " + ex.GetType().Name + ": " + ex.Message);
-                }
-            }
 
-            if (variable is not null)
-            {
-                try
-                {
-                    variable.Value = 60d;
-                    notes.Add("переменная изменена на 60; прочитано " +
-                              Api5.Num(Api5.SafeDouble(() => variable.Value)));
-                    if (_part is not null
-                        && _app.TransferInterface(_part, (int)ksAPITypeEnum.ksAPI7Dual, 0) is KompasAPI7.IPart7 again)
+                        target ??= collection.GetByName(variableName, true, false) as ksVariable;
+                    }
+                    else
                     {
-                        notes.Add("RebuildModel после смены переменной → " +
-                                  Api5.Raw(Api5.SafeBool(() => again.RebuildModel(true))));
+                        variableNotes.Add("VariableCollection() не вернул ksVariableCollection");
                     }
                 }
                 catch (Exception ex)
                 {
-                    notes.Add("смена переменной: " + ex.GetType().Name + ": " + ex.Message);
+                    variableNotes.Add("поиск переменной: " + ex.GetType().Name + ": " + ex.Message);
                 }
 
-                afterVariable = ReadLength("после смены переменной на 60");
+                if (target is null)
+                {
+                    variableNotes.Add($"переменная '{variableName}' в коллекции детали НЕ найдена — " +
+                                      "сменить нечего, и это названная причина, а не «не прочитано»");
+                }
+                else
+                {
+                    try
+                    {
+                        target.Expression = "60";
+                        target.value = 60d;
+                        variableNotes.Add("переменная '" + variableName + "' изменена: Expression=" +
+                                          Api5.SafeObject(() => target.Expression) + ", value=" +
+                                          Api5.Num(Api5.SafeDouble(() => target.value)));
+                    }
+                    catch (Exception ex)
+                    {
+                        variableNotes.Add("запись переменной: " + ex.GetType().Name + ": " + ex.Message);
+                    }
+
+                    try
+                    {
+                        var rebuilt = _doc!.RebuildDocument();
+                        variableNotes.Add("RebuildDocument() после смены переменной → " + Api5.Raw(rebuilt));
+                    }
+                    catch (Exception ex)
+                    {
+                        variableNotes.Add("RebuildDocument(): " + ex.GetType().Name);
+                    }
+
+                    afterVariable = ReadLength("после смены переменной на 60");
+                }
             }
+
+            notes.AddRange(variableNotes);
 
             // 4. save → close → reopen.
             double? afterReopen = null;

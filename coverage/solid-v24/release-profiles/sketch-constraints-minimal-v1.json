@@ -3,7 +3,7 @@
   "artifact": "coverage/solid-v24/release-profiles/sketch-constraints-minimal-v1.json",
   "profile_id": "sketch-constraints-minimal-v1",
   "title": "Ограничения эскиза и управляющие размеры v24",
-  "revision": "1.5",
+  "revision": "1.6",
   "created_utc": "2026-10-10T20:30:00Z",
   "decision": "Наряд OMEGA_G6_SKETCH_CONSTRAINTS_DEVELOPER_PROMPT.md от 10.10.2026: G6 выходит ОТДЕЛЬНЫМ выпуском (ожидаемо 0.8.0) после 0.7.0; основание - отчёт docs/research/OMEGA_GAPS_RESEARCH_20261008.md раздел G6 с датированной поправкой 09.10.2026 и план coverage/solid-v24/implementation-plan.md, шаг D, очередь G6",
   "plan": "coverage/solid-v24/implementation-plan.md, шаг D, очередь G6",
@@ -56,6 +56,11 @@
     "revision": "1.5",
     "date": "10.10.2026",
     "change": "ПРАВИЛЬНЫЙ МАРШРУТ ПРОЙДЕН, и оба снятых требования оказались верными. (1) SKC-05 ВЫПОЛНЕНО: контур из 4 отрезков без выдавливания (4 ksCMergePoints, 2 ksCHorizontal, 2 ksCVertical, 2 ksCFixedLenght, 1 ksCFixedPoint) даёт ISketch.ConstraintsState = 1 (ksStateWellConstrained), и состояние 1 прочитано повторно ПОСЛЕ save → close → reopen. ParametricMode документально подтверждён (ikompasdocument2d1_parametricmode.html) и присутствует в установленной kAPI7.tlb слотами 74/75; QI(IKompasDocument2D1) отвечают документ фрагмента эскиза и активный документ приложения. (2) SKC-02: документированный маршрут создания размера НАЙДЕН и пройден — IView QI ISymbols2DContainer → ILineDimensions::Add() → ILineDimension (IDrawingObject) → Update(); объект-размер отвечает IDrawingObject1, и ksCDimWithVariable на нём отвечает Create=True. НЕ ПОДТВЕРЖДЕНО УПРАВЛЕНИЕ ГЕОМЕТРИЕЙ: длина отрезка остаётся 40 при Value=50 через ограничение, при IDimensionText.NominalValue=50 и при переменной детали G3 (IPart7.AddVariable). Измеренный факт вынесен заказчику; требование НЕ снимается исполнителем."
+   },
+   {
+    "revision": "1.6",
+    "date": "11.10.2026",
+    "change": "АССОЦИАТИВНЫЙ РАЗМЕР ИЗМЕРЕН. Рецепт заказчика подтверждён: на объекте-размере ksCAssociation (партнёр — массив отрезков) → ksCFixedDim (Create=True, Valid=True) → ksCDimWithVariable со значением 50 (Create=True, Valid=True) дают длину отрезка 40 → 50, и 50 читается ПОСЛЕ save → close → reopen. Различающий контроль: без значения длина остаётся 40. СВЯЗЬ С ПЕРЕМЕННОЙ ДЕТАЛИ не подтверждена и названа ограничением: переменная, назначенная ядром (k_assoc_50), в коллекции переменных детали ОТСУТСТВУЕТ (ksPart.VariableCollection() после refresh() = True даёт GetCount() = 0) — она принадлежит эскизу. Инструмент размера выпускается СО ЗНАЧЕНИЕМ; связь с переменной детали — названное ограничение, решение за заказчиком."
    }
   ]
  },
@@ -117,7 +122,7 @@
    "priority": "practical_required",
    "title": "Размерные типы: ksCDimWithVariable с Expression/Variable, ksCFixedDim, ksCFixedAngle, ksCFixedLenght",
    "current_level": "mcp_verified",
-   "gap": "МАРШРУТ ПРОЙДЕН, УПРАВЛЕНИЕ НЕ ПОДТВЕРЖДЕНО. Размер создаётся документированным путём: IView QI ISymbols2DContainer → ILineDimensions::Add() → ILineDimension (IDrawingObject) → Update(); коллекция 0 → 1, объект-размер отвечает IDrawingObject1, номинал читается (IDimensionText.NominalValue = 40). ksCDimWithVariable на объекте-размере — Create=True. НЕ подтверждено управление геометрией: длина отрезка остаётся 40 при Value=50 через ограничение, при NominalValue=50 и при переменной детали G3. Справка объясняет поведение NominalValue («значение размера при этом не изменяется»). Измеренный факт вынесен заказчику; решение — за ним.",
+   "gap": "ИЗМЕРЕНО: ассоциативный размер управляет геометрией. На объекте-размере (IView QI ISymbols2DContainer → ILineDimensions::Add() → ILineDimension → Update()) ksCAssociation (партнёр — массив отрезков) → ksCFixedDim (Create=True, Valid=True) → ksCDimWithVariable со значением 50 (Create=True, Valid=True) дают длину отрезка 40 → 50, и 50 читается ПОСЛЕ save → close → reopen; без значения длина остаётся 40. НАЗВАННОЕ ОГРАНИЧЕНИЕ: связь с переменной ДЕТАЛИ не подтверждена — переменная, назначенная ядром, в коллекции переменных детали отсутствует (GetCount() = 0 после refresh()), то есть принадлежит эскизу. Инструмент выпускается со значением.",
    "depends_on": [
     "dep.sketch_constraints.object_address",
     "dep.sketch_constraints.type_vocabulary",

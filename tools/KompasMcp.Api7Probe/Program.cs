@@ -241,6 +241,18 @@ public static class Program
                 var sketchDefinition = new SketchDefinitionProbe(report, options);
                 pump.Run(() => sketchDefinition.Run());
             }
+            else if (options.SketchConstraints)
+            {
+                var sketchConstraints = new SketchConstraintsProbe(report, options);
+                pump.Run(() =>
+                {
+                    sketchConstraints.Run();
+                    if (options.KeepRunning)
+                    {
+                        SketchConstraintsProbe.Flush(report, options);
+                    }
+                });
+            }
             else if (options.Identity)
             {
                 var identity = new IdentityProbe(report, options);
@@ -497,6 +509,7 @@ public static class Program
             : options.HoleModes ? "hole-modes"
             : options.HoleTree ? "hole-tree"
             : options.SketchDefinition ? "sketch-definition"
+            : options.SketchConstraints ? "sketch-constraints"
             : options.Identity ? "feature-identity"
             : options.Union ? "disconnected-union"
             : options.B5 ? "b5-sweep-loft-shell"
@@ -724,6 +737,15 @@ public sealed class Options
     /// reference file — the question the adapter's behaviour on an opened document turned into.</summary>
     public string? VmOpen { get; private set; }
 
+    /// <summary><c>--sketch-constraints</c>: the API7 route <c>IDrawingObject1.NewConstraint()</c> →
+    /// <c>IParametriticConstraint.Create()</c> measured on the shipped build, together with the
+    /// addressing of sketch objects and the units of a driving dimension (probe K, order
+    /// <c>OMEGA_G6_SKETCH_CONSTRAINTS_DEVELOPER_PROMPT.md</c> §9). A separate entry from
+    /// <c>--sketch-definition</c>: probe S reached the constraint through <c>FindObject</c>, whose
+    /// parameter class is not registered, so its refusal was a statement about the instrument.
+    /// History: docs/decisions/probes.md#sketch-constraints</summary>
+    public bool SketchConstraints { get; private set; }
+
     /// <summary>PID of the KOMPAS instance the probe launched, written back by the step that measured the
     /// process diff. <c>null</c> means "not attributed yet" — a distinct state from a PID of zero,
     /// and the step that needs it says so rather than comparing against a placeholder.</summary>
@@ -769,6 +791,7 @@ public sealed class Options
         var vmControlExpression = false;
         var vmDensityUnits = false;
         var vmDensityMci = false;
+        var sketchConstraints = false;
         string? vmOpen = null;
 
         for (var i = 0; i < args.Length; i++)
@@ -880,6 +903,9 @@ public sealed class Options
                 case "--vm-density-mci":
                     vmDensityMci = true;
                     break;
+                case "--sketch-constraints":
+                    sketchConstraints = true;
+                    break;
                 case "--vm-open" when i + 1 < args.Length:
                     vmOpen = args[++i];
                     break;
@@ -920,6 +946,7 @@ public sealed class Options
             : vmControlExpression ? "vm-control-expression"
             : vmDensityUnits ? "vm-density-units"
             : vmDensityMci ? "vm-density-mci"
+            : sketchConstraints ? "sketch-constraints"
             : controls ? "api7-attribution" : "api7-probe-report";
         var work = workOverride ?? Path.Combine(root, "scratch", $"api7-{stem}-{runId}");
         var reportDir = Path.Combine(root, "docs", "acceptance", "api7");
@@ -968,6 +995,7 @@ public sealed class Options
             VmDensityUnits = vmDensityUnits,
             VmDensityMci = vmDensityMci,
             VmOpen = vmOpen,
+            SketchConstraints = sketchConstraints,
         };
     }
 

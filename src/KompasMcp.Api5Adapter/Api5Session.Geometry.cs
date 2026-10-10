@@ -4036,19 +4036,74 @@ public sealed partial class Api5Session
                 }
             }
         }
-        else if (stored.Payload is ksFaceDefinition face && command.Properties.Contains(MeasurableProperty.SurfaceArea))
+        else if (stored.Payload is ksFaceDefinition face)
         {
-            area = SafeDouble(() => face.GetArea((uint)KompasUnits.LengthMm));
+            // A FACE. INVARIANT: every requested property that is NOT read is NAMED with its own reason —
+            // a bare null is indistinguishable from "forgotten", and a request WITHOUT surface_area must
+            // not fall through to "not measurable" wholesale.
+            // DOC: the v24 mirror carries no route that publishes a FACE's bounding box
+            // (ksFaceDefinition answers GetArea/GetSurface, not a gabarit); the box is taken from the BODY
+            // (kompas_list_bodies). LIMIT: that is why bbox is named, not read.
+            // History: docs/decisions/contracts.md#face-properties
+            if (command.Properties.Contains(MeasurableProperty.SurfaceArea))
+            {
+                area = SafeDouble(() => face.GetArea((uint)KompasUnits.LengthMm));
+            }
+
+            foreach (var requested in command.Properties)
+            {
+                unverified.Add(requested switch
+                {
+                    MeasurableProperty.SurfaceArea => string.Empty,
+                    MeasurableProperty.Bbox =>
+                        "bbox_not_read_for_face — габарит ГРАНИ документированным маршрутом API5 не "
+                        + "читается (у ksFaceDefinition его нет); габарит берите у ТЕЛА "
+                        + "(kompas_list_bodies)",
+                    MeasurableProperty.Volume =>
+                        "volume_not_applicable_to_face — объём есть у тела, а не у грани",
+                    MeasurableProperty.Mass =>
+                        "mass_not_applicable_to_face — масса есть у тела, а не у грани",
+                    MeasurableProperty.Centroid =>
+                        "centroid_not_read_for_face — центр масс грани документированным маршрутом API5 "
+                        + "не читается",
+                    _ => $"property_{requested}_not_read_for_face",
+                });
+            }
         }
-        else if (stored.Payload is ksEdgeDefinition edge && command.Properties.Contains(MeasurableProperty.Bbox))
+        else if (stored.Payload is ksEdgeDefinition edge)
         {
-            unverified.Add("bbox_not_available_for_edge — у ребра нет собственного габарита в API5");
+            // An EDGE: no property of an edge is readable on the documented route, and each requested one
+            // is named separately instead of one blanket "not measurable".
+            foreach (var requested in command.Properties)
+            {
+                unverified.Add(requested switch
+                {
+                    MeasurableProperty.Bbox =>
+                        "bbox_not_available_for_edge — у ребра нет собственного габарита в API5",
+                    MeasurableProperty.Volume =>
+                        "volume_not_applicable_to_edge — объём есть у тела, а не у ребра",
+                    MeasurableProperty.Mass =>
+                        "mass_not_applicable_to_edge — масса есть у тела, а не у ребра",
+                    MeasurableProperty.SurfaceArea =>
+                        "surface_area_not_read_for_edge — площадь ребра документированным маршрутом "
+                        + "API5 не читается",
+                    MeasurableProperty.Centroid =>
+                        "centroid_not_read_for_edge — центр масс ребра документированным маршрутом API5 "
+                        + "не читается",
+                    _ => $"property_{requested}_not_read_for_edge",
+                });
+            }
+
             _ = edge;
         }
         else
         {
             unverified.Add($"target_kind_{stored.Kind}_not_measurable");
         }
+
+        // An empty string from the face branch means "this property WAS read": drop the placeholders so the
+        // list carries reasons only.
+        unverified.RemoveAll(string.IsNullOrEmpty);
 
         return new MeasurementDto
         {

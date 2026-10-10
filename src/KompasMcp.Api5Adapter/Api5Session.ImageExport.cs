@@ -97,6 +97,47 @@ public sealed partial class Api5Session
                 RetryPolicy.Never);
         }
 
+        // AUTO SIZING vs EXPLICIT. INVARIANT: explicit resolution/scale are never touched — the server
+        // sizes the snapshot ONLY when neither is given, and a target together with them is a
+        // contradictory request refused before COM.
+        var explicitSizing = command.Resolution is not null || command.Scale is not null;
+        var targetLongSide = command.LongSidePx ?? RasterLimits.DefaultLongSidePixels;
+        var sizingToken = explicitSizing ? RasterSizing.Explicit : RasterSizing.AutoTwoPass;
+        int? probeLongSide = null;
+        double? appliedScale = null;
+        string? sizingNote = null;
+
+        if (command.LongSidePx is int namedTarget
+            && (namedTarget < RasterLimits.MinLongSidePixels || namedTarget > RasterLimits.MaxLongSidePixels))
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                $"long_side_px={namedTarget} вне пределов, которые сервер принимает: " +
+                $"{RasterLimits.MinLongSidePixels}..{RasterLimits.MaxLongSidePixels}.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["long_side_px"] = namedTarget,
+                    ["min_long_side_px"] = RasterLimits.MinLongSidePixels,
+                    ["max_long_side_px"] = RasterLimits.MaxLongSidePixels,
+                });
+        }
+
+        if (command.LongSidePx is not null && explicitSizing)
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                "long_side_px задан вместе с resolution/scale: явные значения сервер не трогает, а "
+                + "целевой размер им противоречит. Задайте либо целевой размер, либо явные значения.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["long_side_px"] = command.LongSidePx,
+                    ["resolution"] = command.Resolution,
+                    ["scale"] = command.Scale,
+                });
+        }
+
         var bytesRoute = command.ReturnImageContent;
         var fileName = bytesRoute ? string.Empty : command.SavePath!;
         if (!bytesRoute)
@@ -111,66 +152,56 @@ public sealed partial class Api5Session
             }
         }
 
-        ksRasterFormatParam? parameter = null;
         byte[]? data = null;
         var viewState = ViewSwapState.NotRequested;
         try
         {
-            // The view is applied BEFORE the render and restored AFTER it. The swap is a separate object
-            // so that the restore happens in a `finally` even when the render refuses: a caller must not
-            // lose the window's view because a snapshot failed.
+            // The view is applied BEFORE the render and restored AFTER it, ONCE for BOTH passes: two
+            // switches would move the caller's window twice and make `keep_view` mean two things.
+            // The swap is a separate object so that the restore happens in a `finally` even when the
+            // render refuses: a caller must not lose the window's view because a snapshot failed.
             if (requestedView is not null)
             {
                 viewState = ViewSwap.Apply(document, requestedView, command.KeepView);
             }
 
-            parameter = (ksRasterFormatParam)document.Document3D.RasterFormatParam();
-            if (parameter is null)
+            // PASS 1 — the probe. Always the MEMORY route with the core default resolution/scale: no
+            // file is created and nothing of the caller's is touched. The measured law
+            // `long_side = base * (resolution / 120) * scale` is why one probe is enough.
+            if (!explicitSizing)
             {
-                throw new KompasContractException(
-                    ErrorCodes.RasterRefused,
-                    "RasterFormatParam() вернул null: документ не отдал объект параметров растра.",
-                    RetryPolicy.SameOperationId);
+                var probe = RenderRaster(document, format, string.Empty, bytesMode: true,
+                    resolution: null, scale: null, out var probeReturned);
+                if (!probeReturned || probe is null || probe.Length == 0)
+                {
+                    throw new KompasContractException(
+                        ErrorCodes.RasterEmpty,
+                        "Пробный снимок не дал байтов: подобрать масштаб не из чего. Передайте "
+                        + "resolution или scale явно.",
+                        RetryPolicy.SameOperationId,
+                        details: new Dictionary<string, object?> { ["format"] = format.Wire });
+                }
+
+                probeLongSide = LongestSide(RasterImageReader.Inspect(probe, format));
+                var outcome = RasterSizing.FromProbe(targetLongSide, probeLongSide);
+                if (outcome.Scale is not double computedScale)
+                {
+                    // The reason is NAMED, not softened: an unread probe long side is the honest answer
+                    // for a format whose header the reader does not parse.
+                    throw new KompasContractException(
+                        ErrorCodes.CapabilityUnavailable,
+                        outcome.RefusalReason!,
+                        RetryPolicy.SameOperationId,
+                        details: new Dictionary<string, object?> { ["format"] = format.Wire });
+                }
+
+                appliedScale = computedScale;
+                sizingNote = outcome.Note;
             }
 
-            parameter.Init();
-            parameter.format = format.Code;
-            parameter.colorBPP = RasterColorBitsPerPixel;
-            if (command.Resolution is int resolution)
-            {
-                parameter.extResolution = resolution;
-            }
-
-            if (command.Scale is double scale)
-            {
-                parameter.extScale = scale;
-            }
-
-            if (bytesRoute)
-            {
-                parameter.returnResultAsArrayBytes = true;
-            }
-
-            bool returned;
-            try
-            {
-                returned = document.Document3D.SaveAsToRasterFormat(fileName, parameter);
-            }
-            catch (COMException ex)
-            {
-                throw new KompasContractException(
-                    ErrorCodes.RasterRefused,
-                    $"SaveAsToRasterFormat бросил исключение: {ex.Message}",
-                    RetryPolicy.SameOperationId,
-                    partialEffects: File.Exists(fileName),
-                    hresult: ex.HResult,
-                    details: new Dictionary<string, object?>
-                    {
-                        ["format"] = format.Wire,
-                        ["route"] = bytesRoute ? "memory" : "file",
-                    });
-            }
-
+            // PASS 2 — the final render. The file (if asked) is written ONLY here.
+            data = RenderRaster(document, format, fileName, bytesRoute, command.Resolution,
+                appliedScale ?? command.Scale, out var returned);
             if (!returned)
             {
                 throw new KompasContractException(
@@ -183,15 +214,6 @@ public sealed partial class Api5Session
                         ["format"] = format.Wire,
                         ["route"] = bytesRoute ? "memory" : "file",
                     });
-            }
-
-            if (bytesRoute)
-            {
-                data = ReadArrayBytes(parameter);
-            }
-            else
-            {
-                data = ReadFileBytes(command.SavePath!);
             }
         }
         finally
@@ -211,8 +233,6 @@ public sealed partial class Api5Session
                 viewState.Restored = restored;
                 viewState.RestoreNote = restoreNote;
             }
-
-            ComApartment.Release(parameter);
         }
 
         if (data is null || data.Length == 0)
@@ -267,6 +287,36 @@ public sealed partial class Api5Session
         string? base64 = null;
         if (command.ReturnImageContent)
         {
+            // HEAVY FORMATS: for an UNCOMPRESSED raster (bmp, tif) the response limit decides the size, not
+            // the caller's target. A refusal at the default is not allowed (§3d п.4), so the target is
+            // REDUCED and the reduction is NAMED. The byte count grows with the pixel AREA, hence the
+            // square root of the ratio.
+            var attempt = 0;
+            while (!explicitSizing && attempt < 3 && data is { Length: > 0 }
+                   && Base64Length(data) > RasterLimits.MaxBase64Characters
+                   && probeLongSide is int probedForLimit && probedForLimit > 0)
+            {
+                var wanted = (int)Math.Floor(targetLongSide
+                    * Math.Sqrt(RasterLimits.MaxBase64Characters / (double)Base64Length(data)) * 0.95);
+                wanted = Math.Max(wanted, RasterLimits.MinLongSidePixels);
+                var reducedScale = (double)wanted / probedForLimit;
+                var reduced = RenderRaster(document, format, fileName, bytesRoute, command.Resolution,
+                    reducedScale, out var again);
+                if (!again || reduced is null || reduced.Length == 0)
+                {
+                    break;
+                }
+
+                data = reduced;
+                facts = RasterImageReader.Inspect(data, format);
+                appliedScale = reducedScale;
+                targetLongSide = wanted;
+                sizingNote = (sizingNote is null ? string.Empty : sizingNote + "; ")
+                    + $"target_reduced_for_base64_limit — целевой размер уменьшен до {wanted} px, чтобы "
+                    + "base64 уложился в предел ответа (тяжёлый формат)";
+                attempt++;
+            }
+
             EnforceLimits(facts, data, format);
             base64 = Convert.ToBase64String(data);
         }
@@ -298,12 +348,32 @@ public sealed partial class Api5Session
             unverified.Add(note);
         }
 
+        // HIT CHECK. The second pass is measured like the first: a miss beyond 10 % is NAMED in the
+        // response, not passed off as a hit — the law the scale was computed from is measured, and a
+        // measured law is not a guarantee.
+        if (!explicitSizing && probeLongSide is int probedSide && LongestSide(facts) is int actualSide)
+        {
+            var deviation = Math.Abs(actualSide - targetLongSide) / (double)targetLongSide;
+            if (deviation > 0.10)
+            {
+                sizingNote = (sizingNote is null ? string.Empty : sizingNote + "; ")
+                    + $"target_missed — длинная сторона {actualSide} px отличается от цели "
+                    + $"{targetLongSide} px на {deviation * 100:0.#} % (> 10 %); пробная сторона была "
+                    + $"{probedSide} px";
+            }
+        }
+
         return new ExportImageResultDto
         {
             Format = format.Wire,
             MimeType = format.MimeType,
             PixelWidth = facts.PixelWidth,
             PixelHeight = facts.PixelHeight,
+            Sizing = sizingToken,
+            ProbeLongSidePx = probeLongSide,
+            AppliedScale = appliedScale,
+            TargetLongSidePx = explicitSizing ? null : targetLongSide,
+            SizingNote = sizingNote,
             BytesCount = data.LongLength,
             SavePath = command.SavePath,
             RasterRoute = bytesRoute ? "memory" : "file",
@@ -319,6 +389,92 @@ public sealed partial class Api5Session
             UnverifiedAspects = unverified,
         };
     }
+
+    /// <summary>One render with the given parameters: the documented route
+    /// <c>RasterFormatParam → Init → SaveAsToRasterFormat</c>, once per call.</summary>
+    /// <remarks>INVARIANT: the parameter object is released here, so a refusal inside the render cannot
+    /// leak it. INVARIANT: the two routes are mutually exclusive — an empty file name with
+    /// <c>returnResultAsArrayBytes</c> gives bytes and no file, a non-empty name gives the file.
+    /// <paramref name="returned"/> reports the KERNEL's answer, not success: the caller names the refusal.
+    /// History: docs/decisions/adapter-core.md#image-export</remarks>
+    private byte[]? RenderRaster(
+        DocumentEntry document, RasterFormatSpec format, string fileName, bool bytesMode,
+        int? resolution, double? scale, out bool returned)
+    {
+        ksRasterFormatParam? parameter = null;
+        try
+        {
+            parameter = (ksRasterFormatParam)document.Document3D.RasterFormatParam();
+            if (parameter is null)
+            {
+                throw new KompasContractException(
+                    ErrorCodes.RasterRefused,
+                    "RasterFormatParam() вернул null: документ не отдал объект параметров растра.",
+                    RetryPolicy.SameOperationId);
+            }
+
+            parameter.Init();
+            parameter.format = format.Code;
+            parameter.colorBPP = RasterColorBitsPerPixel;
+            if (resolution is int resolutionValue)
+            {
+                parameter.extResolution = resolutionValue;
+            }
+
+            if (scale is double scaleValue)
+            {
+                parameter.extScale = scaleValue;
+            }
+
+            if (bytesMode)
+            {
+                parameter.returnResultAsArrayBytes = true;
+            }
+
+            try
+            {
+                returned = document.Document3D.SaveAsToRasterFormat(fileName, parameter);
+            }
+            catch (COMException ex)
+            {
+                throw new KompasContractException(
+                    ErrorCodes.RasterRefused,
+                    $"SaveAsToRasterFormat бросил исключение: {ex.Message}",
+                    RetryPolicy.SameOperationId,
+                    partialEffects: File.Exists(fileName),
+                    hresult: ex.HResult,
+                    details: new Dictionary<string, object?>
+                    {
+                        ["format"] = format.Wire,
+                        ["route"] = bytesMode ? "memory" : "file",
+                    });
+            }
+
+            if (!returned)
+            {
+                return null;
+            }
+
+            return bytesMode ? ReadArrayBytes(parameter) : ReadFileBytes(fileName);
+        }
+        finally
+        {
+            if (parameter is not null)
+            {
+                ComApartment.Release(parameter);
+            }
+        }
+    }
+
+    /// <summary>Length of the base64 the bytes will become — computed, not encoded, so a heavy raster is
+    /// not turned into a string twice.</summary>
+    private static int Base64Length(byte[] data) => ((data.Length + 2) / 3) * 4;
+
+    /// <summary>The longest side of the raster read from its HEADER, or null when the header carries no
+    /// dimensions (MEASURED: JPG and TIF dimensions are not parsed) — a null is NAMED by the caller, and
+    /// never treated as zero.</summary>
+    private static int? LongestSide(RasterImageFacts facts) =>
+        facts.PixelWidth is int w && facts.PixelHeight is int h ? Math.Max(w, h) : null;
 
     /// <summary>Response context limits. Exceeding them is a NAMED refusal with a hint, not silent
     /// downscaling: shrinking the image server-side would substitute the result, not deliver it.</summary>

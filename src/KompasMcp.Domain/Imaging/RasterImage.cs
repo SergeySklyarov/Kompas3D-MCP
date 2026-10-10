@@ -85,6 +85,22 @@ public static class RasterLimits
 
     /// <summary>Limit of the base64 image in the response (2 MiB).</summary>
     public const int MaxBase64Characters = 2 * 1024 * 1024;
+
+    /// <summary>Lower bound of the caller-supplied target long side. Below it the snapshot stops being
+    /// an illustration of the model; the number is named so a refusal can say what it clamps to.</summary>
+    public const int MinLongSidePixels = 16;
+
+    /// <summary>Target long side used when the caller named none.</summary>
+    public const int DefaultLongSidePixels = 1024;
+
+    /// <summary>Upper bound of the scale the server computes itself. MEASURED: <c>extScale=10</c>
+    /// renders (596×502 on a 100×80 plate), <c>100</c> answers RASTER_EMPTY and <c>1000</c>
+    /// RASTER_REFUSED — the kernel does not accept an arbitrary multiplier.</summary>
+    public const double MaxAutoScale = 10.0;
+
+    /// <summary>Lower bound of the computed scale. MEASURED: <c>extScale=0.0001</c> renders a 1×1
+    /// image; 0 and negatives are refused by the schema before COM.</summary>
+    public const double MinAutoScale = 0.0001;
 }
 
 /// <summary>What could be read FROM THE FILE ITSELF. Dimensions come from the header, not from the request:

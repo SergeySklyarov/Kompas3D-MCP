@@ -6113,6 +6113,13 @@ def client_bugs_20261010_checks(client, rep, app_id, workdir):
         _e, env, _r = client.tool("kompas_measure", {"target_ref": body_ref, "properties": ["volume"]})
         return result(env).get("volume_mm3")
 
+    def faces(doc, body_ref):
+        """Грани тела: документированный маршрут чтения топологии (include=faces)."""
+        _e, env, _r = client.tool("kompas_read_topology",
+                                  {"document_id": doc, "body_ref": body_ref, "include": "faces"})
+        rows = result(env).get("faces")
+        return rows if isinstance(rows, list) else []
+
     def first_body(doc):
         rows = bodies(doc)
         return rows[0] if rows else None
@@ -6551,6 +6558,246 @@ def client_bugs_20261010_checks(client, rep, app_id, workdir):
         rep.add("CB10.12", "отказ до создания признака", "FAIL", f"эталон не построен: {err4}")
     close(doc4)
 
+    # ── CB10.10: синтетический аналог отказа К5 (контур на стенке кармана) ─────────────────────
+    doc5, sketch5, err5 = build_plate("CB10-wall")
+    if doc5 and not err5:
+        body_ref = (first_body(doc5) or {}).get("body_ref")
+        # Карман 40x30 в (20,20), глубина 5.
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc5, "expected_revision": current_rev(doc5),
+            "plane": {"base": "xy", "offset_mm": 0}, "name": "CB10-pocket"})
+        pocket = result(env).get("id")
+        call("kompas_edit_sketch", {
+            "sketch_ref": pocket, "expected_revision": current_rev(doc5), "mode": "append",
+            "entities": [{"kind": "rectangle", "start_mm": [20.0, 20.0],
+                          "width_mm": 40.0, "height_mm": 30.0}]})
+        call("kompas_finish_sketch", {"sketch_ref": pocket, "require_closed_profile": False})
+        env, code = call("kompas_extrude", {
+            # direction=negative: у выреза на XY положительное направление снимает ПРОТИВ нормали
+            # эскиза, то есть в пустоту под телом; карман режется только в материал.
+            "sketch_ref": pocket, "expected_revision": current_rev(doc5), "operation": "cut",
+            "depth_mm": 5.0, "direction": "negative", "end_condition": "blind",
+            "target_body_ref": body_ref})
+        pocket_code = code
+        pocket_ok = pocket_code is None
+        # Второй контур ЛЕЖИТ ГРАНЬЮ НА СТЕНКЕ кармана: левая сторона x=20 совпадает со стенкой.
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc5, "expected_revision": current_rev(doc5),
+            "plane": {"base": "xy", "offset_mm": 0}, "name": "CB10-onwall"})
+        onwall = result(env).get("id")
+        call("kompas_edit_sketch", {
+            "sketch_ref": onwall, "expected_revision": current_rev(doc5), "mode": "append",
+            "entities": [{"kind": "rectangle", "start_mm": [0.0, 20.0],
+                          "width_mm": 20.0, "height_mm": 30.0}]})
+        call("kompas_finish_sketch", {"sketch_ref": onwall, "require_closed_profile": False})
+        env, wall_code = call("kompas_extrude", {
+            "sketch_ref": onwall, "expected_revision": current_rev(doc5), "operation": "cut",
+            "depth_mm": 3.0, "direction": "negative", "end_condition": "blind",
+            "target_body_ref": body_ref})
+        det = details_of(env)
+        snap = det.get("failure_snapshot") or {}
+        rep.add("CB10.10",
+                "аналог отказа клиента на СИНТЕТИКЕ: контур в МАТЕРИАЛЕ, сторона которого совпадает "
+                "со стенкой уже вырезанного кармана. Строка ФИКСИРУЕТ ОТВЕТ КАК ЕСТЬ и называет, "
+                "воспроизвёлся ли отказ `Entity.Create()=false`, а не подгоняет постановку",
+                "PASS" if pocket_ok else "FAIL",
+                f"карман={pocket_code!r} контур_на_стенке={wall_code!r} "
+                f"компас_код={snap.get('kompas_result_code')!r} "
+                f"left_in_tree={det.get('feature_left_in_tree')!r} msg={emsg(env)}",
+                details={"pocket_error": pocket_code, "on_wall_error": wall_code,
+                         "snapshot": snap, "response": {k: v for k, v in det.items()
+                                                        if not k.startswith("failure_snapshot")}})
+    else:
+        rep.add("CB10.10", "аналог отказа К5 на синтетике", "FAIL", f"эталон не построен: {err5}")
+    close(doc5)
+
+    # ── CB10.14-CB10.20: подбор размера снимка в два прохода ───────────────────────────────────
+    def long_side(res):
+        w, h = res.get("pixel_width"), res.get("pixel_height")
+        return max(w, h) if isinstance(w, int) and isinstance(h, int) else None
+
+    def build_cube(size_mm, name):
+        env, code = call("kompas_create_document",
+                         {"application_id": app_id, "kind": "part", "name": name})
+        doc = result(env).get("id")
+        if not doc:
+            return None, f"create_document: {code}"
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": current_rev(doc),
+            "plane": {"base": "xy", "offset_mm": 0}, "name": name + "-s"})
+        sk = result(env).get("id")
+        env, code = call("kompas_edit_sketch", {
+            "sketch_ref": sk, "expected_revision": current_rev(doc), "mode": "append",
+            "entities": [{"kind": "rectangle", "start_mm": [0.0, 0.0],
+                          "width_mm": size_mm, "height_mm": size_mm}]})
+        call("kompas_finish_sketch", {"sketch_ref": sk, "require_closed_profile": False})
+        env, code = call("kompas_extrude", {
+            "sketch_ref": sk, "expected_revision": current_rev(doc), "operation": "base",
+            "depth_mm": size_mm, "direction": "positive"})
+        return (doc, None) if code is None else (None, f"extrude: {code}")
+
+    def shoot(doc, **kw):
+        path = _os.path.join(workdir, "cb10-%s.png" % _uuid.uuid4().hex[:8])
+        args = {"document_id": doc, "expected_revision": current_rev(doc), "format": "png",
+                "view": "isometric", "return_image_content": False, "save_path": path}
+        args.update(kw)
+        # view=None в payload отвергается схемой: отсутствие вида выражается ОТСУТСТВИЕМ поля.
+        args = {k: v for k, v in args.items() if v is not None}
+        env, code = call("kompas_export_image", args)
+        return code, result(env), env
+
+    for cid, size_mm, name in (("CB10.14", 2.0, "CB10-tiny"), ("CB10.15", 100.0, "CB10-mid")):
+        doc, err = build_cube(size_mm, name)
+        if err:
+            rep.add(cid, "подбор размера без параметров", "FAIL", err)
+            continue
+        code, res, _env = shoot(doc)
+        got = long_side(res)
+        near_target = got is not None and abs(got - 1024) <= 102.4
+        rep.add(cid,
+                "снимок без resolution/scale: сервер делает пробный проход и подбирает масштаб так, "
+                "чтобы длинная сторона была около 1024 px (в пределах 10 %)",
+                "PASS" if (code is None and res.get("sizing") == "auto_two_pass" and near_target) else "FAIL",
+                f"деталь {size_mm} мм: code={code} sizing={res.get('sizing')!r} "
+                f"probe={res.get('probe_long_side_px')!r} scale={res.get('applied_scale')!r} "
+                f"target={res.get('target_long_side_px')!r} итог={got} note={res.get('sizing_note')!r}",
+                details={"response": res})
+        close(doc)
+
+    doc16, err16 = build_cube(100.0, "CB10-target")
+    if err16:
+        rep.add("CB10.16", "long_side_px=400", "FAIL", err16)
+    else:
+        code, res, _env = shoot(doc16, long_side_px=400)
+        got = long_side(res)
+        rep.add("CB10.16",
+                "long_side_px=400: подбор идёт под НАЗВАННУЮ цель, длинная сторона около 400 px "
+                "(в пределах 10 %)",
+                "PASS" if (code is None and got is not None and abs(got - 400) <= 40.0) else "FAIL",
+                f"code={code} target={res.get('target_long_side_px')!r} итог={got} "
+                f"scale={res.get('applied_scale')!r} note={res.get('sizing_note')!r}",
+                details={"response": res})
+
+    if not err16:
+        _c1, r1, _e1 = shoot(doc16, scale=1.0)
+        _c2, r2, _e2 = shoot(doc16, scale=2.0)
+        s1, s2 = long_side(r1), long_side(r2)
+        ratio_ok = (s1 and s2 and abs((s2 / s1) - 2.0) <= 0.04)
+        rep.add("CB10.17",
+                "явный scale сервер НЕ трогает: снимок с scale=2 ровно вдвое длиннее снимка с scale=1, "
+                "sizing=explicit, applied_scale пуст",
+                "PASS" if (ratio_ok and r1.get("sizing") == "explicit"
+                           and r2.get("applied_scale") is None) else "FAIL",
+                f"scale=1 → {s1} px, scale=2 → {s2} px, отношение={None if not s1 else round(s2 / s1, 4)} "
+                f"(ожидание 2.0), sizing={r1.get('sizing')!r}, applied_scale={r2.get('applied_scale')!r}")
+    else:
+        rep.add("CB10.17", "явные значения не трогаются", "FAIL", err16)
+    close(doc16)
+
+    doc18, err18 = build_cube(100.0, "CB10-conflict")
+    if err18:
+        rep.add("CB10.18", "long_side_px + resolution", "FAIL", err18)
+    else:
+        env, code = call("kompas_export_image", {
+            "document_id": doc18, "expected_revision": current_rev(doc18), "format": "png",
+            "view": "isometric", "return_image_content": False,
+            "save_path": _os.path.join(workdir, "cb10-conflict.png"),
+            "long_side_px": 400, "resolution": 200})
+        rep.add("CB10.18",
+                "long_side_px вместе с resolution — INVALID_ARGUMENT ДО COM: явные значения и целевой "
+                "размер противоречат друг другу",
+                "PASS" if code == "INVALID_ARGUMENT" else "FAIL",
+                f"code={code} msg={emsg(env)}", details={"details": details_of(env)})
+    close(doc18)
+
+    doc19, err19 = build_cube(100.0, "CB10-bmp")
+    if err19:
+        rep.add("CB10.19", "bmp с возвратом содержимого", "FAIL", err19)
+    else:
+        env, code = call("kompas_export_image", {
+            "document_id": doc19, "expected_revision": current_rev(doc19), "format": "bmp",
+            "view": "isometric", "return_image_content": True})
+        res = result(env)
+        # Картинка уходит ОТДЕЛЬНЫМ image-блоком, а не base64 в JSON (правило хоста), поэтому предел
+        # проверяется по измеренному bytes_count: base64 = ceil(bytes / 3) * 4.
+        nbytes = res.get("bytes_count") or 0
+        b64len = ((int(nbytes) + 2) // 3) * 4
+        got = long_side(res)
+        reduced = "target_reduced_for_base64_limit" in str(res.get("sizing_note") or "")
+        rep.add("CB10.19",
+                "bmp с возвратом содержимого: ответ укладывается в MaxBase64Characters БЕЗ отказа, а "
+                "уменьшение целевого размера под предел НАЗВАНО в sizing_note (тяжёлый формат: байт "
+                "растёт с ПЛОЩАДЬЮ, поэтому сторона при этом меньше цели — это и названо)",
+                "PASS" if (code is None and 0 < b64len <= 2 * 1024 * 1024 and reduced) else "FAIL",
+                f"code={code} base64={b64len} символов (предел {2 * 1024 * 1024}) итог={got} px "
+                f"sizing={res.get('sizing')!r} note={res.get('sizing_note')!r}",
+                details={"base64_characters": b64len, "long_side_px": got})
+    close(doc19)
+
+    doc20, err20 = build_cube(2.0, "CB10-current")
+    if err20:
+        rep.add("CB10.20", "снимок текущего вида", "FAIL", err20)
+    else:
+        code, res, _env = shoot(doc20, view=None)
+        got = long_side(res)
+        rep.add("CB10.20",
+                "снимок ТЕКУЩЕГО вида (view не задан) без параметров: подбор работает и для того вида, "
+                "что стоит в окне, потому что база ИЗМЕРЯЕТСЯ, а не вычисляется. Масштаб окна "
+                "документированным маршрутом MCP не меняется, поэтому «отдаление» не выполнялось - "
+                "названо",
+                "PASS" if (code is None and res.get("sizing") == "auto_two_pass"
+                           and got is not None and abs(got - 1024) <= 102.4) else "FAIL",
+                f"code={code} sizing={res.get('sizing')!r} probe={res.get('probe_long_side_px')!r} "
+                f"итог={got} px note={res.get('sizing_note')!r}",
+                details={"response": res})
+    close(doc20)
+
+    # ── CB10.21-CB10.22: measure грани называет непрочитанное ──────────────────────────────────
+    doc21, err21 = build_cube(100.0, "CB10-measure")
+    if err21:
+        rep.add("CB10.21", "measure грани: bbox назван", "FAIL", err21)
+        rep.add("CB10.22", "measure грани: bbox без площади", "FAIL", err21)
+    else:
+        body = first_body(doc21)
+        face_ref = None
+        for f in faces(doc21, body.get("body_ref")) if body else []:
+            if f.get("face_ref"):
+                face_ref = f["face_ref"]
+                break
+        if not face_ref:
+            rep.add("CB10.21", "measure грани: bbox назван", "FAIL", "грань не найдена")
+            rep.add("CB10.22", "measure грани: bbox без площади", "FAIL", "грань не найдена")
+        else:
+            _e, env, _r = client.tool("kompas_measure",
+                                      {"target_ref": face_ref,
+                                       "properties": ["bbox", "surface_area"]})
+            res = result(env)
+            aspects = res.get("unverified_aspects") or []
+            named = any("bbox_not_read_for_face" in str(a) for a in aspects)
+            bbox = res.get("bbox")
+            rep.add("CB10.21",
+                    "грань, properties=[bbox, surface_area]: площадь прочитана, а bbox либо прочитан и "
+                    "совпадает с гранью, либо null и НАЗВАН в unverified_aspects",
+                    "PASS" if (error_code(env) is None and res.get("surface_area_mm2")
+                               and (bbox is not None or named)) else "FAIL",
+                    f"площадь={res.get('surface_area_mm2')!r} bbox={bbox!r} named={named} "
+                    f"unverified={aspects}",
+                    details={"response": res})
+            _e, env22, _r = client.tool("kompas_measure",
+                                        {"target_ref": face_ref, "properties": ["bbox"]})
+            res22 = result(env22)
+            aspects22 = res22.get("unverified_aspects") or []
+            named22 = any("bbox_not_read_for_face" in str(a) for a in aspects22)
+            not_measurable = any("not_measurable" in str(a) for a in aspects22)
+            rep.add("CB10.22",
+                    "грань, properties=[bbox] БЕЗ площади: ответ не «не измеряется» целиком, а то же "
+                    "правило — bbox назван своей причиной",
+                    "PASS" if (error_code(env22) is None and named22 and not not_measurable) else "FAIL",
+                    f"bbox={res22.get('bbox')!r} named={named22} not_measurable={not_measurable} "
+                    f"unverified={aspects22}",
+                    details={"response": res22})
+    close(doc21)
+
     # ── CB10.13: attach при НУЛЕ кандидатов — APPLICATION_DISCONNECTED, а не «неоднозначно» ─────
     # Строка идёт ПОСЛЕДНЕЙ и закрывает СВОЙ экземпляр: только тогда «нет ни одного КОМПАС» —
     # правда, а не постановка. Чужого сеанса на машине быть не должно (правило от 09.10.2026).
@@ -6597,6 +6844,16 @@ def client_bugs_20261010_checks(client, rep, app_id, workdir):
         ("CB10.11", "отказ называет оставшийся признак и его ссылку"),
         ("CB10.12", "отказ до создания признака — флаг false"),
         ("CB10.13", "attach при нуле кандидатов — APPLICATION_DISCONNECTED"),
+        ("CB10.10", "аналог отказа К5 на синтетике"),
+        ("CB10.14", "подбор размера: деталь ~2 мм без параметров"),
+        ("CB10.15", "подбор размера: деталь ~100 мм без параметров"),
+        ("CB10.16", "подбор размера: long_side_px=400"),
+        ("CB10.17", "явные resolution/scale сервер не трогает"),
+        ("CB10.18", "long_side_px вместе с resolution — INVALID_ARGUMENT"),
+        ("CB10.19", "bmp с возвратом содержимого укладывается в предел"),
+        ("CB10.20", "снимок текущего вида без параметров"),
+        ("CB10.21", "measure грани: bbox либо прочитан, либо назван"),
+        ("CB10.22", "measure грани: bbox без площади — то же правило"),
     ):
         if not any(row.get("id") == cid for row in rep.rows):
             rep.add(cid, desc, "FAIL", "строка не выполнена (раннее исключение постановки)")

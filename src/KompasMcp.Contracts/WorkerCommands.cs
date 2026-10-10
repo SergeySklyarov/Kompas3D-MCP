@@ -2284,6 +2284,15 @@ public sealed record ExportImageCommand
     /// <summary>Value of <c>extScale</c>. Not set — the member is not written.</summary>
     public double? Scale { get; init; }
 
+    /// <summary>Target long side of the snapshot in pixels. Not set — 1024. Only meaningful when NEITHER
+    /// <see cref="Resolution"/> NOR <see cref="Scale"/> is given: those are explicit values the server
+    /// does not touch, and combining them with a target is a contradictory request (INVALID_ARGUMENT
+    /// before COM). The server reaches the target in TWO passes — a probe render, then the scale computed
+    /// from it — because the raster base depends on the projection of the concrete part and on the
+    /// current window view, and no formula for it exists (measured, docs/04_KOMPAS_API_NOTES.md §4.66).
+    /// </summary>
+    public int? LongSidePx { get; init; }
+
     /// <summary>Where to put the file. Not set — no file is created (byte mode).</summary>
     public string? SavePath { get; init; }
 
@@ -2318,6 +2327,24 @@ public sealed record ExportImageResultDto
     public int? PixelWidth { get; init; }
 
     public int? PixelHeight { get; init; }
+
+    /// <summary>Which route produced the size: <c>explicit</c> (the caller passed resolution/scale) or
+    /// <c>auto_two_pass</c> (the server took a probe render and computed the scale from it).</summary>
+    public string? Sizing { get; init; }
+
+    /// <summary>Long side of the PROBE render in pixels, when the server sized the snapshot itself; null
+    /// otherwise. Published because the computed scale is derived from it — without it the number in
+    /// <see cref="AppliedScale"/> cannot be checked by the caller.</summary>
+    public int? ProbeLongSidePx { get; init; }
+
+    /// <summary>The <c>extScale</c> actually written, when the server computed it.</summary>
+    public double? AppliedScale { get; init; }
+
+    /// <summary>The target long side the server aimed at (the caller's or the default 1024).</summary>
+    public int? TargetLongSidePx { get; init; }
+
+    /// <summary>Why the result missed the target or was clamped; null when nothing needed saying.</summary>
+    public string? SizingNote { get; init; }
 
     /// <summary>Artifact size in bytes — MEASURED, not derived from the request.</summary>
     public required long BytesCount { get; init; }

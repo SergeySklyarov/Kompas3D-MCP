@@ -3,7 +3,7 @@
   "artifact": "coverage/solid-v24/release-profiles/sketch-constraints-minimal-v1.json",
   "profile_id": "sketch-constraints-minimal-v1",
   "title": "Ограничения эскиза и управляющие размеры v24",
-  "revision": "1.6",
+  "revision": "1.7",
   "created_utc": "2026-10-10T20:30:00Z",
   "decision": "Наряд OMEGA_G6_SKETCH_CONSTRAINTS_DEVELOPER_PROMPT.md от 10.10.2026: G6 выходит ОТДЕЛЬНЫМ выпуском (ожидаемо 0.8.0) после 0.7.0; основание - отчёт docs/research/OMEGA_GAPS_RESEARCH_20261008.md раздел G6 с датированной поправкой 09.10.2026 и план coverage/solid-v24/implementation-plan.md, шаг D, очередь G6",
   "plan": "coverage/solid-v24/implementation-plan.md, шаг D, очередь G6",
@@ -61,6 +61,11 @@
     "revision": "1.6",
     "date": "11.10.2026",
     "change": "АССОЦИАТИВНЫЙ РАЗМЕР ИЗМЕРЕН. Рецепт заказчика подтверждён: на объекте-размере ksCAssociation (партнёр — массив отрезков) → ksCFixedDim (Create=True, Valid=True) → ksCDimWithVariable со значением 50 (Create=True, Valid=True) дают длину отрезка 40 → 50, и 50 читается ПОСЛЕ save → close → reopen. Различающий контроль: без значения длина остаётся 40. СВЯЗЬ С ПЕРЕМЕННОЙ ДЕТАЛИ не подтверждена и названа ограничением: переменная, назначенная ядром (k_assoc_50), в коллекции переменных детали ОТСУТСТВУЕТ (ksPart.VariableCollection() после refresh() = True даёт GetCount() = 0) — она принадлежит эскизу. Инструмент размера выпускается СО ЗНАЧЕНИЕМ; связь с переменной детали — названное ограничение, решение за заказчиком."
+   },
+   {
+    "revision": "1.7",
+    "date": "11.10.2026",
+    "change": "ПОПРАВКА К 1.6, в пользу заказчика: маршрут переменной существует. Переменная размера — переменная ПРИЗНАКА ЭСКИЗА (ksEntity.GetFeature() → ksFeature.VariableCollection), и на признаке она ВИДНА: измерено v8=0 и v9=50 (Expression='50'), где v9 — ровно переменная записи ksCDimWithVariable. Выражение параметра привязывается к имени переменной детали и читается обратно ('L_sketch'). НЕПРОВЕРЕННЫМ осталось одно звено — смена переменной детали двигает геометрию: проба не смогла создать переменную детали так, чтобы документ её удержал (ksPart.VariableCollection() = 0 в трёх чтениях после обеих маршрутов создания и после RebuildDocument). Это утверждение о ПРИБОРЕ: создание переменной детали доказано приёмкой блока G3 на поставке. Следующий шаг — повторить звено ЧЕРЕЗ ПОСТАВКУ (kompas_create_variable → kompas_bind_parameter → kompas_set_variable → перестроение), а не пробой."
    }
   ]
  },
@@ -122,7 +127,7 @@
    "priority": "practical_required",
    "title": "Размерные типы: ksCDimWithVariable с Expression/Variable, ksCFixedDim, ksCFixedAngle, ksCFixedLenght",
    "current_level": "mcp_verified",
-   "gap": "ИЗМЕРЕНО: ассоциативный размер управляет геометрией. На объекте-размере (IView QI ISymbols2DContainer → ILineDimensions::Add() → ILineDimension → Update()) ksCAssociation (партнёр — массив отрезков) → ksCFixedDim (Create=True, Valid=True) → ksCDimWithVariable со значением 50 (Create=True, Valid=True) дают длину отрезка 40 → 50, и 50 читается ПОСЛЕ save → close → reopen; без значения длина остаётся 40. НАЗВАННОЕ ОГРАНИЧЕНИЕ: связь с переменной ДЕТАЛИ не подтверждена — переменная, назначенная ядром, в коллекции переменных детали отсутствует (GetCount() = 0 после refresh()), то есть принадлежит эскизу. Инструмент выпускается со значением.",
+   "gap": "ИЗМЕРЕНО: ассоциативный размер управляет геометрией. На объекте-размере (IView QI ISymbols2DContainer → ILineDimensions::Add() → ILineDimension → Update()) ksCAssociation (партнёр — массив отрезков) → ksCFixedDim (Create=True, Valid=True) → ksCDimWithVariable со значением 50 (Create=True, Valid=True) дают длину отрезка 40 → 50, и 50 читается ПОСЛЕ save → close → reopen; без значения длина остаётся 40. МАРШРУТ ПЕРЕМЕННОЙ СУЩЕСТВУЕТ (поправка 11.10.2026): переменная размера — переменная ПРИЗНАКА ЭСКИЗА и на нём ВИДНА (ksEntity.GetFeature() → ksFeature.VariableCollection: v9 = 50); выражение параметра привязывается к имени переменной детали и читается обратно. Непроверенным осталось одно звено — смена переменной детали двигает геометрию; проба его не осилила по своему пределу (переменная детали в её документе не приживается: ksPart.VariableCollection() = 0), а создание переменной детали доказано приёмкой G3. Звено подлежит проверке ЧЕРЕЗ ПОСТАВКУ.",
    "depends_on": [
     "dep.sketch_constraints.object_address",
     "dep.sketch_constraints.type_vocabulary",

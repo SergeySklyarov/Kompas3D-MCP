@@ -90,6 +90,7 @@ internal sealed class SketchConstraintsProbe
             DimensionDrives();
             AssociationRoute();
             VariableDimLadder();
+            SketchFeatureVariable();
             ParametricModeRoute();
             FullyDefinedReopen();
             ReadBack();
@@ -1675,6 +1676,466 @@ internal sealed class SketchConstraintsProbe
             step.Errors.Add(ex.ToString());
             step.Fail("Лестница не выполнена: " + ex.Message);
         }
+    }
+
+    // ═══════════════════════════════════════════ sketch feature variable (G3 route) ══
+
+    /// <summary>The dimension's variable is a variable of the SKETCH FEATURE, the same way an
+    /// extrusion's variable belongs to its feature. So the G3 route is applied to the SKETCH:
+    /// <c>ksEntity.GetFeature()</c> → <c>ksFeature.VariableCollection()</c>
+    /// (<c>ksfeature_variablecollection.html</c>), then the parameter's expression is bound to a PART
+    /// variable, the part variable is changed, the document is rebuilt, and the length is re-read.
+    /// </summary>
+    /// <remarks>DOC: «Изменения в полученном массиве не отображаются в модели немедленно. Чтобы
+    /// изменения вступили в силу, необходимо вызвать метод ksPart::RebuildModel».
+    /// History: docs/decisions/probes.md#sketch-constraints</remarks>
+    private void SketchFeatureVariable()
+    {
+        var step = _report.Begin("K.18", "Переменная размера — переменная ПРИЗНАКА ЭСКИЗА: привязка к переменной детали",
+            "Видна ли переменная ассоциативного размера в ksFeature.VariableCollection признака эскиза, " +
+            "привязывается ли её выражение к переменной детали, и двигает ли смена этой переменной " +
+            "длину отрезка?");
+        try
+        {
+            if (!BuildRectangleSketch("k-featvar", step, out _))
+            {
+                step.Fail("Контрольный документ не построен.");
+                return;
+            }
+
+            if (TransferSketch(_sketchEntity!, step) is not KompasAPI7.ISketch sketch)
+            {
+                step.Unknown("Эскиз не перенесён в API7.");
+                return;
+            }
+
+            var notes = new List<string>();
+            string? dimensionVariable = null;
+
+            // 1. The recipe, on the dimension object.
+            KompasAPI7.IFragmentDocument? fragment = null;
+            try
+            {
+                fragment = sketch.BeginEdit();
+            }
+            catch (COMException ex)
+            {
+                notes.Add($"BeginEdit: 0x{ex.HResult:X8}");
+            }
+
+            if (fragment is not null)
+            {
+                try
+                {
+                    var objects = EnumerateInFragment(fragment, notes);
+                    if (objects.Count > 0 && objects[0].ConstraintHost is { } segmentHost)
+                    {
+                        var created = AddLineDimension(fragment, notes, out _, out _);
+                        if (created is { } pair && pair.Host is { } dimensionHost)
+                        {
+                            notes.Add("ассоциация: " + CreateConstraint(dimensionHost,
+                                new Placement("association", ksConstraintTypeEnum.ksCAssociation, -1,
+                                    new PartnerPick("seg", 0, -1), -1),
+                                new object[] { segmentHost }, null, notes).Summary);
+                            notes.Add("фиксированный: " + CreateConstraint(dimensionHost,
+                                new Placement("fixed_dim", ksConstraintTypeEnum.ksCFixedDim, -1, null, -1),
+                                null, null, notes).Summary);
+                            notes.Add("с переменной: " + CreateConstraint(dimensionHost,
+                                new Placement("dim_with_variable", ksConstraintTypeEnum.ksCDimWithVariable,
+                                    -1, null, -1, 50d, "50", null),
+                                null, null, notes).Summary);
+
+                            try
+                            {
+                                if (dimensionHost.Constraints is Array array)
+                                {
+                                    foreach (var element in array)
+                                    {
+                                        if (element is KompasAPI7.IParametriticConstraint c
+                                            && Api5.SafeInt(() => (int)c.ConstraintType) == 13)
+                                        {
+                                            dimensionVariable = Api5.SafeObject(() => c.Variable) as string;
+                                        }
+                                    }
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                notes.Add("чтение имени переменной: " + ex.GetType().Name);
+                            }
+
+                            notes.Add("переменная размера: " + (dimensionVariable ?? "не прочитана"));
+                        }
+                    }
+                }
+                finally
+                {
+                    try
+                    {
+                        sketch.EndEdit();
+                    }
+                    catch (Exception ex) when (ex is COMException or InvalidCastException)
+                    {
+                        notes.Add("EndEdit(): " + ex.GetType().Name);
+                    }
+                }
+            }
+
+            _doc!.RebuildDocument();
+            var lengthAfterValue = ReadLength(step, notes, "после значения 50");
+
+            // 2. The SKETCH FEATURE and its own variable collection.
+            var featureNotes = new List<string>();
+            ksFeature? feature = null;
+            try
+            {
+                feature = _sketchEntity?.GetFeature() as ksFeature;
+                featureNotes.Add("ksEntity.GetFeature() → " + (feature is null ? "null" : "ksFeature"));
+            }
+            catch (Exception ex)
+            {
+                featureNotes.Add("GetFeature(): " + ex.GetType().Name + ": " + ex.Message);
+            }
+
+            ksVariableCollection? featureVariables = null;
+            var featureNames = new List<string>();
+            if (feature is not null)
+            {
+                try
+                {
+                    featureVariables = feature.VariableCollection as ksVariableCollection;
+                    featureNotes.Add("ksFeature.VariableCollection() → " +
+                                     (featureVariables is null ? "null" : "ksVariableCollection"));
+                }
+                catch (Exception ex)
+                {
+                    featureNotes.Add("VariableCollection(): " + ex.GetType().Name + ": " + ex.Message);
+                }
+            }
+
+            if (featureVariables is not null)
+            {
+                var count = Api5.SafeInt(() => featureVariables.GetCount());
+                featureNotes.Add("переменных у признака ЭСКИЗА: " + Api5.Raw(count));
+                for (var i = 0; i < (count ?? 0); i++)
+                {
+                    if (featureVariables.GetByIndex(i) is ksVariable variable)
+                    {
+                        var name = Api5.SafeObject(() => variable.name) as string;
+                        featureNames.Add(name ?? "(без имени)");
+                        featureNotes.Add($"  [{i}] '{name}' = " +
+                                         Api5.Num(Api5.SafeDouble(() => variable.value)) +
+                                         ", Expression='" +
+                                         (Api5.SafeObject(() => variable.Expression) as string ?? "") + "'");
+                    }
+                }
+            }
+
+            step.Data["feature_notes"] = featureNotes;
+            foreach (var note in featureNotes)
+            {
+                step.Observe(note);
+            }
+
+            step.Data["dimension_variable"] = dimensionVariable;
+            step.Data["feature_variable_names"] = featureNames;
+            step.Data["variable_visible_on_feature"] = dimensionVariable is not null
+                && featureNames.Contains(dimensionVariable, StringComparer.Ordinal);
+            step.Data["length_after_value"] = Api5.Num(lengthAfterValue);
+
+            if (dimensionVariable is null || !featureNames.Contains(dimensionVariable, StringComparer.Ordinal))
+            {
+                step.Data["notes"] = notes.Concat(featureNotes).ToList();
+                step.Unknown("Переменная размера (" + (dimensionVariable ?? "не прочитана") +
+                             ") в коллекции переменных ПРИЗНАКА ЭСКИЗА не видна (видно: " +
+                             (featureNames.Count == 0 ? "ничего" : string.Join(", ", featureNames)) +
+                             "). Привязка невозможна — это названная причина, а не «не прочитано».");
+                return;
+            }
+
+            if (featureVariables is null)
+            {
+                step.Data["notes"] = notes.Concat(featureNotes).ToList();
+                step.Unknown("Коллекции переменных признака нет — привязывать нечего.");
+                return;
+            }
+
+            // 3. Bind the parameter's expression to a PART variable, change it, rebuild, re-read.
+            string? boundValue = null;
+            double? lengthAfterBind = null;
+            double? lengthAfterPartChange = null;
+            double? lengthAfterReopen = null;
+
+            // The part variable is created through the API5 COLLECTION — the same one it will later be
+            // read from and changed in. MEASURED: a variable created through the API7 route
+            // (IPart7.AddVariable) is NOT visible in ksPart.VariableCollection() afterwards, and the
+            // "not found" would have been a statement about the instrument, not about the binding.
+            var partVariableName = "L_sketch";
+            try
+            {
+                // The route is the one block G3 PROVED: IPart7.AddVariable. The API5 collection's own
+                // AddNewVariable was tried first and MEASURED to leave the collection empty after a
+                // refresh — the variable never reached the document, and that is an instrument
+                // statement, not a property of the binding.
+                if (_app.TransferInterface(_part!, (int)ksAPITypeEnum.ksAPI7Dual, 0)
+                    is KompasAPI7.IPart7 part7)
+                {
+                    var created = part7.AddVariable(partVariableName, 50d, "проба K: переменная детали");
+                    notes.Add("переменная детали создана через IPart7.AddVariable: " + partVariableName +
+                              " = " + Api5.Num(Api5.SafeDouble(() => created!.Value)));
+                    // The document rebuild is what makes the created variable visible in the part's
+                    // collection — MEASURED: without it the very next refresh() answers count=0, and
+                    // "not found" would have been a statement about the instrument.
+                    try
+                    {
+                        notes.Add("RebuildDocument() после создания переменной → " + Api5.Raw(_doc!.RebuildDocument()));
+                    }
+                    catch (Exception ex)
+                    {
+                        notes.Add("RebuildDocument(): " + ex.GetType().Name);
+                    }
+
+                    notes.Add(ListPartVariables("после создания переменной детали и перестроения"));
+                }
+                else
+                {
+                    notes.Add("ksPart.VariableCollection() не дал ksVariableCollection");
+                }
+            }
+            catch (Exception ex)
+            {
+                notes.Add("переменная детали: " + ex.GetType().Name + ": " + ex.Message);
+            }
+
+            try
+            {
+                if (featureVariables.GetByName(dimensionVariable, true, false) is ksVariable target)
+                {
+                    target.Expression = partVariableName;
+                    boundValue = Api5.SafeObject(() => target.Expression) as string;
+                    notes.Add($"выражение параметра привязано: Expression = '{boundValue}'");
+                }
+                else
+                {
+                    notes.Add("переменная признака не найдена по имени — привязка не выполнена");
+                }
+            }
+            catch (Exception ex)
+            {
+                notes.Add("привязка: " + ex.GetType().Name + ": " + ex.Message);
+            }
+
+            // The help names ksPart::RebuildModel; G3 measured that RebuildDocument is the call that
+            // carries it. Both are called, and each result is recorded separately.
+            try
+            {
+                notes.Add("ksPart.RebuildModel() → " + Api5.Raw(Api5.SafeBool(() => _part!.RebuildModel())));
+            }
+            catch (Exception ex)
+            {
+                notes.Add("RebuildModel(): " + ex.GetType().Name);
+            }
+
+            try
+            {
+                notes.Add("ksDocument3D.RebuildDocument() → " + Api5.Raw(_doc.RebuildDocument()));
+            }
+            catch (Exception ex)
+            {
+                notes.Add("RebuildDocument(): " + ex.GetType().Name);
+            }
+
+            notes.Add(ListPartVariables("после привязки выражения"));
+            lengthAfterBind = ReadLength(step, notes, "после привязки к переменной детали");
+            notes.Add(ListPartVariables("после перестроения"));
+
+            // 4. Change the PART variable and rebuild.
+            try
+            {
+                // `refresh()` before the lookup, for the same reason as at creation: the collection is
+                // a VIEW, and after a rebuild it does not show what was added in this session.
+                if (_part!.VariableCollection() is ksVariableCollection partVariables2)
+                {
+                    partVariables2.refresh();
+                }
+
+                if (_part.VariableCollection() is ksVariableCollection partVariables3
+                    && partVariables3.GetByName(partVariableName, true, false) is ksVariable l2)
+                {
+                    l2.value = 60d;
+                    l2.Expression = "60";
+                    notes.Add("переменная детали изменена: value = " +
+                              Api5.Num(Api5.SafeDouble(() => l2.value)) + ", Expression = '" +
+                              (Api5.SafeObject(() => l2.Expression) as string ?? "") + "'");
+                }
+                else
+                {
+                    var seen = new List<string>();
+                    try
+                    {
+                        if (_part.VariableCollection() is ksVariableCollection again2)
+                        {
+                            var n = Api5.SafeInt(() => again2.GetCount()) ?? 0;
+                            for (var i = 0; i < n; i++)
+                            {
+                                if (again2.GetByIndex(i) is ksVariable v)
+                                {
+                                    seen.Add((Api5.SafeObject(() => v.name) as string ?? "?") + "=" +
+                                             Api5.Num(Api5.SafeDouble(() => v.value)));
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex2)
+                    {
+                        seen.Add("список не прочитан: " + ex2.GetType().Name);
+                    }
+
+                    notes.Add("переменная детали '" + partVariableName + "' НЕ найдена; в коллекции: " +
+                              (seen.Count == 0 ? "пусто" : string.Join(", ", seen)));
+                }
+            }
+            catch (Exception ex)
+            {
+                notes.Add("смена переменной детали: " + ex.GetType().Name + ": " + ex.Message);
+            }
+
+            try
+            {
+                _part!.RebuildModel();
+                _doc.RebuildDocument();
+            }
+            catch (Exception ex)
+            {
+                notes.Add("перестроение после смены: " + ex.GetType().Name);
+            }
+
+            lengthAfterPartChange = ReadLength(step, notes, "после смены переменной детали на 60");
+
+            // 5. save → close → reopen.
+            var path = Path.Combine(_options.WorkDir, "k-featvar.m3d");
+            if (_doc.SaveAs(path) == true)
+            {
+                TryBool(() => _doc!.close());
+                _doc = (ksDocument3D)_app.Document3D();
+                if (_doc.Open(path, true) == true)
+                {
+                    _part = (ksPart)_doc.GetPart(-1);
+                    if (FindSketchInReopened(step))
+                    {
+                        lengthAfterReopen = ReadLength(step, notes, "после переоткрытия");
+                    }
+                    else
+                    {
+                        notes.Add("эскиз в переоткрытом документе не найден");
+                    }
+                }
+                else
+                {
+                    notes.Add("переоткрытый документ не открылся");
+                }
+            }
+            else
+            {
+                notes.Add("SaveAs не подтверждён");
+            }
+
+            step.Data["notes"] = notes.Concat(featureNotes).ToList();
+            step.Data["bound_expression"] = boundValue;
+            step.Data["length_after_bind"] = Api5.Num(lengthAfterBind);
+            step.Data["length_after_part_variable"] = Api5.Num(lengthAfterPartChange);
+            step.Data["length_after_reopen"] = Api5.Num(lengthAfterReopen);
+
+            foreach (var note in notes)
+            {
+                step.Observe(note);
+            }
+
+            step.Observe($"длина: после значения 50 → {Api5.Num(lengthAfterValue)}; после привязки → " +
+                         $"{Api5.Num(lengthAfterBind)}; после переменной детали 60 → " +
+                         $"{Api5.Num(lengthAfterPartChange)}; после переоткрытия → {Api5.Num(lengthAfterReopen)}");
+
+            if (lengthAfterPartChange is { } changed && Math.Abs(changed - 60d) < 1e-6)
+            {
+                step.Pass("Смена переменной ДЕТАЛИ двигает геометрию: длина отрезка стала 60 после " +
+                          "привязки выражения параметра эскиза к переменной детали и перестроения" +
+                          (lengthAfterReopen is { } r && Math.Abs(r - 60d) < 1e-6
+                              ? "; 60 читается и после save → close → reopen."
+                              : "; после переоткрытия " + Api5.Num(lengthAfterReopen) + "."));
+            }
+            else
+            {
+                step.Unknown("Привязка выполнена, но длина отрезка не стала 60: после привязки " +
+                             $"{Api5.Num(lengthAfterBind)}, после переменной детали 60 → " +
+                             $"{Api5.Num(lengthAfterPartChange)}, после переоткрытия " +
+                             $"{Api5.Num(lengthAfterReopen)}. Это измеренный факт — стоп, решение за заказчиком.");
+            }
+        }
+        catch (Exception ex)
+        {
+            step.Errors.Add(ex.ToString());
+            step.Fail("Маршрут признака эскиза не измерен: " + ex.Message);
+        }
+    }
+
+    /// <summary>The part's variable collection at a named moment: name=value for each variable, or the
+    /// reason it could not be read. Used to say exactly WHEN a variable disappears, instead of guessing.
+    /// </summary>
+    private string ListPartVariables(string moment)
+    {
+        try
+        {
+            // The part is re-fetched from the DOCUMENT every time: after a rebuild the wrapper held by
+            // the probe may be stale, and a stale wrapper would answer "empty" about a document that is
+            // not empty — an instrument statement, not a fact about the variable.
+            if (_doc is not null)
+            {
+                _part = (ksPart)_doc.GetPart(-1);
+            }
+
+            if (_part?.VariableCollection() is not ksVariableCollection collection)
+            {
+                return $"{moment}: коллекция не получена";
+            }
+
+            collection.refresh();
+            var count = Api5.SafeInt(() => collection.GetCount());
+            var items = new List<string>();
+            for (var i = 0; i < (count ?? 0); i++)
+            {
+                if (collection.GetByIndex(i) is ksVariable v)
+                {
+                    items.Add((Api5.SafeObject(() => v.name) as string ?? "?") + "=" +
+                              Api5.Num(Api5.SafeDouble(() => v.value)));
+                }
+            }
+
+            return $"{moment}: count={Api5.Raw(count)} [" + string.Join(", ", items) + "]";
+        }
+        catch (Exception ex)
+        {
+            return $"{moment}: " + ex.GetType().Name + ": " + ex.Message;
+        }
+    }
+
+    /// <summary>Reads the length of the first segment, INSIDE a session, with the reason for a failure
+    /// recorded — <c>null</c> is never left without a cause.</summary>
+    private double? ReadLength(ProbeStep step, List<string> notes, string tag)
+    {
+        if (TransferSketch(_sketchEntity!, step) is not KompasAPI7.ISketch forRead)
+        {
+            notes.Add($"длина ({tag}): эскиз не перенесён в API7");
+            return null;
+        }
+
+        var readNotes = new List<string>();
+        var length = InSession(forRead, write: false, readNotes, (objects, _) =>
+            objects.Count > 0 && objects[0].Drawing is KompasAPI7.ILineSegment bottom
+                ? Api5.SafeDouble(() => bottom.Length)
+                : null);
+        notes.Add($"длина ({tag}) = {Api5.Num(length)}");
+        notes.AddRange(readNotes);
+        return length;
     }
 
     // ═══════════════════════════════════════════════════════════ parametric mode ══

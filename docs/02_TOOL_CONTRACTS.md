@@ -355,6 +355,7 @@ set_transform не считается успешным по одному воз�
 | Инструмент | Параметры | Особенности |
 |---|---|---|
 | `kompas_export_step` | document_id, output_path, overwrite=false, validation_level | Результат содержит фактически достигнутую проверку |
+| `kompas_export_stl` | document_id, target_path, binary, max_edge_length_mm, normal_angle_deg | Файл STL; вид файла определён по содержимому, число треугольников прочитано ИЗ ФАЙЛА, габарит сверен с телом |
 | `kompas_import_step` | application_id, input_path, desired_kind auto/part/assembly, target_path|null | Указать созданные документы и типы тел, единицы |
 | `kompas_export_flat_dxf` | part document_id, face_ref|null, output_path, tolerance_mm, kerf_compensation=false | Только доказанно плоская деталь постоянной толщины |
 | `kompas_export_sheet_unfold` | document_id, method native/calculated, bend_parameters, output paths | Дополнительная capability; без поддержки вернуть ошибку |
@@ -481,5 +482,47 @@ set_transform не считается успешным по одному воз�
 
 **`kompas_measure`.** Что читается, зависит от ВИДА цели, и каждое запрошенное, но не прочитанное
 свойство называется в `unverified_aspects`. ТЕЛО: `bbox`, `volume`, `surface_area`, `centroid`
-(и `mass` при плотности). ГРАНЬ: только `surface_area`; `bbox` у грани не читается — берите у тела;
-`volume`/`mass` не применимы. РЕБРО: не читается ни одно.
+(и `mass` при плотности), а с 0.7.0 и `inertia`. ГРАНЬ: только `surface_area`; `bbox` у грани не
+читается — берите у тела; `volume`/`mass`/`inertia` не применимы. РЕБРО: не читается ни одно.
+
+## 2.14. Экспорт STL и моменты инерции (блок G5+G7, 10.10.2026)
+
+Профиль `export-inertia-minimal-v1`, очередь G5+G7. Один новый инструмент и одно новое необязательное
+свойство; существующее поведение `kompas_measure` не меняется (MINOR).
+
+**`kompas_export_stl`.** `document_id`, `expected_revision`, `target_path`, `binary`,
+`max_edge_length_mm` (> 0), `normal_angle_deg` (> 0). Мутация ФАЙЛА: `operation_id` обязателен,
+`expected_revision` проверяется до конвертера, ревизия модели не двигается. Документ — деталь; сборка
+и чертёж дают `WRONG_DOCUMENT_KIND`. Путь судит политика корней Host'а до COM (`PATH_NOT_ALLOWED`);
+неверные `length`/`angle` — `INVALID_ARGUMENT` до COM; формат вне `D3FormatConvType` —
+`FORMAT_UNAVAILABLE`; отказ конвертера, отсутствующий или пустой файл — `EXPORT_FAILED`.
+
+**Что подтверждается.** Файл на диске (существование, размер), число треугольников ИЗ ФАЙЛА и способ
+его чтения (`triangle_count_source`: `binary_header` или `text_facet_lines`), габарит триангуляции
+против габарита ТЕЛА (`GetGabarit(full=false)`) в допуске, равном `max_edge_length_mm`. Уровень
+`geometry_checked` — габарит совпал, иначе `structure_checked`. Возврат конвертера `true` без файла
+успехом НЕ считается.
+
+**Вид файла определяется по содержимому, а не по запросу.** ИЗМЕРЕНО: на целевой сборке
+`formatBinary` даёт вид, ОБРАТНЫЙ справке, поэтому сервер пишет документированное значение, проверяет
+файл и при расхождении записывает противоположное значение один раз. Ответ называет
+`binary_requested`, `file_kind_detected` и `format_binary_written`; расхождение, которое так и не
+удалось снять, называется в `unverified_aspects` (`binary_flag_mismatch`).
+
+**Точность триангуляции.** `max_edge_length_mm` → `IAdditionFormatParam.length`,
+`normal_angle_deg` → `.angle`; оба подтверждаются ОБРАТНЫМ ЧТЕНИЕМ (`applied_length_mm`,
+`applied_angle_deg`). ИЗМЕРЕНО: на целевой сборке эти члены число треугольников STL НЕ меняют
+(`length` 0.0001..10 мм и `maxTeselationCellCount` 1..10000 дают одни и те же 120 треугольников на
+цилиндре r=20 h=50); требование наряда «меньше шаг — больше треугольников» снято из проверки, факт
+назван строкой `EI.04b.tessellation_independence`.
+
+**`kompas_measure` с `inertia`.** Новое необязательное свойство `inertia` в перечне `properties` и
+новый необязательный аргумент `inertia_units` (`mm_kg` по умолчанию | `m_kg`). Ответ — блок
+`inertia`: `units` (`mm|kg` / `m|kg`) и `system` (`central`) обязательны, группы `axial`
+(`jx/jy/jz`), `centrifugal` (`jxjy/jxz/jyz`), `plane` (`jx0z/jy0z/jx0y`), `principal`
+(`jx0/jy0/jz0` со своей `system: principal`) и `principal_axes` (`x`/`y`/`z`). Непрочитанное значение —
+`null` с причиной в `notes`, а не ноль; интерфейс МЦХ не вернулся — отказ `INERTIA_NOT_AVAILABLE`.
+Чтение `inertia` ревизию НЕ меняет и `operation_id` не требует. Единица моментов — АРГУМЕНТ вызова:
+`m_kg` даёт значение в 1e6 раз меньше (момент имеет размерность масса × длина²), и это измерено.
+У симметричного тела главные оси вырождены, и ядро возвращает для них нулевые векторы — это
+измеренное значение, а не отказ.

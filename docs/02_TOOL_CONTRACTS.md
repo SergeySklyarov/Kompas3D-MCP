@@ -387,3 +387,53 @@ set_transform не считается успешным по одному воз�
 ```
 
 Повтор с тем же operation_id не создаёт второе выдавливание. После успешной операции возвращается новая ревизия и refs. После внешнего изменения до выполнения - REVISION_CONFLICT без частичных эффектов.
+
+## 2.11. Переменные детали и параметры операций (блок G3, 10.10.2026)
+
+Профиль `variables-bind-minimal-v1`, очередь G3. Три инструмента; эталон приёмки строит геометрию
+(плита 100×80×10 = 80000 мм³ и отдельное тело 20×20×10 = 4000 мм³) сам, а переменные и привязки создаёт
+ПРОДУКТ.
+
+| Инструмент | Параметры и поведение |
+|---|---|
+| `kompas_create_variable` | `document_id`, `expected_revision`, `name` (латиница/цифры/`_`), `value` (конечное число), `note` (необязательно), `expression` (необязательно), `external` (bool, умолчание true), `operation_id`. МУТАЦИЯ |
+| `kompas_list_feature_parameters` | `document_id`, `feature_ref` (ссылка из `kompas_list_features`). READ: без `operation_id` и `expected_revision`, ревизию не меняет |
+| `kompas_bind_parameter` | `document_id`, `expected_revision`, `feature_ref`, `parameter_name` (ТОЧНОЕ `name` из предыдущего), `expression` (непустая строка), `expected_volume_mm3` (необязательно), `operation_id`. МУТАЦИЯ |
+
+**Что возвращает `kompas_create_variable`.** `name`, `value`, `expression`, `external`, `note` - все
+ПРОЧИТАННЫЕ из заново полученной `ksPart.VariableCollection`, а не эхо запроса; рядом запрошенные
+`requested_*`, `read_back_verified`, `revision_before`/`revision_after`, `verification` с проверками
+`name_read_back`/`value_read_back`/`expression_read_back`/`external_read_back`, `diagnostics`.
+
+**Что возвращает `kompas_list_feature_parameters`.** `feature_ref`, `feature_name`, `total`, `revision`,
+`parameters` - по строке на переменную-параметр: `ordinal`, `name`, `display_name`, `parameter_note`,
+`value`, `expression`, `external`, `diagnostics`. Непрочитанное поле - `null` с причиной, а не `0` и не
+пустая строка.
+
+**Что возвращает `kompas_bind_parameter`.** `parameter_name`, `parameter_note`, `expression_read_back`,
+`value_after`, `rebuild_succeeded`, `volume_before_mm3`, `volume_after_mm3`, `volume_delta_mm3`,
+`expected_volume_mm3`/`expected_volume_matched`, ревизии, `verification` с проверками
+`expression_read_back`/`value_computed`/`rebuild_succeeded`/`volume_after_bind`, `diagnostics` и
+`warnings`.
+
+**Правила, отличающие эти инструменты от «просто вызова ядра».**
+
+- **Параметр адресуется ТОЧНЫМ ИМЕНЕМ** (`name`), а не значением и не позицией. Ноль или несколько
+  совпадений - `INVALID_ARGUMENT` с перечнем доступных имён, и запись НЕ выполняется. Причина названа:
+  у параметров операции по значению различить их нельзя (`docs/04_KOMPAS_API_NOTES.md` §4.64).
+- **Пустое выражение отвергается до COM** (`INVALID_ARGUMENT`): ядро его не поддерживает - запись пустой
+  строки сообщает об успехе, выражение остаётся прежним, а переменная покидает коллекцию. Если
+  `expression` у `kompas_create_variable` не задано, ставится константа, равная `value`. Снятие
+  привязки - `kompas_bind_parameter` с числовой константой; отдельного режима нет.
+- **Имя проверяется ДО записи** (`IPart7.IsVariableNameValid`), и существующее имя не перезаписывается.
+- **«Создана, но не внешняя» и «создана, но нет в коллекции»** - названные отказы с последствиями
+  (`partial_effects`), а не ложный успех.
+- **«Записано» и «применилось» - разные утверждения:** ответ привязки строится перечитыванием выражения
+  и вычисленного значения из заново полученного признака после `ksDocument3D.RebuildDocument`; иначе -
+  названный отказ с `revision_after` в `details`. Выражение считает КОМПАС; собственного вычислителя
+  сервер не содержит.
+- **`expected_volume_mm3`** - заявленное ожидание: несовпадение даёт непройденную проверку и
+  предупреждение, а не отказ; несравнимая величина уходит в `unverified_aspects`.
+- **Вне объёма, не как долг:** удаление и переименование переменных, функциональные и интервальные
+  переменные, таблица переменных `IVariableTable`, переменные компонентов сборки и привязка размеров
+  эскиза (наряд `OMEGA_G6_SKETCH_CONSTRAINTS_DEVELOPER_PROMPT.md`, после выпуска 0.7.0).

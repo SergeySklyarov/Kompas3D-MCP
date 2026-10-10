@@ -8,7 +8,7 @@
      Источник - src/KompasMcp.Host/Catalog/ToolCatalog.cs. -->
 
 <!-- BEGIN TOOL LISTING -->
-Всего инструментов: 81.
+Всего инструментов: 84.
 
 | Инструмент | Назначение | Что делает |
 |---|---|---|
@@ -85,6 +85,9 @@
 | `kompas_set_variable` | Изменить внешнюю переменную | МЕНЯЕТ значение ИЛИ выражение одной внешней переменной детали, адресуя её ТОЧНЫМ именем. |
 | `kompas_get_material` | Материал и плотность детали | ЧИТАЕТ обозначение материала верхнего компонента детали и его ФИЗИЧЕСКУЮ плотность. |
 | `kompas_set_material` | Назначить материал и плотность | НАЗНАЧАЕТ материал и плотность верхнего компонента детали: ksPart.SetMaterial(name, density) и затем обязательный ksPart.Update («Изменение материала вступает в силу после вызова метода ksPart::Update»), после чего имя и плотность… |
+| `kompas_create_variable` | Создать переменную детали | СОЗДАЁТ именованную переменную верхнего компонента детали документированным маршрутом API7: IPart7.AddVariable(Name, Value, Note) → IVariable7, затем .External и .Expression (справка v24: ipart7_addvariable.html,… |
+| `kompas_list_feature_parameters` | Параметры операции | ЧИТАЕТ переменные-параметры ОДНОЙ операции и ничего не записывает: признак (ссылка из kompas_list_features) → ksEntity.GetFeature() → ksFeature.VariableCollection → перечисление GetCount/GetByIndex и чтение ksVariable.name, displayName,… |
+| `kompas_bind_parameter` | Привязать параметр операции | ЗАПИСЫВАЕТ выражение параметра операции, адресуя параметр его ТОЧНЫМ именем (поле name из kompas_list_feature_parameters), а НЕ значением или позицией: два параметра с равным значением по значению неразличимы. |
 | `kompas_probe_units` | Замер единиц | Строит известную геометрию и возвращает сырые показания всех измерительных вызовов. |
 | `kompas_read_topology` | Топология тела | Грани и рёбра из конечного тела (GetMainBody→FaceCollection→EdgeCollection), а не из EntityCollection: коллекция рёбер модели содержит эскизные и служебные контуры. |
 | `kompas_resolve_selection` | Однозначный выбор | Структурный предикат по граням тела. |

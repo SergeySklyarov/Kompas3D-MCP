@@ -5336,3 +5336,81 @@ TRUE — полный, FALSE — только тела; customizable — TRUE �
 
 **Чем показано.** `scratch/mcp-smoke/suppress-acceptance.json` (`--suppress-repeat 20` и `60`), поля
 `state_before.volume_total`, `state_after.volume_total`, `recovery.rebuild_volume_total`.
+
+## §4.64. Блок G3 (создание переменных и привязка параметров операций): маршруты справки, состав параметров выдавливания и адрес параметра по имени (10.10.2026, наряд `OMEGA_G3_VARIABLES_DEVELOPER_PROMPT.md`)
+
+**Проводная проверка справки SDK 24.** `https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/`: `ipart7_addvariable`,
+`ipart7_isvariablenamevalid`, `ivariable7_expression`, `ivariable7_external`, `ksentity_getfeature`,
+`ksfeature_variablecollection`, `ksvariable_parameternote`, `ksvariable_displayname`,
+`ksvariablecollection_addnewvariable` - HTTP **200**; отрицательный контроль
+`ksvariablecollection_thisdoesnotexist_xyz` - HTTP **404**. Цитаты, на которые опирается блок:
+
+- `ipart7_addvariable.html`: `LPDISPATCH AddVariable(BSTR Name, double Value, BSTR Note)`, «Метод позволяет
+  добавить переменную в массив переменных и документ», `Note` - «примечание», возврат - «указатель на
+  интерфейс переменной `IVariable7`». **Третий аргумент - ПРИМЕЧАНИЕ, а не выражение.**
+- `ipart7_isvariablenamevalid.html`: `BOOL IsVariableNameValid(BSTR Name)`, «TRUE - имя допустимо, FALSE -
+  имя недопустимо».
+- `ivariable7_external.html`: `External` - «Свойство позволяет устанавливать и получать признак внешней
+  переменной»; `ivariable7_expression.html`: `Expression` - «Свойство позволяет устанавливать и получать
+  выражение».
+- `ksentity_getfeature.html`: `GetFeature()` возвращает «указатель на интерфейс `ksFeature` или `IFeature` -
+  объект дерева, связанный с данным объектом».
+- `ksfeature_variablecollection.html`: `VariableCollection()` возвращает «указатель на интерфейс
+  `ksVariableCollection` или `IVariableCollection`»; примечание: «Изменения в полученном массиве не
+  отображаются в модели немедленно. Чтобы изменения вступили в силу, необходимо вызвать метод
+  `ksPart::RebuildModel`».
+- `ksvariable_parameternote.html`: `parameterNote` - «Имя параметра переменной», тип строка, «Свойство
+  только для чтения»; `ksvariable_displayname.html`: `displayName` - «Отображаемое имя переменной», BSTR,
+  «Свойство только для чтения».
+
+**Interop поставленной сборки** (`tools/KompasMcp.InteropScan`, 10.10.2026). `Interop.KompasAPI7.dll`
+(03.03.2025): `IPart7` (154 члена, в том числе `Variable7 AddVariable(String Name, Double Value, String Note)`
+и `Boolean IsVariableNameValid(String Name)`), `IVariable7` (79 членов: `Name`, `Value`, `Expression`,
+`External`, `ParameterNote`, `DisplayName`, `VariableType`, `VariableID`, `Delete`), `IFeature7` (32 члена:
+`Variables(Object)`, `VariablesCount(Int32)`, `Variable(Object)`, `Excluded`, `Valid`).
+`Interop.Kompas6API5.dll`: `ksVariable` (`name` - только чтение, `value`, `Expression`, `external`,
+`displayName`, `parameterNote`, `note`), `ksVariableCollection` (`GetCount`/`GetByIndex`/`GetByName`/
+`AddNewVariable`/`RemoveVariable`), `ksFeature` (`VariableCollection`).
+
+**ИЗМЕРЕНО (проба `KompasMcp.Api7Probe --g3-parameter-route`, 10.10.2026): состав параметров базового
+выдавливания и три маршрута к ним.** Плита 100×80×10, `Api5.BasePlate`. У признака выдавливания ровно
+**пять** переменных-параметров, и они читаются ОДИНАКОВО тремя путями - ручкой построителя, перенесённым в
+API7 признаком (`IFeature7.Variables(false,false)`) и признаком, найденным в дереве
+(`EntityCollection(110)` → `GetFeature()` → `VariableCollection`):
+
+```text
+[0] name=«v17» parameterNote=«Исключить из расчета »  value=0   external=False expression=«»
+[1] name=«v20» parameterNote=«Расстояние 1»           value=10  external=False expression=«»
+[2] name=«v22» parameterNote=«Угол 1»                 value=0   external=False expression=«»
+[3] name=«v23» parameterNote=«Расстояние 2»           value=0   external=False expression=«»
+[4] name=«v25» parameterNote=«Угол 2»                 value=0   external=False expression=«»
+```
+
+Следствия, названные прямо:
+
+- **Адрес параметра - ИМЯ (`name`), а не значение и не позиция.** `name` у параметра операции - короткое
+  системное имя ядра (`v20`), а человеческое имя параметра лежит в `parameterNote` («Расстояние 1»).
+  По значению параметры неразличимы: `value` здесь равен нулю у трёх из пяти, а у двух выдавливаний
+  эталона глубина равна одному и тому же числу 10. Эталонная проба VM искала параметр глубины **по
+  числовому значению** - для продукта это недопустимо, и блок G3 адресует параметр по имени.
+- **У параметров операции внешний статус не объявляется:** `external=False` у всех пяти, включая
+  `v20` со значением 10. Внешней бывает ПОЛЬЗОВАТЕЛЬСКАЯ переменная (DOC `1786_173_3_tipi_peremen.html`),
+  а параметр операции лишь ссылается на неё выражением.
+- **Признак выдавливания виден в дереве под типом 25** с именем «Элемент выдавливания:N», где N -
+  порядок создания; тело адресуется габаритом, а признак - именем, потому что ссылка на признак
+  перевыпускается каждым чтением дерева (`References.Register` без identity) и перештамповывается
+  обычной мутацией.
+
+**ИЗМЕРЕНО: обычная мутация НЕ устаревает ссылку на признак, а перестроение - устаревает.**
+`ReferenceRegistry.RevisionForward(documentId, newRevision, invalidateAll: false)` (обычная мутация)
+ПЕРЕШТАМПОВЫВАЕТ нетопологические ссылки на новую ревизию, поэтому `feature_ref`, полученная до записи,
+после неё продолжает разрешаться; топологические ручки (`face`/`edge`/…) при этом сбрасываются.
+`invalidateAll: true` (перестроение документа, переоткрытие, обнаруженное внешнее изменение) сбрасывает
+ВСЁ. Поэтому приёмочная строка «устаревшая `feature_ref`» строится после `kompas_rebuild`, а не после
+записи: обычная мутация дала бы ложный успех.
+
+**Что НЕ переизмеряется здесь** (измерено ранее и остаётся в силе): пустое выражение переменной не
+поддерживается ядром, а запись сообщает об успехе (§4.42 п.3); геометрию двигает
+`ksDocument3D.RebuildDocument`, а не `ksPart.RebuildModel` (§4.42 п.2); `IVariableTable.ApplyVars` не
+применяет таблицу к компоненту (§4.40.2); `AddNewVariable` документирован только для
+`ksFeature`/`IFeature` (§4.40).

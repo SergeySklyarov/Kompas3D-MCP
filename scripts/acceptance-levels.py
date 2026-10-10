@@ -70,6 +70,7 @@ PROFILE_ORDER = (
     "variables-material-minimal-v1",
     "assembly-interference-minimal-v1",
     "sketch-bulk-minimal-v1",
+    "variables-bind-minimal-v1",
 )
 
 # Профили, ЗАВЕДЁННЫЕ, но в объём выпуска не подключённые. Список пуст и таков ПО ПОСТРОЕНИЮ: каждый

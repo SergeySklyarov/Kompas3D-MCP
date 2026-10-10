@@ -349,6 +349,18 @@ public static class Program
                     }
                 });
             }
+            else if (options.G3ParameterRoute)
+            {
+                var g3 = new G3ParameterRouteProbe(report, options);
+                pump.Run(() =>
+                {
+                    g3.Run();
+                    if (options.KeepRunning)
+                    {
+                        G3ParameterRouteProbe.Flush(report, options);
+                    }
+                });
+            }
             else if (options.VmControlExpression)
             {
                 var vmControl = new VmControlExpressionProbe(report, options);
@@ -497,6 +509,7 @@ public static class Program
             : options.VmOpen is not null ? "vm-open-rebuild"
             : options.VmReference is not null ? "vm-reference"
             : options.VmVariableRoute ? "vm-variable-route"
+            : options.G3ParameterRoute ? "g3-parameter-route"
             : options.VmControlExpression ? "vm-control-expression"
             : options.VmDensityUnits ? "vm-density-units"
             : options.CollectControls ? "api7-attribution"
@@ -679,6 +692,10 @@ public sealed class Options
     /// the acceptance group only OPENS the file. History: docs/decisions/variables-material.md</summary>
     public string? VmReference { get; private set; }
 
+    /// <summary><c>--g3-parameter-route</c>: throwaway measurement — which object exposes an extrusion's
+    /// parameter variables (block G3 §3.2 route vs the API7 view vs the tree entity).</summary>
+    public bool G3ParameterRoute { get; private set; }
+
     /// <summary><c>--vm-variable-route</c>: throwaway ladder — on which object does the documented
     /// <c>AddNewVariable</c> actually take. Needed because the reference part's variables must be created
     /// by documented means, and the first two candidates refused. History:
@@ -748,6 +765,7 @@ public sealed class Options
         var sketchPlane = false;
         string? vmReference = null;
         var vmVariableRoute = false;
+        var g3ParameterRoute = false;
         var vmControlExpression = false;
         var vmDensityUnits = false;
         var vmDensityMci = false;
@@ -850,6 +868,9 @@ public sealed class Options
                 case "--vm-variable-route":
                     vmVariableRoute = true;
                     break;
+                case "--g3-parameter-route":
+                    g3ParameterRoute = true;
+                    break;
                 case "--vm-control-expression":
                     vmControlExpression = true;
                     break;
@@ -895,6 +916,7 @@ public sealed class Options
             : sketchPlane ? "sketch-plane"
             : vmReference is not null ? "vm-reference"
             : vmVariableRoute ? "vm-variable-route"
+            : g3ParameterRoute ? "g3-parameter-route"
             : vmControlExpression ? "vm-control-expression"
             : vmDensityUnits ? "vm-density-units"
             : vmDensityMci ? "vm-density-mci"
@@ -941,6 +963,7 @@ public sealed class Options
             SketchPlane = sketchPlane,
             VmReference = vmReference,
             VmVariableRoute = vmVariableRoute,
+            G3ParameterRoute = g3ParameterRoute,
             VmControlExpression = vmControlExpression,
             VmDensityUnits = vmDensityUnits,
             VmDensityMci = vmDensityMci,

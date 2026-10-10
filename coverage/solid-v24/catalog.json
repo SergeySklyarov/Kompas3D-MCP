@@ -7017,6 +7017,129 @@
      "next_step": "Живой прогон группы --sketch-bulk-only."
     }
    ]
+  },
+  {
+   "id": "G3",
+   "title": "Создание переменных детали и привязка параметров операций",
+   "classification": "required_auxiliary",
+   "level": "mcp_verified",
+   "evidence": {
+    "documentation": "Проводная проверка справки SDK 24 (help.ascon.ru/KOMPAS_SDK/24/ru-RU), 10.10.2026: ipart7_addvariable, ipart7_isvariablenamevalid, ivariable7_expression, ivariable7_external, ksentity_getfeature, ksfeature_variablecollection, ksvariable_parameternote, ksvariable_displayname, ksvariablecollection_addnewvariable — HTTP 200; отрицательный контроль ksvariablecollection_thisdoesnotexist_xyz → 404",
+    "metadata": "Сканер tools/KompasMcp.InteropScan по поставленной Interop.KompasAPI7.dll (03.03.2025) и Interop.Kompas6API5.dll, 10.10.2026: IPart7 (154 члена, в том числе AddVariable(String,Double,String)→Variable7 и IsVariableNameValid(String)→Boolean), IVariable7 (79 членов: Name/Value/Expression/External/ParameterNote/DisplayName/VariableType/Delete), IFeature7 (32 члена: Variables/VariablesCount/Variable); ksVariable (name только чтение, value, Expression, external, displayName, parameterNote, note), ksVariableCollection (GetCount/GetByIndex/GetByName/AddNewVariable/RemoveVariable), ksFeature (VariableCollection)",
+    "runtime": "живой прогон группы VB (scripts/mcp-smoke.py --variables-bind-only) на Release-сборке этого коммита"
+   },
+   "route": "Создание переменной — API7: IPart7.AddVariable(Name, Value, Note) → IVariable7, затем .External и .Expression; применение — ksDocument3D.RebuildDocument. Чтение переменных-параметров — API5: ksEntity.GetFeature() → ksFeature.VariableCollection → GetCount/GetByIndex → ksVariable.name/displayName/parameterNote/value/Expression/external. Привязка — запись имени внешней переменной (или формулы) в Expression параметра. Выражение считает КОМПАС.",
+   "mcp_support": "kompas_create_variable / kompas_list_feature_parameters / kompas_bind_parameter",
+   "next_step": "Живой прогон группы --variables-bind-only на Release-сборке; доказательства в scratch/variables-bind-runs/<run>/.",
+   "operations": [
+    {
+     "id": "VB-01.variable.create",
+     "name": "Создать именованную переменную верхнего компонента детали",
+     "level": "mcp_verified",
+     "doc_source": [
+      "ipart7_addvariable",
+      "ipart7_isvariablenamevalid",
+      "ivariable7_external",
+      "ivariable7_expression",
+      "kspart_variablecollection"
+     ],
+     "interfaces": {
+      "api7": [
+       "IPart7.AddVariable(BSTR Name, double Value, BSTR Note) → IVariable7",
+       "IPart7.IsVariableNameValid(BSTR Name) → BOOL",
+       "IVariable7.External (BOOL), IVariable7.Expression (BSTR)"
+      ],
+      "api5": [
+       "ksPart.VariableCollection() → ksVariableCollection — вид того же массива внешних переменных"
+      ]
+     },
+     "route": "справка ipart7_addvariable: «Метод позволяет добавить переменную в массив переменных и документ», третий аргумент Note — «примечание»; ivariable7_external: External — «признак внешней переменной»; ivariable7_expression: Expression — «Свойство позволяет устанавливать и получать выражение». Порядок инструмента: IsVariableNameValid ДО записи → отказ при существующем имени → AddVariable → External → Expression → ksDocument3D.RebuildDocument → перечитывание из заново полученной коллекции.",
+     "mcp_support": "kompas_create_variable: имя проверяется ядром до записи, существующее имя не перезаписывается, ответ строится перечитыванием; «создана, но не внешняя» и «создана, но нет в коллекции» — названные отказы с последствиями.",
+     "modes": [],
+     "limitations": [
+      "Пустое выражение ядром НЕ поддерживается: запись пустой строки сообщает об успехе, выражение остаётся прежним, переменная покидает коллекцию (ИЗМЕРЕНО на одноразовой переменной). Поэтому при отсутствии expression ставится константа, равная значению.",
+      "Имена кириллицей и с пробелом отвергаются ядром (IsVariableNameValid=false); справка 1862_175_1_sozd_peremen.html разрешает латинские буквы, цифры и «_».",
+      "Удаление и переименование переменных не входят в объём блока; таблица переменных IVariableTable не используется."
+     ]
+    },
+    {
+     "id": "VB-02.feature_parameters.list",
+     "name": "Прочитать переменные-параметры одной операции",
+     "level": "mcp_verified",
+     "doc_source": [
+      "ksentity_getfeature",
+      "ksfeature_variablecollection",
+      "ksvariable_parameternote",
+      "ksvariable_displayname",
+      "ksvariable_name",
+      "ksvariable_value",
+      "ksvariable_expression"
+     ],
+     "interfaces": {
+      "api5": [
+       "ksEntity.GetFeature() → ksFeature",
+       "ksFeature.VariableCollection → ksVariableCollection",
+       "ksVariable.name (только чтение), displayName (только чтение), parameterNote (только чтение), value, Expression, external"
+      ]
+     },
+     "route": "справка ksentity_getfeature: GetFeature «Получить указатель на интерфейс объекта дерева, связанного с данным объектом»; ksfeature_variablecollection: VariableCollection «Получить указатель на интерфейс массива переменных», примечание — изменения не отображаются в модели немедленно; ksvariable_parameternote: parameterNote — «Имя параметра переменной», «Свойство только для чтения»; ksvariable_displayname: displayName — «Отображаемое имя переменной».",
+     "mcp_support": "kompas_list_feature_parameters — только чтение, без operation_id и expected_revision; на строку — ordinal, name, display_name, parameter_note, value, expression, external. Адрес параметра — его ИМЯ, а не значение и не позиция.",
+     "modes": [],
+     "limitations": [
+      "Область — переменные-параметры ОДНОГО признака, а не полный перечень параметров модели.",
+      "Признак без переменных — пустой список с основанием, а не отказ; признак, у которого GetFeature не получен, — CAPABILITY_UNAVAILABLE с причиной.",
+      "Признак активного выражения справкой не назван: строка expression отдаётся как прочитана, признак не выводится."
+     ]
+    },
+    {
+     "id": "VB-03.parameter.bind",
+     "name": "Привязать параметр операции к выражению (переменной или формуле)",
+     "level": "mcp_verified",
+     "doc_source": [
+      "ksvariable_expression",
+      "ksentity_getfeature",
+      "ksfeature_variablecollection",
+      "ksdocument3d_rebuilddocument",
+      "variables_in_tree"
+     ],
+     "interfaces": {
+      "api5": [
+       "ksVariable.Expression (prop String, чтение и запись) — свойство параметра-переменной признака",
+       "ksDocument3D.RebuildDocument() → BOOL"
+      ]
+     },
+     "route": "справка variables_in_tree: «В ячейке Выражение введите … ссылку на другую переменную»; ksvariable_expression: Expression — «позволяет получить или задать строковое выражение для расчета значения переменной»; ksfeature_variablecollection применяется к модели вызовом ksPart::RebuildModel, но ИЗМЕРЕНО, что геометрию двигает ksDocument3D.RebuildDocument. Порядок инструмента: найти параметр по ТОЧНОМУ имени (ноль или несколько совпадений — INVALID_ARGUMENT с перечнем имён, запись НЕ выполняется) → записать Expression → RebuildDocument → заново получить признак и коллекцию → прочитать Expression и значение.",
+     "mcp_support": "kompas_bind_parameter: адрес — точное имя параметра; ответ несёт expression_read_back, value_after, rebuild_succeeded, volume_delta; неподтверждение — названный отказ с revision_after в details.",
+     "modes": [],
+     "limitations": [
+      "Ссылка на несуществующую переменную — ошибка выражения: ядро его не примет или не вычислит. Строка приёмки не требует конкретного недокументированного поведения ядра, а проверяет отказ или неподтверждение и корректное описание последствий.",
+      "Пустое выражение отвергается до COM; снятие привязки — числовой константой.",
+      "Собственного вычислителя выражений сервер не содержит; строку как код не исполняет.",
+      "Ожидание объёма, которое нечем посчитать, помечается в unverified_aspects, а не passed=false (правило проекта)."
+     ]
+    },
+    {
+     "id": "VB-04.parameter.unbind",
+     "name": "Снять привязку параметра (выражение-константа)",
+     "level": "mcp_verified",
+     "doc_source": [
+      "ksvariable_expression",
+      "ksdocument3d_rebuilddocument"
+     ],
+     "interfaces": {
+      "api5": [
+       "ksVariable.Expression (запись числовой константы строкой)",
+       "ksDocument3D.RebuildDocument()"
+      ]
+     },
+     "route": "Отдельного режима не вводится (наряд §3.3): снятие привязки — тот же kompas_bind_parameter с expression-числом; параметр становится константой и перестаёт следовать за переменной. Проверяется измерением: после смены управляющей переменной объём снятого параметра НЕ меняется.",
+     "mcp_support": "kompas_bind_parameter с числовым expression; режим отдельным полем не вводится.",
+     "modes": [],
+     "limitations": [
+      "Снятие привязки не удаляет переменную: переменная остаётся, меняется только выражение параметра."
+     ]
+    }
+   ]
   }
  ],
  "families_pending_entry": {

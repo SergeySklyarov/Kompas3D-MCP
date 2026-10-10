@@ -79,6 +79,8 @@ public sealed class CommandDispatcher
         WorkerCommands.SetVariableValue,
         WorkerCommands.SetVariableExpression,
         WorkerCommands.SetMaterial,
+        WorkerCommands.CreateVariable,
+        WorkerCommands.BindParameter,
         WorkerCommands.UnitProbe,
     };
 
@@ -237,6 +239,10 @@ public sealed class CommandDispatcher
         // goes through SetMaterial + Update + a re-read of name and density.
         WorkerCommands.SetVariableValue or WorkerCommands.SetVariableExpression
             or WorkerCommands.SetMaterial => 240_000,
+        // Variable creation goes through the API7 bridge + RebuildDocument + a re-read of the collection;
+        // parameter binding re-reads the feature, its collection and the model volume after the rebuild.
+        WorkerCommands.CreateVariable or WorkerCommands.BindParameter
+            or WorkerCommands.ListFeatureParameters => 240_000,
         _ => 120_000,
     };
 
@@ -344,6 +350,9 @@ public sealed class CommandDispatcher
             WorkerCommands.SetVariableExpression => _sta.Run(() => SetVariable(request), "var.set_expression", cancellationToken),
             WorkerCommands.GetMaterial => _sta.Run(() => GetMaterial(request), "mat.get", cancellationToken),
             WorkerCommands.SetMaterial => _sta.Run(() => SetMaterial(request), "mat.set", cancellationToken),
+            WorkerCommands.CreateVariable => _sta.Run(() => CreateVariable(request), "var.create", cancellationToken),
+            WorkerCommands.ListFeatureParameters => _sta.Run(() => ListFeatureParameters(request), "feat.parameters", cancellationToken),
+            WorkerCommands.BindParameter => _sta.Run(() => BindParameter(request), "feat.bind_parameter", cancellationToken),
             WorkerCommands.Shutdown => _sta.Run(ShutdownPayload, "shutdown", cancellationToken),
             _ => throw new KompasContractException(
                 ErrorCodes.CapabilityUnavailable,
@@ -1011,6 +1020,30 @@ public sealed class CommandDispatcher
         var command = Argument<SetMaterialCommand>(request);
         var document = _session.RequireDocument(command.DocumentId);
         return TaggedAfter(document.Id, () => _session.SetMaterial(command), document);
+    }
+
+    // G3 block. var.create and feat.bind_parameter are mutations (TaggedAfter: control copy, revision,
+    // journal). feat.parameters only READS the feature's parameter array: no revision bump and no
+    // control copy, so it returns the revision it observed. History: docs/decisions/variables-material.md#g3-route
+    private object? CreateVariable(IpcFrame request)
+    {
+        var command = Argument<CreateVariableCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return TaggedAfter(document.Id, () => _session.CreateVariable(command), document);
+    }
+
+    private object? ListFeatureParameters(IpcFrame request)
+    {
+        var command = Argument<ListFeatureParametersCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return Tagged(document.Id, document.Revision, _session.ListFeatureParameters(command));
+    }
+
+    private object? BindParameter(IpcFrame request)
+    {
+        var command = Argument<BindParameterCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return TaggedAfter(document.Id, () => _session.BindParameter(command), document);
     }
 
     private static void GuardRevision(DocumentEntry document, long expectedRevision)

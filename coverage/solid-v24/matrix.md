@@ -84,6 +84,18 @@
 - **открытые_режимы:** []
 - **открытые_зависимости:** []
 
+### профиль variables-bind-minimal-v1 — Создание переменных детали и привязка параметров операций v24
+
+- **обязательных_режимов:** 4
+- **режимов_закрыто:** 4
+- **общих_зависимостей:** 5
+- **зависимостей_закрыто:** 5
+- **профиль_закрыт:** да
+- **готовность_процента:** 100.0%
+- **по_очередям:** G3 4/4
+- **открытые_режимы:** []
+- **открытые_зависимости:** []
+
 ### профиль variables-material-minimal-v1 — Внешние переменные и материал детали v24
 
 - **обязательных_режимов:** 5
@@ -98,18 +110,18 @@
 
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 310
-- **строк_полностью_закрыто:** 121
-- **строк_с_каким_либо_прогрессом:** 136
-- **семейств_в_каталоге:** 38
+- **строк_каталога:** 319
+- **строк_полностью_закрыто:** 130
+- **строк_с_каким_либо_прогрессом:** 145
+- **семейств_в_каталоге:** 39
 - **семейств_без_строк:** 14
 - **операций:** 99
 - **режимов_и_вариантов:** 146
-- **применимых_действий:** 2729
-- **действий_verified:** 898
-- **покрытие_действий:** 32.9%
-- **распределение_статусов:** {'not_started': 1831, 'verified': 898, 'not_applicable': 371}
-- **уровни_каталога_операций:** {'metadata_found': 50, 'mcp_verified': 37, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 4}
+- **применимых_действий:** 2767
+- **действий_verified:** 936
+- **покрытие_действий:** 33.8%
+- **распределение_статусов:** {'not_started': 1831, 'verified': 936, 'not_applicable': 423}
+- **уровни_каталога_операций:** {'metadata_found': 50, 'mcp_verified': 41, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 4}
 - **уровни_каталога_режимов:** {'mcp_verified': 55, 'documented': 19, 'runtime_verified': 3, 'metadata_found': 48, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
@@ -292,6 +304,25 @@
 | `dep.sketch_bulk.limits_source` | да | discover, read, negative_tests | SB-01.discover, SB-02.limits |
 | `dep.sketch_bulk.entity_read_back` | да | discover, read, negative_tests | SB-03.polyline_native, SB-06.polyline_open, SB-07.spline, SB-08.spline_open, SB-10.reopen |
 | `dep.sketch_bulk.profile_area_rule` | да | read, geometry_validation, negative_tests | SB-03.polyline_native, SB-04.polyline_limit, SB-05.client_contour, SB-07.spline |
+
+## Метрика 1 — обязательные режимы профиля `variables-bind-minimal-v1`
+
+| режим/операция | семья | приоритет | очередь | уровень каталога | поиск | созд | чтен | правк | перестр | reopen | подавл | удал | отказ | геом | проверки |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
+| `VB-01.variable.create` | G3 | practical_required | G3 | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | VB.01.discover, VB.02.create, VB.03.create, VB.10.save_reopen, VB.13.refusals |
+| `VB-02.feature_parameters.list` | G3 | practical_required | G3 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | VB.01.discover, VB.04.read, VB.10.save_reopen, VB.13.refusals |
+| `VB-03.parameter.bind` | G3 | practical_required | G3 | mcp_verified | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | VB.01.discover, VB.05.bind, VB.06.bind, VB.07.rebuild, VB.08.edit, VB.10.save_reopen, VB.13.refusals |
+| `VB-04.parameter.unbind` | G3 | practical_required | G3 | mcp_verified | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | VB.01.discover, VB.09.unbind, VB.10.save_reopen, VB.13.refusals |
+
+### Общие зависимости профиля `variables-bind-minimal-v1`
+
+| зависимость | закрыто | приоритетные действия | проверки |
+|---|---|---|---|
+| `dep.vb.parameter_address` | да | discover, read, negative_tests | VB.01.discover, VB.04.read, VB.11.address_by_name, VB.13.refusals |
+| `dep.vb.units` | да | read, negative_tests | VB.05.bind, VB.09.unbind, VB.13.refusals |
+| `dep.vb.rebuild_document` | да | rebuild, geometry_validation | VB.05.bind, VB.06.bind, VB.07.rebuild, VB.09.unbind |
+| `dep.vb.read_only_list` | да | read, negative_tests | VB.04.read, VB.14.no_mutation |
+| `dep.vb.idempotency` | да | create, read, negative_tests | VB.12.idempotency |
 
 ## Метрика 1 — обязательные режимы профиля `variables-material-minimal-v1`
 
@@ -581,6 +612,10 @@
 | `SKB-01.limits` | G2 | practical_required | G2 | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | OK | SB-01.discover, SB-02.limits, SB-04.polyline_limit, SB-09.refusals, SB-10.reopen |
 | `SKB-02.polyline_native` | G2 | practical_required | G2 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | SB-03.polyline_native, SB-04.polyline_limit, SB-05.client_contour, SB-06.polyline_open, SB-09.refusals, SB-10.reopen, SB-11.idempotent |
 | `SKB-03.spline` | G2 | practical_required | G2 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | SB-07.spline, SB-08.spline_open, SB-09.refusals, SB-10.reopen |
+| `VB-01.variable.create` | G3 | practical_required | G3 | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | VB.01.discover, VB.02.create, VB.03.create, VB.10.save_reopen, VB.13.refusals |
+| `VB-02.feature_parameters.list` | G3 | practical_required | G3 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | VB.01.discover, VB.04.read, VB.10.save_reopen, VB.13.refusals |
+| `VB-03.parameter.bind` | G3 | practical_required | G3 | mcp_verified | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | VB.01.discover, VB.05.bind, VB.06.bind, VB.07.rebuild, VB.08.edit, VB.10.save_reopen, VB.13.refusals |
+| `VB-04.parameter.unbind` | G3 | practical_required | G3 | mcp_verified | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | VB.01.discover, VB.09.unbind, VB.10.save_reopen, VB.13.refusals |
 | `AUX-SKETCH.plane_and_profile_lifecycle` *(вне каталога)* | AUX-SKETCH | later | — | — | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | V03, V04, V05, G07_xy, G07_xz, G07_yz, V04r, V04d, V04e, V04f, G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, F08.28.discover, F08.28.create, F08.28.read, F08.28.edit, F08.28.rebuild, F08.28.save_reopen, F08.28.negative_tests, F08.28.geometry_validation, AUXS.01.edit, AUXS.02.negative_tests, AUXS.03.create, AUXS.04.edit, AUXS.05.save_reopen |
 | `SM-04.boss` *(вне каталога)* | SM-04 | later | B5 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `dep.sketch.entities` *(вне каталога)* | AUX-SKETCH | dependency_of | — | — | OK | OK | OK | OK | — | OK | — | — | OK | OK | G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, DEP.DSE.02.create, DEP.DSE.07.geometry_validation, DEP.DSE.06.negative_tests, DEP.DSE.05.save_reopen, DEP.DSE.04.edit, DEP.DSE.01.discover, DEP.DSE.03.read |
@@ -629,6 +664,11 @@
 | `dep.sketch_bulk.limits_source` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | SB-01.discover, SB-02.limits |
 | `dep.sketch_bulk.entity_read_back` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | SB-03.polyline_native, SB-06.polyline_open, SB-07.spline, SB-08.spline_open, SB-10.reopen |
 | `dep.sketch_bulk.profile_area_rule` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | SB-03.polyline_native, SB-04.polyline_limit, SB-05.client_contour, SB-07.spline |
+| `dep.vb.parameter_address` *(вне каталога)* | — | dependency_of | G3 | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | VB.01.discover, VB.04.read, VB.11.address_by_name, VB.13.refusals |
+| `dep.vb.units` *(вне каталога)* | — | dependency_of | G3 | — | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | VB.05.bind, VB.09.unbind, VB.13.refusals |
+| `dep.vb.rebuild_document` *(вне каталога)* | — | dependency_of | G3 | — | н/п | н/п | OK | н/п | OK | н/п | н/п | н/п | н/п | OK | VB.05.bind, VB.06.bind, VB.07.rebuild, VB.09.unbind |
+| `dep.vb.read_only_list` *(вне каталога)* | — | dependency_of | G3 | — | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | VB.04.read, VB.14.no_mutation |
+| `dep.vb.idempotency` *(вне каталога)* | — | dependency_of | G3 | — | н/п | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | VB.12.idempotency |
 
 ## Ограничения и незакрытое
 
@@ -1074,6 +1114,21 @@
   - Площадь профиля со сплайном на стороне сервера НЕ считается: собственной аппроксимации кривой сервер не делает, и это названо в unverified_aspects, а не выдано за проверку.
   - Поле on_poles не объявлено: у маршрута ksBezier нет признака «по полюсам», а кривая всегда проходит через заданные вершины.
   - Поле degree не объявлено: у ksBezier нет порядка; порядок принадлежит маршруту ksNurbs, который отвергнут по измерению.
+- `VB-01.variable.create` — закрыт целиком
+  - Пустое выражение не поддерживается ядром; при отсутствии expression ставится константа, равная значению (ИЗМЕРЕНО).
+  - Ответ строится перечитыванием, а не эхом запроса; «создана, но не внешняя» и «создана, но нет в коллекции» — названные отказы с последствиями.
+  - Удаление и переименование переменных вне объёма блока.
+- `VB-02.feature_parameters.list` — закрыт целиком
+  - Область — переменные-параметры ОДНОГО признака, а не редактор всех параметров модели.
+  - Непрочитанное поле остаётся null с причиной, а не нулём или пустой строкой.
+  - Признак без переменных — пустой список с основанием, а не отказ; устаревшая ссылка — STALE_REFERENCE.
+- `VB-03.parameter.bind` — закрыт целиком
+  - Ссылка на несуществующую переменную — ошибка выражения: отказ или явное неподтверждение, конкретное недокументированное поведение ядра не требуется.
+  - Измеряется СУММАРНЫЙ объём всех тел модели; объём отдельного тела здесь не измеряется и назван в unverified_aspects.
+  - Несовпадение expected_volume_mm3 — непройденная проверка и предупреждение, а не отказ (правило заявленного ожидания).
+- `VB-04.parameter.unbind` — закрыт целиком
+  - Снятие привязки не удаляет переменную: переменная остаётся, меняется только выражение параметра.
+  - Пустое выражение отвергается до COM; константа задаётся строкой.
 - `AUX-SKETCH.plane_and_profile_lifecycle` — закрыт целиком
   - замена и очистка после reopen работают для измеренной области: эскиз на основной XY, профиль — окружность, вырезание сквозное; точка поиска выводится из цилиндрической грани зависимого тела (проба G, строки G10…G10r)
   - вне измеренной области (наклонная плоскость, отрезки, дуги, прямоугольники) отказ явный: CAPABILITY_UNAVAILABLE с derivation=profile_not_circle / plane_not_xy, а не догадка (строка G11)
@@ -1207,6 +1262,16 @@
   - Поля points_count и closed у прочих видов — null: непрочитанное не выдаётся за ноль.
 - `dep.sketch_bulk.profile_area_rule` — закрыт целиком
   - Сплайн не разбирается на отрезки и дуги: собственной аппроксимации сервер не делает.
+- `dep.vb.parameter_address` — закрыт целиком
+  - Слабое место эталона, которое блок исправляет: эталонный прибор искал параметр глубины по ЧИСЛОВОМУ значению. Для продукта это недопустимо — два параметра с равным значением неразличимы, поэтому адрес — имя и примечание параметра.
+- `dep.vb.units` — закрыт целиком
+  - Сервер размерность не выводит из имени и не переводит: значение — число в собственной размерности переменной.
+- `dep.vb.rebuild_document` — закрыт целиком
+  - ИЗМЕРЕНО: ksPart.RebuildModel, чья страница обещает передать внешние переменные в модель, геометрию НЕ двигает и после перестройки документа возвращает прежнюю глубину; перестраивает именно RebuildDocument.
+- `dep.vb.read_only_list` — закрыт целиком
+  - Отсутствие доступной коллекции параметров — названный отказ (CAPABILITY_UNAVAILABLE), а не пустой список: два состояния различимы в ответе.
+- `dep.vb.idempotency` — закрыт целиком
+  - Проверяется на обоих мутирующих инструментах: повтор payload, конфликт аргументов и устаревшая ревизия.
 
 ## Семьи без строк матрицы (инвентаризация не завершена)
 

@@ -2611,6 +2611,100 @@ public static class ToolCatalog
                 requiresDocument: true,
                 requiresRevision: true),
 
+            // ── block G3 "variable creation and parameter binding" (profile variables-bind-minimal-v1) ──
+            Mutation("kompas_create_variable", "Создать переменную детали",
+                "СОЗДАЁТ именованную переменную верхнего компонента детали документированным маршрутом "
+                + "API7: IPart7.AddVariable(Name, Value, Note) → IVariable7, затем .External и .Expression "
+                + "(справка v24: ipart7_addvariable.html, ipart7_isvariablenamevalid.html, "
+                + "ivariable7_external.html, ivariable7_expression.html). Третий аргумент AddVariable - "
+                + "ПРИМЕЧАНИЕ, а не формула; выражение задаётся отдельным свойством. "
+                + "Порядок: проверка имени IsVariableNameValid ДО записи → отказ, если переменная с таким "
+                + "именем уже есть (перезапись не выполняется) → AddVariable → External → Expression → "
+                + "ksDocument3D.RebuildDocument → ПЕРЕЧИТЫВАНИЕ из заново полученной коллекции. "
+                + "Пустое expression ядром НЕ поддерживается (запись сообщает об успехе, выражение остаётся "
+                + "прежним, переменная покидает коллекцию), поэтому если выражение не задано, ставится "
+                + "выражение-константа, равное значению. Ответ строится ПЕРЕЧИТЫВАНИЕМ, а не эхом запроса; "
+                + "случаи «создана, но не внешняя» и «создана, но нет в коллекции» - НАЗВАННЫЕ отказы с "
+                + "последствиями, а не ложный успех. Выражение считает КОМПАС.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("name", Sch.Str(
+                        "Имя переменной: латинские буквы, цифры и «_», первый символ - буква или «_» "
+                        + "(проверяется ядром через IPart7.IsVariableNameValid ДО записи).",
+                        minLength: 1)),
+                    ("value", Sch.Num(
+                        "Числовое значение в собственной размерности переменной. Только конечное число.")),
+                    ("note", Sch.Nullable(Sch.Str(
+                        "Примечание переменной - третий аргумент AddVariable. Не формула."))),
+                    ("expression", Sch.Nullable(Sch.Str(
+                        "Выражение, которое считает КОМПАС. Если не задано, ставится константа, равная value: "
+                        + "пустое выражение ядром не поддерживается."))),
+                    ("external", Sch.Nullable(Sch.Bool(
+                        "Делать переменную внешней. Внешняя переменная видна в kompas_list_variables и "
+                        + "может управлять параметром операции. Если поле не задано, переменная внешняя.",
+                        true)))),
+                WorkerCommands.CreateVariable,
+                requiresDocument: true,
+                requiresRevision: true),
+
+            ReadOnly("kompas_list_feature_parameters", "Параметры операции",
+                "ЧИТАЕТ переменные-параметры ОДНОЙ операции и ничего не записывает: признак (ссылка из "
+                + "kompas_list_features) → ksEntity.GetFeature() → ksFeature.VariableCollection → "
+                + "перечисление GetCount/GetByIndex и чтение ksVariable.name, displayName, parameterNote, "
+                + "value, Expression, external (справка v24: ksentity_getfeature.html, "
+                + "ksfeature_variablecollection.html, ksvariable_parameternote.html, "
+                + "ksvariable_displayname.html). "
+                + "На строку отдаются имя, отображаемое имя, ИМЯ ПАРАМЕТРА (parameterNote), значение, "
+                + "выражение, признак внешней переменной и порядковый номер. АДРЕС ПАРАМЕТРА - ЕГО ИМЯ "
+                + "(поле name), а НЕ значение и не позиция: два параметра с равным значением по значению "
+                + "неразличимы. Непрочитанное поле остаётся null с причиной, а не нулём или пустой строкой. "
+                + "Признак без переменных - пустой список с основанием, а не отказ; признак, у которого "
+                + "GetFeature не получен, - CAPABILITY_UNAVAILABLE с причиной; устаревшая ссылка - "
+                + "STALE_REFERENCE. Чтение не меняет ревизию и не требует expected_revision.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("feature_ref", Sch.Ref("#/$defs/reference"))),
+                WorkerCommands.ListFeatureParameters,
+                requiresDocument: true),
+
+            Mutation("kompas_bind_parameter", "Привязать параметр операции",
+                "ЗАПИСЫВАЕТ выражение параметра операции, адресуя параметр его ТОЧНЫМ именем (поле name из "
+                + "kompas_list_feature_parameters), а НЕ значением или позицией: два параметра с равным "
+                + "значением по значению неразличимы. Порядок: найти параметр по точному имени в коллекции "
+                + "признака (ноль или несколько совпадений - INVALID_ARGUMENT с перечнем имён, запись НЕ "
+                + "происходит) → записать ksVariable.Expression → ksDocument3D.RebuildDocument → заново "
+                + "получить признак и коллекцию → прочитать Expression и вычисленное значение → по "
+                + "возможности измерить объём модели и сверить с expected_volume_mm3 (справка v24: "
+                + "variables_in_tree.html - «В ячейке Выражение введите … ссылку на другую переменную», "
+                + "ksvariable_expression.html, ksdocument3d_rebuilddocument.html). "
+                + "«Записано» и «применилось» - разные утверждения: ответ несёт expression_read_back, "
+                + "value_after, rebuild_succeeded и volume_delta; если выражение прочиталось иначе, значение "
+                + "не вычислилось или перестроение не удалось - НАЗВАННЫЙ отказ с состоянием модели "
+                + "(revision_after в details), а не succeeded. Ссылка на несуществующую переменную - ошибка "
+                + "выражения: ядро его не примет или не вычислит. Пустое expression отвергается до COM. "
+                + "СНЯТИЕ привязки - expression задаётся числом (строкой): параметр становится константой; "
+                + "отдельный режим не вводится. Выражение считает КОМПАС; собственного вычислителя сервер "
+                + "не содержит и строку как код не исполняет."
+                + DeclaredExpectationRule,
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("feature_ref", Sch.Ref("#/$defs/reference")),
+                    ("parameter_name", Sch.Str(
+                        "Точное name параметра из kompas_list_feature_parameters. Сравнивается посимвольно; "
+                        + "ноль или несколько совпадений - отказ без записи.",
+                        minLength: 1)),
+                    ("expression", Sch.Str(
+                        "Непустое выражение: имя переменной, формула или числовая константа. Константа снимает "
+                        + "привязку. Выражение считает КОМПАС.",
+                        minLength: 1)),
+                    ("expected_volume_mm3", Sch.Nullable(Sch.Num(
+                        "Ожидаемый объём модели после привязки, мм³. Только конечное число.")))),
+                WorkerCommands.BindParameter,
+                requiresDocument: true,
+                requiresRevision: true),
+
             Mutation("kompas_probe_units", "Замер единиц",
                 "Строит известную геометрию и возвращает сырые показания всех измерительных вызовов. Калибровка, а не догадка: именно так подтверждалось, что GetLength(0) — сантиметры.",
                 Sch.Props(

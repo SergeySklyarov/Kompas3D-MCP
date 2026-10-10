@@ -9778,6 +9778,655 @@
     "площадь замкнутой полилинии считается прежней формулой по вершинам и совпадает с аналитической",
     "у сплайна площадь null с причиной, и проверка объёма честно помечена в unverified_aspects"
    ]
+  },
+  {
+   "operation_id": "VB-01.variable.create",
+   "kind": "profile_mode",
+   "profile": "variables-bind-minimal-v1",
+   "priority": "practical_required",
+   "queue": "G3",
+   "context": "part.feature",
+   "catalog_ref": "G3",
+   "catalog_level": "mcp_verified",
+   "parameters_schema": "schemas/kompas_create_variable.json",
+   "adapter_route": "kompas_create_variable: IPart7.IsVariableNameValid ДО записи → проверка отсутствия имени (GetByName(name, TRUE, FALSE) по коллекции верхнего компонента) → IPart7.AddVariable(Name, Value, Note) → IVariable7.External → IVariable7.Expression → ksDocument3D.RebuildDocument → ПЕРЕЧИТЫВАНИЕ из заново полученной ksPart.VariableCollection (ipart7_addvariable.html, ipart7_isvariablenamevalid.html, ivariable7_external.html, ivariable7_expression.html).",
+   "actions": {
+    "discover": "verified",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "not_applicable_reasons": {
+    "edit": "правка существующей переменной — существующий kompas_set_variable, а не этот режим (наряд §2: создание)",
+    "rebuild": "создание переменной геометрии не касается; перестроение документом проверяют режимы привязки",
+    "suppress_restore": "подавление и восстановление переменных не входит в объём блока (наряд §2)",
+    "delete_dependencies": "удаление переменных не входит в объём блока (наряд §2)",
+    "geometry_validation": "создание переменной геометрии не меняет — объём проверяют строки привязки"
+   },
+   "tests": [
+    "VB.01.discover",
+    "VB.02.create",
+    "VB.03.create",
+    "VB.10.save_reopen",
+    "VB.13.refusals"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "coverage/solid-v24/release-profiles/variables-bind-minimal-v1.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "tests/Unit/KompasMcp.Unit/VariableBindDomainTests.cs"
+   ],
+   "limitations": [
+    "Пустое выражение не поддерживается ядром; при отсутствии expression ставится константа, равная значению (ИЗМЕРЕНО).",
+    "Ответ строится перечитыванием, а не эхом запроса; «создана, но не внешняя» и «создана, но нет в коллекции» — названные отказы с последствиями.",
+    "Удаление и переименование переменных вне объёма блока."
+   ],
+   "depends_on": [
+    "dep.vb.rebuild_document",
+    "dep.vb.idempotency"
+   ],
+   "acceptance": [
+    "переменная depth = 10 прочитана из заново полученной коллекции: имя, значение 10, external=true, выражение-константа; видна в kompas_list_variables",
+    "переменная full_depth с выражением depth*2: значение, вычисленное КОМПАС, равно 20; выражение прочитано как depth*2",
+    "имя с кириллицей и с пробелом отвергается до записи; повтор имени — отказ без перезаписи; value=NaN отвергается",
+    "переменные и выражения читаются из переоткрытого документа до всякой записи"
+   ],
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_create_variable"
+     }
+    ]
+   },
+   "create_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_create_variable"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_variables"
+     }
+    ]
+   }
+  },
+  {
+   "operation_id": "VB-02.feature_parameters.list",
+   "kind": "profile_mode",
+   "profile": "variables-bind-minimal-v1",
+   "priority": "practical_required",
+   "queue": "G3",
+   "context": "part.feature",
+   "catalog_ref": "G3",
+   "catalog_level": "mcp_verified",
+   "parameters_schema": "schemas/kompas_list_feature_parameters.json",
+   "adapter_route": "kompas_list_feature_parameters: признак (ссылка из kompas_list_features) → ksEntity.GetFeature() → ksFeature.VariableCollection → GetCount/GetByIndex → ksVariable.name/displayName/parameterNote/value/Expression/external (ksentity_getfeature.html, ksfeature_variablecollection.html, ksvariable_parameternote.html). Только чтение: без operation_id и без изменения ревизии.",
+   "actions": {
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "not_applicable_reasons": {
+    "create": "чтение ничего не создаёт в модели",
+    "edit": "чтение ничего не меняет",
+    "rebuild": "чтение модель не перестраивает",
+    "suppress_restore": "подавление признака не входит в объём блока",
+    "delete_dependencies": "удаление признака не входит в объём блока",
+    "geometry_validation": "чтение геометрии не меняет — измерять нечего"
+   },
+   "tests": [
+    "VB.01.discover",
+    "VB.04.read",
+    "VB.10.save_reopen",
+    "VB.13.refusals"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "coverage/solid-v24/release-profiles/variables-bind-minimal-v1.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "tests/Unit/KompasMcp.Unit/VariableBindDomainTests.cs"
+   ],
+   "limitations": [
+    "Область — переменные-параметры ОДНОГО признака, а не редактор всех параметров модели.",
+    "Непрочитанное поле остаётся null с причиной, а не нулём или пустой строкой.",
+    "Признак без переменных — пустой список с основанием, а не отказ; устаревшая ссылка — STALE_REFERENCE."
+   ],
+   "depends_on": [
+    "dep.vb.parameter_address",
+    "dep.vb.read_only_list"
+   ],
+   "acceptance": [
+    "у выдавливания прочитана переменная глубины: её name, parameter_note и value = 10; все поля непустые или null с причиной",
+    "признак без переменных даёт пустой список с основанием, а не отказ",
+    "устаревшая feature_ref даёт STALE_REFERENCE, а не пустой список"
+   ],
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_feature_parameters"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_feature_parameters"
+     }
+    ]
+   }
+  },
+  {
+   "operation_id": "VB-03.parameter.bind",
+   "kind": "profile_mode",
+   "profile": "variables-bind-minimal-v1",
+   "priority": "practical_required",
+   "queue": "G3",
+   "context": "part.feature",
+   "catalog_ref": "G3",
+   "catalog_level": "mcp_verified",
+   "parameters_schema": "schemas/kompas_bind_parameter.json",
+   "adapter_route": "kompas_bind_parameter: поиск параметра по ТОЧНОМУ имени в ksFeature.VariableCollection (ноль или несколько совпадений — INVALID_ARGUMENT с перечнем имён, запись НЕ выполняется) → запись ksVariable.Expression → ksDocument3D.RebuildDocument → заново получить признак и коллекцию → прочитать Expression и value → измерить суммарный объём модели и сверить с expected_volume_mm3 (variables_in_tree.html, ksvariable_expression.html, ksdocument3d_rebuilddocument.html).",
+   "actions": {
+    "discover": "verified",
+    "create": "verified",
+    "read": "verified",
+    "edit": "verified",
+    "rebuild": "verified",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
+   },
+   "not_applicable_reasons": {
+    "suppress_restore": "подавление признака не входит в объём блока",
+    "delete_dependencies": "удаление признака не входит в объём блока (наряд §2)"
+   },
+   "tests": [
+    "VB.01.discover",
+    "VB.05.bind",
+    "VB.06.bind",
+    "VB.07.rebuild",
+    "VB.08.edit",
+    "VB.10.save_reopen",
+    "VB.13.refusals"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "coverage/solid-v24/release-profiles/variables-bind-minimal-v1.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "tests/Unit/KompasMcp.Unit/VariableBindDomainTests.cs"
+   ],
+   "limitations": [
+    "Ссылка на несуществующую переменную — ошибка выражения: отказ или явное неподтверждение, конкретное недокументированное поведение ядра не требуется.",
+    "Измеряется СУММАРНЫЙ объём всех тел модели; объём отдельного тела здесь не измеряется и назван в unverified_aspects.",
+    "Несовпадение expected_volume_mm3 — непройденная проверка и предупреждение, а не отказ (правило заявленного ожидания)."
+   ],
+   "depends_on": [
+    "dep.vb.parameter_address",
+    "dep.vb.rebuild_document",
+    "dep.vb.idempotency"
+   ],
+   "acceptance": [
+    "глубина основания привязана к depth: expression_read_back = depth, value_after = 10, rebuild_succeeded = true",
+    "глубина второй операции привязана к full_depth: expression_read_back = full_depth, value_after = 20",
+    "смена depth двигает обе операции: объём тел 100*80*20 + 400*40 = 176000 в допуске профиля",
+    "выражение depth/2 + 5 на втором параметре вычислено КОМПАС: при depth = 20 значение 15"
+   ],
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_bind_parameter"
+     }
+    ]
+   },
+   "create_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_bind_parameter"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_feature_parameters"
+     }
+    ]
+   },
+   "edit_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_bind_parameter"
+     }
+    ]
+   },
+   "rebuild_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_measure"
+     }
+    ]
+   },
+   "geometry_validation_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_measure"
+     }
+    ]
+   }
+  },
+  {
+   "operation_id": "VB-04.parameter.unbind",
+   "kind": "profile_mode",
+   "profile": "variables-bind-minimal-v1",
+   "priority": "practical_required",
+   "queue": "G3",
+   "context": "part.feature",
+   "catalog_ref": "G3",
+   "catalog_level": "mcp_verified",
+   "parameters_schema": "schemas/kompas_bind_parameter.json",
+   "adapter_route": "kompas_bind_parameter с числовым expression: тот же порядок, что у привязки; отдельного режима нет (наряд §3.3). Проверяется измерением: после снятия привязки смена управляющей переменной объём этого параметра НЕ меняет.",
+   "actions": {
+    "discover": "verified",
+    "create": "verified",
+    "read": "verified",
+    "edit": "verified",
+    "rebuild": "verified",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
+   },
+   "not_applicable_reasons": {
+    "suppress_restore": "подавление признака не входит в объём блока",
+    "delete_dependencies": "удаление признака не входит в объём блока (наряд §2)"
+   },
+   "tests": [
+    "VB.01.discover",
+    "VB.09.unbind",
+    "VB.10.save_reopen",
+    "VB.13.refusals"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "coverage/solid-v24/release-profiles/variables-bind-minimal-v1.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "tests/Unit/KompasMcp.Unit/VariableBindDomainTests.cs"
+   ],
+   "limitations": [
+    "Снятие привязки не удаляет переменную: переменная остаётся, меняется только выражение параметра.",
+    "Пустое выражение отвергается до COM; константа задаётся строкой."
+   ],
+   "depends_on": [
+    "dep.vb.parameter_address",
+    "dep.vb.rebuild_document",
+    "dep.vb.units"
+   ],
+   "acceptance": [
+    "expression = \"10\" у основания: после смены depth объём основания не меняется (остаётся 80000), второй параметр продолжает следовать",
+    "пустое expression при снятии отвергается до COM"
+   ],
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_bind_parameter"
+     }
+    ]
+   },
+   "create_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_bind_parameter"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_feature_parameters"
+     }
+    ]
+   },
+   "edit_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_bind_parameter"
+     }
+    ]
+   },
+   "rebuild_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_measure"
+     }
+    ]
+   },
+   "geometry_validation_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_measure"
+     }
+    ]
+   }
+  },
+  {
+   "operation_id": "dep.vb.parameter_address",
+   "kind": "common_dependency",
+   "profile": "variables-bind-minimal-v1",
+   "priority": "dependency_of",
+   "queue": "G3",
+   "context": "part.feature",
+   "catalog_refs": [
+    "G3"
+   ],
+   "parameter_schema": null,
+   "actions": {
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "not_applicable_reasons": {
+    "create": "адрес — свойство маршрута, а не объект модели",
+    "edit": "адрес сам по себе не правится: правку выполняет режим привязки",
+    "rebuild": "адрес модель не перестраивает",
+    "save_reopen": "переживание переоткрытия проверяют строки VB.10 режимов",
+    "suppress_restore": "неприменимо к адресации",
+    "delete_dependencies": "неприменимо к адресации",
+    "geometry_validation": "адрес геометрии не касается"
+   },
+   "tests": [
+    "VB.01.discover",
+    "VB.04.read",
+    "VB.11.address_by_name",
+    "VB.13.refusals"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "coverage/solid-v24/release-profiles/variables-bind-minimal-v1.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "tests/Unit/KompasMcp.Unit/VariableBindDomainTests.cs"
+   ],
+   "limitations": [
+    "Слабое место эталона, которое блок исправляет: эталонный прибор искал параметр глубины по ЧИСЛОВОМУ значению. Для продукта это недопустимо — два параметра с равным значением неразличимы, поэтому адрес — имя и примечание параметра."
+   ],
+   "required_actions": [
+    "discover",
+    "read",
+    "negative_tests"
+   ],
+   "acceptance": [
+    "параметр адресуется полем name; ноль или несколько совпадений — INVALID_ARGUMENT с перечнем имён и БЕЗ записи",
+    "две переменные с равным значением не путаются: привязка идёт к названному параметру"
+   ],
+   "adapter_route": "Адрес параметра — поле name из kompas_list_feature_parameters; совпадение ищется ПОСИМВОЛЬНО по коллекции признака, и ноль или несколько совпадений — INVALID_ARGUMENT с перечнем имён до записи. Значение и позиция адресом не являются."
+  },
+  {
+   "operation_id": "dep.vb.units",
+   "kind": "common_dependency",
+   "profile": "variables-bind-minimal-v1",
+   "priority": "dependency_of",
+   "queue": "G3",
+   "context": "part.feature",
+   "catalog_refs": [
+    "G3"
+   ],
+   "parameter_schema": null,
+   "actions": {
+    "discover": "not_applicable",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "not_applicable_reasons": {
+    "discover": "размерность — свойство значения, а не объект модели",
+    "create": "размерность ничего не создаёт",
+    "edit": "запись значения выполняют режимы привязки",
+    "rebuild": "размерность модель не перестраивает",
+    "save_reopen": "переживание переоткрытия проверяют строки VB.10",
+    "suppress_restore": "неприменимо к размерности",
+    "delete_dependencies": "неприменимо к размерности",
+    "geometry_validation": "согласованность размерности проверяется объёмом в строках привязки"
+   },
+   "tests": [
+    "VB.05.bind",
+    "VB.09.unbind",
+    "VB.13.refusals"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "coverage/solid-v24/release-profiles/variables-bind-minimal-v1.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "tests/Unit/KompasMcp.Unit/VariableBindDomainTests.cs"
+   ],
+   "limitations": [
+    "Сервер размерность не выводит из имени и не переводит: значение — число в собственной размерности переменной."
+   ],
+   "required_actions": [
+    "read",
+    "negative_tests"
+   ],
+   "acceptance": [
+    "прочитанное value совпадает с выражением-константой численно в допуске",
+    "числовое снятие привязки даёт ожидаемый объём: 100*80*10 = 80000"
+   ],
+   "adapter_route": "Значение параметра читается и пишется как число в собственной размерности; сервер его не переводит. Выражение-константа задаётся строкой, и прочитанное значение сверяется с ней численно в допуске профиля."
+  },
+  {
+   "operation_id": "dep.vb.rebuild_document",
+   "kind": "common_dependency",
+   "profile": "variables-bind-minimal-v1",
+   "priority": "dependency_of",
+   "queue": "G3",
+   "context": "part.feature",
+   "catalog_refs": [
+    "G3"
+   ],
+   "parameter_schema": null,
+   "actions": {
+    "discover": "not_applicable",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "verified",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "not_applicable",
+    "geometry_validation": "verified"
+   },
+   "not_applicable_reasons": {
+    "discover": "перестроение — свойство маршрута, а не объект модели",
+    "create": "перестроение ничего не создаёт",
+    "edit": "правку выполняют режимы привязки",
+    "save_reopen": "переживание переоткрытия проверяют строки VB.10",
+    "suppress_restore": "неприменимо к перестроению",
+    "delete_dependencies": "неприменимо к перестроению",
+    "negative_tests": "отрицательные проверки перестроения относятся к режимам привязки"
+   },
+   "tests": [
+    "VB.05.bind",
+    "VB.06.bind",
+    "VB.07.rebuild",
+    "VB.09.unbind"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "coverage/solid-v24/release-profiles/variables-bind-minimal-v1.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "tests/Unit/KompasMcp.Unit/VariableBindDomainTests.cs"
+   ],
+   "limitations": [
+    "ИЗМЕРЕНО: ksPart.RebuildModel, чья страница обещает передать внешние переменные в модель, геометрию НЕ двигает и после перестройки документа возвращает прежнюю глубину; перестраивает именно RebuildDocument."
+   ],
+   "required_actions": [
+    "rebuild",
+    "geometry_validation"
+   ],
+   "acceptance": [
+    "после записи выражения вызывается ksDocument3D.RebuildDocument, а не ksPart.RebuildModel",
+    "геометрия следует за переменной: смена depth меняет объём тел 100*80*20 + 400*40 = 176000 в допуске профиля"
+   ],
+   "adapter_route": "После записи выражения вызывается ksDocument3D.RebuildDocument (НЕ ksPart.RebuildModel, который на установленной сборке геометрию не двигает — ИЗМЕРЕНО, docs/04_KOMPAS_API_NOTES.md §4.42). Геометрия сверяется независимым измерением объёма."
+  },
+  {
+   "operation_id": "dep.vb.read_only_list",
+   "kind": "common_dependency",
+   "profile": "variables-bind-minimal-v1",
+   "priority": "dependency_of",
+   "queue": "G3",
+   "context": "part.feature",
+   "catalog_refs": [
+    "G3"
+   ],
+   "parameter_schema": null,
+   "actions": {
+    "discover": "not_applicable",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "not_applicable_reasons": {
+    "discover": "чтение адресуется признаком, а не обнаружением",
+    "create": "чтение ничего не создаёт",
+    "edit": "чтение ничего не меняет",
+    "rebuild": "чтение модель не перестраивает",
+    "save_reopen": "переживание переоткрытия проверяют строки VB.10",
+    "suppress_restore": "неприменимо к чтению",
+    "delete_dependencies": "неприменимо к чтению",
+    "geometry_validation": "чтение геометрии не меняет"
+   },
+   "tests": [
+    "VB.04.read",
+    "VB.14.no_mutation"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "coverage/solid-v24/release-profiles/variables-bind-minimal-v1.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "tests/Unit/KompasMcp.Unit/VariableBindDomainTests.cs"
+   ],
+   "limitations": [
+    "Отсутствие доступной коллекции параметров — названный отказ (CAPABILITY_UNAVAILABLE), а не пустой список: два состояния различимы в ответе."
+   ],
+   "required_actions": [
+    "read",
+    "negative_tests"
+   ],
+   "acceptance": [
+    "ревизия, число признаков и признак изменения те же после каждого вызова kompas_list_feature_parameters",
+    "непрочитанное поле остаётся null с причиной, а не нулём или пустой строкой"
+   ],
+   "adapter_route": "kompas_list_feature_parameters не требует operation_id и expected_revision и не меняет ревизию, число признаков и признак изменения. Непрочитанное поле остаётся null с причиной."
+  },
+  {
+   "operation_id": "dep.vb.idempotency",
+   "kind": "common_dependency",
+   "profile": "variables-bind-minimal-v1",
+   "priority": "dependency_of",
+   "queue": "G3",
+   "context": "part.feature",
+   "catalog_refs": [
+    "G3"
+   ],
+   "parameter_schema": null,
+   "actions": {
+    "discover": "not_applicable",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "not_applicable_reasons": {
+    "discover": "идемпотентность адресуется operation_id, а не обнаружением",
+    "edit": "повтор — тот же вызов, а не правка",
+    "rebuild": "перестроение выполняют режимы привязки",
+    "save_reopen": "переживание переоткрытия проверяют строки VB.10",
+    "suppress_restore": "неприменимо к идемпотентности",
+    "delete_dependencies": "неприменимо к идемпотентности",
+    "geometry_validation": "геометрию проверяют строки привязки"
+   },
+   "tests": [
+    "VB.12.idempotency"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "coverage/solid-v24/release-profiles/variables-bind-minimal-v1.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "tests/Unit/KompasMcp.Unit/VariableBindDomainTests.cs"
+   ],
+   "limitations": [
+    "Проверяется на обоих мутирующих инструментах: повтор payload, конфликт аргументов и устаревшая ревизия."
+   ],
+   "required_actions": [
+    "create",
+    "read",
+    "negative_tests"
+   ],
+   "acceptance": [
+    "повтор operation_id не создаёт переменную и не привязывает параметр дважды",
+    "другие аргументы при том же operation_id — OPERATION_ID_CONFLICT",
+    "устаревшая ревизия — REVISION_CONFLICT без частичных эффектов"
+   ],
+   "adapter_route": "Оба мутирующих инструмента (kompas_create_variable, kompas_bind_parameter) идут через общий механизм журнала operation_id, дедупликации и ревизий. Повтор с тем же operation_id и теми же аргументами не выполняет изменение дважды; другие аргументы — OPERATION_ID_CONFLICT; устаревшая ревизия — REVISION_CONFLICT."
   }
  ],
  "pending_families": [

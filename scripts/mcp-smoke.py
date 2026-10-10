@@ -488,6 +488,9 @@ RUN_GROUPS = (
     ("variables_material", "variables-material", "variables-material-acceptance.json",
      "Приёмка VM: внешние переменные детали и материал через MCP (блок VM, профиль "
      "variables-material-minimal-v1)"),
+    ("variables_bind", "variables-bind", "variables-bind-acceptance.json",
+     "Приёмка VB: создание переменных детали и привязка параметров операций (блок G3, профиль "
+     "variables-bind-minimal-v1)"),
     ("pattern_orientation", "pattern-orientation", "pattern-orientation-acceptance.json",
      "Приёмка PO: ориентация экземпляров кругового массива через MCP (наряд MCP-015)"),
     ("release_040", "release-040", "release-040-acceptance.json",
@@ -1946,8 +1949,8 @@ def sketch_bulk_checks(client, rep, app_id, workdir):
             "схемы совпадают с реестром; описания называют новые пределы и вид spline",
             "PASS" if (schema_matches and "spline" in kinds and "polyline" in kinds
                        and isinstance(limit_entities, int) and isinstance(limit_vertices, int)
-                       and named_limits and len(names) == 81) else "FAIL",
-            f"инструментов={len(names)} (ожидание 81); схема kompas_edit_sketch совпадает с реестром="
+                       and named_limits and len(names) == 84) else "FAIL",
+            f"инструментов={len(names)} (ожидание 84); схема kompas_edit_sketch совпадает с реестром="
             f"{schema_matches}; виды={kinds}; предел entities={limit_entities}, "
             f"предел points_mm={limit_vertices}; описания называют числа и источник={named_limits}",
             {"entities_max_items": limit_entities, "points_max_items": limit_vertices,
@@ -2543,9 +2546,9 @@ def interference_checks(client, rep, app_id, workdir):
     named = all(name in caps_text for name in wanted)
     rep.add("INT.01.discover",
             "оба инструмента объявлены, схемы совпадают с реестром, kompas_capabilities их называет",
-            "PASS" if (all(name in names for name in wanted) and len(names) == 81
+            "PASS" if (all(name in names for name in wanted) and len(names) == 84
                        and all(schema_ok.values()) and named) else "FAIL",
-            f"инструментов={len(names)} (ожидание 81); схемы совпадают={schema_ok}; "
+            f"инструментов={len(names)} (ожидание 84); схемы совпадают={schema_ok}; "
             f"capabilities называет={named}")
 
     # ========= INT.13: раскладка двойника сверена с УСТАНОВЛЕННОЙ библиотекой типов =========
@@ -5991,6 +5994,725 @@ def variables_material_checks(client, rep, app_id, workdir, reference_path=None)
 
     close(reopened)
 
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# Группа VB: создание переменных детали и привязка параметров операций (блок G3,
+# профиль `variables-bind-minimal-v1`)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+
+# Описание эталона VB, зафиксированное ДО прогона. Геометрию строит САМА группа через MCP, а переменные и
+# привязки создаёт ПРОДУКТ (kompas_create_variable / kompas_bind_parameter) — это и есть предмет наряда,
+# поэтому заранее собранный файл С переменными здесь не подставляется. Числа ниже не подбираются после FAIL.
+VB_REFERENCE = {
+    "base_width_mm": 100.0,
+    "base_height_mm": 80.0,
+    "base_depth_mm": 10.0,
+    "base_volume_mm3": 80000.0,
+    "add_start_mm": [120.0, 0.0],
+    "add_size_mm": 20.0,
+    "add_depth_mm": 10.0,
+    "add_volume_mm3": 4000.0,
+    "total_initial_mm3": 84000.0,
+    "depth_name": "depth",
+    "depth_initial": 10.0,
+    "depth_changed": 20.0,
+    "depth_third": 30.0,
+    "dependent_name": "full_depth",
+    "dependent_expression": "depth*2",
+    "dependent_initial": 20.0,
+    "dependent_changed": 40.0,
+    "dependent_third": 60.0,
+    "equal_name": "depth_equal",
+    "half_expression": "depth/2 + 5",
+    "half_value_at_20": 15.0,
+    "half_value_at_30": 20.0,
+    "unbind_constant": "10",
+    "volume_tolerance_mm3": 1.0,
+    "value_tolerance": 1e-6,
+}
+
+
+def variables_bind_checks(client, rep, app_id, workdir):
+    """VB.* — три инструмента блока G3 через MCP на бинарях поставки.
+
+    ЗАЧЕМ ЭТА ГРУППА. Три инструмента (create_variable, list_feature_parameters, bind_parameter) написаны
+    по документированным маршрутам v24 и покрыты модульными тестами. Группа — ЖИВОЕ подтверждение на
+    бинарях поставки: инструменты вызываются через настоящий MCP, а не «маршрут написан».
+
+    ЭТАЛОН. Геометрия (плита 100×80 глубиной 10 = 80000 мм³ и ВТОРАЯ операция — отдельное тело, квадрат
+    20×20 вне плиты, глубина 10 = 4000 мм³) строится ЗДЕСЬ через MCP; переменные и привязки создаёт
+    ПРОДУКТ — иначе группа доказывала бы заранее собранный файл, а не свои инструменты. Имена, выражения
+    и числа зафиксированы в VB_REFERENCE ДО прогона.
+
+    ЧЕГО ЗДЕСЬ НЕТ. Клиентская приёмка и Trust не трогаются. Удаление и переименование переменных,
+    функциональные/интервальные переменные, таблица переменных IVariableTable, переменные компонентов
+    сборки и привязка размеров эскиза — вне объёма блока (наряд §2) и здесь не проверяются.
+    """
+    import json as _json
+    import os as _os
+
+    ref = dict(VB_REFERENCE)
+
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def call_raw(tool, payload, timeout=300):
+        """Call WITHOUT injecting operation_id — for idempotency, where the id is part of the payload."""
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def doc_of(env):
+        r = result(env)
+        return r.get("document_id") or r.get("id") or (env or {}).get("document_id")
+
+    def emsg(env):
+        err = (env or {}).get("error") or {}
+        return err.get("message") if isinstance(err, dict) else None
+
+    def status_of(env):
+        return (env or {}).get("status")
+
+    def current_rev(doc):
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return ((env or {}).get("result") or {}).get("revision") or 1
+
+    def dirty_of(doc):
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return ((env or {}).get("result") or {}).get("dirty")
+
+    def near(a, b, tol):
+        return isinstance(a, (int, float)) and isinstance(b, (int, float)) and abs(a - b) <= tol
+
+    def list_bodies(doc):
+        _e, env, _r = client.tool("kompas_list_bodies", {"document_id": doc})
+        rows = (env or {}).get("result")
+        return rows if isinstance(rows, list) else []
+
+    def body_volume(body_ref):
+        _e, env, _r = client.tool("kompas_measure", {"target_ref": body_ref, "properties": ["volume"]})
+        return ((env or {}).get("result") or {}).get("volume_mm3")
+
+    def total_volume(doc):
+        rows = list_bodies(doc)
+        values = [body_volume(r.get("body_ref")) for r in rows]
+        if not rows or any(v is None for v in values):
+            return None
+        return sum(values)
+
+    def body_volume_by_xy(doc, x_lo, x_hi, y_lo, y_hi):
+        """The body whose XY FOOTPRINT matches, whatever its height.
+
+        INVARIANT: the height is what the checks MOVE, so a bbox that included z would stop identifying
+        the body the moment the parameter it drives changed — the instrument would describe itself.
+        """
+        for row in list_bodies(doc):
+            box = row.get("bbox") or {}
+            mn, mx = box.get("min_mm"), box.get("max_mm")
+            if mn and mx and len(mn) >= 3 and len(mx) >= 3 \
+                    and abs(mn[0] - x_lo) <= 0.01 and abs(mx[0] - x_hi) <= 0.01 \
+                    and abs(mn[1] - y_lo) <= 0.01 and abs(mx[1] - y_hi) <= 0.01:
+                return body_volume(row.get("body_ref"))
+        return None
+
+    def base_body_volume(doc):
+        return body_volume_by_xy(doc, 0.0, ref["base_width_mm"], 0.0, ref["base_height_mm"])
+
+    def add_body_volume(doc):
+        x = ref["add_start_mm"][0]
+        return body_volume_by_xy(doc, x, x + ref["add_size_mm"], 0.0, ref["add_size_mm"])
+
+    def list_features(doc):
+        _e, env, _r = client.tool("kompas_list_features", {"document_id": doc})
+        rows = (env or {}).get("result")
+        return rows if isinstance(rows, list) else []
+
+    def list_variables(doc):
+        _e, env, _r = client.tool("kompas_list_variables", {"document_id": doc})
+        return result(env), error_code(env)
+
+    def feature_ref(doc, name):
+        """Resolve a feature reference by its system NAME on the CURRENT revision.
+
+        INVARIANT: references are revision-bound, so a reference captured before a mutation is re-resolved
+        before every use instead of being held across it. The NAME identifies the operation; the reference
+        is only the currency the product takes."""
+        for row in list_features(doc):
+            if row.get("name") == name:
+                return row.get("feature_ref")
+        return None
+
+    def variables_by_name(doc):
+        listing, _code = list_variables(doc)
+        return {v.get("name"): v for v in (listing.get("variables") or [])}
+
+    def create_variable(doc, name, value, **kw):
+        args = {"document_id": doc, "expected_revision": current_rev(doc), "name": name, "value": value}
+        args.update(kw)
+        return call("kompas_create_variable", args)
+
+    def list_parameters(doc, feature_ref):
+        return call("kompas_list_feature_parameters",
+                    {"document_id": doc, "feature_ref": feature_ref})
+
+    def bind(doc, feature_ref, parameter_name, expression, **kw):
+        args = {"document_id": doc, "expected_revision": current_rev(doc), "feature_ref": feature_ref,
+                "parameter_name": parameter_name, "expression": expression}
+        args.update(kw)
+        return call("kompas_bind_parameter", args)
+
+    def parameter_row(doc, feature_ref, name):
+        env, _code = list_parameters(doc, feature_ref)
+        row = next((p for p in (result(env).get("parameters") or []) if p.get("name") == name), None)
+        return row
+
+    def parameter_value_row(doc, feature_ref, value):
+        """The parameter whose current value equals `value` — the harness identifies the depth parameter
+        by VALUE here and then hands the PRODUCT its NAME; the product must address by name (§1)."""
+        env, code = list_parameters(doc, feature_ref)
+        rows = result(env).get("parameters") or []
+        hits = [p for p in rows if near(p.get("value"), value, ref["value_tolerance"])]
+        return (hits[0] if hits else None), rows, len(hits), code
+
+    def close(doc):
+        if doc:
+            call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+
+    def build_error_for_all(reason):
+        for cid, desc in (
+            ("VB.02.create", "переменная depth = 10 создана и прочитана из заново полученной коллекции"),
+            ("VB.03.create", "переменная full_depth с выражением depth*2 вычислена КОМПАС (20)"),
+            ("VB.04.read", "параметры операции прочитаны: name, parameter_note, value = 10"),
+            ("VB.05.bind", "глубина основания привязана к depth"),
+            ("VB.06.bind", "глубина второй операции привязана к full_depth"),
+            ("VB.07.rebuild", "смена depth двигает обе операции: объём 176000"),
+            ("VB.08.edit", "выражение depth/2 + 5 вычислено КОМПАС"),
+            ("VB.09.unbind", "снятие привязки основанием константой 10"),
+            ("VB.10.save_reopen", "переменные, выражения и привязки переживают save → close → reopen"),
+            ("VB.11.address_by_name", "параметр адресуется по имени при двух равнозначных переменных"),
+            ("VB.12.idempotency", "идемпотентность и ревизии у двух мутирующих инструментов"),
+            ("VB.13.refusals", "отказы предусмотренными кодами без ложного успеха"),
+            ("VB.14.no_mutation", "чтение параметров не меняет модель"),
+        ):
+            rep.add(cid, desc, "FAIL", reason)
+
+    # ── VB.01.discover: инструменты и схемы ────────────────────────────────────────────────────
+    tools = client.call("tools/list", {}).get("tools", [])
+    names = sorted(t["name"] for t in tools)
+    drift_ok = True
+    drift_detail = []
+    for tool_name in ("kompas_create_variable", "kompas_list_feature_parameters",
+                      "kompas_bind_parameter"):
+        entry = next((t for t in tools if t["name"] == tool_name), None)
+        published = _os.path.join(ROOT, "schemas", tool_name + ".json")
+        want = None
+        try:
+            with open(published, encoding="utf-8-sig") as fh:
+                want = _json.load(fh)
+            want.pop("$schema", None)
+        except (OSError, ValueError):
+            want = None
+        same = entry is not None and want is not None and entry.get("inputSchema") == want
+        drift_ok = drift_ok and same
+        drift_detail.append(f"{tool_name}={same}")
+    rep.add("VB.01.discover",
+            "три инструмента в tools/list, их схемы совпадают с опубликованным реестром; всего 84",
+            "PASS" if (len(names) == 84 and drift_ok) else "FAIL",
+            f"инструментов={len(names)} (ожидание 84); схемы: {', '.join(drift_detail)}")
+
+    # ── построение эталона: две независимые операции через MCP ─────────────────────────────────
+    env, code = call("kompas_create_document", {"application_id": app_id, "kind": "part", "name": "VB-REF"})
+    doc = doc_of(env)
+    build_error = None if doc else f"create_document: {code}"
+
+    base_feature_name = None
+    add_feature_name = None
+    if doc:
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": current_rev(doc),
+            "plane": {"base": "xy", "offset_mm": 0}, "name": "vb-base"})
+        base_sketch = result(env).get("id")
+        if not base_sketch:
+            build_error = f"create_sketch(base): {code} {emsg(env)}"
+        else:
+            env, code = call("kompas_edit_sketch", {
+                "sketch_ref": base_sketch, "expected_revision": current_rev(doc), "mode": "append",
+                "entities": [{"kind": "rectangle", "start_mm": [0.0, 0.0],
+                              "width_mm": ref["base_width_mm"], "height_mm": ref["base_height_mm"]}]})
+            if code:
+                build_error = f"edit_sketch(base): {code} {emsg(env)}"
+            else:
+                env, code = call("kompas_finish_sketch",
+                                 {"sketch_ref": base_sketch, "require_closed_profile": False})
+                if code:
+                    build_error = f"finish_sketch(base): {code} {emsg(env)}"
+                else:
+                    env, code = call("kompas_extrude", {
+                        "sketch_ref": base_sketch, "expected_revision": current_rev(doc),
+                        "operation": "base", "depth_mm": ref["base_depth_mm"], "direction": "positive"})
+                    if code:
+                        build_error = f"extrude(base): {code} {emsg(env)}"
+
+    if doc and not build_error:
+        # The base extrusion is the ONE feature that appeared; the second operation is the ref that is
+        # NEW after it — so the two operations are told apart by identity, not by order in the tree.
+        base_rows = list_features(doc)
+        if len(base_rows) != 1 or not base_rows[0].get("name"):
+            build_error = (f"после базового выдавливания признаков {len(base_rows)}, ожидался 1 с именем; "
+                           f"признаки={[(r.get('name'), r.get('type')) for r in base_rows]}")
+        else:
+            base_feature_name = base_rows[0].get("name")
+
+    if doc and not build_error:
+        x = ref["add_start_mm"][0]
+        size = ref["add_size_mm"]
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": current_rev(doc),
+            "plane": {"base": "xy", "offset_mm": 0}, "name": "vb-add"})
+        add_sketch = result(env).get("id")
+        if not add_sketch:
+            build_error = f"create_sketch(add): {code} {emsg(env)}"
+        else:
+            env, code = call("kompas_edit_sketch", {
+                "sketch_ref": add_sketch, "expected_revision": current_rev(doc), "mode": "append",
+                "entities": [{"kind": "rectangle", "start_mm": [x, 0.0],
+                              "width_mm": size, "height_mm": size}]})
+            if code:
+                build_error = f"edit_sketch(add): {code} {emsg(env)}"
+            else:
+                env, code = call("kompas_finish_sketch",
+                                 {"sketch_ref": add_sketch, "require_closed_profile": False})
+                if code:
+                    build_error = f"finish_sketch(add): {code} {emsg(env)}"
+                else:
+                    env, code = call("kompas_extrude", {
+                        "sketch_ref": add_sketch, "expected_revision": current_rev(doc),
+                        "operation": "base", "depth_mm": ref["add_depth_mm"], "direction": "positive"})
+                    if code:
+                        build_error = f"extrude(add): {code} {emsg(env)}"
+
+    if doc and not build_error:
+        # The second operation is told apart by IDENTITY, not by order in the tree: among the features
+        # that appeared after the first extrusion, the OPERATION is the one that exposes parameter
+        # variables — a sketch has none. Order in the tree is not used as an address.
+        all_rows = list_features(doc)
+        new_rows = [r for r in all_rows if r.get("name") != base_feature_name]
+        if len(new_rows) != 1 or not new_rows[0].get("name"):
+            build_error = (f"после второй операции новых признаков {len(new_rows)}, ожидался 1 с именем; "
+                           f"все признаки={[(r.get('name'), r.get('type')) for r in all_rows]}")
+        else:
+            add_feature_name = new_rows[0].get("name")
+
+    initial_base = base_body_volume(doc) if doc and not build_error else None
+    initial_add = add_body_volume(doc) if doc and not build_error else None
+    rep.add("VB.00.setup",
+            "эталон собран через MCP: плита 100×80×10 = 80000 мм³ и отдельное тело 20×20×10 = 4000 мм³ "
+            "(две независимые операции, тело адресуется габаритом)",
+            "PASS" if (doc and not build_error
+                       and near(initial_base, ref["base_volume_mm3"], ref["volume_tolerance_mm3"])
+                       and near(initial_add, ref["add_volume_mm3"], ref["volume_tolerance_mm3"])) else "FAIL",
+            f"document_id={doc} base_volume={initial_base} add_volume={initial_add} error={build_error} "
+            f"base_feature={base_feature_name!r} add_feature={add_feature_name!r} "
+            f"features={[(r.get('name'), r.get('type')) for r in (list_features(doc) if doc else [])]}")
+
+    if not doc or build_error or not base_feature_name or not add_feature_name:
+        build_error_for_all(f"эталон не построен: {build_error}")
+        close(doc)
+        return
+
+    # ── VB.02.create: depth = 10 ───────────────────────────────────────────────────────────────
+    env, code = create_variable(doc, ref["depth_name"], ref["depth_initial"],
+                                note="глубина эталона G3")
+    created = result(env)
+    depth_ok = (not code and created.get("name") == ref["depth_name"]
+                and near(created.get("value"), ref["depth_initial"], ref["value_tolerance"])
+                and created.get("external") is True
+                and created.get("expression") is not None
+                and created.get("read_back_verified") is True)
+    listing, lcode = list_variables(doc)
+    seen_names = {v.get("name") for v in (listing.get("variables") or [])}
+    rep.add("VB.02.create",
+            "переменная depth = 10 создана документированным маршрутом и прочитана ИЗ ЗАНОВО ПОЛУЧЕННОЙ "
+            "коллекции (не эхо запроса): имя, значение 10, external=true, выражение-константа; видна в "
+            "kompas_list_variables",
+            "PASS" if (depth_ok and not lcode and ref["depth_name"] in seen_names) else "FAIL",
+            f"error={code} name={created.get('name')!r} value={created.get('value')} "
+            f"expression={created.get('expression')!r} external={created.get('external')} "
+            f"read_back_verified={created.get('read_back_verified')} "
+            f"list_total={listing.get('total')} names={sorted(n for n in seen_names if n)} "
+            f"diagnostics={created.get('diagnostics')}")
+
+    # ── VB.03.create: full_depth с выражением depth*2 ──────────────────────────────────────────
+    env, code = create_variable(doc, ref["dependent_name"], ref["dependent_initial"],
+                                expression=ref["dependent_expression"], note="полная глубина эталона G3")
+    dependent = result(env)
+    dependent_ok = (not code
+                    and dependent.get("expression") == ref["dependent_expression"]
+                    and near(dependent.get("value"), ref["dependent_initial"], ref["value_tolerance"])
+                    and dependent.get("external") is True
+                    and dependent.get("read_back_verified") is True)
+    rep.add("VB.03.create",
+            "переменная full_depth создана с выражением depth*2; значение, ВЫЧИСЛЕННОЕ КОМПАС, равно 20, "
+            "и выражение прочитано как depth*2",
+            "PASS" if dependent_ok else "FAIL",
+            f"error={code} expression={dependent.get('expression')!r} value={dependent.get('value')} "
+            f"(формула даёт {ref['dependent_initial']}) external={dependent.get('external')} "
+            f"read_back_verified={dependent.get('read_back_verified')} "
+            f"diagnostics={dependent.get('diagnostics')}")
+
+    # ── VB.04.read: параметры обеих операций ───────────────────────────────────────────────────
+    base_param_row, base_params, base_hits, base_code = parameter_value_row(
+        doc, feature_ref(doc, base_feature_name), ref["base_depth_mm"])
+    add_param_row, add_params, add_hits, add_code = parameter_value_row(
+        doc, feature_ref(doc, add_feature_name), ref["add_depth_mm"])
+    base_param = (base_param_row or {}).get("name")
+    add_param = (add_param_row or {}).get("name")
+    fields_named = all((p.get("name") is not None or p.get("value") is None) for p in base_params)
+    read_ok = (base_param_row is not None and add_param_row is not None
+               and base_param_row.get("parameter_note") is not None
+               and near(base_param_row.get("value"), ref["base_depth_mm"], ref["value_tolerance"])
+               and base_param_row.get("ordinal") is not None)
+    rep.add("VB.04.read",
+            "у выдавливания прочитана переменная глубины: её name, parameter_note и value = 10; поля "
+            "непустые или null с причиной; адрес параметра — его ИМЯ",
+            "PASS" if read_ok else "FAIL",
+            f"base_param={base_param!r} note={base_param_row and base_param_row.get('parameter_note')!r} "
+            f"value={base_param_row and base_param_row.get('value')} hits={base_hits} code={base_code} "
+            f"add_param={add_param!r} hits={add_hits} code={add_code} "
+            f"base_rows={[{k: r.get(k) for k in ('ordinal', 'name', 'parameter_note', 'value', 'expression')} for r in base_params]} "
+            f"fields_named_or_null_with_reason={fields_named}")
+
+    if not base_param or not add_param:
+        build_error_for_all("параметры операций не прочитаны — привязывать нечего")
+        close(doc)
+        return
+
+    # ── VB.05.bind: глубина основания → depth ──────────────────────────────────────────────────
+    env, code = bind(doc, feature_ref(doc, base_feature_name), base_param, ref["depth_name"])
+    bound_base = result(env)
+    base_vol = base_body_volume(doc)
+    total_vol = total_volume(doc)
+    rep.add("VB.05.bind",
+            "глубина основания привязана к depth: expression_read_back = depth, value_after = 10, "
+            "rebuild_succeeded = true; объём основания 80000 в допуске профиля",
+            "PASS" if (not code and bound_base.get("expression_read_back") == ref["depth_name"]
+                       and near(bound_base.get("value_after"), ref["depth_initial"], ref["value_tolerance"])
+                       and bound_base.get("rebuild_succeeded") is True
+                       and near(base_vol, ref["base_volume_mm3"], ref["volume_tolerance_mm3"])) else "FAIL",
+            f"error={code} expression_read_back={bound_base.get('expression_read_back')!r} "
+            f"value_after={bound_base.get('value_after')} rebuild={bound_base.get('rebuild_succeeded')} "
+            f"base_volume={base_vol} total={total_vol} "
+            f"checks={bound_base.get('verification', {}).get('checks')} "
+            f"diagnostics={bound_base.get('diagnostics')}")
+
+    # ── VB.06.bind: глубина второй операции → full_depth ───────────────────────────────────────
+    env, code = bind(doc, feature_ref(doc, add_feature_name), add_param, ref["dependent_name"])
+    bound_add = result(env)
+    add_vol = add_body_volume(doc)
+    rep.add("VB.06.bind",
+            "глубина второй операции привязана к full_depth: expression_read_back = full_depth, "
+            "value_after = 20; объём второго тела 8000",
+            "PASS" if (not code and bound_add.get("expression_read_back") == ref["dependent_name"]
+                       and near(bound_add.get("value_after"), ref["dependent_initial"],
+                                ref["value_tolerance"])
+                       and bound_add.get("rebuild_succeeded") is True
+                       and near(add_vol, 2.0 * ref["add_volume_mm3"], ref["volume_tolerance_mm3"])) else "FAIL",
+            f"error={code} expression_read_back={bound_add.get('expression_read_back')!r} "
+            f"value_after={bound_add.get('value_after')} rebuild={bound_add.get('rebuild_succeeded')} "
+            f"add_volume={add_vol} (эталон 8000) diagnostics={bound_add.get('diagnostics')}")
+
+    # ── VB.07.rebuild: смена depth → 20 двигает ОБЕ операции ───────────────────────────────────
+    env, code = call("kompas_set_variable", {
+        "document_id": doc, "expected_revision": current_rev(doc),
+        "name": ref["depth_name"], "value": ref["depth_changed"]})
+    after_change = result(env)
+    base_vol2 = base_body_volume(doc)
+    add_vol2 = add_body_volume(doc)
+    total_vol2 = total_volume(doc)
+    expected_base2 = ref["base_width_mm"] * ref["base_height_mm"] * ref["depth_changed"]
+    expected_add2 = ref["add_size_mm"] * ref["add_size_mm"] * ref["dependent_changed"]
+    expected_total2 = expected_base2 + expected_add2
+    vars2 = variables_by_name(doc)
+    rep.add("VB.07.rebuild",
+            "смена depth → 20 через существующий kompas_set_variable двигает ОБЕ операции: основание "
+            "100×80×20 = 160000, второе тело 20×20×40 = 16000, всего 176000",
+            "PASS" if (not code
+                       and near(base_vol2, expected_base2, ref["volume_tolerance_mm3"])
+                       and near(add_vol2, expected_add2, ref["volume_tolerance_mm3"])
+                       and near(total_vol2, expected_total2, ref["volume_tolerance_mm3"])
+                       and near((vars2.get(ref["dependent_name"]) or {}).get("value"),
+                                ref["dependent_changed"], ref["value_tolerance"])) else "FAIL",
+            f"error={code} base={base_vol2} (эталон {expected_base2}) add={add_vol2} "
+            f"(эталон {expected_add2}) total={total_vol2} (эталон {expected_total2}) "
+            f"full_depth={(vars2.get(ref['dependent_name']) or {}).get('value')} "
+            f"set_diagnostics={after_change.get('diagnostics')}")
+
+    # ── VB.08.edit: выражение depth/2 + 5 на втором параметре ──────────────────────────────────
+    env, code = bind(doc, feature_ref(doc, add_feature_name), add_param, ref["half_expression"])
+    edited = result(env)
+    add_vol3 = add_body_volume(doc)
+    expected_add3 = ref["add_size_mm"] * ref["add_size_mm"] * ref["half_value_at_20"]
+    rep.add("VB.08.edit",
+            "выражение depth/2 + 5 на втором параметре вычислено КОМПАС: при depth = 20 значение 15, "
+            "объём второго тела 400*15 = 6000",
+            "PASS" if (not code and edited.get("expression_read_back") == ref["half_expression"]
+                       and near(edited.get("value_after"), ref["half_value_at_20"], ref["value_tolerance"])
+                       and near(add_vol3, expected_add3, ref["volume_tolerance_mm3"])) else "FAIL",
+            f"error={code} expression_read_back={edited.get('expression_read_back')!r} "
+            f"value_after={edited.get('value_after')} (эталон {ref['half_value_at_20']}) "
+            f"add_volume={add_vol3} (эталон {expected_add3}) diagnostics={edited.get('diagnostics')}")
+
+    # ── VB.09.unbind: снятие привязки основания константой ─────────────────────────────────────
+    env, code = bind(doc, feature_ref(doc, base_feature_name), base_param, ref["unbind_constant"])
+    unbound = result(env)
+    env2, code2 = call("kompas_set_variable", {
+        "document_id": doc, "expected_revision": current_rev(doc),
+        "name": ref["depth_name"], "value": ref["depth_third"]})
+    base_vol4 = base_body_volume(doc)
+    add_vol4 = add_body_volume(doc)
+    expected_add4 = ref["add_size_mm"] * ref["add_size_mm"] * ref["half_value_at_30"]
+    rep.add("VB.09.unbind",
+            "expression = \"10\" у основания: после смены depth → 30 объём основания НЕ меняется "
+            "(остаётся 80000), второй параметр продолжает следовать (20 → 8000)",
+            "PASS" if (not code and unbound.get("expression_read_back") == ref["unbind_constant"]
+                       and near(unbound.get("value_after"), ref["depth_initial"], ref["value_tolerance"])
+                       and not code2
+                       and near(base_vol4, ref["base_volume_mm3"], ref["volume_tolerance_mm3"])
+                       and near(add_vol4, expected_add4, ref["volume_tolerance_mm3"])) else "FAIL",
+            f"unbind_error={code} expression_read_back={unbound.get('expression_read_back')!r} "
+            f"value_after={unbound.get('value_after')} set_error={code2} base_volume={base_vol4} "
+            f"add_volume={add_vol4} (эталон {expected_add4}) diagnostics={unbound.get('diagnostics')}")
+
+    # ── VB.11.address_by_name: две переменные с РАВНЫМ значением ───────────────────────────────
+    env, code = create_variable(doc, ref["equal_name"], ref["depth_third"], note="двойник глубины G3")
+    equal_made = result(env)
+    # The twin carries the SAME number as depth; binding must still resolve the NAME, not the value.
+    env, code = bind(doc, feature_ref(doc, add_feature_name), add_param, ref["depth_name"])
+    bound_name = result(env)
+    twin = variables_by_name(doc).get(ref["equal_name"]) or {}
+    add_vol5 = add_body_volume(doc)
+    expected_add5 = ref["add_size_mm"] * ref["add_size_mm"] * ref["depth_third"]
+    rep.add("VB.11.address_by_name",
+            "при двух переменных с РАВНЫМ значением (depth и depth_equal) параметр адресуется ПО ИМЕНИ: "
+            "привязка к depth не задевает depth_equal (контроль слабого места эталона)",
+            "PASS" if (not code and bound_name.get("expression_read_back") == ref["depth_name"]
+                       and bound_name.get("expression_read_back") != ref["equal_name"]
+                       and near(bound_name.get("value_after"), ref["depth_third"], ref["value_tolerance"])
+                       and near(twin.get("value"), ref["depth_third"], ref["value_tolerance"])
+                       and near(add_vol5, expected_add5, ref["volume_tolerance_mm3"])) else "FAIL",
+            f"create_error={code} expression_read_back={bound_name.get('expression_read_back')!r} "
+            f"value_after={bound_name.get('value_after')} depth_equal_value={twin.get('value')} "
+            f"depth_equal_expression={twin.get('expression')!r} add_volume={add_vol5} "
+            f"(эталон {expected_add5}) equal_created={equal_made.get('name')!r}")
+
+    # ── VB.10.save_reopen: снимок → save → close → reopen → чтение ДО повторной записи ─────────
+    snapshot_vars = {v.get("name"): (v.get("value"), v.get("expression"))
+                     for v in (list_variables(doc)[0].get("variables") or [])}
+    snapshot_base_expr = (parameter_row(doc, feature_ref(doc, base_feature_name), base_param)
+                          or {}).get("expression")
+    snapshot_add_expr = (parameter_row(doc, feature_ref(doc, add_feature_name), add_param)
+                         or {}).get("expression")
+    snapshot_base_vol = base_body_volume(doc)
+    snapshot_add_vol = add_body_volume(doc)
+    written_path = _os.path.join(workdir, "variables-bind", "vb-reference.m3d")
+    _os.makedirs(_os.path.dirname(written_path), exist_ok=True)
+    env, code_save = call("kompas_save_document", {
+        "document_id": doc, "expected_revision": current_rev(doc), "target_path": written_path})
+    close(doc)
+    env, code_open = call("kompas_open_document", {
+        "application_id": app_id, "path": written_path, "access": "edit"})
+    reopened = doc_of(env)
+
+    reopen_ok = False
+    reopen_detail = f"save_error={code_save} open_error={code_open}"
+    if reopened:
+        base_ref2 = feature_ref(reopened, base_feature_name)
+        add_ref2 = feature_ref(reopened, add_feature_name)
+        vars_after = {v.get("name"): (v.get("value"), v.get("expression"))
+                      for v in (list_variables(reopened)[0].get("variables") or [])}
+        base_expr2 = (parameter_row(reopened, base_ref2, base_param) or {}).get("expression") \
+            if base_ref2 else None
+        add_expr2 = (parameter_row(reopened, add_ref2, add_param) or {}).get("expression") \
+            if add_ref2 else None
+        base_vol6 = base_body_volume(reopened)
+        add_vol6 = add_body_volume(reopened)
+        vars_match = (vars_after.get(ref["depth_name"], (None,))[0] is not None
+                      and near(vars_after.get(ref["depth_name"], (None,))[0], ref["depth_third"],
+                               ref["value_tolerance"])
+                      and near(vars_after.get(ref["dependent_name"], (None,))[0],
+                               ref["dependent_third"], ref["value_tolerance"])
+                      and near(vars_after.get(ref["equal_name"], (None,))[0], ref["depth_third"],
+                               ref["value_tolerance"]))
+        bindings_match = (base_expr2 == snapshot_base_expr and add_expr2 == snapshot_add_expr
+                          and base_expr2 == ref["unbind_constant"]
+                          and add_expr2 == ref["depth_name"])
+        volumes_match = (near(base_vol6, snapshot_base_vol, ref["volume_tolerance_mm3"])
+                         and near(add_vol6, snapshot_add_vol, ref["volume_tolerance_mm3"]))
+        # смена depth ПОСЛЕ переоткрытия снова двигает геометрию (второе тело следует за depth)
+        env2, code2 = call("kompas_set_variable", {
+            "document_id": reopened, "expected_revision": current_rev(reopened),
+            "name": ref["depth_name"], "value": ref["depth_initial"]})
+        base_vol7 = base_body_volume(reopened)
+        add_vol7 = add_body_volume(reopened)
+        expected_add7 = ref["add_size_mm"] * ref["add_size_mm"] * ref["depth_initial"]
+        moved = (not code2
+                 and near(base_vol7, ref["base_volume_mm3"], ref["volume_tolerance_mm3"])
+                 and near(add_vol7, expected_add7, ref["volume_tolerance_mm3"]))
+        reopen_ok = vars_match and bindings_match and volumes_match and moved
+        reopen_detail += (f"; vars_match={vars_match} bindings_match={bindings_match} "
+                          f"base_expr={base_expr2!r} add_expr={add_expr2!r} "
+                          f"snapshot=({snapshot_base_expr!r},{snapshot_add_expr!r}) "
+                          f"volumes_match={volumes_match} moved={moved} "
+                          f"base_volume={base_vol7} add_volume={add_vol7} (эталон {expected_add7})")
+        rep.add("VB.10.save_reopen",
+                "переменные, выражения и привязки читаются из ПЕРЕОТКРЫТОГО документа ДО всякой записи; "
+                "значения и объём те же; смена depth после reopen снова двигает геометрию",
+                "PASS" if reopen_ok else "FAIL", reopen_detail)
+    else:
+        rep.add("VB.10.save_reopen",
+                "переменные, выражения и привязки читаются из ПЕРЕОТКРЫТОГО документа ДО всякой записи; "
+                "значения и объём те же; смена depth после reopen снова двигает геометрию",
+                "FAIL", reopen_detail)
+
+    # ── VB.12.idempotency: повтор operation_id, конфликт, устаревшая ревизия ───────────────────
+    idem_op = str(uuid.uuid4())
+    rev_before_idem = current_rev(reopened or doc)
+    target_doc = reopened or doc
+    payload = {"document_id": target_doc, "expected_revision": rev_before_idem,
+               "name": "idem_var", "value": 5.0, "operation_id": idem_op}
+    env, code_first = call_raw("kompas_create_variable", dict(payload))
+    rev_after_first = current_rev(target_doc)
+    env, code_repeat = call_raw("kompas_create_variable", dict(payload))
+    rev_after_repeat = current_rev(target_doc)
+    conflict_payload = dict(payload)
+    conflict_payload["value"] = 7.0
+    env, code_conflict = call_raw("kompas_create_variable", conflict_payload)
+    stale_payload = {"document_id": target_doc, "expected_revision": rev_before_idem,
+                     "name": "stale_var", "value": 1.0, "operation_id": str(uuid.uuid4())}
+    env, code_stale = call_raw("kompas_create_variable", stale_payload)
+    idem_count = sum(1 for v in (list_variables(target_doc)[0].get("variables") or [])
+                     if v.get("name") == "idem_var")
+    rep.add("VB.12.idempotency",
+            "повтор operation_id не создаёт переменную дважды (ревизия не двигается); тот же id с другими "
+            "аргументами — OPERATION_ID_CONFLICT; устаревшая ревизия — REVISION_CONFLICT",
+            "PASS" if (not code_first and not code_repeat
+                       and rev_after_repeat == rev_after_first
+                       and code_conflict == "OPERATION_ID_CONFLICT"
+                       and code_stale == "REVISION_CONFLICT"
+                       and idem_count == 1) else "FAIL",
+            f"first={code_first} repeat={code_repeat} conflict={code_conflict} stale={code_stale} "
+            f"revision {rev_before_idem}→{rev_after_first}→{rev_after_repeat} "
+            f"idem_var_count={idem_count}")
+
+    # ── VB.14.no_mutation: чтение параметров модель не меняет ──────────────────────────────────
+    rev_a = current_rev(target_doc)
+    dirty_a = dirty_of(target_doc)
+    features_a = len(list_features(target_doc))
+    bodies_a = len(list_bodies(target_doc))
+    for _ in range(3):
+        list_parameters(target_doc, feature_ref(target_doc, base_feature_name))
+    rev_b = current_rev(target_doc)
+    dirty_b = dirty_of(target_doc)
+    features_b = len(list_features(target_doc))
+    bodies_b = len(list_bodies(target_doc))
+    rep.add("VB.14.no_mutation",
+            "ревизия, признак изменения, число признаков и число тел те же после каждого вызова "
+            "kompas_list_feature_parameters",
+            "PASS" if (rev_a == rev_b and dirty_a == dirty_b
+                       and features_a == features_b and bodies_a == bodies_b) else "FAIL",
+            f"revision {rev_a}→{rev_b} dirty {dirty_a}→{dirty_b} features {features_a}→{features_b} "
+            f"bodies {bodies_a}→{bodies_b}")
+
+    # ── VB.13.refusals: предусмотренные коды без ложного успеха ───────────────────────────────
+    refusals = {}
+
+    env, code = create_variable(target_doc, "Глубина", 10.0)
+    refusals["cyrillic_name"] = code
+
+    env, code = create_variable(target_doc, "has space", 10.0)
+    refusals["space_name"] = code
+
+    rev_before_dup = current_rev(target_doc)
+    vol_before_dup = total_volume(target_doc)
+    env, code = create_variable(target_doc, ref["depth_name"], 99.0)
+    refusals["duplicate_name"] = code
+    rev_after_dup = current_rev(target_doc)
+    vol_after_dup = total_volume(target_doc)
+
+    env, code = create_variable(target_doc, "nan_var", "NaN")
+    refusals["nan_value"] = code
+
+    env, code = call("kompas_create_document", {"application_id": app_id, "kind": "assembly",
+                                                "name": "VB-ASM"})
+    asm_doc = doc_of(env)
+    if asm_doc:
+        env, code = call("kompas_create_variable", {
+            "document_id": asm_doc, "expected_revision": current_rev(asm_doc),
+            "name": "asm_var", "value": 1.0})
+        refusals["assembly_document"] = code
+        close(asm_doc)
+    else:
+        refusals["assembly_document"] = f"assembly_not_created: {code}"
+
+    env, code = bind(target_doc, feature_ref(target_doc, base_feature_name), "ghost_parameter", "1")
+    refusals["unknown_parameter"] = code
+
+    env, code = bind(target_doc, feature_ref(target_doc, base_feature_name), base_param, "")
+    refusals["empty_expression"] = code
+
+    # ghost*2: конкретное недокументированное поведение ядра НЕ требуется. Проверяется, что нет ложного
+    # успеха: либо названный отказ, либо успех, при котором состояние ПЕРЕЧИТАНО и названо.
+    env, code = bind(target_doc, feature_ref(target_doc, base_feature_name), base_param, "ghost*2")
+    ghost = result(env)
+    ghost_state = parameter_row(target_doc, feature_ref(target_doc, base_feature_name), base_param) or {}
+    if code is not None:
+        ghost_ok = True
+    else:
+        ghost_ok = (ghost.get("expression_read_back") == "ghost*2"
+                    and ghost.get("value_after") is not None
+                    and ghost_state.get("expression") == "ghost*2")
+    refusals["ghost_expression"] = code
+
+    # УСТАРЕВШАЯ ССЫЛКА. ИЗМЕРЕНО: обычная мутация ссылку НЕ устаревает — RevisionForward ПЕРЕШТАМПОВЫВАЕТ
+    # ссылки признаков на новую ревизию, и прежняя строка продолжает разрешаться. Устаревает она после
+    # перестроения (invalidateAll), поэтому проверка идёт после kompas_rebuild, а не после записи.
+    stale_feature = feature_ref(target_doc, base_feature_name)
+    env, rebuild_code = call("kompas_rebuild", {"document_id": target_doc})
+    env, code = list_parameters(target_doc, stale_feature)
+    refusals["stale_feature_ref"] = code
+
+    expected = {
+        "cyrillic_name": "INVALID_ARGUMENT",
+        "space_name": "INVALID_ARGUMENT",
+        "duplicate_name": "INVALID_ARGUMENT",
+        "nan_value": "INVALID_ARGUMENT",
+        "assembly_document": "WRONG_DOCUMENT_KIND",
+        "unknown_parameter": "INVALID_ARGUMENT",
+        "empty_expression": "INVALID_ARGUMENT",
+        "stale_feature_ref": "STALE_REFERENCE",
+    }
+    codes_ok = all(refusals.get(k) == v for k, v in expected.items())
+    duplicate_safe = (rev_after_dup == rev_before_dup
+                      and near(vol_before_dup, vol_after_dup, ref["volume_tolerance_mm3"]))
+    rep.add("VB.13.refusals",
+            "отказы предусмотренными кодами без ложного успеха: кириллица и пробел в имени, повтор имени, "
+            "value = NaN, сборка вместо детали, неизвестный parameter_name, пустое expression, "
+            "ссылка на несуществующую переменную, устаревшая feature_ref; последствия и состояние названы",
+            "PASS" if (codes_ok and duplicate_safe and ghost_ok and not rebuild_code) else "FAIL",
+            f"codes={refusals} (ожидание {expected}); duplicate_name revision "
+            f"{rev_before_dup}→{rev_after_dup} volume {vol_before_dup}→{vol_after_dup} "
+            f"(перезаписи нет); ghost_expression read_back={ghost.get('expression_read_back')!r} "
+            f"value_after={ghost.get('value_after')} state_expression={ghost_state.get('expression')!r} "
+            f"ghost_ok={ghost_ok}; rebuild_before_stale={rebuild_code}; "
+            f"diagnostics={ghost.get('diagnostics')}")
+
+    close(target_doc)
+
 def main():
     if "--self-test" in sys.argv[1:]:
         # Самопроверка прибора прогонов (наряд ENTITY_CREATE_FALSE, п. 1.5). Стоит ПЕРВОЙ строкой:
@@ -6214,6 +6936,14 @@ def main():
     variables_material_only = "--variables-material-only" in sys.argv
     vm_reference_doc = argument("--vm-reference-doc")
 
+    # Домен СОЗДАНИЯ ПЕРЕМЕННЫХ И ПРИВЯЗКИ ПАРАМЕТРОВ (блок G3, профиль
+    # `variables-bind-minimal-v1`): одна группа, свой сеанс, своя ветка. Клетка матрицы обязана
+    # находиться по ИМЕНИ строки (`VB.<NN>.<действие>`), а не по номеру в общем потоке. Геометрию
+    # эталона строит САМА группа через MCP, а переменные и привязки создаёт ПРОДУКТ: заранее
+    # собранный файл С переменными здесь не подставляется — иначе группа доказывала бы его, а не
+    # собственные инструменты.
+    variables_bind_only = "--variables-bind-only" in sys.argv
+
     # Набор выбранных веток -> ОДНО решение об имени группы. Заголовок, имя файла отчёта и имя
     # каталога прогона выводятся из него вместе, поэтому каталог не может назвать одну группу, а
     # отчёт внутри — другую.
@@ -6243,6 +6973,7 @@ def main():
         "sketch_bulk": sketch_bulk_only,
         "drawing": drawing_only,
         "variables_material": variables_material_only,
+        "variables_bind": variables_bind_only,
         "pattern_orientation": pattern_orientation_only,
         "release_040": release_040_only,
         "client_bugs_20261008": client_bugs_only,
@@ -6712,6 +7443,14 @@ def main():
 
         if variables_material_only:
             variables_material_checks(client, rep, app_id, workdir, reference_path=vm_reference_doc)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if variables_bind_only:
+            variables_bind_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,

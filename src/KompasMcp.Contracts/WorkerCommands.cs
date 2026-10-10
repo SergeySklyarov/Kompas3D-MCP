@@ -228,6 +228,13 @@ public static class WorkerCommands
     public const string SetVariableExpression = "var.set_expression";
     public const string GetMaterial = "mat.get";
     public const string SetMaterial = "mat.set";
+    // ── block G3 "variable creation and parameter binding" (profile variables-bind-minimal-v1) ──
+    // var.create → VB-01, feat.parameters → VB-02 (READ: no operation_id, no revision bump),
+    // feat.bind_parameter → VB-03/VB-04. Unbinding is the same command with a numeric constant
+    // expression, so no fourth command is introduced for VB-04.
+    public const string CreateVariable = "var.create";
+    public const string ListFeatureParameters = "feat.parameters";
+    public const string BindParameter = "feat.bind_parameter";
     // ── block G1 "assembly interference and gaps" (profile assembly-interference-minimal-v1) ──
     // asm.check_interference → INT-01/INT-02/INT-03, asm.measure_gap → INT-04. Both are READ: no
     // operation_id, no revision bump. INT-05…INT-08 are a SCENARIO over these two commands plus the

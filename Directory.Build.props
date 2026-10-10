@@ -12,7 +12,7 @@
     History: docs/decisions/releases.md#versioning
   -->
   <PropertyGroup>
-    <Version>0.6.0</Version>
+    <Version>0.7.0</Version>
   </PropertyGroup>
 
   <PropertyGroup>

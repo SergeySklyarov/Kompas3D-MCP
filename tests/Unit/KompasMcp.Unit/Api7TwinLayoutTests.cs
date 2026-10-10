@@ -19,6 +19,7 @@ public sealed class Api7TwinLayoutTests
 
     private const string Part7Iid = "fa4a5fde-a08c-4f5a-8c04-98395ba44307";
     private const string Measurement3DIid = "f59ff609-45c2-4afb-b3c4-08184b9900ff";
+    private const string Document2D1Iid = "fb57f1c4-44fe-4c73-9b15-87241e8735b5";
 
     /// <summary>Every member of <c>IPart7Twin</c> in declaration order, which IS its vtable order.</summary>
     private static readonly string[] Part7Members =
@@ -63,6 +64,41 @@ public sealed class Api7TwinLayoutTests
     /// <summary>The members the adapter calls, with the slot read from the installed type library.</summary>
     private static readonly (string Member, int Slot)[] Part7Used = { ("get_Measurement3D", 123) };
 
+    /// <summary>Every member of <c>IKompasDocument2D1Twin</c> up to <c>get_ParametricMode</c>, in the order
+    /// the installed type library declares them — which IS their vtable order.</summary>
+    /// <remarks>MEASURED: read from <c>Bin\kAPI7.tlb</c>; the TLB's function list starts with the seven
+    /// <c>IUnknown</c>/<c>IDispatch</c> members, so its index 7 is vtable slot 7 and the declaration here
+    /// is FLAT — no base interface — which keeps the <c>7 + index</c> rule applicable unchanged.</remarks>
+    private static readonly string[] Document2D1Members =
+    {
+        "get_EditMacroObject", "get_DrawingGroups", "get_NamedGroups", "get_CurrentGroup",
+        "get_SelectionManager", "get_ChooseManager", "CopyObjects", "get_Variables", "get_Variable",
+        "get_VariablesCount", "UpdateVariables", "get_VariableTable", "IsVariableNameValid",
+        "AddVariable", "RebuildDocument", "CreateHyperLink", "GetHyperLinkObjects", "DeleteHyperLinks",
+        "get_EditMacroVisibleRegime", "GetObjectById", "get_LibProcess", "FindObject", "FindObjects",
+        "SelectObjects", "get_IntervalVariables", "AddIntervalVariable", "get_IntervalVariable",
+        "get_UserFuncVariables", "AddUserFuncVariable", "get_UserFuncVariable", "ClearUndo",
+        "set_EnableUndo", "get_EnableUndo", "set_UndoContainer", "get_UndoContainer",
+        "CompleteRebuildDocument", "DestroyObjects", "ChangeObjectsOrder", "get_LibraryEditMode",
+        "DecomposeObject", "VisualCreateObject", "RunCreateObjectProcess", "VisualEditObject",
+        "get_CursorLimit", "ExecuteProcessOfDocumentFromFile", "GetObjectsGabarit", "CreateMatrix",
+        "DeleteMatrix", "TransformPointIntoMatrix", "TransformPointFromMatrix", "TransformLengthIntoMatrix",
+        "TransformLengthFromMatrix", "TransformAngleIntoMatrix", "TransformAngleFromMatrix",
+        "TransformObjects", "ClearRegion", "MoveObjects", "RotateObjects", "SymmetryObjects",
+        "set_TreeNeedRebuild", "get_TreeNeedRebuild", "set_TreeNeedUpdateItems", "get_TreeNeedUpdateItems",
+        "ViewGetObjectsArea", "CheckAssociation", "CreateApproximationCurve", "ParametrizeObjects",
+        "set_ParametricMode", "get_ParametricMode",
+    };
+
+    /// <summary>The members of the 2D document the adapter calls, with their slots from the type library.</summary>
+    /// <remarks>The PUT is declared because a vtable is reproduced in order, but it is NOT called: the
+    /// parametric mode is read, never written. Listing both makes the pair's position checkable, so a
+    /// declaration that quietly swapped them would be refused here rather than in a live run.</remarks>
+    private static readonly (string Member, int Slot)[] Document2D1Used =
+    {
+        ("set_ParametricMode", 74), ("get_ParametricMode", 75),
+    };
+
     /// <summary>The members the adapter calls on the measurement service, with their slots.</summary>
     private static readonly (string Member, int Slot)[] Measurement3DUsed =
     {
@@ -85,6 +121,14 @@ public sealed class Api7TwinLayoutTests
         var type = Twin("IMeasurement3DTwin");
 
         AssertLayout(type, "Measurement3DIid", Measurement3DIid, Measurement3DMembers, Measurement3DUsed);
+    }
+
+    [Fact]
+    public void Document2D1Twin_DeclaresTheMeasuredLayout()
+    {
+        var type = Twin("IKompasDocument2D1Twin");
+
+        AssertLayout(type, "Document2D1Iid", Document2D1Iid, Document2D1Members, Document2D1Used);
     }
 
     /// <summary>The twin's identity, its member ORDER and the slots of the members actually called.</summary>

@@ -52,52 +52,46 @@ import os
 PROFILE_REL = "coverage/solid-v24/release-profiles/mechanical-core-v1.json"
 MATRIX_REL = "coverage/solid-v24/matrix.json"
 
-# ОБЪЁМ ВЫПУСКА — ТРИ ПРОФИЛЯ, А НЕ ОДИН. Прежде знаменатель объёма был ОДНИМ профилем
-# (`mechanical-core-v1`), и паспорт печатал `mandatory_scope=COMPLETE 54/54 · 15/15`, описывая при
-# этом поставку, в которую входят ещё C1 и C2. `COMPLETE` по ядру не доказывает полноту объединённого
-# выпуска — это разные утверждения. Здесь перечислены все действующие профили выпуска; их состояния
-# считаются ОТДЕЛЬНО и сводятся в один вердикт, а числители и знаменатели каждого печатаются рядом.
-#
-# ПОЧЕМУ ЗДЕСЬ ТЕПЕРЬ ЕСТЬ `drawings-minimal-v1` (уточнено 06.10.2026). Ранее его отсутствие называлось
-# «решением заказчика об объёме», и ИСТОЧНИК ТАКОГО РЕШЕНИЯ НАЙДЕН НЕ БЫЛ: ни в `AGENTS.md`, ни в
-# `DRAWINGS_DEVELOPER_PROMPT.md`, ни в иных проверенных материалах его нет. Атрибуция заказчику снята
-# как недоказанная. Фактическое состояние изменилось по существу: блок DRW ВЫПОЛНЕН и проверен живьём
-# (группа `DRW` в `scripts/mcp-smoke.py --drawing-only`, 78 строк, 78 PASS; профиль
-# `drawings-minimal-v1` закрыт 6/6 режимов и 6/6 зависимостей), поэтому профиль ВКЛЮЧЁН в объём
-# выпуска — это следствие выполненной работы, а не переопределение чьего-либо решения. Нежелательный
-# вердикт сам по себе основанием не является: подключение непроверенного профиля переводит вердикт в
-# INCOMPLETE — это признание открытой работы, а не причина её прятать. `COMPLETE` по трём прежним
-# профилям доказательством готовности блока DRW больше НЕ является по другой причине: блок закрыт
-# собственными строками приёмки, а не выводом из чужого вердикта.
-#
-# `variables-material-minimal-v1` (блок VM) добавлен 06.10.2026 тем же правилом, что и DRW: профиль
-# заведён и подключён к объёму выпуска. Его строка НЕ проверена живым прогоном (эталон VM не собран —
-# причина названа в docs/04_KOMPAS_API_NOTES.md §4.40.1), поэтому подключение переводит вердикт
-# объёма в INCOMPLETE — это признание ОТКРЫТОЙ работы, а не причина её прятать. `COMPLETE` по прежним
-# профилям доказательством готовности блока VM не является: у блока свои строки приёмки.
-PROFILES = (
-    ("mechanical-core-v1", "coverage/solid-v24/release-profiles/mechanical-core-v1.json"),
-    ("assemblies-minimal-v1", "coverage/solid-v24/release-profiles/assemblies-minimal-v1.json"),
-    ("mates-minimal-v1", "coverage/solid-v24/release-profiles/mates-minimal-v1.json"),
-    ("drawings-minimal-v1", "coverage/solid-v24/release-profiles/drawings-minimal-v1.json"),
-    ("variables-material-minimal-v1",
-     "coverage/solid-v24/release-profiles/variables-material-minimal-v1.json"),
-    # `assembly-interference-minimal-v1` (блок G1) подключён 08.10.2026 тем же правилом, что DRW и VM:
-    # профиль заведён, закрыт собственными строками приёмки и входит в объём выпуска. `COMPLETE` по
-    # прежним профилям доказательством готовности блока G1 не является: у блока свои строки приёмки.
-    ("assembly-interference-minimal-v1",
-     "coverage/solid-v24/release-profiles/assembly-interference-minimal-v1.json"),
-    # `sketch-bulk-minimal-v1` (блок G2) подключён 08.10.2026 тем же правилом, что DRW, VM и G1:
-    # профиль заведён, закрыт собственными строками приёмки и входит в объём выпуска. `COMPLETE` по
-    # прежним профилям доказательством готовности блока G2 не является: у блока свои строки приёмки.
-    ("sketch-bulk-minimal-v1",
-     "coverage/solid-v24/release-profiles/sketch-bulk-minimal-v1.json"),
+# ОБЪЁМ ВЫПУСКА - ВСЕ ПРОФИЛИ КАТАЛОГА release-profiles/, А НЕ СПИСОК В КОДЕ. Прежде знаменатель
+# объёма задавался кортежем литералов, и профиль, заведённый новым нарядом, в него не попадал, пока
+# его не впишут руками: выпуск 0.6.0 из-за этого остановился - манифест назвал шесть профилей вместо
+# семи. Теперь НАБОР берётся из каталога, поэтому забыть профиль правкой нельзя, а нечитаемый файл
+# профиля - явная ошибка, а не тихий пропуск.
+PROFILE_DIR_REL = "coverage/solid-v24/release-profiles"
+
+# Порядок профилей в ПУБЛИКУЕМОМ выводе. Это НЕ перечень (набор - из каталога), а только порядок
+# известных профилей: перенос перечня в каталог не должен менять ни одной опубликованной строки.
+# Профиль из каталога, которого здесь нет, печатается САМ (в конце, по имени).
+PROFILE_ORDER = (
+    "mechanical-core-v1",
+    "assemblies-minimal-v1",
+    "mates-minimal-v1",
+    "drawings-minimal-v1",
+    "variables-material-minimal-v1",
+    "assembly-interference-minimal-v1",
+    "sketch-bulk-minimal-v1",
 )
 
-# Профили, ЗАВЕДЁННЫЕ, но в объём выпуска пока не подключённые. Названы явно, чтобы отсутствие не
-# читалось как забытое поле: «не подключён» — это состояние, и оно печатается, а не замалчивается.
-# СПИСОК ПУСТ, и это утверждение, а не забытый раздел: каждый заведённый профиль теперь в объёме.
+# Профили, ЗАВЕДЁННЫЕ, но в объём выпуска не подключённые. Список пуст и таков ПО ПОСТРОЕНИЮ: каждый
+# файл каталога входит в объём. Печатается, чтобы «не подключён» не читалось как забытое поле.
 UNATTACHED_PROFILES = ()
+
+
+def release_profiles(root):
+    """Профили выпуска: НАБОР - из каталога `release-profiles/`, порядок - из PROFILE_ORDER.
+
+    Каталог, а не литерал: профиль, заведённый новым нарядом, входит в объём САМ. Файл профиля,
+    который не читается, - явная ошибка с именем файла (см. `load`), а не пропуск.
+    """
+    directory = os.path.join(root, PROFILE_DIR_REL)
+    try:
+        names = sorted(name for name in os.listdir(directory) if name.endswith(".json"))
+    except OSError as error:
+        raise SystemExit(f"каталог профилей не читается: {PROFILE_DIR_REL}: {error}")
+    ids = [name[: -len(".json")] for name in names]
+    rank = {profile_id: index for index, profile_id in enumerate(PROFILE_ORDER)}
+    ids.sort(key=lambda profile_id: (rank.get(profile_id, len(PROFILE_ORDER)), profile_id))
+    return tuple((profile_id, f"{PROFILE_DIR_REL}/{profile_id}.json") for profile_id in ids)
 
 CLOSING_STATUSES = ("verified", "not_applicable")
 
@@ -117,9 +111,16 @@ VERDICT_RULE = ("PASS только когда пройдены ВСЕ уровн
 
 
 def load(root, relative):
-    # `utf-8-sig`, а не `utf-8`: файлы покрытия записаны С BOM (проектное соглашение).
-    with open(os.path.join(root, relative), encoding="utf-8-sig") as handle:
-        return json.load(handle)
+    # `utf-8-sig`, а не `utf-8`: файлы покрытия записаны С BOM (проектное соглашение). Нечитаемый
+    # или неразбираемый файл - ЯВНАЯ ошибка с именем файла, а не пропуск профиля.
+    path = os.path.join(root, relative)
+    try:
+        with open(path, encoding="utf-8-sig") as handle:
+            return json.load(handle)
+    except OSError as error:
+        raise SystemExit(f"файл покрытия не читается: {relative}: {error}")
+    except json.JSONDecodeError as error:
+        raise SystemExit(f"файл покрытия не разбирается как JSON: {relative}: {error}")
 
 
 def evaluate_profile(root, profile_rel):
@@ -257,7 +258,7 @@ def evaluate_release_scope(root):
     `verdict`, а рядом печатается сводка. Общий процент не выводится: `COMPLETE` по одному профилю
     не доказывает полноту объединённого выпуска.
     """
-    profiles = [evaluate_profile(root, rel) for _, rel in PROFILES]
+    profiles = [evaluate_profile(root, rel) for _, rel in release_profiles(root)]
     problems = [f"{p['profile_id']}: {line}" for p in profiles for line in p["problems"]]
     open_entries = []
     for profile in profiles:

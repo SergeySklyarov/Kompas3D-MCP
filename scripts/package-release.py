@@ -35,7 +35,9 @@ import importlib.util
 import json
 import os
 import re
+import shutil
 import sys
+import tempfile
 import zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -56,18 +58,76 @@ OWN_ASSEMBLIES = [
     "KompasMcp.Api5Adapter.dll", "KompasMcp.Domain.dll", "KompasMcp.Contracts.dll",
 ]
 
-# INVARIANT: the numbers here are the ones acceptance-levels.py measures, not the ones a release
-# would like to claim. A profile whose actions are not all verified is listed with its real ratio and
-# named as open in `not_included`, never rounded up to "closed".
-PROFILES = [
-    {"id": "mechanical-core-v1", "title": "Детали: твердотельное моделирование", "modes": "54/54", "deps": "16/16"},
-    {"id": "assemblies-minimal-v1", "title": "Сборки", "modes": "7/7", "deps": "5/5"},
-    {"id": "mates-minimal-v1", "title": "Сопряжения", "modes": "6/6", "deps": "5/5"},
-    {"id": "drawings-minimal-v1", "title": "Чертежи: виды, размеры, штамп, DXF/DWG, техтребования", "modes": "6/6", "deps": "6/6"},
-    {"id": "variables-material-minimal-v1", "title": "Переменные и материал детали", "modes": "5/5", "deps": "5/5"},
-    {"id": "assembly-interference-minimal-v1", "title": "Пересечения и зазоры между компонентами сборки", "modes": "4/4", "deps": "5/5"},
-    {"id": "sketch-bulk-minimal-v1", "title": "Массовая геометрия эскиза: нативная полилиния, сплайн", "modes": "3/3", "deps": "3/3"},
-]
+# INVARIANT (release scope): the profile list and EVERY number in it come from the release profiles
+# themselves, measured by acceptance-levels.py - never from a literal that can go stale. The 0.6.0
+# release stopped because a hand-kept list missed one profile; here a profile present in
+# coverage/solid-v24/release-profiles/ cannot be omitted, and its ratio is measured, not claimed.
+# Only the wording below is editorial: a release title cannot be measured. A profile without wording
+# is NOT dropped - it falls back to its own meta.title and is still named in the manifest.
+PROFILE_TEXT = {
+    "mechanical-core-v1": {"title": "Детали: твердотельное моделирование", "scope": "детали"},
+    "assemblies-minimal-v1": {"title": "Сборки", "scope": "сборки"},
+    "mates-minimal-v1": {"title": "Сопряжения", "scope": "сопряжения"},
+    "drawings-minimal-v1": {
+        "title": "Чертежи: виды, размеры, штамп, DXF/DWG, техтребования", "scope": "чертежи"},
+    "variables-material-minimal-v1": {
+        "title": "Переменные и материал детали", "scope": "переменные и материал"},
+    "assembly-interference-minimal-v1": {
+        "title": "Пересечения и зазоры между компонентами сборки",
+        "scope": "пересечения и зазоры сборки"},
+    "sketch-bulk-minimal-v1": {
+        "title": "Массовая геометрия эскиза: нативная полилиния, сплайн",
+        "scope": "массовая геометрия эскиза"},
+}
+
+# Spelled-out count of profiles for the release text; the noun agrees with the numeral. Beyond the
+# table the number is printed as digits, which is honest but visibly not the editorial style.
+NUMERAL_WORDS = ("ноль", "один", "два", "три", "четыре", "пять", "шесть", "семь", "восемь", "девять",
+                 "десять", "одиннадцать", "двенадцать", "тринадцать", "четырнадцать", "пятнадцать",
+                 "шестнадцать", "семнадцать", "восемнадцать", "девятнадцать", "двадцать")
+
+
+def profiles_phrase(count):
+    """«семь профилей» for a spelled-out count, digits beyond the table."""
+    if count >= len(NUMERAL_WORDS):
+        return f"{count} профилей"
+    noun = "профиль" if count == 1 else ("профиля" if 2 <= count <= 4 else "профилей")
+    return f"{NUMERAL_WORDS[count]} {noun}"
+
+
+def _load_levels():
+    """scripts/acceptance-levels.py as a module: one definition of the release scope for both tools."""
+    spec = importlib.util.spec_from_file_location(
+        "acceptance_levels", os.path.join(ROOT, "scripts", "acceptance-levels.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def profile_title(root, profile_rel):
+    """`meta.title` of one release profile, or None."""
+    with open(os.path.join(root, profile_rel), encoding="utf-8-sig") as handle:
+        return (json.load(handle).get("meta") or {}).get("title")
+
+
+def measured_profiles(root):
+    """Manifest entries {id, title, scope_label, modes, deps}: the set and the numbers are MEASURED."""
+    scope = _load_levels().evaluate_release_scope(root)
+    entries = []
+    for profile in scope["profiles"]:
+        profile_id = profile["profile_id"]
+        text = PROFILE_TEXT.get(profile_id) or {}
+        title = text.get("title") or profile_title(root, profile["profile_artifact"])
+        if not title:
+            sys.exit(f"профиль {profile_id} без заголовка: нет ни в PROFILE_TEXT, ни в meta.title")
+        entries.append({
+            "id": profile_id,
+            "title": title,
+            "scope_label": text.get("scope") or title,
+            "modes": f'{profile["modes_closed"]}/{profile["modes_total"]}',
+            "deps": f'{profile["deps_closed"]}/{profile["deps_total"]}',
+        })
+    return entries
 
 TAG_RE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
 PROPS_VERSION_RE = re.compile(r"<Version>\s*([^<\s]+)\s*</Version>")
@@ -180,6 +240,33 @@ def sources_problem(build_commit, passport_commit):
     return f"git diff не выполнен: {done.stderr.decode('utf-8', 'replace').strip()}"
 
 
+def self_test_profile_catalog():
+    """Eight profiles in a temporary catalog must give eight manifest entries.
+
+    The hand-kept list this replaces failed by OMISSION - a new profile simply did not appear. So the
+    check is about the count following the directory, not about a specific profile: the real catalog
+    is copied, one more profile file is added, and the manifest must name eight.
+    """
+    source = os.path.join(ROOT, "coverage", "solid-v24")
+    with tempfile.TemporaryDirectory(prefix="profile-catalog-") as root:
+        target = os.path.join(root, "coverage", "solid-v24")
+        os.makedirs(os.path.join(target, "release-profiles"))
+        shutil.copy(os.path.join(source, "matrix.json"), os.path.join(target, "matrix.json"))
+        for name in os.listdir(os.path.join(source, "release-profiles")):
+            if name.endswith(".json"):
+                shutil.copy(os.path.join(source, "release-profiles", name),
+                            os.path.join(target, "release-profiles", name))
+        extra = {"meta": {"profile_id": "selftest-eighth-v1", "revision": "1.0",
+                          "title": "Восьмой профиль контроля прибора"},
+                 "modes": [], "common_dependencies": []}
+        with open(os.path.join(target, "release-profiles", "selftest-eighth-v1.json"), "w",
+                  encoding="utf-8") as handle:
+            json.dump(extra, handle)
+        entries = measured_profiles(root)
+    return (len(entries) == 8,
+            f"каталог из восьми профилей даёт {len(entries)} записей манифеста")
+
+
 def self_test():
     """The pure checks on fixed inputs: each refusal fires, and the clean case passes."""
     props = "<Project><PropertyGroup><Version>0.4.1</Version></PropertyGroup></Project>"
@@ -219,6 +306,7 @@ def self_test():
         (notes_problems("n.md", "# KompasMCP 0.4.1 - другое\n", "KompasMCP 0.4.1 - уклоны") != [],
          "заметки под другим заголовком отвергнуты"),
         (notes_problems("n.md", None, "KompasMCP 0.4.1 - уклоны") != [], "нет заметок - отказ"),
+        self_test_profile_catalog(),
     ]
     failed = [title for ok, title in cases if not ok]
     for ok, title in cases:
@@ -300,6 +388,14 @@ def main():
     if problems:
         sys.exit("ОТКАЗ: выпуск не собран.\n  - " + "\n  - ".join(problems))
 
+    # The scope is MEASURED here, before a single asset is written: a profile without wording stops
+    # the release instead of producing a manifest that silently misses it.
+    profiles = measured_profiles(ROOT)
+    scope_text = (" + ".join(entry["scope_label"] for entry in profiles)
+                  + " (" + ", ".join(entry["id"] for entry in profiles) + " закрыты полностью)")
+    manifest_profiles = [{"id": entry["id"], "title": entry["title"],
+                          "modes": entry["modes"], "deps": entry["deps"]} for entry in profiles]
+
     out = os.path.abspath(a.out or os.path.join(ROOT, "artifacts", "release", a.tag))
     os.makedirs(out, exist_ok=True)
     zip_name = f"KompasMCP-{a.tag}-win-x64.zip"
@@ -340,18 +436,15 @@ def main():
         "platform": "win-x64",
         "zip": zip_name,
         "installer": "Install-KompasMcp.ps1",
-        "scope": "детали + сборки + сопряжения + чертежи + переменные и материал + пересечения и "
-                 "зазоры сборки + массовая геометрия эскиза (mechanical-core-v1, assemblies-minimal-v1, "
-                 "mates-minimal-v1, drawings-minimal-v1, variables-material-minimal-v1, "
-                 "assembly-interference-minimal-v1, sketch-bulk-minimal-v1 закрыты полностью)",
-        "profiles": PROFILES,
+        "scope": scope_text,
+        "profiles": manifest_profiles,
         "not_included": [
             "массивы компонентов сборки",
             "полная спецификация (BOM)",
             "расширенные виды сопряжений сверх mates-minimal-v1",
             "спецификации и другие 2D-документы, кроме чертежей профиля drawings-minimal-v1",
             "создание и удаление переменных (kompas_set_variable меняет существующую внешнюю переменную)",
-            "полный каталог P6 (выпуск закрывает семь профилей выше)",
+            f"полный каталог P6 (выпуск закрывает {profiles_phrase(len(profiles))} выше)",
         ],
         "tools_count": len(schemas),
         "tools": schemas,

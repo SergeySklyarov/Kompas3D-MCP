@@ -33,9 +33,11 @@ public class ControlCopyTests : IDisposable
     public void ReadOnlyDocument_IsNeverRestored()
     {
         var decision = ControlCopyRestorePolicy.Decide(
-            copyMade: true, DocumentAccess.ReadOnly, ErrorCodes.GeometryFailed, partialEffects: true);
+            copyMade: true, DocumentAccess.ReadOnly, ErrorCodes.GeometryFailed, partialEffects: true,
+            openInKompas: true);
 
         Assert.False(decision.Restore);
+        Assert.Equal(ControlCopyRestorePolicy.DocumentReadOnly, decision.Code);
         Assert.Contains("read_only", decision.Reason, StringComparison.Ordinal);
     }
 
@@ -44,9 +46,11 @@ public class ControlCopyTests : IDisposable
     {
         // REVISION_CONFLICT arrives before COM: the file did not change, so a restore would be a needless write.
         var decision = ControlCopyRestorePolicy.Decide(
-            copyMade: true, DocumentAccess.Edit, ErrorCodes.RevisionConflict, partialEffects: false);
+            copyMade: true, DocumentAccess.Edit, ErrorCodes.RevisionConflict, partialEffects: false,
+            openInKompas: true);
 
         Assert.False(decision.Restore);
+        Assert.Equal(ControlCopyRestorePolicy.FailureBeforeCom, decision.Code);
         Assert.Contains(ErrorCodes.RevisionConflict, decision.Reason, StringComparison.Ordinal);
     }
 
@@ -58,18 +62,40 @@ public class ControlCopyTests : IDisposable
     [InlineData(ErrorCodes.DocumentNotFound)]
     public void RefusalsThatNeverTouchedTheModel_AreNotRestored(string code)
     {
-        var decision = ControlCopyRestorePolicy.Decide(copyMade: true, DocumentAccess.Edit, code, partialEffects: false);
+        var decision = ControlCopyRestorePolicy.Decide(
+            copyMade: true, DocumentAccess.Edit, code, partialEffects: false, openInKompas: true);
 
         Assert.False(decision.Restore);
     }
 
+    /// <summary>A document OPEN IN KOMPAS is not overwritten from the copy, even on a partial effect.</summary>
+    /// <remarks>INVARIANT: the copy is KEPT and the refusal names the manual rollback. MEASURED: whether the
+    /// overwrite succeeds is machine-dependent (it succeeded in every saved acceptance run and failed with an
+    /// IOException for the client), and even a successful overwrite returns only the FILE — the in-memory
+    /// model stays changed. So the server does not promise what it cannot honour.
+    /// History: docs/decisions/files.md#control-copies</remarks>
     [Fact]
-    public void PartialEffectOnEditableDocument_IsRestored()
+    public void PartialEffect_OnDocumentOpenInKompas_KeepsTheCopyAndDoesNotOverwriteTheFile()
     {
         var decision = ControlCopyRestorePolicy.Decide(
-            copyMade: true, DocumentAccess.Edit, ErrorCodes.GeometryFailed, partialEffects: true);
+            copyMade: true, DocumentAccess.Edit, ErrorCodes.NoGeometryChange, partialEffects: true,
+            openInKompas: true);
+
+        Assert.False(decision.Restore);
+        Assert.Equal(ControlCopyRestorePolicy.CopyKeptDocumentOpen, decision.Code);
+        Assert.Contains("открыт в КОМПАС", decision.Reason, StringComparison.Ordinal);
+        Assert.Contains("не откатывалась", decision.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PartialEffectOnEditableDocumentNotOpenInKompas_IsRestored()
+    {
+        var decision = ControlCopyRestorePolicy.Decide(
+            copyMade: true, DocumentAccess.Edit, ErrorCodes.GeometryFailed, partialEffects: true,
+            openInKompas: false);
 
         Assert.True(decision.Restore);
+        Assert.Equal(ControlCopyRestorePolicy.FileRestored, decision.Code);
     }
 
     [Fact]
@@ -77,7 +103,7 @@ public class ControlCopyTests : IDisposable
     {
         // Unexpected exception: no code, outcome unknown — the file is returned.
         var decision = ControlCopyRestorePolicy.Decide(
-            copyMade: true, DocumentAccess.Edit, errorCode: null, partialEffects: false);
+            copyMade: true, DocumentAccess.Edit, errorCode: null, partialEffects: false, openInKompas: false);
 
         Assert.True(decision.Restore);
     }
@@ -86,9 +112,11 @@ public class ControlCopyTests : IDisposable
     public void NoCopy_IsNotRestored()
     {
         var decision = ControlCopyRestorePolicy.Decide(
-            copyMade: false, DocumentAccess.Edit, ErrorCodes.GeometryFailed, partialEffects: true);
+            copyMade: false, DocumentAccess.Edit, ErrorCodes.GeometryFailed, partialEffects: true,
+            openInKompas: true);
 
         Assert.False(decision.Restore);
+        Assert.Equal(ControlCopyRestorePolicy.CopyNotMade, decision.Code);
     }
 
     /// <summary>Negative control: a partial effect does NOT override the ban on writing to a read_only
@@ -98,7 +126,8 @@ public class ControlCopyTests : IDisposable
     public void PartialEffect_DoesNotOverrideTheReadOnlyAccess()
     {
         var decision = ControlCopyRestorePolicy.Decide(
-            copyMade: true, DocumentAccess.ReadOnly, ErrorCodes.GeometryFailed, partialEffects: true);
+            copyMade: true, DocumentAccess.ReadOnly, ErrorCodes.GeometryFailed, partialEffects: true,
+            openInKompas: true);
 
         Assert.False(decision.Restore);
     }

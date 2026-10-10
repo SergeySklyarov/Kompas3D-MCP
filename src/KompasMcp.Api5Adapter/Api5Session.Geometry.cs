@@ -76,6 +76,12 @@ public sealed partial class Api5Session
         // profile lay. It is the same string the create answer carries, so the two records cannot drift.
         _sketchPlaneHint[reference.Id] = PlaneHint(command.Plane, support.Entity);
 
+        // INVARIANT: creating a sketch IS a mutation — an entity enters the document tree — so the
+        // revision is bumped and the document turns dirty here, exactly as when the sketch is drawn
+        // into. MEASURED: without this the create answer carried revision_before == revision_after and
+        // the document read back not dirty, so the two edits that follow looked like the first change.
+        BumpRevision(document, "sketch.create");
+
         return ToDto(reference, PlaneHint(command.Plane, support.Entity));
     }
 
@@ -2848,8 +2854,10 @@ public sealed partial class Api5Session
     /// <summary>Feature count that keeps "could not be read" apart from "zero features".</summary>
     /// <remarks>Why not <see cref="CountFeatures"/>: it answers 0 when the collection refuses, and in this
     /// snapshot 0 is a legitimate reading — merging the two would make an unread count look measured.
-    /// The route is the same one <c>kompas_get_context</c> uses, including the refresh.</remarks>
-    private int? TryCountFeatures(DocumentEntry document)
+    /// The route is the same one <c>kompas_get_context</c> uses, including the refresh.
+    /// Also read by the dispatcher around a mutation: a REFUSAL that left the feature count HIGHER than
+    /// before created a feature and left it in the tree, which the refusal then names.</remarks>
+    public int? TryCountFeatures(DocumentEntry document)
     {
         try
         {

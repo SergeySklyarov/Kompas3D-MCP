@@ -137,7 +137,7 @@ public static class ErrorMessages
         [ErrorCodes.BitnessMismatch] = "Разрядность процесса сервера не совпадает с разрядностью КОМПАС.",
         [ErrorCodes.LicenseUnavailable] = "Лицензия КОМПАС недоступна; операция не может быть выполнена.",
         [ErrorCodes.AmbiguousApplication] = "Найдено несколько экземпляров КОМПАС; нужен явный выбор.",
-        [ErrorCodes.ApplicationDisconnected] = "Связь с выбранным экземпляром КОМПАС потеряна.",
+        [ErrorCodes.ApplicationDisconnected] = "Связь с выбранным экземпляром КОМПАС потеряна, либо доступного для attach экземпляра нет.",
         [ErrorCodes.WrongDocumentKind] = "Документ имеет другой тип, чем требует операция.",
         [ErrorCodes.DocumentNotFound] = "Документ не найден среди открытых в этом экземпляре КОМПАС.",
         [ErrorCodes.DocumentDirty] = "Документ содержит несохранённые изменения.",

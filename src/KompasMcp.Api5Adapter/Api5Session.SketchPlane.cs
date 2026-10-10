@@ -89,6 +89,31 @@ public sealed partial class Api5Session
                 details: new Dictionary<string, object?> { ["support_before"] = supportBefore });
         }
 
+        // INVARIANT: an ACCEPTED support change IS a mutation, and it is bumped here, BEFORE the apply
+        // step and INDEPENDENTLY of whether the body moved. The change is not conditional on the
+        // geometry: a support can move while the bounding box and volume stay put (a re-anchor that
+        // shifts the profile by less than the reading tolerance), and reading geometry to decide
+        // "was this a mutation" made the client's own re-anchor come back dirty=false with an
+        // unchanged revision. Bumped before the apply step so that a later throw still reports the
+        // revision the model is actually on.
+        BumpRevision(document, "sketch.set_plane");
+
+        // The remembered support is refreshed HERE, with the SAME rule as at creation: a named base
+        // plane is remembered, a reference support is NOT (its frame is not one of the three standard
+        // frames, so a remembered XY would send the coordinate derivation of kompas_edit_sketch along
+        // the wrong axis). The declared hint is refreshed for the same reason it exists — a refused
+        // extrusion has to say where the profile lay.
+        if (support.BasePlane is PlaneBase basePlane)
+        {
+            _sketchPlaneBase[command.SketchRef] = basePlane;
+        }
+        else
+        {
+            _sketchPlaneBase.Remove(command.SketchRef);
+        }
+
+        _sketchPlaneHint[command.SketchRef] = PlaneHint(command.Plane, support.Entity);
+
         // The measured-sufficient apply step. Its name is returned in the response because "which
         // route applied the edit" is a measured quantity, not an implementation detail.
         var applyRoute = "sketch.Update()";

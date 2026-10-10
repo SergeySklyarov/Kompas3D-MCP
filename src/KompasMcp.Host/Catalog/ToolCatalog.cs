@@ -192,7 +192,7 @@ public static class ToolCatalog
                 replaysOperationId: true),
 
             Mutation("kompas_connect", "Подключиться к КОМПАС",
-                "attach — подключиться к уже запущенному экземпляру (нужен однозначный выбор, иначе AMBIGUOUS_APPLICATION); launch — запустить собственный. Обычные инструменты новое приложение не создают. КАНДИДАТЫ attach — экземпляры, зарегистрированные в Running Object Table (ROT) под ProgID КОМПАС, а НЕ все процессы KOMPAS.exe: процесс без записи в ROT кандидатом не является, поэтому running_instances и rot_kompas_entries в kompas_capabilities — разные числа. При нескольких кандидатах нужен явный process_id: выбор «первого попавшегося» запрещён.",
+                "attach — подключиться к уже запущенному экземпляру (нужен однозначный выбор, иначе AMBIGUOUS_APPLICATION; при НУЛЕ кандидатов код APPLICATION_DISCONNECTED с причиной reason: kompas_process_not_running — процесс не запущен, kompas_process_not_in_rot — запущен, но не зарегистрирован в ROT, rot_empty — перечисление ROT пусто; в details приходят kompas_process_ids, rot_entries_matching_kompas, rot_total_entries и имена ПРОЧИХ записей ROT как не-кандидаты); launch — запустить собственный. Обычные инструменты новое приложение не создают. КАНДИДАТЫ attach — экземпляры, зарегистрированные в Running Object Table (ROT) под ProgID КОМПАС, а НЕ все процессы KOMPAS.exe: процесс без записи в ROT кандидатом не является, поэтому running_instances и rot_kompas_entries в kompas_capabilities — разные числа. При нескольких кандидатах нужен явный process_id: выбор «первого попавшегося» запрещён.",
                 Sch.Props(
                     ("mode", Sch.Enum("Способ получения экземпляра.", "attach", "launch")),
                     ("process_id", Sch.Nullable(Sch.Int("Явный PID экземпляра КОМПАС для attach."))),
@@ -644,6 +644,12 @@ public static class ToolCatalog
                 + "ПОВТОРНЫМ ЧТЕНИЕМ опоры документированным GetPlane(): успешный код SetPlane "
                 + "применением не объявляется. Опора той же плоскостью — законный вызов, и он "
                 + "измеренно НЕ меняет геометрию. "
+                + "СМЕНА ОПОРЫ — МУТАЦИЯ САМА ПО СЕБЕ: принятая ядром смена поднимает ревизию и "
+                + "делает документ изменённым (dirty), независимо от того, сдвинулось ли тело. Поле "
+                + "geometry_changed отвечает на ДРУГОЙ вопрос — изменился ли габарит или объём "
+                + "зависимого тела, — и по нему нельзя судить, была ли мутация: опора может "
+                + "смениться при неизменном габарите, поэтому revision растёт всегда, а "
+                + "geometry_changed — нет. "
                 + "ПРЕДЫСТОРИЯ: опора эскиза не выражалась ничем — из 43 опубликованных схем "
                 + "плоскость задавал только kompas_create_sketch при СОЗДАНИИ, а kompas_edit_sketch "
                 + "принимает лишь entities. Расширение kompas_edit_sketch полем plane отвергнуто "

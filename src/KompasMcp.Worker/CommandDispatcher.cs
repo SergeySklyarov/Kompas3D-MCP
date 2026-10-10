@@ -431,6 +431,9 @@ public sealed class CommandDispatcher
         // THE CONTROL COPY IS TAKEN BEFORE THE MUTATION, into the service directory, and this is the
         // only point the core, assembly and mate mutations pass through. Reads do NOT go through it.
         var copy = _controlCopies.Before(document.Path, document.Id, document.Revision);
+        // Feature count BEFORE the mutation. A refusal that leaves it HIGHER created a feature and left
+        // it in the tree — MEASURED, not assumed, so the refusal can name the object to delete.
+        var featuresBefore = _session.TryCountFeatures(document);
         object? outcome;
         try
         {
@@ -439,11 +442,12 @@ public sealed class CommandDispatcher
         catch (Exception ex)
         {
             // FAILURE: the file is returned to its pre-mutation state, BUT ONLY WHEN THAT MAKES SENSE.
-            // The pure ControlCopyRestorePolicy decides: a read_only document is not overwritten, and a
+            // The pure ControlCopyRestorePolicy decides: a read-only document is not overwritten, and a
             // failure before COM deserves no write to the user's file.
             var contract = ex as KompasContractException;
             var decision = ControlCopyRestorePolicy.Decide(
-                copy.Made, document.Access, contract?.Code, contract?.PartialEffects ?? false);
+                copy.Made, document.Access, contract?.Code, contract?.PartialEffects ?? false,
+                document.OpenInKompas);
             var restoreFailure = decision.Restore
                 ? _controlCopies.Restore(document.Path, copy.Path, document.Access)
                 : null;
@@ -454,7 +458,8 @@ public sealed class CommandDispatcher
             // model), so a null revision_after made the client's next call fail REVISION_CONFLICT until
             // it re-read the context. The number is the document's CURRENT revision: the mutation already
             // bumped it if it changed anything, and an unchanged model reads back its old revision.
-            throw Reclassify(ex, copy, decision, restoreFailure, document.Revision);
+            throw Reclassify(ex, copy, decision, restoreFailure, document.Revision,
+                FeatureLeftInTree(featuresBefore, _session.TryCountFeatures(document)));
         }
 
         // SUCCESS: THE COPY IS DELETED. It was there for the failure case; left behind, it would
@@ -477,27 +482,52 @@ public sealed class CommandDispatcher
         return node;
     }
 
+    /// <summary>Whether a refused mutation left a NEW feature in the tree, from the feature count before
+    /// and after it. <c>null</c> when either read failed — an unread count is never passed off as "no".</summary>
+    /// <remarks>MEASURED, not assumed: the count is read through the same route
+    /// <c>kompas_get_context</c> uses. A feature that was created and left raises it by one; a refusal
+    /// that never created one leaves it unchanged. History: docs/decisions/adapter-core.md#feature-left.</remarks>
+    private static bool? FeatureLeftInTree(int? before, int? after) =>
+        before is int b && after is int a ? a > b : null;
+
     /// <summary>Carry to the client that a control copy was taken and what became of it on failure. The original code
     /// and retry policy are PRESERVED: a failure does not change because a copy appeared.</summary> <remarks>For an
     /// UNEXPECTED mutation exception the policy is "after reconciliation", not "same operation_id": partialEffects=true
     /// means repeating would apply the mutation twice.</remarks>
     private static Exception Reclassify(
         Exception ex, ControlCopyResult copy, RestoreDecision decision, string? restoreFailure,
-        long revisionAfter)
+        long revisionAfter, bool? featureLeftInTree)
     {
         var details = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             ["control_copy"] = DocumentControlCopies.Describe(copy),
             ["control_copy_made"] = copy.Made,
             ["control_copy_path"] = copy.Path,
+            // WHETHER A FEATURE THE CALLER MUST DELETE STAYED IN THE TREE — from the feature count before
+            // and after the refused mutation, so it is a reading, not a guess. <c>false</c> when nothing
+            // was added; <c>null</c> reads are NAMED, never passed off as "no".
+            ["feature_left_in_tree"] = featureLeftInTree ?? false,
             // WHY THE FILE WAS NOT RESTORED — NAMED. "Not restored" without a reason is indistinguishable
-            // from "we forgot to restore", and here the reason is substantive: a read_only document, or a
+            // from "we forgot to restore", and here the reason is substantive: a read-only document, or a
             // failure that never reached COM.
             ["restore_attempted"] = decision.Restore,
-            ["restore_decision"] = decision.Reason,
+            ["restore_decision"] = decision.Code,
+            ["restore_decision_reason"] = decision.Reason,
             ["restored"] = decision.Restore && restoreFailure is null,
             ["restore_failure"] = restoreFailure,
-            ["rollback_scope"] = "файл документа; модель в памяти КОМПАСа не откатывается",
+            // WHAT WAS ROLLED BACK, named as one of three distinct states rather than as prose that
+            // reads alike for all of them: nothing / the file only. The in-memory model is NEVER rolled
+            // back, and that is stated in every partial-effect refusal, not only in the tool description.
+            ["rollback_scope_code"] = decision.Restore
+                ? (restoreFailure is null ? "file_restored" : "file_restore_failed")
+                : "nothing_rolled_back",
+            ["rollback_scope"] = decision.Restore
+                ? (restoreFailure is null
+                    ? "файл документа возвращён из копии; модель в памяти КОМПАСа не откатывалась"
+                    : "файл документа НЕ возвращён (восстановление из копии не удалось); модель в памяти "
+                        + "КОМПАСа не откатывалась")
+                : "ничего не откачено: файл документа не перезаписывался; модель в памяти КОМПАСа не "
+                    + "откатывалась",
             // INVARIANT: a refused MUTATION always states the revision to continue from. The number is the
             // document's current revision at the refusal — the mutation already bumped it when it changed
             // anything, and the rollback restores only the file, so this is the factual model state.
@@ -506,6 +536,14 @@ public sealed class CommandDispatcher
             ["revision_after_note"] = "ревизия документа на момент отказа; модель в памяти КОМПАСа не "
                 + "откатывается, поэтому продолжать нужно с неё, а не с прежней",
         };
+
+        if (featureLeftInTree is null)
+        {
+            // "Not measured" is named: an unread count must not read as "no feature stayed".
+            details["feature_left_in_tree_note"] =
+                "число признаков до и после отказа не прочитано: остался ли в дереве созданный признак — "
+                + "не измерено, проверьте kompas_list_features";
+        }
 
         if (ex is KompasContractException contract)
         {
@@ -535,8 +573,7 @@ public sealed class CommandDispatcher
             details: details);
     }
 
-    private JsonNode? Tagged(string documentId, long revision, object? outcome)
-    {
+    private JsonNode? Tagged(string documentId, long revision, object? outcome)    {
         var node = outcome is null
             ? new JsonObject()
             : KompJson.ToNode(outcome)?.AsObject() ?? new JsonObject();
@@ -639,8 +676,12 @@ public sealed class CommandDispatcher
         return TaggedAfter(document.Id, () => _session.EditSketch(command), document);
     }
 
-    /// <summary>Changing a sketch's support plane is a mutation: the revision is bumped and the document's references
-    /// move with it. The revision is checked before COM; a sketch reference carries the document.</summary>
+    /// <summary>Change a sketch's support plane — a MUTATION (control copy, revision bump).</summary>
+    /// <remarks>INVARIANT: the revision is checked BEFORE COM, and the sketch reference carries the
+    /// document, so the document is not taken from the payload. INVARIANT: the adapter bumps the
+    /// revision on an ACCEPTED support change, independently of whether the body moved — the change is
+    /// a mutation, not a geometry event.
+    /// History: docs/decisions/adapter-sketch.md#set-plane-is-a-mutation</remarks>
     private object? SetSketchPlane(IpcFrame request)
     {
         var command = Argument<SetSketchPlaneCommand>(request);

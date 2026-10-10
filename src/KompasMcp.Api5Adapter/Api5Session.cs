@@ -6,6 +6,7 @@ using KompasAPI7;
 using KompasMcp.Api5Adapter.Com;
 using KompasMcp.Contracts;
 using KompasMcp.Contracts.Ipc;
+using KompasMcp.Domain.Applications;
 using KompasMcp.Domain.Documents;
 using KompasMcp.Domain.Files;
 using KompasMcp.Domain.Geometry;
@@ -178,22 +179,29 @@ public sealed partial class Api5Session : IDisposable
 
         if (candidates.Count == 0)
         {
-            // Report the unfiltered ROT total too: "no KOMPAS entries" and "the enumerator returned
-            // nothing" are different diagnoses — without this the refusal is unfalsifiable.
+            // Report the unfiltered ROT total AND the running KOMPAS processes: "the process is not
+            // running" and "it runs but is not registered in the ROT" are different diagnoses, and
+            // without both the refusal is unfalsifiable. The refusal code is NOT
+            // AMBIGUOUS_APPLICATION — zero instances is "not found", not "ambiguous".
             var (total, names) = RunningObjectTable.EnumerateAllEntries();
-            var reason = total == 0
-                ? "Перечисление ROT не вернуло ни одной записи вообще: либо КОМПАС не зарегистрирован в ROT, либо перечислитель их не видит."
-                : $"В ROT {total} записей, но ни одна не сопоставима с КОМПАС.";
+            var kompasProcesses = KompasInteropResolver.SnapshotProcessIds("KOMPAS");
+            var refusal = AttachDiagnosis.NoInstance(kompasProcesses.Length, total, entries.Count);
 
             throw new KompasContractException(
-                ErrorCodes.AmbiguousApplication,
-                reason + " Attach не выполнен; используйте mode=launch.",
+                refusal.Code,
+                refusal.Message,
                 RetryPolicy.SameOperationId,
                 details: new Dictionary<string, object?>
                 {
+                    ["reason"] = refusal.ReasonCode,
+                    ["kompas_process_ids"] = kompasProcesses,
                     ["rot_entries_matching_kompas"] = entries.Count,
                     ["rot_total_entries"] = total,
-                    ["rot_sample_names"] = names.Take(10).ToArray(),
+                    // NOT candidates: named so a foreign file (a PDF, a project) is not mistaken for an
+                    // attachable instance. File names only — never the full paths of another user's files.
+                    ["rot_other_entry_names"] = names.Take(10).Select(FileNameOnly).ToArray(),
+                    ["rot_other_entry_names_note"] =
+                        "прочие записи ROT (не КОМПАС, не рассматриваются как кандидаты attach)",
                 });
         }
 
@@ -248,8 +256,20 @@ public sealed partial class Api5Session : IDisposable
             ConnectMode.Attach, command.MakeVisible);
     }
 
-    private int? ResolveProcessId(object kompasObject, int[] newlyAppeared)
+    /// <summary>The last path segment of a ROT display name: a foreign entry is named, never located —
+    /// the full path of another user's file does not belong in a refusal.</summary>
+    private static string FileNameOnly(string displayName)
     {
+        if (string.IsNullOrEmpty(displayName))
+        {
+            return displayName;
+        }
+
+        var cut = displayName.LastIndexOfAny(['\\', '/']);
+        return cut >= 0 && cut + 1 < displayName.Length ? displayName[(cut + 1)..] : displayName;
+    }
+
+    private int? ResolveProcessId(object kompasObject, int[] newlyAppeared)    {
         if (newlyAppeared.Length == 1)
         {
             return newlyAppeared[0];
@@ -1511,10 +1531,14 @@ public sealed class DocumentEntry
     /// Defaults to <see cref="DocumentAccess.Edit"/> — a created document has no file of its own yet.</summary>
     public DocumentAccess Access { get; set; } = DocumentAccess.Edit;
 
-    /// <summary>The API5 3D document handle. Null for a drawing.</summary>
-    public ksDocument3D? Document { get; }
+    /// <summary>Whether the server holds a LIVE CAD handle for the document — i.e. it is open in KOMPAS
+    /// right now. INVARIANT: a mutation runs only on such a document, so its FILE is held by KOMPAS and
+    /// must not be overwritten from a control copy; the decision is <see
+    /// cref="KompasMcp.Domain.Files.ControlCopyRestorePolicy"/>, this is the fact it is fed.</summary>
+    public bool OpenInKompas => Document is not null || Drawing is not null || Drawing7 is not null;
 
-    /// <summary>The 3D handle as a NON-NULL value, or a NAMED refusal. Every 3D-only operation reads the
+    /// <summary>The API5 3D document handle. Null for a drawing.</summary>
+    public ksDocument3D? Document { get; }    /// <summary>The 3D handle as a NON-NULL value, or a NAMED refusal. Every 3D-only operation reads the
     /// document through this member so that calling one on a drawing yields <c>DOCUMENT_KIND_MISMATCH</c>
     /// rather than a null dereference — the crash would be an instrument defect, not a fact about the
     /// document. Same contract as <see cref="Require3D"/>, kept as a property for call-site ergonomics.</summary>

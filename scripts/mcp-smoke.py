@@ -16310,10 +16310,11 @@ def cb9_checks(client, rep, app_id, workdir):
         except OSError:
             pass
 
-    # ── CB9.8: откат контрольной копии называет настоящую причину ОС ────────────────────────────────
-    # Тот же «вырез в пустоту» на СОХРАНЁННОМ документе: отказ несёт partial_effects, поэтому файл
-    # возвращается из контрольной копии. Строка требует либо успешного восстановления, либо НАЗВАННОЙ
-    # причины, а не прежнего «недоступен для записи» при живом save_document.
+    # ── CB9.8: откат контрольной копии: файл открытого документа не перезаписывается (OBS-019) ──────
+    # Тот же «вырез в пустоту» на СОХРАНЁННОМ документе: отказ несёт partial_effects. Наряд
+    # CLIENT_BUGS_20261010 убрал перезапись открытого файла: исход зависит от машины и заранее не
+    # определяется, а удачная перезапись вернула бы только файл, не модель. Строка требует, чтобы файл
+    # НЕ перезаписывался, копия была сохранена и её путь назван.
     restore_path = os.path.join(workdir, "cb9-restore.m3d")
     if os.path.exists(restore_path):
         try:
@@ -16342,13 +16343,16 @@ def cb9_checks(client, rep, app_id, workdir):
             det = details_of(env2)
             attempted = det.get("restore_attempted")
             restored = det.get("restored")
-            failure = det.get("restore_failure")
-            named = isinstance(failure, str) and failure
-            rep.add("CB9.8", "откат контрольной копии: восстановление проходит или причина названа",
-                    "PASS" if (error_code(env2) == "NO_GEOMETRY_CHANGE" and attempted is True
-                               and (restored is True or named)) else "FAIL",
-                    "code=%s restore_attempted=%s restored=%s restore_failure=%r"
-                    % (error_code(env2), attempted, restored, str(failure)[:110]))
+            decision = det.get("restore_decision")
+            copy_path = det.get("control_copy_path")
+            rep.add("CB9.8", "откат контрольной копии: файл открытого в КОМПАС документа НЕ "
+                             "перезаписывается, копия сохранена и названа причиной (OBS-019)",
+                    "PASS" if (error_code(env2) == "NO_GEOMETRY_CHANGE" and attempted is False
+                               and restored is False
+                               and decision == "copy_kept_document_open"
+                               and isinstance(copy_path, str) and copy_path) else "FAIL",
+                    "code=%s restore_attempted=%s restored=%s restore_decision=%s path=%r"
+                    % (error_code(env2), attempted, restored, decision, str(copy_path)[:110]))
         close(doc)
         try:
             os.remove(restore_path)
@@ -18739,16 +18743,19 @@ def entity_create_checks(client, rep, app_id, workdir):
     rollback_ok = (refuse_code == "GEOMETRY_FAILED" and not refuse_feature_present
                    and isinstance(refuse_before, (int, float)) and isinstance(refuse_after, (int, float))
                    and abs(refuse_after - refuse_before) <= 1e-9
-                   and rollback.get("restore_attempted") is True and rollback.get("restored") is True
+                   and rollback.get("restore_attempted") is False and rollback.get("restored") is False
+                   and rollback.get("restore_decision") == "copy_kept_document_open"
+                   and isinstance(rollback.get("control_copy_path"), str)
                    and hash_before and hash_before == hash_after)
     rep.add("EC9.09.negative_tests",
             "откат после отказа: признака в дереве нет, объём целевого тела не изменился, контрольная "
-            "копия снята, файл документа возвращён к состоянию до мутации (совпал по SHA-256)",
+            "копия снята и сохранена, файл открытого документа НЕ перезаписывался (совпал по SHA-256)",
             "PASS" if rollback_ok else "FAIL",
             f"признак_в_дереве={refuse_feature_present} объём {refuse_before} → {refuse_after} "
             f"копия={rollback.get('control_copy_made')} попытка={rollback.get('restore_attempted')} "
-            f"восстановлено={rollback.get('restored')} хеш {hash_before[:12]}→{hash_after[:12]} "
-            f"причина={rollback.get('restore_failure')}",
+            f"восстановлено={rollback.get('restored')} решение={rollback.get('restore_decision')} "
+            f"хеш {hash_before[:12]}→{hash_after[:12]} "
+            f"путь={str(rollback.get('control_copy_path'))[:90]}",
             details={"rollback": {k: v for k, v in rollback.items() if k != "failure_snapshot"},
                      "document_path": refuse_path})
 

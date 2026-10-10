@@ -491,6 +491,10 @@ RUN_GROUPS = (
     ("variables_bind", "variables-bind", "variables-bind-acceptance.json",
      "Приёмка VB: создание переменных детали и привязка параметров операций (блок G3, профиль "
      "variables-bind-minimal-v1)"),
+    ("client_bugs_20261010", "client-bugs-20261010", "client-bugs-20261010-acceptance.json",
+     "Приёмка CB10: дефекты клиента на 0.6.0 — смена опоры эскиза как мутация (OBS-030), отказ не "
+     "перезаписывает файл открытого документа (OBS-019), признак, оставшийся в дереве, attach при "
+     "нуле кандидатов (наряд CLIENT_BUGS_20261010)"),
     ("pattern_orientation", "pattern-orientation", "pattern-orientation-acceptance.json",
      "Приёмка PO: ориентация экземпляров кругового массива через MCP (наряд MCP-015)"),
     ("release_040", "release-040", "release-040-acceptance.json",
@@ -6031,6 +6035,573 @@ VB_REFERENCE = {
 }
 
 
+CB10_REFERENCE = {
+    "plate_width_mm": 100.0,
+    "plate_height_mm": 80.0,
+    "plate_depth_mm": 10.0,
+    "plate_volume_mm3": 80000.0,
+    "small_width_mm": 60.0,
+    "small_height_mm": 40.0,
+    "small_volume_mm3": 24000.0,
+    "volume_tolerance_mm3": 0.5,
+    "support_offset_mm": 50.0,
+    "boss_radius_mm": 12.5,
+    "boss_depth_mm": 15.0,
+}
+
+
+def client_bugs_20261010_checks(client, rep, app_id, workdir):
+    """CB10.* — дефекты клиента на выпуске 0.6.0 (наряд CLIENT_BUGS_20261010).
+
+    ЧТО ДОКАЗЫВАЮТ ЭТИ СТРОКИ. Четыре независимых утверждения о ПРОДУКТЕ, каждое на СВОЕЙ
+    синтетической геометрии (данные клиента не используются, наряд §5):
+
+    A (OBS-030) - принятая смена опоры эскиза есть МУТАЦИЯ: ревизия растёт, документ становится
+    изменённым, и это не зависит от того, сдвинулось ли тело. Строки CB10.1-CB10.5.
+    B (OBS-019) - отказ с частичным эффектом больше НЕ перезаписывает файл открытого документа:
+    копия сохраняется, путь назван, модель в памяти не откатывается. Строки CB10.6-CB10.9.
+    D - отказ называет признак, ОСТАВШИЙСЯ в дереве, и его ссылку; где признак не создавался -
+    флаг false. Строки CB10.11-CB10.12.
+    E - attach при НУЛЕ кандидатов отвечает APPLICATION_DISCONNECTED с причиной, а не
+    AMBIGUOUS_APPLICATION. Строка CB10.13.
+
+    ЧЕГО ЗДЕСЬ НЕТ. Часть C (воспроизведение отказа клиента) и часть F (умолчание размера растра)
+    нарядом не выполнены, поэтому строк CB10.10 и CB10.14-CB10.19 здесь НЕТ - это названо, а не
+    пропущено молча.
+    """
+    import hashlib as _hashlib
+    import os as _os
+    import time as _time
+    import uuid as _uuid
+
+    ref = dict(CB10_REFERENCE)
+
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(_uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def details_of(env):
+        err = (env or {}).get("error") or {}
+        return err.get("details") or {} if isinstance(err, dict) else {}
+
+    def emsg(env):
+        err = (env or {}).get("error") or {}
+        return err.get("message") if isinstance(err, dict) else None
+
+    def ctx(doc):
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return result(env)
+
+    def current_rev(doc):
+        return ctx(doc).get("revision") or 1
+
+    def near(a, b, tol):
+        return isinstance(a, (int, float)) and isinstance(b, (int, float)) and abs(a - b) <= tol
+
+    def bodies(doc):
+        _e, env, _r = client.tool("kompas_list_bodies", {"document_id": doc})
+        rows = result(env)
+        return rows if isinstance(rows, list) else []
+
+    def volume_of(body_ref):
+        _e, env, _r = client.tool("kompas_measure", {"target_ref": body_ref, "properties": ["volume"]})
+        return result(env).get("volume_mm3")
+
+    def first_body(doc):
+        rows = bodies(doc)
+        return rows[0] if rows else None
+
+    def first_volume(doc):
+        b = first_body(doc)
+        return volume_of(b.get("body_ref")) if b else None
+
+    def first_bbox(doc):
+        return (first_body(doc) or {}).get("bbox")
+
+    def thin_axis(box):
+        if not box:
+            return None
+        mn, mx = box.get("min_mm"), box.get("max_mm")
+        if not mn or not mx:
+            return None
+        extents = [round(mx[i] - mn[i], 3) for i in range(3)]
+        return "xyz"[extents.index(min(extents))]
+
+    def close(doc):
+        if doc:
+            call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+
+    def plane(doc, sketch_ref, spec, rev=None):
+        return call("kompas_set_sketch_plane", {
+            "document_id": doc, "sketch_ref": sketch_ref,
+            "expected_revision": rev if rev is not None else current_rev(doc),
+            "plane": spec})
+
+    def sha256(path):
+        if not path or not _os.path.exists(path):
+            return None
+        with open(path, "rb") as fh:
+            return _hashlib.sha256(fh.read()).hexdigest()
+
+    def feature_ref_by_name(doc, name):
+        _e, env, _r = client.tool("kompas_list_features", {"document_id": doc})
+        for row in (result(env) or []):
+            if isinstance(row, dict) and row.get("name") == name:
+                return row.get("feature_ref")
+        return None
+
+    def build_plate(name):
+        """Плита 100×80×10 = 80000 мм³ на XY: эскиз, прямоугольник, выдавливание base."""
+        env, code = call("kompas_create_document",
+                         {"application_id": app_id, "kind": "part", "name": name})
+        doc = result(env).get("id")
+        if not doc:
+            return None, None, f"create_document: {code}"
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": current_rev(doc),
+            "plane": {"base": "xy", "offset_mm": 0}, "name": name + "-s"})
+        sk = result(env).get("id")
+        if not sk:
+            return doc, None, f"create_sketch: {code} {emsg(env)}"
+        env, code = call("kompas_edit_sketch", {
+            "sketch_ref": sk, "expected_revision": current_rev(doc), "mode": "append",
+            "entities": [{"kind": "rectangle", "start_mm": [0.0, 0.0],
+                          "width_mm": ref["plate_width_mm"], "height_mm": ref["plate_height_mm"]}]})
+        if code:
+            return doc, sk, f"edit_sketch: {code} {emsg(env)}"
+        env, code = call("kompas_finish_sketch", {"sketch_ref": sk, "require_closed_profile": False})
+        if code:
+            return doc, sk, f"finish_sketch: {code} {emsg(env)}"
+        env, code = call("kompas_extrude", {
+            "sketch_ref": sk, "expected_revision": current_rev(doc),
+            "operation": "base", "depth_mm": ref["plate_depth_mm"], "direction": "positive"})
+        if code:
+            return doc, sk, f"extrude: {code} {emsg(env)}"
+        return doc, sk, None
+
+    # ── CB10.00.setup: эталон через MCP ────────────────────────────────────────────────────────
+    doc, sketch_ref, build_error = build_plate("CB10")
+    plate_volume = first_volume(doc) if doc and not build_error else None
+    rep.add("CB10.00.setup",
+            "эталон собран через MCP: плита 100×80×10 = 80000 мм³ на XY (эскиз → прямоугольник → "
+            "выдавливание base)",
+            "PASS" if (doc and not build_error and near(plate_volume, ref["plate_volume_mm3"], 1.0)) else "FAIL",
+            f"document_id={doc} volume={plate_volume} sketch={sketch_ref!r} error={build_error}")
+
+    # ── CB10.1: принятая смена опоры — мутация (ревизия + dirty) ────────────────────────────────
+    if doc and sketch_ref and not build_error:
+        rev_before = current_rev(doc)
+        env, code = plane(doc, sketch_ref, {"base": "xy", "offset_mm": ref["support_offset_mm"]})
+        res = result(env)
+        rev_after = current_rev(doc)
+        dirty_after = ctx(doc).get("dirty")
+        stale_env, stale_code = plane(doc, sketch_ref, {"base": "xy", "offset_mm": 0.0}, rev=rev_before)
+        ok = (code is None and rev_after == rev_before + 1 and dirty_after is True
+              and stale_code == "REVISION_CONFLICT")
+        rep.add("CB10.1",
+                "OBS-030: принятая смена опоры эскиза (XY → смещённая XY) — МУТАЦИЯ: ревизия выросла "
+                "ровно на 1, документ стал изменённым, прежняя ревизия отвергается REVISION_CONFLICT",
+                "PASS" if ok else "FAIL",
+                f"code={code} ревизия {rev_before}→{rev_after} dirty={dirty_after} "
+                f"старая_ревизия→{stale_code} support_after={res.get('support_type_after')!r} "
+                f"geometry_changed={res.get('geometry_changed')!r} msg={emsg(env)}",
+                details={"rev_before": rev_before, "rev_after": rev_after, "dirty": dirty_after,
+                         "stale_code": stale_code, "result": res})
+    else:
+        rep.add("CB10.1", "OBS-030: смена опоры — мутация", "FAIL", f"эталон не построен: {build_error}")
+
+    # ── CB10.2: ревизия растёт НЕЗАВИСИМО от geometry_changed ──────────────────────────────────
+    if doc and sketch_ref and not build_error:
+        rev_before = current_rev(doc)
+        env, code = plane(doc, sketch_ref, {"base": "xy", "offset_mm": 0.0})
+        res = result(env)
+        rev_after = current_rev(doc)
+        dirty_after = ctx(doc).get("dirty")
+        # Опора сменена на ТУ ЖЕ плоскость: габарит и объём тела не изменились ни на йоту, поэтому
+        # geometry_changed обязан быть false — и ревизия обязана вырасти ВСЁ РАВНО.
+        ok = (code is None and rev_after == rev_before + 1 and dirty_after is True)
+        rep.add("CB10.2",
+                "OBS-030: смена опоры на ту же плоскость — ни габарит, ни объём тела не изменились "
+                "(geometry_changed=false), но ревизия ВСЁ РАВНО выросла и документ изменён: признак "
+                "геометрии не решает, была ли мутация",
+                "PASS" if ok else "FAIL",
+                f"code={code} ревизия {rev_before}→{rev_after} dirty={dirty_after} "
+                f"geometry_changed={res.get('geometry_changed')!r} "
+                f"gabarit {res.get('gabarit_before')!r} → {res.get('gabarit_after')!r}",
+                details={"rev_before": rev_before, "rev_after": rev_after,
+                         "geometry_changed": res.get("geometry_changed"), "result": res})
+    else:
+        rep.add("CB10.2", "OBS-030: ревизия независима от geometry_changed", "FAIL",
+                f"эталон не построен: {build_error}")
+
+    # ── CB10.3: после сохранения первая смена опоры снова делает документ изменённым ────────────
+    if doc and sketch_ref and not build_error:
+        save_path = _os.path.join(workdir, "cb10-%s.m3d" % _uuid.uuid4().hex[:8])
+        env, code = call("kompas_save_document", {
+            "document_id": doc, "target_path": save_path, "expected_revision": current_rev(doc)})
+        dirty_saved = ctx(doc).get("dirty")
+        rev_before = current_rev(doc)
+        env2, code2 = plane(doc, sketch_ref, {"base": "xy", "offset_mm": ref["support_offset_mm"]})
+        dirty_after = ctx(doc).get("dirty")
+        rev_after = current_rev(doc)
+        ok = (code is None and dirty_saved is False and code2 is None
+              and dirty_after is True and rev_after == rev_before + 1)
+        rep.add("CB10.3",
+                "OBS-030: save → dirty=false, затем смена опоры → снова dirty=true и ревизия +1 "
+                "(у клиента первая смена опоры после сохранения давала dirty=false)",
+                "PASS" if ok else "FAIL",
+                f"save={code} dirty_после_save={dirty_saved} смена={code2} "
+                f"ревизия {rev_before}→{rev_after} dirty_после_смены={dirty_after}",
+                details={"save_path": save_path, "dirty_saved": dirty_saved,
+                         "dirty_after": dirty_after, "rev_before": rev_before, "rev_after": rev_after})
+        rep._cb10_saved_path = save_path
+    else:
+        rep.add("CB10.3", "OBS-030: смена опоры после сохранения", "FAIL",
+                f"эталон не построен: {build_error}")
+
+    # ── CB10.4: правка эскиза ПОСЛЕ смены опоры идёт в НОВОЙ системе координат ───────────────────
+    if doc and sketch_ref and not build_error:
+        env, code = plane(doc, sketch_ref, {"base": "xz", "offset_mm": 0.0})
+        thin_after_support = thin_axis(first_bbox(doc))
+        env2, code2 = call("kompas_edit_sketch", {
+            "sketch_ref": sketch_ref, "expected_revision": current_rev(doc), "mode": "replace",
+            "entities": [{"kind": "rectangle", "start_mm": [0.0, 0.0],
+                          "width_mm": ref["small_width_mm"], "height_mm": ref["small_height_mm"]}]})
+        volume_after = first_volume(doc)
+        ok = (code is None and code2 is None and thin_after_support == "y"
+              and near(volume_after, ref["small_volume_mm3"], 1.0))
+        rep.add("CB10.4",
+                "OBS-030: после смены опоры XY → XZ правка эскиза читается в НОВОЙ системе координат: "
+                "тонкое протяжение тела лежит по Y, объём равен 60×40×10 = 24000 (проверка гипотезы о "
+                "_sketchPlaneBase)",
+                "PASS" if ok else "FAIL",
+                f"смена={code} правка={code2} тонкая_ось={thin_after_support} (ожидание y) "
+                f"объём={volume_after} (ожидание {ref['small_volume_mm3']}) msg={emsg(env2)}",
+                details={"thin_axis": thin_after_support, "volume": volume_after,
+                         "expected_volume": ref["small_volume_mm3"]})
+    else:
+        rep.add("CB10.4", "OBS-030: правка эскиза после смены опоры", "FAIL",
+                f"эталон не построен: {build_error}")
+
+    # ── CB10.5: сторона материала на НОВОЙ опоре названа и подтверждена габаритом ───────────────
+    if doc and sketch_ref and not build_error:
+        # Бобышка на опоре XZ: её сторона обязана быть названа полем material_added_toward, а источник
+        # (measured_box_shift либо sketch_normal_rule) — назван; подтверждение — сдвиг габарита тела.
+        box_before = first_bbox(doc)
+        env, code = call("kompas_extrude", {
+            "sketch_ref": sketch_ref, "expected_revision": current_rev(doc),
+            "operation": "boss", "depth_mm": ref["boss_depth_mm"], "direction": "positive",
+            "target_body_ref": (first_body(doc) or {}).get("body_ref")})
+        res = result(env)
+        box_after = first_bbox(doc)
+        toward = res.get("material_added_toward")
+        source = res.get("material_toward_source")
+        grew = False
+        if box_before and box_after:
+            try:
+                grew = (box_after["max_mm"][1] - box_before["max_mm"][1]) > 1.0 or \
+                       (box_before["min_mm"][1] - box_after["min_mm"][1]) > 1.0
+            except (KeyError, IndexError, TypeError):
+                grew = False
+        ok = (code is None and toward is not None and source is not None and grew)
+        rep.add("CB10.5",
+                "OBS-030: после смены опоры сторона материала названа (material_added_toward) и её "
+                "источник назван (material_toward_source), а габарит тела сдвинулся именно в эту "
+                "сторону — проверка _sketchPlaneHint на новой опоре",
+                "PASS" if ok else "FAIL",
+                f"code={code} toward={toward!r} source={source!r} габарит сдвинулся={grew} "
+                f"normal={res.get('material_toward_sketch_normal')!r} msg={emsg(env)}",
+                details={"toward": toward, "source": source, "grew": grew,
+                         "box_before": box_before, "box_after": box_after,
+                         "unavailable": res.get("material_toward_unavailable")})
+    else:
+        rep.add("CB10.5", "OBS-030: сторона материала на новой опоре", "FAIL",
+                f"эталон не построен: {build_error}")
+
+    close(doc)
+
+    # ── CB10.6: отказ с частичным эффектом НЕ перезаписывает файл открытого документа ───────────
+    doc2, sketch2, err2 = build_plate("CB10-restore")
+    restore_path = _os.path.join(workdir, "cb10-restore-%s.m3d" % _uuid.uuid4().hex[:8])
+    if doc2 and not err2:
+        env, code = call("kompas_save_document", {
+            "document_id": doc2, "target_path": restore_path, "expected_revision": current_rev(doc2)})
+        hash_before = sha256(restore_path)
+        mtime_before = _os.path.getmtime(restore_path) if _os.path.exists(restore_path) else None
+        body_ref = (first_body(doc2) or {}).get("body_ref")
+        # «Вырез в воздуху»: эскиз на XY+50, профиль 20×20 вне плиты → NO_GEOMETRY_CHANGE,
+        # partial_effects=true, признак остаётся в дереве.
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc2, "expected_revision": current_rev(doc2),
+            "plane": {"base": "xy", "offset_mm": ref["support_offset_mm"]}, "name": "CB10-air"})
+        air = result(env).get("id")
+        env, code = call("kompas_edit_sketch", {
+            "sketch_ref": air, "expected_revision": current_rev(doc2), "mode": "append",
+            "entities": [{"kind": "rectangle", "start_mm": [40.0, 30.0],
+                          "width_mm": 20.0, "height_mm": 20.0}]})
+        env, code = call("kompas_finish_sketch", {"sketch_ref": air, "require_closed_profile": False})
+        env, refuse_code = call("kompas_extrude", {
+            "sketch_ref": air, "expected_revision": current_rev(doc2), "operation": "cut",
+            "depth_mm": 5.0, "direction": "positive", "end_condition": "blind",
+            "target_body_ref": body_ref})
+        det = details_of(env)
+        hash_after = sha256(restore_path)
+        mtime_after = _os.path.getmtime(restore_path) if _os.path.exists(restore_path) else None
+        copy_path = det.get("control_copy_path")
+        ok = (refuse_code == "NO_GEOMETRY_CHANGE"
+              and det.get("restore_attempted") is False
+              and det.get("restore_decision") == "copy_kept_document_open"
+              and det.get("restored") is False
+              and isinstance(copy_path, str) and copy_path and _os.path.exists(copy_path)
+              and hash_before is not None and hash_before == hash_after
+              and mtime_before == mtime_after)
+        rep.add("CB10.6",
+                "OBS-019: отказ с частичным эффектом на ОТКРЫТОМ документе не перезаписывает файл: "
+                "restore_attempted=false, restore_decision=copy_kept_document_open, копия сохранена и "
+                "её путь назван; sha256 и время изменения файла документа не изменились",
+                "PASS" if ok else "FAIL",
+                f"code={refuse_code} attempted={det.get('restore_attempted')} "
+                f"decision={det.get('restore_decision')!r} restored={det.get('restored')} "
+                f"rollback={det.get('rollback_scope_code')!r} "
+                f"sha {str(hash_before)[:12]}→{str(hash_after)[:12]} "
+                f"mtime {mtime_before}→{mtime_after} copy={str(copy_path)[:80]!r}",
+                details={"restore": {k: v for k, v in det.items() if not k.startswith("failure_snapshot")},
+                         "restore_path": restore_path, "copy_path": copy_path,
+                         "hash_before": hash_before, "hash_after": hash_after})
+        rep._cb10_restore = {"path": restore_path, "copy": copy_path, "body_ref": body_ref,
+                             "doc": doc2, "volume": first_volume(doc2)}
+    else:
+        rep.add("CB10.6", "OBS-019: отказ не перезаписывает файл", "FAIL", f"эталон не построен: {err2}")
+        close(doc2)
+        doc2 = None
+
+    # ── CB10.7: отказ ДО COM — поведение прежнее (записи в файл нет) ─────────────────────────────
+    if doc2:
+        env, code = call("kompas_extrude", {
+            "sketch_ref": sketch2, "expected_revision": 1, "operation": "cut",
+            "depth_mm": 1.0, "direction": "positive", "target_body_ref": None})
+        det = details_of(env)
+        # REVISION_CONFLICT выдаётся ДО TaggedAfter (GuardRevision), поэтому конверт отказа несёт
+        # только ревизии: ни контрольной копии, ни решения о восстановлении в нём нет — файл не
+        # трогали вовсе. Это и есть «поведение прежнее», названное в наряде.
+        ok = (code == "REVISION_CONFLICT" and det.get("control_copy_made") in (None, False)
+              and det.get("restored") in (None, False))
+        rep.add("CB10.7",
+                "OBS-019: отказ ДО COM (REVISION_CONFLICT) — поведение прежнее: ни контрольной копии, "
+                "ни попытки восстановления; файл документа не трогали",
+                "PASS" if ok else "FAIL",
+                f"code={code} control_copy_made={det.get('control_copy_made')!r} "
+                f"restore_attempted={det.get('restore_attempted')!r} restored={det.get('restored')!r}",
+                details={"details": det})
+    else:
+        rep.add("CB10.7", "OBS-019: отказ до COM", "FAIL", "документ CB10.6 не построен")
+
+    # ── CB10.8: read_only — поведение прежнее (файл не перезаписывается) ────────────────────────
+    # ВАЖНО: документ CB10.6 обязан быть ЗАКРЫТ до этого открытия. Иначе сервер узнаёт уже
+    # открытый по тому же пути документ и возвращает СУЩЕСТВУЮЩУЮ запись (access=edit), и строка
+    # мерила бы не тот доступ, который запросила.
+    close(doc2)
+    doc2 = None
+    ro_doc = None
+    restore_path = (rep._cb10_restore or {}).get("path") if hasattr(rep, "_cb10_restore") else None
+    if restore_path and _os.path.exists(restore_path):
+        _e, o_env, _r = client.tool("kompas_open_document", {
+            "application_id": app_id, "path": restore_path, "access": "read_only",
+            "operation_id": str(_uuid.uuid4())}, timeout=240)
+        ro_doc = result(o_env).get("document_id") or result(o_env).get("id")
+        if ro_doc:
+            hash_before = sha256(restore_path)
+            body_ref = (first_body(ro_doc) or {}).get("body_ref")
+            env, code = call("kompas_create_sketch", {
+                "document_id": ro_doc, "expected_revision": current_rev(ro_doc),
+                "plane": {"base": "xy", "offset_mm": ref["support_offset_mm"]}, "name": "CB10-ro-air"})
+            air = result(env).get("id")
+            env, code = call("kompas_edit_sketch", {
+                "sketch_ref": air, "expected_revision": current_rev(ro_doc), "mode": "append",
+                "entities": [{"kind": "rectangle", "start_mm": [40.0, 30.0],
+                              "width_mm": 20.0, "height_mm": 20.0}]})
+            env, code = call("kompas_finish_sketch", {"sketch_ref": air,
+                                                      "require_closed_profile": False})
+            env, refuse_code = call("kompas_extrude", {
+                "sketch_ref": air, "expected_revision": current_rev(ro_doc), "operation": "cut",
+                "depth_mm": 5.0, "direction": "positive", "end_condition": "blind",
+                "target_body_ref": body_ref})
+            det = details_of(env)
+            hash_after = sha256(restore_path)
+            ok = (refuse_code == "NO_GEOMETRY_CHANGE"
+                  and det.get("restore_attempted") is False
+                  and det.get("restore_decision") == "document_read_only"
+                  and hash_before == hash_after)
+            rep.add("CB10.8",
+                    "OBS-019: документ открыт access=read_only — поведение прежнее: файл не "
+                    "перезаписывается, restore_attempted=false, причина названа",
+                    "PASS" if ok else "FAIL",
+                    f"code={refuse_code} attempted={det.get('restore_attempted')} "
+                    f"decision={det.get('restore_decision')!r} "
+                    f"sha {str(hash_before)[:12]}→{str(hash_after)[:12]}",
+                    details={"restore": {k: v for k, v in det.items()
+                                         if not k.startswith("failure_snapshot")}})
+        else:
+            rep.add("CB10.8", "OBS-019: read_only", "FAIL",
+                    f"документ не открыт read_only: {emsg(o_env)}")
+    else:
+        rep.add("CB10.8", "OBS-019: read_only", "FAIL", "нет сохранённого файла из CB10.6")
+    close(ro_doc)
+
+    # ── CB10.9: ручной откат по руководству — копия открывается, объём прежний ──────────────────
+    copy_path = (rep._cb10_restore or {}).get("copy") if hasattr(rep, "_cb10_restore") else None
+    if copy_path and _os.path.exists(copy_path):
+        _e, c_env, _r = client.tool("kompas_open_document", {
+            "application_id": app_id, "path": copy_path, "access": "read_only",
+            "operation_id": str(_uuid.uuid4())}, timeout=240)
+        copy_doc = result(c_env).get("document_id") or result(c_env).get("id")
+        copy_volume = first_volume(copy_doc) if copy_doc else None
+        ok = bool(copy_doc) and near(copy_volume, ref["plate_volume_mm3"], 1.0)
+        rep.add("CB10.9",
+                "OBS-019: ручной откат по руководству — контрольная копия из control_copy_path "
+                "открывается и её объём равен объёму до мутации (80000 мм³)",
+                "PASS" if ok else "FAIL",
+                f"copy={str(copy_path)[:80]!r} открыт={bool(copy_doc)} объём={copy_volume} "
+                f"(ожидание {ref['plate_volume_mm3']})",
+                details={"copy_path": copy_path, "volume": copy_volume})
+        close(copy_doc)
+    else:
+        rep.add("CB10.9", "OBS-019: ручной откат", "FAIL", "нет контрольной копии из CB10.6")
+
+    close(doc2)
+
+    # ── CB10.11: вырез «в воздухе» — признак ОСТАЛСЯ, ссылка разрешается, удаление по ней проходит ─
+    doc3, sketch3, err3 = build_plate("CB10-left")
+    if doc3 and not err3:
+        left_path = _os.path.join(workdir, "cb10-left-%s.m3d" % _uuid.uuid4().hex[:8])
+        call("kompas_save_document", {
+            "document_id": doc3, "target_path": left_path, "expected_revision": current_rev(doc3)})
+        body_ref = (first_body(doc3) or {}).get("body_ref")
+        volume_before = first_volume(doc3)
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc3, "expected_revision": current_rev(doc3),
+            "plane": {"base": "xy", "offset_mm": ref["support_offset_mm"]}, "name": "CB10-left-air"})
+        air = result(env).get("id")
+        call("kompas_edit_sketch", {
+            "sketch_ref": air, "expected_revision": current_rev(doc3), "mode": "append",
+            "entities": [{"kind": "rectangle", "start_mm": [40.0, 30.0],
+                          "width_mm": 20.0, "height_mm": 20.0}]})
+        call("kompas_finish_sketch", {"sketch_ref": air, "require_closed_profile": False})
+        env, refuse_code = call("kompas_extrude", {
+            "sketch_ref": air, "expected_revision": current_rev(doc3), "operation": "cut",
+            "depth_mm": 5.0, "direction": "positive", "end_condition": "blind",
+            "target_body_ref": body_ref})
+        det = details_of(env)
+        left_ref = det.get("feature_ref")
+        rev_at_refusal = (env or {}).get("revision_after")
+        deleted = None
+        delete_env = {}
+        if left_ref:
+            # confirm_dependents объявлено СХЕМОЙ обязательным (не «по умолчанию false»): без него
+            # Host отвергает вызов INVALID_ARGUMENT до COM. Названо в отчёте наряда.
+            delete_env, deleted = call("kompas_delete_feature", {
+                "feature_ref": left_ref, "expected_revision": rev_at_refusal,
+                "confirm_dependents": False})
+        volume_after = first_volume(doc3)
+        ok = (refuse_code == "NO_GEOMETRY_CHANGE" and det.get("feature_left_in_tree") is True
+              and isinstance(left_ref, str) and left_ref and deleted is None
+              and near(volume_after, volume_before, 1.0))
+        rep.add("CB10.11",
+                "отказ называет признак, ОСТАВШИЙСЯ в дереве: details.feature_left_in_tree=true, "
+                "details.feature_ref разрешается при revision_after отказа, удаление по этой ссылке "
+                "проходит, объём тела прежний — клиенту не нужен свежий list_features",
+                "PASS" if ok else "FAIL",
+                f"code={refuse_code} left={det.get('feature_left_in_tree')!r} feature_ref={str(left_ref)[:40]!r} "
+                f"удаление={deleted!r} объём {volume_before}→{volume_after} msg={emsg(env)} "
+                f"удаление_msg={emsg(delete_env)}",
+                details={"feature_ref": left_ref, "delete_error": deleted,
+                         "delete_details": details_of(delete_env),
+                         "revision_at_refusal": rev_at_refusal, "volume_before": volume_before,
+                         "volume_after": volume_after})
+    else:
+        rep.add("CB10.11", "отказ называет оставшийся признак", "FAIL", f"эталон не построен: {err3}")
+    close(doc3)
+
+    # ── CB10.12: отказ ДО создания признака — флаг false ────────────────────────────────────────
+    doc4, sketch4, err4 = build_plate("CB10-nofeat")
+    if doc4 and not err4:
+        nofeat_path = _os.path.join(workdir, "cb10-nofeat-%s.m3d" % _uuid.uuid4().hex[:8])
+        call("kompas_save_document", {
+            "document_id": doc4, "target_path": nofeat_path, "expected_revision": current_rev(doc4)})
+        # Отказ ПРОДУКТА до создания признака: base и reference одновременно — INVALID_ARGUMENT,
+        # выдаётся внутри TaggedAfter, признак не создаётся, счётчик признаков не меняется.
+        env, code = plane(doc4, sketch4, {"base": "xy", "offset_mm": 0.0, "reference": "plane:nope"})
+        det = details_of(env)
+        ok = (code == "INVALID_ARGUMENT" and det.get("feature_left_in_tree") is False)
+        rep.add("CB10.12",
+                "отказ ДО создания признака (base и reference одновременно → INVALID_ARGUMENT) несёт "
+                "feature_left_in_tree=false: признака в дереве не появилось",
+                "PASS" if ok else "FAIL",
+                f"code={code} left={det.get('feature_left_in_tree')!r} "
+                f"control_copy_made={det.get('control_copy_made')!r} msg={emsg(env)}",
+                details={"details": {k: v for k, v in det.items()
+                                     if not k.startswith("failure_snapshot")}})
+    else:
+        rep.add("CB10.12", "отказ до создания признака", "FAIL", f"эталон не построен: {err4}")
+    close(doc4)
+
+    # ── CB10.13: attach при НУЛЕ кандидатов — APPLICATION_DISCONNECTED, а не «неоднозначно» ─────
+    # Строка идёт ПОСЛЕДНЕЙ и закрывает СВОЙ экземпляр: только тогда «нет ни одного КОМПАС» —
+    # правда, а не постановка. Чужого сеанса на машине быть не должно (правило от 09.10.2026).
+    client.tool("kompas_disconnect", {
+        "application_id": app_id, "close_owned_application": True,
+        "operation_id": str(_uuid.uuid4())}, timeout=120)
+    for _ in range(20):
+        _e, cap_env, _r = client.tool("kompas_capabilities", {}, timeout=60)
+        running = result(cap_env).get("running_instances")
+        if running in (0, None):
+            break
+        _time.sleep(1.0)
+    _e, a_env, _r = client.tool("kompas_connect", {
+        "mode": "attach", "make_visible": False, "operation_id": str(_uuid.uuid4())}, timeout=120)
+    attach_code = error_code(a_env)
+    det = details_of(a_env)
+    process_ids = det.get("kompas_process_ids")
+    ok = (attach_code == "APPLICATION_DISCONNECTED"
+          and det.get("reason") in ("kompas_process_not_running", "kompas_process_not_in_rot",
+                                    "rot_empty")
+          and process_ids == []
+          and isinstance(det.get("rot_other_entry_names"), list)
+          and "не КОМПАС" in str(det.get("rot_other_entry_names_note", "")))
+    rep.add("CB10.13",
+            "OBS-019/attach: attach при НУЛЕ записей КОМПАС отвечает APPLICATION_DISCONNECTED с "
+            "названной причиной и kompas_process_ids=[] — это «не найдено», а не «неоднозначно»; "
+            "прочие записи ROT названы не-кандидатами",
+            "PASS" if ok else "FAIL",
+            f"code={attach_code} reason={det.get('reason')!r} process_ids={process_ids!r} "
+            f"rot_matching={det.get('rot_entries_matching_kompas')!r} "
+            f"rot_total={det.get('rot_total_entries')!r} msg={emsg(a_env)}",
+            details={"details": det})
+
+    for cid, desc in (
+        ("CB10.1", "OBS-030: принятая смена опоры эскиза — мутация (ревизия + dirty)"),
+        ("CB10.2", "OBS-030: ревизия растёт независимо от geometry_changed"),
+        ("CB10.3", "OBS-030: после save смена опоры снова делает документ изменённым"),
+        ("CB10.4", "OBS-030: правка эскиза после смены опоры идёт в новой системе координат"),
+        ("CB10.5", "OBS-030: сторона материала на новой опоре названа и подтверждена"),
+        ("CB10.6", "OBS-019: отказ не перезаписывает файл открытого документа"),
+        ("CB10.7", "OBS-019: отказ до COM — поведение прежнее"),
+        ("CB10.8", "OBS-019: read_only — файл не перезаписывается"),
+        ("CB10.9", "OBS-019: ручной откат по руководству"),
+        ("CB10.11", "отказ называет оставшийся признак и его ссылку"),
+        ("CB10.12", "отказ до создания признака — флаг false"),
+        ("CB10.13", "attach при нуле кандидатов — APPLICATION_DISCONNECTED"),
+    ):
+        if not any(row.get("id") == cid for row in rep.rows):
+            rep.add(cid, desc, "FAIL", "строка не выполнена (раннее исключение постановки)")
+
+
 def variables_bind_checks(client, rep, app_id, workdir):
     """VB.* — три инструмента блока G3 через MCP на бинарях поставки.
 
@@ -6944,6 +7515,11 @@ def main():
     # собственные инструменты.
     variables_bind_only = "--variables-bind-only" in sys.argv
 
+    # Наряд CLIENT_BUGS_20261010: дефекты клиента на выпуске 0.6.0 (OBS-030 - смена опоры эскиза,
+    # OBS-019 - восстановление файла, признак, оставшийся в дереве, attach при нуле кандидатов).
+    # Своя группа, свой сеанс, своя синтетическая геометрия; данные клиента не используются (§5).
+    client_bugs_20261010_only = "--client-bugs-20261010" in sys.argv
+
     # Набор выбранных веток -> ОДНО решение об имени группы. Заголовок, имя файла отчёта и имя
     # каталога прогона выводятся из него вместе, поэтому каталог не может назвать одну группу, а
     # отчёт внутри — другую.
@@ -6974,6 +7550,7 @@ def main():
         "drawing": drawing_only,
         "variables_material": variables_material_only,
         "variables_bind": variables_bind_only,
+        "client_bugs_20261010": client_bugs_20261010_only,
         "pattern_orientation": pattern_orientation_only,
         "release_040": release_040_only,
         "client_bugs_20261008": client_bugs_only,
@@ -7451,6 +8028,14 @@ def main():
 
         if variables_bind_only:
             variables_bind_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if client_bugs_20261010_only:
+            client_bugs_20261010_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,

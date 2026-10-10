@@ -271,6 +271,10 @@ class Report:
         # прежнее общее имя («последний прогон») и явный путь приёмки поставки (`--report`).
         # Копия, а не перемещение: единственный экземпляр доказательств у прогона уже есть.
         self.mirror_paths = []
+        # Разбивка по группам — только в режиме `--all`, где один отчёт несёт строки многих групп.
+        # `group` выставляется ПЕРЕД прогоном группы; без него строка относится к «вертикали».
+        self.grouped = False
+        self.group = None
 
     def add(self, cid, desc, verdict, detail="", details=None):
         """`detail` — короткая сводка для строки; `details` — полные данные измерения.
@@ -281,6 +285,10 @@ class Report:
         идут в `details` и не усекаются.
         """
         row = {"id": cid, "description": desc, "verdict": verdict, "detail": clip(detail, 600)}
+        if self.grouped:
+            # Группа строки — для разбивки отчёта `--all`. Без разбивки поле не пишется, чтобы
+            # обычный отчёт одной группы не менялся.
+            row["group"] = self.group or "vertical"
         if details is not None:
             row["details"] = details
         # ОКНО ВЫЗОВОВ строки: [начало, конец) в журнале CALL_LOG. Это свидетельство того, что строка
@@ -301,6 +309,10 @@ class Report:
         if self.context:
             payload["context"] = self.context
         payload["rows"] = self.rows
+        if self.grouped:
+            # Разбивка по группам и общий счёт в самом отчёте: один отчёт `--all` несёт строки многих
+            # групп, и без разбивки «где чьё» пришлось бы выводить из имён строк.
+            payload["groups"] = self._group_breakdown()
         if CALL_LOG:
             # Журнал едет ВМЕСТЕ с отчётом: без него `calls_window` некуда приложить, и связь
             # «действие → проверка» снова пришлось бы выводить из имени строки.
@@ -322,8 +334,21 @@ class Report:
         counts = {}
         for r in self.rows:
             counts[r["verdict"]] = counts.get(r["verdict"], 0) + 1
+        if self.grouped:
+            print("\nРазбивка по группам:")
+            for group, bucket in sorted(self._group_breakdown().items()):
+                parts = ", ".join(f"{v}={n}" for v, n in sorted(bucket.items()))
+                print(f"  {group:24} {parts}")
         print(f"\nИтог: {counts}")
         return counts
+
+    def _group_breakdown(self):
+        """Счёт вердиктов по группам: `{группа: {вердикт: число}}`. Строка без группы — «вертикаль»."""
+        breakdown = {}
+        for r in self.rows:
+            bucket = breakdown.setdefault(r.get("group") or "vertical", {})
+            bucket[r["verdict"]] = bucket.get(r["verdict"], 0) + 1
+        return breakdown
 
 
 
@@ -521,17 +546,127 @@ RUN_GROUPS = (
 VERTICAL_GROUP = ("vertical", "smoke-report.json",
                   "Интеграционный прогон вертикального сценария через MCP")
 
+# ── Режим `--all`: вертикаль плюс все группы вне неё ─────────────────────────────────────────────
+# ИЗМЕРЕНО 10.10.2026 по местам вызова проверочных функций: вертикальный блок (ниже) вызывает
+# функции ЭТИХ групп, а функции восьми групп из ALL_GROUPS_EXTRA — только в своей ветке
+# `--<группа>-only`. Список сверяется самопроверкой all_plan_problems(), а не поддерживается на
+# память: группа, добавленная в RUN_GROUPS и забытая здесь, делает самопроверку ненулевой.
+VERTICAL_GROUPS = (
+    "contract", "chamfer", "fillet", "extrusion", "hole", "rotation", "sketch_status",
+    "b3", "b3l", "b3m", "b3c", "dirty", "b4", "b5", "f08", "mania", "dep", "image", "nested",
+    "sketch_bulk", "pattern_orientation", "release_040", "client_bugs_20261008",
+    "client_bugs_20261009", "entity_create", "sketch_profile",
+)
 
-def selected_run_group(selected):
+# Группы, которых в вертикали НЕТ: их проверочная функция вызывается ТОЛЬКО в своей ветке
+# `--<группа>-only`. Значение - аргументы запуска (для `suppress` - с повтором K=3). Порядок =
+# порядок прогона в `--all`.
+ALL_GROUPS_EXTRA = (
+    ("assembly", ["--assembly-only"]),
+    ("mate", ["--mate-only"]),
+    ("interference", ["--interference-only"]),
+    ("drawing", ["--drawing-only"]),
+    ("variables_material", ["--variables-material-only"]),
+    ("variables_bind", ["--variables-bind-only"]),
+    ("client_bugs_20261010", ["--client-bugs-20261010"]),
+    ("suppress", ["--suppress-repeat", "3"]),
+)
+
+# Группы, которые нельзя запускать ПОДРЯД в общем сеансе. Пусто: каждая группа вне вертикали
+# прогоняется в `--all`, а `suppress` поднимает свой свежий сеанс ВНУТРИ себя (это его контроль
+# «редкое состояние длинного сеанса» против «редкой постановки»), поэтому подряд она запускается.
+ALL_GROUPS_EXCLUDED = ()
+
+ALL_GROUP = ("all", "smoke-all-report.json",
+             "Приёмка: вертикальный сценарий плюс все группы вне него (режим --all)")
+
+
+def all_plan_problems():
+    """Самопроверка плана `--all`: перечень групп совпадает с `GROUPS`, кроме названных исключений.
+
+    Возвращает список проблем (пусто - план согласован). Проверяются три вещи: каждая группа
+    `RUN_GROUPS` ровно в одном из трёх наборов (вертикаль / вне вертикали / исключена); в наборах нет
+    имён, которых нет в `RUN_GROUPS`; у каждой группы вне вертикали есть аргумент запуска.
+    """
+    keys = {key for key, *_ in RUN_GROUPS}
+    vertical = set(VERTICAL_GROUPS)
+    extra = {key for key, _ in ALL_GROUPS_EXTRA}
+    excluded = {key for key, _ in ALL_GROUPS_EXCLUDED}
+    problems = []
+
+    unknown = (vertical | extra | excluded) - keys
+    if unknown:
+        problems.append("имена вне GROUPS: " + ", ".join(sorted(unknown)))
+
+    missing = keys - (vertical | extra | excluded)
+    if missing:
+        problems.append("группы без прогона в --all: " + ", ".join(sorted(missing)))
+
+    overlaps = (vertical & extra) | (vertical & excluded) | (extra & excluded)
+    if overlaps:
+        problems.append("группа названа дважды: " + ", ".join(sorted(overlaps)))
+
+    for key, args in ALL_GROUPS_EXTRA:
+        if not args:
+            problems.append(f"у группы {key} нет аргумента запуска")
+
+    return problems
+
+
+def selected_run_group(selected, all_groups=False):
     """(слаг, имя файла отчёта, заголовок) для набора выбранных веток.
 
     Чистая функция, а не цепочка условий в `main()`: имя отчёта и имя каталога прогона обязаны
     выводиться из ОДНОГО решения, иначе каталог назовёт одну группу, а отчёт внутри — другую.
     """
+    if all_groups:
+        return ALL_GROUP
     for key, slug, filename, title in RUN_GROUPS:
         if selected.get(key):
             return slug, filename, title
     return VERTICAL_GROUP
+
+
+# Повтор K, с которым группа `suppress` прогоняется в `--all`: то же число, что в её аргументе
+# запуска (`--suppress-repeat 3`). Держится рядом с планом, чтобы список групп и их параметры
+# читались из одного места.
+ALL_SUPPRESS_REPEAT = 3
+
+
+def dispatch_extra_group(client, rep, app_id, workdir, key, vm_reference_doc):
+    """Проверки группы вне вертикали на данном сеансе. ЕДИНСТВЕННОЕ место этого выбора: список
+    `ALL_GROUPS_EXTRA` и разбор ключа держатся вместе, поэтому не расходятся."""
+    checks = EXTRA_GROUP_CHECKS.get(key)
+    if checks is None:
+        raise ValueError(f"группа вне вертикали без проверок: {key}")
+    checks(client, rep, app_id, workdir, vm_reference_doc)
+
+
+def run_extra_group_fresh(client, rep, workdir, key, vm_reference_doc):
+    """Группа вне вертикали в СВОЁМ свежем сеансе: поднять сеанс, прогнать, погасить.
+
+    ЗАЧЕМ СВЕЖИЙ СЕАНС, А НЕ ОБЩИЙ. ИЗМЕРЕНО 10.10.2026 в прогоне `--all` на общей сессии: группа
+    `client_bugs_20261010` частью E НАМЕРЕННО отключает приложение (проверка attach при нуле
+    кандидатов), поэтому общий сеанс после неё недействителен, и следующая за ней группа получает
+    `APPLICATION_DISCONNECTED` на построении постановки. Чтобы числа `--all` значили то же, что числа
+    отдельного прогона группы, каждая группа вне вертикали поднимает свой сеанс.
+    """
+    _e, env, _r = client.tool("kompas_connect", {"mode": "launch", "make_visible": False,
+                                                 "operation_id": str(uuid.uuid4())}, timeout=300)
+    app_id = (env or {}).get("application_id")
+    if not app_id:
+        rep.add("ALL." + key, f"группа {key}: сеанс не поднят", "FAIL",
+                "kompas_connect не вернул application_id")
+        return
+    dispatch_extra_group(client, rep, app_id, workdir, key, vm_reference_doc)
+    # Сеанс гасим сами. Отказ гашения НЕ отменяет уже полученные строки группы, но и не молчит:
+    # `client_bugs_20261010` отключает приложение сама, и её отказ здесь — ожидаемый.
+    _e, env2, _r = client.tool("kompas_disconnect", {"application_id": app_id,
+                                                     "close_owned_application": True,
+                                                     "operation_id": str(uuid.uuid4())}, timeout=120)
+    if error_code(env2) not in (None, "APPLICATION_DISCONNECTED"):
+        rep.add("ALL." + key, f"группа {key}: сеанс не погашен", "NAMED",
+                f"kompas_disconnect вернул {error_code(env2)}")
 
 
 def run_directory_name(started_utc, group, commit, dirty):
@@ -753,6 +888,27 @@ def instrument_self_test():
           f"{zero_failure_bound(20)!r} {zero_failure_bound(60)!r}")
     check("граница нуля отказов на нуле попыток не выдумывается",
           zero_failure_bound(0) is None)
+
+    # План режима `--all` (наряд DRW_REGRESSION_FIX, §3). Самопроверка НЕ тавтологична: список
+    # вертикали записан ИЗМЕРЕННО и сверяется с GROUPS, поэтому группа, добавленная в GROUPS и
+    # забытая в плане (или названная дважды), делает проверку ненулевой.
+    problems = all_plan_problems()
+    check("план --all покрывает все группы GROUPS ровно по разу", not problems,
+          "; ".join(problems))
+    keys = {key for key, *_ in RUN_GROUPS}
+    check("вертикаль и группы вне неё не пересекаются",
+          not (set(VERTICAL_GROUPS) & {k for k, _ in ALL_GROUPS_EXTRA}))
+    check("--all называет все группы вне вертикали",
+          set(VERTICAL_GROUPS) | {k for k, _ in ALL_GROUPS_EXTRA}
+          | {k for k, _ in ALL_GROUPS_EXCLUDED} == keys,
+          f"вертикаль={len(VERTICAL_GROUPS)} вне={len(ALL_GROUPS_EXTRA)} "
+          f"исключено={len(ALL_GROUPS_EXCLUDED)} всего={len(keys)}")
+    check("у каждой группы вне вертикали есть проверки",
+          {k for k, _ in ALL_GROUPS_EXTRA} == set(EXTRA_GROUP_CHECKS),
+          f"вне={sorted(k for k, _ in ALL_GROUPS_EXTRA)} проверки={sorted(EXTRA_GROUP_CHECKS)}")
+    check("повтор подавления в --all совпадает с её аргументом запуска",
+          [a for k, a in ALL_GROUPS_EXTRA if k == "suppress"] == [["--suppress-repeat",
+                                                                 str(ALL_SUPPRESS_REPEAT)]])
 
     print(f"\nСамопроверка прибора: {checks} проверок, "
           f"{len(failures)} FAIL" + (f" — {failures}" if failures else ""))
@@ -7571,6 +7727,9 @@ def main():
     workdir = os.path.join(ROOT, "scratch", "mcp-smoke")
     os.makedirs(workdir, exist_ok=True)
     keep = "--keep" in sys.argv
+    # Полный прогон: вертикальный сценарий ПЛЮС все группы вне него, в одном отчёте с разбивкой по
+    # группам. Это и есть «полный прогон» для приёмки наряда и выпуска (AGENTS.md, «Сборка и тесты»).
+    all_groups = "--all" in sys.argv
     only_contract = "--contract-only" in sys.argv
     # Отладочный режим: одна группа фаски на своём сеансе, без получасовой вертикали. Полный прогон
     # всё равно обязателен — эта ветка не проверяет остальное и не заменяет релизную приёмку.
@@ -7816,7 +7975,18 @@ def main():
         "sketch_profile": sketch_profile_only,
         "suppress": bool(suppress_repeat_k),
     }
-    group, report_filename, report_title = selected_run_group(selected)
+    # `--all` — это «вертикаль плюс группы вне неё», а не ещё одна ветка наравне с `-only`: вместе с
+    # сужающим флагом он неоднозначен, и выбор молча сделал бы отчёт не тем, чем назван.
+    if all_groups and any(selected.values()):
+        print("--all не сочетается с сужающим флагом (-only/--suppress-repeat/--nested-repeat): "
+              "он прогоняет вертикаль и ВСЕ группы вне неё.")
+        return 2
+    if all_groups:
+        problems = all_plan_problems()
+        if problems:
+            print("План --all не согласован с GROUPS: " + "; ".join(problems))
+            return 2
+    group, report_filename, report_title = selected_run_group(selected, all_groups)
 
     # Явный путь приёмки проверяется ДО создания каталога прогона: отказ обязан оставить дерево
     # таким, каким он его нашёл, — пустой каталог прогона после отказа выглядел бы как состоявшийся
@@ -7839,6 +8009,8 @@ def main():
     commit, tree_dirty = git_state(ROOT)
     run_dir = create_run_directory(workdir, started_utc, group, commit, tree_dirty)
     rep = Report(report_title, os.path.join(run_dir, report_filename))
+    # Разбивка по группам — только у полного прогона: его один отчёт несёт строки всех групп.
+    rep.grouped = all_groups
     # Прежнее общее имя остаётся КОПИЕЙ последнего прогона: привычный путь не пропадает, но и не
     # является больше единственным экземпляром доказательств.
     rep.mirror_paths.append(os.path.join(workdir, report_filename))
@@ -7893,6 +8065,20 @@ def main():
         "report_path": rep.path,
         "report_copies": rep.mirror_paths,
     }
+    if all_groups:
+        # Отчёт полного прогона называет свой план: какие группы даёт вертикаль, какие добавлены, что
+        # исключено. Без этого «полный» пришлось бы принимать на слово.
+        rep.context["all_plan"] = {
+            "vertical": list(VERTICAL_GROUPS),
+            "extra": [key for key, _ in ALL_GROUPS_EXTRA],
+            "excluded": [key for key, _ in ALL_GROUPS_EXCLUDED],
+            "groups_total": len(RUN_GROUPS),
+            # Каждая группа вне вертикали поднимает СВОЙ сеанс. Причина измерена: CB10 частью E
+            # отключает приложение, и общий сеанс после неё недействителен (см. run_extra_group_fresh).
+            "extra_session_policy": "each_group_in_own_fresh_session",
+            "extra_session_reason": "client_bugs_20261010 part E disconnects the application "
+                                    "(attach with zero candidates), invalidating a shared session",
+        }
     write_run_manifest(run_dir, {"state": "started", "context": rep.context})
     print("Измеряется: " + json.dumps(rep.context, ensure_ascii=False))
 
@@ -8966,9 +9152,18 @@ def main():
             client.tool("kompas_disconnect", {"application_id": app_id, "close_owned_application": True, "operation_id": str(uuid.uuid4())}, timeout=120)
             app_id = None
 
+        # ── Режим `--all`: группы, которых в вертикали НЕТ ───────────────────────────────────────
+        # Каждая — в СВОЁМ свежем сеансе (см. run_extra_group_fresh: CB10 частью E отключает
+        # приложение, поэтому общий сеанс после неё недействителен).
+        if all_groups:
+            for key, _args in ALL_GROUPS_EXTRA:
+                rep.group = key
+                run_extra_group_fresh(client, rep, workdir, key, vm_reference_doc)
+
         # Группа DL идёт ПОСЛЕ вертикального сценария и своим сеансом: она закрывает документы и
         # приложение, а последняя её строка поднимает второе окно. Вклинить её в середину значило
         # бы держать два экземпляра КОМПАС одновременно.
+        rep.group = "dirty"
         dirty_close_checks(client, rep, workdir, host, measured_config)
         return finish(rep, client)
     except McpError as ex:
@@ -36591,6 +36786,22 @@ def finish(rep, client):
         for line in client.log[:10]:
             print("  " + line)
     return 1 if counts.get("FAIL") else 0
+
+
+# Проверки групп вне вертикали, по ключу `ALL_GROUPS_EXTRA`. Объявлено ЗДЕСЬ, в конце модуля, потому
+# что ссылается на функции групп, определённые ниже `dispatch_extra_group`; к моменту вызова `main()`
+# модуль загружен целиком. Самопроверка сверяет ключи этого словаря с `ALL_GROUPS_EXTRA`.
+EXTRA_GROUP_CHECKS = {
+    "assembly": lambda c, r, a, w, v: assembly_checks(c, r, a, w),
+    "mate": lambda c, r, a, w, v: mate_checks(c, r, a, w),
+    "interference": lambda c, r, a, w, v: interference_checks(c, r, a, w),
+    "drawing": lambda c, r, a, w, v: drawing_checks(c, r, a, w),
+    "variables_material": lambda c, r, a, w, v: variables_material_checks(
+        c, r, a, w, reference_path=v),
+    "variables_bind": lambda c, r, a, w, v: variables_bind_checks(c, r, a, w),
+    "client_bugs_20261010": lambda c, r, a, w, v: client_bugs_20261010_checks(c, r, a, w),
+    "suppress": lambda c, r, a, w, v: suppress_restore_checks(c, r, a, w, ALL_SUPPRESS_REPEAT),
+}
 
 
 if __name__ == "__main__":

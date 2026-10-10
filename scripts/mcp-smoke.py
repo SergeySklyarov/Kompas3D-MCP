@@ -1,4 +1,4 @@
-"""Drives KompasMcp.Host over the real MCP stdio transport for the vertical scenario.
+﻿"""Drives KompasMcp.Host over the real MCP stdio transport for the vertical scenario.
 
 The server side uses the official C# SDK for transport; this client speaks the wire format
 directly (newline-delimited JSON-RPC 2.0) on purpose: the assertions must be about OUR contract —

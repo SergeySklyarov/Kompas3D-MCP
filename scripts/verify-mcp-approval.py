@@ -146,63 +146,69 @@ def default_out():
 
 
 def self_test():
-    """Батарея прибора: обе половины по КАЖДОМУ из двух свойств умолчания.
+    """Instrument battery: both halves of each of the two default-`--out` properties.
 
-    Свойство первое — умолчание СЛЕДУЕТ за источником аудита. Половина «обязано разрешиться»:
-    синтетический аудит с источником в существующем каталоге даёт путь в ЭТОМ каталоге. Половина
-    «обязано отказать»: синтетический аудит с источником в НЕсуществующем каталоге даёт отказ, а не
-    подстановку.
-
-    Свойство второе — прежний каталог (`delivery-20260918`) не возвращается НИКОГДА. Это и есть
-    отрицательный контроль дефекта №25: он обязан сработать на любом входе, включая тот, на котором
-    прежняя редакция давала ровно `delivery-20260918`.
+    THE DATA IS BUILT HERE, in a temporary directory inside the repository root. It used to read
+    another run's artefacts and reported a RED battery once those were gone - i.e. it measured the
+    survival of a directory, not the default. The directory must sit under the root because the audit
+    source is a root-relative path. Property one: the default FOLLOWS the source (resolves into an
+    existing directory, refuses a missing one). Property two: the legacy `delivery-20260918` NEVER
+    comes back - the negative control of defect #25, which must fire on every input.
+    History: docs/decisions/tests.md#evidence-rebuild
     """
-    scratch = os.path.join(ROOT, "scratch", "_mcp-approval-selftest")
-    os.makedirs(scratch, exist_ok=True)
-    live_dir = os.path.join(ROOT, "scratch", "mcp-smoke")
+    import shutil
+    import tempfile
+
     checks, results = [], []
+    with tempfile.TemporaryDirectory(prefix="_mcp-approval-selftest-", dir=ROOT) as scratch:
+        # Живой прогон строится здесь же: один файл — ровно то, что нужно источнику с маской в
+        # ИМЕНИ файла. Пустое содержимое допустимо: проверяется разрешение каталога, а не отчёт.
+        live_dir = os.path.join(scratch, "live-run")
+        os.makedirs(live_dir)
+        with open(os.path.join(live_dir, "full.json"), "w", encoding="utf-8") as fh:
+            fh.write("{}")
+        live_rel = os.path.relpath(live_dir, ROOT).replace("\\", "/")
 
-    def probe(label, source, expect_dir, expect_error):
-        path = os.path.join(scratch, "audit-%s.json" % label)
-        doc = {"claimed_actions_check": {"source": source}} if source is not None else {"meta": {}}
-        with open(path, "w", encoding="utf-8") as fh:
-            json.dump(doc, fh, ensure_ascii=False)
-        directory, _src, err = audit_reports_dir(path)
-        got_dir = os.path.normpath(directory) if directory else None
-        ok = ((got_dir == os.path.normpath(expect_dir)) if expect_dir
-              else (got_dir is None and bool(err) == expect_error))
-        checks.append(ok)
-        results.append((label, source, got_dir, err))
-        return ok
+        def probe(label, source, expect_dir, expect_error):
+            path = os.path.join(scratch, "audit-%s.json" % label)
+            doc = {"claimed_actions_check": {"source": source}} if source is not None else {"meta": {}}
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump(doc, fh, ensure_ascii=False)
+            directory, _src, err = audit_reports_dir(path)
+            got_dir = os.path.normpath(directory) if directory else None
+            ok = ((got_dir == os.path.normpath(expect_dir)) if expect_dir
+                  else (got_dir is None and bool(err) == expect_error))
+            checks.append(ok)
+            results.append((label, source, got_dir, err))
+            return ok
 
-    # (1) следует за источником: каталог существует
-    probe("follows", "scratch/mcp-smoke/sketchplane-20260921/*.json",
-          os.path.join(live_dir, "sketchplane-20260921"), None)
-    # (2) обязан отказать: каталога нет — подстановка запрещена
-    probe("refuses_absent", "scratch/mcp-smoke/__zzz_absent_run/*.json", None, True)
-    # (3) обязан отказать: поля нет вовсе (прежняя редакция здесь молча шла в 18.09)
-    probe("refuses_missing_field", None, None, True)
-    # (4) обязан отказать: маска стоит в КАТАЛОГЕ — прогон неоднозначен, выбирать нельзя
-    probe("refuses_glob_dir", "scratch/mcp-smoke/*/full.json", None, True)
-    # (5) источник без маски, но с названным каталогом — каталог однозначен и принимается
-    probe("plain_file", "scratch/mcp-smoke/sketchplane-20260921/full.json",
-          os.path.join(live_dir, "sketchplane-20260921"), None)
+        # (1) следует за источником: каталог существует
+        probe("follows", live_rel + "/*.json", live_dir, None)
+        # (2) обязан отказать: каталога нет — подстановка запрещена
+        probe("refuses_absent", live_rel + "-absent/*.json", None, True)
+        # (3) обязан отказать: поля нет вовсе (прежняя редакция здесь молча шла в 18.09)
+        probe("refuses_missing_field", None, None, True)
+        # (4) обязан отказать: маска стоит в КАТАЛОГЕ — прогон неоднозначен, выбирать нельзя
+        probe("refuses_glob_dir", live_rel + "/*/full.json", None, True)
+        # (5) источник без маски, но с названным каталогом — каталог однозначен и принимается
+        probe("plain_file", live_rel + "/full.json", live_dir, None)
 
-    # (6) ОТРИЦАТЕЛЬНЫЙ КОНТРОЛЬ ДЕФЕКТА №25: прежний каталог не возвращается ни на одном входе.
-    legacy = "delivery-20260918"
-    leaked = [r for r in results if r[2] and legacy in r[2]]
-    checks.append(not leaked)
+        # (6) ОТРИЦАТЕЛЬНЫЙ КОНТРОЛЬ ДЕФЕКТА №25: прежний каталог не возвращается ни на одном входе.
+        legacy = "delivery-20260918"
+        leaked = [r for r in results if r[2] and legacy in r[2]]
+        checks.append(not leaked)
 
-    print("=== батарея прибора (самопроверка) ===")
-    for label, source, got_dir, err in results:
-        print("  %-18s источник %-46s → %s"
-              % (label, str(source)[:46], os.path.relpath(got_dir, ROOT) if got_dir else "ОТКАЗ: " + str(err)))
-    print("  %-18s прежний каталог `%s` не возвращается: %s"
-          % ("№25-контроль", legacy, "ДА" if not leaked else "НЕТ — ДЕФЕКТ НЕ ВЫЛЕЧЕН"))
-    ok = all(checks)
-    print("  проверок пройдено: %d из %d" % (sum(1 for c in checks if c), len(checks)))
-    print("  батарея: %s" % ("ЗЕЛЁНАЯ" if ok else "КРАСНАЯ"))
-    return 0 if ok else 1
+        print("=== батарея прибора (самопроверка) ===")
+        for label, source, got_dir, err in results:
+            print("  %-18s источник %-46s → %s"
+                  % (label, str(source)[:46],
+                     os.path.relpath(got_dir, ROOT) if got_dir else "ОТКАЗ: " + str(err)))
+        print("  %-18s прежний каталог `%s` не возвращается: %s"
+              % ("№25-контроль", legacy, "ДА" if not leaked else "НЕТ — ДЕФЕКТ НЕ ВЫЛЕЧЕН"))
+        ok = all(checks)
+        print("  проверок пройдено: %d из %d" % (sum(1 for c in checks if c), len(checks)))
+        print("  батарея: %s" % ("ЗЕЛЁНАЯ" if ok else "КРАСНАЯ"))
+        return 0 if ok else 1
 
 
 def main():

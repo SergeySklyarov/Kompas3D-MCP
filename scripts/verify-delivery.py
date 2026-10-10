@@ -30,6 +30,7 @@ import os
 import struct
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 
@@ -216,21 +217,87 @@ def isolate_config(config, out):
 
 
 def default_out(delivery):
-    """Каталог отчёта — ИМЯ ТОЙ ПОСТАВКИ, КОТОРУЮ ИЗМЕРИЛИ, а не константа.
+    """Report path: derived from the delivery NAME, under the PERMANENT evidence root.
 
-    Здесь стоял жёсткий путь `scratch/mcp-smoke/delivery-20260918/package-check.json`: проверка
-    поставки B4 складывала отчёт в каталог, названный по поставке B2. Это не косметика — паспорт
-    поставки читает `package-check.json` из СВОЕГО каталога, и отчёт, положенный по умолчанию не
-    туда, оставлял бы в паспорте чужой результат. Имя выводится из имени поставки:
-    `artifacts/publish-b4-20260920` → `scratch/mcp-smoke/delivery-b4-20260920/package-check.json`.
+    INVARIANT: the passport reads `package-check.json` from ITS OWN reports directory, so a report
+    written elsewhere by default leaves another delivery's result in the passport. MEASURED: a
+    hardcoded `scratch/mcp-smoke/delivery-20260918/...` filed a B4 check under the B2 delivery.
+    The root is `docs/acceptance/evidence/`, never `scratch/` - `scratch/` is cleaned, and a delivery
+    check that disappears with it was never evidence. `--out` overrides. The passport finds the
+    reports directory by search (`default_reports_dir`), so `--reports` sets it too.
+    History: docs/decisions/tests.md#evidence-rebuild
     """
     name = os.path.basename(delivery.rstrip("/\\"))
     if name.startswith("publish-"):
         name = name[len("publish-"):]
-    return os.path.join(ROOT, "scratch", "mcp-smoke", f"delivery-{name}", "package-check.json")
+    return os.path.join(ROOT, "docs", "acceptance", "evidence", name, "package-check.json")
+
+
+def self_test():
+    """Self-check on PURE functions: PE machine, schema canonicalisation, report path.
+
+    Both halves are mandatory: a clean input must pass and a corrupted one must be NAMED, otherwise a
+    green `verify-delivery` run is indistinguishable from a run that measured nothing. No Host and no
+    KOMPAS is started here, so the check depends on no delivery, no machine and no `scratch/` path.
+    """
+    checks, failures = [], []
+
+    def check(name, ok, detail=""):
+        checks.append(name)
+        if not ok:
+            failures.append(name)
+        print("  [%s] %s%s" % ("PASS" if ok else "FAIL", name, (" — " + detail) if detail else ""))
+
+    def fake_pe(machine):
+        # A minimal PE image: MZ, e_lfanew at 0x3C, "PE\0\0", then the Machine field.
+        data = bytearray(0x100)
+        data[0:2] = b"MZ"
+        struct.pack_into("<I", data, 0x3C, 0x40)
+        data[0x40:0x44] = b"PE\0\0"
+        struct.pack_into("<H", data, 0x44, machine)
+        return bytes(data)
+
+    with tempfile.TemporaryDirectory(prefix="verify-delivery-selftest-") as tmp:
+        x64 = os.path.join(tmp, "x64.exe")
+        with open(x64, "wb") as fh:
+            fh.write(fake_pe(0x8664))
+        check("PE x64 читается как 0x8664", pe_machine(x64) == 0x8664, str(pe_machine(x64)))
+
+        x86 = os.path.join(tmp, "x86.exe")
+        with open(x86, "wb") as fh:
+            fh.write(fake_pe(0x014C))
+        check("PE x86 отвергается (не 0x8664)", pe_machine(x86) == 0x014C, str(pe_machine(x86)))
+
+        text = os.path.join(tmp, "not-pe.txt")
+        with open(text, "w", encoding="utf-8") as fh:
+            fh.write("MZ" * 100)
+        check("не-PE отвечает None, а не нулём", pe_machine(text) is None)
+
+    # Canonicalisation: key order and `$schema` must not matter; different values must.
+    a = {"$schema": "http://x", "type": "object", "properties": {"a": 1, "b": 2}}
+    b = {"type": "object", "properties": {"b": 2, "a": 1}}
+    c = {"type": "object", "properties": {"b": 3, "a": 1}}
+    check("порядок ключей и $schema не влияют", canonical(a) == canonical(b))
+    check("разные значения дают разные канонизации", canonical(a) != canonical(c))
+
+    derived = default_out(os.path.join(ROOT, "artifacts", "publish-b4-20260920"))
+    check("имя отчёта выводится из имени поставки",
+          derived.replace("\\", "/").endswith("docs/acceptance/evidence/b4-20260920/package-check.json"),
+          derived)
+    check("отчёт проверки поставки не пишется в scratch/",
+          "scratch" not in derived.replace("\\", "/").split("/"), derived)
+
+    print("  проверок пройдено: %d из %d" % (len(checks) - len(failures), len(checks)))
+    if failures:
+        print("  батарея: КРАСНАЯ — " + ", ".join(failures))
+        return 1
+    print("  батарея: ЗЕЛЁНАЯ")
+    return 0
 
 
 def main():
+    if "--self-test" in sys.argv[1:]:
+        return self_test()
     delivery = os.path.abspath(argument("--delivery", os.path.join(ROOT, "artifacts", "publish")))
     config = os.path.abspath(argument("--config") or local_config(ROOT))
     out = os.path.abspath(argument("--out") or default_out(delivery))

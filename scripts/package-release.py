@@ -241,30 +241,35 @@ def sources_problem(build_commit, passport_commit):
 
 
 def self_test_profile_catalog():
-    """Eight profiles in a temporary catalog must give eight manifest entries.
+    """The manifest must name one entry per profile file, MEASURED from the copied directory.
 
     The hand-kept list this replaces failed by OMISSION - a new profile simply did not appear. So the
     check is about the count following the directory, not about a specific profile: the real catalog
-    is copied, one more profile file is added, and the manifest must name eight.
+    is copied, one more profile file is added, and the manifest must name exactly one entry more than
+    the source directory held. The expected count is derived from that directory, not spelled out:
+    the literal "eight" went stale the moment a new profile was added to the real catalog.
     """
     source = os.path.join(ROOT, "coverage", "solid-v24")
+    profiles_dir = os.path.join(source, "release-profiles")
+    copied = [name for name in os.listdir(profiles_dir) if name.endswith(".json")]
     with tempfile.TemporaryDirectory(prefix="profile-catalog-") as root:
         target = os.path.join(root, "coverage", "solid-v24")
         os.makedirs(os.path.join(target, "release-profiles"))
         shutil.copy(os.path.join(source, "matrix.json"), os.path.join(target, "matrix.json"))
-        for name in os.listdir(os.path.join(source, "release-profiles")):
-            if name.endswith(".json"):
-                shutil.copy(os.path.join(source, "release-profiles", name),
-                            os.path.join(target, "release-profiles", name))
-        extra = {"meta": {"profile_id": "selftest-eighth-v1", "revision": "1.0",
-                          "title": "Восьмой профиль контроля прибора"},
+        for name in copied:
+            shutil.copy(os.path.join(profiles_dir, name),
+                        os.path.join(target, "release-profiles", name))
+        extra = {"meta": {"profile_id": "selftest-extra-v1", "revision": "1.0",
+                          "title": "Дополнительный профиль контроля прибора"},
                  "modes": [], "common_dependencies": []}
-        with open(os.path.join(target, "release-profiles", "selftest-eighth-v1.json"), "w",
+        with open(os.path.join(target, "release-profiles", "selftest-extra-v1.json"), "w",
                   encoding="utf-8") as handle:
             json.dump(extra, handle)
         entries = measured_profiles(root)
-    return (len(entries) == 8,
-            f"каталог из восьми профилей даёт {len(entries)} записей манифеста")
+    expected = len(copied) + 1
+    return (len(entries) == expected,
+            f"каталог из {len(copied)} профилей плюс один даёт {len(entries)} записей манифеста "
+            f"(ожидание {expected})")
 
 
 def self_test():

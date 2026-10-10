@@ -12,7 +12,7 @@
 увидеть, что удаление строки требования не унесло чужие проверки с тем же числовым префиксом.
 
 Запуск:
-    python scripts/acceptance-numbers.py                      # отчёты B3/B3L/B3M/B3C из scratch
+    python scripts/acceptance-numbers.py                      # отчёты B3/B3L/B3M/B3C из каталога доказательств
     python scripts/acceptance-numbers.py <report.json> ...     # конкретные файлы
 """
 from __future__ import annotations
@@ -25,16 +25,33 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-# Значения по умолчанию называют ПОСЛЕДНЮЮ фактически проверенную поставку, а не каталог
-# `scratch/mcp-smoke/` верхнего уровня: там лежат отчёты прежних поставок, и молчаливый пересчёт по
-# ним публиковал бы числа другой сборки (измерено 20.09.2026: `b3m-acceptance.json` верхнего уровня
-# давал 4 FAIL эпохи дефекта знака на полюсе при нуле отказов на текущей поставке).
-DEFAULT_REPORTS = (
-    "scratch/mcp-smoke/delivery-20260920-apifix/b3.json",
-    "scratch/mcp-smoke/delivery-20260920-apifix/b3l.json",
-    "scratch/mcp-smoke/delivery-20260920-apifix/b3m.json",
-    "scratch/mcp-smoke/delivery-20260920-apifix/b3c.json",
-)
+# THE PERMANENT EVIDENCE DIRECTORY, NOT `scratch/`. The defaults used to name the last measured
+# delivery with paths under `scratch/mcp-smoke/delivery-20260920-apifix/`; cleaning `scratch/` deleted
+# them, and the probe printed "отчёта нет — прогон не выполнялся" about runs that had happened. A
+# hardcoded path would have to be re-edited after every re-check - that WAS the defect. The report is
+# SEARCHED now: the evidence directory is named by date and commit, so the newest one is the last
+# check. History: docs/decisions/tests.md#evidence-rebuild
+EVIDENCE_DIR = ROOT / "docs" / "acceptance" / "evidence"
+
+# The B3 family - the same set the previous default list named.
+DEFAULT_GROUPS = ("b3", "b3l", "b3m", "b3c")
+
+
+def latest_evidence(group: str) -> Path | None:
+    """Newest report of a group in the evidence directory, or `None`.
+
+    The directory is `<YYYYMMDD>-<group>-<commit>`, so lexicographic order is chronological and the
+    last one wins. `None` is a NAMED state: missing evidence is not reported as zero numbers.
+    """
+    if not EVIDENCE_DIR.is_dir():
+        return None
+    found = sorted(EVIDENCE_DIR.glob("*-%s-*/%s-acceptance.json" % (group, group)))
+    return found[-1] if found else None
+
+
+def default_reports() -> list[str]:
+    """Default paths: the newest report of EACH B3-family group from the evidence directory."""
+    return [str(path) for group in DEFAULT_GROUPS if (path := latest_evidence(group)) is not None]
 
 
 def rows_of(path: Path) -> list[dict]:
@@ -48,7 +65,12 @@ def rows_of(path: Path) -> list[dict]:
 
 
 def main(argv: list[str]) -> int:
-    names = argv[1:] or list(DEFAULT_REPORTS)
+    names = argv[1:] or default_reports()
+    if not names:
+        print("В каталоге доказательств " + str(EVIDENCE_DIR) + " отчётов групп "
+              + ", ".join(DEFAULT_GROUPS) + " нет: пересчитывать нечего — это НАЗВАННОЕ состояние, "
+              "а не нулевые числа. Прогоните группы либо передайте отчёты путями.")
+        return 1
     total_rows = 0
     total_verdicts: collections.Counter = collections.Counter()
     exit_code = 0

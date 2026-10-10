@@ -86,13 +86,41 @@ _levels_spec.loader.exec_module(levels)
 
 
 def load(name):
-    # `utf-8-sig`, а не `utf-8`: отчёты части групп несут BOM (в поставке 19.09.2026 — `b3.json`,
-    # `b3m.json`, `full.json`). Чтение их как `utf-8` падало с `Unexpected UTF-8 BOM` и валило
-    # переиздание паспорта на ЧУЖОМ формате файла, а не на своём предмете. `utf-8-sig` читает оба
-    # вида одинаково: наличие BOM перестаёт быть свойством поставки.
+    # `utf-8-sig`, not `utf-8`: some group reports carry a BOM, and reading them as `utf-8` failed on
+    # the BOM rather than on the report. A MISSING report is a NAMED refusal, not a FileNotFoundError
+    # traceback: the reader must be told what is absent and which key names the directory.
     path = os.path.join(REPORTS, name)
+    if not os.path.exists(path):
+        raise SystemExit(
+            "отчёта нет: " + rel(path) + "\n"
+            "Каталог отчётов задаётся ключом --reports (сейчас: " + rel(REPORTS) + "). "
+            "Доказательства приёмки поставки лежат в docs/acceptance/evidence/<дата>-<группа>-<коммит>/; "
+            "укажите --reports <каталог, где лежат отчёты групп и package-check.json>.")
     with open(path, encoding="utf-8-sig") as fh:
         return json.load(fh)
+
+
+def default_reports_dir():
+    """Reports directory of a delivery, by default: a SEARCH, not a hardcoded path.
+
+    INVARIANT: what tells a delivery's reports directory from a group's is `package-check.json` inside
+    it (written by `verify-delivery.py`). MEASURED: a hardcoded `scratch/mcp-smoke/delivery-20260918`
+    stopped resolving once `scratch/` was cleaned, and the passport without keys failed on the input
+    instead of naming `--reports`. An empty result is NOT invented: the caller refuses and names the
+    key. History: docs/decisions/tests.md#evidence-rebuild
+    """
+    roots = (os.path.join(ROOT, "docs", "acceptance", "evidence"),
+             os.path.join(ROOT, "docs", "acceptance"),
+             os.path.join(ROOT, "scratch", "mcp-smoke"))
+    found = []
+    for root in roots:
+        if not os.path.isdir(root):
+            continue
+        for name in os.listdir(root):
+            candidate = os.path.join(root, name)
+            if os.path.isfile(os.path.join(candidate, "package-check.json")):
+                found.append(candidate)
+    return max(found, key=os.path.getmtime) if found else None
 
 
 def report_path(name):
@@ -184,14 +212,10 @@ def self_test_measured_binaries():
     return 0
 
 
-# АРТЕФАКТЫ СЕАНСА 2 ОТ 21.09.2026 — предмет контроля вердикта. Каталог отчётов прогонов лежит в
-# `scratch` и потому может быть вычищен; отсутствие артефактов — НАЗВАННОЕ состояние контроля, а не
-# молчаливый пропуск: контроль, «проходящий» при отсутствии данных, не измеряет ничего.
-SESSION2_REPORTS = "scratch/mcp-smoke/sketchplane-20260921"
-SESSION2_ACCEPTANCE = "docs/acceptance/delivery-sketchplane-20260921-plane/client-acceptance.json"
-SESSION2_ENTRY = "docs/acceptance/delivery-sketchplane-20260921-plane/client-entry-check.json"
-SESSION2_GROUP_REPORTS = ("full.json", "f08.json", "mania.json", "dep.json", "image.json")
-CLIENT_GATE_SELFTEST_DIR = "scratch/_passport-selftest/client-gate"
+# THE SESSION-2 ARTEFACTS ARE NO LONGER AN INPUT. Path constants into `scratch/` used to live here;
+# cleaning `scratch/` made the verdict control un-runnable, and a control that cannot run measures
+# nothing. The control builds its own data now (`self_test_client_gate`, tempfile) and depends on no
+# run on disk. History: docs/decisions/tests.md#evidence-rebuild
 
 
 def _run_generator(argv):
@@ -213,128 +237,117 @@ def _run_generator(argv):
 
 
 def self_test_client_gate():
-    """Контроль вердикта: на артефактах сеанса 2 итог обязан быть FAIL, и он обязан ПЕРЕВЕРНУТЬСЯ
-    в PASS, если ровно один вход — клиентская приёмка — заменён на пройденную.
+    """Verdict control: with the client acceptance failed the verdict must be FAIL, and it must FLIP to
+    PASS when exactly one input - the client acceptance - is replaced by a passing one.
 
-    ПОЧЕМУ НА АРТЕФАКТАХ, А НЕ НА СИНТЕТИКЕ. Синтетика проверяет правило, но не проверяет, что
-    ГЕНЕРАТОР паспорта это правило спрашивает: блок `client_acceptance` вычислялся в литерале
-    паспорта уже ПОСЛЕ вердикта, и правило, живущее рядом, само по себе расхождение не ловит.
-    Здесь прогоняется сам генератор, и оба плеча идут на ОДНИХ И ТЕХ ЖЕ отчётах: (а) с настоящим
-    отчётом клиентской приёмки сеанса 2 (`verdict FAIL`) — итог FAIL; (б) с тем же отчётом, у
-    которого вердикт заменён на PASS, — итог PASS. Расхождение возможно только по клиентской
-    приёмке, и это делает контроль способным отказать: если генератор снова станет игнорировать
-    блок, плечо (а) даст PASS и контроль назовёт это.
-
-    Предпосылки проверяются ЯВНО: если артефакты сеанса 2 отсутствуют или уже не описывают то
-    состояние (entry PASS + client FAIL), контроль НЕ выполняется и говорит об этом отказом.
+    THE DATA IS BUILT HERE, not read from another run: the control used to take the session-2
+    artefacts from `scratch/`, and once those were cleaned it stopped running altogether - the
+    survival of a directory was passed off as the state of the rule. The synthetic set checks THE SAME
+    THING through the generator itself: both arms run `main()` on the SAME reports, and only the client
+    gate differs, which is what makes the control able to refuse. PREMISE CHECKED EXPLICITLY: the
+    release scope must be `COMPLETE`, otherwise the refusal would come from another level.
+    History: docs/decisions/tests.md#evidence-rebuild
     """
-    reports = os.path.join(ROOT, *SESSION2_REPORTS.split("/"))
-    acceptance_path = os.path.join(ROOT, *SESSION2_ACCEPTANCE.split("/"))
-    entry_path = os.path.join(ROOT, *SESSION2_ENTRY.split("/"))
-    missing = [p for p in [os.path.join(reports, name) for name in SESSION2_GROUP_REPORTS]
-               + [os.path.join(reports, "package-check.json"), acceptance_path, entry_path]
-               if not os.path.exists(p)]
-    if missing:
-        print("контроль вердикта по клиентской приёмке НЕ ВЫПОЛНЕН: нет артефактов сеанса 2 —")
-        for path in missing:
-            print("  -", rel(path))
-        print("Контроль, «проходящий» без данных, ничего не измеряет; восстановите артефакты "
-              "сеанса 2 (отчёты прогонов в " + rel(reports) + " и два отчёта клиента в "
-              + rel(os.path.dirname(acceptance_path)) + ").")
+    import tempfile
+
+    scope = levels.evaluate_release_scope(ROOT)
+    if scope.get("verdict") != "COMPLETE":
+        print("контроль вердикта по клиентской приёмке НЕ ВЫПОЛНЕН: обязательный объём выпуска не "
+              f"COMPLETE (вердикт {scope.get('verdict')!r}, открыто {scope.get('open_total')}, "
+              f"расхождений {len(scope.get('problems') or [])}) — отказ пришёл бы не от гейта.")
         return 1
 
-    with open(acceptance_path, encoding="utf-8-sig") as fh:
-        acceptance = json.load(fh)
-    with open(entry_path, encoding="utf-8-sig") as fh:
-        entry = json.load(fh)
-    with open(os.path.join(reports, "package-check.json"), encoding="utf-8-sig") as fh:
-        package = json.load(fh)
-    if acceptance.get("verdict") != "FAIL":
-        print("контроль вердикта по клиентской приёмке НЕ ВЫПОЛНЕН: отчёт сеанса 2 больше не "
-              f"несёт FAIL (verdict={acceptance.get('verdict')!r}) — предпосылка контроля "
-              "изменилась, и проверять на нём нечего.")
-        return 1
-    if entry.get("verdict") != "PASS":
-        print("контроль вердикта по клиентской приёмке НЕ ВЫПОЛНЕН: проверка записи сеанса 2 "
-              f"больше не PASS (verdict={entry.get('verdict')!r}).")
-        return 1
-    if acceptance.get("host_dll_sha256") != package.get("host_dll_sha256"):
-        print("контроль вердикта по клиентской приёмке НЕ ВЫПОЛНЕН: клиентская приёмка снята не с "
-              "той сборки, что описана отчётами прогонов — блок был бы назван расхождением, и "
-              "отказ пришёл бы не от гейта.")
-        return 1
-
-    tmp = os.path.join(ROOT, *CLIENT_GATE_SELFTEST_DIR.split("/"))
-    if os.path.exists(tmp):
-        shutil.rmtree(tmp)
-    work = os.path.join(tmp, "reports")
-    os.makedirs(work)
-    for name in list(SESSION2_GROUP_REPORTS) + ["package-check.json"]:
-        shutil.copy2(os.path.join(reports, name), os.path.join(work, name))
-    shutil.copy2(acceptance_path, os.path.join(work, "client-acceptance.json"))
-    shutil.copy2(entry_path, os.path.join(work, "client-entry-check.json"))
-
-    def read_passport(out_dir):
-        with open(os.path.join(out_dir, "delivery-passport.json"), encoding="utf-8-sig") as fh:
-            return json.load(fh)
-
-    def run(out_dir):
-        code, output = _run_generator(["--reports", work, "--out", out_dir])
-        path = os.path.join(out_dir, "delivery-passport.json")
-        if code is not None or not os.path.exists(path):
-            return None, output
-        return read_passport(out_dir), output
-
+    # Hashes in the group reports and in the client acceptance are THE SAME as in the package:
+    # otherwise the build guard and the client-acceptance guard would refuse first, and the control
+    # would check them rather than the gate.
+    hashes = {"host_dll_sha256": "1" * 64, "worker_dll_sha256": "2" * 64,
+              "adapter_sha256": "3" * 64}
     failures = []
-    fail_out = os.path.join(tmp, "out-fail")
-    passport, output = run(fail_out)
-    if passport is None:
-        failures.append("плечо (а): генератор не записал паспорт\n" + output)
-    else:
-        got = passport["acceptance"]
-        levels_seen = {k: got[k]["verdict"] for k in
-                       ("transport_and_delivery", "functional_acceptance", "mandatory_scope",
-                        "client_acceptance")}
-        if got["verdict"] != "FAIL" or got["fully_ready"] is not False:
-            failures.append(f"плечо (а): итог {got['verdict']!r} / fully_ready "
-                            f"{got['fully_ready']!r}, ожидание FAIL / False — генератор снова "
-                            f"игнорирует клиентскую приёмку (уровни: {levels_seen})")
-        elif got["client_acceptance"]["verdict"] != "FAIL":
-            failures.append(f"плечо (а): итог FAIL, но уровень клиентской приёмки назван "
-                            f"{got['client_acceptance']['verdict']!r} — отказ пришёл не от него")
-        elif passport["client_entry"].get("verdict") != "PASS":
-            failures.append("плечо (а): проверка записи клиента не PASS — предпосылка изменилась")
-        elif levels_seen["transport_and_delivery"] != "PASS" \
-                or levels_seen["functional_acceptance"] != "PASS" \
-                or levels_seen["mandatory_scope"] != "COMPLETE":
-            failures.append(f"плечо (а): отказ пришёл не от клиентской приёмки, а от уровней "
-                            f"{levels_seen} — тогда контроль не проверяет гейт")
+    with tempfile.TemporaryDirectory(prefix="passport-gate-") as tmp:
+        work = os.path.join(tmp, "reports")
+        os.makedirs(work)
+        delivery_dir = os.path.join(tmp, "delivery")
+        os.makedirs(delivery_dir)
+        package = {"verdict": "PASS", "file_count": 1, "problems": [], "schema_mismatches": [],
+                   "repo_drift": [], "tools_count": 0, "protocol_version": "2025-06-18",
+                   "host_path": os.path.join(delivery_dir, "KompasMcp.Host.exe"),
+                   "worker_path": os.path.join(delivery_dir, "KompasMcp.Worker.exe"), **hashes}
+        full = {"title": "синтетический полный прогон", "context": dict(hashes),
+                "rows": [{"id": "SYN.%02d" % i, "description": "синтетика", "verdict": "PASS"}
+                         for i in range(1, 11)]}
+        entry = {"verdict": "PASS", "config_path": os.path.join(tmp, "mcp.json"),
+                 "rows": [{"id": "A01", "verdict": "PASS"}]}
+        acceptance = {"verdict": "FAIL", **hashes,
+                      "rows": [{"id": "C01", "verdict": "FAIL"}]}
+        for name, doc in (("package-check.json", package), ("full.json", full),
+                          ("client-entry-check.json", entry),
+                          ("client-acceptance.json", acceptance)):
+            with open(os.path.join(work, name), "w", encoding="utf-8") as fh:
+                json.dump(doc, fh, ensure_ascii=False, indent=2)
 
-    # Плечо (б): тот же отчёт, но клиент принял. Меняется РОВНО один вход.
-    patched = json.loads(json.dumps(acceptance))
-    patched["verdict"] = "PASS"
-    if isinstance(patched.get("transport_and_delivery"), dict):
-        patched["transport_and_delivery"]["verdict"] = "PASS"
-    with open(os.path.join(work, "client-acceptance.json"), "w", encoding="utf-8") as fh:
-        json.dump(patched, fh, ensure_ascii=False, indent=2)
-    pass_out = os.path.join(tmp, "out-pass")
-    passport, output = run(pass_out)
-    if passport is None:
-        failures.append("плечо (б): генератор не записал паспорт\n" + output)
-    else:
-        got = passport["acceptance"]
-        if got["verdict"] != "PASS" or got["fully_ready"] is not True:
-            failures.append(f"плечо (б): итог {got['verdict']!r} / fully_ready "
-                            f"{got['fully_ready']!r}, ожидание PASS / True — итог не следует за "
-                            f"клиентской приёмкой (причина уровня: "
-                            f"{got['client_acceptance'].get('reason')!r})")
+        def read_passport(out_dir):
+            with open(os.path.join(out_dir, "delivery-passport.json"), encoding="utf-8-sig") as fh:
+                return json.load(fh)
+
+        def run(out_dir):
+            # `--allow-dirty-tree`: the self-check runs from a working tree that may be dirty, and the
+            # "no passport from a dirty tree" refusal is a separate rule with its own control.
+            code, output = _run_generator(["--reports", work, "--out", out_dir,
+                                           "--allow-dirty-tree"])
+            path = os.path.join(out_dir, "delivery-passport.json")
+            if code is not None or not os.path.exists(path):
+                return None, output
+            return read_passport(out_dir), output
+
+        fail_out = os.path.join(tmp, "out-fail")
+        passport, output = run(fail_out)
+        if passport is None:
+            failures.append("плечо (а): генератор не записал паспорт\n" + output)
+        else:
+            got = passport["acceptance"]
+            levels_seen = {k: got[k]["verdict"] for k in
+                           ("transport_and_delivery", "functional_acceptance", "mandatory_scope",
+                            "client_acceptance")}
+            if got["verdict"] != "FAIL" or got["fully_ready"] is not False:
+                failures.append(f"плечо (а): итог {got['verdict']!r} / fully_ready "
+                                f"{got['fully_ready']!r}, ожидание FAIL / False — генератор снова "
+                                f"игнорирует клиентскую приёмку (уровни: {levels_seen})")
+            elif got["client_acceptance"]["verdict"] != "FAIL":
+                failures.append(f"плечо (а): итог FAIL, но уровень клиентской приёмки назван "
+                                f"{got['client_acceptance']['verdict']!r} — отказ пришёл не от него")
+            elif passport["client_entry"].get("verdict") != "PASS":
+                failures.append("плечо (а): проверка записи клиента не PASS — предпосылка изменилась")
+            elif levels_seen["transport_and_delivery"] != "PASS" \
+                    or levels_seen["functional_acceptance"] != "PASS" \
+                    or levels_seen["mandatory_scope"] != "COMPLETE":
+                failures.append(f"плечо (а): отказ пришёл не от клиентской приёмки, а от уровней "
+                                f"{levels_seen} — тогда контроль не проверяет гейт")
+
+        # Плечо (б): тот же отчёт, но клиент принял. Меняется РОВНО один вход.
+        patched = json.loads(json.dumps(acceptance))
+        patched["verdict"] = "PASS"
+        if isinstance(patched.get("transport_and_delivery"), dict):
+            patched["transport_and_delivery"]["verdict"] = "PASS"
+        with open(os.path.join(work, "client-acceptance.json"), "w", encoding="utf-8") as fh:
+            json.dump(patched, fh, ensure_ascii=False, indent=2)
+        pass_out = os.path.join(tmp, "out-pass")
+        passport, output = run(pass_out)
+        if passport is None:
+            failures.append("плечо (б): генератор не записал паспорт\n" + output)
+        else:
+            got = passport["acceptance"]
+            if got["verdict"] != "PASS" or got["fully_ready"] is not True:
+                failures.append(f"плечо (б): итог {got['verdict']!r} / fully_ready "
+                                f"{got['fully_ready']!r}, ожидание PASS / True — итог не следует за "
+                                f"клиентской приёмкой (причина уровня: "
+                                f"{got['client_acceptance'].get('reason')!r})")
 
     if failures:
         print("КОНТРОЛЬ ВЕРДИКТА НЕ ПРОЙДЕН:")
         for line in failures:
             print("  -", line)
         return 1
-    print("контроль вердикта по клиентской приёмке пройден: на артефактах сеанса 2 итог FAIL "
+    print("контроль вердикта по клиентской приёмке пройден: на синтетическом наборе итог FAIL "
           "(уровень client_acceptance FAIL, entry PASS), с пройденной клиентской приёмкой — PASS")
     return 0
 
@@ -385,7 +398,7 @@ def client_entry(reports_dir):
         "rows": len(entry.get("rows", [])),
         "verdicts": counts(entry),
         "verdict": entry.get("verdict"),
-        "report": os.path.relpath(path, ROOT).replace("\\", "/"),
+        "report": rel(path),
         "note": "вызовы инструментов выполнены проверкой, а не клиентом: включение записи "
                 "требует действия пользователя",
     }
@@ -628,6 +641,17 @@ def main():
         RUN_ID = "delivery-" + os.path.basename(DELIVERY)
     if "--reports" in opts:
         REPORTS = os.path.abspath(opts["--reports"])
+    else:
+        # The default is SEARCHED, not hardcoded: the reports directory is named by the run itself,
+        # and the old constant outlived its run. Not found - a refusal naming the key, not a crash.
+        discovered = default_reports_dir()
+        if discovered is None:
+            print("ОТКАЗ: каталог отчётов поставки не найден и не задан.\n"
+                  "Укажите --reports <каталог>, где лежат отчёты групп и package-check.json; "
+                  "доказательства приёмки лежат в docs/acceptance/evidence/<дата>-<группа>-<коммит>/.")
+            return 2
+        REPORTS = discovered
+        print("каталог отчётов (найден поиском): " + rel(REPORTS))
     if "--out" in opts:
         OUT_DIR = os.path.abspath(opts["--out"])
     run_id_from_cli = "--run-id" in opts
@@ -771,7 +795,7 @@ def main():
             # (группа вращения: 106 строк при 83 именах — измерено), и это названо, а не скрыто.
             "unique_rows": len(set(row_ids)),
             "verdicts": counts(report),
-            "report": os.path.relpath(path, ROOT).replace("\\", "/"),
+            "report": rel(path),
             "host_path": context.get("host_path"),
             "host_sha256": context.get("host_sha256"),
             # И .dll, а не только .exe: apphost одинаков в обеих конфигурациях, и группа, у которой

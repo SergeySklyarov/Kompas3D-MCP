@@ -63,6 +63,8 @@ public sealed class CommandDispatcher
         WorkerCommands.CreateAuxGeometry,
         WorkerCommands.UpdatePlane,
         WorkerCommands.EditSketchEntity,
+        WorkerCommands.CreateSketchConstraint,
+        WorkerCommands.DeleteSketchConstraint,
         WorkerCommands.InsertComponent,
         WorkerCommands.SetComponentPlacement,
         WorkerCommands.ReplaceComponent,
@@ -222,6 +224,10 @@ public sealed class CommandDispatcher
         // Rebuilds the dependent body; the MEASURED apply step (`sketch.Update()`) fits in it.
         WorkerCommands.SetSketchPlane => 240_000,
         WorkerCommands.ListSketchEntities or WorkerCommands.EditSketchEntity => 240_000,
+        // The API7 route plus an edit session (BeginEdit/EndEdit) and a re-read of the object's
+        // constraint list inside it; one COM call per object on enumeration.
+        WorkerCommands.CreateSketchConstraint or WorkerCommands.ListSketchConstraints
+            or WorkerCommands.DeleteSketchConstraint => 240_000,
         // Reads a file and rebuilds the document; enumeration makes one COM call per component.
         WorkerCommands.InsertComponent or WorkerCommands.ReplaceComponent => 240_000,
         WorkerCommands.ListComponents or WorkerCommands.SetComponentPlacement
@@ -326,6 +332,9 @@ public sealed class CommandDispatcher
             WorkerCommands.UpdatePlane => _sta.Run(() => UpdatePlane(request), "aux.update_plane", cancellationToken),
             WorkerCommands.ListSketchEntities => _sta.Run(() => ListSketchEntities(request), "sketch.entities", cancellationToken),
             WorkerCommands.EditSketchEntity => _sta.Run(() => EditSketchEntity(request), "sketch.entity_edit", cancellationToken),
+            WorkerCommands.CreateSketchConstraint => _sta.Run(() => CreateSketchConstraint(request), "sketch.constraint.create", cancellationToken),
+            WorkerCommands.ListSketchConstraints => _sta.Run(() => ListSketchConstraints(request), "sketch.constraint.list", cancellationToken),
+            WorkerCommands.DeleteSketchConstraint => _sta.Run(() => DeleteSketchConstraint(request), "sketch.constraint.delete", cancellationToken),
             WorkerCommands.ListComponents => _sta.Run(() => ListComponents(request), "asm.list_components", cancellationToken),
             WorkerCommands.InsertComponent => _sta.Run(() => InsertComponent(request), "asm.insert_component", cancellationToken),
             WorkerCommands.SetComponentPlacement => _sta.Run(() => SetComponentPlacement(request), "asm.set_placement", cancellationToken),
@@ -1273,6 +1282,35 @@ public sealed class CommandDispatcher
     }
 
     /// <summary>Targeted edit of one sketch entity — a mutation.</summary>
+    /// <summary>Writes one sketch constraint. The document comes from the sketch reference, and the
+    /// revision is bumped: a constraint is an edit of the model.</summary>
+    private object? CreateSketchConstraint(IpcFrame request)
+    {
+        var command = Argument<CreateSketchConstraintCommand>(request);
+        var document = _session.DocumentForReference(command.SketchRef);
+        GuardRevision(document, command.ExpectedRevision);
+        return TaggedAfter(document.Id, () => _session.CreateSketchConstraint(command), document);
+    }
+
+    /// <summary>Reads the constraints of a sketch's objects. Bypasses the mutation journal: it changes
+    /// nothing, so the revision is returned but NOT bumped — the same rule as <c>sketch.status</c>.</summary>
+    private object? ListSketchConstraints(IpcFrame request)
+    {
+        var command = Argument<ListSketchConstraintsCommand>(request);
+        var document = _session.DocumentForReference(command.SketchRef);
+        return Tagged(document.Id, document.Revision, _session.ListSketchConstraints(command));
+    }
+
+    /// <summary>Deletes one constraint of an object or all of them. A deletion is an edit of the model,
+    /// so the revision is bumped.</summary>
+    private object? DeleteSketchConstraint(IpcFrame request)
+    {
+        var command = Argument<DeleteSketchConstraintCommand>(request);
+        var document = _session.DocumentForReference(command.SketchRef);
+        GuardRevision(document, command.ExpectedRevision);
+        return TaggedAfter(document.Id, () => _session.DeleteSketchConstraint(command), document);
+    }
+
     private object? EditSketchEntity(IpcFrame request)
     {
         var command = Argument<EditSketchEntityCommand>(request);

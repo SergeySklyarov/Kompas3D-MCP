@@ -10,9 +10,10 @@
 ![MCP](https://img.shields.io/badge/MCP-stdio-black)
 
 > *English summary.* A Model Context Protocol server that lets an AI agent drive a real, licensed
-> KOMPAS-3D v24 (x64) over COM: parts, sketches, features, patterns, booleans, assemblies and mates,
-> assembly interference and clearance checks, drawings (views, dimensions, title block, DXF/DWG
-> export), external variables and material, STEP and image export. Every mutating call reports a
+> KOMPAS-3D v24 (x64) over COM: parts, sketches (including bulk geometry: native polyline and
+> spline), features, patterns, booleans, assemblies and mates, assembly interference and clearance
+> checks, drawings (views, dimensions, title block, DXF/DWG export), external variables and material,
+> STEP and image export. Every mutating call reports a
 > measured verification level (volume, bodies, faces, re-read parameters, save/reopen), journals
 > operations for idempotent retries, rejects stale revisions, and is confined to configured disk
 > roots. No arbitrary code execution. 81 tools, MIT licensed. Documentation is in Russian.
@@ -208,8 +209,8 @@ JSON-конфигурацией:
 ## Состояние и планы
 
 Целевая версия: КОМПАС-3D v24.0.0.2799 x64. Текущий выпуск -
-[`v0.5.0`](https://github.com/SergeySklyarov/Kompas3D-MCP/releases/tag/v0.5.0), заметки:
-[docs/distribution/v0.5.0.md](docs/distribution/v0.5.0.md). Теги выпусков - версия продукта
+[`v0.6.0`](https://github.com/SergeySklyarov/Kompas3D-MCP/releases/tag/v0.6.0), заметки:
+[docs/distribution/v0.6.0.md](docs/distribution/v0.6.0.md). Теги выпусков - версия продукта
 `vMAJOR.MINOR.PATCH` ([правило](AGENTS.md)). Обязательный объём закрывается, только когда каждое применимое
 действие режима (создание, чтение, правка, перестроение, сохранение и повторное открытие,
 подавление, удаление зависимостей, отрицательные проверки, проверка геометрии) подтверждено живым
@@ -223,15 +224,16 @@ JSON-конфигурацией:
 | Чертежи (`drawings-minimal-v1`) | 6/6 | 6/6 |
 | Переменные и материал детали (`variables-material-minimal-v1`) | 5/5 | 5/5 |
 | Пересечения и зазоры сборки (`assembly-interference-minimal-v1`) | 4/4 | 5/5 |
+| Массовая геометрия эскиза (`sketch-bulk-minimal-v1`) | 3/3 | 3/3 |
 
-Закрыты все шесть профилей: режимов **82/82**, зависимостей **42/42**, открыто **0**,
-`problems: []` (`scripts/acceptance-levels.py`, 08.10.2026).
+Закрыты все семь профилей: режимов **85/85**, зависимостей **45/45**, открыто **0**,
+`problems: []` (`scripts/acceptance-levels.py`, 10.10.2026).
 
-**Приёмка выпуска 0.5.0** (08.10.2026, на бинарях пакета): полный живой прогон **1133/1133**;
-группы вне полного прогона (сборки, сопряжения, чертежи, переменные и материал, пересечения и
-зазоры) - все PASS; клиентская приёмка рабочим MCP-клиентом - **38 сценариев из 38**. Паспорт
-поставки - итог PASS по всем
-уровням: доставка, функциональная приёмка, обязательный объём и клиентская приёмка. Текущее состояние и измеренные числа:
+**Приёмка выпуска 0.6.0** (на бинарях пакета): полный живой прогон **1187 PASS / 1 NAMED / 0 FAIL**
+(1188 строк); шесть групп вне полного прогона (пересечения и зазоры, сборки, сопряжения, чертежи,
+переменные и материал, повтор «подавить -> снять») - отказов 0; клиентская приёмка рабочим
+MCP-клиентом - **51 из 51**. Паспорт поставки - итог PASS по всем уровням: доставка, функциональная
+приёмка, обязательный объём и клиентская приёмка. Текущее состояние и измеренные числа:
 [`docs/STATUS.md`](docs/STATUS.md); каталог операций, матрица покрытия и
 профили: [`coverage/solid-v24/`](coverage/solid-v24/).
 
@@ -255,8 +257,8 @@ JSON-конфигурацией:
   существующей внешней переменной.
 - Родные приклеивание и вырезание по траектории (`SM-04.boss`) отложены; сохранение копии базового
   объекта при объединении (`SM-15.union.mode_save_base_copy`) запланировано следующим этапом.
-- Шесть профилей из таблицы выше - это не весь каталог операций P6: в каталоге
-  **37 семейств**, из них **19** в обязательном объёме (**82** обязательных режима). План:
+- Семь профилей из таблицы выше - это не весь каталог операций P6: в каталоге
+  **38 семейств**, из них **20** в обязательном объёме (**85** обязательных режимов). План:
   [implementation-plan.md](coverage/solid-v24/implementation-plan.md).
 - Сервер не правит произвольную операцию КОМПАС: то, что не подтверждено, возвращается как
   `CAPABILITY_UNAVAILABLE` с объяснением, а не как успех.

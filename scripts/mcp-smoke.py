@@ -29517,6 +29517,26 @@ def f08_action_lifecycle_checks(client, rep, app_id, workdir):
                               "geometry_changed": same_res.get("geometry_changed"),
                               "box_before": box2, "box_after": box_same})
 
+                # ССЫЛКИ ПЕРЕРАЗРЕШАЮТСЯ ПОСЛЕ ПОСТАНОВКИ 5, и это не косметика. Смена опоры —
+                # МУТАЦИЯ (наряд CLIENT_BUGS_20261010): она поднимает ревизию и отзывает
+                # ТОПОЛОГИЧЕСКИЕ ссылки (грань, ребро), снятые ДО неё. Прежняя редакция брала
+                # face_ref/edge_ref до постановки 5 и получала на формах STALE_REFERENCE — то есть
+                # мерила устаревание собственных ссылок, а не ВИД ссылки. Тело берётся по габариту
+                # заново: оно тоже адресуется ссылкой.
+                body_live = body_at(doc, list(box2[0]), list(box2[1]))
+                face_ref = None
+                for f in faces(doc, body_live):
+                    if f.get("face_ref"):
+                        face_ref = f["face_ref"]
+                        break
+                edge_ref = None
+                for e in edges(doc, body_live):
+                    if e.get("edge_ref"):
+                        edge_ref = e["edge_ref"]
+                        break
+                details["face_ref_for_negative"] = face_ref
+                details["edge_ref_for_negative"] = edge_ref
+
                 # ГРАНИЦЫ ФОРМЫ `plane` — ТЕПЕРЬ ЭТО ОТКАЗЫ, А НЕ «КОНТРАКТ НЕ ПРОПУСКАЕТ». Прежняя
                 # редакция записывала здесь, что форма «только reference» контрактом не пропускается:
                 # `base` был обязателен, а `base = null` не проходил перечисление, поэтому проверка ВИДА

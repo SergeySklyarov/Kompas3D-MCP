@@ -354,10 +354,10 @@
 | режим/операция | семья | приоритет | очередь | уровень каталога | поиск | созд | чтен | правк | перестр | reopen | подавл | удал | отказ | геом | проверки |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
 | `SKC-01.geometric_types` | G6 | practical_required | G6 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | OK | OK | OK | SKC.01.discover, SKC.02.create, SKC.03.read, SKC.04.edit, SKC.05.rebuild, SKC.06.save_reopen, SKC.08.delete_dependencies, SKC.09.negative_tests, SKC.10.geometry_validation, SKC.13.type_vocabulary, SKC.14.object_address |
-| `SKC-02.dimension_types` | G6 | practical_required | G6 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | SKC.11.dimension_types, SKC.02.create, SKC.03.read, SKC.06.save_reopen, SKC.09.negative_tests |
+| `SKC-02.dimension_types` | G6 | practical_required | G6 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | SKC.11.dimension_types, SKC.17.dimension_drives_length, SKC.18.dimension_survives_reopen, SKC.19.dimension_variable |
 | `SKC-03.read` | G6 | practical_required | G6 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | OK | SKC.03.read, SKC.06.save_reopen, SKC.09.negative_tests, SKC.14.object_address, SKC.15.state_agreement, SKC.16.no_silent_rewrite |
 | `SKC-04.delete` | G6 | practical_required | G6 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | OK | OK | OK | SKC.08.delete_dependencies, SKC.04.edit, SKC.09.negative_tests |
-| `SKC-05.state_read` | G6 | practical_required | G6 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | SKC.12.state_read, SKC.15.state_agreement, SKC.16.no_silent_rewrite |
+| `SKC-05.state_read` | G6 | practical_required | G6 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | SKC.12.state_read, SKC.15.state_agreement |
 
 ### Общие зависимости профиля `sketch-constraints-minimal-v1`
 
@@ -686,10 +686,10 @@
 | `EI-04.inertia.principal` | G7 | practical_required | G5+G7 | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | EI.07.inertia_principal |
 | `EI-05.inertia.units` | G7 | practical_required | G5+G7 | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | EI.09.inertia_units |
 | `SKC-01.geometric_types` | G6 | practical_required | G6 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | OK | OK | OK | SKC.01.discover, SKC.02.create, SKC.03.read, SKC.04.edit, SKC.05.rebuild, SKC.06.save_reopen, SKC.08.delete_dependencies, SKC.09.negative_tests, SKC.10.geometry_validation, SKC.13.type_vocabulary, SKC.14.object_address |
-| `SKC-02.dimension_types` | G6 | practical_required | G6 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | SKC.11.dimension_types, SKC.02.create, SKC.03.read, SKC.06.save_reopen, SKC.09.negative_tests |
+| `SKC-02.dimension_types` | G6 | practical_required | G6 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | SKC.11.dimension_types, SKC.17.dimension_drives_length, SKC.18.dimension_survives_reopen, SKC.19.dimension_variable |
 | `SKC-03.read` | G6 | practical_required | G6 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | OK | SKC.03.read, SKC.06.save_reopen, SKC.09.negative_tests, SKC.14.object_address, SKC.15.state_agreement, SKC.16.no_silent_rewrite |
 | `SKC-04.delete` | G6 | practical_required | G6 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | OK | OK | OK | SKC.08.delete_dependencies, SKC.04.edit, SKC.09.negative_tests |
-| `SKC-05.state_read` | G6 | practical_required | G6 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | SKC.12.state_read, SKC.15.state_agreement, SKC.16.no_silent_rewrite |
+| `SKC-05.state_read` | G6 | practical_required | G6 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | SKC.12.state_read, SKC.15.state_agreement |
 | `SKC-06.association_bisector` | G6 | next | G6 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `AUX-SKETCH.plane_and_profile_lifecycle` *(вне каталога)* | AUX-SKETCH | later | — | — | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | V03, V04, V05, G07_xy, G07_xz, G07_yz, V04r, V04d, V04e, V04f, G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, F08.28.discover, F08.28.create, F08.28.read, F08.28.edit, F08.28.rebuild, F08.28.save_reopen, F08.28.negative_tests, F08.28.geometry_validation, AUXS.01.edit, AUXS.02.negative_tests, AUXS.03.create, AUXS.04.edit, AUXS.05.save_reopen |
 | `SM-04.boss` *(вне каталога)* | SM-04 | later | B5 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
@@ -1235,18 +1235,19 @@
   - Ядро ДВИГАЕТ геометрию при наложении геометрического ограничения, и это публикуется: измерено, что ksCHorizontal на отрезке 25 мм под 30° доворачивает его до угла 0 вокруг СЕРЕДИНЫ отрезка, а не вокруг начала. Ожидание §11.2 наряда (конец уходит в (25,0), дельта по Y 12.5) измерением опровергнуто: измеренная дельта −6.25.
   - Типы «точка на кривой» (2) и «точка на середине кривой» (20) принимают ОБЪЕКТОМ точку, а не кривую: на отрезке ядро отвечает Create=False. Это измеренное предусловие постановки, а не отказ маршрута.
 - `SKC-02.dimension_types` — закрыт целиком
-  - ИЗМЕРЕНО: ассоциативный размер управляет геометрией — длина 40 → 50 при значении 50, и 50 переживает save → close → reopen; без значения длина остаётся 40 (различающий контроль).
-  - ИЗМЕРЕНО (поправка 11.10.2026): переменная размера — переменная ПРИЗНАКА ЭСКИЗА и на нём ВИДНА (ksEntity.GetFeature() → ksFeature.VariableCollection: v8=0, v9=50 при Expression='50'); выражение параметра привязывается к имени переменной детали и читается обратно ('L_sketch').
-  - НЕПРОВЕРЕННОЕ ЗВЕНО: смена переменной детали двигает геометрию. Проба не осилила его по своему пределу — переменная детали в её документе не приживается (ksPart.VariableCollection() = 0 в трёх чтениях после обеих маршрутов создания и после RebuildDocument). Создание переменной детали доказано приёмкой блока G3; звено подлежит проверке ЧЕРЕЗ ПОСТАВКУ.
+  - ИЗМЕРЕНО через поставку: управляющий размер на отрезке даёт длину 40 → 50 при значении 50, и 50 читается после save → close → reopen.
+  - ИЗМЕРЕНО: цепочка переменной ДЕТАЛИ работает целиком — kompas_create_variable L=50 → kompas_list_feature_parameters на ПРИЗНАКЕ ЭСКИЗА видит переменную размера (['v8','v9']) → kompas_bind_parameter v9 → 'L' → kompas_set_variable L=60 + перестроение → длина 60 → после переоткрытия 60.
+  - ПОДТВЕРЖДЕНИЕ ПО ТРЁМ ФАКТАМ, а не по общей паре: точки размера на концах отрезка, значение перечитано равным запрошенному, длина отрезка равна значению. Общая пара Create()==true && Valid!=false для прочих типов НЕ ослаблена: ассоциация читается как две ksCMergePoints (Valid=true), тогда как запись ksCAssociation несёт Valid=false.
+  - Граница, названная числом: на ОТРЕЗКЕ (а не на объекте-размере) ksCFixedDim отвергается GEOMETRY_FAILED.
 - `SKC-03.read` — закрыт целиком
   - Список ограничений читается ТОЛЬКО ВНУТРИ сеанса редактирования: вне его тот же IDrawingObject1 отвечает Constraints → null без исключения. Это измеренная ловушка прибора, и она названа в описании инструмента.
   - При ОДНОЙ записи справка обещает VARIANT VT_DISPATCH, а не массив: одиночная запись разворачивается, а не объявляется «не массивом».
 - `SKC-04.delete` — закрыт целиком
   - На ПУСТОМ списке DeleteConstraints() отвечает False: это ответ про пустой список, а не про метод, и зачитывать его как свойство удаления нельзя. Поэтому строка измеряет метод на непустом списке.
 - `SKC-05.state_read` — закрыт целиком
-  - Требование ВЫПОЛНЕНО и измерено: контур из 4 отрезков без выдавливания даёт состояние 1, и 1 прочитано после save → close → reopen.
-  - Отрезок с двумя закреплёнными концами остаётся недоопределённым (2) — названный факт постановки, не отменяющий требования.
-  - ParametricMode в поставленной обёртке отсутствует, но присутствует в установленной kAPI7.tlb слотами 74/75; вызван через IDispatch, DISPID разрешён по имени.
+  - ИЗМЕРЕНО через поставку: контур из 4 отрезков БЕЗ выдавливания (4 совпадения угловых точек с указанием точки на объекте, 2 горизонтали, 2 вертикали, 2 фиксированные длины, закрепление угла) даёт состояние 1, и 1 читается ПОСЛЕ save → close → reopen.
+  - ПРЕЖНЯЯ ПОСТАНОВКА, названная рядом: контур С выдавливанием и отрезок с двумя закреплёнными концами давали 2 — она измерена пробой K (шаги K.12, K.12b, K.15) и не забыта.
+  - ParametricMode документирован и присутствует в установленной kAPI7.tlb слотами 74/75; в поставленной обёртке его нет, поэтому продукт читает состояние без него — состояние 1 достигнуто и без вызова этого члена.
 - `SKC-06.association_bisector` — не закрыт
   - Необязательный режим: обязательный объём профиля не закрывает. ksCAssociation измерен как отказ без массива партнёров (ожидаемое предусловие), ksCBisector не измерялся.
 - `AUX-SKETCH.plane_and_profile_lifecycle` — закрыт целиком

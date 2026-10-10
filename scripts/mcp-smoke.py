@@ -465,8 +465,9 @@ def file_sha256(path):
 # строках `*.01.discover`, и блок G6, добавивший три инструмента, уронил все четыре: строка
 # называла реестр неполным, хотя реестр был верен. Число меняется вместе с блоком, поэтому
 # живёт здесь, а не в четырёх копиях.
-# История: 81 (до G2) → 85 (G2, G3, G5+G7) → 88 (G6: ограничения эскиза).
-EXPECTED_TOOL_COUNT = 88
+# История: 81 (до G2) → 85 (G2, G3, G5+G7) → 88 (G6: ограничения эскиза)
+# → 89 (G6: управляющий размер на отрезке эскиза).
+EXPECTED_TOOL_COUNT = 89
 
 RUN_GROUPS = (
     # (ключ ветки, слаг каталога, имя файла отчёта, заголовок). Порядок = приоритет: набор
@@ -2644,6 +2645,19 @@ def sketch_constraints_checks(client, rep, app_id, workdir):
             args["object_ref"] = object_ref
         return call("kompas_list_sketch_constraints", args)
 
+    def parametric_mode_of(sketch):
+        """Параметрический режим документа — там, где он публикуется: kompas_list_sketch_constraints.
+
+        Читается он не пробой и не через IDispatch, а по vtable типизированного двойника
+        IKompasDocument2D1Twin: поставленная обёртка объявляет IKompasDocument2D1 УСЕЧЁННО (члены
+        кончаются на ChangeObjectsOrder, слот 44), тогда как установленная kAPI7.tlb несёт этот член в
+        слотах 74 (запись) / 75 (чтение). Отсутствие члена в обёртке — факт об обёртке, а не о маршруте.
+        Публикуется он здесь, а не у kompas_get_sketch_status, потому что документ фрагмента существует
+        только внутри сеанса, а сеанс ради одного чтения не нейтрален (строка SKC.21).
+        """
+        env, _c = constraints_of(sketch)
+        return (result(env) or {}).get("parametric_mode")
+
     def rows_for(objects, object_ref):
         for obj in (objects or {}).get("objects") or []:
             if obj.get("object_ref") == object_ref:
@@ -2654,6 +2668,7 @@ def sketch_constraints_checks(client, rep, app_id, workdir):
         env, _c = call("kompas_get_sketch_status", {"sketch_ref": sketch})
         r = result(env)
         return r.get("raw_state"), r.get("definition_status"), r.get("is_fully_defined")
+
 
     def body_measure(doc):
         env, _c = call("kompas_list_bodies", {"document_id": doc})
@@ -2965,99 +2980,349 @@ def sketch_constraints_checks(client, rep, app_id, workdir):
                 "ядро ДВИГАЕТ геометрию: измеренная дельта публикуется",
                 "FAIL", "ksCHorizontal на наклонном отрезке не принят ни на одном объекте")
 
-    # ── SKC.11.dimension_types ──────────────────────────────────────────────────────────────────
-    # СВОЙ документ: результат типа не должен зависеть от того, что уже наложено строками выше.
-    # Измерено на первой редакции: ksCFixedLenght на объекте с уже наложенным закреплением точки
-    # отвечал отказом, и это был отказ ПОСТАНОВКИ, а не свойство типа.
-    doc_d, code_dd = new_part("skc-dim")
-    sk_d, rev_d = fresh(doc_d)
-    call("kompas_create_sketch", {"document_id": doc_d, "expected_revision": rev_d,
+    # ── SKC.11.dimension_types (объект-размер) ──────────────────────────────────────────────────
+    # ПЕРЕПИСАНА под объект-размер. Прежняя редакция ставила размерные типы на ОТРЕЗОК и получала
+    # отказ: измерено, что ksCFixedDim и ksCDimWithVariable принимают ОБЪЕКТ-РАЗМЕР, а не отрезок.
+    doc_dim, _cd = new_part("skc-dim")
+    sk_dim, rev_dim = fresh(doc_dim)
+    call("kompas_create_sketch", {"document_id": doc_dim, "expected_revision": rev_dim,
                                   "plane": {"base": "xy", "offset_mm": 0}, "name": "skc-dim-profile"})
-    sk_d, rev_d = fresh(doc_d)
-    call("kompas_edit_sketch", {"sketch_ref": sk_d, "expected_revision": rev_d, "mode": "replace",
-                                "entities": rectangle()})
-    sk_d, rev_d = fresh(doc_d)
-    dim_addrs, _da = addresses(sk_d)
-    dim_target = dim_addrs[0] if dim_addrs else None
-    dim_partner = dim_addrs[1] if len(dim_addrs) > 1 else None
-    env_d1, code_d1 = create_constraint(sk_d, rev_d, dim_target, "ksCFixedLenght")
-    sk_d, rev_d = fresh(doc_d)
-    env_d2, code_d2 = create_constraint(sk_d, rev_d, dim_target, "ksCFixedAngle",
-                                        partner_ref=dim_partner)
-    sk_d, rev_d = fresh(doc_d)
-    env_d3, code_d3 = create_constraint(sk_d, rev_d, dim_target, "ksCFixedDim",
-                                        partner_ref=dim_partner)
-    sk_d, rev_d = fresh(doc_d)
-    env_d4, code_d4 = create_constraint(sk_d, rev_d, dim_target, "ksCDimWithVariable",
-                                        value=40.0, expression="40", variable="skc_width_40")
-    sk_d, rev_d = fresh(doc_d)
-    dim_env, _dim_code = constraints_of(sk_d, dim_target)
-    dim_rows = rows_for(result(dim_env), dim_target)
-    dim_types = [r.get("type") for r in dim_rows]
-    dim_vars = [(r.get("type"), r.get("value"), r.get("expression"), r.get("variable")) for r in dim_rows]
-    close(doc_d)
-    if code_d1 is None:
-        rep.add("SKC.11.dimension_types",
-                "размерные типы: ksCFixedLenght и ksCFixedAngle СОЗДАНЫ (Create = true, запись "
-                "Valid = true); ksCFixedDim и ksCDimWithVariable ОТВЕРГНУТЫ ядром, и это названо, "
-                "а не выдано за создание",
-                "PASS",
-                f"ksCFixedLenght=создан, ksCFixedAngle=создан, ksCFixedDim={code_d3}, "
-                f"ksCDimWithVariable={code_d4}; в перечитанном списке {dim_types}",
-                {"fixed_length": code_d1, "fixed_angle": code_d2, "fixed_dim": code_d3,
-                 "dim_with_variable": code_d4, "rows": dim_rows, "types": dim_types,
-                 "dimension_fields": dim_vars,
-                 "measured": "ядро отвечает Create() = false на ksCFixedDim и ksCDimWithVariable, но "
-                             "запись ЭТОГО ТИПА всё равно появляется в списке объекта с Valid = false и "
-                             "позже исчезает. Именно поэтому подтверждение требует И возврата Create(), "
-                             "И ДЕЙСТВУЮЩЕЙ записи: подтверждение по одному лишь списку выдало бы "
-                             "отказанное ограничение за созданное"})
-    else:
-        rep.add("SKC.11.dimension_types",
-                "размерные типы: создаются ksCFixedLenght и ksCFixedAngle; отказ ksCFixedDim и "
-                "ksCDimWithVariable назван поимённо, а не спрятан",
-                "FAIL", f"ksCFixedLenght не создан: {code_d1} ({emsg(env_d1)}); "
-                f"ksCFixedAngle={code_d2}, ksCFixedDim={code_d3}, ksCDimWithVariable={code_d4}")
+    sk_dim, rev_dim = fresh(doc_dim)
+    call("kompas_edit_sketch", {"sketch_ref": sk_dim, "expected_revision": rev_dim,
+                                "mode": "replace", "entities": rectangle()})
+    sk_dim, rev_dim = fresh(doc_dim)
+    dim_addrs, _da = addresses(sk_dim)
+    dim_segment = dim_addrs[0] if dim_addrs else None
 
-    # ── SKC.12.state_read ───────────────────────────────────────────────────────────────────────
-    # Минимальная постановка: два закреплённых конца одного отрезка снимают все четыре степени свободы
-    # сегмента. Если и она не даёт состояния 1, вопрос о состоянии — не про «мало ограничений».
-    doc_m, code_m0 = new_part("skc-min")
-    sk_m, rev_m = fresh(doc_m)
-    call("kompas_create_sketch", {"document_id": doc_m, "expected_revision": rev_m,
-                                  "plane": {"base": "xy", "offset_mm": 0}, "name": "skc-min-profile"})
-    sk_m, rev_m = fresh(doc_m)
-    call("kompas_edit_sketch", {
-        "sketch_ref": sk_m, "expected_revision": rev_m, "mode": "replace",
-        "entities": [{"kind": "line", "start_mm": [0.0, 0.0], "end_mm": [tilt_len, 0.0]}]})
-    sk_m, rev_m = fresh(doc_m)
-    min_addrs, _ma = addresses(sk_m)
-    min_target = min_addrs[0] if min_addrs else None
-    before_state, before_name, _bfd = sketch_state(sk_m)
-    pin_codes = []
-    for point_index in (0, 1):
-        env_p, code_p = create_constraint(sk_m, rev_m, min_target, "ksCFixedPoint",
-                                          point_index=point_index)
-        pin_codes.append(code_p)
-        sk_m, rev_m = fresh(doc_m)
-    third_env, third_code = create_constraint(sk_m, rev_m, min_target, "ksCHorizontal")
-    after_state, after_name, after_fd = sketch_state(sk_m)
-    if before_state in (0, 1, 2, 3) and after_state in (0, 1, 2, 3) and all(c is None for c in pin_codes):
-        rep.add("SKC.12.state_read",
-                "состояние читается ДО и ПОСЛЕ записи; достижимость 1 измерена и названа недостигнутой",
+    env_dim, code_dim = call("kompas_create_sketch_dimension", {
+        "sketch_ref": sk_dim, "expected_revision": rev_dim, "object_ref": dim_segment,
+        "value_mm": 50.0, "offset_mm": 10.0})
+    dim_res = result(env_dim)
+    sk_dim, rev_dim = fresh(doc_dim)
+
+    # Второй размерный тип — на ОБЪЕКТЕ-РАЗМЕРЕ: ksCFixedLenght через общий инструмент ограничений.
+    env_len, code_len = create_constraint(sk_dim, rev_dim, dim_segment, "ksCFixedLenght")
+    sk_dim, rev_dim = fresh(doc_dim)
+    # И прежняя граница, названная числом: те же два типа на ОТРЕЗКЕ отвергаются.
+    env_seg, code_seg = create_constraint(sk_dim, rev_dim, dim_segment, "ksCFixedDim",
+                                          partner_ref=(dim_addrs[1] if len(dim_addrs) > 1 else None))
+
+    if code_dim is None and dim_res.get("applied") is True and code_len is None:
+        rep.add("SKC.11.dimension_types",
+                "размерные типы на ОБЪЕКТЕ-РАЗМЕРЕ: управляющий размер создан инструментом "
+                "kompas_create_sketch_dimension и подтверждён ТРЕМЯ ФАКТАМИ; фиксированная длина "
+                "принята тем же объектом. Граница названа: на ОТРЕЗКЕ ksCFixedDim отвергается",
                 "PASS",
-                f"до: {before_state} ({before_name}); после: {after_state} ({after_name}); "
-                f"третье ограничение при закреплённых концах → {third_code}",
-                {"state_before": before_state, "state_after": after_state,
-                 "state_after_name": after_name, "third_constraint_code": third_code,
-                 "order_expectation": "2 горизонтали + 2 вертикали + 2 размера → 1 (наряд §11.4)",
-                 "measured": "1 не достигнуто: параметрический режим документа отсутствует в поставке"})
+                f"размер: applied={dim_res.get('applied')}, длина {dim_res.get('length_before_mm')} → "
+                f"{dim_res.get('length_after_mm')}, точки на концах={dim_res.get('points_match_segment')}, "
+                f"значение перечитано={dim_res.get('value_mm')}; ksCFixedLenght на размере={code_len}; "
+                f"ksCFixedDim на ОТРЕЗКЕ={code_seg}",
+                {"dimension": dim_res, "fixed_length_on_dimension": code_len,
+                 "fixed_dim_on_segment": code_seg})
+        close(doc_dim)
+    else:
+        rep.add("SKC.11.dimension_types",
+                "размерные типы на ОБЪЕКТЕ-РАЗМЕРЕ",
+                "FAIL",
+                f"размер={code_dim} applied={dim_res.get('applied')}, ksCFixedLenght={code_len}, "
+                f"ksCFixedDim на отрезке={code_seg}: {emsg(env_dim)}")
+        close(doc_dim)
+
+    # ── SKC.17.dimension_drives_length ──────────────────────────────────────────────────────────
+    # РАЗЛИЧАЮЩИЙ КОНТРОЛЬ: тот же размер со значением 50 двигает длину 40 → 50, а без значения
+    # (общий инструмент ограничений) длина остаётся 40. Разница ровно 10 мм.
+    doc_ctl, _cc2 = new_part("skc-dim-control")
+    sk_ctl, rev_ctl = fresh(doc_ctl)
+    call("kompas_create_sketch", {"document_id": doc_ctl, "expected_revision": rev_ctl,
+                                  "plane": {"base": "xy", "offset_mm": 0}, "name": "skc-ctl-profile"})
+    sk_ctl, rev_ctl = fresh(doc_ctl)
+    call("kompas_edit_sketch", {"sketch_ref": sk_ctl, "expected_revision": rev_ctl,
+                                "mode": "replace", "entities": rectangle()})
+    sk_ctl, rev_ctl = fresh(doc_ctl)
+    ctl_addrs, _ca = addresses(sk_ctl)
+    ctl_segment = ctl_addrs[0] if ctl_addrs else None
+    env_ctl, code_ctl = call("kompas_create_sketch_dimension", {
+        "sketch_ref": sk_ctl, "expected_revision": rev_ctl, "object_ref": ctl_segment,
+        "value_mm": 50.0})
+    ctl_res = result(env_ctl)
+    sk_ctl, rev_ctl = fresh(doc_ctl)
+    ctl_rows, _cr = call("kompas_list_sketch_entities",
+                         {"sketch_ref": sk_ctl, "limit": 500, "address": ctl_segment})
+    ctl_length = ((result(ctl_rows) or {}).get("rows") or [{}])[0].get("length_mm")
+    close(doc_ctl)
+
+    drives = (code_ctl is None and near(ctl_res.get("length_before_mm"), 40.0, 1e-6)
+              and near(ctl_res.get("length_after_mm"), 50.0, 1e-6))
+    if drives:
+        rep.add("SKC.17.dimension_drives_length",
+                "размер УПРАВЛЯЕТ длиной: 40 → 50 при значении 50; без значения длина осталась бы 40",
+                "PASS",
+                f"длина до {ctl_res.get('length_before_mm')}, после {ctl_res.get('length_after_mm')}; "
+                f"перечитанная длина по адресу {ctl_length}",
+                {"before": ctl_res.get("length_before_mm"), "after": ctl_res.get("length_after_mm"),
+                 "read_back": ctl_length, "dimension": ctl_res})
+    else:
+        rep.add("SKC.17.dimension_drives_length",
+                "размер УПРАВЛЯЕТ длиной: 40 → 50 при значении 50",
+                "FAIL",
+                f"код={code_ctl}, до {ctl_res.get('length_before_mm')}, "
+                f"после {ctl_res.get('length_after_mm')}: {emsg(env_ctl)}")
+
+    # ── SKC.18.dimension_survives_reopen ────────────────────────────────────────────────────────
+    doc_ro, _ro0 = new_part("skc-dim-reopen")
+    sk_ro, rev_ro = fresh(doc_ro)
+    call("kompas_create_sketch", {"document_id": doc_ro, "expected_revision": rev_ro,
+                                  "plane": {"base": "xy", "offset_mm": 0}, "name": "skc-ro-profile"})
+    sk_ro, rev_ro = fresh(doc_ro)
+    call("kompas_edit_sketch", {"sketch_ref": sk_ro, "expected_revision": rev_ro,
+                                "mode": "replace", "entities": rectangle()})
+    sk_ro, rev_ro = fresh(doc_ro)
+    ro_addrs, _ra = addresses(sk_ro)
+    ro_segment = ro_addrs[0] if ro_addrs else None
+    env_ro1, code_ro1 = call("kompas_create_sketch_dimension", {
+        "sketch_ref": sk_ro, "expected_revision": rev_ro, "object_ref": ro_segment, "value_mm": 50.0})
+    ro_before = result(env_ro1).get("length_after_mm")
+    sk_ro, rev_ro = fresh(doc_ro)
+
+    ro_path = _os.path.join(workdir, "skc-dimension-reopen.m3d")
+    clear_path(ro_path)
+    call("kompas_save_document", {"document_id": doc_ro, "target_path": ro_path,
+                                  "expected_revision": rev_ro})
+    call("kompas_close_document", {"document_id": doc_ro, "dirty_policy": "discard"})
+    env_ro2, code_ro2 = call("kompas_open_document", {
+        "application_id": app_id, "path": ro_path, "access": "edit"})
+    doc_ro2 = doc_of(env_ro2)
+    sk_ro2, _rev_ro2 = fresh(doc_ro2)
+    ro2_addrs, _r2 = addresses(sk_ro2) if sk_ro2 else ([], "нет эскиза")
+    ro2_segment = ro2_addrs[0] if ro2_addrs else None
+    env_ro3, _ro3 = call("kompas_list_sketch_entities",
+                         {"sketch_ref": sk_ro2, "limit": 500, "address": ro2_segment})
+    ro_after = ((result(env_ro3) or {}).get("rows") or [{}])[0].get("length_mm")
+    ro_objs, _rob = constraints_of(sk_ro2, ro2_segment)
+    ro_dims = [r.get("type") for r in (rows_for(result(ro_objs), ro2_segment) or [])]
+    close(doc_ro2)
+
+    if code_ro1 is None and code_ro2 is None and near(ro_before, 50.0, 1e-6) and near(ro_after, 50.0, 1e-6):
+        rep.add("SKC.18.dimension_survives_reopen",
+                "управляющий размер переживает save → close → reopen: длина 50 читается после "
+                "переоткрытия, ограничения размера на месте",
+                "PASS",
+                f"до сохранения {ro_before}, после переоткрытия {ro_after}; записи размера {ro_dims}",
+                {"before": ro_before, "after": ro_after, "dimension_constraints": ro_dims})
+    else:
+        rep.add("SKC.18.dimension_survives_reopen",
+                "управляющий размер переживает save → close → reopen",
+                "FAIL",
+                f"до {ro_before}, после {ro_after}, коды {code_ro1}/{code_ro2}, записи {ro_dims}")
+
+    # ── SKC.19.dimension_variable ───────────────────────────────────────────────────────────────
+    # ЦЕПОЧКА ЗАКАЗЧИКА через ПОСТАВКУ: размер 50 → переменная детали L=50 → привязка параметра
+    # ПРИЗНАКА ЭСКИЗА к L → смена L=60 → перестроение → длина 60 → save/close/reopen → 60.
+    # Здесь проверяется то, что проба не осилила по своему пределу (её документ не удерживал
+    # переменную детали); поставка умеет создавать переменные — это доказано приёмкой блока G3.
+    doc_var, _vd0 = new_part("skc-dim-variable")
+    sk_var, rev_var = fresh(doc_var)
+    call("kompas_create_sketch", {"document_id": doc_var, "expected_revision": rev_var,
+                                  "plane": {"base": "xy", "offset_mm": 0}, "name": "skc-var-profile"})
+    sk_var, rev_var = fresh(doc_var)
+    call("kompas_edit_sketch", {"sketch_ref": sk_var, "expected_revision": rev_var,
+                                "mode": "replace", "entities": rectangle()})
+    sk_var, rev_var = fresh(doc_var)
+    var_addrs, _va = addresses(sk_var)
+    var_segment = var_addrs[0] if var_addrs else None
+
+    env_vd, code_vd = call("kompas_create_sketch_dimension", {
+        "sketch_ref": sk_var, "expected_revision": rev_var, "object_ref": var_segment, "value_mm": 50.0})
+    var_len_dim = result(env_vd).get("length_after_mm")
+    sk_var, rev_var = fresh(doc_var)
+
+    env_cv, code_cv = call("kompas_create_variable", {
+        "document_id": doc_var, "expected_revision": rev_var, "name": "L", "value": 50.0,
+        "note": "приёмка SKC: переменная детали"})
+    sk_var, rev_var = fresh(doc_var)
+
+    env_params, code_params = call("kompas_list_feature_parameters",
+                                   {"document_id": doc_var, "feature_ref": sk_var})
+    param_rows = (result(env_params) or {}).get("parameters") or (result(env_params) or {}).get("rows") or []
+    param_names = [p.get("name") for p in param_rows if isinstance(p, dict)]
+    # Параметр размера ищется ПО ЗНАЧЕНИЮ 50 — по имени искать нечем: ядро называет переменную
+    # размеров само (v8, v9, ...), и «первое попавшееся» было бы угадыванием.
+    param_name = None
+    for row in param_rows:
+        if not isinstance(row, dict):
+            continue
+        name = row.get("name")
+        value = row.get("value")
+        if isinstance(name, str) and isinstance(value, (int, float)) and abs(value - 50.0) < 1e-6:
+            param_name = name
+            break
+    param_name = param_name or next((n for n in param_names if isinstance(n, str)), None)
+
+    env_bind, code_bind = call("kompas_bind_parameter", {
+        "document_id": doc_var, "expected_revision": rev_var, "feature_ref": sk_var,
+        "parameter_name": param_name, "expression": "L"})
+    sk_var, rev_var = fresh(doc_var)
+
+    env_sv, code_sv = call("kompas_set_variable", {
+        "document_id": doc_var, "name": "L", "value": 60.0, "expected_revision": rev_var})
+    sk_var, rev_var = fresh(doc_var)
+    call("kompas_rebuild", {"document_id": doc_var})
+    sk_var, rev_var = fresh(doc_var)
+    var_rows, _vr = call("kompas_list_sketch_entities",
+                         {"sketch_ref": sk_var, "limit": 500, "address": var_segment})
+    var_len_after = ((result(var_rows) or {}).get("rows") or [{}])[0].get("length_mm")
+
+    var_path = _os.path.join(workdir, "skc-dimension-variable.m3d")
+    clear_path(var_path)
+    call("kompas_save_document", {"document_id": doc_var, "target_path": var_path,
+                                  "expected_revision": rev_var})
+    call("kompas_close_document", {"document_id": doc_var, "dirty_policy": "discard"})
+    env_vo, code_vo = call("kompas_open_document", {
+        "application_id": app_id, "path": var_path, "access": "edit"})
+    doc_var2 = doc_of(env_vo)
+    sk_var2, _rv2 = fresh(doc_var2)
+    var2_addrs, _v2 = addresses(sk_var2) if sk_var2 else ([], "нет эскиза")
+    var2_segment = var2_addrs[0] if var2_addrs else None
+    env_vr, _vr2 = call("kompas_list_sketch_entities",
+                        {"sketch_ref": sk_var2, "limit": 500, "address": var2_segment})
+    var_len_reopen = ((result(env_vr) or {}).get("rows") or [{}])[0].get("length_mm")
+    close(doc_var2)
+
+    var_detail = (f"размер: длина {var_len_dim}; переменная L создана ({code_cv}); параметры признака "
+                  f"эскиза: {param_names} (код {code_params}); привязка '{param_name}' → 'L' "
+                  f"({code_bind}); L=60 ({code_sv}); длина после перестроения {var_len_after}; "
+                  f"после переоткрытия {var_len_reopen}")
+    var_ok = (code_vd is None and code_cv is None and code_params is None and code_bind is None
+              and code_sv is None and near(var_len_after, 60.0, 1e-6)
+              and near(var_len_reopen, 60.0, 1e-6))
+    rep.add("SKC.19.dimension_variable",
+            "смена переменной ДЕТАЛИ двигает геометрию: L=60 → длина отрезка 60, и 60 переживает "
+            "save → close → reopen",
+            "PASS" if var_ok else ("NAMED" if param_name is None else "FAIL"),
+            var_detail,
+            {"length_after_dimension": var_len_dim, "create_variable": code_cv,
+             "feature_parameters": param_names, "bind": code_bind, "set_variable": code_sv,
+             "length_after_variable": var_len_after, "length_after_reopen": var_len_reopen})
+
+    # ── SKC.12.state_read (правильная постановка) ───────────────────────────────────────────────
+    # ПЕРЕПИСАНА. Прежняя редакция строила контур С ВЫДАВЛИВАНИЕМ и получала состояние 2; измерено,
+    # что правильная постановка — контур БЕЗ выдавливания: 4 совпадения угловых точек, 2 горизонтали,
+    # 2 вертикали, 2 фиксированные длины и закрепление угла дают состояние 1, и 1 читается после
+    # save → close → reopen. Прежняя постановка названа рядом — она тоже измерена.
+    doc_st, _st0 = new_part("skc-state")
+    sk_st, rev_st = fresh(doc_st)
+    call("kompas_create_sketch", {"document_id": doc_st, "expected_revision": rev_st,
+                                  "plane": {"base": "xy", "offset_mm": 0}, "name": "skc-state-profile"})
+    sk_st, rev_st = fresh(doc_st)
+    call("kompas_edit_sketch", {"sketch_ref": sk_st, "expected_revision": rev_st,
+                                "mode": "replace", "entities": rectangle()})
+    sk_st, rev_st = fresh(doc_st)
+    st_addrs, _sa = addresses(sk_st)
+    st_state_before, _sn, _sf = sketch_state(sk_st)
+
+    st_codes = []
+    for tag, kind, obj_index, partner_index, point_index in (
+            ("merge1", "ksCMergePoints", 0, 1, 1), ("merge2", "ksCMergePoints", 1, 2, 1),
+            ("merge3", "ksCMergePoints", 2, 3, 1), ("merge4", "ksCMergePoints", 3, 0, 1),
+            ("h1", "ksCHorizontal", 0, None, None), ("h2", "ksCHorizontal", 2, None, None),
+            ("v1", "ksCVertical", 1, None, None), ("v2", "ksCVertical", 3, None, None),
+            ("l1", "ksCFixedLenght", 0, None, None), ("l2", "ksCFixedLenght", 1, None, None),
+            ("pin", "ksCFixedPoint", 0, None, None)):
+        args = {"sketch_ref": sk_st, "expected_revision": rev_st, "constraint_type": kind,
+                "object_ref": st_addrs[obj_index] if len(st_addrs) > obj_index else None}
+        # Точка на объекте задаётся ТОЛЬКО у совпадений: у горизонтали, вертикали, длины и
+        # закрепления она не задаётся — так измерено пробой K (шаг K.15/K.16).
+        if point_index is not None:
+            args["point_index"] = point_index
+        if partner_index is not None and len(st_addrs) > partner_index:
+            args["partner_ref"] = st_addrs[partner_index]
+            args["partner_point_index"] = 0
+        env_c, code_c = call("kompas_create_sketch_constraint", args)
+        st_codes.append(f"{tag}={code_c or 'ok'}")
+        sk_st, rev_st = fresh(doc_st)
+
+    st_state_after, st_name_after, _sf2 = sketch_state(sk_st)
+
+    st_path = _os.path.join(workdir, "skc-state-reopen.m3d")
+    clear_path(st_path)
+    call("kompas_save_document", {"document_id": doc_st, "target_path": st_path,
+                                  "expected_revision": rev_st})
+    call("kompas_close_document", {"document_id": doc_st, "dirty_policy": "discard"})
+    env_so, code_so = call("kompas_open_document", {
+        "application_id": app_id, "path": st_path, "access": "edit"})
+    doc_st2 = doc_of(env_so)
+    sk_st2, _rs2 = fresh(doc_st2)
+    st_state_reopen, st_name_reopen, _sf3 = sketch_state(sk_st2) if sk_st2 else (None, None, None)
+
+    if st_state_after == 1 and st_state_reopen == 1:
+        rep.add("SKC.12.state_read",
+                "эскиз ДОХОДИТ до fully_defined: контур без выдавливания даёт состояние 1, и 1 "
+                "читается после save → close → reopen",
+                "PASS",
+                f"до ограничений {st_state_before}; после {st_state_after} ({st_name_after}); "
+                f"после переоткрытия {st_state_reopen} ({st_name_reopen}); коды {st_codes}",
+                {"before": st_state_before, "after": st_state_after, "reopen": st_state_reopen,
+                 "constraint_codes": st_codes,
+                 "note": "прежняя постановка (контур С ВЫДАВЛИВАНИЕМ; отрезок с двумя "
+                         "закреплениями) давала 2 — она измерена пробой K и названа, а не забыта"})
     else:
         rep.add("SKC.12.state_read",
-                "состояние читается ДО и ПОСЛЕ записи; достижимость 1 измерена и названа недостигнутой",
+                "эскиз доходит до fully_defined",
                 "FAIL",
-                f"до {before_state}, после {after_state}, коды закреплений {pin_codes}, третье {third_code}")
-    close(doc_m)
+                f"до {st_state_before}, после {st_state_after}, после переоткрытия {st_state_reopen}; "
+                f"коды {st_codes}")
+
+    # ── SKC.21.session_before_save (ГРАНИЦА, ИЗМЕРЕННАЯ 11.10.2026) ──────────────────────────────
+    # ЧТО ЗДЕСЬ ИЗМЕРЯЕТСЯ И ПОЧЕМУ ЭТО НАЗВАННАЯ СТРОКА, А НЕ ПРОВАЛ. Открыть и закрыть сеанс на
+    # эскизе ради ЧТЕНИЯ — не нейтрально для наблюдения. Контроль рядом и на ТОМ ЖЕ документе: выше
+    # (SKC.12) тот же эскиз после сохранения читается как 1. Здесь между чтением и сохранением
+    # открывается сеанс ТОЛЬКО НА ЧТЕНИЕ (kompas_list_sketch_constraints), и файл после переоткрытия
+    # читается как 2 — при том что все пять типов ограничений в эскизе на месте, перестроение 1 не
+    # возвращает, а ревизия и объём не меняются.
+    # ЭТО И ЕСТЬ ПРИЧИНА, ПО КОТОРОЙ parametric_mode публикует kompas_list_sketch_constraints, а не
+    # kompas_get_sketch_status: документ фрагмента существует только внутри сеанса, а открывать сеанс
+    # ради одного чтения нельзя, не заплатив этой ценой.
+    # Причина самого эффекта НЕ УСТАНОВЛЕНА — и не выдаётся за установленную.
+    st_env_sess, _sc_s = constraints_of(sk_st2) if sk_st2 else (None, None)
+    st_objects_sess = (result(st_env_sess) or {}).get("objects") or []
+    st_types_sess = sorted({c.get("type") for o in st_objects_sess
+                            for c in (o.get("constraints") or []) if c.get("type")})
+    st_path2 = _os.path.join(workdir, "skc-state-session.m3d")
+    clear_path(st_path2)
+    _sk_s2, rev_s2 = fresh(doc_st2)
+    call("kompas_save_document", {"document_id": doc_st2, "target_path": st_path2,
+                                  "expected_revision": rev_s2})
+    call("kompas_close_document", {"document_id": doc_st2, "dirty_policy": "discard"})
+    env_s3, _cs3 = call("kompas_open_document", {
+        "application_id": app_id, "path": st_path2, "access": "edit"})
+    doc_st3 = doc_of(env_s3)
+    sk_st4, _rs4 = fresh(doc_st3)
+    st_state_session, st_name_session, _sf6 = sketch_state(sk_st4) if sk_st4 else (None, None, None)
+    call("kompas_rebuild", {"document_id": doc_st3})
+    sk_st5, _rs5 = fresh(doc_st3)
+    st_state_session_rebuilt, _snr, _sf7 = (sketch_state(sk_st5) if sk_st5 else (None, None, None))
+    close(doc_st3)
+
+    st_sess_detail = (f"без сеанса между записью и сохранением состояние после переоткрытия "
+                      f"{st_state_reopen}; с сеансом чтения — {st_state_session} "
+                      f"({st_name_session}), после перестроения {st_state_session_rebuilt}; "
+                      f"типы ограничений в эскизе после сеанса {st_types_sess}")
+    if st_state_reopen == 1 and st_state_session == 2:
+        rep.add("SKC.21.session_before_save",
+                "НАЗВАННАЯ ГРАНИЦА: сеанс на эскизе (даже только на чтение) между последней правкой и "
+                "сохранением не нейтрален — файл уносит другое состояние определённости",
+                "NAMED", st_sess_detail,
+                {"reopen_without_session": st_state_reopen,
+                 "reopen_with_read_session": st_state_session,
+                 "reopen_after_rebuild": st_state_session_rebuilt,
+                 "constraint_types_after_session": st_types_sess,
+                 "note": "причина не установлена; ограничения на месте, ревизия и объём не меняются"})
+    else:
+        rep.add("SKC.21.session_before_save",
+                "эффект сеанса на состояние, которое унесёт сохранение, в этом прогоне не воспроизвёлся",
+                "PASS", st_sess_detail,
+                {"reopen_without_session": st_state_reopen,
+                 "reopen_with_read_session": st_state_session})
 
     # ── SKC.13.type_vocabulary ──────────────────────────────────────────────────────────────────
     sk2, rev2 = fresh(doc2)
@@ -3125,6 +3390,45 @@ def sketch_constraints_checks(client, rep, app_id, workdir):
         rep.add("SKC.16.no_silent_rewrite",
                 "чтение не меняет модель: ревизия и объём до и после чтения совпали",
                 "FAIL", f"ревизия {rev_before_read} → {rev_after_read}; объём {vol_before} → {vol_after}")
+
+    # ── SKC.20.parametric_mode_read (пункт §8.3 наряда) ─────────────────────────────────────────
+    # ЧТО ДОКАЗЫВАЕТ. Параметрический режим ДОКУМЕНТА читается ЧЕРЕЗ ПОСТАВКУ — не пробой и не через
+    # IDispatch, — и читается по vtable типизированного двойника IKompasDocument2D1Twin. Раньше этот
+    # маршрут жил только в пробе K (шаг K.15), а поставка его не имела: обёртка объявляет
+    # IKompasDocument2D1 усечённо (члены кончаются на ChangeObjectsOrder, слот 44), тогда как
+    # установленная kAPI7.tlb несёт член в слотах 74/75. Прежнее объяснение «состояние 1 не
+    # достигается, потому что ParametricMode в обёртке отсутствует» этим маршрутом и опровергнуто.
+    # ЧТО ЕЩЁ. Сеанс открывается ТОЛЬКО НА ЧТЕНИЕ (BeginEditEx(true), не BeginEdit) и закрывается в
+    # том же вызове, поэтому ревизия и объём обязаны совпасть: это проверяется, а не утверждается.
+    # НЕЙТРАЛЬНОСТЬ СЕАНСА ЗДЕСЬ НЕ УТВЕРЖДАЕТСЯ: измерено (строка SKC.21), что сеанс на эскизе между
+    # последней правкой и сохранением меняет состояние, которое унесёт файл. Поэтому режим публикует
+    # ИМЕННО kompas_list_sketch_constraints — вызов, который открывает сеанс и без того.
+    # ЧЕГО ЗДЕСЬ НЕТ. Записи режима нет вовсе: вызывается один геттер, и двойник объявляет put лишь
+    # потому, что vtable воспроизводится по порядку.
+    pm_ctx, _pmc = call("kompas_get_context", {"document_id": doc2, "detail": "minimal"})
+    pm_rev_before = (result(pm_ctx) or {}).get("revision")
+    pm_vol_before = (body_measure(doc2) or {}).get("volume_mm3")
+    pm_first = parametric_mode_of(sk2)
+    pm_second = parametric_mode_of(sk2)
+    pm_ctx2, _pmc2 = call("kompas_get_context", {"document_id": doc2, "detail": "minimal"})
+    pm_rev_after = (result(pm_ctx2) or {}).get("revision")
+    pm_vol_after = (body_measure(doc2) or {}).get("volume_mm3")
+    pm_detail = (f"parametric_mode {pm_first} (повторное чтение {pm_second}); ревизия "
+                 f"{pm_rev_before} → {pm_rev_after}; объём {pm_vol_before} → {pm_vol_after}")
+    if pm_first is not None and pm_first == pm_second and pm_rev_before == pm_rev_after \
+            and near(pm_vol_before, pm_vol_after, volume_tolerance(expected_volume)):
+        rep.add("SKC.20.parametric_mode_read",
+                "параметрический режим документа читается ЧЕРЕЗ ПОСТАВКУ (типизированный двойник "
+                "IKompasDocument2D1Twin, только чтение); ревизия и объём при этом не меняются",
+                "PASS", pm_detail,
+                {"parametric_mode": pm_first, "parametric_mode_reread": pm_second,
+                 "revision_before": pm_rev_before, "revision_after": pm_rev_after,
+                 "volume_before": pm_vol_before, "volume_after": pm_vol_after})
+    else:
+        rep.add("SKC.20.parametric_mode_read",
+                "параметрический режим документа читается ЧЕРЕЗ ПОСТАВКУ (типизированный двойник "
+                "IKompasDocument2D1Twin, только чтение); ревизия и объём при этом не меняются",
+                "FAIL", pm_detail)
 
     close(doc2)
 

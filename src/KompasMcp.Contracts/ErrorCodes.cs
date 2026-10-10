@@ -111,6 +111,12 @@ public static class ErrorCodes
     /// (<c>acknowledge_unknown_document_state=true</c>); there it is not.</remarks>
     public const string DocumentStateUnknown = "DOCUMENT_STATE_UNKNOWN";
 
+    /// <summary>The mass-centre interface returned nothing, or the requested inertia property did not read.
+    /// A separate code, not <see cref="InvalidArgument"/>: the request is legitimate and the geometry is a
+    /// valid target, so the kernel's refusal is the fact being reported — and a zero would be
+    /// indistinguishable from a measured zero moment.</summary>
+    public const string InertiaNotAvailable = "INERTIA_NOT_AVAILABLE";
+
     /// <summary>The requested interchange format has no documented programmatic route in the target version.
     /// A separate code, not <see cref="InvalidArgument"/>: the FORMAT is a legitimate export target of the
     /// product (PDF is exported from the UI), so "unknown argument" would misname the reason. The refusal
@@ -159,6 +165,9 @@ public static class ErrorMessages
         [ErrorCodes.ExternalReferences] = "Обнаружены внешние ссылки, требующие явного решения.",
         [ErrorCodes.ExportFailed] = "Экспорт не удался.",
         [ErrorCodes.ImportFailed] = "Импорт не удался.",
+        [ErrorCodes.InertiaNotAvailable] =
+            "Моменты инерции получить не удалось: интерфейс МЦХ не вернулся или запрошенное свойство " +
+            "не читается на этой геометрии. Ноль вместо непрочитанного момента не публикуется.",
         [ErrorCodes.FormatUnavailable] =
             "Для запрошенного формата экспорта нет документированного программного маршрута в целевой " +
             "версии. Справка SDK v24 описывает конвертер только для DXF (команда 1) и DWG (команда 2), " +

@@ -237,6 +237,122 @@ public enum MeasurableProperty
     SurfaceArea,
     Mass,
     Centroid,
+
+    /// <summary>Mass-centre inertia: axial, centrifugal, plane, principal moments and the principal
+    /// axes. Available on a BODY only — the interface that carries it is the mass-centre one.</summary>
+    Inertia,
+}
+
+/// <summary>Unit selector for <see cref="MeasurableProperty.Inertia"/> — the length/mass dimension of
+/// the values the mass-centre interface returns.</summary>
+/// <remarks>DOC: <c>kspart_calcmassinertiaproperties.html</c> — <c>bitVector</c> «определяет
+/// размерность длины, размерность массы», values in <c>[ST_MIX_MM..ST_MIX_KG]</c>. INVARIANT: the unit
+/// is an ARGUMENT of the call, never a code constant, so the response can say which one was used.
+/// History: docs/decisions/geometry.md#inertia</remarks>
+public enum InertiaUnits
+{
+    /// <summary>Length in millimetres, mass in kilograms — <c>ST_MIX_MM|ST_MIX_KG</c>. The default.</summary>
+    MmKg,
+
+    /// <summary>Length in metres, mass in kilograms — <c>ST_MIX_M|ST_MIX_KG</c>. Moment values are then
+    /// smaller by the square of the length ratio (1e6), which is what makes the unit selector observable.</summary>
+    MKg,
+}
+
+/// <summary>Axial moments in the central system (<c>jx</c>, <c>jy</c>, <c>jz</c>).</summary>
+/// <remarks>DOC: <c>ksmassinertiaparam_jx.html</c> — «Осевые моменты инерции в центральной системе
+/// координат», read-only.</remarks>
+public sealed record InertiaAxialDto
+{
+    public double? Jx { get; init; }
+
+    public double? Jy { get; init; }
+
+    public double? Jz { get; init; }
+}
+
+/// <summary>Centrifugal moments in the central system (<c>jxjy</c>, <c>jxz</c>, <c>jyz</c>).</summary>
+/// <remarks>DOC: <c>ksmassinertiaparam_jxy.html</c> — «Центробежные моменты инерции в центральной
+/// системе координат».</remarks>
+public sealed record InertiaCentrifugalDto
+{
+    public double? Jxjy { get; init; }
+
+    public double? Jxz { get; init; }
+
+    public double? Jyz { get; init; }
+}
+
+/// <summary>Plane moments (<c>jx0z</c>, <c>jy0z</c>, <c>jx0y</c>).</summary>
+/// <remarks>DOC: <c>ksmassinertiaparam_jx0z.html</c> — «Плоскостные моменты инерции».</remarks>
+public sealed record InertiaPlaneDto
+{
+    public double? Jx0z { get; init; }
+
+    public double? Jy0z { get; init; }
+
+    public double? Jx0y { get; init; }
+}
+
+/// <summary>Principal central moments (<c>jx0</c>, <c>jy0</c>, <c>jz0</c>).</summary>
+/// <remarks>DOC: <c>ksmassinertiaparam_jx0.html</c> — «Главный центральный момент инерции (в главной
+/// центральной системе координат — с началом в центре масс и осями, ориентированными так, что все
+/// центробежные моменты равны нулю)»; «применимо только для трехмерных объектов».</remarks>
+public sealed record InertiaPrincipalDto
+{
+    /// <summary>Always "principal": the principal central system, not the same system as
+    /// <see cref="InertiaDto.System"/> — the same name <c>Jx</c> means a different quantity here.</summary>
+    public required string System { get; init; }
+
+    public double? Jx0 { get; init; }
+
+    public double? Jy0 { get; init; }
+
+    public double? Jz0 { get; init; }
+}
+
+/// <summary>Directions of the principal central axes as three unit vectors.</summary>
+/// <remarks>DOC: <c>ksmassinertiaparam_getaxisx.html</c> — «GetAxisX, GetAxisY, GetAxisZ — Получить
+/// вектора направлений главных центральных осей инерции»; «применим только для трехмерных объектов».
+/// A vector that did not read stays null, and the reason is named in <see cref="Notes"/> — an invented
+/// (0,0,0) would be indistinguishable from a measured axis.</remarks>
+public sealed record InertiaAxesDto
+{
+    public IReadOnlyList<double>? X { get; init; }
+
+    public IReadOnlyList<double>? Y { get; init; }
+
+    public IReadOnlyList<double>? Z { get; init; }
+
+    public IReadOnlyList<string> Notes { get; init; } = Array.Empty<string>();
+}
+
+/// <summary>Mass-centre inertia block of <c>kompas_measure</c>.</summary>
+/// <remarks>INVARIANT: <see cref="Units"/> and <see cref="System"/> are mandatory, because one and the
+/// same name <c>Jx</c> denotes three different quantities in three systems, and a number without its
+/// unit and its system is not a measurement. INVARIANT: a value that did not read is null with its
+/// reason in <see cref="Notes"/> — never a zero.
+/// History: docs/decisions/geometry.md#inertia</remarks>
+public sealed record InertiaDto
+{
+    /// <summary>Unit system of every value below: "mm|kg" or "m|kg". Set by the call argument.</summary>
+    public required string Units { get; init; }
+
+    /// <summary>System of <see cref="Axial"/>, <see cref="Centrifugal"/> and <see cref="Plane"/>: "central".</summary>
+    public required string System { get; init; }
+
+    public InertiaAxialDto? Axial { get; init; }
+
+    public InertiaCentrifugalDto? Centrifugal { get; init; }
+
+    public InertiaPlaneDto? Plane { get; init; }
+
+    public InertiaPrincipalDto? Principal { get; init; }
+
+    public InertiaAxesDto? PrincipalAxes { get; init; }
+
+    /// <summary>Named reasons for every group or value that stayed null.</summary>
+    public IReadOnlyList<string> Notes { get; init; } = Array.Empty<string>();
 }
 
 /// <summary>Result of measuring one target.</summary>
@@ -253,6 +369,9 @@ public sealed record MeasurementDto
     public double? MassKg { get; init; }
 
     public IReadOnlyList<double>? CentroidMm { get; init; }
+
+    /// <summary>Mass-centre inertia; null unless <see cref="MeasurableProperty.Inertia"/> was requested.</summary>
+    public InertiaDto? Inertia { get; init; }
 
     /// <summary>Aspect the server could NOT confirm in the unit system, e.g. "volume_units".</summary>
     public IReadOnlyList<string> UnverifiedAspects { get; init; } = Array.Empty<string>();

@@ -4017,6 +4017,7 @@ public sealed partial class Api5Session
         double? volume = null;
         double? area = null;
         double? mass = null;
+        InertiaDto? inertia = null;
 
         if (stored.Payload is ksBody body)
         {
@@ -4033,6 +4034,11 @@ public sealed partial class Api5Session
             if (command.Properties.Contains(MeasurableProperty.SurfaceArea))
             {
                 area = MeasureArea(body, unverified);
+            }
+
+            if (command.Properties.Contains(MeasurableProperty.Inertia))
+            {
+                inertia = ReadInertia(body, command.InertiaUnits, unverified);
             }
 
             if (command.Properties.Contains(MeasurableProperty.Mass))
@@ -4078,6 +4084,8 @@ public sealed partial class Api5Session
                     MeasurableProperty.Centroid =>
                         "centroid_not_read_for_face — центр масс грани документированным маршрутом API5 "
                         + "не читается",
+                    MeasurableProperty.Inertia =>
+                        "inertia_not_applicable_to_face — моменты инерции есть у тела, а не у грани",
                     _ => $"property_{requested}_not_read_for_face",
                 });
             }
@@ -4102,6 +4110,8 @@ public sealed partial class Api5Session
                     MeasurableProperty.Centroid =>
                         "centroid_not_read_for_edge — центр масс ребра документированным маршрутом API5 "
                         + "не читается",
+                    MeasurableProperty.Inertia =>
+                        "inertia_not_applicable_to_edge — моменты инерции есть у тела, а не у ребра",
                     _ => $"property_{requested}_not_read_for_edge",
                 });
             }
@@ -4123,6 +4133,7 @@ public sealed partial class Api5Session
             VolumeMm3 = volume,
             SurfaceAreaMm2 = area,
             MassKg = mass,
+            Inertia = inertia,
             UnverifiedAspects = unverified,
         };
     }
@@ -4367,6 +4378,109 @@ public sealed partial class Api5Session
         catch (Exception ex) when (ex is COMException or InvalidCastException)
         {
             return null;
+        }
+    }
+
+    /// <summary>Mass-centre inertia of a BODY: axial, centrifugal, plane and principal central moments
+    /// plus the principal axis directions.</summary>
+    /// <remarks>DOC: <c>ksmassinertiaparam.html</c> — «МЦХ тела вращения или выдавливания»; the pointer is
+    /// obtained by <c>ksPart::CalcMassInertiaProperties</c> or <c>ksBody::MassInertiaParam</c>, and the
+    /// length/mass dimensions of everything it returns are set by <c>bitVector</c> in
+    /// <c>[ST_MIX_MM..ST_MIX_KG]</c>. DOC: <c>ksmassinertiaparam_jx0.html</c> and
+    /// <c>ksmassinertiaparam_getaxisx.html</c> — the principal values and the axis directions are
+    /// «применимо только для трехмерных объектов».
+    /// INVARIANT: a missing interface is a REFUSAL (<c>INERTIA_NOT_AVAILABLE</c>), never a block of zeros;
+    /// a value that does not read stays null with its reason named (the assembly rule lives in
+    /// <see cref="InertiaBlock"/> and is unit-tested).
+    /// History: docs/decisions/geometry.md#inertia</remarks>
+    private InertiaDto ReadInertia(ksBody body, InertiaUnits units, List<string> unverified)
+    {
+        var bitVector = units == InertiaUnits.MKg ? KompasUnits.MassMKg : KompasUnits.MassMmKg;
+        var properties = MassProperties(body, (uint)bitVector);
+        if (properties is null)
+        {
+            // The interface did not come back: the kernel does not offer mass-centre characteristics on
+            // this body. A zero block would be indistinguishable from a measured zero moment.
+            throw new KompasContractException(
+                ErrorCodes.InertiaNotAvailable,
+                "CalcMassInertiaProperties не вернул ksMassInertiaParam: моменты инерции на этой "
+                + "геометрии недоступны. Ноль вместо непрочитанного момента не публикуется.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?> { ["unit_selector"] = bitVector });
+        }
+
+        var block = InertiaBlock.Build(
+            units == InertiaUnits.MKg ? "m|kg" : "mm|kg",
+            InertiaBlock.CentralSystem,
+            Scalar(() => properties.jx, "jx"),
+            Scalar(() => properties.jy, "jy"),
+            Scalar(() => properties.jz, "jz"),
+            Scalar(() => properties.jxy, "jxjy"),
+            Scalar(() => properties.jxz, "jxz"),
+            Scalar(() => properties.jyz, "jyz"),
+            Scalar(() => properties.jx0z, "jx0z"),
+            Scalar(() => properties.jy0z, "jy0z"),
+            Scalar(() => properties.jx0y, "jx0y"),
+            Scalar(() => properties.jx0, "jx0"),
+            Scalar(() => properties.jy0, "jy0"),
+            Scalar(() => properties.jz0, "jz0"),
+            Axis(properties, 0),
+            Axis(properties, 1),
+            Axis(properties, 2));
+
+        if (block.Notes.Count > 0)
+        {
+            // The measurement level names the fact; the block carries the per-value reasons. Both, because
+            // a client reading only unverified_aspects must still learn that the block is partial.
+            unverified.Add(
+                $"inertia_partial — {block.Notes.Count} значений блока inertia не прочитано; причины в inertia.notes");
+        }
+
+        return block;
+    }
+
+    /// <summary>One mass-centre scalar; a value that is not finite, or does not read, is a NAMED failure —
+    /// never a zero.</summary>
+    private static InertiaReading Scalar(Func<double> reader, string field)
+    {
+        try
+        {
+            return InertiaReading.From(reader(), field);
+        }
+        catch (Exception ex) when (ex is COMException or MissingMethodException or TargetInvocationException or InvalidCastException)
+        {
+            return InertiaReading.Failed($"{field}_not_read — свойство {field} не читается: {ex.GetType().Name}");
+        }
+    }
+
+    /// <summary>Direction of one principal central axis (<c>GetAxisX/Y/Z</c>); an axis that did not read
+    /// stays null, never an invented (0,0,0).</summary>
+    private static InertiaAxisReading Axis(ksMassInertiaParam properties, int axis)
+    {
+        var name = axis switch { 0 => "x", 1 => "y", _ => "z" };
+        try
+        {
+            double x = 0, y = 0, z = 0;
+            var ok = axis switch
+            {
+                0 => properties.GetAxisX(out x, out y, out z),
+                1 => properties.GetAxisY(out x, out y, out z),
+                _ => properties.GetAxisZ(out x, out y, out z),
+            };
+
+            if (ok && double.IsFinite(x) && double.IsFinite(y) && double.IsFinite(z))
+            {
+                return InertiaAxisReading.Ok(new[] { x, y, z });
+            }
+
+            return InertiaAxisReading.Failed(
+                $"principal_axis_{name}_not_read — GetAxis{name.ToUpperInvariant()} вернул "
+                + (ok ? "нечисловой вектор" : "false"));
+        }
+        catch (Exception ex) when (ex is COMException or MissingMethodException or TargetInvocationException or InvalidCastException)
+        {
+            return InertiaAxisReading.Failed(
+                $"principal_axis_{name}_not_read — GetAxis{name.ToUpperInvariant()} прервался: {ex.GetType().Name}");
         }
     }
 

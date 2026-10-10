@@ -8,7 +8,7 @@
      Источник - src/KompasMcp.Host/Catalog/ToolCatalog.cs. -->
 
 <!-- BEGIN TOOL LISTING -->
-Всего инструментов: 84.
+Всего инструментов: 85.
 
 | Инструмент | Назначение | Что делает |
 |---|---|---|
@@ -68,6 +68,7 @@
 | `kompas_delete_feature` | Удалить признак | Удаляет признак (измерено пробой L.8: ksDocument3D.DeleteObject → true, число признаков минус один). |
 | `kompas_rebuild` | Перестроить | Перестроение документа. |
 | `kompas_export_step` | Экспорт STEP | Экспорт нативным конвертером. |
+| `kompas_export_stl` | Экспорт STL | Сохранение модели в файл STL документированным маршрутом ksDocument3D.SaveAsToAdditionFormat с параметрами IAdditionFormatParam (format_STL=6). |
 | `kompas_import_step` | Импорт STEP | Чтение STEP. |
 | `kompas_export_image` | Снимок модели | Растровый снимок документированным маршрутом API5: ksDocument3D.RasterFormatParam → ksRasterFormatParam → SaveAsToRasterFormat. |
 | `kompas_create_drawing_views` | Создать стандартные виды чертежа | Строит группу стандартных ассоциативных видов модели документированным маршрутом API7: IDrawingDocument.ViewsAndLayersManager → IViews.AddStandartViews(FileName, ProjectionName, ProjectionsTypes, X, Y, Scale, DX, DY) (справка v24:… |

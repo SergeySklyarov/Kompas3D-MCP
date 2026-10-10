@@ -173,6 +173,11 @@ public static class WorkerCommands
     public const string ExportStep = "export.step";
     public const string ImportStep = "import.step";
     public const string ExportImage = "export.image";
+
+    /// <summary>Save a body/part to STL through the documented additional-format route
+    /// (<c>ksDocument3D.SaveAsToAdditionFormat</c> with <c>format_STL</c>). The file is a MUTATION of the
+    /// file system, so the tool carries an <c>operation_id</c>; the model itself is not changed.</summary>
+    public const string ExportStl = "export.stl";
     public const string UnitProbe = "probe.units";
 
     // Assembly domain (order C1). Commands are named after the modes of profile assemblies-minimal-v1:
@@ -708,6 +713,10 @@ public sealed record MeasureCommand
 
     /// <summary>Density in kg/m³, supplied by the caller. Server never guesses it.</summary>
     public double? DensityKgPerM3 { get; init; }
+
+    /// <summary>Unit selector for <see cref="MeasurableProperty.Inertia"/>. Ignored when inertia is not
+    /// requested. The unit of the returned moments is an ARGUMENT of the kernel call, not a constant.</summary>
+    public InertiaUnits InertiaUnits { get; init; } = InertiaUnits.MmKg;
 }
 
 public sealed record ResolveSelectionCommand
@@ -2244,10 +2253,102 @@ public sealed record ExportStepCommand
     public required long ExpectedRevision { get; init; }
 }
 
+/// <summary>Save a part/body to STL through the documented additional-format route.</summary>
+/// <remarks>DOC: <c>ksdocument3d_saveastoadditionformat.html</c> — «Сохранить модель в файле формата
+/// SAT, XT, STEP, IGES, VRML, STL»; the format parameters come from
+/// <c>ksDocument3D::AdditionFormatParam</c> (<c>ksadditionformatparam.html</c>). The tessellation accuracy
+/// is <c>length</c> («максимально допустимое расстояние между соседними точками на расстоянии шага») and
+/// <c>angle</c> (<c>ksadditionformatparam_length.html</c>, <c>ksadditionformatparam_angle.html</c>);
+/// binary/text is <c>formatBinary</c> (<c>ksadditionformatparam_formatbinary.html</c>).
+/// History: docs/decisions/geometry.md#stl</remarks>
+public sealed record ExportStlCommand
+{
+    public required string DocumentId { get; init; }
+
+    /// <summary>Full destination path; judged by the Host path policy before any COM call.</summary>
+    public required string TargetPath { get; init; }
+
+    /// <summary>Binary (true) or text (false) STL — <c>IAdditionFormatParam.formatBinary</c>.</summary>
+    public required bool Binary { get; init; }
+
+    /// <summary>Maximum distance between adjacent tessellation points, mm — <c>IAdditionFormatParam.length</c>.</summary>
+    public required double MaxEdgeLengthMm { get; init; }
+
+    /// <summary>Maximum angular deviation of normals between adjacent points, degrees —
+    /// <c>IAdditionFormatParam.angle</c>.</summary>
+    public required double NormalAngleDeg { get; init; }
+
+    /// <summary>Revision the caller read; a mismatch aborts before the converter runs.</summary>
+    public required long ExpectedRevision { get; init; }
+}
+
+/// <summary>What <c>kompas_export_stl</c> actually produced, measured from the FILE rather than from the
+/// converter's return value.</summary>
+/// <remarks>INVARIANT: <c>SaveAsToAdditionFormat = true</c> is NOT proof of a file; the triangle count is
+/// read back from the bytes on disk and its source is named, so the number cannot be mistaken for a value
+/// the kernel returned. History: docs/decisions/geometry.md#stl</remarks>
+public sealed record ExportStlResultDto
+{
+    public required string TargetPath { get; init; }
+
+    public required long Bytes { get; init; }
+
+    public required long TriangleCount { get; init; }
+
+    /// <summary>How <see cref="TriangleCount"/> was obtained: <c>binary_header</c> (from the 84-byte
+    /// header) or <c>text_facet_lines</c> (counting <c>facet normal</c> lines).</summary>
+    public required string TriangleCountSource { get; init; }
+
+    /// <summary>What the caller asked for.</summary>
+    public required bool BinaryRequested { get; init; }
+
+    /// <summary>What the FILE turned out to be: "binary" or "text". Read from the content, never assumed
+    /// from the request — MEASURED: on the target build the kernel's <c>formatBinary</c> produces the
+    /// OPPOSITE kind from what the help page states, so the flag is verified by the file.</summary>
+    public required string FileKindDetected { get; init; }
+
+    /// <summary>What was actually written to <c>IAdditionFormatParam.formatBinary</c> for the file that
+    /// was kept — read back from the parameter object, not echoed.</summary>
+    public required bool FormatBinaryWritten { get; init; }
+
+    /// <summary>Format name on the wire; always "stl".</summary>
+    public required string Format { get; init; }
+
+    /// <summary>Tessellation accuracy read BACK from the parameter object, mm.</summary>
+    public required double AppliedLengthMm { get; init; }
+
+    /// <summary>Tessellation accuracy read BACK from the parameter object, degrees.</summary>
+    public required double AppliedAngleDeg { get; init; }
+
+    /// <summary>Box of the tessellation read FROM THE FILE, mm. Null when no vertex was readable — a box
+    /// of infinities would not serialise, and a box of zeros would be an invented measurement.</summary>
+    public BoundingBoxDto? TriangleBox { get; init; }
+
+    /// <summary>Box of the body measured through the documented gabarit route, mm. Null when unread.</summary>
+    public BoundingBoxDto? BodyBox { get; init; }
+
+    /// <summary>Largest per-axis difference between <see cref="TriangleBox"/> and <see cref="BodyBox"/>,
+    /// mm; null when the comparison could not be made.</summary>
+    public double? BoxDeviationMm { get; init; }
+
+    /// <summary>Tolerance derived from <see cref="AppliedLengthMm"/> that <see cref="BoxDeviationMm"/> is
+    /// judged against — never picked by eye.</summary>
+    public required double BoxToleranceMm { get; init; }
+
+    public required VerificationLevel ReachedLevel { get; init; }
+
+    /// <summary>Verification block of the envelope, so the level the Host publishes is the level THIS
+    /// call reached rather than a substituted <c>call_returned</c>.</summary>
+    public required VerificationDto Verification { get; init; }
+
+    public required IReadOnlyList<string> UnverifiedAspects { get; init; }
+
+    public required long SourceRevision { get; init; }
+}
+
 public sealed record ImportStepCommand
 {
     public required string ApplicationId { get; init; }
-
     public required string InputPath { get; init; }
 
     public string DesiredKind { get; init; } = "auto";

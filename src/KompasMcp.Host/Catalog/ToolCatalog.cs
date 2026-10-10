@@ -572,16 +572,29 @@ public static class ToolCatalog
                 + "сервер её не угадывает. ЧТО ЧИТАЕТСЯ ЗАВИСИТ ОТ ВИДА ЦЕЛИ, и каждое запрошенное, но "
                 + "НЕ ПРОЧИТАННОЕ свойство называется в unverified_aspects со своей причиной — пустое "
                 + "значение неотличимо от «забыли заполнить». ТЕЛО: читаются bbox, volume, "
-                + "surface_area, centroid; mass — при плотности. ГРАНЬ: читается ТОЛЬКО surface_area; "
-                + "bbox у грани документированным маршрутом API5 НЕ читается (у ksFaceDefinition его "
-                + "нет) — габарит берите у ТЕЛА (kompas_list_bodies); volume и mass к грани не "
+                + "surface_area, centroid; mass — при плотности; inertia — МЦХ тела (осевые, центробежные, "
+                + "плоскостные и главные центральные моменты инерции плюс направления главных осей) "
+                + "документированным маршрутом ksPart.CalcMassInertiaProperties → ksMassInertiaParam. "
+                + "Единицы моментов задаёт АРГУМЕНТ вызова (inertia_units), а не константа кода, и блок "
+                + "inertia их называет вместе с системой координат: одно и то же имя Jx означает разные "
+                + "величины в центральной и главной центральной системах. Если интерфейс МЦХ не вернулся "
+                + "(у тела нет МЦХ на этой геометрии), запрос inertia даёт отказ INERTIA_NOT_AVAILABLE, а "
+                + "не ноль. ГРАНЬ: читается ТОЛЬКО surface_area; bbox у грани документированным "
+                + "маршрутом API5 НЕ читается (у ksFaceDefinition его нет) — габарит берите у ТЕЛА "
+                + "(kompas_list_bodies); volume, mass и inertia к грани не "
                 + "применимы. РЕБРО: ни одно из запрошенных свойств не читается, и каждое названо "
                 + "отдельно. Запрос bbox у грани БЕЗ surface_area обрабатывается той же ветвью грани, "
                 + "а не уходит в «не измеряется» целиком.",
                 Sch.Props(
                     ("target_ref", Sch.Ref("#/$defs/reference")),
-                    ("properties", Sch.Arr(Sch.Enum("Свойство", "bbox", "volume", "surface_area", "mass", "centroid"), "Запрашиваемые свойства.", 1, 5)),
-                    ("density_kg_per_m3", Sch.Nullable(Sch.Positive("Плотность материала", "кг/м³")))),
+                    ("properties", Sch.Arr(Sch.Enum("Свойство", "bbox", "volume", "surface_area", "mass", "centroid", "inertia"), "Запрашиваемые свойства.", 1, 6)),
+                    ("density_kg_per_m3", Sch.Nullable(Sch.Positive("Плотность материала", "кг/м³"))),
+                    ("inertia_units", Sch.Nullable(Sch.Enum(
+                        "Единицы моментов инерции (только при запрошенном inertia): mm_kg — длина в мм, "
+                        + "масса в кг (по умолчанию); m_kg — длина в м, масса в кг. Единица — АРГУМЕНТ "
+                        + "вызова: значение момента с m_kg меньше в 1e6 раз (квадрат отношения длин), и "
+                        + "блок inertia называет применённую единицу в поле units.",
+                        "mm_kg", "m_kg")))),
                 WorkerCommands.Measure,
                 requiresDocument: false,
                 requiresOperationId: false),
@@ -2165,6 +2178,39 @@ public static class ToolCatalog
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
                     ("output_path", Sch.Ref("#/$defs/output_path"))),
                 WorkerCommands.ExportStep,
+                requiresDocument: true,
+                requiresRevision: true),
+
+            Mutation("kompas_export_stl", "Экспорт STL",
+                "Сохранение модели в файл STL документированным маршрутом "
+                + "ksDocument3D.SaveAsToAdditionFormat с параметрами IAdditionFormatParam "
+                + "(format_STL=6). Точность триангуляции задаётся явно: max_edge_length_mm — "
+                + "«максимально допустимое расстояние между соседними точками», normal_angle_deg — "
+                + "«максимально допустимое угловое отклонение нормалей»; двоичный или текстовый файл "
+                + "задаётся полем binary (IAdditionFormatParam.formatBinary, «используется для XT, X_B, "
+                + "STL»). Возврат конвертера true НЕ считается доказательством файла: сервер читает "
+                + "файл с диска, считает треугольники ИЗ ФАЙЛА (для двоичного — из заголовка, для "
+                + "текстового — по строкам facet normal), называет способ счёта (triangle_count_source) "
+                + "и сверяет габарит триангуляции с габаритом тела в пределах шага триангуляции. "
+                + "Уровень: structure_checked — файл и число треугольников; geometry_checked — габарит "
+                + "триангуляции совпал с габаритом тела. Путь проверяется политикой корней ДО COM; "
+                + "формат STL вне D3FormatConvType — FORMAT_UNAVAILABLE; отказ конвертера или пустой "
+                + "файл — EXPORT_FAILED. Документ — деталь; сборка и чертёж дают WRONG_DOCUMENT_KIND. "
+                + "3MF и другие форматы не публикуются: документированного маршрута для них нет.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("target_path", Sch.Ref("#/$defs/output_path")),
+                    ("binary", Sch.Bool(
+                        "Двоичный (true) или текстовый (false) STL. Двоичный — по умолчанию; для "
+                        + "текстового точный размер файла и число треугольников зависят от "
+                        + "форматирования, поэтому сверяется число треугольников, а не размер.", true)),
+                    ("max_edge_length_mm", Sch.Positive(
+                        "Максимально допустимое расстояние между соседними точками триангуляции",
+                        "мм", "Из него же выводится допуск сверки габарита триангуляции с габаритом тела.")),
+                    ("normal_angle_deg", Sch.Positive(
+                        "Максимально допустимое угловое отклонение нормалей в соседних точках", "градусы"))),
+                WorkerCommands.ExportStl,
                 requiresDocument: true,
                 requiresRevision: true),
 

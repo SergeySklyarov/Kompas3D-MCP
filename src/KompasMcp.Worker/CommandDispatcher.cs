@@ -205,6 +205,8 @@ public sealed class CommandDispatcher
         WorkerCommands.Ping => 2_000,
         WorkerCommands.Connect => 180_000,
         WorkerCommands.ExportStep or WorkerCommands.ImportStep => 300_000,
+        // Tessellates the model and writes the file; the file is then read back in full.
+        WorkerCommands.ExportStl => 300_000,
         // Renders and (in file mode) writes a file; MEASURED in seconds.
         WorkerCommands.ExportImage => 240_000,
         // API7 route (bridge + TransferInterface + RebuildModel): longer than a pure API5 mutation.
@@ -315,6 +317,7 @@ public sealed class CommandDispatcher
             WorkerCommands.DeleteFeature => _sta.Run(() => DeleteFeature(request), "feat.delete", cancellationToken),
             WorkerCommands.Rebuild => _sta.Run(() => Rebuild(request), "doc.rebuild", cancellationToken),
             WorkerCommands.ExportStep => _sta.Run(() => ExportStep(request), "export.step", cancellationToken),
+            WorkerCommands.ExportStl => _sta.Run(() => ExportStl(request), "export.stl", cancellationToken),
             WorkerCommands.ImportStep => _sta.Run(() => ImportStep(request), "import.step", cancellationToken),
             WorkerCommands.ExportImage => _sta.Run(() => ExportImage(request), "export.image", cancellationToken),
             WorkerCommands.UnitProbe => _sta.Run(() => UnitProbe(request), "probe.units", cancellationToken),
@@ -969,6 +972,16 @@ public sealed class CommandDispatcher
         var command = Argument<ExportImageCommand>(request);
         var document = _session.RequireDocument(command.DocumentId);
         return Tagged(document.Id, document.Revision, _session.ExportImage(command));
+    }
+
+    private object? ExportStl(IpcFrame request)
+    {
+        // Tagged, not TaggedAfter: STL writes a FILE, not the model. The revision is checked inside the
+        // adapter (REVISION_CONFLICT before the converter runs) and the model revision does not move —
+        // exactly like kompas_export_step. History: docs/decisions/geometry.md#stl
+        var command = Argument<ExportStlCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return Tagged(document.Id, document.Revision, _session.ExportStl(command));
     }
 
     // DRW (block drawings): the three mutating tools go through the common mutation point so the

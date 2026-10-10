@@ -242,7 +242,33 @@
     "scratch/acceptance-b3-targeting.log",
     "scratch/b3-area-extra3.log"
    ],
-   "log_refs_dropped_note": "журналы разовых прогонов не были файлами группы; те же строки (SM-15/SM-16/SM-17) проверяются строками B3.*/B3L.*/B3M.* групп b3/b3l/b3m/b3c, ссылки на которые у этих строк уже есть."
+   "log_refs_dropped_note": "журналы разовых прогонов не были файлами группы; те же строки (SM-15/SM-16/SM-17) проверяются строками B3.*/B3L.*/B3M.* групп b3/b3l/b3m/b3c, ссылки на которые у этих строк уже есть.",
+   "drw_regression_fix": {
+    "date": "2026-10-10",
+    "commit": "6f66d56",
+    "reason": "Регрессия e578b47 (CLIENT_BUGS_20261010, часть D) исправлена нарядом DRW_REGRESSION_FIX: проба числа признаков в TaggedAfter больше не бросает на документе без дерева признаков. Группа --drawing-only перепрогнана на Release-сборке, 79 строк, 0 FAIL.",
+    "groups": [
+     "drawing"
+    ],
+    "old_to_new": {
+     "scratch/drw-runs/20261006-rework3/drawing-acceptance.json": "docs/acceptance/evidence/20261010-drawing-6f66d56/drawing-acceptance.json"
+    },
+    "rebound": [
+     "DRW-01.views.create_standard",
+     "DRW-02.views.list",
+     "DRW-03.dimension.add",
+     "DRW-03.dimension.add.diametral",
+     "DRW-03.dimension.add.linear",
+     "DRW-03.dimension.add.radial",
+     "DRW-04.title_block.set",
+     "DRW-06.technical_demand",
+     "dep.drawing.idempotency",
+     "dep.drawing.revisions",
+     "dep.drawing.source_file",
+     "dep.drawing.view_address"
+    ]
+   },
+   "not_rebound_note": "УСТАРЕЛО с 10.10.2026 (наряд DRW_REGRESSION_FIX): перечисленные строки ПЕРЕПРИВЯЗАНЫ к docs/acceptance/evidence/20261010-drawing-6f66d56/drawing-acceptance.json; список not_rebound оставлен как история находки EVIDENCE_REBUILD, а не как текущее состояние."
   }
  },
  "rows": [
@@ -7097,7 +7123,7 @@
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
-    "scratch/drw-runs/20261006-rework3/drawing-acceptance.json"
+    "docs/acceptance/evidence/20261010-drawing-6f66d56/drawing-acceptance.json"
    ],
    "limitations": [
     "Живой прогон НЕ выполнялся: код собран, но группа DRW в scripts/mcp-smoke.py ещё не написана. Уровень строки mcp_implemented — маршрут написан, подтверждения приёмкой нет.",
@@ -7175,7 +7201,7 @@
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
-    "scratch/drw-runs/20261006-rework3/drawing-acceptance.json"
+    "docs/acceptance/evidence/20261010-drawing-6f66d56/drawing-acceptance.json"
    ],
    "limitations": [
     "Живой прогон НЕ выполнялся: код собран, но группа DRW в scripts/mcp-smoke.py ещё не написана. Уровень строки mcp_implemented — маршрут написан, подтверждения приёмкой нет.",
@@ -7245,7 +7271,7 @@
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
-    "scratch/drw-runs/20261006-rework3/drawing-acceptance.json"
+    "docs/acceptance/evidence/20261010-drawing-6f66d56/drawing-acceptance.json"
    ],
    "limitations": [
     "АССОЦИАТИВНОСТЬ РАЗМЕРА К ГЕОМЕТРИИ ВИДА НЕ ПОДТВЕРЖДЕНА: маршрут BaseObject документирован, но получения опорного объекта ИЗ вида живьём не измерено. Размеры ставятся ПО ТОЧКАМ в координатах вида; изменение геометрии может не перетащить размер.",
@@ -7328,7 +7354,7 @@
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
-    "scratch/drw-runs/20261006-rework3/drawing-acceptance.json"
+    "docs/acceptance/evidence/20261010-drawing-6f66d56/drawing-acceptance.json"
    ],
    "limitations": [
     "Живой прогон НЕ выполнялся: код собран, но группа DRW в scripts/mcp-smoke.py ещё не написана. Уровень строки mcp_implemented — маршрут написан, подтверждения приёмкой нет.",
@@ -7535,7 +7561,7 @@
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
-    "scratch/drw-runs/20261006-rework3/drawing-acceptance.json"
+    "docs/acceptance/evidence/20261010-drawing-6f66d56/drawing-acceptance.json"
    ],
    "limitations": [
     "Зависимость блока чертежей; живого прогона нет — действия остаются not_started.",
@@ -7593,7 +7619,7 @@
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
-    "scratch/drw-runs/20261006-rework3/drawing-acceptance.json"
+    "docs/acceptance/evidence/20261010-drawing-6f66d56/drawing-acceptance.json"
    ],
    "limitations": [
     "Зависимость блока чертежей; живого прогона нет — действия остаются not_started.",
@@ -7654,7 +7680,7 @@
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
-    "scratch/drw-runs/20261006-rework3/drawing-acceptance.json"
+    "docs/acceptance/evidence/20261010-drawing-6f66d56/drawing-acceptance.json"
    ],
    "limitations": [
     "Зависимость блока чертежей; живого прогона нет — действия остаются not_started.",
@@ -7715,7 +7741,7 @@
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
-    "scratch/drw-runs/20261006-rework3/drawing-acceptance.json"
+    "docs/acceptance/evidence/20261010-drawing-6f66d56/drawing-acceptance.json"
    ],
    "limitations": [
     "Зависимость блока чертежей; живого прогона нет — действия остаются not_started.",
@@ -7825,7 +7851,7 @@
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
-    "scratch/drw-runs/20261006-rework3/drawing-acceptance.json"
+    "docs/acceptance/evidence/20261010-drawing-6f66d56/drawing-acceptance.json"
    ],
    "limitations": [
     "Живой прогон НЕ выполнялся: код собран, но группа DRW в scripts/mcp-smoke.py ещё не написана. Уровень строки mcp_implemented — маршрут написан, подтверждения приёмкой нет.",
@@ -7901,7 +7927,7 @@
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
-    "scratch/drw-runs/20261006-rework3/drawing-acceptance.json"
+    "docs/acceptance/evidence/20261010-drawing-6f66d56/drawing-acceptance.json"
    ],
    "limitations": [
     "Живой прогон подтвердил перечитывание номинала и сверку с эталоном тестовой геометрии с допуском 0.01 мм (DRW-03.dimension.add.create.linear).",
@@ -7979,7 +8005,7 @@
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
-    "scratch/drw-runs/20261006-rework3/drawing-acceptance.json"
+    "docs/acceptance/evidence/20261010-drawing-6f66d56/drawing-acceptance.json"
    ],
    "limitations": [
     "Живой прогон подтвердил перечитывание номинала и сверку с эталоном тестовой геометрии с допуском 0.01 мм (DRW-03.dimension.add.create.radial).",
@@ -8057,7 +8083,7 @@
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
-    "scratch/drw-runs/20261006-rework3/drawing-acceptance.json"
+    "docs/acceptance/evidence/20261010-drawing-6f66d56/drawing-acceptance.json"
    ],
    "limitations": [
     "Живой прогон подтвердил перечитывание номинала и сверку с эталоном тестовой геометрии с допуском 0.01 мм (DRW-03.dimension.add.create.diametral).",

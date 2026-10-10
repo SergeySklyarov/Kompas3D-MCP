@@ -984,3 +984,31 @@ MANIA.19, где второе перестроение вернуло 132256.500
 Ссылки этих 12 строк оставлены прежними (на удалённый файл) - так они ВИДНЫ находкой, а не
 выглядят закрытыми. Решение о правке кода продукта - за заказчиком: код продукта этим нарядом не
 меняется (`EVIDENCE_REBUILD_DEVELOPER_PROMPT.md` §3).
+
+### Регрессия исправлена и 12 строк перепривязаны (наряд `DRW_REGRESSION_FIX`, 10.10.2026)
+
+**Что исправлено.** Проба числа признаков (`Api5Session.TryCountFeatures`) проверяет ВИД документа ДО
+`PartNow()`: у детали и сборки дерево признаков модели есть, у чертежа и фрагмента его нет ПО
+ПОСТРОЕНИЮ, поэтому для них проба отвечает `null`, не бросая. Правило вида вынесено в чистую
+функцию `ModelFeatureTree` (Domain) и покрыто модульными тестами `ModelFeatureTreeTests`; вызов в
+`CommandDispatcher.TaggedAfter` дополнительно обёрнут так, что не бросает ни при каком виде документа
+(INVARIANT: вспомогательное чтение для ответа не отменяет мутацию). Решение и запись -
+`docs/decisions/contracts.md#feature-left-in-tree`.
+
+**Прогон.** Release-сборка коммита `6f66d56`, дерево чистое, группа запускалась по одной
+(`scripts/mcp-smoke.py --drawing-only --report docs/acceptance/evidence/20261010-drawing-6f66d56/…`):
+
+| Новый путь | Группа | Строк | Итог |
+|---|---|---|---|
+| `docs/acceptance/evidence/20261010-drawing-6f66d56/drawing-acceptance.json` | `drawing` | 79 | PASS 79 |
+
+**Перепривязка.** 12 строк матрицы (`DRW-01.views.create_standard`, `DRW-02.views.list`,
+`DRW-03.dimension.add` и три её вида, `DRW-04.title_block.set`, `DRW-06.technical_demand`,
+`dep.drawing.source_file`, `dep.drawing.view_address`, `dep.drawing.revisions`,
+`dep.drawing.idempotency`) перепривязаны со старого пути `scratch/drw-runs/20261006-rework3/…` на
+новый; у каждой их собственные строки прибора PASS. `meta.evidence_rebuilt.drw_regression_fix`
+несёт дату, коммит, причину и таблицу `old_to_new`; список `not_rebound` оставлен как история
+находки с датированной пометой об устаревании.
+
+**Проверки.** `python scripts/emit-coverage-matrix.py` - целостность OK (было 12 нарушений);
+`python scripts/check-evidence-links.py` - 0 (все ссылки разрешаются).

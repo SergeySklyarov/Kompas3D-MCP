@@ -64,6 +64,7 @@ public sealed class CommandDispatcher
         WorkerCommands.UpdatePlane,
         WorkerCommands.EditSketchEntity,
         WorkerCommands.CreateSketchConstraint,
+        WorkerCommands.CreateSketchDimension,
         WorkerCommands.DeleteSketchConstraint,
         WorkerCommands.InsertComponent,
         WorkerCommands.SetComponentPlacement,
@@ -227,7 +228,7 @@ public sealed class CommandDispatcher
         // The API7 route plus an edit session (BeginEdit/EndEdit) and a re-read of the object's
         // constraint list inside it; one COM call per object on enumeration.
         WorkerCommands.CreateSketchConstraint or WorkerCommands.ListSketchConstraints
-            or WorkerCommands.DeleteSketchConstraint => 240_000,
+            or WorkerCommands.DeleteSketchConstraint or WorkerCommands.CreateSketchDimension => 240_000,
         // Reads a file and rebuilds the document; enumeration makes one COM call per component.
         WorkerCommands.InsertComponent or WorkerCommands.ReplaceComponent => 240_000,
         WorkerCommands.ListComponents or WorkerCommands.SetComponentPlacement
@@ -333,6 +334,7 @@ public sealed class CommandDispatcher
             WorkerCommands.ListSketchEntities => _sta.Run(() => ListSketchEntities(request), "sketch.entities", cancellationToken),
             WorkerCommands.EditSketchEntity => _sta.Run(() => EditSketchEntity(request), "sketch.entity_edit", cancellationToken),
             WorkerCommands.CreateSketchConstraint => _sta.Run(() => CreateSketchConstraint(request), "sketch.constraint.create", cancellationToken),
+            WorkerCommands.CreateSketchDimension => _sta.Run(() => CreateSketchDimension(request), "sketch.dimension.create", cancellationToken),
             WorkerCommands.ListSketchConstraints => _sta.Run(() => ListSketchConstraints(request), "sketch.constraint.list", cancellationToken),
             WorkerCommands.DeleteSketchConstraint => _sta.Run(() => DeleteSketchConstraint(request), "sketch.constraint.delete", cancellationToken),
             WorkerCommands.ListComponents => _sta.Run(() => ListComponents(request), "asm.list_components", cancellationToken),
@@ -1290,6 +1292,16 @@ public sealed class CommandDispatcher
         var document = _session.DocumentForReference(command.SketchRef);
         GuardRevision(document, command.ExpectedRevision);
         return TaggedAfter(document.Id, () => _session.CreateSketchConstraint(command), document);
+    }
+
+    /// <summary>Creates a driving linear dimension on a segment. A dimension is an edit of the model,
+    /// so the revision is bumped.</summary>
+    private object? CreateSketchDimension(IpcFrame request)
+    {
+        var command = Argument<CreateSketchDimensionCommand>(request);
+        var document = _session.DocumentForReference(command.SketchRef);
+        GuardRevision(document, command.ExpectedRevision);
+        return TaggedAfter(document.Id, () => _session.CreateSketchDimension(command), document);
     }
 
     /// <summary>Reads the constraints of a sketch's objects. Bypasses the mutation journal: it changes

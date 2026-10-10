@@ -138,6 +138,22 @@ public static class WorkerCommands
     /// History: docs/decisions/contracts.md#sketch-status-route</remarks>
     public const string SketchStatus = "sketch.status";
 
+    /// <summary>Writes ONE parametritic constraint on an object of an existing sketch (block G6).
+    /// </summary> <remarks>DOC: the documented API7 route —
+    /// <c>IDrawingObject1::NewConstraint()</c> (<c>idrawingobject1_newconstraint.html</c>) →
+    /// <c>IParametriticConstraint</c> → <c>Create()</c> (<c>iparametriticconstraint_create.html</c>).
+    /// MEASURED: the object is taken from the sketch's own drawing container, and its <c>Constraints</c>
+    /// list is readable ONLY inside the edit session — outside it the same object answers <c>null</c>
+    /// without an exception, so every confirmation happens inside the session.
+    /// History: docs/decisions/contracts.md#sketch-constraints</remarks>
+    public const string CreateSketchConstraint = "sketch.constraint.create";
+
+    /// <summary>Reads the constraints of the sketch's objects (block G6).</summary>
+    public const string ListSketchConstraints = "sketch.constraint.list";
+
+    /// <summary>Deletes one constraint of an object or all of them (block G6).</summary>
+    public const string DeleteSketchConstraint = "sketch.constraint.delete";
+
     /// <summary>Reading the parameters of an existing feature (docs/05 §7 kompas_get_feature).</summary>
     public const string GetFeature = "feat.get";
     /// <summary>Editing the parameters of an existing feature in place (docs/05 §4.3, §7).</summary>

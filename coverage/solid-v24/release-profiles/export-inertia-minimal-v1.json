@@ -1,0 +1,276 @@
+{
+ "meta": {
+  "artifact": "coverage/solid-v24/release-profiles/export-inertia-minimal-v1.json",
+  "profile_id": "export-inertia-minimal-v1",
+  "title": "Экспорт STL и моменты инерции тела v24",
+  "revision": "1.0",
+  "created_utc": "2026-10-10T18:00:00Z",
+  "decision": "Наряд OMEGA_G5_G7_STL_INERTIA_DEVELOPER_PROMPT.md от 10.10.2026: G5 (экспорт STL) и G7 (моменты инерции) входят в ОДИН выпуск 0.7.0; основание - отчёт docs/research/OMEGA_GAPS_RESEARCH_20261008.md разделы G5 и G7, план coverage/solid-v24/implementation-plan.md, шаг D, очередь #4",
+  "plan": "coverage/solid-v24/implementation-plan.md, шаг D, очередь #4 (G5+G7)",
+  "mandate": "OMEGA_G5_G7_STL_INERTIA_DEVELOPER_PROMPT.md",
+  "catalog": "coverage/solid-v24/catalog.json",
+  "matrix": "coverage/solid-v24/matrix.json",
+  "target_environment": "КОМПАС-3D v24.0.0.2799 x64",
+  "naming": "Знаменатели принятых профилей этим профилем НЕ трогаются: блок G5+G7 получает свой знаменатель",
+  "must_not_be_confused_with": [
+   "профиль mechanical-core-v1 (базовые тела и операции)",
+   "профиль variables-material-minimal-v1 (плотность материала как МЦХ-величина r)",
+   "экспорт STEP (существующий kompas_export_step): другой формат и другой уровень проверки",
+   "экспорт IGES/VRML/JT/SAT через тот же вызов SaveAsToAdditionFormat: другие режимы, в профиль не выбранные"
+  ],
+  "queue": {
+   "G5+G7": "G5 - сохранение модели в STL с заданной точностью триангуляции и подтверждением из файла; G7 - осевые, центробежные, плоскостные и главные центральные моменты инерции тела плюс направления главных осей"
+  },
+  "queue_rules": "Внутри очереди разрешена обоснованная перестановка по измеренным зависимостям; при блокере продолжаются независимые режимы. Очередь не даёт права пропустить обязательный режим.",
+  "rules": [
+   "Строка закрывается только по closed_definition.mode_closed.",
+   "Числа — только измеренные; непрочитанное поле называется непрочитанным.",
+   "Возврат конвертера SaveAsToAdditionFormat = true НЕ считается доказательством файла: доказательство — файл на диске, число треугольников ИЗ ФАЙЛА и сверка габарита.",
+   "Допуск сверки габарита триангуляции выводится из max_edge_length_mm, а не берётся на глаз.",
+   "Непрочитанный момент — null с причиной, а не ноль; интерфейс МЦХ не вернулся — отказ INERTIA_NOT_AVAILABLE.",
+   "Единицы и система моментов называются в ответе (units, system) и следуют за аргументом вызова.",
+   "Чтение МЦХ модель не меняет: ревизия, число признаков и объём после kompas_measure те же.",
+   "Знаменатели принятых профилей не пересчитываются.",
+   "3MF и любой формат, кроме STL, в объём не входят: документированного маршрута в справке v24 нет (наряд §1, §8)."
+  ],
+  "revision_history": [
+   {
+    "revision": "1.0",
+    "date": "10.10.2026",
+    "change": "профиль заведён: 5 режимов EI-01…EI-05 (очередь G5+G7) и 5 общих зависимостей; знаменатели прочих профилей не тронуты"
+   }
+  ]
+ },
+ "priority_vocabulary": {
+  "practical_required": "точные режимы блока G5+G7 (§2 наряда)",
+  "next": "следующий согласованный слой (ограничения эскиза и управляющие размеры, G6)",
+  "later": "долгосрочное полное покрытие",
+  "dependency_of": "ссылки на режимы, которым нужно общее средство"
+ },
+ "action_vocabulary": [
+  "discover",
+  "create",
+  "read",
+  "edit",
+  "rebuild",
+  "save_reopen",
+  "suppress_restore",
+  "delete_dependencies",
+  "negative_tests",
+  "geometry_validation"
+ ],
+ "closed_definition": {
+  "mode_closed": "все применимые действия строки матрицы имеют статус verified (или not_applicable с обоснованием предметной неприменимости) и режим прошёл цикл плана §5.1",
+  "not_applicable_allowed": "только по предметной неприменимости, не по отсутствию кода",
+  "success_is_not_proof": "успешный вызов не доказывает результат: у STL подтверждение берётся ЧТЕНИЕМ файла с диска (существование, размер, число треугольников, габарит триангуляции), а у моментов — сверкой с АНАЛИТИЧЕСКИ известным эталоном цилиндра, а не с тем, что вернул вызов"
+ },
+ "tolerance_classes": {
+  "note": "допуски размерно-раздельны и зафиксированы ДО прогона; допуск не подбирается после неудачи",
+  "stl_box_mm": {
+   "derivation": "допуск габарита триангуляции = max_edge_length_mm: хорда между соседними точками триангуляции отклоняется от истинной поверхности не более чем на шаг, поэтому габарит триангуляции может отставать от габарита тела не более чем на этот шаг",
+   "note": "габарит триангуляции сверяется с габаритом ТЕЛА (ksPart.GetGabarit(full=false), режим «только тела»); расхождение называется числом"
+  },
+  "inertia_relative": {
+   "relative": 0.0001,
+   "note": "момент инерции — производная величина (масса × длина²), собранная из измеренного объёма и записанной плотности; эталон аналитический (π), поэтому класс 1e-4 по относительной величине"
+  },
+  "inertia_zero_relative": {
+   "relative": 1e-06,
+   "note": "центробежные моменты симметричного цилиндра равны нулю; полоса «ноль» задана долей от наибольшего осевого момента (Jz), а не абсолютным нулём"
+  },
+  "inertia_axis_orthonormal_relative": {
+   "relative": 1e-06,
+   "note": "направления главных центральных осей — ортонормированная тройка: единичная длина и взаимная ортогональность в этом допуске"
+  },
+  "units_ratio_relative": {
+   "relative": 1e-06,
+   "note": "смена единицы длины мм→м делит момент на квадрат отношения длин (1000² = 1e6); сверяется отношение mm|kg / m|kg"
+  },
+  "counts": "число инструментов, число треугольников (двоичный против текстового) и число признаков — точное совпадение либо названное расхождение"
+ },
+ "modes": [
+  {
+   "ref": "EI-01.stl.export",
+   "family": "G5",
+   "queue": "G5+G7",
+   "title": "Сохранить тело/деталь в STL (двоичный и текстовый)",
+   "priority": "practical_required",
+   "current_level": "mcp_verified",
+   "gap": "Маршрут ksDocument3D.AdditionFormatParam → ksAdditionFormatParam (format_STL=6, formatBinary) → ksDocument3D.SaveAsToAdditionFormat документирован и реализован инструментом kompas_export_stl; подтверждение — живой прогон группы --export-inertia-only, строки EI.01…EI.03, EI.11.",
+   "depends_on": [
+    "dep.ei.path_policy",
+    "dep.ei.triangle_count_from_file",
+    "dep.ei.idempotency"
+   ]
+  },
+  {
+   "ref": "EI-02.stl.tessellation",
+   "family": "G5",
+   "queue": "G5+G7",
+   "title": "Точность триангуляции: length и angle применяются к параметрам записи, габарит триангуляции сверяется с bbox тела",
+   "priority": "practical_required",
+   "current_level": "mcp_verified",
+   "gap": "Свойства IAdditionFormatParam.length и .angle («максимально допустимое расстояние между соседними точками», «максимально допустимое угловое отклонение нормалей») записываются и подтверждаются ОБРАТНЫМ ЧТЕНИЕМ; габарит триангуляции сверяется с габаритом тела в пределах шага (измерено: расхождение 0). СНЯТО ИЗ ПРОВЕРКИ (измерено 10.10.2026): требование «меньше шаг — больше треугольников» НЕ подтверждено — число треугольников STL не зависит ни от length, ни от angle, ни от maxTeselationCellCount (0.0001..10 мм и ячейки 1..10000 дают одни и те же 120 треугольников на цилиндре r=20 h=50). Справка приписывает length/angle точность приближения, но формату STL её не приписывает, поэтому это был неподтверждённый вывод, а не документированное свойство; по AGENTS.md ошибочное требование удалено из проверки, а фактический ответ API назван строкой EI.04b. Подтверждение — живой прогон группы --export-inertia-only, строки EI.04, EI.04b, EI.05, EI.10.",
+   "depends_on": [
+    "dep.ei.path_policy",
+    "dep.ei.triangle_count_from_file"
+   ]
+  },
+  {
+   "ref": "EI-03.inertia.central",
+   "family": "G7",
+   "queue": "G5+G7",
+   "title": "Осевые, центробежные и плоскостные моменты инерции в центральной системе",
+   "priority": "practical_required",
+   "current_level": "mcp_verified",
+   "gap": "Свойства ksMassInertiaParam jx/jy/jz, jxjy/jxz/jyz, jx0z/jy0z/jx0y документированы и читаются тем же интерфейсом, который продукт уже вызывает; подтверждение — живой прогон группы --export-inertia-only, строки EI.06, EI.08, EI.12, EI.13.",
+   "depends_on": [
+    "dep.ei.units_system",
+    "dep.ei.read_only_measure"
+   ]
+  },
+  {
+   "ref": "EI-04.inertia.principal",
+   "family": "G7",
+   "queue": "G5+G7",
+   "title": "Главные центральные моменты и направления главных осей",
+   "priority": "practical_required",
+   "current_level": "mcp_verified",
+   "gap": "Свойства jx0/jy0/jz0 и методы GetAxisX/Y/Z документированы («применимо только для трехмерных объектов»); подтверждение — живой прогон группы --export-inertia-only, строка EI.07.",
+   "depends_on": [
+    "dep.ei.units_system",
+    "dep.ei.read_only_measure"
+   ]
+  },
+  {
+   "ref": "EI-05.inertia.units",
+   "family": "G7",
+   "queue": "G5+G7",
+   "title": "Единицы и система моментов названы и следуют за аргументом вызова",
+   "priority": "practical_required",
+   "current_level": "mcp_verified",
+   "gap": "Размерность длины и массы задаётся аргументом bitVector в [ST_MIX_MM..ST_MIX_KG] и публикуется полем units; система (central/principal) — обязательное поле; подтверждение — живой прогон группы --export-inertia-only, строка EI.09.",
+   "depends_on": [
+    "dep.ei.units_system",
+    "dep.ei.read_only_measure"
+   ]
+  }
+ ],
+ "common_dependencies": [
+  {
+   "id": "dep.ei.path_policy",
+   "title": "Путь проверяется политикой корней ДО обращения к КОМПАС",
+   "priority": "dependency_of",
+   "catalog_refs": [
+    "G5",
+    "G7"
+   ],
+   "required_actions": [
+    "discover",
+    "negative_tests"
+   ],
+   "acceptance": [
+    "путь вне разрешённых корней даёт PATH_NOT_ALLOWED без обращения к КОМПАС (отказ на уровне Host по имени поля target_path)",
+    "формат STL вне D3FormatConvType и неверные length/angle отвергаются до COM"
+   ],
+   "required_of": [
+    "EI-01.stl.export",
+    "EI-02.stl.tessellation"
+   ]
+  },
+  {
+   "id": "dep.ei.triangle_count_from_file",
+   "title": "Число треугольников читается ИЗ ФАЙЛА, а не берётся из ответа ядра",
+   "priority": "dependency_of",
+   "catalog_refs": [
+    "G5"
+   ],
+   "required_actions": [
+    "read",
+    "negative_tests"
+   ],
+   "acceptance": [
+    "для двоичного STL число треугольников читается из заголовка (размер минус 84, делённый на 50), для текстового — подсчётом строк facet normal",
+    "способ чтения назван в ответе полем triangle_count_source; число не выдаётся за значение, полученное от ядра"
+   ],
+   "required_of": [
+    "EI-01.stl.export",
+    "EI-02.stl.tessellation"
+   ]
+  },
+  {
+   "id": "dep.ei.units_system",
+   "title": "Единицы и система моментов названы и совпадают с аргументом вызова",
+   "priority": "dependency_of",
+   "catalog_refs": [
+    "G7"
+   ],
+   "required_actions": [
+    "read",
+    "negative_tests"
+   ],
+   "acceptance": [
+    "units принимает значения mm|kg и m|kg и следует за аргументом вызова; system называет центральную систему, principal — главную центральную",
+    "смена единицы длины мм→м делит момент на 1e6 (квадрат отношения длин), и это измерено, а не предположено"
+   ],
+   "required_of": [
+    "EI-03.inertia.central",
+    "EI-04.inertia.principal",
+    "EI-05.inertia.units"
+   ]
+  },
+  {
+   "id": "dep.ei.read_only_measure",
+   "title": "kompas_measure с inertia — только чтение: модель не меняется",
+   "priority": "dependency_of",
+   "catalog_refs": [
+    "G7"
+   ],
+   "required_actions": [
+    "read",
+    "negative_tests"
+   ],
+   "acceptance": [
+    "kompas_measure не требует operation_id и expected_revision и не меняет ревизию, число признаков и объём тела",
+    "непрочитанное свойство остаётся null с причиной в inertia.notes, а не нулём"
+   ],
+   "required_of": [
+    "EI-03.inertia.central",
+    "EI-04.inertia.principal",
+    "EI-05.inertia.units"
+   ]
+  },
+  {
+   "id": "dep.ei.idempotency",
+   "title": "Идемпотентность и ревизии у экспорта STL",
+   "priority": "dependency_of",
+   "catalog_refs": [
+    "G5"
+   ],
+   "required_actions": [
+    "create",
+    "negative_tests"
+   ],
+   "acceptance": [
+    "повтор с тем же operation_id и теми же аргументами не создаёт файл дважды и возвращает записанный исход",
+    "тот же operation_id с другими аргументами даёт OPERATION_ID_CONFLICT",
+    "устаревшая ревизия даёт REVISION_CONFLICT без частичных эффектов"
+   ],
+   "required_of": [
+    "EI-01.stl.export"
+   ]
+  }
+ ],
+ "scenarios": [],
+ "explicitly_out_of_scope": {
+  "not_a_debt": true,
+  "items": [
+   "3MF и любой другой формат, кроме STL: документированного маршрута в справке v24 нет (наряд §1, §8)",
+   "экспорт IGES/STEP/VRML/JT/SAT через тот же вызов SaveAsToAdditionFormat — другие режимы, в профиль не выбранные",
+   "запись моментов инерции (все свойства МЦХ только для чтения), запись МЦХ в документ, тензор инерции сборки (только деталь/тело)",
+   "расчёт геометрии, триангуляции или тензора на стороне сервера: и то и другое считает КОМПАС",
+   "настройка триангуляции через конфигурационный файл (IAdditionFormatParam.LoadConfigurationFile) — не выбрана",
+   "применимость моментов к телу от булевой операции и к телу после кругового массива измеряется строкой EI.13 и, если ядро их не даёт, остаётся честным отказом, а не долгом"
+  ]
+ }
+}

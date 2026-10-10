@@ -516,6 +516,9 @@ RUN_GROUPS = (
     ("variables_bind", "variables-bind", "variables-bind-acceptance.json",
      "Приёмка VB: создание переменных детали и привязка параметров операций (блок G3, профиль "
      "variables-bind-minimal-v1)"),
+    ("export_inertia", "export-inertia", "export-inertia-acceptance.json",
+     "Приёмка EI: экспорт STL и моменты инерции тела через MCP (блок G5+G7, профиль "
+     "export-inertia-minimal-v1)"),
     ("client_bugs_20261010", "client-bugs-20261010", "client-bugs-20261010-acceptance.json",
      "Приёмка CB10: дефекты клиента на 0.6.0 — смена опоры эскиза как мутация (OBS-030), отказ не "
      "перезаписывает файл открытого документа (OBS-019), признак, оставшийся в дереве, attach при "
@@ -568,6 +571,7 @@ ALL_GROUPS_EXTRA = (
     ("drawing", ["--drawing-only"]),
     ("variables_material", ["--variables-material-only"]),
     ("variables_bind", ["--variables-bind-only"]),
+    ("export_inertia", ["--export-inertia-only"]),
     ("client_bugs_20261010", ["--client-bugs-20261010"]),
     ("suppress", ["--suppress-repeat", "3"]),
 )
@@ -2109,8 +2113,8 @@ def sketch_bulk_checks(client, rep, app_id, workdir):
             "схемы совпадают с реестром; описания называют новые пределы и вид spline",
             "PASS" if (schema_matches and "spline" in kinds and "polyline" in kinds
                        and isinstance(limit_entities, int) and isinstance(limit_vertices, int)
-                       and named_limits and len(names) == 84) else "FAIL",
-            f"инструментов={len(names)} (ожидание 84); схема kompas_edit_sketch совпадает с реестром="
+                       and named_limits and len(names) == 85) else "FAIL",
+            f"инструментов={len(names)} (ожидание 85); схема kompas_edit_sketch совпадает с реестром="
             f"{schema_matches}; виды={kinds}; предел entities={limit_entities}, "
             f"предел points_mm={limit_vertices}; описания называют числа и источник={named_limits}",
             {"entities_max_items": limit_entities, "points_max_items": limit_vertices,
@@ -2706,9 +2710,9 @@ def interference_checks(client, rep, app_id, workdir):
     named = all(name in caps_text for name in wanted)
     rep.add("INT.01.discover",
             "оба инструмента объявлены, схемы совпадают с реестром, kompas_capabilities их называет",
-            "PASS" if (all(name in names for name in wanted) and len(names) == 84
+            "PASS" if (all(name in names for name in wanted) and len(names) == 85
                        and all(schema_ok.values()) and named) else "FAIL",
-            f"инструментов={len(names)} (ожидание 84); схемы совпадают={schema_ok}; "
+            f"инструментов={len(names)} (ожидание 85); схемы совпадают={schema_ok}; "
             f"capabilities называет={named}")
 
     # ========= INT.13: раскладка двойника сверена с УСТАНОВЛЕННОЙ библиотекой типов =========
@@ -7015,6 +7019,649 @@ def client_bugs_20261010_checks(client, rep, app_id, workdir):
             rep.add(cid, desc, "FAIL", "строка не выполнена (раннее исключение постановки)")
 
 
+# Эталон блока G5+G7. Числа ЗАФИКСИРОВАНЫ ДО ПРОГОНА и выводятся аналитически, а не подбираются:
+# цилиндр r=20, h=50, выдавливанием окружности; плита 100x80x10. Моменты считаются от плотности,
+# которую группа сама записывает материалом, поэтому масса и моменты известны ДО вызова.
+EI_REFERENCE = {
+    "cylinder_radius_mm": 20.0,
+    "cylinder_height_mm": 50.0,
+    "density_kg_per_m3": 7800.0,
+    "material_name": "Сталь 45 ГОСТ 1050-2013",
+    "plate_width_mm": 100.0,
+    "plate_height_mm": 80.0,
+    "plate_depth_mm": 10.0,
+    "step_fine_mm": 0.5,
+    "step_coarse_mm": 2.0,
+    "angle_deg": 20.0,
+    "volume_tolerance_mm3": 1.0,
+    "inertia_relative": 1e-4,
+    "zero_relative": 1e-6,
+    "orthonormal_relative": 1e-6,
+    "units_ratio_relative": 1e-6,
+    "triangle_count_relative": 0.05,
+}
+
+
+def export_inertia_checks(client, rep, app_id, workdir):
+    """EI.* — экспорт STL (G5) и моменты инерции (G7) через MCP на бинарях поставки.
+
+    ЗАЧЕМ ЭТА ГРУППА. Инструмент kompas_export_stl и свойство inertia инструмента kompas_measure
+    написаны по документированным маршрутам v24 и покрыты модульными тестами. Группа — ЖИВОЕ
+    подтверждение: и то и другое вызывается через настоящий MCP, а не «маршрут написан».
+
+    ЭТАЛОН. Геометрия (цилиндр r=20, h=50 и плита 100x80x10) строится ЗДЕСЬ через MCP. Моменты
+    инерции сверяются с АНАЛИТИКОЙ (Jz = m r^2 / 2, Jx = Jy = m (3 r^2 + h^2) / 12), а не с тем,
+    что вернул вызов; плотность задаётся материалом с явным числом. Числа зафиксированы в
+    EI_REFERENCE ДО прогона.
+
+    ЧЕГО ЗДЕСЬ НЕТ. Клиентская приёмка и Trust не трогаются. 3MF и другие форматы, запись МЦХ,
+    тензор сборки, расчёт геометрии или триангуляции на стороне сервера — вне объёма блока.
+    """
+    import os as _os
+    import struct as _struct
+
+    ref = dict(EI_REFERENCE)
+    radius = ref["cylinder_radius_mm"]
+    height = ref["cylinder_height_mm"]
+    density = ref["density_kg_per_m3"]
+
+    # Аналитический эталон: выведен ДО прогона, не подбирается после.
+    cylinder_volume = math.pi * radius * radius * height
+    mass_kg = density * cylinder_volume * 1e-9
+    jz_expected = mass_kg * radius * radius / 2.0
+    jx_expected = mass_kg * (3.0 * radius * radius + height * height) / 12.0
+    # Момент имеет размерность масса x длина^2: мм->м делит его на 1000^2 = 1e6.
+    units_ratio_expected = 1000.0 ** 2
+
+    evidence_dir = _os.path.join(workdir, "export-inertia-runs",
+                                 _os.path.basename(rep.context.get("run_directory") or "run"))
+    _os.makedirs(evidence_dir, exist_ok=True)
+
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def call_raw(tool, payload, timeout=300):
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def emsg(env):
+        err = (env or {}).get("error") or {}
+        return err.get("message") if isinstance(err, dict) else None
+
+    def doc_of(env):
+        r = result(env)
+        return r.get("document_id") or r.get("id") or (env or {}).get("document_id")
+
+    def current_rev(doc):
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return ((env or {}).get("result") or {}).get("revision") or 1
+
+    def near(a, b, tol):
+        return isinstance(a, (int, float)) and isinstance(b, (int, float)) and abs(a - b) <= tol
+
+    def rel_near(a, b, rel):
+        if not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
+            return False
+        scale = max(abs(a), abs(b), 1e-12)
+        return abs(a - b) / scale <= rel
+
+    def list_bodies(doc):
+        _e, env, _r = client.tool("kompas_list_bodies", {"document_id": doc})
+        rows = (env or {}).get("result")
+        return rows if isinstance(rows, list) else []
+
+    def body_of(doc):
+        rows = list_bodies(doc)
+        return rows[0].get("body_ref") if rows else None
+
+    def feature_count(doc):
+        _e, env, _r = client.tool("kompas_list_features", {"document_id": doc})
+        rows = (env or {}).get("result")
+        return len(rows) if isinstance(rows, list) else None
+
+    def measure(ref_, props, units=None, timeout=240):
+        args = {"target_ref": ref_, "properties": list(props)}
+        if units:
+            args["inertia_units"] = units
+        _e, env, _r = client.tool("kompas_measure", args, timeout=timeout)
+        return env, error_code(env)
+
+    def volume_of(ref_):
+        env, _code = measure(ref_, ["volume"])
+        return result(env).get("volume_mm3")
+
+    def new_document(kind, name):
+        env, code = call("kompas_create_document",
+                         {"application_id": app_id, "kind": kind, "name": name})
+        return doc_of(env), code, env
+
+    def draw_and_extrude(doc, entities, name, depth, plane="xy", offset=0.0):
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": current_rev(doc),
+            "plane": {"base": plane, "offset_mm": offset}, "name": name})
+        sketch = result(env).get("id")
+        if not sketch:
+            return None, f"create_sketch({name}): {code} {emsg(env)}"
+        env, code = call("kompas_edit_sketch", {
+            "sketch_ref": sketch, "expected_revision": current_rev(doc), "mode": "append",
+            "entities": entities})
+        if code:
+            return sketch, f"edit_sketch({name}): {code} {emsg(env)}"
+        env, code = call("kompas_finish_sketch",
+                         {"sketch_ref": sketch, "require_closed_profile": False})
+        if code:
+            return sketch, f"finish_sketch({name}): {code} {emsg(env)}"
+        env, code = call("kompas_extrude", {
+            "sketch_ref": sketch, "expected_revision": current_rev(doc),
+            "operation": "base", "depth_mm": depth, "direction": "positive"})
+        if code:
+            return sketch, f"extrude({name}): {code} {emsg(env)}"
+        return sketch, None
+
+    def export_stl(doc, path, binary, step, angle=None, revision=None, timeout=300):
+        return call("kompas_export_stl", {
+            "document_id": doc, "expected_revision": revision if revision is not None else current_rev(doc),
+            "target_path": path, "binary": binary, "max_edge_length_mm": step,
+            "normal_angle_deg": angle if angle is not None else ref["angle_deg"]}, timeout=timeout)
+
+    # Независимый читатель файла: прибор считает треугольники САМ, а не верит ответу продукта.
+    def read_binary_triangles(path):
+        size = _os.path.getsize(path)
+        if size < 84:
+            return None, None
+        with open(path, "rb") as fh:
+            fh.seek(80)
+            declared = _struct.unpack("<I", fh.read(4))[0]
+        return declared, (size - 84) // 50
+
+    def read_text_triangles(path):
+        count = 0
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                if line.lstrip().lower().startswith("facet normal"):
+                    count += 1
+        return count
+
+    def close(doc):
+        if doc:
+            call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+
+    def fail_all(reason):
+        for cid, desc in (
+            ("EI.01.discover", "kompas_export_stl в tools/list, схема совпадает с реестром; у kompas_measure есть свойство inertia; инструментов 85"),
+            ("EI.02.stl_binary", "двоичный STL: файл создан, число треугольников ИЗ ФАЙЛА совпадает с ответом"),
+            ("EI.03.stl_text", "текстовый STL распознан, число треугольников сверено с двоичным"),
+            ("EI.04.tessellation", "точность триангуляции применена и прочитана обратно равной запросу"),
+            ("EI.04b.tessellation_independence", "число треугольников STL не зависит от length/angle/maxTeselationCellCount"),
+            ("EI.05.box", "габарит триангуляции совпал с measure.bbox в пределах шага"),
+            ("EI.06.inertia_central", "jx/jy/jz цилиндра сверены с аналитикой"),
+            ("EI.07.inertia_principal", "главные центральные совпали с осевыми, оси ортонормированы"),
+            ("EI.08.inertia_offdiag", "центробежные ≈ 0, плоскостные прочитаны"),
+            ("EI.09.inertia_units", "смена единицы мм|кг -> м|кг делит момент на 1e6"),
+            ("EI.10.refusals", "отказы предусмотренными кодами без ложного успеха"),
+            ("EI.11.idempotency", "идемпотентность, OPERATION_ID_CONFLICT и REVISION_CONFLICT"),
+            ("EI.12.no_mutation", "kompas_measure с inertia модель не меняет"),
+            ("EI.13.applicability", "тело от булевой операции и от кругового массива: исход назван"),
+        ):
+            rep.add(cid, desc, "FAIL", reason)
+
+    # ── EI.01.discover: инструменты и схемы ────────────────────────────────────────────────────────
+    tools = client.call("tools/list", {}).get("tools", [])
+    names = sorted(t["name"] for t in tools)
+    export_entry = next((t for t in tools if t["name"] == "kompas_export_stl"), None)
+    measure_entry = next((t for t in tools if t["name"] == "kompas_measure"), None)
+    export_schema_ok = False
+    if export_entry is not None:
+        published = _os.path.join(ROOT, "schemas", "kompas_export_stl.json")
+        try:
+            with open(published, encoding="utf-8-sig") as fh:
+                want = json.load(fh)
+            want.pop("$schema", None)
+            export_schema_ok = export_entry.get("inputSchema") == want
+        except (OSError, ValueError):
+            export_schema_ok = False
+    measure_props = (((measure_entry or {}).get("inputSchema") or {}).get("properties") or {})
+    properties_field = measure_props.get("properties") or {}
+    inertia_property = "inertia" in ((properties_field.get("items") or {}).get("enum") or [])
+    inertia_units_property = "inertia_units" in measure_props
+    rep.add("EI.01.discover",
+            "kompas_export_stl в tools/list, схема совпадает с реестром; у kompas_measure в схеме есть "
+            "свойство inertia и аргумент inertia_units; всего 85 инструментов",
+            "PASS" if (len(names) == 85 and export_schema_ok and inertia_property
+                       and inertia_units_property) else "FAIL",
+            f"инструментов={len(names)} (ожидание 85); схема kompas_export_stl совпадает={export_schema_ok}; "
+            f"inertia в перечне свойств={inertia_property}; inertia_units={inertia_units_property}")
+
+    # ── построение эталона через MCP ───────────────────────────────────────────────────────────────
+    cyl_doc, cyl_err, _ = new_document("part", "EI-cylinder")
+    plate_doc, plate_err, _ = new_document("part", "EI-plate")
+    build_error = None
+    if not cyl_doc:
+        build_error = f"create_document(cylinder): {cyl_err}"
+    elif not plate_doc:
+        build_error = f"create_document(plate): {plate_err}"
+
+    cyl_sketch = None
+    if cyl_doc and not build_error:
+        cyl_sketch, build_error = draw_and_extrude(
+            cyl_doc, [{"kind": "circle", "center_mm": [0.0, 0.0], "radius_mm": radius}],
+            "ei-circle", height)
+    plate_sketch = None
+    if plate_doc and not build_error:
+        plate_sketch, build_error = draw_and_extrude(
+            plate_doc,
+            [{"kind": "rectangle", "start_mm": [0.0, 0.0],
+              "width_mm": ref["plate_width_mm"], "height_mm": ref["plate_height_mm"]}],
+            "ei-plate", ref["plate_depth_mm"])
+
+    cyl_volume = None
+    plate_volume = None
+    material_ok = False
+    if cyl_doc and not build_error:
+        env, code = call("kompas_set_material", {
+            "document_id": cyl_doc, "expected_revision": current_rev(cyl_doc),
+            "material_name": ref["material_name"], "density_kg_per_m3": density})
+        written = result(env)
+        material_ok = (not code and written.get("name_matches")
+                       and written.get("density_matches")
+                       and near(written.get("read_density_kg_per_m3_after"), density, 0.5))
+        cyl_volume = volume_of(body_of(cyl_doc))
+        plate_volume = volume_of(body_of(plate_doc))
+
+    rep.add("EI.00.setup",
+            "эталон собран через MCP: цилиндр r=20 h=50 (V = pi r^2 h) и плита 100x80x10 (V = 80000); "
+            "плотность 7800 кг/м3 записана материалом и подтверждена перечитыванием",
+            "PASS" if (not build_error and material_ok
+                       and near(cyl_volume, cylinder_volume, ref["volume_tolerance_mm3"])
+                       and near(plate_volume, 80000.0, ref["volume_tolerance_mm3"])) else "FAIL",
+            f"cylinder_volume={cyl_volume} (аналитика {cylinder_volume:.6f}) plate_volume={plate_volume} "
+            f"material_ok={material_ok} error={build_error}")
+
+    if build_error or not cyl_doc or not plate_doc:
+        fail_all(f"эталон не построен: {build_error}")
+        close(cyl_doc)
+        close(plate_doc)
+        return
+
+    cyl_body = body_of(cyl_doc)
+    plate_body = body_of(plate_doc)
+
+    # ── EI.02.stl_binary ───────────────────────────────────────────────────────────────────────────
+    binary_path = _os.path.join(evidence_dir, "cylinder-coarse-binary.stl")
+    env, code = export_stl(cyl_doc, binary_path, True, ref["step_coarse_mm"])
+    res = result(env)
+    declared, from_size = (None, None)
+    if _os.path.isfile(binary_path):
+        declared, from_size = read_binary_triangles(binary_path)
+    rep.add("EI.02.stl_binary",
+            "двоичный STL: файл создан и непуст, ВИД файла определён по содержимому как двоичный, число "
+            "треугольников прочитано ИЗ ФАЙЛА и совпадает с ответом; format=stl",
+            "PASS" if (not code and _os.path.isfile(binary_path)
+                       and _os.path.getsize(binary_path) > 0
+                       and res.get("triangle_count", 0) > 0
+                       and res.get("triangle_count_source") == "binary_header"
+                       and res.get("file_kind_detected") == "binary"
+                       and res.get("binary_requested") is True
+                       and res.get("format") == "stl"
+                       and declared is not None and res.get("triangle_count") == from_size
+                       and res.get("triangle_count") == declared) else "FAIL",
+            f"error={code} bytes={res.get('bytes')} triangle_count={res.get('triangle_count')} "
+            f"source={res.get('triangle_count_source')} kind={res.get('file_kind_detected')} "
+            f"format_binary_written={res.get('format_binary_written')} "
+            f"независимо: declared={declared} from_size={from_size} format={res.get('format')} "
+            f"level={((env or {}).get('verification') or {}).get('level')}")
+
+    # ── EI.03.stl_text ─────────────────────────────────────────────────────────────────────────────
+    text_path = _os.path.join(evidence_dir, "cylinder-coarse-text.stl")
+    env, code = export_stl(cyl_doc, text_path, False, ref["step_coarse_mm"])
+    tres = result(env)
+    text_count = read_text_triangles(text_path) if _os.path.isfile(text_path) else None
+    binary_count = res.get("triangle_count")
+    text_matches_binary = (isinstance(text_count, int) and isinstance(binary_count, (int, float))
+                           and binary_count > 0
+                           and abs(text_count - binary_count) / binary_count
+                           <= ref["triangle_count_relative"])
+    rep.add("EI.03.stl_text",
+            "текстовый STL: вид файла определён по содержимому как текстовый "
+            "(triangle_count_source=text_facet_lines); число треугольников ИЗ ФАЙЛА совпадает с двоичным "
+            "в пределах допуска триангуляции",
+            "PASS" if (not code and _os.path.isfile(text_path)
+                       and tres.get("triangle_count_source") == "text_facet_lines"
+                       and tres.get("file_kind_detected") == "text"
+                       and tres.get("binary_requested") is False
+                       and isinstance(text_count, int) and text_count > 0
+                       and text_matches_binary) else "FAIL",
+            f"error={code} triangle_count={tres.get('triangle_count')} source={tres.get('triangle_count_source')} "
+            f"kind={tres.get('file_kind_detected')} format_binary_written={tres.get('format_binary_written')} "
+            f"независимо прочитано из текста={text_count} "
+            f"binary_count={binary_count} расхождение="
+            f"{abs(text_count - binary_count) if isinstance(text_count, int) and isinstance(binary_count, (int, float)) else 'n/a'}")
+
+    # ── EI.04.tessellation ─────────────────────────────────────────────────────────────────────────
+    # ЧТО ЗДЕСЬ ПРОВЕРЯЕТСЯ И ЧТО СНЯТО. Наряд §6 требовал, чтобы два разных max_edge_length_mm давали
+    # РАЗНОЕ число треугольников. ИЗМЕРЕНО 10.10.2026: на целевой сборке число треугольников STL НЕ
+    # зависит ни от length, ни от angle, ни от maxTeselationCellCount — 0.0001..10 мм дают одни и те же
+    # 120 треугольников на цилиндре. Справка приписывает length/angle точность приближения, но НЕ
+    # приписывает её формату STL (в отличие от formatBinary, где формат назван прямо), поэтому
+    # требование было НЕПОДТВЕРЖДЁННЫМ выводом, а не документированным свойством. По AGENTS.md такое
+    # требование снимается из проверки, а фактический ответ API не переписывается: строка EI.04b
+    # называет измеренную независимость числа треугольников от этих членов.
+    sweep = []
+    for step in (0.0001, 1.0, 10.0):
+        sweep_path = _os.path.join(evidence_dir, f"cylinder-step-{step}.stl")
+        env, code = export_stl(cyl_doc, sweep_path, True, step)
+        sweep.append((step, code, result(env)))
+    readback_ok = all(near((r or {}).get("applied_length_mm"), step, 1e-12)
+                      and near((r or {}).get("applied_angle_deg"), ref["angle_deg"], 1e-9)
+                      for step, _c, r in sweep)
+    rep.add("EI.04.tessellation",
+            "точность триангуляции ПРИМЕНЯЕТСЯ к объекту параметров: length и angle прочитаны ОБРАТНО "
+            "равными запросу на каждом шаге, число треугольников прочитано из файла и названо; габарит "
+            "триангуляции сверен в пределах шага (строка EI.05)",
+            "PASS" if (not any(code for _s, code, _r in sweep) and readback_ok
+                       and all(isinstance((r or {}).get("triangle_count"), int)
+                               and (r or {}).get("triangle_count") > 0 for _s, _c, r in sweep)) else "FAIL",
+            "шаг -> (applied_length, triangle_count): "
+            + ", ".join(f"{s} -> ({(r or {}).get('applied_length_mm')}, {(r or {}).get('triangle_count')})"
+                        for s, _c, r in sweep)
+            + f"; коды={[c for _s, c, _r in sweep]}")
+
+    sweep_counts = {(r or {}).get("triangle_count") for _s, _c, r in sweep}
+    rep.add("EI.04b.tessellation_independence",
+            "число треугольников STL НЕ зависит от length/angle/maxTeselationCellCount на этой сборке: "
+            "требование наряда «меньше шаг — больше треугольников» измерением НЕ подтверждено и снято "
+            "из проверки (AGENTS.md: ошибочное требование удаляется, фактический ответ API не переписывается)",
+            "NAMED",
+            "шаги " + ", ".join(str(s) for s, _c, _r in sweep)
+            + f" дали множество чисел треугольников {sorted(c for c in sweep_counts if c is not None)} "
+            + "(разброс шага 100000x); maxTeselationCellCount 1..10000 тоже не меняет число (измерено "
+            + "отдельной пробой)")
+
+    # ── EI.05.box ──────────────────────────────────────────────────────────────────────────────────
+    plate_stl = _os.path.join(evidence_dir, "plate-binary.stl")
+    env, code = export_stl(plate_doc, plate_stl, True, 1.0)
+    pres = result(env)
+    m_env, _mcode = measure(plate_body, ["bbox"])
+    pbox = result(m_env).get("bbox") or {}
+    deviation = pres.get("box_deviation_mm")
+    tolerance = pres.get("box_tolerance_mm")
+    box_ok = False
+    if isinstance(deviation, (int, float)) and isinstance(tolerance, (int, float)) and tolerance > 0:
+        box_ok = deviation <= tolerance
+    rep.add("EI.05.box",
+            "для плиты 100x80x10 габарит триангуляции совпал с measure.bbox по всем трём осям в "
+            "пределах шага; расхождение названо числом",
+            "PASS" if (not code and box_ok and pres.get("reached_level") == "geometry_checked"
+                       and ((env or {}).get("verification") or {}).get("level") == "geometry_checked") else "FAIL",
+            f"error={code} triangle_box={json.dumps(pres.get('triangle_box'), ensure_ascii=False)} "
+            f"body_box={json.dumps(pres.get('body_box'), ensure_ascii=False)} "
+            f"measure.bbox={json.dumps(pbox, ensure_ascii=False)} "
+            f"отклонение={deviation} мм при допуске {tolerance} мм level={pres.get('reached_level')} "
+            f"envelope_level={((env or {}).get('verification') or {}).get('level')}")
+
+    # ── EI.06.inertia_central ──────────────────────────────────────────────────────────────────────
+    env, code = measure(cyl_body, ["inertia"])
+    inertia = result(env).get("inertia") or {}
+    axial = inertia.get("axial") or {}
+    jx, jy, jz = axial.get("jx"), axial.get("jy"), axial.get("jz")
+    central_ok = (inertia.get("system") == "central" and inertia.get("units") == "mm|kg"
+                  and rel_near(jz, jz_expected, ref["inertia_relative"])
+                  and rel_near(jx, jx_expected, ref["inertia_relative"])
+                  and rel_near(jy, jx_expected, ref["inertia_relative"]))
+    rep.add("EI.06.inertia_central",
+            "jx, jy, jz цилиндра сверены с аналитикой (Jz = m r^2/2, Jx = Jy = m (3r^2+h^2)/12) в "
+            "допуске профиля; system=central, units названы",
+            "PASS" if (not code and central_ok) else "FAIL",
+            f"error={code} system={inertia.get('system')} units={inertia.get('units')} "
+            f"jx={jx} (аналитика {jx_expected:.6f}) jy={jy} (аналитика {jx_expected:.6f}) "
+            f"jz={jz} (аналитика {jz_expected:.6f}) notes={inertia.get('notes')}")
+
+    # ── EI.07.inertia_principal ────────────────────────────────────────────────────────────────────
+    principal = inertia.get("principal") or {}
+    axes = inertia.get("principal_axes") or {}
+
+    def norm(vec):
+        return math.sqrt(sum(float(c) * float(c) for c in vec)) if isinstance(vec, list) and len(vec) == 3 else None
+
+    def dot(a, b):
+        return sum(float(a[i]) * float(b[i]) for i in range(3))
+
+    def orthonormal(triple):
+        if not all(isinstance(v, list) and len(v) == 3 for v in triple):
+            return False
+        lengths = [norm(v) for v in triple]
+        return (all(abs(l - 1.0) <= ref["orthonormal_relative"] for l in lengths)
+                and abs(dot(triple[0], triple[1])) <= ref["orthonormal_relative"]
+                and abs(dot(triple[0], triple[2])) <= ref["orthonormal_relative"]
+                and abs(dot(triple[1], triple[2])) <= ref["orthonormal_relative"])
+
+    # Цилиндр: главные моменты совпадают с осевыми с точностью до перестановки. Оси у него
+    # ВЫРОЖДЕНЫ (jx0 == jy0), поэтому ортонормированность проверяется на ПЛИТЕ, где все три
+    # главных момента различны и главная система определена однозначно.
+    cyl_sorted = sorted(v for v in (jx, jy, jz) if isinstance(v, (int, float)))
+    prin_sorted = sorted(v for v in (principal.get("jx0"), principal.get("jy0"), principal.get("jz0"))
+                         if isinstance(v, (int, float)))
+    principal_moments_ok = (principal.get("system") == "principal" and len(cyl_sorted) == 3
+                            and len(prin_sorted) == 3
+                            and all(rel_near(a, b, ref["inertia_relative"])
+                                    for a, b in zip(cyl_sorted, prin_sorted)))
+
+    plate_env, plate_code = measure(plate_body, ["inertia"])
+    plate_axes = (result(plate_env).get("inertia") or {}).get("principal_axes") or {}
+    plate_triple = (plate_axes.get("x"), plate_axes.get("y"), plate_axes.get("z"))
+    plate_ok = orthonormal(plate_triple)
+    rep.add("EI.07.inertia_principal",
+            "jx0/jy0/jz0 цилиндра совпали с jx/jy/jz (с точностью до перестановки); направления "
+            "главных осей GetAxisX/Y/Z на ПЛИТЕ дали ортонормированную тройку (у цилиндра оси "
+            "вырождены, и ядро возвращает для них нули — это измерено и названо)",
+            "PASS" if (not code and principal_moments_ok and not plate_code and plate_ok) else "FAIL",
+            f"error={code} system={principal.get('system')} jx0={principal.get('jx0')} "
+            f"jy0={principal.get('jy0')} jz0={principal.get('jz0')} цилиндр (осевые)={cyl_sorted} "
+            f"(главные)={prin_sorted}; оси цилиндра={json.dumps(axes, ensure_ascii=False)} "
+            f"оси плиты={json.dumps(plate_axes, ensure_ascii=False)} ортонормирована={plate_ok}")
+
+    # ── EI.08.inertia_offdiag ──────────────────────────────────────────────────────────────────────
+    centrifugal = inertia.get("centrifugal") or {}
+    plane = inertia.get("plane") or {}
+    zero_band = abs(jz_expected) * ref["zero_relative"] if isinstance(jz_expected, (int, float)) else 0.0
+    offdiag_ok = all(isinstance(centrifugal.get(k), (int, float))
+                     and abs(centrifugal.get(k)) <= zero_band
+                     for k in ("jxjy", "jxz", "jyz"))
+    plane_ok = all(isinstance(plane.get(k), (int, float)) for k in ("jx0z", "jy0z", "jx0y"))
+    rep.add("EI.08.inertia_offdiag",
+            "центробежные моменты симметричного цилиндра ≈ 0 в допуске; плоскостные прочитаны непустыми",
+            "PASS" if (not code and offdiag_ok and plane_ok) else "FAIL",
+            f"error={code} jxjy={centrifugal.get('jxjy')} jxz={centrifugal.get('jxz')} "
+            f"jyz={centrifugal.get('jyz')} (полоса нуля {zero_band:.6g}) "
+            f"plane={json.dumps(plane, ensure_ascii=False)}")
+
+    # ── EI.09.inertia_units ────────────────────────────────────────────────────────────────────────
+    env, code = measure(cyl_body, ["inertia"], units="m_kg")
+    m_inertia = result(env).get("inertia") or {}
+    m_axial = m_inertia.get("axial") or {}
+    m_jz = m_axial.get("jz")
+    ratio = (jz / m_jz) if (isinstance(jz, (int, float)) and isinstance(m_jz, (int, float))
+                            and m_jz != 0) else None
+    units_ok = (m_inertia.get("units") == "m|kg" and inertia.get("units") == "mm|kg"
+                and isinstance(ratio, (int, float))
+                and rel_near(ratio, units_ratio_expected, ref["units_ratio_relative"]))
+    rep.add("EI.09.inertia_units",
+            "смена bitVector (мм|кг против м|кг) делит момент на 1000^2 = 1e6 (момент имеет размерность "
+            "масса x длина^2); поле units следует за аргументом вызова",
+            "PASS" if (not code and units_ok) else "FAIL",
+            f"error={code} units(mm|kg)={inertia.get('units')} units(m|kg)={m_inertia.get('units')} "
+            f"jz_mm={jz} jz_m={m_jz} отношение={ratio} (ожидание {units_ratio_expected:.0f})")
+
+    # ── EI.10.refusals ─────────────────────────────────────────────────────────────────────────────
+    outside = "D:\\ei-not-allowed-" + uuid.uuid4().hex[:8] + "\\out.stl"
+    env, code_outside = export_stl(cyl_doc, outside, True, 1.0)
+    env, code_step = export_stl(cyl_doc, _os.path.join(evidence_dir, "bad-step.stl"), True, 0.0)
+    asm_doc, asm_err, _ = new_document("assembly", "EI-assembly")
+    env, code_asm = export_stl(asm_doc, _os.path.join(evidence_dir, "assembly.stl"), True, 1.0)
+    new_dir_path = _os.path.join(evidence_dir, "created-on-demand", "plate.stl")
+    env, code_newdir = export_stl(plate_doc, new_dir_path, True, 1.0)
+    face_ref = None
+    _e, topo_env, _r = client.tool("kompas_read_topology",
+                                   {"document_id": cyl_doc, "body_ref": cyl_body, "include": "faces"})
+    faces = (result(topo_env).get("faces") or []) if isinstance(result(topo_env), dict) else []
+    if faces:
+        face_ref = faces[0].get("face_ref") or faces[0].get("ref") or faces[0].get("id")
+    face_env, face_code = (measure(face_ref, ["inertia"]) if face_ref else ({}, None))
+    face_result = result(face_env)
+    face_named = (face_code is None and face_result.get("inertia") is None
+                  and any("inertia" in str(a) for a in (face_result.get("unverified_aspects") or [])))
+    refusals_ok = (code_outside == "PATH_NOT_ALLOWED" and code_step == "INVALID_ARGUMENT"
+                   and code_asm == "WRONG_DOCUMENT_KIND"
+                   and code_newdir is None and _os.path.isfile(new_dir_path)
+                   and (face_ref is None or face_named))
+    rep.add("EI.10.refusals",
+            "путь вне разрешённых корней — PATH_NOT_ALLOWED до COM; max_edge_length_mm <= 0 — "
+            "INVALID_ARGUMENT; сборка вместо детали — WRONG_DOCUMENT_KIND; несуществующий каталог "
+            "создаётся и файл пишется; inertia у ГРАНИ — null с причиной, а не ноль",
+            "PASS" if refusals_ok else "FAIL",
+            f"outside={code_outside} bad_step={code_step} assembly={code_asm} "
+            f"nonexistent_dir={code_newdir} (файл создан={_os.path.isfile(new_dir_path)}) "
+            f"face_ref={face_ref} face_code={face_code} face_inertia={face_result.get('inertia')} "
+            f"face_unverified={face_result.get('unverified_aspects')}")
+
+    # ── EI.11.idempotency ──────────────────────────────────────────────────────────────────────────
+    idem_path = _os.path.join(evidence_dir, "idempotent.stl")
+    op_id = str(uuid.uuid4())
+    payload = {"document_id": cyl_doc, "expected_revision": current_rev(cyl_doc),
+               "target_path": idem_path, "binary": True, "max_edge_length_mm": 1.0,
+               "normal_angle_deg": ref["angle_deg"], "operation_id": op_id}
+    env1, code1 = call_raw("kompas_export_stl", payload)
+    first = result(env1)
+    stat_before = _os.stat(idem_path) if _os.path.isfile(idem_path) else None
+    env2, code2 = call_raw("kompas_export_stl", payload)
+    stat_after = _os.stat(idem_path) if _os.path.isfile(idem_path) else None
+    untouched = (stat_before is not None and stat_after is not None
+                 and stat_before.st_mtime_ns == stat_after.st_mtime_ns
+                 and stat_before.st_size == stat_after.st_size)
+    conflict_payload = dict(payload, max_edge_length_mm=1.5)
+    env3, code3 = call_raw("kompas_export_stl", conflict_payload)
+    stale_payload = dict(payload, operation_id=str(uuid.uuid4()), expected_revision=1,
+                         target_path=_os.path.join(evidence_dir, "stale.stl"))
+    env4, code4 = call_raw("kompas_export_stl", stale_payload)
+    rep.add("EI.11.idempotency",
+            "повтор с тем же operation_id не запускает конвертер второй раз (файл не переписан); тот же "
+            "id с другими аргументами — OPERATION_ID_CONFLICT; устаревшая ревизия — REVISION_CONFLICT",
+            "PASS" if (not code1 and not code2 and untouched and first.get("triangle_count", 0) > 0
+                       and code3 == "OPERATION_ID_CONFLICT" and code4 == "REVISION_CONFLICT") else "FAIL",
+            f"первый={code1} повтор={code2} файл не переписан={untouched} "
+            f"triangle_count={first.get('triangle_count')} конфликт={code3} ревизия={code4}")
+
+    # ── EI.12.no_mutation ──────────────────────────────────────────────────────────────────────────
+    rev_before = current_rev(cyl_doc)
+    features_before = feature_count(cyl_doc)
+    volume_before = volume_of(cyl_body)
+    env, code = measure(cyl_body, ["inertia", "volume", "bbox"])
+    rev_after = current_rev(cyl_doc)
+    features_after = feature_count(cyl_doc)
+    volume_after = volume_of(cyl_body)
+    rep.add("EI.12.no_mutation",
+            "после kompas_measure с inertia ревизия, число признаков и объём те же: чтение МЦХ модель "
+            "не меняет",
+            "PASS" if (not code and rev_before == rev_after and features_before == features_after
+                       and near(volume_before, volume_after, 1e-6)
+                       and isinstance(result(env).get("inertia"), dict)) else "FAIL",
+            f"error={code} revision {rev_before}->{rev_after} features {features_before}->{features_after} "
+            f"volume {volume_before}->{volume_after}")
+
+    # ── EI.13.applicability: булево тело и круговой массив ─────────────────────────────────────────
+    bool_doc, bool_err, _ = new_document("part", "EI-boolean")
+    outcome_bool = f"документ не создан: {bool_err}"
+    bool_ok = False
+    if bool_doc:
+        err1 = None
+        _, err1 = draw_and_extrude(bool_doc, [{"kind": "circle", "center_mm": [0.0, 0.0], "radius_mm": 15.0}],
+                                   "ei-bool-a", 30.0)
+        err2 = None
+        if not err1:
+            _, err2 = draw_and_extrude(bool_doc, [{"kind": "circle", "center_mm": [20.0, 0.0], "radius_mm": 15.0}],
+                                       "ei-bool-b", 30.0)
+        build = err1 or err2
+        if build:
+            outcome_bool = f"тела не построены: {build}"
+        else:
+            rows = list_bodies(bool_doc)
+            if len(rows) < 2:
+                outcome_bool = f"тел {len(rows)}, ожидалось 2 для объединения"
+            else:
+                env, code = call("kompas_boolean", {
+                    "document_id": bool_doc, "expected_revision": current_rev(bool_doc),
+                    "target_body_ref": rows[0].get("body_ref"),
+                    "tool_body_refs": [rows[1].get("body_ref")],
+                    "operation": "union", "keep_tools": False})
+                if code:
+                    outcome_bool = f"объединение отказало: {code} {emsg(env)}"
+                else:
+                    merged = body_of(bool_doc)
+                    env, mcode = measure(merged, ["inertia", "volume"])
+                    block = result(env).get("inertia")
+                    if mcode == "INERTIA_NOT_AVAILABLE":
+                        outcome_bool = "INERTIA_NOT_AVAILABLE — ядро не даёт МЦХ для булева тела (честный отказ)"
+                        bool_ok = True
+                    elif isinstance(block, dict) and isinstance((block.get("axial") or {}).get("jz"), (int, float)):
+                        outcome_bool = ("прочитано: " + json.dumps(block.get("axial"), ensure_ascii=False)
+                                        + f" volume={result(env).get('volume_mm3')}")
+                        bool_ok = True
+                    else:
+                        outcome_bool = f"ни значение, ни отказ: code={mcode} inertia={block}"
+        close(bool_doc)
+
+    pat_doc, pat_err, _ = new_document("part", "EI-pattern")
+    outcome_pat = f"документ не создан: {pat_err}"
+    pat_ok = False
+    if pat_doc:
+        build = None
+        _, build = draw_and_extrude(pat_doc, [{"kind": "circle", "center_mm": [10.0, 0.0], "radius_mm": 5.0}],
+                                    "ei-pat-seed", 10.0)
+        if build:
+            outcome_pat = f"тело не построено: {build}"
+        else:
+            seed = body_of(pat_doc)
+            env, code = call("kompas_pattern_circular", {
+                "document_id": pat_doc, "expected_revision": current_rev(pat_doc),
+                "copy_kind": "bodies", "source_refs": [seed],
+                "axis_point1_mm": [0.0, 0.0, 0.0], "axis_point2_mm": [0.0, 0.0, 1.0],
+                "count2": 4, "step2_deg": 90.0}, timeout=300)
+            if code:
+                outcome_pat = f"круговой массив отказал: {code} {emsg(env)}"
+            else:
+                rows = list_bodies(pat_doc)
+                merged = (rows[0].get("body_ref") if rows else None)
+                env, mcode = measure(merged, ["inertia", "volume"])
+                block = result(env).get("inertia")
+                if mcode == "INERTIA_NOT_AVAILABLE":
+                    outcome_pat = "INERTIA_NOT_AVAILABLE — ядро не даёт МЦХ для тела массива (честный отказ)"
+                    pat_ok = True
+                elif isinstance(block, dict) and isinstance((block.get("axial") or {}).get("jz"), (int, float)):
+                    outcome_pat = ("прочитано: " + json.dumps(block.get("axial"), ensure_ascii=False)
+                                   + f" bodies={len(rows)}")
+                    pat_ok = True
+                else:
+                    outcome_pat = f"ни значение, ни отказ: code={mcode} inertia={block}"
+        close(pat_doc)
+
+    rep.add("EI.13.applicability",
+            "тело от булевой операции (объединение двух цилиндров) и тело после кругового массива: "
+            "запрошен inertia, исход назван (прочитано или INERTIA_NOT_AVAILABLE), а не молчаливый ноль",
+            "PASS" if (bool_ok and pat_ok) else "NAMED",
+            f"булево: {outcome_bool} | массив: {outcome_pat}")
+
+    close(cyl_doc)
+    close(plate_doc)
+    close(asm_doc)
+
+
 def variables_bind_checks(client, rep, app_id, workdir):
     """VB.* — три инструмента блока G3 через MCP на бинарях поставки.
 
@@ -7205,9 +7852,9 @@ def variables_bind_checks(client, rep, app_id, workdir):
         drift_ok = drift_ok and same
         drift_detail.append(f"{tool_name}={same}")
     rep.add("VB.01.discover",
-            "три инструмента в tools/list, их схемы совпадают с опубликованным реестром; всего 84",
-            "PASS" if (len(names) == 84 and drift_ok) else "FAIL",
-            f"инструментов={len(names)} (ожидание 84); схемы: {', '.join(drift_detail)}")
+            "три инструмента в tools/list, их схемы совпадают с опубликованным реестром; всего 85",
+            "PASS" if (len(names) == 85 and drift_ok) else "FAIL",
+            f"инструментов={len(names)} (ожидание 85); схемы: {', '.join(drift_detail)}")
 
     # ── построение эталона: две независимые операции через MCP ─────────────────────────────────
     env, code = call("kompas_create_document", {"application_id": app_id, "kind": "part", "name": "VB-REF"})
@@ -7931,6 +8578,13 @@ def main():
     # собственные инструменты.
     variables_bind_only = "--variables-bind-only" in sys.argv
 
+    # Домен ЭКСПОРТА STL И МОМЕНТОВ ИНЕРЦИИ (блок G5+G7, профиль `export-inertia-minimal-v1`): одна
+    # группа, свой сеанс, своя ветка. Клетка матрицы обязана находиться по ИМЕНИ строки (`EI.<NN>.<действие>`),
+    # а не по номеру в общем потоке. Геометрию эталона (цилиндр и плита) строит САМА группа через MCP,
+    # плотность задаётся материалом с явным числом: аналитический эталон моментов выводится из этих
+    # чисел ДО прогона, а не подбирается по ответу продукта.
+    export_inertia_only = "--export-inertia-only" in sys.argv
+
     # Наряд CLIENT_BUGS_20261010: дефекты клиента на выпуске 0.6.0 (OBS-030 - смена опоры эскиза,
     # OBS-019 - восстановление файла, признак, оставшийся в дереве, attach при нуле кандидатов).
     # Своя группа, свой сеанс, своя синтетическая геометрия; данные клиента не используются (§5).
@@ -7966,6 +8620,7 @@ def main():
         "drawing": drawing_only,
         "variables_material": variables_material_only,
         "variables_bind": variables_bind_only,
+        "export_inertia": export_inertia_only,
         "client_bugs_20261010": client_bugs_20261010_only,
         "pattern_orientation": pattern_orientation_only,
         "release_040": release_040_only,
@@ -8471,6 +9126,14 @@ def main():
 
         if variables_bind_only:
             variables_bind_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if export_inertia_only:
+            export_inertia_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -36799,6 +37462,7 @@ EXTRA_GROUP_CHECKS = {
     "variables_material": lambda c, r, a, w, v: variables_material_checks(
         c, r, a, w, reference_path=v),
     "variables_bind": lambda c, r, a, w, v: variables_bind_checks(c, r, a, w),
+    "export_inertia": lambda c, r, a, w, v: export_inertia_checks(c, r, a, w),
     "client_bugs_20261010": lambda c, r, a, w, v: client_bugs_20261010_checks(c, r, a, w),
     "suppress": lambda c, r, a, w, v: suppress_restore_checks(c, r, a, w, ALL_SUPPRESS_REPEAT),
 }

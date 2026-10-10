@@ -43,6 +43,11 @@
     "artifact": "coverage/solid-v24/release-profiles/drawings-minimal-v1.json",
     "title": "Минимальные чертежи v24",
     "plan": "coverage/solid-v24/implementation-plan.md (редакция 2.0)"
+   },
+   "export-inertia-minimal-v1": {
+    "artifact": "coverage/solid-v24/release-profiles/export-inertia-minimal-v1.json",
+    "title": "Экспорт STL и моменты инерции тела v24",
+    "plan": "coverage/solid-v24/implementation-plan.md, шаг D, очередь #4 (G5+G7)"
    }
   },
   "change_edge_set_note": "17.09.2026: edit закрыт приёмкой ПРОДУКТА через MCP (scripts/mcp-smoke.py --fillet-only, 46 строк, 0 FAIL). Прежний вердикт blocked_api был поставлен по измерению и верен для того состояния: корень оказался не в маршруте и не в валюте, а в неопубликованном свойстве base_object_refs схемы kompas_update_feature — Host отвергал сокращение валидацией до COM. Граница, которая строкой НЕ закрывается: расширение набора (1→2, 2→3) через контракт не выражено (FL25, Г-образная пластина).",
@@ -10480,6 +10485,693 @@
     "устаревшая ревизия — REVISION_CONFLICT без частичных эффектов"
    ],
    "adapter_route": "Оба мутирующих инструмента (kompas_create_variable, kompas_bind_parameter) идут через общий механизм журнала operation_id, дедупликации и ревизий. Повтор с тем же operation_id и теми же аргументами не выполняет изменение дважды; другие аргументы — OPERATION_ID_CONFLICT; устаревшая ревизия — REVISION_CONFLICT."
+  },
+  {
+   "operation_id": "EI-01.stl.export",
+   "kind": "profile_mode",
+   "profile": "export-inertia-minimal-v1",
+   "priority": "practical_required",
+   "queue": "G5+G7",
+   "context": "part.single_body",
+   "catalog_ref": "G5",
+   "catalog_level": "mcp_verified",
+   "parameters_schema": "schemas/kompas_export_stl.json",
+   "adapter_route": "kompas_export_stl: политика путей (Host, поле target_path) → ksDocument3D.AdditionFormatParam() → Init() → format=format_STL(6), formatBinary, length, angle → ksDocument3D.SaveAsToAdditionFormat → чтение файла с диска (существование, размер, число треугольников, габарит) → сверка габарита триангуляции с ksPart.GetGabarit(full=false) (ksdocument3d_saveastoadditionformat.html, ksadditionformatparam.html, d3formatconvtype.html).",
+   "actions": {
+    "discover": "verified",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
+   },
+   "not_applicable_reasons": {
+    "edit": "экспорт файла модель не правит: перезапись — свойство вызова, а не отдельное действие",
+    "rebuild": "экспорт не перестраивает модель",
+    "save_reopen": "переживание переоткрытия к экспорту файла не относится: файл читается сразу после записи",
+    "suppress_restore": "подавление и восстановление признаков к экспорту STL не относятся",
+    "delete_dependencies": "удаление признаков к экспорту STL не относится"
+   },
+   "tests": [
+    "EI.01.discover",
+    "EI.02.stl_binary",
+    "EI.03.stl_text",
+    "EI.11.idempotency",
+    "EI.04b.tessellation_independence"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "coverage/solid-v24/release-profiles/export-inertia-minimal-v1.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "docs/decisions/geometry.md",
+    "docs/02_TOOL_CONTRACTS.md",
+    "tests/Unit/KompasMcp.Unit/StlInertiaDomainTests.cs"
+   ],
+   "limitations": [
+    "Возврат конвертера true не считается доказательством файла: подтверждение — файл на диске и число треугольников ИЗ ФАЙЛА.",
+    "Число треугольников двоичного STL читается как (размер − 84) / 50 (заголовок 80 байт плюс 4 байта счётчика); для текстового — подсчётом строк facet normal.",
+    "Документ — деталь; сборка и чертёж дают WRONG_DOCUMENT_KIND."
+   ],
+   "depends_on": [
+    "dep.ei.path_policy",
+    "dep.ei.triangle_count_from_file",
+    "dep.ei.idempotency"
+   ],
+   "acceptance": [
+    "двоичный STL создан, непуст; число треугольников ИЗ ФАЙЛА > 0 и совпадает с triangle_count; binary=true",
+    "текстовый STL распознан (triangle_count_source=text_facet_lines), число треугольников совпадает с двоичным в пределах допуска триангуляции",
+    "повтор с тем же operation_id не создаёт файл дважды; другие аргументы — OPERATION_ID_CONFLICT"
+   ],
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_export_stl"
+     }
+    ]
+   },
+   "create_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_export_stl"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_export_stl"
+     }
+    ]
+   }
+  },
+  {
+   "operation_id": "EI-02.stl.tessellation",
+   "kind": "profile_mode",
+   "profile": "export-inertia-minimal-v1",
+   "priority": "practical_required",
+   "queue": "G5+G7",
+   "context": "part.single_body",
+   "catalog_ref": "G5",
+   "catalog_level": "mcp_verified",
+   "parameters_schema": "schemas/kompas_export_stl.json",
+   "adapter_route": "kompas_export_stl: max_edge_length_mm -> ksAdditionFormatParam.length, normal_angle_deg -> ksAdditionFormatParam.angle, оба подтверждаются обратным чтением; габарит триангуляции читается ИЗ ФАЙЛА и сверяется с ksPart.GetGabarit(full=false) в пределах шага (ksadditionformatparam_length.html, ksadditionformatparam_angle.html). ИЗМЕРЕНО: на целевой сборке эти члены на сетку STL не влияют.",
+   "actions": {
+    "discover": "verified",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
+   },
+   "not_applicable_reasons": {
+    "edit": "экспорт файла модель не правит: перезапись — свойство вызова, а не отдельное действие",
+    "rebuild": "экспорт не перестраивает модель",
+    "save_reopen": "переживание переоткрытия к экспорту файла не относится: файл читается сразу после записи",
+    "suppress_restore": "подавление и восстановление признаков к экспорту STL не относятся",
+    "delete_dependencies": "удаление признаков к экспорту STL не относится"
+   },
+   "tests": [
+    "EI.04.tessellation",
+    "EI.04b.tessellation_independence",
+    "EI.05.box",
+    "EI.10.refusals"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "coverage/solid-v24/release-profiles/export-inertia-minimal-v1.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "docs/decisions/geometry.md",
+    "docs/02_TOOL_CONTRACTS.md",
+    "tests/Unit/KompasMcp.Unit/StlInertiaDomainTests.cs"
+   ],
+   "limitations": [
+    "Габарит триангуляции сверяется с габаритом ТЕЛА (режим «только тела»), а не с габаритом всего документа.",
+    "СНЯТО ИЗ ПРОВЕРКИ (измерено 10.10.2026): требование «два разных max_edge_length_mm дают РАЗНОЕ число треугольников» измерением НЕ подтверждено — число треугольников STL не зависит ни от length, ни от angle, ни от maxTeselationCellCount (0.0001..10 мм и ячейки 1..10000 дают одни и те же 120 треугольников на цилиндре r=20 h=50). Справка приписывает length/angle точность приближения, но формату STL её не приписывает, поэтому это был неподтверждённый вывод; по AGENTS.md ошибочное требование удалено из проверки, а фактический ответ API назван строкой EI.04b."
+   ],
+   "depends_on": [
+    "dep.ei.path_policy",
+    "dep.ei.triangle_count_from_file"
+   ],
+   "acceptance": [
+    "length и angle записаны в IAdditionFormatParam и подтверждены ОБРАТНЫМ ЧТЕНИЕМ равными запросу на каждом шаге; число треугольников прочитано из файла и названо",
+    "габарит триангуляции совпал с measure.bbox в пределах шага; расхождение названо числом",
+    "для плиты 100x80x10 габарит триангуляции совпал с bbox по всем трём осям в пределах шага"
+   ],
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_export_stl"
+     }
+    ]
+   },
+   "create_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_export_stl"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_export_stl"
+     }
+    ]
+   }
+  },
+  {
+   "operation_id": "EI-03.inertia.central",
+   "kind": "profile_mode",
+   "profile": "export-inertia-minimal-v1",
+   "priority": "practical_required",
+   "queue": "G5+G7",
+   "context": "part.single_body",
+   "catalog_ref": "G7",
+   "catalog_level": "mcp_verified",
+   "parameters_schema": "schemas/kompas_measure.json",
+   "adapter_route": "kompas_measure со свойством inertia: ksBody.CalcMassInertiaProperties(bitVector) → ksMassInertiaParam → jx/jy/jz, jxjy/jxz/jyz, jx0z/jy0z/jx0y (kspart_calcmassinertiaproperties.html, ksmassinertiaparam_jx.html, ksmassinertiaparam_jxy.html, ksmassinertiaparam_jx0z.html).",
+   "actions": {
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
+   },
+   "not_applicable_reasons": {
+    "create": "чтение МЦХ ничего не создаёт",
+    "edit": "свойства ksMassInertiaParam только для чтения: записи нет",
+    "rebuild": "чтение МЦХ модель не перестраивает",
+    "save_reopen": "переживание переоткрытия к чтению МЦХ не относится",
+    "suppress_restore": "подавление признаков к чтению МЦХ не относится",
+    "delete_dependencies": "удаление признаков к чтению МЦХ не относится"
+   },
+   "tests": [
+    "EI.06.inertia_central",
+    "EI.08.inertia_offdiag",
+    "EI.12.no_mutation",
+    "EI.13.applicability"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "coverage/solid-v24/release-profiles/export-inertia-minimal-v1.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "docs/decisions/geometry.md",
+    "docs/02_TOOL_CONTRACTS.md",
+    "tests/Unit/KompasMcp.Unit/StlInertiaDomainTests.cs"
+   ],
+   "limitations": [
+    "Непрочитанное свойство — null с причиной в inertia.notes, а не ноль.",
+    "Интерфейс МЦХ не вернулся — отказ INERTIA_NOT_AVAILABLE, а не блок нулей.",
+    "Применимость к телу от булевой операции и после кругового массива измеряется строкой EI.13."
+   ],
+   "depends_on": [
+    "dep.ei.units_system",
+    "dep.ei.read_only_measure"
+   ],
+   "acceptance": [
+    "jx, jy, jz цилиндра сверены с аналитикой (Jz = m·r²/2, Jx = Jy = m·(3r²+h²)/12) в допуске профиля",
+    "system = central, units названы",
+    "jxjy, jxz, jyz симметричного цилиндра ≈ 0 в допуске; плоскостные прочитаны непустыми или null с причиной"
+   ],
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_measure"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_measure"
+     }
+    ]
+   }
+  },
+  {
+   "operation_id": "EI-04.inertia.principal",
+   "kind": "profile_mode",
+   "profile": "export-inertia-minimal-v1",
+   "priority": "practical_required",
+   "queue": "G5+G7",
+   "context": "part.single_body",
+   "catalog_ref": "G7",
+   "catalog_level": "mcp_verified",
+   "parameters_schema": "schemas/kompas_measure.json",
+   "adapter_route": "kompas_measure со свойством inertia: ksMassInertiaParam.jx0/jy0/jz0 и GetAxisX/Y/Z (ksmassinertiaparam_jx0.html, ksmassinertiaparam_getaxisx.html).",
+   "actions": {
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
+   },
+   "not_applicable_reasons": {
+    "create": "чтение МЦХ ничего не создаёт",
+    "edit": "свойства ksMassInertiaParam только для чтения: записи нет",
+    "rebuild": "чтение МЦХ модель не перестраивает",
+    "save_reopen": "переживание переоткрытия к чтению МЦХ не относится",
+    "suppress_restore": "подавление признаков к чтению МЦХ не относится",
+    "delete_dependencies": "удаление признаков к чтению МЦХ не относится"
+   },
+   "tests": [
+    "EI.07.inertia_principal"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "coverage/solid-v24/release-profiles/export-inertia-minimal-v1.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "docs/decisions/geometry.md",
+    "docs/02_TOOL_CONTRACTS.md",
+    "tests/Unit/KompasMcp.Unit/StlInertiaDomainTests.cs"
+   ],
+   "limitations": [
+    "Справка называет главные моменты и направления осей применимыми «только для трехмерных объектов».",
+    "Направление оси, которое не прочиталось, остаётся null, а не выдуманным вектором (0,0,0)."
+   ],
+   "depends_on": [
+    "dep.ei.units_system",
+    "dep.ei.read_only_measure"
+   ],
+   "acceptance": [
+    "jx0, jy0, jz0 цилиндра совпали с jx, jy, jz (для цилиндра главные центральные совпадают с осевыми)",
+    "GetAxisX/Y/Z дали ортонормированную тройку (единичная длина, взаимная ортогональность)"
+   ],
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_measure"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_measure"
+     }
+    ]
+   }
+  },
+  {
+   "operation_id": "EI-05.inertia.units",
+   "kind": "profile_mode",
+   "profile": "export-inertia-minimal-v1",
+   "priority": "practical_required",
+   "queue": "G5+G7",
+   "context": "part.single_body",
+   "catalog_ref": "G7",
+   "catalog_level": "mcp_verified",
+   "parameters_schema": "schemas/kompas_measure.json",
+   "adapter_route": "kompas_measure: inertia_units mm_kg → bitVector ST_MIX_MM|ST_MIX_KG (1|16), m_kg → ST_MIX_M|ST_MIX_KG (3|16); ответ публикует units и system (kspart_calcmassinertiaproperties.html, ksmassinertiaparam.html).",
+   "actions": {
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "not_applicable_reasons": {
+    "create": "чтение МЦХ ничего не создаёт",
+    "edit": "свойства ksMassInertiaParam только для чтения: записи нет",
+    "rebuild": "чтение МЦХ модель не перестраивает",
+    "save_reopen": "переживание переоткрытия к чтению МЦХ не относится",
+    "suppress_restore": "подавление признаков к чтению МЦХ не относится",
+    "delete_dependencies": "удаление признаков к чтению МЦХ не относится",
+    "geometry_validation": "смена единицы — свойство аргумента, геометрию она не двигает"
+   },
+   "tests": [
+    "EI.09.inertia_units"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "coverage/solid-v24/release-profiles/export-inertia-minimal-v1.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "docs/decisions/geometry.md",
+    "docs/02_TOOL_CONTRACTS.md",
+    "tests/Unit/KompasMcp.Unit/StlInertiaDomainTests.cs"
+   ],
+   "limitations": [
+    "Единица — аргумент вызова, а не константа кода; ответ называет применённую единицу полем units.",
+    "Одно и то же имя Jx означает разные величины в центральной и главной центральной системах, поэтому system обязателен."
+   ],
+   "depends_on": [
+    "dep.ei.units_system",
+    "dep.ei.read_only_measure"
+   ],
+   "acceptance": [
+    "смена bitVector (мм|кг против м|кг) меняет численное значение момента в 1e6 раз (квадрат отношения длин)",
+    "поле units следует за вызовом: mm|kg против m|kg"
+   ],
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_measure"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_measure"
+     }
+    ]
+   }
+  },
+  {
+   "operation_id": "dep.ei.path_policy",
+   "kind": "common_dependency",
+   "profile": "export-inertia-minimal-v1",
+   "priority": "dependency_of",
+   "queue": "G5+G7",
+   "context": "part.single_body",
+   "catalog_refs": [
+    "G5",
+    "G7"
+   ],
+   "parameter_schema": null,
+   "actions": {
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "not_applicable",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "not_applicable_reasons": {
+    "discover": "к этой общей зависимости действие не относится",
+    "create": "к этой общей зависимости действие не относится",
+    "read": "к этой общей зависимости действие не относится",
+    "edit": "к этой общей зависимости действие не относится",
+    "rebuild": "к этой общей зависимости действие не относится",
+    "save_reopen": "к этой общей зависимости действие не относится",
+    "suppress_restore": "к этой общей зависимости действие не относится",
+    "delete_dependencies": "к этой общей зависимости действие не относится",
+    "negative_tests": "к этой общей зависимости действие не относится",
+    "geometry_validation": "к этой общей зависимости действие не относится"
+   },
+   "tests": [
+    "EI.01.discover",
+    "EI.10.refusals"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "coverage/solid-v24/release-profiles/export-inertia-minimal-v1.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "docs/decisions/geometry.md",
+    "docs/02_TOOL_CONTRACTS.md",
+    "tests/Unit/KompasMcp.Unit/StlInertiaDomainTests.cs"
+   ],
+   "limitations": [
+    "Политика путей — свойство Host, а не ядра: измерено, что ядро путь не проверяет."
+   ],
+   "required_actions": [
+    "discover",
+    "negative_tests"
+   ],
+   "acceptance": [
+    "путь вне разрешённых корней даёт PATH_NOT_ALLOWED без обращения к КОМПАС",
+    "неверные max_edge_length_mm и normal_angle_deg отвергаются до COM"
+   ],
+   "adapter_route": "Поле target_path входит в список полей пути Host'а (ToolInvoker.PathFields), поэтому политика корней судит его до диспетчеризации; неверные length/angle отвергаются в адаптере до COM."
+  },
+  {
+   "operation_id": "dep.ei.triangle_count_from_file",
+   "kind": "common_dependency",
+   "profile": "export-inertia-minimal-v1",
+   "priority": "dependency_of",
+   "queue": "G5+G7",
+   "context": "part.single_body",
+   "catalog_refs": [
+    "G5"
+   ],
+   "parameter_schema": null,
+   "actions": {
+    "discover": "not_applicable",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "not_applicable_reasons": {
+    "discover": "к этой общей зависимости действие не относится",
+    "create": "к этой общей зависимости действие не относится",
+    "read": "к этой общей зависимости действие не относится",
+    "edit": "к этой общей зависимости действие не относится",
+    "rebuild": "к этой общей зависимости действие не относится",
+    "save_reopen": "к этой общей зависимости действие не относится",
+    "suppress_restore": "к этой общей зависимости действие не относится",
+    "delete_dependencies": "к этой общей зависимости действие не относится",
+    "negative_tests": "к этой общей зависимости действие не относится",
+    "geometry_validation": "к этой общей зависимости действие не относится"
+   },
+   "tests": [
+    "EI.02.stl_binary",
+    "EI.03.stl_text"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "coverage/solid-v24/release-profiles/export-inertia-minimal-v1.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "docs/decisions/geometry.md",
+    "docs/02_TOOL_CONTRACTS.md",
+    "tests/Unit/KompasMcp.Unit/StlInertiaDomainTests.cs"
+   ],
+   "limitations": [
+    "Точный размер текстового STL зависит от форматирования: сверяется число треугольников, а не размер."
+   ],
+   "required_actions": [
+    "read",
+    "negative_tests"
+   ],
+   "acceptance": [
+    "для двоичного STL число треугольников читается из заголовка, для текстового — по строкам facet normal",
+    "способ чтения назван полем triangle_count_source"
+   ],
+   "adapter_route": "StlFileInspector: двоичный — (размер − 84) / 50 с чтением вершин для габарита; текстовый — подсчёт строк facet normal и разбор строк vertex."
+  },
+  {
+   "operation_id": "dep.ei.units_system",
+   "kind": "common_dependency",
+   "profile": "export-inertia-minimal-v1",
+   "priority": "dependency_of",
+   "queue": "G5+G7",
+   "context": "part.single_body",
+   "catalog_refs": [
+    "G7"
+   ],
+   "parameter_schema": null,
+   "actions": {
+    "discover": "not_applicable",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "not_applicable_reasons": {
+    "discover": "к этой общей зависимости действие не относится",
+    "create": "к этой общей зависимости действие не относится",
+    "read": "к этой общей зависимости действие не относится",
+    "edit": "к этой общей зависимости действие не относится",
+    "rebuild": "к этой общей зависимости действие не относится",
+    "save_reopen": "к этой общей зависимости действие не относится",
+    "suppress_restore": "к этой общей зависимости действие не относится",
+    "delete_dependencies": "к этой общей зависимости действие не относится",
+    "negative_tests": "к этой общей зависимости действие не относится",
+    "geometry_validation": "к этой общей зависимости действие не относится"
+   },
+   "tests": [
+    "EI.06.inertia_central",
+    "EI.09.inertia_units"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "coverage/solid-v24/release-profiles/export-inertia-minimal-v1.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "docs/decisions/geometry.md",
+    "docs/02_TOOL_CONTRACTS.md",
+    "tests/Unit/KompasMcp.Unit/StlInertiaDomainTests.cs"
+   ],
+   "limitations": [
+    "Единица — аргумент вызова: константа кода её не задаёт."
+   ],
+   "required_actions": [
+    "read",
+    "negative_tests"
+   ],
+   "acceptance": [
+    "units принимает mm|kg и m|kg и следует за аргументом вызова",
+    "смена единицы длины мм→м делит момент на 1e6"
+   ],
+   "adapter_route": "bitVector собирается из аргумента inertia_units (ST_MIX_MM|ST_MIX_KG или ST_MIX_M|ST_MIX_KG); блок inertia публикует units и system."
+  },
+  {
+   "operation_id": "dep.ei.read_only_measure",
+   "kind": "common_dependency",
+   "profile": "export-inertia-minimal-v1",
+   "priority": "dependency_of",
+   "queue": "G5+G7",
+   "context": "part.single_body",
+   "catalog_refs": [
+    "G7"
+   ],
+   "parameter_schema": null,
+   "actions": {
+    "discover": "not_applicable",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "not_applicable_reasons": {
+    "discover": "к этой общей зависимости действие не относится",
+    "create": "к этой общей зависимости действие не относится",
+    "read": "к этой общей зависимости действие не относится",
+    "edit": "к этой общей зависимости действие не относится",
+    "rebuild": "к этой общей зависимости действие не относится",
+    "save_reopen": "к этой общей зависимости действие не относится",
+    "suppress_restore": "к этой общей зависимости действие не относится",
+    "delete_dependencies": "к этой общей зависимости действие не относится",
+    "negative_tests": "к этой общей зависимости действие не относится",
+    "geometry_validation": "к этой общей зависимости действие не относится"
+   },
+   "tests": [
+    "EI.12.no_mutation",
+    "EI.10.refusals"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "coverage/solid-v24/release-profiles/export-inertia-minimal-v1.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "docs/decisions/geometry.md",
+    "docs/02_TOOL_CONTRACTS.md",
+    "tests/Unit/KompasMcp.Unit/StlInertiaDomainTests.cs"
+   ],
+   "limitations": [
+    "Чтение МЦХ модель не меняет; проверяется строками EI.12."
+   ],
+   "required_actions": [
+    "read",
+    "negative_tests"
+   ],
+   "acceptance": [
+    "kompas_measure не требует operation_id и expected_revision и не меняет ревизию, число признаков и объём",
+    "непрочитанное свойство остаётся null с причиной, а не нулём"
+   ],
+   "adapter_route": "kompas_measure зарегистрирован как ReadOnly (requiresOperationId: false); диспетчер идёт через Tagged, ревизия не двигается."
+  },
+  {
+   "operation_id": "dep.ei.idempotency",
+   "kind": "common_dependency",
+   "profile": "export-inertia-minimal-v1",
+   "priority": "dependency_of",
+   "queue": "G5+G7",
+   "context": "part.single_body",
+   "catalog_refs": [
+    "G5"
+   ],
+   "parameter_schema": null,
+   "actions": {
+    "discover": "not_applicable",
+    "create": "verified",
+    "read": "not_applicable",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "not_applicable"
+   },
+   "not_applicable_reasons": {
+    "discover": "к этой общей зависимости действие не относится",
+    "create": "к этой общей зависимости действие не относится",
+    "read": "к этой общей зависимости действие не относится",
+    "edit": "к этой общей зависимости действие не относится",
+    "rebuild": "к этой общей зависимости действие не относится",
+    "save_reopen": "к этой общей зависимости действие не относится",
+    "suppress_restore": "к этой общей зависимости действие не относится",
+    "delete_dependencies": "к этой общей зависимости действие не относится",
+    "negative_tests": "к этой общей зависимости действие не относится",
+    "geometry_validation": "к этой общей зависимости действие не относится"
+   },
+   "tests": [
+    "EI.11.idempotency"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "coverage/solid-v24/release-profiles/export-inertia-minimal-v1.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "docs/decisions/geometry.md",
+    "docs/02_TOOL_CONTRACTS.md",
+    "tests/Unit/KompasMcp.Unit/StlInertiaDomainTests.cs"
+   ],
+   "limitations": [
+    "STL пишет файл, а не модель: ревизия модели не двигается, проверяется только запрошенная."
+   ],
+   "required_actions": [
+    "create",
+    "negative_tests"
+   ],
+   "acceptance": [
+    "повтор с тем же operation_id и теми же аргументами не создаёт файл дважды",
+    "тот же operation_id с другими аргументами даёт OPERATION_ID_CONFLICT",
+    "устаревшая ревизия даёт REVISION_CONFLICT без частичных эффектов"
+   ],
+   "adapter_route": "Мутирующий инструмент: журнал и дедупликация — на уровне Host по operation_id; проверка ревизии — в адаптере до конвертера (как у kompas_export_step)."
   }
  ],
  "pending_families": [

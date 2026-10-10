@@ -48,6 +48,18 @@
 - **открытые_режимы:** []
 - **открытые_зависимости:** []
 
+### профиль export-inertia-minimal-v1 — Экспорт STL и моменты инерции тела v24
+
+- **обязательных_режимов:** 5
+- **режимов_закрыто:** 5
+- **общих_зависимостей:** 5
+- **зависимостей_закрыто:** 5
+- **профиль_закрыт:** да
+- **готовность_процента:** 100.0%
+- **по_очередям:** G5+G7 5/5
+- **открытые_режимы:** []
+- **открытые_зависимости:** []
+
 ### профиль mates-minimal-v1 — Минимальные сопряжения v24
 
 - **обязательных_режимов:** 6
@@ -110,18 +122,18 @@
 
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 319
-- **строк_полностью_закрыто:** 130
-- **строк_с_каким_либо_прогрессом:** 145
-- **семейств_в_каталоге:** 39
+- **строк_каталога:** 329
+- **строк_полностью_закрыто:** 140
+- **строк_с_каким_либо_прогрессом:** 155
+- **семейств_в_каталоге:** 41
 - **семейств_без_строк:** 14
 - **операций:** 99
 - **режимов_и_вариантов:** 146
-- **применимых_действий:** 2767
-- **действий_verified:** 936
-- **покрытие_действий:** 33.8%
-- **распределение_статусов:** {'not_started': 1831, 'verified': 936, 'not_applicable': 423}
-- **уровни_каталога_операций:** {'metadata_found': 50, 'mcp_verified': 41, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 4}
+- **применимых_действий:** 2798
+- **действий_verified:** 967
+- **покрытие_действий:** 34.6%
+- **распределение_статусов:** {'not_started': 1831, 'verified': 967, 'not_applicable': 492}
+- **уровни_каталога_операций:** {'metadata_found': 50, 'mcp_verified': 46, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 4}
 - **уровни_каталога_режимов:** {'mcp_verified': 55, 'documented': 19, 'runtime_verified': 3, 'metadata_found': 48, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
@@ -187,6 +199,26 @@
 | `dep.drawing.revisions` | да | edit, read, negative_tests | dep.drawing.revisions.edit, dep.drawing.revisions.edit.demand, dep.drawing.revisions.negative_tests, dep.drawing.revisions.read |
 | `dep.drawing.idempotency` | да | create, read, negative_tests | dep.drawing.idempotency.create, dep.drawing.idempotency.negative_tests, dep.drawing.idempotency.read |
 | `dep.drawing.export_file` | да | create, read, negative_tests | dep.drawing.export_file.create, dep.drawing.export_file.negative_tests, dep.drawing.export_file.read |
+
+## Метрика 1 — обязательные режимы профиля `export-inertia-minimal-v1`
+
+| режим/операция | семья | приоритет | очередь | уровень каталога | поиск | созд | чтен | правк | перестр | reopen | подавл | удал | отказ | геом | проверки |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
+| `EI-01.stl.export` | G5 | practical_required | G5+G7 | mcp_verified | OK | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | EI.01.discover, EI.02.stl_binary, EI.03.stl_text, EI.11.idempotency, EI.04b.tessellation_independence |
+| `EI-02.stl.tessellation` | G5 | practical_required | G5+G7 | mcp_verified | OK | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | EI.04.tessellation, EI.04b.tessellation_independence, EI.05.box, EI.10.refusals |
+| `EI-03.inertia.central` | G7 | practical_required | G5+G7 | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | EI.06.inertia_central, EI.08.inertia_offdiag, EI.12.no_mutation, EI.13.applicability |
+| `EI-04.inertia.principal` | G7 | practical_required | G5+G7 | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | EI.07.inertia_principal |
+| `EI-05.inertia.units` | G7 | practical_required | G5+G7 | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | EI.09.inertia_units |
+
+### Общие зависимости профиля `export-inertia-minimal-v1`
+
+| зависимость | закрыто | приоритетные действия | проверки |
+|---|---|---|---|
+| `dep.ei.path_policy` | да | discover, negative_tests | EI.01.discover, EI.10.refusals |
+| `dep.ei.triangle_count_from_file` | да | read, negative_tests | EI.02.stl_binary, EI.03.stl_text |
+| `dep.ei.units_system` | да | read, negative_tests | EI.06.inertia_central, EI.09.inertia_units |
+| `dep.ei.read_only_measure` | да | read, negative_tests | EI.12.no_mutation, EI.10.refusals |
+| `dep.ei.idempotency` | да | create, negative_tests | EI.11.idempotency |
 
 ## Метрика 1 — обязательные режимы профиля `mates-minimal-v1`
 
@@ -616,6 +648,11 @@
 | `VB-02.feature_parameters.list` | G3 | practical_required | G3 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | VB.01.discover, VB.04.read, VB.10.save_reopen, VB.13.refusals |
 | `VB-03.parameter.bind` | G3 | practical_required | G3 | mcp_verified | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | VB.01.discover, VB.05.bind, VB.06.bind, VB.07.rebuild, VB.08.edit, VB.10.save_reopen, VB.13.refusals |
 | `VB-04.parameter.unbind` | G3 | practical_required | G3 | mcp_verified | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | VB.01.discover, VB.09.unbind, VB.10.save_reopen, VB.13.refusals |
+| `EI-01.stl.export` | G5 | practical_required | G5+G7 | mcp_verified | OK | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | EI.01.discover, EI.02.stl_binary, EI.03.stl_text, EI.11.idempotency, EI.04b.tessellation_independence |
+| `EI-02.stl.tessellation` | G5 | practical_required | G5+G7 | mcp_verified | OK | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | EI.04.tessellation, EI.04b.tessellation_independence, EI.05.box, EI.10.refusals |
+| `EI-03.inertia.central` | G7 | practical_required | G5+G7 | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | EI.06.inertia_central, EI.08.inertia_offdiag, EI.12.no_mutation, EI.13.applicability |
+| `EI-04.inertia.principal` | G7 | practical_required | G5+G7 | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | EI.07.inertia_principal |
+| `EI-05.inertia.units` | G7 | practical_required | G5+G7 | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | EI.09.inertia_units |
 | `AUX-SKETCH.plane_and_profile_lifecycle` *(вне каталога)* | AUX-SKETCH | later | — | — | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | V03, V04, V05, G07_xy, G07_xz, G07_yz, V04r, V04d, V04e, V04f, G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, F08.28.discover, F08.28.create, F08.28.read, F08.28.edit, F08.28.rebuild, F08.28.save_reopen, F08.28.negative_tests, F08.28.geometry_validation, AUXS.01.edit, AUXS.02.negative_tests, AUXS.03.create, AUXS.04.edit, AUXS.05.save_reopen |
 | `SM-04.boss` *(вне каталога)* | SM-04 | later | B5 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `dep.sketch.entities` *(вне каталога)* | AUX-SKETCH | dependency_of | — | — | OK | OK | OK | OK | — | OK | — | — | OK | OK | G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, DEP.DSE.02.create, DEP.DSE.07.geometry_validation, DEP.DSE.06.negative_tests, DEP.DSE.05.save_reopen, DEP.DSE.04.edit, DEP.DSE.01.discover, DEP.DSE.03.read |
@@ -669,6 +706,11 @@
 | `dep.vb.rebuild_document` *(вне каталога)* | — | dependency_of | G3 | — | н/п | н/п | OK | н/п | OK | н/п | н/п | н/п | н/п | OK | VB.05.bind, VB.06.bind, VB.07.rebuild, VB.09.unbind |
 | `dep.vb.read_only_list` *(вне каталога)* | — | dependency_of | G3 | — | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | VB.04.read, VB.14.no_mutation |
 | `dep.vb.idempotency` *(вне каталога)* | — | dependency_of | G3 | — | н/п | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | VB.12.idempotency |
+| `dep.ei.path_policy` *(вне каталога)* | — | dependency_of | G5+G7 | — | OK | н/п | н/п | н/п | н/п | н/п | н/п | н/п | OK | н/п | EI.01.discover, EI.10.refusals |
+| `dep.ei.triangle_count_from_file` *(вне каталога)* | — | dependency_of | G5+G7 | — | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | EI.02.stl_binary, EI.03.stl_text |
+| `dep.ei.units_system` *(вне каталога)* | — | dependency_of | G5+G7 | — | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | EI.06.inertia_central, EI.09.inertia_units |
+| `dep.ei.read_only_measure` *(вне каталога)* | — | dependency_of | G5+G7 | — | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | EI.12.no_mutation, EI.10.refusals |
+| `dep.ei.idempotency` *(вне каталога)* | — | dependency_of | G5+G7 | — | н/п | OK | н/п | н/п | н/п | н/п | н/п | н/п | OK | н/п | EI.11.idempotency |
 
 ## Ограничения и незакрытое
 
@@ -1129,6 +1171,23 @@
 - `VB-04.parameter.unbind` — закрыт целиком
   - Снятие привязки не удаляет переменную: переменная остаётся, меняется только выражение параметра.
   - Пустое выражение отвергается до COM; константа задаётся строкой.
+- `EI-01.stl.export` — закрыт целиком
+  - Возврат конвертера true не считается доказательством файла: подтверждение — файл на диске и число треугольников ИЗ ФАЙЛА.
+  - Число треугольников двоичного STL читается как (размер − 84) / 50 (заголовок 80 байт плюс 4 байта счётчика); для текстового — подсчётом строк facet normal.
+  - Документ — деталь; сборка и чертёж дают WRONG_DOCUMENT_KIND.
+- `EI-02.stl.tessellation` — закрыт целиком
+  - Габарит триангуляции сверяется с габаритом ТЕЛА (режим «только тела»), а не с габаритом всего документа.
+  - СНЯТО ИЗ ПРОВЕРКИ (измерено 10.10.2026): требование «два разных max_edge_length_mm дают РАЗНОЕ число треугольников» измерением НЕ подтверждено — число треугольников STL не зависит ни от length, ни от angle, ни от maxTeselationCellCount (0.0001..10 мм и ячейки 1..10000 дают одни и те же 120 треугольников на цилиндре r=20 h=50). Справка приписывает length/angle точность приближения, но формату STL её не приписывает, поэтому это был неподтверждённый вывод; по AGENTS.md ошибочное требование удалено из проверки, а фактический ответ API назван строкой EI.04b.
+- `EI-03.inertia.central` — закрыт целиком
+  - Непрочитанное свойство — null с причиной в inertia.notes, а не ноль.
+  - Интерфейс МЦХ не вернулся — отказ INERTIA_NOT_AVAILABLE, а не блок нулей.
+  - Применимость к телу от булевой операции и после кругового массива измеряется строкой EI.13.
+- `EI-04.inertia.principal` — закрыт целиком
+  - Справка называет главные моменты и направления осей применимыми «только для трехмерных объектов».
+  - Направление оси, которое не прочиталось, остаётся null, а не выдуманным вектором (0,0,0).
+- `EI-05.inertia.units` — закрыт целиком
+  - Единица — аргумент вызова, а не константа кода; ответ называет применённую единицу полем units.
+  - Одно и то же имя Jx означает разные величины в центральной и главной центральной системах, поэтому system обязателен.
 - `AUX-SKETCH.plane_and_profile_lifecycle` — закрыт целиком
   - замена и очистка после reopen работают для измеренной области: эскиз на основной XY, профиль — окружность, вырезание сквозное; точка поиска выводится из цилиндрической грани зависимого тела (проба G, строки G10…G10r)
   - вне измеренной области (наклонная плоскость, отрезки, дуги, прямоугольники) отказ явный: CAPABILITY_UNAVAILABLE с derivation=profile_not_circle / plane_not_xy, а не догадка (строка G11)
@@ -1272,6 +1331,16 @@
   - Отсутствие доступной коллекции параметров — названный отказ (CAPABILITY_UNAVAILABLE), а не пустой список: два состояния различимы в ответе.
 - `dep.vb.idempotency` — закрыт целиком
   - Проверяется на обоих мутирующих инструментах: повтор payload, конфликт аргументов и устаревшая ревизия.
+- `dep.ei.path_policy` — закрыт целиком
+  - Политика путей — свойство Host, а не ядра: измерено, что ядро путь не проверяет.
+- `dep.ei.triangle_count_from_file` — закрыт целиком
+  - Точный размер текстового STL зависит от форматирования: сверяется число треугольников, а не размер.
+- `dep.ei.units_system` — закрыт целиком
+  - Единица — аргумент вызова: константа кода её не задаёт.
+- `dep.ei.read_only_measure` — закрыт целиком
+  - Чтение МЦХ модель не меняет; проверяется строками EI.12.
+- `dep.ei.idempotency` — закрыт целиком
+  - STL пишет файл, а не модель: ревизия модели не двигается, проверяется только запрошенная.
 
 ## Семьи без строк матрицы (инвентаризация не завершена)
 

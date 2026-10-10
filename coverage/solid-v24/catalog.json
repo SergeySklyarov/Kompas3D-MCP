@@ -7140,6 +7140,146 @@
      ]
     }
    ]
+  },
+  {
+   "id": "G5",
+   "title": "Экспорт STL: сохранение модели в дополнительный формат с заданной точностью триангуляции",
+   "classification": "solid",
+   "level": "mcp_verified",
+   "evidence": {
+    "documentation": "Проводная проверка справки SDK 24 (help.ascon.ru/KOMPAS_SDK/24/ru-RU), 10.10.2026: ksdocument3d_saveastoadditionformat, ksadditionformatparam, ksdocument3d_additionformatparam, ksadditionformatparam_props, ksadditionformatparam_methods, ksadditionformatparam_length, ksadditionformatparam_angle, ksadditionformatparam_formatbinary, ksapi_iadditionconvertparameters_setformatbinary, d3formatconvtype, ksd3converteroptionsenum — HTTP 200; отрицательный контроль: 3mf, format_3MF, d3formatconvtype_3mf → 404 (маршрута 3MF нет)",
+    "metadata": "Сканер tools/KompasMcp.InteropScan по поставленной Interop.Kompas6API5.dll и Interop.Kompas6Constants3D.dll, 10.10.2026: ksDocument3D.SaveAsToAdditionFormat(BSTR, LPDISPATCH)→Boolean и ksDocument3D.AdditionFormatParam()→ksAdditionFormatParam; ksAdditionFormatParam (iid 0fd25ff9-ab0a-48f3-bad4-f193116c0887, 70 членов): format(Int16), formatBinary(Boolean), length(Double), angle(Double), Init(), topolgyIncluded, maxTeselationCellCount, LoadConfigurationFile/SaveConfigurationFile; D3FormatConvType.format_STL = 6",
+    "runtime": "живой прогон группы EI (scripts/mcp-smoke.py --export-inertia-only) на Release-сборке этого коммита"
+   },
+   "route": "Экспорт — API5: ksDocument3D.AdditionFormatParam() → ksAdditionFormatParam.Init() → format = format_STL(6), formatBinary, length, angle → ksDocument3D.SaveAsToAdditionFormat(fileName, param). Подтверждение — файл на диске, число треугольников ИЗ ФАЙЛА и габарит триангуляции против габарита тела. ИЗМЕРЕНО 10.10.2026: признак formatBinary на целевой сборке даёт вид файла, ОБРАТНЫЙ справке (true -> текстовый), поэтому сервер проверяет вид ПО СОДЕРЖИМОМУ файла и при расхождении записывает противоположное значение; точность триангуляции (length/angle) на сетку STL не влияет.",
+   "mcp_support": "kompas_export_stl",
+   "next_step": "Живой прогон группы --export-inertia-only на Release-сборке; доказательства в scratch/export-inertia-runs/<run>/.",
+   "operations": [
+    {
+     "id": "EI-01.stl.export",
+     "name": "Сохранить тело/деталь в STL (двоичный и текстовый)",
+     "level": "mcp_verified",
+     "doc_source": [
+      "ksdocument3d_saveastoadditionformat",
+      "ksadditionformatparam",
+      "ksdocument3d_additionformatparam",
+      "ksadditionformatparam_formatbinary",
+      "ksapi_iadditionconvertparameters_setformatbinary",
+      "d3formatconvtype"
+     ],
+     "interfaces": {
+      "api5": [
+       "ksDocument3D.AdditionFormatParam() → ksAdditionFormatParam",
+       "ksAdditionFormatParam.Init() → Boolean",
+       "ksAdditionFormatParam.format (Int16) = format_STL = 6",
+       "ksAdditionFormatParam.formatBinary (Boolean)",
+       "ksDocument3D.SaveAsToAdditionFormat(BSTR fileName, LPDISPATCH additionPar) → Boolean"
+      ]
+     },
+     "route": "Двоичный и текстовый STL одним маршрутом; формат и признак двоичности — свойства параметра, а не отдельные методы. Число треугольников читается из файла.",
+     "modes": [],
+     "mcp_support": "kompas_export_stl",
+     "next_step": "Живой прогон группы --export-inertia-only."
+    },
+    {
+     "id": "EI-02.stl.tessellation",
+     "name": "Точность триангуляции: length и angle применяются к параметрам записи, габарит триангуляции сверяется с bbox тела",
+     "level": "mcp_verified",
+     "doc_source": [
+      "ksadditionformatparam_length",
+      "ksadditionformatparam_angle",
+      "ksadditionformatparam_props"
+     ],
+     "interfaces": {
+      "api5": [
+       "ksAdditionFormatParam.length (Double) — максимально допустимое расстояние между соседними точками на расстоянии шага",
+       "ksAdditionFormatParam.angle (Double) — максимально допустимое угловое отклонение касательных кривой или нормалей поверхности в соседних точках"
+      ]
+     },
+     "route": "Точность задаётся явно перед записью и подтверждается ОБРАТНЫМ ЧТЕНИЕМ; допуск сверки габарита выводится из шага триангуляции (max_edge_length_mm), а не берётся на глаз. ИЗМЕРЕНО 10.10.2026: на целевой сборке число треугольников STL не зависит ни от length, ни от angle, ни от maxTeselationCellCount — требование «меньше шаг, больше треугольников» снято из проверки по AGENTS.md, фактический ответ API назван строкой EI.04b.",
+     "modes": [],
+     "mcp_support": "kompas_export_stl",
+     "next_step": "Живой прогон группы --export-inertia-only."
+    }
+   ]
+  },
+  {
+   "id": "G7",
+   "title": "Моменты инерции тела: осевые, центробежные, плоскостные и главные центральные",
+   "classification": "solid",
+   "level": "mcp_verified",
+   "evidence": {
+    "documentation": "Проводная проверка справки SDK 24 (help.ascon.ru/KOMPAS_SDK/24/ru-RU), 10.10.2026: kspart_calcmassinertiaproperties, ksmassinertiaparam, ksmassinertiaparam_props, ksmassinertiaparam_methods, ksmassinertiaparam_jx, ksmassinertiaparam_jxy, ksmassinertiaparam_jx0z, ksmassinertiaparam_jx0, ksmassinertiaparam_lx, ksmassinertiaparam_lxy, ksmassinertiaparam_getaxisx — HTTP 200",
+    "metadata": "Сканер tools/KompasMcp.InteropScan по поставленной Interop.Kompas6API5.dll, 10.10.2026: ksMassInertiaParam (iid 283f77eb-7e2c-4f71-8b16-4d286fa4857e, 54 члена) — xc/yc/zc, lx/ly/lz, jx/jy/jz, jxy/jxz/jyz, jx0z/jy0z/jx0y, lxy/lxz/lyz, r, m, v, F, jx0/jy0/jz0, GetAxisX/Y/Z(Double&, Double&, Double&)→Boolean; ksBody.CalcMassInertiaProperties(uint)→object",
+    "runtime": "живой прогон группы EI (scripts/mcp-smoke.py --export-inertia-only) на Release-сборке этого коммита"
+   },
+   "route": "МЦХ — API5: ksBody.CalcMassInertiaProperties(bitVector) → ksMassInertiaParam; bitVector задаёт размерность длины и массы в [ST_MIX_MM..ST_MIX_KG]; свойства jx/jy/jz, jxjy/jxz/jyz, jx0z/jy0z/jx0y, jx0/jy0/jz0 и методы GetAxisX/Y/Z — только чтение. Маршрут уже вызывается продуктом ради объёма, площади и плотности.",
+   "mcp_support": "kompas_measure (свойство inertia)",
+   "next_step": "Живой прогон группы --export-inertia-only на Release-сборке; доказательства в scratch/export-inertia-runs/<run>/.",
+   "operations": [
+    {
+     "id": "EI-03.inertia.central",
+     "name": "Осевые, центробежные и плоскостные моменты инерции в центральной системе",
+     "level": "mcp_verified",
+     "doc_source": [
+      "kspart_calcmassinertiaproperties",
+      "ksmassinertiaparam",
+      "ksmassinertiaparam_jx",
+      "ksmassinertiaparam_jxy",
+      "ksmassinertiaparam_jx0z"
+     ],
+     "interfaces": {
+      "api5": [
+       "ksBody.CalcMassInertiaProperties(uint bitVector) → object (ksMassInertiaParam)",
+       "ksMassInertiaParam.jx, .jy, .jz (Double, только чтение)",
+       "ksMassInertiaParam.jxjy, .jxz, .jyz (Double, только чтение)",
+       "ksMassInertiaParam.jx0z, .jy0z, .jx0y (Double, только чтение)"
+      ]
+     },
+     "route": "Свойства того же интерфейса, который продукт уже вызывает для объёма и площади.",
+     "modes": [],
+     "mcp_support": "kompas_measure (inertia)",
+     "next_step": "Живой прогон группы --export-inertia-only."
+    },
+    {
+     "id": "EI-04.inertia.principal",
+     "name": "Главные центральные моменты и направления главных осей",
+     "level": "mcp_verified",
+     "doc_source": [
+      "ksmassinertiaparam_jx0",
+      "ksmassinertiaparam_getaxisx"
+     ],
+     "interfaces": {
+      "api5": [
+       "ksMassInertiaParam.jx0, .jy0, .jz0 (Double, только чтение; только 3D)",
+       "ksMassInertiaParam.GetAxisX/Y/Z(out double, out double, out double) → Boolean"
+      ]
+     },
+     "route": "Главные центральные моменты и направления осей; справка называет применимость «только для трехмерных объектов».",
+     "modes": [],
+     "mcp_support": "kompas_measure (inertia)",
+     "next_step": "Живой прогон группы --export-inertia-only."
+    },
+    {
+     "id": "EI-05.inertia.units",
+     "name": "Единицы и система моментов названы и следуют за аргументом вызова",
+     "level": "mcp_verified",
+     "doc_source": [
+      "kspart_calcmassinertiaproperties",
+      "ksmassinertiaparam"
+     ],
+     "interfaces": {
+      "api5": [
+       "bitVector: размерность длины и массы в [ST_MIX_MM..ST_MIX_KG]",
+       "ST_MIX_MM = 1, ST_MIX_M = 3, ST_MIX_KG = 16"
+      ]
+     },
+     "route": "Единица — аргумент вызова, а не константа кода; ответ называет её полем units вместе с системой координат.",
+     "modes": [],
+     "mcp_support": "kompas_measure (inertia_units)",
+     "next_step": "Живой прогон группы --export-inertia-only."
+    }
+   ]
   }
  ],
  "families_pending_entry": {

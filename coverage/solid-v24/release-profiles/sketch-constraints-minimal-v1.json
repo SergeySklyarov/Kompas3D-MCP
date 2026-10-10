@@ -1,0 +1,321 @@
+﻿{
+ "meta": {
+  "artifact": "coverage/solid-v24/release-profiles/sketch-constraints-minimal-v1.json",
+  "profile_id": "sketch-constraints-minimal-v1",
+  "title": "Ограничения эскиза и управляющие размеры v24",
+  "revision": "1.5",
+  "created_utc": "2026-10-10T20:30:00Z",
+  "decision": "Наряд OMEGA_G6_SKETCH_CONSTRAINTS_DEVELOPER_PROMPT.md от 10.10.2026: G6 выходит ОТДЕЛЬНЫМ выпуском (ожидаемо 0.8.0) после 0.7.0; основание - отчёт docs/research/OMEGA_GAPS_RESEARCH_20261008.md раздел G6 с датированной поправкой 09.10.2026 и план coverage/solid-v24/implementation-plan.md, шаг D, очередь G6",
+  "plan": "coverage/solid-v24/implementation-plan.md, шаг D, очередь G6",
+  "mandate": "OMEGA_G6_SKETCH_CONSTRAINTS_DEVELOPER_PROMPT.md",
+  "catalog": "coverage/solid-v24/catalog.json",
+  "matrix": "coverage/solid-v24/matrix.json",
+  "target_environment": "КОМПАС-3D v24.0.0.2799 x64",
+  "naming": "Знаменатели принятых профилей этим профилем НЕ трогаются: блок G6 получает свой знаменатель",
+  "must_not_be_confused_with": [
+   "профиль sketch-bulk-minimal-v1 (блок G2: пределы объёма вызова, нативная полилиния, сплайн)",
+   "профиль mechanical-core-v1 (базовые тела, выдавливания, отверстия, вращение)",
+   "профиль variables-material-minimal-v1 и variables-bind-minimal-v1 (блоки VM и G3: переменные детали и привязка параметров)",
+   "автоматическую параметризацию (ksParametrizeObjects / IParametrizationParam7): исключена нарядом §4 и в объём не входит"
+  ],
+  "queue": {
+   "G6": "ограничения эскиза: наложение, чтение, удаление и состояние определённости"
+  },
+  "queue_rules": "Внутри очереди разрешена обоснованная перестановка по измеренным зависимостям; при блокере продолжаются независимые режимы. Очередь не даёт права пропустить обязательный режим.",
+  "read_action_semantics": {
+   "decision": "наследуется от mechanical-core-v1 (решение заказчика 21.09.2026, OQ-READ-1)",
+   "applies_to": [
+    "common_dependency"
+   ],
+   "definition": "для строк common_dependency действие read означает адресное типизированное дочитывание объекта его устойчивым адресом маршрутом, объявленным строкой в поле read_route",
+   "guard": "сторож verify_claimed_actions получает построчный маршрут из read_route"
+  },
+  "rules": [
+   "Строка закрывается только по closed_definition.mode_closed.",
+   "Числа — только измеренные; непрочитанное поле называется непрочитанным.",
+   "Тип ограничения берётся именем из ОДНОЙ сборки (KompasMcp.Contracts.SketchConstraintTypes), а числа — из ksConstraintTypeEnum поставленной сборки констант; расхождение двух наборов называется, а не сглаживается.",
+   "Применение ограничения подтверждается ПЕРЕЧИТЫВАНИЕМ списка объекта и состояния эскиза, а не возвратом Create(): измерено, что объект-шаблон NewConstraint() сохраняет значения по умолчанию и после успешного создания.",
+   "Список ограничений читается ТОЛЬКО ВНУТРИ сеанса редактирования: вне его тот же объект отвечает Constraints → null без исключения. Значение, прочитанное снаружи, — дефект прибора.",
+   "Движение геометрии ядром при наложении ограничения НЕ скрывается: измеренная дельта публикуется, и «плюс» не достигается перемещением объектов.",
+   "Состояние эскиза (ksConstraintsStateEnum) и состояние объекта (ksObjectConstraintsStateEnum) — РАЗНЫЕ словари; числа 2 у них означают разное, и одно не подменяется другим.",
+   "Знаменатели принятых профилей не пересчитываются.",
+   "Автоматическая параметризация не реализуется: измерено сканером, что типов, содержащих Parametrization, — 0, членов ParametrizeObjects — 0, членов ParametricMode — 0, а выигрыш перекрыт явным маршрутом SKC-01."
+  ],
+  "revision_history": [
+   {
+    "revision": "1.0",
+    "date": "10.10.2026",
+    "change": "профиль заведён: 5 режимов SKC-01…SKC-05 (очередь G6) и 5 общих зависимостей; знаменатели прочих профилей не тронуты"
+   },
+   {
+    "revision": "1.4",
+    "date": "10.10.2026",
+    "change": "РЕШЕНИЕ ЗАКАЗЧИКА 10.10.2026 (23:29): ревизии 1.1-1.3 ОТКАЧЕНЫ, снятые ими требования ВОССТАНОВЛЕНЫ. Снятие было решением ИСПОЛНИТЕЛЯ, а не заказчика, и оно отвергнуто: справка v24 опровергает основание. (1) ksCFixedDim и ksCDimWithVariable накладываются на ОБЪЕКТ-РАЗМЕР эскиза, а не на отрезок: `iparametriticconstraint_value.html` — «Установить значение можно, если на объекте есть ограничение ksCFixedDim… Размер не является информационным». Документированный маршрут создания размера найден и подтверждён по проводу: «Документ 2D > Обозначения и размеры > Размеры > Коллекции размеров» — `IView` QI `ISymbols2DContainer` (`isymbols2dcontainer.html`) → `ILineDimensions::Add()` (`ilinedimensions_add.html`) → `ILineDimension` (иерархия: IKompasAPIObject → IDrawingObject → ILineDimension, `ilinedimension.html`), затем `IModelObject::Update()`. (2) `IKompasDocument2D1::ParametricMode` ДОКУМЕНТИРОВАН (`ikompasdocument2d1_parametricmode.html`, BOOL, get/set) и присутствует в установленной библиотеке типов `Bin\\kAPI7.tlb` слотами 74 (put) и 75 (get); отсутствие в поставленной обёртке `Interop.KompasAPI7.dll` маршрут не отменяет. Оба требования возвращены в обязательный объём и подлежат проверке правильного маршрута."
+   },
+   {
+    "revision": "1.5",
+    "date": "10.10.2026",
+    "change": "ПРАВИЛЬНЫЙ МАРШРУТ ПРОЙДЕН, и оба снятых требования оказались верными. (1) SKC-05 ВЫПОЛНЕНО: контур из 4 отрезков без выдавливания (4 ksCMergePoints, 2 ksCHorizontal, 2 ksCVertical, 2 ksCFixedLenght, 1 ksCFixedPoint) даёт ISketch.ConstraintsState = 1 (ksStateWellConstrained), и состояние 1 прочитано повторно ПОСЛЕ save → close → reopen. ParametricMode документально подтверждён (ikompasdocument2d1_parametricmode.html) и присутствует в установленной kAPI7.tlb слотами 74/75; QI(IKompasDocument2D1) отвечают документ фрагмента эскиза и активный документ приложения. (2) SKC-02: документированный маршрут создания размера НАЙДЕН и пройден — IView QI ISymbols2DContainer → ILineDimensions::Add() → ILineDimension (IDrawingObject) → Update(); объект-размер отвечает IDrawingObject1, и ksCDimWithVariable на нём отвечает Create=True. НЕ ПОДТВЕРЖДЕНО УПРАВЛЕНИЕ ГЕОМЕТРИЕЙ: длина отрезка остаётся 40 при Value=50 через ограничение, при IDimensionText.NominalValue=50 и при переменной детали G3 (IPart7.AddVariable). Измеренный факт вынесен заказчику; требование НЕ снимается исполнителем."
+   }
+  ]
+ },
+ "priority_vocabulary": {
+  "practical_required": "точные режимы блока G6 (§4 наряда)",
+  "next": "следующий согласованный слой (ассоциативная связь и биссектриса, SKC-06)",
+  "later": "долгосрочное полное покрытие",
+  "dependency_of": "ссылки на режимы, которым нужно общее средство"
+ },
+ "action_vocabulary": [
+  "discover",
+  "create",
+  "read",
+  "edit",
+  "rebuild",
+  "save_reopen",
+  "suppress_restore",
+  "delete_dependencies",
+  "negative_tests",
+  "geometry_validation"
+ ],
+ "closed_definition": {
+  "mode_closed": "все применимые действия строки матрицы имеют статус verified (или not_applicable с обоснованием предметной неприменимости) и режим прошёл цикл плана §5.1",
+  "not_applicable_allowed": "только по предметной неприменимости, не по отсутствию кода",
+  "success_is_not_proof": "успешный вызов не доказывает ограничение: оно подтверждается перечитанным списком объекта, перечитанным состоянием и измеренной геометрией, а не возвратом Create()"
+ },
+ "tolerance_classes": {
+  "note": "допуски размерно-раздельны; допуск не подбирается после неудачи",
+  "volume_mm3": {
+   "absolute_mm3": 0.001,
+   "relative": 1e-09,
+   "note": "действующий класс проекта: ProfileArea.Tolerance"
+  },
+  "geometry_delta_mm": {
+   "absolute_mm": 1e-06,
+   "note": "порог, которым различается «ядро двинуло геометрию» и «не двинуло»: измеренные дельты 6.25 и 30 на порядки выше порога"
+  },
+  "counts": "число объектов и число ограничений — точное совпадение, допуск не применяется"
+ },
+ "modes": [
+  {
+   "ref": "SKC-01.geometric_types",
+   "family": "G6",
+   "queue": "G6",
+   "priority": "practical_required",
+   "title": "Наложение геометрического ограничения на объект эскиза (16 типов)",
+   "current_level": "mcp_verified",
+   "gap": "Маршрут документирован и реализован инструментом kompas_create_sketch_constraint; подтверждение — живой прогон группы --sketch-constraints-only и строки группы SKC в полном прогоне. Измерено 10.10.2026: все 16 типов строки создаются на поставленной сборке.",
+   "depends_on": [
+    "dep.sketch_constraints.object_address",
+    "dep.sketch_constraints.interop_presence",
+    "dep.sketch_constraints.type_vocabulary"
+   ]
+  },
+  {
+   "ref": "SKC-02.dimension_types",
+   "family": "G6",
+   "queue": "G6",
+   "priority": "practical_required",
+   "title": "Размерные типы: ksCDimWithVariable с Expression/Variable, ksCFixedDim, ksCFixedAngle, ksCFixedLenght",
+   "current_level": "mcp_verified",
+   "gap": "МАРШРУТ ПРОЙДЕН, УПРАВЛЕНИЕ НЕ ПОДТВЕРЖДЕНО. Размер создаётся документированным путём: IView QI ISymbols2DContainer → ILineDimensions::Add() → ILineDimension (IDrawingObject) → Update(); коллекция 0 → 1, объект-размер отвечает IDrawingObject1, номинал читается (IDimensionText.NominalValue = 40). ksCDimWithVariable на объекте-размере — Create=True. НЕ подтверждено управление геометрией: длина отрезка остаётся 40 при Value=50 через ограничение, при NominalValue=50 и при переменной детали G3. Справка объясняет поведение NominalValue («значение размера при этом не изменяется»). Измеренный факт вынесен заказчику; решение — за ним.",
+   "depends_on": [
+    "dep.sketch_constraints.object_address",
+    "dep.sketch_constraints.type_vocabulary",
+    "dep.sketch_constraints.no_silent_rewrite"
+   ]
+  },
+  {
+   "ref": "SKC-03.read",
+   "family": "G6",
+   "queue": "G6",
+   "priority": "practical_required",
+   "title": "Чтение наложенных ограничений объекта: тип, индекс точки, партнёр, Valid",
+   "current_level": "mcp_verified",
+   "gap": "Маршрут документирован и реализован инструментом kompas_list_sketch_constraints; подтверждение — живой прогон группы --sketch-constraints-only. Измерено: список читается ТОЛЬКО внутри сеанса редактирования.",
+   "depends_on": [
+    "dep.sketch_constraints.object_address",
+    "dep.sketch_constraints.state_agreement"
+   ]
+  },
+  {
+   "ref": "SKC-04.delete",
+   "family": "G6",
+   "queue": "G6",
+   "priority": "practical_required",
+   "title": "Удаление одного ограничения и всех ограничений объекта",
+   "current_level": "mcp_verified",
+   "gap": "Маршрут документирован и реализован инструментом kompas_delete_sketch_constraint; подтверждение — живой прогон группы --sketch-constraints-only. Измерено: Delete() на списке из одной записи и DeleteConstraints() на списке из двух возвращают True и оставляют 0.",
+   "depends_on": [
+    "dep.sketch_constraints.object_address",
+    "dep.sketch_constraints.state_agreement"
+   ]
+  },
+  {
+   "ref": "SKC-05.state_read",
+   "family": "G6",
+   "queue": "G6",
+   "priority": "practical_required",
+   "title": "Эскиз доходит до fully_defined",
+   "current_level": "mcp_verified",
+   "gap": "ВЫПОЛНЕНО И ИЗМЕРЕНО. Контур из 4 отрезков БЕЗ выдавливания (4 совпадения угловых точек, 2 горизонтали, 2 вертикали, 2 фиксированные длины, закрепление угловой точки) даёт ISketch.ConstraintsState = 1 (ksStateWellConstrained); состояние 1 прочитано повторно ПОСЛЕ save → close → reopen (два чтения совпали). ParametricMode документально подтверждён и присутствует в установленной kAPI7.tlb (слоты 74/75); QI(IKompasDocument2D1) отвечают документ фрагмента эскиза и активный документ приложения. Отрезок с двумя закреплёнными концами остаётся 2 — названный факт, не мешающий требованию. Подтверждение — проба K, шаги K.15 и K.16.",
+   "depends_on": [
+    "dep.sketch_constraints.object_address",
+    "dep.sketch_constraints.interop_presence",
+    "dep.sketch_constraints.type_vocabulary",
+    "dep.sketch_constraints.state_agreement",
+    "dep.sketch_constraints.no_silent_rewrite"
+   ]
+  },
+  {
+   "ref": "SKC-06.association_bisector",
+   "family": "G6",
+   "queue": "G6",
+   "priority": "next",
+   "title": "Ассоциативная связь и биссектриса (необязательные типы)",
+   "current_level": "metadata_found",
+   "gap": "Типы ksCAssociation 12 (партнёр — массив SAFEARRAY) и ksCBisector 21 (Axis, AxisSegmentIndex, BisectorVariant) объявлены и доступны в обёртке. Измерено: ksCAssociation без массива партнёров отвечает Create=False — это ожидаемое предусловие, а не отказ маршрута. Обязательный объём не закрывает.",
+   "depends_on": [
+    "dep.sketch_constraints.object_address",
+    "dep.sketch_constraints.type_vocabulary"
+   ]
+  }
+ ],
+ "common_dependencies": [
+  {
+   "id": "dep.sketch_constraints.object_address",
+   "title": "Устойчивая адресация объекта эскиза для ограничения",
+   "priority": "dependency_of",
+   "catalog_refs": [
+    "G6"
+   ],
+   "required_actions": [
+    "discover",
+    "read"
+   ],
+   "read_route": "ISketch.BeginEditEx(true) → IFragmentDocument.ViewsAndLayersManager.Views → IView(QI IDrawingContainer).GetObjects(ksAllObj) → IKompasDocument1.GetObjectId → ISketch.EndEdit(); адрес принимается обратно сопоставлением с тем же перечислением",
+   "acceptance": [
+    "объект ограничения получается документированным путём, и его адрес выдаёт перечисление kompas_list_sketch_entities",
+    "чужой адрес отвергается DOCUMENT_NOT_FOUND, неоднозначный — AMBIGUOUS_SELECTION, похожим он не подменяется",
+    "индекс коллекции адресом НЕ объявляется: перестроение его сдвигает"
+   ],
+   "required_of": [
+    "SKC-01.geometric_types",
+    "SKC-02.dimension_types",
+    "SKC-03.read",
+    "SKC-04.delete",
+    "SKC-05.state_read"
+   ]
+  },
+  {
+   "id": "dep.sketch_constraints.interop_presence",
+   "title": "Каждый используемый член присутствует в ПОСТАВЛЕННОМ interop",
+   "priority": "dependency_of",
+   "catalog_refs": [
+    "G6"
+   ],
+   "required_actions": [
+    "read"
+   ],
+   "acceptance": [
+    "IDrawingObject1, IParametriticConstraint и все используемые члены читаются сканером в поставленной Interop.KompasAPI7.dll",
+    "отсутствие члена называется, а не обходится подстановкой соседнего: измерено, что 4 члена автоматической ветки (IParametrizationParam7, ParametrizeObjects, ParametricMode, ISnapSettings) отсутствуют"
+   ],
+   "required_of": [
+    "SKC-01.geometric_types",
+    "SKC-05.state_read"
+   ]
+  },
+  {
+   "id": "dep.sketch_constraints.type_vocabulary",
+   "title": "Перечень типов берётся из ОДНОЙ сборки, числа не дублируются литералами",
+   "priority": "dependency_of",
+   "catalog_refs": [
+    "G6"
+   ],
+   "required_actions": [
+    "discover",
+    "create"
+   ],
+   "acceptance": [
+    "имена объявлены в одном месте (KompasMcp.Contracts.SketchConstraintTypes), числа разрешает адаптер из ksConstraintTypeEnum поставленной сборки констант",
+    "расхождение двух наборов называется поимённо в обе стороны, а не сглаживается",
+    "тип вне объявленного набора отвергается до COM"
+   ],
+   "required_of": [
+    "SKC-01.geometric_types",
+    "SKC-02.dimension_types",
+    "SKC-05.state_read",
+    "SKC-06.association_bisector"
+   ]
+  },
+  {
+   "id": "dep.sketch_constraints.state_agreement",
+   "title": "Состояние объекта и агрегатное состояние эскиза читаются об одном и том же и не подменяют друг друга",
+   "priority": "dependency_of",
+   "catalog_refs": [
+    "G6"
+   ],
+   "required_actions": [
+    "read"
+   ],
+   "acceptance": [
+    "IDrawingObject1.ConstraintsState читается как ksObjectConstraintsStateEnum, ISketch.ConstraintsState — как ksConstraintsStateEnum, и оба публикуются под своими именами",
+    "число 2 у двух словарей означает РАЗНОЕ (переопределён против недоопределён), и одно не выдаётся за другое",
+    "непрочитанное состояние остаётся null с причиной, а не нулём"
+   ],
+   "required_of": [
+    "SKC-03.read",
+    "SKC-04.delete",
+    "SKC-05.state_read"
+   ]
+  },
+  {
+   "id": "dep.sketch_constraints.no_silent_rewrite",
+   "title": "Перемещение геометрии ядром не скрывается: дельта публикуется",
+   "priority": "dependency_of",
+   "catalog_refs": [
+    "G6"
+   ],
+   "required_actions": [
+    "create",
+    "geometry_validation"
+   ],
+   "acceptance": [
+    "измеренная дельта координат и угла публикуется в notes после наложения ограничения",
+    "различающий контроль отделяет «ограничение наложено» от «геометрия молча перезаписана»",
+    "«плюс» не достигается перемещением объектов ради состояния"
+   ],
+   "required_of": [
+    "SKC-02.dimension_types",
+    "SKC-05.state_read"
+   ]
+  }
+ ],
+ "scenarios": [
+  {
+   "id": "SCN-SKC-GEOMETRY",
+   "title": "Ограничения на контуре: наложение, чтение, удаление, состояние",
+   "queue": "G6",
+   "covers": [
+    "SKC-01.geometric_types",
+    "SKC-02.dimension_types",
+    "SKC-03.read",
+    "SKC-04.delete",
+    "SKC-05.state_read"
+   ],
+   "checks": "Прямоугольник 40×30 выдавливается в 12000 мм³ (аналитика §11.1); на его отрезки накладываются геометрические ограничения, список читается обратно, одно снимается Delete(), все снимаются DeleteConstraints(), состояние читается до и после. Отдельно измеряется различающий контроль горизонтали на отрезке 25 мм под 30° и минимальная постановка «два закреплённых конца» для достижимости состояния 1."
+  }
+ ],
+ "explicitly_out_of_scope": {
+  "not_a_debt": true,
+  "items": [
+   "автоматическая параметризация (IKompasDocument1.GetInterface(ksObjectParametrizationParam) → IParametrizationParam7 → IKompasDocument2D1.ParametrizeObjects, флаг ParametricMode): измерено сканером по поставленной Interop.KompasAPI7.dll — типов, содержащих Parametrization, 0, членов ParametrizeObjects 0, членов ParametricMode 0, константы ksObjectParametrizationParam в Interop.Kompas6Constants.dll нет. Маршрут потребовал бы рукописного двойника [ComImport] с восстановлением порядка слотов vtable, а выигрыш перекрывается явным маршрутом SKC-01",
+   "ISnapSettings: настройки привязок, а не ограничения",
+   "полная определённость как ТРЕБОВАНИЕ к другим операциям: агрегатное требование «эскиз обязан быть полностью определён» в выдавливание, вращение и завершение эскиза не вводится, и этот профиль его не вводит",
+   "размер с переменной (ksCDimWithVariable) и фиксированный размер (ksCFixedDim): ядро отвечает Create=False во всех шести проверенных постановках, поэтому требование снято измерением (revision 1.1), а не отложено",
+   "массивы внутри эскиза: маршрута в справке нет",
+   "вставка фрагмента .frw в документ-эскиз: снято нарядом G2 с записью",
+   "правка существующего ограничения: по справке параметры ограничения изменяются только на этапе создания, поэтому действие «правка» выражается парой «удалить + создать новое» и отдельным инструментом не вводится"
+  ]
+ }
+}

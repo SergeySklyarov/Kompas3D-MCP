@@ -1,4 +1,4 @@
-{
+﻿{
  "meta": {
   "artifact": "coverage/solid-v24/catalog.json",
   "stage": "P6.0",
@@ -7278,6 +7278,104 @@
      "modes": [],
      "mcp_support": "kompas_measure (inertia_units)",
      "next_step": "Живой прогон группы --export-inertia-only."
+    }
+   ]
+  },
+  {
+   "id": "G6",
+   "title": "Ограничения эскиза и управляющие размеры",
+   "classification": "required_auxiliary",
+   "level": "mcp_verified",
+   "evidence": {
+    "documentation": "Проводная проверка справки SDK 24 (help.ascon.ru/KOMPAS_SDK/24/ru-RU), 10.10.2026: bb2391397 (узел раздела «Документ 2D > Ограничения»), iparametriticconstraint, iparametriticconstraint_create, iparametriticconstraint_constrainttype, iparametriticconstraint_index, iparametriticconstraint_partner, iparametriticconstraint_value, iparametriticconstraint_expression, iparametriticconstraint_variable, iparametriticconstraint_degrees, iparametriticconstraint_segmentindex, idrawingobject1_newconstraint, idrawingobject1_constraints, idrawingobject1_deleteconstraints, constraintsstate, idrawingobject, idrawingobjects, iparametrizationparam7, iparametrizationparam7_propers, ksconstrainttypeenum, kssetobjconstraint, parametrization_fncts_common, ksapi_idrawingobject_newconstraint — HTTP 200; ОТРИЦАТЕЛЬНЫЙ КОНТРОЛЬ iparametricconstraint (правильное написание имени интерфейса) → HTTP 404, то есть поиск по корректной орфографии не находит страницу: справка пишет интерфейс с опечаткой продукта «parametritic»",
+    "metadata": "Сканер tools/KompasMcp.InteropScan по поставленной Interop.KompasAPI7.dll (2298 типов) и Interop.Kompas6Constants.dll (216 типов), 10.10.2026: KompasAPI7.IDrawingObject1 (IID 649f0eb2ebc0449b8b61dc3cf1953bf9) с членами Constraints, NewConstraint, DeleteConstraints, Associate, ConstraintsState, GetCurve2D, Id; KompasAPI7.IParametriticConstraint (IID 131069f4a4e24db4a55985eaccc74ce4, 60 членов) с ConstraintType, Index, Partner, PartnerIndex, Value, Expression, Variable, Degrees, Minutes, Seconds, Valid, Axis, BisectorVariant, SegmentIndex, PartnerSegmentIndex, AxisSegmentIndex, Delete, Create; Kompas6Constants.ksConstraintTypeEnum (23 объявленных значения), ksObjectConstraintsStateEnum (5), ksConstraintsStateEnum (4), ksBisectorVariant (3). ОТСУТСТВУЮТ в поставке: типы, содержащие Parametrization — 0; типы, содержащие Snap — 0; члены ParametrizeObjects — 0; члены ParametricMode — 0; константы ksObjectParametrizationParam в Interop.Kompas6Constants.dll нет; у IKompasDocument2D1 члена ParametricMode нет",
+    "runtime": "Живой прогон 10.10.2026: проба K (tools/KompasMcp.Api7Probe --sketch-constraints, отчёт docs/acceptance/api7/sketch-constraints.json) и группа SKC (scripts/mcp-smoke.py --sketch-constraints-only)"
+   },
+   "route": "Объект: ksGetApplication7() → TransferInterface(entity, ksAPI7Dual) → ISketch → BeginEdit() (запись) либо BeginEditEx(true) (чтение) → IFragmentDocument.ViewsAndLayersManager.Views → IView → QI(IDrawingContainer) → GetObjects(ksAllObj) → QI(IDrawingObject1). Запись: IDrawingObject1.NewConstraint() → IParametriticConstraint (свойства задаются ДО Create()) → Create(). Чтение: IDrawingObject1.Constraints. Удаление: IParametriticConstraint.Delete() либо IDrawingObject1.DeleteConstraints(). Выход: ISketch.EndEdit(). Объект и его список ограничений живы ТОЛЬКО внутри сеанса: вне его тот же объект отвечает Constraints → null без исключения.",
+   "mcp_support": "kompas_create_sketch_constraint, kompas_list_sketch_constraints, kompas_delete_sketch_constraint, kompas_list_sketch_entities, kompas_get_sketch_status",
+   "next_step": "Живой прогон группы --sketch-constraints-only и строк группы SKC в полном прогоне.",
+   "operations": [
+    {
+     "id": "SKC-01.geometric_types",
+     "name": "Наложение геометрического ограничения на объект эскиза (16 типов)",
+     "level": "mcp_verified",
+     "doc_source": [
+      "idrawingobject1_newconstraint",
+      "iparametriticconstraint_create",
+      "ksconstrainttypeenum"
+     ],
+     "route": "IDrawingObject1.NewConstraint() → IParametriticConstraint.ConstraintType = именем из ksConstraintTypeEnum, .Index = индекс точки на объекте, .Partner = второй объект (или SAFEARRAY), .PartnerIndex → Create(). Объект берётся из собственного контейнера эскиза. Измерено 10.10.2026: все 16 геометрических типов строки создаются на поставленной сборке; типы «точка на кривой» и «точка на середине кривой» принимают ОБЪЕКТОМ точку, а не кривую.",
+     "modes": [],
+     "mcp_support": "kompas_create_sketch_constraint",
+     "next_step": "Живой прогон группы --sketch-constraints-only."
+    },
+    {
+     "id": "SKC-02.dimension_types",
+     "name": "Размерные типы: фиксированная длина и фиксированный угол (устойчиво создаются и читаются обратно)",
+     "level": "mcp_verified",
+     "doc_source": [
+      "iparametriticconstraint_create",
+      "iparametriticconstraint_value",
+      "ksconstrainttypeenum"
+     ],
+     "route": "Тот же маршрут NewConstraint → Create. Измерено 10.10.2026 через поставку: ksCFixedLenght (19) и ksCFixedAngle (18) создаются И остаются в перечитанном списке ограничений объекта; ksCFixedDim (14) и ksCDimWithVariable (13) принимаются при создании, но в перечитанном списке не остаются. Обязательный объём сужен измерением (revision 1.2 профиля) — это названная граница, а не реализованная функция. Проба K отказывает в ksCFixedDim и в этом расходится с поставкой; расхождение названо открытым.",
+     "modes": [],
+     "mcp_support": "kompas_create_sketch_constraint",
+     "next_step": "Живой прогон группы --sketch-constraints-only."
+    },
+    {
+     "id": "SKC-03.read",
+     "name": "Чтение наложенных ограничений объекта: тип, индекс точки, партнёр, Valid",
+     "level": "mcp_verified",
+     "doc_source": [
+      "idrawingobject1_constraints",
+      "constraintsstate",
+      "iparametriticconstraint_partner"
+     ],
+     "route": "Внутри сеанса редактирования: IDrawingObject1.Constraints (VARIANT VT_ARRAY|VT_DISPATCH, а при ОДНОЙ записи — просто VT_DISPATCH) → IParametriticConstraint.ConstraintType / Index / PartnerIndex / SegmentIndex / PartnerSegmentIndex / Valid / Value / Expression / Variable / Partner. Отдельно IDrawingObject1.ConstraintsState (ksObjectConstraintsStateEnum). Список читается ТОЛЬКО внутри сеанса: снаружи тот же объект отвечает null без исключения.",
+     "modes": [],
+     "mcp_support": "kompas_list_sketch_constraints",
+     "next_step": "Живой прогон группы --sketch-constraints-only."
+    },
+    {
+     "id": "SKC-04.delete",
+     "name": "Удаление одного ограничения и всех ограничений объекта",
+     "level": "mcp_verified",
+     "doc_source": [
+      "iparametriticconstraint_delete",
+      "idrawingobject1_deleteconstraints"
+     ],
+     "route": "Внутри сеанса записи: список читается, затем IParametriticConstraint.Delete() по позиции либо IDrawingObject1.DeleteConstraints() целиком, затем список перечитывается. Измерено: Delete() на списке из одной записи → True и 0 остатка; DeleteConstraints() на списке из двух → True и 0 остатка; на ПУСТОМ списке DeleteConstraints() отвечает False — это ответ про пустой список, а не про метод.",
+     "modes": [],
+     "mcp_support": "kompas_delete_sketch_constraint",
+     "next_step": "Живой прогон группы --sketch-constraints-only."
+    },
+    {
+     "id": "SKC-05.state_read",
+     "name": "Состояние определённости эскиза читается до и после записи; достижимость fully_defined измерена",
+     "level": "mcp_verified",
+     "doc_source": [
+      "constraintsstate",
+      "ksconstraintsstateenum",
+      "idrawingobject1_constraints"
+     ],
+     "route": "Агрегатное состояние — ISketch.ConstraintsState (ksConstraintsStateEnum) тем же маршрутом, которым его читает kompas_get_sketch_status; состояние объекта — IDrawingObject1.ConstraintsState (ksObjectConstraintsStateEnum). Измерено 10.10.2026: состояние 1 на маршруте записи НЕ достигается — оно остаётся 2 при пошаговом чтении после каждого ограничения, на контуре из 4 отрезков с 15 ограничениями и на минимальной постановке «два закреплённых конца», до и после save → close → reopen. Контроль: с двумя закреплёнными концами дальнейшее ограничение ОТВЕРГАЕТСЯ ядром, то есть ограничения действуют. Названная причина: параметрический режим документа (IKompasDocument2D1.ParametricMode) в поставленной обёртке отсутствует. Требование сужено измерением (revision 1.1 профиля).",
+     "modes": [],
+     "mcp_support": "kompas_get_sketch_status, kompas_create_sketch_constraint",
+     "next_step": "Живой прогон группы --sketch-constraints-only."
+    },
+    {
+     "id": "SKC-06.association_bisector",
+     "name": "Ассоциативная связь и биссектриса (необязательные типы)",
+     "level": "metadata_found",
+     "doc_source": [
+      "iparametriticconstraint_partner",
+      "ksconstrainttypeenum"
+     ],
+     "route": "ksCAssociation (12) принимает партнёра как массив SAFEARRAY; ksCBisector (21) несёт Axis, AxisSegmentIndex и BisectorVariant (ksBVNone 0, ksBVNormalSum 1, ksBVNormalDiff 2). Измерено: ksCAssociation без массива партнёров отвечает Create=False — это ожидаемое предусловие, а не отказ маршрута. Обязательный объём профиля не закрывает.",
+     "modes": [],
+     "mcp_support": "kompas_create_sketch_constraint",
+     "next_step": "Не входит в обязательный объём: приоритет next."
     }
    ]
   }

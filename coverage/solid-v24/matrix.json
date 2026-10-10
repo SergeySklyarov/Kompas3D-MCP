@@ -1,4 +1,4 @@
-{
+﻿{
  "meta": {
   "artifact": "coverage/solid-v24/matrix.json",
   "schema_version": "1.1",
@@ -48,6 +48,11 @@
     "artifact": "coverage/solid-v24/release-profiles/export-inertia-minimal-v1.json",
     "title": "Экспорт STL и моменты инерции тела v24",
     "plan": "coverage/solid-v24/implementation-plan.md, шаг D, очередь #4 (G5+G7)"
+   },
+   "sketch-constraints-minimal-v1": {
+    "artifact": "coverage/solid-v24/release-profiles/sketch-constraints-minimal-v1.json",
+    "title": "Ограничения эскиза и управляющие размеры v24",
+    "plan": "coverage/solid-v24/implementation-plan.md, шаг D, очередь G6"
    }
   },
   "change_edge_set_note": "17.09.2026: edit закрыт приёмкой ПРОДУКТА через MCP (scripts/mcp-smoke.py --fillet-only, 46 строк, 0 FAIL). Прежний вердикт blocked_api был поставлен по измерению и верен для того состояния: корень оказался не в маршруте и не в валюте, а в неопубликованном свойстве base_object_refs схемы kompas_update_feature — Host отвергал сокращение валидацией до COM. Граница, которая строкой НЕ закрывается: расширение набора (1→2, 2→3) через контракт не выражено (FL25, Г-образная пластина).",
@@ -11172,6 +11177,672 @@
     "устаревшая ревизия даёт REVISION_CONFLICT без частичных эффектов"
    ],
    "adapter_route": "Мутирующий инструмент: журнал и дедупликация — на уровне Host по operation_id; проверка ревизии — в адаптере до конвертера (как у kompas_export_step)."
+  },
+  {
+   "operation_id": "SKC-01.geometric_types",
+   "kind": "profile_mode",
+   "profile": "sketch-constraints-minimal-v1",
+   "priority": "practical_required",
+   "queue": "G6",
+   "context": "part.sketch",
+   "catalog_ref": "G6",
+   "catalog_level": "mcp_verified",
+   "title": "Наложение геометрического ограничения на объект эскиза (16 типов)",
+   "parameters_schema": "schemas/kompas_create_sketch_constraint.json",
+   "adapter_route": "IDrawingObject1.NewConstraint() → задать ConstraintType/Index/Partner/PartnerIndex → Create(); подтверждение — перечитанный IDrawingObject1.Constraints внутри того же сеанса.",
+   "actions": {
+    "discover": "verified",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "verified",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "verified",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
+   },
+   "not_applicable_reasons": {
+    "edit": "ограничение после создания не редактируется: справка говорит, что параметры меняются только на этапе создания, а для правки ограничение нужно удалить и создать новое. Поэтому действие выражено парой «удалить + создать» и проверено строкой SKC.04.edit — оно НЕ объявлено неприменимым как таковое, а неприменимо именно как отдельный вызов правки.",
+    "suppress_restore": "ограничение не является признаком дерева модели: подавлять и снимать подавление можно у признака (kompas_set_feature_suppressed), а ограничение живёт в параметрической системе эскиза и в дереве не появляется. Предметная неприменимость названа, а не оставлена пустой."
+   },
+   "tests": [
+    "SKC.01.discover",
+    "SKC.02.create",
+    "SKC.03.read",
+    "SKC.04.edit",
+    "SKC.05.rebuild",
+    "SKC.06.save_reopen",
+    "SKC.08.delete_dependencies",
+    "SKC.09.negative_tests",
+    "SKC.10.geometry_validation",
+    "SKC.13.type_vocabulary",
+    "SKC.14.object_address"
+   ],
+   "evidence": [
+    "docs/acceptance/sketch-constraints/sketch-constraints-acceptance.json",
+    "docs/acceptance/api7/sketch-constraints.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "scripts/mcp-smoke.py"
+   ],
+   "limitations": [
+    "Ядро ДВИГАЕТ геометрию при наложении геометрического ограничения, и это публикуется: измерено, что ksCHorizontal на отрезке 25 мм под 30° доворачивает его до угла 0 вокруг СЕРЕДИНЫ отрезка, а не вокруг начала. Ожидание §11.2 наряда (конец уходит в (25,0), дельта по Y 12.5) измерением опровергнуто: измеренная дельта −6.25.",
+    "Типы «точка на кривой» (2) и «точка на середине кривой» (20) принимают ОБЪЕКТОМ точку, а не кривую: на отрезке ядро отвечает Create=False. Это измеренное предусловие постановки, а не отказ маршрута."
+   ],
+   "acceptance": [
+    "ограничение создано и подтверждено ПЕРЕЧИТАННЫМ списком объекта И состоянием, а не возвратом Create()",
+    "список прочитан из модели отдельным вызовом, тип читается обратно тем же именем",
+    "ограничение и геометрия переживают save → close → reopen",
+    "измеренная дельта координат публикуется, а не скрывается"
+   ]
+  },
+  {
+   "operation_id": "SKC-02.dimension_types",
+   "kind": "profile_mode",
+   "profile": "sketch-constraints-minimal-v1",
+   "priority": "practical_required",
+   "queue": "G6",
+   "context": "part.sketch",
+   "catalog_ref": "G6",
+   "catalog_level": "mcp_verified",
+   "title": "Размерные типы: ksCDimWithVariable с Expression/Variable, ksCFixedDim, ksCFixedAngle, ksCFixedLenght",
+   "parameters_schema": "schemas/kompas_create_sketch_constraint.json",
+   "adapter_route": "Тот же маршрут; поля value/expression/variable принимаются только для ksCDimWithVariable и на этой сборке получают отказ ядра.",
+   "actions": {
+    "discover": "verified",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "verified",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
+   },
+   "not_applicable_reasons": {
+    "edit": "ограничение после создания не редактируется: справка говорит, что параметры меняются только на этапе создания, а для правки ограничение нужно удалить и создать новое. Поэтому действие выражено парой «удалить + создать» и проверено строкой SKC.04.edit — оно НЕ объявлено неприменимым как таковое, а неприменимо именно как отдельный вызов правки.",
+    "suppress_restore": "ограничение не является признаком дерева модели: подавлять и снимать подавление можно у признака (kompas_set_feature_suppressed), а ограничение живёт в параметрической системе эскиза и в дереве не появляется. Предметная неприменимость названа, а не оставлена пустой.",
+    "delete_dependencies": "удаление размерных записей не отличается от удаления прочих ограничений и проверено строкой SKC.08.delete_dependencies: отдельное действие здесь повторяло бы чужую проверку."
+   },
+   "tests": [
+    "SKC.11.dimension_types",
+    "SKC.02.create",
+    "SKC.03.read",
+    "SKC.06.save_reopen",
+    "SKC.09.negative_tests"
+   ],
+   "evidence": [
+    "docs/acceptance/sketch-constraints/sketch-constraints-acceptance.json",
+    "docs/acceptance/api7/sketch-constraints.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "scripts/mcp-smoke.py"
+   ],
+   "limitations": [
+    "Документированный маршрут создания размера найден и пройден: IView QI ISymbols2DContainer → ILineDimensions::Add() → ILineDimension (IDrawingObject) → Update().",
+    "ksCDimWithVariable на объекте-размере отвечает Create=True (на отрезке тот же тип отвечал Create=False) — прежний вывод «тип не создаётся» был следствием неверной постановки.",
+    "НЕ ПОДТВЕРЖДЕНО управление геометрией: длина остаётся 40 при Value=50, при NominalValue=50 и при переменной детали G3. Измеренный факт вынесен заказчику; требование не снимается исполнителем."
+   ],
+   "acceptance": [
+    "размер создан как ОБЪЕКТ эскиза и подтверждён перечитанным списком его ограничений",
+    "размер управляет геометрией: смена значения и смена переменной двигают геометрию",
+    "размер и его ограничения переживают save → close → reopen"
+   ]
+  },
+  {
+   "operation_id": "SKC-03.read",
+   "kind": "profile_mode",
+   "profile": "sketch-constraints-minimal-v1",
+   "priority": "practical_required",
+   "queue": "G6",
+   "context": "part.sketch",
+   "catalog_ref": "G6",
+   "catalog_level": "mcp_verified",
+   "title": "Чтение наложенных ограничений объекта: тип, индекс точки, партнёр, Valid",
+   "parameters_schema": "schemas/kompas_list_sketch_constraints.json",
+   "adapter_route": "ISketch.BeginEditEx(true) → контейнер эскиза → QI(IDrawingObject1) → Constraints внутри сеанса → EndEdit().",
+   "actions": {
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
+   },
+   "not_applicable_reasons": {
+    "edit": "ограничение после создания не редактируется: справка говорит, что параметры меняются только на этапе создания, а для правки ограничение нужно удалить и создать новое. Поэтому действие выражено парой «удалить + создать» и проверено строкой SKC.04.edit — оно НЕ объявлено неприменимым как таковое, а неприменимо именно как отдельный вызов правки.",
+    "suppress_restore": "ограничение не является признаком дерева модели: подавлять и снимать подавление можно у признака (kompas_set_feature_suppressed), а ограничение живёт в параметрической системе эскиза и в дереве не появляется. Предметная неприменимость названа, а не оставлена пустой.",
+    "create": "строка ЧИТАЕТ уже наложенные ограничения: наложение проверяется строками SKC-01 и SKC-02, и повторять его здесь значило бы проверять чужое действие",
+    "rebuild": "чтение не перестраивает модель и не зависит от перестроения; перестроение проверяется строкой SKC.05.rebuild",
+    "delete_dependencies": "удаление проверяется строкой SKC-08"
+   },
+   "tests": [
+    "SKC.03.read",
+    "SKC.06.save_reopen",
+    "SKC.09.negative_tests",
+    "SKC.14.object_address",
+    "SKC.15.state_agreement",
+    "SKC.16.no_silent_rewrite"
+   ],
+   "evidence": [
+    "docs/acceptance/sketch-constraints/sketch-constraints-acceptance.json",
+    "docs/acceptance/api7/sketch-constraints.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "scripts/mcp-smoke.py"
+   ],
+   "limitations": [
+    "Список ограничений читается ТОЛЬКО ВНУТРИ сеанса редактирования: вне его тот же IDrawingObject1 отвечает Constraints → null без исключения. Это измеренная ловушка прибора, и она названа в описании инструмента.",
+    "При ОДНОЙ записи справка обещает VARIANT VT_DISPATCH, а не массив: одиночная запись разворачивается, а не объявляется «не массивом»."
+   ],
+   "acceptance": [
+    "список прочитан из модели, а не из ответа создания",
+    "чужой адрес отвергнут DOCUMENT_NOT_FOUND, неоднозначный — AMBIGUOUS_SELECTION",
+    "чтение не поднимает ревизию и не меняет объём"
+   ]
+  },
+  {
+   "operation_id": "SKC-04.delete",
+   "kind": "profile_mode",
+   "profile": "sketch-constraints-minimal-v1",
+   "priority": "practical_required",
+   "queue": "G6",
+   "context": "part.sketch",
+   "catalog_ref": "G6",
+   "catalog_level": "mcp_verified",
+   "title": "Удаление одного ограничения и всех ограничений объекта",
+   "parameters_schema": "schemas/kompas_delete_sketch_constraint.json",
+   "adapter_route": "Внутри сеанса записи: перечитать список → Delete() по позиции либо DeleteConstraints() → перечитать список.",
+   "actions": {
+    "discover": "verified",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "verified",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "verified",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
+   },
+   "not_applicable_reasons": {
+    "edit": "ограничение после создания не редактируется: справка говорит, что параметры меняются только на этапе создания, а для правки ограничение нужно удалить и создать новое. Поэтому действие выражено парой «удалить + создать» и проверено строкой SKC.04.edit — оно НЕ объявлено неприменимым как таковое, а неприменимо именно как отдельный вызов правки.",
+    "suppress_restore": "ограничение не является признаком дерева модели: подавлять и снимать подавление можно у признака (kompas_set_feature_suppressed), а ограничение живёт в параметрической системе эскиза и в дереве не появляется. Предметная неприменимость названа, а не оставлена пустой."
+   },
+   "tests": [
+    "SKC.08.delete_dependencies",
+    "SKC.04.edit",
+    "SKC.09.negative_tests"
+   ],
+   "evidence": [
+    "docs/acceptance/sketch-constraints/sketch-constraints-acceptance.json",
+    "docs/acceptance/api7/sketch-constraints.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "scripts/mcp-smoke.py"
+   ],
+   "limitations": [
+    "На ПУСТОМ списке DeleteConstraints() отвечает False: это ответ про пустой список, а не про метод, и зачитывать его как свойство удаления нельзя. Поэтому строка измеряет метод на непустом списке."
+   ],
+   "acceptance": [
+    "DeleteConstraints() снимает все записи объекта, Delete() — одну, и оба подтверждены перечитыванием",
+    "число записей ДО и ПОСЛЕ снято внутри одного сеанса"
+   ]
+  },
+  {
+   "operation_id": "SKC-05.state_read",
+   "kind": "profile_mode",
+   "profile": "sketch-constraints-minimal-v1",
+   "priority": "practical_required",
+   "queue": "G6",
+   "context": "part.sketch",
+   "catalog_ref": "G6",
+   "catalog_level": "mcp_verified",
+   "title": "Эскиз доходит до fully_defined",
+   "parameters_schema": "schemas/kompas_get_sketch_status.json",
+   "adapter_route": "Агрегатное состояние — ISketch.ConstraintsState; состояние объекта — IDrawingObject1.ConstraintsState; оба читаются тем же мостом, что и kompas_get_sketch_status.",
+   "actions": {
+    "discover": "verified",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "verified",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
+   },
+   "not_applicable_reasons": {
+    "edit": "ограничение после создания не редактируется: справка говорит, что параметры меняются только на этапе создания, а для правки ограничение нужно удалить и создать новое. Поэтому действие выражено парой «удалить + создать» и проверено строкой SKC.04.edit — оно НЕ объявлено неприменимым как таковое, а неприменимо именно как отдельный вызов правки.",
+    "suppress_restore": "ограничение не является признаком дерева модели: подавлять и снимать подавление можно у признака (kompas_set_feature_suppressed), а ограничение живёт в параметрической системе эскиза и в дереве не появляется. Предметная неприменимость названа, а не оставлена пустой.",
+    "delete_dependencies": "удаление ограничений проверяется строкой SKC-04 и на состояние не влияет: измерено, что состояние остаётся недоопределённым и после удаления"
+   },
+   "tests": [
+    "SKC.12.state_read",
+    "SKC.15.state_agreement",
+    "SKC.16.no_silent_rewrite"
+   ],
+   "evidence": [
+    "docs/acceptance/sketch-constraints/sketch-constraints-acceptance.json",
+    "docs/acceptance/api7/sketch-constraints.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "scripts/mcp-smoke.py"
+   ],
+   "limitations": [
+    "Требование ВЫПОЛНЕНО и измерено: контур из 4 отрезков без выдавливания даёт состояние 1, и 1 прочитано после save → close → reopen.",
+    "Отрезок с двумя закреплёнными концами остаётся недоопределённым (2) — названный факт постановки, не отменяющий требования.",
+    "ParametricMode в поставленной обёртке отсутствует, но присутствует в установленной kAPI7.tlb слотами 74/75; вызван через IDispatch, DISPID разрешён по имени."
+   ],
+   "acceptance": [
+    "параметрический режим документа включается документированным членом и перечитывается",
+    "эскиз доходит до состояния 1 при включённом режиме",
+    "состояние 1 прочитано ПОСЛЕ save → close → reopen"
+   ]
+  },
+  {
+   "operation_id": "SKC-06.association_bisector",
+   "kind": "profile_mode",
+   "profile": "sketch-constraints-minimal-v1",
+   "priority": "next",
+   "queue": "G6",
+   "context": "part.sketch",
+   "catalog_ref": "G6",
+   "catalog_level": "metadata_found",
+   "title": "Ассоциативная связь и биссектриса (необязательные типы)",
+   "parameters_schema": "schemas/kompas_create_sketch_constraint.json",
+   "adapter_route": "Тот же маршрут; партнёр передаётся массивом (partner_refs), ось — полем axis_ref.",
+   "actions": {
+    "discover": "not_started",
+    "create": "not_started",
+    "read": "not_started",
+    "edit": "not_started",
+    "rebuild": "not_started",
+    "save_reopen": "not_started",
+    "suppress_restore": "not_started",
+    "delete_dependencies": "not_started",
+    "negative_tests": "not_started",
+    "geometry_validation": "not_started"
+   },
+   "not_applicable_reasons": {},
+   "tests": [],
+   "evidence": [
+    "docs/acceptance/api7/sketch-constraints.json",
+    "docs/04_KOMPAS_API_NOTES.md"
+   ],
+   "limitations": [
+    "Необязательный режим: обязательный объём профиля не закрывает. ksCAssociation измерен как отказ без массива партнёров (ожидаемое предусловие), ksCBisector не измерялся."
+   ],
+   "acceptance": [
+    "тип ksCAssociation принимает партнёра массивом SAFEARRAY, ksCBisector — ось и вариант биссектрисы"
+   ]
+  },
+  {
+   "operation_id": "dep.sketch_constraints.object_address",
+   "kind": "common_dependency",
+   "profile": "sketch-constraints-minimal-v1",
+   "priority": "dependency_of",
+   "queue": "G6",
+   "context": "part.sketch",
+   "catalog_ref": "G6",
+   "catalog_refs": [
+    "G6"
+   ],
+   "title": "Устойчивая адресация объекта эскиза для ограничения",
+   "parameters_schema": null,
+   "adapter_route": "Устойчивая адресация объекта эскиза для ограничения",
+   "actions": {
+    "discover": "verified",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "not_applicable",
+    "geometry_validation": "not_applicable"
+   },
+   "not_applicable_reasons": {
+    "create": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "edit": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "rebuild": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "save_reopen": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "suppress_restore": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "delete_dependencies": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "negative_tests": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "geometry_validation": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные"
+   },
+   "required_actions": [
+    "discover",
+    "read"
+   ],
+   "tests": [
+    "SKC.14.object_address",
+    "SKC.01.discover"
+   ],
+   "evidence": [
+    "docs/acceptance/sketch-constraints/sketch-constraints-acceptance.json",
+    "docs/acceptance/api7/sketch-constraints.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "scripts/mcp-smoke.py"
+   ],
+   "limitations": [
+    "Адрес выдаёт перечисление и принимается обратно сопоставлением с тем же перечислением; индекс коллекции адресом НЕ объявляется, потому что перестроение его сдвигает."
+   ],
+   "acceptance": [
+    "зависимость закрыта своими доказательствами, а не «попутно»"
+   ],
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_sketch_entities",
+      "require_args": [
+       "sketch_ref"
+      ]
+     }
+    ]
+   },
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_sketch_entities",
+      "require_args": [
+       "sketch_ref"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "operation_id": "dep.sketch_constraints.interop_presence",
+   "kind": "common_dependency",
+   "profile": "sketch-constraints-minimal-v1",
+   "priority": "dependency_of",
+   "queue": "G6",
+   "context": "part.sketch",
+   "catalog_ref": "G6",
+   "catalog_refs": [
+    "G6"
+   ],
+   "title": "Каждый используемый член присутствует в ПОСТАВЛЕННОМ interop",
+   "parameters_schema": null,
+   "adapter_route": "Каждый используемый член присутствует в ПОСТАВЛЕННОМ interop",
+   "actions": {
+    "discover": "not_applicable",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "not_applicable",
+    "geometry_validation": "not_applicable"
+   },
+   "not_applicable_reasons": {
+    "discover": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "create": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "edit": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "rebuild": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "save_reopen": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "suppress_restore": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "delete_dependencies": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "negative_tests": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "geometry_validation": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные"
+   },
+   "required_actions": [
+    "read"
+   ],
+   "tests": [
+    "SKC.03.read",
+    "SKC.13.type_vocabulary"
+   ],
+   "evidence": [
+    "docs/acceptance/sketch-constraints/sketch-constraints-acceptance.json",
+    "docs/acceptance/api7/sketch-constraints.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "scripts/mcp-smoke.py"
+   ],
+   "limitations": [
+    "Отсутствие члена называется, а не обходится подстановкой соседнего: измерено сканером, что IParametrizationParam7, ParametrizeObjects, ParametricMode и SnapSettings в поставленной обёртке отсутствуют."
+   ],
+   "acceptance": [
+    "зависимость закрыта своими доказательствами, а не «попутно»"
+   ],
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_sketch_constraints",
+      "require_args": [
+       "sketch_ref"
+      ]
+     }
+    ]
+   },
+   "discover_route": null
+  },
+  {
+   "operation_id": "dep.sketch_constraints.type_vocabulary",
+   "kind": "common_dependency",
+   "profile": "sketch-constraints-minimal-v1",
+   "priority": "dependency_of",
+   "queue": "G6",
+   "context": "part.sketch",
+   "catalog_ref": "G6",
+   "catalog_refs": [
+    "G6"
+   ],
+   "title": "Перечень типов берётся из ОДНОЙ сборки, числа не дублируются литералами",
+   "parameters_schema": null,
+   "adapter_route": "Перечень типов берётся из ОДНОЙ сборки, числа не дублируются литералами",
+   "actions": {
+    "discover": "verified",
+    "create": "verified",
+    "read": "not_applicable",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "not_applicable",
+    "geometry_validation": "not_applicable"
+   },
+   "not_applicable_reasons": {
+    "read": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "edit": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "rebuild": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "save_reopen": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "suppress_restore": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "delete_dependencies": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "negative_tests": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "geometry_validation": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные"
+   },
+   "required_actions": [
+    "discover",
+    "create"
+   ],
+   "tests": [
+    "SKC.13.type_vocabulary",
+    "SKC.09.negative_tests"
+   ],
+   "evidence": [
+    "docs/acceptance/sketch-constraints/sketch-constraints-acceptance.json",
+    "docs/acceptance/api7/sketch-constraints.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "scripts/mcp-smoke.py"
+   ],
+   "limitations": [
+    "Имена объявлены в одном месте (KompasMcp.Contracts.SketchConstraintTypes), числа разрешает адаптер из ksConstraintTypeEnum поставленной сборки констант; расхождение наборов называется поимённо в обе стороны."
+   ],
+   "acceptance": [
+    "зависимость закрыта своими доказательствами, а не «попутно»"
+   ],
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_sketch_constraints",
+      "require_args": [
+       "sketch_ref"
+      ]
+     }
+    ]
+   },
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_create_sketch_constraint",
+      "require_args": [
+       "constraint_type"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "operation_id": "dep.sketch_constraints.state_agreement",
+   "kind": "common_dependency",
+   "profile": "sketch-constraints-minimal-v1",
+   "priority": "dependency_of",
+   "queue": "G6",
+   "context": "part.sketch",
+   "catalog_ref": "G6",
+   "catalog_refs": [
+    "G6"
+   ],
+   "title": "Состояние объекта и агрегатное состояние эскиза не подменяют друг друга",
+   "parameters_schema": null,
+   "adapter_route": "Состояние объекта и агрегатное состояние эскиза не подменяют друг друга",
+   "actions": {
+    "discover": "not_applicable",
+    "create": "not_applicable",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "not_applicable",
+    "geometry_validation": "not_applicable"
+   },
+   "not_applicable_reasons": {
+    "discover": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "create": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "edit": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "rebuild": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "save_reopen": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "suppress_restore": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "delete_dependencies": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "negative_tests": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "geometry_validation": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные"
+   },
+   "required_actions": [
+    "read"
+   ],
+   "tests": [
+    "SKC.15.state_agreement"
+   ],
+   "evidence": [
+    "docs/acceptance/sketch-constraints/sketch-constraints-acceptance.json",
+    "docs/acceptance/api7/sketch-constraints.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "scripts/mcp-smoke.py"
+   ],
+   "limitations": [
+    "Число 2 у ksObjectConstraintsStateEnum означает «переопределён», а у ksConstraintsStateEnum — «недоопределён»: одно не выдаётся за другое."
+   ],
+   "acceptance": [
+    "зависимость закрыта своими доказательствами, а не «попутно»"
+   ],
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_sketch_constraints",
+      "require_args": [
+       "sketch_ref"
+      ]
+     }
+    ]
+   },
+   "discover_route": null
+  },
+  {
+   "operation_id": "dep.sketch_constraints.no_silent_rewrite",
+   "kind": "common_dependency",
+   "profile": "sketch-constraints-minimal-v1",
+   "priority": "dependency_of",
+   "queue": "G6",
+   "context": "part.sketch",
+   "catalog_ref": "G6",
+   "catalog_refs": [
+    "G6"
+   ],
+   "title": "Перемещение геометрии ядром не скрывается: дельта публикуется",
+   "parameters_schema": null,
+   "adapter_route": "Перемещение геометрии ядром не скрывается: дельта публикуется",
+   "actions": {
+    "discover": "not_applicable",
+    "create": "verified",
+    "read": "not_applicable",
+    "edit": "not_applicable",
+    "rebuild": "not_applicable",
+    "save_reopen": "not_applicable",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "not_applicable",
+    "geometry_validation": "verified"
+   },
+   "not_applicable_reasons": {
+    "discover": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "read": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "edit": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "rebuild": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "save_reopen": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "suppress_restore": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "delete_dependencies": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные",
+    "negative_tests": "зависимость закрывается СВОИМИ доказательствами: обязательные действия названы в required_actions, а остальные к ней не относятся и не выдаются за выполненные"
+   },
+   "required_actions": [
+    "create",
+    "geometry_validation"
+   ],
+   "tests": [
+    "SKC.10.geometry_validation",
+    "SKC.16.no_silent_rewrite"
+   ],
+   "evidence": [
+    "docs/acceptance/sketch-constraints/sketch-constraints-acceptance.json",
+    "docs/acceptance/api7/sketch-constraints.json",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "scripts/mcp-smoke.py"
+   ],
+   "limitations": [
+    "Измеренная дельта координат и угла публикуется в notes; сервер движение не отменяет, потому что отмена была бы второй, не запрошенной правкой."
+   ],
+   "acceptance": [
+    "зависимость закрыта своими доказательствами, а не «попутно»"
+   ],
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_sketch_entities",
+      "require_args": [
+       "sketch_ref",
+       "address"
+      ]
+     }
+    ]
+   },
+   "discover_route": null
   }
  ],
  "pending_families": [

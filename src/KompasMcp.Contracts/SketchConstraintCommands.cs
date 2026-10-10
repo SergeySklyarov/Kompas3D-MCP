@@ -114,7 +114,22 @@ public sealed record SketchConstraintsResult(
     IReadOnlyList<SketchConstraintObjectDto> Objects,
     int ConstraintTotal,
     string Route,
-    IReadOnlyList<string> Notes);
+    IReadOnlyList<string> Notes,
+    /// <summary>The document's PARAMETRIC MODE (<c>IKompasDocument2D1.ParametricMode</c>, <c>BOOL</c>) as it
+    /// was READ, or <c>null</c> when it could not be read — in which case the reason is named in
+    /// <see cref="Notes"/> and never substituted with <c>false</c>.</summary>
+    /// <remarks>DOC: <c>ikompasdocument2d1_parametricmode.html</c>; reachable on the sketch's FRAGMENT
+    /// document (<c>ikompasdocument2d1.html</c>: the 2D interface is obtained by <c>QueryInterface</c>).
+    /// MEASURED 11.10.2026: the shipped wrapper declares <c>IKompasDocument2D1</c> TRUNCATED (its members end
+    /// at <c>ChangeObjectsOrder</c>, slot 44), so the member is called through the typed twin
+    /// <c>IKompasDocument2D1Twin</c>, which reproduces the vtable of the installed type library (slots 74
+    /// put / 75 get) — not through <c>IDispatch</c>. READ ONLY: only the getter is called.
+    /// WHY IT IS PUBLISHED HERE AND NOT BY <c>kompas_get_sketch_status</c>: the fragment document exists
+    /// only inside an edit session, and this call already opens one; measured 11.10.2026, a read-only
+    /// session opened on the sketch is not observation-neutral — a save that follows it carries a different
+    /// constraint state (see the tool description and §4.73 of the API notes).
+    /// History: docs/decisions/contracts.md#sketch-status-mapping</remarks>
+    bool? ParametricMode = null);
 
 /// <summary>Request to delete constraints of ONE object of an existing sketch.</summary>
 public sealed record DeleteSketchConstraintCommand
@@ -148,3 +163,58 @@ public sealed record SketchConstraintDeleteResult(
     string? StateName,
     string Route,
     IReadOnlyList<string> Notes);
+
+/// <summary>Request to create a LINEAR DIMENSION on a segment of an existing sketch
+/// (<c>kompas_create_sketch_dimension</c>).</summary>
+/// <remarks>DOC: the dimension is created by the documented route — <c>IView</c> QI
+/// <c>ISymbols2DContainer</c> (<c>isymbols2dcontainer.html</c>) → <c>ILineDimensions::Add()</c>
+/// (<c>ilinedimensions_add.html</c>) → <c>ILineDimension</c> (hierarchy
+/// <c>IKompasAPIObject → IDrawingObject → ILineDimension</c>, <c>ilinedimension.html</c>) →
+/// <c>IModelObject::Update()</c>. The dimension is bound to the segment ASSOCIATIVELY
+/// (<c>ksCAssociation</c>, type 12), then made fixed (<c>ksCFixedDim</c>), then given its value
+/// (<c>ksCDimWithVariable</c>) — MEASURED: without the association the value does not drive the
+/// geometry, with it the length follows the value.
+/// History: docs/decisions/contracts.md#sketch-dimension</remarks>
+public sealed record CreateSketchDimensionCommand
+{
+    public required string SketchRef { get; init; }
+
+    public required long ExpectedRevision { get; init; }
+
+    /// <summary>Address of the SEGMENT the dimension measures, as issued by
+    /// <c>kompas_list_sketch_entities</c>. The dimension's points are taken from that segment's own
+    /// ends, so the dimension measures exactly what the client named.</summary>
+    public required string ObjectRef { get; init; }
+
+    /// <summary>Value of the dimension in millimetres. It is the driving value: the segment's length
+    /// is expected to become exactly this number.</summary>
+    public required double ValueMm { get; init; }
+
+    /// <summary>How far the dimension line is drawn from the segment, mm. Positive puts it on the
+    /// outer side of the segment (away from the sketch origin).</summary>
+    public double OffsetMm { get; init; } = 10d;
+}
+
+/// <summary>Answer of <c>kompas_create_sketch_dimension</c>.</summary>
+/// <param name="Applied">Whether the three facts hold: the dimension's points coincide with the
+/// segment's ends, the dimension's value is re-read as requested, and the segment's length equals the
+/// value. NOT the generic <c>Create() == true &amp;&amp; Valid != false</c> pair — see the remarks.</param>
+/// <param name="AssociationAsMergePoints">The number of <c>ksCMergePoints</c> records the association
+/// reads back as. MEASURED: the association appears as TWO such records with <c>Valid = true</c>,
+/// while the <c>ksCAssociation</c> record itself carries <c>Valid = false</c> — so the generic rule is
+/// NOT applied to the dimension and is NOT weakened for the other types either.</param>
+public sealed record SketchDimensionCreateResult(
+    string ObjectRef,
+    string DimensionRef,
+    double ValueMm,
+    bool Applied,
+    double? LengthBeforeMm,
+    double? LengthAfterMm,
+    int? DimensionPointsCount,
+    bool? PointsMatchSegment,
+    bool AssociationCreated,
+    bool FixedDimCreated,
+    bool ValueDimCreated,
+    int AssociationAsMergePoints,
+    IReadOnlyList<string> Notes,
+    string Route);

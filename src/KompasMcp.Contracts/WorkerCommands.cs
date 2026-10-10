@@ -154,6 +154,15 @@ public static class WorkerCommands
     /// <summary>Deletes one constraint of an object or all of them (block G6).</summary>
     public const string DeleteSketchConstraint = "sketch.constraint.delete";
 
+    /// <summary>Creates a LINEAR DIMENSION on a segment of an existing sketch (block G6).
+    /// </summary> <remarks>DOC: <c>IView</c> QI <c>ISymbols2DContainer</c> →
+    /// <c>ILineDimensions::Add()</c> → <c>ILineDimension</c> → <c>Update()</c>; then the association
+    /// (<c>ksCAssociation</c>), the fixed dimension (<c>ksCFixedDim</c>) and the value
+    /// (<c>ksCDimWithVariable</c>). MEASURED: the association is what makes the value drive the
+    /// geometry; without it the value is accepted and the length does not move.
+    /// History: docs/decisions/contracts.md#sketch-dimension</remarks>
+    public const string CreateSketchDimension = "sketch.dimension.create";
+
     /// <summary>Reading the parameters of an existing feature (docs/05 §7 kompas_get_feature).</summary>
     public const string GetFeature = "feat.get";
     /// <summary>Editing the parameters of an existing feature in place (docs/05 §4.3, §7).</summary>
@@ -529,7 +538,11 @@ public sealed record SketchEntityRowDto(
     IReadOnlyList<string> Notes,
     int? PointsCount = null,
     bool? Closed = null,
-    string? EntityKind = null);
+    string? EntityKind = null,
+    /// <summary>Length of a LINE SEGMENT in millimetres, read from the object itself. <c>null</c> for
+    /// other kinds and when the member did not answer — "not read", never zero. It is what lets a
+    /// client verify that a driving dimension really moved the geometry.</summary>
+    double? LengthMm = null);
 
 /// <summary>Request for an address-targeted sketch-entity edit. <see cref="Address"/> is mandatory: an edit of "the
 /// first entity that comes up" is not address-targeted.</summary>

@@ -921,3 +921,66 @@ MANIA.19, где второе перестроение вернуло 132256.500
 **Порядок отказов модульным не проверяется и назван.** Что отказ «маршрут не применён» идёт первым,
 видно только на живом COM-маршруте (строка `L11`): функция сравнивает два числа и о порядке ничего
 не знает. Проверка — живой прогон группы `L11`, а не модульный тест.
+
+## <a id="evidence-rebuild"></a>Пересоздание доказательств после чистки `scratch/` (наряд EVIDENCE_REBUILD, 10.10.2026)
+
+Наряд `REPO_SLIMMING` удалил из `scratch/` безвозвратно (`shutil.rmtree`) файлы, на которые
+ссылались машинные файлы покрытия: список «оставить» строился только по ссылкам из
+`docs/STATUS.md`. Решение заказчика 10.10.2026 - доказательства **пересоздать повторным прогоном**,
+а не восстанавливать. `scripts/emit-coverage-matrix.py` показывал **98** нарушений «ссылка на
+доказательство не разрешается» по **11** уникальным путям.
+
+**Постоянное место доказательств.** `docs/acceptance/evidence/<ГГГГММДД>-<группа>-<коммит>/` с
+файлом группы и `run.json` (каталог не публикуется: `.gitignore` исключает `/docs/acceptance/`).
+`scratch/` остаётся только для черновиков; сторож -
+`python scripts/check-evidence-links.py` (падает, если машинный файл ссылается на путь, которого
+нет). Правило записано в `AGENTS.md` («Карта для агента», «Версии и выпуски»).
+
+**Прогон.** Release-сборка коммита `3e3290f`, дерево чистое, группы запускались по одной
+(`scripts/mcp-smoke.py --<группа>-only --host <Release>`):
+
+| Старый путь | Новый путь | Группа | Строк | Итог |
+|---|---|---|---|---|
+| `scratch/mcp-smoke/rotation-acceptance.json` | `docs/acceptance/evidence/20261010-rotation-3e3290f/rotation-acceptance.json` | `rotation` | 108 | PASS 108 |
+| `scratch/mcp-smoke/fillet-acceptance.json` | `docs/acceptance/evidence/20261010-fillet-3e3290f/fillet-acceptance.json` | `fillet` | 50 | PASS 50 |
+| `scratch/mcp-smoke/b3-acceptance.json` | `docs/acceptance/evidence/20261010-b3-3e3290f/b3-acceptance.json` | `b3` | 84 | PASS 84 |
+| `scratch/mcp-smoke/b3l-acceptance.json` | `docs/acceptance/evidence/20261010-b3l-3e3290f/b3l-acceptance.json` | `b3l` | 25 | PASS 25 |
+| `scratch/mcp-smoke/b3m-acceptance.json` | `docs/acceptance/evidence/20261010-b3m-3e3290f/b3m-acceptance.json` | `b3m` | 122 | PASS 122 |
+| `scratch/mcp-smoke/b3c-acceptance.json` | `docs/acceptance/evidence/20261010-b3c-3e3290f/b3c-acceptance.json` | `b3c` | 34 | PASS 34 |
+| `scratch/mcp-smoke/delivery-b4-20260920/b4-acceptance.json` | `docs/acceptance/evidence/20261010-b4-3e3290f/b4-acceptance.json` | `b4` | 129 | PASS 129 |
+| `scratch/mcp-smoke/delivery-b5-20260920/b5-acceptance.json` | `docs/acceptance/evidence/20261010-b5-3e3290f/b5-acceptance.json` | `b5` | 100 | PASS 100 |
+| `scratch/drw-runs/20261006-rework3/drawing-acceptance.json` | `docs/acceptance/evidence/20261010-drawing-3e3290f/drawing-acceptance.json` | `drawing` | 75 | PASS 53 · **FAIL 22** |
+| `scratch/acceptance-b3-targeting.log` | снята (§2.4) | - | - | - |
+| `scratch/b3-area-extra3.log` | снята (§2.4) | - | - | - |
+
+**Журналы разовых прогонов (§2.4).** `acceptance-b3-targeting.log` и `b3-area-extra3.log` не были
+файлами группы. Строки, на них ссылавшиеся (`SM-15.*`, `SM-16.*`, `SM-17.*`), проверяются строками
+`B3.*`/`B3L.*`/`B3M.*` групп `b3`/`b3l`/`b3m`/`b3c`, ссылки на которые у этих строк уже были;
+обе ссылки на журналы сняты, подстановки чужой проверки не делалось.
+
+**Перепривязка.** 36 строк матрицы перепривязаны к новым файлам (их собственные имена строк
+прибора все PASS); `meta.evidence_rebuilt` несёт дату, коммит, причину и таблицу `old_to_new`.
+Нарушений у `emit-coverage-matrix.py` стало **12** (было 98).
+
+**12 строк НЕ перепривязаны, и это находка, а не умолчание.** Строки группы DRW
+(`DRW-01.views.create_standard`, `DRW-02.views.list`, `DRW-03.dimension.add`,
+`DRW-03.dimension.add.linear/.radial/.diametral`, `DRW-04.title_block.set`,
+`DRW-06.technical_demand`, `dep.drawing.source_file`, `dep.drawing.view_address`,
+`dep.drawing.revisions`, `dep.drawing.idempotency`) в новом прогоне **не PASS**: 22 строки из 75
+отказывают `WRONG_DOCUMENT_KIND` с сообщением «трёхмерный маршрут к нему не применим».
+
+Причина измерена и названа: коммит `e578b47` (наряд `CLIENT_BUGS_20261010`, часть D) ввёл
+`_session.TryCountFeatures(document)` в `TaggedAfter` **до** мутации и **вне** `try`. Проба идёт
+маршрутом `DocumentEntry.PartNow()` → `Require3D()`, а у чертежа `Document` (API5 `ksDocument3D`)
+пуст по построению, поэтому проба бросает `WRONG_DOCUMENT_KIND`; ловится только
+`COMException`/`InvalidCastException`, и контрактное исключение выходит наружу. Через `TaggedAfter`
+идут все мутации чертежа (`drawing.create_views`, `drawing.add_dimension`, `drawing.set_title_block`,
+`drawing.set_technical_demand`, `drawing.rebuild_views`), поэтому отказывает каждая. Чтения и
+`drawing.export` идут через `Tagged` и работают - отсюда 53 PASS.
+
+Регрессию не поймал предыдущий наряд: строки группы DRW в полный (вертикальный) прогон не входят
+(`grep -c 'DRW'` по `full.json` = 0), а приёмка `CLIENT_BUGS_20261010` шла полным прогоном.
+
+Ссылки этих 12 строк оставлены прежними (на удалённый файл) - так они ВИДНЫ находкой, а не
+выглядят закрытыми. Решение о правке кода продукта - за заказчиком: код продукта этим нарядом не
+меняется (`EVIDENCE_REBUILD_DEVELOPER_PROMPT.md` §3).

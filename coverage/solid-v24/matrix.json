@@ -196,7 +196,54 @@
     "weakest_route_note": "`dep.foundation` зачтён по `kompas_get_context` (размывание 290 из 292 чужих совпадений). Это самый слабый из принятых маршрутов: он подтверждает наличие чтения основы сеанса в окне строки `DEP.DFN.01.read`, но НЕ различает адресное дочитывание — инструмент вызывается в 290 чужих строках. Сказать иначе значило бы выдать меру за различающую силу.",
     "not_a_feature": "зачёт `read` — переопределение СЕМАНТИКИ проверки, а не новая функция продукта: ни один инструмент не опубликован и продуктовый `src/` не менялся"
    }
-  ]
+  ],
+  "evidence_rebuilt": {
+   "date": "2026-10-10",
+   "commit": "3e3290f",
+   "reason": "Каталог доказательств в scratch/ удалён нарядом REPO_SLIMMING 10.10.2026; доказательства пересозданы повторным прогоном групп на Release-сборке и лежат в docs/acceptance/evidence/<дата>-<группа>-<коммит>/ (наряд EVIDENCE_REBUILD).",
+   "groups": [
+    "b3",
+    "b3c",
+    "b3l",
+    "b3m",
+    "b4",
+    "b5",
+    "drawing",
+    "fillet",
+    "rotation"
+   ],
+   "old_to_new": {
+    "scratch/drw-runs/20261006-rework3/drawing-acceptance.json": "docs/acceptance/evidence/20261010-drawing-3e3290f/drawing-acceptance.json",
+    "scratch/mcp-smoke/b3-acceptance.json": "docs/acceptance/evidence/20261010-b3-3e3290f/b3-acceptance.json",
+    "scratch/mcp-smoke/b3c-acceptance.json": "docs/acceptance/evidence/20261010-b3c-3e3290f/b3c-acceptance.json",
+    "scratch/mcp-smoke/b3l-acceptance.json": "docs/acceptance/evidence/20261010-b3l-3e3290f/b3l-acceptance.json",
+    "scratch/mcp-smoke/b3m-acceptance.json": "docs/acceptance/evidence/20261010-b3m-3e3290f/b3m-acceptance.json",
+    "scratch/mcp-smoke/delivery-b4-20260920/b4-acceptance.json": "docs/acceptance/evidence/20261010-b4-3e3290f/b4-acceptance.json",
+    "scratch/mcp-smoke/delivery-b5-20260920/b5-acceptance.json": "docs/acceptance/evidence/20261010-b5-3e3290f/b5-acceptance.json",
+    "scratch/mcp-smoke/fillet-acceptance.json": "docs/acceptance/evidence/20261010-fillet-3e3290f/fillet-acceptance.json",
+    "scratch/mcp-smoke/rotation-acceptance.json": "docs/acceptance/evidence/20261010-rotation-3e3290f/rotation-acceptance.json"
+   },
+   "not_rebound": [
+    "DRW-01.views.create_standard",
+    "DRW-02.views.list",
+    "DRW-03.dimension.add",
+    "DRW-03.dimension.add.diametral",
+    "DRW-03.dimension.add.linear",
+    "DRW-03.dimension.add.radial",
+    "DRW-04.title_block.set",
+    "DRW-06.technical_demand",
+    "dep.drawing.idempotency",
+    "dep.drawing.revisions",
+    "dep.drawing.source_file",
+    "dep.drawing.view_address"
+   ],
+   "not_rebound_reason": "строки группы DRW не PASS в новом прогоне: регрессия CLIENT_BUGS_20261010 (часть D) - проба числа признаков в TaggedAfter требует 3D-документ и отказывает чертежу WRONG_DOCUMENT_KIND до мутации. Ссылки оставлены прежними и видны находкой у scripts/emit-coverage-matrix.py; решение за заказчиком.",
+   "log_refs_dropped": [
+    "scratch/acceptance-b3-targeting.log",
+    "scratch/b3-area-extra3.log"
+   ],
+   "log_refs_dropped_note": "журналы разовых прогонов не были файлами группы; те же строки (SM-15/SM-16/SM-17) проверяются строками B3.*/B3L.*/B3M.* групп b3/b3l/b3m/b3c, ссылки на которые у этих строк уже есть."
+  }
  },
  "rows": [
   {
@@ -1069,7 +1116,7 @@
    ],
    "evidence": [
     "scripts/mcp-smoke.py#rotation_checks",
-    "scratch/mcp-smoke/rotation-acceptance.json",
+    "docs/acceptance/evidence/20261010-rotation-3e3290f/rotation-acceptance.json",
     "schemas/kompas_rotated.json",
     "src/KompasMcp.Api5Adapter/Api5Session.Rotated.cs",
     "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs#Api7Rotated",
@@ -1151,7 +1198,7 @@
    ],
    "evidence": [
     "scripts/mcp-smoke.py#rotation_checks",
-    "scratch/mcp-smoke/rotation-acceptance.json",
+    "docs/acceptance/evidence/20261010-rotation-3e3290f/rotation-acceptance.json",
     "schemas/kompas_rotated.json",
     "src/KompasMcp.Api5Adapter/Api5Session.Rotated.cs",
     "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs#Api7Rotated",
@@ -1234,7 +1281,7 @@
    ],
    "evidence": [
     "scripts/mcp-smoke.py#rotation_checks",
-    "scratch/mcp-smoke/rotation-acceptance.json",
+    "docs/acceptance/evidence/20261010-rotation-3e3290f/rotation-acceptance.json",
     "schemas/kompas_rotated.json",
     "src/KompasMcp.Api5Adapter/Api5Session.Rotated.cs",
     "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs#Api7Rotated",
@@ -1335,7 +1382,7 @@
    ],
    "evidence": [
     "scripts/mcp-smoke.py#rotation_checks",
-    "scratch/mcp-smoke/rotation-acceptance.json",
+    "docs/acceptance/evidence/20261010-rotation-3e3290f/rotation-acceptance.json",
     "schemas/kompas_rotated.json",
     "src/KompasMcp.Api5Adapter/Api5Session.Rotated.cs",
     "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs#Api7Rotated",
@@ -1423,7 +1470,7 @@
    ],
    "evidence": [
     "scripts/mcp-smoke.py#rotation_checks",
-    "scratch/mcp-smoke/rotation-acceptance.json",
+    "docs/acceptance/evidence/20261010-rotation-3e3290f/rotation-acceptance.json",
     "schemas/kompas_rotated.json",
     "src/KompasMcp.Api5Adapter/Api5Session.Rotated.cs",
     "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs#Api7Rotated",
@@ -1491,7 +1538,7 @@
    ],
    "evidence": [
     "coverage/solid-v24/catalog.json#SM-04.base.mode_orthogonal",
-    "scratch/mcp-smoke/delivery-b5-20260920/b5-acceptance.json#B5K.02.* (окно вызовов каждой строки)",
+    "docs/acceptance/evidence/20261010-b5-3e3290f/b5-acceptance.json#B5K.02.* (окно вызовов каждой строки)",
     "docs/acceptance/api7/b5-sweep-loft-shell.json (проба B5.2–B5.22: маршруты и эталоны)"
    ],
    "limitations": [
@@ -1573,7 +1620,7 @@
    ],
    "evidence": [
     "coverage/solid-v24/catalog.json#SM-05.base.mode_couplings",
-    "scratch/mcp-smoke/delivery-b5-20260920/b5-acceptance.json#B5S.02.* (окно вызовов каждой строки)",
+    "docs/acceptance/evidence/20261010-b5-3e3290f/b5-acceptance.json#B5S.02.* (окно вызовов каждой строки)",
     "docs/acceptance/api7/b5-sweep-loft-shell.json (проба B5.2–B5.22: маршруты и эталоны)"
    ],
    "limitations": [
@@ -2113,7 +2160,7 @@
    ],
    "evidence": [
     "scripts/mcp-smoke.py#fillet_checks",
-    "scratch/mcp-smoke/fillet-acceptance.json",
+    "docs/acceptance/evidence/20261010-fillet-3e3290f/fillet-acceptance.json",
     "docs/acceptance/api7/fillet-base-objects.json",
     "docs/acceptance/api7/fillet-base-objects.md",
     "tools/KompasMcp.Api7Probe/FilletBaseObjectsProbe.cs",
@@ -2379,7 +2426,7 @@
    ],
    "evidence": [
     "coverage/solid-v24/catalog.json#SM-13.shell.mode_remove_faces",
-    "scratch/mcp-smoke/delivery-b5-20260920/b5-acceptance.json#B5O.01.* (окно вызовов каждой строки)",
+    "docs/acceptance/evidence/20261010-b5-3e3290f/b5-acceptance.json#B5O.01.* (окно вызовов каждой строки)",
     "docs/acceptance/api7/b5-sweep-loft-shell.json (проба B5.2–B5.22: маршруты и эталоны)"
    ],
    "limitations": [
@@ -2432,7 +2479,7 @@
    ],
    "evidence": [
     "coverage/solid-v24/catalog.json#SM-13.shell.mode_direction",
-    "scratch/mcp-smoke/delivery-b5-20260920/b5-acceptance.json#B5O.02.* (окно вызовов каждой строки)",
+    "docs/acceptance/evidence/20261010-b5-3e3290f/b5-acceptance.json#B5O.02.* (окно вызовов каждой строки)",
     "docs/acceptance/api7/b5-sweep-loft-shell.json (проба B5.2–B5.22: маршруты и эталоны)"
    ],
    "limitations": [
@@ -2488,17 +2535,15 @@
     "docs/acceptance/B3_AUDIT.md",
     "docs/04_KOMPAS_API_NOTES.md",
     "scripts/mcp-smoke.py",
-    "scratch/mcp-smoke/b3-acceptance.json",
-    "scratch/mcp-smoke/b3l-acceptance.json",
-    "scratch/mcp-smoke/b3m-acceptance.json",
-    "scratch/mcp-smoke/b3c-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3-3e3290f/b3-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3l-3e3290f/b3l-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3m-3e3290f/b3m-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3c-3e3290f/b3c-acceptance.json",
     "docs/acceptance/api7/feature-identity.json",
     "docs/acceptance/api7/disconnected-union.json",
     "docs/acceptance/api7/reposition-read.json",
     "docs/acceptance/api7/cut-area.json",
-    "docs/acceptance/api7/reposition-order.json",
-    "scratch/acceptance-b3-targeting.log",
-    "scratch/b3-area-extra3.log"
+    "docs/acceptance/api7/reposition-order.json"
    ],
    "limitations": [
     "expected_volume_mm3 — ОДНО ИМЯ И ТРИ ВЕЛИЧИНЫ: у kompas_boolean это объём главного тела, то есть СУММА всех тел документа; у kompas_split — сумма ЧАСТЕЙ; у kompas_cut_by_plane — объём ОСТАТКА. Объявленное число, не подтверждённое моделью, НАЗЫВАЕТСЯ в unverified_aspects (B3.40), и это не отказ: геометрия сверена независимо, а расхождение названо.",
@@ -2556,17 +2601,15 @@
     "docs/acceptance/B3_AUDIT.md",
     "docs/04_KOMPAS_API_NOTES.md",
     "scripts/mcp-smoke.py",
-    "scratch/mcp-smoke/b3-acceptance.json",
-    "scratch/mcp-smoke/b3l-acceptance.json",
-    "scratch/mcp-smoke/b3m-acceptance.json",
-    "scratch/mcp-smoke/b3c-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3-3e3290f/b3-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3l-3e3290f/b3l-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3m-3e3290f/b3m-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3c-3e3290f/b3c-acceptance.json",
     "docs/acceptance/api7/feature-identity.json",
     "docs/acceptance/api7/disconnected-union.json",
     "docs/acceptance/api7/reposition-read.json",
     "docs/acceptance/api7/cut-area.json",
-    "docs/acceptance/api7/reposition-order.json",
-    "scratch/acceptance-b3-targeting.log",
-    "scratch/b3-area-extra3.log"
+    "docs/acceptance/api7/reposition-order.json"
    ],
    "limitations": [
     "expected_volume_mm3 — ОДНО ИМЯ И ТРИ ВЕЛИЧИНЫ: у kompas_boolean это объём главного тела, то есть СУММА всех тел документа; у kompas_split — сумма ЧАСТЕЙ; у kompas_cut_by_plane — объём ОСТАТКА. Объявленное число, не подтверждённое моделью, НАЗЫВАЕТСЯ в unverified_aspects (B3.40), и это не отказ: геометрия сверена независимо, а расхождение названо.",
@@ -2621,17 +2664,15 @@
     "docs/acceptance/B3_AUDIT.md",
     "docs/04_KOMPAS_API_NOTES.md",
     "scripts/mcp-smoke.py",
-    "scratch/mcp-smoke/b3-acceptance.json",
-    "scratch/mcp-smoke/b3l-acceptance.json",
-    "scratch/mcp-smoke/b3m-acceptance.json",
-    "scratch/mcp-smoke/b3c-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3-3e3290f/b3-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3l-3e3290f/b3l-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3m-3e3290f/b3m-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3c-3e3290f/b3c-acceptance.json",
     "docs/acceptance/api7/feature-identity.json",
     "docs/acceptance/api7/disconnected-union.json",
     "docs/acceptance/api7/reposition-read.json",
     "docs/acceptance/api7/cut-area.json",
-    "docs/acceptance/api7/reposition-order.json",
-    "scratch/acceptance-b3-targeting.log",
-    "scratch/b3-area-extra3.log"
+    "docs/acceptance/api7/reposition-order.json"
    ],
    "limitations": [
     "expected_volume_mm3 — ОДНО ИМЯ И ТРИ ВЕЛИЧИНЫ: у kompas_boolean это объём главного тела, то есть СУММА всех тел документа; у kompas_split — сумма ЧАСТЕЙ; у kompas_cut_by_plane — объём ОСТАТКА. Объявленное число, не подтверждённое моделью, НАЗЫВАЕТСЯ в unverified_aspects (B3.40), и это не отказ: геометрия сверена независимо, а расхождение названо.",
@@ -2685,17 +2726,15 @@
     "docs/acceptance/B3_AUDIT.md",
     "docs/04_KOMPAS_API_NOTES.md",
     "scripts/mcp-smoke.py",
-    "scratch/mcp-smoke/b3-acceptance.json",
-    "scratch/mcp-smoke/b3l-acceptance.json",
-    "scratch/mcp-smoke/b3m-acceptance.json",
-    "scratch/mcp-smoke/b3c-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3-3e3290f/b3-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3l-3e3290f/b3l-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3m-3e3290f/b3m-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3c-3e3290f/b3c-acceptance.json",
     "docs/acceptance/api7/feature-identity.json",
     "docs/acceptance/api7/disconnected-union.json",
     "docs/acceptance/api7/reposition-read.json",
     "docs/acceptance/api7/cut-area.json",
-    "docs/acceptance/api7/reposition-order.json",
-    "scratch/acceptance-b3-targeting.log",
-    "scratch/b3-area-extra3.log"
+    "docs/acceptance/api7/reposition-order.json"
    ],
    "limitations": [
     "expected_volume_mm3 — ОДНО ИМЯ И ТРИ ВЕЛИЧИНЫ: у kompas_boolean это объём главного тела, то есть СУММА всех тел документа; у kompas_split — сумма ЧАСТЕЙ; у kompas_cut_by_plane — объём ОСТАТКА. Объявленное число, не подтверждённое моделью, НАЗЫВАЕТСЯ в unverified_aspects (B3.40), и это не отказ: геометрия сверена независимо, а расхождение названо.",
@@ -2755,17 +2794,15 @@
     "docs/acceptance/B3_AUDIT.md",
     "docs/04_KOMPAS_API_NOTES.md",
     "scripts/mcp-smoke.py",
-    "scratch/mcp-smoke/b3-acceptance.json",
-    "scratch/mcp-smoke/b3l-acceptance.json",
-    "scratch/mcp-smoke/b3m-acceptance.json",
-    "scratch/mcp-smoke/b3c-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3-3e3290f/b3-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3l-3e3290f/b3l-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3m-3e3290f/b3m-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3c-3e3290f/b3c-acceptance.json",
     "docs/acceptance/api7/feature-identity.json",
     "docs/acceptance/api7/disconnected-union.json",
     "docs/acceptance/api7/reposition-read.json",
     "docs/acceptance/api7/cut-area.json",
-    "docs/acceptance/api7/reposition-order.json",
-    "scratch/acceptance-b3-targeting.log",
-    "scratch/b3-area-extra3.log"
+    "docs/acceptance/api7/reposition-order.json"
    ],
    "limitations": [
     "expected_volume_mm3 — ОДНО ИМЯ И ТРИ ВЕЛИЧИНЫ: у kompas_boolean это объём главного тела, то есть СУММА всех тел документа; у kompas_split — сумма ЧАСТЕЙ; у kompas_cut_by_plane — объём ОСТАТКА. Объявленное число, не подтверждённое моделью, НАЗЫВАЕТСЯ в unverified_aspects (B3.40), и это не отказ: геометрия сверена независимо, а расхождение названо.",
@@ -2836,17 +2873,15 @@
     "docs/acceptance/B3_AUDIT.md",
     "docs/04_KOMPAS_API_NOTES.md",
     "scripts/mcp-smoke.py",
-    "scratch/mcp-smoke/b3-acceptance.json",
-    "scratch/mcp-smoke/b3l-acceptance.json",
-    "scratch/mcp-smoke/b3m-acceptance.json",
-    "scratch/mcp-smoke/b3c-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3-3e3290f/b3-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3l-3e3290f/b3l-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3m-3e3290f/b3m-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3c-3e3290f/b3c-acceptance.json",
     "docs/acceptance/api7/feature-identity.json",
     "docs/acceptance/api7/disconnected-union.json",
     "docs/acceptance/api7/reposition-read.json",
     "docs/acceptance/api7/cut-area.json",
-    "docs/acceptance/api7/reposition-order.json",
-    "scratch/acceptance-b3-targeting.log",
-    "scratch/b3-area-extra3.log"
+    "docs/acceptance/api7/reposition-order.json"
    ],
    "limitations": [
     "expected_volume_mm3 — ОДНО ИМЯ И ТРИ ВЕЛИЧИНЫ: у kompas_boolean это объём главного тела, то есть СУММА всех тел документа; у kompas_split — сумма ЧАСТЕЙ; у kompas_cut_by_plane — объём ОСТАТКА. Объявленное число, не подтверждённое моделью, НАЗЫВАЕТСЯ в unverified_aspects (B3.40), и это не отказ: геометрия сверена независимо, а расхождение названо.",
@@ -2918,17 +2953,15 @@
     "docs/acceptance/B3_AUDIT.md",
     "docs/04_KOMPAS_API_NOTES.md",
     "scripts/mcp-smoke.py",
-    "scratch/mcp-smoke/b3-acceptance.json",
-    "scratch/mcp-smoke/b3l-acceptance.json",
-    "scratch/mcp-smoke/b3m-acceptance.json",
-    "scratch/mcp-smoke/b3c-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3-3e3290f/b3-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3l-3e3290f/b3l-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3m-3e3290f/b3m-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3c-3e3290f/b3c-acceptance.json",
     "docs/acceptance/api7/feature-identity.json",
     "docs/acceptance/api7/disconnected-union.json",
     "docs/acceptance/api7/reposition-read.json",
     "docs/acceptance/api7/cut-area.json",
-    "docs/acceptance/api7/reposition-order.json",
-    "scratch/acceptance-b3-targeting.log",
-    "scratch/b3-area-extra3.log"
+    "docs/acceptance/api7/reposition-order.json"
    ],
    "limitations": [
     "ГРАНИЦА ЧТЕНИЯ ПАРАМЕТРОВ ПРЕОБРАЗОВАНИЯ. ТРЕБОВАНИЕ ЗАКРЫТО ИЗМЕРЕНИЕМ, а не переформулировкой: продукт читает параметры преобразования из модели, включая переоткрытый документ, и публикует их. ЧЕМ ЗАКРЫТО: проба --reposition-params, прогон a336120926fc4652a8bf737562568271 (шаги RP.1–RP.25), отчёт docs/acceptance/api7/reposition-params.json; и приёмка ПРОДУКТА на бинарниках поставки строками B3M.09.read, B3M.09.save_reopen, B3M.10.read, B3M.10.save_reopen. Все четыре строки читают переоткрытый документ через свежую ссылку ДО любой записи и сверяются с ОБЪЯВЛЕННЫМ ожиданием, а не с наблюдаемым. ПОРЯДОК И ЕДИНИЦЫ УГЛОВ — ИЗ ДОКУМЕНТАЦИИ И ИЗМЕРЕНИЯ, А НЕ ПОДБРАНЫ ПОД ОДИН ПРИМЕР. Справка даёт композицию трёх углов РИСУНКОМ (rotation_pict.html → images/_praezession.jpg), поэтому шесть мыслимых порядков были СРАВНЕНЫ ПО МАТРИЦЕ на измеренных позах: расхождение нулевое только у PNR (Precession → Nutation → Rotation, M = Rz(P)·Rx(N)·Rz(R)), у остальных пяти — 1. Единицы — градусы (измерено: запрошенные 30° читаются как 29.99999999999998). ПРЕОБРАЗОВАНИЕ ДОКАЗЫВАЕТСЯ ЭКВИВАЛЕНТНОСТЬЮ МАТРИЦ, А НЕ СОВПАДЕНИЕМ ТРОЙКИ ЧИСЕЛ, и это требование наряда, а не удобство: параметризация неоднозначна — при нутации π у разложения ДВА законных решения, поэтому запись проверяется восстановлением матрицы из свежепрочитанных параметров и сравнением с запрошенной (допуск 1e-6; верный порядок расходится на 2.2e-16, неверный — на 1). Отрицательный контроль: WrongOrder_DoesNotReproduceTheMeasuredMatrix (tests/Unit/KompasMcp.Unit/EulerOrientationTests.cs) требует расхождения > 0.5 у неверного порядка. ЧТО ЧИТАЕТСЯ: reposition_kind — всегда; reposition_vector_mm — у переноса; reposition_axis_direction_mm и reposition_angle_deg — у поворота. Произвольное направление оси (не только координатное), угол и ось через точку ВНЕ начала координат выражаются: тройка углов задаёт ориентацию целиком, а переносная часть размещения читается отдельно. ЧЕГО НЕ ЧИТАЕТСЯ, И ЭТО НАЗВАНО: reposition_axis_point_mm. Документированного члена для точки оси нет ни у одного интерфейса цепочки — IBodyReposition, ILocalCoordinateSystem/IPoint3D, IPoint3DParamDisplace, ILocalCSAxesDirectionParam, ILocalCSEulerParam, ILocalCSObject (шаги RP.10, RP.13; справка объявляет ILocalCSObject.CoordinateSystem как IModelObject). Сверх того точка оси НЕ ЯВЛЯЕТСЯ свойством размещения: запись X/Y/Z = c МЕНЯЕТ габарит повёрнутого тела — (−5,0,0)…(5,20,5) вместо (−5,−5,0)…(5,15,5), — тогда как запись X/Y/Z = c − R·c его СОХРАНЯЕТ (RP.12), то есть поворот вокруг любой точки одной и той же прямой даёт ТО ЖЕ размещение. Из прочитанных ориентации и переноса восстанавливается ПРЕДСТАВИТЕЛЬ прямой, а не исходный вход, поэтому поле не публикуется и НАЗЫВАЕТСЯ причиной, а не пустует молча. ПРЕЖНИЙ ИЗМЕРЕННЫЙ ФАКТ, ИЗ-ЗА КОТОРОГО ЗАМЕНЁН МАРШРУТ ЗАПИСИ (не отменён и не переписан): матричный вид размещения отдаёт записанное ТОЛЬКО В СЕССИИ ЗАПИСИ. Живой поворот +90° вокруг Z читается (0,1,0) при габарите (−5,−5,0)…(5,15,5); тот же признак после сохранения, закрытия и открытия — (1,0,0) при ТОЙ ЖЕ геометрии (RP.16); WriteToFile на переоткрытом документе даёт единичную матрицу (RP.18); запись в тот же элемент возвращает верное чтение, но оно живёт ровно до следующего открытия (RP.20). Отличить «записано» от «не восстановлено» НЕЧЕМ, и это измерено: ILocalCoordinateSystem.Valid читается True в ОБОИХ состояниях (RP.16), OrientationType — 0 в обоих, ILocalCSAxesDirectionParam.LeadAxis — o3d_unknown в обоих; документированная последовательность работы с документом тоже чтения не восстанавливает — RP.23 прочитал (1,0,0) сразу после открытия, после IModelObject.Update() признака, после ILocalCoordinateSystem.Update() и после RebuildModel+RebuildDocument, все четыре ступени единичны при габарите, подтверждающем поворот; документированная коллекция ЛСК размещения пуста (RP.21: элементов 0). Поэтому единичная ориентация переоткрытого признака НЕ означает переноса — она не означает ничего, и именно она давала ложный ответ reposition_kind = «translate» у ЗАПИСАННОГО ПОВОРОТА. Матрица больше НЕ ЧИТАЕТСЯ НИ РАЗУ, а размещение ЗАПИСЫВАЕТСЯ ПАРАМЕТРАМИ (см. B3_REPOSITION_ROUTE). ЗАКРЫТЫЕ ВЕТВИ, чтобы их не искали заново: IPoint3DParamDisplace.DX/DY/DZ недостижимы, пока ParameterType не выставлен в ksPDisplace; Vector3D(ось) = null, ILocalCSAxesDirectionParam.DirectingObject = null, LeadAxis = o3d_unknown; IBodyReposition.RepositionObjects объявлен в библиотеке типов, но не в interop, и чисел не несёт; интерфейс IPlacement3D (GetMatrix3D/GetOrigin/GetEulerAngles/GetPoint3D) объект Position не реализует — члены отвечают DISP_E_UNKNOWNNAME (проба --reposition-read, прогон 9801ee2579f348fa8366dab2131f7b23), а Position подтверждает ровно IPoint3D, ILocalCoordinateSystem, ILocalCSObject и IModelObject (RP.10). УГОЛ В РЕЖИМЕ ОСЕЙ НЕ ЧИТАЕТСЯ ПО СПРАВКЕ: ILocalCSAxesDirectionParam.AngleByOwnAxis — «Свойство доступно только для записи» (ilocalcsaxesdirctionparam_anglebyownaxis.html), поэтому режим осей для чтения не годится и продукт читает режим углов. СОЗДАННОЕ МАТРИЦОЙ НЕ ПЕРЕВОДИТСЯ МОЛЧА: у признака, записанного прежней редакцией, OrientationType читается 0 (ksAxisOrientation), и продукт ОТКАЗЫВАЕТ, называя все пять полей преобразования, а не выдаёт нули и не выводит вид из единичной ориентации. Успех на новых признаках поддержки старых не доказывает — это разные утверждения, и второе здесь не заявлено. СНЯТИЕ — НЕ РЕАЛИЗОВАННАЯ ФУНКЦИЯ, и здесь ничего не снято: знаменатель не уменьшался, счётчик закрытых вырос на ЗАКРЫТИЕ, а не на удаление. Запрет объявлять входные поля читаемыми, когда они не прочитаны, — B3_REMOVED_READ_CLAIMS ниже и сторож REPOSITION_READ_INPUTS в scripts/mcp-smoke.py.",
@@ -3021,17 +3054,15 @@
     "docs/acceptance/B3_AUDIT.md",
     "docs/04_KOMPAS_API_NOTES.md",
     "scripts/mcp-smoke.py",
-    "scratch/mcp-smoke/b3-acceptance.json",
-    "scratch/mcp-smoke/b3l-acceptance.json",
-    "scratch/mcp-smoke/b3m-acceptance.json",
-    "scratch/mcp-smoke/b3c-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3-3e3290f/b3-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3l-3e3290f/b3l-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3m-3e3290f/b3m-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3c-3e3290f/b3c-acceptance.json",
     "docs/acceptance/api7/feature-identity.json",
     "docs/acceptance/api7/disconnected-union.json",
     "docs/acceptance/api7/reposition-read.json",
     "docs/acceptance/api7/cut-area.json",
-    "docs/acceptance/api7/reposition-order.json",
-    "scratch/acceptance-b3-targeting.log",
-    "scratch/b3-area-extra3.log"
+    "docs/acceptance/api7/reposition-order.json"
    ],
    "limitations": [
     "ГРАНИЦА ЧТЕНИЯ ПАРАМЕТРОВ ПРЕОБРАЗОВАНИЯ. ТРЕБОВАНИЕ ЗАКРЫТО ИЗМЕРЕНИЕМ, а не переформулировкой: продукт читает параметры преобразования из модели, включая переоткрытый документ, и публикует их. ЧЕМ ЗАКРЫТО: проба --reposition-params, прогон a336120926fc4652a8bf737562568271 (шаги RP.1–RP.25), отчёт docs/acceptance/api7/reposition-params.json; и приёмка ПРОДУКТА на бинарниках поставки строками B3M.09.read, B3M.09.save_reopen, B3M.10.read, B3M.10.save_reopen. Все четыре строки читают переоткрытый документ через свежую ссылку ДО любой записи и сверяются с ОБЪЯВЛЕННЫМ ожиданием, а не с наблюдаемым. ПОРЯДОК И ЕДИНИЦЫ УГЛОВ — ИЗ ДОКУМЕНТАЦИИ И ИЗМЕРЕНИЯ, А НЕ ПОДБРАНЫ ПОД ОДИН ПРИМЕР. Справка даёт композицию трёх углов РИСУНКОМ (rotation_pict.html → images/_praezession.jpg), поэтому шесть мыслимых порядков были СРАВНЕНЫ ПО МАТРИЦЕ на измеренных позах: расхождение нулевое только у PNR (Precession → Nutation → Rotation, M = Rz(P)·Rx(N)·Rz(R)), у остальных пяти — 1. Единицы — градусы (измерено: запрошенные 30° читаются как 29.99999999999998). ПРЕОБРАЗОВАНИЕ ДОКАЗЫВАЕТСЯ ЭКВИВАЛЕНТНОСТЬЮ МАТРИЦ, А НЕ СОВПАДЕНИЕМ ТРОЙКИ ЧИСЕЛ, и это требование наряда, а не удобство: параметризация неоднозначна — при нутации π у разложения ДВА законных решения, поэтому запись проверяется восстановлением матрицы из свежепрочитанных параметров и сравнением с запрошенной (допуск 1e-6; верный порядок расходится на 2.2e-16, неверный — на 1). Отрицательный контроль: WrongOrder_DoesNotReproduceTheMeasuredMatrix (tests/Unit/KompasMcp.Unit/EulerOrientationTests.cs) требует расхождения > 0.5 у неверного порядка. ЧТО ЧИТАЕТСЯ: reposition_kind — всегда; reposition_vector_mm — у переноса; reposition_axis_direction_mm и reposition_angle_deg — у поворота. Произвольное направление оси (не только координатное), угол и ось через точку ВНЕ начала координат выражаются: тройка углов задаёт ориентацию целиком, а переносная часть размещения читается отдельно. ЧЕГО НЕ ЧИТАЕТСЯ, И ЭТО НАЗВАНО: reposition_axis_point_mm. Документированного члена для точки оси нет ни у одного интерфейса цепочки — IBodyReposition, ILocalCoordinateSystem/IPoint3D, IPoint3DParamDisplace, ILocalCSAxesDirectionParam, ILocalCSEulerParam, ILocalCSObject (шаги RP.10, RP.13; справка объявляет ILocalCSObject.CoordinateSystem как IModelObject). Сверх того точка оси НЕ ЯВЛЯЕТСЯ свойством размещения: запись X/Y/Z = c МЕНЯЕТ габарит повёрнутого тела — (−5,0,0)…(5,20,5) вместо (−5,−5,0)…(5,15,5), — тогда как запись X/Y/Z = c − R·c его СОХРАНЯЕТ (RP.12), то есть поворот вокруг любой точки одной и той же прямой даёт ТО ЖЕ размещение. Из прочитанных ориентации и переноса восстанавливается ПРЕДСТАВИТЕЛЬ прямой, а не исходный вход, поэтому поле не публикуется и НАЗЫВАЕТСЯ причиной, а не пустует молча. ПРЕЖНИЙ ИЗМЕРЕННЫЙ ФАКТ, ИЗ-ЗА КОТОРОГО ЗАМЕНЁН МАРШРУТ ЗАПИСИ (не отменён и не переписан): матричный вид размещения отдаёт записанное ТОЛЬКО В СЕССИИ ЗАПИСИ. Живой поворот +90° вокруг Z читается (0,1,0) при габарите (−5,−5,0)…(5,15,5); тот же признак после сохранения, закрытия и открытия — (1,0,0) при ТОЙ ЖЕ геометрии (RP.16); WriteToFile на переоткрытом документе даёт единичную матрицу (RP.18); запись в тот же элемент возвращает верное чтение, но оно живёт ровно до следующего открытия (RP.20). Отличить «записано» от «не восстановлено» НЕЧЕМ, и это измерено: ILocalCoordinateSystem.Valid читается True в ОБОИХ состояниях (RP.16), OrientationType — 0 в обоих, ILocalCSAxesDirectionParam.LeadAxis — o3d_unknown в обоих; документированная последовательность работы с документом тоже чтения не восстанавливает — RP.23 прочитал (1,0,0) сразу после открытия, после IModelObject.Update() признака, после ILocalCoordinateSystem.Update() и после RebuildModel+RebuildDocument, все четыре ступени единичны при габарите, подтверждающем поворот; документированная коллекция ЛСК размещения пуста (RP.21: элементов 0). Поэтому единичная ориентация переоткрытого признака НЕ означает переноса — она не означает ничего, и именно она давала ложный ответ reposition_kind = «translate» у ЗАПИСАННОГО ПОВОРОТА. Матрица больше НЕ ЧИТАЕТСЯ НИ РАЗУ, а размещение ЗАПИСЫВАЕТСЯ ПАРАМЕТРАМИ (см. B3_REPOSITION_ROUTE). ЗАКРЫТЫЕ ВЕТВИ, чтобы их не искали заново: IPoint3DParamDisplace.DX/DY/DZ недостижимы, пока ParameterType не выставлен в ksPDisplace; Vector3D(ось) = null, ILocalCSAxesDirectionParam.DirectingObject = null, LeadAxis = o3d_unknown; IBodyReposition.RepositionObjects объявлен в библиотеке типов, но не в interop, и чисел не несёт; интерфейс IPlacement3D (GetMatrix3D/GetOrigin/GetEulerAngles/GetPoint3D) объект Position не реализует — члены отвечают DISP_E_UNKNOWNNAME (проба --reposition-read, прогон 9801ee2579f348fa8366dab2131f7b23), а Position подтверждает ровно IPoint3D, ILocalCoordinateSystem, ILocalCSObject и IModelObject (RP.10). УГОЛ В РЕЖИМЕ ОСЕЙ НЕ ЧИТАЕТСЯ ПО СПРАВКЕ: ILocalCSAxesDirectionParam.AngleByOwnAxis — «Свойство доступно только для записи» (ilocalcsaxesdirctionparam_anglebyownaxis.html), поэтому режим осей для чтения не годится и продукт читает режим углов. СОЗДАННОЕ МАТРИЦОЙ НЕ ПЕРЕВОДИТСЯ МОЛЧА: у признака, записанного прежней редакцией, OrientationType читается 0 (ksAxisOrientation), и продукт ОТКАЗЫВАЕТ, называя все пять полей преобразования, а не выдаёт нули и не выводит вид из единичной ориентации. Успех на новых признаках поддержки старых не доказывает — это разные утверждения, и второе здесь не заявлено. СНЯТИЕ — НЕ РЕАЛИЗОВАННАЯ ФУНКЦИЯ, и здесь ничего не снято: знаменатель не уменьшался, счётчик закрытых вырос на ЗАКРЫТИЕ, а не на удаление. Запрет объявлять входные поля читаемыми, когда они не прочитаны, — B3_REMOVED_READ_CLAIMS ниже и сторож REPOSITION_READ_INPUTS в scripts/mcp-smoke.py.",
@@ -3109,7 +3140,7 @@
    "evidence": [
     "docs/acceptance/INDEX.md",
     "scripts/mcp-smoke.py",
-    "scratch/mcp-smoke/delivery-b4-20260920/b4-acceptance.json"
+    "docs/acceptance/evidence/20261010-b4-3e3290f/b4-acceptance.json"
    ],
    "limitations": [
     "count1 = 5 при шаге 20 ставит пятую копию на кромку пластины (x = 100) и снимает половину отверстия: измерено снятое 3 534,29173528853 = 4,5 · 250π против аналитических 5 · 250π. Ожидание «пять полных копий» было неверным — исправлено ОНО, а не замер.",
@@ -3166,7 +3197,7 @@
    "evidence": [
     "docs/acceptance/INDEX.md",
     "scripts/mcp-smoke.py",
-    "scratch/mcp-smoke/delivery-b4-20260920/b4-acceptance.json"
+    "docs/acceptance/evidence/20261010-b4-3e3290f/b4-acceptance.json"
    ],
    "limitations": [
     "angle2_deg — угол МЕЖДУ направлениями, а не «наклон второй оси». Измерено пробой в одной постановке: при angle2_deg = 0 второе направление совмещается с первым и копии продолжают первую ось (измерены центры x = 20, 40, 60, 50, 70, 90 при y = 20); при 90° встают по второй оси; при 270° модель нормализует значение до 180°. Поэтому незаданный угол НЕ ЗАПИСЫВАЕТСЯ вовсе: пока поле было не-nullable, адаптер писал 0 всегда, и прямоугольная сетка вырождалась в линию.",
@@ -3222,7 +3253,7 @@
    "evidence": [
     "docs/acceptance/INDEX.md",
     "scripts/mcp-smoke.py",
-    "scratch/mcp-smoke/delivery-b4-20260920/b4-acceptance.json"
+    "docs/acceptance/evidence/20261010-b4-3e3290f/b4-acceptance.json"
    ],
    "limitations": [
     "Новых тел не появляется: измерено, что число тел остаётся 1 при трёх экземплярах вырезания.",
@@ -3275,7 +3306,7 @@
    "evidence": [
     "docs/acceptance/INDEX.md",
     "scripts/mcp-smoke.py",
-    "scratch/mcp-smoke/delivery-b4-20260920/b4-acceptance.json"
+    "docs/acceptance/evidence/20261010-b4-3e3290f/b4-acceptance.json"
    ],
    "limitations": [
     "Копируется тело целиком: измерено, что при шаге 120 (пластина шириной 100 не пересекается с копией) документ содержит три тела по 80 000 мм³, а подавление признака оставляет одно.",
@@ -3328,7 +3359,7 @@
    "evidence": [
     "docs/acceptance/INDEX.md",
     "scripts/mcp-smoke.py",
-    "scratch/mcp-smoke/delivery-b4-20260920/b4-acceptance.json"
+    "docs/acceptance/evidence/20261010-b4-3e3290f/b4-acceptance.json"
    ],
    "limitations": [
     "Кольцевое направление — это (Count2, Step2), а не (Count1, Step1): страница icircularpattern_props.html называет их именно так, и измерение это подтверждает.",
@@ -3381,7 +3412,7 @@
    "evidence": [
     "docs/acceptance/INDEX.md",
     "scripts/mcp-smoke.py",
-    "scratch/mcp-smoke/delivery-b4-20260920/b4-acceptance.json"
+    "docs/acceptance/evidence/20261010-b4-3e3290f/b4-acceptance.json"
    ],
    "limitations": [
     "Исходное отверстие обязано лежать так, чтобы ВСЁ кольцо помещалось в материал: измерено, что при исходном (20, 20) один экземпляр сектора выходит за габарит и снимает меньше материала (77 683,53147055213 против аналитических 77 643,80550980766, разница 39,725960744472104). Ожидание «три полных копии» было неверным; исходник перенесён в (50, 20).",
@@ -3434,7 +3465,7 @@
    "evidence": [
     "docs/acceptance/INDEX.md",
     "scripts/mcp-smoke.py",
-    "scratch/mcp-smoke/delivery-b4-20260920/b4-acceptance.json"
+    "docs/acceptance/evidence/20261010-b4-3e3290f/b4-acceptance.json"
    ],
    "limitations": [
     "Новых тел не появляется: число тел остаётся 1."
@@ -3485,7 +3516,7 @@
    "evidence": [
     "docs/acceptance/INDEX.md",
     "scripts/mcp-smoke.py",
-    "scratch/mcp-smoke/delivery-b4-20260920/b4-acceptance.json"
+    "docs/acceptance/evidence/20261010-b4-3e3290f/b4-acceptance.json"
    ],
    "limitations": [
     "Копируется тело целиком: измерено, что три экземпляра дают три тела по 8 000 мм³ (плита 40×20×10).",
@@ -3538,7 +3569,7 @@
    "evidence": [
     "docs/acceptance/INDEX.md",
     "scripts/mcp-smoke.py",
-    "scratch/mcp-smoke/delivery-b4-20260920/b4-acceptance.json"
+    "docs/acceptance/evidence/20261010-b4-3e3290f/b4-acceptance.json"
    ],
    "limitations": [
     "Исходные объекты — ЯВНЫЕ body:-ссылки. Измерено, что пустой список создаёт признак, но не отражает ни одного тела, а до правки адаптера явные ссылки на тела отвергались STALE_REFERENCE: разбор ссылок шёл ВСЕГДА как по признакам, тогда как контракт обещает для all_bodies body:-ссылки.",
@@ -4729,7 +4760,7 @@
    ],
    "evidence": [
     "coverage/solid-v24/catalog.json#SM-04.base.single_profile_flat_path",
-    "scratch/mcp-smoke/delivery-b5-20260920/b5-acceptance.json#B5K.01.* (окно вызовов каждой строки)",
+    "docs/acceptance/evidence/20261010-b5-3e3290f/b5-acceptance.json#B5K.01.* (окно вызовов каждой строки)",
     "docs/acceptance/api7/b5-sweep-loft-shell.json (проба B5.2–B5.22: маршруты и эталоны)"
    ],
    "limitations": [
@@ -4784,7 +4815,7 @@
    ],
    "evidence": [
     "coverage/solid-v24/catalog.json#SM-05.base.parallel_sections_order",
-    "scratch/mcp-smoke/delivery-b5-20260920/b5-acceptance.json#B5S.01.* (окно вызовов каждой строки)",
+    "docs/acceptance/evidence/20261010-b5-3e3290f/b5-acceptance.json#B5S.01.* (окно вызовов каждой строки)",
     "docs/acceptance/api7/b5-sweep-loft-shell.json (проба B5.2–B5.22: маршруты и эталоны)"
    ],
    "limitations": [
@@ -4838,7 +4869,7 @@
    ],
    "evidence": [
     "coverage/solid-v24/catalog.json#SM-13.shell.uniform_thickness",
-    "scratch/mcp-smoke/delivery-b5-20260920/b5-acceptance.json#B5O.03.* (окно вызовов каждой строки)",
+    "docs/acceptance/evidence/20261010-b5-3e3290f/b5-acceptance.json#B5O.03.* (окно вызовов каждой строки)",
     "docs/acceptance/api7/b5-sweep-loft-shell.json (проба B5.2–B5.22: маршруты и эталоны)"
    ],
    "limitations": [
@@ -4894,17 +4925,15 @@
     "docs/acceptance/B3_AUDIT.md",
     "docs/04_KOMPAS_API_NOTES.md",
     "scripts/mcp-smoke.py",
-    "scratch/mcp-smoke/b3-acceptance.json",
-    "scratch/mcp-smoke/b3l-acceptance.json",
-    "scratch/mcp-smoke/b3m-acceptance.json",
-    "scratch/mcp-smoke/b3c-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3-3e3290f/b3-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3l-3e3290f/b3l-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3m-3e3290f/b3m-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3c-3e3290f/b3c-acceptance.json",
     "docs/acceptance/api7/feature-identity.json",
     "docs/acceptance/api7/disconnected-union.json",
     "docs/acceptance/api7/reposition-read.json",
     "docs/acceptance/api7/cut-area.json",
-    "docs/acceptance/api7/reposition-order.json",
-    "scratch/acceptance-b3-targeting.log",
-    "scratch/b3-area-extra3.log"
+    "docs/acceptance/api7/reposition-order.json"
    ],
    "limitations": [
     "expected_volume_mm3 — ОДНО ИМЯ И ТРИ ВЕЛИЧИНЫ: у kompas_boolean это объём главного тела, то есть СУММА всех тел документа; у kompas_split — сумма ЧАСТЕЙ; у kompas_cut_by_plane — объём ОСТАТКА. Объявленное число, не подтверждённое моделью, НАЗЫВАЕТСЯ в unverified_aspects (B3.40), и это не отказ: геометрия сверена независимо, а расхождение названо.",
@@ -4966,17 +4995,15 @@
     "docs/acceptance/B3_AUDIT.md",
     "docs/04_KOMPAS_API_NOTES.md",
     "scripts/mcp-smoke.py",
-    "scratch/mcp-smoke/b3-acceptance.json",
-    "scratch/mcp-smoke/b3l-acceptance.json",
-    "scratch/mcp-smoke/b3m-acceptance.json",
-    "scratch/mcp-smoke/b3c-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3-3e3290f/b3-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3l-3e3290f/b3l-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3m-3e3290f/b3m-acceptance.json",
+    "docs/acceptance/evidence/20261010-b3c-3e3290f/b3c-acceptance.json",
     "docs/acceptance/api7/feature-identity.json",
     "docs/acceptance/api7/disconnected-union.json",
     "docs/acceptance/api7/reposition-read.json",
     "docs/acceptance/api7/cut-area.json",
-    "docs/acceptance/api7/reposition-order.json",
-    "scratch/acceptance-b3-targeting.log",
-    "scratch/b3-area-extra3.log"
+    "docs/acceptance/api7/reposition-order.json"
    ],
    "limitations": [
     "expected_volume_mm3 — ОДНО ИМЯ И ТРИ ВЕЛИЧИНЫ: у kompas_boolean это объём главного тела, то есть СУММА всех тел документа; у kompas_split — сумма ЧАСТЕЙ; у kompas_cut_by_plane — объём ОСТАТКА. Объявленное число, не подтверждённое моделью, НАЗЫВАЕТСЯ в unverified_aspects (B3.40), и это не отказ: геометрия сверена независимо, а расхождение названо.",
@@ -5038,7 +5065,7 @@
    "evidence": [
     "docs/acceptance/INDEX.md",
     "scripts/mcp-smoke.py",
-    "scratch/mcp-smoke/delivery-b4-20260920/b4-acceptance.json"
+    "docs/acceptance/evidence/20261010-b4-3e3290f/b4-acceptance.json"
    ],
    "limitations": [
     "SaveInitialObjects НЕ действует: справка imirrorpattern_saveinitialobjects.html говорит «Свойство работает только для o3d_mirrorAllOperation» и «у других операций зеркального копирования возможность скрыть экземпляры отсутствует». Измерено: записано false — прочитано из модели true, объём 78 429,20367320509 в обеих половинах. Требование «половины различаются на операции 48» снято как противоречащее справке, а не отложено.",
@@ -7373,7 +7400,7 @@
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
-    "scratch/drw-runs/20261006-rework3/drawing-acceptance.json"
+    "docs/acceptance/evidence/20261010-drawing-3e3290f/drawing-acceptance.json"
    ],
    "limitations": [
     "Живой прогон НЕ выполнялся: код собран, но группа DRW в scripts/mcp-smoke.py ещё не написана. Уровень строки mcp_implemented — маршрут написан, подтверждения приёмкой нет.",
@@ -7442,7 +7469,7 @@
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
-    "scratch/drw-runs/20261006-rework3/drawing-acceptance.json"
+    "docs/acceptance/evidence/20261010-drawing-3e3290f/drawing-acceptance.json"
    ],
    "limitations": [
     "Зависимость блока чертежей; живого прогона нет — действия остаются not_started.",
@@ -7749,7 +7776,7 @@
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
-    "scratch/drw-runs/20261006-rework3/drawing-acceptance.json"
+    "docs/acceptance/evidence/20261010-drawing-3e3290f/drawing-acceptance.json"
    ],
    "limitations": [
     "Зависимость блока чертежей; живого прогона нет — действия остаются not_started.",

@@ -111,7 +111,12 @@
   / `rot_empty`) вместо `AMBIGUOUS_APPLICATION`; имена прочих записей ROT — только имена файлов.
 - **Приёмка.** Группа `--client-bugs-20261010`: **34 PASS / 0 FAIL** (13 строк `CB10.*` плюс
   контрактная преамбула). Модульных тестов **910, 0 FAIL**. Сборка Debug и Release — 0 ошибок.
-  `docs/TOOLS.md` переиздан генератором. Записи — `docs/decisions/adapter-sketch.md#set-plane-is-a-mutation`,
+  `docs/TOOLS.md` переиздан генератором. **Полный прогон:** 1188 строк, **1178 PASS / 1 NAMED /
+  9 FAIL**; NAMED — прежний `SB-12.fragment_insert`; девять FAIL — известный нестабильный класс
+  (`B4M.07.*`, `B4M.01.delete_dependencies`, `F08.07.suppress_restore` с `GEOMETRY_FAILED`), и по
+  правилу техдолга повтор прогона даёт зелёный результат: `--f08-only` 304 PASS / 0 FAIL,
+  `--b4-only` 0 FAIL. **Правка постановки:** `AUXS.02` переразрешает `face_ref`/`edge_ref` после
+  смены опоры — смена опоры теперь мутация и отзывает топологические ссылки. Записи — `docs/decisions/adapter-sketch.md#set-plane-is-a-mutation`,
   `docs/decisions/files.md#control-copies` (поправка), `docs/decisions/adapter-core.md#attach-diagnosis`
   и `#feature-left`, `docs/04_KOMPAS_API_NOTES.md` §4.65/§4.66, `docs/operator-guide/control-copies.md`.
 - **НЕ сделано и названо.** **Часть C** (воспроизведение отказа клиента; его файл-контрольная точка

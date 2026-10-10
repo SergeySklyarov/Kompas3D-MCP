@@ -4,6 +4,7 @@ using Kompas6API5;
 using KompasMcp.Api5Adapter.Com;
 using KompasMcp.Contracts;
 using KompasMcp.Contracts.Ipc;
+using KompasMcp.Domain.Documents;
 using KompasMcp.Domain.Geometry;
 using KompasMcp.Domain.References;
 
@@ -2856,9 +2857,20 @@ public sealed partial class Api5Session
     /// snapshot 0 is a legitimate reading — merging the two would make an unread count look measured.
     /// The route is the same one <c>kompas_get_context</c> uses, including the refresh.
     /// Also read by the dispatcher around a mutation: a REFUSAL that left the feature count HIGHER than
-    /// before created a feature and left it in the tree, which the refusal then names.</remarks>
+    /// before created a feature and left it in the tree, which the refusal then names.
+    /// A document without a 3D model (a drawing, a fragment) has no tree at all: this answers null for it
+    /// WITHOUT throwing, so the auxiliary read never cancels the mutation it was only meant to describe.</remarks>
     public int? TryCountFeatures(DocumentEntry document)
     {
+        // INVARIANT: the kind is checked BEFORE PartNow(). PartNow() -> Require3D() refuses a drawing with
+        // WRONG_DOCUMENT_KIND, and that contract exception is not in the catch below, so it would escape and
+        // cancel a mutation that only asked for an answer. A document with no 3D model has no feature tree
+        // by construction: null (not applicable), never a throw.
+        if (!ModelFeatureTree.Applies(document.Kind))
+        {
+            return null;
+        }
+
         try
         {
             var collection = (ksEntityCollection)document.PartNow()

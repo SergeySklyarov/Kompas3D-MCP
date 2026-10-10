@@ -7,6 +7,7 @@ using KompasMcp.Api5Adapter.Com;
 using KompasMcp.Api5Adapter.Sta;
 using KompasMcp.Contracts;
 using KompasMcp.Contracts.Ipc;
+using KompasMcp.Domain.Documents;
 using KompasMcp.Domain.Files;
 
 namespace KompasMcp.Worker;
@@ -433,7 +434,7 @@ public sealed class CommandDispatcher
         var copy = _controlCopies.Before(document.Path, document.Id, document.Revision);
         // Feature count BEFORE the mutation. A refusal that leaves it HIGHER created a feature and left
         // it in the tree — MEASURED, not assumed, so the refusal can name the object to delete.
-        var featuresBefore = _session.TryCountFeatures(document);
+        var featuresBefore = CountFeaturesSafe(document);
         object? outcome;
         try
         {
@@ -459,7 +460,7 @@ public sealed class CommandDispatcher
             // it re-read the context. The number is the document's CURRENT revision: the mutation already
             // bumped it if it changed anything, and an unchanged model reads back its old revision.
             throw Reclassify(ex, copy, decision, restoreFailure, document.Revision,
-                FeatureLeftInTree(featuresBefore, _session.TryCountFeatures(document)));
+                document.Kind, FeatureLeftInTree(featuresBefore, CountFeaturesSafe(document)));
         }
 
         // SUCCESS: THE COPY IS DELETED. It was there for the failure case; left behind, it would
@@ -490,14 +491,34 @@ public sealed class CommandDispatcher
     private static bool? FeatureLeftInTree(int? before, int? after) =>
         before is int b && after is int a ? a > b : null;
 
+    /// <summary>The feature-count probe, wrapped so it can NEVER throw.</summary>
+    /// <remarks>INVARIANT: an auxiliary read made for the RESPONSE does not cancel the mutation it only
+    /// describes. <see cref="Api5Session.TryCountFeatures"/> already answers null for a document with no
+    /// 3D model; this guard covers any remaining failure so that no document kind can turn a mutation into
+    /// a refusal before the mutation has run. History: docs/decisions/worker-ipc.md#feature-left.</remarks>
+    private int? CountFeaturesSafe(DocumentEntry document)
+    {
+        try
+        {
+            return _session.TryCountFeatures(document);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
     /// <summary>Carry to the client that a control copy was taken and what became of it on failure. The original code
     /// and retry policy are PRESERVED: a failure does not change because a copy appeared.</summary> <remarks>For an
     /// UNEXPECTED mutation exception the policy is "after reconciliation", not "same operation_id": partialEffects=true
     /// means repeating would apply the mutation twice.</remarks>
     private static Exception Reclassify(
         Exception ex, ControlCopyResult copy, RestoreDecision decision, string? restoreFailure,
-        long revisionAfter, bool? featureLeftInTree)
+        long revisionAfter, DocumentKind kind, bool? featureLeftInTree)
     {
+        // Whether the model feature tree applies to THIS document kind. A drawing has none, so the count
+        // is not "unread" but not applicable, and the two are named differently below.
+        var treeApplies = ModelFeatureTree.Applies(kind);
         var details = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             ["control_copy"] = DocumentControlCopies.Describe(copy),
@@ -506,7 +527,7 @@ public sealed class CommandDispatcher
             // WHETHER A FEATURE THE CALLER MUST DELETE STAYED IN THE TREE — from the feature count before
             // and after the refused mutation, so it is a reading, not a guess. <c>false</c> when nothing
             // was added; <c>null</c> reads are NAMED, never passed off as "no".
-            ["feature_left_in_tree"] = featureLeftInTree ?? false,
+            ["feature_left_in_tree"] = treeApplies && featureLeftInTree is bool left ? left : false,
             // WHY THE FILE WAS NOT RESTORED — NAMED. "Not restored" without a reason is indistinguishable
             // from "we forgot to restore", and here the reason is substantive: a read-only document, or a
             // failure that never reached COM.
@@ -539,10 +560,13 @@ public sealed class CommandDispatcher
 
         if (featureLeftInTree is null)
         {
-            // "Not measured" is named: an unread count must not read as "no feature stayed".
-            details["feature_left_in_tree_note"] =
-                "число признаков до и после отказа не прочитано: остался ли в дереве созданный признак — "
-                + "не измерено, проверьте kompas_list_features";
+            // WHY THE FIELD IS false. Two DIFFERENT reasons, named apart so neither is read as "no feature
+            // stayed": (a) the document has no model feature tree at all (a drawing, by construction);
+            // (b) the tree exists but the count could not be read. "Not measured" is not "measured zero".
+            details["feature_left_in_tree_note"] = treeApplies
+                ? "число признаков до и после отказа не прочитано: остался ли в дереве созданный признак — "
+                    + "не измерено, проверьте kompas_list_features"
+                : ModelFeatureTree.NotApplicableNote(kind);
         }
 
         if (ex is KompasContractException contract)

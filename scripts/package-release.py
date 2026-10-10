@@ -66,6 +66,7 @@ PROFILES = [
     {"id": "drawings-minimal-v1", "title": "Чертежи: виды, размеры, штамп, DXF/DWG, техтребования", "modes": "6/6", "deps": "6/6"},
     {"id": "variables-material-minimal-v1", "title": "Переменные и материал детали", "modes": "5/5", "deps": "5/5"},
     {"id": "assembly-interference-minimal-v1", "title": "Пересечения и зазоры между компонентами сборки", "modes": "4/4", "deps": "5/5"},
+    {"id": "sketch-bulk-minimal-v1", "title": "Массовая геометрия эскиза: нативная полилиния, сплайн", "modes": "3/3", "deps": "3/3"},
 ]
 
 TAG_RE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
@@ -340,9 +341,9 @@ def main():
         "zip": zip_name,
         "installer": "Install-KompasMcp.ps1",
         "scope": "детали + сборки + сопряжения + чертежи + переменные и материал + пересечения и "
-                 "зазоры сборки (mechanical-core-v1, assemblies-minimal-v1, mates-minimal-v1, "
-                 "drawings-minimal-v1, variables-material-minimal-v1, "
-                 "assembly-interference-minimal-v1 закрыты полностью)",
+                 "зазоры сборки + массовая геометрия эскиза (mechanical-core-v1, assemblies-minimal-v1, "
+                 "mates-minimal-v1, drawings-minimal-v1, variables-material-minimal-v1, "
+                 "assembly-interference-minimal-v1, sketch-bulk-minimal-v1 закрыты полностью)",
         "profiles": PROFILES,
         "not_included": [
             "массивы компонентов сборки",
@@ -350,7 +351,7 @@ def main():
             "расширенные виды сопряжений сверх mates-minimal-v1",
             "спецификации и другие 2D-документы, кроме чертежей профиля drawings-minimal-v1",
             "создание и удаление переменных (kompas_set_variable меняет существующую внешнюю переменную)",
-            "полный каталог P6 (выпуск закрывает шесть профилей выше)",
+            "полный каталог P6 (выпуск закрывает семь профилей выше)",
         ],
         "tools_count": len(schemas),
         "tools": schemas,

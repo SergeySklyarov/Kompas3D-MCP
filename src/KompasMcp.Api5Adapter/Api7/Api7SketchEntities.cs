@@ -20,7 +20,8 @@ internal sealed record SketchEntityRow(
     IReadOnlyList<string> Notes,
     int? PointsCount = null,
     bool? Closed = null,
-    string? EntityKind = null);
+    string? EntityKind = null,
+    double? LengthMm = null);
 
 /// <summary>Result of enumerating sketch entities: rows, route and per-collection counts.</summary>
 internal sealed record SketchEntitiesRead(
@@ -266,6 +267,7 @@ internal static class Api7SketchEntities
         int? pointsCount = null;
         bool? closed = null;
         string? entityKind = null;
+        double? lengthMm = null;
 
         if (item is IKompasAPIObject apiObject)
         {
@@ -343,6 +345,20 @@ internal static class Api7SketchEntities
         // <c>ksBezier</c>; the read-back kind stays the measured <c>DrawingObjectType</c> name, and the
         // normalised name is published next to it so a client need not know the vendor's enumeration.
         // History: docs/decisions/adapter-sketch.md#sketch-entity-kind
+        // The segment's own length: it is the quantity a driving dimension moves, so the client must
+        // be able to read it back instead of trusting the answer of the write.
+        if (item is ILineSegment lineSegment)
+        {
+            try
+            {
+                lengthMm = lineSegment.Length;
+            }
+            catch (Exception ex) when (ex is COMException or InvalidCastException)
+            {
+                local.Add("длина отрезка не прочитана: " + ex.GetType().Name);
+            }
+        }
+
         if (item is IPolyLine2D polyLine)
         {
             pointsCount = ReadInt(() => polyLine.PointsCount, local, "число вершин полилинии");
@@ -363,7 +379,8 @@ internal static class Api7SketchEntities
         }
 
         notes.AddRange(local.Select(n => $"объект {index}: {n}"));
-        return new SketchEntityRow(index, address, kind, name, typeCode, local, pointsCount, closed, entityKind);
+        return new SketchEntityRow(index, address, kind, name, typeCode, local, pointsCount, closed,
+            entityKind, lengthMm);
     }
 
     private static string? ReadString(Func<string?> read, List<string> notes, string what)

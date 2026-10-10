@@ -126,7 +126,7 @@ public sealed partial class Api5Session
         }
 
         var notes = new List<string>();
-        var outcome = InWriteSession(sketch7, notes, objects =>
+        var outcome = InWriteSession(sketch7, notes, (_, objects) =>
         {
             var host = ResolveObject(objects, command.ObjectRef!, "object_ref", notes);
             var before = Api7SketchConstraints.ReadRows(host, notes);
@@ -277,8 +277,15 @@ public sealed partial class Api5Session
         }
 
         var notes = new List<string>();
-        var objects = InReadSession(sketch7, notes, items =>
+        bool? parametricMode = null;
+        var objects = InReadSession(sketch7, notes, (fragment, items) =>
         {
+            // The DOCUMENT's parametric mode, read through the typed twin while the fragment document is
+            // in hand. Read here, and not by kompas_get_sketch_status, because the fragment exists only
+            // inside an edit session — and a session opened just to read is not observation-neutral
+            // (measured 11.10.2026, §4.73 of the API notes), while this call already opens one.
+            parametricMode = ReadParametricMode(fragment, notes);
+
             var wanted = command.ObjectRef is { Length: > 0 }
                 ? items.Where(o => string.Equals(o.Address, command.ObjectRef, StringComparison.Ordinal)).ToList()
                 : items.ToList();
@@ -321,7 +328,6 @@ public sealed partial class Api5Session
 
             return rows;
         });
-
         if (objects is null)
         {
             throw new KompasContractException(
@@ -335,7 +341,8 @@ public sealed partial class Api5Session
             Objects: objects,
             ConstraintTotal: objects.Sum(dto => dto.Constraints.Count),
             Route: Api7SketchConstraints.ReadRoute,
-            Notes: notes);
+            Notes: notes,
+            ParametricMode: parametricMode);
     }
 
     /// <summary>Deletes ONE constraint of an object, or ALL of them.</summary>
@@ -388,7 +395,7 @@ public sealed partial class Api5Session
         }
 
         var notes = new List<string>();
-        var outcome = InWriteSession(sketch7, notes, objects =>
+        var outcome = InWriteSession(sketch7, notes, (_, objects) =>
         {
             var host = ResolveObject(objects, command.ObjectRef!, "object_ref", notes);
             var before = Api7SketchConstraints.ReadRows(host, notes);
@@ -550,21 +557,25 @@ public sealed partial class Api5Session
     /// path too: a fragment left open would keep the sketch in edit mode and the next call would find the
     /// model busy.</summary>
     private T? InWriteSession<T>(KompasAPI7.ISketch sketch, List<string> notes,
-        Func<IReadOnlyList<SketchConstraintObject>, T> action) =>
+        Func<KompasAPI7.IFragmentDocument, IReadOnlyList<SketchConstraintObject>, T> action) =>
         InSession(sketch, write: true, notes, action);
 
     private T? InReadSession<T>(KompasAPI7.ISketch sketch, List<string> notes,
-        Func<IReadOnlyList<SketchConstraintObject>, T> action) =>
+        Func<KompasAPI7.IFragmentDocument, IReadOnlyList<SketchConstraintObject>, T> action) =>
         InSession(sketch, write: false, notes, action);
 
+    /// <remarks>The FRAGMENT document is handed to the action because it is the object that answers
+    /// <c>QI(IKompasDocument2D1)</c> — the parametric mode is read from it while the session is open,
+    /// rather than by opening a second session just for the read.</remarks>
     private T? InSession<T>(KompasAPI7.ISketch sketch, bool write, List<string> notes,
-        Func<IReadOnlyList<SketchConstraintObject>, T> action)
+        Func<KompasAPI7.IFragmentDocument, IReadOnlyList<SketchConstraintObject>, T> action)
     {
         KompasAPI7.IFragmentDocument? fragment;
         try
         {
             // BeginEdit() is FOR WRITING and BeginEditEx(true) is READ-ONLY: different members, not
-            // overloads with a default. A read must not be given the right to change the model.
+            // overloads with a default (measured in the type library: the parameter is named ReadOnly).
+            // A read must not be given the right to change the model.
             fragment = write ? sketch.BeginEdit() : sketch.BeginEditEx(true);
         }
         catch (COMException ex)
@@ -588,7 +599,7 @@ public sealed partial class Api5Session
                 return default;
             }
 
-            return action(objects);
+            return action(fragment, objects);
         }
         finally
         {
@@ -601,6 +612,42 @@ public sealed partial class Api5Session
                 // A failed exit is a reason for the journal, not grounds to return a false success.
                 notes.Add("ISketch.EndEdit не подтверждён: " + ex.GetType().Name);
             }
+        }
+    }
+
+    /// <summary>The document's parametric mode, READ through the typed twin of the interface the shipped
+    /// wrapper truncates.</summary>
+    /// <remarks>DOC: <c>ikompasdocument2d1_parametricmode.html</c> (<c>BOOL</c>, get/set) and
+    /// <c>ikompasdocument2d1.html</c> («дополнительный интерфейс <c>IKompasDocument2D…</c> можно получить
+    /// посредством <c>QueryInterface</c>»).
+    /// MEASURED 11.10.2026: the shipped wrapper's <c>IKompasDocument2D1</c> stops at
+    /// <c>ChangeObjectsOrder</c> (slot 44) while the installed <c>kAPI7.tlb</c> carries the member at slots
+    /// 74/75 — so the absence from the wrapper is a fact about the wrapper, not about the route, and the
+    /// member is reached by reproducing the vtable (ADR-004), not by <c>IDispatch</c>. The sketch's FRAGMENT
+    /// document answers <c>QI(IKompasDocument2D1)</c>; the part document does not.
+    /// READ ONLY: only the getter is called — the mode is reported, never set. The twin declares the PUT as
+    /// well solely because a vtable is reproduced in order.
+    /// INVARIANT: an unreadable mode is <c>null</c> with the reason named; it is never substituted.
+    /// History: docs/decisions/adapter-sketch.md#sketch-constraints</remarks>
+    private static bool? ReadParametricMode(KompasAPI7.IFragmentDocument fragment, List<string> notes)
+    {
+        try
+        {
+            if (fragment is not IKompasDocument2D1Twin document)
+            {
+                notes.Add("параметрический режим не прочитан: документ фрагмента эскиза не отвечает " +
+                          "QI(IKompasDocument2D1). Это утверждение о маршруте, а не о документе.");
+                return null;
+            }
+
+            var mode = document.get_ParametricMode();
+            notes.Add($"параметрический режим документа: {mode}");
+            return mode;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            notes.Add("параметрический режим не прочитан: " + ex.GetType().Name);
+            return null;
         }
     }
 

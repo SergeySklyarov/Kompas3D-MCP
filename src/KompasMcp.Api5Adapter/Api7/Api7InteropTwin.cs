@@ -20,6 +20,118 @@ internal static class Api7InteropTwin
 
     /// <summary>The IID of <c>IMeasurement3D</c>, taken from the installed TLB.</summary>
     public const string Measurement3DIid = "f59ff609-45c2-4afb-b3c4-08184b9900ff";
+
+    /// <summary>The IID of <c>IKompasDocument2D1</c>; the same value the shipped wrapper declares.</summary>
+    /// <remarks>MEASURED: the wrapper declares this interface too, but TRUNCATED — its member list ends
+    /// at <c>ChangeObjectsOrder</c> (slot 44), while the installed <c>kAPI7.tlb</c> carries 74 members
+    /// (slots 7…80). <c>ParametricMode</c> (slots 74 put / 75 get) is therefore in the TLB and in the
+    /// interface's own vtable, but not in the wrapper's declaration — which is why the member is reached
+    /// through this twin rather than through <c>KompasAPI7.IKompasDocument2D1</c>.</remarks>
+    public const string Document2D1Iid = "fb57f1c4-44fe-4c73-9b15-87241e8735b5";
+}
+
+
+/// <summary><c>IKompasDocument2D1</c> as declared by the INSTALLED type library, up to and including
+/// <c>get_ParametricMode</c> (slot 75).</summary>
+/// <remarks>MEASURED: the layout was read from <c>Bin\kAPI7.tlb</c> (<c>--tlb --type-members
+/// IKompasDocument2D1</c>), where the member list of this dual interface starts with the seven
+/// <c>IUnknown</c>/<c>IDispatch</c> members, so the TLB's index 7 is vtable slot 7; <c>FUNCDESC.oVft</c>
+/// carries the offset directly and agrees (slot 74 → oVft 592, slot 75 → oVft 600). The declaration is
+/// FLAT — every member of the interface, in vtable order, with no base interface — so the adapter's rule
+/// "member i of a dual interface sits in slot 7 + i" holds for it unchanged, exactly as for
+/// <see cref="IPart7Twin"/>.
+/// LIMIT, NAMED: the shipped wrapper does not declare five of the types the members above slot 44 use
+/// (<c>ksDecomposeObjectLevelEnum</c>, <c>ksDrawingObjectParamTypeEnum</c>, <c>ksCheckAssociationResultEnum</c>,
+/// <c>ksCheckObjectsTypeEnum</c>, <c>ParametrizationParam7</c>). Those parameters are declared as the
+/// 4-byte value of the enum (ABI-identical for a vtable call) and as an interface pointer respectively,
+/// rather than by inventing a twin for a type the installation may not even carry. None of those members
+/// is called: the adapter calls <c>get_ParametricMode</c> only, and the PUT is declared solely because a
+/// vtable is reproduced in order.
+/// History: docs/decisions/assembly.md#api7-twin</remarks>
+[ComImport]
+[Guid(Api7InteropTwin.Document2D1Iid)]
+[InterfaceType(ComInterfaceType.InterfaceIsDual)]
+internal interface IKompasDocument2D1Twin
+{
+    MacroObject get_EditMacroObject();   // slot 7
+    DrawingGroups get_DrawingGroups();   // slot 8
+    DrawingGroups get_NamedGroups();   // slot 9
+    DrawingGroup get_CurrentGroup();   // slot 10
+    SelectionManager get_SelectionManager();   // slot 11
+    ChooseManager get_ChooseManager();   // slot 12
+    object CopyObjects(object Objects, ICopyObjectParam Params);   // slot 13
+    object get_Variables(bool ExternalOnly);   // slot 14
+    Variable7 get_Variable(bool External, object Index);   // slot 15
+    int get_VariablesCount(bool External);   // slot 16
+    bool UpdateVariables();   // slot 17
+    VariableTable get_VariableTable();   // slot 18
+    bool IsVariableNameValid(string Name);   // slot 19
+    Variable7 AddVariable(string Name, double Value, string Note);   // slot 20
+    bool RebuildDocument();   // slot 21
+    bool CreateHyperLink(object Objects, ksHyperLinkTypeEnum Type, string Text, IDrawingObject LinkObject,
+        int Level);   // slot 22
+    object GetHyperLinkObjects(ksHyperLinkTypeEnum Type, IDrawingObject LinkObject, int Level,
+        string Text);   // slot 23
+    bool DeleteHyperLinks(object Objects);   // slot 24
+    bool get_EditMacroVisibleRegime();   // slot 25
+    IDrawingObject GetObjectById(long Id);   // slot 26
+    Process2D get_LibProcess(ksProcess2DTypeEnum ProcessType);   // slot 27
+    IDrawingObject FindObject(double X, double Y, double Limit, FindObjectParameters Param);   // slot 28
+    object FindObjects(double X, double Y, double Limit, FindObjectParameters Param);   // slot 29
+    object SelectObjects(ksRegionTypeEnum RegionType, double XMin, double YMin, double XMax,
+        double YMax);   // slot 30
+    object get_IntervalVariables();   // slot 31
+    Variable7 AddIntervalVariable(string Name, double FirstValue, double SecondValue);   // slot 32
+    Variable7 get_IntervalVariable(object Index);   // slot 33
+    object get_UserFuncVariables();   // slot 34
+    Variable7 AddUserFuncVariable(string Name, string Expression);   // slot 35
+    Variable7 get_UserFuncVariable(object Index);   // slot 36
+    bool ClearUndo();   // slot 37
+    void set_EnableUndo(bool PVal);   // slot 38
+    bool get_EnableUndo();   // slot 39
+    void set_UndoContainer(bool PVal);   // slot 40
+    bool get_UndoContainer();   // slot 41
+    bool CompleteRebuildDocument();   // slot 42
+    bool DestroyObjects(object Objects);   // slot 43
+    bool ChangeObjectsOrder(object Objects, IDrawingObject OrderObject,
+        ksChangeOrderType OrderType);   // slot 44
+    bool get_LibraryEditMode();   // slot 45
+    DrawingGroup DecomposeObject(IKompasAPIObject Object, int Level, double Arrow,
+        int DecomposeType);   // slot 46
+    IDrawingObject VisualCreateObject(DrawingObjectTypeEnum ObjectType);   // slot 47
+    IDrawingObject RunCreateObjectProcess(ProcessTypeEnum ProcessType);   // slot 48
+    bool VisualEditObject(IDrawingObject Object);   // slot 49
+    double get_CursorLimit();   // slot 50
+    bool ExecuteProcessOfDocumentFromFile(string FileName, ProcessTypeEnum ProcessType);   // slot 51
+    bool GetObjectsGabarit(object Objects, ref double X1, ref double Y1, ref double X2,
+        ref double Y2);   // slot 52
+    bool CreateMatrix(double X, double Y, double Angle, double ScaleX, double ScaleY);   // slot 53
+    bool DeleteMatrix();   // slot 54
+    bool TransformPointIntoMatrix(double X, double Y, ref double Xn, ref double Yn);   // slot 55
+    bool TransformPointFromMatrix(double X, double Y, ref double Xn, ref double Yn);   // slot 56
+    bool TransformLengthIntoMatrix(ref double Length);   // slot 57
+    bool TransformLengthFromMatrix(ref double Length);   // slot 58
+    bool TransformAngleIntoMatrix(ref double Angle);   // slot 59
+    bool TransformAngleFromMatrix(ref double Angle);   // slot 60
+    bool TransformObjects(object Objects);   // slot 61
+    bool ClearRegion(DrawingGroup ClearGroup, DrawingGroup RegionGroup, bool Inside);   // slot 62
+    bool MoveObjects(object Objects, double DX, double DY);   // slot 63
+    bool RotateObjects(object Objects, double X, double Y, double Angle);   // slot 64
+    IKompasAPIObject SymmetryObjects(object Objects, double X1, double Y1, double X2, double Y2,
+        bool Copy, bool TextSymmetry, bool CopyAttribytes);   // slot 65
+    void set_TreeNeedRebuild(bool PVal);   // slot 66
+    bool get_TreeNeedRebuild();   // slot 67
+    void set_TreeNeedUpdateItems(bool PVal);   // slot 68
+    bool get_TreeNeedUpdateItems();   // slot 69
+    DrawingGroup ViewGetObjectsArea();   // slot 70
+    int CheckAssociation(object DimensionTypes, int CheckType, object CheckStyle,
+        ref int CompleteAssocCount, ref int IncompleteAssocCount);   // slot 71
+    IKompasAPIObject CreateApproximationCurve(IDrawingObject Curve, double Epsilon, bool CurentLayer,
+        double MaxRadius, bool Smooth);   // slot 72
+    bool ParametrizeObjects(object Objects,
+        [MarshalAs(UnmanagedType.Interface)] object Param);   // slot 73
+    void set_ParametricMode(bool Enable);   // slot 74
+    bool get_ParametricMode();   // slot 75
 }
 
 

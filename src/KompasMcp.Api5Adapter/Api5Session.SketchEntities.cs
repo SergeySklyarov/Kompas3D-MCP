@@ -92,7 +92,7 @@ public sealed partial class Api5Session
         return new SketchEntitiesResult(
             rows.Select(r => new SketchEntityRowDto(
                 r.Index, r.Address, r.Kind, r.Name, r.TypeCode, r.Notes,
-                r.PointsCount, r.Closed, r.EntityKind)).ToList(),
+                r.PointsCount, r.Closed, r.EntityKind, r.LengthMm)).ToList(),
             read.CollectionCounts,
             read.Route,
             notes);

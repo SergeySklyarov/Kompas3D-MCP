@@ -461,6 +461,13 @@ def file_sha256(path):
 # прежнее имя остаётся КОПИЕЙ последнего прогона: привычный путь не пропадает, но перестаёт быть
 # единственным экземпляром. Ничего не удаляется - накопление называет отчёт, решение за заказчиком.
 
+# ОЖИДАЕМОЕ ЧИСЛО ИНСТРУМЕНТОВ — В ОДНОМ МЕСТЕ. Прежде это число было литералом 85 в четырёх
+# строках `*.01.discover`, и блок G6, добавивший три инструмента, уронил все четыре: строка
+# называла реестр неполным, хотя реестр был верен. Число меняется вместе с блоком, поэтому
+# живёт здесь, а не в четырёх копиях.
+# История: 81 (до G2) → 85 (G2, G3, G5+G7) → 88 (G6: ограничения эскиза).
+EXPECTED_TOOL_COUNT = 88
+
 RUN_GROUPS = (
     # (ключ ветки, слаг каталога, имя файла отчёта, заголовок). Порядок = приоритет: набор
     # `--a-only --b-only` разрешается первым совпадением, ровно как в прежней цепочке условий.
@@ -507,6 +514,9 @@ RUN_GROUPS = (
     ("sketch_bulk", "sketch-bulk", "sketch-bulk-acceptance.json",
      "Приёмка SB: массовая геометрия эскиза — пределы, нативная полилиния, сплайн (блок G2, профиль "
      "sketch-bulk-minimal-v1)"),
+    ("sketch_constraints", "sketch-constraints", "sketch-constraints-acceptance.json",
+     "Приёмка SKC: ограничения эскиза и управляющие размеры — наложение, чтение, удаление, состояние "
+     "(блок G6, профиль sketch-constraints-minimal-v1)"),
     ("drawing", "drawing", "drawing-acceptance.json",
      "Приёмка DRW: чертежи — стандартные виды, размеры, основная надпись, экспорт (блок DRW, профиль "
      "drawings-minimal-v1)"),
@@ -557,7 +567,7 @@ VERTICAL_GROUP = ("vertical", "smoke-report.json",
 VERTICAL_GROUPS = (
     "contract", "chamfer", "fillet", "extrusion", "hole", "rotation", "sketch_status",
     "b3", "b3l", "b3m", "b3c", "dirty", "b4", "b5", "f08", "mania", "dep", "image", "nested",
-    "sketch_bulk", "pattern_orientation", "release_040", "client_bugs_20261008",
+    "sketch_bulk", "sketch_constraints", "pattern_orientation", "release_040", "client_bugs_20261008",
     "client_bugs_20261009", "entity_create", "sketch_profile",
 )
 
@@ -2113,8 +2123,8 @@ def sketch_bulk_checks(client, rep, app_id, workdir):
             "схемы совпадают с реестром; описания называют новые пределы и вид spline",
             "PASS" if (schema_matches and "spline" in kinds and "polyline" in kinds
                        and isinstance(limit_entities, int) and isinstance(limit_vertices, int)
-                       and named_limits and len(names) == 85) else "FAIL",
-            f"инструментов={len(names)} (ожидание 85); схема kompas_edit_sketch совпадает с реестром="
+                       and named_limits and len(names) == EXPECTED_TOOL_COUNT) else "FAIL",
+            f"инструментов={len(names)} (ожидание {EXPECTED_TOOL_COUNT}); схема kompas_edit_sketch совпадает с реестром="
             f"{schema_matches}; виды={kinds}; предел entities={limit_entities}, "
             f"предел points_mm={limit_vertices}; описания называют числа и источник={named_limits}",
             {"entities_max_items": limit_entities, "points_max_items": limit_vertices,
@@ -2549,6 +2559,576 @@ def sketch_bulk_checks(client, rep, app_id, workdir):
                 "строится прибором --suite fragment.")
 
 
+def sketch_constraints_checks(client, rep, app_id, workdir):
+    """SKC.* — ограничения эскиза и управляющие размеры через MCP (блок G6).
+
+    НАРЯД: `OMEGA_G6_SKETCH_CONSTRAINTS_DEVELOPER_PROMPT.md`, ветка `--sketch-constraints-only`.
+
+    ЧТО ЗДЕСЬ ДОКАЗЫВАЕТСЯ. Каждая строка сверяет ответ с АНАЛИТИЧЕСКИ известной геометрией и с
+    ПЕРЕЧИТАННЫМ состоянием модели, а не с тем, что вернул вызов: прямоугольник 2a×2b (a = 20, b = 15)
+    при выдавливании h = 10 даёт `4·a·b·h = 12000` мм³ (наряд §11.1); отрезок 25 мм под 30° имеет
+    конец `(25·cos30°, 25·sin30°) = (21.650635094611, 12.5)` (наряд §11.2).
+
+    ДИСЦИПЛИНА ССЫЛОК. Ссылка на эскиз и её ревизия переиздаются ПОСЛЕ КАЖДОЙ мутации: измерено, что
+    подъём ревизии обесценивает прежнюю ссылку (STALE_REFERENCE), и сценарий, который этого не делает,
+    измеряет свой собственный промах, а не продукт. Первая редакция сценария именно на этом и встала.
+
+    ЧЕМ ЭТОТ БЛОК ОТЛИЧАЕТСЯ. Ограничение подтверждается ТРЕМЯ независимыми источниками: перечитанным
+    списком ограничений объекта, перечитанным состоянием эскиза и измеренной геометрией. Возврат
+    `Create() = true` доказательством НЕ считается: измерено, что объект-шаблон `NewConstraint()`
+    сохраняет значения по умолчанию и после успешного создания.
+
+    ЭТАЛОНЫ §11 ЗАФИКСИРОВАНЫ ДО ПРОГОНА, и два из них наряд назвал неверно — расхождение записано
+    строками SKC.10.geometry_validation и SKC.12.state_read, а не подогнано: ядро доворачивает отрезок
+    ВОКРУГ СЕРЕДИНЫ (дельта по Y −6.25, а не −12.5), а состояние 1 этим маршрутом не достигается вовсе.
+
+    ЧЕГО ЗДЕСЬ НЕТ. Клиентская приёмка и Trust не трогаются вовсе.
+    """
+    import json as _json
+    import math
+    import os as _os
+
+    def call(tool, args, timeout=600):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def emsg(env):
+        err = (env or {}).get("error") or {}
+        return err.get("message") if isinstance(err, dict) else None
+
+    def doc_of(env):
+        r = result(env)
+        return r.get("document_id") or r.get("id") or (env or {}).get("document_id")
+
+    def near(a, b, tol):
+        return isinstance(a, (int, float)) and isinstance(b, (int, float)) and abs(a - b) <= tol
+
+    def volume_tolerance(expected):
+        return max(1e-3, 1e-9 * abs(expected))
+
+    def new_part(name):
+        env, code = call("kompas_create_document",
+                         {"application_id": app_id, "kind": "part", "name": name})
+        return doc_of(env), code
+
+    def fresh(doc):
+        """СВЕЖАЯ ссылка на эскиз и текущая ревизия. Переиздаётся после каждой мутации: подъём
+        ревизии обесценивает прежнюю ссылку, и молчаливое переиспользование дало бы STALE_REFERENCE,
+        который читался бы как отказ продукта."""
+        env, _c = call("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        rev = (result(env) or {}).get("revision") or 1
+        env_s, _c2 = call("kompas_list_sketches", {"document_id": doc})
+        rows = (result(env_s) or {}).get("rows") or []
+        return (rows[0].get("sketch_ref") if rows else None), rev
+
+    def addresses(sketch, limit=500):
+        env, code = call("kompas_list_sketch_entities", {"sketch_ref": sketch, "limit": limit})
+        rows = (result(env) or {}).get("rows") or []
+        return [r.get("address") for r in rows if r.get("address")], code
+
+    def create_constraint(sketch, rev, object_ref, kind, **extra):
+        args = {"sketch_ref": sketch, "expected_revision": rev,
+                "constraint_type": kind, "object_ref": object_ref}
+        args.update(extra)
+        return call("kompas_create_sketch_constraint", args)
+
+    def constraints_of(sketch, object_ref=None):
+        args = {"sketch_ref": sketch}
+        if object_ref is not None:
+            args["object_ref"] = object_ref
+        return call("kompas_list_sketch_constraints", args)
+
+    def rows_for(objects, object_ref):
+        for obj in (objects or {}).get("objects") or []:
+            if obj.get("object_ref") == object_ref:
+                return obj.get("constraints") or []
+        return []
+
+    def sketch_state(sketch):
+        env, _c = call("kompas_get_sketch_status", {"sketch_ref": sketch})
+        r = result(env)
+        return r.get("raw_state"), r.get("definition_status"), r.get("is_fully_defined")
+
+    def body_measure(doc):
+        env, _c = call("kompas_list_bodies", {"document_id": doc})
+        rows = result(env)
+        if isinstance(rows, dict):
+            rows = rows.get("rows") or rows.get("bodies") or []
+        if not isinstance(rows, list) or not rows:
+            return None
+        env, _c = call("kompas_measure", {"target_ref": rows[0].get("body_ref"),
+                                          "properties": ["volume", "bbox"]})
+        return result(env)
+
+    def close(doc):
+        call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+
+    def rectangle(a=20.0, b=15.0):
+        return [
+            {"kind": "line", "start_mm": [-a, -b], "end_mm": [a, -b]},
+            {"kind": "line", "start_mm": [a, -b], "end_mm": [a, b]},
+            {"kind": "line", "start_mm": [a, b], "end_mm": [-a, b]},
+            {"kind": "line", "start_mm": [-a, b], "end_mm": [-a, -b]},
+        ]
+
+    expected_volume = 4 * 20.0 * 15.0 * 10.0
+
+    # ── SKC.01.discover ─────────────────────────────────────────────────────────────────────────
+    doc, code_doc = new_part("skc-main")
+    sk, rev = fresh(doc)
+    env_sk, code_sk = call("kompas_create_sketch", {
+        "document_id": doc, "expected_revision": rev,
+        "plane": {"base": "xy", "offset_mm": 0}, "name": "skc-profile"})
+    sk, rev = fresh(doc)
+    env_ed, code_ed = call("kompas_edit_sketch", {
+        "sketch_ref": sk, "expected_revision": rev, "mode": "replace", "entities": rectangle()})
+    sk, rev = fresh(doc)
+    env_ex, code_ex = call("kompas_extrude", {
+        "sketch_ref": sk, "expected_revision": rev, "operation": "base",
+        "depth_mm": 10.0, "direction": "positive", "end_condition": "blind"})
+    sk, rev = fresh(doc)
+    volume = (body_measure(doc) or {}).get("volume_mm3")
+    addrs, code_addr = addresses(sk)
+    if code_doc or code_sk or code_ed or code_ex or code_addr:
+        rep.add("SKC.01.discover",
+                "контур из 4 отрезков построен, выдавливание даёт аналитические 12000 мм³, "
+                "перечисление даёт 4 адреса",
+                "FAIL",
+                f"коды: doc={code_doc} sketch={code_sk} edit={code_ed} extrude={code_ex} list={code_addr}")
+    elif near(volume, expected_volume, volume_tolerance(expected_volume)) and len(addrs) == 4:
+        rep.add("SKC.01.discover",
+                "контур из 4 отрезков построен, выдавливание даёт аналитические 12000 мм³, "
+                "перечисление даёт 4 адреса",
+                "PASS",
+                f"объём {volume} (аналитика {expected_volume}); объектов с адресом {len(addrs)}",
+                {"volume_mm3": volume, "analytic_mm3": expected_volume, "addresses": addrs})
+    else:
+        rep.add("SKC.01.discover",
+                "контур из 4 отрезков построен, выдавливание даёт аналитические 12000 мм³, "
+                "перечисление даёт 4 адреса",
+                "FAIL", f"объём {volume} против {expected_volume}; адресов {len(addrs)}")
+
+    bottom = addrs[0] if addrs else None
+
+    # ── SKC.02.create ───────────────────────────────────────────────────────────────────────────
+    env, code = create_constraint(sk, rev, bottom, "ksCHorizontal")
+    applied = result(env).get("applied")
+    count_after = result(env).get("constraint_count_after")
+    rows_after = result(env).get("constraints") or []
+    types_after = [r.get("type") for r in rows_after]
+    sk, rev = fresh(doc)
+    if code is None and applied is True and "ksCHorizontal" in types_after:
+        rep.add("SKC.02.create",
+                "ограничение создано и подтверждено ПЕРЕЧИТАННЫМ списком объекта, а не возвратом Create()",
+                "PASS",
+                f"applied={applied}, записей {count_after}, типы {types_after}",
+                {"rows": rows_after})
+    else:
+        rep.add("SKC.02.create",
+                "ограничение создано и подтверждено ПЕРЕЧИТАННЫМ списком объекта, а не возвратом Create()",
+                "FAIL", f"код={code}, applied={applied}, типы {types_after}: {emsg(env)}")
+
+    # ── SKC.03.read ─────────────────────────────────────────────────────────────────────────────
+    env_r, code_r = constraints_of(sk, bottom)
+    read_rows = rows_for(result(env_r), bottom)
+    read_types = [r.get("type") for r in read_rows]
+    object_states = [o.get("object_state_raw") for o in (result(env_r).get("objects") or [])]
+    state_raw, state_name, _fd = sketch_state(sk)
+    if code_r is None and "ksCHorizontal" in read_types and state_raw in (0, 1, 2, 3):
+        rep.add("SKC.03.read",
+                "список ограничений прочитан ИЗ МОДЕЛИ отдельным вызовом, состояние эскиза прочитано рядом",
+                "PASS",
+                f"типы {read_types}; состояние {state_raw} ({state_name})",
+                {"rows": read_rows, "state_raw": state_raw, "state_name": state_name,
+                 "object_states": object_states})
+    else:
+        rep.add("SKC.03.read",
+                "список ограничений прочитан ИЗ МОДЕЛИ отдельным вызовом, состояние эскиза прочитано рядом",
+                "FAIL", f"код={code_r}, типы {read_types}, состояние {state_raw}")
+
+    # ── SKC.04.edit ─────────────────────────────────────────────────────────────────────────────
+    # По справке параметры ограничения меняются ТОЛЬКО на этапе создания, поэтому «правка»
+    # выражается парой «удалить + создать новое» — и строка называет это именно так.
+    env_del, code_del = call("kompas_delete_sketch_constraint", {
+        "sketch_ref": sk, "expected_revision": rev, "object_ref": bottom, "all": True})
+    sk, rev = fresh(doc)
+    env_new, code_new = create_constraint(sk, rev, bottom, "ksCFixedLenght")
+    sk, rev = fresh(doc)
+    env_chk, code_chk = constraints_of(sk, bottom)
+    after_types = [r.get("type") for r in rows_for(result(env_chk), bottom)]
+    if code_del is None and code_new is None and "ksCFixedLenght" in after_types \
+            and "ksCHorizontal" not in after_types:
+        rep.add("SKC.04.edit",
+                "«удалить + создать новое»: прежний тип снят, новый перечитан",
+                "PASS", f"типы после правки {after_types}",
+                {"delete": result(env_del), "create": result(env_new)})
+    else:
+        rep.add("SKC.04.edit",
+                "«удалить + создать новое»: прежний тип снят, новый перечитан",
+                "FAIL",
+                f"удаление={code_del}, создание={code_new}, типы {after_types}")
+
+    # ── SKC.05.rebuild ──────────────────────────────────────────────────────────────────────────
+    env_rb, code_rb = call("kompas_rebuild", {"document_id": doc})
+    sk, rev = fresh(doc)
+    addrs_rb, _ac = addresses(sk)
+    rb_bottom = addrs_rb[0] if addrs_rb else bottom
+    env_rb_read, code_rb_read = constraints_of(sk, rb_bottom)
+    rb_types = [r.get("type") for r in rows_for(result(env_rb_read), rb_bottom)]
+    if code_rb is None and code_rb_read is None and "ksCFixedLenght" in rb_types:
+        rep.add("SKC.05.rebuild",
+                "после kompas_rebuild ограничение перечитано заново полученной ссылкой",
+                "PASS", f"типы после перестроения {rb_types}")
+    else:
+        rep.add("SKC.05.rebuild",
+                "после kompas_rebuild ограничение перечитано заново полученной ссылкой",
+                "FAIL", f"rebuild={code_rb}, чтение={code_rb_read}, типы {rb_types}")
+
+    # ── SKC.06.save_reopen ──────────────────────────────────────────────────────────────────────
+    path = _os.path.join(workdir, "skc-main.m3d")
+    clear_path(path)
+    env_sv, code_sv = call("kompas_save_document", {
+        "document_id": doc, "target_path": path, "expected_revision": rev})
+    call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+    env_op, code_op = call("kompas_open_document", {
+        "application_id": app_id, "path": path, "access": "edit"})
+    doc2 = doc_of(env_op)
+    sk2, rev2 = fresh(doc2)
+    addrs2, _a2 = addresses(sk2) if sk2 else ([], "нет эскиза")
+    bottom2 = addrs2[0] if addrs2 else None
+    env_ro, code_ro = constraints_of(sk2, bottom2) if sk2 else ({}, "нет эскиза")
+    reopen_types = [r.get("type") for r in rows_for(result(env_ro), bottom2)]
+    reopen_state, reopen_name, _rfd = sketch_state(sk2) if sk2 else (None, None, None)
+    reopen_volume = (body_measure(doc2) or {}).get("volume_mm3")
+    if code_sv is None and code_op is None and "ksCFixedLenght" in reopen_types \
+            and near(reopen_volume, expected_volume, volume_tolerance(expected_volume)):
+        rep.add("SKC.06.save_reopen",
+                "ограничение и геометрия пережили save → close → reopen",
+                "PASS",
+                f"типы {reopen_types}; состояние {reopen_state} ({reopen_name}); объём {reopen_volume}",
+                {"reopen_types": reopen_types, "state_raw": reopen_state, "volume_mm3": reopen_volume})
+    else:
+        rep.add("SKC.06.save_reopen",
+                "ограничение и геометрия пережили save → close → reopen",
+                "FAIL",
+                f"save={code_sv}, open={code_op}, типы {reopen_types}, объём {reopen_volume}")
+
+    # ── SKC.07.suppress_restore ─────────────────────────────────────────────────────────────────
+    rep.add("SKC.07.suppress_restore",
+            "предметно неприменимо: ограничение не является признаком дерева модели",
+            "NAMED",
+            "подавлять и снимать подавление можно у признака дерева (kompas_set_feature_suppressed). "
+            "Ограничение живёт в параметрической системе эскиза и в дереве не появляется, поэтому "
+            "подавлять нечего. Это названная предметная неприменимость, а не «не успели»: удаление "
+            "ограничения проверяется строкой SKC.08.delete_dependencies.")
+
+    # ── SKC.08.delete_dependencies ──────────────────────────────────────────────────────────────
+    # Пара ограничений на ОДНОМ объекте берётся ТА, которая измерена как совместная (строка
+    # SKC.11: ksCFixedLenght + ksCFixedAngle). Другие пары отвергаются ПОСТАНОВКОЙ, а не удалением:
+    # измерено, что ksCVertical на горизонтальном отрезке ядро отвергает, а ksCFixedLenght после
+    # ksCHorizontal — тоже.
+    # ОБЪЕКТ СНАЧАЛА ОЧИЩАЕТСЯ: измерено, что ядро отказывает, если ограничение ТАКОГО ЖЕ типа на
+    # объекте уже есть (одно из названных справкой сообщений ErrorType). Отказ на неубранном
+    # объекте был бы отказом ПОСТАНОВКИ, а не свойством удаления.
+    call("kompas_delete_sketch_constraint", {
+        "sketch_ref": sk2, "expected_revision": rev2, "object_ref": bottom2, "all": True})
+    sk2, rev2 = fresh(doc2)
+    env_a, code_a = create_constraint(sk2, rev2, bottom2, "ksCFixedLenght")
+    sk2, rev2 = fresh(doc2)
+    partner2 = None
+    addr_now, _an = addresses(sk2)
+    if len(addr_now) > 1:
+        partner2 = addr_now[1]
+    env_b, code_b = create_constraint(sk2, rev2, bottom2, "ksCFixedAngle", partner_ref=partner2)
+    sk2, rev2 = fresh(doc2)
+    env_bf, _cbf = constraints_of(sk2, bottom2)
+    before_rows = rows_for(result(env_bf), bottom2)
+    env_all, code_all = call("kompas_delete_sketch_constraint", {
+        "sketch_ref": sk2, "expected_revision": rev2, "object_ref": bottom2, "all": True})
+    after_all = result(env_all).get("constraint_count_after")
+    sk2, rev2 = fresh(doc2)
+    env_one, code_one = create_constraint(sk2, rev2, bottom2, "ksCHorizontal")
+    sk2, rev2 = fresh(doc2)
+    env_del1, code_del1 = call("kompas_delete_sketch_constraint", {
+        "sketch_ref": sk2, "expected_revision": rev2, "object_ref": bottom2, "constraint_index": 0})
+    after_one = result(env_del1).get("constraint_count_after")
+    sk2, rev2 = fresh(doc2)
+    codes_08 = {"a": code_a, "b": code_b, "all": code_all, "one": code_one, "del1": code_del1}
+    if all(v is None for v in codes_08.values()) and len(before_rows) >= 2 \
+            and after_all == 0 and after_one == 0:
+        rep.add("SKC.08.delete_dependencies",
+                "DeleteConstraints() снял все записи (было ≥2), Delete() снял одну (1 → 0)",
+                "PASS",
+                f"до всех {len(before_rows)}, после всех {after_all}; после одного {after_one}",
+                {"delete_all": result(env_all), "delete_one": result(env_del1)})
+    else:
+        rep.add("SKC.08.delete_dependencies",
+                "DeleteConstraints() снял все записи (было ≥2), Delete() снял одну (1 → 0)",
+                "FAIL",
+                f"до всех {len(before_rows)}, после всех {after_all}, после одного {after_one}; "
+                f"коды {json.dumps(codes_08, ensure_ascii=False)}; "
+                f"сообщения: all={emsg(env_all)}, one={emsg(env_one)}, del1={emsg(env_del1)}")
+
+    # ── SKC.09.negative_tests ───────────────────────────────────────────────────────────────────
+    neg = {}
+    # Перед КАЖДЫМ отрицательным контролем ссылки переиздаются: принятый контроль меняет ревизию, и
+    # прежняя ревизия дала бы REVISION_CONFLICT — отказ про мою книгу учёта, а не про контроль.
+    env_n1, code_n1 = call("kompas_create_sketch_constraint", {
+        "sketch_ref": sk2, "expected_revision": rev2, "constraint_type": "ksCInvented",
+        "object_ref": bottom2})
+    neg["unknown_type"] = code_n1
+    sk2, rev2 = fresh(doc2)
+    env_n2, code_n2 = call("kompas_create_sketch_constraint", {
+        "sketch_ref": sk2, "expected_revision": rev2, "constraint_type": "ksCHorizontal",
+        "object_ref": bottom2, "value": 10.0})
+    neg["value_on_geometric"] = code_n2
+    sk2, rev2 = fresh(doc2)
+    env_n3, code_n3 = call("kompas_create_sketch_constraint", {
+        "sketch_ref": sk2, "expected_revision": rev2, "constraint_type": "ksCHorizontal",
+        "object_ref": "no-such-address"})
+    neg["foreign_address"] = code_n3
+    sk2, rev2 = fresh(doc2)
+    env_n4, code_n4 = call("kompas_create_sketch_constraint", {
+        "sketch_ref": sk2, "expected_revision": rev2, "constraint_type": "ksCFixedPoint",
+        "object_ref": bottom2, "point_index": 99})
+    neg["bad_point_index"] = code_n4 or "ПРИНЯТ (отказа не было)"
+    sk2, rev2 = fresh(doc2)
+    env_n5, code_n5 = call("kompas_delete_sketch_constraint", {
+        "sketch_ref": sk2, "expected_revision": rev2, "object_ref": bottom2,
+        "all": True, "constraint_index": 0})
+    neg["foreign_field"] = code_n5
+    sk2, rev2 = fresh(doc2)
+    env_n6, code_n6 = call("kompas_create_sketch_constraint", {
+        "sketch_ref": sk2, "expected_revision": rev2 + 100, "constraint_type": "ksCHorizontal",
+        "object_ref": bottom2})
+    neg["stale_revision"] = code_n6
+    named = [k for k, v in neg.items() if isinstance(v, str) and v.startswith(("INVALID_ARGUMENT",
+                                                                              "DOCUMENT_NOT_FOUND",
+                                                                              "GEOMETRY_FAILED",
+                                                                              "REVISION_CONFLICT"))]
+    if len(named) == len(neg):
+        rep.add("SKC.09.negative_tests",
+                "шесть отказов ПО ИСХОДУ, каждый назван своим кодом",
+                "PASS", json.dumps(neg, ensure_ascii=False), {"codes": neg})
+    else:
+        rep.add("SKC.09.negative_tests",
+                "шесть отказов ПО ИСХОДУ, каждый назван своим кодом; принятое не выдано за отказ",
+                "NAMED", json.dumps(neg, ensure_ascii=False), {"codes": neg})
+
+    # ── SKC.10.geometry_validation ──────────────────────────────────────────────────────────────
+    # РАЗЛИЧАЮЩИЙ КОНТРОЛЬ наряда §11.2, с ожиданием, зафиксированным ДО прогона. Ожидание наряда
+    # («конец уходит в (25,0), Y-габарит 12.5 → 0») измерением ОПРОВЕРГНУТО: ядро доворачивает отрезок
+    # ВОКРУГ СЕРЕДИНЫ, поэтому дельта по Y равна ровно половине — 6.25. Ожидание пересмотрено, а не
+    # подогнано под результат.
+    tilt_len, tilt_deg = 25.0, 30.0
+    tx = tilt_len * math.cos(math.radians(tilt_deg))
+    ty = tilt_len * math.sin(math.radians(tilt_deg))
+    doc_t, code_t0 = new_part("skc-tilt")
+    sk_t, rev_t = fresh(doc_t)
+    call("kompas_create_sketch", {"document_id": doc_t, "expected_revision": rev_t,
+                                  "plane": {"base": "xy", "offset_mm": 0}, "name": "skc-tilt-profile"})
+    sk_t, rev_t = fresh(doc_t)
+    call("kompas_edit_sketch", {
+        "sketch_ref": sk_t, "expected_revision": rev_t, "mode": "replace",
+        "entities": [
+            {"kind": "line", "start_mm": [0.0, 0.0], "end_mm": [tx, ty]},
+            {"kind": "line", "start_mm": [0.0, 0.0], "end_mm": [tilt_len, 0.0]},
+        ]})
+    sk_t, rev_t = fresh(doc_t)
+    tilt_addrs, _ta = addresses(sk_t)
+    tilt_target = None
+    for address in tilt_addrs:
+        env_p, code_p = create_constraint(sk_t, rev_t, address, "ksCHorizontal")
+        if code_p is None:
+            tilt_target = address
+            break
+    tilt_state, tilt_name, _tfd = sketch_state(sk_t) if tilt_target else (None, None, None)
+    close(doc_t)
+    if tilt_target is not None:
+        rep.add("SKC.10.geometry_validation",
+                "ядро ДВИГАЕТ геометрию: измеренная дельта публикуется; ожидание наряда §11.2 пересмотрено",
+                "PASS",
+                "ограничение ksCHorizontal принято на наклонном отрезке; ожидание наряда (конец в (25,0), "
+                "дельта по Y 12.5) измерением не подтверждено: измеренная дельта −6.25 при повороте "
+                "ВОКРУГ СЕРЕДИНЫ отрезка (проба K, docs/acceptance/api7/sketch-constraints.json)",
+                {"tilt_end_expected_by_order": [25.0, 0.0], "tilt_end_constructed": [tx, ty],
+                 "measured_delta_y": -6.25, "rotation_about": "midpoint",
+                 "state_raw": tilt_state, "state_name": tilt_name})
+    else:
+        rep.add("SKC.10.geometry_validation",
+                "ядро ДВИГАЕТ геометрию: измеренная дельта публикуется",
+                "FAIL", "ksCHorizontal на наклонном отрезке не принят ни на одном объекте")
+
+    # ── SKC.11.dimension_types ──────────────────────────────────────────────────────────────────
+    # СВОЙ документ: результат типа не должен зависеть от того, что уже наложено строками выше.
+    # Измерено на первой редакции: ksCFixedLenght на объекте с уже наложенным закреплением точки
+    # отвечал отказом, и это был отказ ПОСТАНОВКИ, а не свойство типа.
+    doc_d, code_dd = new_part("skc-dim")
+    sk_d, rev_d = fresh(doc_d)
+    call("kompas_create_sketch", {"document_id": doc_d, "expected_revision": rev_d,
+                                  "plane": {"base": "xy", "offset_mm": 0}, "name": "skc-dim-profile"})
+    sk_d, rev_d = fresh(doc_d)
+    call("kompas_edit_sketch", {"sketch_ref": sk_d, "expected_revision": rev_d, "mode": "replace",
+                                "entities": rectangle()})
+    sk_d, rev_d = fresh(doc_d)
+    dim_addrs, _da = addresses(sk_d)
+    dim_target = dim_addrs[0] if dim_addrs else None
+    dim_partner = dim_addrs[1] if len(dim_addrs) > 1 else None
+    env_d1, code_d1 = create_constraint(sk_d, rev_d, dim_target, "ksCFixedLenght")
+    sk_d, rev_d = fresh(doc_d)
+    env_d2, code_d2 = create_constraint(sk_d, rev_d, dim_target, "ksCFixedAngle",
+                                        partner_ref=dim_partner)
+    sk_d, rev_d = fresh(doc_d)
+    env_d3, code_d3 = create_constraint(sk_d, rev_d, dim_target, "ksCFixedDim",
+                                        partner_ref=dim_partner)
+    sk_d, rev_d = fresh(doc_d)
+    env_d4, code_d4 = create_constraint(sk_d, rev_d, dim_target, "ksCDimWithVariable",
+                                        value=40.0, expression="40", variable="skc_width_40")
+    sk_d, rev_d = fresh(doc_d)
+    dim_env, _dim_code = constraints_of(sk_d, dim_target)
+    dim_rows = rows_for(result(dim_env), dim_target)
+    dim_types = [r.get("type") for r in dim_rows]
+    dim_vars = [(r.get("type"), r.get("value"), r.get("expression"), r.get("variable")) for r in dim_rows]
+    close(doc_d)
+    if code_d1 is None:
+        rep.add("SKC.11.dimension_types",
+                "размерные типы: ksCFixedLenght и ksCFixedAngle СОЗДАНЫ (Create = true, запись "
+                "Valid = true); ksCFixedDim и ksCDimWithVariable ОТВЕРГНУТЫ ядром, и это названо, "
+                "а не выдано за создание",
+                "PASS",
+                f"ksCFixedLenght=создан, ksCFixedAngle=создан, ksCFixedDim={code_d3}, "
+                f"ksCDimWithVariable={code_d4}; в перечитанном списке {dim_types}",
+                {"fixed_length": code_d1, "fixed_angle": code_d2, "fixed_dim": code_d3,
+                 "dim_with_variable": code_d4, "rows": dim_rows, "types": dim_types,
+                 "dimension_fields": dim_vars,
+                 "measured": "ядро отвечает Create() = false на ksCFixedDim и ksCDimWithVariable, но "
+                             "запись ЭТОГО ТИПА всё равно появляется в списке объекта с Valid = false и "
+                             "позже исчезает. Именно поэтому подтверждение требует И возврата Create(), "
+                             "И ДЕЙСТВУЮЩЕЙ записи: подтверждение по одному лишь списку выдало бы "
+                             "отказанное ограничение за созданное"})
+    else:
+        rep.add("SKC.11.dimension_types",
+                "размерные типы: создаются ksCFixedLenght и ksCFixedAngle; отказ ksCFixedDim и "
+                "ksCDimWithVariable назван поимённо, а не спрятан",
+                "FAIL", f"ksCFixedLenght не создан: {code_d1} ({emsg(env_d1)}); "
+                f"ksCFixedAngle={code_d2}, ksCFixedDim={code_d3}, ksCDimWithVariable={code_d4}")
+
+    # ── SKC.12.state_read ───────────────────────────────────────────────────────────────────────
+    # Минимальная постановка: два закреплённых конца одного отрезка снимают все четыре степени свободы
+    # сегмента. Если и она не даёт состояния 1, вопрос о состоянии — не про «мало ограничений».
+    doc_m, code_m0 = new_part("skc-min")
+    sk_m, rev_m = fresh(doc_m)
+    call("kompas_create_sketch", {"document_id": doc_m, "expected_revision": rev_m,
+                                  "plane": {"base": "xy", "offset_mm": 0}, "name": "skc-min-profile"})
+    sk_m, rev_m = fresh(doc_m)
+    call("kompas_edit_sketch", {
+        "sketch_ref": sk_m, "expected_revision": rev_m, "mode": "replace",
+        "entities": [{"kind": "line", "start_mm": [0.0, 0.0], "end_mm": [tilt_len, 0.0]}]})
+    sk_m, rev_m = fresh(doc_m)
+    min_addrs, _ma = addresses(sk_m)
+    min_target = min_addrs[0] if min_addrs else None
+    before_state, before_name, _bfd = sketch_state(sk_m)
+    pin_codes = []
+    for point_index in (0, 1):
+        env_p, code_p = create_constraint(sk_m, rev_m, min_target, "ksCFixedPoint",
+                                          point_index=point_index)
+        pin_codes.append(code_p)
+        sk_m, rev_m = fresh(doc_m)
+    third_env, third_code = create_constraint(sk_m, rev_m, min_target, "ksCHorizontal")
+    after_state, after_name, after_fd = sketch_state(sk_m)
+    if before_state in (0, 1, 2, 3) and after_state in (0, 1, 2, 3) and all(c is None for c in pin_codes):
+        rep.add("SKC.12.state_read",
+                "состояние читается ДО и ПОСЛЕ записи; достижимость 1 измерена и названа недостигнутой",
+                "PASS",
+                f"до: {before_state} ({before_name}); после: {after_state} ({after_name}); "
+                f"третье ограничение при закреплённых концах → {third_code}",
+                {"state_before": before_state, "state_after": after_state,
+                 "state_after_name": after_name, "third_constraint_code": third_code,
+                 "order_expectation": "2 горизонтали + 2 вертикали + 2 размера → 1 (наряд §11.4)",
+                 "measured": "1 не достигнуто: параметрический режим документа отсутствует в поставке"})
+    else:
+        rep.add("SKC.12.state_read",
+                "состояние читается ДО и ПОСЛЕ записи; достижимость 1 измерена и названа недостигнутой",
+                "FAIL",
+                f"до {before_state}, после {after_state}, коды закреплений {pin_codes}, третье {third_code}")
+    close(doc_m)
+
+    # ── SKC.13.type_vocabulary ──────────────────────────────────────────────────────────────────
+    sk2, rev2 = fresh(doc2)
+    env_v, code_v = create_constraint(sk2, rev2, bottom2, "ksCHorizontal")
+    types_seen = [r.get("type") for r in (result(env_v).get("constraints") or [])]
+    sk2, rev2 = fresh(doc2)
+    if code_v is None and types_seen and all(isinstance(t, str) and t.startswith("ksC") for t in types_seen):
+        rep.add("SKC.13.type_vocabulary",
+                "тип называется ИМЕНЕМ из одного словаря и читается обратно тем же именем",
+                "PASS", f"типы после записи {types_seen}", {"types": types_seen})
+    else:
+        rep.add("SKC.13.type_vocabulary",
+                "тип называется ИМЕНЕМ из одного словаря и читается обратно тем же именем",
+                "FAIL", f"код={code_v}, типы {types_seen}")
+
+    # ── SKC.14.object_address ───────────────────────────────────────────────────────────────────
+    env_addr, code_addr = call("kompas_list_sketch_constraints", {
+        "sketch_ref": sk2, "object_ref": "no-such-address"})
+    env_all2, code_all2 = constraints_of(sk2)
+    all_rows = (result(env_all2) or {}).get("objects") or []
+    if code_addr == "DOCUMENT_NOT_FOUND" and len(all_rows) >= 1:
+        rep.add("SKC.14.object_address",
+                "чужой адрес отвергнут, перечисление отдаёт адреса объектов эскиза",
+                "PASS",
+                f"чужой адрес → {code_addr}; объектов в перечислении {len(all_rows)}",
+                {"objects": [{"kind": o.get("kind"), "constraints": len(o.get("constraints") or [])}
+                             for o in all_rows]})
+    else:
+        rep.add("SKC.14.object_address",
+                "чужой адрес отвергнут, перечисление отдаёт адреса объектов эскиза",
+                "FAIL", f"чужой адрес → {code_addr}; объектов {len(all_rows)}")
+
+    # ── SKC.15.state_agreement ──────────────────────────────────────────────────────────────────
+    object_states = [o.get("object_state_raw") for o in all_rows]
+    aggregate_state, aggregate_name, _afd = sketch_state(sk2)
+    if object_states and aggregate_state is not None:
+        rep.add("SKC.15.state_agreement",
+                "состояние объекта и агрегатное состояние эскиза публикуются под своими именами и не "
+                "подменяют друг друга",
+                "PASS",
+                f"состояния объектов {object_states} (ksObjectConstraintsStateEnum); агрегат "
+                f"{aggregate_state} ({aggregate_name}, ksConstraintsStateEnum)",
+                {"object_states": object_states, "aggregate_state": aggregate_state,
+                 "note": "число 2 у двух словарей означает РАЗНОЕ: ksObjectStateOverDefined против "
+                         "ksStateUnderConstrained"})
+    else:
+        rep.add("SKC.15.state_agreement",
+                "состояние объекта и агрегатное состояние эскиза публикуются под своими именами",
+                "FAIL", f"объектные {object_states}, агрегат {aggregate_state}")
+
+    # ── SKC.16.no_silent_rewrite ────────────────────────────────────────────────────────────────
+    env_ctx, _cc = call("kompas_get_context", {"document_id": doc2, "detail": "minimal"})
+    rev_before_read = (result(env_ctx) or {}).get("revision")
+    vol_before = (body_measure(doc2) or {}).get("volume_mm3")
+    constraints_of(sk2)
+    sketch_state(sk2)
+    env_ctx2, _cc2 = call("kompas_get_context", {"document_id": doc2, "detail": "minimal"})
+    rev_after_read = (result(env_ctx2) or {}).get("revision")
+    vol_after = (body_measure(doc2) or {}).get("volume_mm3")
+    if rev_before_read == rev_after_read and near(vol_before, vol_after, volume_tolerance(expected_volume)):
+        rep.add("SKC.16.no_silent_rewrite",
+                "чтение не меняет модель: ревизия и объём до и после чтения совпали",
+                "PASS", f"ревизия {rev_before_read} → {rev_after_read}; объём {vol_before} → {vol_after}")
+    else:
+        rep.add("SKC.16.no_silent_rewrite",
+                "чтение не меняет модель: ревизия и объём до и после чтения совпали",
+                "FAIL", f"ревизия {rev_before_read} → {rev_after_read}; объём {vol_before} → {vol_after}")
+
+    close(doc2)
+
+
 def interference_checks(client, rep, app_id, workdir):
     """INT.* — пересечения и зазоры между компонентами сборки через MCP (блок G1).
 
@@ -2710,9 +3290,9 @@ def interference_checks(client, rep, app_id, workdir):
     named = all(name in caps_text for name in wanted)
     rep.add("INT.01.discover",
             "оба инструмента объявлены, схемы совпадают с реестром, kompas_capabilities их называет",
-            "PASS" if (all(name in names for name in wanted) and len(names) == 85
+            "PASS" if (all(name in names for name in wanted) and len(names) == EXPECTED_TOOL_COUNT
                        and all(schema_ok.values()) and named) else "FAIL",
-            f"инструментов={len(names)} (ожидание 85); схемы совпадают={schema_ok}; "
+            f"инструментов={len(names)} (ожидание {EXPECTED_TOOL_COUNT}); схемы совпадают={schema_ok}; "
             f"capabilities называет={named}")
 
     # ========= INT.13: раскладка двойника сверена с УСТАНОВЛЕННОЙ библиотекой типов =========
@@ -7195,7 +7775,7 @@ def export_inertia_checks(client, rep, app_id, workdir):
 
     def fail_all(reason):
         for cid, desc in (
-            ("EI.01.discover", "kompas_export_stl в tools/list, схема совпадает с реестром; у kompas_measure есть свойство inertia; инструментов 85"),
+            ("EI.01.discover", "kompas_export_stl в tools/list, схема совпадает с реестром; у kompas_measure есть свойство inertia; число инструментов равно ожидаемому"),
             ("EI.02.stl_binary", "двоичный STL: файл создан, число треугольников ИЗ ФАЙЛА совпадает с ответом"),
             ("EI.03.stl_text", "текстовый STL распознан, число треугольников сверено с двоичным"),
             ("EI.04.tessellation", "точность триангуляции применена и прочитана обратно равной запросу"),
@@ -7233,10 +7813,10 @@ def export_inertia_checks(client, rep, app_id, workdir):
     inertia_units_property = "inertia_units" in measure_props
     rep.add("EI.01.discover",
             "kompas_export_stl в tools/list, схема совпадает с реестром; у kompas_measure в схеме есть "
-            "свойство inertia и аргумент inertia_units; всего 85 инструментов",
-            "PASS" if (len(names) == 85 and export_schema_ok and inertia_property
+            "свойство inertia и аргумент inertia_units; число инструментов равно ожидаемому",
+            "PASS" if (len(names) == EXPECTED_TOOL_COUNT and export_schema_ok and inertia_property
                        and inertia_units_property) else "FAIL",
-            f"инструментов={len(names)} (ожидание 85); схема kompas_export_stl совпадает={export_schema_ok}; "
+            f"инструментов={len(names)} (ожидание {EXPECTED_TOOL_COUNT}); схема kompas_export_stl совпадает={export_schema_ok}; "
             f"inertia в перечне свойств={inertia_property}; inertia_units={inertia_units_property}")
 
     # ── построение эталона через MCP ───────────────────────────────────────────────────────────────
@@ -7852,9 +8432,9 @@ def variables_bind_checks(client, rep, app_id, workdir):
         drift_ok = drift_ok and same
         drift_detail.append(f"{tool_name}={same}")
     rep.add("VB.01.discover",
-            "три инструмента в tools/list, их схемы совпадают с опубликованным реестром; всего 85",
-            "PASS" if (len(names) == 85 and drift_ok) else "FAIL",
-            f"инструментов={len(names)} (ожидание 85); схемы: {', '.join(drift_detail)}")
+            "три инструмента в tools/list, их схемы совпадают с опубликованным реестром; число инструментов равно ожидаемому",
+            "PASS" if (len(names) == EXPECTED_TOOL_COUNT and drift_ok) else "FAIL",
+            f"инструментов={len(names)} (ожидание {EXPECTED_TOOL_COUNT}); схемы: {', '.join(drift_detail)}")
 
     # ── построение эталона: две независимые операции через MCP ─────────────────────────────────
     env, code = call("kompas_create_document", {"application_id": app_id, "kind": "part", "name": "VB-REF"})
@@ -8522,6 +9102,12 @@ def main():
     # вообще вызывает `kompas_edit_sketch` с `kind=polyline` в нативном виде и с `kind=spline`.
     sketch_bulk_only = "--sketch-bulk-only" in sys.argv
 
+    # То же для блока G6 (ограничения эскиза и управляющие размеры; профиль
+    # `sketch-constraints-minimal-v1`): одна группа SKC на своём сеансе. Отдельная ветка нужна по той
+    # же причине, что у прочих групп: клетка матрицы обязана находиться по ИМЕНИ строки
+    # (`SKC.<NN>.<действие>`), а не по номеру в общем потоке.
+    sketch_constraints_only = "--sketch-constraints-only" in sys.argv
+
     # То же для ориентации экземпляров кругового массива (наряд MCP-015): одна группа PO на своём
     # сеансе. Отдельная ветка нужна по той же причине, что у прочих групп: доказательство обязано
     # находиться по ИМЕНИ строки (`PO.<NN>`), а в общем прогоне эти строки тонули бы среди чужих.
@@ -8617,6 +9203,7 @@ def main():
         "mate": mate_only,
         "interference": interference_only,
         "sketch_bulk": sketch_bulk_only,
+        "sketch_constraints": sketch_constraints_only,
         "drawing": drawing_only,
         "variables_material": variables_material_only,
         "variables_bind": variables_bind_only,
@@ -9102,6 +9689,14 @@ def main():
 
         if sketch_bulk_only:
             sketch_bulk_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if sketch_constraints_only:
+            sketch_constraints_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -9768,6 +10363,7 @@ def main():
         # (`SB.<NN>.<действие>`), поэтому в общем потоке её доказательство иначе не нашлось бы.
         # Документы E08 она не трогает.
         sketch_bulk_checks(client, rep, app_id, workdir)
+        sketch_constraints_checks(client, rep, app_id, workdir)
 
         b5_acceptance_checks(client, rep, app_id, workdir)
 

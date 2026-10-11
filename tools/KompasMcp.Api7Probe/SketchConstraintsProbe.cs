@@ -5237,7 +5237,9 @@ internal sealed class SketchConstraintsProbe
         });
 
     /// <summary>The angle between the first two segments, in degrees, from their OWN direction
-    /// vectors — not from <c>ILineSegment.Angle</c>, whose zero direction is a separate question.</summary>
+    /// vectors — not from <c>ILineSegment.Angle</c>, whose zero direction is a separate question. The
+    /// member IS read too and named in the notes, so the difference between the two is an observation
+    /// rather than an assumption.</summary>
     private double? ReadAngleBetweenSegments(KompasAPI7.ISketch sketch, List<string> notes) =>
         InSession(sketch, write: false, notes, (objects, _) =>
         {
@@ -5247,8 +5249,13 @@ internal sealed class SketchConstraintsProbe
                 return null;
             }
 
-            var a = Direction((KompasAPI7.ILineSegment)segments[0].Drawing);
-            var b = Direction((KompasAPI7.ILineSegment)segments[1].Drawing);
+            var first = (KompasAPI7.ILineSegment)segments[0].Drawing;
+            var second = (KompasAPI7.ILineSegment)segments[1].Drawing;
+            notes.Add("ILineSegment.Angle: отрезок[0] = " + Api5.Num(Api5.SafeDouble(() => first.Angle))
+                      + ", отрезок[1] = " + Api5.Num(Api5.SafeDouble(() => second.Angle)));
+
+            var a = Direction(first);
+            var b = Direction(second);
             if (a is null || b is null)
             {
                 return null;

@@ -3543,25 +3543,28 @@ public sealed partial class Api5Session
         string EdgeUnwrapRoute,
         IReadOnlyList<string>? Warnings = null);
 
-    /// <summary>How many times one rebuild request may be repeated before the model is declared to have
-    /// moved. A rebuild recomputes what is already built, so the FIRST attempt is expected to suffice;
-    /// the bound exists only so that a model that never settles is reported instead of looping.
-    /// History: docs/decisions/adapter-core.md#rebuild-verify</summary>
+    /// <summary>How many times one rebuild request may be repeated before stability is declared
+    /// unestablished. A rebuild recomputes what is already built, so the FIRST attempt is expected to
+    /// leave the volume alone; the bound exists only so that a model that never settles is reported
+    /// instead of looping. History: docs/decisions/adapter-core.md#rebuild-verify</summary>
     private const int RebuildAttemptLimit = 3;
 
-    /// <summary>Rebuild until the document volume stops moving; returns the attempts and both volumes.</summary>
-    /// <remarks>INVARIANT: a rebuild recomputes the model that is ALREADY built, so the volume must not
-    /// move. MEASURED: one RebuildDocument() can leave a feature unapplied, and the NEXT rebuild restores
-    /// it - so a state read after a SINGLE rebuild is not necessarily a state of the built model, and a
-    /// caller recording such a state records something the model does not owe. <c>Ok</c> is the answer of
-    /// the LAST documented call, so a caller keeps its own refusal behaviour.
-    /// History: docs/decisions/adapter-core.md#rebuild-verify</remarks>
-    private (int Attempts, double? Baseline, double? Observed, bool Ok) SettleRebuild(
+    /// <summary>Rebuild until two CONSECUTIVE readings of the document volume agree; returns the state
+    /// the settle started from, the last state, the attempts and whether stability was established.</summary>
+    /// <remarks>INVARIANT: a state of the BUILT model is one a rebuild does not move, so stability is
+    /// "two readings in a row agree", NOT "a reading returned to the value it had before the first
+    /// rebuild". MEASURED: the state an operation reads right after its OWN rebuild can itself be the
+    /// unstable one, so comparing every later reading against that value never settles and names a move
+    /// that did not happen. <c>Ok</c> is the answer of the LAST documented call, so a caller keeps its own
+    /// refusal behaviour. History: docs/decisions/adapter-core.md#rebuild-verify</remarks>
+    private (int Attempts, double? Baseline, double? Observed, bool Stable, bool Ok) SettleRebuild(
         DocumentEntry document)
     {
         var baseline = ReadVolume(document);
+        var previous = baseline;
         var attempts = 0;
         double? observed = baseline;
+        var stable = false;
         var ok = false;
         while (attempts < RebuildAttemptLimit)
         {
@@ -3575,27 +3578,35 @@ public sealed partial class Api5Session
             attempts++;
             observed = ReadVolume(document);
             // An unreadable side stops the loop: repeating cannot compare what was never read.
-            if (baseline is null || observed is null || RebuildSettlement.Settled(baseline, observed))
+            if (previous is null || observed is null)
             {
                 break;
             }
+
+            if (RebuildSettlement.Settled(previous, observed))
+            {
+                stable = true;
+                break;
+            }
+
+            previous = observed;
         }
 
-        return (attempts, baseline, observed, ok);
+        return (attempts, baseline, observed, stable, ok);
     }
 
     /// <summary>Rebuild the model from its feature tree.</summary>
     /// <remarks>INVARIANT: a rebuild recomputes the model that is already built, so the document volume
     /// must not move. MEASURED: one RebuildDocument() can leave a feature unapplied - the document then
     /// answers a volume larger by exactly the wall of one hole - and the NEXT rebuild restores it. The
-    /// call is therefore repeated while the volume keeps moving, and the attempts are published in the
-    /// context's unverified_aspects rather than hidden.
+    /// call is therefore repeated until two readings in a row agree, and what that took is published in
+    /// the context's unverified_aspects rather than hidden.
     /// History: docs/decisions/adapter-core.md#rebuild-verify</remarks>
     public RebuildResult Rebuild(RebuildCommand command)
     {
         var document = RequireDocument(command.DocumentId);
         var unverified = new List<string>();
-        var (attempts, baseline, observed, ok) = SettleRebuild(document);
+        var (attempts, baseline, observed, stable, ok) = SettleRebuild(document);
         if (!ok)
         {
             throw new KompasContractException(
@@ -3606,15 +3617,10 @@ public sealed partial class Api5Session
                 details: new Dictionary<string, object?> { ["rebuild_attempts"] = attempts + 1 });
         }
 
-        var fmt = System.Globalization.CultureInfo.InvariantCulture;
-        var note = RebuildSettlement.Note(baseline, observed, attempts);
+        var note = RebuildSettlement.Describe(attempts, baseline, observed, stable);
         if (note is not null)
         {
-            unverified.Add(note
-                + (baseline is double b0 && observed is double o0
-                    ? " (было " + b0.ToString("0.####", fmt) + ", стало " + o0.ToString("0.####", fmt)
-                      + ", перестроений " + attempts + ")"
-                    : string.Empty));
+            unverified.Add(note);
         }
 
         // A rebuild is exactly the case where handles from the previous revision must stop

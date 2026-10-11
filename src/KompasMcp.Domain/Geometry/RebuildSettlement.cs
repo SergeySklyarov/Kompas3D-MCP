@@ -2,29 +2,30 @@ using KompasMcp.Contracts;
 
 namespace KompasMcp.Domain.Geometry;
 
-/// <summary>The rule that ties a rebuild's before/after volumes to the mark the caller sees.</summary>
-/// <remarks>INVARIANT: a rebuild recomputes the model that is ALREADY built, so the document volume must
-/// not move; a move means a feature was not applied, and it is named where the client reads what was not
-/// confirmed. MEASURED: one <c>RebuildDocument()</c> can leave a feature unapplied, and the NEXT rebuild
-/// restores the model, so the number of attempts is part of the answer rather than an implementation
-/// detail. The decision is a pure function of two numbers and a count, so a SUBSTITUTED read result
-/// exercises it. History: docs/decisions/adapter-core.md#rebuild-verify</remarks>
+/// <summary>The rule that ties the volumes a rebuild was repeated over to the mark the caller sees.</summary>
+/// <remarks>INVARIANT: a state of the BUILT model is a state a rebuild does not move, so stability is
+/// established by two CONSECUTIVE readings agreeing — not by a reading returning to the value it had
+/// before the first rebuild. MEASURED: the state read right after an operation's own rebuild can itself be
+/// the unstable one (the volume was then 769.6902 mm3 above the built model), so a rule that compares
+/// every later reading against THAT value never settles and reports a move that did not happen.
+/// The decision is a pure function of three numbers and a flag, so a SUBSTITUTED read result exercises
+/// it. History: docs/decisions/adapter-core.md#rebuild-verify</remarks>
 public static class RebuildSettlement
 {
-    /// <summary>The volumes did not come back, so "the rebuild changed nothing" was not measured.</summary>
+    /// <summary>A volume was not read, so stability was not measured. "Not compared" is not "stable".</summary>
     public const string VolumeNotCompared =
-        "rebuild_volume_not_compared — объём документа до или после перестроения не прочитан, поэтому "
-        + "«перестроение не изменило модель» не проверено числом";
+        "rebuild_volume_not_compared — объём документа не прочитан, поэтому устойчивость состояния "
+        + "модели не проверена числом";
 
-    /// <summary>The model returned to its own volume, but only on a later attempt.</summary>
+    /// <summary>The first state was not stable: the model reached a stable state only after repeats.</summary>
     public const string Repeated =
-        "rebuild_repeated — первое перестроение изменило объём документа, модель вернулась к исходному "
-        + "объёму только после повторных перестроений";
+        "rebuild_repeated — первое состояние модели оказалось неустойчивым (объём сдвинулся), и к "
+        + "устойчивому состоянию модель пришла только после повторных перестроений";
 
-    /// <summary>The model never came back: the rebuild itself moved the geometry.</summary>
+    /// <summary>Two consecutive readings never agreed: stability was NOT established.</summary>
     public const string ChangedModel =
-        "rebuild_changed_model — перестроение изменило объём документа и не вернуло его за отведённые "
-        + "попытки. Перестроение обязано пересчитывать УЖЕ построенное";
+        "rebuild_changed_model — устойчивое состояние модели не установлено за отведённые попытки: "
+        + "каждое перестроение меняло объём документа. Перестроение обязано пересчитывать УЖЕ построенное";
 
     /// <summary>The rebuild that was supposed to settle a just-built model did not run, so the state of
     /// that model was never compared. A separate name from the three above: there the rebuild happened and
@@ -33,62 +34,52 @@ public static class RebuildSettlement
         "rebuild_not_checked — контрольное перестроение не выполнено: вызов прервался, устойчивость "
         + "состояния модели НЕ проверена. Перечитайте объём и при расхождении вызовите kompas_rebuild";
 
-    /// <summary>The warning a result carries when the model never came back: a success on such a state is
-    /// not a geometry confirmation.</summary>
+    /// <summary>The warning a result carries when stability was not established: a success on such a state
+    /// is not a geometry confirmation.</summary>
     public const string ChangedModelWarning =
-        "Перестроение не вернуло объём документа за отведённые попытки: модель не пришла к устойчивому "
-        + "состоянию, поэтому геометрия НЕ подтверждена. Перечитайте объём и повторите перестроение.";
+        "Устойчивое состояние модели не установлено за отведённые попытки перестроения, поэтому геометрия "
+        + "НЕ подтверждена. Перечитайте объём и повторите перестроение.";
 
-    /// <summary>Whether the volume after the rebuild is the volume before it, within the shared tolerance.
-    /// An unreadable side is NOT settled: an unperformed comparison is not a passed one.</summary>
+    /// <summary>Whether two readings agree within the shared tolerance. The settle loop feeds it
+    /// CONSECUTIVE readings, because that is what "a rebuild does not move the model" means.
+    /// An unreadable side is NOT agreement: an unperformed comparison is not a passed one.</summary>
     public static bool Settled(double? baselineMm3, double? observedMm3) =>
         baselineMm3 is double baseline && observedMm3 is double observed
         && Math.Abs(observed - baseline) <= DeclaredExpectation.Tolerance(baseline);
 
-    /// <summary>The mark for the caller's unverified aspects, or null when there is nothing to report:
-    /// a rebuild that settled on its first attempt is exactly what the contract promises.</summary>
-    public static string? Note(double? baselineMm3, double? observedMm3, int attempts)
-    {
-        if (baselineMm3 is not double || observedMm3 is not double)
-        {
-            return VolumeNotCompared;
-        }
-
-        if (!Settled(baselineMm3, observedMm3))
-        {
-            return ChangedModel;
-        }
-
-        return attempts > 1 ? Repeated : null;
-    }
-
-    /// <summary>The mark WITH the numbers, so every call site of the automatic settlement answers in the
-    /// same words. Null when the first rebuild settled: a rebuild that recomputed what was already built
-    /// is exactly what the contract promises, and a note would be a false alarm.</summary>
+    /// <summary>The mark WITH the numbers, so every call site answers in the same words. Null when the
+    /// FIRST control rebuild did not move the model: that is exactly what the contract promises, and a
+    /// note would be a false alarm.</summary>
+    /// <param name="stable">Whether two consecutive readings agreed. A state that never stabilised is
+    /// named as a moved model whatever the two numbers are.</param>
     /// <remarks>WHY THE NUMBERS ARE PART OF THE RULE. "The rebuild moved the model" is only actionable
     /// with the two volumes and the attempt count; formatting them at each call site made the same
-    /// measurement read differently in different tools.
-    /// History: docs/decisions/adapter-core.md#rebuild-verify</remarks>
-    public static string? Describe(int attempts, double? baselineMm3, double? observedMm3)
+    /// measurement read differently in different tools. History: docs/decisions/adapter-core.md#rebuild-verify</remarks>
+    public static string? Describe(int attempts, double? baselineMm3, double? observedMm3, bool stable)
     {
         if (baselineMm3 is not double baseline || observedMm3 is not double observed)
         {
             return VolumeNotCompared;
         }
 
-        if (!Settled(baselineMm3, observedMm3))
+        if (!stable)
         {
             return ChangedModel + Numbers(baseline, observed, attempts);
         }
 
-        return attempts > 1 ? Repeated + Numbers(baseline, observed, attempts) : null;
+        // Stable now. Anything other than "the very first control rebuild left it alone" is a state that
+        // had to be corrected, and the client must be able to see that it was.
+        return attempts > 1 || !Settled(baseline, observed)
+            ? Repeated + Numbers(baseline, observed, attempts)
+            : null;
     }
 
-    /// <summary>Lower a level when the rebuild did not settle: a state of a model that is not built is
+    /// <summary>Lower a level when stability was NOT established: a state of a model that is not built is
     /// never a geometry confirmation. A level already at or below <c>structure_checked</c> is returned
-    /// as is — the rule only ever lowers.</summary>
-    public static VerificationLevel CapLevel(VerificationLevel level, bool modelMoved) =>
-        modelMoved && level > VerificationLevel.StructureChecked
+    /// as is — the rule only ever lowers. A state whose volume could not be READ is not "moved": nothing
+    /// was compared, and that gap is named instead (see <see cref="VolumeNotCompared"/>).</summary>
+    public static VerificationLevel CapLevel(VerificationLevel level, bool stabilityUnestablished) =>
+        stabilityUnestablished && level > VerificationLevel.StructureChecked
             ? VerificationLevel.StructureChecked
             : level;
 
@@ -101,26 +92,30 @@ public static class RebuildSettlement
     }
 }
 
-/// <summary>What one settled rebuild measured: the two volumes and the number of attempts it took.</summary>
-/// <remarks>INVARIANT: the two volumes are the whole evidence, and an unreadable side is NOT a settled
-/// one. The record carries no COM type, so the decision it feeds is exercised by substituted numbers.
+/// <summary>What one settle measured: the state before the control rebuilds, the last state, how many
+/// control rebuilds it took, and whether stability was established.</summary>
+/// <remarks>INVARIANT: an unreadable side is NOT a stable one, and two readings that never agreed are not
+/// a move of the model either — they are the ABSENCE of a stable state, and that is what the mark says.
+/// The record carries no COM type, so the decision it feeds is exercised by substituted numbers.
 /// History: docs/decisions/adapter-core.md#rebuild-verify</remarks>
 public readonly record struct RebuildSettlementOutcome(
     int Attempts,
     double? BaselineMm3,
-    double? ObservedMm3)
+    double? ObservedMm3,
+    bool Stable)
 {
-    /// <summary>The volumes came back within the shared tolerance: the state is a state of the built model.</summary>
-    public bool Settled => RebuildSettlement.Settled(BaselineMm3, ObservedMm3);
+    /// <summary>Two consecutive readings agreed: the state is a state of the built model.</summary>
+    public bool Settled => Stable;
 
-    /// <summary>Both volumes were read and did NOT come back: the model never reached a stable state, so
-    /// no result check may claim geometry. An unreadable side is NOT "moved" — nothing was compared.</summary>
-    public bool ModelMoved => !Settled && BaselineMm3 is not null && ObservedMm3 is not null;
+    /// <summary>Both volumes were read and the readings never agreed: no result check may then claim
+    /// geometry. An unreadable side is NOT this state — nothing was compared.</summary>
+    public bool StabilityUnestablished => !Stable && BaselineMm3 is not null && ObservedMm3 is not null;
 
-    /// <summary>The mark for the caller's unverified aspects, or null when the first rebuild settled.</summary>
-    public string? Note => RebuildSettlement.Describe(Attempts, BaselineMm3, ObservedMm3);
+    /// <summary>The mark for the caller's unverified aspects, or null when the first control rebuild
+    /// left the model alone.</summary>
+    public string? Note => RebuildSettlement.Describe(Attempts, BaselineMm3, ObservedMm3, Stable);
 
     /// <summary>The same rule applied to a level the caller already computed.</summary>
     public VerificationLevel CapLevel(VerificationLevel level) =>
-        RebuildSettlement.CapLevel(level, ModelMoved);
+        RebuildSettlement.CapLevel(level, StabilityUnestablished);
 }

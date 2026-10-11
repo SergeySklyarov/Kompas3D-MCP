@@ -22,24 +22,25 @@ public partial class Api5Session
     /// previous one.</summary>
     private readonly List<string> _rebuildSettlementNotes = new();
 
-    /// <summary>Whether the current command left a model that never came back to its own volume.</summary>
-    private bool _rebuildModelMoved;
+    /// <summary>Whether the current command left a model whose stability was NOT established: two
+    /// consecutive readings never agreed within the attempt limit.</summary>
+    private bool _rebuildStabilityUnestablished;
 
     /// <summary>Drop the marks of the previous command. Called before the mutation, not after: a command
     /// that refuses must not carry the marks of the command that ran before it.</summary>
     public void ResetRebuildSettlement()
     {
         _rebuildSettlementNotes.Clear();
-        _rebuildModelMoved = false;
+        _rebuildStabilityUnestablished = false;
     }
 
     /// <summary>What the settlement of this command did NOT confirm, in the words of
-    /// <see cref="RebuildSettlement"/>; empty when every rebuild returned the model unchanged.</summary>
+    /// <see cref="RebuildSettlement"/>; empty when the first control rebuild left the model alone.</summary>
     public IReadOnlyList<string> RebuildSettlementNotes => _rebuildSettlementNotes;
 
-    /// <summary>True when the model did not come back to its own volume within the attempt limit: no
-    /// result check of this command may then claim geometry.</summary>
-    public bool RebuildModelMoved => _rebuildModelMoved;
+    /// <summary>True when stability was NOT established within the attempt limit: no result check of this
+    /// command may then claim geometry.</summary>
+    public bool RebuildStabilityUnestablished => _rebuildStabilityUnestablished;
 
     /// <summary>Bring the model to a state of the BUILT model after the mutation's own rebuild, and
     /// collect what that cost. The control rebuild is <c>ksDocument3D.RebuildDocument()</c> for every
@@ -56,8 +57,8 @@ public partial class Api5Session
             return;
         }
 
-        var (attempts, baseline, observed, _) = SettleRebuild(document);
-        Record(new RebuildSettlementOutcome(attempts, baseline, observed));
+        var (attempts, baseline, observed, stable, _) = SettleRebuild(document);
+        Record(new RebuildSettlementOutcome(attempts, baseline, observed, stable));
     }
 
     /// <summary>The API7 route's rebuild followed by the control rebuild. The API7 write is carried into
@@ -95,7 +96,7 @@ public partial class Api5Session
             _rebuildSettlementNotes.Add(note);
         }
 
-        _rebuildModelMoved |= outcome.ModelMoved;
+        _rebuildStabilityUnestablished |= outcome.StabilityUnestablished;
     }
 
     /// <summary>Whether the document holds a solid body right now. A read that fails answers false: the

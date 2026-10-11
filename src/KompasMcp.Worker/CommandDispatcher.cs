@@ -744,8 +744,8 @@ public sealed class CommandDispatcher
     private void PublishRebuildSettlement(JsonObject node)
     {
         var notes = _session.RebuildSettlementNotes;
-        var moved = _session.RebuildModelMoved;
-        if (notes.Count == 0 && !moved)
+        var unestablished = _session.RebuildStabilityUnestablished;
+        if (notes.Count == 0 && !unestablished)
         {
             return;
         }
@@ -756,7 +756,7 @@ public sealed class CommandDispatcher
             var aspects = new List<string>(dto.UnverifiedAspects);
             aspects.AddRange(notes);
             node["verification"] = KompJson.ToNode(new VerificationDto(
-                RebuildSettlement.CapLevel(dto.Level, moved), dto.Checks, aspects));
+                RebuildSettlement.CapLevel(dto.Level, unestablished), dto.Checks, aspects));
         }
 
         if (node["context"] is JsonObject context)
@@ -770,7 +770,7 @@ public sealed class CommandDispatcher
             context["unverified_aspects"] = aspects;
         }
 
-        if (moved)
+        if (unestablished)
         {
             var warnings = (node["warnings"] as JsonArray) ?? new JsonArray();
             warnings.Add(RebuildSettlement.ChangedModelWarning);
@@ -798,7 +798,7 @@ public sealed class CommandDispatcher
         }
 
         details["rebuild_settlement"] = notes.ToArray();
-        details["rebuild_model_moved"] = _session.RebuildModelMoved;
+        details["rebuild_stability_unestablished"] = _session.RebuildStabilityUnestablished;
         return new KompasContractException(
             contract.Code, contract.Message, contract.RetryPolicy, contract.PartialEffects,
             contract.Hresult, details);

@@ -33,21 +33,10 @@ internal static class Api7InteropTwin
 
 /// <summary><c>IKompasDocument2D1</c> as declared by the INSTALLED type library, up to and including
 /// <c>get_ParametricMode</c> (slot 75).</summary>
-/// <remarks>MEASURED: the layout was read from <c>Bin\kAPI7.tlb</c> (<c>--tlb --type-members
-/// IKompasDocument2D1</c>), where the member list of this dual interface starts with the seven
-/// <c>IUnknown</c>/<c>IDispatch</c> members, so the TLB's index 7 is vtable slot 7; <c>FUNCDESC.oVft</c>
-/// carries the offset directly and agrees (slot 74 → oVft 592, slot 75 → oVft 600). The declaration is
-/// FLAT — every member of the interface, in vtable order, with no base interface — so the adapter's rule
-/// "member i of a dual interface sits in slot 7 + i" holds for it unchanged, exactly as for
-/// <see cref="IPart7Twin"/>.
-/// LIMIT, NAMED: the shipped wrapper does not declare five of the types the members above slot 44 use
-/// (<c>ksDecomposeObjectLevelEnum</c>, <c>ksDrawingObjectParamTypeEnum</c>, <c>ksCheckAssociationResultEnum</c>,
-/// <c>ksCheckObjectsTypeEnum</c>, <c>ParametrizationParam7</c>). Those parameters are declared as the
-/// 4-byte value of the enum (ABI-identical for a vtable call) and as an interface pointer respectively,
-/// rather than by inventing a twin for a type the installation may not even carry. None of those members
-/// is called: the adapter calls <c>get_ParametricMode</c> only, and the PUT is declared solely because a
-/// vtable is reproduced in order.
-/// History: docs/decisions/assembly.md#api7-twin</remarks>
+/// <remarks>INVARIANT: the declaration is FLAT - every member, in vtable order, with no base interface -
+/// so the adapter's rule "member i of a dual interface sits in slot 7 + i" holds for it unchanged.
+/// LIMIT, NAMED: a type the shipped wrapper does not declare is reproduced as its ABI, not invented.
+/// History: docs/decisions/assembly.md#api7-document2d1-twin</remarks>
 [ComImport]
 [Guid(Api7InteropTwin.Document2D1Iid)]
 [InterfaceType(ComInterfaceType.InterfaceIsDual)]

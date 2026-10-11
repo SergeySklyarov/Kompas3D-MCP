@@ -34075,6 +34075,33 @@ def mania_references():
     }
 
 
+def kompas_processes():
+    """Live KOMPAS.exe processes as MEASURED by the OS: (pid, working_set_bytes), ascending by pid.
+
+    WHY HERE. A group that leaves its own instance alive makes every later group run beside a foreign
+    CAD, and the rows of that later group then measure an environment, not the product. The count is
+    read from `tasklist`, not from our own launch bookkeeping: bookkeeping can only report the
+    processes we started, and the whole question is about the ones we did not.
+    """
+    try:
+        out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq KOMPAS.exe", "/FO", "CSV", "/NH"],
+                             capture_output=True, text=True, timeout=60).stdout
+    except (OSError, subprocess.SubprocessError):
+        return []
+    procs = []
+    for line in out.splitlines():
+        parts = [p.strip().strip('"') for p in line.split('","')]
+        if len(parts) < 5 or not parts[0].strip('"').lower().startswith("kompas"):
+            continue
+        pid = parts[1].strip('"')
+        mem = parts[4].strip('"').replace(",", "").replace("K", "").replace("\u00a0", "").strip()
+        try:
+            procs.append((int(pid), int(mem) * 1024))
+        except ValueError:
+            procs.append((int(pid) if pid.isdigit() else -1, None))
+    return sorted(procs)
+
+
 def mania_scenario_checks(client, rep, app_id, workdir):
     """MANIA: сценарий «Скоба Model Mania 2021» — от эскиза касательными дугами до переоткрытия.
 
@@ -34177,6 +34204,28 @@ def mania_scenario_checks(client, rep, app_id, workdir):
                 out.append({"ref": r, "v": volume(r), "bb": bbox(r)})
             return out
 
+        # MEASURED: a volume read taken right after an operation is not necessarily the volume of the
+        # post-operation model — the same body read twice in a row can answer two different numbers.
+        # The whole sequence is kept, because "the row is wrong" and "the reading was stale" are
+        # different findings and only the sequence tells them apart.
+        def volume_reads(count=3):
+            return [mv() for _ in range(count)]
+
+        def face_count(refr):
+            return len(faces(refr))
+
+        def r7_faces(refr):
+            """The R7 cylindrical faces of the scenario body, by axis point.
+
+            MEASURED: each ear carries two coaxial R7 faces (the shell-cavity wall and the ear-hole
+            wall), so the COUNT and the axis points are what tell whether one of them is missing when
+            the volume moves by exactly one ear-hole wall.
+            """
+            return [{"c": f.get("center_mm"), "h": f.get("height_mm"), "a": f.get("area_mm2")}
+                    for f in faces(refr)
+                    if f.get("surface_type") == "cylinder"
+                    and abs((f.get("radius_mm") or 0) - 7.0) < 0.01]
+
         def main_row():
             """Тело сценария — ПО ГАБАРИТУ, а не по порядку: после булевой операции с сохранением
             инструмента в документе два тела, и «первое» может оказаться инструментом."""
@@ -34202,6 +34251,24 @@ def mania_scenario_checks(client, rep, app_id, workdir):
             env, _ = call("kompas_read_topology",
                           {"document_id": doc, "body_ref": refr, "include": "edges"})
             return result(env).get("edges") or []
+
+        # MEASURED: a face picked out of the enumeration carries the POSITION of the enumeration with
+        # it. The rows are recorded whole (index included) because the scenario selected "the last
+        # matching face", so the answer to "which face" is only readable together with the order.
+        def compact_face(f, i):
+            return {"i": i, "ref": f.get("face_ref"), "st": f.get("surface_type"),
+                    "area": f.get("area_mm2"), "n": f.get("normal_at_center"),
+                    "r": f.get("radius_mm"), "h": f.get("height_mm"),
+                    "c": f.get("center_mm"), "ax": f.get("axis_mm")}
+
+        def plane_candidates(refr, axis, sign):
+            """Every planar face whose normal along `axis` has the given sign, in enumeration order."""
+            rows = faces(refr)
+            hit = [i for i, f in enumerate(rows)
+                   if f.get("surface_type") == "plane"
+                   and len(f.get("normal_at_center") or []) >= 3
+                   and sign * f["normal_at_center"][axis] > 0.99]
+            return rows, hit
 
         def mk_sketch(name, plane, offset, entities):
             env, code = call("kompas_create_sketch", {
@@ -34294,17 +34361,23 @@ def mania_scenario_checks(client, rep, app_id, workdir):
              details={"volume": v, "expected": ref["v_bore"]})
 
         # ── 05: оболочка t=5 с удалением нижней грани ────────────────────────────────────────
-        bottom = None
-        for f in faces(main_row()["ref"]):
-            n = f.get("normal_at_center") or []
-            if f.get("surface_type") == "plane" and len(n) >= 3 and abs(n[2] + 1) <= 1e-6:
-                bottom = f.get("face_ref")
+        rows05, matches05 = plane_candidates(main_row()["ref"], 2, -1)
+        bottom = rows05[matches05[-1]].get("face_ref") if matches05 else None
+        cand05 = {"faces_total": len(rows05), "matches": matches05,
+                  "chosen_index": matches05[-1] if matches05 else None,
+                  "kompas_processes": kompas_processes(),
+                  "faces": [compact_face(f, i) for i, f in enumerate(rows05)]}
         c5 = "нижняя грань не найдена"
+        shell_result = None
         if bottom:
             env, c5 = call("kompas_shell", {
                 "document_id": doc, "expected_revision": revision(), "face_refs": [bottom],
                 "thickness_mm": MANIA_WALL_T, "thin_direction": "inward"})
-        v = mv()
+            shell_result = result(env)
+        v5reads = volume_reads()
+        v = v5reads[0]
+        faces5_after = face_count(main_row()["ref"])
+        r7_5 = r7_faces(main_row()["ref"])
         emit(5, "create", "оболочка t=5 с удалением нижней грани (полость = смещённое сечение "
                           "× (плита − t))",
              "PASS" if (c5 is None and near(v, ref["v_shell"])) else "FAIL",
@@ -34314,7 +34387,9 @@ def mania_scenario_checks(client, rep, app_id, workdir):
              % (v, ref["v_shell"], ref["shell_removed"], ref["inner_area"],
                 abs((v or 0) - ref["v_shell"]), c5),
              details={"volume": v, "expected": ref["v_shell"], "inner_area": ref["inner_area"],
-                      "shell_removed": ref["shell_removed"]})
+                      "shell_removed": ref["shell_removed"], "candidates": cand05,
+                      "volume_reads": v5reads, "faces_after": faces5_after, "r7_faces": r7_5,
+                      "shell_result": shell_result})
 
         # ── 06: четыре отверстия ушей Ø14 ────────────────────────────────────────────────────
         ear_codes = []
@@ -34387,12 +34462,14 @@ def mania_scenario_checks(client, rep, app_id, workdir):
         # ── 08: отверстие Ø9 + цековка Ø15×8 на грани +Y ─────────────────────────────────────
         # Грань ищется ПО НОРМАЛИ (у плоской грани center_mm не возвращается — измерено). Кадр
         # смещений измерен: offset_x = x, offset_y = −z.
-        yface = None
-        for f in faces(main_row()["ref"]):
-            n = f.get("normal_at_center") or []
-            if f.get("surface_type") == "plane" and len(n) >= 3 and n[1] > 0.99:
-                yface = f.get("face_ref")
+        rows08, matches08 = plane_candidates(main_row()["ref"], 1, +1)
+        yface = rows08[matches08[-1]].get("face_ref") if matches08 else None
+        cand08 = {"faces_total": len(rows08), "matches": matches08,
+                  "chosen_index": matches08[-1] if matches08 else None,
+                  "kompas_processes": kompas_processes(),
+                  "faces": [compact_face(f, i) for i, f in enumerate(rows08)]}
         c8 = "грань +Y ушка не найдена"
+        hole_result = None
         if yface:
             env, c8 = call("kompas_hole", {
                 "face_ref": yface, "expected_revision": revision(),
@@ -34401,11 +34478,21 @@ def mania_scenario_checks(client, rep, app_id, workdir):
                 "counterbore_depth_mm": MANIA_CBORE_T,
                 "offset_x_mm": MANIA_LUG_X1, "offset_y_mm": -MANIA_LUG_Z,
                 "expected_volume_delta_mm3": ref["cbore_removed"]})
-        v = mv()
+            hole_result = result(env)
+        v8reads = volume_reads()
+        v = v8reads[0]
+        faces8_after = face_count(main_row()["ref"])
+        r7_8 = r7_faces(main_row()["ref"])
         hole_axis = None
+        # MEASURED: axis_mm is the DIRECTION of the cylinder placement, not a point; the point on the
+        # axis is center_mm. Reading only the direction cannot tell WHERE the hole landed, so both are
+        # recorded here — the failure this row hunts is a hole on the wrong face, i.e. a wrong center.
+        hole_read = []
         for f in faces(main_row()["ref"]):
             if f.get("surface_type") == "cylinder" and abs((f.get("radius_mm") or 0) - 4.5) < 0.01:
                 hole_axis = f.get("axis_mm")
+            if f.get("surface_type") == "cylinder" and (f.get("radius_mm") or 0) in (4.5, 7.5):
+                hole_read.append(compact_face(f, -1))
         emit(8, "create", "отверстие Ø9 сквозь ушко с цековкой Ø15×8 (кольцо по формуле M.2)",
              "PASS" if (c8 is None and near(v, ref["v_cbore"])) else "FAIL",
              "V=%.6f ожидание %.6f (пилот π·4.5²·36=%.6f + КОЛЬЦО (π/4)(15²−9²)·8=%.6f; "
@@ -34414,6 +34501,9 @@ def mania_scenario_checks(client, rep, app_id, workdir):
                 (math.pi / 4.0) * (MANIA_CBORE_D ** 2 - MANIA_LUG_HOLE_D ** 2) * MANIA_CBORE_T,
                 abs((v or 0) - ref["v_cbore"]), hole_axis, c8),
              details={"volume": v, "expected": ref["v_cbore"], "hole_axis": hole_axis,
+                      "cylinders_4_5_7_5": hole_read, "candidates": cand08,
+                      "volume_reads": v8reads, "faces_after": faces8_after, "r7_faces": r7_8,
+                      "hole_result": hole_result,
                       "ring": (math.pi / 4.0) * (MANIA_CBORE_D ** 2 - MANIA_LUG_HOLE_D ** 2)
                       * MANIA_CBORE_T})
 
@@ -34432,6 +34522,7 @@ def mania_scenario_checks(client, rep, app_id, workdir):
                 if mn and abs(mn[0] - MANIA_SAWCUT_X) <= 1e-3:
                     tool = x["ref"]
         c9b = "инструмент не найден по габариту"
+        boolean_result = None
         if tool:
             # ОБЪЯВЛЕННОЕ ОЖИДАНИЕ — СУММА ПО ДОКУМЕНТУ, а не объём главного тела: инструмент пропила
             # сохранён отдельным телом (keep_tools=true), и продукт сверяет сумму (наряд PRE_RELEASE_0_6_0
@@ -34441,7 +34532,11 @@ def mania_scenario_checks(client, rep, app_id, workdir):
                 "target_body_ref": main_row()["ref"], "tool_body_refs": [tool],
                 "operation": "difference", "keep_tools": True,
                 "expected_volume_mm3": ref["v_sawcut"] + ref["sawcut_tool"]})
-        v = mv()
+            boolean_result = result(env)
+        v9reads = volume_reads()
+        v = v9reads[0]
+        faces9_after = face_count(main_row()["ref"])
+        r7_9 = r7_faces(main_row()["ref"])
         emit(9, "create", "пропил 3 мм булевой разностью с сохранением инструмента",
              "PASS" if (c9 is None and c9b is None and near(v, ref["v_sawcut"])) else "FAIL",
              "V=%.6f ожидание %.6f (снято сегм(12,1.5)·3=%.6f минус уже снятое пилотом "
@@ -34453,7 +34548,9 @@ def mania_scenario_checks(client, rep, app_id, workdir):
                                       MANIA_SAWCUT_X - MANIA_LUG_X1) * MANIA_SAWCUT_W,
                 ref["sawcut_removed"], abs((v or 0) - ref["v_sawcut"]),
                 c9, c9b, len(rows())),
-             details={"volume": v, "expected": ref["v_sawcut"], "bodies": len(rows())})
+             details={"volume": v, "expected": ref["v_sawcut"], "bodies": len(rows()),
+                      "volume_reads": v9reads, "faces_after": faces9_after, "r7_faces": r7_9,
+                      "boolean_result": boolean_result})
 
         # ── 10: скругления R3 ────────────────────────────────────────────────────────────────
         # НАБОР ОБЪЯВЛЕН ПО ИМЕНИ: рёбра, ОБЕ вершины которых лежат на z = 20. Из них кольцо
@@ -34477,6 +34574,13 @@ def mania_scenario_checks(client, rep, app_id, workdir):
                 junction.append(e.get("edge_ref"))
             else:
                 others.append(e.get("edge_ref"))
+        # MEASURED: the junction ring is picked by a predicate over the enumeration too; the order and
+        # the full candidate set are recorded for the same reason as the faces above.
+        cand10 = {"edges_total": len(edges(b0)), "ring": len(junction) + len(others),
+                  "junction": len(junction),
+                  "kompas_processes": kompas_processes(),
+                  "edges": [{"i": i, "ref": e.get("edge_ref"),
+                             "v": e.get("vertices_mm")} for i, e in enumerate(ring_edges())]}
         c10 = "рёбер на стыке плиты и ступицы не найдено"
         v10a = None
         if junction:
@@ -34510,7 +34614,7 @@ def mania_scenario_checks(client, rep, app_id, workdir):
                 "разбиением набора" if c10b else ""),
              details={"junction_edges": len(junction), "other_edges": len(others),
                       "added": added, "expected_added": ref["fillet_added"],
-                      "refusal": c10b, "volume_after_split": v10b})
+                      "refusal": c10b, "volume_after_split": v10b, "candidates": cand10})
         v_after_fillet = v10a if v10a is not None else mv()
 
         # ── 11: чтение дерева и параметров признака ──────────────────────────────────────────
@@ -34594,6 +34698,25 @@ def mania_scenario_checks(client, rep, app_id, workdir):
         def rows2():
             return [{"ref": b.get("body_ref"), "v": volume2(b.get("body_ref"))} for b in bodies2()]
 
+        def faces2(refr):
+            """Faces of the REOPENED document. The earlier form called faces() here, which reads the
+            CLOSED original document and answered an empty list — the row then reported "граней=0",
+            i.e. the instrument hid the evidence it was printing."""
+            env, _ = call("kompas_read_topology",
+                          {"document_id": doc2, "body_ref": refr, "include": "faces"})
+            return result(env).get("faces") or []
+
+        def ear_walls():
+            """The R7 cylindrical faces of the reopened model, by axis point — the ear-hole wall and the
+            shell-cavity wall at each ear share the radius, so the count and the axis points are what
+            tell whether one of them is missing."""
+            out = []
+            for f in faces2(main2()["ref"]):
+                if f.get("surface_type") == "cylinder" and abs((f.get("radius_mm") or 0) - 7.0) < 0.01:
+                    out.append({"c": f.get("center_mm"), "h": f.get("height_mm"),
+                                "area": f.get("area_mm2")})
+            return out
+
         def main2():
             """То же тело по габариту: у него габарит тот же, что до переоткрытия."""
             best = None
@@ -34663,18 +34786,27 @@ def mania_scenario_checks(client, rep, app_id, workdir):
         # after it and compared the rebuilt model with itself.
         # History: docs/decisions/tests.md#mania-rebuild-before
         n_bodies = len(bodies2())
-        n_faces = len(faces(bodies2()[0].get("body_ref"))) if n_bodies else 0
+        # The face count belongs to the SCENARIO body, not to bodies2()[0]: after the boolean the
+        # document holds the sawcut tool as well, and a box answers 6 faces for the wrong object.
+        n_faces = len(faces2(main2()["ref"])) if main2() else 0
         rev_before = revision2()
         v16_before = sum(x["v"] or 0.0 for x in rows2())
-        env, _ = call("kompas_rebuild", {"document_id": doc2})
+        walls_before = ear_walls()
+        env16, c16 = call("kompas_rebuild", {"document_id": doc2})
+        rebuild16 = result(env16)
         rev_after = revision()
-        v16 = sum(x["v"] or 0.0 for x in rows2())
+        v16_reads = [sum(x["v"] or 0.0 for x in rows2()) for _ in range(3)]
+        v16 = v16_reads[0]
+        walls_after = ear_walls()
         emit(16, "geometry_validation",
              "сохранность: тела, грани и объём не изменились перестроением",
              "PASS" if (n_bodies >= 1 and near(v16, v16_before)) else "FAIL",
              "тел=%d граней=%d; V до перестроения=%.6f после=%.6f; ревизия %s→%s"
              % (n_bodies, n_faces, v16_before, v16, rev_before, rev_after),
-             details={"bodies": n_bodies, "faces": n_faces, "volume": v16})
+             details={"bodies": n_bodies, "faces": n_faces, "volume": v16,
+                      "volume_before": v16_before, "volume_reads": v16_reads,
+                      "ear_walls_before": walls_before, "ear_walls_after": walls_after,
+                      "rebuild_result": rebuild16, "rebuild_error": c16})
 
         # ── 17: НЕГАТИВНЫЙ КОНТРОЛЬ ДЕФЕКТА ДУГИ (наряд §3.5) ────────────────────────────────
         # Различающая пара: одна и та же четверть диска, заданная ПОЛОЖИТЕЛЬНЫМ и ОТРИЦАТЕЛЬНЫМ
@@ -34877,13 +35009,16 @@ def mania_scenario_checks(client, rep, app_id, workdir):
 
         # ── 19: перестроение не меняет геометрию ─────────────────────────────────────────────
         v19_before = sum(x["v"] or 0.0 for x in rows2())
-        env, c19 = call("kompas_rebuild", {"document_id": doc2})
-        v19 = sum(x["v"] or 0.0 for x in rows2())
+        env19, c19 = call("kompas_rebuild", {"document_id": doc2})
+        v19_reads = [sum(x["v"] or 0.0 for x in rows2()) for _ in range(3)]
+        v19 = v19_reads[0]
         emit(19, "rebuild", "перестроение документа не меняет геометрию",
              "PASS" if (c19 is None and near(v19, v19_before)) else "FAIL",
              "V=%.6f против %.6f (расхождение %.3e); err=%s"
              % (v19, v19_before, abs(v19 - v19_before), c19),
-             details={"volume": v19, "before": v19_before})
+             details={"volume": v19, "before": v19_before, "volume_reads": v19_reads,
+                      "ear_walls_after": ear_walls(), "rebuild_result": result(env19),
+                      "rebuild_error": c19})
 
         # ── 20: подавление и снятие подавления булевой операции ──────────────────────────────
         env, _ = call("kompas_list_features", {"document_id": doc2})

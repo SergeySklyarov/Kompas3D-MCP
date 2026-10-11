@@ -419,6 +419,52 @@ public sealed partial class Api5Session : IDisposable
                 $"Экземпляр '{applicationId}' не подключён; сначала kompas_connect.",
                 RetryPolicy.SameOperationId);
 
+    /// <summary>Whether the application behind a target still answers a CHEAP documented call; null when
+    /// there is nothing to probe.</summary>
+    /// <remarks>WHY IT EXISTS. The session latch observes EXCEPTIONS, not owners: a connection loss raised
+    /// while binding a stale ROT entry of a DEAD FOREIGN instance looks exactly like the loss of our own
+    /// session. Before a read is refused, the mark is CONFIRMED against OUR object — a live answer means
+    /// the loss was not ours, and the mark is lifted by name. The probe reads one documented property
+    /// (<c>KompasObject.Visible</c>, the same one the visibility observation reads) and changes nothing.
+    /// History: docs/decisions/adapter-core.md#disconnect-latch</remarks>
+    public bool? ProbeApplication(string? applicationId, string? documentId)
+    {
+        var target = TargetApplication(applicationId, documentId);
+        if (target is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            _ = target.Application.Visible;
+            return true;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidComObjectException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>The application a command targets: the owner of its document, else the one it names, else
+    /// the only one registered. Null when the command names an instance this session does not hold — then
+    /// nothing can be confirmed and the caller must stay conservative.
+    /// History: docs/decisions/adapter-core.md#disconnect-latch</summary>
+    private ApplicationEntry? TargetApplication(string? applicationId, string? documentId)
+    {
+        if (documentId is not null && _documents.TryGetValue(documentId, out var document))
+        {
+            return _applications.TryGetValue(document.ApplicationId, out var owner) ? owner : null;
+        }
+
+        if (applicationId is not null)
+        {
+            return _applications.TryGetValue(applicationId, out var named) ? named : null;
+        }
+
+        return _applications.Values.Count == 1 ? _applications.Values.First() : null;
+    }
+
     public DocumentEntry CreateDocument(CreateDocumentCommand command)
     {
         var application = RequireApplication(command.ApplicationId);

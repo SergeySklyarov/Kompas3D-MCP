@@ -120,32 +120,92 @@ public sealed class CommandDispatcher
 
         // The one place the latch is fed. The handler runs on the thread that THREW, synchronously,
         // before the catch that would swallow the loss; it must therefore stay trivial and non-throwing.
-        AppDomain.CurrentDomain.FirstChanceException += (_, args) => _latch.Observe(args.Exception);
+        // A loss that is NOT ours is named in the log: "the mark was not set" and "a foreign loss was
+        // seen and ignored" are different states, and only the log tells them apart.
+        AppDomain.CurrentDomain.FirstChanceException += (_, args) =>
+        {
+            try
+            {
+                var before = _latch.IgnoredOutsideSession;
+                _latch.Observe(args.Exception);
+                if (_latch.IgnoredOutsideSession != before)
+                {
+                    _log.Write("warn", "connection loss outside a session command, NOT applied", new
+                    {
+                        type = args.Exception.GetType().Name,
+                        message = args.Exception.Message,
+                        hresult = ComHResult.From(args.Exception),
+                        hresult_name = ComHResult.From(args.Exception) is int code ? ComHResult.Name(code) : null,
+                        on_sta_thread = Environment.CurrentManagedThreadId == _sta.StaThreadId,
+                    });
+                }
+            }
+            catch
+            {
+                // A FirstChanceException handler that throws would replace the exception being observed;
+                // the log is best effort, the observation is not.
+            }
+        };
     }
 
-    /// <summary>Whether a command is a READ of the model, whose answer must not be built on a swallowed
-    /// connection loss.</summary>
-    /// <remarks>Control-lane commands never touch KOMPAS and are excluded: `kompas_health` must keep
-    /// answering when the CAD session is gone — that is exactly when it is asked.
-    /// `session.inventory` is excluded BY NAME: its consumer (the release guard) already refuses on an
-    /// unread inventory, and routing it through the latch would change the refusal code of
-    /// `kompas_release_session`, whose behaviour this order leaves alone.
+    /// <summary>Commands that WRITE A FILE but leave the MODEL untouched. A lost connection during one of
+    /// them leaves nothing to reconcile, so the honest answer is the same refusal a READ gets, not
+    /// "the outcome is unknown".</summary>
+    /// <remarks>LIMIT, NAMED: <c>kompas_export_step</c> and <c>kompas_save_document</c> are deliberately
+    /// NOT here — they keep the mutation classification, because widening the set reclassifies a refusal
+    /// the client may already act on, and only the two exports named by the order were asked for.
     /// History: docs/decisions/adapter-core.md#disconnect-latch</remarks>
-    private static bool IsGuardedRead(string command) =>
-        !MutationCommands.Contains(command)
+    private static readonly HashSet<string> FileWritingReads = new(StringComparer.Ordinal)
+    {
+        WorkerCommands.ExportStl,
+        WorkerCommands.ExportImage,
+    };
+
+    /// <summary>Whether a command can leave the MODEL in an unknown state. A file-writing read cannot:
+    /// it writes a file, not the model.</summary>
+    private static bool ChangesModel(string command) =>
+        MutationCommands.Contains(command) && !FileWritingReads.Contains(command);
+
+    /// <summary>Whether a command's answer must not be built on a swallowed connection loss.</summary>
+    /// <remarks>Control-lane commands never touch KOMPAS and are excluded: `kompas_health` must keep
+    /// answering when the CAD session is gone — that is exactly when it is asked. `session.inventory` is
+    /// excluded BY NAME: its consumer (the release guard) already refuses on an unread inventory, and
+    /// routing it through the latch would change the refusal code of `kompas_release_session`.
+    /// `disconnect` is excluded BY NAME: it TEARS OUR OBJECTS DOWN, so a disconnect-class HRESULT there is
+    /// the expected consequence of our own action, not a loss.
+    /// History: docs/decisions/adapter-core.md#disconnect-latch</remarks>
+    private static bool MustNotAnswerAcrossALoss(string command) =>
+        !ChangesModel(command)
         && !ControlLaneCommands.Contains(command)
         && command != WorkerCommands.SessionInventory
+        && command != WorkerCommands.Disconnect
         && command != WorkerCommands.Shutdown;
+
+    /// <summary>Whether the observation window is open while this command runs. Every CAD-lane command
+    /// except the teardown opens it; control-lane commands never do, because they run OFF the STA thread
+    /// (the ROT enumeration binds foreign objects there, and a dead entry of another instance is not our
+    /// loss). History: docs/decisions/adapter-core.md#disconnect-latch</remarks>
+    private static bool ObservesConnectionLoss(string command) =>
+        !ControlLaneCommands.Contains(command) && command != WorkerCommands.Disconnect;
 
     public async Task<IpcFrame> HandleAsync(IpcFrame request, CancellationToken cancellationToken)
     {
         var budgetMs = BudgetFor(request);
         Interlocked.Increment(ref _handled);
 
+        // The observation window is open for exactly one session command: outside it a connection-class
+        // exception belongs to somebody else (a foreign ROT entry, another instance's dead object) and
+        // must not mark OUR session. The window closes on every exit, including the refusal paths.
+        var observesLoss = ObservesConnectionLoss(request.Command);
+        if (observesLoss)
+        {
+            _latch.Arm(_sta.StaThreadId);
+        }
+
         try
         {
             var payload = await DispatchAsync(request, budgetMs, cancellationToken).ConfigureAwait(false);
-            GuardDisconnectedRead(request);
+            await GuardDisconnectedReadAsync(request, cancellationToken).ConfigureAwait(false);
             return new IpcFrame
             {
                 ProtocolVersion = IpcFrame.CurrentProtocolVersion,
@@ -189,27 +249,29 @@ public sealed class CommandDispatcher
         }
         catch (Exception ex)
         {
-            // AN UNEXPECTED EXCEPTION IN A MUTATION IS NOT A "CLEAN FAILURE": the flag comes from
-            // <see cref="MutationCommands"/>, so the client is not told to repeat an applied mutation.
-            var isMutation = MutationCommands.Contains(request.Command);
+            // AN UNEXPECTED EXCEPTION IN A MODEL-CHANGING COMMAND IS NOT A "CLEAN FAILURE": the flag comes
+            // from <see cref="ChangesModel"/>, so the client is not told to repeat an applied mutation,
+            // while a file-writing read is judged like a read.
+            var changesModel = ChangesModel(request.Command);
 
-            if (isMutation)
+            if (changesModel)
             {
                 NeedsReconciliation = true;
             }
 
             Interlocked.Increment(ref _failed);
             var hresult = ComHResult.From(ex);
-            _log.Write("error", "command threw", new { command = request.Command, type = ex.GetType().Name, message = ex.Message, hresult, isMutation });
+            _log.Write("error", "command threw", new { command = request.Command, type = ex.GetType().Name, message = ex.Message, hresult, changesModel });
 
-            // A connection loss that escaped every local catch. In a MUTATION the outcome is unknown and
-            // the client must reconcile first. In a READ nothing was changed, so "outcome unknown" would
-            // be a false alarm: the loss itself is the answer, and reconnecting is the remedy.
+            // A connection loss that escaped every local catch. In a MODEL-CHANGING command the outcome is
+            // unknown and the client must reconcile first. In a READ (and in a file-writing read) nothing
+            // was changed, so "outcome unknown" would be a false alarm: the loss itself is the answer, and
+            // reconnecting is the remedy.
             // The loss is seen in TWO shapes, and both must be caught: the exception in hand may be the
             // disconnect itself, or a consequence of one observed during this command whose own HRESULT
             // carries nothing (MEASURED: `kompas_measure` on a dead body throws InvalidCastException).
             var disconnected = ComHResult.IsDisconnected(ex) || _latch.IsSet;
-            if (!isMutation && disconnected)
+            if (!changesModel && disconnected)
             {
                 return Failure(request, DisconnectedRead(request.Command, ex).ToErrorDto());
             }
@@ -217,25 +279,32 @@ public sealed class CommandDispatcher
             // An unexpected exception during a mutation means the outcome is unknown, not "failed
             // cleanly": saying so is what stops the client from repeating a half-applied change.
             return Failure(request, new ErrorDto(
-                isMutation ? ErrorCodes.OutcomeUnknown : Classify(ex, hresult),
+                changesModel ? ErrorCodes.OutcomeUnknown : Classify(ex, hresult),
                 ex.Message,
-                isMutation ? RetryPolicy.AfterReconciliation : RetryPolicy.SameOperationId,
+                changesModel ? RetryPolicy.AfterReconciliation : RetryPolicy.SameOperationId,
                 hresult,
-                isMutation,
+                changesModel,
                 new JsonObject
                 {
                     ["exception"] = ex.GetType().Name,
-                    ["is_mutation"] = isMutation,
+                    ["changes_model"] = changesModel,
                 }));
+        }
+        finally
+        {
+            if (observesLoss)
+            {
+                _latch.Disarm();
+            }
         }
     }
 
     /// <summary>Refuse a read whose answer was built while the session-level loss mark is set.</summary>
     /// <remarks>INVARIANT: this runs AFTER the command and BEFORE the answer leaves, so a read that
     /// swallowed the loss in a local catch cannot pass its default off as a measurement. The mark is
-    /// cleared only by a successful <c>kompas_connect</c>, which is the documented way back.
+    /// cleared by a successful <c>kompas_connect</c>, or by the CONFIRMATION below.
     /// History: docs/decisions/adapter-core.md#disconnect-latch</remarks>
-    private void GuardDisconnectedRead(IpcFrame request)
+    private async Task GuardDisconnectedReadAsync(IpcFrame request, CancellationToken cancellationToken)
     {
         if (request.Command == WorkerCommands.Connect)
         {
@@ -246,10 +315,42 @@ public sealed class CommandDispatcher
             return;
         }
 
-        if (IsGuardedRead(request.Command) && _latch.IsSet)
+        if (!MustNotAnswerAcrossALoss(request.Command) || !_latch.IsSet)
         {
-            throw DisconnectedRead(request.Command, exception: null);
+            return;
         }
+
+        // CONFIRM THE MARK AGAINST OUR OWN OBJECT BEFORE REFUSING. The observer cannot tell whose COM call
+        // failed, and a stale ROT entry of a DEAD FOREIGN instance raises the same class of error; binding
+        // such an entry happens inside `kompas_connect mode=attach`. A live answer from OUR application
+        // means the loss was not ours: the mark is lifted and NAMED, and the read proceeds.
+        // The route is captured BEFORE the probe, else the refusal would name `app.probe` — the
+        // instrument — instead of the call that failed.
+        var route = _sta.CurrentLabel;
+        var alive = await _sta.Run(
+            () => _session.ProbeApplication(
+                ReadString(request.Payload, "application_id"),
+                ReadString(request.Payload, "document_id")),
+            "app.probe",
+            cancellationToken).ConfigureAwait(false);
+
+        if (alive == true)
+        {
+            var observed = _latch.Observation;
+            var reason = "наше приложение ответило на дешёвое обращение: потеря, наблюдённая защёлкой, "
+                         + "принадлежит ЧУЖОМУ COM-объекту (например, записи погибшего экземпляра в ROT)";
+            _latch.ClearWithReason(reason);
+            _log.Write("warn", "disconnect mark cleared: our application answers", new
+            {
+                command = request.Command,
+                route,
+                reason,
+                observed,
+            });
+            return;
+        }
+
+        throw DisconnectedRead(request.Command, exception: null, route: route);
     }
 
     /// <summary>The refusal of a read that could not be read because the connection is gone.</summary>
@@ -258,10 +359,10 @@ public sealed class CommandDispatcher
     /// document ids and revisions belong to a dead instance. The remedy is therefore "reconnect, then
     /// re-read the context", which is exactly what this policy means.
     /// History: docs/decisions/adapter-core.md#disconnect-latch</remarks>
-    private KompasContractException DisconnectedRead(string command, Exception? exception)
+    private KompasContractException DisconnectedRead(string command, Exception? exception, string? route = null)
     {
         var observed = _latch.Observation;
-        var route = _sta.CurrentLabel;
+        route ??= _sta.CurrentLabel;
         var details = new JsonObject
         {
             // WHICH KOMPAS CALL FAILED: the route the adapter was inside, and the first code that broke.
@@ -384,6 +485,11 @@ public sealed class CommandDispatcher
                             ["observed_at_utc"] = loss.AtUtc.ToString("O"),
                         }
                         : null,
+                    // A connection loss seen OUTSIDE a session command, i.e. belonging to a FOREIGN COM
+                    // object: seen and deliberately NOT applied. Named so "the mark is clear" and
+                    // "nothing was seen" stay distinguishable.
+                    ["cad_disconnect_ignored_outside_session"] = _latch.IgnoredOutsideSession,
+                    ["cad_disconnect_cleared_reason"] = _latch.ClearedReason,
                     ["build"] = BuildIdentity.Collect(),
                     ["sta"] = new JsonObject(_sta.Statistics().ToDictionary(kv => kv.Key, kv => (JsonNode?)JsonValue.Create(kv.Value))),
                     ["com_filter"] = new JsonObject(_sta.MessageFilter.Snapshot().ToDictionary(kv => kv.Key, kv => (JsonNode?)JsonValue.Create(kv.Value))),
@@ -518,7 +624,14 @@ public sealed class CommandDispatcher
           "проверяется до вызова, поэтому диалог возможен по другой причине (например, лицензия или восстановление)."
         : string.Empty;
 
-    private static T Argument<T>(IpcFrame request)    {
+    /// <summary>One string field of a raw payload, for the guard that runs BEFORE the typed parse: it must
+    /// work even when the command is refused before its payload is understood.
+    /// History: docs/decisions/adapter-core.md#disconnect-latch</summary>
+    private static string? ReadString(JsonNode? payload, string key) =>
+        payload is JsonObject obj ? JsonScalars.ReadString(obj[key]) : null;
+
+    private static T Argument<T>(IpcFrame request)
+    {
         if (request.Payload is null)
         {
             throw new KompasContractException(ErrorCodes.InvalidArgument, $"Команда '{request.Command}' не получила payload.");

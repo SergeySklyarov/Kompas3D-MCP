@@ -9099,11 +9099,11 @@ def disconnect_checks(client, rep, app_id, workdir, process_id=None):
             f"components={asm_components} pid={process_id} error={build_error or asm_error}",
             details={"plate_document_id": plate, "assembly_document_id": asm,
                      "process_id": process_id, "source_path": src_path})
-
     # ── DC.07: контроль ПРИ ЖИВОМ КОМПАС — честный ноль не превращается в отказ ────────────────
     # Строка идёт ДО обрыва намеренно: после него она измеряла бы защёлку, а не контроль.
     empty_asm, code_e, _env_e = new_doc("assembly", "DC_Empty")
     bare_part, code_p, _env_p = new_doc("part", "DC_Bare")
+    drawing_doc, code_d, _env_d = new_doc("drawing", "DC_Drawing")
     env, code = call("kompas_list_components", {"document_id": empty_asm}) if empty_asm else (None, "no-doc")
     empty_rows = result(env).get("components") if env else None
     bare = ctx(bare_part) if bare_part else {}
@@ -9120,6 +9120,116 @@ def disconnect_checks(client, rep, app_id, workdir, process_id=None):
             f"body_count={bare.get('body_count')!r} feature_count={bare.get('feature_count')!r} "
             f"unverified={bare.get('unverified_aspects')!r}",
             details={"empty_components": empty_rows, "bare_context": bare})
+
+    # ── DC.08/DC.09: ЧУЖОЙ обрыв не смеет метить НАШ сеанс ─────────────────────────────────────
+    # Второй экземпляр поднимается ЭТИМ ЖЕ прибором и завершается по СВОЕМУ PID; наш экземпляр жив
+    # и держит открытый документ с телом. Чужой процесс не трогается: taskkill получает один PID.
+    # Ревизия плиты читается ЗДЕСЬ: после обрыва её взять негде, а мутация экспорта требует её явно.
+    plate_rev_before = current_rev(plate) if plate else None
+    foreign = {}
+    second_pid = None
+    if plate and plate_body and not build_error:
+        env_s, code_s = call("kompas_connect", {"mode": "launch", "make_visible": False}, timeout=300)
+        second_app = result(env_s).get("application_id") or (env_s or {}).get("application_id")
+        second_pid = result(env_s).get("process_id")
+        if second_pid:
+            _subprocess.run(["taskkill", "/PID", str(second_pid), "/F"],
+                            capture_output=True, text=True, timeout=60)
+            for _ in range(25):
+                if not process_alive(second_pid):
+                    break
+                _time.sleep(0.4)
+        # `kompas_capabilities` перечисляет ROT и СВЯЗЫВАЕТ каждую запись: запись погибшего
+        # экземпляра — чужой обрыв, и он не должен становиться пометкой НАШЕГО сеанса.
+        # ДВА ЗАМЕРА, и это часть измерения: сразу после taskkill запись погибшего может ещё
+        # перечисляться, а через паузу — уже нет. Оба числа названы, иначе «записи нет» неотличимо
+        # от «перечисление её не показало».
+        env_c, code_c = call("kompas_capabilities", {}, timeout=120)
+        cap = result(env_c)
+        env_h, code_h = call("kompas_health", {"detail": "diagnostic"}, timeout=60)
+        health = result(env_h)
+        _time.sleep(2.0)
+        env_c2, code_c2 = call("kompas_capabilities", {}, timeout=120)
+        cap2 = result(env_c2)
+        env_h2, code_h2 = call("kompas_health", {"detail": "diagnostic"}, timeout=60)
+        health2 = result(env_h2)
+        after = ctx(plate)
+        foreign = {
+            "second_app": second_app, "second_pid": second_pid,
+            "capabilities_code": code_c, "rot_entries_immediate": cap.get("rot_kompas_entries"),
+            "rot_failure_immediate": cap.get("rot_kompas_entries_failure"),
+            "rot_entries_settled": cap2.get("rot_kompas_entries"),
+            "rot_failure_settled": cap2.get("rot_kompas_entries_failure"),
+            "running_instances": cap.get("running_instances"),
+            "health_code": code_h, "cad_disconnected": health.get("cad_disconnected"),
+            "ignored_outside_session": health.get("cad_disconnect_ignored_outside_session"),
+            "ignored_outside_session_settled": health2.get("cad_disconnect_ignored_outside_session"),
+            "plate_body_count_after": after.get("body_count"),
+        }
+        ok08 = (code_c is None and code_h is None and code_c2 is None and code_h2 is None
+                and health.get("cad_disconnected") is False
+                and health2.get("cad_disconnected") is False
+                and after.get("body_count") == 1)
+        rep.add("DC.08",
+                "чужой обрыв (второй экземпляр завершён по своему PID) НЕ метит наш сеанс: "
+                "kompas_capabilities отвечает успехом, чтение НАШЕГО документа — успехом с "
+                "измеренным телом, kompas_health показывает cad_disconnected=false",
+                "PASS" if ok08 else "FAIL",
+                f"code_cap={code_c} rot_immediate={cap.get('rot_kompas_entries')!r} "
+                f"rot_settled={cap2.get('rot_kompas_entries')!r} "
+                f"cad_disconnected={health.get('cad_disconnected')!r} "
+                f"body_count={after.get('body_count')!r} second_pid={second_pid}",
+                details=foreign)
+
+        # РАЗЛИЧАЮЩАЯ ПОЛОВИНА: «пометки нет» и «ничего не наблюдалось» — разные вещи.
+        # ИЗМЕРЕНО: запись погибшего экземпляра из ROT ИСЧЕЗАЕТ вместе с процессом (rot_immediate и
+        # rot_settled оба равны 1 — только наш живой экземпляр), поэтому чужого COM-объекта в ROT
+        # эта постановка не оставляет и потерь вне команды не рождает. Чужой объект, который ЕСТЬ,
+        # создаётся здесь же: сеанс держит RCW погибшего экземпляра, и его СНЯТИЕ (команда
+        # `disconnect` намеренно НЕ открывает окно наблюдения) обязано быть увидено и НЕ применено.
+        env_f, code_f = call("kompas_disconnect", {
+            "application_id": second_app, "close_owned_application": True}, timeout=120)
+        env_h3, code_h3 = call("kompas_health", {"detail": "diagnostic"}, timeout=60)
+        health3 = result(env_h3)
+        after3 = ctx(plate)
+        ignored = health3.get("cad_disconnect_ignored_outside_session")
+        ok08b = (isinstance(ignored, int) and ignored >= 1
+                 and health3.get("cad_disconnected") is False
+                 and after3.get("body_count") == 1)
+        rep.add("DC.08b",
+                "различающий контроль: потеря ЧУЖОГО COM-объекта ВИДЕНА и НЕ применена — снятие RCW "
+                "погибшего экземпляра даёт cad_disconnect_ignored_outside_session >= 1, при этом "
+                "cad_disconnected=false и чтение НАШЕГО документа по-прежнему успешно",
+                "PASS" if ok08b else "FAIL",
+                f"disconnect_foreign={code_f!r} ignored_outside_session={ignored!r} "
+                f"cad_disconnected={health3.get('cad_disconnected')!r} "
+                f"body_count={after3.get('body_count')!r}",
+                details={"health": health3, "foreign_disconnect": err_of(env_f),
+                         "context_after": after3,
+                         "rot_entries_immediate": cap.get("rot_kompas_entries"),
+                         "rot_entries_settled": cap2.get("rot_kompas_entries")})
+
+        # ── DC.09 (б): attach при оставшейся записи погибшего и живом экземпляре ────────────────
+        env_p, code_p2 = call("kompas_connect", {"mode": "attach", "make_visible": False}, timeout=120)
+        plain_attach = error_code(env_p)
+        env_a, code_a = call("kompas_connect", {"mode": "attach", "process_id": process_id,
+                                                "make_visible": False}, timeout=120)
+        attach_app = result(env_a).get("application_id") or (env_a or {}).get("application_id")
+        attached = ctx(plate) if attach_app else {}
+        ok09 = (code_a is None and attach_app and attached.get("body_count") == 1)
+        rep.add("DC.09",
+                "connect mode=attach с ЯВНЫМ PID живого экземпляра при оставшейся в ROT записи "
+                "погибшего: сеанс поднимается и чтения НАШЕГО документа успешны (запись погибшего "
+                "оставляет attach неоднозначным по документированному правилу — названо в details)",
+                "PASS" if ok09 else "FAIL",
+                f"plain_attach={plain_attach!r} attach_explicit={code_a!r} app={attach_app} "
+                f"body_count={attached.get('body_count')!r} rot={cap.get('rot_kompas_entries')!r}",
+                details={"plain_attach": plain_attach, "attach_explicit": code_a,
+                         "attached_context": attached, "foreign": foreign})
+    else:
+        rep.add("DC.08", "чужой обрыв не метит наш сеанс", "FAIL", f"эталон не построен: {build_error}")
+        rep.add("DC.08b", "чужой обрыв виден и не применён", "FAIL", "эталон не построен")
+        rep.add("DC.09", "attach при записи погибшего экземпляра", "FAIL", "эталон не построен")
 
     # ── обрыв: процесс СВОЕГО экземпляра завершается по PID ────────────────────────────────────
     killed = None
@@ -9219,6 +9329,35 @@ def disconnect_checks(client, rep, app_id, workdir, process_id=None):
             details={"close": err_of(env05a), "close_status": status(env05a),
                      "release": err_of(env05b), "release_status": status(env05b)})
 
+    # ── DC.10 (в): экспорт и чертёжное чтение при обрыве НАШЕГО КОМПАС ─────────────────────────
+    # Экспорт пишет ФАЙЛ из модели и модель не меняет: «исход неизвестен» тут было бы ложной
+    # тревогой, честный ответ — тот же отказ, что у чтения.
+    export_path = _os.path.join(workdir, "dc-export-%s.stl" % _uuid.uuid4().hex[:8])
+    image_path = _os.path.join(workdir, "dc-image-%s.png" % _uuid.uuid4().hex[:8])
+    after_break = {}
+    for cid, tool, args in (
+        ("export_stl", "kompas_export_stl", {
+            "document_id": plate, "expected_revision": plate_rev_before, "target_path": export_path,
+            "binary": True, "max_edge_length_mm": 0.5, "normal_angle_deg": 20.0}),
+        ("export_image", "kompas_export_image", {
+            "document_id": plate, "expected_revision": plate_rev_before, "format": "png",
+            "save_path": image_path}),
+        ("drawing_views", "kompas_list_drawing_views", {"document_id": drawing_doc}),
+        ("title_block", "kompas_get_title_block",
+         {"document_id": drawing_doc, "cell_ids": [str(i) for i in range(0, 13)]}),
+    ):
+        env_x, code_x = call(tool, args, timeout=180)
+        after_break[cid] = {"code": code_x, "status": status(env_x), "message": emsg(env_x),
+                            "retry": err_of(env_x).get("retry_policy")}
+    ok10 = all(r["code"] == "APPLICATION_DISCONNECTED" for r in after_break.values())
+    rep.add("DC.10",
+            "экспорт (export_stl, export_image) и чертёжное чтение (list_drawing_views, "
+            "get_title_block) после обрыва СВОЕГО КОМПАС отвечают APPLICATION_DISCONNECTED, а не "
+            "OUTCOME_UNKNOWN: модель не менялась, согласовывать нечего",
+            "PASS" if ok10 else "FAIL",
+            "; ".join("%s=%s/%s" % (k, v["code"], v["status"]) for k, v in after_break.items()),
+            details={"after_break": after_break})
+
     # ── DC.06: kompas_connect восстанавливает сеанс, чтения снова работают ─────────────────────
     env06, code06 = call("kompas_connect", {"mode": "launch", "make_visible": False}, timeout=300)
     new_app = result(env06).get("application_id") or (env06 or {}).get("application_id")
@@ -9267,6 +9406,10 @@ def disconnect_checks(client, rep, app_id, workdir, process_id=None):
         ("DC.05", "мутации: close_document OUTCOME_UNKNOWN, release_session отказ"),
         ("DC.06", "kompas_connect восстанавливает сеанс, чтения работают"),
         ("DC.07", "контроль: живой КОМПАС даёт честный 0 и пустой список"),
+        ("DC.08", "чужой обрыв не метит наш сеанс"),
+        ("DC.08b", "чужой обрыв виден и не применён"),
+        ("DC.09", "attach при записи погибшего экземпляра в ROT"),
+        ("DC.10", "экспорт и чертёжное чтение при обрыве — APPLICATION_DISCONNECTED"),
     ):
         if not any(row.get("id") == cid for row in rep.rows):
             rep.add(cid, desc, "FAIL", "строка не выполнена (раннее исключение постановки)")

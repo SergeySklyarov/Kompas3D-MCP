@@ -9215,17 +9215,33 @@ def disconnect_checks(client, rep, app_id, workdir, process_id=None):
         env_a, code_a = call("kompas_connect", {"mode": "attach", "process_id": process_id,
                                                 "make_visible": False}, timeout=120)
         attach_app = result(env_a).get("application_id") or (env_a or {}).get("application_id")
-        attached = ctx(plate) if attach_app else {}
-        ok09 = (code_a is None and attach_app and attached.get("body_count") == 1)
+        # Сеанс обязан остаться РАБОЧИМ независимо от ответа attach — это и есть требование (б).
+        attached = ctx(plate)
+        attached_ok = attached.get("body_count") == 1
+        # ДВЕ ВЕТКИ, И ВЕТКУ НАЗЫВАЕТ ИЗМЕРЕНИЕ, а не прибор. ИЗМЕРЕНО в `--all`: в ROT бывает
+        # ЧУЖОЙ живой экземпляр (running_instances = 2 при rot_kompas_entries = 1), и тогда наш
+        # экземпляр кандидатом attach не является вовсе. Тогда требование (б) проверяется по
+        # существу: attach обязан отказать ПО ИМЕНИ, а не подставить чужой экземпляр, и наш сеанс
+        # обязан остаться рабочим.
+        if plain_attach is None:
+            branch = "наш экземпляр — единственный кандидат ROT: attach поднимает сеанс"
+            ok09 = code_a is None and bool(attach_app) and attached_ok
+        else:
+            branch = ("запись ROT принадлежит ЧУЖОМУ живому экземпляру: attach обязан отказать "
+                      "ПО ИМЕНИ (AMBIGUOUS_APPLICATION) и не тронуть наш сеанс")
+            ok09 = (plain_attach == "AMBIGUOUS_APPLICATION"
+                    and code_a == "AMBIGUOUS_APPLICATION" and attached_ok)
         rep.add("DC.09",
-                "connect mode=attach с ЯВНЫМ PID живого экземпляра при оставшейся в ROT записи "
-                "погибшего: сеанс поднимается и чтения НАШЕГО документа успешны (запись погибшего "
-                "оставляет attach неоднозначным по документированному правилу — названо в details)",
+                "connect mode=attach при ЧУЖОЙ записи в ROT: сеанс остаётся рабочим и чтения НАШЕГО "
+                "документа успешны; подставиться под чужой экземпляр attach не имеет права — он либо "
+                "поднимает сеанс (наш экземпляр кандидат), либо отказывает ПО ИМЕНИ",
                 "PASS" if ok09 else "FAIL",
-                f"plain_attach={plain_attach!r} attach_explicit={code_a!r} app={attach_app} "
-                f"body_count={attached.get('body_count')!r} rot={cap.get('rot_kompas_entries')!r}",
-                details={"plain_attach": plain_attach, "attach_explicit": code_a,
-                         "attached_context": attached, "foreign": foreign})
+                f"ветка={branch}; plain_attach={plain_attach!r} attach_explicit={code_a!r} "
+                f"app={attach_app} body_count={attached.get('body_count')!r} "
+                f"rot={cap.get('rot_kompas_entries')!r} running={cap.get('running_instances')!r}",
+                details={"branch": branch, "plain_attach": plain_attach, "attach_explicit": code_a,
+                         "attached_context": attached, "foreign": foreign,
+                         "attach_error": err_of(env_a)})
     else:
         rep.add("DC.08", "чужой обрыв не метит наш сеанс", "FAIL", f"эталон не построен: {build_error}")
         rep.add("DC.08b", "чужой обрыв виден и не применён", "FAIL", "эталон не построен")

@@ -9219,18 +9219,17 @@ def disconnect_checks(client, rep, app_id, workdir, process_id=None):
         attached = ctx(plate)
         attached_ok = attached.get("body_count") == 1
         # ДВЕ ВЕТКИ, И ВЕТКУ НАЗЫВАЕТ ИЗМЕРЕНИЕ, а не прибор. ИЗМЕРЕНО в `--all`: в ROT бывает
-        # ЧУЖОЙ живой экземпляр (running_instances = 2 при rot_kompas_entries = 1), и тогда наш
-        # экземпляр кандидатом attach не является вовсе. Тогда требование (б) проверяется по
-        # существу: attach обязан отказать ПО ИМЕНИ, а не подставить чужой экземпляр, и наш сеанс
-        # обязан остаться рабочим.
-        if plain_attach is None:
-            branch = "наш экземпляр — единственный кандидат ROT: attach поднимает сеанс"
-            ok09 = code_a is None and bool(attach_app) and attached_ok
+        # ЧУЖОЙ живой экземпляр (running_instances = 2 при rot_kompas_entries = 1), и тогда НАШ
+        # экземпляр кандидатом attach не является вовсе. Признак ветки — ОТВЕТ attach С НАШИМ PID:
+        # успех обычного attach о нашем экземпляре не говорит ничего, потому что единственным
+        # кандидатом может быть чужой (измерено: plain_attach успешен, а attach с нашим PID отказал).
+        if code_a is None:
+            branch = "наш экземпляр — кандидат ROT: attach поднимает сеанс"
+            ok09 = bool(attach_app) and attached_ok
         else:
-            branch = ("запись ROT принадлежит ЧУЖОМУ живому экземпляру: attach обязан отказать "
-                      "ПО ИМЕНИ (AMBIGUOUS_APPLICATION) и не тронуть наш сеанс")
-            ok09 = (plain_attach == "AMBIGUOUS_APPLICATION"
-                    and code_a == "AMBIGUOUS_APPLICATION" and attached_ok)
+            branch = ("наш экземпляр кандидатом не является: attach обязан отказать ПО ИМЕНИ и не "
+                      "тронуть наш сеанс")
+            ok09 = code_a in ("AMBIGUOUS_APPLICATION", "APPLICATION_DISCONNECTED") and attached_ok
         rep.add("DC.09",
                 "connect mode=attach при ЧУЖОЙ записи в ROT: сеанс остаётся рабочим и чтения НАШЕГО "
                 "документа успешны; подставиться под чужой экземпляр attach не имеет права — он либо "

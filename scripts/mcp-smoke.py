@@ -9349,6 +9349,7 @@ def disconnect_checks(client, rep, app_id, workdir, process_id=None):
     # тревогой, честный ответ — тот же отказ, что у чтения.
     export_path = _os.path.join(workdir, "dc-export-%s.stl" % _uuid.uuid4().hex[:8])
     image_path = _os.path.join(workdir, "dc-image-%s.png" % _uuid.uuid4().hex[:8])
+    step_path = _os.path.join(workdir, "dc-export-%s.step" % _uuid.uuid4().hex[:8])
     after_break = {}
     for cid, tool, args in (
         ("export_stl", "kompas_export_stl", {
@@ -9357,6 +9358,9 @@ def disconnect_checks(client, rep, app_id, workdir, process_id=None):
         ("export_image", "kompas_export_image", {
             "document_id": plate, "expected_revision": plate_rev_before, "format": "png",
             "save_path": image_path}),
+        ("export_step", "kompas_export_step", {
+            "document_id": plate, "expected_revision": plate_rev_before,
+            "output_path": step_path}),
         ("drawing_views", "kompas_list_drawing_views", {"document_id": drawing_doc}),
         ("title_block", "kompas_get_title_block",
          {"document_id": drawing_doc, "cell_ids": [str(i) for i in range(0, 13)]}),
@@ -9366,9 +9370,9 @@ def disconnect_checks(client, rep, app_id, workdir, process_id=None):
                             "retry": err_of(env_x).get("retry_policy")}
     ok10 = all(r["code"] == "APPLICATION_DISCONNECTED" for r in after_break.values())
     rep.add("DC.10",
-            "экспорт (export_stl, export_image) и чертёжное чтение (list_drawing_views, "
-            "get_title_block) после обрыва СВОЕГО КОМПАС отвечают APPLICATION_DISCONNECTED, а не "
-            "OUTCOME_UNKNOWN: модель не менялась, согласовывать нечего",
+            "экспорт (export_stl, export_image, export_step) и чертёжное чтение "
+            "(list_drawing_views, get_title_block) после обрыва СВОЕГО КОМПАС отвечают "
+            "APPLICATION_DISCONNECTED, а не OUTCOME_UNKNOWN: модель не менялась, согласовывать нечего",
             "PASS" if ok10 else "FAIL",
             "; ".join("%s=%s/%s" % (k, v["code"], v["status"]) for k, v in after_break.items()),
             details={"after_break": after_break})

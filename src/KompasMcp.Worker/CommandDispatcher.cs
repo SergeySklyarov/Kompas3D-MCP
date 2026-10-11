@@ -151,12 +151,13 @@ public sealed class CommandDispatcher
     /// <summary>Commands that WRITE A FILE but leave the MODEL untouched. A lost connection during one of
     /// them leaves nothing to reconcile, so the honest answer is the same refusal a READ gets, not
     /// "the outcome is unknown".</summary>
-    /// <remarks>LIMIT, NAMED: <c>kompas_export_step</c> and <c>kompas_save_document</c> are deliberately
-    /// NOT here — they keep the mutation classification, because widening the set reclassifies a refusal
-    /// the client may already act on, and only the two exports named by the order were asked for.
+    /// <remarks>LIMIT, NAMED: <c>kompas_save_document</c> is deliberately NOT here — it keeps the mutation
+    /// classification, because it rewrites the document the model is reconciled against. The three
+    /// exports are file-writing reads: the model is untouched either way.
     /// History: docs/decisions/adapter-core.md#disconnect-latch</remarks>
     private static readonly HashSet<string> FileWritingReads = new(StringComparer.Ordinal)
     {
+        WorkerCommands.ExportStep,
         WorkerCommands.ExportStl,
         WorkerCommands.ExportImage,
     };

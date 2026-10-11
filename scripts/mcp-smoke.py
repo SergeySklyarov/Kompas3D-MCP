@@ -691,10 +691,17 @@ def run_extra_group_fresh(client, rep, workdir, key, vm_reference_doc):
     dispatch_extra_group(client, rep, app_id, workdir, key, vm_reference_doc, process_id)
     # Сеанс гасим сами. Отказ гашения НЕ отменяет уже полученные строки группы, но и не молчит:
     # `client_bugs_20261010` отключает приложение сама, и её отказ здесь — ожидаемый.
+    # Группа `disconnect` идёт дальше: она НАМЕРЕННО завершает процесс своего экземпляра, поэтому
+    # подтвердить ШТАТНОЕ завершение уже нельзя, и `OUTCOME_UNKNOWN` здесь — названный ожидаемый исход
+    # («погасить нечем»), а не находка. Иначе каждая строка `--all` несла бы постоянный NAMED, и
+    # читатель приучался бы его пропускать. Для остальных групп тот же код — по-прежнему находка.
+    expected_shutdown = (None, "APPLICATION_DISCONNECTED")
+    if key == "disconnect":
+        expected_shutdown = expected_shutdown + ("OUTCOME_UNKNOWN",)
     _e, env2, _r = client.tool("kompas_disconnect", {"application_id": app_id,
                                                      "close_owned_application": True,
                                                      "operation_id": str(uuid.uuid4())}, timeout=120)
-    if error_code(env2) not in (None, "APPLICATION_DISCONNECTED"):
+    if error_code(env2) not in expected_shutdown:
         rep.add("ALL." + key, f"группа {key}: сеанс не погашен", "NAMED",
                 f"kompas_disconnect вернул {error_code(env2)}")
 

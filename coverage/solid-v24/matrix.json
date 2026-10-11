@@ -11245,9 +11245,9 @@
    "context": "part.sketch",
    "catalog_ref": "G6",
    "catalog_level": "mcp_verified",
-   "title": "Размерные типы: ksCDimWithVariable с Expression/Variable, ksCFixedDim, ksCFixedAngle, ksCFixedLenght",
-   "parameters_schema": "schemas/kompas_create_sketch_constraint.json",
-   "adapter_route": "Тот же маршрут; поля value/expression/variable принимаются только для ksCDimWithVariable и на этой сборке получают отказ ядра.",
+   "title": "Управляющие размеры ЧЕТЫРЁХ видов: линейный, диаметральный, радиальный, угловой",
+   "parameters_schema": "schemas/kompas_create_sketch_dimension.json",
+   "adapter_route": "У каждого вида СВОЯ коллекция контейнера ISymbols2DContainer (LineDimensions / DiametralDimensions / RadialDimensions / AngleDimensions) → Add() → интерфейс размера → IDrawingObject.Update(). У линейного вида значение двигает геометрию только через ksCAssociation; у трёх новых запрошенная ассоциация отвергается (Create=false), и связывает размер ОПОРНЫЙ объект (BaseObject / BaseObject1+BaseObject2).",
    "actions": {
     "discover": "verified",
     "create": "verified",
@@ -11269,11 +11269,18 @@
     "SKC.11.dimension_types",
     "SKC.17.dimension_drives_length",
     "SKC.18.dimension_survives_reopen",
-    "SKC.19.dimension_variable"
+    "SKC.19.dimension_variable",
+    "SKC.23.diametral_dimension",
+    "SKC.24.radial_dimension",
+    "SKC.25.angular_dimension",
+    "SKC.26.dimension_value_control",
+    "SKC.27.dimension_kind_refusals",
+    "SKC.28.diametral_dimension_extruded_body"
    ],
    "evidence": [
-    "docs/acceptance/sketch-constraints/sketch-constraints-acceptance.json",
-    "docs/acceptance/api7/sketch-constraints.json",
+    "docs/acceptance/evidence/20261011-dimension-kinds-d169ae0/smoke-all-report.json",
+    "docs/acceptance/evidence/20261011-dimension-kinds-d169ae0/sketch-constraints-acceptance.json",
+    "docs/acceptance/evidence/20261011-dimension-kinds-d169ae0/api7-sketch-constraints.json",
     "docs/04_KOMPAS_API_NOTES.md",
     "scripts/mcp-smoke.py"
    ],
@@ -11281,7 +11288,13 @@
     "ИЗМЕРЕНО через поставку: управляющий размер на отрезке даёт длину 40 → 50 при значении 50, и 50 читается после save → close → reopen.",
     "ИЗМЕРЕНО: цепочка переменной ДЕТАЛИ работает целиком — kompas_create_variable L=50 → kompas_list_feature_parameters на ПРИЗНАКЕ ЭСКИЗА видит переменную размера (['v8','v9']) → kompas_bind_parameter v9 → 'L' → kompas_set_variable L=60 + перестроение → длина 60 → после переоткрытия 60.",
     "ПОДТВЕРЖДЕНИЕ ПО ТРЁМ ФАКТАМ, а не по общей паре: точки размера на концах отрезка, значение перечитано равным запрошенному, длина отрезка равна значению. Общая пара Create()==true && Valid!=false для прочих типов НЕ ослаблена: ассоциация читается как две ksCMergePoints (Valid=true), тогда как запись ksCAssociation несёт Valid=false.",
-    "Граница, названная числом: на ОТРЕЗКЕ (а не на объекте-размере) ksCFixedDim отвергается GEOMETRY_FAILED."
+    "Граница, названная числом: на ОТРЕЗКЕ (а не на объекте-размере) ksCFixedDim отвергается GEOMETRY_FAILED.",
+    "ИЗМЕРЕНО 11.10.2026 (доводка): диаметральный размер на окружности R10 со значением 30 даёт радиус 10 → 15; радиальный на дуге R10 со значением 15 — радиус 10 → 15; угловой на двух отрезках под 30° со значением 45 — угол 30 → 44.999999999797. Все три переживают save → close → reopen, и смена переменной ДЕТАЛИ двигает геометрию дальше (D 30 → 40, R 15 → 20, A 45 → 60).",
+    "РАЗЛИЧАЮЩИЙ КОНТРОЛЬ на всех трёх видах: значение, РАВНОЕ уже измеренной геометрии, её НЕ двигает — движение принадлежит ЗНАЧЕНИЮ, а не факту создания размера.",
+    "СВЯЗЫВАНИЕ У ВИДОВ РАЗНОЕ, и это измерено: у линейного вида значение двигает геометрию только через ksCAssociation, у трёх новых запрошенная ksCAssociation отвечает Create=false, а запись её в списке объекта-размера при этом есть — связывает размер ОПОРНЫЙ объект, названный справкой.",
+    "СЦЕНАРИЙ КЛИЕНТА измерен независимо от размера: диаметр отверстия через переменную детали двигает объём выдавленного тела по аналитике π·D²/4·h — 3141.59 при R10, 7068.58 при Ø30, 12566.37 при Ø40.",
+    "НАЗВАННОЕ РАСХОЖДЕНИЕ СПРАВКИ: iradialdimension.html обещает у радиального размера NominalValue-диаметр, измерено — РАДИУС. Диаметральный вид принят по справке, радиальный по измерению.",
+    "НАЗВАННОЕ СУЖЕНИЕ: справка допускает у диаметрального размера и окружность, и дугу; реализована ОКРУЖНОСТЬ."
    ],
    "acceptance": [
     "размер создан как ОБЪЕКТ эскиза и подтверждён перечитанным списком его ограничений",

@@ -3545,6 +3545,41 @@ public sealed partial class Api5Session
     /// History: docs/decisions/adapter-core.md#rebuild-verify</summary>
     private const int RebuildAttemptLimit = 3;
 
+    /// <summary>Rebuild until the document volume stops moving; returns the attempts and both volumes.</summary>
+    /// <remarks>INVARIANT: a rebuild recomputes the model that is ALREADY built, so the volume must not
+    /// move. MEASURED: one RebuildDocument() can leave a feature unapplied, and the NEXT rebuild restores
+    /// it - so a state read after a SINGLE rebuild is not necessarily a state of the built model, and a
+    /// caller recording such a state records something the model does not owe. <c>Ok</c> is the answer of
+    /// the LAST documented call, so a caller keeps its own refusal behaviour.
+    /// History: docs/decisions/adapter-core.md#rebuild-verify</remarks>
+    private (int Attempts, double? Baseline, double? Observed, bool Ok) SettleRebuild(
+        DocumentEntry document)
+    {
+        var baseline = ReadVolume(document);
+        var attempts = 0;
+        double? observed = baseline;
+        var ok = false;
+        while (attempts < RebuildAttemptLimit)
+        {
+            ok = document.Document3D.RebuildDocument();
+            if (!ok)
+            {
+                break;
+            }
+
+            document.Document3D.UpdateDocumentParam();
+            attempts++;
+            observed = ReadVolume(document);
+            // An unreadable side stops the loop: repeating cannot compare what was never read.
+            if (baseline is null || observed is null || RebuildSettlement.Settled(baseline, observed))
+            {
+                break;
+            }
+        }
+
+        return (attempts, baseline, observed, ok);
+    }
+
     /// <summary>Rebuild the model from its feature tree.</summary>
     /// <remarks>INVARIANT: a rebuild recomputes the model that is already built, so the document volume
     /// must not move. MEASURED: one RebuildDocument() can leave a feature unapplied - the document then
@@ -3556,29 +3591,15 @@ public sealed partial class Api5Session
     {
         var document = RequireDocument(command.DocumentId);
         var unverified = new List<string>();
-        var baseline = ReadVolume(document);
-        var attempts = 0;
-        double? observed = baseline;
-        while (attempts < RebuildAttemptLimit)
+        var (attempts, baseline, observed, ok) = SettleRebuild(document);
+        if (!ok)
         {
-            if (!document.Document3D.RebuildDocument())
-            {
-                throw new KompasContractException(
-                    ErrorCodes.GeometryFailed,
-                    "RebuildDocument() вернул false.",
-                    RetryPolicy.AfterReconciliation,
-                    partialEffects: true,
-                    details: new Dictionary<string, object?> { ["rebuild_attempts"] = attempts + 1 });
-            }
-
-            document.Document3D.UpdateDocumentParam();
-            attempts++;
-            observed = ReadVolume(document);
-            // An unreadable side stops the loop: repeating cannot compare what was never read.
-            if (baseline is null || observed is null || RebuildSettlement.Settled(baseline, observed))
-            {
-                break;
-            }
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                "RebuildDocument() вернул false.",
+                RetryPolicy.AfterReconciliation,
+                partialEffects: true,
+                details: new Dictionary<string, object?> { ["rebuild_attempts"] = attempts + 1 });
         }
 
         var fmt = System.Globalization.CultureInfo.InvariantCulture;

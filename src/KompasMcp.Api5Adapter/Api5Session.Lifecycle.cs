@@ -42,6 +42,13 @@ public partial class Api5Session
                 RetryPolicy.Never);
         }
 
+        // INVARIANT: the state a later RESTORE is compared against must be a state of the BUILT model.
+        // MEASURED: a rebuild can leave a feature unapplied, and the document then answers a volume
+        // larger by exactly the wall of one hole; the write's own rebuild restored the model, so a record
+        // taken on that state made the restore REFUSE a correct model. The model is therefore settled
+        // BEFORE the record, and again after the write, so both compared sides are built states.
+        // History: docs/decisions/adapter-core.md#rebuild-verify
+        SettleRebuild(document);
         var volumeBefore = ReadVolume(document);
         var countBefore = CountFeatures(document);
         var stateBefore = ReadFeatureState(entity);
@@ -57,7 +64,8 @@ public partial class Api5Session
         var revisionBeforeWrite = document.Revision;
 
         feature.excluded = command.Suppressed;
-        document.Document3D.RebuildDocument();
+        // Settled, not a single call: the state read below is what a later restore is compared against.
+        SettleRebuild(document);
         BumpRevision(document, command.Suppressed ? "feature.suppress" : "feature.restore");
 
         // Re-read from a fresh feature object: the one held during the write may be a cached view, and

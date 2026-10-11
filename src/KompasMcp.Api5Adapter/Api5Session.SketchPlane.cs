@@ -118,6 +118,9 @@ public sealed partial class Api5Session
         // route applied the edit" is a measured quantity, not an implementation detail.
         var applyRoute = "sketch.Update()";
         var updated = TryUpdate(sketch, diagnostics);
+        // The edit reaches the dependent body through sketch.Update(), so the body read below must be a
+        // read of a model that finished building.
+        SettleAfterMutation(document);
 
         var supportAfter = TryGetPlaneType(definition);
         var after = DescribeBody(document);

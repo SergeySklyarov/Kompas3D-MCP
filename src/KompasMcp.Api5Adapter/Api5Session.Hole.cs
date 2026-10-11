@@ -106,7 +106,7 @@ public partial class Api5Session
         // Without RebuildModel the API7 write stays a representation: MEASURED by probe E on
         // IExtrusion.Sketch and repeated on the chamfer F.10 and the fillet. The call order is part of
         // the contract, not style.
-        Api7Bridge.Rebuild(container, document.Document3D);
+        RebuildApi7AndSettle(container, document);
         BumpRevision(document, "hole." + command.Mode.ToString().ToLowerInvariant());
 
         var volumeAfter = ReadVolume(document);
@@ -808,7 +808,7 @@ public partial class Api5Session
         // The order "write → Update() → rebuild" is part of the contract, not style: without
         // RebuildModel the API7 write stays a representation (MEASURED by probe E and repeated on the
         // chamfer and fillet).
-        Api7Bridge.Rebuild(container, document.Document3D);
+        RebuildApi7AndSettle(container, document);
         BumpRevision(document, "hole.update");
 
         var volumeAfter = ReadVolume(document);

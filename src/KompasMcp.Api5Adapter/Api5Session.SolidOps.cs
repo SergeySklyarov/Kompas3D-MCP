@@ -123,7 +123,7 @@ public sealed partial class Api5Session
                 });
         }
 
-        Api7Bridge.Rebuild(container, document.Document3D);
+        RebuildApi7AndSettle(container, document);
         BumpRevision(document, "solid.boolean");
 
         var rows = ReadSolidBodies(document);
@@ -258,7 +258,7 @@ public sealed partial class Api5Session
                 });
         }
 
-        Api7Bridge.Rebuild(container, document.Document3D);
+        RebuildApi7AndSettle(container, document);
         BumpRevision(document, "solid.split");
 
         var rows = ReadSolidBodies(document);
@@ -391,7 +391,7 @@ public sealed partial class Api5Session
                 });
         }
 
-        Api7Bridge.Rebuild(container, document.Document3D);
+        RebuildApi7AndSettle(container, document);
         BumpRevision(document, "solid.cut_by_plane");
 
         var rows = ReadSolidBodies(document);
@@ -582,7 +582,7 @@ public sealed partial class Api5Session
 
         RequirePlacementRoundTrip(created.Feature, matrix, command.Kind);
 
-        Api7Bridge.Rebuild(container, document.Document3D);
+        RebuildApi7AndSettle(container, document);
         BumpRevision(document, "solid.reposition");
 
         var rows = ReadSolidBodies(document);
@@ -1660,7 +1660,7 @@ public sealed partial class Api5Session
                 details: new Dictionary<string, object?> { ["api7_failure"] = written.Failure });
         }
 
-        Api7Bridge.Rebuild(container, document.Document3D);
+        RebuildApi7AndSettle(container, document);
         BumpRevision(document, "solid.reposition.update");
 
         var readBack = Api7SolidReposition.ReadPlacement(container, index);
@@ -2148,7 +2148,7 @@ public sealed partial class Api5Session
                 });
         }
 
-        Api7Bridge.Rebuild(container, document.Document3D);
+        RebuildApi7AndSettle(container, document);
         BumpRevision(document, "solid.split.update");
 
         var rows = ReadSolidBodies(document);
@@ -2444,7 +2444,7 @@ public sealed partial class Api5Session
                 });
         }
 
-        Api7Bridge.Rebuild(container, document.Document3D);
+        RebuildApi7AndSettle(container, document);
         BumpRevision(document, "solid.cut_by_plane.update");
 
         var rows = ReadSolidBodies(document);
@@ -2764,7 +2764,7 @@ public sealed partial class Api5Session
                 });
         }
 
-        Api7Bridge.Rebuild(container, document.Document3D);
+        RebuildApi7AndSettle(container, document);
         BumpRevision(document, "solid.boolean.update");
 
         var operationAfter = Api7SolidBoolean.ReadOperation(container, index);

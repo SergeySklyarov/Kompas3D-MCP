@@ -217,7 +217,7 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["named_code"] = "GEOMETRY_FAILED" });
         }
 
-        Api7Bridge.Rebuild(container, document.Document3D);
+        RebuildApi7AndSettle(container, document);
 
         var reference = References.Register("feature", document.Id, document.Revision, loft);
         BumpRevision(document, "loft.create");

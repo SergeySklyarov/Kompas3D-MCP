@@ -372,7 +372,7 @@ public partial class Api5Session
         }
 
         // Without the rebuild the API7 write stays a representation.
-        Api7Bridge.Rebuild(container, document.Document3D);
+        RebuildApi7AndSettle(container, document);
         BumpRevision(document, "pattern." + family);
 
         var volumeAfter = ReadVolume(document);

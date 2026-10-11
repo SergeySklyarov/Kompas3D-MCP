@@ -122,7 +122,7 @@ public partial class Api5Session
 
         SafeBool(entity.Update);
         part.RebuildModel();
-        document.Document3D.RebuildDocument();
+        SettleAfterMutation(document);
 
         // Path length is read AFTER the build: the pre-build read was an instrument defect, not a
         // product fact.

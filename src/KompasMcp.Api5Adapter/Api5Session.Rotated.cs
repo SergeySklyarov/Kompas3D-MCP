@@ -128,7 +128,7 @@ public partial class Api5Session
         // Without a rebuild the API7 write stays a representation — measured by probe E on
         // IExtrusion.Sketch and repeated here: the order "write → Update() → Rebuild()" is part of
         // the contract, not a style.
-        Api7Bridge.Rebuild(container, document.Document3D);
+        RebuildApi7AndSettle(container, document);
         BumpRevision(document, "rotated." + operationName);
 
         var volumeAfter = ReadVolume(document);
@@ -624,7 +624,7 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["api7_failure"] = write.Failure });
         }
 
-        Api7Bridge.Rebuild(container, document.Document3D);
+        RebuildApi7AndSettle(container, document);
         BumpRevision(document, "rotated.update");
 
         var volumeAfter = ReadVolume(document);

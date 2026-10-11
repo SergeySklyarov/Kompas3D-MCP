@@ -193,7 +193,7 @@ public partial class Api5Session
         var updated = SafeBool(entity.Update) == true;
         var part = document.PartNow();
         part.RebuildModel();
-        document.Document3D.RebuildDocument();
+        SettleAfterMutation(document);
         BumpRevision(document, "sweep.update");
 
         // Re-read FROM THE MODEL: the definition is taken from the feature afresh, not the requested
@@ -649,7 +649,7 @@ public partial class Api5Session
         var sectionsAfterDocumentRebuild = Api7Loft.SectionCount(loft);
         var volumeAfterApi5Rebuild = ReadVolume(document);
 
-        Api7Bridge.Rebuild(container, document.Document3D);
+        RebuildApi7AndSettle(container, document);
         BumpRevision(document, "loft.update");
         // Sections are read by TWO routes, and BOTH numbers are published: in ILoft (where it was
         // written) and in the feature definition (from where kompas_get_feature reads them). A divergence
@@ -1190,7 +1190,7 @@ public partial class Api5Session
 
         var part = document.PartNow();
         part.RebuildModel();
-        document.Document3D.RebuildDocument();
+        SettleAfterMutation(document);
         BumpRevision(document, "shell.update");
 
         // Re-read FROM THE MODEL: the definition is taken from the feature afresh.

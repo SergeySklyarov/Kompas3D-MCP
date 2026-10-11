@@ -199,6 +199,9 @@ public sealed partial class Api5Session
 
             var documentId = RegisterImportedDocument(target, application, trace);
             var entry = RequireDocument(documentId);
+            // A model just built by an import is a state of the BUILT model only if its own rebuild
+            // applied every feature: the counts below must not describe a half-built model.
+            SettleBuiltModel(entry);
             var bodies = CountBodies(entry);
             var components = CountComponents(entry);
             trace.Add($"  тел={bodies}, компонентов={components}");

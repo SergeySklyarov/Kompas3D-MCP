@@ -1,3 +1,4 @@
+using KompasMcp.Contracts;
 using KompasMcp.Domain.Geometry;
 using Xunit;
 
@@ -62,5 +63,77 @@ public class RebuildSettlementTests
         Assert.NotEqual(RebuildSettlement.Repeated, RebuildSettlement.ChangedModel);
         Assert.NotEqual(RebuildSettlement.Repeated, RebuildSettlement.VolumeNotCompared);
         Assert.NotEqual(RebuildSettlement.ChangedModel, RebuildSettlement.VolumeNotCompared);
+    }
+
+    [Fact]
+    public void Describe_CarriesTheTwoVolumesAndTheAttemptCount()
+    {
+        // The mark is only actionable with the numbers: "the rebuild moved the model" alone leaves the
+        // client unable to tell a hole wall from a rounding difference.
+        var repeated = RebuildSettlement.Describe(2, 132256.500735, 132256.500735);
+        var moved = RebuildSettlement.Describe(3, 132256.500735, 133026.190951);
+
+        Assert.NotNull(repeated);
+        Assert.StartsWith(RebuildSettlement.Repeated, repeated);
+        Assert.Contains("перестроений 2", repeated);
+        Assert.NotNull(moved);
+        Assert.StartsWith(RebuildSettlement.ChangedModel, moved);
+        Assert.Contains("133026.191", moved);
+        Assert.Contains("перестроений 3", moved);
+    }
+
+    [Fact]
+    public void Describe_OnAFirstAttemptSettle_SaysNothing()
+    {
+        // The before-state of the NEXT operation is the after-state of this one: a settled operation
+        // must leave no mark, else every following operation would inherit a false alarm.
+        Assert.Null(RebuildSettlement.Describe(1, 132256.500735, 132256.500735));
+    }
+
+    [Fact]
+    public void Outcome_MovingTheModel_CapsTheLevelAtStructureChecked()
+    {
+        var outcome = new RebuildSettlementOutcome(3, 132256.500735, 133026.190951);
+
+        Assert.True(outcome.ModelMoved);
+        Assert.False(outcome.Settled);
+        Assert.Equal(
+            VerificationLevel.StructureChecked,
+            outcome.CapLevel(VerificationLevel.GeometryChecked));
+    }
+
+    [Fact]
+    public void Outcome_SettledOnTheSecondAttempt_KeepsTheLevel_AndIsNamed()
+    {
+        var outcome = new RebuildSettlementOutcome(2, 132256.500735, 132256.500735);
+
+        Assert.True(outcome.Settled);
+        Assert.False(outcome.ModelMoved);
+        Assert.Equal(VerificationLevel.GeometryChecked, outcome.CapLevel(VerificationLevel.GeometryChecked));
+        Assert.StartsWith(RebuildSettlement.Repeated, outcome.Note);
+    }
+
+    [Fact]
+    public void Outcome_WithAnUnreadVolume_IsNotMoved_AndTheGapIsNamed()
+    {
+        // "Not compared" is a named gap, not a moved model: capping the level here would turn a missing
+        // read into a claim about the geometry that nobody made.
+        var outcome = new RebuildSettlementOutcome(1, null, 132256.500735);
+
+        Assert.False(outcome.Settled);
+        Assert.False(outcome.ModelMoved);
+        Assert.Equal(VerificationLevel.GeometryChecked, outcome.CapLevel(VerificationLevel.GeometryChecked));
+        Assert.Equal(RebuildSettlement.VolumeNotCompared, outcome.Note);
+    }
+
+    [Fact]
+    public void CapLevel_NeverRaisesALowerLevel()
+    {
+        Assert.Equal(
+            VerificationLevel.CallReturned,
+            RebuildSettlement.CapLevel(VerificationLevel.CallReturned, modelMoved: true));
+        Assert.Equal(
+            VerificationLevel.GeometryChecked,
+            RebuildSettlement.CapLevel(VerificationLevel.GeometryChecked, modelMoved: false));
     }
 }

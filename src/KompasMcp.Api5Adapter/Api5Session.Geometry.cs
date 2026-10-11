@@ -288,6 +288,7 @@ public sealed partial class Api5Session
 
             BumpRevision(document, "sketch.delete");
             _sketchProfiles.Remove(command.SketchRef);
+            SettleAfterMutation(document);
 
             // Emptying a sketch removes the profile the dependent feature was built on, so the same
             // vanishing-body question applies here as on replace.
@@ -343,6 +344,9 @@ public sealed partial class Api5Session
         }
 
         BumpRevision(document, "sketch.edit");
+        // The guard below reads the dependent body: it must read a model that finished building, and
+        // the state the NEXT command starts from is the state this one leaves.
+        SettleAfterMutation(document);
 
         // INVARIANT: the calls' answers are not evidence — probe G.9 saw every one succeed while the
         // dependent body vanished entirely. Losing the body is a refusal, not a geometry_checked result.
@@ -1255,7 +1259,7 @@ public sealed partial class Api5Session
                 });
         }
 
-        document.Document3D.RebuildDocument();
+        SettleAfterMutation(document);
         BumpRevision(document, "extrude");
 
         var bodiesAfter = ReadBodySnapshots(document.PartNow());
@@ -3091,7 +3095,7 @@ public sealed partial class Api5Session
                 partialEffects: true);
         }
 
-        document.Document3D.RebuildDocument();
+        SettleAfterMutation(document);
         BumpRevision(document, "fillet");
 
         var volumeAfter = ReadVolume(document);
@@ -3320,7 +3324,7 @@ public sealed partial class Api5Session
                 details: new Dictionary<string, object?> { ["object_error"] = objectError });
         }
 
-        document.Document3D.RebuildDocument();
+        SettleAfterMutation(document);
         BumpRevision(document, "chamfer");
 
         var volumeAfter = ReadVolume(document);

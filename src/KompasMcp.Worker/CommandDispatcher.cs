@@ -10,6 +10,7 @@ using KompasMcp.Contracts.Ipc;
 using KompasMcp.Domain.Documents;
 using KompasMcp.Domain.Files;
 using KompasMcp.Domain.Com;
+using KompasMcp.Domain.Geometry;
 
 namespace KompasMcp.Worker;
 
@@ -676,6 +677,10 @@ public sealed class CommandDispatcher
         // Feature count BEFORE the mutation. A refusal that leaves it HIGHER created a feature and left
         // it in the tree — MEASURED, not assumed, so the refusal can name the object to delete.
         var featuresBefore = CountFeaturesSafe(document);
+        // The settlement marks of the PREVIOUS command are dropped before this one runs: a command that
+        // refuses must not carry the marks of the command before it, and a body mutation collects its own
+        // marks in the adapter as it rebuilds. History: docs/decisions/adapter-core.md#rebuild-verify
+        _session.ResetRebuildSettlement();
         object? outcome;
         try
         {
@@ -683,6 +688,10 @@ public sealed class CommandDispatcher
         }
         catch (Exception ex)
         {
+            // The settlement of THIS command travels with the refusal too: a refusal whose numbers were
+            // read on a model that did not come back to its own volume was computed on a state the model
+            // does not owe, and the client must be able to see that.
+            ex = WithRebuildSettlement(ex);
             // FAILURE: the file is returned to its pre-mutation state, BUT ONLY WHEN THAT MAKES SENSE.
             // The pure ControlCopyRestorePolicy decides: a read-only document is not overwritten, and a
             // failure before COM deserves no write to the user's file.
@@ -709,7 +718,7 @@ public sealed class CommandDispatcher
         // "the directory does not grow" and "the copy could not be removed" are different claims.
         var copyCleanupFailure = _controlCopies.DeleteAfterSuccess(copy.Path);
 
-        var node = Tagged(documentId, document.Revision, outcome) ?? new JsonObject();
+        var node = Tagged(documentId, document.Revision, outcome) as JsonObject ?? new JsonObject();
         // The copy is named BOTH as a string and as fields. The string is read by a human, the fields by a
         // probe: parsing the human-readable wording would make acceptance depend on the wording's revision.
         node["control_copy"] = DocumentControlCopies.Describe(copy);
@@ -721,7 +730,78 @@ public sealed class CommandDispatcher
             node["control_copy_cleanup_failure"] = copyCleanupFailure;
         }
 
+        PublishRebuildSettlement(node);
         return node;
+    }
+
+    /// <summary>Publish what the automatic settlement of this mutation did NOT confirm, in the same names
+    /// and the same lists <c>kompas_rebuild</c> uses.</summary>
+    /// <remarks>INVARIANT: a result computed on a model that did not come back to its own volume may not
+    /// read as <c>geometry_checked</c>; the level is lowered and the reason is warned about, not hidden.
+    /// The marks go to the tool's own <c>verification.unverified_aspects</c> (the field the client reads)
+    /// and to <c>context.unverified_aspects</c> (the list <c>kompas_rebuild</c> publishes them in).
+    /// History: docs/decisions/adapter-core.md#rebuild-verify</remarks>
+    private void PublishRebuildSettlement(JsonObject node)
+    {
+        var notes = _session.RebuildSettlementNotes;
+        var moved = _session.RebuildModelMoved;
+        if (notes.Count == 0 && !moved)
+        {
+            return;
+        }
+
+        if (node["verification"] is JsonObject verification
+            && JsonSerializer.Deserialize<VerificationDto>(verification.ToJsonString(), KompJson.Options) is { } dto)
+        {
+            var aspects = new List<string>(dto.UnverifiedAspects);
+            aspects.AddRange(notes);
+            node["verification"] = KompJson.ToNode(new VerificationDto(
+                RebuildSettlement.CapLevel(dto.Level, moved), dto.Checks, aspects));
+        }
+
+        if (node["context"] is JsonObject context)
+        {
+            var aspects = (context["unverified_aspects"] as JsonArray) ?? new JsonArray();
+            foreach (var note in notes)
+            {
+                aspects.Add(note);
+            }
+
+            context["unverified_aspects"] = aspects;
+        }
+
+        if (moved)
+        {
+            var warnings = (node["warnings"] as JsonArray) ?? new JsonArray();
+            warnings.Add(RebuildSettlement.ChangedModelWarning);
+            node["warnings"] = warnings;
+        }
+    }
+
+    /// <summary>Carry the settlement marks of a REFUSED command into its <c>details</c>. The original code
+    /// and retry policy are preserved: a refusal does not change because a rebuild was not settled.</summary>
+    private Exception WithRebuildSettlement(Exception ex)
+    {
+        var notes = _session.RebuildSettlementNotes;
+        if (notes.Count == 0 || ex is not KompasContractException contract)
+        {
+            return ex;
+        }
+
+        var details = new Dictionary<string, object?>();
+        if (contract.Details is not null)
+        {
+            foreach (var (key, value) in contract.Details)
+            {
+                details[key] = value;
+            }
+        }
+
+        details["rebuild_settlement"] = notes.ToArray();
+        details["rebuild_model_moved"] = _session.RebuildModelMoved;
+        return new KompasContractException(
+            contract.Code, contract.Message, contract.RetryPolicy, contract.PartialEffects,
+            contract.Hresult, details);
     }
 
     /// <summary>Whether a refused mutation left a NEW feature in the tree, from the feature count before
@@ -901,7 +981,13 @@ public sealed class CommandDispatcher
     private object? Open(IpcFrame request)
     {
         var document = _session.OpenDocument(Argument<OpenDocumentCommand>(request));
-        return _session.Context(document, includeTopology: false);
+        // A reopened model is a state of the BUILT model only if its own rebuild applied every feature;
+        // the client's first read must not describe a model the kernel left half built. This is the one
+        // boundary no mutation covers, so the settlement happens here.
+        _session.ResetRebuildSettlement();
+        _session.SettleBuiltModel(document);
+        return _session.Context(document, includeTopology: false,
+            extraUnverified: _session.RebuildSettlementNotes);
     }
 
     private object? Context(IpcFrame request)
@@ -1468,7 +1554,17 @@ public sealed class CommandDispatcher
 
     private object? Topology(IpcFrame request) => _session.ReadTopology(Argument<ReadTopologyCommand>(request));
 
-    private object? ImportStep(IpcFrame request) => _session.ImportStep(Argument<ImportStepCommand>(request));
+    private object? ImportStep(IpcFrame request)
+    {
+        _session.ResetRebuildSettlement();
+        var result = _session.ImportStep(Argument<ImportStepCommand>(request));
+        var notes = _session.RebuildSettlementNotes;
+        // The imported model is settled before its counts are read; what that settlement did not confirm
+        // is named in the same list the import already uses for its own gaps.
+        return notes.Count == 0
+            ? result
+            : result with { UnverifiedAspects = result.UnverifiedAspects.Concat(notes).ToArray() };
+    }
 
     private object? UnitProbe(IpcFrame request) => _session.UnitProbe(Argument<UnitProbeCommand>(request));
 

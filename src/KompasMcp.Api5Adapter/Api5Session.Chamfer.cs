@@ -106,7 +106,7 @@ public partial class Api5Session
         }
 
         // Without RebuildModel the IChamfer write stays a representation (MEASURED on IExtrusion.Sketch).
-        Api7Bridge.Rebuild(container, document.Document3D);
+        RebuildApi7AndSettle(container, document);
         BumpRevision(document, "chamfer.angle");
 
         var volumeAfter = ReadVolume(document);
@@ -404,7 +404,7 @@ public partial class Api5Session
 
         // Without the rebuild the IChamfer write stays a representation (the same order as on
         // creation: F.10 + probe E on IExtrusion.Sketch).
-        Api7Bridge.Rebuild(container, document.Document3D);
+        RebuildApi7AndSettle(container, document);
         BumpRevision(document, "chamfer.update.angle");
 
         var after = Api7Chamfer.Read(container, index);
@@ -634,7 +634,7 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["applied_writes"] = writes.Count });
         }
 
-        document.Document3D.RebuildDocument();
+        SettleAfterMutation(document);
         var readBack = (entity.GetDefinition() as ksChamferDefinition) is { } afterDefinition
             ? ReadChamferParam(afterDefinition)
             : null;

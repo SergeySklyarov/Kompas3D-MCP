@@ -229,7 +229,7 @@ public partial class Api5Session
 
         // Without a rebuild the IFillet write stays a representation: the same order as on fillet
         // creation and on chamfer-angle edit (F.10 + probe E).
-        Api7Bridge.Rebuild(container, document.Document3D);
+        RebuildApi7AndSettle(container, document);
         BumpRevision(document, "fillet.update.radius");
 
         var after = Api7Fillet.Read(container, index);
@@ -625,7 +625,7 @@ public partial class Api5Session
                 details: new Dictionary<string, object?> { ["api7_failure"] = write.Failure });
         }
 
-        Api7Bridge.Rebuild(container, document.Document3D);
+        RebuildApi7AndSettle(container, document);
         BumpRevision(document, "fillet.update.inputs");
 
         var volumeAfter = ReadVolume(document);
@@ -982,7 +982,7 @@ public partial class Api5Session
 
         // Without a rebuild the IFillet write stays a representation: the same order as on fillet
         // creation and on radius edit (F.10 + probe E).
-        Api7Bridge.Rebuild(container, document.Document3D);
+        RebuildApi7AndSettle(container, document);
         BumpRevision(document, "fillet.update.edges");
 
         var volumeAfter = ReadVolume(document);

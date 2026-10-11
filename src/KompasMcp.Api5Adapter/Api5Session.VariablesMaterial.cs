@@ -292,6 +292,7 @@ public sealed partial class Api5Session
         try
         {
             rebuildResult = document.Require3D().RebuildDocument();
+            SettleAfterMutation(document);
         }
         catch (COMException ex)
         {

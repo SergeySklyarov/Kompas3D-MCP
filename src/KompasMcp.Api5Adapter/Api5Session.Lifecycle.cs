@@ -382,7 +382,7 @@ public partial class Api5Session
                 partialEffects: true);
         }
 
-        document.Document3D.RebuildDocument();
+        SettleAfterMutation(document);
         BumpRevision(document, "feature.delete");
 
         var treeAfter = FeatureTreeElements(document);

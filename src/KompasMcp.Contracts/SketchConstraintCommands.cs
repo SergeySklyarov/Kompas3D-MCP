@@ -2,16 +2,12 @@ namespace KompasMcp.Contracts.Ipc;
 
 /// <summary>Request to write ONE parametritic constraint on one object of an existing sketch
 /// (<c>kompas_create_sketch_constraint</c>).</summary>
-/// <remarks>DOC: the route is the documented API7 one — <c>IDrawingObject1::NewConstraint()</c>
-/// (<c>idrawingobject1_newconstraint.html</c>) → <c>IParametriticConstraint</c> → <c>Create()</c>
-/// (<c>iparametriticconstraint_create.html</c>). MEASURED: the object is taken from the sketch's own
+/// <remarks>DOC: the documented API7 route — <c>IDrawingObject1::NewConstraint()</c> →
+/// <c>IParametriticConstraint</c> → <c>Create()</c>. MEASURED: the object comes from the sketch's own
 /// drawing container (<c>IDrawingContainer.GetObjects</c>), not from <c>IView1::FindObject</c>, whose
 /// parameter class is not registered on the target installation.
-/// INVARIANT: <see cref="Value"/>, <see cref="Expression"/> and <see cref="Variable"/> are accepted for
-/// <c>ksCDimWithVariable</c> ONLY — the help says so for all three
-/// (<c>iparametriticconstraint_value.html</c>), and accepting them elsewhere would let an ignored field
-/// survive to acceptance looking like an applied dimension.
-/// History: docs/decisions/contracts.md#sketch-constraints</remarks>
+/// INVARIANT: <see cref="Value"/>, <see cref="Expression"/> and <see cref="Variable"/> are accepted
+/// for <c>ksCDimWithVariable</c> ONLY. History: docs/decisions/contracts.md#sketch-constraints</remarks>
 public sealed record CreateSketchConstraintCommand
 {
     public required string SketchRef { get; init; }
@@ -115,19 +111,13 @@ public sealed record SketchConstraintsResult(
     int ConstraintTotal,
     string Route,
     IReadOnlyList<string> Notes,
-    /// <summary>The document's PARAMETRIC MODE (<c>IKompasDocument2D1.ParametricMode</c>, <c>BOOL</c>) as it
-    /// was READ, or <c>null</c> when it could not be read — in which case the reason is named in
-    /// <see cref="Notes"/> and never substituted with <c>false</c>.</summary>
-    /// <remarks>DOC: <c>ikompasdocument2d1_parametricmode.html</c>; reachable on the sketch's FRAGMENT
-    /// document (<c>ikompasdocument2d1.html</c>: the 2D interface is obtained by <c>QueryInterface</c>).
-    /// MEASURED 11.10.2026: the shipped wrapper declares <c>IKompasDocument2D1</c> TRUNCATED (its members end
+    /// <summary>The document's PARAMETRIC MODE (<c>IKompasDocument2D1.ParametricMode</c>, <c>BOOL</c>), as
+    /// READ — <c>null</c> when unread, with the reason in <see cref="Notes"/>, never <c>false</c>.</summary>
+    /// <remarks>DOC: <c>ikompasdocument2d1_parametricmode.html</c>, reachable on the sketch's FRAGMENT
+    /// document. MEASURED: the shipped wrapper declares <c>IKompasDocument2D1</c> TRUNCATED (members end
     /// at <c>ChangeObjectsOrder</c>, slot 44), so the member is called through the typed twin
-    /// <c>IKompasDocument2D1Twin</c>, which reproduces the vtable of the installed type library (slots 74
-    /// put / 75 get) — not through <c>IDispatch</c>. READ ONLY: only the getter is called.
-    /// WHY IT IS PUBLISHED HERE AND NOT BY <c>kompas_get_sketch_status</c>: the fragment document exists
-    /// only inside an edit session, and this call already opens one; measured 11.10.2026, a read-only
-    /// session opened on the sketch is not observation-neutral — a save that follows it carries a different
-    /// constraint state (see the tool description and §4.73 of the API notes).
+    /// <c>IKompasDocument2D1Twin</c>, not through <c>IDispatch</c>; only the getter is called, and it is
+    /// published here because the fragment document exists only inside an edit session.
     /// History: docs/decisions/contracts.md#sketch-status-mapping</remarks>
     bool? ParametricMode = null);
 
@@ -164,49 +154,65 @@ public sealed record SketchConstraintDeleteResult(
     string Route,
     IReadOnlyList<string> Notes);
 
-/// <summary>Request to create a LINEAR DIMENSION on a segment of an existing sketch
-/// (<c>kompas_create_sketch_dimension</c>).</summary>
-/// <remarks>DOC: the dimension is created by the documented route — <c>IView</c> QI
-/// <c>ISymbols2DContainer</c> (<c>isymbols2dcontainer.html</c>) → <c>ILineDimensions::Add()</c>
-/// (<c>ilinedimensions_add.html</c>) → <c>ILineDimension</c> (hierarchy
-/// <c>IKompasAPIObject → IDrawingObject → ILineDimension</c>, <c>ilinedimension.html</c>) →
-/// <c>IModelObject::Update()</c>. The dimension is bound to the segment ASSOCIATIVELY
-/// (<c>ksCAssociation</c>, type 12), then made fixed (<c>ksCFixedDim</c>), then given its value
-/// (<c>ksCDimWithVariable</c>) — MEASURED: without the association the value does not drive the
-/// geometry, with it the length follows the value.
-/// History: docs/decisions/contracts.md#sketch-dimension</remarks>
+/// <summary>Request to create a DRIVING DIMENSION on a sketch (<c>kompas_create_sketch_dimension</c>):
+/// four kinds share it — <c>linear</c> (the default), <c>diametral</c>, <c>radial</c>, <c>angular</c>.</summary>
+/// <remarks>DOC: each kind has its own documented collection on <c>ISymbols2DContainer</c> → <c>Add()</c>
+/// → the dimension interface → <c>IDrawingObject::Update()</c>; only the angular collection's <c>Add</c>
+/// takes a drawing-object type (<c>ksDrADimension</c>).
+/// MEASURED: the LINEAR kind is bound by <c>ksCAssociation</c>; the other three REFUSE it and are bound
+/// by their base object. INVARIANT: a field of a foreign kind is refused before COM, and the measured
+/// object's kind is checked against the kind asked for. History: docs/decisions/contracts.md#sketch-dimension</remarks>
 public sealed record CreateSketchDimensionCommand
 {
     public required string SketchRef { get; init; }
 
     public required long ExpectedRevision { get; init; }
 
-    /// <summary>Address of the SEGMENT the dimension measures, as issued by
-    /// <c>kompas_list_sketch_entities</c>. The dimension's points are taken from that segment's own
-    /// ends, so the dimension measures exactly what the client named.</summary>
+    /// <summary>Address of the object the dimension measures, as issued by
+    /// <c>kompas_list_sketch_entities</c>: the segment for <c>linear</c>, the circle for
+    /// <c>diametral</c>, the arc or circle for <c>radial</c>, and the FIRST segment for
+    /// <c>angular</c>.</summary>
     public required string ObjectRef { get; init; }
 
-    /// <summary>Value of the dimension in millimetres. It is the driving value: the segment's length
-    /// is expected to become exactly this number.</summary>
-    public required double ValueMm { get; init; }
+    /// <summary>Kind of the dimension: <c>linear</c> (the default), <c>diametral</c>, <c>radial</c> or
+    /// <c>angular</c>. An omitted field is the default, so a call written before this field existed
+    /// keeps its meaning.</summary>
+    public string? Kind { get; init; }
 
-    /// <summary>How far the dimension line is drawn from the segment, mm. Positive puts it on the
-    /// outer side of the segment (away from the sketch origin).</summary>
-    public double OffsetMm { get; init; } = 10d;
+    /// <summary>Address of the SECOND measured segment. <c>angular</c> ONLY, where it is required: an
+    /// angle is measured between two segments. Supplying it for any other kind is a named refusal, not
+    /// an ignored field.</summary>
+    public string? SecondObjectRef { get; init; }
+
+    /// <summary>Value of the dimension in millimetres. <c>linear</c> (the segment's length),
+    /// <c>diametral</c> (the DIAMETER, not the radius) and <c>radial</c> (the RADIUS) ONLY. The
+    /// segment's length / the diameter / the radius is expected to become exactly this number.</summary>
+    public double? ValueMm { get; init; }
+
+    /// <summary>Value of the dimension in degrees. <c>angular</c> ONLY: the angle between the two
+    /// segments is expected to become exactly this number.</summary>
+    public double? ValueDeg { get; init; }
+
+    /// <summary>How far the dimension line is drawn from the segment, mm — <c>linear</c> ONLY, because
+    /// only the linear dimension is placed by three points and a shelf. Positive puts it on the outer
+    /// side of the segment (away from the sketch origin). Omitted means the default of 10; the other
+    /// kinds place themselves from their base object and take their own position members
+    /// (<c>Angle</c>, <c>Radius</c>, <c>Xc</c>/<c>Yc</c>), which this tool does not set.</summary>
+    public double? OffsetMm { get; init; }
 }
 
 /// <summary>Answer of <c>kompas_create_sketch_dimension</c>.</summary>
-/// <param name="Applied">Whether the three facts hold: the dimension's points coincide with the
-/// segment's ends, the dimension's value is re-read as requested, and the segment's length equals the
-/// value. NOT the generic <c>Create() == true &amp;&amp; Valid != false</c> pair — see the remarks.</param>
-/// <param name="AssociationAsMergePoints">The number of <c>ksCMergePoints</c> records the association
-/// reads back as. MEASURED: the association appears as TWO such records with <c>Valid = true</c>,
-/// while the <c>ksCAssociation</c> record itself carries <c>Valid = false</c> — so the generic rule is
-/// NOT applied to the dimension and is NOT weakened for the other types either.</param>
+/// <param name="Applied">Whether the confirmation held for the kind asked for: the value re-read as
+/// requested AND the measured geometry re-read as requested — plus, for <c>linear</c>, the dimension's
+/// points on the segment's ends. NOT the generic <c>Create() == true &amp;&amp; Valid != false</c> pair.</param>
+/// <param name="GeometryName">WHICH geometry <see cref="GeometryBefore"/> and
+/// <see cref="GeometryAfter"/> describe: <c>length_mm</c>, <c>diameter_mm</c>, <c>radius_mm</c> or
+/// <c>angle_deg</c>. The pre-existing linear pair <see cref="LengthBeforeMm"/>/<see cref="LengthAfterMm"/>
+/// is kept unchanged for clients written against the published contract.</param>
 public sealed record SketchDimensionCreateResult(
     string ObjectRef,
     string DimensionRef,
-    double ValueMm,
+    double? ValueMm,
     bool Applied,
     double? LengthBeforeMm,
     double? LengthAfterMm,
@@ -217,4 +223,17 @@ public sealed record SketchDimensionCreateResult(
     bool ValueDimCreated,
     int AssociationAsMergePoints,
     IReadOnlyList<string> Notes,
-    string Route);
+    string Route,
+    /// <summary>The kind that was placed, named back so a client that omitted the field learns what it
+    /// got.</summary>
+    string Kind,
+    string? SecondObjectRef = null,
+    double? ValueDeg = null,
+    string? ValueUnit = null,
+    string? GeometryName = null,
+    double? GeometryBefore = null,
+    double? GeometryAfter = null,
+    /// <summary>The sketch-feature variable the kernel gave the dimension (<c>v9</c> in the measured
+    /// runs), so the client can bind it to a part variable with <c>kompas_bind_parameter</c> right away.
+    /// <c>null</c> means it was not read, and the reason is in <see cref="Notes"/>.</summary>
+    string? DimensionVariable = null);

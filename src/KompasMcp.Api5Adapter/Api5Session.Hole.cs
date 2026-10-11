@@ -137,22 +137,42 @@ public partial class Api5Session
                 Observed: bodiesAfter.ToString(System.Globalization.CultureInfo.InvariantCulture)),
         };
 
+        var positionComparable = OffsetsCompareInPartFrame(face);
+        var unverified = new List<string>();
         if (command.OffsetXMm is not null || command.OffsetYMm is not null)
         {
             var wantedX = command.OffsetXMm ?? 0d;
             var wantedY = command.OffsetYMm ?? 0d;
-            // It is searched AMONG ALL axes, not at the first: the request "shift to (25, 15)" is
-            // satisfied if an axis with those coordinates exists on the body, and not satisfied if it
-            // does not, even when a foreign axis of the matching radius stands nearby.
-            var matching = axisOrigins.FirstOrDefault(o =>
-                Math.Abs(o[0] - wantedX) <= 0.5d && Math.Abs(o[1] - wantedY) <= 0.5d);
-            checks.Add(new NamedCheck(
-                "position_applied",
-                matching is not null,
-                Observed: axisOrigins.Count == 0
-                    ? "осей Ø" + command.DiameterMm.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + " на теле нет"
-                    : string.Join("; ", axisOrigins.Select(o => $"({o[0]:0.###}, {o[1]:0.###})")),
-                Expected: $"({wantedX:0.###}, {wantedY:0.###})"));
+            if (!positionComparable)
+            {
+                // MEASURED: the offsets are given along the SUPPORT FACE's own axes (M.5), while
+                // FindCylinderOrigins answers in PART coordinates. The two agree only when the face
+                // frame coincides with the part frame, which the documented API publishes for a face
+                // perpendicular to the part Z axis and for no other orientation. Comparing anyway
+                // reported position_applied=false on a CORRECT hole on a +Y face - a false check is
+                // worse than a named gap.
+                // History: docs/decisions/adapter-core.md#hole-position-frame
+                unverified.Add(
+                    "position_check_frame_unavailable — опорная грань не перпендикулярна оси Z детали, "
+                    + "поэтому запрошенные offset_x_mm/offset_y_mm заданы в кадре ГРАНИ, а прочитанная "
+                    + "ось — в координатах ДЕТАЛИ: сверить их нечем, и проверка положения не "
+                    + "выполнялась. Центр оси прочитан и опубликован в center_mm");
+            }
+            else
+            {
+                // It is searched AMONG ALL axes, not at the first: the request "shift to (25, 15)" is
+                // satisfied if an axis with those coordinates exists on the body, and not satisfied if it
+                // does not, even when a foreign axis of the matching radius stands nearby.
+                var matching = axisOrigins.FirstOrDefault(o =>
+                    Math.Abs(o[0] - wantedX) <= 0.5d && Math.Abs(o[1] - wantedY) <= 0.5d);
+                checks.Add(new NamedCheck(
+                    "position_applied",
+                    matching is not null,
+                    Observed: axisOrigins.Count == 0
+                        ? "осей Ø" + command.DiameterMm.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + " на теле нет"
+                        : string.Join("; ", axisOrigins.Select(o => $"({o[0]:0.###}, {o[1]:0.###})")),
+                    Expected: $"({wantedX:0.###}, {wantedY:0.###})"));
+            }
         }
 
         var materialRemoved = volumeBefore is double b && volumeAfter is double a && a < b;
@@ -187,7 +207,6 @@ public partial class Api5Session
             && numericMatch is not false
             && checks.TrueForAll(c => c.Name != "position_applied" || c.Passed);
 
-        var unverified = new List<string>();
         if (declared.IsUnverifiable)
         {
             unverified.Add(DeclaredExpectation.UnverifiableReason("уменьшение объёма", declared));
@@ -268,6 +287,27 @@ public partial class Api5Session
                 unverified),
             string.Join(", ", placementNotes),
             Warnings: DeclaredExpectation.Warnings(declared));
+    }
+
+    /// <summary>Whether the requested offsets may be compared with a PART-frame axis origin.</summary>
+    /// <remarks>MEASURED: the offsets are given along the SUPPORT FACE's own axes (M.5), while
+    /// FindCylinderOrigins answers in PART coordinates. The documented API publishes a face frame that
+    /// coincides with the part frame only for a face perpendicular to the part Z axis; for any other
+    /// orientation the two pairs are different quantities, and comparing them reported a failed check on
+    /// a CORRECT hole on a +Y face. An unreadable normal is NOT comparable either: a comparison that
+    /// could not be framed is an unperformed check, not a passed one.
+    /// History: docs/decisions/adapter-core.md#hole-position-frame</remarks>
+    private static bool OffsetsCompareInPartFrame(ksFaceDefinition face)
+    {
+        try
+        {
+            var normal = SurfaceNormalAtMiddle(face);
+            return normal is { Length: >= 3 } && Math.Abs(Math.Abs(normal[2]) - 1d) <= 1e-6;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return false;
+        }
     }
 
     /// <summary>One mode — one branch. Returns (created, failure cause, reported countersink depth): a

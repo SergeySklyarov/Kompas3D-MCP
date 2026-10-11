@@ -3539,23 +3539,64 @@ public sealed partial class Api5Session
         string EdgeUnwrapRoute,
         IReadOnlyList<string>? Warnings = null);
 
+    /// <summary>How many times one rebuild request may be repeated before the model is declared to have
+    /// moved. A rebuild recomputes what is already built, so the FIRST attempt is expected to suffice;
+    /// the bound exists only so that a model that never settles is reported instead of looping.
+    /// History: docs/decisions/adapter-core.md#rebuild-verify</summary>
+    private const int RebuildAttemptLimit = 3;
+
+    /// <summary>Rebuild the model from its feature tree.</summary>
+    /// <remarks>INVARIANT: a rebuild recomputes the model that is already built, so the document volume
+    /// must not move. MEASURED: one RebuildDocument() can leave a feature unapplied - the document then
+    /// answers a volume larger by exactly the wall of one hole - and the NEXT rebuild restores it. The
+    /// call is therefore repeated while the volume keeps moving, and the attempts are published in the
+    /// context's unverified_aspects rather than hidden.
+    /// History: docs/decisions/adapter-core.md#rebuild-verify</remarks>
     public RebuildResult Rebuild(RebuildCommand command)
     {
         var document = RequireDocument(command.DocumentId);
-        if (!document.Document3D.RebuildDocument())
+        var unverified = new List<string>();
+        var baseline = ReadVolume(document);
+        var attempts = 0;
+        double? observed = baseline;
+        while (attempts < RebuildAttemptLimit)
         {
-            throw new KompasContractException(
-                ErrorCodes.GeometryFailed,
-                "RebuildDocument() вернул false.",
-                RetryPolicy.AfterReconciliation,
-                partialEffects: true);
+            if (!document.Document3D.RebuildDocument())
+            {
+                throw new KompasContractException(
+                    ErrorCodes.GeometryFailed,
+                    "RebuildDocument() вернул false.",
+                    RetryPolicy.AfterReconciliation,
+                    partialEffects: true,
+                    details: new Dictionary<string, object?> { ["rebuild_attempts"] = attempts + 1 });
+            }
+
+            document.Document3D.UpdateDocumentParam();
+            attempts++;
+            observed = ReadVolume(document);
+            // An unreadable side stops the loop: repeating cannot compare what was never read.
+            if (baseline is null || observed is null || RebuildSettlement.Settled(baseline, observed))
+            {
+                break;
+            }
         }
 
-        document.Document3D.UpdateDocumentParam();
+        var fmt = System.Globalization.CultureInfo.InvariantCulture;
+        var note = RebuildSettlement.Note(baseline, observed, attempts);
+        if (note is not null)
+        {
+            unverified.Add(note
+                + (baseline is double b0 && observed is double o0
+                    ? " (было " + b0.ToString("0.####", fmt) + ", стало " + o0.ToString("0.####", fmt)
+                      + ", перестроений " + attempts + ")"
+                    : string.Empty));
+        }
+
         // A rebuild is exactly the case where handles from the previous revision must stop
         // resolving: the solver may have produced different faces and edges.
         BumpRevision(document, "rebuild", invalidateAll: true);
-        return new RebuildResult(document.Revision, Context(document, includeTopology: false));
+        return new RebuildResult(document.Revision,
+            Context(document, includeTopology: false, extraUnverified: unverified));
     }
 
     // ---------------------------------------------------------------------------------------------

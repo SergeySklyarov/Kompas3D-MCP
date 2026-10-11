@@ -955,7 +955,8 @@ public sealed partial class Api5Session : IDisposable
         }
     }
 
-    public DocumentContextDto Context(DocumentEntry document, bool includeTopology)
+    public DocumentContextDto Context(DocumentEntry document, bool includeTopology,
+        IReadOnlyList<string>? extraUnverified = null)
     {
         // Every counter is read through a route that keeps "not read" apart from a measured number; the
         // reasons travel next to the values, so a null counter is never mistaken for "forgotten".
@@ -964,6 +965,12 @@ public sealed partial class Api5Session : IDisposable
         var bodies = ReadBodyCount(document, unverified);
         var features = ReadFeatureCount(document, unverified);
         var components = document.Kind == DocumentKind.Assembly ? ReadComponentCount(document, unverified) : 0;
+        if (extraUnverified is not null)
+        {
+            // A caller's own reason for the same list: the context is the only place a rebuild can name
+            // what it could not confirm without adding a field to the published result.
+            unverified.AddRange(extraUnverified);
+        }
         return new DocumentContextDto
         {
             Id = document.Id,

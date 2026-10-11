@@ -26,6 +26,13 @@ public static class RebuildSettlement
         "rebuild_changed_model — перестроение изменило объём документа и не вернуло его за отведённые "
         + "попытки. Перестроение обязано пересчитывать УЖЕ построенное";
 
+    /// <summary>The rebuild that was supposed to settle a just-built model did not run, so the state of
+    /// that model was never compared. A separate name from the three above: there the rebuild happened and
+    /// the volumes disagreed, here it never happened.</summary>
+    public const string NotChecked =
+        "rebuild_not_checked — контрольное перестроение не выполнено: вызов прервался, устойчивость "
+        + "состояния модели НЕ проверена. Перечитайте объём и при расхождении вызовите kompas_rebuild";
+
     /// <summary>The warning a result carries when the model never came back: a success on such a state is
     /// not a geometry confirmation.</summary>
     public const string ChangedModelWarning =

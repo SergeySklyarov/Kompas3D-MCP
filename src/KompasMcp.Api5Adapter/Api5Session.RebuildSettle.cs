@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using KompasAPI7;
 using KompasMcp.Api5Adapter.Api7;
 using KompasMcp.Contracts;
+using KompasMcp.Domain.Com;
 using KompasMcp.Domain.Geometry;
 
 namespace KompasMcp.Api5Adapter;
@@ -71,7 +72,21 @@ public partial class Api5Session
 
     /// <summary>Settle a model that was just BUILT by opening or importing, before any client reads it:
     /// a reopened model is a state of the built model only if its rebuild applied every feature.</summary>
-    public void SettleBuiltModel(DocumentEntry document) => SettleAfterMutation(document);
+    /// <remarks>WHY THE FAILURE IS NAMED AND NOT THROWN. The document IS open (or imported) by the time
+    /// this runs; failing the call would hide that from the caller. A connection loss is the one case
+    /// that must NOT be swallowed — the session's loss machinery owns it — so it propagates unchanged.
+    /// History: docs/decisions/adapter-core.md#rebuild-verify</remarks>
+    public void SettleBuiltModel(DocumentEntry document)
+    {
+        try
+        {
+            SettleAfterMutation(document);
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException && !ComHResult.IsDisconnected(ex))
+        {
+            _rebuildSettlementNotes.Add(RebuildSettlement.NotChecked);
+        }
+    }
 
     private void Record(RebuildSettlementOutcome outcome)
     {

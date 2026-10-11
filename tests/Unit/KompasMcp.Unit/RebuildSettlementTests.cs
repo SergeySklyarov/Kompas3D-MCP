@@ -63,6 +63,11 @@ public class RebuildSettlementTests
         Assert.NotEqual(RebuildSettlement.Repeated, RebuildSettlement.ChangedModel);
         Assert.NotEqual(RebuildSettlement.Repeated, RebuildSettlement.VolumeNotCompared);
         Assert.NotEqual(RebuildSettlement.ChangedModel, RebuildSettlement.VolumeNotCompared);
+        // A fourth mark for a FOURTH state: the control rebuild never ran. It must not read as any of the
+        // three that describe a rebuild that DID run.
+        Assert.NotEqual(RebuildSettlement.NotChecked, RebuildSettlement.Repeated);
+        Assert.NotEqual(RebuildSettlement.NotChecked, RebuildSettlement.ChangedModel);
+        Assert.NotEqual(RebuildSettlement.NotChecked, RebuildSettlement.VolumeNotCompared);
     }
 
     [Fact]

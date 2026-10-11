@@ -256,6 +256,7 @@ public sealed partial class Api5Session
             GeometryName: "length_mm",
             GeometryBefore: outcome.LengthBefore,
             GeometryAfter: lengthAfter,
+            ValueRead: outcome.ValueRead,
             DimensionVariable: outcome.DimensionVariable);
     }
 
@@ -421,6 +422,7 @@ public sealed partial class Api5Session
             GeometryName: SketchDimensionRule.GeometryName(kind),
             GeometryBefore: outcome.GeometryBefore,
             GeometryAfter: geometryAfter,
+            ValueRead: outcome.ValueRead,
             DimensionVariable: outcome.DimensionVariable);
     }
 

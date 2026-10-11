@@ -233,6 +233,12 @@ public sealed record SketchDimensionCreateResult(
     string? GeometryName = null,
     double? GeometryBefore = null,
     double? GeometryAfter = null,
+    /// <summary>The value re-read FROM THE DIMENSION ITSELF (<c>IDimensionText::NominalValue</c>), in
+    /// <see cref="ValueUnit"/>. It is one of the confirmation's facts and is published next to
+    /// <see cref="GeometryAfter"/> so a client sees the two SEPARATELY: the dimension's own value and the
+    /// geometry the kernel moved. <c>null</c> means the member did not answer — the reason is in
+    /// <see cref="Notes"/>.</summary>
+    double? ValueRead = null,
     /// <summary>The sketch-feature variable the kernel gave the dimension (<c>v9</c> in the measured
     /// runs), so the client can bind it to a part variable with <c>kompas_bind_parameter</c> right away.
     /// <c>null</c> means it was not read, and the reason is in <see cref="Notes"/>.</summary>

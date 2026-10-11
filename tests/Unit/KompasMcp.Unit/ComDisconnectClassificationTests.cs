@@ -11,11 +11,10 @@ namespace KompasMcp.Unit;
 /// <remarks>WHY THESE TESTS EXIST. MEASURED: a killed KOMPAS made `kompas_list_components` answer
 /// `succeeded` with an empty list and `kompas_get_context` answer `succeeded` with -1/0, because the
 /// adapter's local catches swallowed the loss and the classifier did not recognise the client-side code
-/// the loss arrives as. The class therefore lives in Domain (no KOMPAS types), where it can be EXECUTED —
-/// a classification read only as source text is a claim about text.
-/// The numeric values are not restated from memory: they are cross-checked against the Windows SDK header
-/// on this machine, and that check FAILS (never skips) when the header cannot be found.
-/// History: docs/decisions/adapter-core.md#disconnect-classification</remarks>
+/// the loss arrives as. The class lives in Domain (no KOMPAS types), where it can be EXECUTED — a
+/// classification read only as source text is a claim about text. The values are not restated from
+/// memory: they are cross-checked against the Windows SDK header, and that check FAILS when the header
+/// is absent rather than skipping. History: docs/decisions/adapter-core.md#disconnect-classification</remarks>
 public class ComDisconnectClassificationTests
 {
     /// <summary>HRESULTs that mean "a live server can no longer be reached".</summary>
@@ -219,10 +218,18 @@ public class ComDisconnectLatchTests
 {
     private static COMException Loss(int code) => new("connection lost", code);
 
+    /// <summary>A latch with the observation window OPEN on this thread, as during a session command.</summary>
+    private static ComDisconnectLatch Armed()
+    {
+        var latch = new ComDisconnectLatch();
+        latch.Arm(Environment.CurrentManagedThreadId);
+        return latch;
+    }
+
     [Fact]
     public void FirstLossIsRecordedWithItsCodeAndName()
     {
-        var latch = new ComDisconnectLatch();
+        var latch = Armed();
         Assert.False(latch.IsSet);
         Assert.Null(latch.Observation);
 
@@ -238,7 +245,7 @@ public class ComDisconnectLatchTests
     public void TheFirstLossWins_ALaterSwallowedFailureDoesNotReplaceIt()
     {
         // The first failure names the call that actually broke; the rest are its consequences.
-        var latch = new ComDisconnectLatch();
+        var latch = Armed();
         latch.Observe(Loss(ComHResult.RPC_E_DISCONNECTED));
         latch.Observe(Loss(ComHResult.RPC_S_CALL_FAILED));
 
@@ -248,20 +255,87 @@ public class ComDisconnectLatchTests
     [Fact]
     public void AnOrdinaryFailureDoesNotSetTheLatch()
     {
-        var latch = new ComDisconnectLatch();
+        var latch = Armed();
 
         Assert.False(latch.Observe(Loss(ComHResult.RPC_E_SERVERBUSY)));
         Assert.False(latch.Observe(new InvalidOperationException("not COM")));
         Assert.False(latch.Observe(null));
 
         Assert.False(latch.IsSet);
+        Assert.Equal(0, latch.IgnoredOutsideSession);
+    }
+
+    [Fact]
+    public void ALossOutsideASessionCommandIsSeenAndNOTApplied()
+    {
+        // MEASURED CASE: `kompas_capabilities` enumerates the ROT and binds a stale entry of a DEAD
+        // FOREIGN instance; that bind raises the very same class of error. It must not mark OUR session,
+        // and the count must show it WAS seen — else "the mark is clear" and "nothing was seen" look alike.
+        var latch = new ComDisconnectLatch();
+
+        Assert.False(latch.Observe(Loss(ComHResult.RPC_S_SERVER_UNAVAILABLE)));
+        Assert.False(latch.IsSet);
+        Assert.Equal(1, latch.IgnoredOutsideSession);
+
+        // A loss during a session command is still recorded after that.
+        latch.Arm(Environment.CurrentManagedThreadId);
+        Assert.True(latch.Observe(Loss(ComHResult.RPC_E_DISCONNECTED)));
+        Assert.True(latch.IsSet);
+        Assert.Equal(1, latch.IgnoredOutsideSession);
+    }
+
+    [Fact]
+    public void ALossOnAnotherThreadIsNotOursAndIsNotCountedAsForeign()
+    {
+        // MEASURED: an exception thrown on the STA thread inside a command is RE-THROWN on the awaiting
+        // thread when the task is awaited, so the same loss reaches the observer twice. The second sighting
+        // must be neither applied NOR counted as a foreign loss — counting it inflated the counter with
+        // our own losses and made a real foreign loss indistinguishable from a re-throw.
+        var latch = new ComDisconnectLatch();
+        latch.Arm(Environment.CurrentManagedThreadId + 1000);
+
+        Assert.False(latch.Observe(Loss(ComHResult.RPC_S_SERVER_UNAVAILABLE)));
+        Assert.False(latch.IsSet);
+        Assert.Equal(0, latch.IgnoredOutsideSession);
+    }
+
+    [Fact]
+    public void TheWindowIsNestedAndClosesOnlyWithTheLastCommand()
+    {
+        var latch = new ComDisconnectLatch();
+        latch.Arm(Environment.CurrentManagedThreadId);
+        latch.Arm(Environment.CurrentManagedThreadId);
+
+        latch.Disarm();
+        Assert.True(latch.Observe(Loss(ComHResult.RPC_E_DISCONNECTED)));
+
+        latch.Disarm();
+        latch.Disarm();
+        Assert.False(latch.Observe(Loss(ComHResult.RPC_S_CALL_FAILED)));
+
+        // The last sighting happened with the window SHUT: it counts as an out-of-session loss.
+        Assert.Equal(1, latch.IgnoredOutsideSession);
+    }
+
+    [Fact]
+    public void ClearWithReasonLiftsTheMarkAndKeepsTheReason()
+    {
+        // OUR application answered a cheap call: the loss belonged to a foreign object.
+        var latch = Armed();
+        latch.Observe(Loss(ComHResult.RPC_S_SERVER_UNAVAILABLE));
+        Assert.True(latch.IsSet);
+
+        latch.ClearWithReason("наше приложение ответило");
+
+        Assert.False(latch.IsSet);
+        Assert.Equal("наше приложение ответило", latch.ClearedReason);
     }
 
     [Fact]
     public void ResetClearsTheMark()
     {
         // A successful kompas_connect clears it: the session the mark described is gone.
-        var latch = new ComDisconnectLatch();
+        var latch = Armed();
         latch.Observe(Loss(ComHResult.RPC_E_SERVER_DIED));
         Assert.True(latch.IsSet);
 

@@ -103,6 +103,9 @@ internal sealed class SketchConstraintsProbe
             IncrementalState();
             FixedPointPins();
             NegativeTests();
+            DiametralDimension();
+            RadialDimension();
+            AngularDimension();
         }
         catch (Exception ex)
         {
@@ -4712,5 +4715,562 @@ internal sealed class SketchConstraintsProbe
     private enum LocalConstraintType
     {
         Horizontal = 3,
+    }
+
+    // ═══════════════════════ diametral / radial / angular dimensions (order §2) ══
+
+    /// <summary>The three further dimension kinds of the order. Each has its OWN documented collection
+    /// on <c>ISymbols2DContainer</c> and its own way of naming the measured object, so the route is
+    /// written once per kind rather than forced through a common shape.</summary>
+    private enum DimKind
+    {
+        Diametral,
+        Radial,
+        Angular,
+    }
+
+    /// <summary>One placement of a non-linear dimension. Every field is an observation: <c>null</c>
+    /// means the member did not answer, which is not the same as "false".</summary>
+    private sealed record DimKindOutcome(
+        double? NominalBefore,
+        double? NominalAfter,
+        bool? DimensionValid,
+        bool AssociationCreated,
+        bool FixedDimCreated,
+        bool ValueDimCreated,
+        int MergePoints,
+        string? DimensionRef,
+        string? ReadBack,
+        string? Failure);
+
+    /// <summary>K.19 — a diametral dimension on a circle; its value is the DIAMETER.</summary>
+    private void DiametralDimension() => DimensionKindStep(
+        DimKind.Diametral,
+        "K.19",
+        "Диаметральный размер: окружность R10, значение 30",
+        "Создаётся ли диаметральный размер документированным маршрутом "
+        + "(ISymbols2DContainer.DiametralDimensions.Add() → BaseObject → Update()), читается ли "
+        + "NominalValue как ДИАМЕТР и двигает ли заданное значение геометрию?",
+        BuildCircleDocument,
+        ReadCircleRadius,
+        value: 30d,
+        expectedGeometry: 15d,
+        geometryLabel: "радиус окружности");
+
+    /// <summary>K.20 — a radial dimension on an arc; the help claims <c>NominalValue</c> returns the
+    /// DIAMETER even here, which is what this step measures rather than repeats.</summary>
+    private void RadialDimension() => DimensionKindStep(
+        DimKind.Radial,
+        "K.20",
+        "Радиальный размер: дуга R10, значение 15",
+        "Создаётся ли радиальный размер маршрутом (ISymbols2DContainer.RadialDimensions.Add() → "
+        + "BaseObject → Update()), что возвращает NominalValue у РАДИАЛЬНОГО размера (справка пишет "
+        + "«диаметр») и двигает ли заданное значение радиус дуги?",
+        BuildArcDocument,
+        ReadArcRadius,
+        value: 15d,
+        expectedGeometry: 15d,
+        geometryLabel: "радиус дуги");
+
+    /// <summary>K.21 — an angular dimension between two segments; its value is the ANGLE.</summary>
+    private void AngularDimension() => DimensionKindStep(
+        DimKind.Angular,
+        "K.21",
+        "Угловой размер: два отрезка под 30°, значение 45",
+        "Создаётся ли угловой размер маршрутом (ISymbols2DContainer.AngleDimensions.Add("
+        + "ksDrADimension) → BaseObject1/BaseObject2 → Update()) и двигает ли заданное значение угол "
+        + "между отрезками?",
+        BuildTwoSegmentForAngle,
+        ReadAngleBetweenSegments,
+        value: 45d,
+        expectedGeometry: 45d,
+        geometryLabel: "угол между отрезками, град");
+
+    /// <summary>One kind, measured THREE times, each on a FRESH document: with the value and without
+    /// the association (the candidate recipe), the discriminating control (same placement, no value),
+    /// and with the association (the step the LINEAR kind needs) so that its necessity for this kind is
+    /// measured instead of assumed.</summary>
+    private void DimensionKindStep(
+        DimKind kind,
+        string stepId,
+        string title,
+        string what,
+        Func<string, ProbeStep, bool> build,
+        Func<KompasAPI7.ISketch, List<string>, double?> readGeometry,
+        double value,
+        double expectedGeometry,
+        string geometryLabel)
+    {
+        var step = _report.Begin(stepId, title, what);
+        try
+        {
+            var slug = kind.ToString().ToLowerInvariant();
+
+            var main = RunPlacement(kind, step, "k-" + slug + "-value", build, readGeometry, value,
+                writeValue: true, withAssociation: false);
+            var control = RunPlacement(kind, step, "k-" + slug + "-novalue", build, readGeometry, value,
+                writeValue: false, withAssociation: false);
+            var withAssociation = RunPlacement(kind, step, "k-" + slug + "-assoc", build, readGeometry,
+                value, writeValue: true, withAssociation: true);
+
+            var outcome = main.Outcome;
+            step.Data["nominal_before"] = Api5.Num(outcome?.NominalBefore);
+            step.Data["nominal_after_value"] = Api5.Num(outcome?.NominalAfter);
+            step.Data["dimension_valid"] = Api5.Raw(outcome?.DimensionValid);
+            step.Data["association_created"] = outcome?.AssociationCreated;
+            step.Data["fixed_dim"] = outcome?.FixedDimCreated;
+            step.Data["dim_with_variable"] = outcome?.ValueDimCreated;
+            step.Data["read_back"] = outcome?.ReadBack;
+            step.Data["geometry_before"] = Api5.Num(main.GeometryBefore);
+            step.Data["geometry_after_value"] = Api5.Num(main.GeometryAfter);
+            step.Data["geometry_control_before"] = Api5.Num(control.GeometryBefore);
+            step.Data["geometry_control_without_value"] = Api5.Num(control.GeometryAfter);
+            step.Data["geometry_with_association"] = Api5.Num(withAssociation.GeometryAfter);
+            step.Data["association_attempt_create"] = withAssociation.Outcome?.AssociationCreated;
+            step.Data["expected_geometry"] = expectedGeometry;
+            step.Data["geometry_label"] = geometryLabel;
+            step.Data["value_written"] = value;
+            step.Data["notes"] = main.Notes.Concat(control.Notes).Concat(withAssociation.Notes).ToList();
+
+            foreach (var note in main.Notes.Concat(control.Notes).Concat(withAssociation.Notes))
+            {
+                step.Observe(note);
+            }
+
+            if (outcome?.Failure is { } failure)
+            {
+                step.Unknown($"Размер не поставлен: {failure}. Это измеренный факт о маршруте, а не "
+                             + "об объекте: он выносится заказчику.");
+                return;
+            }
+
+            step.Observe($"{geometryLabel}: до {Api5.Num(main.GeometryBefore)}, после значения {value} — " +
+                         $"{Api5.Num(main.GeometryAfter)}; контроль БЕЗ значения: " +
+                         $"{Api5.Num(control.GeometryBefore)} → {Api5.Num(control.GeometryAfter)}; " +
+                         $"с ассоциацией — {Api5.Num(withAssociation.GeometryAfter)}");
+
+            if (main.GeometryBefore is null || main.GeometryAfter is null)
+            {
+                step.Unknown("Геометрия не прочитана до и после — контроль не различает исходы. "
+                             + "Дефект прибора.");
+                return;
+            }
+
+            var moved = Math.Abs(main.GeometryAfter.Value - main.GeometryBefore.Value) > 1e-6;
+            var hit = Math.Abs(main.GeometryAfter.Value - expectedGeometry) < 1e-4;
+            var controlStable = control.GeometryAfter is not null && control.GeometryBefore is not null
+                                && Math.Abs(control.GeometryAfter.Value - control.GeometryBefore.Value) < 1e-6;
+
+            if (hit && controlStable)
+            {
+                step.Pass($"Размер УПРАВЛЯЕТ геометрией БЕЗ ассоциации: {geometryLabel} " +
+                          $"{Api5.Num(main.GeometryBefore)} → {Api5.Num(main.GeometryAfter)} при значении " +
+                          $"{value} (ожидание {Api5.Num(expectedGeometry)}), а БЕЗ значения геометрия не " +
+                          $"двинулась ({Api5.Num(control.GeometryBefore)} → {Api5.Num(control.GeometryAfter)}).");
+            }
+            else if (hit && !controlStable)
+            {
+                step.Unknown($"Геометрия пришла к значению ({Api5.Num(main.GeometryAfter)}), но сдвинулась " +
+                             $"и БЕЗ значения ({Api5.Num(control.GeometryBefore)} → " +
+                             $"{Api5.Num(control.GeometryAfter)}): движение НЕ приписывается значению. " +
+                             "Измеренный факт, выносится заказчику.");
+            }
+            else if (moved)
+            {
+                step.Unknown($"Геометрия сдвинулась, но не до значения: {Api5.Num(main.GeometryBefore)} → " +
+                             $"{Api5.Num(main.GeometryAfter)} при значении {value} (ожидание " +
+                             $"{Api5.Num(expectedGeometry)}). Измеренный факт, а не совпадение.");
+            }
+            else
+            {
+                step.Unknown($"Размер создан, но геометрией НЕ управляет: {geometryLabel} " +
+                             $"{Api5.Num(main.GeometryBefore)} → {Api5.Num(main.GeometryAfter)} при " +
+                             $"значении {value}. Измеренный факт, выносится заказчику.");
+            }
+        }
+        catch (Exception ex)
+        {
+            step.Errors.Add(ex.ToString());
+            step.Fail("Маршрут вида не измерен: " + ex.Message);
+        }
+    }
+
+    /// <summary>One placement on a FRESH document of its own, with the geometry read before and after
+    /// the rebuild. The three placements of a kind are kept apart on purpose: sharing one document would
+    /// let the first placement's dimension drive the geometry the second one measures.</summary>
+    private (DimKindOutcome? Outcome, double? GeometryBefore, double? GeometryAfter, List<string> Notes)
+        RunPlacement(
+            DimKind kind,
+            ProbeStep step,
+            string tag,
+            Func<string, ProbeStep, bool> build,
+            Func<KompasAPI7.ISketch, List<string>, double?> readGeometry,
+            double value,
+            bool writeValue,
+            bool withAssociation)
+    {
+        var notes = new List<string>();
+        if (!build(tag, step))
+        {
+            notes.Add($"документ «{tag}» не построен");
+            return (null, null, null, notes);
+        }
+
+        if (TransferSketch(_sketchEntity!, step) is not KompasAPI7.ISketch sketch)
+        {
+            notes.Add("эскиз не перенесён в API7");
+            return (null, null, null, notes);
+        }
+
+        var before = readGeometry(sketch, notes);
+        var outcome = PlaceKindDimension(kind, sketch, value, writeValue, withAssociation, notes);
+
+        _doc!.RebuildDocument();
+
+        double? after = null;
+        if (TransferSketch(_sketchEntity!, step) is KompasAPI7.ISketch again)
+        {
+            after = readGeometry(again, notes);
+        }
+
+        return (outcome, before, after, notes);
+    }
+
+    /// <summary>Places ONE non-linear dimension inside one write session, by the documented route of
+    /// its own collection. <paramref name="withAssociation"/> adds the <c>ksCAssociation</c> step the
+    /// LINEAR dimension needs, so that its necessity for these kinds is measured rather than assumed;
+    /// <paramref name="writeValue"/> adds <c>ksCFixedDim</c> + <c>ksCDimWithVariable</c>.</summary>
+    private DimKindOutcome PlaceKindDimension(
+        DimKind kind,
+        KompasAPI7.ISketch sketch,
+        double value,
+        bool writeValue,
+        bool withAssociation,
+        List<string> notes)
+    {
+        KompasAPI7.IFragmentDocument? fragment = null;
+        try
+        {
+            fragment = sketch.BeginEdit();
+        }
+        catch (COMException ex)
+        {
+            notes.Add($"BeginEdit отказал: 0x{ex.HResult:X8}");
+        }
+
+        if (fragment is null)
+        {
+            return new(null, null, null, false, false, false, 0, null, null,
+                "вход в эскиз не состоялся");
+        }
+
+        try
+        {
+            var objects = EnumerateInFragment(fragment, notes);
+            if (fragment.ViewsAndLayersManager?.Views?.get_View(0)
+                is not KompasAPI7.ISymbols2DContainer symbols)
+            {
+                return new(null, null, null, false, false, false, 0, null, null,
+                    "вид не отвечает QI(ISymbols2DContainer)");
+            }
+
+            KompasAPI7.IDrawingObject? dimension;
+            var baseObjects = new List<KompasAPI7.IDrawingObject>();
+            var partnerObjects = new List<object>();
+
+            switch (kind)
+            {
+                case DimKind.Diametral:
+                {
+                    var circle = objects.FirstOrDefault(o => o.Drawing is KompasAPI7.ICircle);
+                    if (circle is null)
+                    {
+                        return new(null, null, null, false, false, false, 0, null, null,
+                            "окружность в эскизе не найдена");
+                    }
+
+                    baseObjects.Add(circle.Drawing);
+                    partnerObjects.Add((object?)circle.ConstraintHost ?? circle.Drawing);
+                    var added = symbols.DiametralDimensions.Add();
+                    if (added is null)
+                    {
+                        return new(null, null, null, false, false, false, 0, null, null,
+                            "IDiametralDimensions.Add() → null");
+                    }
+
+                    added.BaseObject = circle.Drawing;
+                    notes.Add($"DiametralDimensions.Add(): BaseObject = окружность " +
+                              $"({circle.Geometry}); Update() → {Api5.Raw(Api5.SafeBool(() => added.Update()))}");
+                    dimension = added;
+                    break;
+                }
+
+                case DimKind.Radial:
+                {
+                    var arc = objects.FirstOrDefault(o => o.Drawing is KompasAPI7.IArc)
+                              ?? objects.FirstOrDefault(o => o.Drawing is KompasAPI7.ICircle);
+                    if (arc is null)
+                    {
+                        return new(null, null, null, false, false, false, 0, null, null,
+                            "дуга или окружность в эскизе не найдена");
+                    }
+
+                    baseObjects.Add(arc.Drawing);
+                    partnerObjects.Add((object?)arc.ConstraintHost ?? arc.Drawing);
+                    var added = symbols.RadialDimensions.Add();
+                    if (added is null)
+                    {
+                        return new(null, null, null, false, false, false, 0, null, null,
+                            "IRadialDimensions.Add() → null");
+                    }
+
+                    added.BaseObject = arc.Drawing;
+                    notes.Add($"RadialDimensions.Add(): BaseObject = {arc.DrawingKind} " +
+                              $"({arc.Geometry}); Update() → {Api5.Raw(Api5.SafeBool(() => added.Update()))}");
+                    dimension = added;
+                    break;
+                }
+
+                case DimKind.Angular:
+                {
+                    var segments = objects.Where(o => o.Drawing is KompasAPI7.ILineSegment).Take(2).ToList();
+                    if (segments.Count < 2)
+                    {
+                        return new(null, null, null, false, false, false, 0, null, null,
+                            $"отрезков в эскизе {segments.Count}, угловому размеру нужно два");
+                    }
+
+                    baseObjects.Add(segments[0].Drawing);
+                    baseObjects.Add(segments[1].Drawing);
+                    partnerObjects.Add((object?)segments[0].ConstraintHost ?? segments[0].Drawing);
+                    partnerObjects.Add((object?)segments[1].ConstraintHost ?? segments[1].Drawing);
+                    var added = symbols.AngleDimensions.Add(DrawingObjectTypeEnum.ksDrADimension);
+                    if (added is null)
+                    {
+                        return new(null, null, null, false, false, false, 0, null, null,
+                            "IAngleDimensions.Add(ksDrADimension) → null");
+                    }
+
+                    added.BaseObject1 = segments[0].Drawing;
+                    added.BaseObject2 = segments[1].Drawing;
+                    notes.Add($"AngleDimensions.Add(ksDrADimension): BaseObject1 = отрезок " +
+                              $"[{segments[0].Index}], BaseObject2 = отрезок [{segments[1].Index}]; " +
+                              $"Update() → {Api5.Raw(Api5.SafeBool(() => added.Update()))}");
+                    dimension = added;
+                    break;
+                }
+
+                default:
+                    return new(null, null, null, false, false, false, 0, null, null, "неизвестный вид");
+            }
+
+            var valid = Api5.SafeBool(() => dimension.Valid);
+            var reference = Api5.SafeInt(() => dimension.Reference);
+            var nominalBefore = ReadDimensionNominal(dimension, notes, "номинал сразу после создания");
+
+            var associationCreated = false;
+            var fixedCreated = false;
+            var valueCreated = false;
+            var mergePoints = 0;
+            var readBack = (string?)null;
+
+            if (writeValue)
+            {
+                if (dimension as KompasAPI7.IDrawingObject1 is not { } host)
+                {
+                    return new(nominalBefore, null, valid, false, false, false, 0,
+                        reference?.ToString(), null,
+                        "объект-размер не отвечает QI(IDrawingObject1): NewConstraint() недоступен");
+                }
+
+                if (withAssociation)
+                {
+                    var association = CreateConstraint(host,
+                        new Placement("association", ksConstraintTypeEnum.ksCAssociation, -1, null, -1),
+                        partnerObjects.ToArray(), null, notes);
+                    associationCreated = association.Created == true;
+                    notes.Add("ksCAssociation: " + association.Summary);
+                }
+                else
+                {
+                    notes.Add("ksCAssociation НЕ запрашивалась — этим измеряется, нужна ли она виду");
+                }
+
+                var fixedDim = CreateConstraint(host,
+                    new Placement("fixed_dim", ksConstraintTypeEnum.ksCFixedDim, -1, null, -1),
+                    null, null, notes);
+                fixedCreated = fixedDim.Created == true;
+                notes.Add("ksCFixedDim: " + fixedDim.Summary);
+
+                var valueDim = CreateConstraint(host,
+                    new Placement("dim_with_variable", ksConstraintTypeEnum.ksCDimWithVariable, -1, null, -1,
+                        value, value.ToString(CultureInfo.InvariantCulture)),
+                    null, null, notes);
+                valueCreated = valueDim.Created == true;
+                notes.Add("ksCDimWithVariable: " + valueDim.Summary);
+
+                var rows = ReadConstraints(host, notes);
+                mergePoints = rows.Count(r => r.Contains("ksCMergePoints", StringComparison.Ordinal));
+                readBack = rows.Count == 0 ? "список пуст или не развёрнут" : string.Join(" | ", rows);
+            }
+
+            var nominalAfter = ReadDimensionNominal(dimension, notes, "номинал после записи значения");
+
+            return new(nominalBefore, nominalAfter, valid, associationCreated, fixedCreated, valueCreated,
+                mergePoints, reference?.ToString(), readBack, null);
+        }
+        catch (Exception ex)
+        {
+            return new(null, null, null, false, false, false, 0, null, null,
+                ex.GetType().Name + ": " + ex.Message);
+        }
+        finally
+        {
+            try
+            {
+                sketch.EndEdit();
+            }
+            catch (Exception ex) when (ex is COMException or InvalidCastException)
+            {
+                notes.Add("EndEdit(): " + ex.GetType().Name);
+            }
+        }
+    }
+
+    /// <summary>Reads <c>IDimensionText::NominalValue</c> — the value member of EVERY dimension kind.
+    /// <c>null</c> is "not read" and is named, never zero.</summary>
+    private static double? ReadDimensionNominal(KompasAPI7.IDrawingObject dimension, List<string> notes,
+        string moment)
+    {
+        if (dimension is not KompasAPI7.IDimensionText text)
+        {
+            notes.Add($"{moment}: объект-размер не отвечает QI(IDimensionText)");
+            return null;
+        }
+
+        var value = Api5.SafeDouble(() => text.NominalValue);
+        notes.Add($"{moment}: NominalValue = {Api5.Num(value)}");
+        return value;
+    }
+
+    /// <summary>A single circle R10 at the origin — the placement a diametral dimension needs.</summary>
+    private bool BuildCircleDocument(string name, ProbeStep step)
+    {
+        if (!NewSketch(name, step, out var doc, out var part, out var sketch, out var definition))
+        {
+            return false;
+        }
+
+        if (definition.BeginEdit() is not ksDocument2D activeEditor)
+        {
+            step.Observe($"BeginEdit для «{name}» вернул не ksDocument2D.");
+            return false;
+        }
+
+        activeEditor.ksCircle(0d, 0d, 10d, 1);
+        definition.EndEdit();
+
+        _doc = doc;
+        _part = part;
+        _sketchEntity = sketch;
+        step.Observe($"«{name}»: окружность R10 (Ø20) с центром в начале координат.");
+        return true;
+    }
+
+    /// <summary>An arc R10 at the origin from 0° to 90° — the placement a radial dimension needs.
+    /// An ARC and not a circle, so the radial dimension is measured on the object the order names for
+    /// it; a circle would make the measurement describe the other admissible base object.</summary>
+    private bool BuildArcDocument(string name, ProbeStep step)
+    {
+        if (!NewSketch(name, step, out var doc, out var part, out var sketch, out var definition))
+        {
+            return false;
+        }
+
+        if (definition.BeginEdit() is not ksDocument2D activeEditor)
+        {
+            step.Observe($"BeginEdit для «{name}» вернул не ksDocument2D.");
+            return false;
+        }
+
+        activeEditor.ksArcByAngle(0d, 0d, 10d, 0d, 90d, 1, 1);
+        definition.EndEdit();
+
+        _doc = doc;
+        _part = part;
+        _sketchEntity = sketch;
+        step.Observe($"«{name}»: дуга R10 с центром в начале координат, 0°…90°.");
+        return true;
+    }
+
+    private bool BuildTwoSegmentForAngle(string name, ProbeStep step) =>
+        BuildTwoSegmentDocument(name, step, out _, out _);
+
+    /// <summary>The radius of the first circle of the sketch, read INSIDE a session.</summary>
+    private double? ReadCircleRadius(KompasAPI7.ISketch sketch, List<string> notes) =>
+        InSession(sketch, write: false, notes, (objects, _) =>
+        {
+            foreach (var o in objects)
+            {
+                if (o.Drawing is KompasAPI7.ICircle circle)
+                {
+                    return Api5.SafeDouble(() => circle.Radius);
+                }
+            }
+
+            return null;
+        });
+
+    /// <summary>The radius of the first arc of the sketch, read INSIDE a session.</summary>
+    private double? ReadArcRadius(KompasAPI7.ISketch sketch, List<string> notes) =>
+        InSession(sketch, write: false, notes, (objects, _) =>
+        {
+            foreach (var o in objects)
+            {
+                if (o.Drawing is KompasAPI7.IArc arc)
+                {
+                    return Api5.SafeDouble(() => arc.Radius);
+                }
+            }
+
+            return null;
+        });
+
+    /// <summary>The angle between the first two segments, in degrees, from their OWN direction
+    /// vectors — not from <c>ILineSegment.Angle</c>, whose zero direction is a separate question.</summary>
+    private double? ReadAngleBetweenSegments(KompasAPI7.ISketch sketch, List<string> notes) =>
+        InSession(sketch, write: false, notes, (objects, _) =>
+        {
+            var segments = objects.Where(o => o.Drawing is KompasAPI7.ILineSegment).Take(2).ToList();
+            if (segments.Count < 2)
+            {
+                return null;
+            }
+
+            var a = Direction((KompasAPI7.ILineSegment)segments[0].Drawing);
+            var b = Direction((KompasAPI7.ILineSegment)segments[1].Drawing);
+            if (a is null || b is null)
+            {
+                return null;
+            }
+
+            var dot = a.Value.X * b.Value.X + a.Value.Y * b.Value.Y;
+            var cross = a.Value.X * b.Value.Y - a.Value.Y * b.Value.X;
+            return (double?)(Math.Atan2(Math.Abs(cross), dot) * 180d / Math.PI);
+        });
+
+    private static (double X, double Y)? Direction(KompasAPI7.ILineSegment segment)
+    {
+        try
+        {
+            var dx = segment.X2 - segment.X1;
+            var dy = segment.Y2 - segment.Y1;
+            var length = Math.Sqrt(dx * dx + dy * dy);
+            return length < 1e-12 ? null : (dx / length, dy / length);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 }

@@ -3934,6 +3934,520 @@ def sketch_constraints_checks(client, rep, app_id, workdir):
                 "IKompasDocument2D1Twin, только чтение); ревизия и объём при этом не меняются",
                 "FAIL", pm_detail)
 
+    # ══ SKC.29-SKC.46: ГЕОМЕТРИЧЕСКИЕ ТИПЫ — ОТНОШЕНИЕ, ПЕРЕЧИТАННОЕ ПО ГЕОМЕТРИИ ══════════════
+    # ЗАЧЕМ. До этой доводки «создано» у геометрического типа подтверждалось ЗАПИСЬЮ В СПИСКЕ, а не
+    # тем, что геометрия подчинилась. Здесь на каждый тип строится постановка, в которой отношение
+    # ИЗНАЧАЛЬНО НЕ ВЫПОЛНЕНО, ставится ограничение, и отношение перечитывается НЕЗАВИСИМЫМ
+    # перечислением сущностей: kompas_list_sketch_entities публикует координаты, радиусы и углы.
+    # ВЕРДИКТ БЕРЁТСЯ ИЗ ПЕРЕЧИТАННОЙ ГЕОМЕТРИИ, а не из ответа записи: ответ публикует своё
+    # отношение полем verified_relation, и оно названо рядом, но не подменяет проверку.
+    # ЭТАЛОН ЗАФИКСИРОВАН ДО ПРОГОНА и не подгоняется: постановки взяты с заведомым расхождением
+    # (отрезок под 30° для горизонтали, 70° для перпендикуляра, разные радиусы для равенства и т.д.).
+
+    def all_rows(sketch, limit=500):
+        env_e, _ec = call("kompas_list_sketch_entities", {"sketch_ref": sketch, "limit": limit})
+        return (result(env_e) or {}).get("rows") or []
+
+    def pick(rows, pred):
+        return next((r for r in rows if pred(r)), None)
+
+    def line_at(rows, x1, y1):
+        return pick(rows, lambda r: r.get("kind") == "ksDrLineSeg"
+                    and near(r.get("x1_mm"), x1, 1e-6) and near(r.get("y1_mm"), y1, 1e-6))
+
+    def seg_dir(row):
+        if not row:
+            return None
+        x1, y1, x2, y2 = row.get("x1_mm"), row.get("y1_mm"), row.get("x2_mm"), row.get("y2_mm")
+        if None in (x1, y1, x2, y2):
+            return None
+        return math.degrees(math.atan2(y2 - y1, x2 - x1)) % 180.0
+
+    def seg_len(row):
+        if not row:
+            return None
+        x1, y1, x2, y2 = row.get("x1_mm"), row.get("y1_mm"), row.get("x2_mm"), row.get("y2_mm")
+        if None in (x1, y1, x2, y2):
+            return None
+        return math.hypot(x2 - x1, y2 - y1)
+
+    def acute_deg(a, b):
+        d = abs(a - b) % 180.0
+        return min(d, 180.0 - d)
+
+    def point_at(row, index):
+        """Точка по индексу: у отрезка 0 — начало, 1 — конец; у окружности и дуги 0 — центр
+        (iparametriticconstraint_index.html)."""
+        if not row:
+            return None
+        kind = row.get("kind")
+        if kind == "ksDrLineSeg":
+            return ((row.get("x1_mm"), row.get("y1_mm")) if index == 0
+                    else (row.get("x2_mm"), row.get("y2_mm")))
+        if kind in ("ksDrCircle", "ksDrArc") and index == 0:
+            return (row.get("center_x_mm"), row.get("center_y_mm"))
+        return None
+
+    def dist(a, b):
+        return math.hypot(a[0] - b[0], a[1] - b[1])
+
+    def distance_point_to_line(p, line):
+        x1, y1, x2, y2 = (line.get("x1_mm"), line.get("y1_mm"),
+                          line.get("x2_mm"), line.get("y2_mm"))
+        length = math.hypot(x2 - x1, y2 - y1)
+        return abs((p[0] - x1) * (y2 - y1) - (p[1] - y1) * (x2 - x1)) / length
+
+    GEO_TOL = 1e-4  # допуск приёмки, мм и градусы; расхождения постановки на порядки выше
+
+    def geo_row(row_id, constraint_type, entities, expectation, choose, relation=None,
+                expect_refusal=False):
+        """Одна строка на геометрический тип: постановка → ограничение → ОТНОШЕНИЕ по геометрии."""
+        try:
+            doc_g, _cg = new_part("skc-geo-" + row_id.split(".")[1].lower())
+            sk_g, rev_g = fresh(doc_g)
+            call("kompas_create_sketch", {"document_id": doc_g, "expected_revision": rev_g,
+                                          "plane": {"base": "xy", "offset_mm": 0}, "name": row_id})
+            sk_g, rev_g = fresh(doc_g)
+            call("kompas_edit_sketch", {"sketch_ref": sk_g, "expected_revision": rev_g,
+                                        "mode": "replace", "entities": entities})
+            sk_g, rev_g = fresh(doc_g)
+            rows0 = all_rows(sk_g)
+            args = {"sketch_ref": sk_g, "expected_revision": rev_g,
+                    "constraint_type": constraint_type}
+            refs = choose(rows0)
+            args.update(refs)
+            env_c, code_c = call("kompas_create_sketch_constraint", args)
+            res = result(env_c)
+            sk_g, rev_g = fresh(doc_g)
+            rows1 = all_rows(sk_g)
+            if expect_refusal:
+                refused = code_c in ("INVALID_ARGUMENT", "GEOMETRY_FAILED", "CAPABILITY_UNAVAILABLE")
+                ok = refused and res.get("applied") is not True
+                rep.add(row_id, expectation, "PASS" if ok else "FAIL",
+                        f"код={code_c}, applied={res.get('applied')}, сообщение={emsg(env_c)}")
+                close(doc_g)
+                return
+            ok_rel, measured, expected, text = relation(rows1, refs)
+            applied = res.get("applied")
+            verified = res.get("verified_relation")
+            ok = code_c is None and applied is True and ok_rel
+            rep.add(row_id, expectation, "PASS" if ok else "FAIL",
+                    f"{text}; отношение выполнено={ok_rel} (измерено {measured}, ожидалось "
+                    f"{expected}); applied={applied}; verified_relation={verified}; "
+                    f"unverified={res.get('unverified_aspects')}; код={code_c}",
+                    {"measured": measured, "expected": expected, "relation_ok": ok_rel,
+                     "response_verified_relation": verified,
+                     "unverified_aspects": res.get("unverified_aspects")})
+            close(doc_g)
+        except Exception as exc:  # noqa: BLE001 — строка обязана назвать падение, а не молчать
+            rep.add(row_id, expectation, "FAIL", "сценарий упал: %s" % exc)
+
+    def by_address(rows, address):
+        return pick(rows, lambda r: r.get("address") == address)
+
+    def line_to(rows, x2, y2):
+        return pick(rows, lambda r: r.get("kind") == "ksDrLineSeg"
+                    and near(r.get("x2_mm"), x2, 1e-6) and near(r.get("y2_mm"), y2, 1e-6))
+
+    def ref_of(row):
+        return row.get("address") if row else None
+
+    def two_lines(a, b):
+        return [{"kind": "line", "start_mm": a, "end_mm": b}]
+
+    def circle_at(rows, r):
+        return pick(rows, lambda row: row.get("kind") == "ksDrCircle"
+                    and near(row.get("radius_mm"), r, 1e-6))
+
+    tilt = [25.0 * math.cos(math.radians(30.0)), 25.0 * math.sin(math.radians(30.0))]
+    line70 = [20.0, 0.0, 20.0 + 10.0 * math.cos(math.radians(70.0)),
+              10.0 * math.sin(math.radians(70.0))]
+
+    def rel_dir(rows, refs, expected, horizontal):
+        d = seg_dir(by_address(rows, refs["object_ref"]))
+        if d is None:
+            return False, None, expected, "направление не прочитано"
+        dev = min(d, 180.0 - d) if horizontal else abs(d - 90.0)
+        return dev <= GEO_TOL, d, expected, f"направление после {d:.6f}°"
+
+    def rel_two_segments(rows, refs, expected):
+        da = seg_dir(by_address(rows, refs["object_ref"]))
+        db = seg_dir(by_address(rows, refs["partner_ref"]))
+        if da is None or db is None:
+            return False, None, expected, "направления не прочитаны"
+        a = acute_deg(da, db)
+        return abs(a - expected) <= GEO_TOL, a, expected, f"угол между направлениями после {a:.6f}°"
+
+    def rel_collinear(rows, refs):
+        a = by_address(rows, refs["object_ref"])
+        b = by_address(rows, refs["partner_ref"])
+        da, db = seg_dir(a), seg_dir(b)
+        if da is None or db is None:
+            return False, None, 0.0, "направления не прочитаны"
+        ang = acute_deg(da, db)
+        gap = distance_point_to_line((b.get("x1_mm"), b.get("y1_mm")), a)
+        return (ang <= GEO_TOL and gap <= GEO_TOL), max(ang, gap), 0.0, \
+            f"угол {ang:.6f}°, расстояние между прямыми {gap:.6f} мм"
+
+    def rel_equal_length(rows, refs):
+        la = seg_len(by_address(rows, refs["object_ref"]))
+        lb = seg_len(by_address(rows, refs["partner_ref"]))
+        if la is None or lb is None:
+            return False, None, 0.0, "длины не прочитаны"
+        m = abs(la - lb)
+        return m <= GEO_TOL, m, 0.0, f"длины {la:.6f} и {lb:.6f}"
+
+    def rel_equal_radius(rows, refs):
+        a = by_address(rows, refs["object_ref"])
+        b = by_address(rows, refs["partner_ref"])
+        ra, rb = a.get("radius_mm"), b.get("radius_mm")
+        if ra is None or rb is None:
+            return False, None, 0.0, "радиусы не прочитаны"
+        m = abs(ra - rb)
+        return m <= GEO_TOL, m, 0.0, f"радиусы {ra} и {rb}"
+
+    def rel_aligned(rows, refs, by_y):
+        pa = point_at(by_address(rows, refs["object_ref"]), refs.get("point_index"))
+        pb = point_at(by_address(rows, refs["partner_ref"]), refs.get("partner_point_index"))
+        if pa is None or pb is None:
+            return False, None, 0.0, "точки не прочитаны"
+        m = abs(pa[1] - pb[1]) if by_y else abs(pa[0] - pb[0])
+        axis = "Y" if by_y else "X"
+        return m <= GEO_TOL, m, 0.0, f"{axis} точек {pa} и {pb}"
+
+    def rel_merge(rows, refs):
+        pa = point_at(by_address(rows, refs["object_ref"]), refs.get("point_index"))
+        pb = point_at(by_address(rows, refs["partner_ref"]), refs.get("partner_point_index"))
+        if pa is None or pb is None:
+            return False, None, 0.0, "точки не прочитаны"
+        m = dist(pa, pb)
+        return m <= GEO_TOL, m, 0.0, f"расстояние между точками {m:.6f} мм"
+
+    def rel_concentric(rows, refs):
+        a = by_address(rows, refs["object_ref"])
+        b = by_address(rows, refs["partner_ref"])
+        ca = (a.get("center_x_mm"), a.get("center_y_mm"))
+        cb = (b.get("center_x_mm"), b.get("center_y_mm"))
+        if None in ca or None in cb:
+            return False, None, 0.0, "центры не прочитаны"
+        m = dist(ca, cb)
+        return m <= GEO_TOL, m, 0.0, f"расстояние между центрами {m:.6f} мм"
+
+    def rel_tangent(rows, refs):
+        circ = by_address(rows, refs["object_ref"])
+        line = by_address(rows, refs["partner_ref"])
+        c = (circ.get("center_x_mm"), circ.get("center_y_mm"))
+        r = circ.get("radius_mm")
+        if None in c or r is None:
+            return False, None, 0.0, "окружность не прочитана"
+        d = distance_point_to_line(c, line)
+        m = abs(d - r)
+        return m <= GEO_TOL, m, 0.0, f"расстояние от центра до прямой {d:.6f}, радиус {r:.6f}"
+
+    def rel_symmetry(rows, refs):
+        a = by_address(rows, refs["object_ref"])
+        b = by_address(rows, refs["partner_ref"])
+        axis = by_address(rows, refs["axis_ref"])
+        pa = point_at(a, refs.get("point_index"))
+        pb = point_at(b, refs.get("partner_point_index"))
+        if pa is None or pb is None or axis is None:
+            return False, None, 0.0, "точки или ось не прочитаны"
+        mid = ((pa[0] + pb[0]) / 2.0, (pa[1] + pb[1]) / 2.0)
+        d_on = distance_point_to_line(mid, axis)
+        ux = axis.get("x2_mm") - axis.get("x1_mm")
+        uy = axis.get("y2_mm") - axis.get("y1_mm")
+        ul = math.hypot(ux, uy)
+        cx, cy = pb[0] - pa[0], pb[1] - pa[1]
+        cl = math.hypot(cx, cy)
+        dot = abs((cx * ux + cy * uy) / (ul * cl)) if ul > 0 and cl > 0 else 1.0
+        m = max(d_on, dot)
+        return m <= GEO_TOL, m, 0.0, f"середина от оси {d_on:.6f} мм, косинус угла с осью {dot:.6f}"
+
+    geo_row("SKC.29.horizontal_relation", "ksCHorizontal", two_lines([0.0, 0.0], tilt),
+            "горизонталь: отрезок под 30° доворачивается до угла 0, отношение перечитано по геометрии",
+            lambda rows: {"object_ref": ref_of(line_at(rows, 0.0, 0.0))},
+            lambda rows, refs: rel_dir(rows, refs, 0.0, True))
+
+    geo_row("SKC.30.vertical_relation", "ksCVertical", two_lines([0.0, 0.0], tilt),
+            "вертикаль: отрезок под 30° доворачивается до угла 90, отношение перечитано по геометрии",
+            lambda rows: {"object_ref": ref_of(line_at(rows, 0.0, 0.0))},
+            lambda rows, refs: rel_dir(rows, refs, 90.0, False))
+
+    geo_row("SKC.31.parallel_relation", "ksCParallel",
+            two_lines([0.0, 0.0], [10.0, 0.0]) + two_lines([0.0, 5.0], [8.660254037845, 10.0]),
+            "параллельность: отрезки под 0° и 30° становятся сонаправленными",
+            lambda rows: {"object_ref": ref_of(line_at(rows, 0.0, 5.0)),
+                          "partner_ref": ref_of(line_at(rows, 0.0, 0.0))},
+            lambda rows, refs: rel_two_segments(rows, refs, 0.0))
+
+    geo_row("SKC.32.perpendicular_relation", "ksCPerpendicular",
+            two_lines([0.0, 0.0], [10.0, 0.0]) + two_lines(line70[0:2], line70[2:4]),
+            "перпендикулярность: отрезки под 0° и 70° становятся под 90°",
+            lambda rows: {"object_ref": ref_of(line_at(rows, 20.0, 0.0)),
+                          "partner_ref": ref_of(line_at(rows, 0.0, 0.0))},
+            lambda rows, refs: rel_two_segments(rows, refs, 90.0))
+
+    geo_row("SKC.33.collinear_relation", "ksCCollinear",
+            two_lines([0.0, 0.0], [10.0, 0.0]) + two_lines([0.0, 5.0], [10.0, 5.0]),
+            "коллинеарность: параллельные отрезки со смещением 5 мм ложатся на одну прямую",
+            lambda rows: {"object_ref": ref_of(line_at(rows, 0.0, 5.0)),
+                          "partner_ref": ref_of(line_at(rows, 0.0, 0.0))},
+            rel_collinear)
+
+    geo_row("SKC.34.equal_length_relation", "ksCEqualLength",
+            two_lines([0.0, 0.0], [10.0, 0.0]) + two_lines([0.0, 5.0], [15.0, 5.0]),
+            "равенство длин: отрезки 10 и 15 мм становятся равными",
+            lambda rows: {"object_ref": ref_of(line_at(rows, 0.0, 5.0)),
+                          "partner_ref": ref_of(line_at(rows, 0.0, 0.0))},
+            rel_equal_length)
+
+    geo_row("SKC.35.equal_radius_relation", "ksCEqualRadius",
+            [{"kind": "circle", "center_mm": [0.0, 0.0], "radius_mm": 10.0}]
+            + [{"kind": "circle", "center_mm": [30.0, 0.0], "radius_mm": 15.0}],
+            "равенство радиусов: окружности R10 и R15 становятся одного радиуса",
+            lambda rows: {"object_ref": ref_of(circle_at(rows, 15.0)),
+                          "partner_ref": ref_of(circle_at(rows, 10.0))},
+            rel_equal_radius)
+
+    geo_row("SKC.36.h_align_points_relation", "ksCHAlignPoints",
+            two_lines([0.0, 0.0], [10.0, 7.0]) + two_lines([20.0, 0.0], [30.0, 3.0]),
+            "выравнивание по горизонтали: концы двух отрезков (Y 7 и 3) получают общий Y",
+            lambda rows: {"object_ref": ref_of(line_at(rows, 0.0, 0.0)), "point_index": 1,
+                          "partner_ref": ref_of(line_at(rows, 20.0, 0.0)),
+                          "partner_point_index": 1},
+            lambda rows, refs: rel_aligned(rows, refs, True))
+
+    geo_row("SKC.37.v_align_points_relation", "ksCVAlignPoints",
+            two_lines([5.0, 0.0], [5.0, 10.0]) + two_lines([9.0, 20.0], [9.0, 30.0]),
+            "выравнивание по вертикали: начала двух отрезков (X 5 и 9) получают общий X",
+            lambda rows: {"object_ref": ref_of(line_at(rows, 5.0, 0.0)), "point_index": 0,
+                          "partner_ref": ref_of(line_at(rows, 9.0, 20.0)),
+                          "partner_point_index": 0},
+            lambda rows, refs: rel_aligned(rows, refs, False))
+
+    geo_row("SKC.38.merge_points_relation", "ksCMergePoints",
+            two_lines([0.0, 0.0], [10.0, 0.0]) + two_lines([13.0, 0.0], [20.0, 5.0]),
+            "совпадение точек: конец одного отрезка и начало другого (3 мм врозь) совпадают",
+            lambda rows: {"object_ref": ref_of(line_at(rows, 0.0, 0.0)), "point_index": 1,
+                          "partner_ref": ref_of(line_at(rows, 13.0, 0.0)),
+                          "partner_point_index": 0},
+            rel_merge)
+
+    geo_row("SKC.39.concentricity_relation", "ksCConcentricity",
+            [{"kind": "circle", "center_mm": [0.0, 0.0], "radius_mm": 10.0}]
+            + [{"kind": "circle", "center_mm": [6.0, 4.0], "radius_mm": 15.0}],
+            "совпадение центров: центры врозь на 7.21 мм сходятся в одну точку",
+            lambda rows: {"object_ref": ref_of(circle_at(rows, 15.0)),
+                          "partner_ref": ref_of(circle_at(rows, 10.0))},
+            rel_concentric)
+
+    geo_row("SKC.40.tangent_relation", "ksCTangentTwoCurves",
+            two_lines([-20.0, 5.0], [20.0, 5.0])
+            + [{"kind": "circle", "center_mm": [0.0, 0.0], "radius_mm": 10.0}],
+            "касание: прямая на 5 мм от центра окружности R10 отходит до касания (10 мм)",
+            lambda rows: {"object_ref": ref_of(circle_at(rows, 10.0)),
+                          "partner_ref": ref_of(line_at(rows, -20.0, 5.0))},
+            rel_tangent)
+
+    geo_row("SKC.41.symmetry_relation", "ksCSymmetryTwoPoints",
+            two_lines([-10.0, 3.0], [-4.0, 3.0]) + two_lines([4.0, 6.0], [10.0, 6.0])
+            + two_lines([0.0, -10.0], [0.0, 10.0]),
+            "симметрия точек относительно оси: середина ложится на ось, хорда — перпендикулярно ей",
+            lambda rows: {"object_ref": ref_of(line_at(rows, -10.0, 3.0)), "point_index": 1,
+                          "partner_ref": ref_of(line_at(rows, 4.0, 6.0)),
+                          "partner_point_index": 0,
+                          "axis_ref": ref_of(line_at(rows, 0.0, -10.0))},
+            rel_symmetry)
+
+    geo_row("SKC.42.point_on_curve_refusal", "ksCPointOnCurve",
+            two_lines([0.0, 0.0], [10.0, 0.0]),
+            "точка на кривой: ОБЪЕКТОМ должна быть ТОЧКА, а не кривая — на отрезке названный отказ",
+            lambda rows: {"object_ref": ref_of(line_at(rows, 0.0, 0.0))},
+            expect_refusal=True)
+
+    geo_row("SKC.43.point_on_curve_middle_refusal", "ksCPointOnCurveMiddle",
+            two_lines([0.0, 0.0], [10.0, 0.0]),
+            "точка на середине кривой: объектом должна быть ТОЧКА — на отрезке названный отказ",
+            lambda rows: {"object_ref": ref_of(line_at(rows, 0.0, 0.0))},
+            expect_refusal=True)
+
+    # ── SKC.44.fixed_point_holds_geometry (ВРЕМЕННОЕ свойство: правка СОСЕДНЕГО объекта) ─────────
+    # «Точка закреплена» сразу после создания не читается: координаты совпадают с исходными у любого
+    # ограничения. Свойство проверяется ПРАВКОЙ СОСЕДА: два отрезка сведены в общую вершину
+    # (ksCMergePoints), вершина закреплена (ksCFixedPoint), затем ВТОРОЙ отрезок доворачивается до
+    # горизонтали (ksCHorizontal). Держит закрепление — вершина на месте; не держит — уезжает с
+    # поворотом. Отказ соседа тоже записывается, а не прячется: он означает, что поворачивать нечего.
+    try:
+        doc_f, _cf = new_part("skc-geo-fixedpoint")
+        sk_f, rev_f = fresh(doc_f)
+        call("kompas_create_sketch", {"document_id": doc_f, "expected_revision": rev_f,
+                                      "plane": {"base": "xy", "offset_mm": 0}, "name": "fixedpoint"})
+        sk_f, rev_f = fresh(doc_f)
+        call("kompas_edit_sketch", {
+            "sketch_ref": sk_f, "expected_revision": rev_f, "mode": "replace",
+            "entities": two_lines([0.0, 0.0], [10.0, 0.0]) + two_lines([10.0, 0.0], [20.0, 8.66])})
+        sk_f, rev_f = fresh(doc_f)
+        f_rows = all_rows(sk_f)
+        f_a = line_at(f_rows, 0.0, 0.0)
+        f_b = line_at(f_rows, 10.0, 0.0)
+        _e1, f_c1 = create_constraint(sk_f, rev_f, f_a["address"], "ksCMergePoints",
+                                      point_index=1, partner_ref=f_b["address"],
+                                      partner_point_index=0)
+        sk_f, rev_f = fresh(doc_f)
+        _e2, f_c2 = create_constraint(sk_f, rev_f, f_a["address"], "ksCFixedPoint", point_index=1)
+        sk_f, rev_f = fresh(doc_f)
+        f_vertex_before = point_at(by_address(all_rows(sk_f), f_a["address"]), 1)
+        _e3, f_c3 = create_constraint(sk_f, rev_f, f_b["address"], "ksCHorizontal")
+        sk_f, rev_f = fresh(doc_f)
+        f_rows_after = all_rows(sk_f)
+        f_vertex_after = point_at(by_address(f_rows_after, f_a["address"]), 1)
+        f_dir = seg_dir(by_address(f_rows_after, f_b["address"]))
+        f_moved = (dist(f_vertex_before, f_vertex_after)
+                   if f_vertex_before and f_vertex_after else None)
+        f_ok = (f_c1 is None and f_c2 is None and f_moved is not None and f_moved <= GEO_TOL)
+        rep.add("SKC.44.fixed_point_holds_geometry",
+                "закрепление ТОЧКИ держит геометрию: после правки СОСЕДНЕГО объекта закреплённая "
+                "вершина осталась на месте",
+                "PASS" if f_ok else "FAIL",
+                f"вершина до {f_vertex_before}, после {f_vertex_after}, смещение {f_moved} мм; "
+                f"направление соседа после {f_dir}; коды merge={f_c1}/pin={f_c2}/horizontal={f_c3}",
+                {"vertex_before": f_vertex_before, "vertex_after": f_vertex_after,
+                 "moved_mm": f_moved, "neighbour_dir_deg": f_dir,
+                 "codes": {"merge": f_c1, "pin": f_c2, "horizontal": f_c3}})
+        close(doc_f)
+    except Exception as exc:  # noqa: BLE001
+        rep.add("SKC.44.fixed_point_holds_geometry",
+                "закрепление точки держит геометрию", "FAIL", "сценарий упал: %s" % exc)
+
+    # ── SKC.45.geometric_control (РАЗЛИЧАЮЩИЙ КОНТРОЛЬ) ─────────────────────────────────────────
+    # Та же постановка БЕЗ ограничения: если бы геометрию двигало построение эскиза, а не ограничение,
+    # угол остался бы 70° и здесь. Строка SKC.32 и эта отличаются РОВНО наличием ограничения.
+    try:
+        doc_ctl2, _c2g = new_part("skc-geo-control")
+        sk_ctl2, rev_ctl2 = fresh(doc_ctl2)
+        call("kompas_create_sketch", {"document_id": doc_ctl2, "expected_revision": rev_ctl2,
+                                      "plane": {"base": "xy", "offset_mm": 0}, "name": "control"})
+        sk_ctl2, rev_ctl2 = fresh(doc_ctl2)
+        call("kompas_edit_sketch", {
+            "sketch_ref": sk_ctl2, "expected_revision": rev_ctl2, "mode": "replace",
+            "entities": two_lines([0.0, 0.0], [10.0, 0.0]) + two_lines(line70[0:2], line70[2:4])})
+        sk_ctl2, rev_ctl2 = fresh(doc_ctl2)
+        ctl_rows = all_rows(sk_ctl2)
+        ctl_ang = acute_deg(seg_dir(line_at(ctl_rows, 0.0, 0.0)),
+                            seg_dir(line_at(ctl_rows, 20.0, 0.0)))
+        ctl_ok = abs(ctl_ang - 70.0) <= 0.01
+        rep.add("SKC.45.geometric_control",
+                "контроль: БЕЗ ограничения те же отрезки остаются под 70° — геометрию двигает "
+                "ограничение, а не построение эскиза",
+                "PASS" if ctl_ok else "FAIL",
+                f"угол без ограничения {ctl_ang:.6f}° (ожидание 70°)")
+        close(doc_ctl2)
+    except Exception as exc:  # noqa: BLE001
+        rep.add("SKC.45.geometric_control", "контроль без ограничения", "FAIL",
+                "сценарий упал: %s" % exc)
+
+    # ── SKC.46.geometric_relation_survives_reopen ───────────────────────────────────────────────
+    # Отношение переживает save → close → reopen: перпендикулярность проверяется по геометрии
+    # переоткрытого документа независимым перечислением.
+    try:
+        doc_ro2, _rg = new_part("skc-geo-reopen")
+        sk_ro2, rev_ro2 = fresh(doc_ro2)
+        call("kompas_create_sketch", {"document_id": doc_ro2, "expected_revision": rev_ro2,
+                                      "plane": {"base": "xy", "offset_mm": 0}, "name": "reopen"})
+        sk_ro2, rev_ro2 = fresh(doc_ro2)
+        call("kompas_edit_sketch", {
+            "sketch_ref": sk_ro2, "expected_revision": rev_ro2, "mode": "replace",
+            "entities": two_lines([0.0, 0.0], [10.0, 0.0]) + two_lines(line70[0:2], line70[2:4])})
+        sk_ro2, rev_ro2 = fresh(doc_ro2)
+        ro_rows = all_rows(sk_ro2)
+        ro_a = line_at(ro_rows, 0.0, 0.0)
+        ro_b = line_at(ro_rows, 20.0, 0.0)
+        _erc, ro_code = create_constraint(sk_ro2, rev_ro2, ro_a["address"], "ksCPerpendicular",
+                                          partner_ref=ro_b["address"])
+        sk_ro2, rev_ro2 = fresh(doc_ro2)
+        geo_path = _os.path.join(workdir, "skc-geo-reopen.m3d")
+        clear_path(geo_path)
+        call("kompas_save_document", {"document_id": doc_ro2, "target_path": geo_path,
+                                      "expected_revision": rev_ro2})
+        call("kompas_close_document", {"document_id": doc_ro2, "dirty_policy": "discard"})
+        env_go, ro_open = call("kompas_open_document", {
+            "application_id": app_id, "path": geo_path, "access": "edit"})
+        doc_ro3 = doc_of(env_go)
+        sk_ro3, _rv3 = fresh(doc_ro3)
+        ro3_rows = all_rows(sk_ro3)
+        ro3_ang = acute_deg(seg_dir(by_address(ro3_rows, ro_a["address"])),
+                            seg_dir(by_address(ro3_rows, ro_b["address"])))
+        ro_ok = ro_code is None and ro_open is None and abs(ro3_ang - 90.0) <= GEO_TOL
+        rep.add("SKC.46.geometric_relation_survives_reopen",
+                "отношение переживает save → close → reopen: перпендикулярность читается по "
+                "геометрии переоткрытого документа",
+                "PASS" if ro_ok else "FAIL",
+                f"угол после переоткрытия {ro3_ang:.6f}° (ожидание 90); код записи {ro_code}, "
+                f"код открытия {ro_open}",
+                {"angle_after_reopen": ro3_ang, "create_code": ro_code, "reopen_code": ro_open})
+        close(doc_ro3)
+    except Exception as exc:  # noqa: BLE001
+        rep.add("SKC.46.geometric_relation_survives_reopen",
+                "отношение переживает переоткрытие", "FAIL", "сценарий упал: %s" % exc)
+
+    # ── SKC.47.bisector (ПОСТАНОВКА ИЗМЕРЕНА; СПРАВКА ЕЁ НЕ ОПИСЫВАЕТ) ───────────────────────────
+    # ЧТО ЗДЕСЬ. Проба K не создала биссектрису. Справка v24 называет для ksCBisector только
+    # BisectorVariant («вариант решения биссектрисы ДЛЯ ДВУХ ПРЯМЫХ») и Axis («ось симметрии для
+    # ограничения симметрия точек») — то есть что является ОБЪЕКТОМ, ПАРТНЁРОМ и ОСЬЮ, страница НЕ
+    # ДАЁТ. Здесь перебираются правдоподобные постановки, и РАБОЧАЯ измерена: объект — сама
+    # биссектриса, партнёр и ось — две прямые. Постановка ПРОВЕРЯЕТСЯ ПО ГЕОМЕТРИИ (наряд §3):
+    # третья прямая построена под 45°, а биссектриса пары 0°/60° — 30°, значит расхождение заведомо
+    # есть, и после ограничения углы обязаны сравняться. Если бы постановка была тривиальной (третья
+    # прямая уже биссектриса), строка ничего бы не доказала.
+    # ГРАНИЦА НАЗВАНА: постановка ИЗМЕРЕНА, но справкой не описана, поэтому она и объявлена так —
+    # измеренной, а не документированной (AGENTS.md: эксперимента по справке недостаточно).
+    try:
+        doc_bi, _cbi = new_part("skc-geo-bisector")
+        sk_bi, rev_bi = fresh(doc_bi)
+        call("kompas_create_sketch", {"document_id": doc_bi, "expected_revision": rev_bi,
+                                      "plane": {"base": "xy", "offset_mm": 0}, "name": "bisector"})
+        sk_bi, rev_bi = fresh(doc_bi)
+        call("kompas_edit_sketch", {
+            "sketch_ref": sk_bi, "expected_revision": rev_bi, "mode": "replace",
+            "entities": [
+                {"kind": "line", "start_mm": [0.0, 0.0], "end_mm": [20.0, 0.0]},
+                {"kind": "line", "start_mm": [0.0, 0.0], "end_mm": [10.0, 17.320508075689]},
+                {"kind": "line", "start_mm": [0.0, 0.0], "end_mm": [14.142135623731, 14.142135623731]},
+            ]})
+        sk_bi, rev_bi = fresh(doc_bi)
+        bi_rows = all_rows(sk_bi)
+        bi_a = line_to(bi_rows, 20.0, 0.0)
+        bi_b = line_to(bi_rows, 10.0, 17.320508075689)
+        bi_c = line_to(bi_rows, 14.142135623731, 14.142135623731)
+        bi_before = acute_deg(seg_dir(bi_c), seg_dir(bi_a)) - acute_deg(seg_dir(bi_c), seg_dir(bi_b))
+        env_bi, code_bi = call("kompas_create_sketch_constraint", {
+            "sketch_ref": sk_bi, "expected_revision": rev_bi, "constraint_type": "ksCBisector",
+            "object_ref": ref_of(bi_c), "partner_ref": ref_of(bi_a), "axis_ref": ref_of(bi_b)})
+        bi_res = result(env_bi)
+        sk_bi, rev_bi = fresh(doc_bi)
+        bi_rows_after = all_rows(sk_bi)
+        bi_dir = seg_dir(by_address(bi_rows_after, ref_of(bi_c)))
+        bi_gap = abs(acute_deg(bi_dir, seg_dir(bi_a)) - acute_deg(bi_dir, seg_dir(bi_b)))
+        bi_ok = code_bi is None and bi_res.get("applied") is True and bi_gap <= GEO_TOL
+        rep.add("SKC.47.bisector",
+                "биссектриса: измеренная постановка (объект — биссектриса, партнёр и ось — две прямые) "
+                "ядром принята И отношение перечитано по геометрии: третья прямая под 45° становится "
+                "биссектрисой пары 0°/60° (одной из двух — 30° или 120°)",
+                "PASS" if bi_ok else "FAIL",
+                f"направление третьей прямой после {bi_dir:.6f}° (одна из двух биссектрис пары 0°/60°: "
+                f"30° или 120°); расхождение углов объекта с партнёром и осью {bi_gap:.6f}° (до "
+                f"постановки {bi_before:.6f}°); applied={bi_res.get('applied')}; "
+                f"verified_relation={bi_res.get('verified_relation')}; код={code_bi}",
+                {"direction_after": bi_dir, "bisector_gap_deg": bi_gap, "gap_before": bi_before,
+                 "applied": bi_res.get("applied"),
+                 "response_verified_relation": bi_res.get("verified_relation"),
+                 "doc": "iparametriticconstraint_bisectorvariant.html — только BisectorVariant «для "
+                        "двух прямых»; постановка справкой НЕ описана, она ИЗМЕРЕНА"})
+        close(doc_bi)
+    except Exception as exc:  # noqa: BLE001
+        rep.add("SKC.47.bisector", "биссектриса: постановка измерена и проверена по геометрии",
+                "FAIL", "сценарий упал: %s" % exc)
+
     close(doc2)
 
 

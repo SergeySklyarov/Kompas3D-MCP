@@ -6090,3 +6090,39 @@ G3 (`kompas_bind_parameter`: `ksFeature.VariableCollection` → `ksVariable.Expr
 **Чего это измерение НЕ доказывает.** Тип, чьё отношение числом не выражается (закрепление точки, фиксация
 длины и угла), подтверждается не этим маршрутом, а приёмкой; его `unverified_aspects` назван в ответе, а не
 умолчан.
+
+## §4.77. Потеря связи с КОМПАС: коды, которые приходят клиенту, и как выглядит обрыв (живое измерение 11.10.2026, наряд `READ_DISCONNECT`)
+
+**Что измерено.** Процесс СВОЕГО экземпляра КОМПАС завершён по PID (тот, что вернул
+`kompas_connect mode=launch`) при открытой детали с телом и сборке с компонентом. Дальнейшее чтение
+через MCP дало:
+
+- `kompas_list_components` → отказ `APPLICATION_DISCONNECTED`, `details.hresult_name =
+  RPC_S_SERVER_UNAVAILABLE`, `details.hresult = 0x800706BA` (десятичное -2147023174),
+  `details.exception_type = COMException`, текст «The RPC server is unavailable. (0x800706BA)».
+  То есть клиентская сторона получает Win32-код 1722 (`RPC_S_SERVER_UNAVAILABLE`), а не
+  `RPC_E_DISCONNECTED`;
+- `kompas_list_bodies`, `kompas_list_features`, `kompas_get_sketch_status`,
+  `kompas_list_sketch_constraints` → тот же `COMException` с тем же кодом;
+- `kompas_measure` по ссылке на тело погибшего документа → **`InvalidCastException` БЕЗ HRESULT**.
+  Это отдельная форма обрыва, и она важна: маршрут замера ловит `COMException`/`InvalidCastException`
+  внутри и перебрасывает свой `InvalidCastException` («объём недоступен»), поэтому по HRESULT обрыв
+  не виден вообще. Признак обрыва должен быть отдельным от кода в исключении, иначе строка `DC.03`
+  отвечает `VERIFICATION_FAILED`.
+
+**Что сверено со справкой Windows.** По `Include\<версия>\shared\winerror.h` установленного Windows
+SDK: `RPC_S_SERVER_UNAVAILABLE` = 1722 (HRESULT 0x800706BA), `RPC_S_CALL_FAILED` = 1726,
+`RPC_E_DISCONNECTED` = 0x80010108, `RPC_E_SERVER_DIED` = 0x80010007,
+`RPC_E_SERVER_DIED_DNE` = 0x80010012, `CO_E_SERVER_EXEC_FAILURE` = 0x80080005,
+`RPC_E_VERSION_MISMATCH` = 0x80010110.
+
+**Найденный дефект прибора.** Классификатор адаптера признавал обрыв по 0x80010108 и по константе с
+именем `RPC_E_SERVERDIED` и значением 0x80010110. По заголовку 0x80010110 - это
+`RPC_E_VERSION_MISMATCH`, а опубликованный `RPC_E_SERVER_DIED` равен 0x80010007: классификатор узнавал
+несовпадение версий протокола и НИ РАЗУ не узнавал погибший сервер. Значения исправлены и закреплены
+модульным тестом, который сверяет их с `winerror.h` (см. §4.77 и
+`docs/decisions/adapter-core.md#disconnect-classification`).
+
+**Чего это измерение НЕ доказывает.** Оно не доказывает, какие коды приходят при ДРУГИХ формах обрыва
+(сетевой сбой DCOM, завершение сеанса пользователя, перезапуск explorer) - измерен только завершённый
+процесс. Набор признаваемых кодов поэтому назван в коде поимённо и расширяется только с измерением.

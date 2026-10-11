@@ -91,7 +91,7 @@ SESSION_NOT_ACQUIRED, SESSION_RELEASE_BUSY, SESSION_RELEASE_FAILED, OWNERSHIP_ST
 
 ## 2.3. Типы данных
 
-**DocumentContext:** id, application_id, kind(part/assembly/drawing/fragment), path|null, dirty, revision, feature_count, body_count, component_count, unit_system, origin, fingerprint, external_change_detection(reliable/conservative/unavailable).
+**DocumentContext:** id, application_id, kind(part/assembly/drawing/fragment), path|null, dirty, revision, feature_count|null, body_count|null, component_count|null, unverified_aspects, unit_system, origin, fingerprint, external_change_detection(reliable/conservative/unavailable). Три счётчика необязательные: `null` означает «не прочитано» (или «неприменимо» - у чертежа нет трёхмерной модели), и причина каждого названа строкой в `unverified_aspects`. `-1` в ответе не публикуется вовсе, `0` означает только измеренный ноль (наряд `READ_DISCONNECT`, `docs/decisions/adapter-core.md#unread-counters`).
 
 **Reference:** id, kind, document_id, revision, persistent_feature_id|null, bbox, semantic_hint. Реестр хранит COM-объект только внутри Worker.
 

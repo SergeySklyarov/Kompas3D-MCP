@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using Kompas6API5;
 using KompasMcp.Api5Adapter;
 using KompasMcp.Api5Adapter.Com;
+using KompasMcp.Domain.Com;
 
 namespace KompasMcp.P0Probe;
 

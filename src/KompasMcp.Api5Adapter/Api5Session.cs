@@ -11,6 +11,7 @@ using KompasMcp.Domain.Documents;
 using KompasMcp.Domain.Files;
 using KompasMcp.Domain.Geometry;
 using KompasMcp.Domain.Paths;
+using KompasMcp.Domain.Com;
 
 namespace KompasMcp.Api5Adapter;
 
@@ -910,8 +911,13 @@ public sealed partial class Api5Session : IDisposable
 
     public DocumentContextDto Context(DocumentEntry document, bool includeTopology)
     {
-        var bodies = CountBodies(document);
-        var features = CountFeatures(document);
+        // Every counter is read through a route that keeps "not read" apart from a measured number; the
+        // reasons travel next to the values, so a null counter is never mistaken for "forgotten".
+        // History: docs/decisions/adapter-core.md#unread-counters
+        var unverified = new List<string>();
+        var bodies = ReadBodyCount(document, unverified);
+        var features = ReadFeatureCount(document, unverified);
+        var components = document.Kind == DocumentKind.Assembly ? ReadComponentCount(document, unverified) : 0;
         return new DocumentContextDto
         {
             Id = document.Id,
@@ -922,7 +928,8 @@ public sealed partial class Api5Session : IDisposable
             Revision = document.Revision,
             FeatureCount = features,
             BodyCount = bodies,
-            ComponentCount = document.Kind == DocumentKind.Assembly ? CountComponents(document) : 0,
+            ComponentCount = components,
+            UnverifiedAspects = unverified,
             UnitSystem = "mm",
             Origin = new double[] { 0, 0, 0 },
             Fingerprint = document.Fingerprint,
@@ -1115,6 +1122,77 @@ public sealed partial class Api5Session : IDisposable
         {
             return 0;
         }
+    }
+
+    /// <summary>Body count for the context: a number when read, null with a named reason when not.</summary>
+    /// <remarks>INVARIANT: "not read" and "no bodies" never share a value. A document with no 3D model has
+    /// no body collection at all, which is "not applicable"; a collection that refused is "not read".
+    /// Publishing -1 (or 0) for either made a client read "the model is empty" where it was not measured.
+    /// History: docs/decisions/adapter-core.md#unread-counters</remarks>
+    private int? ReadBodyCount(DocumentEntry document, List<string> unverified)
+    {
+        if (document.Document is null)
+        {
+            unverified.Add("body_count_not_applicable — у документа нет трёхмерной модели "
+                           + "(чертёж/фрагмент): коллекции тел нет, и 0 означал бы «тел нет»");
+            return null;
+        }
+
+        var count = CountBodies(document);
+        if (count < 0)
+        {
+            unverified.Add("body_count_unread — коллекция тел КОМПАС не ответила: число тел НЕ "
+                           + "ПРОЧИТАНО, а не ноль");
+            return null;
+        }
+
+        return count;
+    }
+
+    /// <summary>Feature count for the context: a number when read, null with a named reason when not.</summary>
+    /// <remarks>INVARIANT: a document whose kind has no model feature tree (a drawing, a fragment) gets a
+    /// named "not applicable", not a zero that reads as a measurement.
+    /// History: docs/decisions/adapter-core.md#unread-counters</remarks>
+    private int? ReadFeatureCount(DocumentEntry document, List<string> unverified)
+    {
+        if (!ModelFeatureTree.Applies(document.Kind))
+        {
+            unverified.Add("feature_count_not_applicable — у документа этого типа нет дерева признаков "
+                           + "(чертёж/фрагмент): 0 означал бы «признаков нет», а не «неприменимо»");
+            return null;
+        }
+
+        var count = TryCountFeatures(document);
+        if (count is null)
+        {
+            unverified.Add("feature_count_unread — коллекция признаков КОМПАС не ответила: число "
+                           + "признаков НЕ ПРОЧИТАНО, а не ноль");
+        }
+
+        return count;
+    }
+
+    /// <summary>Component count for the context, with "the structure did not resolve" named apart from
+    /// "the assembly has no components". History: docs/decisions/adapter-core.md#unread-counters</summary>
+    private int? ReadComponentCount(DocumentEntry document, List<string> unverified)
+    {
+        var count = TryCountComponents(document);
+        if (count is null)
+        {
+            unverified.Add("component_count_unread — структуру сборки (IPart7.PartsEx) прочитать не "
+                           + "удалось: число компонентов НЕ ПРОЧИТАНО, а не ноль");
+        }
+
+        return count;
+    }
+
+    /// <summary>Component count that keeps "could not be read" apart from "no components".</summary>
+    /// <remarks><see cref="CountComponents"/> answers 0 when the API7 structure does not resolve, and for
+    /// an assembly that is "not read", not "empty". History: docs/decisions/adapter-core.md#unread-counters</remarks>
+    private int? TryCountComponents(DocumentEntry document)
+    {
+        var notes = new List<string>();
+        return TopPart7(document, notes) is null ? null : CountComponents(document);
     }
 
     /// <summary>Assembly component count — from the STRUCTURE (<c>IPart7.PartsEx</c>), not the API5 collection.</summary>

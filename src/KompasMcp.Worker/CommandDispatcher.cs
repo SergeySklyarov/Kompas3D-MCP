@@ -9,6 +9,7 @@ using KompasMcp.Contracts;
 using KompasMcp.Contracts.Ipc;
 using KompasMcp.Domain.Documents;
 using KompasMcp.Domain.Files;
+using KompasMcp.Domain.Com;
 
 namespace KompasMcp.Worker;
 
@@ -93,6 +94,14 @@ public sealed class CommandDispatcher
     private readonly Api5Session _session = new();
     private readonly Stopwatch _uptime = Stopwatch.StartNew();
 
+    /// <summary>The session-level mark that a connection loss was observed anywhere in the adapter.</summary>
+    /// <remarks>WHY THIS EXISTS. MEASURED: a killed KOMPAS left ~290 local catches in the adapter answering
+    /// their defaults, so a READ came back `succeeded` with an empty list or a -1 counter instead of naming
+    /// the loss. The mark is fed by <c>FirstChanceException</c>, which sees the exception BEFORE any local
+    /// catch, and a guarded read answers <c>APPLICATION_DISCONNECTED</c> when it is set.
+    /// History: docs/decisions/adapter-core.md#disconnect-latch</remarks>
+    private readonly ComDisconnectLatch _latch = new();
+
     /// <summary>Control copies of document files, taken before every mutation into the SERVICE directory.</summary>
     private readonly DocumentControlCopies _controlCopies;
 
@@ -108,7 +117,25 @@ public sealed class CommandDispatcher
         _sta = sta;
         _log = log;
         _controlCopies = new DocumentControlCopies(controlCopyDirectory);
+
+        // The one place the latch is fed. The handler runs on the thread that THREW, synchronously,
+        // before the catch that would swallow the loss; it must therefore stay trivial and non-throwing.
+        AppDomain.CurrentDomain.FirstChanceException += (_, args) => _latch.Observe(args.Exception);
     }
+
+    /// <summary>Whether a command is a READ of the model, whose answer must not be built on a swallowed
+    /// connection loss.</summary>
+    /// <remarks>Control-lane commands never touch KOMPAS and are excluded: `kompas_health` must keep
+    /// answering when the CAD session is gone — that is exactly when it is asked.
+    /// `session.inventory` is excluded BY NAME: its consumer (the release guard) already refuses on an
+    /// unread inventory, and routing it through the latch would change the refusal code of
+    /// `kompas_release_session`, whose behaviour this order leaves alone.
+    /// History: docs/decisions/adapter-core.md#disconnect-latch</remarks>
+    private static bool IsGuardedRead(string command) =>
+        !MutationCommands.Contains(command)
+        && !ControlLaneCommands.Contains(command)
+        && command != WorkerCommands.SessionInventory
+        && command != WorkerCommands.Shutdown;
 
     public async Task<IpcFrame> HandleAsync(IpcFrame request, CancellationToken cancellationToken)
     {
@@ -118,6 +145,7 @@ public sealed class CommandDispatcher
         try
         {
             var payload = await DispatchAsync(request, budgetMs, cancellationToken).ConfigureAwait(false);
+            GuardDisconnectedRead(request);
             return new IpcFrame
             {
                 ProtocolVersion = IpcFrame.CurrentProtocolVersion,
@@ -174,21 +202,92 @@ public sealed class CommandDispatcher
             var hresult = ComHResult.From(ex);
             _log.Write("error", "command threw", new { command = request.Command, type = ex.GetType().Name, message = ex.Message, hresult, isMutation });
 
+            // A connection loss that escaped every local catch. In a MUTATION the outcome is unknown and
+            // the client must reconcile first. In a READ nothing was changed, so "outcome unknown" would
+            // be a false alarm: the loss itself is the answer, and reconnecting is the remedy.
+            // The loss is seen in TWO shapes, and both must be caught: the exception in hand may be the
+            // disconnect itself, or a consequence of one observed during this command whose own HRESULT
+            // carries nothing (MEASURED: `kompas_measure` on a dead body throws InvalidCastException).
+            var disconnected = ComHResult.IsDisconnected(ex) || _latch.IsSet;
+            if (!isMutation && disconnected)
+            {
+                return Failure(request, DisconnectedRead(request.Command, ex).ToErrorDto());
+            }
+
             // An unexpected exception during a mutation means the outcome is unknown, not "failed
             // cleanly": saying so is what stops the client from repeating a half-applied change.
-            var unknown = ex is COMException && hresult is int code && ComHResult.IsDisconnected(code);
             return Failure(request, new ErrorDto(
-                unknown || isMutation ? ErrorCodes.OutcomeUnknown : Classify(ex, hresult),
+                isMutation ? ErrorCodes.OutcomeUnknown : Classify(ex, hresult),
                 ex.Message,
-                unknown || isMutation ? RetryPolicy.AfterReconciliation : RetryPolicy.SameOperationId,
+                isMutation ? RetryPolicy.AfterReconciliation : RetryPolicy.SameOperationId,
                 hresult,
-                unknown || isMutation,
+                isMutation,
                 new JsonObject
                 {
                     ["exception"] = ex.GetType().Name,
                     ["is_mutation"] = isMutation,
                 }));
         }
+    }
+
+    /// <summary>Refuse a read whose answer was built while the session-level loss mark is set.</summary>
+    /// <remarks>INVARIANT: this runs AFTER the command and BEFORE the answer leaves, so a read that
+    /// swallowed the loss in a local catch cannot pass its default off as a measurement. The mark is
+    /// cleared only by a successful <c>kompas_connect</c>, which is the documented way back.
+    /// History: docs/decisions/adapter-core.md#disconnect-latch</remarks>
+    private void GuardDisconnectedRead(IpcFrame request)
+    {
+        if (request.Command == WorkerCommands.Connect)
+        {
+            // The reconnect SUCCEEDED (DispatchAsync returned without throwing): the session the mark
+            // described is gone, so the mark goes with it. Clearing it on a FAILED connect would let the
+            // next read publish defaults again.
+            _latch.Reset();
+            return;
+        }
+
+        if (IsGuardedRead(request.Command) && _latch.IsSet)
+        {
+            throw DisconnectedRead(request.Command, exception: null);
+        }
+    }
+
+    /// <summary>The refusal of a read that could not be read because the connection is gone.</summary>
+    /// <remarks>WHY `reacquire_context` AND NOT `after_reconciliation`. A read changes nothing, so there is
+    /// nothing to reconcile; what IS stale is every reference the caller holds — after the reconnect the
+    /// document ids and revisions belong to a dead instance. The remedy is therefore "reconnect, then
+    /// re-read the context", which is exactly what this policy means.
+    /// History: docs/decisions/adapter-core.md#disconnect-latch</remarks>
+    private KompasContractException DisconnectedRead(string command, Exception? exception)
+    {
+        var observed = _latch.Observation;
+        var route = _sta.CurrentLabel;
+        var details = new JsonObject
+        {
+            // WHICH KOMPAS CALL FAILED: the route the adapter was inside, and the first code that broke.
+            ["failed_call"] = route,
+            ["reason"] = "connection_lost_during_read",
+            ["hresult"] = exception is null ? observed?.HResult : ComHResult.From(exception),
+            ["hresult_name"] = exception is null
+                ? observed?.Name
+                : (ComHResult.From(exception) is int code ? ComHResult.Name(code) : null),
+            ["exception_type"] = exception?.GetType().Name ?? observed?.ExceptionType,
+            ["exception_message"] = exception?.Message ?? observed?.Message,
+            ["observed_at_utc"] = observed?.AtUtc.ToString("O"),
+            ["remedy"] = "вызовите kompas_connect (mode=launch или attach) и перечитайте контекст: " +
+                         "документы прежнего экземпляра в новой сессии недействительны",
+        };
+
+        var name = details["hresult_name"]?.GetValue<string>() ?? "код не назван";
+        return new KompasContractException(
+            ErrorCodes.ApplicationDisconnected,
+            $"Связь с КОМПАС потеряна во время чтения '{command}': вызов КОМПАС отказал ({name}). " +
+            "Результат не публикуется: пустой список или непрочитанный счётчик означали бы «модель " +
+            "пуста», тогда как модель НЕ ПРОЧИТАНА. Переподключитесь и повторите чтение.",
+            RetryPolicy.ReacquireContext,
+            partialEffects: false,
+            hresult: details["hresult"]?.GetValue<int?>(),
+            details: details.ToDictionary(pair => pair.Key, pair => (object?)pair.Value?.DeepClone()));
     }
 
     private static string Classify(Exception ex, int? hresult) => (ex, hresult) switch
@@ -271,6 +370,20 @@ public sealed class CommandDispatcher
                     ["failed"] = Interlocked.Read(ref _failed),
                     ["timed_out"] = Interlocked.Read(ref _timedOut),
                     ["needs_reconciliation"] = NeedsReconciliation,
+                    // WHETHER THE CAD CONNECTION IS GONE. Set by any connection loss observed in the
+                    // adapter, cleared by a successful kompas_connect; named here so `kompas_health`
+                    // reports the loss instead of leaving the client to infer it from empty reads.
+                    ["cad_disconnected"] = _latch.IsSet,
+                    ["cad_disconnected_reason"] = _latch.Observation is { } loss
+                        ? new JsonObject
+                        {
+                            ["hresult"] = loss.HResult,
+                            ["hresult_name"] = loss.Name,
+                            ["exception_type"] = loss.ExceptionType,
+                            ["exception_message"] = loss.Message,
+                            ["observed_at_utc"] = loss.AtUtc.ToString("O"),
+                        }
+                        : null,
                     ["build"] = BuildIdentity.Collect(),
                     ["sta"] = new JsonObject(_sta.Statistics().ToDictionary(kv => kv.Key, kv => (JsonNode?)JsonValue.Create(kv.Value))),
                     ["com_filter"] = new JsonObject(_sta.MessageFilter.Snapshot().ToDictionary(kv => kv.Key, kv => (JsonNode?)JsonValue.Create(kv.Value))),

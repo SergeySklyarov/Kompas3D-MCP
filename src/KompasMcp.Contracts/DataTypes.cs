@@ -58,12 +58,27 @@ public sealed record DocumentContextDto
 
     public required long Revision { get; init; }
 
-    public required int FeatureCount { get; init; }
+    /// <summary>Operations of the model feature tree (o3d_operationElement), or null when the collection
+    /// did not answer. INVARIANT: an unread count is null with a reason in <see cref="UnverifiedAspects"/>;
+    /// it is never -1 and never 0, because 0 reads as a measured "no features".
+    /// History: docs/decisions/adapter-core.md#unread-counters</summary>
+    public required int? FeatureCount { get; init; }
 
-    public required int BodyCount { get; init; }
+    /// <summary>Solid bodies of the document, or null when the collection did not answer, or when the
+    /// document has no 3D model at all (a drawing). A reason for the null travels in
+    /// <see cref="UnverifiedAspects"/>. History: docs/decisions/adapter-core.md#unread-counters</summary>
+    public required int? BodyCount { get; init; }
 
-    /// <summary>Component instances for an assembly; 0 for a part.</summary>
-    public required int ComponentCount { get; init; }
+    /// <summary>Component instances for an assembly; 0 for a part, which genuinely has no components.
+    /// Null when the assembly structure could not be read, with a reason in <see cref="UnverifiedAspects"/>.
+    /// History: docs/decisions/adapter-core.md#unread-counters</summary>
+    public required int? ComponentCount { get; init; }
+
+    /// <summary>What this context could NOT read, each entry naming the field and the reason. Empty when
+    /// every counter was measured. INVARIANT: a null counter above always has an entry here — silence
+    /// would make "not read" indistinguishable from "forgotten to fill in".
+    /// History: docs/decisions/adapter-core.md#unread-counters</summary>
+    public IReadOnlyList<string> UnverifiedAspects { get; init; } = Array.Empty<string>();
 
     /// <summary>Unit system the server reports for this document, e.g. "mm".</summary>
     public required string UnitSystem { get; init; }

@@ -8,6 +8,7 @@ using KompasMcp.Api5Adapter.Com;
 using KompasMcp.Contracts;
 using KompasMcp.Contracts.Ipc;
 using KompasMcp.Domain.Geometry;
+using KompasMcp.Domain.Com;
 
 namespace KompasMcp.Api5Adapter;
 

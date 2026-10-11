@@ -1,78 +1,7 @@
 using System.Runtime.InteropServices;
+using KompasMcp.Domain.Com;
 
 namespace KompasMcp.Api5Adapter.Com;
-
-/// <summary>The COM HRESULTs this project reasons about, written as the published literals rather than
-/// remembered decimals. Anything not listed here is reported verbatim and treated as an
-/// unknown outcome — an unrecognised HRESULT must never be laundered into a retryable error.</summary>
-public static class ComHResult
-{
-    public const int S_OK = 0;
-
-    /// <summary>Call denied because the callee is still parsing input; retry is legitimate.</summary>
-    public const int RPC_E_CALL_REJECTED = unchecked((int)0x80010001);
-
-    /// <summary>Server rejected the call for retry — the canonical "come back later".</summary>
-    public const int RPC_E_SERVERCALL_RETRYLATER = unchecked((int)0x8001010A);
-
-    /// <summary>Call rejected by the message filter.</summary>
-    public const int RPC_E_SERVERCALL_FILTERING = unchecked((int)0x8001010B);
-
-    /// <summary>Out-of-process server too busy to accept the call.</summary>
-    public const int RPC_E_SERVERBUSY = unchecked((int)0x800101DD);
-
-    /// <summary>The object has disconnected: the reference is dead and the call outcome is unknowable.</summary>
-    public const int RPC_E_DISCONNECTED = unchecked((int)0x80010108);
-
-    /// <summary>The server process died.</summary>
-    public const int RPC_E_SERVERDIED = unchecked((int)0x80010110);
-
-    /// <summary>Server process could not be started.</summary>
-    public const int CO_E_SERVER_EXEC_FAILURE = unchecked((int)0x80080005);
-
-    /// <summary>ProgID could not be parsed.</summary>
-    public const int CO_E_CLASSSTRING = unchecked((int)0x800401F3);
-
-    /// <summary>Class not registered.</summary>
-    public const int REGDB_E_CLASSNOTREG = unchecked((int)0x80040154);
-
-    /// <summary>Late-bound member not found — normally an interface/version mismatch.</summary>
-    public const int DISP_E_MEMBERNOTFOUND = unchecked((int)0x80020003);
-
-    public static bool IsBusy(int code) =>
-        code is RPC_E_CALL_REJECTED
-            or RPC_E_SERVERCALL_RETRYLATER
-            or RPC_E_SERVERCALL_FILTERING
-            or RPC_E_SERVERBUSY;
-
-    public static bool IsDisconnected(int code) => code is RPC_E_DISCONNECTED or RPC_E_SERVERDIED;
-
-    public static bool IsRegistrationFailure(int code) =>
-        code is CO_E_CLASSSTRING or REGDB_E_CLASSNOTREG;
-
-    public static string Name(int code) => code switch
-    {
-        RPC_E_CALL_REJECTED => "RPC_E_CALL_REJECTED",
-        RPC_E_SERVERCALL_RETRYLATER => "RPC_E_SERVERCALL_RETRYLATER",
-        RPC_E_SERVERCALL_FILTERING => "RPC_E_SERVERCALL_FILTERING",
-        RPC_E_SERVERBUSY => "RPC_E_SERVERBUSY",
-        RPC_E_DISCONNECTED => "RPC_E_DISCONNECTED",
-        RPC_E_SERVERDIED => "RPC_E_SERVERDIED",
-        CO_E_SERVER_EXEC_FAILURE => "CO_E_SERVER_EXEC_FAILURE",
-        CO_E_CLASSSTRING => "CO_E_CLASSSTRING",
-        REGDB_E_CLASSNOTREG => "REGDB_E_CLASSNOTREG",
-        DISP_E_MEMBERNOTFOUND => "DISP_E_MEMBERNOTFOUND",
-        _ => $"0x{code:X8}",
-    };
-
-    /// <summary>Extract the HRESULT from an exception, or null when it carries none.</summary>
-    public static int? From(Exception ex) => ex switch
-    {
-        COMException com => com.HResult,
-        InvalidComObjectException => unchecked((int)0x80131501),
-        _ => null,
-    };
-}
 
 /// <summary>Declaration of <c>IOleMessageFilter</c> exactly as published in oleidl.h: five methods in
 /// this order, IUnknown-derived, no IDispatch. The order is part of the contract — a wrong

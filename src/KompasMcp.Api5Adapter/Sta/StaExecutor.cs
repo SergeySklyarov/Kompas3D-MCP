@@ -37,6 +37,7 @@ public sealed class StaExecutor : IDisposable
     private long _executed;
     private long _messagesPumped;
     private long _droppedOnCancel;
+    private string? _currentLabel;
     private volatile bool _disposed;
 
     public string Name { get; }
@@ -67,6 +68,11 @@ public sealed class StaExecutor : IDisposable
     public ComMessageFilter MessageFilter => _filter;
 
     public bool IsStarted => Volatile.Read(ref _threadId) != 0;
+
+    /// <summary>The label of the work item running right now, or the last one that ran. It names WHICH
+    /// route was inside KOMPAS when a call failed, which an exception alone does not say.
+    /// History: docs/decisions/adapter-core.md#disconnect-latch</summary>
+    public string? CurrentLabel => Volatile.Read(ref _currentLabel);
 
     public IReadOnlyDictionary<string, long> Statistics() => new Dictionary<string, long>
     {
@@ -195,6 +201,7 @@ public sealed class StaExecutor : IDisposable
             }
 
             Interlocked.Increment(ref _executed);
+            Volatile.Write(ref _currentLabel, item.Label);
             item.Invoke();
         }
     }

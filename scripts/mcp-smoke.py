@@ -555,6 +555,9 @@ RUN_GROUPS = (
     ("suppress", "suppress", "suppress-acceptance.json",
      "Приёмка SR: повтор «подавить → снять» для B4M.09 и MANIA.20 — воспроизведение молчаливой "
      "неверной геометрии и контроль в свежем сеансе (наряд SUPPRESS_RESTORE)"),
+    ("disconnect", "disconnect", "disconnect-acceptance.json",
+     "Приёмка DC: чтение при потерянной связи с КОМПАС отвечает APPLICATION_DISCONNECTED, а не "
+     "ложным успехом с пустыми данными (наряд READ_DISCONNECT)"),
 )
 
 VERTICAL_GROUP = ("vertical", "smoke-report.json",
@@ -585,6 +588,9 @@ ALL_GROUPS_EXTRA = (
     ("export_inertia", ["--export-inertia-only"]),
     ("client_bugs_20261010", ["--client-bugs-20261010"]),
     ("suppress", ["--suppress-repeat", "3"]),
+    # Группа DC ЗАВЕРШАЕТ процесс своего КОМПАС: общий сеанс после неё недействителен, поэтому идёт
+    # в своём свежем сеансе, как `client_bugs_20261010` (см. run_extra_group_fresh).
+    ("disconnect", ["--disconnect-only"]),
 )
 
 # Группы, которые нельзя запускать ПОДРЯД в общем сеансе. Пусто: каждая группа вне вертикали
@@ -648,13 +654,18 @@ def selected_run_group(selected, all_groups=False):
 ALL_SUPPRESS_REPEAT = 3
 
 
-def dispatch_extra_group(client, rep, app_id, workdir, key, vm_reference_doc):
+def dispatch_extra_group(client, rep, app_id, workdir, key, vm_reference_doc, process_id=None):
     """Проверки группы вне вертикали на данном сеансе. ЕДИНСТВЕННОЕ место этого выбора: список
-    `ALL_GROUPS_EXTRA` и разбор ключа держатся вместе, поэтому не расходятся."""
+    `ALL_GROUPS_EXTRA` и разбор ключа держатся вместе, поэтому не расходятся.
+
+    `process_id` — PID экземпляра, поднятого `run_extra_group_fresh`. Его читает только группа DC:
+    чтобы воспроизвести обрыв, надо завершить ИМЕННО свой процесс, а PID называет только ответ
+    `kompas_connect mode=launch`.
+    """
     checks = EXTRA_GROUP_CHECKS.get(key)
     if checks is None:
         raise ValueError(f"группа вне вертикали без проверок: {key}")
-    checks(client, rep, app_id, workdir, vm_reference_doc)
+    checks(client, rep, app_id, workdir, vm_reference_doc, process_id)
 
 
 def run_extra_group_fresh(client, rep, workdir, key, vm_reference_doc):
@@ -669,11 +680,15 @@ def run_extra_group_fresh(client, rep, workdir, key, vm_reference_doc):
     _e, env, _r = client.tool("kompas_connect", {"mode": "launch", "make_visible": False,
                                                  "operation_id": str(uuid.uuid4())}, timeout=300)
     app_id = (env or {}).get("application_id")
+    # PID читается здесь, потому что его называет ТОЛЬКО ответ launch. Группа DC завершает процесс
+    # своего экземпляра именно по этому числу; чужой PID взять неоткуда, и это и есть гарантия
+    # «чужие экземпляры не закрываются».
+    process_id = ((env or {}).get("result") or {}).get("process_id")
     if not app_id:
         rep.add("ALL." + key, f"группа {key}: сеанс не поднят", "FAIL",
                 "kompas_connect не вернул application_id")
         return
-    dispatch_extra_group(client, rep, app_id, workdir, key, vm_reference_doc)
+    dispatch_extra_group(client, rep, app_id, workdir, key, vm_reference_doc, process_id)
     # Сеанс гасим сами. Отказ гашения НЕ отменяет уже полученные строки группы, но и не молчит:
     # `client_bugs_20261010` отключает приложение сама, и её отказ здесь — ожидаемый.
     _e, env2, _r = client.tool("kompas_disconnect", {"application_id": app_id,
@@ -8921,6 +8936,335 @@ def client_bugs_20261010_checks(client, rep, app_id, workdir):
             rep.add(cid, desc, "FAIL", "строка не выполнена (раннее исключение постановки)")
 
 
+# Эталон группы DC. Числа объявлены ЗДЕСЬ, ДО прогона: плита 100x80x10 = 80000 мм³ на XY.
+DC_REFERENCE = {
+    "plate_width_mm": 100.0,
+    "plate_height_mm": 80.0,
+    "plate_depth_mm": 10.0,
+    "plate_volume_mm3": 100.0 * 80.0 * 10.0,
+}
+
+
+def disconnect_checks(client, rep, app_id, workdir, process_id=None):
+    """DC.* — чтение при ПОТЕРЯННОЙ связи с КОМПАС (наряд READ_DISCONNECT).
+
+    ЧТО ДОКАЗЫВАЮТ ЭТИ СТРОКИ. Клиент 11.10.2026 намеренно закрыл все экземпляры КОМПАС посреди
+    работы и получил ЛОЖНЫЙ УСПЕХ: `kompas_list_components` ответил `succeeded` с пустым списком, а
+    `kompas_get_context` — `succeeded` со счётчиками -1/0. Клиент видел «пустую модель» там, где
+    модель НЕ БЫЛА ПРОЧИТАНА. Строки проверяют обратное: чтение называет потерю связи, а
+    непрочитанное значение не выдаётся числом.
+
+    ПОСТАНОВКА. Свой экземпляр КОМПАС (`kompas_connect mode=launch`; PID приходит снаружи, из ответа
+    ТОГО ЖЕ вызова), деталь с телом и сборка с компонентом открыты, затем процесс СВОЕГО экземпляра
+    завершается. `taskkill` вызывается ровно с одним PID — тем, что вернул launch; чужие экземпляры
+    не трогаются ни здесь, ни в уборке.
+
+    ПОРЯДОК СТРОК — ЧАСТЬ ИЗМЕРЕНИЯ, И ЭТО НАЗВАНО. Первое чтение после обрыва (DC.01) обязано
+    отказать САМО: если потеря во время него не наблюдается, строка падает. Остальные чтения (DC.03)
+    отвечают отказом уже по ЗАЩЁЛКЕ сеанса — это названо, а не выдано за независимое
+    подтверждение. Первый наблюдённый код и маршрут несёт `kompas_health` (DC.04).
+
+    ЧЕГО ЗДЕСЬ НЕТ. Клиентская приёмка и Trust не трогаются. Мутации на НОВОЕ поведение не
+    проверяются: DC.05 подтверждает, что их ПРЕЖНЕЕ поведение не изменилось.
+    """
+    import os as _os
+    import subprocess as _subprocess
+    import time as _time
+    import uuid as _uuid
+
+    ref = dict(DC_REFERENCE)
+
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(_uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def err_of(env):
+        err = (env or {}).get("error") or {}
+        return err if isinstance(err, dict) else {}
+
+    def det(env):
+        return err_of(env).get("details") or {}
+
+    def emsg(env):
+        return err_of(env).get("message")
+
+    def status(env):
+        return (env or {}).get("status")
+
+    def ctx(doc):
+        _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return result(env)
+
+    def current_rev(doc):
+        return ctx(doc).get("revision") or 1
+
+    def doc_id(env):
+        r = result(env)
+        return r.get("id") or r.get("document_id")
+
+    def near(a, b, tol=1.0):
+        return isinstance(a, (int, float)) and isinstance(b, (int, float)) and abs(a - b) <= tol
+
+    def new_doc(kind, name):
+        env, code = call("kompas_create_document", {"application_id": app_id, "kind": kind, "name": name})
+        return doc_id(env), code, env
+
+    def build_plate(name):
+        """Плита 100×80×10 на XY через MCP; возвращает (doc, sketch_ref, body_ref, volume, error)."""
+        doc, code, _env = new_doc("part", name)
+        if not doc:
+            return None, None, None, None, "create_document: %s" % code
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": current_rev(doc),
+            "plane": {"base": "xy", "offset_mm": 0}, "name": name + "-s"})
+        sk = result(env).get("id")
+        if not sk:
+            return doc, None, None, None, "create_sketch: %s %s" % (code, emsg(env))
+        env, code = call("kompas_edit_sketch", {
+            "sketch_ref": sk, "expected_revision": current_rev(doc), "mode": "append",
+            "entities": [{"kind": "rectangle", "start_mm": [0.0, 0.0],
+                          "width_mm": ref["plate_width_mm"], "height_mm": ref["plate_height_mm"]}]})
+        if code:
+            return doc, sk, None, None, "edit_sketch: %s %s" % (code, emsg(env))
+        env, code = call("kompas_finish_sketch", {"sketch_ref": sk, "require_closed_profile": False})
+        if code:
+            return doc, sk, None, None, "finish_sketch: %s %s" % (code, emsg(env))
+        env, code = call("kompas_extrude", {
+            "sketch_ref": sk, "expected_revision": current_rev(doc),
+            "operation": "base", "depth_mm": ref["plate_depth_mm"], "direction": "positive"})
+        if code:
+            return doc, sk, None, None, "extrude: %s %s" % (code, emsg(env))
+        _e, benv, _r = client.tool("kompas_list_bodies", {"document_id": doc})
+        rows = result(benv)
+        if not isinstance(rows, list) or not rows:
+            return doc, sk, None, None, "выдавливание не дало тела"
+        body_ref = rows[0].get("body_ref")
+        _e, menv, _r = client.tool("kompas_measure", {"target_ref": body_ref, "properties": ["volume"]})
+        return doc, sk, body_ref, result(menv).get("volume_mm3"), None
+
+    def process_alive(pid):
+        done = _subprocess.run(["tasklist", "/FI", "PID eq %d" % pid, "/NH"],
+                               capture_output=True, text=True, timeout=30)
+        return str(pid) in (done.stdout or "")
+
+    # ── DC.00: постановка на СВОЁМ экземпляре ─────────────────────────────────────────────────
+    src_dir = _os.path.join(workdir, "dc-src")
+    _os.makedirs(src_dir, exist_ok=True)
+    src_path = _os.path.join(src_dir, "dc-source-%s.m3d" % _uuid.uuid4().hex[:8])
+
+    plate, plate_sketch, plate_body, plate_volume, build_error = build_plate("DC_Plate")
+    asm = None
+    asm_components = None
+    asm_error = None
+    if not build_error:
+        # Деталь сохраняется на диск: сборке нужен файл-источник, а вставка адресуется им.
+        # Через `call`, а не `client.tool`: сохранение — МУТАЦИЯ, и без operation_id Хост отвергает
+        # вызов по контракту (INVALID_ARGUMENT), а не по существу.
+        _senv, _scode = call("kompas_save_document", {
+            "document_id": plate, "expected_revision": current_rev(plate), "target_path": src_path})
+        if not _os.path.isfile(src_path):
+            asm_error = "деталь-источник не сохранена: %s %s" % (_scode, emsg(_senv))
+        else:
+            asm, code, _env = new_doc("assembly", "DC_Asm")
+            if not asm:
+                asm_error = "create assembly: %s" % code
+            else:
+                env, code = call("kompas_insert_component", {
+                    "document_id": asm, "expected_revision": current_rev(asm),
+                    "source_path": src_path, "fixed": False})
+                asm_components = result(env).get("component_count")
+                if code:
+                    asm_error = "insert_component: %s %s" % (code, emsg(env))
+
+    setup_ok = (plate and plate_body and not build_error and asm and asm_components == 1
+                and isinstance(process_id, int) and process_id > 0)
+    rep.add("DC.00.setup",
+            "постановка на СВОЁМ экземпляре: плита 100×80×10 = 80000 мм³ с телом, сборка с одним "
+            "компонентом, PID своего КОМПАС известен (из ответа launch)",
+            "PASS" if setup_ok else "FAIL",
+            f"plate={plate} volume={plate_volume} body={plate_body!r} asm={asm} "
+            f"components={asm_components} pid={process_id} error={build_error or asm_error}",
+            details={"plate_document_id": plate, "assembly_document_id": asm,
+                     "process_id": process_id, "source_path": src_path})
+
+    # ── DC.07: контроль ПРИ ЖИВОМ КОМПАС — честный ноль не превращается в отказ ────────────────
+    # Строка идёт ДО обрыва намеренно: после него она измеряла бы защёлку, а не контроль.
+    empty_asm, code_e, _env_e = new_doc("assembly", "DC_Empty")
+    bare_part, code_p, _env_p = new_doc("part", "DC_Bare")
+    env, code = call("kompas_list_components", {"document_id": empty_asm}) if empty_asm else (None, "no-doc")
+    empty_rows = result(env).get("components") if env else None
+    bare = ctx(bare_part) if bare_part else {}
+    control_ok = (empty_asm and bare_part
+                  and code is None and empty_rows == []
+                  and bare.get("body_count") == 0 and bare.get("feature_count") == 0
+                  and not (bare.get("unverified_aspects") or []))
+    rep.add("DC.07",
+            "контроль при ЖИВОМ КОМПАС: пустая сборка отвечает succeeded с [], деталь без тел — "
+            "succeeded с измеренным 0 (и без причин в unverified_aspects): честный ноль не "
+            "превращается в отказ",
+            "PASS" if control_ok else "FAIL",
+            f"empty_asm={empty_asm} components={empty_rows!r} code={code} bare_part={bare_part} "
+            f"body_count={bare.get('body_count')!r} feature_count={bare.get('feature_count')!r} "
+            f"unverified={bare.get('unverified_aspects')!r}",
+            details={"empty_components": empty_rows, "bare_context": bare})
+
+    # ── обрыв: процесс СВОЕГО экземпляра завершается по PID ────────────────────────────────────
+    killed = None
+    if isinstance(process_id, int) and process_id > 0:
+        done = _subprocess.run(["taskkill", "/PID", str(process_id), "/F"],
+                               capture_output=True, text=True, timeout=60)
+        for _ in range(25):
+            if not process_alive(process_id):
+                break
+            _time.sleep(0.4)
+        killed = not process_alive(process_id)
+        rep.add("DC.KILL", "процесс СВОЕГО КОМПАС завершён по PID (чужие экземпляры не тронуты)",
+                "PASS" if killed else "FAIL",
+                f"pid={process_id} taskkill_rc={done.returncode} alive_after={not killed} "
+                f"out={((done.stdout or '') + (done.stderr or '')).strip()[:200]}")
+    else:
+        rep.add("DC.KILL", "процесс СВОЕГО КОМПАС завершён по PID", "FAIL",
+                "PID не получен от launch: обрыв связи не воспроизводим")
+
+    # ── DC.01: первое чтение после обрыва — ПЕРВОЕ, что наблюдает потерю ───────────────────────
+    env01, code01 = call("kompas_list_components", {"document_id": asm}, timeout=180)
+    d01 = det(env01)
+    ok01 = (code01 == "APPLICATION_DISCONNECTED" and status(env01) != "succeeded"
+            and d01.get("reason") == "connection_lost_during_read"
+            and isinstance(d01.get("hresult"), int)
+            and isinstance(d01.get("hresult_name"), str)
+            and d01.get("hresult_name") != ""
+            and isinstance(d01.get("failed_call"), str))
+    rep.add("DC.01",
+            "первое чтение после обрыва (kompas_list_components) отвечает APPLICATION_DISCONNECTED "
+            "с названным вызовом, HRESULT и его именем — НЕ succeeded с пустым списком",
+            "PASS" if ok01 else "FAIL",
+            f"code={code01} status={status(env01)} failed_call={d01.get('failed_call')!r} "
+            f"hresult={d01.get('hresult')!r} name={d01.get('hresult_name')!r} "
+            f"retry={err_of(env01).get('retry_policy')!r} msg={emsg(env01)}",
+            details={"error": err_of(env01), "envelope_status": status(env01)})
+
+    # ── DC.02: get_context — не succeeded со счётчиками -1/0 ──────────────────────────────────
+    env02, code02 = call("kompas_get_context", {"document_id": plate, "detail": "minimal"}, timeout=180)
+    ok02 = code02 == "APPLICATION_DISCONNECTED" and status(env02) != "succeeded" and not result(env02)
+    rep.add("DC.02",
+            "kompas_get_context при обрыве отвечает APPLICATION_DISCONNECTED, а не succeeded со "
+            "счётчиками -1/0: непрочитанное не публикуется числом",
+            "PASS" if ok02 else "FAIL",
+            f"code={code02} status={status(env02)} result={result(env02)!r} msg={emsg(env02)}",
+            details={"error": err_of(env02)})
+
+    # ── DC.03: остальные чтения — каждый отказ; это следствие ЗАЩЁЛКИ, и это названо ───────────
+    reads = [
+        ("kompas_list_bodies", {"document_id": plate}),
+        ("kompas_list_features", {"document_id": plate}),
+        ("kompas_measure", {"target_ref": plate_body, "properties": ["volume"]}),
+        ("kompas_get_sketch_status", {"sketch_ref": plate_sketch}),
+        ("kompas_list_sketch_constraints", {"sketch_ref": plate_sketch}),
+    ]
+    read_codes = {}
+    for tool, args in reads:
+        env_r, code_r = call(tool, args, timeout=180)
+        read_codes[tool] = {"code": code_r, "status": status(env_r), "message": emsg(env_r)}
+    ok03 = all(r["code"] == "APPLICATION_DISCONNECTED" and r["status"] != "succeeded"
+               for r in read_codes.values())
+    rep.add("DC.03",
+            "list_bodies, list_features, measure, get_sketch_status, list_sketch_constraints — "
+            "каждый отвечает APPLICATION_DISCONNECTED (по защёлке сеанса, а не независимым "
+            "наблюдением: первое наблюдение несёт DC.01)",
+            "PASS" if ok03 else "FAIL",
+            "; ".join("%s=%s/%s" % (t, r["code"], r["status"]) for t, r in read_codes.items()),
+            details={"reads": read_codes})
+
+    # ── DC.04: kompas_health называет потерю связи ────────────────────────────────────────────
+    env04, code04 = call("kompas_health", {"detail": "diagnostic"}, timeout=60)
+    h04 = result(env04)
+    loss04 = h04.get("cad_disconnected_reason") or {}
+    ok04 = (code04 is None and h04.get("cad_disconnected") is True
+            and isinstance(loss04, dict) and loss04.get("hresult_name"))
+    rep.add("DC.04",
+            "kompas_health (control-lane, к COM не обращается) называет потерю связи: "
+            "cad_disconnected=true и первый наблюдённый код с его именем",
+            "PASS" if ok04 else "FAIL",
+            f"code={code04} cad_disconnected={h04.get('cad_disconnected')!r} "
+            f"reason={loss04!r}",
+            details={"health": h04})
+
+    # ── DC.05: мутации — ПРЕЖНЕЕ поведение (не перепроверка нового) ────────────────────────────
+    env05a, code05a = call("kompas_close_document", {"document_id": asm, "dirty_policy": "discard"},
+                           timeout=180)
+    close_ok = status(env05a) == "outcome_unknown" or code05a == "OUTCOME_UNKNOWN"
+    env05b, code05b = call("kompas_release_session", {}, timeout=180)
+    release_refused = status(env05b) != "succeeded"
+    ok05 = close_ok and release_refused
+    rep.add("DC.05",
+            "мутации не изменились: close_document при обрыве — OUTCOME_UNKNOWN (исход неизвестен, "
+            "повтор запрещён), release_session — отказ (сеанс не объявляется свободным)",
+            "PASS" if ok05 else "FAIL",
+            f"close: code={code05a} status={status(env05a)}; release: code={code05b} "
+            f"status={status(env05b)} msg={emsg(env05b)}",
+            details={"close": err_of(env05a), "close_status": status(env05a),
+                     "release": err_of(env05b), "release_status": status(env05b)})
+
+    # ── DC.06: kompas_connect восстанавливает сеанс, чтения снова работают ─────────────────────
+    env06, code06 = call("kompas_connect", {"mode": "launch", "make_visible": False}, timeout=300)
+    new_app = result(env06).get("application_id") or (env06 or {}).get("application_id")
+    fresh_doc = None
+    fresh_ctx = {}
+    if not code06 and new_app:
+        _e, denv, _r = client.tool("kompas_create_document", {
+            "application_id": new_app, "kind": "part", "name": "DC_After",
+            "operation_id": str(_uuid.uuid4())}, timeout=180)
+        fresh_doc = doc_id(denv)
+        if fresh_doc:
+            fresh_ctx = ctx(fresh_doc)
+    # Документ ПОГИБШЕГО экземпляра: после переподключения он не имеет права выглядеть «пустой
+    # моделью» — либо отказ, либо НАЗВАННЫЕ непрочитанные счётчики.
+    env06b, code06b = call("kompas_get_context", {"document_id": plate, "detail": "minimal"}, timeout=180)
+    old_ctx = result(env06b)
+    old_honest = (code06b == "APPLICATION_DISCONNECTED"
+                  or (code06b is None and old_ctx.get("body_count") is None
+                      and old_ctx.get("feature_count") is None
+                      and (old_ctx.get("unverified_aspects") or [])))
+    ok06 = (code06 is None and new_app and fresh_doc
+            and code06 is None and fresh_ctx.get("body_count") == 0 and old_honest)
+    rep.add("DC.06",
+            "kompas_connect mode=launch после обрыва восстанавливает сеанс: новый документ читается "
+            "(succeeded, измеренный 0), а документ погибшего экземпляра НЕ выдаётся за пустую модель",
+            "PASS" if ok06 else "FAIL",
+            f"connect={code06} app={new_app} fresh={fresh_doc} "
+            f"fresh_body_count={fresh_ctx.get('body_count')!r} "
+            f"old_code={code06b} old_body_count={old_ctx.get('body_count')!r} "
+            f"old_unverified={old_ctx.get('unverified_aspects')!r}",
+            details={"connect": result(env06), "fresh_context": fresh_ctx,
+                     "old_document": {"code": code06b, "status": status(env06b), "result": old_ctx}})
+
+    # Уборка: экземпляр, поднятый ЭТИМ прибором, закрывается только по его собственному id, и только
+    # если он ещё жив. Процесс, завершённый обрывом, закрывать нечего.
+    if new_app:
+        call("kompas_disconnect", {"application_id": new_app, "close_owned_application": True},
+             timeout=120)
+
+    for cid, desc in (
+        ("DC.00.setup", "постановка: деталь с телом, сборка с компонентом, PID своего КОМПАС"),
+        ("DC.01", "list_components при обрыве — APPLICATION_DISCONNECTED"),
+        ("DC.02", "get_context при обрыве — APPLICATION_DISCONNECTED"),
+        ("DC.03", "пять чтений при обрыве — каждый APPLICATION_DISCONNECTED"),
+        ("DC.04", "kompas_health называет потерю связи"),
+        ("DC.05", "мутации: close_document OUTCOME_UNKNOWN, release_session отказ"),
+        ("DC.06", "kompas_connect восстанавливает сеанс, чтения работают"),
+        ("DC.07", "контроль: живой КОМПАС даёт честный 0 и пустой список"),
+    ):
+        if not any(row.get("id") == cid for row in rep.rows):
+            rep.add(cid, desc, "FAIL", "строка не выполнена (раннее исключение постановки)")
+
+
 # Эталон блока G5+G7. Числа ЗАФИКСИРОВАНЫ ДО ПРОГОНА и выводятся аналитически, а не подбираются:
 # цилиндр r=20, h=50, выдавливанием окружности; плита 100x80x10. Моменты считаются от плотности,
 # которую группа сама записывает материалом, поэтому масса и моменты известны ДО вызова.
@@ -10498,6 +10842,11 @@ def main():
     # Своя группа, свой сеанс, своя синтетическая геометрия; данные клиента не используются (§5).
     client_bugs_20261010_only = "--client-bugs-20261010" in sys.argv
 
+    # Наряд READ_DISCONNECT: чтение при потерянной связи с КОМПАС отвечает APPLICATION_DISCONNECTED,
+    # а не ложным успехом с пустыми данными. Группа завершает СВОЙ экземпляр КОМПАС по PID, поэтому
+    # идёт своим свежим сеансом и последней среди групп вне вертикали.
+    disconnect_only = "--disconnect-only" in sys.argv
+
     # Набор выбранных веток -> ОДНО решение об имени группы. Заголовок, имя файла отчёта и имя
     # каталога прогона выводятся из него вместе, поэтому каталог не может назвать одну группу, а
     # отчёт внутри — другую.
@@ -10538,6 +10887,7 @@ def main():
         "entity_create": entity_create_only,
         "sketch_profile": sketch_profile_only,
         "suppress": bool(suppress_repeat_k),
+        "disconnect": disconnect_only,
     }
     # `--all` — это «вертикаль плюс группы вне неё», а не ещё одна ветка наравне с `-only`: вместе с
     # сужающим флагом он неоднозначен, и выбор молча сделал бы отчёт не тем, чем назван.
@@ -10649,6 +10999,9 @@ def main():
     client = Client(host, measured_config)
     document_id = None
     app_id = None
+    # PID экземпляра, поднятого вертикальным connect. Его читает только ветка DC: обрыв связи
+    # воспроизводится завершением ИМЕННО своего процесса, а PID называет только ответ launch.
+    app_pid = None
     try:
         init = client.call("initialize", {
             "protocolVersion": "2025-06-18",
@@ -10843,6 +11196,7 @@ def main():
         # --- the vertical slice ------------------------------------------------------
         c_err, c_env, _ = client.tool("kompas_connect", {"mode": "launch", "make_visible": False, "operation_id": str(uuid.uuid4())}, timeout=300)
         app_id = (c_env or {}).get("application_id")
+        app_pid = ((c_env or {}).get("result") or {}).get("process_id")
         rep.add("C01", "connect(launch): сеанс зарегистрирован",
                 "PASS" if c_env and c_env.get("status") == "succeeded" and app_id else "FAIL",
                 f"app_id={app_id} pid={((c_env or {}).get('result') or {}).get('process_id')} "
@@ -11111,6 +11465,17 @@ def main():
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
                     "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if disconnect_only:
+            # PID берётся у УЖЕ поднятого вертикального экземпляра: группа завершает ЕГО процесс,
+            # чтобы воспроизвести обрыв связи. Второй экземпляр не поднимается — иначе он остался бы
+            # висеть после прогона.
+            if not app_id:
+                rep.add("DC.00.setup", "постановка: сеанс не поднят", "FAIL",
+                        "вертикальный kompas_connect не вернул application_id")
+            else:
+                disconnect_checks(client, rep, app_id, workdir, process_id=app_pid)
             return finish(rep, client)
 
         if b3m_only:
@@ -39373,16 +39738,19 @@ def finish(rep, client):
 # что ссылается на функции групп, определённые ниже `dispatch_extra_group`; к моменту вызова `main()`
 # модуль загружен целиком. Самопроверка сверяет ключи этого словаря с `ALL_GROUPS_EXTRA`.
 EXTRA_GROUP_CHECKS = {
-    "assembly": lambda c, r, a, w, v: assembly_checks(c, r, a, w),
-    "mate": lambda c, r, a, w, v: mate_checks(c, r, a, w),
-    "interference": lambda c, r, a, w, v: interference_checks(c, r, a, w),
-    "drawing": lambda c, r, a, w, v: drawing_checks(c, r, a, w),
-    "variables_material": lambda c, r, a, w, v: variables_material_checks(
+    "assembly": lambda c, r, a, w, v, p: assembly_checks(c, r, a, w),
+    "mate": lambda c, r, a, w, v, p: mate_checks(c, r, a, w),
+    "interference": lambda c, r, a, w, v, p: interference_checks(c, r, a, w),
+    "drawing": lambda c, r, a, w, v, p: drawing_checks(c, r, a, w),
+    "variables_material": lambda c, r, a, w, v, p: variables_material_checks(
         c, r, a, w, reference_path=v),
-    "variables_bind": lambda c, r, a, w, v: variables_bind_checks(c, r, a, w),
-    "export_inertia": lambda c, r, a, w, v: export_inertia_checks(c, r, a, w),
-    "client_bugs_20261010": lambda c, r, a, w, v: client_bugs_20261010_checks(c, r, a, w),
-    "suppress": lambda c, r, a, w, v: suppress_restore_checks(c, r, a, w, ALL_SUPPRESS_REPEAT),
+    "variables_bind": lambda c, r, a, w, v, p: variables_bind_checks(c, r, a, w),
+    "export_inertia": lambda c, r, a, w, v, p: export_inertia_checks(c, r, a, w),
+    "client_bugs_20261010": lambda c, r, a, w, v, p: client_bugs_20261010_checks(c, r, a, w),
+    "suppress": lambda c, r, a, w, v, p: suppress_restore_checks(c, r, a, w, ALL_SUPPRESS_REPEAT),
+    # `p` — PID экземпляра, поднятого общим запуском группы: только группа DC его использует, чтобы
+    # завершить СВОЙ процесс КОМПАС и воспроизвести обрыв связи.
+    "disconnect": lambda c, r, a, w, v, p: disconnect_checks(c, r, a, w, process_id=p),
 }
 
 

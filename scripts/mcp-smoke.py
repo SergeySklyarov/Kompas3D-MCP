@@ -3516,6 +3516,318 @@ def sketch_constraints_checks(client, rep, app_id, workdir):
                 "НЕУСТОЙЧИВ (в сеансе одно, после сохранения другое) — граница остаётся НАЗВАННОЙ",
                 "PASS", sb_detail, sb_data)
 
+    # ══ SKC.23-SKC.28: ЧЕТЫРЕ ВИДА УПРАВЛЯЮЩЕГО РАЗМЕРА (наряд G6_DIMENSION_KINDS §4) ══════════
+    # ЗАЧЕМ. До этой доводки инструмент умел только линейный размер. Здесь измеряется, что
+    # диаметральный, радиальный и угловой размеры СТАВЯТСЯ, УПРАВЛЯЮТ геометрией, ПЕРЕЖИВАЮТ
+    # переоткрытие и ПРИВЯЗЫВАЮТСЯ к переменной детали — а также, отдельно, что движение принадлежит
+    # ЗНАЧЕНИЮ, а не самому факту создания размера, и что негодный вход отвергается ДО COM.
+    #
+    # ГЕОМЕТРИЯ ЧИТАЕТСЯ НЕЗАВИСИМО от ответа записи: kompas_list_sketch_entities публикует length_mm
+    # (отрезок), radius_mm (дуга и окружность) и angle_deg (наклон отрезка к оси X эскиза). Угол МЕЖДУ
+    # двумя отрезками — разность их наклонов; это ИЗМЕРЕНО (0 и 30 на постановке под 30°), а не
+    # предположено.
+
+    def circle_entities(radius=10.0):
+        return [{"kind": "circle", "center_mm": [0.0, 0.0], "radius_mm": radius}]
+
+    def arc_entities(radius=10.0, start_deg=0.0, sweep_deg=90.0):
+        return [{"kind": "arc", "center_mm": [0.0, 0.0], "radius_mm": radius,
+                 "start_deg": start_deg, "sweep_deg": sweep_deg}]
+
+    def angle_entities(angle_deg=30.0, length=25.0):
+        rad = math.radians(angle_deg)
+        return [
+            {"kind": "line", "start_mm": [0.0, 0.0], "end_mm": [length, 0.0]},
+            {"kind": "line", "start_mm": [0.0, 0.0],
+             "end_mm": [length * math.cos(rad), length * math.sin(rad)]},
+        ]
+
+    def entity_row(sketch, address):
+        env_e, _ec = call("kompas_list_sketch_entities",
+                          {"sketch_ref": sketch, "limit": 500, "address": address})
+        return ((result(env_e) or {}).get("rows") or [{}])[0]
+
+    def addresses_of_kind(sketch, kinds):
+        """Адреса сущностей НАЗВАННОГО вида. Индекс коллекции адресом не является: после постановки
+        размера в виде появляется ещё один объект, и «нулевой» перестаёт быть измеряемым."""
+        env_e, _ec = call("kompas_list_sketch_entities", {"sketch_ref": sketch, "limit": 500})
+        rows = (result(env_e) or {}).get("rows") or []
+        return [r.get("address") for r in rows if r.get("kind") in kinds and r.get("address")]
+
+    def read_diameter(sketch, addrs):
+        radius = entity_row(sketch, addrs[0]).get("radius_mm")
+        return 2.0 * radius if isinstance(radius, (int, float)) else None
+
+    def read_radius(sketch, addrs):
+        return entity_row(sketch, addrs[0]).get("radius_mm")
+
+    def read_angle(sketch, addrs):
+        first = entity_row(sketch, addrs[0]).get("angle_deg")
+        second = entity_row(sketch, addrs[1]).get("angle_deg")
+        if not isinstance(first, (int, float)) or not isinstance(second, (int, float)):
+            return None
+        return abs(second - first)
+
+    def revision_of(doc):
+        env_r, _rc = call("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return (result(env_r) or {}).get("revision")
+
+    def build_sketch(name, entities):
+        doc_b, _c0 = new_part(name)
+        sk_b, rev_b = fresh(doc_b)
+        call("kompas_create_sketch", {"document_id": doc_b, "expected_revision": rev_b,
+                                      "plane": {"base": "xy", "offset_mm": 0}, "name": name})
+        sk_b, rev_b = fresh(doc_b)
+        call("kompas_edit_sketch", {"sketch_ref": sk_b, "expected_revision": rev_b,
+                                    "mode": "replace", "entities": entities})
+        sk_b, rev_b = fresh(doc_b)
+        return doc_b, sk_b, rev_b
+
+    def kind_scenario(kind, entities, value_field, value, variable_name, variable_delta,
+                      measured_kinds, read_geometry):
+        """Один вид целиком: постановка → переоткрытие → привязка переменной РАЗМЕРА к переменной
+        ДЕТАЛИ → смена значения. Геометрия читается ДО постановки, ПОСЛЕ переоткрытия и ПОСЛЕ смены
+        переменной — каждый раз независимым перечислением сущностей, а измеряемые объекты ищутся ПО
+        ВИДУ, а не по индексу: после постановки размера в виде появляется ещё один объект."""
+        doc_k, sk_k, rev_k = build_sketch("skc-kind-" + kind, entities)
+        addrs = addresses_of_kind(sk_k, measured_kinds)
+        out = {"kind": kind, "addresses": addrs, "geometry_before": read_geometry(sk_k, addrs)}
+
+        args = {"sketch_ref": sk_k, "expected_revision": rev_k, "object_ref": addrs[0],
+                "kind": kind, value_field: value}
+        if kind == "angular" and len(addrs) > 1:
+            args["second_object_ref"] = addrs[1]
+        env_d, code_d = call("kompas_create_sketch_dimension", args)
+        res_d = result(env_d)
+        out["create_code"] = code_d
+        out["response_kind"] = res_d.get("kind")
+        out["value_read"] = res_d.get("value_read")
+        out["geometry_name"] = res_d.get("geometry_name")
+        out["geometry_after"] = res_d.get("geometry_after")
+        out["dimension_variable"] = res_d.get("dimension_variable")
+        sk_k, rev_k = fresh(doc_k)
+
+        path_k = _os.path.join(workdir, "skc-kind-" + kind + ".m3d")
+        clear_path(path_k)
+        call("kompas_save_document", {"document_id": doc_k, "target_path": path_k,
+                                      "expected_revision": rev_k})
+        call("kompas_close_document", {"document_id": doc_k, "dirty_policy": "discard"})
+        env_ro, code_ro = call("kompas_open_document", {
+            "application_id": app_id, "path": path_k, "access": "edit"})
+        doc_r = doc_of(env_ro)
+        sk_r, rev_r = fresh(doc_r)
+        out["reopen_code"] = code_ro
+        out["geometry_reopen"] = read_geometry(sk_r, addrs)
+        # Значение размера ищется по ВСЕМ объектам эскиза и берётся у ЗАПИСИ С ИМЕНЕМ ПЕРЕМЕННОЙ: у
+        # объекта-размера лежит запись ksCDimWithVariable со значением и переменной v9, а на самом
+        # ИЗМЕРЯЕМОМ объекте (окружности, дуге, отрезке) есть одноимённая запись со значением 0 и
+        # пустой переменной — она принадлежит связи, а не размеру. Брать первую попавшуюся значило бы
+        # читать чужую запись; что именно лежит где, записывается целиком, а не сглаживается.
+        env_lc, _lc = constraints_of(sk_r)
+        out["reopen_constraints"] = [
+            {"object_ref": obj.get("object_ref"), "kind": obj.get("kind"),
+             "rows": [{"type": c.get("type"), "value": c.get("value"),
+                       "variable": c.get("variable")} for c in (obj.get("constraints") or [])]}
+            for obj in (result(env_lc) or {}).get("objects") or []]
+        out["dimension_value_reopen"] = next(
+            (c["value"] for obj in out["reopen_constraints"] for c in obj["rows"]
+             if c["type"] == "ksCDimWithVariable" and c.get("variable")), None)
+
+        _sk_v, rev_v = fresh(doc_r)
+        _env_cv, code_cv = call("kompas_create_variable", {
+            "document_id": doc_r, "expected_revision": rev_v, "name": variable_name,
+            "value": value, "note": "приёмка SKC: вид " + kind})
+        sk_r, rev_r = fresh(doc_r)
+        _env_b, code_b = call("kompas_bind_parameter", {
+            "document_id": doc_r, "expected_revision": rev_r, "feature_ref": sk_r,
+            "parameter_name": out["dimension_variable"], "expression": variable_name})
+        sk_r, rev_r = fresh(doc_r)
+        _env_sv, code_sv = call("kompas_set_variable", {
+            "document_id": doc_r, "name": variable_name, "value": value + variable_delta,
+            "expected_revision": rev_r})
+        call("kompas_rebuild", {"document_id": doc_r})
+        sk_r, rev_r = fresh(doc_r)
+        out["variable_codes"] = {"create": code_cv, "bind": code_b, "set": code_sv}
+        out["geometry_after_variable"] = read_geometry(sk_r, addrs)
+        close(doc_r)
+        return out
+
+    def kind_row(row_id, expectation, kind, entities, value_field, value, variable_name,
+                 variable_delta, measured_kinds, read_geometry, tol=1e-4):
+        try:
+            out = kind_scenario(kind, entities, value_field, value, variable_name, variable_delta,
+                                measured_kinds, read_geometry)
+        except Exception as exc:  # noqa: BLE001 — строка обязана назвать падение сценария, а не молчать
+            rep.add(row_id, expectation, "FAIL", "сценарий упал: %s" % exc)
+            return
+
+        codes_ok = (out["create_code"] is None and out["reopen_code"] is None
+                    and all(c is None for c in out["variable_codes"].values()))
+        facts = {
+            "kind_echoed": out["response_kind"] == kind,
+            "value_read": near(out["value_read"], value, tol),
+            "geometry_after": near(out["geometry_after"], value, tol),
+            "geometry_reopen": near(out["geometry_reopen"], value, tol),
+            "value_reopen": near(out["dimension_value_reopen"], value, tol),
+            "geometry_after_variable": near(out["geometry_after_variable"], value + variable_delta,
+                                            tol),
+        }
+        ok = codes_ok and all(facts.values())
+        detail = (f"геометрия {out['geometry_before']} → {out['geometry_after']} "
+                  f"({out['geometry_name']}) при значении {value}; переоткрытие: геометрия "
+                  f"{out['geometry_reopen']}, значение размера в перечитанном списке "
+                  f"{out['dimension_value_reopen']}; переменная {variable_name}: параметр "
+                  f"'{out['dimension_variable']}' → '{variable_name}', "
+                  f"{value} → {value + variable_delta} даёт геометрию "
+                  f"{out['geometry_after_variable']}; коды {out['create_code']}/"
+                  f"{out['reopen_code']}/{out['variable_codes']}")
+        rep.add(row_id, expectation, "PASS" if ok else "FAIL", detail,
+                {"facts": facts, "codes_ok": codes_ok, "scenario": out})
+
+    kind_row("SKC.23.diametral_dimension",
+             "диаметральный размер: окружность Ø20, значение 30 → диаметр 30; переживает "
+             "save → close → reopen; переменная ДЕТАЛИ D: 30 → 40 двигает диаметр до 40",
+             "diametral", circle_entities(10.0), "value_mm", 30.0, "D", 10.0,
+             ("ksDrCircle",), read_diameter)
+
+    kind_row("SKC.24.radial_dimension",
+             "радиальный размер: дуга R10, значение 15 → радиус 15; переживает save → close → reopen; "
+             "переменная ДЕТАЛИ R: 15 → 20 двигает радиус до 20",
+             "radial", arc_entities(10.0), "value_mm", 15.0, "R", 5.0,
+             ("ksDrArc",), read_radius)
+
+    kind_row("SKC.25.angular_dimension",
+             "угловой размер: два отрезка из общей точки под 30°, значение 45 → угол 45°; переживает "
+             "save → close → reopen; переменная ДЕТАЛИ A: 45 → 60 двигает угол до 60°",
+             "angular", angle_entities(30.0), "value_deg", 45.0, "A", 15.0,
+             ("ksDrLineSeg",), read_angle)
+
+    # ── SKC.26.dimension_value_control (различающий контроль НА ВСЕХ ТРЁХ ВИДАХ) ────────────────
+    # ЗАЧЕМ. Строки SKC.23-SKC.25 показывают, что геометрия ПРИШЛА к значению. Здесь та же постановка
+    # получает значение, РАВНОЕ УЖЕ ИЗМЕРЕННОЙ геометрии: если бы двигал сам факт создания размера,
+    # геометрия сдвинулась бы и здесь. Она обязана остаться на месте — этим движение приписывается
+    # ЗНАЧЕНИЮ, а не размеру как таковому.
+    control_rows = []
+    for tag, entities, value_field, current, measured_kinds, read_geometry in (
+            ("diametral", circle_entities(10.0), "value_mm", 20.0, ("ksDrCircle",), read_diameter),
+            ("radial", arc_entities(10.0), "value_mm", 10.0, ("ksDrArc",), read_radius),
+            ("angular", angle_entities(30.0), "value_deg", 30.0, ("ksDrLineSeg",), read_angle)):
+        doc_c, sk_c, rev_c = build_sketch("skc-control-" + tag, entities)
+        addrs_c = addresses_of_kind(sk_c, measured_kinds)
+        before_c = read_geometry(sk_c, addrs_c)
+        args_c = {"sketch_ref": sk_c, "expected_revision": rev_c, "object_ref": addrs_c[0],
+                  "kind": tag, value_field: current}
+        if tag == "angular" and len(addrs_c) > 1:
+            args_c["second_object_ref"] = addrs_c[1]
+        _env_c, code_c = call("kompas_create_sketch_dimension", args_c)
+        sk_c, _rev_c2 = fresh(doc_c)
+        after_c = read_geometry(sk_c, addrs_c)
+        close(doc_c)
+        control_rows.append((tag, before_c, after_c, code_c, current,
+                             code_c is None and near(before_c, current, 1e-4)
+                             and near(after_c, before_c, 1e-6)))
+
+    control_ok = all(row[5] for row in control_rows)
+    rep.add("SKC.26.dimension_value_control",
+            "различающий контроль: значение, РАВНОЕ уже измеренной геометрии, её НЕ двигает — значит, "
+            "движет значение, а не сам факт создания размера",
+            "PASS" if control_ok else "FAIL",
+            "; ".join(f"{t}: {b} → {a} при значении {v} (код {c})"
+                      for t, b, a, c, v, _ok in control_rows),
+            {"rows": [{"kind": t, "before": b, "after": a, "value": v, "code": c}
+                      for t, b, a, c, v, _ok in control_rows]})
+
+    # ── SKC.27.dimension_kind_refusals (ОТКАЗЫ ДО COM) ──────────────────────────────────────────
+    # ЗАЧЕМ. Поле чужого вида и объект не того вида обязаны отвергаться ДО COM и НЕ поднимать ревизию:
+    # иначе клиент считал бы заданным то, чего сервер не задавал, а половина записи осталась бы в модели.
+    doc_n, sk_n, rev_n = build_sketch("skc-refusals", circle_entities(10.0))
+    addrs_n, _an = addresses(sk_n)
+    segment_doc, segment_sk, segment_rev = build_sketch("skc-refusals-seg", rectangle())
+    segment_addrs, _san = addresses(segment_sk)
+
+    refusal_cases = []
+    for tag, args in (
+            ("diametral на отрезке", {"kind": "diametral", "object_ref": segment_addrs[0],
+                                      "value_mm": 30.0}),
+            ("diametral с value_deg", {"kind": "diametral", "object_ref": addrs_n[0],
+                                       "value_deg": 45.0}),
+            ("diametral со вторым объектом", {"kind": "diametral", "object_ref": addrs_n[0],
+                                              "second_object_ref": addrs_n[0], "value_mm": 30.0}),
+            ("angular без второго объекта", {"kind": "angular", "object_ref": addrs_n[0],
+                                             "value_deg": 45.0}),
+            ("linear с value_deg", {"kind": "linear", "object_ref": segment_addrs[0],
+                                    "value_deg": 45.0}),
+            ("вид вне словаря", {"kind": "diameter", "object_ref": addrs_n[0], "value_mm": 30.0})):
+        target_doc, target_sk = (segment_doc, segment_sk) if "отрезке" in tag or tag.startswith("linear") \
+            else (doc_n, sk_n)
+        rev_before = revision_of(target_doc)
+        _env_r, code_r = call("kompas_create_sketch_dimension", {
+            "sketch_ref": target_sk, "expected_revision": rev_before, **args})
+        rev_after = revision_of(target_doc)
+        refusal_cases.append((tag, code_r, rev_before, rev_after))
+    close(doc_n)
+    close(segment_doc)
+
+    refusals_ok = all(code == "INVALID_ARGUMENT" and before == after
+                      for _t, code, before, after in refusal_cases)
+    rep.add("SKC.27.dimension_kind_refusals",
+            "поле чужого вида и объект не того вида отвергаются INVALID_ARGUMENT ДО COM, ревизия не "
+            "двигается",
+            "PASS" if refusals_ok else "FAIL",
+            "; ".join(f"{t}: код {c}, ревизия {b} → {a}" for t, c, b, a in refusal_cases),
+            {"cases": [{"case": t, "code": c, "revision_before": b, "revision_after": a}
+                       for t, c, b, a in refusal_cases]})
+
+    # ── SKC.28.diametral_dimension_extruded_body (СЦЕНАРИЙ КЛИЕНТА) ──────────────────────────────
+    # ЗАЧЕМ. Это сценарий заказчика: диаметр отверстия, которым управляет переменная детали, а тело
+    # перестраивается за ней. Проверка НЕЗАВИСИМА от размера: объём тела меряется компасом через
+    # kompas_measure и сверяется с аналитикой π·D²/4·h.
+    doc_x, sk_x, rev_x = build_sketch("skc-extruded-diameter", circle_entities(10.0))
+    circle_x = addresses_of_kind(sk_x, ("ksDrCircle",))
+    _env_x, code_x = call("kompas_extrude", {
+        "sketch_ref": sk_x, "expected_revision": rev_x, "operation": "base",
+        "depth_mm": 10.0, "direction": "positive", "end_condition": "blind"})
+    volume_at_r10 = (body_measure(doc_x) or {}).get("volume_mm3")
+    sk_x, rev_x = fresh(doc_x)
+    env_xd, code_xd = call("kompas_create_sketch_dimension", {
+        "sketch_ref": sk_x, "expected_revision": rev_x, "object_ref": circle_x[0],
+        "kind": "diametral", "value_mm": 30.0})
+    dim_variable = result(env_xd).get("dimension_variable")
+    volume_at_d30 = (body_measure(doc_x) or {}).get("volume_mm3")
+    sk_x, rev_x = fresh(doc_x)
+    _env_xv, code_xv = call("kompas_create_variable", {
+        "document_id": doc_x, "expected_revision": rev_x, "name": "D", "value": 30.0,
+        "note": "приёмка SKC.28: диаметр отверстия"})
+    sk_x, rev_x = fresh(doc_x)
+    _env_xb, code_xb = call("kompas_bind_parameter", {
+        "document_id": doc_x, "expected_revision": rev_x, "feature_ref": sk_x,
+        "parameter_name": dim_variable, "expression": "D"})
+    sk_x, rev_x = fresh(doc_x)
+    _env_xs, code_xs = call("kompas_set_variable", {
+        "document_id": doc_x, "name": "D", "value": 40.0, "expected_revision": rev_x})
+    call("kompas_rebuild", {"document_id": doc_x})
+    volume_at_d40 = (body_measure(doc_x) or {}).get("volume_mm3")
+    close(doc_x)
+
+    analytic_r10 = math.pi * 10.0 ** 2 * 10.0
+    analytic_d30 = math.pi * 15.0 ** 2 * 10.0
+    analytic_d40 = math.pi * 20.0 ** 2 * 10.0
+    body_ok = (code_x is None and code_xd is None and code_xv is None and code_xb is None
+               and code_xs is None and near(volume_at_r10, analytic_r10, 1e-2)
+               and near(volume_at_d30, analytic_d30, 1e-2)
+               and near(volume_at_d40, analytic_d40, 1e-2))
+    rep.add("SKC.28.diametral_dimension_extruded_body",
+            "сценарий клиента: диаметр отверстия через переменную ДЕТАЛИ — объём выдавленного тела "
+            "идёт за ней по аналитике π·D²/4·h",
+            "PASS" if body_ok else "FAIL",
+            f"объём до размера {volume_at_r10} (аналитика R10 {analytic_r10}); после размера Ø30 "
+            f"{volume_at_d30} (аналитика {analytic_d30}); после D=40 {volume_at_d40} (аналитика "
+            f"{analytic_d40}); коды выдавливания {code_x}, размера {code_xd}, переменной {code_xv}, "
+            f"привязки {code_xb}, смены {code_xs}",
+            {"volume_at_r10": volume_at_r10, "volume_at_d30": volume_at_d30,
+             "volume_at_d40": volume_at_d40, "analytic_d30": analytic_d30,
+             "analytic_d40": analytic_d40, "dimension_variable": dim_variable})
+
     # ── SKC.13.type_vocabulary ──────────────────────────────────────────────────────────────────
     sk2, rev2 = fresh(doc2)
     env_v, code_v = create_constraint(sk2, rev2, bottom2, "ksCHorizontal")

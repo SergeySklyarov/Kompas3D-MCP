@@ -3324,6 +3324,198 @@ def sketch_constraints_checks(client, rep, app_id, workdir):
                 {"reopen_without_session": st_state_reopen,
                  "reopen_with_read_session": st_state_session})
 
+    # ── SKC.22.session_after_state_behaviour (вопрос заказчика 11.10.2026) ──────────────────────
+    # ЗАЧЕМ. Строка SKC.21 показала, что сеанс на эскизе между последней правкой и сохранением меняет
+    # состояние, которое унесёт файл. Вопрос заказчика — СОХРАНЯЕТСЯ ли при этом ПАРАМЕТРИЧЕСКОЕ
+    # ПОВЕДЕНИЕ. Три вопроса, все через поставку:
+    #   (1) kompas_set_variable L=70 + перестроение → длина 70?
+    #   (2) держит ли ограничение геометрию — отказ при попытке нарушить?
+    #   (3) возвращает ли состояние 1 следующая НАСТОЯЩАЯ правка эскиза?
+    # Если параметрика цела — граница остаётся НАЗВАННОЙ (вариант «а» решения заказчика).
+    # Если параметрика теряется — СТОП и доклад, а не «названная граница».
+    # ПОСТАНОВКА. Контур полностью ограничен (как в SKC.12), но одна фиксированная длина заменена
+    # УПРАВЛЯЮЩИМ РАЗМЕРОМ, привязанным к переменной детали L: без размера вопрос (1) задать нечем.
+    # РАЗДЕЛЕНИЕ, БЕЗ КОТОРОГО СТРОКА НИЧЕГО НЕ ДОКАЗЫВАЕТ: состояние читается ТРИЖДЫ —
+    #   a) в сеансе сразу после привязки (контроль постановки),
+    #   b) после save → close → reopen БЕЗ сеанса (что даёт само сохранение),
+    #   c) после сеанса ТОЛЬКО НА ЧТЕНИЕ + save → close → reopen (что добавляет сеанс).
+    # Без (b) нельзя отличить «сеанс сдвинул состояние» от «сохранение сдвинуло состояние».
+    doc_sb, _sb0 = new_part("skc-session-behaviour")
+    sk_sb, rev_sb = fresh(doc_sb)
+    call("kompas_create_sketch", {"document_id": doc_sb, "expected_revision": rev_sb,
+                                  "plane": {"base": "xy", "offset_mm": 0}, "name": "skc-sb-profile"})
+    sk_sb, rev_sb = fresh(doc_sb)
+    call("kompas_edit_sketch", {"sketch_ref": sk_sb, "expected_revision": rev_sb,
+                                "mode": "replace", "entities": rectangle()})
+    sk_sb, rev_sb = fresh(doc_sb)
+    sb_addrs, _sba = addresses(sk_sb)
+
+    sb_codes = []
+    for tag, kind, obj_index, partner_index, point_index in (
+            ("merge1", "ksCMergePoints", 0, 1, 1), ("merge2", "ksCMergePoints", 1, 2, 1),
+            ("merge3", "ksCMergePoints", 2, 3, 1), ("merge4", "ksCMergePoints", 3, 0, 1),
+            ("h1", "ksCHorizontal", 0, None, None), ("h2", "ksCHorizontal", 2, None, None),
+            ("v1", "ksCVertical", 1, None, None), ("v2", "ksCVertical", 3, None, None),
+            ("l1", "ksCFixedLenght", 1, None, None),
+            ("pin", "ksCFixedPoint", 0, None, None)):
+        args = {"sketch_ref": sk_sb, "expected_revision": rev_sb, "constraint_type": kind,
+                "object_ref": sb_addrs[obj_index] if len(sb_addrs) > obj_index else None}
+        if point_index is not None:
+            args["point_index"] = point_index
+        if partner_index is not None and len(sb_addrs) > partner_index:
+            args["partner_ref"] = sb_addrs[partner_index]
+            args["partner_point_index"] = 0
+        _ec, code_c = call("kompas_create_sketch_constraint", args)
+        sb_codes.append(f"{tag}={code_c or 'ok'}")
+        sk_sb, rev_sb = fresh(doc_sb)
+
+    sb_segment = sb_addrs[0] if sb_addrs else None
+    env_sbd, code_sbd = call("kompas_create_sketch_dimension", {
+        "sketch_ref": sk_sb, "expected_revision": rev_sb, "object_ref": sb_segment, "value_mm": 50.0})
+    sb_len_dim = result(env_sbd).get("length_after_mm")
+    sk_sb, rev_sb = fresh(doc_sb)
+
+    env_sbcv, code_sbcv = call("kompas_create_variable", {
+        "document_id": doc_sb, "expected_revision": rev_sb, "name": "L", "value": 50.0,
+        "note": "приёмка SKC.22: переменная детали"})
+    sk_sb, rev_sb = fresh(doc_sb)
+    env_sbp, code_sbp = call("kompas_list_feature_parameters",
+                             {"document_id": doc_sb, "feature_ref": sk_sb})
+    sb_rows = ((result(env_sbp) or {}).get("parameters")
+               or (result(env_sbp) or {}).get("rows") or [])
+    sb_param = None
+    for row in sb_rows:
+        if (isinstance(row, dict) and isinstance(row.get("name"), str)
+                and isinstance(row.get("value"), (int, float))
+                and abs(row["value"] - 50.0) < 1e-6):
+            sb_param = row["name"]
+            break
+    env_sbb, code_sbb = call("kompas_bind_parameter", {
+        "document_id": doc_sb, "expected_revision": rev_sb, "feature_ref": sk_sb,
+        "parameter_name": sb_param, "expression": "L"})
+    sk_sb, rev_sb = fresh(doc_sb)
+
+    # (a) контроль постановки: состояние В СЕАНСЕ сразу после привязки, БЕЗ сохранения и БЕЗ сеанса чтения.
+    sb_state_insession, sb_name_insession, _sf8 = sketch_state(sk_sb)
+
+    sb_path_a = _os.path.join(workdir, "skc-session-behaviour-plain.m3d")
+    clear_path(sb_path_a)
+    _sk_sb1, rev_sb1 = fresh(doc_sb)
+    call("kompas_save_document", {"document_id": doc_sb, "target_path": sb_path_a,
+                                  "expected_revision": rev_sb1})
+    call("kompas_close_document", {"document_id": doc_sb, "dirty_policy": "discard"})
+
+    # (b) save → close → reopen БЕЗ сеанса чтения: что даёт САМО сохранение.
+    env_sb_a, _csa = call("kompas_open_document", {
+        "application_id": app_id, "path": sb_path_a, "access": "edit"})
+    doc_sb_a = doc_of(env_sb_a)
+    sk_sb_a, _rsa = fresh(doc_sb_a)
+    sb_state_plain, sb_name_plain, _sf9 = (sketch_state(sk_sb_a) if sk_sb_a else (None, None, None))
+    close(doc_sb_a)
+
+    # (c) сеанс ТОЛЬКО НА ЧТЕНИЕ + save → close → reopen: что ДОБАВЛЯЕТ сеанс.
+    env_sb_b, _csb = call("kompas_open_document", {
+        "application_id": app_id, "path": sb_path_a, "access": "edit"})
+    doc_sb = doc_of(env_sb_b)
+    sk_sb, _rsb = fresh(doc_sb)
+    constraints_of(sk_sb)
+    sb_path_b = _os.path.join(workdir, "skc-session-behaviour-session.m3d")
+    clear_path(sb_path_b)
+    _sk_sb2, rev_sb2 = fresh(doc_sb)
+    call("kompas_save_document", {"document_id": doc_sb, "target_path": sb_path_b,
+                                  "expected_revision": rev_sb2})
+    call("kompas_close_document", {"document_id": doc_sb, "dirty_policy": "discard"})
+    env_sb_c, _csc = call("kompas_open_document", {
+        "application_id": app_id, "path": sb_path_b, "access": "edit"})
+    doc_sb2 = doc_of(env_sb_c)
+    sk_sb2, _rsc = fresh(doc_sb2)
+    sb_state_session, sb_name_session, _sf10 = (sketch_state(sk_sb2) if sk_sb2 else (None, None, None))
+    sb2_addrs, _sb2a = addresses(sk_sb2) if sk_sb2 else ([], "нет эскиза")
+    sb2_segment = sb2_addrs[0] if sb2_addrs else None
+
+    def sb_length(sketch, segment):
+        """Длина отрезка ЧЕРЕЗ ПОСТАВКУ — независимая от ответа записи проверка."""
+        env_l, _lc = call("kompas_list_sketch_entities",
+                          {"sketch_ref": sketch, "limit": 500, "address": segment})
+        rows = (result(env_l) or {}).get("rows") or [{}]
+        return rows[0].get("length_mm")
+
+    # (1) смена переменной ДЕТАЛИ на 70 + перестроение → длина 70?
+    _sk_sb3, rev_sb3 = fresh(doc_sb2)
+    env_s70, code_s70 = call("kompas_set_variable", {
+        "document_id": doc_sb2, "name": "L", "value": 70.0, "expected_revision": rev_sb3})
+    call("kompas_rebuild", {"document_id": doc_sb2})
+    sb_len_70 = sb_length(fresh(doc_sb2)[0], sb2_segment)
+
+    # (1b) и обратно на 50 — «держит» означает, что длина ХОДИТ за переменной в обе стороны.
+    _sk_sb4, rev_sb4 = fresh(doc_sb2)
+    env_s50, code_s50 = call("kompas_set_variable", {
+        "document_id": doc_sb2, "name": "L", "value": 50.0, "expected_revision": rev_sb4})
+    call("kompas_rebuild", {"document_id": doc_sb2})
+    sb_len_50 = sb_length(fresh(doc_sb2)[0], sb2_segment)
+
+    # (3) НАСТОЯЩАЯ правка эскиза: снять закрепление и наложить заново (рецепт SKC.04).
+    # Состояние читается ИЗ ОТВЕТА ЗАПИСИ — то есть сразу после правки, а не после переоткрытия.
+    sb3_addrs, _sb3a = addresses(fresh(doc_sb2)[0])
+    sb_state_after_edit = None
+    sb_edit_note = "правка не выполнена"
+    if len(sb3_addrs) > 0:
+        sb_pin_env, _sb_pin_code = constraints_of(fresh(doc_sb2)[0], sb3_addrs[0])
+        sb_pin_rows = ((result(sb_pin_env) or {}).get("objects") or [{}])[0].get("constraints") or []
+        sb_pin_index = next((c.get("index") for c in sb_pin_rows
+                             if c.get("type") == "ksCFixedPoint"), None)
+        if sb_pin_index is None:
+            sb_edit_note = "закрепление (ksCFixedPoint) в списке не найдено — правка не выполнена"
+        else:
+            _sk_sb5, rev_sb5 = fresh(doc_sb2)
+            _env_del, code_del = call("kompas_delete_sketch_constraint", {
+                "sketch_ref": fresh(doc_sb2)[0], "expected_revision": rev_sb5,
+                "object_ref": sb3_addrs[0], "constraint_index": sb_pin_index})
+            _sk_sb6, rev_sb6 = fresh(doc_sb2)
+            env_readd, code_readd = call("kompas_create_sketch_constraint", {
+                "sketch_ref": fresh(doc_sb2)[0], "expected_revision": rev_sb6,
+                "constraint_type": "ksCFixedPoint", "object_ref": sb3_addrs[0]})
+            sb_state_after_edit = result(env_readd).get("state_raw")
+            sb_edit_note = (f"снято ({code_del or 'ok'}), наложено заново ({code_readd or 'ok'}), "
+                            f"состояние из ответа записи {sb_state_after_edit}")
+
+    # (2) ПОПЫТКА НАРУШИТЬ: второй управляющий размер на том же отрезке с ДРУГИМ значением.
+    # Отказ = ограничение держит геометрию. Принятие и длина 80 = не держит.
+    _env_viol, sb_code_viol = call("kompas_create_sketch_dimension", {
+        "sketch_ref": fresh(doc_sb2)[0], "expected_revision": fresh(doc_sb2)[1],
+        "object_ref": sb2_segment, "value_mm": 80.0})
+    sb_len_viol = sb_length(fresh(doc_sb2)[0], sb2_segment)
+
+    close(doc_sb2)
+
+    sb_holds = (sb_code_viol is not None and near(sb_len_viol, sb_len_50, 1e-6))
+    sb_drives = (near(sb_len_70, 70.0, 1e-6) and near(sb_len_50, 50.0, 1e-6))
+    sb_detail = (f"состояние: в сеансе после привязки {sb_state_insession} ({sb_name_insession}); "
+                 f"после сохранения и переоткрытия БЕЗ сеанса {sb_state_plain} ({sb_name_plain}); "
+                 f"после сеанса чтения и переоткрытия {sb_state_session} ({sb_name_session}); "
+                 f"размер {sb_len_dim}; L=70 → длина {sb_len_70}; L=50 → длина {sb_len_50}; "
+                 f"правка эскиза: {sb_edit_note}; "
+                 f"попытка нарушить (второй размер 80): код {sb_code_viol}, длина {sb_len_viol}")
+    sb_data = {"state_after_bind": sb_state_insession, "state_plain_reopen": sb_state_plain,
+               "state_after_read_session": sb_state_session,
+               "length_after_dimension": sb_len_dim, "length_after_70": sb_len_70,
+               "length_after_50": sb_len_50, "constraint_holds": sb_holds,
+               "violation_code": sb_code_viol, "length_after_violation": sb_len_viol,
+               "state_after_real_edit": sb_state_after_edit, "codes": sb_codes,
+               "dimension": code_sbd, "create_variable": code_sbcv, "bind": code_sbb,
+               "feature_parameters": [r.get("name") for r in sb_rows if isinstance(r, dict)]}
+    if not sb_drives:
+        # СТОП И ДОКЛАД: параметрика теряется — это дефект, а не «названная граница».
+        rep.add("SKC.22.session_after_state_behaviour",
+                "ПАРАМЕТРИКА ТЕРЯЕТСЯ: переменная детали больше не задаёт длину отрезка",
+                "FAIL", sb_detail, sb_data)
+    else:
+        rep.add("SKC.22.session_after_state_behaviour",
+                "ПАРАМЕТРИКА ЦЕЛА при любом прочитанном флаге состояния: L=70 → длина 70, L=50 → "
+                "длина 50, попытка нарушить отвергнута, длина не сдвинулась; флаг состояния при этом "
+                "НЕУСТОЙЧИВ (в сеансе одно, после сохранения другое) — граница остаётся НАЗВАННОЙ",
+                "PASS", sb_detail, sb_data)
+
     # ── SKC.13.type_vocabulary ──────────────────────────────────────────────────────────────────
     sk2, rev2 = fresh(doc2)
     env_v, code_v = create_constraint(sk2, rev2, bottom2, "ksCHorizontal")

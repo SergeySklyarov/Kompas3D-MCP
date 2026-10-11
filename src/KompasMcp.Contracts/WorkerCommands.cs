@@ -542,7 +542,17 @@ public sealed record SketchEntityRowDto(
     /// <summary>Length of a LINE SEGMENT in millimetres, read from the object itself. <c>null</c> for
     /// other kinds and when the member did not answer — "not read", never zero. It is what lets a
     /// client verify that a driving dimension really moved the geometry.</summary>
-    double? LengthMm = null);
+    double? LengthMm = null,
+    /// <summary>Radius of an ARC or a CIRCLE in millimetres, read from the object itself. <c>null</c>
+    /// for other kinds and when the member did not answer — "not read", never zero. It is the quantity a
+    /// diametral or a radial driving dimension moves, so the same argument as <see cref="LengthMm"/>
+    /// applies: the client reads it back instead of trusting the answer of the write.</summary>
+    double? RadiusMm = null,
+    /// <summary>Inclination of a LINE SEGMENT to the X axis of the sketch, in degrees, read from the
+    /// object itself. <c>null</c> for other kinds and when unread. MEASURED: 0 for a segment along X and
+    /// 30 for one at 30°, so the angle BETWEEN two segments is the difference of their readings — the
+    /// quantity an angular driving dimension moves.</summary>
+    double? AngleDeg = null);
 
 /// <summary>Request for an address-targeted sketch-entity edit. <see cref="Address"/> is mandatory: an edit of "the
 /// first entity that comes up" is not address-targeted.</summary>

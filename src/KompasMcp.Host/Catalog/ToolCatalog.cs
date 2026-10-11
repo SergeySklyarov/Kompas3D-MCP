@@ -2988,7 +2988,13 @@ public static class ToolCatalog
                 + "ПОЛИЛИНИЯ И СПЛАЙН ПРИХОДЯТ ОДНИМ ОБЪЕКТОМ: строка полилинии (вид ksDrPolyline) несёт "
                 + "entity_kind=polyline и поля points_count и closed, прочитанные IPolyLine2D.PointsCount и "
                 + "IPolyLine2D.Closed; строка сплайна (вид ksDrBezier) — entity_kind=spline и те же поля из "
-                + "IBezier. У прочих видов эти поля null: непрочитанное не выдаётся за ноль.",
+                + "IBezier. У прочих видов эти поля null: непрочитанное не выдаётся за ноль. "
+                + "ГЕОМЕТРИЯ, КОТОРУЮ ДВИГАЕТ УПРАВЛЯЮЩИЙ РАЗМЕР, ПУБЛИКУЕТСЯ ЗДЕСЬ ЖЕ, чтобы клиент "
+                + "проверял её САМ, а не верил ответу записи: length_mm — длина отрезка (ILineSegment.Length), "
+                + "radius_mm — радиус дуги или окружности (IArc.Radius / ICircle.Radius), angle_deg — "
+                + "наклон отрезка к оси X эскиза в градусах (ILineSegment.Angle; измерено: 0 у отрезка по "
+                + "оси X и 30 у отрезка под 30°, поэтому угол МЕЖДУ двумя отрезками есть разность их "
+                + "наклонов). Поле, неприменимое к виду сущности, остаётся null — это «неприменимо», а не ноль.",
                 Sch.Props(
                     ("sketch_ref", Sch.Ref("#/$defs/reference")),
                     ("address", Sch.Nullable(Sch.Str("Адрес одной сущности, выданный этим же перечислением.", maxLength: 512))),

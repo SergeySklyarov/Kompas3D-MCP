@@ -21,7 +21,16 @@ internal sealed record SketchEntityRow(
     int? PointsCount = null,
     bool? Closed = null,
     string? EntityKind = null,
-    double? LengthMm = null);
+    double? LengthMm = null,
+    /// <summary>Radius of an arc or a circle, mm. <c>null</c> for other kinds and when the member did not
+    /// answer — "not read", never zero. It is the quantity a diametral or a radial driving dimension
+    /// moves, so a client must be able to read it back instead of trusting the answer of the write.</summary>
+    double? RadiusMm = null,
+    /// <summary>Inclination of a line segment to the X axis of the sketch, degrees
+    /// (<c>ILineSegment::Angle</c>). MEASURED: 0 for a segment along X and 30 for one at 30°, so the
+    /// angle BETWEEN two segments is the difference of their readings — the quantity an angular driving
+    /// dimension moves. <c>null</c> for other kinds and when unread.</summary>
+    double? AngleDeg = null);
 
 /// <summary>Result of enumerating sketch entities: rows, route and per-collection counts.</summary>
 internal sealed record SketchEntitiesRead(
@@ -268,6 +277,8 @@ internal static class Api7SketchEntities
         bool? closed = null;
         string? entityKind = null;
         double? lengthMm = null;
+        double? radiusMm = null;
+        double? angleDeg = null;
 
         if (item is IKompasAPIObject apiObject)
         {
@@ -352,11 +363,23 @@ internal static class Api7SketchEntities
             try
             {
                 lengthMm = lineSegment.Length;
+                angleDeg = lineSegment.Angle;
             }
             catch (Exception ex) when (ex is COMException or InvalidCastException)
             {
-                local.Add("длина отрезка не прочитана: " + ex.GetType().Name);
+                local.Add("длина или угол наклона отрезка не прочитаны: " + ex.GetType().Name);
             }
+        }
+
+        // The radius of an arc or a circle: the same argument as the segment's length, for the two
+        // kinds of driving dimension whose value IS a radius or a diameter.
+        if (item is IArc arc)
+        {
+            radiusMm = ReadDouble(() => arc.Radius, local, "радиус дуги");
+        }
+        else if (item is ICircle circle)
+        {
+            radiusMm = ReadDouble(() => circle.Radius, local, "радиус окружности");
         }
 
         if (item is IPolyLine2D polyLine)
@@ -380,7 +403,7 @@ internal static class Api7SketchEntities
 
         notes.AddRange(local.Select(n => $"объект {index}: {n}"));
         return new SketchEntityRow(index, address, kind, name, typeCode, local, pointsCount, closed,
-            entityKind, lengthMm);
+            entityKind, lengthMm, radiusMm, angleDeg);
     }
 
     private static string? ReadString(Func<string?> read, List<string> notes, string what)
@@ -397,6 +420,19 @@ internal static class Api7SketchEntities
     }
 
     private static int? ReadInt(Func<int> read, List<string> notes, string what)
+    {
+        try
+        {
+            return read();
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            notes.Add($"{what} не прочитан: {ex.GetType().Name}");
+            return null;
+        }
+    }
+
+    private static double? ReadDouble(Func<double> read, List<string> notes, string what)
     {
         try
         {

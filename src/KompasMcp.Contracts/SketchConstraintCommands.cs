@@ -69,7 +69,7 @@ public sealed record SketchConstraintRowDto(
     IReadOnlyList<string> Notes);
 
 /// <summary>Answer of <c>kompas_create_sketch_constraint</c>: the constraint was written and CONFIRMED by
-/// re-reading the object's list and the sketch state.</summary>
+/// re-reading the object's list, the sketch state AND the geometry the constraint must bind.</summary>
 /// <param name="Applied">Whether the requested type is present in the list AFTER the write. Derived from
 /// the re-read, not from the return of <c>Create()</c>.</param>
 public sealed record SketchConstraintCreateResult(
@@ -83,7 +83,17 @@ public sealed record SketchConstraintCreateResult(
     int? StateRaw,
     string? StateName,
     string Route,
-    IReadOnlyList<string> Notes);
+    IReadOnlyList<string> Notes,
+    /// <summary>The relation re-read from the geometry and found to hold, or <c>null</c> when the type's
+    /// relation is not a number (then the reason is in <see cref="UnverifiedAspects"/>). A relation that
+    /// is measurable but does NOT hold is not a success — it is a named <c>GEOMETRY_FAILED</c>.</summary>
+    string? VerifiedRelation = null,
+    double? RelationMeasured = null,
+    double? RelationExpected = null,
+    double? RelationTolerance = null,
+    /// <summary>What could NOT be confirmed by re-reading, each with its reason — the alternative to a
+    /// silent pass. Empty means the relation was checked and holds.</summary>
+    IReadOnlyList<string>? UnverifiedAspects = null);
 
 /// <summary>Request to read the constraints of a sketch's objects.</summary>
 public sealed record ListSketchConstraintsCommand

@@ -3,24 +3,18 @@ using Kompas6Constants;
 using KompasMcp.Api5Adapter.Api7;
 using KompasMcp.Contracts;
 using KompasMcp.Contracts.Ipc;
+using KompasMcp.Domain.Geometry;
 
 namespace KompasMcp.Api5Adapter;
 
 /// <summary>Sketch constraints: write, read and delete (<c>kompas_create_sketch_constraint</c>,
 /// <c>kompas_list_sketch_constraints</c>, <c>kompas_delete_sketch_constraint</c>; block G6).</summary>
-/// <remarks>
-/// DOC: the route is the documented API7 one — <c>IDrawingObject1::NewConstraint()</c>
-/// (<c>idrawingobject1_newconstraint.html</c>) → <c>IParametriticConstraint</c> → <c>Create()</c>
-/// (<c>iparametriticconstraint_create.html</c>); the objects come from the sketch's own drawing
-/// container and the list from <c>IDrawingObject1::Constraints</c>.
-/// INVARIANT: a write is CONFIRMED by re-reading the object's list and the sketch's state, never by the
-/// return of <c>Create()</c>. INVARIANT: the write moves geometry, so the reply carries the state before
-/// and after rather than only the request's echo.
-/// LIMIT: the kernel MOVES geometry when a geometric constraint is applied, and the rotation is about
-/// the MIDDLE of a segment, not about an endpoint. The measured deltas are published in <c>notes</c>;
-/// the server does not undo the movement, because undoing it would be a second, unrequested edit.
-/// History: docs/decisions/adapter-sketch.md#sketch-constraints
-/// </remarks>
+/// <remarks>DOC: the route is the documented API7 one — <c>IDrawingObject1::NewConstraint()</c> →
+/// <c>IParametriticConstraint</c> → <c>Create()</c>; the objects come from the sketch's own container,
+/// the list from <c>IDrawingObject1::Constraints</c>.
+/// INVARIANT: a write is CONFIRMED by re-reading the object's list, the sketch state AND the geometry
+/// the constraint must bind — never by the return of <c>Create()</c>; the kernel's movement is published.
+/// History: docs/decisions/adapter-sketch.md#sketch-constraints</remarks>
 public sealed partial class Api5Session
 {
     /// <summary>Writes ONE constraint on one object of an existing sketch.</summary>
@@ -128,10 +122,12 @@ public sealed partial class Api5Session
         var notes = new List<string>();
         var outcome = InWriteSession(sketch7, notes, (_, objects) =>
         {
+            var targetObject = ResolveSketchObject(objects, command.ObjectRef!, "object_ref");
             var host = ResolveObject(objects, command.ObjectRef!, "object_ref", notes);
             var before = Api7SketchConstraints.ReadRows(host, notes);
 
             object? partner = null;
+            SketchConstraintObject? partnerObject = null;
             if (command.PartnerRefs is { Count: > 0 } partners)
             {
                 partner = partners
@@ -140,26 +136,39 @@ public sealed partial class Api5Session
             }
             else if (command.PartnerRef is { Length: > 0 } partnerRef)
             {
-                partner = ResolveObject(objects, partnerRef, "partner_ref", notes);
+                partnerObject = ResolveSketchObject(objects, partnerRef, "partner_ref");
+                partner = partnerObject.Host;
             }
 
             // The AXIS is declared as IDrawingObject on IParametriticConstraint, and in the shipped
             // interop IDrawingObject1 is NOT derived from it — so the axis is taken from the enumerated
             // object's DRAWING interface rather than from its constraint host.
             KompasAPI7.IDrawingObject? axis = null;
+            SketchConstraintObject? axisObject = null;
             if (command.AxisRef is { Length: > 0 } axisRef)
             {
-                axis = ResolveDrawingObject(objects, axisRef, "axis_ref");
+                axisObject = ResolveSketchObject(objects, axisRef, "axis_ref");
+                axis = axisObject.Drawing;
             }
+
+            // The geometry BEFORE the write, so a refusal can carry the numbers on both sides. Read
+            // INSIDE the session: outside it the same object answers zeros silently.
+            var targetShapeBefore = Api7SketchConstraints.ReadShape(targetObject.Drawing, notes);
+            var partnerShapeBefore = partnerObject is null
+                ? null
+                : Api7SketchConstraints.ReadShape(partnerObject.Drawing, notes);
+            var axisShapeBefore = axisObject is null
+                ? null
+                : Api7SketchConstraints.ReadShape(axisObject.Drawing, notes);
 
             var created = Api7SketchConstraints.Create(
                 host, type, command.PointIndex, partner, command.PartnerPointIndex, axis,
                 command.Value, command.Expression, command.Variable, notes);
 
             // CONFIRMATION — the RE-READ LIST **AND** THE RETURN OF Create(), and BOTH are required.
-            // MEASURED 10.10.2026: for ksCFixedDim the kernel answers Create() = FALSE and yet a record
-            // of that type APPEARS in the object's list, with Valid = false. A confirmation that looked
-            // only at the list therefore reported a refused constraint as applied. The help is explicit
+            // MEASURED: for ksCFixedDim the kernel answers Create() = FALSE and yet a record of that type
+            // APPEARS in the object's list, with Valid = false. A confirmation that looked only at the
+            // list therefore reported a refused constraint as applied. The help is explicit
             // («TRUE — параметрическое ограничение создано, FALSE — в случае неудачи»), so the record is
             // additionally required to be VALID: a record the kernel itself calls invalid is not a
             // created constraint.
@@ -177,6 +186,27 @@ public sealed partial class Api5Session
 
             var state = Api7SketchConstraints.ObjectState(host, notes);
 
+            // GEOMETRY CONFIRMATION — the relation the constraint must establish, read from the geometry
+            // AFTER the write. "Success is only what a re-read confirms": a record in the list proves the
+            // constraint EXISTS, not that it BINDS the geometry.
+            var targetShapeAfter = Api7SketchConstraints.ReadShape(targetObject.Drawing, notes);
+            var partnerShapeAfter = partnerObject is null
+                ? null
+                : Api7SketchConstraints.ReadShape(partnerObject.Drawing, notes);
+            var axisShapeAfter = axisObject is null
+                ? null
+                : Api7SketchConstraints.ReadShape(axisObject.Drawing, notes);
+            var relation = SketchConstraintGeometryRule.Evaluate(
+                command.ConstraintType, targetShapeAfter, command.PointIndex,
+                partnerShapeAfter, command.PartnerPointIndex, axisShapeAfter);
+            var geometryDetail = "объект до " + DescribeShape(targetShapeBefore) +
+                                 ", после " + DescribeShape(targetShapeAfter) +
+                                 (partnerObject is null
+                                     ? string.Empty
+                                     : "; партнёр до " + DescribeShape(partnerShapeBefore) +
+                                       ", после " + DescribeShape(partnerShapeAfter)) +
+                                 (axisObject is null ? string.Empty : "; ось " + DescribeShape(axisShapeAfter));
+
             return new WriteOutcome(
                 applied,
                 before,
@@ -184,7 +214,9 @@ public sealed partial class Api5Session
                 created.Created,
                 created.Failure,
                 state.Raw,
-                state.Name);
+                state.Name,
+                relation,
+                geometryDetail);
         });
 
         if (outcome is null)
@@ -238,6 +270,43 @@ public sealed partial class Api5Session
                 });
         }
 
+        // GEOMETRY CONFIRMATION, the second half of "success is only what a re-read confirms". A record
+        // in the list proves the constraint exists; the relation re-read on the geometry proves it BINDS.
+        // A type whose relation is not a number is NAMED in unverified_aspects, never passed as verified.
+        var relation = outcome.Relation;
+        if (relation is { Expresses: true, Holds: false })
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                $"Ограничение '{command.ConstraintType}' создано (запись действует), но ОТНОШЕНИЕ не " +
+                $"выполнено: {relation.Relation} — измерено {Api5Number(relation.Measured)}, ожидалось " +
+                $"{Api5Number(relation.Expected)} при допуске {Api5Number(relation.Tolerance)}. " +
+                "Геометрия после записи: " + (outcome.GeometryDetail ?? "не прочитана") + ".",
+                RetryPolicy.AfterReconciliation,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["constraint_type"] = command.ConstraintType,
+                    ["object_ref"] = command.ObjectRef,
+                    ["relation"] = relation.Relation,
+                    ["measured"] = relation.Measured,
+                    ["expected"] = relation.Expected,
+                    ["tolerance"] = relation.Tolerance,
+                    ["geometry"] = outcome.GeometryDetail,
+                    ["notes"] = notes.ToArray(),
+                });
+        }
+
+        var unverified = new List<string>();
+        if (relation is null)
+        {
+            unverified.Add("отношение не проверено: геометрия объекта не перечитана");
+        }
+        else if (!relation.Expresses)
+        {
+            unverified.Add($"{relation.Relation}: {relation.Reason}");
+        }
+
         BumpRevision(target.Document, "sketch.constraint.create");
         var stateAfter = ReadSketchState(bridge, target.Sketch, notes);
 
@@ -252,7 +321,12 @@ public sealed partial class Api5Session
             StateRaw: stateAfter.Raw,
             StateName: stateAfter.Name,
             Route: Api7SketchConstraints.Route,
-            Notes: notes);
+            Notes: notes,
+            VerifiedRelation: relation is { Expresses: true } ? relation.Relation : null,
+            RelationMeasured: relation is { Expresses: true } ? relation.Measured : null,
+            RelationExpected: relation is { Expresses: true } ? relation.Expected : null,
+            RelationTolerance: relation is { Expresses: true } ? relation.Tolerance : null,
+            UnverifiedAspects: unverified);
     }
 
     /// <summary>Reads the constraints of the sketch's objects, or of one named object.</summary>
@@ -283,7 +357,7 @@ public sealed partial class Api5Session
             // The DOCUMENT's parametric mode, read through the typed twin while the fragment document is
             // in hand. Read here, and not by kompas_get_sketch_status, because the fragment exists only
             // inside an edit session — and a session opened just to read is not observation-neutral
-            // (measured 11.10.2026, §4.73 of the API notes), while this call already opens one.
+            // (measured; §4.73 of the API notes), while this call already opens one.
             parametricMode = ReadParametricMode(fragment, notes);
 
             var wanted = command.ObjectRef is { Length: > 0 }
@@ -485,36 +559,38 @@ public sealed partial class Api5Session
         bool? Created,
         string? Failure,
         int? ObjectStateRaw,
-        string? ObjectStateName);
+        string? ObjectStateName,
+        ConstraintRelationVerdict? Relation = null,
+        string? GeometryDetail = null);
+
+    /// <summary>A shape as the refusal's numbers name it — every member that was read, or "не прочитано".
+    /// </summary>
+    private static string DescribeShape(SketchShape? shape)
+    {
+        if (shape is null)
+        {
+            return "не прочитано";
+        }
+
+        static string N(double? value) =>
+            value?.ToString("0.######", System.Globalization.CultureInfo.InvariantCulture) ?? "?";
+
+        return shape.Kind switch
+        {
+            SketchShapeKind.Point => $"точка({N(shape.X)},{N(shape.Y)})",
+            SketchShapeKind.Segment =>
+                $"отрезок({N(shape.X1)},{N(shape.Y1)})-({N(shape.X2)},{N(shape.Y2)})",
+            SketchShapeKind.Circle =>
+                $"окружность(центр {N(shape.CenterX)},{N(shape.CenterY)}; R {N(shape.Radius)})",
+            _ => $"дуга(центр {N(shape.CenterX)},{N(shape.CenterY)}; R {N(shape.Radius)}; " +
+                 $"({N(shape.X1)},{N(shape.Y1)})-({N(shape.X2)},{N(shape.Y2)}))",
+        };
+    }
 
     private static SketchConstraintRowDto ToDto(SketchConstraintRow row) =>
         new(row.Index, row.Type, row.TypeCode, row.PointIndex, row.PartnerIndex, row.SegmentIndex,
             row.PartnerSegmentIndex, row.Valid, row.Value, row.Expression, row.Variable, row.PartnerPresent,
             row.Notes);
-
-    /// <summary>Finds the enumerated object by its address and returns its DRAWING interface, which is
-    /// what the members typed as <c>IDrawingObject</c> take. In the shipped interop <c>IDrawingObject1</c>
-    /// is not derived from <c>IDrawingObject</c>, so the two are obtained separately rather than cast.</summary>
-    private static KompasAPI7.IDrawingObject ResolveDrawingObject(
-        IReadOnlyList<SketchConstraintObject> objects, string address, string field)
-    {
-        var matches = objects.Where(o => string.Equals(o.Address, address, StringComparison.Ordinal)).ToList();
-        if (matches.Count != 1)
-        {
-            throw new KompasContractException(
-                matches.Count == 0 ? ErrorCodes.DocumentNotFound : ErrorCodes.AmbiguousSelection,
-                $"{field}='{address}' разрешился в {matches.Count} объектов вместо одного " +
-                $"(в эскизе {objects.Count} объектов).",
-                details: new Dictionary<string, object?>
-                {
-                    [field] = address,
-                    ["matches"] = matches.Count,
-                    ["enumerated"] = objects.Count,
-                });
-        }
-
-        return matches[0].Drawing;
-    }
 
     /// <summary>Finds the object by its ADDRESS inside the enumerated objects. The address is the one the
     /// enumeration itself issued, so a foreign address cannot be silently substituted.</summary>
@@ -620,7 +696,7 @@ public sealed partial class Api5Session
     /// <remarks>DOC: <c>ikompasdocument2d1_parametricmode.html</c> (<c>BOOL</c>, get/set) and
     /// <c>ikompasdocument2d1.html</c> («дополнительный интерфейс <c>IKompasDocument2D…</c> можно получить
     /// посредством <c>QueryInterface</c>»).
-    /// MEASURED 11.10.2026: the shipped wrapper's <c>IKompasDocument2D1</c> stops at
+    /// MEASURED: the shipped wrapper's <c>IKompasDocument2D1</c> stops at
     /// <c>ChangeObjectsOrder</c> (slot 44) while the installed <c>kAPI7.tlb</c> carries the member at slots
     /// 74/75 — so the absence from the wrapper is a fact about the wrapper, not about the route, and the
     /// member is reached by reproducing the vtable (ADR-004), not by <c>IDispatch</c>. The sketch's FRAGMENT

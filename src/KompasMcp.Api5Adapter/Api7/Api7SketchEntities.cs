@@ -30,7 +30,21 @@ internal sealed record SketchEntityRow(
     /// (<c>ILineSegment::Angle</c>). MEASURED: 0 for a segment along X and 30 for one at 30°, so the
     /// angle BETWEEN two segments is the difference of their readings — the quantity an angular driving
     /// dimension moves. <c>null</c> for other kinds and when unread.</summary>
-    double? AngleDeg = null);
+    double? AngleDeg = null,
+    /// <summary>Coordinates of a POINT entity, mm (<c>IPoint.X/Y</c>).</summary>
+    double? XMm = null,
+    double? YMm = null,
+    /// <summary>End points of a segment or an arc, mm.</summary>
+    double? X1Mm = null,
+    double? Y1Mm = null,
+    double? X2Mm = null,
+    double? Y2Mm = null,
+    /// <summary>Centre of a circle or an arc, mm.</summary>
+    double? CenterXMm = null,
+    double? CenterYMm = null,
+    /// <summary>The point in the middle of an arc, mm (<c>IArc.X3/Y3</c>).</summary>
+    double? MidXMm = null,
+    double? MidYMm = null);
 
 /// <summary>Result of enumerating sketch entities: rows, route and per-collection counts.</summary>
 internal sealed record SketchEntitiesRead(
@@ -279,6 +293,16 @@ internal static class Api7SketchEntities
         double? lengthMm = null;
         double? radiusMm = null;
         double? angleDeg = null;
+        double? xMm = null;
+        double? yMm = null;
+        double? x1Mm = null;
+        double? y1Mm = null;
+        double? x2Mm = null;
+        double? y2Mm = null;
+        double? centerXMm = null;
+        double? centerYMm = null;
+        double? midXMm = null;
+        double? midYMm = null;
 
         if (item is IKompasAPIObject apiObject)
         {
@@ -348,38 +372,56 @@ internal static class Api7SketchEntities
             name = ReadString(() => model.Name, local, "имя объекта модели");
         }
 
-        // A polyline, a spline and a NURBS are the entities whose VERTEX COUNT and CLOSURE the client
-        // reads back, and each publishes them on its own 2D interface. DOC: <c>ipolyline2d_props.html</c>
-        // (Closed, PointsCount) and <c>inurbs</c> (Closed, PointsCount). A member that did not answer
-        // leaves the field NULL with the reason in Notes — "not read", never zero.
-        // INVARIANT: `spline` is the INPUT-contract name of the curve this server builds with
-        // <c>ksBezier</c>; the read-back kind stays the measured <c>DrawingObjectType</c> name, and the
-        // normalised name is published next to it so a client need not know the vendor's enumeration.
+        // A polyline, a spline and a NURBS publish VERTEX COUNT and CLOSURE on their own 2D interface
+        // (DOC: <c>ipolyline2d_props.html</c>, <c>inurbs</c>); an unread member leaves the field NULL
+        // with the reason in Notes — "not read", never zero. `spline` is the INPUT name of the curve
+        // built with <c>ksBezier</c>; the read-back kind stays the measured <c>DrawingObjectType</c>
+        // name, and the normalised name is published next to it. A segment's length, angle and end
+        // points are read for the same reason: a client verifies the geometry a dimension or a
+        // constraint claims to have moved instead of trusting the answer of the write.
         // History: docs/decisions/adapter-sketch.md#sketch-entity-kind
-        // The segment's own length: it is the quantity a driving dimension moves, so the client must
-        // be able to read it back instead of trusting the answer of the write.
         if (item is ILineSegment lineSegment)
         {
             try
             {
                 lengthMm = lineSegment.Length;
                 angleDeg = lineSegment.Angle;
+                x1Mm = lineSegment.X1;
+                y1Mm = lineSegment.Y1;
+                x2Mm = lineSegment.X2;
+                y2Mm = lineSegment.Y2;
             }
             catch (Exception ex) when (ex is COMException or InvalidCastException)
             {
-                local.Add("длина или угол наклона отрезка не прочитаны: " + ex.GetType().Name);
+                local.Add("длина, угол или концы отрезка не прочитаны: " + ex.GetType().Name);
             }
         }
 
         // The radius of an arc or a circle: the same argument as the segment's length, for the two
-        // kinds of driving dimension whose value IS a radius or a diameter.
+        // kinds of driving dimension whose value IS a radius or a diameter. The centre and the arc's own
+        // points are read for the same reason: a client verifies a constraint's relation on them.
         if (item is IArc arc)
         {
             radiusMm = ReadDouble(() => arc.Radius, local, "радиус дуги");
+            centerXMm = ReadDouble(() => arc.Xc, local, "координата X центра дуги");
+            centerYMm = ReadDouble(() => arc.Yc, local, "координата Y центра дуги");
+            x1Mm = ReadDouble(() => arc.X1, local, "координата X1 дуги");
+            y1Mm = ReadDouble(() => arc.Y1, local, "координата Y1 дуги");
+            x2Mm = ReadDouble(() => arc.X2, local, "координата X2 дуги");
+            y2Mm = ReadDouble(() => arc.Y2, local, "координата Y2 дуги");
+            midXMm = ReadDouble(() => arc.X3, local, "координата X3 дуги");
+            midYMm = ReadDouble(() => arc.Y3, local, "координата Y3 дуги");
         }
         else if (item is ICircle circle)
         {
             radiusMm = ReadDouble(() => circle.Radius, local, "радиус окружности");
+            centerXMm = ReadDouble(() => circle.Xc, local, "координата X центра окружности");
+            centerYMm = ReadDouble(() => circle.Yc, local, "координата Y центра окружности");
+        }
+        else if (item is IPoint point)
+        {
+            xMm = ReadDouble(() => point.X, local, "координата X точки");
+            yMm = ReadDouble(() => point.Y, local, "координата Y точки");
         }
 
         if (item is IPolyLine2D polyLine)
@@ -403,7 +445,8 @@ internal static class Api7SketchEntities
 
         notes.AddRange(local.Select(n => $"объект {index}: {n}"));
         return new SketchEntityRow(index, address, kind, name, typeCode, local, pointsCount, closed,
-            entityKind, lengthMm, radiusMm, angleDeg);
+            entityKind, lengthMm, radiusMm, angleDeg, xMm, yMm, x1Mm, y1Mm, x2Mm, y2Mm,
+            centerXMm, centerYMm, midXMm, midYMm);
     }
 
     private static string? ReadString(Func<string?> read, List<string> notes, string what)

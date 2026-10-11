@@ -3,6 +3,7 @@ using Kompas6Constants;
 using KompasAPI7;
 using KompasMcp.Api5Adapter.Com;
 using KompasMcp.Contracts;
+using KompasMcp.Domain.Geometry;
 
 namespace KompasMcp.Api5Adapter.Api7;
 
@@ -32,20 +33,12 @@ internal sealed record SketchConstraintObject(
     IDrawingObject1? Host);
 
 /// <summary>Sketch constraints through the documented API7 route (block G6).</summary>
-/// <remarks>DOC: <c>IDrawingObject1::NewConstraint()</c> (<c>idrawingobject1_newconstraint.html</c>) →
-/// <c>IParametriticConstraint</c> → <c>Create()</c> (<c>iparametriticconstraint_create.html</c>);
-/// the object comes from <c>IDrawingContainer::GetObjects</c> inside
-/// <c>ISketch.BeginEdit/BeginEditEx</c>, and the list from <c>IDrawingObject1::Constraints</c>
-/// (<c>idrawingobject1_constraints.html</c>).
-/// MEASURED (the instrument's own trap, found on the first run): an <c>IDrawingObject1</c> and its
-/// <c>Constraints</c> are alive ONLY INSIDE the edit session. Read after <c>EndEdit()</c> the very same
-/// object answers <c>Constraints → null</c> and zero coordinates, WITHOUT an exception. So every read
-/// and every confirmation happens inside the session, and a value read outside it is a defect of the
-/// instrument, not a property of КОМПАС.
-/// INVARIANT: the confirmation is the RE-READ LIST, never the return of <c>Create()</c>. MEASURED: the
-/// template object returned by <c>NewConstraint()</c> keeps its defaults (<c>Value</c> 0,
-/// <c>Expression</c> empty) after a successful creation, so reading it back would report a created
-/// dimension as empty.
+/// <remarks>DOC: <c>IDrawingObject1::NewConstraint()</c> → <c>IParametriticConstraint</c> → <c>Create()</c>.
+/// The object comes from <c>IDrawingContainer.GetObjects</c> inside <c>ISketch.BeginEdit</c>, the
+/// list from <c>IDrawingObject1::Constraints</c>.
+/// MEASURED: an object and its <c>Constraints</c> are alive ONLY INSIDE the edit session — after
+/// <c>EndEdit()</c> the same object answers <c>Constraints → null</c> and zero coordinates.
+/// INVARIANT: confirmation is the RE-READ LIST, never the return of <c>Create()</c>.
 /// History: docs/decisions/adapter-api7.md#sketch-constraints</remarks>
 internal static class Api7SketchConstraints
 {
@@ -440,6 +433,44 @@ internal static class Api7SketchConstraints
         {
             notes.Add("состояние объекта не прочитано: " + ex.GetType().Name);
             return (null, null);
+        }
+    }
+
+    /// <summary>Reads the geometry of one drawing object for a relation check. MUST be called inside the
+    /// session — see the class remarks: outside it the same object answers zero coordinates silently.
+    /// A shape whose members did not answer is <c>null</c> with the reason named, never zeros.</summary>
+    /// <remarks>DOC: <c>ilinesegment_props.html</c> (X1/Y1/X2/Y2/Length/Angle),
+    /// <c>icircle_props.html</c> (Xc/Yc/Radius/X/Y) and <c>iarc_props.html</c>
+    /// (Xc/Yc/Radius/X1/Y1/X2/Y2/X3/Y3) and <c>ipoint_props.html</c> (X/Y). The ARC is checked before the
+    /// CIRCLE: an arc carries a radius too, and naming it a circle would lose its endpoints.
+    /// History: docs/decisions/adapter-api7.md#constraint-geometry</remarks>
+    public static SketchShape? ReadShape(IDrawingObject drawing, List<string> notes)
+    {
+        try
+        {
+            switch (drawing)
+            {
+                case ILineSegment segment:
+                    return new SketchShape(SketchShapeKind.Segment,
+                        X1: segment.X1, Y1: segment.Y1, X2: segment.X2, Y2: segment.Y2);
+                case IArc arc:
+                    return new SketchShape(SketchShapeKind.Arc,
+                        X1: arc.X1, Y1: arc.Y1, X2: arc.X2, Y2: arc.Y2,
+                        CenterX: arc.Xc, CenterY: arc.Yc, Radius: arc.Radius, MidX: arc.X3, MidY: arc.Y3);
+                case ICircle circle:
+                    return new SketchShape(SketchShapeKind.Circle,
+                        CenterX: circle.Xc, CenterY: circle.Yc, Radius: circle.Radius);
+                case IPoint point:
+                    return new SketchShape(SketchShapeKind.Point, X: point.X, Y: point.Y);
+                default:
+                    notes.Add("геометрия объекта не прочитана: вид не отрезок, не дуга, не окружность и не точка");
+                    return null;
+            }
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            notes.Add("геометрия объекта не прочитана: " + ex.GetType().Name);
+            return null;
         }
     }
 

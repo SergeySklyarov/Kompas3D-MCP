@@ -552,7 +552,26 @@ public sealed record SketchEntityRowDto(
     /// object itself. <c>null</c> for other kinds and when unread. MEASURED: 0 for a segment along X and
     /// 30 for one at 30°, so the angle BETWEEN two segments is the difference of their readings — the
     /// quantity an angular driving dimension moves.</summary>
-    double? AngleDeg = null);
+    double? AngleDeg = null,
+    /// <summary>Coordinates of a POINT entity, mm (<c>IPoint.X/Y</c>). <c>null</c> for other kinds and
+    /// when unread. A client reads them to verify a relation itself instead of trusting the answer of a
+    /// write that claimed to establish it.</summary>
+    double? XMm = null,
+    double? YMm = null,
+    /// <summary>End points of a LINE SEGMENT or an ARC, mm (<c>ILineSegment.X1/Y1/X2/Y2</c>,
+    /// <c>IArc.X1/Y1/X2/Y2</c>). <c>null</c> for other kinds and when unread.</summary>
+    double? X1Mm = null,
+    double? Y1Mm = null,
+    double? X2Mm = null,
+    double? Y2Mm = null,
+    /// <summary>Centre of a CIRCLE or an ARC, mm (<c>ICircle.Xc/Yc</c>, <c>IArc.Xc/Yc</c>). <c>null</c>
+    /// for other kinds and when unread.</summary>
+    double? CenterXMm = null,
+    double? CenterYMm = null,
+    /// <summary>The point in the MIDDLE of an ARC, mm (<c>IArc.X3/Y3</c>). <c>null</c> for other kinds
+    /// and when unread; it is what a "point on the middle of a curve" relation is checked against.</summary>
+    double? MidXMm = null,
+    double? MidYMm = null);
 
 /// <summary>Request for an address-targeted sketch-entity edit. <see cref="Address"/> is mandatory: an edit of "the
 /// first entity that comes up" is not address-targeted.</summary>

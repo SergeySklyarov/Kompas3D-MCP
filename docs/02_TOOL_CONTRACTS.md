@@ -239,7 +239,7 @@ _Правка 07.10.2026 (наряд о `coordinate_space` и выравнива
 | `kompas_create_sketch` | plane_ref, name; явный sketch_local frame |
 | `kompas_edit_sketch` | sketch_ref, mode append/replace/delete_entities, entities[] |
 | `kompas_finish_sketch` | sketch_ref; проверка замкнутости при требовании профиля |
-| `kompas_extrude` | sketch_ref, operation base/boss/cut, depth_mm, direction positive/negative/symmetric, target_body_ref для boss/cut |
+| `kompas_extrude` | sketch_ref, operation base/boss/cut, depth_mm, ровно одно из direction positive/negative/symmetric и material_toward +x/-x/+y/-y/+z/-z, target_body_ref для boss/cut |
 | `kompas_revolve` | sketch_ref, axis definition, angle_deg, operation |
 | `kompas_loft` | ordered section_refs[] (не менее двух), operation, target_body_ref при добавлении/вырезе; `building` auto/by_normal/by_object/cupola, `closed`; документ берётся по `document_id` |
 | `kompas_sweep` | sketch_ref (профиль, задаёт документ), path_ref (траектория, обязана быть в той же детали), `shift_mode` parallel/keep_angle/orthogonal |
@@ -252,6 +252,20 @@ _Правка 07.10.2026 (наряд о `coordinate_space` и выравнива
 | `kompas_pattern_circular` | copy_kind operations/bodies, source_refs[], axis point/direction, count, angle_deg или полный круг; `reverse_direction`, `save_initial_orientation` (по умолчанию false - экземпляры доворачиваются до радиального направления); ответ несёт перечитанное `save_initial_orientation` и `save_initial_orientation_defaulted` |
 | `kompas_pattern_mirror` | mode mirror_all/selected_operations, source_refs[], plane или base+offset_mm, `save_initial_objects`, `choose_bodies_type` |
 | `kompas_get_pattern` | feature_ref; чтение семейства и параметров существующего массива или зеркала |
+
+**Сторона выдавливания: `direction` ИЛИ `material_toward` (наряд `EXTRUDE_MATERIAL_TOWARD`, 12.10.2026).**
+Сторону задаёт ровно одно из двух полей; оба или ни одного - `INVALID_ARGUMENT` до COM. `direction`
+(`positive`/`negative`/`symmetric`) - слово КОМПАС, и у выреза и у base/boss `positive` означает
+ПРОТИВОПОЛОЖНЫЕ стороны (справка v24: «для вырезаемого элемента выдавливания направление
+противоположно нормали»), поэтому клиенту оно неудобно. `material_toward`
+(`+x`/`-x`/`+y`/`-y`/`+z`/`-z`) называет сторону В КООРДИНАТАХ ДЕТАЛИ, и сервер переводит её в
+`positive`/`negative` по нормали плоскости эскиза. Ось обязана совпадать с нормалью (или быть ей
+обратной) в допуске: иначе `INVALID_ARGUMENT` до создания признака, с нормалью, углом и допуском в
+`details` (на наклонной опоре задавайте `direction`). `symmetric` и режим `end_condition=through`
+выражаются только через `direction`. В ответе при `material_toward`: `material_toward_requested`,
+`direction_resolved` и сверка фактической стороны с запрошенной (расхождение - в `warnings` и
+`unverified_aspects`). Знак минус принимается и как дефис, и как U+2212 из ответа. Снятие
+обязательности `direction` - не ломающее изменение: прежние вызовы работают как раньше.
 
 **Опубликовано ли это - измерено 21.09.2026, а не подразумевается.** Таблица выше есть контракт
 проекта (§2), а не список инструментов на проводе. Из **57** имён, названных в этом документе, на

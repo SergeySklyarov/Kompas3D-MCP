@@ -109,6 +109,26 @@ internal sealed class Api7Bridge
         }
     }
 
+    /// <summary>The API7 → API5 transfer of a model object — the reverse of <see cref="TransferTo7"/>.</summary>
+    /// <remarks>WHY IT IS NEEDED: this server CREATES auxiliary geometry through API7 factories, so the only
+    /// handle it holds is an API7 object; the documented deletion route is the API5
+    /// <c>ksDocument3D.DeleteObject</c>. DOC: <c>kompasobject_transferinterface.html</c> - the target API is
+    /// named by <c>ksAPITypeEnum</c> (the reverse direction is expressible), and a call asking for the
+    /// object's OWN API returns the SOURCE object by design, so the caller must not read "the same object
+    /// came back" as a conversion. History: docs/decisions/adapter-api7.md#bridge</remarks>
+    public object? TransferTo5(object source)
+    {
+        try
+        {
+            return _application5.TransferInterface(source, (int)ksAPITypeEnum.ksAPI5Auto, 0);
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            _bridgeFailure = Describe(ex);
+            return null;
+        }
+    }
+
     /// <summary>An array of transferred objects for <c>BaseObjects</c> — an array, not a collection.</summary>
     /// <remarks>DOC: <c>IChamfer.BaseObjects</c> requires a SAFEARRAY of IDispatch pointers.
     /// History: docs/decisions/adapter-api7.md#bridge</remarks>

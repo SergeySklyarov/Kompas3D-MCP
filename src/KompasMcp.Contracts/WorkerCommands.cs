@@ -871,13 +871,12 @@ public sealed record FinishSketchCommand
 
 /// <summary>Extrusion (docs/05 SM-02). The SIDE is given by exactly one of <see cref="Direction"/> and
 /// <see cref="MaterialToward"/>; the Host refuses "both" and "neither" before COM.</summary>
-/// <remarks>WHY two fields for one thing. <c>direction</c> is KOMPAS's own word and it means OPPOSITE sides for
-/// a cut and for a base/boss (v24 help), so a client that does not know the rule asks for the wrong side and
-/// the kernel does not complain — it creates the feature and changes nothing. <c>material_toward</c> names the
-/// side in part coordinates, which is what the caller actually knows, and the server translates it by the same
-/// documented rule it publishes the side with. <c>direction</c> stays for compatibility and for the one case
-/// the axis vocabulary cannot express: <c>symmetric</c>.
-/// History: docs/decisions/adapter-core.md#material-toward-input</remarks>
+/// <remarks>WHY two fields for one thing. <c>direction</c> is KOMPAS's own word and it means OPPOSITE sides
+/// for a cut and for a base/boss (v24 help), so a client that does not know the rule asks for the wrong
+/// side and the kernel does not complain - it creates the feature and changes nothing. <c>material_toward</c>
+/// names the side in part coordinates, which is what the caller knows; the server translates it by the same
+/// documented rule it publishes the side with. <c>direction</c> stays for the one case the axis vocabulary
+/// cannot express: <c>symmetric</c>. History: docs/decisions/adapter-core.md#material-toward-input</remarks>
 public sealed record ExtrudeCommand
 {
     public required string SketchRef { get; init; }

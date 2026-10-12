@@ -1,8 +1,11 @@
 ﻿using System.Runtime.InteropServices;
+using KompasMcp.Api5Adapter.Api7;
 using KompasMcp.Contracts;
 using KompasMcp.Contracts.Ipc;
 using KompasMcp.Domain.Geometry;
+using KompasMcp.Domain.References;
 using Kompas6API5;
+using KompasAPI7;
 
 namespace KompasMcp.Api5Adapter;
 
@@ -303,7 +306,53 @@ public partial class Api5Session
 
     public DeleteFeatureResult DeleteFeature(DeleteFeatureCommand command)
     {
-        var (document, entity) = RequireFeatureEntity(command.FeatureRef);
+        if (!References.TryGet(command.FeatureRef, out var probe) || probe is null)
+        {
+            throw new KompasContractException(
+                ErrorCodes.StaleReference,
+                $"Ссылка '{command.FeatureRef}' не найдена в реестре.",
+                RetryPolicy.ReacquireContext);
+        }
+
+        var document = RequireDocument(probe.DocumentId);
+        var stored = References.Require(command.FeatureRef, document.Id, document.Revision);
+
+        // INVARIANT: this tool deletes a FEATURE, a SKETCH or an AUXILIARY object of a part, never an
+        // assembly component: a component has its own rules (dependent mates, a confirmed address) and its
+        // own tool, so deleting it here would bypass both. The refusal is by the reference KIND and precedes
+        // any COM mutation. DOC: ksdocoment3d_deleteobject.html - «Удалить можно любой трехмерный объект».
+        // History: docs/decisions/adapter-core.md#delete-object-kinds
+        if (stored.Kind == "component")
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                "Ссылка адресует КОМПОНЕНТ сборки, а не объект детали. Компонент удаляется своим "
+                + "инструментом kompas_delete_component: он читает зависимые сопряжения и требует "
+                + "подтверждения. kompas_delete_feature компонент не удаляет.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["reference_kind"] = stored.Kind,
+                    ["use_tool"] = "kompas_delete_component",
+                });
+        }
+
+        if (stored.Kind is "sketch" or "plane" or "axis" or "point")
+        {
+            return DeleteNonFeatureObject(document, stored, command);
+        }
+
+        var entity = stored.Payload as ksEntity
+            ?? (stored.Payload as ksFeature)?.GetObject() as ksEntity;
+        if (entity is null)
+        {
+            throw new KompasContractException(
+                ErrorCodes.StaleReference,
+                $"Ссылка '{command.FeatureRef}' указывает на {stored.Payload?.GetType().Name ?? "null"} "
+                + "вместо признака.",
+                RetryPolicy.ReacquireContext);
+        }
+
         var name = entity.name ?? string.Empty;
 
         // Pre-check: the feature must be in the model — a repeated deletion by an already-used reference
@@ -502,6 +551,407 @@ public partial class Api5Session
                 checks,
                 unverified),
             Warnings: DeclaredExpectation.Warnings(declaredVolume));
+    }
+
+    /// <summary>Delete a SKETCH or an AUXILIARY-GEOMETRY object - objects NOT in the feature tree
+    /// (collection 110), so the tree-order candidate rule cannot describe them.</summary>
+    /// <remarks>MEASURED: before this branch existed a sketch reference reached the tree rule, the position
+    /// came back unknown, and the WHOLE tree was offered as candidates - an extrusion on ANOTHER sketch was
+    /// named a dependent. INVARIANT: "the dependent list could not be computed" is not "there are no
+    /// dependents" - the first refuses without <c>confirm_dependents</c> and names why. DOC: <c>GetSketch()</c>
+    /// exists on the extrusion/rotation/evolution/rib definitions, and no member containing <c>Depend</c>
+    /// exists in either API. History: docs/decisions/adapter-core.md#delete-object-kinds</remarks>
+    private DeleteFeatureResult DeleteNonFeatureObject(
+        DocumentEntry document, StoredReference stored, DeleteFeatureCommand command)
+    {
+        var label = stored.Kind switch
+        {
+            "sketch" => "эскизе",
+            "plane" => "вспомогательной плоскости",
+            "axis" => "вспомогательной оси",
+            _ => "вспомогательной точке",
+        };
+        var name = stored.Payload is ksEntity sketchEntity
+            ? sketchEntity.name ?? stored.Kind
+            : ReadModelObjectName(stored.Payload) ?? stored.Kind;
+
+        var (candidates, route, routeNote) = stored.Kind switch
+        {
+            "sketch" => SketchDependents(document, stored),
+            _ => AuxDependents(document, stored),
+        };
+
+        var treeBefore = FeatureTreeElements(document);
+
+        if (candidates is null && !command.ConfirmDependents)
+        {
+            throw new KompasContractException(
+                ErrorCodes.DependentFeatures,
+                $"Перечислить зависимые объекты на {label} «{name}» документированным маршрутом не "
+                + $"удалось: {routeNote}. «Перечень неизвестен» — не то же самое, что «зависимых нет», "
+                + "поэтому удаление выполняется только по явному согласию confirm_dependents=true.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["object_kind"] = stored.Kind,
+                    ["object_name"] = name,
+                    ["dependent_route"] = route,
+                    ["dependent_route_note"] = routeNote,
+                });
+        }
+
+        if (candidates is { Count: > 0 } && !command.ConfirmDependents)
+        {
+            throw new KompasContractException(
+                ErrorCodes.DependentFeatures,
+                $"На {label} «{name}» построено объектов: {candidates.Count}. Удаление унесло бы их с "
+                + "собой. Без confirm_dependents=true удаление не выполняется, модель не меняется. "
+                + "Перечень — в details.candidate_dependents.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["object_kind"] = stored.Kind,
+                    ["object_name"] = name,
+                    ["candidate_dependents"] = candidates,
+                    ["dependent_route"] = route,
+                });
+        }
+
+        var volumeBefore = ReadVolume(document);
+        var payload = stored.Payload
+            ?? throw new KompasContractException(
+                ErrorCodes.StaleReference,
+                $"Ссылка '{command.FeatureRef}' не несёт объекта: удалять нечего.",
+                RetryPolicy.ReacquireContext);
+        var countsBefore = AuxCountsOf(document);
+
+        // An auxiliary object is CREATED through API7 factories, so the handle the registry holds is an
+        // API7 object, while the documented deletion route is the API5 ksDocument3D.DeleteObject. The object
+        // is therefore transferred to API5 first - asking for API5 from an API7 object is the informative
+        // direction - and the outcome is NAMED: "the same object came back" means no conversion happened and
+        // is not read as a successful transfer.
+        var bridge = BridgeFor(document);
+        var transferred = stored.Kind == "sketch" ? null : bridge.TransferTo5(payload);
+        var target = transferred is not null && !SameComObject(transferred, payload) ? transferred : payload;
+        var transferNote = stored.Kind == "sketch"
+            ? "объект уже API5 (ksEntity): перенос не требовался"
+            : transferred is null
+                ? "перенос API7->API5 не удался: в DeleteObject подан объект API7"
+                : SameComObject(transferred, payload)
+                    ? "перенос API7->API5 вернул ТОТ ЖЕ объект: конверсии не произошло"
+                    : "объект передан в DeleteObject после переноса API7->API5";
+
+        bool deleted;
+        try
+        {
+            deleted = document.Document3D.DeleteObject(target);
+        }
+        catch (COMException ex)
+        {
+            // A failure during the mutation - the outcome is unknown, not "it cleanly did not work".
+            throw new KompasContractException(
+                ErrorCodes.OutcomeUnknown,
+                $"DeleteObject прервался: {ex.Message}. Сверьте фактическое состояние модели, "
+                + "повтор той же операции запрещён.",
+                RetryPolicy.AfterReconciliation,
+                partialEffects: true);
+        }
+
+        SettleAfterMutation(document);
+        BumpRevision(document, stored.Kind + ".delete");
+
+        var countsAfter = AuxCountsOf(document);
+        var stillPresent = NonFeatureStillPresent(document, stored, countsBefore, countsAfter);
+        var removed = deleted && !stillPresent;
+        var treeAfter = FeatureTreeElements(document);
+        var volumeAfter = ReadVolume(document);
+        var vanished = VanishedNames(treeBefore, treeAfter);
+        var allowed = new HashSet<string>(StringComparer.Ordinal) { name };
+        foreach (var candidate in candidates ?? [])
+        {
+            allowed.Add(candidate);
+        }
+
+        var outside = vanished.Where(n => !allowed.Contains(n)).ToList();
+        var cascadeWithin = vanished.Count == 0 || outside.Count == 0;
+
+        var checks = new List<NamedCheck>
+        {
+            new("delete_object_returned", deleted, Observed: deleted ? "true" : "false"),
+            new("object_removed", removed,
+                Observed: $"«{name}» " + (stillPresent ? "остался в модели" : "в модели отсутствует")
+                          + $" (счётчики коллекций до {DescribeAuxCounts(countsBefore)}, "
+                          + $"после {DescribeAuxCounts(countsAfter)})"),
+            new("cascade_within_candidates", cascadeWithin,
+                Observed: vanished.Count == 0
+                    ? "ни один признак не ушёл из дерева"
+                    : $"ушли [{string.Join("; ", vanished)}], вне объявленных кандидатов "
+                      + $"[{string.Join("; ", outside)}]; признаков {treeBefore.Count}->{treeAfter.Count}"),
+            new("deletion_target_transfer", stored.Kind == "sketch" || transferred is not null,
+                Observed: transferNote),
+        };
+
+        var unverified = new List<string>
+        {
+            "dependents_are_documented_route_only - перечень зависимых прочитан маршрутом "
+            + route + ", а не выдан ядром: члена «зависимые объекты» нет ни в API5, ни в API7",
+            "deletion_target_transfer - " + transferNote,
+            removed
+                ? "orphaned_references_possible - ссылки предыдущей ревизии отклоняются реестром, "
+                  + "но что именно перестало строиться, сервер не проверяет"
+                : "object_not_removed - удаление не подтверждено перечитыванием модели",
+        };
+        if (candidates is null)
+        {
+            unverified.Add("dependent_list_not_computable - " + routeNote);
+        }
+
+        if (deleted && !cascadeWithin)
+        {
+            unverified.Add("cascade_composition_not_confirmed - состав ушедших признаков не совпал с "
+                + "«цель плюс объявленные кандидаты»: ушли [" + string.Join("; ", vanished)
+                + "], вне кандидатов [" + string.Join("; ", outside) + "]");
+        }
+
+        var declaredVolume = DeclaredExpectation.Evaluate(
+            command.ExpectedVolumeMm3, volumeAfter, () => ReadModelState(document).VolumeMm3);
+        checks.Add(DeclaredExpectation.Check("volume_after_delete", declaredVolume));
+        if (declaredVolume.IsUnverifiable)
+        {
+            unverified.Add(DeclaredExpectation.UnverifiableReason("объём после удаления", declaredVolume));
+        }
+        else if (declaredVolume.IsNotConfirmed)
+        {
+            unverified.Add(DeclaredExpectation.NotConfirmedReason("объём после удаления", declaredVolume));
+        }
+
+        if (!declaredVolume.IsDeclared)
+        {
+            unverified.Add("expected_volume_not_supplied - без ожидания объёма геометрия не подтверждена");
+        }
+
+        var structural = removed && cascadeWithin;
+        return new DeleteFeatureResult(
+            name,
+            deleted,
+            treeBefore.Count,
+            treeAfter.Count,
+            candidates ?? [],
+            volumeBefore,
+            volumeAfter,
+            new VerificationDto(
+                DeclaredExpectation.CapLevel(
+                    structural && declaredVolume.IsConfirmed ? VerificationLevel.GeometryChecked
+                        : removed ? VerificationLevel.StructureChecked
+                        : VerificationLevel.CallReturned,
+                    declaredVolume),
+                checks,
+                unverified),
+            Warnings: DeclaredExpectation.Warnings(declaredVolume));
+    }
+
+    /// <summary>The features built ON a sketch, by the documented <c>GetSketch()</c> route.</summary>
+    /// <remarks><c>Candidates</c> is <c>null</c> when the list could not be computed at all (a different
+    /// statement from an empty list). History: docs/decisions/adapter-core.md#delete-object-kinds</remarks>
+    private (List<string>? Candidates, string Route, string Note) SketchDependents(
+        DocumentEntry document, StoredReference stored)
+    {
+        const string route = "GetSketch() определения признака (выдавливание, вращение, кинематическая "
+            + "операция, отсечение по эскизу, ребро жёсткости)";
+        if (stored.Payload is not ksEntity sketch)
+        {
+            return (null, route, "ссылка не содержит объекта эскиза");
+        }
+
+        var names = new List<string>();
+        foreach (var (_, entity, featureName) in FeatureTreeElements(document))
+        {
+            var owner = SketchOfDefinition(entity);
+            if (owner is not null && SameComObject(owner, sketch))
+            {
+                names.Add(featureName);
+            }
+        }
+
+        return (names, route, "перечень прочитан");
+    }
+
+    /// <summary>Objects built ON an auxiliary plane: a sketch that lies on it.</summary>
+    /// <remarks><c>Candidates</c> is <c>null</c> when the route could not be walked to the end - a read or a
+    /// transfer that failed - because an empty list would be read as "nothing depends on it".
+    /// <para>LIMIT: only SKETCHES are examined. A tilted plane's base plane and its base axis are reachable
+    /// by the same documented shape (<c>ksPlaneAngleDefinition.GetPlane()/GetAxis()</c>), but the API5 side
+    /// does not enumerate auxiliary planes the way collection 5 enumerates sketches, so those two are NOT
+    /// checked and the note says so instead of implying a full list.</para>
+    /// History: docs/decisions/adapter-core.md#delete-object-kinds</remarks>
+    private (List<string>? Candidates, string Route, string Note) AuxDependents(
+        DocumentEntry document, StoredReference stored)
+    {
+        const string route = "GetPlane() опоры эскиза (ksSketchDefinition.GetPlane)";
+        if (stored.Kind != "plane" || stored.Payload is null)
+        {
+            return (null, route,
+                "обратной ссылки «кто построен на этом объекте» нет ни в API5, ни в API7 (метаданные: "
+                + "0 совпадений по Depend*), а коллекции API7 удаления не имеют");
+        }
+
+        var bridge = BridgeFor(document);
+        var target = bridge.TransferTo7(stored.Payload);
+        if (target is null)
+        {
+            return (null, route, "перенос удаляемой плоскости в пространство сравнения не удался");
+        }
+
+        var names = new List<string>();
+        var examined = 0;
+        var unreadable = 0;
+
+        if (document.PartNow().EntityCollection(KompasObjectTypes.Of(KompasObjectTypes.Sketch))
+            is ksEntityCollection sketches)
+        {
+            for (var i = 0; i < sketches.GetCount(); i++)
+            {
+                examined++;
+                if (sketches.GetByIndex(i) is not ksEntity sketch)
+                {
+                    unreadable++;
+                    continue;
+                }
+
+                var support = SketchSupportPlane(sketch);
+                if (support is null)
+                {
+                    unreadable++;
+                    continue;
+                }
+
+                if (SameTransferredPlane(bridge, support, target))
+                {
+                    names.Add(sketch.name ?? $"[{i}]");
+                }
+            }
+        }
+
+        if (unreadable > 0)
+        {
+            return (null, route,
+                $"опору прочитать не удалось у {unreadable} из {examined} эскизов: перечень неполон, "
+                + "а неполный перечень выдавать за полный нельзя");
+        }
+
+        return (names, route,
+            $"осмотрено эскизов: {examined}; базовые плоскости наклонных и смещённых плоскостей и их "
+            + "базовые оси этим маршрутом НЕ проверялись");
+    }
+
+    /// <summary>The support plane of a sketch, by the documented <c>ksSketchDefinition.GetPlane()</c>.</summary>
+    private static object? SketchSupportPlane(ksEntity sketch)
+    {
+        try
+        {
+            return sketch.GetDefinition() is ksSketchDefinition definition ? definition.GetPlane() : null;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Whether an API5 plane object is the SAME model object as an API7 one.</summary>
+    private static bool SameTransferredPlane(Api7Bridge bridge, object api5Plane, object api7Target)
+    {
+        var transferred = bridge.TransferTo7(api5Plane);
+        return transferred is not null && SameComObject(transferred, api7Target);
+    }
+
+    /// <summary>The sketch a feature's definition is built on, by the documented <c>GetSketch()</c>, or
+    /// <c>null</c> when the family declares no such member or the read fails.</summary>
+    private static object? SketchOfDefinition(ksEntity entity)
+    {
+        try
+        {
+            return entity.GetDefinition() switch
+            {
+                ksBaseExtrusionDefinition d => d.GetSketch(),
+                ksBossExtrusionDefinition d => d.GetSketch(),
+                ksCutExtrusionDefinition d => d.GetSketch(),
+                ksBaseRotatedDefinition d => d.GetSketch(),
+                ksBossRotatedDefinition d => d.GetSketch(),
+                ksCutRotatedDefinition d => d.GetSketch(),
+                ksBaseEvolutionDefinition d => d.GetSketch(),
+                ksBossEvolutionDefinition d => d.GetSketch(),
+                ksCutEvolutionDefinition d => d.GetSketch(),
+                ksCutBySketchDefinition d => d.GetSketch(),
+                ksRibDefinition d => d.GetSketch(),
+                _ => null,
+            };
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Whether a non-feature object is still in the model after the mutation.</summary>
+    /// <remarks>COM identity does NOT survive a rebuild, so a sketch is asked about directly
+    /// (<c>IsCreated</c>) and an auxiliary object is judged by its collection's count. The count is the
+    /// primary evidence: a re-enumerated wrapper would compare unequal even if the object were alive.</remarks>
+    private bool NonFeatureStillPresent(
+        DocumentEntry document, StoredReference stored,
+        (int? Planes, int? Axes, int? Points) before, (int? Planes, int? Axes, int? Points) after)
+    {
+        if (stored.Payload is ksEntity entity && stored.Kind == "sketch")
+        {
+            return SafeIsCreated(entity);
+        }
+
+        var (countBefore, countAfter) = stored.Kind switch
+        {
+            "plane" => (before.Planes, after.Planes),
+            "axis" => (before.Axes, after.Axes),
+            _ => (before.Points, after.Points),
+        };
+
+        if (countBefore is not null && countAfter is not null)
+        {
+            return countAfter >= countBefore;
+        }
+
+        // Neither the count nor the identity is readable: the object is reported as still present, so a
+        // failed read can never be laundered into a confirmed removal.
+        return true;
+    }
+
+    /// <summary>Counts of the auxiliary collections, or <c>null</c> per collection when unreachable.</summary>
+    private (int? Planes, int? Axes, int? Points) AuxCountsOf(DocumentEntry document)
+    {
+        var bridge = BridgeFor(document);
+        var (model, auxiliary, _) = Api7AuxGeometry.Containers(bridge, document.PartNow());
+        if (model is null || auxiliary is null)
+        {
+            return (null, null, null);
+        }
+
+        return (Api7AuxGeometry.SafeCount(auxiliary.Planes3D),
+            Api7AuxGeometry.SafeCount(auxiliary.Axes3D),
+            Api7AuxGeometry.SafeCount(model.Points3D));
+    }
+
+    private static string DescribeAuxCounts((int? Planes, int? Axes, int? Points) counts) =>
+        $"плоскостей={counts.Planes?.ToString() ?? "не прочитано"}, "
+        + $"осей={counts.Axes?.ToString() ?? "не прочитано"}, "
+        + $"точек={counts.Points?.ToString() ?? "не прочитано"}";
+
+    private static string? ReadModelObjectName(object? payload)
+    {
+        try
+        {
+            return (payload as IModelObject)?.Name;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return null;
+        }
     }
 
     /// <summary>Names of objects that WERE in the tree before the operation and are gone after.</summary>

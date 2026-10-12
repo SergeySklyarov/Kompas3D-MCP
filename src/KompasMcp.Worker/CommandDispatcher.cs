@@ -71,6 +71,7 @@ public sealed class CommandDispatcher
         WorkerCommands.InsertComponent,
         WorkerCommands.SetComponentPlacement,
         WorkerCommands.ReplaceComponent,
+        WorkerCommands.DeleteComponent,
         WorkerCommands.CreateMate,
         WorkerCommands.SetMateParameter,
         WorkerCommands.SetMateFixed,
@@ -435,6 +436,9 @@ public sealed class CommandDispatcher
         WorkerCommands.InsertComponent or WorkerCommands.ReplaceComponent => 240_000,
         WorkerCommands.ListComponents or WorkerCommands.SetComponentPlacement
             or WorkerCommands.CheckComponentLinks => 240_000,
+        // Walks the mate collection AND asks the kernel (ObjectConstraints) before deleting, then re-reads
+        // the structure: one COM call per mate plus the rebuild.
+        WorkerCommands.DeleteComponent => 240_000,
         // One COM call per body pair (INT-12 checks 190 pairs), plus a second call per intersecting
         // pair when faces are asked for.
         WorkerCommands.CheckInterference or WorkerCommands.MeasureGap => 240_000,
@@ -563,6 +567,7 @@ public sealed class CommandDispatcher
             WorkerCommands.SetComponentPlacement => _sta.Run(() => SetComponentPlacement(request), "asm.set_placement", cancellationToken),
             WorkerCommands.ReplaceComponent => _sta.Run(() => ReplaceComponent(request), "asm.replace_component", cancellationToken),
             WorkerCommands.CheckComponentLinks => _sta.Run(() => CheckComponentLinks(request), "asm.check_links", cancellationToken),
+            WorkerCommands.DeleteComponent => _sta.Run(() => DeleteComponent(request), "asm.delete_component", cancellationToken),
             WorkerCommands.CheckInterference => _sta.Run(() => CheckInterference(request), "asm.check_interference", cancellationToken),
             WorkerCommands.MeasureGap => _sta.Run(() => MeasureGap(request), "asm.measure_gap", cancellationToken),
             WorkerCommands.ListMates => _sta.Run(() => ListMates(request), "mate.list", cancellationToken),
@@ -1539,6 +1544,13 @@ public sealed class CommandDispatcher
 
     private object? CheckComponentLinks(IpcFrame request) =>
         _session.CheckComponentLinks(Argument<CheckComponentLinksCommand>(request));
+
+    private object? DeleteComponent(IpcFrame request)
+    {
+        var command = Argument<DeleteComponentCommand>(request);
+        var document = _session.RequireDocument(command.DocumentId);
+        return TaggedAfter(document.Id, () => _session.DeleteComponent(command), document);
+    }
 
     // Both G1 commands only READ: they do not pass through TaggedAfter (no control copy, no revision
     // bump), exactly like the other read commands of the assembly domain.

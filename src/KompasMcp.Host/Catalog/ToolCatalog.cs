@@ -405,6 +405,30 @@ public static class ToolCatalog
                 requiresDocument: true,
                 requiresOperationId: false),
 
+            Mutation("kompas_delete_component", "Удалить компонент сборки",
+                "Удаляет компонент ВЕРХНЕГО уровня из сборки документированным "
+                + "ksDocument3D.DeleteObject (страница «Удалить объект: деталь, операцию, сопряжение»). "
+                + "Удаляется ВХОЖДЕНИЕ в сборку, а НЕ файл детали: файл-источник не трогается. "
+                + "Зависимые сопряжения перечисляются ДО удаления двумя маршрутами (перебор "
+                + "MateConstraintCollection по IModelObject.Part и ответ ядра ObjectConstraints): при "
+                + "наличии зависимых и confirm_dependents=false вызов ОТКАЗЫВАЕТ с перечнем и состав "
+                + "сборки не меняется. Ядро удаляет зависимые сопряжения ВМЕСТЕ с компонентом — "
+                + "измеренная судьба названа в dependent_mates_disposition. Удалён ИМЕННО адресованный "
+                + "компонент (по источнику и размещению, а не по порядковому номеру): после удаления "
+                + "порядковые номера остальных сдвигаются, ревизия поднимается, и ВСЕ ссылки на "
+                + "компоненты прежней ревизии устаревают — перечитайте структуру kompas_list_components. "
+                + "Вложенный компонент отвергается CAPABILITY_UNAVAILABLE.",
+                Sch.Props(
+                    ("document_id", Sch.Ref("#/$defs/document_id")),
+                    ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
+                    ("component_ref", Sch.Str("Ссылка на экземпляр из kompas_list_components.")),
+                    ("confirm_dependents", Sch.Nullable(Sch.Bool(
+                        "Согласие удалить компонент вместе с зависимыми сопряжениями. По умолчанию "
+                        + "false: при зависимых сопряжениях вызов отказывает с их перечнем.", false)))),
+                WorkerCommands.DeleteComponent,
+                requiresDocument: true,
+                requiresRevision: true),
+
             // ===== interference and gaps (block G1, profile assembly-interference-minimal-v1) =====
             // Routes measured from the help over the wire and from the installed type library; both
             // commands only READ, so neither declares operation_id.

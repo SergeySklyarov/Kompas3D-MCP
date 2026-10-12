@@ -911,6 +911,403 @@ public partial class Api5Session
                 checks, unverified));
     }
 
+    // ── ASM-08 ──
+    /// <summary>Delete a TOP-LEVEL assembly component through the documented
+    /// <c>ksDocument3D.DeleteObject(obj)</c> (<c>ksdocument3d_deleteobject.html</c>: «Удалить объект:
+    /// деталь, операцию, сопряжение»; «Удалить можно любой трехмерный объект»).</summary>
+    /// <remarks>MEASURED (probe DC, docs/04 §4.78): <c>DeleteObject(ksPart)</c> returns true, the component
+    /// count falls by one, and the OTHER components keep their placements. INVARIANT: the component's SOURCE
+    /// FILE is not touched — the insertion into this assembly is removed, not the part file. INVARIANT: the
+    /// ordinal of the remaining components shifts, so ALL references of this revision are revoked and the
+    /// revision is bumped. History: docs/decisions/assembly.md#delete-component</remarks>
+    public DeleteComponentResult DeleteComponent(DeleteComponentCommand command)
+    {
+        var document = RequireAssemblyForDelete(command.DocumentId);
+        RequireRevision(document, command.ExpectedRevision);
+
+        var stored = References.Require(command.ComponentRef, document.Id, document.Revision);
+        if (stored.Payload is not ComponentPayload payload)
+        {
+            throw new KompasContractException(
+                ErrorCodes.StaleReference,
+                $"Ссылка «{command.ComponentRef}» не адресует компонент: это {stored.Kind}.",
+                RetryPolicy.ReacquireContext);
+        }
+
+        // NESTED COMPONENT AND A CONFIRMED ADDRESS ARE BOTH SETTLED HERE, BEFORE ANY COM MUTATION: a nested
+        // component has no API5 address (CAPABILITY_UNAVAILABLE) and an unconfirmed ordinal would delete a
+        // FOREIGN component (STALE_REFERENCE).
+        var part5 = ComponentPart5(document, payload, out var lookupNote);
+        var sourcePath = Ref(() => part5.fileName);
+
+        var notes = new List<string>();
+        var dependents = ReadDependentMates(document, part5, payload, notes,
+            out var objectConstraintsCount, out var crossCheckNote);
+
+        // THE REFUSAL COMES BEFORE COM MUTATES ANYTHING: with dependent mates and no agreement the model is
+        // left exactly as it was, and the caller is told which mates would go.
+        if (dependents.Count > 0 && !command.ConfirmDependents)
+        {
+            throw new KompasContractException(
+                ErrorCodes.DependentFeatures,
+                $"Компонент участвует в {dependents.Count} сопряжении(ях): удаление унесло бы их с собой. "
+                + "Без confirm_dependents=true удаление не выполняется, состав сборки не меняется. "
+                + "Перечень — в details.dependent_mates.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["component_ref"] = command.ComponentRef,
+                    ["dependent_mates"] = dependents,
+                    ["dependent_mate_count"] = dependents.Count,
+                    ["mates_related_from_kernel"] = objectConstraintsCount,
+                    ["dependent_mate_route"] = crossCheckNote,
+                    ["lookup_note"] = lookupNote,
+                });
+        }
+
+        var before = SnapshotComponents(document);
+        var mateCountBefore = MateConstraintCount(document, "до удаления компонента");
+        var addressedKey = before.Count > payload.Ordinal && payload.Ordinal >= 0
+            ? before[payload.Ordinal].Key
+            : null;
+
+        bool deleted;
+        try
+        {
+            deleted = document.Document3D.DeleteObject(part5);
+        }
+        catch (COMException ex)
+        {
+            // A failure DURING the mutation: the outcome is unknown, not "it cleanly did not work".
+            throw new KompasContractException(
+                ErrorCodes.OutcomeUnknown,
+                $"DeleteObject прервался: {ex.Message}. Сверьте фактический состав сборки, повтор той же "
+                + "операции запрещён.",
+                RetryPolicy.AfterReconciliation,
+                partialEffects: true);
+        }
+
+        SettleAfterMutation(document);
+
+        // THE ADDRESSED COMPONENT'S REFERENCE IS BUILT BEFORE THE REFERENCES ARE REVOKED: InvalidateDocument
+        // drops every reference of the document, and a Require afterwards would reject the very reference
+        // the caller used.
+        var dto = ToDto(stored, "component");
+        References.InvalidateDocument(document.Id);
+        BumpRevision(document, "assembly.delete_component");
+
+        var after = SnapshotComponents(document);
+        var mateCountAfter = MateConstraintCount(document, "после удаления компонента");
+
+        // WHICH ONE LEFT IS DECIDED BY IDENTITY (source file + placement), NOT BY THE ORDINAL: the remaining
+        // components' ordinals shift, so "index 0 is gone" would be a statement about the numbering, not
+        // about the component. The removed entry is the multiset difference before minus after.
+        // THE DECISION IS THE PURE ComponentRemoval (Domain, no COM types): the ordinal is not identity, and
+        // the multiset difference is what says which entry left. The keys carry the file and the rounded
+        // placement, so the message names what actually left.
+        var removal = ComponentRemoval.Decide(
+            before.Select(e => e.Key).ToList(), after.Select(e => e.Key).ToList(), addressedKey);
+        var left = removal.Left;
+        var removedIsAddressed = removal.AddressedRemoved;
+        var countFell = removal.CountFell;
+        var ambiguous = removal.Ambiguous;
+        var addressedOccurrences = addressedKey is null ? 0 : before.Count(e => e.Key == addressedKey);
+
+        // SURVIVORS' PLACEMENTS: with NO dependent mates a moved survivor is a hard failure (nothing in the
+        // model justified it). With dependent mates the kernel removes the mate too, and a mate solve can
+        // legitimately move a component — that is NAMED, not refused.
+        var survivorsPreserved = countFell && removedIsAddressed;
+
+        var sourceStillThere = sourcePath is { Length: > 0 } && SafeFileExists(sourcePath);
+
+        var expectedMatesAfter = dependents.Count > 0
+            ? mateCountBefore - dependents.Count
+            : mateCountBefore;
+        var mateFateMatches = mateCountAfter == expectedMatesAfter;
+
+        var checks = new List<NamedCheck>
+        {
+            new("delete_object_returned", deleted, Observed: deleted ? "true" : "false"),
+            new("component_count_decreased", countFell,
+                Observed: $"{before.Count} → {after.Count}", Expected: $"{before.Count - 1}"),
+            new("addressed_component_removed", removedIsAddressed,
+                Observed: $"ушло [{string.Join("; ", left)}]",
+                Expected: "ровно адресованный (файл + размещение)"),
+            new("survivors_placements_preserved", survivorsPreserved,
+                Observed: string.Join("; ", after.Select(e => e.Summary()))),
+            new("dependent_mates_removed_with_component", mateFateMatches,
+                Observed: $"сопряжений {mateCountBefore} → {mateCountAfter}",
+                Expected: $"{expectedMatesAfter}"),
+            new("source_file_untouched", sourceStillThere,
+                Observed: sourcePath ?? "источник не читается",
+                Expected: "файл детали существует и не удаляется"),
+        };
+
+        var unverified = new List<string>
+        {
+            "component_address_by_ordinal — " + lookupNote,
+            "dependent_mate_route — " + crossCheckNote,
+        };
+
+        if (ambiguous)
+        {
+            unverified.Add("addressed_instance_indistinguishable — в сборке " + addressedOccurrences
+                + " компонента(ов) с ТЕМ ЖЕ источником и ТЕМ ЖЕ размещением: «ушёл именно адресованный» "
+                + "проверкой по идентичности неотличимо от «ушёл его двойник». Сверьте состав.");
+        }
+
+        if (!removedIsAddressed || !countFell)
+        {
+            unverified.Insert(0, "component_not_removed — удаление не подтверждено перечитыванием состава: "
+                + $"было {before.Count}, стало {after.Count}, ушло [{string.Join("; ", left)}]");
+        }
+
+        if (!mateFateMatches)
+        {
+            unverified.Insert(0, "dependent_mate_fate_unexpected — сопряжений до " + mateCountBefore
+                + ", зависимых " + dependents.Count + ", после " + mateCountAfter
+                + ": ожидалось " + expectedMatesAfter + ". Судьба зависимых сопряжений не подтверждена.");
+        }
+
+        if (!survivorsPreserved && dependents.Count > 0)
+        {
+            unverified.Add("survivor_placement_changed_with_mates — размещение уцелевшего компонента "
+                + "изменилось, а в сборке были зависимые сопряжения: ядро сняло сопряжение вместе с "
+                + "компонентом, и пересчёт мог двинуть остальные. Это НАЗВАНО, а не выдано за "
+                + "«размещения не изменились»");
+        }
+
+        // A FAILED MANDATORY CHECK IS NOT SUCCESS: the revision is already bumped, so a client reading only
+        // `status` must not take an unconfirmed deletion for a completed one.
+        if (!deleted || !countFell || !removedIsAddressed)
+        {
+            throw new KompasContractException(
+                ErrorCodes.VerificationFailed,
+                "Удаление компонента НЕ подтверждено перечитыванием состава сборки: "
+                + $"DeleteObject={deleted}, компонентов {before.Count} → {after.Count}, "
+                + $"ушло [{string.Join("; ", left)}]. Успехом это не считается.",
+                RetryPolicy.AfterReconciliation,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["component_ref"] = command.ComponentRef,
+                    ["components_before"] = before.Count,
+                    ["components_after"] = after.Count,
+                    ["removed"] = left.ToList(),
+                    ["expected_removed"] = addressedKey,
+                });
+        }
+
+        var disposition = dependents.Count == 0
+            ? "сопряжений у компонента не было: удалять вместе с ним нечего"
+            : mateFateMatches
+                ? $"ядро удалило {dependents.Count} зависимое(ых) сопряжение(ий) ВМЕСТЕ с компонентом "
+                  + $"(сопряжений {mateCountBefore} → {mateCountAfter}); недействительных остатков не осталось"
+                : $"сопряжений было {mateCountBefore}, зависимых {dependents.Count}, осталось {mateCountAfter}: "
+                  + "ожидаемое «минус зависимые» НЕ подтвердилось — сверьте сопряжения";
+
+        return new DeleteComponentResult(
+            dto,
+            sourcePath,
+            dependents,
+            disposition,
+            before.Count,
+            after.Count,
+            new VerificationDto(
+                removedIsAddressed && countFell && survivorsPreserved ? VerificationLevel.StructureChecked
+                    : VerificationLevel.CallReturned,
+                checks, unverified),
+            Warnings: notes.Count == 0 ? null : notes);
+    }
+
+    /// <summary>Whether the document is an assembly, refusing a wrong kind with <c>WRONG_DOCUMENT_KIND</c>.</summary>
+    /// <remarks>DELIBERATELY DIFFERENT FROM THE SIBLING C1 TOOLS: <see cref="RequireAssembly"/> answers
+    /// <c>INVALID_ARGUMENT</c> for the same condition, and the interference block answered
+    /// <c>WRONG_DOCUMENT_KIND</c>. The order for component deletion names <c>WRONG_DOCUMENT_KIND</c>, and the
+    /// divergence is kept rather than smoothed over — a code that silently changed under one tool while the
+    /// others kept theirs would be worse. History: docs/decisions/contracts.md#wrong-document-kind</remarks>
+    private DocumentEntry RequireAssemblyForDelete(string documentId)
+    {
+        var document = RequireDocument(documentId);
+        if (document.Kind != DocumentKind.Assembly)
+        {
+            throw new KompasContractException(
+                ErrorCodes.WrongDocumentKind,
+                $"Документ «{documentId}» имеет тип {document.Kind}: удалять компонент можно только в "
+                + "документе-сборке.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["kind"] = document.Kind.ToString(),
+                    ["supported_kinds"] = new[] { "assembly" },
+                });
+        }
+
+        return document;
+    }
+
+    /// <summary>Mates the component takes part in, read by TWO documented routes that must agree.</summary>
+    /// <remarks>MEASURED (probe DC): the collection walk matches by RCW identity of
+    /// <c>BaseObject1/2</c> → <c>IModelObject.Part</c>, because two insertions of one file share both name
+    /// and source file. <c>ObjectConstraints</c> is the kernel's own answer, so the two together make an
+    /// UNDER-COUNT visible: a walk that misses a mate would otherwise delete a component while a mate is
+    /// still attached. The agreement rule is the pure <see cref="DependentMates.Decide"/>.
+    /// History: docs/decisions/assembly.md#delete-component</remarks>
+    /// <param name="objectConstraintsCount">Mates the kernel reports, or <c>null</c> when unread.</param>
+    private List<MateRowDto> ReadDependentMates(
+        DocumentEntry document,
+        ksPart part5,
+        ComponentPayload payload,
+        List<string> notes,
+        out int? objectConstraintsCount,
+        out string crossCheckNote)
+    {
+        var rows = ReadMates(document, notes);
+        var dependents = new List<MateRowDto>();
+
+        var component7 = BridgeFor(document).TransferTo7(part5) as IPart7;
+        if (component7 is null)
+        {
+            // WITHOUT THE API7 VIEW OF THE COMPONENT THE OWNER CANNOT BE COMPARED AT ALL: an empty list would
+            // read as "no dependents", which is exactly the dangerous direction. Refuse instead.
+            throw new KompasContractException(
+                ErrorCodes.CapabilityUnavailable,
+                "Компонент не переносится в API7 как IPart7: владельца базовых объектов сопряжений "
+                + "сравнить нечем, и «сопряжений нет» выдавать нельзя. Удаление не выполняется.",
+                RetryPolicy.ReacquireContext);
+        }
+
+        foreach (var row in rows)
+        {
+            var storedMate = References.Require(row.MateRef, document.Id, document.Revision);
+            if (storedMate.Payload is not MatePayload matePayload)
+            {
+                continue;
+            }
+
+            if (MateTouchesComponent(document, matePayload.Mate5, component7, out var which))
+            {
+                dependents.Add(row);
+                notes.Add($"dependent_mate — сопряжение «{row.Name ?? "?"}» (номер {row.Ordinal}) "
+                    + $"участвует базовым объектом {which}");
+            }
+        }
+
+        objectConstraintsCount = KernelMateCount(document, component7, notes);
+
+        // THE AGREEMENT IS THE PURE DependentMates (Domain, no COM types). A disagreement is a REFUSAL, never
+        // a preference for the smaller set: the walk can UNDER-count, and deleting on a short list would
+        // remove a component while a mate is still attached.
+        var agreement = DependentMates.Decide(dependents.Count, objectConstraintsCount);
+        crossCheckNote = agreement.Detail;
+
+        if (!agreement.Agree && objectConstraintsCount is not null)
+        {
+            // THE KERNEL SAYS MORE (OR FEWER) MATES THAN THE REFERENCE SCAN FOUND. Deleting on the smaller
+            // set could remove a component while a mate is still attached, so the call refuses.
+            throw new KompasContractException(
+                ErrorCodes.CapabilityUnavailable,
+                "Перечень зависимых сопряжений НЕ подтверждён: перебор коллекции дал " + dependents.Count
+                + ", а ядро (IMateConstraints3D.ObjectConstraints) — " + objectConstraintsCount
+                + ". Удаление по меньшему набору могло бы унести компонент при живом сопряжении, "
+                + "поэтому оно не выполняется.",
+                RetryPolicy.ReacquireContext,
+                details: new Dictionary<string, object?>
+                {
+                    ["by_collection_walk"] = dependents.Count,
+                    ["by_object_constraints"] = objectConstraintsCount,
+                });
+        }
+
+        return dependents;
+    }
+
+    /// <summary>Whether the mate's base objects belong to the component — by RCW identity of
+    /// <c>IModelObject.Part</c>.</summary>
+    /// <param name="which">1 or 2: which base object matched (0 when none).</param>
+    private bool MateTouchesComponent(
+        DocumentEntry document, ksMateConstraint mate5, IPart7 component7, out int which)
+    {
+        which = 0;
+        var bridge = BridgeFor(document);
+        for (short index = 1; index <= 2; index++)
+        {
+            var baseObject = Ref(() => mate5.GetBaseObj(index));
+            if (baseObject is null)
+            {
+                continue;
+            }
+
+            if (bridge.TransferTo7(baseObject) is not IModelObject model)
+            {
+                continue;
+            }
+
+            if (Ref(() => model.Part) is { } owner && ReferenceEquals(owner, component7))
+            {
+                which = index;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>How many mates the kernel reports for the component via
+    /// <c>IMateConstraints3D.ObjectConstraints</c>; <c>null</c> when that read failed.</summary>
+    private int? KernelMateCount(DocumentEntry document, IPart7 component7, List<string> notes)
+    {
+        var top = TopPart7(document, notes);
+        var mates = top?.MateConstraints;
+        if (mates is null || component7 is not IModelObject model)
+        {
+            return null;
+        }
+
+        try
+        {
+            var raw = mates.ObjectConstraints[model];
+            return raw switch
+            {
+                null => 0,
+                Array array => array.Length,
+                _ => 1,
+            };
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException or ArgumentException)
+        {
+            notes.Add("object_constraints_failed — IMateConstraints3D.ObjectConstraints бросил "
+                + ex.GetType().Name + ": перекрёстная проверка не выполнена");
+            return null;
+        }
+    }
+
+    /// <summary>One component of the structure as the deletion compares it: source file and placement.</summary>
+    /// <remarks>Equality is by (file name, rounded matrix): the ordinal is NOT identity — it shifts for the
+    /// survivors. Two insertions of one file at ONE placement are indistinguishable here, and that limit is
+    /// NAMED rather than smoothed over.</remarks>
+    private sealed record ComponentSnapshotEntry(string File, double[]? Matrix)
+    {
+        public string Key => File + "|" + (Matrix is null
+            ? "матрица не читается"
+            : string.Join(",", Matrix.Select(v => Math.Round(v, 6).ToString(CultureInfo.InvariantCulture))));
+
+        public string Summary() => $"«{File}» {Describe(Matrix)}";
+    }
+
+    /// <summary>The structure as a list of (source file, placement) per ordinal, in enumeration order.</summary>
+    private List<ComponentSnapshotEntry> SnapshotComponents(DocumentEntry document)
+    {
+        var entries = new List<ComponentSnapshotEntry>();
+        foreach (var part in ComponentParts5(document))
+        {
+            var file = Path.GetFileName(Ref(() => part.fileName) ?? "источник не читается");
+            entries.Add(new ComponentSnapshotEntry(file, ReadPlacementMatrix(part)));
+        }
+
+        return entries;
+    }
+
     // ── ASM-06 ──
     /// <summary>Check component references to source files.</summary>
     public CheckComponentLinksResult CheckComponentLinks(CheckComponentLinksCommand command)

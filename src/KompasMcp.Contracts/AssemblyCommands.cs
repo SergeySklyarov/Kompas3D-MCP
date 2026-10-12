@@ -64,6 +64,25 @@ public sealed record CheckComponentLinksCommand
     public required string DocumentId { get; init; }
 }
 
+/// <summary>Delete a TOP-LEVEL assembly component.</summary>
+/// <remarks>INVARIANT: only the top-level component has an API5 address (see the assembly block LIMIT), so a
+/// nested component is refused rather than addressed by a guessed ordinal. INVARIANT: the component's SOURCE
+/// FILE is not touched — what is removed is the insertion into this assembly, not the part file.
+/// History: docs/decisions/assembly.md#delete-component</remarks>
+public sealed record DeleteComponentCommand
+{
+    public required string DocumentId { get; init; }
+
+    public required long ExpectedRevision { get; init; }
+
+    /// <summary>Reference to the instance from <c>kompas_list_components</c>.</summary>
+    public required string ComponentRef { get; init; }
+
+    /// <summary>Agreement to delete a component that dependent mates are attached to. <c>false</c> means the
+    /// call is refused with the list of those mates and the model is left untouched.</summary>
+    public bool ConfirmDependents { get; init; }
+}
+
 /// <summary>One assembly-structure row. An empty field means "not read", not zero; the reason is named in <see
 /// cref="ListComponentsResult.Notes"/>.</summary>
 public sealed record ComponentRowDto
@@ -163,3 +182,21 @@ public sealed record CheckComponentLinksResult(
     IReadOnlyList<ComponentLinkDto> Links,
     int BrokenCount,
     VerificationDto Verification);
+
+/// <summary>Result of deleting a component: the structure re-read from the model, not a retelling of the
+/// request.</summary>
+/// <param name="DependentMatesDisposition">The MEASURED fate of the dependent mates - e.g. that the kernel
+/// removed them together with the component. Named, not assumed: an invalid leftover must not read as a
+/// whole one.</param>
+/// <remarks>INVARIANT: the surviving components' placements are re-read and reported; a component that
+/// moved is named, never passed off as "unchanged".
+/// History: docs/decisions/assembly.md#delete-component</remarks>
+public sealed record DeleteComponentResult(
+    ReferenceDto ComponentRef,
+    string? SourcePath,
+    IReadOnlyList<MateRowDto> DependentMates,
+    string DependentMatesDisposition,
+    int ComponentsBefore,
+    int ComponentsAfter,
+    VerificationDto Verification,
+    IReadOnlyList<string>? Warnings = null);

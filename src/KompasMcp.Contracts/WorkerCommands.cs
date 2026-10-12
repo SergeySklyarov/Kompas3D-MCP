@@ -214,6 +214,7 @@ public static class WorkerCommands
     public const string SetComponentPlacement = "asm.set_placement";
     public const string ReplaceComponent = "asm.replace_component";
     public const string CheckComponentLinks = "asm.check_links";
+    public const string DeleteComponent = "asm.delete_component";
 
     // ── block C2 "minimal mates" (profile mates-minimal-v1) ──
     // mate.create → MATE-01, mate.list → MATE-02, mate.set_parameter → MATE-03,

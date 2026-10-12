@@ -850,6 +850,45 @@ def instrument_self_test():
           isinstance(fields["failure_snapshot"], str) and bool(fields["failure_snapshot"]),
           str(fields["failure_snapshot"]))
 
+    # Сверка параметров после переоткрытия обязана называть РАЗОШЕДШИЙСЯ параметр машинно, а не
+    # прятать его в обрезанном тексте (наряд RARE_FLAKES_SOAK §2.1). Обе половины: расхождение
+    # названо, совпадение не превращено в расхождение, а непрочитанное не выдано за совпадение.
+    comparison = param_comparison({"count1": 3, "step1": 20.0, "family": "linear"},
+                                  {"count1": 4, "step1": 20.0, "family": "linear"},
+                                  ("count1", "step1", "family"))
+    check("сверка параметров называет разошедшийся параметр",
+          [c["param"] for c in comparison if not c["matched"]] == ["count1"], str(comparison))
+    check("сверка параметров видит совпадение",
+          all(c["matched"] for c in comparison if c["param"] != "count1"))
+    check("сверка параметров не выдаёт непрочитанное за совпадение",
+          param_comparison({"a": 1}, {"a": None})
+          == [{"param": "a", "expected": 1, "read": None, "matched": False}])
+    check("сверка параметров без двух чтений не выдумывается",
+          param_comparison(None, {"a": 1}) is None)
+    # Адресация и состояние вычищаются РЕКУРСИВНО: ручки подобъектов лежат внутри семейного блока,
+    # и поверхностная фильтрация объявила бы расхождение там, где сменился только адрес.
+    stripped = strip_readout_state(
+        {"sketch_ref": "sketch:1", "name": "Фаска:1", "update_stamp": 7,
+         "fillet": {"radius_mm": 3, "base_object_references": [1, 2],
+                    "base_object_input_refs": ["input:1"]},
+         "sides": [{"depth_mm": 5, "edge_ref": "edge:9"}]})
+    check("адресация и состояние вычищаются рекурсивно",
+          stripped == {"name": "Фаска:1",
+                       "fillet": {"radius_mm": 3},
+                       "sides": [{"depth_mm": 5}]}, str(stripped))
+    check("чистка не трогает числа и строки", strip_readout_state(5) == 5
+          and strip_readout_state("x") == "x")
+    # Отметки сверки перестроения читаются из ОБОИХ мест публикации (result и verification) и не
+    # считаются по чужим неподтверждённым аспектам.
+    marks = rebuild_marks(
+        {"result": {"unverified_aspects": ["rebuild_repeated: 1 -> 2 (2 rebuilds)",
+                                           "geometry_or_file_effect_verified_in_worker_payload"]}},
+        {"verification": {"unverified_aspects": ["rebuild_changed_model"]}})
+    check("отметки сверки перестроения читаются из обоих мест",
+          marks == ["rebuild_repeated: 1 -> 2 (2 rebuilds)", "rebuild_changed_model"], str(marks))
+    check("отметки сверки не считаются по чужим неподтверждённым аспектам",
+          rebuild_marks({"result": {"unverified_aspects": ["geometry_checked"]}}) == [])
+
     # Режим повтора: план обязан быть воспроизводим, а доля — не выдумывать значение на пустом списке.
     check("план повтора чередует виды профиля",
           nested_repeat_plan(7) == ("nested", "circle", "rectangle", "nested", "circle",
@@ -1050,6 +1089,108 @@ def refusal_fields(envelope, code):
         "message": error.get("message"),
         "failure_snapshot": snapshot if snapshot is not None
         else "не прочитан: отказ не Entity.Create() либо снимок не собран",
+    }
+
+
+# ── Разбор нерегулярного отказа (наряд RARE_FLAKES_SOAK §2) ──────────────────────────────────────
+# Три строки приёмки отказывают нерегулярно, и до сих пор отказ был неразбираем: строка несла код,
+# но не несла ни снимка, ни отметок сверки перестроения, ни состояния среды. Помощники ниже кладут
+# всё это в `details` строки МАШИННО, чтобы обрезка текста (`clip`, 600 символов) не прятала
+# расхождение — в сохранённом упавшем прогоне обрезка пришлась ровно на сверяемые параметры.
+
+# Отметки сверки перестроения — те же имена, что публикует `kompas_rebuild` (docs/decisions/
+# adapter-core.md#rebuild-settle): модель вернулась не с первой попытки, не вернулась вовсе, объём
+# не с чем было сравнить.
+REBUILD_MARK_NAMES = ("rebuild_repeated", "rebuild_changed_model", "rebuild_volume_not_compared")
+
+
+def param_comparison(expected, read, fields=None):
+    """Пофайловое сравнение параметров признака: список `{param, expected, read, matched}`.
+
+    INVARIANT: расхождение параметра после переоткрытия обязано быть видно МАШИННО. Ожидание —
+    чтение того же признака ДО сохранения (состояние, которое сохранялось); чтение — после
+    переоткрытия. `None` на любой стороне означает «не прочитано», и это названо, а не превращено в
+    совпадение: пустое неотличимо от «забыли заполнить». Числа сравниваются с допуском 1e-6 —
+    чтение возвращает то же значение, округление тут ни при чём.
+    """
+    if not isinstance(expected, dict) or not isinstance(read, dict):
+        return None
+    keys = list(fields) if fields else sorted(set(expected) | set(read))
+    out = []
+    for key in keys:
+        want, got = expected.get(key), read.get(key)
+        if isinstance(want, (int, float)) and isinstance(got, (int, float)):
+            matched = abs(float(want) - float(got)) <= 1e-6
+        else:
+            matched = want == got
+        out.append({"param": key, "expected": want, "read": got, "matched": matched})
+    return out
+
+
+# Поля чтения признака, которые НЕ сравниваются: это АДРЕСАЦИЯ и СОСТОЯНИЕ, а не параметр. Ссылки
+# (`feature_ref`, `sketch_ref`, `*_ref`) после переоткрытия указывают на те же объекты ДРУГИМИ
+# идентификаторами; `base_object_*` — числовые ручки подобъектов; `update_stamp` — метка ревизии
+# документа; `verification` — итог проверки уровня ответа; `definition_interface` — COM-обёртка;
+# `owner_feature_name` — имя владельца в документе. Сравнивать их значило бы мерить смену адреса.
+READOUT_VOLATILE_KEYS = ("feature_ref", "sketch_ref", "body_ref", "face_ref", "edge_ref",
+                         "persistent_feature_id", "definition_interface", "owner_feature_name",
+                         "update_stamp", "verification", "base_object_references",
+                         "base_object_input_refs")
+
+
+def strip_readout_state(value, keys=READOUT_VOLATILE_KEYS):
+    """Убрать из чтения признака поля адресации и состояния — РЕКУРСИВНО, на любую глубину.
+
+    ЗАЧЕМ РЕКУРСИЯ. Ручки подобъектов лежат ВНУТРИ семейного блока (`fillet.base_object_references`),
+    а не на верхнем уровне: поверхностная фильтрация оставила бы их в сравнении, и после
+    переоткрытия строка объявила бы расхождение параметра там, где сменился только адрес.
+    """
+    if isinstance(value, dict):
+        return {k: strip_readout_state(v, keys) for k, v in value.items() if k not in keys}
+    if isinstance(value, list):
+        return [strip_readout_state(v, keys) for v in value]
+    return value
+
+
+def rebuild_marks(*envelopes):
+    """Отметки сверки перестроения из конвертов операции, названные СВОИМИ именами.
+
+    Место публикации зависит от инструмента (`result.unverified_aspects` или
+    `verification.unverified_aspects`) — читается обоими, как в `unverified_of`. Строка, упавшая
+    ПОСЛЕ того, как сверка отметила сдвиг модели, — это дефект СВЕРКИ, и он обязан быть виден в
+    отчёте, а не выведен из отсутствия отметки.
+    """
+    marks = []
+    for env in envelopes:
+        for item in unverified_of(env):
+            text = item if isinstance(item, str) else json.dumps(item, ensure_ascii=False)
+            if any(name in text for name in REBUILD_MARK_NAMES):
+                marks.append(text)
+    return marks
+
+
+def soak_failure_context(envelopes=(), snapshot_envelope=None):
+    """Всё, чем разбирается нерегулярный отказ: код и текст КОМПАС, отметки сверки, среда, повтор.
+
+    ЗАЧЕМ СНИМОК СОБИРАЕТСЯ В МОМЕНТ ОТКАЗА. Отказ этих строк не воспроизводится по заказу, поэтому
+    строка обязана снять состояние САМА. Код и текст КОМПАС берутся из `failure_snapshot`
+    (`refusal_fields`), отметки сверки — из конвертов операции, число процессов `KOMPAS.exe` и их
+    рабочая память — из ОС (`tasklist`, см. `kompas_processes`), номер повтора — из среды прогона
+    (`KOMPAS_MCP_SOAK_ITER`): сам прибор одного повтора не считает, его ставит драйвер прогона.
+    """
+    envelope = snapshot_envelope if snapshot_envelope is not None else (
+        envelopes[0] if envelopes else None)
+    code = error_code(envelope)
+    fields = refusal_fields(envelope, code)
+    procs = kompas_processes()
+    return {
+        "kompas_code": code,
+        "kompas_message": fields.get("message"),
+        "failure_snapshot": fields.get("failure_snapshot"),
+        "rebuild_marks": rebuild_marks(*envelopes),
+        "kompas_processes": [{"pid": pid, "working_set_bytes": mem} for pid, mem in procs],
+        "kompas_process_count": len(procs),
+        "soak_iteration": os.environ.get("KOMPAS_MCP_SOAK_ITER"),
     }
 
 
@@ -11397,6 +11538,10 @@ def main():
         "worker_path_env": os.environ.get("KOMPAS_MCP_WORKER_PATH", ""),
         "report_path": rep.path,
         "report_copies": rep.mirror_paths,
+        # Номер повтора длинного прогона (наряд RARE_FLAKES_SOAK §2.3). Прибор одного повтора не
+        # считает — номер ставит драйвер прогона; `None` здесь значит «прогон не из серии повторов»,
+        # и это названо, а не оставлено пустым.
+        "soak_iteration": os.environ.get("KOMPAS_MCP_SOAK_ITER"),
     }
     if all_groups:
         # Отчёт полного прогона называет свой план: какие группы даёт вертикаль, какие добавлены, что
@@ -17666,6 +17811,11 @@ def b4_pattern_checks(client, rep, app_id, workdir):
             parts.append(json.dumps(err["details"], ensure_ascii=False)[:600])
         return " | ".join(p for p in parts if p and p != "None")
 
+    # Последний конверт операции, ОТКАЗАВШЕЙ внутри постановки. `plate_with_hole` возвращает только
+    # код строкой, а снимок отказа живёт в конверте; без этого захвата разбор отказа `B4M.09.
+    # save_reopen` (наряд RARE_FLAKES_SOAK §2.2) невозможен — прибор выбрасывал бы доказательство.
+    last_refusal = {"envelope": None}
+
     def new_doc(name):
         _e, env, _r = client.tool("kompas_create_document", {
             "application_id": app_id, "kind": "part", "name": name,
@@ -17688,18 +17838,25 @@ def b4_pattern_checks(client, rep, app_id, workdir):
         sk = ((s_env or {}).get("result") or {}).get("id")
         rev = (s_env or {}).get("revision_after") or rev
         if not sk:
+            last_refusal["envelope"] = s_env
             return None, rev, error_of(s_env)
         _e, e_env, _r = client.tool("kompas_edit_sketch", {
             "sketch_ref": sk, "expected_revision": rev, "mode": "append", "entities": entities,
             "operation_id": str(uuid.uuid4())})
         rev = (e_env or {}).get("revision_after") or rev
+        if error_of(e_env):
+            last_refusal["envelope"] = e_env
         _e, f_env, _r = client.tool("kompas_finish_sketch", {
             "sketch_ref": sk, "require_closed_profile": False, "operation_id": str(uuid.uuid4())})
+        if error_of(f_env):
+            last_refusal["envelope"] = f_env
         return sk, ((f_env or {}).get("revision_after") or rev), error_of(f_env)
 
     def extrude(sk, rev, **kw):
         args = dict(kw, sketch_ref=sk, expected_revision=rev, operation_id=str(uuid.uuid4()))
         _e, env, _r = client.tool("kompas_extrude", args, timeout=240)
+        if error_of(env):
+            last_refusal["envelope"] = env
         return env, ((env or {}).get("revision_after") or rev)
 
     def list_bodies(doc):
@@ -18610,11 +18767,18 @@ def b4_pattern_checks(client, rep, app_id, workdir):
         # нет по справке, это объём СОЗДАНИЯ: подставить сюда None значило бы сравнивать с пустотой
         # и уронить строку вместо того, чтобы её измерить.
         vol_restored = vol_edit if vol_edit is not None else vol_created
+        # Захват сбрасывается ПЕРЕД каждой постановкой: иначе отказ режима без COM-снимка унаследовал
+        # бы конверт предыдущего режима, и прибор выдал бы чужой снимок за свой.
+        last_refusal["envelope"] = None
         doc, rev, env, berr = make(f"B4M{number:02d}_lc")
         if berr or error_of(env) is not None:
             why = berr or f"признак не создан: {error_of(env)}"
+            # Снимок отказа прикладывается к СТРОКЕ НАРЯДА (`save_reopen`): прочие действия этой
+            # ветки не измерялись, и выдать им снимок чужого отказа значило бы подменить чтение.
+            refusal = soak_failure_context([last_refusal["envelope"], env])
             for a in LIFECYCLE_ACTIONS:
-                rep.add(f"{tag}.{a}", f"{mode_id}: жизненный цикл массива", "FAIL", why)
+                rep.add(f"{tag}.{a}", f"{mode_id}: жизненный цикл массива", "FAIL", why,
+                        details=dict(refusal) if a == "save_reopen" else None)
             return
         try:
             # ── discover ─────────────────────────────────────────────────────────────────────
@@ -18743,10 +18907,12 @@ def b4_pattern_checks(client, rep, app_id, workdir):
             close(doc)
 
         # ── save_reopen: ОТДЕЛЬНЫЙ документ, потому что действие его ЗАКРЫВАЕТ ────────────────
+        last_refusal["envelope"] = None
         doc2, rev2, env2, berr2 = make(f"B4M{number:02d}_re")
         if berr2 or error_of(env2) is not None:
             rep.add(f"{tag}.save_reopen", f"{mode_id}: save → close → reopen", "FAIL",
-                    berr2 or f"признак не создан: {error_of(env2)}")
+                    berr2 or f"признак не создан: {error_of(env2)}",
+                    details=soak_failure_context([last_refusal["envelope"], env2]))
             return
         # ИМЯ ФАЙЛА УНИКАЛЬНО, А НЕ «УДАЛИТЬ ПРЕЖНИЙ И ПЕРЕЗАПИСАТЬ». Измерено прогоном: удаление
         # прошлого файла упирается в сторож массового удаления среды (SAFE_DELETE_BULK_CONFIRM_
@@ -18756,6 +18922,10 @@ def b4_pattern_checks(client, rep, app_id, workdir):
         # от предыдущего: файл прошлого прогона не может быть прочитан как результат этого.
         path = os.path.join(workdir,
                             f"b4m{number:02d}-pattern-{uuid.uuid4().hex[:8]}.m3d")
+        # ОЖИДАНИЕ СВЕРКИ — чтение ТОГО ЖЕ признака ДО сохранения, то есть состояние, которое
+        # сохранялось. Без него расхождение параметров нечем назвать: сохранённый упавший прогон
+        # строка несла только чтение ПОСЛЕ переоткрытия, и расхождение было не видно (наряд §2.1).
+        _ref_pre, read_pre = pattern_readout(doc2)
         _e, s_env, _r = client.tool("kompas_save_document", {
             "document_id": doc2, "target_path": path, "expected_revision": rev2,
             "operation_id": str(uuid.uuid4())}, timeout=240)
@@ -18768,12 +18938,18 @@ def b4_pattern_checks(client, rep, app_id, workdir):
         rev3 = (o_env or {}).get("revision_after") or 1
         n_re, v_re = doc_volume(doc3) if doc3 else (None, None)
         pref3 = pattern_ref_from_tree(doc3) if doc3 else None
-        read3 = None
+        read3, pr_env = None, None
         if pref3:
             _e, pr_env, _r = client.tool("kompas_get_pattern", {"feature_ref": pref3})
             read3 = (pattern_result(pr_env) or {}).get("readout")
+        # ПАРАМЕТРЫ СВЕРЯЮТСЯ ПОИМЁННО, А НЕ «ПРОЧИТАЛИСЬ ЛИ». Поля те же, по которым обязаны
+        # совпасть два независимых чтения (`READOUT_FIELDS`); `update_stamp` не входит — это метка
+        # ревизии документа, а не параметр признака. Расхождение роняет строку: она заявляет, что
+        # признак СОХРАНЁН, и разошедшийся параметр этому заявлению противоречит.
+        comparison = param_comparison(read_pre, read3, READOUT_FIELDS)
+        params_all_matched = bool(comparison) and all(c["matched"] for c in comparison)
         # ПРАВКА ПОСЛЕ ПЕРЕОТКРЫТИЯ — то, что отличает «признак уцелел» от «признак работает».
-        v_edit_reopen, edit_reopen_ok = None, False
+        v_edit_reopen, edit_reopen_ok, u3_env = None, False, None
         if pref3 and not edit_na:
             _e, u3_env, _r = client.tool("kompas_update_feature", {
                 "feature_ref": pref3, "expected_revision": rev3, "pattern": edit_patch,
@@ -18786,19 +18962,30 @@ def b4_pattern_checks(client, rep, app_id, workdir):
             # признак остался адресуемым и читаемым, — и это названо прямо, а не выдано за правку.
             edit_reopen_ok = read3 is not None
         reopen_ok = (os.path.exists(path) and doc3 and near(v_re, vol_created)
-                     and bool(pref3) and read3 is not None and edit_reopen_ok)
+                     and bool(pref3) and read3 is not None and params_all_matched
+                     and edit_reopen_ok)
+        details = {"pre_save_readout": read_pre, "reopened_readout": read3,
+                   "param_comparison": comparison, "params_all_matched": params_all_matched,
+                   "reopened_volume": v_re,
+                   "volume_after_edit_post_reopen": v_edit_reopen,
+                   "expected_created": vol_created, "expected_edited": vol_edit,
+                   "edit_not_applicable": bool(edit_na)}
+        if not reopen_ok:
+            # Снимок отказа: код и текст КОМПАС, отметки сверки перестроения, среда, номер повтора.
+            details["failure"] = soak_failure_context([u3_env, s_env, o_env, pr_env, env2])
         rep.add(f"{tag}.save_reopen",
                 f"{mode_id}: save → close → reopen сохраняет признак И оставляет его РАБОЧИМ "
                 f"(правка после переоткрытия применяется)",
                 "PASS" if reopen_ok else "FAIL",
                 f"файл={os.path.exists(path)} документ={bool(doc3)} тел={n_re} V={v_re} "
-                f"(ожидание {vol_created}); свежая ссылка ИЗ ДЕРЕВА={bool(pref3)}; параметры после "
-                f"переоткрытия={read3}; правка ПОСЛЕ переоткрытия: V={v_edit_reopen} "
-                f"(ожидание {vol_edit}), применена={edit_reopen_ok}",
-                details={"reopened_readout": read3, "reopened_volume": v_re,
-                         "volume_after_edit_post_reopen": v_edit_reopen,
-                         "expected_created": vol_created, "expected_edited": vol_edit,
-                         "edit_not_applicable": bool(edit_na)})
+                f"(ожидание {vol_created}); свежая ссылка ИЗ ДЕРЕВА={bool(pref3)}; параметры "
+                f"совпали={params_all_matched}"
+                + ("" if params_all_matched or not comparison else "; разошлись: "
+                   + ", ".join(f"{c['param']}: {c['expected']}→{c['read']}"
+                               for c in comparison if not c["matched"]))
+                + f"; правка ПОСЛЕ переоткрытия: V={v_edit_reopen} "
+                  f"(ожидание {vol_edit}), применена={edit_reopen_ok}",
+                details=details)
         if doc3:
             close(doc3)
 
@@ -31584,6 +31771,11 @@ def f08_action_lifecycle_checks(client, rep, app_id, workdir):
                 out.append(e.get("edge_ref"))
         return out[:limit] if limit else out
 
+    # Последний конверт операции, ОТКАЗАВШЕЙ внутри постановки. `spec["make"]` возвращает только код
+    # строкой, а снимок отказа живёт в конверте; без этого захвата разбор отказа `F08.09.create`
+    # (наряд RARE_FLAKES_SOAK §2.2) невозможен — прибор выбрасывал бы доказательство.
+    last_refusal = {"envelope": None}
+
     def sketch(doc, rev, entities, name, offset=0.0, plane="xy"):
         env, code = call("kompas_create_sketch", {
             "document_id": doc, "expected_revision": rev,
@@ -31591,17 +31783,20 @@ def f08_action_lifecycle_checks(client, rep, app_id, workdir):
         sk = result(env).get("id")
         rev = (env or {}).get("revision_after") or rev
         if code:
+            last_refusal["envelope"] = env
             return None, rev, "эскиз: " + str(code)
         env, code = call("kompas_edit_sketch", {
             "sketch_ref": sk, "expected_revision": rev, "mode": "append",
             "entities": entities})
         rev = (env or {}).get("revision_after") or rev
         if code:
+            last_refusal["envelope"] = env
             return None, rev, "контур: " + str(code)
         env, code = call("kompas_finish_sketch", {"sketch_ref": sk,
                                                  "require_closed_profile": False})
         rev = (env or {}).get("revision_after") or rev
         if code:
+            last_refusal["envelope"] = env
             return None, rev, "замыкание: " + str(code)
         return sk, rev, None
 
@@ -31610,6 +31805,8 @@ def f08_action_lifecycle_checks(client, rep, app_id, workdir):
         args.update(kw)
         env, code = call("kompas_extrude", args)
         rev = (env or {}).get("revision_after") or rev
+        if code:
+            last_refusal["envelope"] = env
         return rev, (result(env).get("feature_ref") or {}).get("id"), code, env
 
     # ── состояние документа: тела, объёмы и габариты. Ожидания объявлены ТЕМИ ЖЕ величинами ────
@@ -31720,6 +31917,9 @@ def f08_action_lifecycle_checks(client, rep, app_id, workdir):
         try:
             # ── create ────────────────────────────────────────────────────────────────────────
             names0 = names_now(doc)
+            # Захват сбрасывается ПЕРЕД постановкой: иначе отказ режима без COM-снимка унаследовал
+            # бы конверт предыдущего режима.
+            last_refusal["envelope"] = None
             fref, rev, cerr = spec["make"](doc, rev)
             # Ревизия перечитывается ИЗ ДОКУМЕНТА, а не берётся из возврата постановки: постановка
             # вправе вернуть ВХОДНУЮ ревизию, и тогда следующий же вызов получит REVISION_CONFLICT.
@@ -31732,19 +31932,26 @@ def f08_action_lifecycle_checks(client, rep, app_id, workdir):
             got = state(doc)
             ok, txt = state_ok(got, spec["created"])
             create_ok = cerr is None and bool(fref) and ok and own is not None
+            create_details = {"measured": got, "expected": spec["created"], "build_error": cerr,
+                              "tree": [{"name": r["name"], "type": r["type"]}
+                                       for r in tree_rows(doc)]}
+            if not create_ok:
+                # Снимок отказа постановки: код и текст КОМПАС, отметки сверки перестроения, среда,
+                # номер повтора. Он ОДИН на весь режим — зависимые строки отказали по той же
+                # причине, и `why` её называет, — поэтому прикладывается и к ним.
+                create_details["failure"] = soak_failure_context([last_refusal["envelope"]])
             emit(nn, "create", row, "PASS" if create_ok else "FAIL",
                  f"err={cerr} ссылка={bool(fref)} признак_в_дереве=«{own_name}» "
                  f"(тип {own and own['type']} из ожидаемых {sorted(types)}) {txt} "
                  f"(ожидание тел={spec['created']['bodies']} объёмов="
                  f"{spec['created']['volumes']})"
                  + (f"; {spec['note']}" if spec.get("note") else ""),
-                 details={"measured": got, "expected": spec["created"], "build_error": cerr,
-                          "tree": [{"name": r["name"], "type": r["type"]}
-                                   for r in tree_rows(doc)]})
+                 details=create_details)
             if not create_ok:
                 for action in F08_ACTIONS:
                     if action != "create":
-                        emit(nn, action, row, "FAIL", "признак не создан — действие не измерено")
+                        emit(nn, action, row, "FAIL", "признак не создан — действие не измерено",
+                             details=create_details if action == "save_reopen" else None)
                 return
 
             # ── discover: признак назван в дереве СВОИМ типом, адресуется и опознан ───────────
@@ -31902,15 +32109,23 @@ def f08_action_lifecycle_checks(client, rep, app_id, workdir):
             return
         try:
             names2 = names_now(doc2)
+            last_refusal["envelope"] = None
             fref2, rev2, cerr2 = spec["make"](doc2, rev2)
             fresh2 = [r for r in tree_rows(doc2) if r["name"] not in names2
                       and r["type"] in types]
             own2 = (fresh2[-1] if fresh2 else {}).get("name")
             if cerr2 or not fref2 or own2 is None:
                 emit(nn, "save_reopen", row, "FAIL",
-                     f"признак не создан: err={cerr2} ссылка={bool(fref2)} имя={own2}")
+                     f"признак не создан: err={cerr2} ссылка={bool(fref2)} имя={own2}",
+                     details=soak_failure_context([last_refusal["envelope"]]))
                 return
             path = os.path.join(workdir, "f08-%02d-%s.m3d" % (nn, uuid.uuid4().hex[:8]))
+            # ОЖИДАНИЕ СВЕРКИ — чтение того же признака ДО сохранения (наряд §2.1). Читается ТЕМ ЖЕ
+            # способом, что и после переоткрытия: по ссылке ИЗ ДЕРЕВА. Ссылка создания и ссылка
+            # дерева семейство НЕ различают одинаково (измерено R1/R1b: создание даёт 24/base, дерево
+            # — 25/boss), поэтому сравнение «создание против дерева» мерило бы разницу источников, а
+            # не сохранность признака.
+            res_pre = read_feature((own_row(doc2, own2) or {}).get("ref")) or {}
             _e, s_env, _r = client.tool("kompas_save_document", {
                 "document_id": doc2, "target_path": path,
                 "expected_revision": ctx(doc2), "operation_id": str(uuid.uuid4())}, timeout=240)
@@ -31934,12 +32149,29 @@ def f08_action_lifecycle_checks(client, rep, app_id, workdir):
             # сверяется с измеренной парой, а наблюдаемое значение называется в тексте строки.
             read3_ok, read3_text = (spec["read_expect"](res3, own2, "tree") if ref3
                                     else (False, "ссылки нет"))
+            # ПОИМЁННАЯ СВЕРКА ПАРАМЕТРОВ, А НЕ «ПРОЧИТАЛОСЬ ЛИ». Поля адресации и состояния
+            # вычищаются рекурсивно (`strip_readout_state`): после переоткрытия документ выдаёт те
+            # же объекты ДРУГИМИ идентификаторами, и без чистки строка объявляла бы расхождение
+            # параметра там, где сменился только адрес. Текст строки обрезается (`clip`, 600), и без
+            # машинной сверки расхождение параметра в нём тонет — что и случилось в сохранённом
+            # упавшем прогоне.
+            comparison = param_comparison(strip_readout_state(res_pre), strip_readout_state(res3))
+            params_all_matched = bool(comparison) and all(c["matched"] for c in comparison)
             reopen_ok = (os.path.exists(path) and bool(doc3) and rok and bool(ref3) and read3_ok)
+            details = {"path": path, "reopened_state": re_state, "pre_save_readout": res_pre,
+                       "reopened_readout": res3, "param_comparison": comparison,
+                       "params_all_matched": params_all_matched}
+            if not reopen_ok:
+                details["failure"] = soak_failure_context([o_env, s_env])
             emit(nn, "save_reopen", row, "PASS" if reopen_ok else "FAIL",
                  f"файл={os.path.exists(path)} документ={bool(doc3)} {rtxt}; признак «{own2}» "
-                 f"найден в дереве переоткрытого документа={bool(row3)}; чтение после "
-                 f"переоткрытия: {read3_text}",
-                 details={"path": path, "reopened_state": re_state, "reopened_readout": res3})
+                 f"найден в дереве переоткрытого документа={bool(row3)}; параметры "
+                 f"совпали={params_all_matched}"
+                 + ("" if params_all_matched or not comparison else "; разошлись: "
+                    + ", ".join(f"{c['param']}: {c['expected']}→{c['read']}"
+                                for c in comparison if not c["matched"]))
+                 + f"; чтение после переоткрытия: {read3_text}",
+                 details=details)
             close(doc3)
         finally:
             if doc2:

@@ -136,6 +136,7 @@ public sealed class ToolInvoker : IAsyncDisposable
 
     private List<SchemaViolation> Validate(ToolDefinition tool, JsonObject arguments)
     {
+        FoldMaterialTowardMinus(arguments);
         var violations = new List<SchemaViolation>(JsonSchemaValidator.Validate(tool.InputSchema, arguments));
 
         if (ReadString(arguments, "operation_id") is { Length: > 0 } operationIdValue && !Guid.TryParse(operationIdValue, out _))
@@ -145,6 +146,23 @@ public sealed class ToolInvoker : IAsyncDisposable
 
         violations.AddRange(ModeViolations(tool, arguments));
         return violations;
+    }
+
+    /// <summary>Folds the minus sign of <c>material_toward</c> to the published ASCII hyphen BEFORE the schema
+    /// enum is applied.</summary>
+    /// <remarks>WHY. The answer spells a side with U+2212 («−z») while the published enum lists the ASCII
+    /// form, so a client copying the side out of the answer would be refused by our own vocabulary. The two
+    /// spellings are ONE request, and the folded form is what the journal records, so a retry with either
+    /// spelling replays the same operation instead of conflicting.
+    /// History: docs/decisions/host.md#material-toward-input</remarks>
+    private static void FoldMaterialTowardMinus(JsonObject arguments)
+    {
+        if (arguments["material_toward"] is JsonValue value
+            && value.TryGetValue<string>(out var word)
+            && word.Contains('\u2212', StringComparison.Ordinal))
+        {
+            arguments["material_toward"] = word.Replace('\u2212', '-');
+        }
     }
 
     /// <summary>Mode-dependent field rules. The published validator understands anyOf/oneOf but not
@@ -360,6 +378,32 @@ public sealed class ToolInvoker : IAsyncDisposable
         var hasDepth = arguments.TryGetPropertyValue("depth_mm", out var depth) && depth is not null;
         var operation = ReadString(arguments, "operation");
         var hasTarget = arguments.TryGetPropertyValue("target_body_ref", out var targetBody) && targetBody is not null;
+        var hasDirection = Present(arguments, "direction");
+        var hasToward = Present(arguments, "material_toward");
+
+        // The side is given by EXACTLY ONE of the two fields. Accepting "both" would silently pick one and
+        // pass off as honoured a request that was contradicted; accepting "neither" would leave the side to a
+        // guess, which is the very defect material_toward exists to remove.
+        // History: docs/decisions/host.md#material-toward-input
+        if (hasDirection == hasToward)
+        {
+            yield return new SchemaViolation(
+                hasDirection ? "/material_toward" : "/direction", "mode",
+                "Сторону задаёт РОВНО ОДНО из полей direction (слово КОМПАС positive/negative/symmetric) и "
+                + "material_toward (+x…-z в координатах детали): "
+                + (hasDirection
+                    ? "заданы оба — сервер не выбирает между ними."
+                    : "не задано ни одно — сторона осталась бы на догадку."));
+        }
+
+        // A through cut is measured to work only with direction=symmetric, and material_toward names ONE side.
+        if (hasToward && endCondition == "through")
+        {
+            yield return new SchemaViolation(
+                "/material_toward", "mode",
+                "При end_condition=through поле material_toward запрещено: насквозь работает только при "
+                + "direction=symmetric, а material_toward выражает одну сторону.");
+        }
 
         // docs/02 makes target_body_ref a field of boss and cut only. `base` creates the first body,
         // so there is nothing to aim at; letting the pair through would report a honoured target that

@@ -1201,6 +1201,11 @@ public sealed partial class Api5Session
                 });
         }
 
+        // The side may be asked for in PART coordinates instead of KOMPAS's own word, because the two families
+        // point opposite ways and a caller who does not know the rule would cut the wrong way without the
+        // kernel complaining. Resolved BEFORE the feature exists, so a refusal moves no revision.
+        var resolved = ResolveDirection(command, target.Definition);
+
         var feature = (ksEntity)document.PartNow().NewEntity(KompasObjectTypes.Of(entityType));
         var definition = feature.GetDefinition();
 
@@ -1209,13 +1214,7 @@ public sealed partial class Api5Session
         // 1 dtReverse -> -z, 2 dtBoth -> both sides. A direction away from the body is NOT an error — KOMPAS
         // creates the feature and changes nothing (Host: NO_GEOMETRY_CHANGE).
         // History: docs/decisions/adapter-core.md#extrude-direction-semantics
-        var direction = command.Direction switch
-        {
-            ExtrudeDirection.Positive => (short)0,
-            ExtrudeDirection.Negative => (short)1,
-            ExtrudeDirection.Symmetric => (short)2,
-            _ => (short)0,
-        };
+        var direction = DirectionCode(resolved.Direction);
 
         var selector = new List<string>();
         var configured = definition switch
@@ -1539,7 +1538,7 @@ public sealed partial class Api5Session
                 // the body lies wholly on the other side of the sketch plane — a checkable fact about the
                 // gabarit. The operation is NOT repeated with the other direction automatically: that is a
                 // behaviour change and no customer decision covers it.
-                var noChange = BuildNoChangeHint(command, target, bodyTarget);
+                var noChange = BuildNoChangeHint(command, target, bodyTarget, resolved.Direction);
                 var sideLine = noChange.BodyLiesOpposite == true
                     ? $" Операция ушла в сторону, где у тела нет материала: запрошенное направление "
                         + $"{noChange.RequestedDirection} снимает/добавляет материал в сторону "
@@ -1549,6 +1548,54 @@ public sealed partial class Api5Session
                         ? $" Операция идёт в сторону {noChange.AttemptedToward} (по правилу нормали эскиза); "
                             + "лежит ли тело целиком по другую сторону плоскости — не проверено."
                         : string.Empty;
+                var noChangeDetails = new Dictionary<string, object?>
+                {
+                    ["target_body_ref"] = command.TargetBodyRef,
+                    ["target_body_index"] = bodyTarget.Index,
+                    // The feature the caller must delete: the operation created it and it did nothing.
+                    ["feature_ref"] = ToDto(featureReference, $"{command.Operation} {FormatDepth(command)}").Id,
+                    // AFTER minus BEFORE, the same convention as every other delta in this response:
+                    // positive = material added, negative = material removed.
+                    ["target_delta_mm3"] = targetDelta,
+                    ["target_delta_meaning"] = "объём целевого тела: после − до (положительное — материал добавлен, отрицательное — снят)",
+                    ["volume_noise_mm3"] = BodyChangePolicy.VolumeNoiseMm3,
+                    ["target_box_changed"] = targetBoxMoved,
+                    ["target_face_count"] = bodyTarget.Snapshot.FaceCount,
+                    ["target_face_count_after"] = affectedAfter?.FaceCount,
+                    ["changed_body_indexes"] = changes.Changed.ToArray(),
+                    ["moved_body_indexes"] = changes.Moved.ToArray(),
+                    ["touched_body_indexes"] = changes.Touched.ToArray(),
+                    ["per_body"] = changes.Rows.ToArray(),
+                    ["profile_target_agreement"] = AgreementName(agreement),
+                    // Where the operation went and what to try instead: the side is named by the documented
+                    // sketch-normal rule when the normal is readable, and the body's side is a measured
+                    // fact from its box and the plane origin. Nothing here is a guess; unreadable parts are
+                    // left null rather than asserted.
+                    ["requested_direction"] = noChange.RequestedDirection,
+                    ["attempted_material_toward"] = noChange.AttemptedToward,
+                    ["opposite_direction"] = noChange.OppositeDirection,
+                    ["body_side"] = noChange.BodySide,
+                    ["body_lies_opposite"] = noChange.BodyLiesOpposite,
+                    // The side of the material is NAMED as not determined, rather than left absent:
+                    // an absent field is indistinguishable from a forgotten write, and here the reason
+                    // is substantive — nothing was removed or added, so no side exists to name.
+                    ["material_removed_toward"] = null,
+                    ["material_added_toward"] = null,
+                    ["material_toward_unavailable"] =
+                        "признак не изменил ни объём, ни габарит, ни число граней: материала не снято и не "
+                        + "добавлено, поэтому сторона в координатах детали не определяется",
+                    ["code"] = "target_body_not_affected",
+                };
+
+                // The requested side and the word it resolved to are named ONLY when the caller asked in
+                // part coordinates: for a call that used `direction` the answer must stay what it was, and
+                // a new null-valued key would still be a change of the payload.
+                if (resolved.RequestedToward is not null)
+                {
+                    noChangeDetails["material_toward_requested"] = resolved.RequestedToward;
+                    noChangeDetails["direction_resolved"] = DirectionWord(resolved.Direction);
+                }
+
                 throw new KompasContractException(
                     ErrorCodes.NoGeometryChange,
                     $"Признак создан (Create=true), но заявленное тело {bodyTarget.Index} не изменилось ни объёмом, ни габаритом, ни числом граней: " +
@@ -1559,44 +1606,7 @@ public sealed partial class Api5Session
                     "kompas_delete_feature по feature_ref." + sideLine,
                     RetryPolicy.ReacquireContext,
                     partialEffects: true,
-                    details: new Dictionary<string, object?>
-                    {
-                        ["target_body_ref"] = command.TargetBodyRef,
-                        ["target_body_index"] = bodyTarget.Index,
-                        // The feature the caller must delete: the operation created it and it did nothing.
-                        ["feature_ref"] = ToDto(featureReference, $"{command.Operation} {FormatDepth(command)}").Id,
-                        // AFTER minus BEFORE, the same convention as every other delta in this response:
-                        // positive = material added, negative = material removed.
-                        ["target_delta_mm3"] = targetDelta,
-                        ["target_delta_meaning"] = "объём целевого тела: после − до (положительное — материал добавлен, отрицательное — снят)",
-                        ["volume_noise_mm3"] = BodyChangePolicy.VolumeNoiseMm3,
-                        ["target_box_changed"] = targetBoxMoved,
-                        ["target_face_count"] = bodyTarget.Snapshot.FaceCount,
-                        ["target_face_count_after"] = affectedAfter?.FaceCount,
-                        ["changed_body_indexes"] = changes.Changed.ToArray(),
-                        ["moved_body_indexes"] = changes.Moved.ToArray(),
-                        ["touched_body_indexes"] = changes.Touched.ToArray(),
-                        ["per_body"] = changes.Rows.ToArray(),
-                        ["profile_target_agreement"] = AgreementName(agreement),
-                        // Where the operation went and what to try instead: the side is named by the documented
-                        // sketch-normal rule when the normal is readable, and the body's side is a measured
-                        // fact from its box and the plane origin. Nothing here is a guess; unreadable parts are
-                        // left null rather than asserted.
-                        ["requested_direction"] = noChange.RequestedDirection,
-                        ["attempted_material_toward"] = noChange.AttemptedToward,
-                        ["opposite_direction"] = noChange.OppositeDirection,
-                        ["body_side"] = noChange.BodySide,
-                        ["body_lies_opposite"] = noChange.BodyLiesOpposite,
-                        // The side of the material is NAMED as not determined, rather than left absent:
-                        // an absent field is indistinguishable from a forgotten write, and here the reason
-                        // is substantive — nothing was removed or added, so no side exists to name.
-                        ["material_removed_toward"] = null,
-                        ["material_added_toward"] = null,
-                        ["material_toward_unavailable"] =
-                            "признак не изменил ни объём, ни габарит, ни число граней: материала не снято и не "
-                            + "добавлено, поэтому сторона в координатах детали не определяется",
-                        ["code"] = "target_body_not_affected",
-                    });
+                    details: noChangeDetails);
             }
 
             if (targetDelta is null)
@@ -1630,7 +1640,7 @@ public sealed partial class Api5Session
         }
 
         var reference = featureReference;
-        var material = DescribeMaterialDirection(command, target, bodyTarget, changes);
+        var material = DescribeMaterialDirection(command, target, bodyTarget, changes, resolved.Direction);
         if (material.Reason is not null)
         {
             unverified.Add(material.Reason);
@@ -1641,6 +1651,30 @@ public sealed partial class Api5Session
             // The two independent sources name opposite sides: not a silent pick — the caller is told, and
             // the acceptance row that exercises it is a FAIL.
             unverified.Add(material.Divergence);
+        }
+
+        // The requested side is checked against the side the answer names. A mismatch after a SUCCESSFUL
+        // operation is the one case the caller cannot see for itself, so it is named in BOTH the declared
+        // expectation channel and warnings, never resolved silently.
+        // History: docs/decisions/adapter-core.md#material-toward-input
+        string? towardMismatch = null;
+        if (resolved.RequestedToward is not null)
+        {
+            var actual = material.RemovedToward ?? material.AddedToward;
+            var actualAxis = ExtrusionSide.Parse(actual);
+            if (actualAxis is null)
+            {
+                unverified.Add("material_toward_not_verified — запрошенная сторона "
+                    + resolved.RequestedToward + " не сверена с фактической: фактическая сторона не названа ("
+                    + (material.Reason ?? "причина не названа") + ")");
+            }
+            else if (!MaterialDirectionRule.SameSide(actualAxis, resolved.RequestedAxis!))
+            {
+                towardMismatch = "material_toward_mismatch — запрошена сторона "
+                    + resolved.RequestedToward + ", а признак снял/добавил материал в сторону " + actual
+                    + "; расхождение запрошенного и фактического не выбирается молча";
+                unverified.Add(towardMismatch);
+            }
         }
 
         var verification = new VerificationDto(
@@ -1675,7 +1709,142 @@ public sealed partial class Api5Session
             material.Reason,
             material.Source,
             material.SketchNormal,
-            material.Divergence is null ? null : new[] { material.Divergence });
+            Warnings: (material.Divergence, towardMismatch) switch
+            {
+                (null, null) => null,
+                (not null, null) => new[] { material.Divergence },
+                (null, not null) => new[] { towardMismatch },
+                _ => new[] { material.Divergence, towardMismatch },
+            },
+            MaterialTowardRequested: resolved.RequestedToward,
+            DirectionResolved: resolved.RequestedToward is null ? null : DirectionWord(resolved.Direction),
+            MaterialTowardRequestedAxis: resolved.RequestedAxis);
+    }
+
+    /// <summary>The side of the extrusion as KOMPAS's directionType code: 0 normal, 1 reverse, 2 both.</summary>
+    private static short DirectionCode(ExtrudeDirection direction) => direction switch
+    {
+        ExtrudeDirection.Negative => (short)1,
+        ExtrudeDirection.Symmetric => (short)2,
+        _ => (short)0,
+    };
+
+    /// <summary>The side word as it is published in the answer.</summary>
+    private static string DirectionWord(ExtrudeDirection direction) => direction switch
+    {
+        ExtrudeDirection.Negative => "negative",
+        ExtrudeDirection.Symmetric => "symmetric",
+        _ => "positive",
+    };
+
+    /// <summary>The side the extrusion acts on, from whichever of <c>direction</c> and <c>material_toward</c>
+    /// the caller used, together with the requested word and axis for the answer and its verification.</summary>
+    private sealed record ResolvedExtrudeDirection(
+        ExtrudeDirection Direction,
+        string? RequestedToward,
+        double[]? RequestedAxis,
+        double[]? SketchNormal);
+
+    /// <summary>Resolves <c>material_toward</c> into KOMPAS's positive/negative against the sketch normal, by
+    /// the INVERSE of the documented rule the answer publishes the side with.</summary>
+    /// <remarks>WHY it runs before the feature exists: a refusal here must move no revision, and "the feature
+    /// was created and went nowhere" is indistinguishable from a real no-op for the caller. A requested axis
+    /// that is NOT the normal is refused rather than rounded to the nearest one — on a tilted support the side
+    /// is a vector, and either KOMPAS word would name a different direction.
+    /// DOC for the normal: kssketchdefinition_getsurface.html → … → ksplacement_getvector.html.
+    /// History: docs/decisions/adapter-core.md#material-toward-input</remarks>
+    private ResolvedExtrudeDirection ResolveDirection(ExtrudeCommand command, ksSketchDefinition definition)
+    {
+        var hasDirection = command.Direction is not null;
+        var towardWord = command.MaterialToward;
+
+        // The Host refuses "both" and "neither" before COM; repeated here because a hand-built IPC frame
+        // bypasses the Host's rule table, and picking a side for the caller is the defect this input fixes.
+        if (hasDirection == (towardWord is not null))
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                "Сторону выдавливания задаёт РОВНО ОДНО из полей direction и material_toward: "
+                + (hasDirection
+                    ? "заданы оба — сервер не выбирает между словом КОМПАС и координатой детали."
+                    : "не задано ни одно — сторона осталась бы на догадку."),
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["direction"] = hasDirection ? DirectionWord(command.Direction!.Value) : null,
+                    ["material_toward"] = towardWord,
+                    ["code"] = hasDirection ? "direction_and_material_toward" : "direction_not_given",
+                });
+        }
+
+        if (towardWord is null)
+        {
+            return new ResolvedExtrudeDirection(command.Direction!.Value, null, null, null);
+        }
+
+        var axis = ExtrusionSide.Parse(towardWord);
+        if (axis is null)
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                $"material_toward='{towardWord}' вне набора: сторона задаётся одной из "
+                + string.Join(", ", ExtrusionSide.Words) + " в координатах детали.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["material_toward"] = towardWord,
+                    ["allowed"] = ExtrusionSide.Words.ToArray(),
+                    ["code"] = "material_toward_not_in_set",
+                });
+        }
+
+        var frame = ReadSketchPlaneFrame(definition);
+        if (frame.Normal is null)
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                "material_toward не переводится в сторону КОМПАС: нормаль плоскости эскиза не прочитана ("
+                + (frame.Reason ?? "причина не названа") + "). Задайте direction.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["material_toward"] = towardWord,
+                    ["material_toward_axis_mm"] = axis,
+                    ["sketch_normal"] = null,
+                    ["sketch_normal_unavailable"] = frame.Reason ?? "причина не названа",
+                    ["code"] = "sketch_normal_unavailable",
+                });
+        }
+
+        var word = ExtrusionSide.DirectionFor(
+            command.Operation == ExtrudeOperation.Cut, frame.Normal, axis, out var angleDeg);
+        if (word is null)
+        {
+            throw new KompasContractException(
+                ErrorCodes.InvalidArgument,
+                $"material_toward='{towardWord}' не совпадает с нормалью плоскости эскиза: угол между ними "
+                + $"{angleDeg.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)}°, "
+                + "а допуск "
+                + $"{ExtrusionSide.AngleToleranceDeg.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)}°. "
+                + "Ось стороны обязана быть нормалью (или её обратной), иначе слово называло бы другое "
+                + "направление. Для наклонной опоры задайте direction.",
+                RetryPolicy.Never,
+                details: new Dictionary<string, object?>
+                {
+                    ["material_toward"] = towardWord,
+                    ["material_toward_axis_mm"] = axis,
+                    ["sketch_normal"] = frame.Normal,
+                    ["angle_deg"] = angleDeg,
+                    ["angle_tolerance_deg"] = ExtrusionSide.AngleToleranceDeg,
+                    ["code"] = "material_toward_not_along_sketch_normal",
+                });
+        }
+
+        return new ResolvedExtrudeDirection(
+            word == "negative" ? ExtrudeDirection.Negative : ExtrudeDirection.Positive,
+            towardWord.Trim().Replace('\u2212', '-'),
+            axis,
+            frame.Normal);
     }
 
     /// <summary>Which way, in PART coordinates, this operation moved material: the documented sketch-normal
@@ -1687,11 +1856,12 @@ public sealed partial class Api5Session
     /// DOC: kssketchdefinition_getsurface.html → … → ksplacement_getvector.html.
     /// History: docs/decisions/adapter-core.md#material-direction-toward</remarks>
     private MaterialDirection DescribeMaterialDirection(
-        ExtrudeCommand command, SketchTarget target, BodyTarget? bodyTarget, BodyComparison changes)
+        ExtrudeCommand command, SketchTarget target, BodyTarget? bodyTarget, BodyComparison changes,
+        ExtrudeDirection direction)
     {
         var removing = command.Operation == ExtrudeOperation.Cut;
-        var negative = command.Direction == ExtrudeDirection.Negative;
-        var symmetric = command.Direction == ExtrudeDirection.Symmetric;
+        var negative = direction == ExtrudeDirection.Negative;
+        var symmetric = direction == ExtrudeDirection.Symmetric;
 
         var frame = ReadSketchPlaneFrame(target.Definition);
         double[]? ruleDirection = frame.Normal is null
@@ -1900,16 +2070,12 @@ public sealed partial class Api5Session
     /// NOT re-run with the opposite direction — that would be a behaviour change with no customer decision.</summary>
     /// <remarks>DOC for the normal: kssketchdefinition_getsurface.html → … → ksplacement_getvector.html.
     /// History: docs/decisions/adapter-core.md#material-direction-toward</remarks>
-    private NoChangeHint BuildNoChangeHint(ExtrudeCommand command, SketchTarget target, BodyTarget? bodyTarget)
+    private NoChangeHint BuildNoChangeHint(
+        ExtrudeCommand command, SketchTarget target, BodyTarget? bodyTarget, ExtrudeDirection direction)
     {
-        var requested = command.Direction switch
-        {
-            ExtrudeDirection.Positive => "positive",
-            ExtrudeDirection.Negative => "negative",
-            _ => "symmetric",
-        };
-        var opposite = command.Direction == ExtrudeDirection.Positive ? "negative"
-            : command.Direction == ExtrudeDirection.Negative ? "positive"
+        var requested = DirectionWord(direction);
+        var opposite = direction == ExtrudeDirection.Positive ? "negative"
+            : direction == ExtrudeDirection.Negative ? "positive"
             : null;
 
         var frame = ReadSketchPlaneFrame(target.Definition);
@@ -1919,8 +2085,8 @@ public sealed partial class Api5Session
         }
 
         var removing = command.Operation == ExtrudeOperation.Cut;
-        var negative = command.Direction == ExtrudeDirection.Negative;
-        var symmetric = command.Direction == ExtrudeDirection.Symmetric;
+        var negative = direction == ExtrudeDirection.Negative;
+        var symmetric = direction == ExtrudeDirection.Symmetric;
         var attempted = MaterialDirectionRule.Toward(frame.Normal, removing, negative, symmetric);
         if (attempted is null)
         {
@@ -2644,7 +2810,8 @@ public sealed partial class Api5Session
             ErrorCodes.GeometryFailed,
             $"Выдавливание не настроено: {step} вернул false (operation={command.Operation}, "
             + $"end_condition={command.EndCondition.ToString().ToLowerInvariant()}, "
-            + $"depth={FormatDepth(command)}, direction={command.Direction}). "
+            + $"depth={FormatDepth(command)}, direction={command.Direction?.ToString() ?? "не задано"}, "
+            + $"material_toward={command.MaterialToward ?? "не задано"}). "
             + profile + kernel
             + " Частая причина — профиль эскиза пуст или не замкнут."
             + " Состояние эскиза и профиля на момент отказа — в details.",
@@ -4714,7 +4881,18 @@ public sealed record ExtrudeResult(
     /// The basis of <c>sketch_normal_rule</c>, published so the side can be audited rather than trusted.</summary>
     double[]? MaterialTowardSketchNormal = null,
     /// <summary>Non-fatal findings that the caller must not miss — e.g. the two side sources disagreeing.</summary>
-    IReadOnlyList<string>? Warnings = null);
+    IReadOnlyList<string>? Warnings = null,
+    /// <summary>The side the caller asked for in part coordinates, echoed back, or null when the caller used
+    /// <c>direction</c>. Trailing so as not to shift the positional arguments.
+    /// History: docs/decisions/adapter-core.md#material-toward-input</summary>
+    string? MaterialTowardRequested = null,
+    /// <summary>The KOMPAS word the requested side resolved to: <c>positive</c> or <c>negative</c>. Published
+    /// whenever <see cref="MaterialTowardRequested"/> is set, including in the refusal that names a resolved
+    /// side (a one-sided cut that changed nothing).</summary>
+    string? DirectionResolved = null,
+    /// <summary>The requested side as a unit axis in part coordinates, or null when <c>direction</c> was
+    /// used. Published so the translation can be audited against <see cref="MaterialTowardSketchNormal"/>.</summary>
+    double[]? MaterialTowardRequestedAxis = null);
 
 public sealed record RebuildResult(long NewRevision, DocumentContextDto Context);
 

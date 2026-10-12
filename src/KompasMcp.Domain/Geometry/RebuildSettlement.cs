@@ -3,13 +3,13 @@ using KompasMcp.Contracts;
 namespace KompasMcp.Domain.Geometry;
 
 /// <summary>The rule that ties the volumes a rebuild was repeated over to the mark the caller sees.</summary>
-/// <remarks>INVARIANT: a state of the BUILT model is a state a rebuild does not move, so stability is
-/// established by two CONSECUTIVE readings agreeing — not by a reading returning to the value it had
-/// before the first rebuild. MEASURED: the state read right after an operation's own rebuild can itself be
-/// the unstable one (the volume was then 769.6902 mm3 above the built model), so a rule that compares
-/// every later reading against THAT value never settles and reports a move that did not happen.
-/// The decision is a pure function of three numbers and a flag, so a SUBSTITUTED read result exercises
-/// it. History: docs/decisions/adapter-core.md#rebuild-verify</remarks>
+/// <remarks>INVARIANT: a state of the BUILT model is a state a rebuild does not move, and the settle
+/// recognises it by EITHER of two facts: a reading returned to the value the settle started from, or two
+/// CONSECUTIVE readings agree. MEASURED: neither fact alone is enough. Comparing only against the starting
+/// value never settles when that value is itself the unstable one (the volume was then 769.6902 mm3 above
+/// the built model); looking only for a fixed point can stop on the unstable state, because a rebuild from
+/// it sometimes leaves it unstable again. The decision is a pure function of three numbers and a flag, so
+/// a SUBSTITUTED read result exercises it. History: docs/decisions/adapter-core.md#rebuild-verify</remarks>
 public static class RebuildSettlement
 {
     /// <summary>A volume was not read, so stability was not measured. "Not compared" is not "stable".</summary>
@@ -40,12 +40,19 @@ public static class RebuildSettlement
         "Устойчивое состояние модели не установлено за отведённые попытки перестроения, поэтому геометрия "
         + "НЕ подтверждена. Перечитайте объём и повторите перестроение.";
 
-    /// <summary>Whether two readings agree within the shared tolerance. The settle loop feeds it
-    /// CONSECUTIVE readings, because that is what "a rebuild does not move the model" means.
+    /// <summary>Whether two readings agree within the shared tolerance. The settle loop feeds it the pair
+    /// "start of the settle" / "now" AND the pair "previous reading" / "now", because a state of the built
+    /// model is one that neither the start value nor the previous reading contradicts.
     /// An unreadable side is NOT agreement: an unperformed comparison is not a passed one.</summary>
     public static bool Settled(double? baselineMm3, double? observedMm3) =>
         baselineMm3 is double baseline && observedMm3 is double observed
         && Math.Abs(observed - baseline) <= DeclaredExpectation.Tolerance(baseline);
+
+    /// <summary>Whether the settle may STOP: the reading returned to the value the settle started from,
+    /// or it agrees with the reading before it (the state is a fixed point of the rebuild). Both facts are
+    /// needed — see the class remarks for what each one alone gets wrong.</summary>
+    public static bool Reached(double? baselineMm3, double? previousMm3, double? observedMm3) =>
+        Settled(baselineMm3, observedMm3) || Settled(previousMm3, observedMm3);
 
     /// <summary>The mark WITH the numbers, so every call site answers in the same words. Null when the
     /// FIRST control rebuild did not move the model: that is exactly what the contract promises, and a

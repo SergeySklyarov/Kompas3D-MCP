@@ -122,6 +122,22 @@ public class RebuildSettlementTests
     }
 
     [Fact]
+    public void Settle_StopsOnEitherFact_AndNeitherAloneIsEnough()
+    {
+        const double built = 132256.500735;
+        const double unstable = built + 769.690216;
+
+        // (1) The reading returned to the value the settle started from.
+        Assert.True(RebuildSettlement.Reached(built, unstable, built));
+        // (2) Two consecutive readings agree: a fixed point of the rebuild. MEASURED: the state read right
+        // after an operation's own rebuild can itself be the unstable one, so this is the ONLY fact that
+        // closes that case.
+        Assert.True(RebuildSettlement.Reached(unstable, built, built));
+        // Neither fact: the volume keeps moving, so the settle must continue.
+        Assert.False(RebuildSettlement.Reached(built, unstable, unstable + 1d));
+    }
+
+    [Fact]
     public void CapLevel_NeverRaisesALowerLevel()
     {
         Assert.Equal(

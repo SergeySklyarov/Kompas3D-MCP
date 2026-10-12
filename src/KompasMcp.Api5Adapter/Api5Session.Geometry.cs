@@ -3549,14 +3549,14 @@ public sealed partial class Api5Session
     /// instead of looping. History: docs/decisions/adapter-core.md#rebuild-verify</summary>
     private const int RebuildAttemptLimit = 3;
 
-    /// <summary>Rebuild until two CONSECUTIVE readings of the document volume agree; returns the state
-    /// the settle started from, the last state, the attempts and whether stability was established.</summary>
-    /// <remarks>INVARIANT: a state of the BUILT model is one a rebuild does not move, so stability is
-    /// "two readings in a row agree", NOT "a reading returned to the value it had before the first
-    /// rebuild". MEASURED: the state an operation reads right after its OWN rebuild can itself be the
-    /// unstable one, so comparing every later reading against that value never settles and names a move
-    /// that did not happen. <c>Ok</c> is the answer of the LAST documented call, so a caller keeps its own
-    /// refusal behaviour. History: docs/decisions/adapter-core.md#rebuild-verify</remarks>
+    /// <summary>Rebuild until the state is settled; returns the start state, the last state and attempts.</summary>
+    /// <remarks>INVARIANT: a settle stops on EITHER of two facts, and both are needed. (1) The reading
+    /// returned to the value the settle started from - the rebuild changed nothing. (2) Two CONSECUTIVE
+    /// readings agree - the state is a fixed point of the rebuild. MEASURED: comparing only against the
+    /// starting value never settles when that value is itself the unstable one; looking only for a fixed
+    /// point can stop on the unstable one, because a rebuild from it sometimes leaves it unstable again.
+    /// <c>Ok</c> is the answer of the LAST documented call, so a caller keeps its own refusal behaviour.
+    /// History: docs/decisions/adapter-core.md#rebuild-verify</remarks>
     private (int Attempts, double? Baseline, double? Observed, bool Stable, bool Ok) SettleRebuild(
         DocumentEntry document)
     {
@@ -3583,7 +3583,7 @@ public sealed partial class Api5Session
                 break;
             }
 
-            if (RebuildSettlement.Settled(previous, observed))
+            if (RebuildSettlement.Reached(baseline, previous, observed))
             {
                 stable = true;
                 break;

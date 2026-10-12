@@ -3369,7 +3369,10 @@ public static class ToolCatalog
 
         foreach (var tool in tools)
         {
-            Sch.WithDefs(tool.InputSchema, defs);
+            // Only the definitions the tool's own schema refers to are attached: the answer of
+            // tools/list is context the client pays for in every session.
+            // History: docs/decisions/host.md#schema-defs-pruned
+            Sch.WithReferencedDefs(tool.InputSchema, defs);
         }
 
         return tools;

@@ -93,7 +93,7 @@ public class JsonSchemaValidatorTests
     [Fact]
     public void RefResolvesAgainstSharedDefinitions()
     {
-        var schema = Sch.WithDefs(
+        var schema = Sch.WithReferencedDefs(
             Sch.Obj("args", new[] { "operation_id" }, Sch.Props(("operation_id", Sch.Ref("#/$defs/operation_id")))),
             Sch.Props(("operation_id", Sch.Uuid())));
 
@@ -104,7 +104,7 @@ public class JsonSchemaValidatorTests
     [Fact]
     public void NullableRefBranch_AcceptsNullAndRejectsGarbage()
     {
-        var schema = Sch.WithDefs(
+        var schema = Sch.WithReferencedDefs(
             Sch.Obj("args", Array.Empty<string>(), Sch.Props(("path", Sch.Nullable(Sch.Ref("#/$defs/path"))))),
             Sch.Props(("path", Sch.Str())));
 

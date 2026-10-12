@@ -281,12 +281,88 @@ public static class Sch
         return obj;
     }
 
-    /// <summary>Attaches shared definitions so per-tool schemas stay small and identical. A JsonNode may have only one
-    /// parent, so the definitions are cloned per schema: sharing the instance would throw the moment a second tool took
-    /// the same node.</summary>
-    public static JsonObject WithDefs(JsonObject schema, JsonObject defs)
+    /// <summary>Attaches ONLY the shared definitions the schema refers to, with the transitive closure. A
+    /// JsonNode may have only one parent, so the kept definitions are cloned per schema: sharing the
+    /// instance would throw the moment a second tool took the same node.</summary>
+    /// <remarks>INVARIANT: a published tool schema is self-contained - every <c>$ref</c> in it resolves
+    /// inside it - and carries no definition nothing refers to. Attaching the whole shared set to every
+    /// tool made most of the <c>tools/list</c> answer repetition: a tool with no inputs of its own still
+    /// carried all 17 definitions, and the client pays for them in every session.
+    /// History: docs/decisions/host.md#schema-defs-pruned</remarks>
+    public static JsonObject WithReferencedDefs(JsonObject schema, JsonObject defs)
     {
-        schema["$defs"] = (JsonObject)defs.DeepClone();
+        var wanted = new List<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        CollectReferences(schema, wanted, seen);
+
+        var kept = new JsonObject();
+        for (var index = 0; index < wanted.Count; index++)
+        {
+            var name = wanted[index];
+            if (defs[name] is not JsonObject definition)
+            {
+                throw new InvalidOperationException(
+                    $"Схема ссылается на #/$defs/{name}, которого нет в общих определениях.");
+            }
+
+            kept[name] = (JsonObject)definition.DeepClone();
+
+            // A kept definition may refer to another one; walking the growing list IS the closure.
+            CollectReferences(definition, wanted, seen);
+        }
+
+        schema["$defs"] = kept;
         return schema;
+    }
+
+    /// <summary>Appends every local <c>$defs</c> pointer of a node that <paramref name="seen"/> does not
+    /// hold yet, in discovery order.</summary>
+    private static void CollectReferences(JsonNode? node, List<string> wanted, HashSet<string> seen)
+    {
+        switch (node)
+        {
+            case JsonObject obj:
+                foreach (var (key, value) in obj)
+                {
+                    if (key == "$ref")
+                    {
+                        if (value is JsonValue reference
+                            && reference.TryGetValue<string>(out var pointer)
+                            && DefinitionName(pointer) is { } name
+                            && seen.Add(name))
+                        {
+                            wanted.Add(name);
+                        }
+
+                        continue;
+                    }
+
+                    CollectReferences(value, wanted, seen);
+                }
+
+                break;
+            case JsonArray array:
+                foreach (var item in array)
+                {
+                    CollectReferences(item, wanted, seen);
+                }
+
+                break;
+        }
+    }
+
+    /// <summary>The definition a local pointer names, or null for a pointer that leaves this schema. A
+    /// pointer deeper than the definition itself (<c>#/$defs/x/properties/y</c>) still names <c>x</c>.</summary>
+    private static string? DefinitionName(string pointer)
+    {
+        const string prefix = "#/$defs/";
+        if (!pointer.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var rest = pointer[prefix.Length..];
+        var slash = rest.IndexOf('/');
+        return (slash < 0 ? rest : rest[..slash]).Replace("~1", "/").Replace("~0", "~");
     }
 }

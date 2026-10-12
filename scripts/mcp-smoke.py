@@ -521,6 +521,9 @@ RUN_GROUPS = (
     ("material_toward", "material-toward", "material-toward-acceptance.json",
      "Приёмка MT: сторона материала в координатах детали на входе kompas_extrude (наряд "
      "EXTRUDE_MATERIAL_TOWARD, профиль material-toward-minimal-v1)"),
+    ("delete_sketch", "delete-sketch", "delete-sketch-acceptance.json",
+     "Приёмка DSC: удаление эскиза и вспомогательной геометрии инструментом kompas_delete_feature, "
+     "судьба зависимых (наряд DELETE_SKETCH_CONTRACT)"),
     ("drawing", "drawing", "drawing-acceptance.json",
      "Приёмка DRW: чертежи — стандартные виды, размеры, основная надпись, экспорт (блок DRW, профиль "
      "drawings-minimal-v1)"),
@@ -574,7 +577,8 @@ VERTICAL_GROUP = ("vertical", "smoke-report.json",
 VERTICAL_GROUPS = (
     "contract", "chamfer", "fillet", "extrusion", "hole", "rotation", "sketch_status",
     "b3", "b3l", "b3m", "b3c", "dirty", "b4", "b5", "f08", "mania", "dep", "image", "nested",
-    "sketch_bulk", "sketch_constraints", "material_toward", "pattern_orientation", "release_040",
+    "sketch_bulk", "sketch_constraints", "material_toward", "delete_sketch", "pattern_orientation",
+    "release_040",
     "client_bugs_20261008", "client_bugs_20261009", "entity_create", "sketch_profile",
 )
 
@@ -11153,6 +11157,398 @@ def variables_bind_checks(client, rep, app_id, workdir):
 
     close(target_doc)
 
+
+def delete_sketch_checks(client, rep, app_id, workdir):
+    """DSC.01…DSC.10: удаление ЭСКИЗА и объекта ВСПОМОГАТЕЛЬНОЙ ГЕОМЕТРИИ инструментом
+    `kompas_delete_feature`.
+
+    НАРЯД: `DELETE_SKETCH_CONTRACT_DEVELOPER_PROMPT.md` §3, ветка `--delete-sketch-only`.
+
+    ЗАЧЕМ ОТДЕЛЬНАЯ ГРУППА. Группа B3L проверяет удаление ПРИЗНАКА (объекта дерева, коллекция 110).
+    Здесь проверяется то, чего у признака нет: удаление объекта, которого в дереве НЕТ, — эскиза и
+    вспомогательной геометрии, — и судьба того, что на них построено.
+
+    ЧТО ИМЕННО ИЗМЕРЯЕТСЯ. Строка проходит, только когда сходится ГЕОМЕТРИЯ и СОСТАВ, а не возврат
+    вызова: объём до и после сверяется с аналитическим ожиданием, а «удалён именно адресованный
+    объект» подтверждается РАЗЛИЧАЮЩИМ КОНТРОЛЕМ — второй эскиз и построенный на нём признак обязаны
+    остаться на месте.
+
+    ЭТАЛОНЫ. Эскиз 40×30, выдавливание h=20 → 24000 мм³. Второй эскиз 20×20, выдавливание h=10 →
+    4000 мм³. Числа не подгоняются под результат.
+    """
+
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def details(env):
+        err = (env or {}).get("error") or {}
+        return err.get("details") or {} if isinstance(err, dict) else {}
+
+    def message(env):
+        err = (env or {}).get("error") or {}
+        return err.get("message") if isinstance(err, dict) else None
+
+    def rev_of(env, fallback):
+        return (env or {}).get("revision_after") or fallback
+
+    def near(actual, expected, tol=0.01):
+        return isinstance(actual, (int, float)) and abs(actual - expected) <= tol
+
+    def new_part(name):
+        env, code = call("kompas_create_document",
+                         {"application_id": app_id, "kind": "part", "name": name})
+        return result(env).get("id") or (env or {}).get("document_id"), rev_of(env, 1), code
+
+    def new_assembly(name):
+        env, code = call("kompas_create_document",
+                         {"application_id": app_id, "kind": "assembly", "name": name})
+        return result(env).get("id") or (env or {}).get("document_id"), rev_of(env, 1), code
+
+    def close(doc):
+        if doc:
+            call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+
+    def rect(lo, hi):
+        return [{"kind": "rectangle", "start_mm": [lo[0], lo[1]],
+                 "width_mm": hi[0] - lo[0], "height_mm": hi[1] - lo[1]}]
+
+    def add_sketch(doc, rev, lo, hi, name, plane=None):
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": rev,
+            "plane": plane or {"base": "xy", "offset_mm": lo[2]}, "name": name})
+        ref = result(env).get("id")
+        rev = rev_of(env, rev)
+        if code is not None or not ref:
+            return None, rev, "эскиз не создан: " + str(code)
+        env, code = call("kompas_edit_sketch", {
+            "sketch_ref": ref, "expected_revision": rev, "mode": "append", "entities": rect(lo, hi)})
+        rev = rev_of(env, rev)
+        if code is not None:
+            return None, rev, "контур не нарисован: " + str(code)
+        env, code = call("kompas_finish_sketch", {
+            "sketch_ref": ref, "require_closed_profile": False})
+        return ref, rev_of(env, rev), code
+
+    def extrude(doc, rev, sk, depth):
+        env, code = call("kompas_extrude", {
+            "sketch_ref": sk, "expected_revision": rev, "operation": "base", "depth_mm": depth,
+            "direction": "positive"})
+        ref = result(env).get("feature_ref")
+        ref = ref.get("id") if isinstance(ref, dict) else ref
+        return ref, rev_of(env, rev), code
+
+    def list_sketches(doc):
+        env, _ = call("kompas_list_sketches", {"document_id": doc})
+        return result(env).get("rows") or []
+
+    def list_features(doc):
+        env, _ = call("kompas_list_features", {"document_id": doc})
+        rows = result(env)
+        return rows if isinstance(rows, list) else []
+
+    def list_aux(doc, include="all"):
+        env, _ = call("kompas_list_aux_geometry", {"document_id": doc, "include": include})
+        rows = result(env).get("rows")
+        return rows if isinstance(rows, list) else []
+
+    def total_volume(doc):
+        env, _ = call("kompas_list_bodies", {"document_id": doc})
+        rows = result(env)
+        rows = rows if isinstance(rows, list) else []
+        total, known = 0.0, True
+        for row in rows:
+            env, _ = call("kompas_measure", {"target_ref": row.get("body_ref"),
+                                             "properties": ["volume"]})
+            value = result(env).get("volume_mm3")
+            if value is None:
+                known = False
+            else:
+                total += value
+        return (round(total, 6) if known else None), len(rows)
+
+    def delete(ref, rev, confirm, volume=None):
+        args = {"feature_ref": ref, "expected_revision": rev, "confirm_dependents": confirm}
+        if volume is not None:
+            args["expected_volume_mm3"] = volume
+        return call("kompas_delete_feature", args)
+
+    def checks_of(env):
+        return {c.get("name"): c.get("passed")
+                for c in ((env or {}).get("verification") or {}).get("checks") or []}
+
+    def aux_plane_count(doc):
+        return len(list_aux(doc, "planes"))
+
+    # ── DSC.01 эскиз, по которому ничего не построено, при чужом признаке в дереве ─────────────────
+    doc, rev, code0 = new_part("DSC_01")
+    s1, rev, e1 = add_sketch(doc, rev, (0.0, 0.0, 0.0), (40.0, 30.0, 0.0), "S1")
+    s2, rev, e2 = add_sketch(doc, rev, (100.0, 0.0, 0.0), (120.0, 20.0, 0.0), "S2")
+    _f2, rev, e3 = extrude(doc, rev, s2, 10.0)
+    v_before, n_before = total_volume(doc)
+    env, del_code = delete(s1, rev, confirm=False)
+    rev = rev_of(env, rev)
+    rows = list_sketches(doc)
+    v_after, n_after = total_volume(doc)
+    s1_listed = any(r.get("sketch_ref") == s1 for r in rows)
+    s2_listed = any(r.get("sketch_ref") == s2 for r in rows)
+    ok = (code0 is None and e1 is None and e2 is None and e3 is None and del_code is None
+          and not s1_listed and s2_listed and near(v_before, 4000.0) and near(v_after, 4000.0)
+          and n_before == 1 and n_after == 1)
+    rep.add("DSC.01", "эскиз без построений при чужом признаке в дереве: удалён без согласия, "
+            "второй эскиз и его выдавливание на месте, объём не изменился",
+            "PASS" if ok else "FAIL",
+            f"codes: doc={code0} sketch1={e1} sketch2={e2} extrude={e3} delete={del_code} | "
+            f"эскизы после={[r.get('name') for r in rows]} (S1 убран={not s1_listed}, "
+            f"S2 на месте={s2_listed}) | V {v_before}->{v_after} (ожидание 4000->4000), "
+            f"тел {n_before}->{n_after} | {clip(message(env), 200)}")
+    close(doc)
+
+    # ── DSC.02 эскиз с зависимым выдавливанием: отказ БЕЗ согласия, перечень достоверен ───────────
+    doc, rev, _ = new_part("DSC_02")
+    s1, rev, _ = add_sketch(doc, rev, (0.0, 0.0, 0.0), (40.0, 30.0, 0.0), "S1")
+    f1, rev, _ = extrude(doc, rev, s1, 20.0)
+    v_before, _ = total_volume(doc)
+    env, del_code = delete(s1, rev, confirm=False)
+    candidates = details(env).get("candidate_dependents")
+    v_after, n_after = total_volume(doc)
+    rows = list_sketches(doc)
+    ok = (del_code == "DEPENDENT_FEATURES" and isinstance(candidates, list)
+          and len(candidates) == 1 and near(v_before, 24000.0) and near(v_after, 24000.0)
+          and n_after == 1 and any(r.get("sketch_ref") == s1 for r in rows))
+    rep.add("DSC.02", "эскиз с выдавливанием без согласия: DEPENDENT_FEATURES с ДОСТОВЕРНЫМ "
+            "перечнем (маршрут GetSketch), модель не тронута",
+            "PASS" if ok else "FAIL",
+            f"код={del_code} перечень={candidates} (ожидание ровно один зависимый) | "
+            f"V {v_before}->{v_after} (ожидание 24000->24000), тел после={n_after}, "
+            f"эскиз на месте={any(r.get('sketch_ref') == s1 for r in rows)}")
+    # ── DSC.03 то же с согласием: ядро уносит выдавливание вместе с эскизом ────────────────────────
+    env, del_code = delete(s1, rev, confirm=True)
+    rev = rev_of(env, rev)
+    v_casc, n_casc = total_volume(doc)
+    feats = list_features(doc)
+    chk = checks_of(env)
+    rows = list_sketches(doc)
+    ok = (del_code is None and near(v_casc, 0.0) and n_casc == 0 and len(feats) == 0
+          and chk.get("delete_object_returned") is True and chk.get("object_removed") is True
+          and not any(r.get("sketch_ref") == s1 for r in rows))
+    rep.add("DSC.03", "то же с confirm_dependents=true: выдавливание уходит ВМЕСТЕ с эскизом "
+            "(объём 24000->0), проверки object_removed/cascade_within_candidates опубликованы",
+            "PASS" if ok else "FAIL",
+            f"код={del_code} V={v_casc} тел={n_casc} признаков={len(feats)} "
+            f"checks={chk} эскизы={[r.get('name') for r in rows]}")
+    close(doc)
+
+    # ── DSC.04 независимая пара переживает удаление ────────────────────────────────────────────────
+    doc, rev, _ = new_part("DSC_04")
+    s1, rev, _ = add_sketch(doc, rev, (0.0, 0.0, 0.0), (40.0, 30.0, 0.0), "S1")
+    _f1, rev, _ = extrude(doc, rev, s1, 20.0)
+    s3, rev, _ = add_sketch(doc, rev, (200.0, 0.0, 0.0), (220.0, 20.0, 0.0), "S3")
+    _f3, rev, _ = extrude(doc, rev, s3, 10.0)
+    v_before, _ = total_volume(doc)
+    env, del_code = delete(s1, rev, confirm=True)
+    rev = rev_of(env, rev)
+    v_after, n_after = total_volume(doc)
+    feats = list_features(doc)
+    survivor = feats[0] if feats else {}
+    env_s, _ = call("kompas_get_feature", {"feature_ref": survivor.get("feature_ref")})
+    survivor_valid = result(env_s).get("is_valid")
+    ok = (del_code is None and near(v_before, 28000.0) and near(v_after, 4000.0) and n_after == 1
+          and len(feats) == 1 and survivor_valid is True)
+    rep.add("DSC.04", "независимая пара эскиз+выдавливание переживает удаление первой пары: "
+            "объём 28000->4000, оставшийся признак is_valid=true",
+            "PASS" if ok else "FAIL",
+            f"код={del_code} V {v_before}->{v_after} (ожидание 28000->4000) тел={n_after} "
+            f"признаки={[f.get('name') for f in feats]} is_valid={survivor_valid}")
+    close(doc)
+
+    # ── DSC.05 эскиз с ограничением и размером, привязанным к переменной детали ────────────────────
+    doc, rev, _ = new_part("DSC_05")
+    s1, rev, _ = add_sketch(doc, rev, (0.0, 0.0, 0.0), (40.0, 30.0, 0.0), "S1")
+    env_e, _ = call("kompas_list_sketch_entities", {"sketch_ref": s1, "limit": 500})
+    segs = [o for o in (result(env_e).get("rows") or [])
+            if o.get("kind") == "ksDrLineSeg" and o.get("address")]
+    seg = segs[0].get("address") if segs else None
+    env_d, code_d = call("kompas_create_sketch_dimension", {
+        "sketch_ref": s1, "expected_revision": rev, "object_ref": seg, "kind": "linear",
+        "value_mm": 40.0})
+    rev = rev_of(env_d, rev)
+    dim_var = result(env_d).get("dimension_variable")
+    env_v, code_v = call("kompas_create_variable", {
+        "document_id": doc, "expected_revision": rev, "name": "DSC_V40", "value": 40.0,
+        "note": "приёмка DSC.05"})
+    rev = rev_of(env_v, rev)
+    env_b, code_b = call("kompas_bind_parameter", {
+        "document_id": doc, "expected_revision": rev, "feature_ref": s1,
+        "parameter_name": dim_var, "expression": "DSC_V40"})
+    rev = rev_of(env_b, rev)
+    vars_before = [v.get("name") for v in (result(call("kompas_list_variables",
+                                                       {"document_id": doc})[0]).get("variables") or [])]
+    env, del_code = delete(s1, rev, confirm=False)
+    rev = rev_of(env, rev)
+    vars_after = [v.get("name") for v in (result(call("kompas_list_variables",
+                                                      {"document_id": doc})[0]).get("variables") or [])]
+    _reb, reb_code = call("kompas_rebuild", {"document_id": doc})
+    vars_rebuild = [v.get("name") for v in (result(call("kompas_list_variables",
+                                                        {"document_id": doc})[0]).get("variables") or [])]
+    rows = list_sketches(doc)
+    ok = (code_d is None and code_v is None and code_b is None and del_code is None
+          and "DSC_V40" in vars_before and "DSC_V40" in vars_after and "DSC_V40" in vars_rebuild
+          and not any(r.get("sketch_ref") == s1 for r in rows))
+    rep.add("DSC.05", "эскиз с управляющим размером, привязанным к переменной детали, удалён: "
+            "переменная детали переживает удаление и перестроение, эскиза нет",
+            "PASS" if ok else "FAIL",
+            f"коды: размер={code_d} переменная={code_v} привязка={code_b} удаление={del_code} "
+            f"переменная признака={dim_var!r} | переменные до={vars_before} после={vars_after} "
+            f"после перестроения={vars_rebuild} rebuild={reb_code} | "
+            f"эскизы={[r.get('name') for r in rows]}")
+    close(doc)
+
+    # ── DSC.06 вспомогательная плоскость без построений ────────────────────────────────────────────
+    doc, rev, _ = new_part("DSC_06")
+    env_p, _ = call("kompas_create_aux_geometry", {
+        "document_id": doc, "expected_revision": rev, "kind": "plane", "mode": "offset",
+        "base_plane": "xy", "offset_mm": 50.0, "name": "P1"})
+    rev = rev_of(env_p, rev)
+    plane_ref = result(env_p).get("reference_id")
+    planes_before = aux_plane_count(doc)
+    env, del_code = delete(plane_ref, rev, confirm=False)
+    planes_after = aux_plane_count(doc)
+    chk = checks_of(env)
+    ok = (del_code is None and planes_before == 1 and planes_after == 0
+          and chk.get("delete_object_returned") is True and chk.get("object_removed") is True
+          and chk.get("deletion_target_transfer") is True)
+    rep.add("DSC.06", "вспомогательная плоскость без построений удалена без согласия; перенос "
+            "API7->API5 назван проверкой deletion_target_transfer",
+            "PASS" if ok else "FAIL",
+            f"код={del_code} плоскостей {planes_before}->{planes_after} checks={chk}")
+    close(doc)
+
+    # ── DSC.07 вспомогательная ось и точка: перечень неизвестен → согласие обязательно ─────────────
+    doc, rev, _ = new_part("DSC_07")
+    env_a, _ = call("kompas_create_aux_geometry", {
+        "document_id": doc, "expected_revision": rev, "kind": "axis", "mode": "by_2_points",
+        "point1_mm": [0.0, 0.0, 0.0], "point2_mm": [0.0, 0.0, 10.0], "name": "A1"})
+    rev = rev_of(env_a, rev)
+    axis_ref = result(env_a).get("reference_id")
+    env_t, _ = call("kompas_create_aux_geometry", {
+        "document_id": doc, "expected_revision": rev, "kind": "point", "mode": "coordinates",
+        "coordinates_mm": [5.0, 5.0, 5.0], "name": "T1"})
+    rev = rev_of(env_t, rev)
+    point_ref = result(env_t).get("reference_id")
+    axes_before = len(list_aux(doc, "axes"))
+    points_before = len(list_aux(doc, "points"))
+    env_an, code_an = delete(axis_ref, rev, confirm=False)
+    env_pn, code_pn = delete(point_ref, rev, confirm=False)
+    env_ay, code_ay = delete(axis_ref, rev, confirm=True)
+    rev = rev_of(env_ay, rev)
+    env_ty, code_ty = delete(point_ref, rev, confirm=True)
+    axes_after = len(list_aux(doc, "axes"))
+    points_after = len(list_aux(doc, "points"))
+    unknown_named = (code_an == "DEPENDENT_FEATURES" and code_pn == "DEPENDENT_FEATURES"
+                     and "не удалось" in (message(env_an) or ""))
+    ok = (unknown_named and code_ay is None and code_ty is None
+          and axes_after == axes_before - 1 and points_after == points_before - 1)
+    rep.add("DSC.07", "вспомогательная ось и точка: без согласия DEPENDENT_FEATURES с НАЗВАННОЙ "
+            "причиной «перечень неизвестен»; с согласием удалены, счётчики падают на единицу",
+            "PASS" if ok else "FAIL",
+            f"без согласия: ось={code_an} точка={code_pn} | с согласием: ось={code_ay} "
+            f"точка={code_ty} | осей {axes_before}->{axes_after} точек {points_before}->{points_after} "
+            f"| {clip(message(env_an), 240)}")
+    close(doc)
+
+    # ── DSC.08 вспомогательная плоскость, на которой лежит эскиз ───────────────────────────────────
+    doc, rev, _ = new_part("DSC_08")
+    env_p, _ = call("kompas_create_aux_geometry", {
+        "document_id": doc, "expected_revision": rev, "kind": "plane", "mode": "offset",
+        "base_plane": "xy", "offset_mm": 50.0, "name": "P1"})
+    rev = rev_of(env_p, rev)
+    plane_ref = result(env_p).get("reference_id")
+    s1, rev, e1 = add_sketch(doc, rev, (0.0, 0.0, 50.0), (40.0, 30.0, 50.0), "S1",
+                             plane={"reference": plane_ref})
+    env_no, code_no = delete(plane_ref, rev, confirm=False)
+    candidates = details(env_no).get("candidate_dependents")
+    env_yes, code_yes = delete(plane_ref, rev, confirm=True)
+    planes_after = aux_plane_count(doc)
+    rows = list_sketches(doc)
+    sketch_gone = not any(r.get("sketch_ref") == s1 for r in rows)
+    ok = (e1 is None and code_no == "DEPENDENT_FEATURES" and candidates == ["S1"]
+          and code_yes is None and planes_after == 0 and sketch_gone)
+    rep.add("DSC.08", "вспомогательная плоскость с лежащим на ней эскизом: перечень называет эскиз; "
+            "с согласием плоскость удалена и эскиз ушёл ВМЕСТЕ с ней",
+            "PASS" if ok else "FAIL",
+            f"без согласия={code_no} перечень={candidates} (ожидание ['S1']) | с согласием={code_yes} "
+            f"плоскостей после={planes_after} эскиз ушёл={sketch_gone} "
+            f"эскизы={[r.get('name') for r in rows]}")
+    close(doc)
+
+    # ── DSC.09 компонент сборки: отказ до COM с указанием на свой инструмент ───────────────────────
+    pdoc, rev, _ = new_part("DSC_09_part")
+    s1, rev, _ = add_sketch(pdoc, rev, (0.0, 0.0, 0.0), (40.0, 30.0, 0.0), "S1")
+    _f, rev, _ = extrude(pdoc, rev, s1, 20.0)
+    part_path = os.path.join(workdir, "dsc-09-part.m3d")
+    clear_path(part_path)
+    call("kompas_save_document", {"document_id": pdoc, "target_path": part_path,
+                                  "expected_revision": rev})
+    close(pdoc)
+    adoc, arev, ac = new_assembly("DSC_09_asm")
+    env_i, code_i = call("kompas_insert_component", {
+        "document_id": adoc, "expected_revision": arev, "source_path": part_path})
+    arev = rev_of(env_i, arev)
+    env_c, _ = call("kompas_list_components", {"document_id": adoc, "recursive": False})
+    comps = result(env_c).get("components") or result(env_c).get("rows") or []
+    cref = comps[0].get("component_ref") if comps else None
+    env_d, del_code = delete(cref, arev, confirm=True) if cref else (None, "no_component")
+    comps_after = (result(call("kompas_list_components", {"document_id": adoc})[0]).get("components")
+                   or [])
+    use_tool = details(env_d).get("use_tool") if env_d else None
+    ok = (ac is None and code_i is None and cref is not None and del_code == "INVALID_ARGUMENT"
+          and use_tool == "kompas_delete_component" and len(comps_after) == 1)
+    rep.add("DSC.09", "компонент сборки: kompas_delete_feature отказывает INVALID_ARGUMENT с "
+            "указанием на kompas_delete_component, компонент на месте",
+            "PASS" if ok else "FAIL",
+            f"вставка={code_i} компонент={cref} удаление={del_code} use_tool={use_tool} "
+            f"компонентов после={len(comps_after)} | {clip(message(env_d), 200)}")
+    close(adoc)
+
+    # ── DSC.10 save → close → reopen после удаления эскиза ─────────────────────────────────────────
+    doc, rev, _ = new_part("DSC_10")
+    s1, rev, _ = add_sketch(doc, rev, (0.0, 0.0, 0.0), (40.0, 30.0, 0.0), "S1")
+    _f1, rev, _ = extrude(doc, rev, s1, 20.0)
+    s2, rev, _ = add_sketch(doc, rev, (100.0, 0.0, 0.0), (120.0, 20.0, 0.0), "S2")
+    _f2, rev, _ = extrude(doc, rev, s2, 10.0)
+    env, del_code = delete(s1, rev, confirm=True)
+    rev = rev_of(env, rev)
+    v_after_delete, _ = total_volume(doc)
+    path = os.path.join(workdir, "dsc-10.m3d")
+    clear_path(path)
+    env_s, save_code = call("kompas_save_document", {
+        "document_id": doc, "target_path": path, "expected_revision": rev})
+    close(doc)
+    env_o, open_code = call("kompas_open_document", {
+        "application_id": app_id, "path": path, "access": "edit"})
+    doc2 = result(env_o).get("id") or (env_o or {}).get("document_id")
+    rows = list_sketches(doc2) if doc2 else []
+    feats = list_features(doc2) if doc2 else []
+    v_reopen, _ = total_volume(doc2) if doc2 else (None, 0)
+    ok = (del_code is None and save_code is None and open_code is None and doc2
+          and len(rows) == 1 and rows[0].get("name") == "S2" and len(feats) == 1
+          and near(v_after_delete, 4000.0) and near(v_reopen, 4000.0))
+    rep.add("DSC.10", "после удаления эскиза документ сохраняется, закрывается и переоткрывается: "
+            "удалённого эскиза нет, второй эскиз и его выдавливание на месте, объём сохранён",
+            "PASS" if ok else "FAIL",
+            f"удаление={del_code} сохранение={save_code} переоткрытие={open_code} | "
+            f"эскизы={[r.get('name') for r in rows]} признаки={[f.get('name') for f in feats]} | "
+            f"V до сохранения={v_after_delete} после переоткрытия={v_reopen}")
+    close(doc2)
+
+
 def main():
     if "--self-test" in sys.argv[1:]:
         # Самопроверка прибора прогонов (наряд ENTITY_CREATE_FALSE, п. 1.5). Стоит ПЕРВОЙ строкой:
@@ -11343,6 +11739,11 @@ def main():
     # общем прогоне эти строки тонули бы среди чужих.
     material_toward_only = "--material-toward-only" in sys.argv
 
+    # То же для удаления эскиза и вспомогательной геометрии (наряд DELETE_SKETCH_CONTRACT): одна группа
+    # DSC на своём сеансе. Отдельная ветка нужна по той же причине, что у прочих групп: доказательство
+    # обязано находиться по ИМЕНИ строки (`DSC.<NN>`), а в общем прогоне эти строки тонули бы среди чужих.
+    delete_sketch_only = "--delete-sketch-only" in sys.argv
+
     # То же для ориентации экземпляров кругового массива (наряд MCP-015): одна группа PO на своём
     # сеансе. Отдельная ветка нужна по той же причине, что у прочих групп: доказательство обязано
     # находиться по ИМЕНИ строки (`PO.<NN>`), а в общем прогоне эти строки тонули бы среди чужих.
@@ -11445,6 +11846,7 @@ def main():
         "sketch_bulk": sketch_bulk_only,
         "sketch_constraints": sketch_constraints_only,
         "material_toward": material_toward_only,
+        "delete_sketch": delete_sketch_only,
         "drawing": drawing_only,
         "variables_material": variables_material_only,
         "variables_bind": variables_bind_only,
@@ -11955,6 +12357,14 @@ def main():
 
         if material_toward_only:
             material_toward_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if delete_sketch_only:
+            delete_sketch_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -12639,6 +13049,11 @@ def main():
         # (`MT.<NN>`), поэтому в общем потоке её доказательство иначе не нашлось бы. Документы SKC
         # она не трогает.
         material_toward_checks(client, rep, app_id, workdir)
+
+        # Группа DSC идёт сразу за MT и в том же сеансе: удаление эскиза и вспомогательной геометрии
+        # (наряд DELETE_SKETCH_CONTRACT), свои документы и свои имена строк (`DSC.<NN>`), поэтому в общем
+        # потоке её доказательство иначе не нашлось бы. Документы MT она не трогает.
+        delete_sketch_checks(client, rep, app_id, workdir)
 
         b5_acceptance_checks(client, rep, app_id, workdir)
 

@@ -1593,6 +1593,12 @@ MINOR до `1.0.0`, входит в накапливаемый `0.6.0` без о
 `REBUILD_SETTLE_REPORT_20261012.md` (прибор `scripts/measure-operation-time.py` читает журнал
 операций прогона).
 
+**Чем подтверждено.** Группа `MANIA` - 52 прогона подряд закоммиченной сборкой `77a8cbe`: 0 FAIL,
+сверка срабатывала 12 раз в 11 прогонах и называла себя с числами (`kompas_hole` 10,
+`kompas_update_feature` 1, `kompas_open_document` 1), уровень во всех случаях `geometry_checked`,
+`rebuild_changed_model` - ни разу. Полный `--all` на Release-сборке того же коммита - 1542 строки:
+1537 PASS, 5 NAMED, 0 FAIL. Доказательства - `docs/acceptance/evidence/20261012-rebuild-settle-77a8cbe/`.
+
 ## <a id="hole-position-frame"></a>Проверка положения отверстия: кадр грани против кадра детали (наряд MANIA_FLAKES, 11.10.2026)
 
 **Что было.** `kompas_hole` с `offset_x_mm`/`offset_y_mm` перечитывал оси найденных цилиндров

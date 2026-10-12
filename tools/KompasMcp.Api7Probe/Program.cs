@@ -43,6 +43,8 @@ public static class Program
                                                         ? "Проба H-2 — входы существующего скругления через IFillet.BaseObjects: чтение, сокращение, замена и различающие контроли"
                                                         : options.Mate
                                                             ? "Проба M — сопряжения сборки: грани компонентов как IModelObject и создание сопряжения"
+                                                        : options.DeleteComponent
+                                                            ? "Проба DC — удаление компонента сборки и судьба зависимых сопряжений"
                                                         : options.SketchDefinition
                                                             ? "Проба S — определённость эскиза: читается ли статус «+ / − / !» из API и различает ли он состояния"
                                                             : options.Identity
@@ -61,7 +63,7 @@ public static class Program
         };
         var clock = Stopwatch.StartNew();
         Console.WriteLine($"A7 probe run {report.RunId} — рабочая папка: {options.WorkDir}");
-        Console.WriteLine($"Режим: passportOnly={options.PassportOnly}, lifecycle={options.Lifecycle}, extrusion={options.Extrusion}, chamfer={options.Chamfer}, sketchReopen={options.SketchReopen}, filletEdgeSet={options.FilletEdgeSet}, filletBaseObjects={options.FilletBaseObjects}, mate={options.Mate}, sketchDefinition={options.SketchDefinition}, controls={options.CollectControls}, keep={options.KeepRunning}, отчёты: {options.ReportDir}");
+        Console.WriteLine($"Режим: passportOnly={options.PassportOnly}, lifecycle={options.Lifecycle}, extrusion={options.Extrusion}, chamfer={options.Chamfer}, sketchReopen={options.SketchReopen}, filletEdgeSet={options.FilletEdgeSet}, filletBaseObjects={options.FilletBaseObjects}, mate={options.Mate}, deleteComponent={options.DeleteComponent}, sketchDefinition={options.SketchDefinition}, controls={options.CollectControls}, keep={options.KeepRunning}, отчёты: {options.ReportDir}");
 
         // Before any Kompas6API5/KompasAPI7 type is first touched: the vendor interop is referenced,
         // not copied, so it only resolves from the installation directory at run time.
@@ -133,6 +135,17 @@ public static class Program
                 if (options.KeepRunning)
                 {
                     MateProbe.Flush(report, options);
+                    Console.WriteLine("Отчёт записан; процесс оставлен для диагностики (--keep).");
+                    return 0;
+                }
+            }
+            else if (options.DeleteComponent)
+            {
+                var deleteComponent = new DeleteComponentProbe(report, options);
+                pump.Run(() => deleteComponent.Run());
+                if (options.KeepRunning)
+                {
+                    DeleteComponentProbe.Flush(report, options);
                     Console.WriteLine("Отчёт записан; процесс оставлен для диагностики (--keep).");
                     return 0;
                 }
@@ -498,6 +511,7 @@ public static class Program
             : options.FilletEdgeSet ? "fillet-edge-set"
             : options.FilletBaseObjects ? "fillet-base-objects"
             : options.Mate ? "mate"
+            : options.DeleteComponent ? "delete-component"
             : options.Boolean ? "boolean-ops"
             : options.Split ? "split-plane"
             : options.Reposition ? "reposition"
@@ -594,6 +608,12 @@ public sealed class Options
     /// <summary>--mate: assembly mates — are COMPONENT FACES addressable and is a mate created
     /// (probe M, the entry of the next block after C1). History: docs/decisions/probes.md#mate</summary>
     public bool Mate { get; private set; }
+
+    /// <summary>--delete-component: does <c>ksDocument3D.DeleteObject</c> remove an assembly
+    /// component, how is a mate tied to the component it constrains, and what happens to a mate when
+    /// its component is deleted (probe DC, order COMPONENT_DELETE). History:
+    /// docs/decisions/assembly.md#delete-component</summary>
+    public bool DeleteComponent { get; private set; }
 
     /// <summary>--full-turn: is it true that a rotation sweep saturates at 180° (probe F2).</summary>
     /// <remarks>DOC: a separate entry because the question is about the PRODUCT, not about probe R.
@@ -776,6 +796,7 @@ public sealed class Options
         var holeTree = false;
         var filletBaseObjects = false;
         var mate = false;
+        var deleteComponent = false;
         var sketchDefinition = false;
         var identity = false;
         var union = false;
@@ -827,6 +848,9 @@ public sealed class Options
                     break;
                 case "--mate":
                     mate = true;
+                    break;
+                case "--delete-component":
+                    deleteComponent = true;
                     break;
                 case "--rotation":
                     rotation = true;
@@ -969,6 +993,7 @@ public sealed class Options
             FilletEdgeSet = filletEdgeSet,
             FilletBaseObjects = filletBaseObjects,
             Mate = mate,
+            DeleteComponent = deleteComponent,
             Boolean = boolean,
             Split = split,
             Reposition = reposition,

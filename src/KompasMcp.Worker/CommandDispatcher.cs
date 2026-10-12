@@ -434,7 +434,12 @@ public sealed class CommandDispatcher
                 RetryPolicy.Never),
         };
 
-        var completed = await Task.WhenAny(task, Task.Delay(budgetMs, cancellationToken)).ConfigureAwait(false);
+        // INVARIANT: the budget timer dies with the command. Task.Delay otherwise keeps a timer alive
+        // for the whole budget (up to 300 s) after the answer is ready, so a run of short commands
+        // leaves a pile of pending timers behind. Cancelling changes no outcome: the delay task is the
+        // one WhenAny did NOT return, and a cancelled task is never rethrown as unobserved.
+        using var timerCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var completed = await Task.WhenAny(task, Task.Delay(budgetMs, timerCancellation.Token)).ConfigureAwait(false);
         if (completed != task)
         {
             Interlocked.Increment(ref _timedOut);
@@ -448,6 +453,7 @@ public sealed class CommandDispatcher
                 partialEffects: true);
         }
 
+        timerCancellation.Cancel();
         var outcome = await task.ConfigureAwait(false);
         return outcome is null ? null : KompJson.ToNode(outcome);
     }

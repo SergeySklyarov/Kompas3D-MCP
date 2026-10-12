@@ -524,6 +524,9 @@ RUN_GROUPS = (
     ("delete_sketch", "delete-sketch", "delete-sketch-acceptance.json",
      "Приёмка DSC: удаление эскиза и вспомогательной геометрии инструментом kompas_delete_feature, "
      "судьба зависимых (наряд DELETE_SKETCH_CONTRACT)"),
+    ("sketch_vertex", "sketch-vertex", "sketch-vertex-acceptance.json",
+     "Приёмка SV: координаты вершин полилинии и сплайна в kompas_list_sketch_entities и поиск "
+     "свободных концов эскиза одним чтением (наряд SKETCH_VERTEX_READ)"),
     ("drawing", "drawing", "drawing-acceptance.json",
      "Приёмка DRW: чертежи — стандартные виды, размеры, основная надпись, экспорт (блок DRW, профиль "
      "drawings-minimal-v1)"),
@@ -577,7 +580,8 @@ VERTICAL_GROUP = ("vertical", "smoke-report.json",
 VERTICAL_GROUPS = (
     "contract", "chamfer", "fillet", "extrusion", "hole", "rotation", "sketch_status",
     "b3", "b3l", "b3m", "b3c", "dirty", "b4", "b5", "f08", "mania", "dep", "image", "nested",
-    "sketch_bulk", "sketch_constraints", "material_toward", "delete_sketch", "pattern_orientation",
+    "sketch_bulk", "sketch_constraints", "material_toward", "delete_sketch", "sketch_vertex",
+    "pattern_orientation",
     "release_040",
     "client_bugs_20261008", "client_bugs_20261009", "entity_create", "sketch_profile",
 )
@@ -11549,6 +11553,371 @@ def delete_sketch_checks(client, rep, app_id, workdir):
     close(doc2)
 
 
+def sketch_vertex_checks(client, rep, app_id, workdir):
+    """SV.01…SV.07: координаты вершин полилинии и сплайна в `kompas_list_sketch_entities`.
+
+    НАРЯД: `SKETCH_VERTEX_READ_DEVELOPER_PROMPT.md` §3, ветка `--sketch-vertex-only`.
+
+    ЗАЧЕМ ОТДЕЛЬНАЯ ГРУППА. Группа SB проверяет, что полилиния и сплайн ПЕРЕЧИТЫВАЮТСЯ одним объектом
+    (`points_count`, `closed`), но САМИХ КООРДИНАТ не читает. Здесь проверяются точки полилинии
+    (`IPolyLine2D.GetPoint`) и опорные точки сплайна Безье (`IBezier.GetPoint`) и то, ради чего они
+    публикуются: свободные концы эскиза находятся ОДНИМ чтением.
+
+    ЧТО ИМЕННО ИЗМЕРЯЕТСЯ. Строка проходит, только когда прочитанные точки совпадают с ЗАДАННЫМИ в
+    допуске, а не когда вызов не отказал: эталоны — те самые числа, что поданы на запись.
+
+    ЭТАЛОНЫ. Незамкнутая полилиния из 5 известных вершин; замкнутая из 6; сплайн через 4 известные
+    точки; контур из двух отрезков, полилинии и дуги с ОДНИМ заведомым разрывом (0,0)-(30,0).
+    """
+
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def message(env):
+        err = (env or {}).get("error") or {}
+        return err.get("message") if isinstance(err, dict) else None
+
+    def rev_of(env, fallback):
+        return (env or {}).get("revision_after") or fallback
+
+    def near(actual, expected, tol=0.01):
+        return isinstance(actual, (int, float)) and abs(actual - expected) <= tol
+
+    def point_near(actual, expected, tol=0.01):
+        return (isinstance(actual, list) and len(actual) == 2
+                and near(actual[0], expected[0], tol) and near(actual[1], expected[1], tol))
+
+    def polygon(n, r):
+        return [[r * math.cos(2 * math.pi * i / n), r * math.sin(2 * math.pi * i / n)]
+                for i in range(n)]
+
+    def new_part(name):
+        env, code = call("kompas_create_document",
+                         {"application_id": app_id, "kind": "part", "name": name})
+        return result(env).get("id") or (env or {}).get("document_id"), rev_of(env, 1), code
+
+    def close(doc):
+        if doc:
+            call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+
+    def new_sketch(doc, rev, name):
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": rev,
+            "plane": {"base": "xy", "offset_mm": 0}, "name": name})
+        ref = result(env).get("id")
+        ref = ref.get("id") if isinstance(ref, dict) else ref
+        return ref, rev_of(env, rev), code
+
+    def edit(sketch, rev, entities, mode="replace"):
+        env, code = call("kompas_edit_sketch", {
+            "sketch_ref": sketch, "expected_revision": rev, "mode": mode, "entities": entities})
+        return env, code, rev_of(env, rev)
+
+    def listing(sketch, include_points=None, limit=500):
+        args = {"sketch_ref": sketch, "limit": limit}
+        if include_points is not None:
+            args["include_points"] = include_points
+        env, code = call("kompas_list_sketch_entities", args)
+        return result(env), code, env
+
+    def rows_of(listed):
+        return (listed or {}).get("rows") or []
+
+    def curve_row(listed):
+        rows = rows_of(listed)
+        return rows[0] if len(rows) == 1 else None
+
+    def points_of(row):
+        raw = (row or {}).get("points_mm")
+        return raw if isinstance(raw, list) else None
+
+    def ends_of(rows, tol=0.05):
+        """Свободные концы эскиза так, как их нашёл бы клиент: концы отрезков и дуг (x1/y1, x2/y2),
+        а у незамкнутых полилинии и сплайна — start_mm и end_mm. Конец без партнёра в допуске — разрыв."""
+        ends = []
+        for row in rows:
+            pair = None
+            if isinstance(row.get("start_mm"), list) or isinstance(row.get("end_mm"), list):
+                pair = [row.get("start_mm"), row.get("end_mm")]
+            elif all(row.get(k) is not None for k in ("x1_mm", "y1_mm", "x2_mm", "y2_mm")):
+                pair = [[row.get("x1_mm"), row.get("y1_mm")], [row.get("x2_mm"), row.get("y2_mm")]]
+            for p in (pair or []):
+                if isinstance(p, list) and len(p) == 2 and all(isinstance(v, (int, float)) for v in p):
+                    ends.append((p[0], p[1]))
+        free = []
+        for i, (x, y) in enumerate(ends):
+            if not any(i != j and abs(x - u) <= tol and abs(y - v) <= tol
+                       for j, (u, v) in enumerate(ends)):
+                free.append((x, y))
+        return ends, free
+
+    # ── SV.01.discover: инструмент и схема объявляют чтение точек ─────────────────────────────────
+    tools = client.call("tools/list", {}).get("tools", [])
+    names = sorted(t["name"] for t in tools)
+    schema = None
+    desc = ""
+    for entry in tools:
+        if entry["name"] == "kompas_list_sketch_entities":
+            schema = entry.get("inputSchema") or {}
+            # Описание инструмента лежит на САМОМ инструменте, а не внутри inputSchema: взяв его из
+            # схемы, строка мерила бы пустую строку и падала на верном ответе.
+            desc = entry.get("description") or ""
+    drift = None
+    try:
+        with open(os.path.join(ROOT, "schemas", "kompas_list_sketch_entities.json"),
+                  encoding="utf-8-sig") as fh:
+            drift = json.load(fh)
+        drift.pop("$schema", None)
+    except (OSError, ValueError):
+        drift = None
+    props = (schema or {}).get("properties") or {}
+    include_schema = props.get("include_points") or {}
+    include_ok = "include_points" in props
+    named = [token for token in ("points_mm", "points_kind", "start_mm", "end_mm", "include_points",
+                                 "through_points", "свободные концы")
+             if token.lower() in desc.lower()]
+    names_ok = len(named) == 7
+    schema_matches = drift is not None and schema == drift
+    rep.add("SV.01.discover",
+            "схема совпадает с реестром; поле include_points объявлено; описание называет "
+            "points_mm/points_kind/start_mm/end_mm, through_points и свободные концы",
+            "PASS" if (schema_matches and include_ok and names_ok
+                       and len(names) == EXPECTED_TOOL_COUNT) else "FAIL",
+            f"инструментов={len(names)} (ожидание {EXPECTED_TOOL_COUNT}); схема совпадает с "
+            f"реестром={schema_matches}; include_points объявлено={include_ok}; описанием названо "
+            f"{len(named)}/7 признаков {named}; тип include_points={include_schema.get('type')}",
+            {"include_points": include_schema, "named_tokens": named})
+
+    # ── SV.02.polyline_open: 5 известных вершин; полный список и концы ────────────────────────────
+    open_vertices = [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0], [-5.0, 5.0]]
+    doc, rev, code0 = new_part("SV_POLYOPEN")
+    sk, rev, e1 = new_sketch(doc, rev, "sv_polyopen")
+    env_e, code_e, rev = edit(sk, rev, [{"kind": "polyline", "points_mm": open_vertices,
+                                         "closed": False}])
+    full, code_full, _ = listing(sk, include_points=True)
+    row = curve_row(full)
+    got = points_of(row)
+    order_ok = (isinstance(got, list) and len(got) == len(open_vertices)
+                and all(point_near(got[i], open_vertices[i]) for i in range(len(open_vertices))))
+    ends_ok = (row is not None and point_near(row.get("start_mm"), open_vertices[0])
+               and point_near(row.get("end_mm"), open_vertices[-1]))
+    kind_ok = row is not None and row.get("points_kind") == "vertices"
+    complete_ok = row is not None and row.get("points_complete") is True
+    count_ok = row is not None and row.get("points_count") == len(open_vertices)
+    default, code_default, env_default = listing(sk, include_points=False)
+    drow = curve_row(default)
+    default_ok = (drow is not None and drow.get("points_mm") is None
+                  and drow.get("points_complete") is False
+                  and point_near(drow.get("start_mm"), open_vertices[0])
+                  and point_near(drow.get("end_mm"), open_vertices[-1]))
+    default_note = any("include_points" in n for n in (drow or {}).get("notes") or [])
+    ok = (code0 is None and e1 is None and code_e is None and code_full is None
+          and code_default is None and order_ok and ends_ok and kind_ok and complete_ok
+          and count_ok and default_ok and default_note)
+    rep.add("SV.02.polyline_open",
+            "незамкнутая полилиния 5 вершин: points_mm совпадает с заданными вершинами в порядке "
+            "записи, points_kind=vertices, start_mm/end_mm — первая и последняя; без include_points "
+            "список отсутствует, а концы читаются",
+            "PASS" if ok else "FAIL",
+            f"коды: doc={code0} sketch={e1} edit={code_e} list_full={code_full} "
+            f"list_default={code_default} | полный: points_count={row.get('points_count') if row else None}, "
+            f"kind={row.get('points_kind') if row else None}, complete={row.get('points_complete') if row else None}, "
+            f"порядок совпал={order_ok}, концы={ends_ok} | по умолчанию: points_mm="
+            f"{drow.get('points_mm') if drow else 'нет строки'}, complete="
+            f"{drow.get('points_complete') if drow else None}, причина названа={default_note} | "
+            f"прочитано={got}",
+            {"expected": open_vertices, "got": got, "full_row": row,
+             "default_row": drow, "default_message": message(env_default)})
+    close(doc)
+
+    # ── SV.03.polyline_closed: 6 вершин; концов нет ───────────────────────────────────────────────
+    closed_vertices = polygon(6, 10.0)
+    doc, rev, code0 = new_part("SV_POLYCLOSED")
+    sk, rev, e1 = new_sketch(doc, rev, "sv_polyclosed")
+    env_e, code_e, rev = edit(sk, rev, [{"kind": "polyline", "points_mm": closed_vertices,
+                                         "closed": True}])
+    full, code_full, _ = listing(sk, include_points=True)
+    row = curve_row(full)
+    got = points_of(row)
+    matched = 0
+    if isinstance(got, list):
+        for want in closed_vertices:
+            if any(point_near(p, want) for p in got):
+                matched += 1
+    count_ok = row is not None and row.get("points_count") == len(closed_vertices)
+    closed_ok = row is not None and row.get("closed") is True
+    list_ok = isinstance(got, list) and len(got) == len(closed_vertices) and matched == len(closed_vertices)
+    complete_ok = row is not None and row.get("points_complete") is True
+    no_ends = row is not None and row.get("start_mm") is None and row.get("end_mm") is None
+    ok = (code0 is None and e1 is None and code_e is None and code_full is None and count_ok
+          and closed_ok and list_ok and complete_ok and no_ends)
+    rep.add("SV.03.polyline_closed",
+            "замкнутая полилиния 6 вершин: closed=true, points_mm — 6 вершин (каждая заданная "
+            "найдена в допуске), start_mm/end_mm = null — свободных концов нет",
+            "PASS" if ok else "FAIL",
+            f"коды: doc={code0} sketch={e1} edit={code_e} list={code_full} | "
+            f"points_count={row.get('points_count') if row else None}, closed="
+            f"{row.get('closed') if row else None}, complete={row.get('points_complete') if row else None}, "
+            f"вершин совпало={matched}/{len(closed_vertices)}, len(points_mm)="
+            f"{len(got) if isinstance(got, list) else None}, концы null={no_ends}",
+            {"expected": closed_vertices, "got": got, "row": row})
+    close(doc)
+
+    # ── SV.04.spline: 4 известные точки; честное имя through_points ───────────────────────────────
+    spline_points = [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [20.0, 10.0]]
+    doc, rev, code0 = new_part("SV_SPLINE")
+    sk, rev, e1 = new_sketch(doc, rev, "sv_spline")
+    env_e, code_e, rev = edit(sk, rev, [{"kind": "spline", "points_mm": spline_points,
+                                         "closed": False}])
+    full, code_full, _ = listing(sk, include_points=True)
+    row = curve_row(full)
+    got = points_of(row)
+    order_ok = (isinstance(got, list) and len(got) == len(spline_points)
+                and all(point_near(got[i], spline_points[i]) for i in range(len(spline_points))))
+    kind_ok = row is not None and row.get("points_kind") == "through_points"
+    complete_ok = row is not None and row.get("points_complete") is True
+    count_ok = row is not None and row.get("points_count") == len(spline_points)
+    ends_ok = (row is not None and point_near(row.get("start_mm"), spline_points[0])
+               and point_near(row.get("end_mm"), spline_points[-1]))
+    ok = (code0 is None and e1 is None and code_e is None and code_full is None and order_ok
+          and kind_ok and complete_ok and count_ok and ends_ok)
+    rep.add("SV.04.spline",
+            "сплайн через 4 известные точки: points_mm совпадает с ними (кривая ПРОХОДИТ через "
+            "опорные точки узлов), points_kind=through_points, start_mm/end_mm — первая и последняя",
+            "PASS" if ok else "FAIL",
+            f"коды: doc={code0} sketch={e1} edit={code_e} list={code_full} | "
+            f"points_count={row.get('points_count') if row else None}, kind="
+            f"{row.get('points_kind') if row else None}, complete="
+            f"{row.get('points_complete') if row else None}, порядок совпал={order_ok}, "
+            f"концы={ends_ok} | прочитано={got}",
+            {"expected": spline_points, "got": got, "row": row})
+    close(doc)
+
+    # ── SV.05.gap: контур из двух отрезков, полилинии и дуги с ОДНИМ заведомым разрывом ───────────
+    # Ожидание выведено ДО прогона: концы (10,0), (10,10) и (20,0) общие у соседей, свободны ровно
+    # два — (0,0) у начала первого отрезка и (30,0) у конца дуги. Это и есть разрыв (0,0)-(30,0).
+    gap_entities = [
+        {"kind": "line", "start_mm": [0.0, 0.0], "end_mm": [10.0, 0.0]},
+        {"kind": "line", "start_mm": [10.0, 0.0], "end_mm": [10.0, 10.0]},
+        {"kind": "polyline", "points_mm": [[10.0, 10.0], [20.0, 10.0], [20.0, 0.0]],
+         "closed": False},
+        {"kind": "arc", "center_mm": [25.0, 0.0], "radius_mm": 5.0,
+         "start_deg": 180.0, "sweep_deg": -180.0},
+    ]
+    doc, rev, code0 = new_part("SV_GAP")
+    sk, rev, e1 = new_sketch(doc, rev, "sv_gap")
+    env_e, code_e, rev = edit(sk, rev, gap_entities)
+    listed, code_l, _ = listing(sk, include_points=False)
+    rows = rows_of(listed)
+    ends, free = ends_of(rows)
+    free_ok = (len(free) == 2
+               and any(near(x, 0.0) and near(y, 0.0) for x, y in free)
+               and any(near(x, 30.0) and near(y, 0.0) for x, y in free))
+    ok = (code0 is None and e1 is None and code_e is None and code_l is None
+          and len(rows) == len(gap_entities) and free_ok)
+    rep.add("SV.05.gap",
+            "эскиз из двух отрезков, полилинии и дуги: по ответу находится РОВНО одна пара "
+            "свободных концов (0,0) и (30,0) — разрыв контура виден одним чтением",
+            "PASS" if ok else "FAIL",
+            f"коды: doc={code0} sketch={e1} edit={code_e} list={code_l} | строк={len(rows)} "
+            f"(ожидание {len(gap_entities)}); концов всего={len(ends)}, свободных={len(free)} "
+            f"{[tuple(round(v, 4) for v in p) for p in free]} (ожидание ровно (0,0) и (30,0))",
+            {"rows": [{"kind": r.get("kind"), "entity_kind": r.get("entity_kind"),
+                       "start_mm": r.get("start_mm"), "end_mm": r.get("end_mm"),
+                       "x1_mm": r.get("x1_mm"), "y1_mm": r.get("y1_mm"),
+                       "x2_mm": r.get("x2_mm"), "y2_mm": r.get("y2_mm")} for r in rows],
+             "ends": ends, "free": free})
+    close(doc)
+
+    # ── SV.06.limit: полилиния 2000 вершин — без молчаливой обрезки ───────────────────────────────
+    big = polygon(2000, 20.0)
+    doc, rev, code0 = new_part("SV_LIMIT")
+    sk, rev, e1 = new_sketch(doc, rev, "sv_limit")
+    env_e, code_e, rev = edit(sk, rev, [{"kind": "polyline", "points_mm": big, "closed": True}])
+    full, code_full, env_full = listing(sk, include_points=True, limit=500)
+    row = curve_row(full)
+    got = points_of(row)
+    returned = len(got) if isinstance(got, list) else None
+    complete = row.get("points_complete") if row else None
+    truncated_named = any("оборван" in n or "НЕ полный" in n for n in (row or {}).get("notes") or [])
+    # Без молчаливой обрезки: либо пришло ровно 2000 и complete=true, либо список короче — и тогда
+    # причина ОБЯЗАНА быть названа в notes.
+    no_silent_cut = ((returned == 2000 and complete is True)
+                     or (returned is not None and returned < 2000 and truncated_named))
+    size_bytes = len(json.dumps(full, ensure_ascii=False).encode("utf-8"))
+    default, code_default, _ = listing(sk, include_points=False, limit=500)
+    drow = curve_row(default)
+    default_ok = (drow is not None and drow.get("points_mm") is None
+                  and drow.get("points_complete") is False)
+    default_size = len(json.dumps(default, ensure_ascii=False).encode("utf-8"))
+    ok = (code0 is None and e1 is None and code_e is None and code_full is None
+          and code_default is None and row is not None and row.get("points_count") == 2000
+          and no_silent_cut and default_ok)
+    rep.add("SV.06.limit",
+            "полилиния 2000 вершин: по include_points=true приходит полный список (complete=true) "
+            "либо усечение НАЗВАНО в notes; без include_points список отсутствует и complete=false",
+            "PASS" if ok else "FAIL",
+            f"коды: doc={code0} sketch={e1} edit={code_e} list_full={code_full} "
+            f"list_default={code_default} | points_count={row.get('points_count') if row else None}, "
+            f"вернулось={returned}, complete={complete}, усечение названо={truncated_named} | "
+            f"размер ответа с полным списком={size_bytes} байт, без списка={default_size} байт",
+            {"returned": returned, "complete": complete, "size_bytes": size_bytes,
+             "default_size_bytes": default_size, "notes": (row or {}).get("notes")})
+    close(doc)
+
+    # ── SV.07.readonly: чтение не меняет ревизию, объём, число признаков и сущностей ──────────────
+    doc, rev, code0 = new_part("SV_READONLY")
+    s1, rev, e1 = new_sketch(doc, rev, "sv_body")
+    env_e, code_e, rev = edit(s1, rev, [{"kind": "rectangle", "start_mm": [0.0, 0.0],
+                                         "width_mm": 40.0, "height_mm": 30.0}])
+    env_x, code_x = call("kompas_extrude", {
+        "sketch_ref": s1, "expected_revision": rev, "operation": "base", "depth_mm": 5.0,
+        "direction": "positive"})
+    rev = rev_of(env_x, rev)
+    s2, rev, e2 = new_sketch(doc, rev, "sv_curves")
+    env_e2, code_e2, rev = edit(s2, rev, [
+        {"kind": "polyline", "points_mm": open_vertices, "closed": False},
+        {"kind": "spline", "points_mm": spline_points, "closed": False}])
+
+    def state():
+        env_c, _ = call("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        revision = result(env_c).get("revision")
+        env_b, _ = call("kompas_list_bodies", {"document_id": doc})
+        bodies = result(env_b)
+        bodies = bodies if isinstance(bodies, list) else []
+        volume = None
+        if bodies:
+            env_m, _ = call("kompas_measure", {"target_ref": bodies[0].get("body_ref"),
+                                               "properties": ["volume"]})
+            volume = result(env_m).get("volume_mm3")
+        env_f, _ = call("kompas_list_features", {"document_id": doc})
+        feats = result(env_f)
+        feats = feats if isinstance(feats, list) else []
+        listed_l, _, _ = listing(s2, include_points=True)
+        return revision, volume, len(feats), len(rows_of(listed_l))
+    before = state()
+    _env_r, code_r, _ = listing(s2, include_points=True)
+    after = state()
+    ok = (code0 is None and e1 is None and code_e is None and code_x is None and e2 is None
+          and code_e2 is None and code_r is None and before == after
+          and near(before[1], 6000.0) and before[3] == 2)
+    rep.add("SV.07.readonly",
+            "чтение точек не меняет ревизию, объём тела, число признаков и число сущностей эскиза",
+            "PASS" if ok else "FAIL",
+            f"коды: doc={code0} sketch1={e1} rect={code_e} extrude={code_x} sketch2={e2} "
+            f"curves={code_e2} list={code_r} | до={before} после={after} (ревизия, объём, признаков, "
+            f"сущностей; ожидание объём 6000, сущностей 2)",
+            {"before": before, "after": after})
+    close(doc)
+
+
 def main():
     if "--self-test" in sys.argv[1:]:
         # Самопроверка прибора прогонов (наряд ENTITY_CREATE_FALSE, п. 1.5). Стоит ПЕРВОЙ строкой:
@@ -11744,6 +12113,12 @@ def main():
     # обязано находиться по ИМЕНИ строки (`DSC.<NN>`), а в общем прогоне эти строки тонули бы среди чужих.
     delete_sketch_only = "--delete-sketch-only" in sys.argv
 
+    # То же для координат вершин кривых эскиза (наряд SKETCH_VERTEX_READ): одна группа SV на своём
+    # сеансе — полилиния, сплайн, свободные концы эскиза. Отдельная ветка нужна по той же причине, что
+    # у прочих групп: доказательство обязано находиться по ИМЕНИ строки (`SV.<NN>`), а в общем прогоне
+    # эти строки тонули бы среди чужих.
+    sketch_vertex_only = "--sketch-vertex-only" in sys.argv
+
     # То же для ориентации экземпляров кругового массива (наряд MCP-015): одна группа PO на своём
     # сеансе. Отдельная ветка нужна по той же причине, что у прочих групп: доказательство обязано
     # находиться по ИМЕНИ строки (`PO.<NN>`), а в общем прогоне эти строки тонули бы среди чужих.
@@ -11847,6 +12222,7 @@ def main():
         "sketch_constraints": sketch_constraints_only,
         "material_toward": material_toward_only,
         "delete_sketch": delete_sketch_only,
+        "sketch_vertex": sketch_vertex_only,
         "drawing": drawing_only,
         "variables_material": variables_material_only,
         "variables_bind": variables_bind_only,
@@ -12365,6 +12741,14 @@ def main():
 
         if delete_sketch_only:
             delete_sketch_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if sketch_vertex_only:
+            sketch_vertex_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -13054,6 +13438,12 @@ def main():
         # (наряд DELETE_SKETCH_CONTRACT), свои документы и свои имена строк (`DSC.<NN>`), поэтому в общем
         # потоке её доказательство иначе не нашлось бы. Документы MT она не трогает.
         delete_sketch_checks(client, rep, app_id, workdir)
+
+        # Группа SV идёт сразу за DSC и в том же сеансе: координаты вершин полилинии и сплайна и поиск
+        # свободных концов эскиза (наряд SKETCH_VERTEX_READ), свои документы и свои имена строк
+        # (`SV.<NN>`), поэтому в общем потоке её доказательство иначе не нашлось бы. Документы DSC она
+        # не трогает.
+        sketch_vertex_checks(client, rep, app_id, workdir)
 
         b5_acceptance_checks(client, rep, app_id, workdir)
 

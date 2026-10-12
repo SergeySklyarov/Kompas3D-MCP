@@ -18,78 +18,10 @@ namespace KompasMcp.Worker;
 /// KOMPAS: everything is serialised onto one STA thread, and an unobserved result is OUTCOME_UNKNOWN.</summary>
 public sealed class CommandDispatcher
 {
-    /// <summary>Commands that must NOT be queued onto the STA lane, because answering them while the CAD lane is busy
-    /// is precisely why the Host can tell "KOMPAS busy" apart from "Worker dead".</summary>
-    private static readonly HashSet<string> ControlLaneCommands = new(StringComparer.Ordinal)
-    {
-        WorkerCommands.Ping,
-        WorkerCommands.EnvironmentProbe,
-    };
-
-    /// <summary>Commands that CHANGE the model. An unexpected exception in a mutation and in a read are DIFFERENT
-    /// states: in a read "not read" is a refusal, in a mutation the model may have changed.</summary>
-    private static readonly HashSet<string> MutationCommands = new(StringComparer.Ordinal)
-    {
-        WorkerCommands.Connect,
-        WorkerCommands.Disconnect,
-        WorkerCommands.CreateDocument,
-        WorkerCommands.OpenDocument,
-        WorkerCommands.SaveDocument,
-        WorkerCommands.CloseDocument,
-        WorkerCommands.CreateSketch,
-        WorkerCommands.EditSketch,
-        WorkerCommands.SetSketchPlane,
-        WorkerCommands.FinishSketch,
-        WorkerCommands.Extrude,
-        WorkerCommands.Fillet,
-        WorkerCommands.Chamfer,
-        WorkerCommands.Hole,
-        WorkerCommands.Rotated,
-        WorkerCommands.Sweep,
-        WorkerCommands.Loft,
-        WorkerCommands.Shell,
-        WorkerCommands.SolidBoolean,
-        WorkerCommands.SolidSplit,
-        WorkerCommands.SolidCutByPlane,
-        WorkerCommands.SolidReposition,
-        WorkerCommands.UpdateFeature,
-        WorkerCommands.PatternGrid,
-        WorkerCommands.PatternCircular,
-        WorkerCommands.PatternMirror,
-        WorkerCommands.SuppressFeature,
-        WorkerCommands.DeleteFeature,
-        WorkerCommands.Rebuild,
-        WorkerCommands.ExportStep,
-        WorkerCommands.ImportStep,
-        WorkerCommands.ExportImage,
-        WorkerCommands.CreateAuxGeometry,
-        WorkerCommands.UpdatePlane,
-        WorkerCommands.EditSketchEntity,
-        WorkerCommands.CreateSketchConstraint,
-        WorkerCommands.CreateSketchDimension,
-        WorkerCommands.DeleteSketchConstraint,
-        WorkerCommands.InsertComponent,
-        WorkerCommands.SetComponentPlacement,
-        WorkerCommands.ReplaceComponent,
-        WorkerCommands.DeleteComponent,
-        WorkerCommands.CreateMate,
-        WorkerCommands.SetMateParameter,
-        WorkerCommands.SetMateFixed,
-        WorkerCommands.DeleteMate,
-        WorkerCommands.CreateDrawingViews,
-        WorkerCommands.EditView,
-        WorkerCommands.RebuildDrawingViews,
-        WorkerCommands.AddDimension,
-        WorkerCommands.SetTitleBlock,
-        WorkerCommands.ExportDrawing,
-        WorkerCommands.SetTechnicalDemand,
-        WorkerCommands.SetVariableValue,
-        WorkerCommands.SetVariableExpression,
-        WorkerCommands.SetMaterial,
-        WorkerCommands.CreateVariable,
-        WorkerCommands.BindParameter,
-        WorkerCommands.UnitProbe,
-    };
+    // INVARIANT: the lane, the action kind and the budget of a command are read from the single table
+    // in Contracts, never restated here. Two copies are what let the Host give up on a command before
+    // the Worker that was still running it did.
+    // History: docs/decisions/contracts.md#budgets-single-table
 
     private readonly StaExecutor _sta;
     private readonly WorkerLog _log;
@@ -150,56 +82,15 @@ public sealed class CommandDispatcher
         };
     }
 
-    /// <summary>Commands that WRITE A FILE but leave the MODEL untouched. A lost connection during one of
-    /// them leaves nothing to reconcile, so the honest answer is the same refusal a READ gets, not
-    /// "the outcome is unknown".</summary>
-    /// <remarks>LIMIT, NAMED: <c>kompas_save_document</c> is deliberately NOT here — it keeps the mutation
-    /// classification, because it rewrites the document the model is reconciled against. The three
-    /// exports are file-writing reads: the model is untouched either way.
-    /// History: docs/decisions/adapter-core.md#disconnect-latch</remarks>
-    private static readonly HashSet<string> FileWritingReads = new(StringComparer.Ordinal)
-    {
-        WorkerCommands.ExportStep,
-        WorkerCommands.ExportStl,
-        WorkerCommands.ExportImage,
-    };
-
-    /// <summary>Whether a command can leave the MODEL in an unknown state. A file-writing read cannot:
-    /// it writes a file, not the model.</summary>
-    private static bool ChangesModel(string command) =>
-        MutationCommands.Contains(command) && !FileWritingReads.Contains(command);
-
-    /// <summary>Whether a command's answer must not be built on a swallowed connection loss.</summary>
-    /// <remarks>Control-lane commands never touch KOMPAS and are excluded: `kompas_health` must keep
-    /// answering when the CAD session is gone — that is exactly when it is asked. `session.inventory` is
-    /// excluded BY NAME: its consumer (the release guard) already refuses on an unread inventory, and
-    /// routing it through the latch would change the refusal code of `kompas_release_session`.
-    /// `disconnect` is excluded BY NAME: it TEARS OUR OBJECTS DOWN, so a disconnect-class HRESULT there is
-    /// the expected consequence of our own action, not a loss.
-    /// History: docs/decisions/adapter-core.md#disconnect-latch</remarks>
-    private static bool MustNotAnswerAcrossALoss(string command) =>
-        !ChangesModel(command)
-        && !ControlLaneCommands.Contains(command)
-        && command != WorkerCommands.SessionInventory
-        && command != WorkerCommands.Disconnect
-        && command != WorkerCommands.Shutdown;
-
-    /// <summary>Whether the observation window is open while this command runs. Every CAD-lane command
-    /// except the teardown opens it; control-lane commands never do, because they run OFF the STA thread
-    /// (the ROT enumeration binds foreign objects there, and a dead entry of another instance is not our
-    /// loss). History: docs/decisions/adapter-core.md#disconnect-latch</remarks>
-    private static bool ObservesConnectionLoss(string command) =>
-        !ControlLaneCommands.Contains(command) && command != WorkerCommands.Disconnect;
-
     public async Task<IpcFrame> HandleAsync(IpcFrame request, CancellationToken cancellationToken)
     {
-        var budgetMs = BudgetFor(request);
+        var budgetMs = WorkerCommandTable.BudgetMs(request.Command);
         Interlocked.Increment(ref _handled);
 
         // The observation window is open for exactly one session command: outside it a connection-class
         // exception belongs to somebody else (a foreign ROT entry, another instance's dead object) and
         // must not mark OUR session. The window closes on every exit, including the refusal paths.
-        var observesLoss = ObservesConnectionLoss(request.Command);
+        var observesLoss = WorkerCommandTable.ObservesConnectionLoss(request.Command);
         if (observesLoss)
         {
             _latch.Arm(_sta.StaThreadId);
@@ -253,9 +144,9 @@ public sealed class CommandDispatcher
         catch (Exception ex)
         {
             // AN UNEXPECTED EXCEPTION IN A MODEL-CHANGING COMMAND IS NOT A "CLEAN FAILURE": the flag comes
-            // from <see cref="ChangesModel"/>, so the client is not told to repeat an applied mutation,
+            // from the single command table, so the client is not told to repeat an applied mutation,
             // while a file-writing read is judged like a read.
-            var changesModel = ChangesModel(request.Command);
+            var changesModel = WorkerCommandTable.ChangesModel(request.Command);
 
             if (changesModel)
             {
@@ -318,7 +209,7 @@ public sealed class CommandDispatcher
             return;
         }
 
-        if (!MustNotAnswerAcrossALoss(request.Command) || !_latch.IsSet)
+        if (!WorkerCommandTable.MustNotAnswerAcrossALoss(request.Command) || !_latch.IsSet)
         {
             return;
         }
@@ -404,67 +295,9 @@ public sealed class CommandDispatcher
         _ => ErrorCodes.VerificationFailed,
     };
 
-    private static int BudgetFor(IpcFrame request) => request.Command switch
-    {
-        // Not free: it enumerates the ROT and the process list.
-        WorkerCommands.EnvironmentProbe => 10_000,
-        WorkerCommands.Ping => 2_000,
-        WorkerCommands.Connect => 180_000,
-        WorkerCommands.ExportStep or WorkerCommands.ImportStep => 300_000,
-        // Tessellates the model and writes the file; the file is then read back in full.
-        WorkerCommands.ExportStl => 300_000,
-        // Renders and (in file mode) writes a file; MEASURED in seconds.
-        WorkerCommands.ExportImage => 240_000,
-        // API7 route (bridge + TransferInterface + RebuildModel): longer than a pure API5 mutation.
-        WorkerCommands.Hole => 240_000,
-        // Same API7 route plus a re-read of all bodies after the rebuild.
-        WorkerCommands.SolidBoolean or WorkerCommands.SolidSplit
-            or WorkerCommands.SolidCutByPlane or WorkerCommands.SolidReposition => 240_000,
-        // API5 route but both rebuild and re-read bodies; sections go through the API7 bridge.
-        WorkerCommands.Sweep or WorkerCommands.Loft or WorkerCommands.Shell => 240_000,
-        // API7 route (bridge + QI(IAuxiliaryGeomContainer) + Rebuild), one COM call per element.
-        WorkerCommands.CreateAuxGeometry or WorkerCommands.ListAuxGeometry => 240_000,
-        WorkerCommands.UpdatePlane => 240_000,
-        // Rebuilds the dependent body; the MEASURED apply step (`sketch.Update()`) fits in it.
-        WorkerCommands.SetSketchPlane => 240_000,
-        WorkerCommands.ListSketchEntities or WorkerCommands.EditSketchEntity => 240_000,
-        // The API7 route plus an edit session (BeginEdit/EndEdit) and a re-read of the object's
-        // constraint list inside it; one COM call per object on enumeration.
-        WorkerCommands.CreateSketchConstraint or WorkerCommands.ListSketchConstraints
-            or WorkerCommands.DeleteSketchConstraint or WorkerCommands.CreateSketchDimension => 240_000,
-        // Reads a file and rebuilds the document; enumeration makes one COM call per component.
-        WorkerCommands.InsertComponent or WorkerCommands.ReplaceComponent => 240_000,
-        WorkerCommands.ListComponents or WorkerCommands.SetComponentPlacement
-            or WorkerCommands.CheckComponentLinks => 240_000,
-        // Walks the mate collection AND asks the kernel (ObjectConstraints) before deleting, then re-reads
-        // the structure: one COM call per mate plus the rebuild.
-        WorkerCommands.DeleteComponent => 240_000,
-        // One COM call per body pair (INT-12 checks 190 pairs), plus a second call per intersecting
-        // pair when faces are asked for.
-        WorkerCommands.CheckInterference or WorkerCommands.MeasureGap => 240_000,
-        // Rebuilds the assembly (Update() + RebuildDocument); enumeration reads every mate object.
-        WorkerCommands.ListMates or WorkerCommands.CreateMate or WorkerCommands.SetMateParameter
-            or WorkerCommands.SetMateFixed or WorkerCommands.DeleteMate => 240_000,
-        // Drawing views/export go through the API7 bridge (TransferInterface + AddStandartViews or the
-        // converter), which is longer than a pure API5 call; dimensions and the stamp are API7 too.
-        WorkerCommands.CreateDrawingViews or WorkerCommands.ExportDrawing
-            or WorkerCommands.AddDimension or WorkerCommands.SetTitleBlock
-            or WorkerCommands.EditView or WorkerCommands.SetTechnicalDemand
-            or WorkerCommands.GetTitleBlock or WorkerCommands.GetTechnicalDemand => 240_000,
-        // Variable writes go through Set + RebuildModel + a re-read of the collection; the material write
-        // goes through SetMaterial + Update + a re-read of name and density.
-        WorkerCommands.SetVariableValue or WorkerCommands.SetVariableExpression
-            or WorkerCommands.SetMaterial => 240_000,
-        // Variable creation goes through the API7 bridge + RebuildDocument + a re-read of the collection;
-        // parameter binding re-reads the feature, its collection and the model volume after the rebuild.
-        WorkerCommands.CreateVariable or WorkerCommands.BindParameter
-            or WorkerCommands.ListFeatureParameters => 240_000,
-        _ => 120_000,
-    };
-
     private async Task<JsonNode?> DispatchAsync(IpcFrame request, int budgetMs, CancellationToken cancellationToken)
     {
-        if (ControlLaneCommands.Contains(request.Command))
+        if (WorkerCommandTable.IsControlLane(request.Command))
         {
             return request.Command switch
             {

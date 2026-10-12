@@ -17,8 +17,9 @@ public sealed class ToolListSizeTests
 {
     /// <summary>Measured size plus 10 %. MEASURED: the listing of 90 tools occupied 333 712 characters
     /// after the shared definitions were pruned to the referenced ones and the eight largest
-    /// descriptions were cut to the contract; the same listing measured over the wire by a stdio client
-    /// gave 343 533 characters with spaced separators, so the two instruments agree within 0.2 %.</summary>
+    /// descriptions were cut to the contract. The same dump counted by a stdio client with spaced
+    /// separators gives 343 533: the 2.9 % is the separators alone, the text is the same, so the
+    /// ceiling is set from THIS instrument's measure.</summary>
     private const int CeilingChars = 367_100;
 
     /// <summary>How the transport writes a listing: attribute-named properties, nulls omitted, and

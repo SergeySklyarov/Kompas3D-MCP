@@ -215,24 +215,9 @@ public static class Program
         _ = cancellationToken;
         log.Write("debug", "tools/list", new { tools = ToolCatalog.All.Count });
 
-        var tools = ToolCatalog.All.Select(tool => new Tool
-        {
-            Name = tool.Name,
-            Title = tool.Title,
-            Description = tool.Description,
-            InputSchema = JsonDocument.Parse(tool.InputSchema.ToJsonString()).RootElement,
-            Annotations = new ToolAnnotations
-            {
-                // Honest annotations only: a mutation is not idempotent just because a journal makes
-                // its replay safe.
-                ReadOnlyHint = tool.Behaviour.ReadOnly,
-                DestructiveHint = tool.Behaviour.Destructive,
-                IdempotentHint = null,
-                OpenWorldHint = false,
-                Title = tool.Title,
-            },
-            Meta = null,
-        }).ToList();
+        // The mapping lives in McpToolFactory so the size guard measures exactly this listing.
+        // History: docs/decisions/host.md#tools-list-size-guard
+        var tools = McpToolFactory.CreateAll(ToolCatalog.All);
 
         return ValueTask.FromResult(new ListToolsResult { Tools = tools, NextCursor = null });
     }

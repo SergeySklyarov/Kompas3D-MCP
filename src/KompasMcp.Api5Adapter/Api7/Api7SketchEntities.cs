@@ -44,7 +44,21 @@ internal sealed record SketchEntityRow(
     double? CenterYMm = null,
     /// <summary>The point in the middle of an arc, mm (<c>IArc.X3/Y3</c>).</summary>
     double? MidXMm = null,
-    double? MidYMm = null);
+    double? MidYMm = null,
+    /// <summary>Vertices of a polyline or through points of a spline, mm (<see cref="PointsKind"/> names
+    /// which). <c>null</c> when not asked for or not read; <see cref="PointsComplete"/> tells the two
+    /// apart.</summary>
+    IReadOnlyList<IReadOnlyList<double>>? PointsMm = null,
+    /// <summary>What <see cref="PointsMm"/> holds: <c>vertices</c> | <c>through_points</c> |
+    /// <c>control_points</c>.</summary>
+    string? PointsKind = null,
+    /// <summary>First point of an OPEN curve, mm; <c>null</c> for a closed curve and other kinds.</summary>
+    IReadOnlyList<double>? StartMm = null,
+    /// <summary>Last point of an OPEN curve, mm; the same rules as <see cref="StartMm"/>.</summary>
+    IReadOnlyList<double>? EndMm = null,
+    /// <summary><c>true</c> when <see cref="PointsMm"/> holds all points; <c>false</c> when absent;
+    /// <c>null</c> when the field does not apply to the kind.</summary>
+    bool? PointsComplete = null);
 
 /// <summary>Result of enumerating sketch entities: rows, route and per-collection counts.</summary>
 internal sealed record SketchEntitiesRead(
@@ -105,8 +119,10 @@ internal static class Api7SketchEntities
 
     /// <summary>Enumerate the sketch entities with addresses. Returns either the rows or a NAMED reason
     /// why enumeration did not happen: an empty list and "not read" are different states.</summary>
+    /// <param name="includePoints">Ask for the full vertex list of a polyline/spline; <c>false</c> reads
+    /// only the free ends of an open curve, which is what finding a gap needs.</param>
     public static (SketchEntitiesRead? Read, string? Failure) Read(
-        Api7Bridge bridge, object sketch5, int limit)
+        Api7Bridge bridge, object sketch5, int limit, bool includePoints = false)
     {
         if (bridge.TransferTo7(sketch5) is not ISketch sketch)
         {
@@ -229,7 +245,7 @@ internal static class Api7SketchEntities
                         break;
                     }
 
-                    rows.Add(Describe(item, withIds, fragmentAsDocument, rows.Count, notes));
+                    rows.Add(Describe(item, withIds, fragmentAsDocument, rows.Count, notes, includePoints));
                 }
             }
 
@@ -280,7 +296,7 @@ internal static class Api7SketchEntities
 
     private static SketchEntityRow Describe(
         object item, IKompasDocument1 document, IKompasDocument1? fragmentDocument, int index,
-        List<string> notes)
+        List<string> notes, bool includePoints)
     {
         var local = new List<string>();
         string? address = null;
@@ -303,6 +319,11 @@ internal static class Api7SketchEntities
         double? centerYMm = null;
         double? midXMm = null;
         double? midYMm = null;
+        IReadOnlyList<IReadOnlyList<double>>? pointsMm = null;
+        string? pointsKind = null;
+        IReadOnlyList<double>? startMm = null;
+        IReadOnlyList<double>? endMm = null;
+        bool? pointsComplete = null;
 
         if (item is IKompasAPIObject apiObject)
         {
@@ -429,24 +450,167 @@ internal static class Api7SketchEntities
             pointsCount = ReadInt(() => polyLine.PointsCount, local, "число вершин полилинии");
             closed = ReadBool(() => polyLine.Closed, local, "замкнутость полилинии");
             entityKind = "polyline";
+            pointsKind = "vertices";
+            (pointsMm, startMm, endMm, pointsComplete) = ReadCurvePoints(
+                "полилиния", pointsCount, closed, includePoints, local,
+                i => PointAt(polyLine, i));
         }
         else if (item is IBezier bezier)
         {
             pointsCount = ReadInt(() => bezier.PointsCount, local, "число вершин сплайна");
             closed = ReadBool(() => bezier.Closed, local, "замкнутость сплайна");
             entityKind = "spline";
+            // The node's LEFT/RIGHT points are tangent handles; only the BASE point is the point the
+            // curve passes through, and mixing the two would publish a curve through its handles.
+            // History: docs/decisions/adapter-sketch.md#sketch-vertex-read
+            pointsKind = "through_points";
+            (pointsMm, startMm, endMm, pointsComplete) = ReadCurvePoints(
+                "сплайн", pointsCount, closed, includePoints, local,
+                i => BasePointAt(bezier, i));
         }
         else if (item is INurbs nurbs)
         {
             pointsCount = ReadInt(() => nurbs.PointsCount, local, "число вершин сплайна NURBS");
             closed = ReadBool(() => nurbs.Closed, local, "замкнутость сплайна NURBS");
             entityKind = "spline";
+            // MEASURED (a closed 16-gon: the volume matched a B-spline of R·cos(π/n), i.e. the curve runs
+            // INSIDE its nodes), so the NURBS points are POLES, not through points — named as such.
+            // History: docs/decisions/adapter-sketch.md#sketch-vertex-read
+            pointsKind = "control_points";
+            (pointsMm, startMm, endMm, pointsComplete) = ReadCurvePoints(
+                "сплайн NURBS", pointsCount, closed, includePoints, local,
+                i => PoleAt(nurbs, i));
         }
 
         notes.AddRange(local.Select(n => $"объект {index}: {n}"));
         return new SketchEntityRow(index, address, kind, name, typeCode, local, pointsCount, closed,
             entityKind, lengthMm, radiusMm, angleDeg, xMm, yMm, x1Mm, y1Mm, x2Mm, y2Mm,
-            centerXMm, centerYMm, midXMm, midYMm);
+            centerXMm, centerYMm, midXMm, midYMm, pointsMm, pointsKind, startMm, endMm, pointsComplete);
+    }
+
+    /// <summary>Read a curve's points through its documented per-point accessor, name WHAT they are and
+    /// — for an OPEN curve — read its two free ends. Returns the full list only when asked for; the free
+    /// ends are read either way, because finding a gap is the reason this exists.</summary>
+    /// <remarks>INVARIANT: an absent list and a short list are told apart by <c>Complete</c>, and the
+    /// reason is always in <paramref name="notes"/> — nothing is shortened silently.
+    /// DOC: the help names the index only as «индекс точки» and does NOT state its base; the base is
+    /// therefore DETECTED per object (index 0, then 1) and a member that answers neither is a NAMED
+    /// refusal, not a shifted list. Figures: docs/decisions/adapter-sketch.md#sketch-vertex-read</remarks>
+    private static (IReadOnlyList<IReadOnlyList<double>>? Points, IReadOnlyList<double>? Start,
+        IReadOnlyList<double>? End, bool? Complete) ReadCurvePoints(
+            string what, int? count, bool? closed, bool includePoints, List<string> notes,
+            Func<int, (bool Ok, double X, double Y)> at)
+    {
+        if (count is not int total || total <= 0)
+        {
+            notes.Add($"{what}: число точек не прочитано — точки не читаются " +
+                "(«не прочитано» — не то же, что ноль точек)");
+            return (null, null, null, null);
+        }
+
+        var indexBase = at(0).Ok ? 0 : at(1).Ok ? 1 : -1;
+        if (indexBase < 0)
+        {
+            notes.Add($"{what}: GetPoint не ответил ни по индексу 0, ни по индексу 1 — " +
+                "база индекса не определена, точки не читаются");
+            return (null, null, null, null);
+        }
+
+        List<IReadOnlyList<double>>? points = null;
+        bool? complete = null;
+        if (includePoints)
+        {
+            points = new List<IReadOnlyList<double>>(total);
+            for (var i = 0; i < total; i++)
+            {
+                var (ok, x, y) = at(indexBase + i);
+                if (!ok)
+                {
+                    notes.Add($"{what}: точка {i} из {total} не прочитана — список оборван " +
+                        $"на {points.Count} из {total}");
+                    break;
+                }
+
+                points.Add(new[] { x, y });
+            }
+
+            complete = points.Count == total;
+        }
+        else
+        {
+            complete = false;
+            notes.Add($"{what}: полный список точек не запрошен (include_points=false) — " +
+                "start_mm/end_mm прочитаны, остальные вершины по запросу");
+        }
+
+        if (closed is null)
+        {
+            notes.Add($"{what}: замкнутость не прочитана — свободные концы не названы");
+            return (points, null, null, complete);
+        }
+
+        if (closed == true)
+        {
+            notes.Add($"{what}: кривая замкнута — свободных концов нет, start_mm/end_mm = null");
+            return (points, null, null, complete);
+        }
+
+        if (points is { Count: > 0 } list && list.Count == total)
+        {
+            return (points, list[0], list[^1], complete);
+        }
+
+        var (okFirst, xFirst, yFirst) = at(indexBase);
+        var (okLast, xLast, yLast) = at(indexBase + total - 1);
+        if (!okFirst || !okLast)
+        {
+            notes.Add($"{what}: концы не прочитаны (первый={okFirst}, последний={okLast})");
+            return (points, null, null, complete);
+        }
+
+        return (points, new[] { xFirst, yFirst }, new[] { xLast, yLast }, complete);
+    }
+
+    /// <summary>One vertex of a polyline (<c>IPolyLine2D.GetPoint</c>); <c>false</c> when the member threw
+    /// or refused. The help names the index only as «индекс точки»; the base is detected by the caller.</summary>
+    private static (bool Ok, double X, double Y) PointAt(IPolyLine2D line, int index)
+    {
+        try
+        {
+            return line.GetPoint(index, out var x, out var y) ? (true, x, y) : (false, 0, 0);
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return (false, 0, 0);
+        }
+    }
+
+    /// <summary>One BASE point of a Bezier node; the left/right handles are dropped on purpose — they are
+    /// tangents, not points the curve passes through.</summary>
+    private static (bool Ok, double X, double Y) BasePointAt(IBezier bezier, int index)
+    {
+        try
+        {
+            return bezier.GetPoint(index, out var x, out var y, out _, out _, out _, out _)
+                ? (true, x, y) : (false, 0, 0);
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return (false, 0, 0);
+        }
+    }
+
+    /// <summary>One pole of a NURBS curve; the weight is dropped — it is not a coordinate.</summary>
+    private static (bool Ok, double X, double Y) PoleAt(INurbs nurbs, int index)
+    {
+        try
+        {
+            return nurbs.GetPoint(index, out var x, out var y, out _) ? (true, x, y) : (false, 0, 0);
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return (false, 0, 0);
+        }
     }
 
     private static string? ReadString(Func<string?> read, List<string> notes, string what)

@@ -3073,6 +3073,20 @@ public static class ToolCatalog
                 + "entity_kind=polyline и поля points_count и closed, прочитанные IPolyLine2D.PointsCount и "
                 + "IPolyLine2D.Closed; строка сплайна (вид ksDrBezier) — entity_kind=spline и те же поля из "
                 + "IBezier. У прочих видов эти поля null: непрочитанное не выдаётся за ноль. "
+                + "ВЕРШИНЫ КРИВЫХ ЧИТАЮТСЯ ЗДЕСЬ ЖЕ: points_mm несёт точки в порядке хранения, а "
+                + "points_kind называет, ЧТО это за точки, — vertices у полилинии (IPolyLine2D.GetPoint), "
+                + "through_points у сплайна Безье (IBezier.GetPoint: опорные точки узлов, через которые "
+                + "кривая ПРОХОДИТ; левая и правая точки узла — касательные и в points_mm НЕ подмешиваются) "
+                + "и control_points у NURBS (полюса, через которые кривая НЕ проходит). У НЕЗАМКНУТОЙ "
+                + "кривой start_mm и end_mm — первая и последняя точка, прочитанные и БЕЗ запроса полного "
+                + "списка; у замкнутой они null, потому что свободных концов у неё нет. ПОЛНЫЙ СПИСОК "
+                + "ЗАПРАШИВАЕТСЯ ПОЛЕМ include_points (по умолчанию false): без него points_mm=null и "
+                + "points_complete=false, с ним приходят все points_count точек и points_complete=true. "
+                + "СПИСОК НЕ ОБРЕЗАЕТСЯ МОЛЧА: отсутствующий список отличим от короткого по points_complete, "
+                + "и причина названа в notes. КАК НАЙТИ СВОБОДНЫЕ КОНЦЫ ОДНИМ ЧТЕНИЕМ: у отрезка это "
+                + "x1_mm/y1_mm и x2_mm/y2_mm, у дуги — x1_mm/y1_mm и x2_mm/y2_mm, у незамкнутых полилинии и "
+                + "сплайна — start_mm и end_mm; конец, у которого нет совпадающего конца другой сущности в "
+                + "допуске, и есть разрыв контура. "
                 + "ГЕОМЕТРИЯ, КОТОРУЮ ДВИГАЕТ УПРАВЛЯЮЩИЙ РАЗМЕР, ПУБЛИКУЕТСЯ ЗДЕСЬ ЖЕ, чтобы клиент "
                 + "проверял её САМ, а не верил ответу записи: length_mm — длина отрезка (ILineSegment.Length), "
                 + "radius_mm — радиус дуги или окружности (IArc.Radius / ICircle.Radius), angle_deg — "
@@ -3082,6 +3096,11 @@ public static class ToolCatalog
                 Sch.Props(
                     ("sketch_ref", Sch.Ref("#/$defs/reference")),
                     ("address", Sch.Nullable(Sch.Str("Адрес одной сущности, выданный этим же перечислением.", maxLength: 512))),
+                    ("include_points", Sch.Nullable(Sch.Bool(
+                        "Вернуть полный список точек полилинии или сплайна в points_mm. По умолчанию "
+                        + "false: points_mm=null, points_complete=false, а start_mm/end_mm незамкнутой "
+                        + "кривой читаются и так — их достаточно, чтобы найти свободные концы. Список "
+                        + "никогда не обрезается молча."))),
                     ("limit", Sch.Nullable(Sch.Ref("#/$defs/limit")))),
                 WorkerCommands.ListSketchEntities),
 

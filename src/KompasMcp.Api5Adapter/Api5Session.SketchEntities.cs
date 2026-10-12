@@ -31,7 +31,7 @@ public sealed partial class Api5Session
                 details: new Dictionary<string, object?> { ["limit"] = limit });
         }
 
-        var (read, failure) = Api7SketchEntities.Read(bridge, target.Sketch, limit);
+        var (read, failure) = Api7SketchEntities.Read(bridge, target.Sketch, limit, command.IncludePoints);
         if (read is null)
         {
             throw new KompasContractException(
@@ -94,7 +94,8 @@ public sealed partial class Api5Session
                 r.Index, r.Address, r.Kind, r.Name, r.TypeCode, r.Notes,
                 r.PointsCount, r.Closed, r.EntityKind, r.LengthMm, r.RadiusMm, r.AngleDeg,
                 r.XMm, r.YMm, r.X1Mm, r.Y1Mm, r.X2Mm, r.Y2Mm,
-                r.CenterXMm, r.CenterYMm, r.MidXMm, r.MidYMm)).ToList(),
+                r.CenterXMm, r.CenterYMm, r.MidXMm, r.MidYMm,
+                r.PointsMm, r.PointsKind, r.StartMm, r.EndMm, r.PointsComplete)).ToList(),
             read.CollectionCounts,
             read.Route,
             notes);

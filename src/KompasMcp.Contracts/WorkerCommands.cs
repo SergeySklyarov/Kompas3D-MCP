@@ -513,6 +513,13 @@ public sealed record ListSketchEntitiesCommand
 
     /// <summary>Row limit: a row costs one COM call, the bound is named as a number.</summary>
     public int? Limit { get; init; }
+
+    /// <summary>Ask for the FULL vertex list of a polyline or a spline. The default is <c>false</c>, and
+    /// then <c>points_mm</c> is <c>null</c> while <c>start_mm</c>/<c>end_mm</c> are still read — a curve
+    /// with 2000 vertices would otherwise dominate an enumeration that exists to find its free ends.
+    /// <c>points_complete</c> says which of the two happened, so a list that is absent is never read as
+    /// a short one.</summary>
+    public bool IncludePoints { get; init; }
 }
 
 /// <summary>Sketch-entity enumeration answer: rows, collection counts, route, notes.</summary>
@@ -572,7 +579,33 @@ public sealed record SketchEntityRowDto(
     /// <summary>The point in the MIDDLE of an ARC, mm (<c>IArc.X3/Y3</c>). <c>null</c> for other kinds
     /// and when unread; it is what a "point on the middle of a curve" relation is checked against.</summary>
     double? MidXMm = null,
-    double? MidYMm = null);
+    double? MidYMm = null,
+    /// <summary>Vertices of a polyline or the THROUGH points of a spline, mm, in storage order and as
+    /// long as <see cref="PointsCount"/>. <c>null</c> for other kinds, when unread, and when
+    /// <c>include_points</c> was not asked for — see <see cref="PointsComplete"/>, which tells the two
+    /// apart. Coordinates are in the SKETCH frame, the same frame the write takes.
+    /// Figures: docs/decisions/adapter-sketch.md#sketch-vertex-read</summary>
+    IReadOnlyList<IReadOnlyList<double>>? PointsMm = null,
+    /// <summary>WHAT <see cref="PointsMm"/> holds, named honestly instead of assumed: <c>vertices</c> —
+    /// a polyline's own vertices (<c>IPolyLine2D.GetPoint</c>); <c>through_points</c> — the base points of
+    /// a Bezier curve's nodes, the points the curve PASSES THROUGH (<c>IBezier.GetPoint</c>; the node's
+    /// left/right points are tangent handles and are NOT mixed in); <c>control_points</c> — the poles of a
+    /// NURBS curve (<c>INurbs.GetPoint</c>), through which the curve does NOT pass. <c>null</c> for other
+    /// kinds.</summary>
+    string? PointsKind = null,
+    /// <summary>First point of an OPEN curve, mm — the same point as <see cref="PointsMm"/>[0], read even
+    /// when the full list was not asked for, so a client finds free ends without knowing the storage
+    /// order. <c>null</c> for a CLOSED curve (there is no free end) and for other kinds.</summary>
+    IReadOnlyList<double>? StartMm = null,
+    /// <summary>Last point of an OPEN curve, mm — the same point as <see cref="PointsMm"/>[^1]. The same
+    /// rules as <see cref="StartMm"/>.</summary>
+    IReadOnlyList<double>? EndMm = null,
+    /// <summary><c>true</c> when <see cref="PointsMm"/> carries ALL <see cref="PointsCount"/> points;
+    /// <c>false</c> when the list is absent because <c>include_points</c> was not set, or (named in the
+    /// row notes) because a point did not read. <c>null</c> when the field does not apply to the kind.
+    /// INVARIANT: the list is never shortened silently — an absent list is always told apart from a
+    /// short one.</summary>
+    bool? PointsComplete = null);
 
 /// <summary>Request for an address-targeted sketch-entity edit. <see cref="Address"/> is mandatory: an edit of "the
 /// first entity that comes up" is not address-targeted.</summary>

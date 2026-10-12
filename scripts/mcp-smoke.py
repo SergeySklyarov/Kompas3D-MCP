@@ -518,6 +518,9 @@ RUN_GROUPS = (
     ("sketch_constraints", "sketch-constraints", "sketch-constraints-acceptance.json",
      "Приёмка SKC: ограничения эскиза и управляющие размеры — наложение, чтение, удаление, состояние "
      "(блок G6, профиль sketch-constraints-minimal-v1)"),
+    ("material_toward", "material-toward", "material-toward-acceptance.json",
+     "Приёмка MT: сторона материала в координатах детали на входе kompas_extrude (наряд "
+     "EXTRUDE_MATERIAL_TOWARD, профиль material-toward-minimal-v1)"),
     ("drawing", "drawing", "drawing-acceptance.json",
      "Приёмка DRW: чертежи — стандартные виды, размеры, основная надпись, экспорт (блок DRW, профиль "
      "drawings-minimal-v1)"),
@@ -571,8 +574,8 @@ VERTICAL_GROUP = ("vertical", "smoke-report.json",
 VERTICAL_GROUPS = (
     "contract", "chamfer", "fillet", "extrusion", "hole", "rotation", "sketch_status",
     "b3", "b3l", "b3m", "b3c", "dirty", "b4", "b5", "f08", "mania", "dep", "image", "nested",
-    "sketch_bulk", "sketch_constraints", "pattern_orientation", "release_040", "client_bugs_20261008",
-    "client_bugs_20261009", "entity_create", "sketch_profile",
+    "sketch_bulk", "sketch_constraints", "material_toward", "pattern_orientation", "release_040",
+    "client_bugs_20261008", "client_bugs_20261009", "entity_create", "sketch_profile",
 )
 
 # Группы, которых в вертикали НЕТ: их проверочная функция вызывается ТОЛЬКО в своей ветке
@@ -11334,6 +11337,12 @@ def main():
     # (`SKC.<NN>.<действие>`), а не по номеру в общем потоке.
     sketch_constraints_only = "--sketch-constraints-only" in sys.argv
 
+    # То же для стороны материала в координатах детали (наряд `EXTRUDE_MATERIAL_TOWARD`, профиль
+    # `material-toward-minimal-v1`): одна группа MT на своём сеансе. Отдельная ветка нужна по той же
+    # причине, что у прочих групп: доказательство обязано находиться по ИМЕНИ строки (`MT.<NN>`), а в
+    # общем прогоне эти строки тонули бы среди чужих.
+    material_toward_only = "--material-toward-only" in sys.argv
+
     # То же для ориентации экземпляров кругового массива (наряд MCP-015): одна группа PO на своём
     # сеансе. Отдельная ветка нужна по той же причине, что у прочих групп: доказательство обязано
     # находиться по ИМЕНИ строки (`PO.<NN>`), а в общем прогоне эти строки тонули бы среди чужих.
@@ -11435,6 +11444,7 @@ def main():
         "interference": interference_only,
         "sketch_bulk": sketch_bulk_only,
         "sketch_constraints": sketch_constraints_only,
+        "material_toward": material_toward_only,
         "drawing": drawing_only,
         "variables_material": variables_material_only,
         "variables_bind": variables_bind_only,
@@ -11937,6 +11947,14 @@ def main():
 
         if sketch_constraints_only:
             sketch_constraints_checks(client, rep, app_id, workdir)
+            if not keep:
+                client.tool("kompas_disconnect", {
+                    "application_id": app_id, "close_owned_application": True,
+                    "operation_id": str(uuid.uuid4())}, timeout=120)
+            return finish(rep, client)
+
+        if material_toward_only:
+            material_toward_checks(client, rep, app_id, workdir)
             if not keep:
                 client.tool("kompas_disconnect", {
                     "application_id": app_id, "close_owned_application": True,
@@ -12615,6 +12633,12 @@ def main():
         # Документы E08 она не трогает.
         sketch_bulk_checks(client, rep, app_id, workdir)
         sketch_constraints_checks(client, rep, app_id, workdir)
+
+        # Группа MT идёт сразу за SKC и в том же сеансе: сторона материала в координатах детали на
+        # входе `kompas_extrude` (наряд EXTRUDE_MATERIAL_TOWARD), свои документы и свои имена строк
+        # (`MT.<NN>`), поэтому в общем потоке её доказательство иначе не нашлось бы. Документы SKC
+        # она не трогает.
+        material_toward_checks(client, rep, app_id, workdir)
 
         b5_acceptance_checks(client, rep, app_id, workdir)
 
@@ -23585,6 +23609,688 @@ def entity_create_checks(client, rep, app_id, workdir):
             "PASS" if rollback_rev_ok else "FAIL", rollback_rev_detail)
 
     if doc:
+        close(doc)
+
+
+def material_toward_checks(client, rep, app_id, workdir):
+    """MT.01…MT.09: сторона материала в КООРДИНАТАХ ДЕТАЛИ на входе `kompas_extrude`.
+
+    НАРЯД: `EXTRUDE_MATERIAL_TOWARD_DEVELOPER_PROMPT.md` §3, ветка `--material-toward-only`.
+
+    ЧТО ЗДЕСЬ ДОКАЗЫВАЕТСЯ. Клиент задаёт сторону в координатах детали (`material_toward`), а сервер
+    переводит её в `positive`/`negative` по нормали плоскости эскиза. Строка считается прошедшей,
+    только когда сходится ВСЁ: аналитически известная геометрия (объём и габарит), ОЖИДАЕМОЕ слово
+    КОМПАС (`direction_resolved`), названная фактическая сторона и её совпадение с запрошенной.
+
+    ЭТАЛОНЫ. Пластина 100×80×10 = 80000 мм³, z=[0,10]. Круг R5 глубиной 5 снимает ровно
+    π·5²·5 = 392.69908169872417 мм³. Числа НЕ подгоняются под результат.
+
+    ИЗМЕРЕННЫЙ ФАКТ, РАСХОДЯЩИЙСЯ С ТЕКСТОМ НАРЯДА (назван, а не спрятан).
+    Наряд в MT.06 пишет «эскиз на плоскости YZ (нормаль +x)». ИЗМЕРЕНО 09.10.2026 (`docs/04` §4.58,
+    строка `CB9.14`): нормаль базовой плоскости YZ равна (−1,0,0), то есть −x, и строка MT.06 сверяет
+    свою нормаль с ЭТИМ измеренным знаком; «+x» из наряда относилось бы к боковой ГРАНИ тела.
+    По той же причине нарядное «эскиз на нижней грани (z=0)» в MT.03 выполнено на ПЛОСКОСТИ z=0
+    (нормаль +z — именно она даёт ожидаемое `direction_resolved=negative`), а инверсию знака у самой
+    НИЖНЕЙ ГРАНИ (нормаль −z) измеряет отдельная строка MT.03f: у грани нормаль −z, и та же просьба
+    разрешается в `positive`.
+
+    ЧЕГО ЗДЕСЬ НЕТ. Клиентская приёмка и Trust не трогаются вовсе.
+    """
+    plate = 100 * 80 * 10                 # 80000
+    disc5 = math.pi * 25 * 5              # 392.69908169872417
+    tol = 0.01
+
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def details(env):
+        err = (env or {}).get("error") or {}
+        return err.get("details") or {} if isinstance(err, dict) else {}
+
+    def message(env):
+        err = (env or {}).get("error") or {}
+        return err.get("message") if isinstance(err, dict) else None
+
+    def rev_of(env, fallback):
+        return (env or {}).get("revision_after") or fallback
+
+    def ctx(doc):
+        env, _ = call("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return ((env or {}).get("result") or {}).get("revision")
+
+    def new_doc(name):
+        env, code = call("kompas_create_document",
+                         {"application_id": app_id, "kind": "part", "name": name})
+        return result(env).get("id") or (env or {}).get("document_id"), rev_of(env, 1), code
+
+    def sketch_on(doc, rev, plane, entities, name):
+        env, code = call("kompas_create_sketch", {
+            "document_id": doc, "expected_revision": rev, "plane": plane, "name": name})
+        ref = result(env).get("id")
+        rev = rev_of(env, rev)
+        if code is not None or not ref:
+            return None, rev, "эскиз не создан: " + str(code)
+        env, code = call("kompas_edit_sketch", {
+            "sketch_ref": ref, "expected_revision": rev, "mode": "append", "entities": entities})
+        rev = rev_of(env, rev)
+        if code is not None:
+            return None, rev, "контур не нарисован: " + str(code)
+        env, code = call("kompas_finish_sketch", {
+            "sketch_ref": ref, "require_closed_profile": False, "expected_revision": rev})
+        return ref, rev_of(env, rev), None
+
+    def extrude(rev, sk, **kw):
+        args = {"sketch_ref": sk, "expected_revision": rev}
+        args.update(kw)
+        env, code = call("kompas_extrude", args)
+        return rev_of(env, rev), env, code
+
+    def bodies(doc):
+        env, _ = call("kompas_list_bodies", {"document_id": doc})
+        rows = (env or {}).get("result")
+        return rows if isinstance(rows, list) else []
+
+    def first_body(doc):
+        rows = bodies(doc)
+        return rows[0]["body_ref"] if rows else None
+
+    def volume(ref):
+        if not ref:
+            return None
+        env, _ = call("kompas_measure", {"target_ref": ref, "properties": ["volume"]})
+        return ((env or {}).get("result") or {}).get("volume_mm3")
+
+    def bbox(ref):
+        if not ref:
+            return None
+        env, _ = call("kompas_measure", {"target_ref": ref, "properties": ["bbox"]})
+        return ((env or {}).get("result") or {}).get("bbox")
+
+    def face_with_normal(doc, body, axis, sign):
+        """Грань с нормалью ±оси: выбирается ПО ЗНАКУ нормали, а не по площади — отверстия режут
+        площадь, но знак нормали не меняют."""
+        env, _ = call("kompas_read_topology", {
+            "document_id": doc, "body_ref": body, "include": "faces"})
+        best, best_area = None, -1.0
+        for face in ((env or {}).get("result") or {}).get("faces") or []:
+            normal = face.get("normal_at_center") or []
+            area = face.get("area_mm2")
+            if (face.get("surface_type") == "plane" and area is not None
+                    and len(normal) >= 3 and abs(normal[axis] - sign) <= 1e-6
+                    and area > best_area):
+                best, best_area = face.get("face_ref"), area
+        return best
+
+    def plane_from_face(doc, face, name):
+        env, code = call("kompas_create_aux_geometry", {
+            "document_id": doc, "expected_revision": ctx(doc), "kind": "plane",
+            "mode": "offset", "base_face_ref": face, "offset_mm": 0.0, "name": name})
+        return result(env).get("reference_id"), code
+
+    def close(doc):
+        if doc:
+            call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+
+    def near(a, b, t=tol):
+        return isinstance(a, (int, float)) and abs(a - b) <= t
+
+    def axis_of(word):
+        """Сторона → вектор оси. Знак минус у ответа — U+2212, поэтому он сводится к дефису: без этого
+        сверка запрошенной и фактической стороны падала бы на РАЗЛИЧИИ ЗАПИСИ одного и того же."""
+        folded = (word or "").replace("\u2212", "-")
+        return {"+x": [1, 0, 0], "-x": [-1, 0, 0], "+y": [0, 1, 0],
+                "-y": [0, -1, 0], "+z": [0, 0, 1], "-z": [0, 0, -1]}.get(folded)
+
+    def same_side(a, b):
+        if not a or not b:
+            return False
+        return sum(x * y for x, y in zip(a, b)) > 1 - 1e-6
+
+    def build_plate(name, plane=None, depth=10, direction="positive"):
+        """Пластина 100×80×10 базовым выдавливанием. (doc, rev, body_ref, err)."""
+        doc, rev, _code = new_doc(name)
+        if not doc:
+            return None, None, None, "документ не создан"
+        sk, rev, err = sketch_on(doc, rev, plane or {"base": "xy", "offset_mm": 0},
+                                 [{"kind": "rectangle", "start_mm": [-50, -40],
+                                   "width_mm": 100, "height_mm": 80}], name + "-s")
+        if err:
+            return doc, rev, None, err
+        rev, _env, code = extrude(rev, sk, operation="base", depth_mm=depth,
+                                  direction=direction, end_condition="blind")
+        if code:
+            return doc, rev, None, "плита не создана: " + str(code)
+        return doc, rev, first_body(doc), None
+
+    CIRCLE = {"kind": "circle", "center_mm": [0, 0], "radius_mm": 5}
+
+    def feature_ref_of(doc):
+        """Ссылка на признак выдавливания в переоткрытом документе: ссылка из ОТВЕТА операции
+        переживает не всякую мутацию, а переоткрытие — никакую, поэтому признак адресуется перечнем."""
+        env, _ = call("kompas_list_features", {"document_id": doc})
+        rows = (env or {}).get("result")
+        rows = rows if isinstance(rows, list) else ((rows or {}).get("features") or [])
+        picked = [r for r in rows if "extrusion" in str(r.get("type", "")).lower()]
+        chosen = (picked or rows or [None])[-1]
+        return (chosen or {}).get("feature_ref")
+
+    # ========= MT.00.discover: поле ОБЪЯВЛЕНО поставкой, а не подразумевается =========
+    tools = client.call("tools/list", {}).get("tools", [])
+    entry = next((t for t in tools if t.get("name") == "kompas_extrude"), None)
+    published = os.path.join(ROOT, "schemas", "kompas_extrude.json")
+    try:
+        with open(published, encoding="utf-8-sig") as fh:
+            want = json.load(fh)
+        want.pop("$schema", None)
+    except (OSError, ValueError):
+        want = None
+    props = ((entry or {}).get("inputSchema") or {}).get("properties") or {}
+    required = ((entry or {}).get("inputSchema") or {}).get("required") or []
+    toward = props.get("material_toward") or {}
+    declared = (toward.get("enum") == ["+x", "-x", "+y", "-y", "+z", "-z"]
+                and "material_toward" not in required and "direction" not in required)
+    same = entry is not None and want is not None and entry.get("inputSchema") == want
+    rep.add("MT.00.discover",
+            "kompas_extrude объявляет material_toward шестью словами, direction стал НЕобязательным, "
+            "схема на проводе совпадает с опубликованным реестром",
+            "PASS" if (declared and same and len(tools) == EXPECTED_TOOL_COUNT) else "FAIL",
+            "инструментов=" + str(len(tools)) + " (ожидание " + str(EXPECTED_TOOL_COUNT) + "); "
+            + "enum material_toward=" + str(toward.get("enum")) + "; required=" + str(required)
+            + "; схема совпадает=" + str(same))
+
+    # ========= MT.01/MT.02: эскиз на ВЕРХНЕЙ ГРАНИ (нормаль +z), cut -z и +z =========
+    doc, rev, body, err = build_plate("MT01-top")
+    top_plane, top_err = (None, err)
+    if not err:
+        top = face_with_normal(doc, body, 2, 1.0)
+        if not top:
+            top_err = "верхняя грань (нормаль +z) не найдена"
+        else:
+            top_plane, top_err = plane_from_face(doc, top, "MT01-plane")
+            if top_err is not None or not top_plane:
+                top_err = "плоскость от верхней грани не создана: " + str(top_err)
+    if top_err:
+        for cid in ("MT.01", "MT.02"):
+            rep.add(cid, "cut с верхней грани (нормаль +z)", "FAIL", top_err)
+        close(doc)
+    else:
+        rev = ctx(doc)
+        body = first_body(doc)
+        sk, rev, serr = sketch_on(doc, rev, {"reference": top_plane}, [CIRCLE], "MT01-s")
+        if serr:
+            for cid in ("MT.01", "MT.02"):
+                rep.add(cid, "cut с верхней грани (нормаль +z)", "FAIL", serr)
+        else:
+            # MT.01: материал снимается ВНИЗ, то есть в -z; у выреза положительное направление снимает
+            # ПРОТИВ нормали, значит запрошенная сторона -z разрешается в positive.
+            rev, env, code = extrude(rev, sk, operation="cut", depth_mm=5,
+                                     material_toward="-z", end_condition="blind",
+                                     target_body_ref=body)
+            res = result(env)
+            v = volume(body)
+            side = res.get("material_removed_toward")
+            ok = (code is None
+                  and res.get("direction_resolved") == "positive"
+                  and res.get("material_toward_requested") == "-z"
+                  and same_side(axis_of(side), axis_of("-z"))
+                  and near(v, plate - disc5))
+            rep.add("MT.01", "cut material_toward=-z с верхней грани: снято π·5²·5, "
+                             "direction_resolved=positive",
+                    "PASS" if ok else "FAIL",
+                    "code=" + str(code) + " V=" + str(v) + " ожидание=" + str(plate - disc5)
+                    + " direction_resolved=" + str(res.get("direction_resolved"))
+                    + " material_removed_toward=" + str(side)
+                    + " source=" + str(res.get("material_toward_source"))
+                    + " normal=" + str(res.get("material_toward_sketch_normal")))
+
+            # MT.02: та же просьба ВВЕРХ, где материала нет: признак создаётся, тело не меняется.
+            # Отказ обязан НАЗВАТЬ переведённую сторону — иначе клиент не отличит неверную сторону
+            # от неверной плоскости.
+            rev_before = ctx(doc)
+            rev2, env2, code2 = extrude(rev, sk, operation="cut", depth_mm=5,
+                                        material_toward="+z", end_condition="blind",
+                                        target_body_ref=body)
+            det = details(env2)
+            v2 = volume(first_body(doc))
+            ok2 = (code2 == "NO_GEOMETRY_CHANGE"
+                   and det.get("direction_resolved") == "negative"
+                   and det.get("material_toward_requested") == "+z"
+                   and near(v2, plate - disc5))
+            rep.add("MT.02", "cut material_toward=+z с верхней грани: NO_GEOMETRY_CHANGE, "
+                             "ответ называет direction_resolved=negative",
+                    "PASS" if ok2 else "FAIL",
+                    "code=" + str(code2) + " V=" + str(v2) + " ожидание=" + str(plate - disc5)
+                    + " details.direction_resolved=" + str(det.get("direction_resolved"))
+                    + " details.material_toward_requested=" + str(det.get("material_toward_requested"))
+                    + " ревизия до=" + str(rev_before) + " после=" + str(rev2))
+        close(doc)
+
+    # ========= MT.03/MT.03f: плоскость z=0 и НИЖНЯЯ ГРАНЬ =========
+    doc, rev, body, err = build_plate("MT03-zero-plane")
+    if err:
+        for cid in ("MT.03", "MT.03f"):
+            rep.add(cid, "cut от плоскости z=0 / от нижней грани", "FAIL", err)
+        close(doc)
+    else:
+        sk, rev, serr = sketch_on(doc, rev, {"base": "xy", "offset_mm": 0}, [CIRCLE], "MT03-s")
+        if serr:
+            for cid in ("MT.03", "MT.03f"):
+                rep.add(cid, "cut от плоскости z=0 / от нижней грани", "FAIL", serr)
+        else:
+            rev, env, code = extrude(rev, sk, operation="cut", depth_mm=5,
+                                     material_toward="+z", end_condition="blind",
+                                     target_body_ref=body)
+            res = result(env)
+            v = volume(body)
+            side = res.get("material_removed_toward")
+            ok = (code is None
+                  and res.get("direction_resolved") == "negative"
+                  and res.get("material_toward_requested") == "+z"
+                  and same_side(axis_of(side), axis_of("+z"))
+                  and near(v, plate - disc5))
+            rep.add("MT.03", "cut material_toward=+z от плоскости z=0 (нормаль +z): снято π·5²·5, "
+                             "direction_resolved=negative",
+                    "PASS" if ok else "FAIL",
+                    "code=" + str(code) + " V=" + str(v) + " ожидание=" + str(plate - disc5)
+                    + " direction_resolved=" + str(res.get("direction_resolved"))
+                    + " material_removed_toward=" + str(side)
+                    + " normal=" + str(res.get("material_toward_sketch_normal")))
+        close(doc)
+
+    doc, rev, body, err = build_plate("MT03-bottom-face")
+    if err:
+        rep.add("MT.03f", "cut material_toward=+z от НИЖНЕЙ ГРАНИ (нормаль -z)", "FAIL", err)
+        close(doc)
+    else:
+        bottom = face_with_normal(doc, body, 2, -1.0)
+        plane, pcode = plane_from_face(doc, bottom, "MT03f-plane") if bottom else (None, "нет грани")
+        if not plane:
+            rep.add("MT.03f", "cut material_toward=+z от НИЖНЕЙ ГРАНИ (нормаль -z)", "FAIL",
+                    "плоскость от нижней грани не создана: " + str(pcode))
+        else:
+            rev = ctx(doc)
+            body = first_body(doc)
+            sk, rev, serr = sketch_on(doc, rev, {"reference": plane}, [CIRCLE], "MT03f-s")
+            if serr:
+                rep.add("MT.03f", "cut material_toward=+z от НИЖНЕЙ ГРАНИ (нормаль -z)", "FAIL", serr)
+            else:
+                rev, env, code = extrude(rev, sk, operation="cut", depth_mm=5,
+                                         material_toward="+z", end_condition="blind",
+                                         target_body_ref=body)
+                res = result(env)
+                normal = res.get("material_toward_sketch_normal")
+                v = volume(body)
+                ok = (code is None
+                      and res.get("direction_resolved") == "positive"
+                      and near(v, plate - disc5)
+                      and isinstance(normal, list) and len(normal) == 3
+                      and abs(normal[2] + 1) <= 1e-6)
+                rep.add("MT.03f", "cut material_toward=+z от НИЖНЕЙ ГРАНИ (нормаль -z): та же просьба "
+                                  "разрешается в positive — знак берётся у ГРАНИ, а не у плоскости",
+                        "PASS" if ok else "FAIL",
+                        "code=" + str(code) + " V=" + str(v) + " ожидание=" + str(plate - disc5)
+                        + " direction_resolved=" + str(res.get("direction_resolved"))
+                        + " нормаль=" + str(normal) + " (ожидание [0, 0, -1])")
+        close(doc)
+
+    # ========= MT.04: base +z и -z от плоскости XY — габарит z=[0,h] и z=[-h,0] =========
+    m04 = []
+    for toward, expect_z, expect_word in (("+z", [0, 10], "positive"),
+                                          ("-z", [-10, 0], "negative")):
+        doc, rev, _code = new_doc("MT04-base-" + toward.strip("+-"))
+        if not doc:
+            m04.append((toward, "FAIL", "документ не создан"))
+            continue
+        sk, rev, serr = sketch_on(doc, rev, {"base": "xy", "offset_mm": 0},
+                                  [{"kind": "rectangle", "start_mm": [-50, -40],
+                                    "width_mm": 100, "height_mm": 80}], "MT04-s")
+        if serr:
+            m04.append((toward, "FAIL", serr))
+            close(doc)
+            continue
+        rev, env, code = extrude(rev, sk, operation="base", depth_mm=10,
+                                 material_toward=toward, end_condition="blind")
+        res = result(env)
+        ref = first_body(doc)
+        bb = bbox(ref)
+        v = volume(ref)
+        z = (bb["min_mm"][2], bb["max_mm"][2]) if bb else None
+        ok = (code is None and res.get("direction_resolved") == expect_word
+              and res.get("material_toward_requested") == toward
+              and near(v, plate) and z is not None
+              and abs(z[0] - expect_z[0]) <= 1e-6 and abs(z[1] - expect_z[1]) <= 1e-6)
+        m04.append((toward, "PASS" if ok else "FAIL",
+                    "code=" + str(code) + " V=" + str(v) + " z=" + str(z)
+                    + " ожидание z=" + str(expect_z) + " direction_resolved="
+                    + str(res.get("direction_resolved")) + " ожидание слова=" + expect_word))
+        close(doc)
+    rep.add("MT.04", "base material_toward=+z и -z на XY: габарит z=[0,10] и z=[-10,0]",
+            "PASS" if m04 and all(v == "PASS" for _w, v, _d in m04) else "FAIL",
+            " | ".join(f"{w}: {v}: {d}" for w, v, d in m04))
+
+    # ========= MT.05: случай клиента — карман моста =========
+    # Мост z=[10,20] построен базовым выдавливанием от плоскости XY со смещением 10. Эскиз лежит на
+    # плоскости z=10 (низ моста), нормаль +z. Клиент хочет карман ВВЕРХ, в тело: material_toward=+z.
+    # Просьба вниз (-z) материала не находит и честно даёт NO_GEOMETRY_CHANGE.
+    doc, rev, body, err = build_plate("MT05-bridge", plane={"base": "xy", "offset_mm": 10})
+    if err:
+        for cid in ("MT.05", "MT.05b"):
+            rep.add(cid, "карман моста", "FAIL", err)
+        close(doc)
+    else:
+        sk, rev, serr = sketch_on(doc, rev, {"base": "xy", "offset_mm": 10}, [CIRCLE], "MT05-s")
+        if serr:
+            for cid in ("MT.05", "MT.05b"):
+                rep.add(cid, "карман моста", "FAIL", serr)
+        else:
+            rev, env, code = extrude(rev, sk, operation="cut", depth_mm=5,
+                                     material_toward="+z", end_condition="blind",
+                                     target_body_ref=body)
+            res = result(env)
+            v = volume(body)
+            ok = (code is None and res.get("direction_resolved") == "negative"
+                  and near(v, plate - disc5))
+            rep.add("MT.05", "карман моста: cut material_toward=+z с плоскости z=10 снимает "
+                             "аналитическое π·5²·5",
+                    "PASS" if ok else "FAIL",
+                    "code=" + str(code) + " V=" + str(v) + " ожидание=" + str(plate - disc5)
+                    + " direction_resolved=" + str(res.get("direction_resolved")))
+            rev, env2, code2 = extrude(rev, sk, operation="cut", depth_mm=5,
+                                       material_toward="-z", end_condition="blind",
+                                       target_body_ref=body)
+            v2 = volume(body)
+            ok2 = code2 == "NO_GEOMETRY_CHANGE" and near(v2, plate - disc5)
+            rep.add("MT.05b", "карман моста: cut material_toward=-z уходит в пустоту под мостом — "
+                              "NO_GEOMETRY_CHANGE",
+                    "PASS" if ok2 else "FAIL",
+                    "code=" + str(code2) + " V=" + str(v2) + " ожидание=" + str(plate - disc5))
+        close(doc)
+
+    # ========= MT.06: плоскость YZ — ИЗМЕРЕННАЯ нормаль (-1,0,0) =========
+    # Тело лежит в x=[-10,0] (базовое выдавливание от плоскости YZ идёт вдоль ЕЁ нормали, а она -x).
+    doc, rev, body, err = build_plate("MT06-yz", plane={"base": "yz", "offset_mm": 0})
+    if err:
+        for cid in ("MT.06", "MT.06b"):
+            rep.add(cid, "cut с плоскости YZ", "FAIL", err)
+        close(doc)
+    else:
+        sk, rev, serr = sketch_on(doc, rev, {"base": "yz", "offset_mm": 0}, [CIRCLE], "MT06-s")
+        if serr:
+            for cid in ("MT.06", "MT.06b"):
+                rep.add(cid, "cut с плоскости YZ", "FAIL", serr)
+        else:
+            rev, env, code = extrude(rev, sk, operation="cut", depth_mm=5,
+                                     material_toward="-x", end_condition="blind",
+                                     target_body_ref=body)
+            res = result(env)
+            normal = res.get("material_toward_sketch_normal")
+            v = volume(body)
+            ok = (code is None and res.get("direction_resolved") == "negative"
+                  and res.get("material_toward_requested") == "-x"
+                  and near(v, plate - disc5)
+                  and isinstance(normal, list) and len(normal) == 3
+                  and abs(normal[0] + 1) <= 1e-6)
+            rep.add("MT.06", "cut material_toward=-x с плоскости YZ: снято π·5²·5, "
+                             "direction_resolved=negative, нормаль ИЗМЕРЕНА как (-1,0,0)",
+                    "PASS" if ok else "FAIL",
+                    "code=" + str(code) + " V=" + str(v) + " ожидание=" + str(plate - disc5)
+                    + " direction_resolved=" + str(res.get("direction_resolved"))
+                    + " нормаль=" + str(normal) + " (ожидание [-1, 0, 0], а не +x из текста наряда)")
+            rev, env2, code2 = extrude(rev, sk, operation="cut", depth_mm=5,
+                                       material_toward="+x", end_condition="blind",
+                                       target_body_ref=body)
+            v2 = volume(body)
+            ok2 = code2 == "NO_GEOMETRY_CHANGE" and near(v2, plate - disc5)
+            rep.add("MT.06b", "cut material_toward=+x с плоскости YZ уходит в пустоту — "
+                              "NO_GEOMETRY_CHANGE",
+                    "PASS" if ok2 else "FAIL",
+                    "code=" + str(code2) + " V=" + str(v2) + " ожидание=" + str(plate - disc5))
+        close(doc)
+
+    # ========= MT.07: отказы — оба поля, ни одного, вне набора, наклонная опора =========
+    doc, rev, body, err = build_plate("MT07-refusals")
+    if err:
+        for cid in ("MT.07", "MT.07b", "MT.07c", "MT.07d"):
+            rep.add(cid, "отказы material_toward", "FAIL", err)
+        close(doc)
+    else:
+        sk, rev, serr = sketch_on(doc, rev, {"base": "xy", "offset_mm": 0}, [CIRCLE], "MT07-s")
+        if serr:
+            for cid in ("MT.07", "MT.07b", "MT.07c", "MT.07d"):
+                rep.add(cid, "отказы material_toward", "FAIL", serr)
+        else:
+            base_args = {"sketch_ref": sk, "operation": "cut", "depth_mm": 5,
+                         "end_condition": "blind", "target_body_ref": body}
+
+            def violation_paths(env):
+                viol = details(env).get("violations") or []
+                return [v.get("path") for v in viol]
+
+            def names_field(paths, field):
+                """Отказ до COM приходит двумя путями: правило режима Хоста называет путь `/field`, а
+                схема — `$/field`. Строка судит ПОЛЕ, а не префикс пути, иначе она падала бы на различии
+                приборов, а не на различии поведения."""
+                return any(isinstance(p, str) and p.endswith(field) for p in paths)
+
+            rev_before = ctx(doc)
+
+            # (а) оба поля
+            _r, env, code = extrude(rev, sk, **dict(base_args, direction="positive",
+                                                    material_toward="-z"))
+            paths = violation_paths(env)
+            rep.add("MT.07", "direction И material_toward вместе — INVALID_ARGUMENT до COM",
+                    "PASS" if code == "INVALID_ARGUMENT" and names_field(paths, "material_toward")
+                    else "FAIL",
+                    "code=" + str(code) + " violations=" + str(paths)
+                    + " msg=" + str(message(env))[:120])
+
+            # (б) ни одного
+            _r, env, code = extrude(rev, sk, **base_args)
+            paths = violation_paths(env)
+            rep.add("MT.07b", "ни direction, ни material_toward — INVALID_ARGUMENT до COM",
+                    "PASS" if code == "INVALID_ARGUMENT" and names_field(paths, "direction")
+                    else "FAIL",
+                    "code=" + str(code) + " violations=" + str(paths)
+                    + " msg=" + str(message(env))[:120])
+
+            # (в) вне набора
+            _r, env, code = extrude(rev, sk, **dict(base_args, material_toward="+w"))
+            paths = violation_paths(env)
+            rep.add("MT.07c", "material_toward вне набора — INVALID_ARGUMENT до COM",
+                    "PASS" if code == "INVALID_ARGUMENT" and names_field(paths, "material_toward")
+                    else "FAIL",
+                    "code=" + str(code) + " violations=" + str(paths)
+                    + " msg=" + str(message(env))[:120])
+
+            rev_after = ctx(doc)
+            rep.add("MT.07r", "три отказа MT.07/MT.07b/MT.07c не двинули ревизию",
+                    "PASS" if rev_after == rev_before else "FAIL",
+                    "ревизия до=" + str(rev_before) + " после=" + str(rev_after))
+
+            # (г) наклонная опора: нормаль не вдоль оси — отказ С НОРМАЛЬЮ в details.
+            # Наклонная плоскость строится вокруг БАЗОВОЙ ОСИ (измерено строкой R40.08): без неё
+            # create_aux_geometry plane/angle отказывает GEOMETRY_FAILED — это свойство стенда, а не
+            # находка о продукте, и оно названо здесь, чтобы не быть прочитанным как находка.
+            env, acode = call("kompas_create_aux_geometry", {
+                "document_id": doc, "expected_revision": ctx(doc), "kind": "axis",
+                "mode": "by_2_points", "point1_mm": [0.0, 0.0, 0.0],
+                "point2_mm": [0.0, 20.0, 0.0], "name": "MT07-axis"})
+            axis = result(env).get("reference_id")
+            if acode is not None or not axis:
+                rep.add("MT.07d", "наклонная опора с осью, не совпадающей с нормалью — "
+                                  "INVALID_ARGUMENT с нормалью в details",
+                        "FAIL", "ось наклона не создана: " + str(acode))
+            else:
+                env, acode = call("kompas_create_aux_geometry", {
+                    "document_id": doc, "expected_revision": ctx(doc), "kind": "plane",
+                    "mode": "angle", "base_plane": "xy", "base_axis_ref": axis,
+                    "angle_deg": 30, "name": "MT07-tilt"})
+                tilt = result(env).get("reference_id")
+                if acode is not None or not tilt:
+                    rep.add("MT.07d", "наклонная опора с осью, не совпадающей с нормалью — "
+                                      "INVALID_ARGUMENT с нормалью в details",
+                            "FAIL", "наклонная плоскость не создана: " + str(acode)
+                            + " msg=" + str(message(env))[:120])
+                else:
+                    body = first_body(doc)
+                    tilt_sk, trev, terr = sketch_on(doc, ctx(doc), {"reference": tilt}, [CIRCLE],
+                                                    "MT07-tilt-s")
+                    if terr:
+                        rep.add("MT.07d", "наклонная опора", "FAIL", terr)
+                    else:
+                        _r, env, code = extrude(trev, tilt_sk, operation="cut", depth_mm=5,
+                                                material_toward="+z", end_condition="blind",
+                                                target_body_ref=body)
+                        det = details(env)
+                        normal = det.get("sketch_normal")
+                        tilted = (isinstance(normal, list) and len(normal) == 3
+                                  and all(abs(abs(c) - 1) > 1e-3 for c in normal))
+                        rep.add("MT.07d", "наклонная опора с осью, не совпадающей с нормалью — "
+                                          "INVALID_ARGUMENT с нормалью и углом в details",
+                                "PASS" if (code == "INVALID_ARGUMENT"
+                                           and det.get("code") == "material_toward_not_along_sketch_normal"
+                                           and tilted) else "FAIL",
+                                "code=" + str(code) + " details.code=" + str(det.get("code"))
+                                + " нормаль=" + str(normal) + " угол=" + str(det.get("angle_deg"))
+                                + " допуск=" + str(det.get("angle_tolerance_deg"))
+                                + " msg=" + str(message(env))[:100])
+        close(doc)
+
+    # ========= MT.08: прежний вызов с direction — ответ по смыслу тот же =========
+    doc, rev, body, err = build_plate("MT08-legacy")
+    if err:
+        rep.add("MT.08", "прежний вызов с direction: ответ по смыслу прежний", "FAIL", err)
+        close(doc)
+    else:
+        sk, rev, serr = sketch_on(doc, rev, {"base": "xy", "offset_mm": 10}, [CIRCLE], "MT08-s")
+        if serr:
+            rep.add("MT.08", "прежний вызов с direction: ответ по смыслу прежний", "FAIL", serr)
+        else:
+            rev, env, code = extrude(rev, sk, operation="cut", depth_mm=5,
+                                     direction="positive", end_condition="blind",
+                                     target_body_ref=body)
+            res = result(env)
+            v = volume(body)
+            # Прежнее поведение: base/boss положительное направление добавляет ПО нормали, вырез —
+            # ПРОТИВ. Здесь эскиз на плоскости z=10 и вырез positive идёт вниз, то есть в -z.
+            side = res.get("material_removed_toward")
+            ok = (code is None and near(v, plate - disc5)
+                  and same_side(axis_of(side), axis_of("-z"))
+                  and res.get("material_toward_requested") is None
+                  and res.get("direction_resolved") is None)
+            rep.add("MT.08", "прежний вызов с direction (без material_toward): геометрия и сторона "
+                             "прежние, новых полей ответа нет",
+                    "PASS" if ok else "FAIL",
+                    "code=" + str(code) + " V=" + str(v) + " ожидание=" + str(plate - disc5)
+                    + " material_removed_toward=" + str(side)
+                    + " material_toward_requested=" + str(res.get("material_toward_requested"))
+                    + " direction_resolved=" + str(res.get("direction_resolved")))
+        close(doc)
+
+    # ========= MT.09: знак минус U+2212 из ответа принимается как та же просьба =========
+    # Эскиз — на плоскости z=10 (верх пластины), как в MT.01: просьба -z там СНИМАЕТ материал, поэтому
+    # строка проверяет и приём знака, и результат, а не только «вызов не отвергнут».
+    doc, rev, body, err = build_plate("MT09-minus")
+    if err:
+        rep.add("MT.09", "знак минус U+2212 принимается как та же просьба", "FAIL", err)
+        close(doc)
+    else:
+        sk, rev, serr = sketch_on(doc, rev, {"base": "xy", "offset_mm": 10}, [CIRCLE], "MT09-s")
+        if serr:
+            rep.add("MT.09", "знак минус U+2212 принимается как та же просьба", "FAIL", serr)
+        else:
+            rev, env, code = extrude(rev, sk, operation="cut", depth_mm=5,
+                                     material_toward="\u2212z", end_condition="blind",
+                                     target_body_ref=body)
+            res = result(env)
+            v = volume(body)
+            ok = (code is None and near(v, plate - disc5)
+                  and res.get("material_toward_requested") == "-z"
+                  and res.get("direction_resolved") == "positive")
+            rep.add("MT.09", "material_toward со знаком минус U+2212 (как его пишет ответ) "
+                             "принимается и сводится к дефису",
+                    "PASS" if ok else "FAIL",
+                    "code=" + str(code) + " V=" + str(v) + " ожидание=" + str(plate - disc5)
+                    + " material_toward_requested=" + str(res.get("material_toward_requested"))
+                    + " direction_resolved=" + str(res.get("direction_resolved")))
+        close(doc)
+
+
+    # ========= MT.10.save_reopen: сторона переживает save → close → reopen =========
+    doc, rev, body, err = build_plate("MT10-reopen")
+    path = os.path.join(workdir, "material-toward-reopen.m3d")
+    if err:
+        rep.add("MT.10.save_reopen", "сторона переживает save → close → reopen", "FAIL", err)
+        close(doc)
+    else:
+        sk, rev, serr = sketch_on(doc, rev, {"base": "xy", "offset_mm": 10}, [CIRCLE], "MT10-s")
+        if serr:
+            rep.add("MT.10.save_reopen", "сторона переживает save → close → reopen", "FAIL", serr)
+            close(doc)
+        else:
+            rev, _env, code = extrude(rev, sk, operation="cut", depth_mm=5,
+                                      material_toward="-z", end_condition="blind",
+                                      target_body_ref=body)
+            _senv, scode = call("kompas_save_document", {
+                "document_id": doc, "expected_revision": ctx(doc), "target_path": path})
+            close(doc)
+            o_env, ocode = call("kompas_open_document", {
+                "application_id": app_id, "path": path, "access": "edit"})
+            doc2 = result(o_env).get("document_id") or (o_env or {}).get("document_id")
+            if code is not None or scode is not None or ocode is not None or not doc2:
+                rep.add("MT.10.save_reopen", "сторона переживает save → close → reopen", "FAIL",
+                        "cut=" + str(code) + " save=" + str(scode) + " open=" + str(ocode)
+                        + " файл=" + str(os.path.exists(path)))
+            else:
+                ref = feature_ref_of(doc2)
+                f_env, fcode = call("kompas_get_feature", {"feature_ref": ref})
+                f_res = result(f_env)
+                v = volume(first_body(doc2))
+                side = f_res.get("material_toward")
+                ok = (fcode is None and near(v, plate - disc5)
+                      and same_side(axis_of(side), axis_of("-z")))
+                rep.add("MT.10.save_reopen", "сторона переживает save → close → reopen: объём и "
+                                             "material_toward признака прежние",
+                        "PASS" if ok else "FAIL",
+                        "cut=" + str(code) + " save=" + str(scode) + " open=" + str(ocode)
+                        + " V=" + str(v) + " ожидание=" + str(plate - disc5)
+                        + " material_toward=" + str(side)
+                        + " источник=" + str(f_res.get("material_toward_source")))
+            close(doc2)
+
+    # ========= MT.11.rebuild: перестроение не меняет сторону =========
+    doc, rev, body, err = build_plate("MT11-rebuild")
+    if err:
+        rep.add("MT.11.rebuild", "перестроение не меняет сторону", "FAIL", err)
+        close(doc)
+    else:
+        sk, rev, serr = sketch_on(doc, rev, {"base": "xy", "offset_mm": 0}, [CIRCLE], "MT11-s")
+        if serr:
+            rep.add("MT.11.rebuild", "перестроение не меняет сторону", "FAIL", serr)
+            close(doc)
+        else:
+            rev, _env, code = extrude(rev, sk, operation="cut", depth_mm=5,
+                                      material_toward="+z", end_condition="blind",
+                                      target_body_ref=body)
+            _benv, bcode = call("kompas_rebuild", {"document_id": doc})
+            ref = feature_ref_of(doc)
+            f_env, fcode = call("kompas_get_feature", {"feature_ref": ref})
+            f_res = result(f_env)
+            v = volume(first_body(doc))
+            side = f_res.get("material_toward")
+            ok = (code is None and bcode is None and fcode is None
+                  and near(v, plate - disc5) and same_side(axis_of(side), axis_of("+z")))
+            rep.add("MT.11.rebuild", "перестроение не меняет сторону: объём и material_toward прежние",
+                    "PASS" if ok else "FAIL",
+                    "cut=" + str(code) + " rebuild=" + str(bcode) + " V=" + str(v)
+                    + " ожидание=" + str(plate - disc5) + " material_toward=" + str(side))
         close(doc)
 
 

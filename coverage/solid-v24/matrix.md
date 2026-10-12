@@ -60,6 +60,18 @@
 - **открытые_режимы:** []
 - **открытые_зависимости:** []
 
+### профиль material-toward-minimal-v1 — Сторона материала в координатах детали на входе выдавливания v24
+
+- **обязательных_режимов:** 1
+- **режимов_закрыто:** 1
+- **общих_зависимостей:** 0
+- **зависимостей_закрыто:** 0
+- **профиль_закрыт:** да
+- **готовность_процента:** 100.0%
+- **по_очередям:** MT 1/1
+- **открытые_режимы:** []
+- **открытые_зависимости:** []
+
 ### профиль mates-minimal-v1 — Минимальные сопряжения v24
 
 - **обязательных_режимов:** 6
@@ -134,18 +146,18 @@
 
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 341
-- **строк_полностью_закрыто:** 151
-- **строк_с_каким_либо_прогрессом:** 166
+- **строк_каталога:** 342
+- **строк_полностью_закрыто:** 152
+- **строк_с_каким_либо_прогрессом:** 167
 - **семейств_в_каталоге:** 42
 - **семейств_без_строк:** 14
 - **операций:** 99
 - **режимов_и_вариантов:** 146
-- **применимых_действий:** 2859
-- **действий_verified:** 1018
-- **покрытие_действий:** 35.6%
-- **распределение_статусов:** {'not_started': 1841, 'verified': 1018, 'not_applicable': 551}
-- **уровни_каталога_операций:** {'metadata_found': 51, 'mcp_verified': 52, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 4}
+- **применимых_действий:** 2866
+- **действий_verified:** 1025
+- **покрытие_действий:** 35.8%
+- **распределение_статусов:** {'not_started': 1841, 'verified': 1025, 'not_applicable': 554}
+- **уровни_каталога_операций:** {'metadata_found': 51, 'mcp_verified': 53, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 4}
 - **уровни_каталога_режимов:** {'mcp_verified': 55, 'documented': 19, 'runtime_verified': 3, 'metadata_found': 48, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
@@ -232,6 +244,17 @@
 | `dep.ei.units_system` | да | read, negative_tests | EI.06.inertia_central, EI.09.inertia_units |
 | `dep.ei.read_only_measure` | да | read, negative_tests | EI.12.no_mutation, EI.10.refusals |
 | `dep.ei.idempotency` | да | create, negative_tests | EI.11.idempotency |
+
+## Метрика 1 — обязательные режимы профиля `material-toward-minimal-v1`
+
+| режим/операция | семья | приоритет | очередь | уровень каталога | поиск | созд | чтен | правк | перестр | reopen | подавл | удал | отказ | геом | проверки |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
+| `SM-02.material_toward` | SM-02 | practical_required | MT | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | MT.00.discover, MT.01, MT.02, MT.03, MT.03f, MT.04, MT.05, MT.05b, MT.06, MT.06b, MT.07, MT.07b, MT.07c, MT.07r, MT.07d, MT.08, MT.09, MT.10.save_reopen, MT.11.rebuild |
+
+### Общие зависимости профиля `material-toward-minimal-v1`
+
+| зависимость | закрыто | приоритетные действия | проверки |
+|---|---|---|---|
 
 ## Метрика 1 — обязательные режимы профиля `mates-minimal-v1`
 
@@ -427,6 +450,7 @@
 | `SM-02.cut_extrusion.through` | SM-02 | practical_required | B1 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | G02, G02v, G02b, G02a, G02f, U05p, U05a, U05b, U05c, G09e, G09f, G09g, G09h, L04, L05, L06, L08, L09, L11, L12, L13, G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, F08.07.discover, F08.07.create, F08.07.read, F08.07.edit, F08.07.rebuild, F08.07.save_reopen, F08.07.suppress_restore, F08.07.delete_dependencies, F08.07.negative_tests, F08.07.geometry_validation |
 | `SM-02.cut_extrusion.explicit_target_body` | SM-02 | practical_required | B1 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | EX43, EX44, U05a, U05b, F08.09.discover, F08.09.create, F08.09.read, F08.09.edit, F08.09.rebuild, F08.09.save_reopen, F08.09.suppress_restore, F08.09.delete_dependencies, F08.09.negative_tests, F08.09.geometry_validation |
 | `SM-02.cut_extrusion.direction_symmetric` | SM-02 | practical_required | B1 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | EX42, F08.08.discover, F08.08.create, F08.08.read, F08.08.edit, F08.08.rebuild, F08.08.save_reopen, F08.08.suppress_restore, F08.08.delete_dependencies, F08.08.negative_tests, F08.08.geometry_validation |
+| `SM-02.material_toward` | SM-02 | practical_required | MT | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | MT.00.discover, MT.01, MT.02, MT.03, MT.03f, MT.04, MT.05, MT.05b, MT.06, MT.06b, MT.07, MT.07b, MT.07c, MT.07r, MT.07d, MT.08, MT.09, MT.10.save_reopen, MT.11.rebuild |
 | `SM-03.base_rotated.full_turn` | SM-03 | practical_required | B2 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | RO.1, RO.1v, RO.1g, RO.3b, RO.3bv, RO.10t, RO.10, RO.10p, RO.11, RO.11r, RO.12, RO.13z, RO.13, RO.14, RO.16, RO.16b, F08.10.discover, F08.10.create, F08.10.read, F08.10.edit, F08.10.rebuild, F08.10.save_reopen, F08.10.suppress_restore, F08.10.delete_dependencies, F08.10.negative_tests, F08.10.geometry_validation |
 | `SM-03.base_rotated.partial_angle` | SM-03 | practical_required | B2 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | RO.4, RO.4v, RO.8, RO.8a, RO.8b, RO.10t, RO.10, RO.10p, RO.11, RO.11r, RO.12, RO.13z, RO.13, RO.14, RO.16, RO.16b, F08.11.discover, F08.11.create, F08.11.read, F08.11.edit, F08.11.rebuild, F08.11.save_reopen, F08.11.suppress_restore, F08.11.delete_dependencies, F08.11.negative_tests, F08.11.geometry_validation |
 | `SM-03.base_rotated.axis_explicit` | SM-03 | practical_required | B2 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | RO.5, RO.6, RO.6f, RO.8f, RO.9, RO.9a, RO.10t, RO.10, RO.10p, RO.11, RO.11r, RO.12, RO.13z, RO.13, RO.14, RO.16, RO.16b, F08.12.discover, F08.12.create, F08.12.read, F08.12.edit, F08.12.rebuild, F08.12.save_reopen, F08.12.suppress_restore, F08.12.delete_dependencies, F08.12.negative_tests, F08.12.geometry_validation |
@@ -803,6 +827,11 @@
   - симметричный вырез снимает обе половины: измерено 785.3981633974618 при ожидании π·5²·10 = 785.3981633974483, то есть глубину с каждой стороны (EX42)
   - для базового выдавливания симметрия тоже работает и даёт удвоенный объём: bbox z=[-10,10], V=160000 при глубине 10 (EX32)
   - по измерению P2.1 режим `etThroughAll` соблюдается только вместе с directionType=2, и число глубины в нём инертно — поэтому сквозной режим проверяется отдельной строкой SM-02.cut_extrusion.through, а не этой
+- `SM-02.material_toward` — закрыт целиком
+  - Живой прогон 12.10.2026 (группа MT) на бинарях Debug; приёмка на бинарях ПОСТАВКИ - отдельный шаг.
+  - material_toward выражает ОДНУ сторону: symmetric и end_condition=through им не задаются и остаются за direction.
+  - На неосевой (наклонной) опоре сторона выражается вектором, а не ±осью: material_toward отвергается INVALID_ARGUMENT с нормалью и углом в details, клиенту - direction. Знак нормали на косой опоре живым прогоном не измерялся (docs/04 §4.58).
+  - Обратный перевод сверен с прямым правилом модульным круговым ходом (шесть сторон x три операции x шесть осевых нормалей) и живыми строками MT.01-MT.11.
 - `SM-03.base_rotated.full_turn` — закрыт целиком
   - НАЙДЕН И ИЗМЕРЕН ПРЯМОЙ МАРШРУТ СОЗДАНИЯ ВРАЩЕНИЯ (прогон 95fa844107ce41609d6278f8f6c5759f, 17.09.2026, build 24.0.0.2799, свой невидимый экземпляр, PID атрибутирован). Вращение создаётся ПРЯМОЙ ФАБРИКОЙ API7, а не определением API5: IModelContainer (достаётся TransferInterface(document, 2 /* ksAPI7Dual */, 0) → IKompasDocument3D.TopPart) → container.Rotateds → IRotateds.Add(ksObj3dTypeEnum) → полученный объект отвечает QI(IRotated) → запись Profile, Axis, Angle[true], Angle[false], Direction, RotatedType[true], ToroidShapeType → Update() → RebuildModel(). ОБОЛОЧКИ API5 NewEntity НЕТ и завершающего API5 Create() НЕТ — именно это отличает измеренный маршрут от всех прежних попыток. Измерено шагом R.24: QI(IRotated)=OK, QI(IRotated1)=OK, QI(IThinParameters)=OK для ВСЕХ ТРЁХ типов (o3d_baseRotated=27, o3d_bossRotated=28, o3d_cutRotated=29), каждый член принят и прочитан обратно, Update()=True, Valid=True, и КАЖДЫЙ из трёх дал тело с аналитическим объёмом: прирост=50265.4824574366 против π·r²·h=50265.4824574367 (r=20, h=40). Итог шага: 3 из 3.
   - ЭТАЛОН ЗАДАНИЯ ПОСТРОЕН И ПРОВЕРЕН НЕЗАВИСИМО (шаг R.25, тот же прогон). Профиль — плоский замкнутый прямоугольник u∈[0,20], v∈[-20,20] мм на плоскости XOY в ЧИСТОМ документе; ось закреплена В ТОЙ ЖЕ ДЕТАЛИ на линии u=0 и построена явно через два контейнера на одном живом объекте детали: IAuxiliaryGeomContainer (достигается ТОЛЬКО через QI) → Axes3D, и IModelContainer → Points3D; ось по двум точкам — Axes3D.Add(o3d_axis2Points=10) → IAxis3DBy2Points с Point1/Point2 и Update() ПОСЛЕ обеих точек. Измерено: Update()=True, Valid=True, тел 0→1, объём после=50265.4824574366 = π·r²·h. Объём дополнен НЕЗАВИСИМОЙ проверкой формы и размера, а не только числом: 1 цилиндрическая грань r=20 h=40, габарит 40×40×40. Смена угла у ТОГО ЖЕ признака 360°→180° дала 25132.7412287183 (полуцилиндр, габарит 40×40×20) — то есть правится СУЩЕСТВУЮЩИЙ признак, а не создаётся второй; смена направления при том же угле объём сохранила; save→close→reopen нашёл признак «Элемент вращения:1» с сохранёнными объёмом, углом и направлением и ПЕРЕПОЛУЧЕННЫМИ ссылками Axis и Profile; повтор всего маршрута на НОВОМ документе дал ровно тот же цилиндр (R25.repeat, R25.repeat.geometry).

@@ -11981,6 +11981,124 @@
      }
     ]
    }
+  },
+  {
+   "operation_id": "SM-02.material_toward",
+   "context": "part.single_body",
+   "catalog_ref": "SM-02",
+   "parameters_schema": "schemas/kompas_extrude.json",
+   "adapter_route": "kompas_extrude, вход material_toward: ExtrusionSide.DirectionFor(operation, normal, toward) по нормали плоскости эскиза (ksSketchDefinition.GetSurface -> ksSurface.GetSurfaceParam -> ksPlaneParam.GetPlacement -> ksPlacement.GetVector(OZ)) -> directionType (0 dtNormal, 1 dtReverse); неосевая или непрочитанная нормаль - INVALID_ARGUMENT до создания признака",
+   "actions": {
+    "discover": "verified",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "verified",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
+   },
+   "tests": [
+    "MT.00.discover",
+    "MT.01",
+    "MT.02",
+    "MT.03",
+    "MT.03f",
+    "MT.04",
+    "MT.05",
+    "MT.05b",
+    "MT.06",
+    "MT.06b",
+    "MT.07",
+    "MT.07b",
+    "MT.07c",
+    "MT.07r",
+    "MT.07d",
+    "MT.08",
+    "MT.09",
+    "MT.10.save_reopen",
+    "MT.11.rebuild"
+   ],
+   "evidence": [
+    "docs/acceptance/material-toward/material-toward-acceptance.json",
+    "scripts/mcp-smoke.py"
+   ],
+   "limitations": [
+    "Живой прогон 12.10.2026 (группа MT) на бинарях Debug; приёмка на бинарях ПОСТАВКИ - отдельный шаг.",
+    "material_toward выражает ОДНУ сторону: symmetric и end_condition=through им не задаются и остаются за direction.",
+    "На неосевой (наклонной) опоре сторона выражается вектором, а не ±осью: material_toward отвергается INVALID_ARGUMENT с нормалью и углом в details, клиенту - direction. Знак нормали на косой опоре живым прогоном не измерялся (docs/04 §4.58).",
+    "Обратный перевод сверен с прямым правилом модульным круговым ходом (шесть сторон x три операции x шесть осевых нормалей) и живыми строками MT.01-MT.11."
+   ],
+   "profile": "material-toward-minimal-v1",
+   "priority": "practical_required",
+   "queue": "MT",
+   "depends_on": [],
+   "catalog_level": "mcp_verified",
+   "kind": "profile_mode",
+   "not_applicable_reasons": {
+    "edit": "вход действует при СОЗДАНИИ признака: поля material_toward у kompas_update_feature нет, а правка созданного признака идёт общим kompas_update_feature и покрыта строками SM-02",
+    "suppress_restore": "подавление и восстановление признака - общий механизм SM-30, покрыт строками SM-02 и MANIA; вход стороны никакого состояния не хранит",
+    "delete_dependencies": "удаление признака и его зависимостей - общий kompas_delete_feature, покрыт строками SM-02; вход стороны зависимостей не создаёт"
+   },
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_extrude"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_extrude"
+     },
+     {
+      "tool": "kompas_get_feature"
+     }
+    ]
+   },
+   "rebuild_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_rebuild"
+     }
+    ]
+   },
+   "save_reopen_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_save_document"
+     },
+     {
+      "tool": "kompas_open_document"
+     }
+    ]
+   },
+   "negative_tests_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_extrude"
+     }
+    ]
+   },
+   "geometry_validation_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_measure"
+     },
+     {
+      "tool": "kompas_list_bodies"
+     }
+    ]
+   }
   }
  ],
  "pending_families": [

@@ -333,6 +333,27 @@
      ],
      "mcp_support": "kompas_extrude (operation=cut, end_condition=blind|through, target_body_ref)",
      "next_step": "отличить through от etUpToNearSurface=6 на стопке «стенка—воздух—стенка» (проба различила числами 1570,796 против 785,398 — в контракт не внесено)"
+    },
+    {
+     "id": "SM-02.material_toward",
+     "name": "Сторона материала в координатах детали на входе выдавливания",
+     "level": "mcp_verified",
+     "doc_source": [
+      "kscutextrusiondefinition_directiontype",
+      "ksbossextrusiondefinition_directiontype",
+      "kssketchdefinition_getsurface",
+      "ksplacement_getvector"
+     ],
+     "interfaces": {
+      "api5": [
+       "ksBaseExtrusionDefinition/ksBossExtrusionDefinition/ksCutExtrusionDefinition.directionType (0 dtNormal, 1 dtReverse, 2 dtBoth)",
+       "ksSketchDefinition.GetSurface() -> ksSurface.GetSurfaceParam() -> ksPlaneParam.GetPlacement() -> ksPlacement.GetVector(2, ...) - нормаль плоскости эскиза"
+      ],
+      "api7": []
+     },
+     "modes": [],
+     "mcp_support": "kompas_extrude: необязательный вход material_toward (+x/-x/+y/-y/+z/-z) в координатах детали; direction стал необязательным - сторону задаёт ровно одно из двух полей",
+     "next_step": "Приёмка на бинарях поставки - отдельный шаг."
     }
    ],
    "evidence": {

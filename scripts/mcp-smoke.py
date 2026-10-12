@@ -1991,6 +1991,256 @@ def assembly_checks(client, rep, app_id, workdir):
     call("kompas_close_document", {"document_id": asm3, "dirty_policy": "discard"})
     call("kompas_close_document", {"document_id": asm2, "dirty_policy": "discard"})
 
+    # ═════════════════════════ ASM-08: удаление компонента сборки (наряд COMPONENT_DELETE) ═════════════
+    #
+    # ЗАЧЕМ СВОЯ СБОРКА. Удаление сдвигает порядковые номера остальных компонентов и снимает
+    # зависимые сопряжения, поэтому оно идёт на СВОЁМ документе: иначе сдвинулись бы строки уже
+    # закрытых режимов ASM-01…ASM-07.
+    #
+    # ЧТО ЗДЕСЬ ДОКАЗАТЕЛЬСТВО. Число и СОСТАВ, а не «status=succeeded»: компонентов стало на один
+    # меньше, ушёл ИМЕННО адресованный (по источнику и размещению), остальные сохранили размещения;
+    # у компонента с сопряжением удаление без согласия ОТКАЗЫВАЕТ и состав не меняется, а с согласием
+    # судьба сопряжения ИЗМЕРЯЕТСЯ; файл детали-источника остаётся неизменным (sha256).
+    #
+    # ПОЧЕМУ ССЫЛКИ ПЕРЕЧИТЫВАЮТСЯ ПОСЛЕ КАЖДОЙ МУТАЦИИ. Ссылка на компонент привязана к РЕВИЗИИ, а
+    # мутация (в том числе создание сопряжения) её поднимает, поэтому сохранённая ссылка после
+    # мутации устаревает — и «компонент не найден» было бы дефектом строки, а не продукта.
+    import hashlib
+
+    def sha256_of(path):
+        try:
+            with open(path, "rb") as stream:
+                return hashlib.sha256(stream.read()).hexdigest()
+        except OSError:
+            return None
+
+    def component_rows(doc):
+        _e, env, _r = client.tool("kompas_list_components", {"document_id": doc})
+        rows = result(env).get("components") or []
+        return rows if isinstance(rows, list) else []
+
+    def placement_x(row):
+        m = row.get("matrix")
+        return round(m[12], 3) if isinstance(m, list) and len(m) >= 16 else None
+
+    def ref_at(doc, x):
+        for row in component_rows(doc):
+            if placement_x(row) == x:
+                return row.get("component_ref")
+        return None
+
+    def mated_ref_of(doc):
+        """Сопряжённый компонент — тот, что вставлен ЗАФИКСИРОВАННЫМ и взят из первого файла.
+
+        Опознаётся по ПРИЗНАКУ ФИКСАЦИИ, а не по размещению: сопряжение двигает НЕзафиксированный
+        компонент, и размещение цели после него уже не то, что было задано.
+        """
+        for row in component_rows(doc):
+            if ((row.get("source_path") or "").endswith("asm-source-1.m3d")
+                    and row.get("fixed") is True):
+                return row.get("component_ref")
+        return None
+
+    env, code = call("kompas_create_document", {"application_id": app_id, "kind": "assembly",
+                                                "name": "ASM-del"})
+    asm_d = doc_id(env)
+    if not asm_d:
+        rep.add("ASM.08.discover", "сборка для удаления компонента создана", "FAIL",
+                f"документ не создан: {code}")
+        return
+
+    # sha256 ИСТОЧНИКА ДО УДАЛЕНИЙ: строка geometry_validation сравнивает его с числом ПОСЛЕ, а не
+    # полагается на «файл вроде бы не трогали».
+    src_hash_before = sha256_of(src_path)
+
+    # ЧЕТЫРЕ компонента: три вставки ОДНОГО файла с РАЗНЫМИ размещениями (0/200/400) и один другого
+    # файла (600). Разные размещения и делают «средний из трёх» различаемым по идентичности. Первый
+    # ЗАФИКСИРОВАН: сопряжение обязано двигать не его, а второго, — тогда сопряжённый компонент
+    # опознаётся по признаку фиксации после того, как размещение второго уедет.
+    insert_errors = []
+    for x, path, fixed in ((0.0, src_path, True), (200.0, src_path, False),
+                           (400.0, src_path, False), (600.0, src2, False)):
+        _e, env_i, _r = client.tool("kompas_insert_component", {
+            "document_id": asm_d, "expected_revision": current_rev(asm_d), "source_path": path,
+            "fixed": fixed,
+            "transform": {"origin_mm": [x, 0, 0], "x_axis": [1, 0, 0], "y_axis": [0, 1, 0]},
+            "operation_id": str(uuid.uuid4())}, timeout=300)
+        insert_errors.append(error_code(env_i))
+
+    rows_d = component_rows(asm_d)
+    placed = sorted(v for v in (placement_x(r) for r in rows_d) if v is not None)
+    rep.add("ASM.08.discover",
+            "сборка и её компоненты найдены перечислением; четыре компонента на 0/200/400/600",
+            "PASS" if (len(rows_d) == 4 and placed == [0.0, 200.0, 400.0, 600.0]
+                       and all(r.get("component_ref") for r in rows_d)) else "FAIL",
+            f"components={len(rows_d)} origin.x={placed} вставки={insert_errors}")
+
+    env, code = call("kompas_list_components", {"document_id": asm_d})
+    rows_d2 = result(env).get("components") or []
+    rep.add("ASM.08.read",
+            "структура сборки читается: каждый компонент назван источником и размещением",
+            "PASS" if (not code and len(rows_d2) == 4
+                       and all(r.get("source_path") for r in rows_d2)) else "FAIL",
+            f"components={len(rows_d2)} sources={[r.get('source_path') for r in rows_d2]} error={code}")
+
+    # ── ASM.08.edit: удаление СРЕДНЕГО из трёх одинаковых (x=200), пока сопряжений нет ──
+    middle_ref = ref_at(asm_d, 200.0)
+    rev_before_edit = current_rev(asm_d)
+    env, code = call("kompas_delete_component", {
+        "document_id": asm_d, "expected_revision": rev_before_edit, "component_ref": middle_ref}) \
+        if middle_ref else ({}, "NO_MIDDLE_COMPONENT")
+    res_edit = result(env)
+    rows_d3 = component_rows(asm_d)
+    placed3 = sorted(v for v in (placement_x(r) for r in rows_d3) if v is not None)
+    rev_after_edit = current_rev(asm_d)
+    rep.add("ASM.08.edit",
+            "удалён СРЕДНИЙ из трёх одинаковых: состав −1, адресованный ушёл, остальные на месте, "
+            "ревизия +1",
+            "PASS" if (not code and len(rows_d3) == 3 and placed3 == [0.0, 400.0, 600.0]
+                       and res_edit.get("components_before") == 4
+                       and res_edit.get("components_after") == 3
+                       and rev_after_edit > rev_before_edit) else "FAIL",
+            f"components={len(rows_d3)} origin.x={placed3} before={res_edit.get('components_before')} "
+            f"after={res_edit.get('components_after')} revision {rev_before_edit}→{rev_after_edit} "
+            f"error={code} msg={emsg(env)}")
+
+    # ── ASM.08.rebuild: перестроение после удаления не теряет структуру ──
+    env, code = call("kompas_rebuild", {"document_id": asm_d})
+    rows_d4 = component_rows(asm_d)
+    rep.add("ASM.08.rebuild", "перестроение после удаления проходит, компоненты на месте",
+            "PASS" if (not code and len(rows_d4) == 3) else "FAIL",
+            f"components={len(rows_d4)} error={code} msg={emsg(env)}")
+
+    # ── сопряжение: компонент x=0 (файл A, зафиксирован) и компонент x=600 (файл B) ──
+    ref_a = ref_at(asm_d, 0.0)
+    ref_b = ref_at(asm_d, 600.0)
+    _e, env_mate, _r = client.tool("kompas_create_mate", {
+        "document_id": asm_d, "expected_revision": current_rev(asm_d),
+        "constraint_type": "coincidence",
+        "first_component_ref": ref_a, "first_face_index": 0,
+        "second_component_ref": ref_b, "second_face_index": 0,
+        "operation_id": str(uuid.uuid4())}, timeout=300)
+    mate_err = error_code(env_mate)
+    env, code = call("kompas_list_mates", {"document_id": asm_d})
+    mates_now = result(env).get("mates") or []
+
+    # ── ASM.08.delete_dependencies: сопряжённый компонент ──
+    count_before_dep = len(component_rows(asm_d))
+    target_dep = mated_ref_of(asm_d)
+    env_dep, code_dep = (call("kompas_delete_component", {
+        "document_id": asm_d, "expected_revision": current_rev(asm_d),
+        "component_ref": target_dep}) if target_dep else ({}, "NO_MATED_COMPONENT"))
+    count_after_dep_refusal = len(component_rows(asm_d))
+    dep_details = edet(env_dep) or {}
+    dependent_list = dep_details.get("dependent_mates") or []
+
+    env_dep2, code_dep2 = (call("kompas_delete_component", {
+        "document_id": asm_d, "expected_revision": current_rev(asm_d),
+        "component_ref": target_dep, "confirm_dependents": True}) if target_dep
+        else ({}, "NO_MATED_COMPONENT"))
+    res_dep = result(env_dep2)
+    count_after_dep = len(component_rows(asm_d))
+    env, code = call("kompas_list_mates", {"document_id": asm_d})
+    mates_after_dep = result(env).get("mates") or []
+    rep.add("ASM.08.delete_dependencies",
+            "сопряжённый компонент: без согласия отказ с перечнем и состав не изменён; с согласием "
+            "удалён, судьба сопряжения измерена и названа",
+            "PASS" if (mate_err is None and len(mates_now) >= 1 and code_dep == "DEPENDENT_FEATURES"
+                       and len(dependent_list) >= 1
+                       and count_after_dep_refusal == count_before_dep
+                       and not code_dep2 and count_after_dep == count_before_dep - 1
+                       and len(mates_after_dep) < len(mates_now)
+                       and res_dep.get("dependent_mates_disposition")) else "FAIL",
+            f"сопряжение={mate_err} сопряжений={len(mates_now)} отказ={code_dep} "
+            f"перечень={len(dependent_list)} состав_после_отказа={count_after_dep_refusal} "
+            f"(было {count_before_dep}); с_согласием={code_dep2} состав={count_after_dep} "
+            f"сопряжений {len(mates_now)}→{len(mates_after_dep)} "
+            f"судьба=«{res_dep.get('dependent_mates_disposition')}» msg={emsg(env_dep)}")
+
+    # ── ASM.08.negative_tests: устаревшая ссылка; деталь вместо сборки; вложенный; повтор id ──
+    # (1) ссылка ПРЕЖНЕЙ ревизии (на только что удалённый компонент) отвергается ДО COM.
+    env_stale, code_stale = call("kompas_delete_component", {
+        "document_id": asm_d, "expected_revision": current_rev(asm_d),
+        "component_ref": target_dep or "нет-ссылки"})
+
+    # (2) деталь вместо сборки.
+    env_part, _c = call("kompas_create_document", {"application_id": app_id, "kind": "part",
+                                                   "name": "ASM-del-part"})
+    part_doc = doc_id(env_part)
+    env_kind, code_kind = call("kompas_delete_component", {
+        "document_id": part_doc, "expected_revision": current_rev(part_doc),
+        "component_ref": "любая-ссылка"})
+    call("kompas_close_document", {"document_id": part_doc, "dirty_policy": "discard"})
+
+    # (3) вложенный компонент: в сборку вставляется ПОДСБОРКА, её вложенный компонент берётся из
+    # рекурсивного чтения и НЕ адресуется.
+    sub2_path = os.path.join(src_dir, "asm-del-sub.m3d")
+    env_sub, _c = call("kompas_create_document", {"application_id": app_id, "kind": "assembly",
+                                                  "name": "ASM-del-sub"})
+    sub2_doc = doc_id(env_sub)
+    call("kompas_insert_component", {"document_id": sub2_doc,
+                                     "expected_revision": current_rev(sub2_doc),
+                                     "source_path": src_path, "fixed": False})
+    call("kompas_save_document", {"document_id": sub2_doc,
+                                  "expected_revision": current_rev(sub2_doc),
+                                  "target_path": sub2_path})
+    call("kompas_close_document", {"document_id": sub2_doc, "dirty_policy": "save"})
+    call("kompas_insert_component", {
+        "document_id": asm_d, "expected_revision": current_rev(asm_d), "source_path": sub2_path,
+        "fixed": False,
+        "transform": {"origin_mm": [800, 0, 0], "x_axis": [1, 0, 0], "y_axis": [0, 1, 0]}})
+    env, code = call("kompas_list_components", {"document_id": asm_d, "recursive": True})
+    nested_rows_d = [r for r in (result(env).get("components") or []) if (r.get("depth") or 0) > 0]
+    nested_ref_d = nested_rows_d[0].get("component_ref") if nested_rows_d else None
+    env_nested, code_nested = (call("kompas_delete_component", {
+        "document_id": asm_d, "expected_revision": current_rev(asm_d),
+        "component_ref": nested_ref_d}) if nested_ref_d else ({}, "NO_NESTED_COMPONENT"))
+
+    # (4) повтор operation_id: второй вызов НЕ удаляет второй компонент.
+    repeat_target = next((r.get("component_ref") for r in component_rows(asm_d)
+                          if placement_x(r) == 400.0), None)
+    count_before_repeat = len(component_rows(asm_d))
+    repeat_payload = {"document_id": asm_d, "expected_revision": current_rev(asm_d),
+                      "component_ref": repeat_target, "operation_id": str(uuid.uuid4())}
+    _e1, env_r1, _r1 = client.tool("kompas_delete_component", dict(repeat_payload), timeout=300)
+    _e2, env_r2, _r2 = client.tool("kompas_delete_component", dict(repeat_payload), timeout=300)
+    count_after_repeat = len(component_rows(asm_d))
+    rep.add("ASM.08.negative_tests",
+            "отказы: устаревшая ссылка, деталь вместо сборки, вложенный компонент, повтор operation_id",
+            "PASS" if (code_stale == "STALE_REFERENCE" and code_kind == "WRONG_DOCUMENT_KIND"
+                       and code_nested == "CAPABILITY_UNAVAILABLE"
+                       and count_after_repeat == count_before_repeat - 1
+                       and not error_code(env_r2)) else "FAIL",
+            f"устаревшая={code_stale} не_сборка={code_kind} вложенный={code_nested} "
+            f"повтор: components {count_before_repeat}→{count_after_repeat} "
+            f"первый={error_code(env_r1)} второй={error_code(env_r2)} msg={emsg(env_nested)}")
+
+    # ── ASM.08.save_reopen: удалённые не возвращаются, остальные на месте ──
+    asm_del_path = os.path.join(src_dir, "asm-del.m3d")
+    count_before_reopen = len(component_rows(asm_d))
+    asm_d, saved_d, err_d = reopen_assembly(asm_d, asm_del_path)
+    rows_d5 = component_rows(asm_d)
+    sources_d5 = sorted((r.get("source_path") or "").split("\\")[-1] for r in rows_d5)
+    rep.add("ASM.08.save_reopen",
+            "после save→close→reopen удалённых компонентов нет, остальные на месте",
+            "PASS" if (saved_d and len(rows_d5) == count_before_reopen) else "FAIL",
+            f"saved={saved_d} components={len(rows_d5)} ожидалось {count_before_reopen} "
+            f"sources={sources_d5} error={err_d}")
+
+    # ── ASM.08.geometry_validation: ФАЙЛ ДЕТАЛИ-ИСТОЧНИКА НЕ ТРОНУТ ──
+    # Удаляется ВХОЖДЕНИЕ в сборку, а не файл. sha256 до/после — измерение, а не заверение.
+    src_hash_after = sha256_of(src_path)
+    env, code = call("kompas_list_components", {"document_id": asm_d})
+    survived = [r for r in (result(env).get("components") or []) if r.get("body_count") is not None]
+    rep.add("ASM.08.geometry_validation",
+            "файл детали-источника существует и НЕ изменён (sha256 до/после), компонент не пуст",
+            "PASS" if (src_hash_before is not None and src_hash_before == src_hash_after
+                       and os.path.isfile(src_path)) else "FAIL",
+            f"sha256_до={src_hash_before} sha256_после={src_hash_after} файл={os.path.isfile(src_path)} "
+            f"компонентов_с_телами={len(survived)}")
+
+    call("kompas_close_document", {"document_id": asm_d, "dirty_policy": "discard"})
+
 
 def sketch_bulk_checks(client, rep, app_id, workdir):
     """SB.* — массовая геометрия эскиза: пределы, нативная полилиния, сплайн (блок G2).

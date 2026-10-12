@@ -3,7 +3,7 @@
   "artifact": "coverage/solid-v24/release-profiles/assemblies-minimal-v1.json",
   "profile_id": "assemblies-minimal-v1",
   "title": "Минимальные сборки v24",
-  "revision": "1.1",
+  "revision": "1.2",
   "created_utc": "2026-10-04T20:45:00Z",
   "decision": "Наряд C1_ASSEMBLIES_IMPLEMENTATION_DEVELOPER_PROMPT.md от 04.10.2026: первый блок после практического выпуска — минимальные сборки",
   "plan": "coverage/solid-v24/implementation-plan.md (редакция 2.0) §3 Шаг C",
@@ -17,7 +17,7 @@
    "полная v1 MCP (сопряжения, массивы компонентов, BOM, DXF, производственные пакеты)"
   ],
   "queue": {
-   "C1": "минимальные сборки: создать/открыть, вставить компонент, прочитать структуру, задать размещение, заменить с сохранением размещения, проверить ссылки, сохранить/reopen"
+   "C1": "минимальные сборки: создать/открыть, вставить компонент, прочитать структуру, задать размещение, заменить с сохранением размещения, проверить ссылки, сохранить/reopen, удаление компонента с перечислением зависимых сопряжений"
   },
   "queue_rules": "Внутри очереди разрешена обоснованная перестановка по измеренным зависимостям; при блокере продолжаются независимые режимы. Очередь не даёт права пропустить обязательный режим.",
   "read_action_semantics": {
@@ -44,6 +44,11 @@
     "revision": "1.1",
     "date": "04.10.2026",
     "change": "живой прогон группы ASM: 7 режимов и 5 зависимостей закрыты; профиль закрыт"
+   },
+   {
+    "revision": "1.2",
+    "date": "12.10.2026",
+    "change": "наряд COMPONENT_DELETE: добавлен режим ASM-08.component.delete (удаление компонента сборки); знаменатель профиля вырос 7 -> 8, знаменатель mechanical-core-v1 не тронут"
    }
   ]
  },
@@ -181,6 +186,21 @@
     "dep.assembly.component_address",
     "dep.assembly.revisions"
    ]
+  },
+  {
+   "ref": "ASM-08.component.delete",
+   "family": "ASM",
+   "queue": "C1",
+   "priority": "practical_required",
+   "title": "Удаление компонента сборки",
+   "current_level": "mcp_verified",
+   "gap": "Живой прогон 12.10.2026, группа ASM: строки ASM.08.* прошли на бинарях Debug. Удалён именно адресованный компонент (по источнику и размещению), зависимые сопряжения названы и сняты вместе с ним, файл детали не тронут (sha256). Приёмка на бинарях поставки - отдельный шаг.",
+   "depends_on": [
+    "dep.assembly.document_lifecycle",
+    "dep.assembly.component_address",
+    "dep.assembly.revisions",
+    "dep.assembly.idempotency"
+   ]
   }
  ],
  "common_dependencies": [
@@ -209,7 +229,8 @@
     "ASM-04.placement.set_read",
     "ASM-05.component.replace",
     "ASM-06.links.check",
-    "ASM-07.save_reopen"
+    "ASM-07.save_reopen",
+    "ASM-08.component.delete"
    ]
   },
   {
@@ -257,7 +278,8 @@
     "ASM-04.placement.set_read",
     "ASM-05.component.replace",
     "ASM-06.links.check",
-    "ASM-07.save_reopen"
+    "ASM-07.save_reopen",
+    "ASM-08.component.delete"
    ]
   },
   {
@@ -280,7 +302,8 @@
     "ASM-02.component.insert",
     "ASM-04.placement.set_read",
     "ASM-05.component.replace",
-    "ASM-07.save_reopen"
+    "ASM-07.save_reopen",
+    "ASM-08.component.delete"
    ]
   },
   {
@@ -302,7 +325,8 @@
    "required_of": [
     "ASM-02.component.insert",
     "ASM-04.placement.set_read",
-    "ASM-05.component.replace"
+    "ASM-05.component.replace",
+    "ASM-08.component.delete"
    ]
   }
  ],

@@ -14,13 +14,13 @@
 
 ### профиль assemblies-minimal-v1 — Минимальные сборки v24
 
-- **обязательных_режимов:** 7
-- **режимов_закрыто:** 7
+- **обязательных_режимов:** 8
+- **режимов_закрыто:** 8
 - **общих_зависимостей:** 5
 - **зависимостей_закрыто:** 5
 - **профиль_закрыт:** да
 - **готовность_процента:** 100.0%
-- **по_очередям:** C1 7/7
+- **по_очередям:** C1 8/8
 - **открытые_режимы:** []
 - **открытые_зависимости:** []
 
@@ -134,18 +134,18 @@
 
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 340
-- **строк_полностью_закрыто:** 150
-- **строк_с_каким_либо_прогрессом:** 165
+- **строк_каталога:** 341
+- **строк_полностью_закрыто:** 151
+- **строк_с_каким_либо_прогрессом:** 166
 - **семейств_в_каталоге:** 42
 - **семейств_без_строк:** 14
 - **операций:** 99
 - **режимов_и_вариантов:** 146
-- **применимых_действий:** 2851
-- **действий_verified:** 1010
-- **покрытие_действий:** 35.4%
-- **распределение_статусов:** {'not_started': 1841, 'verified': 1010, 'not_applicable': 549}
-- **уровни_каталога_операций:** {'metadata_found': 51, 'mcp_verified': 51, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 4}
+- **применимых_действий:** 2859
+- **действий_verified:** 1018
+- **покрытие_действий:** 35.6%
+- **распределение_статусов:** {'not_started': 1841, 'verified': 1018, 'not_applicable': 551}
+- **уровни_каталога_операций:** {'metadata_found': 51, 'mcp_verified': 52, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 4}
 - **уровни_каталога_режимов:** {'mcp_verified': 55, 'documented': 19, 'runtime_verified': 3, 'metadata_found': 48, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
@@ -160,6 +160,7 @@
 | `ASM-05.component.replace` | ASM | practical_required | C1 | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | OK | ASM.03.read, ASM.05.read, ASM.05.edit, ASM.02.rebuild, ASM.07.reopen, ASM.05.negative_tests, ASM.05.discover, ASM.05.save_reopen, ASM.05.geometry_validation |
 | `ASM-06.links.check` | ASM | practical_required | C1 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | ASM.06.discover, ASM.06.read, ASM.07.reopen, ASM.06.negative_tests, ASM.06.save_reopen |
 | `ASM-07.save_reopen` | ASM | practical_required | C1 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | OK | ASM.01.discover, ASM.07.read, ASM.07.save_reopen, ASM.07.reopen, ASM.07.negative_tests, ASM.04.save_reopen, ASM.07.geometry_validation |
+| `ASM-08.component.delete` | ASM | practical_required | C1 | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | OK | OK | OK | ASM.08.discover, ASM.08.read, ASM.08.edit, ASM.08.rebuild, ASM.08.save_reopen, ASM.08.delete_dependencies, ASM.08.negative_tests, ASM.08.geometry_validation |
 
 ### Общие зависимости профиля `assemblies-minimal-v1`
 
@@ -649,6 +650,7 @@
 | `ASM-05.component.replace` | ASM | practical_required | C1 | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | OK | ASM.03.read, ASM.05.read, ASM.05.edit, ASM.02.rebuild, ASM.07.reopen, ASM.05.negative_tests, ASM.05.discover, ASM.05.save_reopen, ASM.05.geometry_validation |
 | `ASM-06.links.check` | ASM | practical_required | C1 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | ASM.06.discover, ASM.06.read, ASM.07.reopen, ASM.06.negative_tests, ASM.06.save_reopen |
 | `ASM-07.save_reopen` | ASM | practical_required | C1 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | OK | ASM.01.discover, ASM.07.read, ASM.07.save_reopen, ASM.07.reopen, ASM.07.negative_tests, ASM.04.save_reopen, ASM.07.geometry_validation |
+| `ASM-08.component.delete` | ASM | practical_required | C1 | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | OK | OK | OK | ASM.08.discover, ASM.08.read, ASM.08.edit, ASM.08.rebuild, ASM.08.save_reopen, ASM.08.delete_dependencies, ASM.08.negative_tests, ASM.08.geometry_validation |
 | `MATE-01.mate.create` | MATE | practical_required | C2 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | MATE.02.discover, MATE.01.create, MATE.02.read, MATE.02.fields, MATE.01.rebuild, MATE.01.save_reopen, MATE.01.negative_tests, MATE.01.face_range, MATE.06.geometry_validation, MATE.01.create_after_mate_moved |
 | `MATE-02.mate.read` | MATE | practical_required | C2 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | MATE.02.discover, MATE.02.read, MATE.02.fields, MATE.05.read, MATE.05.save_reopen, MATE.03.negative_tests |
 | `MATE-03.mate.param_edit` | MATE | practical_required | C2 | mcp_verified | OK | н/п | OK | OK | OK | OK | н/п | н/п | OK | OK | MATE.02.discover, MATE.03.read, MATE.03.edit, MATE.03.create_distance, MATE.03.rebuild, MATE.03.save_reopen, MATE.03.negative_tests, MATE.03.geometry_validation |
@@ -1087,6 +1089,10 @@
   - Живой прогон 04.10.2026 (группа ASM, 52 строки, 0 отказов) на бинарях Debug; приёмка на бинарях ПОСТАВКИ — отдельный шаг.
   - Сопоставление порядков API7 PartsEx и API5 ksPartCollection — предположение, проверенное различающим контролем ASM.04.distinguishing (размещение одного экземпляра не меняет другой).
   - Сверено только начало координат: различающий контроль по осям (поворот) не ставился.
+- `ASM-08.component.delete` — закрыт целиком
+  - Живой прогон 12.10.2026 (группа ASM) на бинарях Debug; приёмка на бинарях ПОСТАВКИ - отдельный шаг.
+  - Тождество владельца сопряжения решается ссылкой на RCW: пара «имя + файл» две вставки одного файла не различает (измерено пробой DC). Перекрёстная проверка ядром (ObjectConstraints) обязана сойтись, иначе вызов отказывает.
+  - Два компонента с ОДНИМ источником и ОДНИМ размещением неразличимы: это НАЗВАНО отметкой addressed_instance_indistinguishable.
 - `MATE-01.mate.create` — закрыт целиком
   - живой прогон 05.10.2026, группа MATE (scripts/mcp-smoke.py --mate-only): 32 строки, 0 отказов
   - Приёмка на бинарях поставки ВЫПОЛНЕНА: `publish-mates-20261005` — Host.dll `5ba127bb…`, Worker.dll `6fecb3fe…`, Api5Adapter.dll `157c9dbb…`; группа MATE снята ИМЕННО на них. `client_acceptance` — шаг заказчика и остаётся `not_run`: отсутствие проверки не PASS.

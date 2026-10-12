@@ -6355,6 +6355,30 @@
      "modes": [],
      "mcp_support": "kompas_save_document / kompas_open_document (общий жизненный цикл)",
      "next_step": "Проба: структура и размещения после reopen совпадают с состоянием до сохранения."
+    },
+    {
+     "id": "ASM-08.component.delete",
+     "name": "Удаление компонента сборки",
+     "level": "mcp_verified",
+     "doc_source": [
+      "ksdocument3d_deleteobject",
+      "imodelobject_part",
+      "imateconstraints3d_objectconstraints"
+     ],
+     "interfaces": {
+      "api5": [
+       "ksDocument3D.DeleteObject(ksPart) - удаление объекта: детали, операции, сопряжения",
+       "ksDocument3D.PartCollection(true) - адрес компонента (порядковый номер)",
+       "ksMateConstraint.GetBaseObj(1|2) - базовые объекты сопряжения"
+      ],
+      "api7": [
+       "IModelObject.Part - «Компонент, владеющий элементом» (владелец базового объекта)",
+       "IMateConstraints3D.ObjectConstraints - сопряжения, связанные с объектом"
+      ]
+     },
+     "modes": [],
+     "mcp_support": "kompas_delete_component (новый), чтение - kompas_list_components, kompas_list_mates; жизненный цикл - общий",
+     "next_step": "Приёмка на бинарях поставки - отдельный шаг."
     }
    ]
   },

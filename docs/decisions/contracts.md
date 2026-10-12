@@ -19,6 +19,50 @@ Worker, который ещё работал по своему бюджету. �
 **Что решено.** Одна таблица `CommandBudgets` на Хост и Worker: бюджет Хоста - бюджет Worker плюс
 `HostMarginMs`. Одна таблица убирает расхождение по построению.
 
+**Доводка 12.10.2026 (наряд `COMMAND_TABLE_CATALOG_SIZE`).** Единственной таблица была по намерению, а
+не по коду: Worker продолжал читать свой `BudgetFor` - отдельный `switch` в `CommandDispatcher`, - и
+после 05.10.2026 он вырос на команды, которых в `CommandBudgets` не было. Измерено исполнением обоих
+вариантов через отражение (прибор наряда в `scratch/`, в продукт не входит): на 22 командах Worker
+давал 240-300 с, а `CommandBudgets` - значение по умолчанию 120 с, поэтому Хост ждал
+`max(120 + 30, operation_budget_ms)` = 150 с и ПЕРВЫМ объявлял `OUTCOME_UNKNOWN`, перезапуская
+работающий Worker. Перечень: `export.stl` (300 с у Worker), `sketch.constraint.create`,
+`sketch.constraint.list`, `sketch.constraint.delete`, `sketch.dimension.create`,
+`asm.delete_component`, `asm.check_interference`, `asm.measure_gap`, `drawing.create_views`,
+`drawing.export`, `drawing.add_dimension`, `drawing.set_title_block`, `drawing.edit_view`,
+`drawing.set_technical_demand`, `drawing.get_title_block`, `drawing.get_technical_demand`,
+`var.set_value`, `var.set_expression`, `mat.set`, `var.create`, `feat.bind_parameter`,
+`feat.parameters`. `CommandBudgetTests` этого не ловил: он сверял общую таблицу саму с собой, а не с
+бюджетом, который действует в Worker.
+
+**Что решено 12.10.2026.** Одна таблица сведений о команде Worker - `WorkerCommandTable` в
+`KompasMcp.Contracts`: имя, полоса (`Control` - вне STA, `Cad` - STA), вид действия (`Read`,
+`FileWrite` - пишет файл и не трогает модель, `ModelMutation`) и бюджет Worker в мс.
+`CommandBudgets.WorkerBudgetMs` и `HostBudgetMs` выводятся из неё; имена методов сохранены, чтобы не
+трогать вызывающих. Из `CommandDispatcher` удалены `ControlLaneCommands`, `MutationCommands`,
+`FileWritingReads` и `BudgetFor`. Предикаты классификации (`ChangesModel`, `MustNotAnswerAcrossALoss`,
+`ObservesConnectionLoss`) переехали в таблицу: иначе их нельзя исполнить из набора модульных тестов
+(Worker без КОМПАС не грузится), а снимок, прочитанный как текст, - это утверждение о тексте, а не
+проверка.
+
+Значение бюджета при слиянии - БОЛЬШЕЕ из двух прежних таблиц: ни один фактический бюджет Worker не
+стал короче, а для перечисленных 22 команд Хост начал ждать дольше Worker, как того требует
+инвариант. Правила классификации не менялись - это рефакторинг, а не смена правил: снимок трёх
+предикатов по всем 90 командам, снятый исполнением старого кода ДО перевода, зафиксирован в тесте
+`WorkerCommandTableTests.ClassificationIsTheSnapshotTakenBeforeTheTable` и сверяется с новым.
+
+Сверка с каталогом Хоста: расхождений вида «таблица называет команду изменением модели, а инструмент
+не требует `operation_id`» нет. Обратно - три инструмента, у которых вид действия `FileWrite`, а
+`operation_id` есть: `kompas_export_step`, `kompas_export_stl`, `kompas_export_image`. Это не ошибка,
+и тест держит их явным перечнем `FileWritingToolsWithAnOperationId`: журнал охраняет файл, а не
+модель, поэтому потеря связи во время экспорта отвечает как чтение (`APPLICATION_DISCONNECTED`), а не
+как неизвестный исход.
+
+Держит единство таблицы `WorkerCommandTableTests`: у каждой константы `WorkerCommands` ровно одна
+строка таблицы и наоборот; у каждой команды полосы `Cad` есть ветка в диспетчере (проверка по
+исходнику - Worker без КОМПАС не грузится, поэтому LIMIT назван в тесте); в `CommandDispatcher.cs` не
+осталось ни одного числа, похожего на бюджет, поэтому вторая таблица не может вернуться незамеченной;
+для каждой команды Хост ждёт строго дольше Worker, а бюджет Хоста берётся из той же таблицы.
+
 ## <a id="json-scalars"></a>Две формы JsonNode
 
 **Что было.** Чтение скаляров из `JsonNode` предполагало одну форму узла. `GetValue<T>()` и

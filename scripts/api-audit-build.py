@@ -201,10 +201,12 @@ def findings_of(evidence, matrix, catalog, claims):
             [docs.get("source")])
     broken = [item for item in unconfirmed if (item.get("reason") or "").startswith("HTTP ")]
     if broken:
-        add("F-02", "дефект прибора аудита (битая ссылка)", "средняя",
-            f"{len(broken)} страниц(а) справки отвечают не 200: "
-            + "; ".join(f"{item['page']} ({item['reason']})" for item in broken[:5]),
-            "битая ссылка не является подтверждением; страницу заменить или член назвать находкой",
+        add("F-02", "подкласс F-01: страницы нет по ожидаемому адресу (HTTP 404)", "высокая",
+            f"{len(broken)} маршрут(ов) из F-01: по адресу `<интерфейс>_<член>.html` страницы нет "
+            f"(HTTP 404), и в перечне своего интерфейса член тоже не назван: "
+            + "; ".join(item["route"] for item in broken[:10]),
+            "перечень заказчику вместе с F-01: либо документированный маршрут, либо исключение, "
+            "названное как исключение",
             [docs.get("source")])
     object_types = docs.get("object_types") or {}
     if object_types.get("mismatched"):

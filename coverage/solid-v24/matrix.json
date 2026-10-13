@@ -672,7 +672,8 @@
     "docs/acceptance/api7/sketch-plane.json",
     "docs/acceptance/INDEX.md",
     "scripts/mcp-smoke.py",
-    "docs/decisions/adapter-sketch.md"
+    "docs/decisions/adapter-sketch.md",
+    "docs/acceptance/api7/api7-probe-report.json"
    ],
    "limitations": [
     "замена и очистка после reopen работают для измеренной области: эскиз на основной XY, профиль — окружность, вырезание сквозное; точка поиска выводится из цилиндрической грани зависимого тела (проба G, строки G10…G10r)",
@@ -1159,7 +1160,8 @@
     "coverage/solid-v24/catalog.json#SM-03.base_rotated.full_turn",
     "docs/acceptance/api7/rotation.md",
     "docs/acceptance/api7/rotation.json",
-    "tools/KompasMcp.Api7Probe/RotationProbe.cs"
+    "tools/KompasMcp.Api7Probe/RotationProbe.cs",
+    "scratch/mcp-smoke/rotation-acceptance.json"
    ],
    "limitations": [
     "НАЙДЕН И ИЗМЕРЕН ПРЯМОЙ МАРШРУТ СОЗДАНИЯ ВРАЩЕНИЯ (прогон 95fa844107ce41609d6278f8f6c5759f, 17.09.2026, build 24.0.0.2799, свой невидимый экземпляр, PID атрибутирован). Вращение создаётся ПРЯМОЙ ФАБРИКОЙ API7, а не определением API5: IModelContainer (достаётся TransferInterface(document, 2 /* ksAPI7Dual */, 0) → IKompasDocument3D.TopPart) → container.Rotateds → IRotateds.Add(ksObj3dTypeEnum) → полученный объект отвечает QI(IRotated) → запись Profile, Axis, Angle[true], Angle[false], Direction, RotatedType[true], ToroidShapeType → Update() → RebuildModel(). ОБОЛОЧКИ API5 NewEntity НЕТ и завершающего API5 Create() НЕТ — именно это отличает измеренный маршрут от всех прежних попыток. Измерено шагом R.24: QI(IRotated)=OK, QI(IRotated1)=OK, QI(IThinParameters)=OK для ВСЕХ ТРЁХ типов (o3d_baseRotated=27, o3d_bossRotated=28, o3d_cutRotated=29), каждый член принят и прочитан обратно, Update()=True, Valid=True, и КАЖДЫЙ из трёх дал тело с аналитическим объёмом: прирост=50265.4824574366 против π·r²·h=50265.4824574367 (r=20, h=40). Итог шага: 3 из 3.",
@@ -1241,7 +1243,8 @@
     "coverage/solid-v24/catalog.json#SM-03.base_rotated.full_turn",
     "docs/acceptance/api7/rotation.md",
     "docs/acceptance/api7/rotation.json",
-    "tools/KompasMcp.Api7Probe/RotationProbe.cs"
+    "tools/KompasMcp.Api7Probe/RotationProbe.cs",
+    "scratch/mcp-smoke/rotation-acceptance.json"
    ],
    "limitations": [
     "НАЙДЕН И ИЗМЕРЕН ПРЯМОЙ МАРШРУТ СОЗДАНИЯ ВРАЩЕНИЯ (прогон 95fa844107ce41609d6278f8f6c5759f, 17.09.2026, build 24.0.0.2799, свой невидимый экземпляр, PID атрибутирован). Вращение создаётся ПРЯМОЙ ФАБРИКОЙ API7, а не определением API5: IModelContainer (достаётся TransferInterface(document, 2 /* ksAPI7Dual */, 0) → IKompasDocument3D.TopPart) → container.Rotateds → IRotateds.Add(ksObj3dTypeEnum) → полученный объект отвечает QI(IRotated) → запись Profile, Axis, Angle[true], Angle[false], Direction, RotatedType[true], ToroidShapeType → Update() → RebuildModel(). ОБОЛОЧКИ API5 NewEntity НЕТ и завершающего API5 Create() НЕТ — именно это отличает измеренный маршрут от всех прежних попыток. Измерено шагом R.24: QI(IRotated)=OK, QI(IRotated1)=OK, QI(IThinParameters)=OK для ВСЕХ ТРЁХ типов (o3d_baseRotated=27, o3d_bossRotated=28, o3d_cutRotated=29), каждый член принят и прочитан обратно, Update()=True, Valid=True, и КАЖДЫЙ из трёх дал тело с аналитическим объёмом: прирост=50265.4824574366 против π·r²·h=50265.4824574367 (r=20, h=40). Итог шага: 3 из 3.",
@@ -1324,7 +1327,8 @@
     "coverage/solid-v24/catalog.json#SM-03.base_rotated.full_turn",
     "docs/acceptance/api7/rotation.md",
     "docs/acceptance/api7/rotation.json",
-    "tools/KompasMcp.Api7Probe/RotationProbe.cs"
+    "tools/KompasMcp.Api7Probe/RotationProbe.cs",
+    "scratch/mcp-smoke/rotation-acceptance.json"
    ],
    "limitations": [
     "НАЙДЕН И ИЗМЕРЕН ПРЯМОЙ МАРШРУТ СОЗДАНИЯ ВРАЩЕНИЯ (прогон 95fa844107ce41609d6278f8f6c5759f, 17.09.2026, build 24.0.0.2799, свой невидимый экземпляр, PID атрибутирован). Вращение создаётся ПРЯМОЙ ФАБРИКОЙ API7, а не определением API5: IModelContainer (достаётся TransferInterface(document, 2 /* ksAPI7Dual */, 0) → IKompasDocument3D.TopPart) → container.Rotateds → IRotateds.Add(ksObj3dTypeEnum) → полученный объект отвечает QI(IRotated) → запись Profile, Axis, Angle[true], Angle[false], Direction, RotatedType[true], ToroidShapeType → Update() → RebuildModel(). ОБОЛОЧКИ API5 NewEntity НЕТ и завершающего API5 Create() НЕТ — именно это отличает измеренный маршрут от всех прежних попыток. Измерено шагом R.24: QI(IRotated)=OK, QI(IRotated1)=OK, QI(IThinParameters)=OK для ВСЕХ ТРЁХ типов (o3d_baseRotated=27, o3d_bossRotated=28, o3d_cutRotated=29), каждый член принят и прочитан обратно, Update()=True, Valid=True, и КАЖДЫЙ из трёх дал тело с аналитическим объёмом: прирост=50265.4824574366 против π·r²·h=50265.4824574367 (r=20, h=40). Итог шага: 3 из 3.",
@@ -1425,7 +1429,8 @@
     "coverage/solid-v24/catalog.json#SM-03.base_rotated.full_turn",
     "docs/acceptance/api7/rotation.md",
     "docs/acceptance/api7/rotation.json",
-    "tools/KompasMcp.Api7Probe/RotationProbe.cs"
+    "tools/KompasMcp.Api7Probe/RotationProbe.cs",
+    "scratch/mcp-smoke/rotation-acceptance.json"
    ],
    "limitations": [
     "НАЙДЕН И ИЗМЕРЕН ПРЯМОЙ МАРШРУТ СОЗДАНИЯ ВРАЩЕНИЯ (прогон 95fa844107ce41609d6278f8f6c5759f, 17.09.2026, build 24.0.0.2799, свой невидимый экземпляр, PID атрибутирован). Вращение создаётся ПРЯМОЙ ФАБРИКОЙ API7, а не определением API5: IModelContainer (достаётся TransferInterface(document, 2 /* ksAPI7Dual */, 0) → IKompasDocument3D.TopPart) → container.Rotateds → IRotateds.Add(ksObj3dTypeEnum) → полученный объект отвечает QI(IRotated) → запись Profile, Axis, Angle[true], Angle[false], Direction, RotatedType[true], ToroidShapeType → Update() → RebuildModel(). ОБОЛОЧКИ API5 NewEntity НЕТ и завершающего API5 Create() НЕТ — именно это отличает измеренный маршрут от всех прежних попыток. Измерено шагом R.24: QI(IRotated)=OK, QI(IRotated1)=OK, QI(IThinParameters)=OK для ВСЕХ ТРЁХ типов (o3d_baseRotated=27, o3d_bossRotated=28, o3d_cutRotated=29), каждый член принят и прочитан обратно, Update()=True, Valid=True, и КАЖДЫЙ из трёх дал тело с аналитическим объёмом: прирост=50265.4824574366 против π·r²·h=50265.4824574367 (r=20, h=40). Итог шага: 3 из 3.",
@@ -1513,7 +1518,8 @@
     "coverage/solid-v24/catalog.json#SM-03.base_rotated.full_turn",
     "docs/acceptance/api7/rotation.md",
     "docs/acceptance/api7/rotation.json",
-    "tools/KompasMcp.Api7Probe/RotationProbe.cs"
+    "tools/KompasMcp.Api7Probe/RotationProbe.cs",
+    "scratch/mcp-smoke/rotation-acceptance.json"
    ],
    "limitations": [
     "НАЙДЕН И ИЗМЕРЕН ПРЯМОЙ МАРШРУТ СОЗДАНИЯ ВРАЩЕНИЯ (прогон 95fa844107ce41609d6278f8f6c5759f, 17.09.2026, build 24.0.0.2799, свой невидимый экземпляр, PID атрибутирован). Вращение создаётся ПРЯМОЙ ФАБРИКОЙ API7, а не определением API5: IModelContainer (достаётся TransferInterface(document, 2 /* ksAPI7Dual */, 0) → IKompasDocument3D.TopPart) → container.Rotateds → IRotateds.Add(ksObj3dTypeEnum) → полученный объект отвечает QI(IRotated) → запись Profile, Axis, Angle[true], Angle[false], Direction, RotatedType[true], ToroidShapeType → Update() → RebuildModel(). ОБОЛОЧКИ API5 NewEntity НЕТ и завершающего API5 Create() НЕТ — именно это отличает измеренный маршрут от всех прежних попыток. Измерено шагом R.24: QI(IRotated)=OK, QI(IRotated1)=OK, QI(IThinParameters)=OK для ВСЕХ ТРЁХ типов (o3d_baseRotated=27, o3d_bossRotated=28, o3d_cutRotated=29), каждый член принят и прочитан обратно, Update()=True, Valid=True, и КАЖДЫЙ из трёх дал тело с аналитическим объёмом: прирост=50265.4824574366 против π·r²·h=50265.4824574367 (r=20, h=40). Итог шага: 3 из 3.",
@@ -2201,7 +2207,8 @@
     "docs/acceptance/api7/fillet-base-objects.md",
     "tools/KompasMcp.Api7Probe/FilletBaseObjectsProbe.cs",
     "coverage/solid-v24/catalog.json#SM-09.fillet.change_edge_set",
-    "schemas/kompas_update_feature.json#edge_refs"
+    "schemas/kompas_update_feature.json#edge_refs",
+    "scratch/mcp-smoke/fillet-acceptance.json"
    ],
    "limitations": [
     "СТРОКА ЗАКРЫТА 17.09.2026 приёмкой ПРОДУКТА через MCP, а не доказательством маршрута и не решением. Действие edit было в blocked_api по измерению (--fillet-only давал FL10, FL10s, FL10b FAIL), и это было честно; корень оказался НЕ в маршруте (он работал — FL10x проходил) и НЕ в валюте, а в ПУБЛИКАЦИИ: свойство base_object_refs отсутствовало в схеме kompas_update_feature, поэтому Host отвергал вызов валидацией (additionalProperties: false) ещё до COM — сокращение набора было не «невыразимо», а необъявлено. После публикации свойства приёмка стала зелёной целиком: scripts/mcp-smoke.py --fillet-only, 46 строк, 0 FAIL, включая FL10 (4→3: V=79942.0575041173 при эталоне 79942.05750411731, level=geometry_checked), FL10s (3→2: 79961.37166941153) и FL10b (2→1: 79980.68583470577). Закрывающим доказательством служит именно FL10 — объём построен по АНАЛИТИКЕ V(n)=80000−n·(1−π/4)·3²·10, а не по наблюдению. Вместе с сокращением подтверждены: замена 1→1 с переездом угла при неизменном объёме (FL23, адрес 1073742400 → 1073742403, V=79961.37166941154 при эталоне двух углов), повтор на НЕЗАВИСИМОМ документе (FL24), save→close→reopen с дальнейшей правкой, адресация на двух скруглениях одного радиуса (FL20/FL21/FL22) и отрицательные случаи (FL26 — чужая ссылка, FL27 — входы чужого признака). Отзыв пробы H НЕ отменяется: её числа — пересчёт по подставленному входу, и это остаётся верным. Отрицательный результат по определению API5 (array()) тоже сохранён: он верен и объясняет, почему маршрут лежит в API7, а не в API5.",
@@ -2579,7 +2586,11 @@
     "docs/acceptance/api7/disconnected-union.json",
     "docs/acceptance/api7/reposition-read.json",
     "docs/acceptance/api7/cut-area.json",
-    "docs/acceptance/api7/reposition-order.json"
+    "docs/acceptance/api7/reposition-order.json",
+    "scratch/mcp-smoke/b3-acceptance.json",
+    "scratch/mcp-smoke/b3l-acceptance.json",
+    "scratch/mcp-smoke/b3m-acceptance.json",
+    "scratch/mcp-smoke/b3c-acceptance.json"
    ],
    "limitations": [
     "expected_volume_mm3 — ОДНО ИМЯ И ТРИ ВЕЛИЧИНЫ: у kompas_boolean это объём главного тела, то есть СУММА всех тел документа; у kompas_split — сумма ЧАСТЕЙ; у kompas_cut_by_plane — объём ОСТАТКА. Объявленное число, не подтверждённое моделью, НАЗЫВАЕТСЯ в unverified_aspects (B3.40), и это не отказ: геометрия сверена независимо, а расхождение названо.",
@@ -2645,7 +2656,11 @@
     "docs/acceptance/api7/disconnected-union.json",
     "docs/acceptance/api7/reposition-read.json",
     "docs/acceptance/api7/cut-area.json",
-    "docs/acceptance/api7/reposition-order.json"
+    "docs/acceptance/api7/reposition-order.json",
+    "scratch/mcp-smoke/b3-acceptance.json",
+    "scratch/mcp-smoke/b3l-acceptance.json",
+    "scratch/mcp-smoke/b3m-acceptance.json",
+    "scratch/mcp-smoke/b3c-acceptance.json"
    ],
    "limitations": [
     "expected_volume_mm3 — ОДНО ИМЯ И ТРИ ВЕЛИЧИНЫ: у kompas_boolean это объём главного тела, то есть СУММА всех тел документа; у kompas_split — сумма ЧАСТЕЙ; у kompas_cut_by_plane — объём ОСТАТКА. Объявленное число, не подтверждённое моделью, НАЗЫВАЕТСЯ в unverified_aspects (B3.40), и это не отказ: геометрия сверена независимо, а расхождение названо.",
@@ -2708,7 +2723,11 @@
     "docs/acceptance/api7/disconnected-union.json",
     "docs/acceptance/api7/reposition-read.json",
     "docs/acceptance/api7/cut-area.json",
-    "docs/acceptance/api7/reposition-order.json"
+    "docs/acceptance/api7/reposition-order.json",
+    "scratch/mcp-smoke/b3-acceptance.json",
+    "scratch/mcp-smoke/b3l-acceptance.json",
+    "scratch/mcp-smoke/b3m-acceptance.json",
+    "scratch/mcp-smoke/b3c-acceptance.json"
    ],
    "limitations": [
     "expected_volume_mm3 — ОДНО ИМЯ И ТРИ ВЕЛИЧИНЫ: у kompas_boolean это объём главного тела, то есть СУММА всех тел документа; у kompas_split — сумма ЧАСТЕЙ; у kompas_cut_by_plane — объём ОСТАТКА. Объявленное число, не подтверждённое моделью, НАЗЫВАЕТСЯ в unverified_aspects (B3.40), и это не отказ: геометрия сверена независимо, а расхождение названо.",
@@ -2770,7 +2789,11 @@
     "docs/acceptance/api7/disconnected-union.json",
     "docs/acceptance/api7/reposition-read.json",
     "docs/acceptance/api7/cut-area.json",
-    "docs/acceptance/api7/reposition-order.json"
+    "docs/acceptance/api7/reposition-order.json",
+    "scratch/mcp-smoke/b3-acceptance.json",
+    "scratch/mcp-smoke/b3l-acceptance.json",
+    "scratch/mcp-smoke/b3m-acceptance.json",
+    "scratch/mcp-smoke/b3c-acceptance.json"
    ],
    "limitations": [
     "expected_volume_mm3 — ОДНО ИМЯ И ТРИ ВЕЛИЧИНЫ: у kompas_boolean это объём главного тела, то есть СУММА всех тел документа; у kompas_split — сумма ЧАСТЕЙ; у kompas_cut_by_plane — объём ОСТАТКА. Объявленное число, не подтверждённое моделью, НАЗЫВАЕТСЯ в unverified_aspects (B3.40), и это не отказ: геометрия сверена независимо, а расхождение названо.",
@@ -2838,7 +2861,11 @@
     "docs/acceptance/api7/disconnected-union.json",
     "docs/acceptance/api7/reposition-read.json",
     "docs/acceptance/api7/cut-area.json",
-    "docs/acceptance/api7/reposition-order.json"
+    "docs/acceptance/api7/reposition-order.json",
+    "scratch/mcp-smoke/b3-acceptance.json",
+    "scratch/mcp-smoke/b3l-acceptance.json",
+    "scratch/mcp-smoke/b3m-acceptance.json",
+    "scratch/mcp-smoke/b3c-acceptance.json"
    ],
    "limitations": [
     "expected_volume_mm3 — ОДНО ИМЯ И ТРИ ВЕЛИЧИНЫ: у kompas_boolean это объём главного тела, то есть СУММА всех тел документа; у kompas_split — сумма ЧАСТЕЙ; у kompas_cut_by_plane — объём ОСТАТКА. Объявленное число, не подтверждённое моделью, НАЗЫВАЕТСЯ в unverified_aspects (B3.40), и это не отказ: геометрия сверена независимо, а расхождение названо.",
@@ -2917,7 +2944,11 @@
     "docs/acceptance/api7/disconnected-union.json",
     "docs/acceptance/api7/reposition-read.json",
     "docs/acceptance/api7/cut-area.json",
-    "docs/acceptance/api7/reposition-order.json"
+    "docs/acceptance/api7/reposition-order.json",
+    "scratch/mcp-smoke/b3-acceptance.json",
+    "scratch/mcp-smoke/b3l-acceptance.json",
+    "scratch/mcp-smoke/b3m-acceptance.json",
+    "scratch/mcp-smoke/b3c-acceptance.json"
    ],
    "limitations": [
     "expected_volume_mm3 — ОДНО ИМЯ И ТРИ ВЕЛИЧИНЫ: у kompas_boolean это объём главного тела, то есть СУММА всех тел документа; у kompas_split — сумма ЧАСТЕЙ; у kompas_cut_by_plane — объём ОСТАТКА. Объявленное число, не подтверждённое моделью, НАЗЫВАЕТСЯ в unverified_aspects (B3.40), и это не отказ: геометрия сверена независимо, а расхождение названо.",
@@ -2997,7 +3028,11 @@
     "docs/acceptance/api7/disconnected-union.json",
     "docs/acceptance/api7/reposition-read.json",
     "docs/acceptance/api7/cut-area.json",
-    "docs/acceptance/api7/reposition-order.json"
+    "docs/acceptance/api7/reposition-order.json",
+    "scratch/mcp-smoke/b3-acceptance.json",
+    "scratch/mcp-smoke/b3l-acceptance.json",
+    "scratch/mcp-smoke/b3m-acceptance.json",
+    "scratch/mcp-smoke/b3c-acceptance.json"
    ],
    "limitations": [
     "ГРАНИЦА ЧТЕНИЯ ПАРАМЕТРОВ ПРЕОБРАЗОВАНИЯ. ТРЕБОВАНИЕ ЗАКРЫТО ИЗМЕРЕНИЕМ, а не переформулировкой: продукт читает параметры преобразования из модели, включая переоткрытый документ, и публикует их. ЧЕМ ЗАКРЫТО: проба --reposition-params, прогон a336120926fc4652a8bf737562568271 (шаги RP.1–RP.25), отчёт docs/acceptance/api7/reposition-params.json; и приёмка ПРОДУКТА на бинарниках поставки строками B3M.09.read, B3M.09.save_reopen, B3M.10.read, B3M.10.save_reopen. Все четыре строки читают переоткрытый документ через свежую ссылку ДО любой записи и сверяются с ОБЪЯВЛЕННЫМ ожиданием, а не с наблюдаемым. ПОРЯДОК И ЕДИНИЦЫ УГЛОВ — ИЗ ДОКУМЕНТАЦИИ И ИЗМЕРЕНИЯ, А НЕ ПОДБРАНЫ ПОД ОДИН ПРИМЕР. Справка даёт композицию трёх углов РИСУНКОМ (rotation_pict.html → images/_praezession.jpg), поэтому шесть мыслимых порядков были СРАВНЕНЫ ПО МАТРИЦЕ на измеренных позах: расхождение нулевое только у PNR (Precession → Nutation → Rotation, M = Rz(P)·Rx(N)·Rz(R)), у остальных пяти — 1. Единицы — градусы (измерено: запрошенные 30° читаются как 29.99999999999998). ПРЕОБРАЗОВАНИЕ ДОКАЗЫВАЕТСЯ ЭКВИВАЛЕНТНОСТЬЮ МАТРИЦ, А НЕ СОВПАДЕНИЕМ ТРОЙКИ ЧИСЕЛ, и это требование наряда, а не удобство: параметризация неоднозначна — при нутации π у разложения ДВА законных решения, поэтому запись проверяется восстановлением матрицы из свежепрочитанных параметров и сравнением с запрошенной (допуск 1e-6; верный порядок расходится на 2.2e-16, неверный — на 1). Отрицательный контроль: WrongOrder_DoesNotReproduceTheMeasuredMatrix (tests/Unit/KompasMcp.Unit/EulerOrientationTests.cs) требует расхождения > 0.5 у неверного порядка. ЧТО ЧИТАЕТСЯ: reposition_kind — всегда; reposition_vector_mm — у переноса; reposition_axis_direction_mm и reposition_angle_deg — у поворота. Произвольное направление оси (не только координатное), угол и ось через точку ВНЕ начала координат выражаются: тройка углов задаёт ориентацию целиком, а переносная часть размещения читается отдельно. ЧЕГО НЕ ЧИТАЕТСЯ, И ЭТО НАЗВАНО: reposition_axis_point_mm. Документированного члена для точки оси нет ни у одного интерфейса цепочки — IBodyReposition, ILocalCoordinateSystem/IPoint3D, IPoint3DParamDisplace, ILocalCSAxesDirectionParam, ILocalCSEulerParam, ILocalCSObject (шаги RP.10, RP.13; справка объявляет ILocalCSObject.CoordinateSystem как IModelObject). Сверх того точка оси НЕ ЯВЛЯЕТСЯ свойством размещения: запись X/Y/Z = c МЕНЯЕТ габарит повёрнутого тела — (−5,0,0)…(5,20,5) вместо (−5,−5,0)…(5,15,5), — тогда как запись X/Y/Z = c − R·c его СОХРАНЯЕТ (RP.12), то есть поворот вокруг любой точки одной и той же прямой даёт ТО ЖЕ размещение. Из прочитанных ориентации и переноса восстанавливается ПРЕДСТАВИТЕЛЬ прямой, а не исходный вход, поэтому поле не публикуется и НАЗЫВАЕТСЯ причиной, а не пустует молча. ПРЕЖНИЙ ИЗМЕРЕННЫЙ ФАКТ, ИЗ-ЗА КОТОРОГО ЗАМЕНЁН МАРШРУТ ЗАПИСИ (не отменён и не переписан): матричный вид размещения отдаёт записанное ТОЛЬКО В СЕССИИ ЗАПИСИ. Живой поворот +90° вокруг Z читается (0,1,0) при габарите (−5,−5,0)…(5,15,5); тот же признак после сохранения, закрытия и открытия — (1,0,0) при ТОЙ ЖЕ геометрии (RP.16); WriteToFile на переоткрытом документе даёт единичную матрицу (RP.18); запись в тот же элемент возвращает верное чтение, но оно живёт ровно до следующего открытия (RP.20). Отличить «записано» от «не восстановлено» НЕЧЕМ, и это измерено: ILocalCoordinateSystem.Valid читается True в ОБОИХ состояниях (RP.16), OrientationType — 0 в обоих, ILocalCSAxesDirectionParam.LeadAxis — o3d_unknown в обоих; документированная последовательность работы с документом тоже чтения не восстанавливает — RP.23 прочитал (1,0,0) сразу после открытия, после IModelObject.Update() признака, после ILocalCoordinateSystem.Update() и после RebuildModel+RebuildDocument, все четыре ступени единичны при габарите, подтверждающем поворот; документированная коллекция ЛСК размещения пуста (RP.21: элементов 0). Поэтому единичная ориентация переоткрытого признака НЕ означает переноса — она не означает ничего, и именно она давала ложный ответ reposition_kind = «translate» у ЗАПИСАННОГО ПОВОРОТА. Матрица больше НЕ ЧИТАЕТСЯ НИ РАЗУ, а размещение ЗАПИСЫВАЕТСЯ ПАРАМЕТРАМИ (см. B3_REPOSITION_ROUTE). ЗАКРЫТЫЕ ВЕТВИ, чтобы их не искали заново: IPoint3DParamDisplace.DX/DY/DZ недостижимы, пока ParameterType не выставлен в ksPDisplace; Vector3D(ось) = null, ILocalCSAxesDirectionParam.DirectingObject = null, LeadAxis = o3d_unknown; IBodyReposition.RepositionObjects объявлен в библиотеке типов, но не в interop, и чисел не несёт; интерфейс IPlacement3D (GetMatrix3D/GetOrigin/GetEulerAngles/GetPoint3D) объект Position не реализует — члены отвечают DISP_E_UNKNOWNNAME (проба --reposition-read, прогон 9801ee2579f348fa8366dab2131f7b23), а Position подтверждает ровно IPoint3D, ILocalCoordinateSystem, ILocalCSObject и IModelObject (RP.10). УГОЛ В РЕЖИМЕ ОСЕЙ НЕ ЧИТАЕТСЯ ПО СПРАВКЕ: ILocalCSAxesDirectionParam.AngleByOwnAxis — «Свойство доступно только для записи» (ilocalcsaxesdirctionparam_anglebyownaxis.html), поэтому режим осей для чтения не годится и продукт читает режим углов. СОЗДАННОЕ МАТРИЦОЙ НЕ ПЕРЕВОДИТСЯ МОЛЧА: у признака, записанного прежней редакцией, OrientationType читается 0 (ksAxisOrientation), и продукт ОТКАЗЫВАЕТ, называя все пять полей преобразования, а не выдаёт нули и не выводит вид из единичной ориентации. Успех на новых признаках поддержки старых не доказывает — это разные утверждения, и второе здесь не заявлено. СНЯТИЕ — НЕ РЕАЛИЗОВАННАЯ ФУНКЦИЯ, и здесь ничего не снято: знаменатель не уменьшался, счётчик закрытых вырос на ЗАКРЫТИЕ, а не на удаление. Запрет объявлять входные поля читаемыми, когда они не прочитаны, — B3_REMOVED_READ_CLAIMS ниже и сторож REPOSITION_READ_INPUTS в scripts/mcp-smoke.py.",
@@ -3098,7 +3133,11 @@
     "docs/acceptance/api7/disconnected-union.json",
     "docs/acceptance/api7/reposition-read.json",
     "docs/acceptance/api7/cut-area.json",
-    "docs/acceptance/api7/reposition-order.json"
+    "docs/acceptance/api7/reposition-order.json",
+    "scratch/mcp-smoke/b3-acceptance.json",
+    "scratch/mcp-smoke/b3l-acceptance.json",
+    "scratch/mcp-smoke/b3m-acceptance.json",
+    "scratch/mcp-smoke/b3c-acceptance.json"
    ],
    "limitations": [
     "ГРАНИЦА ЧТЕНИЯ ПАРАМЕТРОВ ПРЕОБРАЗОВАНИЯ. ТРЕБОВАНИЕ ЗАКРЫТО ИЗМЕРЕНИЕМ, а не переформулировкой: продукт читает параметры преобразования из модели, включая переоткрытый документ, и публикует их. ЧЕМ ЗАКРЫТО: проба --reposition-params, прогон a336120926fc4652a8bf737562568271 (шаги RP.1–RP.25), отчёт docs/acceptance/api7/reposition-params.json; и приёмка ПРОДУКТА на бинарниках поставки строками B3M.09.read, B3M.09.save_reopen, B3M.10.read, B3M.10.save_reopen. Все четыре строки читают переоткрытый документ через свежую ссылку ДО любой записи и сверяются с ОБЪЯВЛЕННЫМ ожиданием, а не с наблюдаемым. ПОРЯДОК И ЕДИНИЦЫ УГЛОВ — ИЗ ДОКУМЕНТАЦИИ И ИЗМЕРЕНИЯ, А НЕ ПОДБРАНЫ ПОД ОДИН ПРИМЕР. Справка даёт композицию трёх углов РИСУНКОМ (rotation_pict.html → images/_praezession.jpg), поэтому шесть мыслимых порядков были СРАВНЕНЫ ПО МАТРИЦЕ на измеренных позах: расхождение нулевое только у PNR (Precession → Nutation → Rotation, M = Rz(P)·Rx(N)·Rz(R)), у остальных пяти — 1. Единицы — градусы (измерено: запрошенные 30° читаются как 29.99999999999998). ПРЕОБРАЗОВАНИЕ ДОКАЗЫВАЕТСЯ ЭКВИВАЛЕНТНОСТЬЮ МАТРИЦ, А НЕ СОВПАДЕНИЕМ ТРОЙКИ ЧИСЕЛ, и это требование наряда, а не удобство: параметризация неоднозначна — при нутации π у разложения ДВА законных решения, поэтому запись проверяется восстановлением матрицы из свежепрочитанных параметров и сравнением с запрошенной (допуск 1e-6; верный порядок расходится на 2.2e-16, неверный — на 1). Отрицательный контроль: WrongOrder_DoesNotReproduceTheMeasuredMatrix (tests/Unit/KompasMcp.Unit/EulerOrientationTests.cs) требует расхождения > 0.5 у неверного порядка. ЧТО ЧИТАЕТСЯ: reposition_kind — всегда; reposition_vector_mm — у переноса; reposition_axis_direction_mm и reposition_angle_deg — у поворота. Произвольное направление оси (не только координатное), угол и ось через точку ВНЕ начала координат выражаются: тройка углов задаёт ориентацию целиком, а переносная часть размещения читается отдельно. ЧЕГО НЕ ЧИТАЕТСЯ, И ЭТО НАЗВАНО: reposition_axis_point_mm. Документированного члена для точки оси нет ни у одного интерфейса цепочки — IBodyReposition, ILocalCoordinateSystem/IPoint3D, IPoint3DParamDisplace, ILocalCSAxesDirectionParam, ILocalCSEulerParam, ILocalCSObject (шаги RP.10, RP.13; справка объявляет ILocalCSObject.CoordinateSystem как IModelObject). Сверх того точка оси НЕ ЯВЛЯЕТСЯ свойством размещения: запись X/Y/Z = c МЕНЯЕТ габарит повёрнутого тела — (−5,0,0)…(5,20,5) вместо (−5,−5,0)…(5,15,5), — тогда как запись X/Y/Z = c − R·c его СОХРАНЯЕТ (RP.12), то есть поворот вокруг любой точки одной и той же прямой даёт ТО ЖЕ размещение. Из прочитанных ориентации и переноса восстанавливается ПРЕДСТАВИТЕЛЬ прямой, а не исходный вход, поэтому поле не публикуется и НАЗЫВАЕТСЯ причиной, а не пустует молча. ПРЕЖНИЙ ИЗМЕРЕННЫЙ ФАКТ, ИЗ-ЗА КОТОРОГО ЗАМЕНЁН МАРШРУТ ЗАПИСИ (не отменён и не переписан): матричный вид размещения отдаёт записанное ТОЛЬКО В СЕССИИ ЗАПИСИ. Живой поворот +90° вокруг Z читается (0,1,0) при габарите (−5,−5,0)…(5,15,5); тот же признак после сохранения, закрытия и открытия — (1,0,0) при ТОЙ ЖЕ геометрии (RP.16); WriteToFile на переоткрытом документе даёт единичную матрицу (RP.18); запись в тот же элемент возвращает верное чтение, но оно живёт ровно до следующего открытия (RP.20). Отличить «записано» от «не восстановлено» НЕЧЕМ, и это измерено: ILocalCoordinateSystem.Valid читается True в ОБОИХ состояниях (RP.16), OrientationType — 0 в обоих, ILocalCSAxesDirectionParam.LeadAxis — o3d_unknown в обоих; документированная последовательность работы с документом тоже чтения не восстанавливает — RP.23 прочитал (1,0,0) сразу после открытия, после IModelObject.Update() признака, после ILocalCoordinateSystem.Update() и после RebuildModel+RebuildDocument, все четыре ступени единичны при габарите, подтверждающем поворот; документированная коллекция ЛСК размещения пуста (RP.21: элементов 0). Поэтому единичная ориентация переоткрытого признака НЕ означает переноса — она не означает ничего, и именно она давала ложный ответ reposition_kind = «translate» у ЗАПИСАННОГО ПОВОРОТА. Матрица больше НЕ ЧИТАЕТСЯ НИ РАЗУ, а размещение ЗАПИСЫВАЕТСЯ ПАРАМЕТРАМИ (см. B3_REPOSITION_ROUTE). ЗАКРЫТЫЕ ВЕТВИ, чтобы их не искали заново: IPoint3DParamDisplace.DX/DY/DZ недостижимы, пока ParameterType не выставлен в ksPDisplace; Vector3D(ось) = null, ILocalCSAxesDirectionParam.DirectingObject = null, LeadAxis = o3d_unknown; IBodyReposition.RepositionObjects объявлен в библиотеке типов, но не в interop, и чисел не несёт; интерфейс IPlacement3D (GetMatrix3D/GetOrigin/GetEulerAngles/GetPoint3D) объект Position не реализует — члены отвечают DISP_E_UNKNOWNNAME (проба --reposition-read, прогон 9801ee2579f348fa8366dab2131f7b23), а Position подтверждает ровно IPoint3D, ILocalCoordinateSystem, ILocalCSObject и IModelObject (RP.10). УГОЛ В РЕЖИМЕ ОСЕЙ НЕ ЧИТАЕТСЯ ПО СПРАВКЕ: ILocalCSAxesDirectionParam.AngleByOwnAxis — «Свойство доступно только для записи» (ilocalcsaxesdirctionparam_anglebyownaxis.html), поэтому режим осей для чтения не годится и продукт читает режим углов. СОЗДАННОЕ МАТРИЦОЙ НЕ ПЕРЕВОДИТСЯ МОЛЧА: у признака, записанного прежней редакцией, OrientationType читается 0 (ksAxisOrientation), и продукт ОТКАЗЫВАЕТ, называя все пять полей преобразования, а не выдаёт нули и не выводит вид из единичной ориентации. Успех на новых признаках поддержки старых не доказывает — это разные утверждения, и второе здесь не заявлено. СНЯТИЕ — НЕ РЕАЛИЗОВАННАЯ ФУНКЦИЯ, и здесь ничего не снято: знаменатель не уменьшался, счётчик закрытых вырос на ЗАКРЫТИЕ, а не на удаление. Запрет объявлять входные поля читаемыми, когда они не прочитаны, — B3_REMOVED_READ_CLAIMS ниже и сторож REPOSITION_READ_INPUTS в scripts/mcp-smoke.py.",
@@ -4969,7 +5008,11 @@
     "docs/acceptance/api7/disconnected-union.json",
     "docs/acceptance/api7/reposition-read.json",
     "docs/acceptance/api7/cut-area.json",
-    "docs/acceptance/api7/reposition-order.json"
+    "docs/acceptance/api7/reposition-order.json",
+    "scratch/mcp-smoke/b3-acceptance.json",
+    "scratch/mcp-smoke/b3l-acceptance.json",
+    "scratch/mcp-smoke/b3m-acceptance.json",
+    "scratch/mcp-smoke/b3c-acceptance.json"
    ],
    "limitations": [
     "expected_volume_mm3 — ОДНО ИМЯ И ТРИ ВЕЛИЧИНЫ: у kompas_boolean это объём главного тела, то есть СУММА всех тел документа; у kompas_split — сумма ЧАСТЕЙ; у kompas_cut_by_plane — объём ОСТАТКА. Объявленное число, не подтверждённое моделью, НАЗЫВАЕТСЯ в unverified_aspects (B3.40), и это не отказ: геометрия сверена независимо, а расхождение названо.",
@@ -5039,7 +5082,11 @@
     "docs/acceptance/api7/disconnected-union.json",
     "docs/acceptance/api7/reposition-read.json",
     "docs/acceptance/api7/cut-area.json",
-    "docs/acceptance/api7/reposition-order.json"
+    "docs/acceptance/api7/reposition-order.json",
+    "scratch/mcp-smoke/b3-acceptance.json",
+    "scratch/mcp-smoke/b3l-acceptance.json",
+    "scratch/mcp-smoke/b3m-acceptance.json",
+    "scratch/mcp-smoke/b3c-acceptance.json"
    ],
    "limitations": [
     "expected_volume_mm3 — ОДНО ИМЯ И ТРИ ВЕЛИЧИНЫ: у kompas_boolean это объём главного тела, то есть СУММА всех тел документа; у kompas_split — сумма ЧАСТЕЙ; у kompas_cut_by_plane — объём ОСТАТКА. Объявленное число, не подтверждённое моделью, НАЗЫВАЕТСЯ в unverified_aspects (B3.40), и это не отказ: геометрия сверена независимо, а расхождение названо.",

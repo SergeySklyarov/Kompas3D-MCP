@@ -135,6 +135,39 @@ def script_path_constants(root):
     return out
 
 
+def script_evidence_lists(root):
+    """(source_file, constant_name, value) for module-level path-like lists in `scripts/*.py`.
+
+    WHY LISTS TOO. The guard read only SCALAR constants, and the reference that survived the
+    `scratch/` cleanup sat inside a LIST: `record-b2-rows.py` names its basis in `AUXS_EVIDENCE`, and
+    one of those paths (`docs/acceptance/api7/api7-probe-report.json`) was gone while the guard stayed
+    silent. The list is found by NAME PATTERN (`*EVIDENCE*`), not from a hand-written constant name:
+    a hand list is what the guard was supposed to replace.
+    """
+    out = []
+    for path in sorted(glob.glob(os.path.join(root, SCRIPT_GLOB))):
+        try:
+            with open(path, encoding="utf-8-sig") as fh:
+                tree = ast.parse(fh.read())
+        except (OSError, SyntaxError):
+            continue
+        source = os.path.relpath(path, root).replace("\\", "/")
+        for node in tree.body:
+            if not isinstance(node, ast.Assign):
+                continue
+            if not isinstance(node.value, (ast.List, ast.Tuple)):
+                continue
+            for target in node.targets:
+                if not (isinstance(target, ast.Name) and target.id.isupper()):
+                    continue
+                if "EVIDENCE" not in target.id:
+                    continue
+                for element in node.value.elts:
+                    if isinstance(element, ast.Constant) and isinstance(element.value, str):
+                        out.append((source, target.id, element.value))
+    return out
+
+
 def findings(root):
     """Every reference that does not resolve, as (source, reference, resolved_path)."""
     missing = []
@@ -147,6 +180,12 @@ def findings(root):
     for source, name, value in script_path_constants(root):
         if not os.path.exists(os.path.join(root, value.replace("/", os.sep))):
             missing.append((source, "%s = %s" % (name, value), value))
+    for source, name, value in script_evidence_lists(root):
+        path = resolve_reference(value)
+        if not path:
+            continue
+        if not os.path.exists(os.path.join(root, path.replace("/", os.sep))):
+            missing.append((source, "%s[] = %s" % (name, value), path))
     return missing
 
 
@@ -187,20 +226,32 @@ def self_test():
         with open(os.path.join(scripts, "probe.py"), "w", encoding="utf-8") as fh:
             fh.write("PRESENT_PATH = 'present.json'\n"
                      "GONE_PATH = 'scripts/gone.py'\n"
-                     "PROSE = 'это не путь, а текст с пробелами и/или слэшем: да/нет'\n")
+                     "PROSE = 'это не путь, а текст с пробелами и/или слэшем: да/нет'\n"
+                     "LIST_EVIDENCE = ['present.json', 'gone-list.json']\n"
+                     "OTHER_LIST = ['gone-other.json']\n")
 
+        with open(os.path.join(tmp, "gone-list.json"), "w", encoding="utf-8") as fh:
+            fh.write("{}")
         clean = findings(tmp)
         check("чистое дерево: находок нет", clean == [], str(clean))
 
         os.remove(os.path.join(scripts, "gone.py"))
         os.remove(os.path.join(tmp, "gone.json"))
+        os.remove(os.path.join(tmp, "gone-list.json"))
         broken = findings(tmp)
         names = {(source, ref) for source, ref, _ in broken}
         check("удалённый файл назван по ссылке из coverage",
               ("coverage/solid-v24/matrix.json", "gone.json#anchor") in names, str(sorted(names)))
         check("удалённый файл назван по константе скрипта",
               ("scripts/probe.py", "GONE_PATH = scripts/gone.py") in names)
-        check("находок ровно две", len(broken) == 2, str(len(broken)))
+        # Отрицательный контроль списка: элемент СПИСКА доказательств обязан быть назван, а элемент
+        # списка с другим именем — нет. Обе половины в одной постановке: иначе «читаю списки» и
+        # «читаю любой список» неотличимы.
+        check("удалённый файл назван по СПИСКУ доказательств",
+              ("scripts/probe.py", "LIST_EVIDENCE[] = gone-list.json") in names, str(sorted(names)))
+        check("список без признака EVIDENCE не читается",
+              not any("gone-other.json" in ref for _s, ref in names), str(sorted(names)))
+        check("находок ровно три", len(broken) == 3, str(len(broken)))
 
         # Отрицательный контроль «не хватает ссылки»: строка, ссылающаяся на несуществующий файл,
         # обязана быть названа. Без него прибор мог бы «проходить» на пустом наборе ссылок.
@@ -214,7 +265,7 @@ def self_test():
               not any(source == "scripts/probe.py" and ref.startswith("PROSE") for source, ref in names))
         check("существующий файл не назван",
               not any(ref in ("present.json", "PRESENT_PATH = present.json") for _s, ref in names))
-        check("находок ровно три", len(broken) == 3, str(len(broken)))
+        check("находок ровно четыре", len(broken) == 4, str(len(broken)))
 
     print("  проверок пройдено: %d из %d" % (len(checks) - len(failures), len(checks)))
     if failures:

@@ -1150,11 +1150,12 @@ B3_EVIDENCE = [
     # пробами, а не выведены из устройства объекта; их отчёты — первичное доказательство.
     "docs/acceptance/api7/cut-area.json",
     "docs/acceptance/api7/reposition-order.json",
-    # Прогон приёмки на бинарях поставки publish-b3-20260919-targeting (полный, по группам).
-    "scratch/acceptance-b3-targeting.log",
-    # Отдельный прогон группы B3, которым измерены границы адресности B3.24i/j/k (переоткрытие с
-    # живым посторонним телом, плоскость мимо цели, несколько посторонних тел).
-    "scratch/b3-area-extra3.log",
+    # ДАТИРОВАННАЯ ПОПРАВКА 13.10.2026 (наряд API_AUDIT_TOOLS §3.3): здесь стояли
+    # `scratch/acceptance-b3-targeting.log` и `scratch/b3-area-extra3.log` — журналы прогонов на
+    # бинарях поставки publish-b3-20260919-targeting, удалённые чисткой `scratch/` 10.10.2026.
+    # Прогоны не восстановимы (восстанавливать журнал значило бы подделать доказательство), поэтому
+    # названные ими измерения подтверждаются ПОВТОРНЫМ прогоном групп: B3/B3L/B3M/B3C выше, а также
+    # прогон группы B3 на текущей поставке (docs/acceptance/evidence/, наряд API_AUDIT_TOOLS).
 ]
 
 # ДОКАЗАТЕЛЬСТВО ЗАКРЫТИЯ ЧТЕНИЯ ПАРАМЕТРОВ ПРЕОБРАЗОВАНИЯ. Отдельный список, а не строка в
@@ -2219,6 +2220,23 @@ def check_f08(index: dict, catalog: dict, profile: dict, reports, lowering: dict
     return problems
 
 
+def merge_evidence(node: dict, wanted) -> list:
+    """Дописать недостающие ссылки в `evidence`, СОХРАНИВ уже названные.
+
+    INVARIANT: запись записи ДОПОЛНЯЕТ, а не заменяет. MEASURED 13.10.2026: прогон записи снял у
+    16 строк ссылки вида `docs/acceptance/evidence/...` и поставил на их место
+    `scratch/mcp-smoke/...` — доказательство, названное прежде, исчезло молча. Это тот же дефект
+    №24 этого прибора (замена вместо слияния), и он повторился сразу в семи местах: проверка
+    «ссылка есть» замену пропускает, потому что проверяет наличие НУЖНОГО, а не сохранность
+    прежнего. Порядок существующих ссылок сохраняется, недостающие дописываются в конец.
+    """
+    current = [str(item) for item in (node.get("evidence") or [])]
+    missing = [str(item) for item in wanted if str(item) not in current]
+    if missing:
+        node["evidence"] = current + missing
+    return missing
+
+
 def f08_default_reports() -> Path:
     """Каталог отчётов приёмки по умолчанию — САМЫЙ СВЕЖИЙ ПРОГОН ГРУППЫ F08, а не имя по шаблону.
 
@@ -2240,9 +2258,32 @@ def f08_default_reports() -> Path:
     base = ROOT / "scratch" / "mcp-smoke"
     if not base.is_dir():
         return base / "прогонов-нет"
-    runs = sorted((p for p in base.iterdir() if p.is_dir() and (p / "f08.json").is_file()),
-                  key=lambda p: (p / "f08.json").stat().st_mtime)
-    return runs[-1] if runs else base / "прогона-с-группой-F08-нет"
+
+    def group_report(directory: Path):
+        """Отчёт группы в каталоге прогона, найденный ПО ИМЕНИ-ОБРАЗЦУ, а не по литералу.
+
+        ИСПРАВЛЕНО 13.10.2026 (наряд API_AUDIT_TOOLS §3.3): умолчание искало литерал `f08.json`, а
+        прогон давно пишет `f08-acceptance.json`; сторож отвечал «каталог отчётов приёмки не найден»
+        на СВЕЖЕМ прогоне группы. Литерал, переживший переименование, читается как отсутствие
+        доказательства — тот же класс, что дефект №25 (умолчание, указывающее мимо предмета).
+        """
+        found = [p for p in directory.glob("f08*.json") if p.is_file()]
+        return max(found, key=lambda p: p.stat().st_mtime) if found else None
+
+    # Каталоги прогонов лежат и прямо под `mcp-smoke/`, и под `mcp-smoke/runs/` (после того как
+    # каждый прогон получил СВОЙ каталог); поиск идёт по обоим уровням, а не по одному из них.
+    runs = []
+    for parent in (base, base / "runs"):
+        if not parent.is_dir():
+            continue
+        for path in parent.iterdir():
+            if not path.is_dir():
+                continue
+            report = group_report(path)
+            if report is not None:
+                runs.append((report.stat().st_mtime, path))
+    runs.sort()
+    return runs[-1][1] if runs else base / "прогона-с-группой-F08-нет"
 
 
 def load(path: Path) -> dict:
@@ -2501,7 +2542,7 @@ def main() -> int:
             aux_row["actions"] = want_actions
             aux_row["tests"] = want_tests
             aux_row["edit_route"] = AUXS_EDIT_ROUTE
-            aux_row["evidence"] = want_evidence
+            merge_evidence(aux_row, want_evidence)
             aux_row["blocked_reasons_removed"] = {"edit": AUXS_UNBLOCK_REASON}
             # Причина снимается ИМЕННО УДАЛЕНИЕМ поля, а не обнулением в пустой словарь: пустой
             # `blocked_reasons` неотличим от «никогда не был заблокирован», а это разные факты.
@@ -2541,7 +2582,7 @@ def main() -> int:
         row["parameters_schema"] = spec["parameters_schema"]
         row["adapter_route"] = spec["adapter_route"]
         row["tests"] = spec["tests"]
-        row["evidence"] = list(SM07_EVIDENCE)
+        merge_evidence(row, SM07_EVIDENCE)
         row["limitations"] = list(spec["limitations"])
         row["catalog_level"] = want_level
         row["not_applicable_reasons"] = {}
@@ -2612,7 +2653,7 @@ def main() -> int:
         row["parameters_schema"] = spec["parameters_schema"]
         row["adapter_route"] = spec["adapter_route"]
         row["tests"] = list(spec["tests"])
-        row["evidence"] = list(SM03_EVIDENCE)
+        merge_evidence(row, SM03_EVIDENCE)
         row["limitations"] = ([SM03_FACTORY, SM03_REFERENCE, SM03_LAWS,
                                SM03_PRODUCT_ROUTE, SM03_BOSS_FUSION, SM03_TARGET_BODY,
                                SM03_REFUSALS, sm03_probe_only_history, spec["why"]]
@@ -2656,13 +2697,13 @@ def main() -> int:
         # `DEP.DAP.0{1..4}`, добавленные приёмкой позже него (дефект №24). Наряд §2 восстанавливает
         # ссылку на УЖЕ существующее доказательство: перечень растёт, а не подменяется.
         dep_row["tests"] = api7_dep_tests(dep_row.get("tests"))
-        dep_row["evidence"] = [
+        merge_evidence(dep_row, [
             "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs",
             "src/KompasMcp.Api5Adapter/Api5Session.Hole.cs",
             "src/KompasMcp.Api5Adapter/Api5Session.Features.cs",
             "docs/acceptance/api7/hole-modes.md",
             "scripts/mcp-smoke.py",
-        ]
+        ])
         dep_row["limitations"] = [
             "Закрыто для измеренной области: четыре режима родного отверстия проходят полный цикл "
             "(создание, чтение параметров, адресуемость признака, подавление/восстановление, удаление, "
@@ -2760,7 +2801,7 @@ def main() -> int:
             "ещё до COM. Свойство опубликовано, валюта заработала. ГРАНИЦА: расширение набора "
             "по-прежнему невыразимо — см. ограничение о расширении."
         )
-        row["evidence"] = [
+        merge_evidence(row, [
             "scripts/mcp-smoke.py#fillet_checks",
             "scratch/mcp-smoke/fillet-acceptance.json",
             "docs/acceptance/api7/fillet-base-objects.json",
@@ -2768,7 +2809,7 @@ def main() -> int:
             "tools/KompasMcp.Api7Probe/FilletBaseObjectsProbe.cs",
             "coverage/solid-v24/catalog.json#SM-09.fillet.change_edge_set",
             "schemas/kompas_update_feature.json#edge_refs",
-        ]
+        ])
         # Основание закрытия ставится первой строкой: читатель должен увидеть его до подробностей.
         # «Чужое» (не наше) сохраняется, но БЕЗ дублей и без повторного накопления: прошлые прогоны
         # уже оставили здесь копии наших же строк, и наивное `previous` добавляло их заново на каждом
@@ -3217,7 +3258,7 @@ def main() -> int:
         row["parameters_schema"] = spec["parameters_schema"]
         row["adapter_route"] = spec["adapter_route"]
         row["tests"] = list(spec["tests"])
-        row["evidence"] = list(B3_EVIDENCE)
+        merge_evidence(row, B3_EVIDENCE)
         row["limitations"] = list(spec["limitations"])
         row["catalog_level"] = want_level
         row["not_applicable_reasons"] = dict(spec["not_applicable"])
@@ -3507,12 +3548,12 @@ def main() -> int:
         if dep.get("id") == "dep.api7.in_same_adapter":
             dep["acceptance"] = API7_DEP_ACCEPTANCE
             dep["status"] = "verified"
-            dep["evidence"] = [
+            merge_evidence(dep, [
                 "src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs",
                 "src/KompasMcp.Api5Adapter/Api5Session.Hole.cs",
                 "docs/acceptance/api7/hole-modes.md",
                 "scripts/mcp-smoke.py",
-            ]
+            ])
         # Ось вращения: маршрут авторства оси НАЙДЕН и измерен, но зависимость остаётся открытой,
         # и открыта она теперь по другой причине, чем раньше. Прежний текст («авторства оси нет»)
         # заменён измеренным: ось строится по двум точкам через два контейнера на одном живом

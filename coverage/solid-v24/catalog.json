@@ -6424,7 +6424,8 @@
      "doc_source": [
       "imateconstraints3d_add"
      ],
-     "route": "IPart7.MateConstraints → IMateConstraints3D.Add(MateConstraintType) → BaseObject1/BaseObject2 → Update() (imateconstraints3d_add.html, imateconstraint3d_baseobject1/2.html)"
+     "route": "IPart7.MateConstraints → IMateConstraints3D.Add(MateConstraintType) → BaseObject1/BaseObject2 → Update() (imateconstraints3d_add.html, imateconstraint3d_baseobject1/2.html)",
+     "modes": []
     },
     {
      "id": "MATE-02.mate.read",
@@ -6433,7 +6434,8 @@
      "doc_source": [
       "imateconstraints3d_add"
      ],
-     "route": "ksDocument3D.MateConstraintCollection → GetCount/GetByIndex → ksMateConstraint.GetBaseObj(1|2), constraintType, ParamValue, Alignment (ksmateconstraintcollection_getcount.html, ksmateconstraint_getbaseobj.html)"
+     "route": "ksDocument3D.MateConstraintCollection → GetCount/GetByIndex → ksMateConstraint.GetBaseObj(1|2), constraintType, ParamValue, Alignment (ksmateconstraintcollection_getcount.html, ksmateconstraint_getbaseobj.html)",
+     "modes": []
     },
     {
      "id": "MATE-03.mate.param_edit",
@@ -6442,7 +6444,8 @@
      "doc_source": [
       "imateconstraints3d_add"
      ],
-     "route": "IMateConstraint3D.ParamValue = … → IMateConstraint3D.Update() (imateconstraint3d_paramvalue.html)"
+     "route": "IMateConstraint3D.ParamValue = … → IMateConstraint3D.Update() (imateconstraint3d_paramvalue.html)",
+     "modes": []
     },
     {
      "id": "MATE-04.mate.fixed",
@@ -6451,7 +6454,8 @@
      "doc_source": [
       "imateconstraints3d_add"
      ],
-     "route": "IMateConstraint3D.Fixed = ksMateFixedTypeEnum (ksmatefixedtypeenum.html)"
+     "route": "IMateConstraint3D.Fixed = ksMateFixedTypeEnum (ksmatefixedtypeenum.html)",
+     "modes": []
     },
     {
      "id": "MATE-05.mate.delete",
@@ -6460,7 +6464,8 @@
      "doc_source": [
       "imateconstraints3d_add"
      ],
-     "route": "ksDocument3D.RemoveMateConstraint(constraintType, obj1, obj2) (ksdocument3d_removemateconstraint.html)"
+     "route": "ksDocument3D.RemoveMateConstraint(constraintType, obj1, obj2) (ksdocument3d_removemateconstraint.html)",
+     "modes": []
     },
     {
      "id": "MATE-06.mate.placement_effect",
@@ -6469,7 +6474,8 @@
      "doc_source": [
       "imateconstraints3d_add"
      ],
-     "route": "ksPlacement.GetMatrix3D по компоненту после Update() сопряжения (маршрут чтения измерен в блоке C1)"
+     "route": "ksPlacement.GetMatrix3D по компоненту после Update() сопряжения (маршрут чтения измерен в блоке C1)",
+     "modes": []
     }
    ]
   },

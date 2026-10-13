@@ -34,8 +34,6 @@ public sealed class HostOptions
     /// appends that folder name, so the value here must NOT already end in it.</summary>
     public string ControlCopyDirectory { get; init; } = Default();
 
-    public string ArtifactDirectory { get; init; } = Default("artifacts");
-
     /// <summary>Bounded CAD queue depth (spec 1.13: 64).</summary>
     public int QueueCapacity { get; init; } = 64;
 
@@ -45,14 +43,12 @@ public sealed class HostOptions
     /// <summary>Per-operation budget on the Worker side.</summary>
     public int OperationBudgetMs { get; init; } = 120_000;
 
-    public int MaxResponseBytes { get; init; } = 16 * 1024;
-
-    public int DefaultPageLimit { get; init; } = 100;
-
-    public int MaxPageLimit { get; init; } = 500;
-
-    /// <summary>True when the EH70 working tree must never be reachable for writing.</summary>
-    public bool RequireReadOnlyModelRoots { get; init; } = true;
+    // LIMIT: `max_response_bytes`, `default_page_limit`, `max_page_limit`, `artifact_directory` and
+    // `require_read_only_model_roots` were read from the configuration and applied NOWHERE - a promise
+    // the product did not keep, and a documented one for the last of them (the operator guide promised
+    // a startup warning). They were removed rather than left reading as working. The real bound on a
+    // response is the IPC frame (16 MB), and the list tools carry their own `limit` argument.
+    // History: docs/decisions/host.md#unused-config-keys
 
     private static string Default(params string[] parts)
     {
@@ -87,14 +83,9 @@ public sealed class HostOptions
             LogPath = ReadString(node, "log_path") ?? Default("logs", "host.jsonl"),
             JournalPath = ReadString(node, "journal_path") ?? Default("journal", "operations.jsonl"),
             ControlCopyDirectory = ReadString(node, "control_copy_directory") ?? Default(),
-            ArtifactDirectory = ReadString(node, "artifact_directory") ?? Default("artifacts"),
             QueueCapacity = ReadInt(node, "queue_capacity") ?? 64,
             SyncBudgetMs = ReadInt(node, "sync_budget_ms") ?? 10_000,
             OperationBudgetMs = ReadInt(node, "operation_budget_ms") ?? 120_000,
-            MaxResponseBytes = ReadInt(node, "max_response_bytes") ?? 16 * 1024,
-            DefaultPageLimit = ReadInt(node, "default_page_limit") ?? 100,
-            MaxPageLimit = ReadInt(node, "max_page_limit") ?? 500,
-            RequireReadOnlyModelRoots = ReadBool(node, "require_read_only_model_roots") ?? true,
         };
 
         return FromEnvironment(options);
@@ -130,14 +121,9 @@ public sealed class HostOptions
             LogPath = options.LogPath,
             JournalPath = options.JournalPath,
             ControlCopyDirectory = options.ControlCopyDirectory,
-            ArtifactDirectory = options.ArtifactDirectory,
             QueueCapacity = options.QueueCapacity,
             SyncBudgetMs = options.SyncBudgetMs,
             OperationBudgetMs = options.OperationBudgetMs,
-            MaxResponseBytes = options.MaxResponseBytes,
-            DefaultPageLimit = options.DefaultPageLimit,
-            MaxPageLimit = options.MaxPageLimit,
-            RequireReadOnlyModelRoots = options.RequireReadOnlyModelRoots,
         };
     }
 

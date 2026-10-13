@@ -11,7 +11,6 @@
 | `writable_roots` | песочницы для сохранений и черновиков | пусто |
 | `export_roots` | куда кладутся экспорты и пакеты | пусто |
 | `allow_unc_paths` | разрешить `\\server\share` | `false` |
-| `require_read_only_model_roots` | сообщить в stderr при старте, если корень записи лежит внутри read-only | `true` |
 | `worker_path` | явный путь к `KompasMcp.Worker.exe` | рядом с Host |
 | `log_path`, `worker_log_path`, `journal_path` | JSONL-файлы наблюдений | в системном temp |
 | `queue_capacity` | глубина очереди CAD-команд | 64 |

@@ -16,6 +16,11 @@ using KompasMcp.InteropScan;
 //   --type-members <name> dump every member of the type whose full/short name matches exactly
 //   --order               with --type-members: keep METADATA order instead of sorting by name
 //   --all-types           list every type in the assembly
+//   --dump-members        emit every member of every type as
+//                         member|<type enumerated>|<declaring type>|<member>|<signature>
+//                         The DECLARING type is printed because an inherited member's owner is the
+//                         base interface, and a caller that resolves a route by member name alone
+//                         would attribute it to whichever derived type it happened to hold.
 //   --csv                 emit machine-readable lines: kind|declaringType|memberName|signature
 //   --tlb <path>          read a COM TYPE LIBRARY instead of an assembly (see TlbLayout.cs)
 //   --com-slots           with --type-members: append the COM slot of every member of a [ComImport]
@@ -45,6 +50,7 @@ var typeFilters = new List<string>();
 var memberFilters = new List<string>();
 var exactTypes = new List<string>();
 var allTypes = false;
+var dumpMembers = false;
 var csv = false;
 var metadataOrder = false;
 var comSlots = false;
@@ -66,6 +72,9 @@ for (var i = optionFirst ? 0 : 1; i < args.Length; i++)
             break;
         case "--all-types":
             allTypes = true;
+            break;
+        case "--dump-members":
+            dumpMembers = true;
             break;
         case "--order":
             metadataOrder = true;
@@ -226,6 +235,34 @@ if (allTypes)
     foreach (var t in types.OrderBy(t => t.FullName, StringComparer.Ordinal))
     {
         Console.WriteLine(csv ? $"type|{t.FullName}||" : $"  {t.FullName}");
+    }
+}
+
+if (dumpMembers)
+{
+    foreach (var t in types.OrderBy(t => t.FullName, StringComparer.Ordinal))
+    {
+        MemberInfo[] members;
+        try
+        {
+            members = t.GetMembers();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"  member-read-failed {t.FullName}: {ex.Message}");
+            continue;
+        }
+
+        // The COM-import flag and the interface flag travel with every member: the audit resolves a
+        // route only when the receiver's type is a COM interface, and a type declared in the adapter
+        // itself (a hand-written twin) is a COM interface only if it says so.
+        var comImport = t.GetCustomAttributes(typeof(ComImportAttribute), false).Length > 0;
+        var isInterface = t.IsInterface;
+        foreach (var m in members.OrderBy(m => m.Name, StringComparer.Ordinal))
+        {
+            var owner = m.DeclaringType?.Name ?? "-";
+            Console.WriteLine($"member|{Short(t)}|{owner}|{m.Name}|{Signature(m)}|{comImport}|{isInterface}");
+        }
     }
 }
 

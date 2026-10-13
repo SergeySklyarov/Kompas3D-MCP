@@ -540,6 +540,7 @@ public partial class Api5Session
             countBefore,
             treeAfter.Count,
             candidates,
+            vanished,
             volumeBefore,
             volumeAfter,
             new VerificationDto(
@@ -737,6 +738,7 @@ public partial class Api5Session
             treeBefore.Count,
             treeAfter.Count,
             candidates ?? [],
+            vanished,
             volumeBefore,
             volumeAfter,
             new VerificationDto(
@@ -997,6 +999,11 @@ public partial class Api5Session
         int FeaturesBefore,
         int FeaturesAfter,
         IReadOnlyList<string> CandidateDependents,
+        // MEASURED: the objects that ACTUALLY left the tree (before minus after), never the promised
+        // list. A cascade removes more than the target, and without this field the real composition is
+        // readable only from a check's prose - a client that wants it must re-enumerate the tree
+        // itself, which is a second, possibly newer, measurement.
+        IReadOnlyList<string> RemovedObjects,
         double? VolumeBeforeMm3,
         double? VolumeAfterMm3,
         VerificationDto Verification,

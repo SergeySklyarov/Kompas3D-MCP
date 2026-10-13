@@ -11580,6 +11580,9 @@ def delete_sketch_checks(client, rep, app_id, workdir):
             f"V {v_before}->{v_after} (ожидание 24000->24000), тел после={n_after}, "
             f"эскиз на месте={any(r.get('sketch_ref') == s1 for r in rows)}")
     # ── DSC.03 то же с согласием: ядро уносит выдавливание вместе с эскизом ────────────────────────
+    # Имена признаков до удаления снимаются ЗДЕСЬ: строка DSC.03b сравнивает список, названный
+    # ОТВЕТОМ, с фактической разностью дерева, и без снимка «до» разность взять неоткуда.
+    names_before = [f.get("name") for f in list_features(doc)]
     env, del_code = delete(s1, rev, confirm=True)
     rev = rev_of(env, rev)
     v_casc, n_casc = total_volume(doc)
@@ -11594,6 +11597,22 @@ def delete_sketch_checks(client, rep, app_id, workdir):
             "PASS" if ok else "FAIL",
             f"код={del_code} V={v_casc} тел={n_casc} признаков={len(feats)} "
             f"checks={chk} эскизы={[r.get('name') for r in rows]}")
+    # ── DSC.03b ответ перечисляет ВСЁ ушедшее, а не только обещанный перечень ─────────────────────
+    # Наряд API_AUDIT_TOOLS §3.4. До этой строки ответ называл `candidate_dependents` (обещание) и
+    # число признаков до/после, а ФАКТИЧЕСКИЙ состав ушедшего читался только из прозы проверки
+    # `cascade_within_candidates`. Сравнивается список ответа с разностью дерева до и после.
+    payload = result(env) or {}
+    declared = payload.get("removed_objects")
+    if declared is None:
+        declared = details(env).get("removed_objects")
+    measured = sorted(set(names_before) - set(f.get("name") for f in feats))
+    ok = (isinstance(declared, list) and bool(measured)
+          and sorted(set(str(x) for x in declared)) == measured)
+    rep.add("DSC.03b", "ответ после каскадного удаления перечисляет ВСЁ фактически ушедшее: "
+            "список ответа совпадает с разностью дерева до и после",
+            "PASS" if ok else "FAIL",
+            f"ответ={declared} измерено={measured} до={names_before} "
+            f"после={[f.get('name') for f in feats]}")
     close(doc)
 
     # ── DSC.04 независимая пара переживает удаление ────────────────────────────────────────────────

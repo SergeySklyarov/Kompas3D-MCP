@@ -24,4 +24,13 @@ public static class CommandBudgets
     /// <summary>How long the Host waits for a command's answer: the Worker budget plus <see
     /// cref="HostMarginMs"/>.</summary>
     public static int HostBudgetMs(string command) => WorkerBudgetMs(command) + HostMarginMs;
+
+    /// <summary>How long the Host ACTUALLY waits: the larger of the shared command budget and the
+    /// operator setting.</summary>
+    /// <remarks>INVARIANT: the setting may LENGTHEN the wait but never shorten it below the Worker
+    /// budget, or the Host would be first to declare "outcome unknown" on a merely slow command and
+    /// restart a Worker that is still running it.
+    /// History: docs/decisions/host.md#budget-per-command</remarks>
+    public static int HostWaitMs(string command, int operationBudgetMs) =>
+        Math.Max(HostBudgetMs(command), operationBudgetMs);
 }

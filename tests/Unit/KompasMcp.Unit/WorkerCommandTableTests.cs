@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using KompasMcp.Contracts.Ipc;
+using KompasMcp.Host;
 using KompasMcp.Host.Catalog;
 using Xunit;
 
@@ -212,21 +213,60 @@ public sealed class WorkerCommandTableTests
             "в диспетчере снова есть число, похожее на бюджет: " + string.Join(", ", numbers));
     }
 
+    /// <summary>INVARIANT: the number the Host actually waits (<see cref="CommandBudgets.HostWaitMs"/>,
+    /// which <c>ToolInvoker</c> calls) is STRICTLY greater than the Worker budget for every command,
+    /// and the operator setting may only LENGTHEN it.</summary>
+    /// <remarks>TEST: the rule is a pure function of the command and the setting, so it is checked
+    /// directly instead of through the Host. A test comparing the shared table with itself could not
+    /// catch the Host and the Worker drifting apart.
+    /// History: docs/decisions/contracts.md#budgets-single-table</remarks>
     [Fact]
-    public void TheHostWaitsStrictlyLongerThanTheWorkerForEveryCommand()
+    public void TheHostWaitIsStrictlyLongerThanTheWorkerBudgetAndOnlyTheSettingLengthensIt()
     {
+        // The default operator setting comes from the options type, not a literal: a changed default
+        // must not slip past this check.
+        var defaultSetting = new HostOptions().OperationBudgetMs;
+        var aboveEveryWorkerBudget = WorkerCommandTable.All.Max(row => row.WorkerBudgetMs) + 1;
+
         foreach (var row in WorkerCommandTable.All)
         {
-            // The Host reads the number the Worker enforces, from the table the Worker reads.
-            Assert.Equal(row.WorkerBudgetMs, CommandBudgets.WorkerBudgetMs(row.Command));
+            foreach (var setting in new[] { defaultSetting, aboveEveryWorkerBudget })
+            {
+                var host = CommandBudgets.HostWaitMs(row.Command, setting);
 
-            var host = CommandBudgets.HostBudgetMs(row.Command);
-            Assert.True(host > row.WorkerBudgetMs,
-                $"{row.Command}: бюджет Хоста {host} мс обязан быть СТРОГО больше бюджета Worker " +
-                $"{row.WorkerBudgetMs} мс, иначе Хост первым объявляет «исход неизвестен» и перезапускает " +
-                "работающий Worker");
-            Assert.Equal(row.WorkerBudgetMs + CommandBudgets.HostMarginMs, host);
+                Assert.True(host > row.WorkerBudgetMs,
+                    $"{row.Command}: ожидание Хоста {host} мс обязано быть СТРОГО больше бюджета Worker " +
+                    $"{row.WorkerBudgetMs} мс, иначе Хост первым объявляет «исход неизвестен» и " +
+                    "перезапускает работающий Worker");
+                Assert.Equal(Math.Max(row.WorkerBudgetMs + CommandBudgets.HostMarginMs, setting), host);
+            }
+
+            // A setting that does not exceed the shared budget changes nothing: only a LONGER setting
+            // lengthens the wait.
+            var shared = CommandBudgets.HostBudgetMs(row.Command);
+            Assert.Equal(shared, CommandBudgets.HostWaitMs(row.Command, shared));
+            Assert.Equal(shared + 1, CommandBudgets.HostWaitMs(row.Command, shared + 1));
         }
+    }
+
+    /// <summary>INVARIANT: every tool the Host routes to the Worker names a command the table
+    /// describes.</summary>
+    /// <remarks>A command outside the table is not an error at runtime: it silently gets the default
+    /// budget and the CAD-lane read classification, so the tool would wait on a number nobody chose.
+    /// History: docs/decisions/contracts.md#budgets-single-table</remarks>
+    [Fact]
+    public void EveryWorkerToolNamesACommandTheTableDescribes()
+    {
+        var described = WorkerCommandTable.All.Select(row => row.Command).ToHashSet(StringComparer.Ordinal);
+
+        var outside = ToolCatalog.All
+            .Where(tool => !tool.IsHostLocal)
+            .Where(tool => !described.Contains(tool.WorkerCommand))
+            .Select(tool => $"{tool.Name} -> {tool.WorkerCommand}")
+            .ToArray();
+
+        Assert.True(outside.Length == 0,
+            "инструменты Worker называют команду вне таблицы: " + string.Join(", ", outside));
     }
 
     [Fact]

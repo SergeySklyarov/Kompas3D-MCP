@@ -505,12 +505,11 @@ public sealed class ToolInvoker : IAsyncDisposable
 
     // ---- Execution ----
 
-    /// <summary>The Host's answer-wait budget: the maximum of the shared command budget (Worker budget
-    /// plus margin) and the operator setting. The setting may LENGTHEN the budget but cannot make the
-    /// Host faster than the Worker — else the Host would be first to declare "outcome unknown" on a
-    /// command that is merely slow.</summary>
+    /// <summary>The Host's answer-wait budget, from the shared rule in <see cref="CommandBudgets"/>: the
+    /// setting may LENGTHEN the wait but cannot make the Host faster than the Worker — else the Host
+    /// would be first to declare "outcome unknown" on a command that is merely slow.</summary>
     private int BudgetFor(ToolDefinition tool) =>
-        Math.Max(CommandBudgets.HostBudgetMs(tool.WorkerCommand), _options.OperationBudgetMs);
+        CommandBudgets.HostWaitMs(tool.WorkerCommand, _options.OperationBudgetMs);
 
     private async Task<ResultEnvelope<JsonNode?>> RunReadAsync(ToolDefinition tool, JsonObject arguments, CancellationToken cancellationToken)
     {

@@ -79,29 +79,27 @@ public class BodyChangePolicyTests
         Assert.True(BodyChangePolicy.VolumeMoved(1e-5, 1d));
     }
 
-    /// <summary>"Nothing happened" may be refused ONLY when the comparison was COMPLETED and found no
-    /// change: an unread observable is not agreement, and a refusal on an unread side would be a false
-    /// finding.</summary>
-    /// <remarks>WHY. A fillet whose body did not move has to be refused (the feature is in the tree and the
-    /// body does not hold it), and the same rule must stay silent when the volume or the topology could not
-    /// be read — there the honest answer is a named gap, not a refusal.
-    /// History: docs/decisions/adapter-features.md#fillet-no-geometry-change</remarks>
+    /// <summary>A fillet and a chamfer are decided by the VOLUME, not by the face count: applying one
+    /// always moves material, so an unchanged volume means the feature never reached the body — and a
+    /// moved face count is the mark the kernel leaves, not the feature.</summary>
+    /// <remarks>WHY. The no-op refusal of the two tools used the general "any observable" rule, which a
+    /// moved face count rescues. Measured live on the Г-plate's reflex corner: the chamfer feature stayed
+    /// in the tree, the volume came back to the plate's 68000 mm³, and the refusal named the surface as
+    /// transferred to another edge — a surface the body does not hold. The two tools therefore ask this
+    /// narrower question, and the order (no-op before placement) is what makes the name precise.
+    /// History: docs/decisions/adapter-features.md#chamfer-not-applied</remarks>
     [Fact]
-    public void Unchanged_RequiresEveryObservableToHaveBeenRead()
+    public void MaterialUnchanged_DecidesAFilletOrChamferByTheVolumeAlone()
     {
-        // Completed and equal: the one shape that is a measured no-op.
-        Assert.True(BodyChangePolicy.Unchanged(0d, 80000d, topologyChanged: false));
-        // Unread volume, unread topology: "could not compare" is not "compared and equal".
-        Assert.False(BodyChangePolicy.Unchanged(null, 80000d, topologyChanged: false));
-        Assert.False(BodyChangePolicy.Unchanged(0d, 80000d, topologyChanged: null));
-        Assert.False(BodyChangePolicy.Unchanged(null, null, topologyChanged: null));
-    }
-
-    [Fact]
-    public void Unchanged_IsFalseWhenAnythingMoved()
-    {
-        Assert.False(BodyChangePolicy.Unchanged(19.314165, 80000d, topologyChanged: false));
-        Assert.False(BodyChangePolicy.Unchanged(-19.314165, 80000d, topologyChanged: false));
-        Assert.False(BodyChangePolicy.Unchanged(0d, 80000d, topologyChanged: true));
+        // The measured no-op: the volume came back to the plate, the face count did not have to agree.
+        Assert.True(BodyChangePolicy.MaterialUnchanged(0d, 68000d));
+        Assert.True(BodyChangePolicy.MaterialUnchanged(3e-14, 68000d));
+        // A real fillet removes material on a convex edge and adds it on a reflex one: both are a result.
+        Assert.False(BodyChangePolicy.MaterialUnchanged(-19.3141652942, 68000d));
+        Assert.False(BodyChangePolicy.MaterialUnchanged(19.3141652942, 68000d));
+        Assert.False(BodyChangePolicy.MaterialUnchanged(-20d, 68000d));
+        // An unread volume is not agreement — the honest answer there is a named gap, not a refusal.
+        Assert.False(BodyChangePolicy.MaterialUnchanged(null, 68000d));
+        Assert.False(BodyChangePolicy.MaterialUnchanged(null, null));
     }
 }

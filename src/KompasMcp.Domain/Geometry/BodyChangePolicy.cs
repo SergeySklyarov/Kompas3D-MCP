@@ -29,15 +29,18 @@ public static class BodyChangePolicy
     public static bool Changed(double? volumeDelta, double? volume, bool boxChanged, bool topologyChanged) =>
         VolumeMoved(volumeDelta, volume) || boxChanged || topologyChanged;
 
-    /// <summary>Whether a COMPLETED comparison found the body unchanged — the only shape in which "nothing
-    /// happened" may be refused as a no-op.</summary>
-    /// <param name="topologyChanged"><c>null</c> when the topology was NOT read (an unread side is not
-    /// agreement). A readable side carries whether the face or body count moved.</param>
-    /// <remarks>INVARIANT: "could not compare" and "compared and equal" are different facts, and only the
-    /// second one is a no-op. A caller that refuses on this rule must pass <c>null</c> for anything it did
-    /// not read, so an unread observable can never turn into a refusal.
-    /// History: docs/decisions/adapter-features.md#fillet-no-geometry-change</remarks>
-    public static bool Unchanged(double? volumeDelta, double? volume, bool? topologyChanged) =>
-        volumeDelta is double delta && topologyChanged is bool moved
-        && !Changed(delta, volume, boxChanged: false, topologyChanged: moved);
+    /// <summary>Whether a COMPLETED volume comparison found the body's MATERIAL unchanged — the decisive
+    /// observable for a fillet and a chamfer.</summary>
+    /// <param name="volumeDelta">The measured change; <c>null</c> when a side was not read, which is NOT
+    /// agreement.</param>
+    /// <remarks>INVARIANT: applying a fillet or a chamfer ALWAYS moves material — it removes it on a
+    /// convex edge and adds it on a reflex one — so an unchanged volume means the feature never reached
+    /// the body, whatever the face count did. A topology-only change is not a fillet: it is the mark the
+    /// kernel leaves in the tree when it creates the feature and does not apply it, and calling it a
+    /// transfer to another edge names a surface that the body does not hold. The general
+    /// <see cref="Changed"/> rule is NOT used here: it lets a moved face count rescue the feature, and for
+    /// these two tools that is exactly the wrong answer.
+    /// History: docs/decisions/adapter-features.md#chamfer-not-applied</remarks>
+    public static bool MaterialUnchanged(double? volumeDelta, double? volume) =>
+        volumeDelta is double delta && !VolumeMoved(delta, volume);
 }

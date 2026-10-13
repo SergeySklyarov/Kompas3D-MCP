@@ -3302,24 +3302,21 @@ public sealed partial class Api5Session
         // A MEASURED NO-OP IS NOT A RESULT, and this refusal comes BEFORE the declared-expectation
         // comparison: that comparison is the geometry check of an operation that HAPPENED, so a declared
         // mismatch must not mask "the route did not take" (the same order as the edge-set edit path).
-        // MEASURED: Create() returned true and the feature is in the tree, while neither the document
-        // volume nor the face count moved - the settlement's control rebuild had un-applied the fillet
-        // it had just created, and its own mark named the move. The fillet the caller asked for is NOT
-        // in the body, so no level of success may be reported. Same shape as kompas_extrude's refusal.
-        // History: docs/decisions/adapter-features.md#fillet-no-geometry-change
+        // MEASURED: Create() returned true and the feature is in the tree, while the document volume did
+        // not move - the settlement's control rebuild had un-applied the fillet it had just created, and
+        // its own mark named the move. The fillet the caller asked for is NOT in the body, so no level of
+        // success may be reported. Same shape as kompas_extrude's refusal.
+        // The VOLUME decides it, not the face count: applying a fillet always moves material, so an
+        // unchanged volume means it never reached the body - and a face count that did move is the mark
+        // the kernel leaves behind, not the fillet. History: docs/decisions/adapter-features.md#fillet-no-geometry-change
         var volumeDelta = volumeBefore is double volumeWas && volumeAfter is double volumeNow
             ? volumeNow - volumeWas
             : (double?)null;
-        // An unread side is NOT "unchanged": null here means the comparison could not be made at all.
-        bool? topologyMoved = facesBefore is double && facesAfter is double
-            && bodiesBefore >= 0 && bodiesAfter >= 0
-                ? facesBefore != facesAfter || bodiesBefore != bodiesAfter
-                : null;
-        if (BodyChangePolicy.Unchanged(volumeDelta, volumeBefore, topologyMoved))
+        if (BodyChangePolicy.MaterialUnchanged(volumeDelta, volumeBefore))
         {
             throw new KompasContractException(
                 ErrorCodes.NoGeometryChange,
-                "Скругление создано (Create=true), но тело не изменилось ни объёмом, ни числом граней: "
+                "Скругление создано (Create=true), но тело не изменилось объёмом: "
                 + "объём " + Num(volumeBefore) + " → " + Num(volumeAfter) + " при пороге шума "
                 + BodyChangePolicy.VolumeNoiseMm3.ToString("0.#####e+0",
                     System.Globalization.CultureInfo.InvariantCulture)
@@ -3628,21 +3625,20 @@ public sealed partial class Api5Session
         // gets the PRECISE reason: "the feature is in the tree and the body does not hold it" is a different
         // finding from "the surface is on another edge", and they must not share a code.
         // MEASURED: a chamfer on a REFLEX edge of the Г-plate is created (Create()=true, the feature stays
-        // in the tree) while neither the volume nor the face count moves - the kernel does not build a
-        // chamfer that would ADD material. Same shape as kompas_fillet's refusal.
+        // in the tree) while the volume does not move - the kernel does not build a chamfer that would ADD
+        // material, and the settlement's control rebuild can un-apply the one it built. The VOLUME decides
+        // it, not the face count: applying a chamfer always moves material, so an unchanged volume means it
+        // never reached the body, and a face count that did move is the mark left behind. Reading it as a
+        // transfer named a surface the body does not hold. Same shape as kompas_fillet's refusal.
         // History: docs/decisions/adapter-features.md#chamfer-not-applied
-        bool? topologyMovedChamfer = facesBefore is double && facesAfter is double
-            && bodiesBefore >= 0 && bodiesAfter >= 0
-                ? facesBefore != facesAfter || bodiesBefore != bodiesAfter
-                : null;
         var chamferDelta = volumeBefore is double chamferWas && volumeAfter is double chamferNow
             ? chamferNow - chamferWas
             : (double?)null;
-        if (BodyChangePolicy.Unchanged(chamferDelta, volumeBefore, topologyMovedChamfer))
+        if (BodyChangePolicy.MaterialUnchanged(chamferDelta, volumeBefore))
         {
             throw new KompasContractException(
                 ErrorCodes.NoGeometryChange,
-                "Фаска создана (Create=true), но тело не изменилось ни объёмом, ни числом граней: "
+                "Фаска создана (Create=true), но тело не изменилось объёмом: "
                 + "объём " + Num(volumeBefore) + " → " + Num(volumeAfter) + " при пороге шума "
                 + BodyChangePolicy.VolumeNoiseMm3.ToString("0.#####e+0",
                     System.Globalization.CultureInfo.InvariantCulture)

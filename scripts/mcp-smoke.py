@@ -28932,19 +28932,30 @@ def chamfer_checks(client, rep, app_id, workdir):
         builtL = (codeL is None and vL1 is not None
                   and abs(vL1 - wantL) <= max(0.01, 1e-6 * l_plate_ch)
                   and levelL == "geometry_checked")
-        namedL = codeL in ("NO_GEOMETRY_CHANGE", "GEOMETRY_FAILED", "CAPABILITY_UNAVAILABLE",
-                           "INVALID_ARGUMENT")
+        # На неизменном теле принимается ТОЛЬКО честный ноль-результат. Перенос поверхности на другое
+        # ребро (`chamfer_on_other_edge`) при неизменном теле - ЛОЖНОЕ имя: поверхность не может уехать
+        # на другое ребро, если материал не тронут; такой исход - FAIL, а не «любой названный отказ».
+        detailsL = ((chL_env or {}).get("error") or {}).get("details") or {}
+        notAppliedL = (codeL == "NO_GEOMETRY_CHANGE"
+                       and detailsL.get("code") == "chamfer_not_applied")
         untouchedL = vL1 is not None and abs(vL1 - l_plate_ch) <= 0.01
-        okL = builtL or (not want_convex and namedL and untouchedL)
-        outcomeL = ("материал добавлен и поверхность прилегает" if builtL else
-                    "отказ НАЗВАН, тело не тронуто" if (namedL and untouchedL) else
-                    "ЛОЖНЫЙ УСПЕХ: тело не изменилось, а отказа нет" if codeL is None and untouchedL
-                    else "исход не отнесён ни к одному приемлемому")
+        okL = builtL or (not want_convex and notAppliedL and untouchedL)
+        if builtL:
+            outcomeL = "материал добавлен и поверхность прилегает"
+        elif notAppliedL and untouchedL:
+            outcomeL = "ноль-результат назван chamfer_not_applied, тело не тронуто"
+        elif codeL is None and untouchedL:
+            outcomeL = "ЛОЖНЫЙ УСПЕХ: тело не изменилось, а отказа нет"
+        elif untouchedL and codeL:
+            outcomeL = ("отказ назван ПЕРЕНОСОМ на неизменном теле: "
+                        + str(detailsL.get("code") or codeL))
+        else:
+            outcomeL = "исход не отнесён ни к одному приемлемому"
         rep.add(label, "фаска на Г-пластине: поверхность прилегает к запрошенному ребру",
                 "PASS" if okL else "FAIL",
                 f"угол={wantedL[0][1]} сторона={'выпуклая' if want_convex else 'входящая'} "
-                f"исход={outcomeL} err={codeL} level={levelL} V={vL1} "
-                f"ожидание_при_построении={wantL} (Г-пластина {l_plate_ch}, "
+                f"исход={outcomeL} err={codeL} details_code={detailsL.get('code')} level={levelL} "
+                f"V={vL1} ожидание_при_построении={wantL} (Г-пластина {l_plate_ch}, "
                 f"снято/добавлено {sign * chamfer_sweep}) msg={describe(chL_env)[1]}")
         close(docL)
 

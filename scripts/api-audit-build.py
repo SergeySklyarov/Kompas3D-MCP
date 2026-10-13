@@ -287,6 +287,21 @@ def completeness(evidence, matrix, catalog, claims, wire):
     }
 
 
+def repo_relative(path):
+    """Путь от корня репозитория, а не от личного каталога разработчика.
+
+    Публикуемый аудит не должен называть `D:\\Projects\\...`: это личная среда, и сторож
+    `verify-publish-set.py` (проверка 5a) справедливо отказывает на ней. Абсолютный путь остаётся
+    только там, где он и есть предмет измерения (каталог установки вендора).
+    """
+    if not path:
+        return path
+    try:
+        return os.path.relpath(path, ROOT).replace("\\", "/")
+    except ValueError:
+        return path.replace("\\", "/")
+
+
 def build(evidence_dir):
     evidence = load_evidence(evidence_dir)
     matrix = load_json(MATRIX)
@@ -300,6 +315,8 @@ def build(evidence_dir):
     build_id = build_identity()
     build_id["host_dll_sha256"] = (wire.get("build") or {}).get("host_dll_sha256") \
         or build_id["host_dll_sha256"]
+    for key in ("dir", "host_path", "worker_path"):
+        build_id[key] = repo_relative(build_id.get(key))
     document = {
         "meta": {
             "artifact": "docs/API_COMPLIANCE.json",

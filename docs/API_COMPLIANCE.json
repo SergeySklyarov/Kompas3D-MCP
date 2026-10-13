@@ -2,7 +2,7 @@
  "meta": {
   "artifact": "docs/API_COMPLIANCE.json",
   "audit": "соответствие MCP официальной документации КОМПАС",
-  "date": "2026-10-13T13:26:04+02:00, часы машины +02:00",
+  "date": "2026-10-13T13:28:41+02:00, часы машины +02:00",
   "target": {
    "product": "КОМПАС-3D v24",
    "build": "24.0.0.2799",
@@ -37,15 +37,15 @@
   },
   "delivery": {
    "kind": "release_build",
-   "dir": "D:\\Projects\\KompasMCP\\src\\KompasMcp.Host\\bin\\x64\\Release\\net10.0-windows",
-   "host_path": "D:\\Projects\\KompasMCP\\src\\KompasMcp.Host\\bin\\x64\\Release\\net10.0-windows\\KompasMcp.Host.exe",
+   "dir": "src/KompasMcp.Host/bin/x64/Release/net10.0-windows",
+   "host_path": "src/KompasMcp.Host/bin/x64/Release/net10.0-windows/KompasMcp.Host.exe",
    "host_sha256": "7d946fa3353c748efd6a63887fde3368bd62ec22e0da48513f21dd27b33218fa",
    "host_dll_sha256": "53d37fb319cfb77e1db1c878a4a63867b506235397ce7f68554c00d0d4d473c8",
-   "worker_path": "D:\\Projects\\KompasMCP\\src\\KompasMcp.Worker\\bin\\x64\\Release\\net10.0-windows\\KompasMcp.Worker.exe",
+   "worker_path": "src/KompasMcp.Worker/bin/x64/Release/net10.0-windows/KompasMcp.Worker.exe",
    "worker_sha256": "0388d6060ae2d0e339ec004722d44b1f2483a5d874dba4727aca8a12b702e7d0",
    "worker_dll_sha256": "da79bdf3531fd2d7b113f920cfaa35c6f835402c4261eb22eb0dd682a0c5d150",
    "adapter_sha256": "d4788002fc1417637af39593635c28242e249ddd11a1fb5170c427ef43c4e673",
-   "source_commit": "6e0ed39",
+   "source_commit": "8ce7eaf",
    "source_tree_dirty": true,
    "tools_count": 90,
    "rows_complete_run": 1595,

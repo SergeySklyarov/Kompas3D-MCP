@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using KompasMcp.Contracts;
 using KompasMcp.Contracts.Ipc;
+using KompasMcp.Domain.Files;
 using KompasMcp.Domain.Journaling;
 using KompasMcp.Host.Catalog;
 
@@ -766,6 +767,11 @@ public sealed class HostSession : IAsyncDisposable
                 ["worker"] = stopNode,
                 ["documents_in_session"] = DocumentCount(inventory.Payload),
                 ["unknown_document_state_acknowledged"] = acknowledgedUnknown,
+                // Where a rescue copy of an unsaved document went. The Worker names the exact file in its
+                // log; this is the directory a client is told to look in, so "the edits were saved" is a
+                // claim with a place attached rather than a reassurance.
+                // History: docs/decisions/files.md#rescue-copies
+                ["rescue_copies_directory"] = new DocumentControlCopies(_options.ControlCopyDirectory).RescueFolder,
                 ["next"] = "kompas_acquire_session",
             }, warnings: BuildReleaseWarnings(stop, acknowledgedUnknown, unknownReason),
             caveats: new[] { "cad_session_ended_documents_closed" }));

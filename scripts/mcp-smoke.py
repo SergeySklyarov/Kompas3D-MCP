@@ -94,6 +94,10 @@ class Client:
         args = [host_exe]
         if config:
             args += ["--config", config]
+        # Путь к исполняемому файлу и конфигурация хранятся: группа SD поднимает СВОИ процессы Хоста
+        # тем же исполняемым файлом и той же конфигурацией, а не угадывает их.
+        self.host_exe = host_exe
+        self.config = config
         self.p = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE, text=True, encoding="utf-8")
         self.n = 0
@@ -567,6 +571,9 @@ RUN_GROUPS = (
     ("disconnect", "disconnect", "disconnect-acceptance.json",
      "Приёмка DC: чтение при потерянной связи с КОМПАС отвечает APPLICATION_DISCONNECTED, а не "
      "ложным успехом с пустыми данными (наряд READ_DISCONNECT)"),
+    ("shutdown", "shutdown", "shutdown-acceptance.json",
+     "Приёмка SD: завершение сеанса не оставляет висящий КОМПАС, а несохранённая работа сохраняется "
+     "спасательной копией (наряд SHUTDOWN_NO_ORPHANS)"),
 )
 
 VERTICAL_GROUP = ("vertical", "smoke-report.json",
@@ -602,6 +609,9 @@ ALL_GROUPS_EXTRA = (
     # Группа DC ЗАВЕРШАЕТ процесс своего КОМПАС: общий сеанс после неё недействителен, поэтому идёт
     # в своём свежем сеансе, как `client_bugs_20261010` (см. run_extra_group_fresh).
     ("disconnect", ["--disconnect-only"]),
+    # Группа SD ведёт свои процессы Хоста и не пользуется свежим общим сеансом: см. ветку `shutdown`
+    # в run_extra_group_fresh. Последняя, чтобы её собственные процессы были единственными.
+    ("shutdown", ["--shutdown-only"]),
 )
 
 # Группы, которые нельзя запускать ПОДРЯД в общем сеансе. Пусто: каждая группа вне вертикали
@@ -688,6 +698,13 @@ def run_extra_group_fresh(client, rep, workdir, key, vm_reference_doc):
     `APPLICATION_DISCONNECTED` на построении постановки. Чтобы числа `--all` значили то же, что числа
     отдельного прогона группы, каждая группа вне вертикали поднимает свой сеанс.
     """
+    if key == "shutdown":
+        # Группа SD — исключение из правила «свой свежий сеанс»: она ведёт СВОИ процессы Хоста
+        # (закрывает им stdin, убивает их) и общего сеанса не касается. Общий сеанс здесь был бы
+        # ЧУЖИМ живым экземпляром КОМПАС на момент её проверки уборки.
+        dispatch_extra_group(client, rep, None, workdir, key, vm_reference_doc, None)
+        return
+
     _e, env, _r = client.tool("kompas_connect", {"mode": "launch", "make_visible": False,
                                                  "operation_id": str(uuid.uuid4())}, timeout=300)
     app_id = (env or {}).get("application_id")
@@ -12192,6 +12209,10 @@ def main():
     # идёт своим свежим сеансом и последней среди групп вне вертикали.
     disconnect_only = "--disconnect-only" in sys.argv
 
+    # Наряд SHUTDOWN_NO_ORPHANS: завершение сеанса не оставляет висящий КОМПАС. Группа ведёт СВОИ
+    # процессы Хоста (закрывает им stdin и убивает их), поэтому общего сеанса прибора не использует.
+    shutdown_only = "--shutdown-only" in sys.argv
+
     # Набор выбранных веток -> ОДНО решение об имени группы. Заголовок, имя файла отчёта и имя
     # каталога прогона выводятся из него вместе, поэтому каталог не может назвать одну группу, а
     # отчёт внутри — другую.
@@ -12236,6 +12257,7 @@ def main():
         "sketch_profile": sketch_profile_only,
         "suppress": bool(suppress_repeat_k),
         "disconnect": disconnect_only,
+        "shutdown": shutdown_only,
     }
     # `--all` — это «вертикаль плюс группы вне неё», а не ещё одна ветка наравне с `-only`: вместе с
     # сужающим флагом он неоднозначен, и выбор молча сделал бы отчёт не тем, чем назван.
@@ -12543,6 +12565,13 @@ def main():
             # приложение, а в последней строке — поднимает ВТОРОЕ окно. Общий экземпляр
             # вертикального сценария ей не нужен и мешал бы: два экземпляра КОМПАС одновременно.
             dirty_close_checks(client, rep, workdir, host, measured_config)
+            return finish(rep, client)
+
+        if shutdown_only:
+            # Группа SD ведёт СВОИ процессы Хоста: проверяемое - судьба процесса КОМПАС после конца
+            # связи и после убийства Хоста, а общий сеанс прибора гасит стенд. Вертикальный сеанс ей
+            # не нужен и мешал бы: его КОМПАС остался бы жить и попал бы в строку об уборке.
+            shutdown_checks(host, measured_config, workdir, rep)
             return finish(rep, client)
 
         # --- the vertical slice ------------------------------------------------------
@@ -42034,6 +42063,372 @@ def finish(rep, client):
 # Проверки групп вне вертикали, по ключу `ALL_GROUPS_EXTRA`. Объявлено ЗДЕСЬ, в конце модуля, потому
 # что ссылается на функции групп, определённые ниже `dispatch_extra_group`; к моменту вызова `main()`
 # модуль загружен целиком. Самопроверка сверяет ключи этого словаря с `ALL_GROUPS_EXTRA`.
+def shutdown_checks(host, config, workdir, rep):
+    """SD.* - завершение сеанса не оставляет висящий КОМПАС (наряд SHUTDOWN_NO_ORPHANS).
+
+    ЧТО ДОКАЗЫВАЮТ ЭТИ СТРОКИ. Заказчик подтвердил, что в работе остаются жить экземпляры
+    `KOMPAS.exe`, запущенные сервером: изменённый документ не давал приложению выйти. Проба SO
+    (13.10.2026) измерила механизм: `Quit()` возвращается сразу и завершения не ждёт, а документ с
+    несохранёнными изменениями оставляет процесс жить. Строки проверяют ПРОДУКТ на трёх путях
+    завершения: конец связи с клиентом, убийство Хоста, освобождение сеанса.
+
+    ПОЧЕМУ ГРУППА ВЕДЁТ СВОИ ХОСТЫ. Проверяемое - не ответ инструмента, а СУДЬБА ПРОЦЕССА, поэтому
+    строке нужен собственный процесс Хоста, которым она распоряжается: закрыть ему stdin (конец
+    связи) или убить его. Общий сеанс прибора для этого не годится - его гасит стенд.
+
+    ПОЧЕМУ ПОСТАНОВКА ИДЁТ ЧЕРЕЗ `Open`+правку. ИЗМЕРЕНО пробой SO: документ, СОЗДАННЫЙ процессом и
+    затем изменённый, экземпляр НЕ осиротил; осиротил документ, ОТКРЫТЫЙ С ДИСКА и изменённый.
+    Строка, построенная на `create_document`, мерила бы не тот случай, ради которого заведена.
+
+    ЧУЖИЕ ЭКЗЕМПЛЯРЫ НЕ ТРОГАЮТСЯ. Процессы завершаются только по PID, который вернул `launch`, и
+    только для того, что завела ЭТА группа. Завершение по имени не применяется нигде.
+    """
+    import hashlib as _hashlib
+    import json as _json
+    import os as _os
+    import subprocess as _subprocess
+    import time as _time
+    import uuid as _uuid
+
+    from localconfig import isolate_config
+
+    with open(config, encoding="utf-8-sig") as fh:
+        _config_data = _json.load(fh)
+    rescue_dir = _os.path.join(_config_data.get("control_copy_directory") or workdir,
+                               "control-copies", "rescue")
+
+    started_hosts = []
+    started_kompas = []
+    # Процессы, ЖИВЫЕ ДО группы, не её заслуга и не её вина: строка уборки говорит только о том, что
+    # подняла ЭТА группа. Без снимка «до» чужой Worker прибора попал бы в её FAIL. Снимок берётся
+    # ниже, сразу после того, как `pids_of` определён.
+    baseline_workers = set()
+
+    def sha256(path):
+        try:
+            with open(path, "rb") as fh:
+                return _hashlib.sha256(fh.read()).hexdigest()
+        except OSError:
+            return None
+
+    def pids_of(image):
+        """PIDs по имени образа, прочитанные у ОС. Пустой вывод НЕ читается как «процессов нет»:
+        12.10.2026 именно так были пропущены три осиротевших процесса."""
+        done = _subprocess.run(["tasklist", "/FI", "IMAGENAME eq " + image, "/FO", "CSV", "/NH"],
+                               capture_output=True, text=True)
+        if done.returncode != 0:
+            return None
+        found = set()
+        for line in done.stdout.splitlines():
+            parts = [p.strip('"') for p in line.split('","')]
+            if len(parts) >= 2 and parts[0].upper().startswith(image.split(".")[0].upper()):
+                try:
+                    found.add(int(parts[1]))
+                except ValueError:
+                    pass
+        return found
+
+    def alive(pid):
+        current = pids_of("KOMPAS.exe")
+        return True if current is None else pid in current
+
+    baseline_workers = pids_of("KompasMcp.Worker.exe") or set()
+    baseline_hosts = pids_of("KompasMcp.Host.exe") or set()
+
+    def wait_gone(pid, timeout):
+        deadline = _time.time() + timeout
+        while _time.time() < deadline:
+            if not alive(pid):
+                return True
+            _time.sleep(0.3)
+        return not alive(pid)
+
+    def force_stop(pid):
+        if pid and alive(pid):
+            _subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, text=True)
+
+    def open_host(tag):
+        isolated = isolate_config(config, workdir, "sd-" + tag)
+        probe = Client(host, isolated)
+        started_hosts.append(probe.p.pid)
+        probe.call("initialize", {
+            "protocolVersion": "2025-06-18", "capabilities": {},
+            "clientInfo": {"name": "mcp-smoke-sd-" + tag, "version": "0"}}, timeout=60)
+        probe.notify("notifications/initialized")
+        return probe
+
+    def call(probe, tool, args, timeout=300):
+        payload = dict(args)
+        if probe.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(_uuid.uuid4()))
+        _e, env, _r = probe.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def connect(probe, visible):
+        env, code = call(probe, "kompas_connect",
+                         {"mode": "launch", "make_visible": visible}, timeout=300)
+        app = (env or {}).get("application_id")
+        pid = (result(env) or {}).get("process_id")
+        if pid:
+            started_kompas.append(pid)
+        return app, pid, code
+
+    def attach(probe, pid):
+        env, code = call(probe, "kompas_connect",
+                         {"mode": "attach", "process_id": pid, "make_visible": False}, timeout=300)
+        return (env or {}).get("application_id"), code
+
+    def context(probe, doc):
+        _e, env, _r = probe.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return result(env)
+
+    def revision(probe, doc):
+        return context(probe, doc).get("revision") or 1
+
+    def build_saved_part(probe, app, client_path, name, depth=10.0):
+        """Плита, СОХРАНЁННАЯ на диск, затем ОТКРЫТАЯ с диска и изменённая."""
+        env, code = call(probe, "kompas_create_document",
+                         {"application_id": app, "kind": "part", "name": name})
+        doc = result(env).get("id") or result(env).get("document_id")
+        if not doc:
+            return None, "create_document: %s" % code
+        env, code = call(probe, "kompas_create_sketch", {
+            "document_id": doc, "expected_revision": revision(probe, doc),
+            "plane": {"base": "xy", "offset_mm": 0}, "name": name + "-s"})
+        sketch = result(env).get("id")
+        if not sketch:
+            return None, "create_sketch: %s" % code
+        env, code = call(probe, "kompas_edit_sketch", {
+            "sketch_ref": sketch, "expected_revision": revision(probe, doc), "mode": "append",
+            "entities": [{"kind": "rectangle", "start_mm": [0.0, 0.0],
+                          "width_mm": 100.0, "height_mm": 80.0}]})
+        if code:
+            return None, "edit_sketch: %s" % code
+        env, code = call(probe, "kompas_finish_sketch",
+                         {"sketch_ref": sketch, "require_closed_profile": False})
+        if code:
+            return None, "finish_sketch: %s" % code
+        env, code = call(probe, "kompas_extrude", {
+            "sketch_ref": sketch, "expected_revision": revision(probe, doc),
+            "operation": "base", "depth_mm": depth, "direction": "positive"})
+        if code:
+            return None, "extrude: %s" % code
+
+        env, code = call(probe, "kompas_save_document",
+                         {"document_id": doc, "expected_revision": revision(probe, doc),
+                          "target_path": client_path}, timeout=300)
+        if code:
+            return None, "save_document: %s" % code
+        call(probe, "kompas_close_document",
+             {"document_id": doc, "dirty_policy": "discard"}, timeout=180)
+
+        env, code = call(probe, "kompas_open_document",
+                         {"application_id": app, "path": client_path, "access": "edit"}, timeout=300)
+        doc = result(env).get("document_id") or result(env).get("id")
+        if not doc:
+            return None, "open_document: %s" % code
+
+        _e, fenv, _r = probe.tool("kompas_list_features", {"document_id": doc}, timeout=180)
+        rows = (fenv or {}).get("result") or []
+        target = None
+        for row in rows:
+            if row.get("kind") in (None, "base_extrusion", "extrusion"):
+                target = row.get("feature_ref") or row.get("id")
+                break
+        if target is None and rows:
+            target = rows[0].get("feature_ref") or rows[0].get("id")
+        if target is None:
+            return None, "list_features: пусто, править нечего"
+
+        env, code = call(probe, "kompas_update_feature", {
+            "feature_ref": target, "expected_revision": revision(probe, doc),
+            "depth_mm": depth + 3.0}, timeout=240)
+        if code:
+            return None, "update_feature: %s" % code
+
+        ctx = context(probe, doc)
+        if ctx.get("dirty") is not True:
+            return None, "документ не помечен изменённым: dirty=%s" % ctx.get("dirty")
+        return doc, None
+
+    def newest_rescue():
+        try:
+            files = [_os.path.join(rescue_dir, f) for f in _os.listdir(rescue_dir)]
+        except OSError:
+            return None
+        files = [f for f in files if _os.path.isfile(f)]
+        return max(files, key=_os.path.getmtime) if files else None
+
+    def open_rescue_and_read_volume(path):
+        """Спасательная копия открывается НОВЫМ сеансом и её тело читается: копия, которая не
+        открывается, - не спасение, а файл."""
+        probe = open_host("rescue")
+        try:
+            app, pid, code = connect(probe, False)
+            if not app:
+                return None, "launch: %s" % code
+            try:
+                env, ocode = call(probe, "kompas_open_document",
+                                  {"application_id": app, "path": path, "access": "read_only"},
+                                  timeout=300)
+                doc = result(env).get("document_id") or result(env).get("id")
+                if not doc:
+                    return None, "open rescue: %s" % ocode
+                _e, benv, _r = probe.tool("kompas_list_bodies", {"document_id": doc}, timeout=180)
+                bodies = (benv or {}).get("result") or []
+                body = bodies[0].get("body_ref") if bodies else None
+                if not body:
+                    return None, "rescue: тел нет"
+                _e, menv, _r = probe.tool("kompas_measure",
+                                          {"target_ref": body, "properties": ["volume"]}, timeout=180)
+                return ((menv or {}).get("result") or {}).get("volume_mm3"), None
+            finally:
+                call(probe, "kompas_disconnect",
+                     {"application_id": app, "close_owned_application": True}, timeout=180)
+        finally:
+            try:
+                probe.close()
+            except Exception:
+                pass
+
+    def end_of_transport(tag, row, visible, mode):
+        probe = open_host(tag)
+        pid = None
+        try:
+            app, pid, code = connect(probe, visible)
+            if not app or not pid:
+                rep.add(row, "%s: сеанс не поднят" % tag, "FAIL", "launch: %s" % code)
+                return
+            client_path = _os.path.join(workdir, "sd-%s-client.m3d" % tag)
+            _doc, problem = build_saved_part(probe, app, client_path, "SD-" + tag)
+            if problem:
+                rep.add(row, "%s: постановка не построена" % tag, "FAIL", problem)
+                return
+            before = sha256(client_path)
+            before_rescue = newest_rescue()
+
+            if mode == "transport":
+                probe.p.stdin.close()
+            else:
+                probe.p.kill()
+
+            gone = wait_gone(pid, 45)
+            after = sha256(client_path)
+            rescue = newest_rescue()
+            new_copy = rescue is not None and rescue != before_rescue
+            volume = None
+            open_problem = None
+            if new_copy:
+                volume, open_problem = open_rescue_and_read_volume(rescue)
+
+            what = "конец связи" if mode == "transport" else "убийство Хоста"
+            ok = (gone and new_copy and before is not None and before == after and volume is not None)
+            rep.add(row,
+                    "%s: %s - КОМПАС завершён, спасательная копия снята и открывается, файл клиента не изменён"
+                    % (tag, what),
+                    "PASS" if ok else "FAIL",
+                    "ушёл=%s копия=%s новый файл=%s sha совпал=%s объём=%s причина=%s"
+                    % (gone, rescue, new_copy, before == after, volume, open_problem))
+        finally:
+            try:
+                probe.close()
+            except Exception:
+                pass
+            force_stop(pid)
+
+    end_of_transport("sd01", "SD.01", False, "transport")
+    end_of_transport("sd03", "SD.03", True, "transport")
+    end_of_transport("sd04", "SD.04", False, "kill")
+
+    # ═══════════ SD.05/SD.06: освобождение сеанса ═══════════
+    probe = open_host("sd05")
+    pid = None
+    try:
+        app, pid, code = connect(probe, False)
+        if not app or not pid:
+            rep.add("SD.05", "release при несохранённом документе: прежний отказ", "FAIL",
+                    "launch: %s" % code)
+        else:
+            client_path = _os.path.join(workdir, "sd-sd05-client.m3d")
+            doc, problem = build_saved_part(probe, app, client_path, "SD-sd05")
+            if problem:
+                rep.add("SD.05", "release при несохранённом документе: прежний отказ", "FAIL", problem)
+            else:
+                _env, rcode = call(probe, "kompas_release_session", {}, timeout=300)
+                still = alive(pid)
+                rep.add("SD.05",
+                        "release_session при несохранённых документах по-прежнему отказывает DOCUMENT_DIRTY",
+                        "PASS" if rcode == "DOCUMENT_DIRTY" and still else "FAIL",
+                        "код=%s процесс жив=%s (отказ сеанс не разрушает)" % (rcode, still))
+
+                _env, ccode = call(probe, "kompas_close_document",
+                                   {"document_id": doc, "dirty_policy": "discard"}, timeout=180)
+                _env, rcode2 = call(probe, "kompas_release_session", {}, timeout=300)
+                gone = wait_gone(pid, 45)
+                rep.add("SD.06",
+                        "release_session после явного отказа от правок: процесса КОМПАС не осталось",
+                        "PASS" if ccode is None and rcode2 is None and gone else "FAIL",
+                        "close=%s release=%s ушёл=%s" % (ccode, rcode2, gone))
+    finally:
+        try:
+            probe.close()
+        except Exception:
+            pass
+        force_stop(pid)
+
+    # ═══════════ SD.07: экземпляр attach не закрывается ═══════════
+    owner = open_host("sd07-owner")
+    attached = open_host("sd07-attach")
+    pid = None
+    try:
+        app_owner, pid, code = connect(owner, False)
+        if not app_owner or not pid:
+            rep.add("SD.07", "экземпляр attach переживает конец связи", "FAIL", "launch: %s" % code)
+        else:
+            app_att, acode = attach(attached, pid)
+            if not app_att:
+                rep.add("SD.07", "экземпляр attach переживает конец связи", "FAIL",
+                        "attach: %s" % acode)
+            else:
+                _env, ocode = call(attached, "kompas_create_document",
+                                   {"application_id": app_att, "kind": "part", "name": "SD-attach"})
+                attached.p.stdin.close()
+                _time.sleep(4)
+                survived = alive(pid)
+                rep.add("SD.07",
+                        "экземпляр attach (процесс пользователя) после конца связи жив и не тронут",
+                        "PASS" if survived else "FAIL",
+                        "create_document на attach=%s процесс жив=%s" % (ocode, survived))
+                call(owner, "kompas_disconnect",
+                     {"application_id": app_owner, "close_owned_application": True}, timeout=180)
+                gone = wait_gone(pid, 45)
+                rep.add("SD.07b",
+                        "владелец (launch) завершает свой экземпляр документированным путём",
+                        "PASS" if gone else "FAIL", "ушёл=%s" % gone)
+    finally:
+        for item in (attached, owner):
+            try:
+                item.close()
+            except Exception:
+                pass
+        force_stop(pid)
+
+    # ═══════════ SD.08: после группы не осталось процессов ЭТОГО прогона ═══════════
+    remaining_kompas = sorted(p for p in started_kompas if alive(p))
+    live_hosts = pids_of("KompasMcp.Host.exe") or set()
+    live_workers = pids_of("KompasMcp.Worker.exe") or set()
+    my_hosts = sorted(p for p in started_hosts if p in live_hosts)
+    my_workers = sorted(p for p in live_workers if p not in baseline_workers)
+    rep.add("SD.08",
+            "после группы не осталось ни KOMPAS.exe, ни Host/Worker, поднятых этой группой",
+            "PASS" if not remaining_kompas and not my_hosts and not my_workers else "FAIL",
+            "КОМПАС=%s Host группы=%s Worker новые=%s (живых Host до группы: %d, Worker: %d)"
+            % (remaining_kompas, my_hosts, my_workers, len(baseline_hosts), len(baseline_workers)))
+
+
 EXTRA_GROUP_CHECKS = {
     "assembly": lambda c, r, a, w, v, p: assembly_checks(c, r, a, w),
     "mate": lambda c, r, a, w, v, p: mate_checks(c, r, a, w),
@@ -42048,6 +42443,9 @@ EXTRA_GROUP_CHECKS = {
     # `p` — PID экземпляра, поднятого общим запуском группы: только группа DC его использует, чтобы
     # завершить СВОЙ процесс КОМПАС и воспроизвести обрыв связи.
     "disconnect": lambda c, r, a, w, v, p: disconnect_checks(c, r, a, w, process_id=p),
+    # Группа SD не пользуется общим сеансом: она ведёт свои процессы Хоста, поэтому ей нужен путь к
+    # исполняемому файлу и конфигурация, а не app_id. Свежий сеанс для неё не поднимается.
+    "shutdown": lambda c, r, a, w, v, p: shutdown_checks(c.host_exe, c.config, w, r),
 }
 
 

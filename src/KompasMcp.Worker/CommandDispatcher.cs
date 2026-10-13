@@ -795,8 +795,47 @@ public sealed class CommandDispatcher
     private object? Disconnect(IpcFrame request)
     {
         var command = Argument<DisconnectCommand>(request);
-        _session.Disconnect(command.ApplicationId, command.CloseOwnedApplication);
-        return new JsonObject { ["application_id"] = command.ApplicationId, ["disconnected"] = true };
+        var shutdown = _session.Disconnect(command.ApplicationId, command.CloseOwnedApplication, _controlCopies);
+        var node = new JsonObject { ["application_id"] = command.ApplicationId, ["disconnected"] = true };
+        if (shutdown is not null)
+        {
+            node["owned_instance_shutdown"] = ShutdownNode(shutdown);
+        }
+
+        return node;
+    }
+
+    /// <summary>The shutdown report as the client sees it: what was rescued, what failed, and whether the
+    /// instance is actually gone. A missing field would be indistinguishable from a forgotten write.
+    /// History: docs/decisions/host.md#shutdown-no-orphans</summary>
+    private static JsonObject ShutdownNode(OwnedShutdownReport shutdown)
+    {
+        var rescued = new JsonArray();
+        foreach (var copy in shutdown.Rescued)
+        {
+            rescued.Add(new JsonObject
+            {
+                ["document_id"] = copy.DocumentId,
+                ["rescue_copy"] = copy.Path,
+                ["reason"] = copy.Reason,
+            });
+        }
+
+        var problems = new JsonArray();
+        foreach (var problem in shutdown.Problems)
+        {
+            problems.Add(problem);
+        }
+
+        return new JsonObject
+        {
+            ["quit_issued"] = shutdown.QuitIssued,
+            ["process_exited"] = shutdown.ProcessExited,
+            ["process_id"] = shutdown.ProcessId,
+            ["killed_by_pid"] = shutdown.KilledByPid,
+            ["rescue_copies"] = rescued,
+            ["problems"] = problems,
+        };
     }
 
     /// <summary>Session inventory for the release decision. A control command, but on the CAD lane: the unsaved flag is
@@ -1507,27 +1546,74 @@ public sealed class CommandDispatcher
 
     private object? ShutdownPayload()
     {
-        ShutdownOwnedSessions();
-        return new JsonObject { ["sessions_closed"] = true };
+        var reports = ShutdownOwnedSessions();
+        var node = new JsonObject { ["sessions_closed"] = true };
+        if (reports.Count > 0)
+        {
+            var array = new JsonArray();
+            foreach (var (applicationId, report) in reports)
+            {
+                var item = ShutdownNode(report);
+                item["application_id"] = applicationId;
+                array.Add(item);
+            }
+
+            node["owned_instance_shutdown"] = array;
+        }
+
+        return node;
     }
 
     /// <summary>Detach from every session. Documents belonging to the server are closed without saving; an attached
     /// KOMPAS is left running because it is the user's process.</summary> <remarks>Queued commands are NOT interrupted
     /// — a COM call cannot be cancelled from outside, so the outcome of an operation the Host called
-    /// <c>OUTCOME_UNKNOWN</c> is determined by the model.</remarks>
-    public void ShutdownOwnedSessions()
+    /// <c>OUTCOME_UNKNOWN</c> is determined by the model.
+    /// MEASURED: this path used to leave an orphan — <c>Quit()</c> answers at once, and a "save changes?"
+    /// window nobody answered kept the process alive. Every step is logged, so a run that fell back to
+    /// terminating a PID says so. History: docs/decisions/host.md#shutdown-no-orphans</remarks>
+    public List<(string ApplicationId, OwnedShutdownReport Report)> ShutdownOwnedSessions()
     {
+        var reports = new List<(string, OwnedShutdownReport)>();
         foreach (var application in _session.Applications.ToArray())
         {
             try
             {
-                _session.Disconnect(application.Id, closeOwnedApplication: application.Ownership == ApplicationOwnership.Launched);
+                var report = _session.Disconnect(
+                    application.Id, closeOwnedApplication: application.Ownership == ApplicationOwnership.Launched, _controlCopies);
+                if (report is null)
+                {
+                    continue;
+                }
+
+                reports.Add((application.Id, report));
+                _log.Write("info", "owned instance shutdown", new
+                {
+                    application = application.Id,
+                    process_id = report.ProcessId,
+                    quit_issued = report.QuitIssued,
+                    process_exited = report.ProcessExited,
+                    killed_by_pid = report.KilledByPid,
+                    rescue_copies = report.Rescued.Select(c => new { c.DocumentId, c.Path, c.Reason }).ToArray(),
+                    problems = report.Problems.ToArray(),
+                });
+
+                if (!report.ProcessExited)
+                {
+                    _log.Write("warn", "owned instance still alive after shutdown", new
+                    {
+                        application = application.Id,
+                        process_id = report.ProcessId,
+                        killed_by_pid = report.KilledByPid,
+                    });
+                }
             }
             catch (Exception ex)
             {
                 _log.Write("warn", "session shutdown failed", new { application = application.Id, type = ex.GetType().Name });
             }
         }
+
+        return reports;
     }
 }
 

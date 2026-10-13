@@ -29,6 +29,50 @@ public sealed class DocumentControlCopies
 
     public string Folder => System.IO.Path.Combine(RootDirectory, FolderName);
 
+    /// <summary>Sub-folder of the SERVICE directory holding the RESCUE copies taken when a session ends
+    /// with a document that still has unsaved changes.</summary>
+    /// <remarks>INVARIANT: a separate sub-folder, because the two kinds have different lifetimes — a
+    /// control copy is deleted after a SUCCESSFUL mutation, a rescue copy is the last copy of work that
+    /// was never saved and is deleted by nobody. Mixing them would let the mutation path delete the
+    /// rescue. Policy: docs/operator-guide/control-copies.md.
+    /// History: docs/decisions/files.md#rescue-copies</remarks>
+    public string RescueFolder => System.IO.Path.Combine(Folder, "rescue");
+
+    /// <summary>The path a rescue copy is written to. The name carries the document id and the moment,
+    /// so two rescues of the same document are different files and neither overwrites the other.</summary>
+    /// <remarks>DOC: the copy is written through the documented <c>SaveAs(path)</c> — the API5
+    /// <c>ksDocument3D.SaveAs</c> / <c>ksDocument2D.ksSaveDocument</c> or the API7
+    /// <c>IKompasDocument.SaveAs</c> — into this service path, so the CLIENT's own file is not written.
+    /// History: docs/decisions/files.md#rescue-copies</remarks>
+    public string RescuePath(string documentId, DateTimeOffset at)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(documentId);
+        var safeId = new string(documentId.Where(c => char.IsLetterOrDigit(c) || c is '-' or '_').ToArray());
+        if (safeId.Length == 0)
+        {
+            safeId = "document";
+        }
+
+        var stamp = at.UtcDateTime.ToString("yyyyMMdd-HHmmssfff", System.Globalization.CultureInfo.InvariantCulture);
+        return System.IO.Path.Combine(RescueFolder, $"{safeId}-{stamp}.m3d");
+    }
+
+    /// <summary>Prepare the rescue folder. Returns <c>null</c> on success or the named reason — a rescue
+    /// that cannot be written must be visible, not silently skipped.</summary>
+    public string? EnsureRescueFolder()
+    {
+        try
+        {
+            Directory.CreateDirectory(RescueFolder);
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+            or NotSupportedException or ArgumentException)
+        {
+            return $"каталог спасательных копий '{RescueFolder}' недоступен: {ex.GetType().Name}: {ex.Message}";
+        }
+    }
+
     /// <summary>Take a copy of the document file before a mutation. Returns the copy or the reason there is
     /// none; a missing file on disk is a NAMED state, not an error — a just-created document has no file
     /// yet, and "no copy" is more honest than an empty path.</summary>

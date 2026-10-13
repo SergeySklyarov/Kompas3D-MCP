@@ -344,11 +344,27 @@ public sealed partial class Api5Session : IDisposable
         }
     }
 
-    public void Disconnect(string applicationId, bool closeOwnedApplication)
+    /// <summary>Detach from a session; an attached KOMPAS is left running because it is the user's
+    /// process, while an owned instance is stopped without leaving it behind.</summary>
+    /// <remarks>MEASURED: <c>Quit()</c> returns at once and does NOT wait for the instance to exit; an
+    /// unsaved document left <c>KOMPAS.exe</c> alive on a "save changes?" window. The DOCUMENTED
+    /// <c>IKompasDocument.Close(kdDoNotSaveChanges)</c> before <c>Quit()</c> ended it; suppressing dialogs
+    /// did not. DOC: ikompasdocument_close.html. History: docs/decisions/host.md#shutdown-no-orphans</remarks>
+    /// <param name="copies">Where a rescue copy of an unsaved document goes. <c>null</c> — no rescue copy
+    /// is taken (the document's edits are dropped); the caller names that choice.</param>
+    public OwnedShutdownReport? Disconnect(
+        string applicationId, bool closeOwnedApplication, DocumentControlCopies? copies = null)
     {
         if (!_applications.TryGetValue(applicationId, out var application))
         {
             throw new KompasContractException(ErrorCodes.ApplicationDisconnected, $"Сеанс '{applicationId}' не найден.");
+        }
+
+        // An instance this server LAUNCHED is stopped through its documented shutdown — and only such an
+        // instance: killing the user's KOMPAS is forbidden (spec 1.6).
+        if (closeOwnedApplication && application.Ownership == ApplicationOwnership.Launched)
+        {
+            return ShutdownOwned(application, copies);
         }
 
         foreach (var document in _documents.Values.Where(d => d.ApplicationId == applicationId).ToArray())
@@ -358,17 +374,288 @@ public sealed partial class Api5Session : IDisposable
 
         try
         {
-            // Killing the process is forbidden; Quit() is the documented shutdown of an instance the
-            // server started itself, and only for owned instances (spec 1.6).
-            if (closeOwnedApplication && application.Ownership == ApplicationOwnership.Launched)
-            {
-                application.Application.Quit();
-            }
+            // An ATTACHED instance is the user's process: nothing is quit, nothing is killed.
         }
         finally
         {
             ComApartment.Release(application.Application);
             _applications.Remove(applicationId);
+        }
+
+        return null;
+    }
+
+    /// <summary>Stop an instance this server launched without leaving it behind: rescue copy of every
+    /// document with unsaved changes, the DOCUMENTED close-without-save for every document, then
+    /// <c>Quit()</c> — and, as the LAST resort only, termination of that one PID.</summary>
+    /// <remarks>INVARIANT: the rescue copy is written BEFORE the close, or the unsaved work would be
+    /// discarded before it was copied. INVARIANT: the client's own file is never the rescue target.
+    /// MEASURED: the whole sequence (rescue + close + quit) took 763-832 ms on a 472 KB and a 756 KB
+    /// document — well inside the Host's 20 s shutdown window.
+    /// History: docs/decisions/host.md#shutdown-no-orphans</remarks>
+    public OwnedShutdownReport ShutdownOwned(ApplicationEntry application, DocumentControlCopies? copies)
+    {
+        var rescued = new List<OwnedShutdownRescue>();
+        var problems = new List<string>();
+        var mine = _documents.Values.Where(d => d.ApplicationId == application.Id).ToArray();
+
+        // (а) Rescue copy of every document that still carries unsaved changes. The FILE the client
+        // opened is not touched: the copy is written through the documented SaveAs into the service path.
+        foreach (var document in mine)
+        {
+            if (!IsDirty(document))
+            {
+                continue;
+            }
+
+            if (copies is null)
+            {
+                rescued.Add(new OwnedShutdownRescue(document.Id, null,
+                    "каталог служебных копий не задан: спасательная копия не снята, правки теряются"));
+                continue;
+            }
+
+            var folderProblem = copies.EnsureRescueFolder();
+            if (folderProblem is not null)
+            {
+                rescued.Add(new OwnedShutdownRescue(document.Id, null, folderProblem));
+                continue;
+            }
+
+            var target = copies.RescuePath(document.Id, DateTimeOffset.UtcNow);
+            var (ok, reason) = RescueCopyTo(document, target);
+            rescued.Add(new OwnedShutdownRescue(document.Id, ok ? target : null, ok ? null : reason));
+        }
+
+        // (б) Close every document through the documented close-without-save, so Quit() finds nothing
+        // to ask about. MEASURED: this is the step that makes the difference — the dialog appears for a
+        // document that is still open and modified when Quit() runs.
+        foreach (var document in mine)
+        {
+            var problem = CloseDiscarding(document);
+            if (problem is not null)
+            {
+                problems.Add($"документ {document.Id}: {problem}");
+            }
+
+            DropDocument(document, alreadyClosed: true);
+        }
+
+        // (г) Quit() — the documented shutdown of an instance this server started.
+        var quitIssued = false;
+        try
+        {
+            application.Application.Quit();
+            quitIssued = true;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            problems.Add("Quit() бросил: " + Describe(ex));
+        }
+
+        // LAST RESORT. Quit() is asynchronous and answers at once, so "the call returned" says nothing
+        // about the process. Only the PID THIS session launched is ever terminated (spec 1.6 forbids
+        // killing by name and forbids touching an attached instance).
+        var processId = application.ProcessId;
+        var exited = WaitForProcessExit(processId, KompasExitWaitMs);
+        var killed = false;
+        if (!exited && processId is int pid)
+        {
+            killed = TryKillProcess(pid);
+            if (killed)
+            {
+                exited = WaitForProcessExit(pid, KilledExitWaitMs);
+            }
+        }
+
+        ComApartment.Release(application.Application);
+        _applications.Remove(application.Id);
+
+        return new OwnedShutdownReport(rescued, problems, quitIssued, exited, killed, processId);
+    }
+
+    /// <summary>How long to wait for the launched instance to leave after <c>Quit()</c> before the PID is
+    /// terminated. MEASURED: a clean sequence ends the instance in well under 1 s, so this is a bound on
+    /// the pathological case, not a normal wait — and it must stay small enough that the whole Worker
+    /// shutdown fits the Host's 20 s window.</summary>
+    private const int KompasExitWaitMs = 5_000;
+
+    /// <summary>How long to wait after a forced termination before reporting whether it worked.</summary>
+    private const int KilledExitWaitMs = 2_000;
+
+    /// <summary>Write a rescue copy of the CURRENT model through the documented <c>SaveAs</c> route of
+    /// whichever handle the document carries. Returns success, or the named reason there is none.</summary>
+    /// <remarks>INVARIANT: the rescue copy is a WRITE to the service path, never to the document's own
+    /// file, so the client's file keeps the state it had. DOC: ikompasdocument_saveas.html.
+    /// History: docs/decisions/files.md#rescue-copies</remarks>
+    private (bool Ok, string? Reason) RescueCopyTo(DocumentEntry document, string targetPath)
+    {
+        try
+        {
+            if (document.Document is not null)
+            {
+                if (document.Document.SaveAs(targetPath) != true)
+                {
+                    return (false, "ksDocument3D.SaveAs вернул не true");
+                }
+            }
+            else if (document.Drawing is not null)
+            {
+                if (document.Drawing.ksSaveDocument(targetPath) != true)
+                {
+                    return (false, "ksDocument2D.ksSaveDocument вернул не true");
+                }
+            }
+            else if (document.Drawing7 is IKompasDocument drawing7)
+            {
+                // DOC: IKompasDocument.SaveAs returns Void, so the file itself is the confirmation.
+                drawing7.SaveAs(targetPath);
+            }
+            else
+            {
+                return (false, "у документа нет ни 3D-, ни 2D-дескриптора: сохранять нечем");
+            }
+
+            var info = new FileInfo(targetPath);
+            if (!info.Exists || info.Length <= 0)
+            {
+                return (false, $"спасательная копия '{targetPath}' не появилась на диске");
+            }
+
+            return (true, null);
+        }
+        catch (Exception ex) when (ex is COMException or IOException or UnauthorizedAccessException
+            or NotSupportedException or ArgumentException)
+        {
+            return (false, "SaveAs бросил: " + Describe(ex));
+        }
+    }
+
+    /// <summary>Close a document WITHOUT saving through the documented route, so KOMPAS has nothing to
+    /// ask about at <c>Quit()</c>. Returns <c>null</c> on success or the named reason it could not be
+    /// done that way (the fallback is named, never silent).</summary>
+    /// <remarks>DOC: ikompasdocument_close.html — <c>Close(kdDoNotSaveChanges)</c> closes an edited
+    /// document without saving and without a prompt; the API5 <c>ksDocument3D.close()</c> carries no
+    /// option at all, so it is the fallback and its weakness is reported.
+    /// History: docs/decisions/host.md#shutdown-no-orphans</remarks>
+    private string? CloseDiscarding(DocumentEntry document)
+    {
+        try
+        {
+            var doc7 = DocumentAsApi7(document);
+            if (doc7 is not null)
+            {
+                return doc7.Close(DocumentCloseOptions.kdDoNotSaveChanges)
+                    ? null
+                    : "IKompasDocument.Close(kdDoNotSaveChanges) вернул false";
+            }
+
+            if (document.Document is not null)
+            {
+                document.Document.close();
+                return "закрыт через API5 ksDocument3D.close(): у него нет выбора «не сохранять»";
+            }
+
+            if (document.Drawing is not null)
+            {
+                document.Drawing.ksCloseDocument();
+                return "закрыт через API5 ksDocument2D.ksCloseDocument(): у него нет выбора «не сохранять»";
+            }
+
+            return "у документа нет ни одного дескриптора для закрытия";
+        }
+        catch (Exception ex) when (ex is COMException or InvalidCastException)
+        {
+            return "закрытие бросило: " + Describe(ex);
+        }
+    }
+
+    /// <summary>The document as an API7 <see cref="IKompasDocument"/>, or <c>null</c> when the transfer
+    /// does not yield one. A 3D document reaches it by transferring the API5 handle; a drawing created
+    /// through the API7 route already carries it.</summary>
+    private IKompasDocument? DocumentAsApi7(DocumentEntry document)
+    {
+        if (document.Drawing7 is IKompasDocument drawing7)
+        {
+            return drawing7;
+        }
+
+        var application = _applications.TryGetValue(document.ApplicationId, out var entry) ? entry : null;
+        if (application is null)
+        {
+            return null;
+        }
+
+        var source = document.Document is not null ? (object)document.Document
+            : document.Drawing is not null ? document.Drawing
+            : null;
+        if (source is null)
+        {
+            return null;
+        }
+
+        return BridgeForApplication(application).TransferTo7(source) as IKompasDocument;
+    }
+
+    /// <summary>Whether the process is gone, waiting at most <paramref name="timeoutMs"/>.</summary>
+    private static bool WaitForProcessExit(int? processId, int timeoutMs)
+    {
+        if (processId is not int pid)
+        {
+            // The PID was never attributed: "not attributed" is not "gone". Reported as not gone so the
+            // caller does not claim the instance was stopped on evidence it does not have.
+            return false;
+        }
+
+        var deadline = Environment.TickCount64 + timeoutMs;
+        while (Environment.TickCount64 < deadline)
+        {
+            if (!IsProcessAlive(pid))
+            {
+                return true;
+            }
+
+            System.Threading.Thread.Sleep(200);
+        }
+
+        return !IsProcessAlive(pid);
+    }
+
+    private static bool IsProcessAlive(int pid)
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(pid);
+            return !process.HasExited;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Terminate ONE process by the PID this session attributed to its own launch. Returns
+    /// whether the call was accepted; whether the process is gone is a separate question the caller
+    /// answers by looking again.</summary>
+    /// <remarks>LIMIT, NAMED: this is the last resort the order allows and it is never reached on a
+    /// normal shutdown. Killing by NAME is forbidden by the project spec and appears nowhere here.
+    /// History: docs/decisions/host.md#shutdown-no-orphans</remarks>
+    private static bool TryKillProcess(int pid)
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(pid);
+            process.Kill(entireProcessTree: false);
+            return true;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException
+            or System.ComponentModel.Win32Exception or NotSupportedException)
+        {
+            return false;
         }
     }
 
@@ -1368,15 +1655,27 @@ public sealed partial class Api5Session : IDisposable
                 break;
         }
 
-        DropDocument(document);
+        // Close through the DOCUMENTED route with an explicit "what happens to unsaved changes": the
+        // option-less API5 close() puts the question back to a user who is not there. DOC:
+        // ikompasdocument_close.html. History: docs/decisions/host.md#shutdown-no-orphans
+        CloseDiscarding(document);
+        DropDocument(document, alreadyClosed: true);
     }
 
-    private void DropDocument(DocumentEntry document)
+    private void DropDocument(DocumentEntry document, bool alreadyClosed = false)
     {
         References.InvalidateDocument(document.Id);
         _documents.Remove(document.Id);
         try
         {
+            if (alreadyClosed)
+            {
+                // The caller already closed the document through the documented route, with the option
+                // that says what happens to unsaved changes (CloseDiscarding). Closing a second time
+                // through the option-less API5 route would put the question back.
+                return;
+            }
+
             // A drawing created through the API7 route closes through its own API7 IKompasDocument.Close;
             // one created/opened through API5 closes through its 2D handle. A 3D document closes through
             // the 3D handle. Each branch names the handle it actually holds.
@@ -1626,6 +1925,29 @@ public sealed record ApplicationEntry(
 
     public static int? ProcessIdOf(KompasObject application) => Api5Session.ProcessIdOf(application);
 }
+
+/// <summary>One rescue copy taken while stopping an instance this server launched: where it was written,
+/// or the named reason there is none.</summary>
+/// <remarks>"No copy" and "copy taken" are different states and are never conflated: a rescue copy that
+/// could not be written means the edits WERE dropped, and the client has to be told.
+/// History: docs/decisions/files.md#rescue-copies</remarks>
+public sealed record OwnedShutdownRescue(string DocumentId, string? Path, string? Reason);
+
+/// <summary>What stopping an instance this server launched actually did.</summary>
+/// <param name="Rescued">Rescue copies, one entry per document that had unsaved changes.</param>
+/// <param name="Problems">Named failures of the close/quit steps. Empty is a claim, not a default.</param>
+/// <param name="QuitIssued">Whether <c>Quit()</c> was called and returned.</param>
+/// <param name="ProcessExited">Whether the process is gone — the number that says if an orphan was left.</param>
+/// <param name="KilledByPid">Whether the last resort — terminating that one PID — had to be used.</param>
+/// <param name="ProcessId">The PID attributed to this session's own launch, or <c>null</c> if it was never
+/// attributed (then nothing was terminated and the report says so).</param>
+public sealed record OwnedShutdownReport(
+    IReadOnlyList<OwnedShutdownRescue> Rescued,
+    IReadOnlyList<string> Problems,
+    bool QuitIssued,
+    bool ProcessExited,
+    bool KilledByPid,
+    int? ProcessId);
 
 /// <summary>A document registered by the server, with its live COM handles and revision.</summary>
 /// <remarks>MEASURED: a DRAWING has no <c>ksDocument3D</c>/<c>ksPart</c> at all — it is an API5

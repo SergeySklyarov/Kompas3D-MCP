@@ -42176,25 +42176,45 @@ def shutdown_checks(host, config, workdir, rep):
             started_kompas.append(pid)
         return app, pid, code
 
-    def attach(probe, pid):
-        """Присоединение к ЧУЖОМУ экземпляру по его PID.
+    def attach_any(probe, preferred_pid):
+        """Присоединение к экземпляру, который поднял НЕ этот Хост.
 
-        Повтор нужен не «на всякий случай»: запись ROT появляется у процесса не мгновенно, и прогон
-        `--all` показал, что первый attach к только что запущенному экземпляру может не найти его
-        среди кандидатов. Отказ не проглатывается: возвращаются и код, и `details` отказа, чтобы
-        строка называла наблюдённые PID, а не только код.
+        ПОЧЕМУ НЕ ТОЛЬКО «по PID запущенного нами». ИЗМЕРЕНО в прогоне `--all`: когда КОМПАС уже
+        запущен (сеанс вертикали), экземпляр, поднятый группой, в таблице ROT не появляется —
+        `details` отказа назвал `requested_process_id: 29204, observed_process_ids: [33840]`. Строка,
+        которая на этом падает, мерит не продукт, а постановку. Поэтому присоединение идёт по
+        кандидату, который ROT ДЕЙСТВИТЕЛЬНО отдаёт: сначала пробуем свой PID, затем — без PID, затем
+        — каждый из названных отказом PID. Возвращается (app_id, pid экземпляра, код, details, попытки).
         """
+        attempts = 0
         last_env, last_code = None, None
-        for attempt in range(5):
+        for candidate in [preferred_pid, None]:
+            for _ in range(3):
+                attempts += 1
+                payload = {"mode": "attach", "make_visible": False}
+                if candidate is not None:
+                    payload["process_id"] = candidate
+                env, code = call(probe, "kompas_connect", payload, timeout=300)
+                app = (env or {}).get("application_id")
+                if app:
+                    got = ((env or {}).get("result") or {}).get("process_id") or candidate
+                    return app, got, None, None, attempts
+                last_env, last_code = env, code
+                _time.sleep(2)
+
+        err = (last_env or {}).get("error") or {}
+        details = err.get("details") if isinstance(err, dict) else None
+        for candidate in (details or {}).get("observed_process_ids") or []:
+            attempts += 1
             env, code = call(probe, "kompas_connect",
-                             {"mode": "attach", "process_id": pid, "make_visible": False}, timeout=300)
+                             {"mode": "attach", "process_id": candidate, "make_visible": False},
+                             timeout=300)
             app = (env or {}).get("application_id")
             if app:
-                return app, None, None, attempt
+                return app, candidate, None, None, attempts
             last_env, last_code = env, code
-            _time.sleep(2)
         err = (last_env or {}).get("error") or {}
-        return None, last_code, (err.get("details") if isinstance(err, dict) else None), 4
+        return None, None, last_code, (err.get("details") if isinstance(err, dict) else None), attempts
 
     def context(probe, doc):
         _e, env, _r = probe.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
@@ -42403,22 +42423,24 @@ def shutdown_checks(host, config, workdir, rep):
         if not app_owner or not pid:
             rep.add("SD.07", "экземпляр attach переживает конец связи", "FAIL", "launch: %s" % code)
         else:
-            app_att, acode, adetails, attempts = attach(attached, pid)
+            app_att, att_pid, acode, adetails, attempts = attach_any(attached, pid)
             if not app_att:
                 rep.add("SD.07", "экземпляр attach переживает конец связи", "FAIL",
                         "attach: %s после %d попыток; details=%s"
-                        % (acode, attempts + 1, _json.dumps(adetails, ensure_ascii=False)[:300]))
+                        % (acode, attempts, _json.dumps(adetails, ensure_ascii=False)[:300]))
             else:
                 _env, ocode = call(attached, "kompas_create_document",
                                    {"application_id": app_att, "kind": "part", "name": "SD-attach"})
                 attached.p.stdin.close()
                 _time.sleep(4)
-                survived = alive(pid)
+                # Проверяется ЧУЖОЙ экземпляр (не тот, что поднял owner): именно его конец связи этого
+                # Хоста не должен закрывать.
+                survived = alive(att_pid) if att_pid else alive(pid)
                 rep.add("SD.07",
                         "экземпляр attach (процесс пользователя) после конца связи жив и не тронут",
                         "PASS" if survived else "FAIL",
-                        "create_document на attach=%s процесс жив=%s (попыток attach: %d)"
-                        % (ocode, survived, attempts + 1))
+                        "create_document на attach=%s; экземпляр %s (PID запрошен %s, свой %s) жив=%s, попыток attach=%d"
+                        % (ocode, att_pid, att_pid, pid, survived, attempts))
                 call(owner, "kompas_disconnect",
                      {"application_id": app_owner, "close_owned_application": True}, timeout=180)
                 gone = wait_gone(pid, 45)

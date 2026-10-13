@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using System.Runtime.InteropServices;
 using Kompas6API5;
 using KompasMcp.Api5Adapter.Com;
@@ -3219,6 +3219,11 @@ public sealed partial class Api5Session
                 partialEffects: true);
         }
 
+        // The edge LINES are taken before the mutation: after the fillet the edge itself is gone, and the
+        // line is what the new cylinder must lie along. Taken here so that a later refusal can compare the
+        // surface against the very edge that was presented.
+        var requestedLines = EdgeLines(entities, edgeRefs);
+
         definition.radius = command.RadiusMm;
         definition.tangent = false;
 
@@ -3342,8 +3347,29 @@ public sealed partial class Api5Session
                 });
         }
 
-        var volumeDecreased = volumeBefore is double beforeVolume && volumeAfter is double afterVolume
-            && afterVolume < beforeVolume;
+        // The surface must lie along the edge that was ASKED FOR, and this is checked by PLACEMENT, not by
+        // volume: on a body whose corners are equivalent a fillet moved to another corner keeps the volume
+        // within the declared expectation, and the client would receive `succeeded` for geometry it never
+        // asked for. The check stands BEFORE the declared-expectation comparison for the same reason the
+        // no-op refusal does: that comparison is the geometry check of an operation that HAPPENED.
+        // History: docs/decisions/adapter-features.md#fillet-on-other-edge
+        var placement = CheckFilletPlacement(document, requestedLines, command.RadiusMm, featureReference.Id);
+        if (placement.Refused)
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                placement.Message!,
+                RetryPolicy.ReacquireContext,
+                partialEffects: true,
+                details: placement.Details);
+        }
+
+        // The SIGN of the change is NOT asserted: a fillet REMOVES material on a convex edge and ADDS it on
+        // a reflex one (the material-side note in the API notes), so "the volume went down" is not a
+        // property of a correct fillet. What is asserted is that the volume MOVED at all, and the placement
+        // check above says WHERE the surface went.
+        // History: docs/decisions/adapter-features.md#fillet-on-other-edge
+        var volumeMoved = BodyChangePolicy.VolumeMoved(volumeDelta, volumeBefore);
         var volumePairRead = volumeBefore is double && volumeAfter is double;
         // The declared delta is the geometry check of this tool: a mismatch is a REFUSAL, an unreadable
         // pair is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
@@ -3362,10 +3388,10 @@ public sealed partial class Api5Session
             // check, it is an unperformed one (the reason travels in unverified_aspects).
             checks.Add(new NamedCheck(
                 "volume_delta",
-                volumeDecreased,
+                volumeMoved,
                 Observed: (volumeBefore!.Value - volumeAfter!.Value)
                     .ToString("0.####", System.Globalization.CultureInfo.InvariantCulture),
-                Expected: "не задано — проверено только направление"));
+                Expected: "не задано — проверено только изменение объёма"));
         }
 
         // Geometry is confirmed when the stored parameter reads back, the topology grew by exactly
@@ -3375,10 +3401,11 @@ public sealed partial class Api5Session
         var geometryConfirmed = radiusReadBack is double confirmed
             && Math.Abs(confirmed - command.RadiusMm) <= 1e-6
             && checks.Exists(c => c.Name == "face_count_grew" && c.Passed)
-            && volumeDecreased
+            && volumeMoved
             && numericMatch is not false;
 
         var unverified = new List<string>();
+        unverified.AddRange(placement.Unverified);
         if (declared.IsUnverifiable)
         {
             unverified.Add(DeclaredExpectation.UnverifiableReason("уменьшение объёма", declared));
@@ -3532,6 +3559,10 @@ public sealed partial class Api5Session
                 details: new Dictionary<string, object?> { ["added"] = added, ["requested"] = entities.Count });
         }
 
+        // The edge LINES, taken before the mutation: after the chamfer the edge itself is gone, and the line
+        // is what the new plane must lie along. Same capture as on the fillet.
+        var requestedLines = EdgeLines(entities, edgeRefs);
+
         if (!feature.Create())
         {
             // The feature's error number is what KOMPAS reports for the reason this very creation failed
@@ -3550,6 +3581,10 @@ public sealed partial class Api5Session
 
         SettleAfterMutation(document);
         BumpRevision(document, "chamfer");
+
+        // Registered BEFORE the placement check, not after it: a refusal must be able to NAME the feature it
+        // left in the tree, so the client can delete it — the same order as kompas_fillet and kompas_extrude.
+        var reference2 = References.Register("feature", document.Id, document.Revision, feature);
 
         var volumeAfter = ReadVolume(document);
         var facesAfter = CountFaces(document);
@@ -3583,8 +3618,75 @@ public sealed partial class Api5Session
                 Observed: bodiesAfter.ToString(System.Globalization.CultureInfo.InvariantCulture)),
         };
 
-        var materialRemoved = volumeBefore is double b && volumeAfter is double a && a < b;
+        // The SIGN of the change is NOT asserted here either: a chamfer REMOVES material on a convex edge
+        // and ADDS it on a reflex one, so "the volume went down" is not a property of a correct chamfer.
+        var volumeMoved = BodyChangePolicy.VolumeMoved(
+            volumeBefore is double cb && volumeAfter is double ca ? ca - cb : null, volumeBefore);
         var volumePairRead = volumeBefore is double && volumeAfter is double;
+
+        // A MEASURED NO-OP IS NOT A RESULT, and it is refused BEFORE the placement check so that the client
+        // gets the PRECISE reason: "the feature is in the tree and the body does not hold it" is a different
+        // finding from "the surface is on another edge", and they must not share a code.
+        // MEASURED: a chamfer on a REFLEX edge of the Г-plate is created (Create()=true, the feature stays
+        // in the tree) while neither the volume nor the face count moves - the kernel does not build a
+        // chamfer that would ADD material. Same shape as kompas_fillet's refusal.
+        // History: docs/decisions/adapter-features.md#chamfer-not-applied
+        bool? topologyMovedChamfer = facesBefore is double && facesAfter is double
+            && bodiesBefore >= 0 && bodiesAfter >= 0
+                ? facesBefore != facesAfter || bodiesBefore != bodiesAfter
+                : null;
+        var chamferDelta = volumeBefore is double chamferWas && volumeAfter is double chamferNow
+            ? chamferNow - chamferWas
+            : (double?)null;
+        if (BodyChangePolicy.Unchanged(chamferDelta, volumeBefore, topologyMovedChamfer))
+        {
+            throw new KompasContractException(
+                ErrorCodes.NoGeometryChange,
+                "Фаска создана (Create=true), но тело не изменилось ни объёмом, ни числом граней: "
+                + "объём " + Num(volumeBefore) + " → " + Num(volumeAfter) + " при пороге шума "
+                + BodyChangePolicy.VolumeNoiseMm3.ToString("0.#####e+0",
+                    System.Globalization.CultureInfo.InvariantCulture)
+                + " мм³, граней " + Num(facesBefore) + " → " + Num(facesAfter)
+                + ", тел " + Num(bodiesBefore) + " → " + Num(bodiesAfter) + ". Признак ОСТАЛСЯ в дереве, "
+                + "а тело его не удерживает: так КОМПАС ведёт себя, когда признак не применяется к телу. "
+                + "Успехом это быть не может. Удалите признак вызовом kompas_delete_feature по feature_ref "
+                + "и повторите фаску.",
+                RetryPolicy.ReacquireContext,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["code"] = "chamfer_not_applied",
+                    ["feature_ref"] = reference2.Id,
+                    ["distance1_mm"] = command.Distance1Mm,
+                    ["distance2_mm"] = distance2,
+                    ["edge_count"] = entities.Count,
+                    ["volume_before_mm3"] = volumeBefore,
+                    ["volume_after_mm3"] = volumeAfter,
+                    ["volume_noise_mm3"] = BodyChangePolicy.VolumeNoiseMm3,
+                    ["face_count_before"] = facesBefore,
+                    ["face_count_after"] = facesAfter,
+                    ["body_count_before"] = bodiesBefore,
+                    ["body_count_after"] = bodiesAfter,
+                });
+        }
+
+        // The plane must cut the two faces that meet at the edge that was ASKED FOR. Placement, not volume:
+        // on a body whose corners are equivalent a chamfer moved to another corner keeps the volume inside
+        // the declared expectation, and the client would receive `succeeded` for geometry it never asked for.
+        // It stands BEFORE the declared-expectation comparison — that comparison is the geometry check of an
+        // operation that HAPPENED.
+        // History: docs/decisions/adapter-features.md#fillet-on-other-edge
+        var placement = CheckChamferPlacement(
+            document, requestedLines, command.Distance1Mm, distance2, reference2.Id);
+        if (placement.Refused)
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                placement.Message!,
+                RetryPolicy.ReacquireContext,
+                partialEffects: true,
+                details: placement.Details);
+        }
         // The declared delta is the geometry check of this tool: a mismatch is a REFUSAL, an unreadable
         // pair is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
         var measuredDelta = volumeBefore is double vBefore && volumeAfter is double vAfter
@@ -3602,10 +3704,10 @@ public sealed partial class Api5Session
             // check, not a failed one.
             checks.Add(new NamedCheck(
                 "volume_delta",
-                materialRemoved,
+                volumeMoved,
                 Observed: (volumeBefore!.Value - volumeAfter!.Value)
                     .ToString("0.####", System.Globalization.CultureInfo.InvariantCulture),
-                Expected: "не задано — проверено только направление"));
+                Expected: "не задано — проверено только изменение объёма"));
         }
 
         var numericMatch = declared.IsDeclared ? declared.IsConfirmed : (bool?)null;
@@ -3614,10 +3716,11 @@ public sealed partial class Api5Session
             && Math.Abs(readBack.Distance2Mm - distance2) <= 1e-6;
         var geometryConfirmed = parametersStored
             && checks.Exists(c => c.Name == "face_count_grew" && c.Passed)
-            && materialRemoved
+            && volumeMoved
             && numericMatch is not false;
 
         var unverified = new List<string>();
+        unverified.AddRange(placement.Unverified);
         if (declared.IsUnverifiable)
         {
             unverified.Add(DeclaredExpectation.UnverifiableReason("уменьшение объёма", declared));
@@ -3642,7 +3745,6 @@ public sealed partial class Api5Session
             unverified.Add("expected_volume_delta_not_supplied — аналитическое ожидание дельты не задавал вызывающий, численного доказательства нет");
         }
 
-        var reference2 = References.Register("feature", document.Id, document.Revision, feature);
             return new ChamferResult(
             ToDto(reference2, $"chamfer {command.Distance1Mm:0.###}×{distance2:0.###} × {entities.Count}"),
             entities.Count,

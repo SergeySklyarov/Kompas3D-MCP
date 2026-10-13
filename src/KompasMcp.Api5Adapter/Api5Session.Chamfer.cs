@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using Kompas6API5;
 using KompasMcp.Api5Adapter.Api7;
 using KompasMcp.Contracts;
@@ -141,8 +141,32 @@ public partial class Api5Session
                 Observed: bodiesAfter.ToString(System.Globalization.CultureInfo.InvariantCulture)),
         };
 
-        var materialRemoved = volumeBefore is double b && volumeAfter is double a && a < b;
+        // The SIGN of the change is NOT asserted here either: a chamfer REMOVES material on a convex edge
+        // and ADDS it on a reflex one, so "the volume went down" is not a property of a correct chamfer.
+        var volumeMoved = BodyChangePolicy.VolumeMoved(
+            volumeBefore is double cb && volumeAfter is double ca ? ca - cb : null, volumeBefore);
         var volumePairRead = volumeBefore is double && volumeAfter is double;
+
+        // The plane must cut the two faces that meet at the edge that was ASKED FOR — placement, not volume.
+        // The second leg of this mode is DERIVED from the angle (MEASURED by probe F.10: the legs are
+        // d and d·tg α), and it is that derived leg the placement is checked against.
+        // History: docs/decisions/adapter-features.md#fillet-on-other-edge
+        var requestedLines = EdgeLines(entities, command.EdgeRefs);
+        var placementFeatureRef = api5Feature is null
+            ? null
+            : References.Register("feature", document.Id, document.Revision, api5Feature).Id;
+        var secondLeg = command.Distance1Mm * Math.Tan(angle * Math.PI / 180d);
+        var placement = CheckChamferPlacement(
+            document, requestedLines, command.Distance1Mm, secondLeg, placementFeatureRef ?? "(признак не найден в дереве)");
+        if (placement.Refused)
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                placement.Message!,
+                RetryPolicy.ReacquireContext,
+                partialEffects: true,
+                details: placement.Details);
+        }
         // The declared delta is the geometry check of this tool: a mismatch is a REFUSAL, an unreadable
         // pair is a NAMED gap (docs/decisions/adapter-core.md#declared-expectation-rule).
         var measuredDelta = volumeBefore is double vBefore && volumeAfter is double vAfter
@@ -160,17 +184,17 @@ public partial class Api5Session
             // check, not a failed one (the reason travels in unverified_aspects).
             checks.Add(new NamedCheck(
                 "volume_delta",
-                materialRemoved,
+                volumeMoved,
                 Observed: ((volumeBefore!.Value) - volumeAfter!.Value)
                     .ToString("0.####", System.Globalization.CultureInfo.InvariantCulture),
-                Expected: "не задано — проверено только направление"));
+                Expected: "не задано — проверено только изменение объёма"));
         }
 
         var numericMatch = declared.IsDeclared ? declared.IsConfirmed : (bool?)null;
         var geometryConfirmed = created.Created
             && parametersStored
             && checks.Exists(c => c.Name == "face_count_grew" && c.Passed)
-            && materialRemoved
+            && volumeMoved
             && numericMatch is not false;
 
         var unverified = new List<string>
@@ -178,6 +202,7 @@ public partial class Api5Session
             "angle_units_measured_once — градусы подтверждены одним замером на прямых рёбрах " +
             "перпендикулярных граней (F.10); на дугах и наклонных рёбрах единица не проверялась",
         };
+        unverified.AddRange(placement.Unverified);
         if (declared.IsUnverifiable)
         {
             unverified.Insert(0, DeclaredExpectation.UnverifiableReason("уменьшение объёма", declared));

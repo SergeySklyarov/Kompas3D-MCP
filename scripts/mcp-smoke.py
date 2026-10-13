@@ -27656,6 +27656,71 @@ def fillet_checks(client, rep, app_id, workdir):
                             details=grow_details)
             close(doc_g)
 
+    # ── FL28: скругление ВХОДЯЩЕГО угла — знак объёма и ПРИЛЕГАНИЕ поверхности ──────────────────
+    # Строка измеряет две вещи, которых не покрывала ни одна существующая строка группы.
+    #
+    # (1) СТОРОНА УГЛА МЕНЯЕТ ЗНАК. На входящем углу скругление материал ДОБАВЛЯЕТ, а не снимает
+    #     (docs/04 §4.5.1), поэтому обещание «объём обязан уменьшиться» здесь ложно, а ожидание
+    #     входит со знаком минус: «до − после» = −(1−π/4)·r²·h. До наряда FILLET_REBUILD_STABILITY
+    #     схема вообще не принимала отрицательное ожидание, а проверка направления объёма была
+    #     односторонней — верная геометрия получала бы call_returned.
+    #
+    # (2) ПРИЛЕГАНИЕ ПОВЕРХНОСТИ ПОДТВЕРЖДАЕТ САМО ИЗДЕЛИЕ. Уровень geometry_checked выдаётся
+    #     только когда измеренная поверхность действительно лежит вдоль ЗАПРОШЕННОГО ребра: ось
+    #     цилиндра параллельна ему и отстоит от обеих граней, смежных с ним, на радиус. Перенос
+    #     скругления на другой угол снял бы этот уровень — и это ровно тот вид ложного успеха,
+    #     который объёмом на теле с равнозначными углами неразличим.
+    doc_r, rev_r, err_r = new_doc("SM09-fillet-reflex-L")
+    L_POINTS_R = [[-50, -40], [50, -40], [50, 10], [10, 10], [10, 40], [-50, 40]]
+    l_plate_r = (100 * 80 - 40 * 30) * 10
+    added_reflex = (1 - math.pi / 4) * fillet_r ** 2 * 10
+    l_after_reflex = l_plate_r + added_reflex
+    if err_r:
+        rep.add("FL28", "скругление ВХОДЯЩЕГО угла Г-пластины: материал добавлен, поверхность прилегает",
+                "FAIL", f"документ не создан: {err_r}")
+    else:
+        skl_r, rev_r, skl_r_err = mk_sketch(doc_r, rev_r, [
+            {"kind": "polyline", "points_mm": L_POINTS_R, "closed": True}], "FLR-R")
+        body_r = None
+        err_br = skl_r_err
+        if not skl_r_err:
+            _e, ex_r, _r = client.tool("kompas_extrude", {
+                "sketch_ref": skl_r, "expected_revision": rev_r, "operation": "base",
+                "depth_mm": 10, "direction": "positive", "end_condition": "blind",
+                "operation_id": str(uuid.uuid4())}, timeout=240)
+            rev_r = (ex_r or {}).get("revision_after") or rev_r
+            if error_code(ex_r) is not None:
+                err_br = f"базовое выдавливание Г-пластины: {error_code(ex_r)}"
+            else:
+                body_r = (bodies(doc_r) or [{}])[0].get("body_ref")
+        pairs_r, _tr = _vertical_edges_any(doc_r, body_r) if body_r else ([], None)
+        convex_r = _at_vertices(pairs_r, _convex_vertices(L_POINTS_R))
+        reflex_r = [(r, xy) for r, xy in pairs_r if (r, xy) not in convex_r]
+        v_r0 = volume(body_r)
+        if err_br or not body_r or len(reflex_r) != 1 or v_r0 is None or abs(v_r0 - l_plate_r) > 0.01:
+            rep.add("FL28", "скругление ВХОДЯЩЕГО угла Г-пластины: материал добавлен, поверхность прилегает",
+                    "FAIL", f"{err_br or ''} входящих углов {len(reflex_r)} (ожидался 1), V={v_r0} "
+                            f"(ожидание {l_plate_r})")
+            close(doc_r)
+        else:
+            _e, rf_env, _r = client.tool("kompas_fillet", {
+                "edge_refs": [reflex_r[0][0]], "expected_revision": rev_r, "radius_mm": fillet_r,
+                "expected_volume_delta_mm3": -added_reflex,
+                "operation_id": str(uuid.uuid4())}, timeout=300)
+            rev_r = (rf_env or {}).get("revision_after") or rev_r
+            v_r1 = volume(body_r)
+            level_r = (((rf_env or {}).get("result") or {}).get("verification") or
+                       (rf_env or {}).get("verification") or {}).get("level")
+            ok_r = (error_code(rf_env) is None and v_r1 is not None
+                    and abs(v_r1 - l_after_reflex) <= max(0.01, 1e-6 * l_after_reflex)
+                    and level_r == "geometry_checked")
+            rep.add("FL28", "скругление ВХОДЯЩЕГО угла Г-пластины: материал добавлен, поверхность прилегает",
+                    "PASS" if ok_r else "FAIL",
+                    f"угол={reflex_r[0][1]} err={error_code(rf_env)} level={level_r} V={v_r1} "
+                    f"ожидание={l_after_reflex} (Г-пластина {l_plate_r}, добавлено {added_reflex}) "
+                    f"msg={describe(rf_env)[1]}")
+            close(doc_r)
+
     # ── FL26: входы скругления ЧУЖОГО документа ───────────────────────────────────────────────
     # Ссылки реестра привязаны к документу. Ссылка признака одного документа, подставленная в
     # признак другого, обязана быть отвергнута ДО мутации. Проверяется на паре живых документов:
@@ -27807,6 +27872,27 @@ def chamfer_checks(client, rep, app_id, workdir):
     """
     plate = 100 * 80 * 10
     corners = {(-50.0, -40.0), (-50.0, 40.0), (50.0, -40.0), (50.0, 40.0)}
+
+    def _convex_vertices(points):
+        """XY ВЫПУКЛЫХ вершин замкнутого контура — тем же правилом, что в группе скругления (FL25):
+        ориентация контура берётся из его собственной площади, знак векторного произведения соседних
+        сторон решает. Нужно там, где пластина не прямоугольная и углы НЕ равнозначны."""
+        area2 = 0.0
+        count = len(points)
+        for i in range(count):
+            x1, y1 = points[i]
+            x2, y2 = points[(i + 1) % count]
+            area2 += x1 * y2 - x2 * y1
+        ccw = area2 > 0
+        out = []
+        for i in range(count):
+            px, py = points[(i - 1) % count]
+            cx, cy = points[i]
+            nx, ny = points[(i + 1) % count]
+            cross = (cx - px) * (ny - cy) - (cy - py) * (nx - cx)
+            if (cross > 0) == ccw:
+                out.append((cx, cy))
+        return out
 
     def ctx(doc):
         _e, env, _r = client.tool("kompas_get_context", {"document_id": doc, "detail": "minimal"})
@@ -28774,6 +28860,94 @@ def chamfer_checks(client, rep, app_id, workdir):
                     f"save={error_code(svD_env)} close={error_code(clD_env)} "
                     f"open={error_code(opD_env)}")
             close(docD2)
+
+    # ═══════════ CH29/CH30: фаска на Г-пластине — прилегание и СТОРОНА угла ═══════════
+    # Г-образный контур 100×80 минус 40×30 даёт шесть вертикальных углов, из них один ВХОДЯЩИЙ.
+    # Это единственная форма в приёмке, где сторона угла различима, а перенос фаски на другой угол
+    # виден геометрически: на прямоугольной пластине все четыре угла равнозначны, и объём при
+    # переносе не меняется вовсе.
+    #
+    # CH29 — ВЫПУКЛЫЙ угол: фаска 2×2 снимает 20 мм³ (V = 67980) и уровень обязан быть
+    # geometry_checked. Этот уровень выдаётся только когда новая грань действительно отсекает обе
+    # грани, смежные с ЗАПРОШЕННЫМ ребром, на заданные катеты — то есть строка падает на переносе
+    # поверхности, который объёмом неразличим.
+    #
+    # CH30 — ВХОДЯЩИЙ угол. Опыт 13.10.2026 показал: КОМПАС создаёт признак фаски (Create()=true,
+    # признак в дереве) и НЕ МЕНЯЕТ тело — фаска материала не добавляет. Строка поэтому утверждает
+    # не «фаска построена», а ЧЕСТНЫЙ ХАРАКТЕР ОТВЕТА, ровно как FL25: либо материал добавлен
+    # (V = 68020, geometry_checked), либо отказ НАЗВАН и тело не тронуто. Молчаливый успех при
+    # неизменном теле — FAIL: это тот же ложный успех, из-за которого строка SM-09 была красной.
+    L_POINTS_CH = [[-50, -40], [50, -40], [50, 10], [10, 10], [10, 40], [-50, 40]]
+    l_plate_ch = (100 * 80 - 40 * 30) * 10
+    leg1_ch, leg2_ch = 2.0, 2.0
+    chamfer_sweep = leg1_ch * leg2_ch / 2 * 10
+    for label, want_convex in (("CH29", True), ("CH30", False)):
+        docL, revL, errL = new_doc("SM11-chamfer-L-" + ("convex" if want_convex else "reflex"))
+        if not docL:
+            rep.add(label, "фаска на Г-пластине: поверхность прилегает к запрошенному ребру",
+                    "FAIL", f"документ не создан: {errL}")
+            continue
+        skL, revL, skL_err = sketch(docL, revL, [
+            {"kind": "polyline", "points_mm": L_POINTS_CH, "closed": True}], "ch-L")
+        _e, exL_env, _r = client.tool("kompas_extrude", {
+            "sketch_ref": skL, "operation": "base", "depth_mm": 10, "direction": "positive",
+            "expected_revision": revL, "operation_id": str(uuid.uuid4())}, timeout=240)
+        revL = (exL_env or {}).get("revision_after") or revL
+        bodyL = (bodies(docL) or [{}])[0].get("body_ref")
+        _e, tpL_env, _r = client.tool("kompas_read_topology", {
+            "document_id": docL, "body_ref": bodyL, "include": "edges"})
+        rowsL = ((tpL_env or {}).get("result") or {}).get("edges") or []
+        pairsL = []
+        for e in rowsL:
+            pts = e.get("vertices_mm") or []
+            if len(pts) != 2 or any(len(p) < 3 for p in pts):
+                continue
+            (ax, ay, az), (bx, by, bz) = pts
+            if round(ax, 3) != round(bx, 3) or round(ay, 3) != round(by, 3):
+                continue
+            zs = sorted([az, bz])
+            if abs(zs[0]) <= 0.001 and abs(zs[1] - 10) <= 0.001 and e.get("edge_ref"):
+                pairsL.append((e.get("edge_ref"), (round(ax, 3), round(ay, 3))))
+        convexL = set(_convex_vertices(L_POINTS_CH))
+        wantedL = [p for p in pairsL if (p[1] in convexL) == want_convex]
+        vL0 = volume(bodyL)
+        if skL_err or not bodyL or len(wantedL) != (5 if want_convex else 1) \
+                or vL0 is None or abs(vL0 - l_plate_ch) > 0.01:
+            rep.add(label, "фаска на Г-пластине: поверхность прилегает к запрошенному ребру",
+                    "FAIL", f"{skL_err or ''} углов {len(wantedL)} "
+                            f"(ожидалось {5 if want_convex else 1}), V={vL0} (ожидание {l_plate_ch})")
+            close(docL)
+            continue
+        sign = 1 if want_convex else -1
+        _e, chL_env, _r = client.tool("kompas_chamfer", {
+            "edge_refs": [wantedL[0][0]], "expected_revision": revL, "mode": "two_distances",
+            "distance1_mm": leg1_ch, "distance2_mm": leg2_ch,
+            "expected_volume_delta_mm3": sign * chamfer_sweep,
+            "operation_id": str(uuid.uuid4())}, timeout=240)
+        vL1 = volume(bodyL)
+        levelL = (((chL_env or {}).get("result") or {}).get("verification") or
+                  (chL_env or {}).get("verification") or {}).get("level")
+        codeL = error_code(chL_env)
+        wantL = l_plate_ch - sign * chamfer_sweep
+        builtL = (codeL is None and vL1 is not None
+                  and abs(vL1 - wantL) <= max(0.01, 1e-6 * l_plate_ch)
+                  and levelL == "geometry_checked")
+        namedL = codeL in ("NO_GEOMETRY_CHANGE", "GEOMETRY_FAILED", "CAPABILITY_UNAVAILABLE",
+                           "INVALID_ARGUMENT")
+        untouchedL = vL1 is not None and abs(vL1 - l_plate_ch) <= 0.01
+        okL = builtL or (not want_convex and namedL and untouchedL)
+        outcomeL = ("материал добавлен и поверхность прилегает" if builtL else
+                    "отказ НАЗВАН, тело не тронуто" if (namedL and untouchedL) else
+                    "ЛОЖНЫЙ УСПЕХ: тело не изменилось, а отказа нет" if codeL is None and untouchedL
+                    else "исход не отнесён ни к одному приемлемому")
+        rep.add(label, "фаска на Г-пластине: поверхность прилегает к запрошенному ребру",
+                "PASS" if okL else "FAIL",
+                f"угол={wantedL[0][1]} сторона={'выпуклая' if want_convex else 'входящая'} "
+                f"исход={outcomeL} err={codeL} level={levelL} V={vL1} "
+                f"ожидание_при_построении={wantL} (Г-пластина {l_plate_ch}, "
+                f"снято/добавлено {sign * chamfer_sweep}) msg={describe(chL_env)[1]}")
+        close(docL)
+
 
 
 def hole_checks(client, rep, app_id, workdir):

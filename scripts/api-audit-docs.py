@@ -56,10 +56,16 @@ EXCEPTIONS = {
 # documentation column would have been a measurement of the network instead of the help.
 USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
               "Chrome/124.0 Safari/537.36")
-RETRY_DELAYS = (5.0, 20.0, 60.0)
+RETRY_DELAYS = (3.0, 8.0)
 # One request per second. MEASURED: a burst of ~2000 requests made the server answer `445` to EVERY
 # page for several minutes, including pages it had served a moment before; at this rate it serves.
 POLITE_DELAY_S = 1.0
+# CIRCUIT BREAKER. When the server refuses page after page, retrying each one four times turns the run
+# into an all-night wait whose result is already known. After this many consecutive refusals the
+# instrument stops retrying and records the refusal ONCE per page: a `not_checked` column with a named
+# reason is honest, a column that takes 20 hours to say the same thing is not more honest.
+CIRCUIT_BREAKER_AFTER = 5
+_STATE = {"refusals": 0, "open": False}
 
 
 def fetch(url, cache=CACHE, timeout=30):
@@ -77,7 +83,8 @@ def fetch(url, cache=CACHE, timeout=30):
         with open(path, encoding="utf-8", errors="replace") as handle:
             return 200, handle.read()
     last = None
-    for attempt in range(len(RETRY_DELAYS) + 1):
+    attempts = 1 if _STATE["open"] else len(RETRY_DELAYS) + 1
+    for attempt in range(attempts):
         request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT,
                                                        "Accept-Language": "ru,en;q=0.8"})
         try:
@@ -85,14 +92,19 @@ def fetch(url, cache=CACHE, timeout=30):
                 body = response.read().decode("utf-8", "replace")
             with open(path, "w", encoding="utf-8") as handle:
                 handle.write(body)
+            _STATE["refusals"] = 0
             time.sleep(POLITE_DELAY_S)
             return 200, body
         except urllib.error.HTTPError as error:
             last = error.code
         except Exception as error:  # noqa: BLE001 - the class is reported, not swallowed
             last = f"network:{type(error).__name__}"
-        if attempt < len(RETRY_DELAYS):
+        if attempt < attempts - 1:
             time.sleep(RETRY_DELAYS[attempt])
+    if isinstance(last, int):
+        _STATE["refusals"] += 1
+        if _STATE["refusals"] >= CIRCUIT_BREAKER_AFTER:
+            _STATE["open"] = True
     if last == 404:
         return 404, ""
     return (last if isinstance(last, str) else f"http:{last}"), ""
@@ -155,6 +167,15 @@ def check_interface(interface, routes, listing_cache):
         listing_cache[interface] = member_list(interface)
     listing, statuses = listing_cache[interface]
     results = []
+    if not listing and all(status != 200 for status in statuses.values()):
+        # Ни одна из страниц перечня интерфейса не открылась: спрашивать его членов нечем, и
+        # повторять запрос на каждого члена значило бы умножить один отказ сервера на число членов.
+        reason = "; ".join(f"{suffix}={status}" for suffix, status in sorted(statuses.items()))
+        return [{"route": route["route"], "member": route["member"],
+                 "page": f"{HELP_ROOT}{interface.lower()}_methods.html",
+                 "status": "не проверено", "reason": f"перечень интерфейса не прочитан: {reason}",
+                 "source": [f"{HELP_ROOT}{interface.lower()}_methods.html"]}
+                for route in routes]
     for route in routes:
         member = route["member"]
         page = None
@@ -275,6 +296,12 @@ def collect(routes_path):
         "unconfirmed": [item for item in checked if item["status"] != "Подтверждено"],
         "exceptions": exceptions,
         "object_types": check_object_types(payload.get("object_type_constants") or []),
+        "circuit_breaker": {
+            "open": _STATE["open"], "after_consecutive_refusals": CIRCUIT_BREAKER_AFTER,
+            "note": "сервер справки отвечал отказом на страницу за страницей; повтор запроса на каждом "
+                    "члене умножал бы один отказ на число членов. Открытый предохранитель означает, что "
+                    "столбец документации НЕПОЛОН, и это названо, а не выдано за чистый результат",
+        },
         "routes": checked,
     }
 

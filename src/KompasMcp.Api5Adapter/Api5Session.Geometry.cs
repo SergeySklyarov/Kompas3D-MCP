@@ -3265,6 +3265,11 @@ public sealed partial class Api5Session
         SettleAfterMutation(document);
         BumpRevision(document, "fillet");
 
+        // The feature reference is minted BEFORE any refusal, not after it: a refused call must still be
+        // able to NAME the feature it left in the tree, so the client can delete it. The same order as
+        // kompas_extrude, whose refusal carries the feature the caller must remove.
+        var featureReference = References.Register("feature", document.Id, document.Revision, feature);
+
         var volumeAfter = ReadVolume(document);
         var facesAfter = CountFaces(document);
         var bodiesAfter = CountBodies(document);
@@ -3288,6 +3293,54 @@ public sealed partial class Api5Session
             new("body_count_unchanged", bodiesAfter == bodiesBefore,
                 Observed: bodiesAfter.ToString(System.Globalization.CultureInfo.InvariantCulture)),
         };
+
+        // A MEASURED NO-OP IS NOT A RESULT, and this refusal comes BEFORE the declared-expectation
+        // comparison: that comparison is the geometry check of an operation that HAPPENED, so a declared
+        // mismatch must not mask "the route did not take" (the same order as the edge-set edit path).
+        // MEASURED: Create() returned true and the feature is in the tree, while neither the document
+        // volume nor the face count moved - the settlement's control rebuild had un-applied the fillet
+        // it had just created, and its own mark named the move. The fillet the caller asked for is NOT
+        // in the body, so no level of success may be reported. Same shape as kompas_extrude's refusal.
+        // History: docs/decisions/adapter-features.md#fillet-no-geometry-change
+        var volumeDelta = volumeBefore is double volumeWas && volumeAfter is double volumeNow
+            ? volumeNow - volumeWas
+            : (double?)null;
+        // An unread side is NOT "unchanged": null here means the comparison could not be made at all.
+        bool? topologyMoved = facesBefore is double && facesAfter is double
+            && bodiesBefore >= 0 && bodiesAfter >= 0
+                ? facesBefore != facesAfter || bodiesBefore != bodiesAfter
+                : null;
+        if (BodyChangePolicy.Unchanged(volumeDelta, volumeBefore, topologyMoved))
+        {
+            throw new KompasContractException(
+                ErrorCodes.NoGeometryChange,
+                "Скругление создано (Create=true), но тело не изменилось ни объёмом, ни числом граней: "
+                + "объём " + Num(volumeBefore) + " → " + Num(volumeAfter) + " при пороге шума "
+                + BodyChangePolicy.VolumeNoiseMm3.ToString("0.#####e+0",
+                    System.Globalization.CultureInfo.InvariantCulture)
+                + " мм³, граней " + Num(facesBefore) + " → " + Num(facesAfter)
+                + ", тел " + Num(bodiesBefore) + " → " + Num(bodiesAfter) + ". Признак ОСТАЛСЯ в дереве, "
+                + "а тело его не удерживает: так КОМПАС ведёт себя, когда признак не применяется к телу. "
+                + "Успехом это быть не может. Удалите признак вызовом kompas_delete_feature по feature_ref "
+                + "и повторите скругление.",
+                RetryPolicy.ReacquireContext,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["code"] = "fillet_not_applied",
+                    ["feature_ref"] = ToDto(featureReference, FilletSemantic(command.RadiusMm, entities.Count)).Id,
+                    ["radius_mm"] = command.RadiusMm,
+                    ["edge_count"] = entities.Count,
+                    ["volume_before_mm3"] = volumeBefore,
+                    ["volume_after_mm3"] = volumeAfter,
+                    ["volume_noise_mm3"] = BodyChangePolicy.VolumeNoiseMm3,
+                    ["face_count_before"] = facesBefore,
+                    ["face_count_after"] = facesAfter,
+                    ["body_count_before"] = bodiesBefore,
+                    ["body_count_after"] = bodiesAfter,
+                    ["edge_unwrap_routes"] = string.Join(", ", unwrapRoutes),
+                });
+        }
 
         var volumeDecreased = volumeBefore is double beforeVolume && volumeAfter is double afterVolume
             && afterVolume < beforeVolume;
@@ -3349,9 +3402,8 @@ public sealed partial class Api5Session
             unverified.Add("expected_volume_delta_not_supplied — аналитическое ожидание дельты не задавал вызывающий, численного доказательства нет");
         }
 
-        var reference2 = References.Register("feature", document.Id, document.Revision, feature);
-            return new FilletResult(
-            ToDto(reference2, $"fillet r{command.RadiusMm:0.###} × {entities.Count}"),
+        return new FilletResult(
+            ToDto(featureReference, FilletSemantic(command.RadiusMm, entities.Count)),
             entities.Count,
             radiusReadBack,
             bodiesAfter,
@@ -3363,6 +3415,11 @@ public sealed partial class Api5Session
             string.Join(", ", unwrapRoutes),
             Warnings: DeclaredExpectation.Warnings(declared));
     }
+
+    /// <summary>The one human-readable name of a created fillet, shared by the result and the refusal so
+    /// both name the SAME feature.</summary>
+    private static string FilletSemantic(double radiusMm, int edgeCount) =>
+        $"fillet r{radiusMm:0.###} × {edgeCount}";
 
     /// <summary>Chamfer over the explicitly referenced edges of the final body (docs/05 SM-11).</summary>
     /// <remarks>Route MEASURED on v24: <c>NewEntity(o3d_chamfer=33)</c> → <c>ksChamferDefinition</c> →

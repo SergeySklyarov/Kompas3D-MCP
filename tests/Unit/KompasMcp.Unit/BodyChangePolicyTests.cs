@@ -78,4 +78,30 @@ public class BodyChangePolicyTests
         Assert.False(BodyChangePolicy.VolumeMoved(1e-7, 1d));
         Assert.True(BodyChangePolicy.VolumeMoved(1e-5, 1d));
     }
+
+    /// <summary>"Nothing happened" may be refused ONLY when the comparison was COMPLETED and found no
+    /// change: an unread observable is not agreement, and a refusal on an unread side would be a false
+    /// finding.</summary>
+    /// <remarks>WHY. A fillet whose body did not move has to be refused (the feature is in the tree and the
+    /// body does not hold it), and the same rule must stay silent when the volume or the topology could not
+    /// be read — there the honest answer is a named gap, not a refusal.
+    /// History: docs/decisions/adapter-features.md#fillet-no-geometry-change</remarks>
+    [Fact]
+    public void Unchanged_RequiresEveryObservableToHaveBeenRead()
+    {
+        // Completed and equal: the one shape that is a measured no-op.
+        Assert.True(BodyChangePolicy.Unchanged(0d, 80000d, topologyChanged: false));
+        // Unread volume, unread topology: "could not compare" is not "compared and equal".
+        Assert.False(BodyChangePolicy.Unchanged(null, 80000d, topologyChanged: false));
+        Assert.False(BodyChangePolicy.Unchanged(0d, 80000d, topologyChanged: null));
+        Assert.False(BodyChangePolicy.Unchanged(null, null, topologyChanged: null));
+    }
+
+    [Fact]
+    public void Unchanged_IsFalseWhenAnythingMoved()
+    {
+        Assert.False(BodyChangePolicy.Unchanged(19.314165, 80000d, topologyChanged: false));
+        Assert.False(BodyChangePolicy.Unchanged(-19.314165, 80000d, topologyChanged: false));
+        Assert.False(BodyChangePolicy.Unchanged(0d, 80000d, topologyChanged: true));
+    }
 }

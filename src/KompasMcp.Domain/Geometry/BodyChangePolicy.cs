@@ -28,4 +28,16 @@ public static class BodyChangePolicy
     /// proves a no-op.</summary>
     public static bool Changed(double? volumeDelta, double? volume, bool boxChanged, bool topologyChanged) =>
         VolumeMoved(volumeDelta, volume) || boxChanged || topologyChanged;
+
+    /// <summary>Whether a COMPLETED comparison found the body unchanged — the only shape in which "nothing
+    /// happened" may be refused as a no-op.</summary>
+    /// <param name="topologyChanged"><c>null</c> when the topology was NOT read (an unread side is not
+    /// agreement). A readable side carries whether the face or body count moved.</param>
+    /// <remarks>INVARIANT: "could not compare" and "compared and equal" are different facts, and only the
+    /// second one is a no-op. A caller that refuses on this rule must pass <c>null</c> for anything it did
+    /// not read, so an unread observable can never turn into a refusal.
+    /// History: docs/decisions/adapter-features.md#fillet-no-geometry-change</remarks>
+    public static bool Unchanged(double? volumeDelta, double? volume, bool? topologyChanged) =>
+        volumeDelta is double delta && topologyChanged is bool moved
+        && !Changed(delta, volume, boxChanged: false, topologyChanged: moved);
 }

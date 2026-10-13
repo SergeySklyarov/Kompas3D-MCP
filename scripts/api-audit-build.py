@@ -463,17 +463,13 @@ def render(document):
         "| Показатель | Значение |",
         "|---|---|",
     ]
-    for key in ("tools_on_wire", "schemas_on_disk", "tools_with_schema",
-                "schemas_matching_wire_by_property_names", "schemas_matching_wire_by_shape",
-                "matrix_rows", "catalog_modes_and_variants", "com_routes",
-                "com_routes_confirmed_by_documentation", "com_routes_unconfirmed",
-                "object_type_constants_checked", "object_type_constants_mismatched",
-                "rows_claiming_verified", "rows_verified_without_any_linked_row",
-                "rows_verified_contradicted_by_fail", "rows_action_without_dedicated_row",
-                "rows_actions_without_required_calls", "acceptance_rows",
-                "acceptance_calls_journal", "acceptance_rows_with_call_window",
-                "required_of_mismatches_matrix_vs_profile"):
-        lines.append(f"| {key} | {completeness_.get(key)} |")
+    # Таблица полноты строится из САМИХ ДАННЫХ, а не из рукописного перечня: перечень уже отставал от
+    # измерения (ключ `documentation_column_complete` в него не попадал, и читатель .md не видел
+    # главного итога столбца документации). Скалярные показатели печатаются все, в порядке появления.
+    for key, value in completeness_.items():
+        if isinstance(value, (dict, list)):
+            continue
+        lines.append(f"| {key} | {value} |")
     lines += [
         "",
         f"Инструментов без присутствия в записях покрытия: "

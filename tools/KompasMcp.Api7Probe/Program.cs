@@ -275,6 +275,18 @@ public static class Program
                 // still reports even when the report itself is never reached.
                 pump.Run(() => shutdown.Run());
             }
+            else if (options.FilletRebuild is not null)
+            {
+                var filletRebuild = new FilletRebuildProbe(report, options);
+                pump.Run(() =>
+                {
+                    filletRebuild.Run();
+                    if (options.KeepRunning)
+                    {
+                        FilletRebuildProbe.Flush(report, options);
+                    }
+                });
+            }
             else if (options.Identity)
             {
                 var identity = new IdentityProbe(report, options);
@@ -534,6 +546,7 @@ public static class Program
             : options.SketchDefinition ? "sketch-definition"
             : options.SketchConstraints ? "sketch-constraints"
             : options.ShutdownScenario is not null ? "shutdown-orphans"
+            : options.FilletRebuild is not null ? "fillet-rebuild-" + options.FilletRebuild
             : options.Identity ? "feature-identity"
             : options.Union ? "disconnected-union"
             : options.B5 ? "b5-sweep-loft-shell"
@@ -786,6 +799,17 @@ public sealed class Options
     /// shows invisibly can be looked at.</summary>
     public bool ShutdownVisible { get; private set; }
 
+    /// <summary><c>--fillet-rebuild &lt;kind&gt;</c>: does a fillet (and a chamfer) created by the API5
+    /// edge route survive a control rebuild, or does the rebuild remove it / move it to another edge
+    /// (order <c>FILLET_REBUILD_STABILITY_DEVELOPER_PROMPT.md</c> §1). <c>kind</c> is <c>fillet</c>,
+    /// <c>chamfer</c> (two legs) or <c>chamfer-da</c> (distance + angle). Each experience launches its own
+    /// instance — the adapter's failures grouped at the start of a repeat series, so the cold state is
+    /// the subject. History: docs/decisions/probes.md#fillet-rebuild</summary>
+    public string? FilletRebuild { get; private set; }
+
+    /// <summary>How many cold experiences <c>--fillet-rebuild</c> runs. Default 20.</summary>
+    public int Iterations { get; private set; } = 20;
+
     /// <summary>PID of the KOMPAS instance the probe launched, written back by the step that measured the
     /// process diff. <c>null</c> means "not attributed yet" — a distinct state from a PID of zero,
     /// and the step that needs it says so rather than comparing against a placeholder.</summary>
@@ -836,6 +860,8 @@ public sealed class Options
         string? shutdownScenario = null;
         var shutdownVisible = false;
         string? vmOpen = null;
+        string? filletRebuild = null;
+        var iterations = 20;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -961,11 +987,21 @@ public sealed class Options
                 case "--vm-open" when i + 1 < args.Length:
                     vmOpen = args[++i];
                     break;
+                case "--fillet-rebuild" when i + 1 < args.Length:
+                    filletRebuild = args[++i];
+                    break;
+                case "--iterations" when i + 1 < args.Length:
+                    iterations = int.TryParse(args[i + 1], System.Globalization.NumberStyles.Integer,
+                        System.Globalization.CultureInfo.InvariantCulture, out var parsed) && parsed > 0
+                        ? parsed
+                        : iterations;
+                    i++;
+                    break;
                 case "--work" when i + 1 < args.Length:
                     workOverride = args[++i];
                     break;
                 case "--help":
-                    Console.WriteLine("KompasMcp.Api7Probe [--passport] [--controls] [--lifecycle] [--extrusion] [--chamfer] [--sketch-reopen] [--fillet-edge-set] [--fillet-base-objects] [--boolean] [--split] [--reposition] [--tree] [--rotation] [--full-turn] [--boss-fuse] [--verify-m3d PATH] [--hole-modes] [--hole-tree] [--sketch-definition] [--identity] [--union] [--b5] [--reposition-read] [--reposition-params] [--cut-area] [--reposition-order] [--sketch-plane] [--vm-reference PATH] [--vm-variable-route] [--vm-control-expression] [--vm-density-units] [--vm-density-mci] [--vm-open PATH] [--shutdown-orphans SCENARIO] [--shutdown-visible] [--work DIR] [--keep]");
+                    Console.WriteLine("KompasMcp.Api7Probe [--passport] [--controls] [--lifecycle] [--extrusion] [--chamfer] [--sketch-reopen] [--fillet-edge-set] [--fillet-base-objects] [--boolean] [--split] [--reposition] [--tree] [--rotation] [--full-turn] [--boss-fuse] [--verify-m3d PATH] [--hole-modes] [--hole-tree] [--sketch-definition] [--identity] [--union] [--b5] [--reposition-read] [--reposition-params] [--cut-area] [--reposition-order] [--sketch-plane] [--vm-reference PATH] [--vm-variable-route] [--vm-control-expression] [--vm-density-units] [--vm-density-mci] [--vm-open PATH] [--shutdown-orphans SCENARIO] [--shutdown-visible] [--fillet-rebuild KIND] [--iterations N] [--work DIR] [--keep]");
                     Environment.Exit(0);
                     break;
             }
@@ -1000,6 +1036,7 @@ public sealed class Options
             : vmDensityMci ? "vm-density-mci"
             : sketchConstraints ? "sketch-constraints"
             : shutdownScenario is not null ? "shutdown-" + shutdownScenario
+            : filletRebuild is not null ? "fillet-rebuild-" + filletRebuild
             : controls ? "api7-attribution" : "api7-probe-report";
         var work = workOverride ?? Path.Combine(root, "scratch", $"api7-{stem}-{runId}");
         var reportDir = Path.Combine(root, "docs", "acceptance", "api7");
@@ -1052,6 +1089,8 @@ public sealed class Options
             SketchConstraints = sketchConstraints,
             ShutdownScenario = shutdownScenario,
             ShutdownVisible = shutdownVisible,
+            FilletRebuild = filletRebuild,
+            Iterations = iterations,
         };
     }
 

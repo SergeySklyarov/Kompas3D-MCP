@@ -698,6 +698,11 @@ def run_extra_group_fresh(client, rep, workdir, key, vm_reference_doc):
     `APPLICATION_DISCONNECTED` на построении постановки. Чтобы числа `--all` значили то же, что числа
     отдельного прогона группы, каждая группа вне вертикали поднимает свой сеанс.
     """
+    # Очистка среды перед КАЖДОЙ группой в своём свежем сеансе: перед группой мог остаться процесс от
+    # предыдущей (MEASURED: второй живой КОМПАС перед группой `DC`). Свои процессы прогона не трогаются
+    # - их называет родство от PID этого Хоста.
+    preflight_and_record(rep, [client.p.pid], "group:" + key)
+
     if key == "shutdown":
         # Группа SD — исключение из правила «свой свежий сеанс»: она ведёт СВОИ процессы Хоста
         # (закрывает им stdin, убивает их) и общего сеанса не касается. Общий сеанс здесь был бы
@@ -732,6 +737,179 @@ def run_extra_group_fresh(client, rep, workdir, key, vm_reference_doc):
     if error_code(env2) not in expected_shutdown:
         rep.add("ALL." + key, f"группа {key}: сеанс не погашен", "NAMED",
                 f"kompas_disconnect вернул {error_code(env2)}")
+
+
+# ── Очистка среды перед прогоном (решение заказчика 12.10.2026) ───────────────────────────────────
+# Прибор ЗАВЕРШАЕТ посторонние процессы сам, ничего не спрашивая, и прогон из-за них не обрывается.
+# MEASURED: осиротевший от прерванного прогона `KOMPAS.exe` дал ложный FAIL строки `CB10.13`.
+# Снимок и завершение - средствами самого прибора, а НЕ PowerShell: в среде исполнителя
+# PowerShell-инструмент не возвращает stdout, и пустой вывод неотличим от «процессов нет».
+PREFLIGHT_IMAGES = ("KOMPAS.exe", "KompasMcp.Host.exe", "KompasMcp.Worker.exe")
+# Сколько ждать добровольного завершения и сколько - принудительного. Числа названы, а не
+# подразумеваются: ожидание без предела читалось бы как «процесс не уходит».
+PREFLIGHT_GRACE_S = 5.0
+PREFLIGHT_FORCE_S = 5.0
+
+
+def process_snapshot():
+    """PID -> {image, parent_pid, started, working_set_kb} по снимку ОС; None - снимок не снят.
+
+    Читается у ОС (kernel32/psapi через ctypes), а не у `tasklist`: нужны РОДИТЕЛЬ и ВРЕМЯ СТАРТА,
+    которых `tasklist` не отдаёт, а решение «чужой или свой» без родства вырождается в сравнение имён.
+    Непрочитанное поле остаётся `None` и печатается как `None` - пустое значение было бы неотличимо
+    от «поля нет».
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    class PROCESSENTRY32W(ctypes.Structure):
+        _fields_ = [("dwSize", wintypes.DWORD),
+                    ("cntUsage", wintypes.DWORD),
+                    ("th32ProcessID", wintypes.DWORD),
+                    ("th32DefaultHeapID", ctypes.c_void_p),
+                    ("th32ModuleID", wintypes.DWORD),
+                    ("cntThreads", wintypes.DWORD),
+                    ("th32ParentProcessID", wintypes.DWORD),
+                    ("pcPriClassBase", ctypes.c_long),
+                    ("dwFlags", wintypes.DWORD),
+                    ("szExeFile", ctypes.c_wchar * 260)]
+
+    class PROCESS_MEMORY_COUNTERS(ctypes.Structure):
+        _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD),
+                    ("PeakWorkingSetSize", ctypes.c_size_t), ("WorkingSetSize", ctypes.c_size_t),
+                    ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                    ("PagefileUsage", ctypes.c_size_t), ("PeakPagefileUsage", ctypes.c_size_t)]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    psapi = ctypes.WinDLL("psapi", use_last_error=True)
+    th32cs_snapprocess = 0x00000002
+    process_query_limited_information = 0x1000
+    invalid = ctypes.c_void_p(-1).value
+    handle = kernel32.CreateToolhelp32Snapshot(th32cs_snapprocess, 0)
+    if handle == invalid or not handle:
+        return None
+    rows = {}
+    try:
+        entry = PROCESSENTRY32W()
+        entry.dwSize = ctypes.sizeof(PROCESSENTRY32W)
+        more = kernel32.Process32FirstW(handle, ctypes.byref(entry))
+        while more:
+            rows[int(entry.th32ProcessID)] = {"image": entry.szExeFile,
+                                              "parent_pid": int(entry.th32ParentProcessID),
+                                              "started": None, "working_set_kb": None}
+            more = kernel32.Process32NextW(handle, ctypes.byref(entry))
+    finally:
+        kernel32.CloseHandle(handle)
+
+    for pid, row in rows.items():
+        own_handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
+        if not own_handle:
+            continue
+        try:
+            created, exited = wintypes.FILETIME(), wintypes.FILETIME()
+            kernel_t, user_t = wintypes.FILETIME(), wintypes.FILETIME()
+            if kernel32.GetProcessTimes(own_handle, ctypes.byref(created), ctypes.byref(exited),
+                                        ctypes.byref(kernel_t), ctypes.byref(user_t)):
+                ticks = (created.dwHighDateTime << 32) | created.dwLowDateTime
+                row["started"] = datetime.datetime.fromtimestamp(
+                    ticks / 10_000_000 - 11_644_473_600, datetime.timezone.utc).isoformat(
+                        timespec="seconds")
+            counters = PROCESS_MEMORY_COUNTERS()
+            counters.cb = ctypes.sizeof(PROCESS_MEMORY_COUNTERS)
+            if psapi.GetProcessMemoryInfo(own_handle, ctypes.byref(counters), counters.cb):
+                row["working_set_kb"] = counters.WorkingSetSize // 1024
+        finally:
+            kernel32.CloseHandle(own_handle)
+    return rows
+
+
+def own_process_tree(rows, own_pids):
+    """PID прогона и всё, что от них ПРОИЗОШЛО (Worker, запущенный приложением `KOMPAS.exe`).
+
+    Родство, а не имя: `KompasMcp.Worker.exe` этого прогона и чужой называются одинаково, и
+    завершение «по имени» тронуло бы чужое.
+    """
+    own = {int(pid) for pid in own_pids if pid}
+    changed = True
+    while changed:
+        changed = False
+        for pid, row in rows.items():
+            if pid not in own and row.get("parent_pid") in own:
+                own.add(pid)
+                changed = True
+    return own
+
+
+def wait_pid_gone(pid, timeout):
+    """Ушёл ли процесс за отведённое время. Снимок снимается заново: кэш «уже нет» был бы догадкой."""
+    deadline = time.time() + timeout
+    while True:
+        rows = process_snapshot()
+        if rows is None or pid not in rows:
+            return True
+        if time.time() >= deadline:
+            return False
+        time.sleep(0.25)
+
+
+def close_foreign_processes(own_pids, when, log=print, only_pids=None):
+    """Завершить посторонние процессы и вернуть запись для `context.preflight_closed`.
+
+    `own_pids` - PID процессов ЭТОГО прогона; всё, что от них произошло, не трогается (см.
+    `own_process_tree`). Возвращается ЗАПИСЬ, а не только факт: PID, имя, родитель (имя и PID),
+    время старта, рабочая память, было ли добровольное завершение, принудительное и сколько ждали.
+
+    `only_pids` СУЖАЕТ набор кандидатов и никогда его не расширяет: им пользуется самопроверка,
+    которой запрещено трогать посторонние процессы рабочей машины исполнителя.
+    """
+    rows = process_snapshot()
+    if rows is None:
+        return {"when": when, "snapshot": "unavailable", "foreign_found": None,
+                "foreign_closed": None, "closed": []}
+    wanted = {name.lower() for name in PREFLIGHT_IMAGES}
+    own = own_process_tree(rows, own_pids)
+    scope = set(rows) if only_pids is None else set(only_pids)
+    foreign = sorted((pid, row) for pid, row in rows.items()
+                     if (row.get("image") or "").lower() in wanted and pid not in own
+                     and pid in scope)
+    record = []
+    for pid, row in foreign:
+        entry = {"pid": pid, "image": row.get("image"),
+                 "parent_pid": row.get("parent_pid"),
+                 "parent_image": (rows.get(row.get("parent_pid")) or {}).get("image"),
+                 "started": row.get("started"), "working_set_kb": row.get("working_set_kb"),
+                 "graceful_sent": False, "forced": False, "closed": False, "waited_s": None}
+        log(f"  Посторонний процесс: {entry['image']} pid={pid} "
+            f"родитель={entry['parent_image']}({entry['parent_pid']}) - завершается")
+        started_at = time.time()
+        subprocess.run(["taskkill", "/PID", str(pid), "/T"], capture_output=True, text=True)
+        entry["graceful_sent"] = True
+        if wait_pid_gone(pid, PREFLIGHT_GRACE_S):
+            entry["closed"] = True
+        else:
+            subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, text=True)
+            entry["forced"] = True
+            entry["closed"] = wait_pid_gone(pid, PREFLIGHT_FORCE_S)
+        entry["waited_s"] = round(time.time() - started_at, 2)
+        log(f"    завершён={entry['closed']} принудительно={entry['forced']} "
+            f"ждали={entry['waited_s']} с")
+        record.append(entry)
+    return {"when": when, "snapshot": "ok", "own_processes": sorted(own),
+            "foreign_found": len(foreign), "foreign_closed": sum(1 for e in record if e["closed"]),
+            "all_closed": all(e["closed"] for e in record), "closed": record}
+
+
+def preflight_and_record(rep, own_pids, when):
+    """Очистка среды с записью в отчёт прогона. Возвращает запись (её же кладёт в контекст)."""
+    result = close_foreign_processes(own_pids, when)
+    rep.context.setdefault("preflight_closed", []).append(result)
+    if result.get("foreign_found"):
+        print(f"  Посторонних процессов завершено: {result['foreign_closed']} "
+              f"из {result['foreign_found']}")
+    return result
 
 
 def run_directory_name(started_utc, group, commit, dirty):
@@ -1013,6 +1191,58 @@ def instrument_self_test():
     check("повтор подавления в --all совпадает с её аргументом запуска",
           [a for k, a in ALL_GROUPS_EXTRA if k == "suppress"] == [["--suppress-repeat",
                                                                  str(ALL_SUPPRESS_REPEAT)]])
+
+    # Очистка среды перед прогоном (наряд API_AUDIT_TOOLS §3.2): прибор обязан НАЙТИ посторонний
+    # процесс, ЗАВЕРШИТЬ его и ЗАПИСАТЬ это, а процессы прогона не тронуть. Обе половины проверяются
+    # на живых процессах-заглушках (копия `cmd.exe` под чужим именем): «нашёл» без «завершил» и
+    # «завершил» без «не тронул своего» доказываются только вместе. Набор кандидатов СУЖЕН до
+    # подсаженных PID: самопроверке запрещено завершать посторонние процессы рабочей машины.
+    check("чужое имя отбирается по списку образов, а родня прогона — по родству",
+          own_process_tree({10: {"parent_pid": 0}, 11: {"parent_pid": 10},
+                            12: {"parent_pid": 11}, 13: {"parent_pid": 0}}, [10]) == {10, 11, 12})
+    snapshot = process_snapshot()
+    check("снимок процессов читается у ОС", snapshot is not None and os.getpid() in snapshot,
+          f"процессов={None if snapshot is None else len(snapshot)}")
+    with tempfile.TemporaryDirectory() as tmp:
+        system32 = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "cmd.exe")
+        planted = os.path.join(tmp, "KompasMcp.Worker.exe")
+        decoy = os.path.join(tmp, "not-a-kompas-process.exe")
+        shutil.copyfile(system32, planted)
+        shutil.copyfile(system32, decoy)
+
+        def spawn(exe):
+            return subprocess.Popen([exe, "/c", "ping -n 300 127.0.0.1 >nul"],
+                                    creationflags=subprocess.CREATE_NO_WINDOW)
+
+        stub, other = spawn(planted), spawn(decoy)
+        try:
+            time.sleep(0.6)
+            record = close_foreign_processes([], "self-test", log=lambda *_: None,
+                                             only_pids={stub.pid, other.pid})
+            found = [e["pid"] for e in record["closed"]]
+            check("посторонний процесс найден и назван в записи", found == [stub.pid],
+                  f"найдено={found} ожидалось={[stub.pid]}")
+            entry = record["closed"][0] if record["closed"] else {}
+            check("запись называет имя образа, родителя, старт и память",
+                  (entry.get("image") or "").lower() == "kompasmcp.worker.exe"
+                  and entry.get("parent_pid") == os.getpid()
+                  and entry.get("started") and entry.get("working_set_kb") is not None,
+                  json.dumps(entry, ensure_ascii=False))
+            check("посторонний процесс действительно завершён", entry.get("closed") is True
+                  and stub.poll() is not None, f"closed={entry.get('closed')} poll={stub.poll()}")
+            check("посторонний процесс ждали, а не выдумали ожидание",
+                  isinstance(entry.get("waited_s"), float), str(entry.get("waited_s")))
+            check("процесс с посторонним ИМЕНЕМ не тронут", other.poll() is None,
+                  f"poll={other.poll()}")
+            again = close_foreign_processes([other.pid], "self-test", log=lambda *_: None,
+                                            only_pids={other.pid})
+            check("процесс ЭТОГО прогона не тронут",
+                  again["foreign_found"] == 0 and other.poll() is None,
+                  f"найдено={again['foreign_found']} poll={other.poll()}")
+        finally:
+            for proc in (stub, other):
+                if proc.poll() is None:
+                    proc.kill()
 
     print(f"\nСамопроверка прибора: {checks} проверок, "
           f"{len(failures)} FAIL" + (f" — {failures}" if failures else ""))
@@ -12367,6 +12597,10 @@ def main():
             "extra_session_reason": "client_bugs_20261010 part E disconnects the application "
                                     "(attach with zero candidates), invalidating a shared session",
         }
+    # Очистка среды ДО запуска Хоста прогона: посторонние процессы завершает сам прибор и называет их
+    # в отчёте (решение заказчика 12.10.2026). Своих процессов прогона в этот момент ещё нет, поэтому
+    # список своих пуст и родство не вычисляется.
+    preflight_and_record(rep, [], "start")
     write_run_manifest(run_dir, {"state": "started", "context": rep.context})
     print("Измеряется: " + json.dumps(rep.context, ensure_ascii=False))
 

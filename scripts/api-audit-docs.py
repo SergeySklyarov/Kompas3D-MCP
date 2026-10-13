@@ -235,6 +235,16 @@ def candidate_names(member):
     return names
 
 
+def address_names_interface(page, interface):
+    """Whether the page's OWN file name carries the interface: `<interface>_<member>.html`.
+
+    A SECOND, independent way to establish the SAME interface, beside the interface's listing page.
+    The prefix must be the interface PLUS `_`, so `ipart7_x.html` does not confirm a member of `IPart`
+    and a page of another interface never confirms this one.
+    """
+    return os.path.basename(page or "").lower().startswith(interface.lower() + "_")
+
+
 def check_interface(interface, routes, listing_cache):
     """Every route on one interface: confirmed, broken or not checked."""
     if interface not in listing_cache:
@@ -261,19 +271,30 @@ def check_interface(interface, routes, listing_cache):
         # carry only the member ("Radius - Радиус дуги"), so demanding the interface name in the
         # title marked 440 of 517 confirmed members as contradictions - an instrument defect that
         # read as a mass API discrepancy.
+        #
+        # A SECOND ROUTE TO THE SAME CONCLUSION, and it is the page's OWN ADDRESS: on this site a
+        # member page is named `<interface>_<member>.html`, so a fetched page whose file name carries
+        # the interface as its prefix names the SAME interface, even when the interface's own listing
+        # page omits the member. Measured: `ksDocument2D.ksLineSeg` is served at
+        # `ksdocument2d_kslineseg.html` while `ksdocument2d_methods.html` does not list it, and the
+        # listing-only rule called a documented member undocumented. The prefix must be the interface
+        # plus `_`, so `ipart7_x.html` does NOT confirm a member of `IPart`.
         listed = page is not None
         if page is None:
             page = f"{HELP_ROOT}{interface.lower()}_{member.lower()}.html"
         status, body = fetch(page)
         title = page_title(body)
         same_member = any(name in title.lower() for name in candidate_names(member))
+        by_address = address_names_interface(page, interface)
         basis = {200: "wire", "mirror": "mirror"}.get(status)
-        if basis and listed and same_member:
+        if basis and same_member and (listed or by_address):
             results.append({"route": route["route"], "member": member, "page": page,
                             "status": "Подтверждено", "title": title, "basis": basis,
+                            "interface_established_by": "перечень интерфейса" if listed
+                            else "имя файла страницы",
                             "owner_established_by": f"{HELP_ROOT}{interface.lower()}_methods.html",
                             "source": [page]})
-        elif basis and not listed:
+        elif basis and not listed and not by_address:
             results.append({"route": route["route"], "member": member, "page": page,
                             "status": "не подтверждено",
                             "reason": "страница не найдена в перечне членов своего интерфейса",
@@ -348,8 +369,14 @@ def check_object_types(constants):
 def collect(routes_path):
     payload = load_json(routes_path)
     routes = payload["routes"]
+    # СОБСТВЕННЫЕ ТИПЫ АДАПТЕРА — не интерфейсы КОМПАС, и страницы справки у них нет ПО ПОСТРОЕНИЮ.
+    # `*Twin` объявлены самим адаптером (`assembly: adapter-twins`); требовать для них страницу
+    # означало бы требовать документ вендора на чужую конструкцию. Класс назван отдельно и НЕ слит с
+    # находками «член без страницы»; в подтверждённые он не попадает.
+    twins = [route for route in routes if route.get("assembly") == "adapter-twins"]
+    judged = [route for route in routes if route.get("assembly") != "adapter-twins"]
     by_interface = collections.OrderedDict()
-    for route in routes:
+    for route in judged:
         by_interface.setdefault(route["declared_on"], []).append(route)
     listing_cache = {}
     checked = []
@@ -368,6 +395,11 @@ def collect(routes_path):
         "help_root": HELP_ROOT,
         "interfaces_checked": len(by_interface),
         "routes_checked": len(checked),
+        "routes_outside_documentation": [{"route": route["route"],
+                                          "reason": "собственный тип адаптера (`*Twin`), объявленный "
+                                                    "самим адаптером, а не интерфейс КОМПАС: страницы "
+                                                    "справки вендора у него нет по построению"}
+                                         for route in twins],
         "statuses": dict(counts),
         "bases": dict(bases),
         # Полнота столбца — свойство МАРШРУТОВ, а не настроения сервера: столбец полон, когда у
@@ -434,6 +466,15 @@ def self_test():
 
     check("аксессор и свойство считаются одним именем",
           candidate_names("get_PartsEx") == ["get_partsex", "partsex"], str(candidate_names("get_PartsEx")))
+
+    # Адрес страницы называет СВОЙ интерфейс. Обе половины в одной постановке: страница своего
+    # интерфейса подтверждает, страница ДРУГОГО интерфейса - нет (иначе правило «тот же интерфейс»
+    # перестало бы различать и подтверждало бы по имени члена).
+    check("адрес страницы называет свой интерфейс",
+          address_names_interface(f"{HELP_ROOT}ksdocument2d_kslineseg.html", "ksDocument2D"))
+    check("адрес страницы ЧУЖОГО интерфейса не подтверждает",
+          not address_names_interface(f"{HELP_ROOT}ipart7_measurement3d.html", "IPart")
+          and not address_names_interface(f"{HELP_ROOT}iaxis3d_name.html", "IAxes3D"))
 
     print(f"\nСамопроверка прибора: {checks} проверок, "
           f"{len(failures)} FAIL" + (f" - {failures}" if failures else ""))

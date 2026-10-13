@@ -19,6 +19,8 @@ public static class Program
         {
             Title = options.PassportOnly
                 ? "Паспорт среды пробы API7 (ADR-003 §4)"
+                : options.ShutdownScenario is not null
+                    ? "Проба SO — завершение сеанса с несохранённым документом: висит ли Quit() и каким маршрутом его нет (наряд SHUTDOWN_NO_ORPHANS)"
                 : options.TreeLifecycle
                     ? "Проба T — как признак B3 адресуется в жизненном цикле: дерево API5 против объектов API7"
                 : options.Lifecycle
@@ -265,6 +267,13 @@ public static class Program
                         SketchConstraintsProbe.Flush(report, options);
                     }
                 });
+            }
+            else if (options.ShutdownScenario is not null)
+            {
+                var shutdown = new ShutdownOrphanProbe(report, options, options.ShutdownScenario, options.ShutdownVisible);
+                // A scenario can wedge inside Quit(); the evidence log is flushed per line, so the run
+                // still reports even when the report itself is never reached.
+                pump.Run(() => shutdown.Run());
             }
             else if (options.Identity)
             {
@@ -524,6 +533,7 @@ public static class Program
             : options.HoleTree ? "hole-tree"
             : options.SketchDefinition ? "sketch-definition"
             : options.SketchConstraints ? "sketch-constraints"
+            : options.ShutdownScenario is not null ? "shutdown-orphans"
             : options.Identity ? "feature-identity"
             : options.Union ? "disconnected-union"
             : options.B5 ? "b5-sweep-loft-shell"
@@ -766,6 +776,16 @@ public sealed class Options
     /// History: docs/decisions/probes.md#sketch-constraints</summary>
     public bool SketchConstraints { get; private set; }
 
+    /// <summary><c>--shutdown-orphans &lt;scenario&gt;</c>: what happens when a session ends with an
+    /// unsaved document — does <c>Quit()</c> block, and which documented route lets the instance go
+    /// (order <c>SHUTDOWN_NO_ORPHANS_DEVELOPER_PROMPT.md</c> §2). One scenario per run, because a run
+    /// that wedges inside <c>Quit()</c> cannot go on to the next one.</summary>
+    public string? ShutdownScenario { get; private set; }
+
+    /// <summary><c>--shutdown-visible</c>: raise the instance's window, so the dialog a hidden instance
+    /// shows invisibly can be looked at.</summary>
+    public bool ShutdownVisible { get; private set; }
+
     /// <summary>PID of the KOMPAS instance the probe launched, written back by the step that measured the
     /// process diff. <c>null</c> means "not attributed yet" — a distinct state from a PID of zero,
     /// and the step that needs it says so rather than comparing against a placeholder.</summary>
@@ -813,6 +833,8 @@ public sealed class Options
         var vmDensityUnits = false;
         var vmDensityMci = false;
         var sketchConstraints = false;
+        string? shutdownScenario = null;
+        var shutdownVisible = false;
         string? vmOpen = null;
 
         for (var i = 0; i < args.Length; i++)
@@ -930,6 +952,12 @@ public sealed class Options
                 case "--sketch-constraints":
                     sketchConstraints = true;
                     break;
+                case "--shutdown-orphans" when i + 1 < args.Length:
+                    shutdownScenario = args[++i];
+                    break;
+                case "--shutdown-visible":
+                    shutdownVisible = true;
+                    break;
                 case "--vm-open" when i + 1 < args.Length:
                     vmOpen = args[++i];
                     break;
@@ -937,7 +965,7 @@ public sealed class Options
                     workOverride = args[++i];
                     break;
                 case "--help":
-                    Console.WriteLine("KompasMcp.Api7Probe [--passport] [--controls] [--lifecycle] [--extrusion] [--chamfer] [--sketch-reopen] [--fillet-edge-set] [--fillet-base-objects] [--boolean] [--split] [--reposition] [--tree] [--rotation] [--full-turn] [--boss-fuse] [--verify-m3d PATH] [--hole-modes] [--hole-tree] [--sketch-definition] [--identity] [--union] [--b5] [--reposition-read] [--reposition-params] [--cut-area] [--reposition-order] [--sketch-plane] [--vm-reference PATH] [--vm-variable-route] [--vm-control-expression] [--vm-density-units] [--vm-density-mci] [--vm-open PATH] [--work DIR] [--keep]");
+                    Console.WriteLine("KompasMcp.Api7Probe [--passport] [--controls] [--lifecycle] [--extrusion] [--chamfer] [--sketch-reopen] [--fillet-edge-set] [--fillet-base-objects] [--boolean] [--split] [--reposition] [--tree] [--rotation] [--full-turn] [--boss-fuse] [--verify-m3d PATH] [--hole-modes] [--hole-tree] [--sketch-definition] [--identity] [--union] [--b5] [--reposition-read] [--reposition-params] [--cut-area] [--reposition-order] [--sketch-plane] [--vm-reference PATH] [--vm-variable-route] [--vm-control-expression] [--vm-density-units] [--vm-density-mci] [--vm-open PATH] [--shutdown-orphans SCENARIO] [--shutdown-visible] [--work DIR] [--keep]");
                     Environment.Exit(0);
                     break;
             }
@@ -971,6 +999,7 @@ public sealed class Options
             : vmDensityUnits ? "vm-density-units"
             : vmDensityMci ? "vm-density-mci"
             : sketchConstraints ? "sketch-constraints"
+            : shutdownScenario is not null ? "shutdown-" + shutdownScenario
             : controls ? "api7-attribution" : "api7-probe-report";
         var work = workOverride ?? Path.Combine(root, "scratch", $"api7-{stem}-{runId}");
         var reportDir = Path.Combine(root, "docs", "acceptance", "api7");
@@ -1021,6 +1050,8 @@ public sealed class Options
             VmDensityMci = vmDensityMci,
             VmOpen = vmOpen,
             SketchConstraints = sketchConstraints,
+            ShutdownScenario = shutdownScenario,
+            ShutdownVisible = shutdownVisible,
         };
     }
 

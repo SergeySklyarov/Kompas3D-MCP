@@ -260,7 +260,10 @@ def completeness(evidence, matrix, catalog, claims, wire):
         "com_routes": (evidence.get("routes") or {}).get("route_count"),
         "com_routes_by_assembly": (evidence.get("routes") or {}).get("by_assembly"),
         "com_routes_confirmed_by_documentation": (docs.get("statuses") or {}).get("Подтверждено", 0),
+        "com_routes_confirmed_over_wire": (docs.get("bases") or {}).get("wire", 0),
+        "com_routes_confirmed_from_mirror": (docs.get("bases") or {}).get("mirror", 0),
         "com_routes_unconfirmed": len(docs.get("unconfirmed") or []),
+        "documentation_column_complete": not (docs.get("circuit_breaker") or {}).get("open"),
         "object_type_constants_checked": len((docs.get("object_types") or {}).get("matched") or []),
         "object_type_constants_mismatched": len(
             (docs.get("object_types") or {}).get("mismatched") or []),
@@ -318,6 +321,13 @@ def build(evidence_dir):
                 "routes_checked": docs.get("routes_checked"),
                 "note": "страницы читались по проводу; подтверждающей считается только страница "
                         "СВОЕГО интерфейса и СВОЕГО члена",
+                "basis": {"wire": (docs.get("bases") or {}).get("wire", 0),
+                          "mirror": (docs.get("bases") or {}).get("mirror", 0),
+                          "note": "`wire` - страница открыта по проводу (HTTP 200); `mirror` - "
+                                  "прочитана из зеркала справки в репозитории, потому что провод "
+                                  "отказал. Подтверждение по зеркалу названо отдельно: это "
+                                  "подтверждение по копии, а не по проводу"},
+                "circuit_breaker": docs.get("circuit_breaker"),
                 "links": {"checked": docs.get("routes_checked"),
                           "ok": (docs.get("statuses") or {}).get("Подтверждено", 0),
                           "failed": len([item for item in docs.get("unconfirmed") or []

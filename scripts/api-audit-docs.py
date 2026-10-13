@@ -36,6 +36,13 @@ from api_audit_common import ROOT, default_out, load_json, save_json, stamp  # n
 
 HELP_ROOT = "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/"
 CACHE = os.path.join(ROOT, "scratch", "api-audit", "help-cache")
+# ЗЕРКАЛО СПРАВКИ — ВТОРАЯ ОСНОВА, И ОНА НАЗЫВАЕТСЯ. `reference/kompas-sdk-v24/` лежит в
+# репозитории (не публикуется) и покрывает ЧАСТЬ справки: 2977 файлов против полного перечня в
+# ~25 800. Когда провод отвечает отказом, страница ищется в зеркале, и у вердикта появляется
+# `basis`: `wire` (страница открыта по проводу, HTTP 200) или `mirror` (страница прочитана из
+# зеркала). Смешивать их нельзя: подтверждение по зеркалу — это подтверждение по копии, и оно
+# названо, а не выдано за провод.
+MIRROR_DIR = os.path.join(ROOT, "reference", "kompas-sdk-v24", "sdk-docs")
 TITLE = re.compile(r"<title[^>]*>(.*?)</title>", re.S | re.I)
 LINK = re.compile(r"""<a\s[^>]*href\s*=\s*["']([^"'#]+)["'][^>]*>(.*?)</a>""", re.S | re.I)
 
@@ -107,7 +114,25 @@ def fetch(url, cache=CACHE, timeout=30):
             _STATE["open"] = True
     if last == 404:
         return 404, ""
+    if isinstance(last, int) or str(last).startswith("network:"):
+        # Провод не отдал страницу. Зеркало — НАЗВАННАЯ вторая основа, а не подмена: вердикт по ней
+        # помечается `basis = mirror`, и читатель видит, чем именно подтверждён каждый член.
+        mirrored = mirror_page(url)
+        if mirrored is not None:
+            return "mirror", mirrored
     return (last if isinstance(last, str) else f"http:{last}"), ""
+
+
+def mirror_page(url):
+    """Тело страницы из зеркала справки, или None. Имя файла — последний сегмент URL."""
+    if not os.path.isdir(MIRROR_DIR):
+        return None
+    name = url.rstrip("/").rsplit("/", 1)[-1]
+    path = os.path.join(MIRROR_DIR, name)
+    if not os.path.isfile(path):
+        return None
+    with open(path, encoding="utf-8", errors="replace") as handle:
+        return handle.read()
 
 
 def page_title(body):
@@ -128,7 +153,7 @@ def member_list(interface):
         url = f"{HELP_ROOT}{base}{suffix}.html"
         status, body = fetch(url)
         statuses[suffix] = status
-        if status != 200:
+        if status not in (200, "mirror"):
             continue
         for href, text in LINK.findall(body):
             href = href.strip()
@@ -193,12 +218,13 @@ def check_interface(interface, routes, listing_cache):
         status, body = fetch(page)
         title = page_title(body)
         same_member = any(name in title.lower() for name in candidate_names(member))
-        if status == 200 and listed and same_member:
+        basis = {200: "wire", "mirror": "mirror"}.get(status)
+        if basis and listed and same_member:
             results.append({"route": route["route"], "member": member, "page": page,
-                            "status": "Подтверждено", "title": title,
+                            "status": "Подтверждено", "title": title, "basis": basis,
                             "owner_established_by": f"{HELP_ROOT}{interface.lower()}_methods.html",
                             "source": [page]})
-        elif status == 200 and not listed:
+        elif basis and not listed:
             results.append({"route": route["route"], "member": member, "page": page,
                             "status": "не подтверждено",
                             "reason": "страница не найдена в перечне членов своего интерфейса",
@@ -281,6 +307,7 @@ def collect(routes_path):
     for interface in sorted(by_interface):
         checked.extend(check_interface(interface, by_interface[interface], listing_cache))
     counts = collections.Counter(item["status"] for item in checked)
+    bases = collections.Counter(item.get("basis", "нет") for item in checked)
     exceptions = [{"route": name, "note": note} for name, note in EXCEPTIONS.items()
                   if any(route["route"].split(".")[0] == name for route in routes)]
     return {
@@ -291,6 +318,7 @@ def collect(routes_path):
         "interfaces_checked": len(by_interface),
         "routes_checked": len(checked),
         "statuses": dict(counts),
+        "bases": dict(bases),
         "confirmed": sorted(item["route"] for item in checked
                             if item["status"] == "Подтверждено"),
         "unconfirmed": [item for item in checked if item["status"] != "Подтверждено"],
@@ -318,8 +346,10 @@ def self_test():
             failures.append(name)
 
     status_ok, body = fetch(f"{HELP_ROOT}kspart_newentity.html")
-    check("страница справки открывается по проводу", status_ok == 200 and body,
-          f"HTTP {status_ok}, {len(body)} байт")
+    # Основа НАЗЫВАЕТСЯ: `200` - страница открыта по проводу, `mirror` - прочитана из зеркала.
+    # Проверка «получена» без этого различала бы провод и зеркало только на глаз.
+    check("страница справки получена, и основа названа", status_ok in (200, "mirror") and body,
+          f"основа={status_ok}, {len(body)} байт")
     check("заголовок страницы читается", "NewEntity" in page_title(body), page_title(body))
     missing = f"{HELP_ROOT}zzz-audit-selftest-404.html"
     status_bad, _ = fetch(missing)

@@ -1,1053 +1,888 @@
 # Соответствие MCP официальной документации КОМПАС-3D v24
 
-Аудит от 2026-10-05 (+02:00, часы машины). Цель - **КОМПАС-3D v24**, сборка 24.0.0.2799, установка `D:\Programs\KOMPAS-3Dv24` (`kompas.exe` `8c17b394da430db8…`), interop `Interop.Kompas6API5, Version=1.0.0.0, Culture=neutral, PublicKeyToken=810e8d71c7a3e510`.
-
-Документация - официальная справка SDK целевой версии <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/>: прочитано страниц 2178 (читалась по проводу; зеркало справки лежит вне поставки).
-
-Поставка, на которой оценивалась реализация: `artifacts/publish-core-c1-c2-20261005` - Host.dll `303ccf6cbeb461cf516e22dd5f0d7159819fbfaf84be0a3214c0fa6ed326dd6a`, Worker.dll `4a736cf7d3d5a90c5f05bef738951baa2ecebfaac6af24eec7ec9f7bba468022`, Api5Adapter.dll `f74936c0328dd4be3cff2e4b1a2101a1e64b60545db787404b42c4881d169a46`; полный прогон 1095 строк, отказов 0. Паспорт: `docs/acceptance/delivery-core-c1-c2-20261005/delivery-passport.json` - **PASS**, `fully_ready` true; уровни: `transport_and_delivery` PASS, `functional_acceptance` PASS, `mandatory_scope` COMPLETE, `client_acceptance` PASS. Путь выбран так: НАЗВАННАЯ подстановка: имени с меткой 'journal' нет, взято имя без метки (docs/acceptance/delivery-core-c1-c2-20261005/delivery-passport.json). Опознание поставки взято измерением: `docs/acceptance/delivery-core-c1-c2-20261005/delivery-passport.json`. Поставка взята по измерению, а не по времени изменения файлов. В колонке «проверка и хеш поставки» стоит короткий хеш Host.dll - тот же бинарь, что в измерении.
-
-**Два независимых вердикта на маршрут.** Документация: Подтверждено / Противоречие / Не подтверждено. Реализация: Подтверждено / Покрыто проверками / Дефект / Недостаточно проверки / Не реализовано. «Документировано» означает **страницу официальной справки**, а не наличие члена в TLB, interop или IntelliSense: найденный в TLB член сам по себе маршрут официальным не делает. «Покрыто проверками» - вердикт ОБЩЕЙ ЗАВИСИМОСТИ: она не реализуется, а покрывается проверками, поэтому «Подтверждено» к ней неприменимо по определению; ярлык ставится только когда все её обязательные действия закрыты И подтверждены вызовами привязанных строк приёмки.
-
-**Итог одной строкой.** Проверено 63 инструментов и 97 строк покрытия; документация подтверждена у 70 строк, реализация - у 69; 3 строк объявлены планом, 25 - «Покрыто проверками», 0 - «Недостаточно проверки» (режимов 0, общих зависимостей 0). Находок 11: F-01 - исправленный дефект продукта (мёртвая ветка удалена); F-02 - исправленный дефект продукта (мёртвая ветка удалена, состояние сохранённости отделено от ревизии); F-03 - состояние объёма будущей работы (не дефект); F-04 - названная граница непубликуемого поля (не дефект); F-05 - исправленный дефект доказательств (не дефект продукта); F-06 - исправленный дефект прибора аудита; F-07 - исправленный дефект прибора аудита; F-08 - названный пробел трассируемости доказательств (не дефект продукта); F-09 - исправленный дефект продукта (знак дуги не доходил до конечного угла); F-10 - исправленный дефект продукта (объявленный диапазон углов дуги шире выражаемого; первая редакция правки была НЕ аддитивной, и это поймал контроль зонда); F-11 - исправленный дефект прибора ПРИЁМКИ (строка `MANIA.17` читала объём ПЕРВОГО тела документа при накапливающихся телах и проходила, не различая ничего; объявленный диапазон `sweep_deg` шире принимаемого - расхождение ОБЪЯВЛЕНИЯ). Утверждение «MCP полностью согласуется с документацией» **не делается**: у 27 строк маршрут не подтверждён документально, потому что его нет в коде.
-
-**Дополнено 06.10.2026 (блок DRW, наряд по `DRAWINGS_REWORK3_REPORT_REVIEW_20261006.md`).** Числа выше
-описывают СОСТАВ ПРОГОНА 05.10.2026 и не переписываются. Аудит дополнен находками **F-12** и **F-13**
-(обе - исправленные дефекты ПРИБОРА: F-12 - проба штампа выдавала круговорот запись→чтение за
-доказательство записи; F-13 - конвертер брался по `Type.Missing`, и переименованный PK-контейнер
-проходил за выгрузку DXF/DWG). Итого находок **13**. Текущий состав репозитория ИЗМЕРЕН в сеансе
-06.10.2026: схем `schemas/*.json` - **74**, строк `coverage/solid-v24/matrix.json` - **112**. Полное
-сведение матрицы под новый живой прогон (`_build_api_compliance.py`) в этот наряд НЕ входило и
-НЕ выполнялось: строки `DRW-*` и `dep.drawing.*` (15 строк) остаются в состоянии `implemented` -
-реализовано и проходит живую приёмку, но аудитом в `verified` пока не переведено (см. отчёт §2.3, §6).
-
-**Дополнено 06.10.2026 (блок VM: маршрут единицы плотности).** Числа аудита выше относятся к составу
-прогона 05.10.2026 и НЕ переписываются. Блок VM добавлен в поставку после этой даты; его маршрут единицы
-плотности — новый ДОКУМЕНТИРОВАННЫЙ путь, в аудит 05.10.2026 не входивший:
-`ksPart.CalcMassInertiaProperties(bitVector)`, где единицу возвращаемых данных задаёт АРГУМЕНТ вызова
-(страницы `kspart_calcmassinertiaproperties.html`, `ksmassinertiaparam.html`,
-`ksmassinertiaparam_props.html`, `mtypes.html`). Дословные цитаты — `docs/04_KOMPAS_API_NOTES.md` §4.44;
-живое измерение — §4.44.1 и `docs/acceptance/api7/vm-density-mci.json`. Машинная запись дополнения —
-ключ `addenda` в `docs/API_COMPLIANCE.json`. Полное сведение матрицы под живой прогон не выполнялось;
-строка `mandatory_scope` переведена в COMPLETE по живому прогону поставки (78/78 режимов, 36/36
-зависимостей).
-
-## 1. Сверка полноты
-
-| Что сверялось | Источник | Результат |
-|---|---|---|
-| Инструменты в `tools/list` | поставленный Host по проводу | 63 |
-| Схемы в `schemas/` | файлы поставки | 63 из 63; имена свойств совпадают с проводом у 63, значимая форма схемы (типы, `required`, `enum`, вложенность, `additionalProperties`, разрешённые `$ref`) - у 63 |
-| Строки матрицы покрытия | `coverage/solid-v24/matrix.json` | 97 |
-| Строки со ссылкой на схему инструмента | там же | 57 из 97 (у 40 поле пустое) |
-| Присутствие инструмента в матрице | сверка имён: собственная строка ЛИБО объявленный маршрут строки | собственной строкой 43, объявленным маршрутом 30; без обоих способов - `kompas_acquire_session`, `kompas_release_session`, `kompas_session_status` |
-| Вызываемые COM-маршруты | исходники `KompasMcp.Api5Adapter`, тип получателя установлен | 334 (API5 152 / API7 182); страница члена или список членов интерфейса найдены у 262, не подтверждено 72; унаследованных 9, индексаторов 7 |
-| Обращения без типа получателя | там же | 1328 (из них 374 - члены, уже покрытые типизированным маршрутом); получателей НЕ COM - 965 |
-| Отражённые и строковые обращения | там же | 1 |
-| Числовые идентификаторы типов объектов | таблица `obj3dtype.html` | совпало 35, нет в таблице 0 |
-| Строки приёмки в доказательствах | 3 групповых отчётов поставки | 1014 уникальных, вердикты: PASS |
-| Ссылки на страницы справки в этом документе | проверка каждой по проводу | открылось 215 из 215; битых 0; не проверено 0 |
-
-Строка покрытия связывается с инструментом по семейству: матрица не даёт этой связи для 40 строк из 97, поэтому маршруты читались ещё и из исходников адаптера - иначе часть вызовов выпала бы из аудита только потому, что забыта в матрице (находка F-05).
-
-Число проверок берётся из полного прогона - 1095 строк. Групповые отчёты каталога с ним **НЕ совпадают**: `assembly.json` - 67 строк, из них в полном прогоне 21, **уникальных 46**; `mate.json` - 55 строк, из них в полном прогоне 21, **уникальных 34**. Строк `ASM.*` и `MATE.*` в полном прогоне нет вовсе: ветки `--assembly-only` и `--mate-only` полным прогоном не вызываются, поэтому блоки ДОПОЛНЯЮТ его, а не повторяют по частям. **Число различных имён строк по всему каталогу - 1149** (объединение по идентификаторам; сам полный прогон даёт 1070 различных имён при 1095 строках - внутри отчёта имена повторяются). Сложение отчётов посчитало бы общие строки дважды. Вызовы каждого отчёта свои (10392 в полном прогоне) и с ним не складываются. Отдельные сверки этого аудита (`tools/list` по проводу, страницы справки, таблица `obj3dtype.html`, чтение исходников) показаны своими строками выше и в приёмку не входят.
-
-Ни одна строка не выдана за проверенную без записи приёмки: строк с вердиктом реализации «Подтверждено» и без строк приёмки - 0 (измерено сверкой вердикта с доказательствами).
-
-Ссылки документа проверены по проводу: открылось 215 из 215, битых 0, не проверено 0. Битая ссылка считается дефектом прибора, а не подтверждением документации, поэтому проверялась каждая.
-
-## 2. Проверенные семейства
-
-Маршрут подтверждён документально, реализация проверена на бинарях поставки. «Действия» - из матрицы: сколько из десяти действий строки имеют состояние `verified`/`not_applicable`. Строки общих зависимостей этих семейств - в разделе 4.
-
-### SM-02 - Выдавливание API5 (базовое / приклеивание / вырезание)
-**Инструмент:** `kompas_extrude`.
-**Место в коде:** `src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs — создание/правка признака выдавливания`; `src/KompasMcp.Api5Adapter/Api5Session.SolidRead.cs — чтение признака`.
-**Существенные условия:** Тип объекта берётся из документированной таблицы Obj3dType (24/25/26); глубина и признак «на всю длину» - параметры SetSideParam(etBlind=0 / etThroughAll=1) из Direction_Type / End_Type; область применения у приклеивания и вырезания задаётся ChooseBodies + BodyCollection; реальный объект появляется после Create, перестроение - RebuildDocument.
-**Документированные интерфейсы и члены:**
-- `ksPart.NewEntity` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspart_newentity.html>
-- `ksBaseExtrusionDefinition.SetSideParam` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksbaseextrusiondefinition_setsideparam.html>
-- `ksBaseExtrusionDefinition.GetSideParam` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksbaseextrusiondefinition_getsideparam.html>
-- `ksBaseExtrusionDefinition.GetThinParam` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksbaseextrusiondefinition_getthinparam.html>
-- `ksBaseExtrusionDefinition.SetSketch / GetSketch` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksbaseextrusiondefinition_setsketch.html>
-- `ksBossExtrusionDefinition.ChooseBodies` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksbossextrusiondefinition_choosebodies.html>
-- `ksEntity.Create / Update` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksentity_create.html>
-- `ksDocument3D.RebuildDocument` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_rebuilddocument.html>
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Подтверждено** - маршрут целиком лежит на документированных интерфейсах и членах
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `SM-02.base_extrusion.blind` | 10/10 verified | 28 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-02.cut_extrusion.through` | 10/10 verified | 39 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-02.base_extrusion.additional_body` | 10/10 verified | 15 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-02.base_extrusion.direction_negative` | 10/10 verified | 12 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-02.boss_extrusion.blind` | 10/10 verified | 14 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-02.boss_extrusion.explicit_target_body` | 10/10 verified | 13 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-02.cut_extrusion.blind` | 10/10 verified | 13 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-02.cut_extrusion.explicit_target_body` | 10/10 verified | 14 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-02.cut_extrusion.direction_symmetric` | 10/10 verified | 11 строк · PASS · `303ccf6c` | Подтверждено | - |
-
-### SM-09 - Скругление (создание API5, чтение и правка API7)
-**Инструмент:** `kompas_fillet`, `kompas_get_feature`, `kompas_update_feature`.
-**Место в коде:** `src/KompasMcp.Api5Adapter/Api5Session.FilletEdit.cs — правка набора рёбер и радиуса`; `src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs — создание скругления`; `src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs — IFillet`.
-**Существенные условия:** Правка набора рёбер и радиуса идёт ТОЛЬКО маршрутом API7 (IFillet.BaseObjects - полная замена набора; IFillet.Radius1) с обязательным Update() и перестроением; маршрут API5 (ksFilletDefinition.Array → Clear → Add) правку набора не даёт - измерено и названо. Расширение набора не выражается ни одной из двух валют.
-**Документированные интерфейсы и члены:**
-- `ksFilletDefinition.radius / tangent / Array` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksfilletdefinition_props.html>
-- `IFillet.Radius1 / Radius2 / Tangent / BuildingType / BaseObjects` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ifillet_propers.html>
-- `ksEntityCollection.GetCount / GetByIndex / FindIt / Add / Clear` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksentitycollection_methods.html>
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Подтверждено** - маршрут целиком лежит на документированных интерфейсах и членах
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `SM-09.fillet.constant_radius_body_edges` | 10/10 verified | 25 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-09.fillet.read_radius_back` | 10/10 verified | 18 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-09.fillet.change_radius_in_place` | 10/10 verified | 15 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-09.fillet.change_edge_set` | 10/10 verified | 35 строк · PASS · `303ccf6c` | Подтверждено | - |
-
-### SM-07 - Родное отверстие API7
-**Инструмент:** `kompas_hole`.
-**Место в коде:** `src/KompasMcp.Api5Adapter/Api5Session.Hole.cs — Hole()`; `src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs — создание отверстия и позиционирование`.
-**Существенные условия:** Форма и дно - ksHTBase / ksHTCounterbore / ksHTCountersinking и ksEFFlat / ksDTValue / ksDTReachThrough; позиция - Point3DParamSurface + ksOffsetByCoords и Offset1/Offset2; ось по нормали грани - BaseSurface + Perpendicular; параметры пишутся до Update().
-**Документированные интерфейсы и члены:**
-- `IHoles3D.Add` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/iholes3d_add.html>
-- `IHoleDisposal.BaseSurface / Perpendicular / Point3DParamSurface` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/iholedisposal_propers.html>
-- `ICountersinkHoleParameters.*` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/icountersinkholeparameters_propers.html>
-- `ISpotfacingHoleParameters.*` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ispotfacingholeparameters_propers.html>
-- `ksDepthTypeEnum / ksEndFaceTypeEnum / ksHoleTypeEnum` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdepthtypeenum.html>
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Подтверждено** - маршрут целиком лежит на документированных интерфейсах и членах
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `SM-07.native_hole.through_cylindrical` | 10/10 verified | 25 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-07.native_hole.blind_flat_bottom` | 10/10 verified | 30 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-07.native_hole.through_counterbore` | 10/10 verified | 26 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-07.native_hole.through_countersink` | 10/10 verified | 27 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-07.native_hole.axis_by_face_normal` | 10/10 verified | 16 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-07.native_hole.position_off_origin` | 10/10 verified | 25 строк · PASS · `303ccf6c` | Подтверждено | - |
-
-### SM-11 - Фаска (API5 и API7)
-**Инструмент:** `kompas_chamfer`, `kompas_update_feature`.
-**Место в коде:** `src/KompasMcp.Api5Adapter/Api5Session.Chamfer.cs`; `src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs — IChamfer`.
-**Существенные условия:** Способ построения задаётся перечислением (два расстояния / расстояние и угол); направление - Direction; правка угла идёт маршрутом API7 (IChamfer.Angle) с Update() и RebuildModel(); производный катет не записывается, если клиент его не задал.
-**Документированные интерфейсы и члены:**
-- `ksChamferDefinition.SetChamferParam / GetChamferParam` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kschamferdefinition_setchamferparam.html>
-- `ksChamferDefinition.Array` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kschamferdefinition_array.html>
-- `IChamfer.BuildingType / Distance1 / Angle / Direction` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ichamfer.html>
-- `ksChamferBuildingTypeEnum / ksChamferTwoSides / ksChamferSideAngle` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kschamferbuildingtypeenum.html>
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Подтверждено** - маршрут целиком лежит на документированных интерфейсах и членах
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `SM-11.chamfer.mode_two_distances` | 10/10 verified | 30 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-11.chamfer.mode_distance_angle` | 10/10 verified | 24 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-11.chamfer.mode_direction` | 10/10 verified | 17 строк · PASS · `303ccf6c` | Подтверждено | - |
-
-### SM-03 - Вращение API7 (базовое / приклеивание / вырезание)
-**Инструмент:** `kompas_rotated`.
-**Место в коде:** `src/KompasMcp.Api5Adapter/Api5Session.Rotated.cs — Rotated()`; `src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs — TryCreateRotated, ось по двум точкам`.
-**Существенные условия:** Тип объекта - 27/28/29 по таблице Obj3dType; сечение и ось задаются до Update(); угол - Angle[true] в градусах, при частичном угле Angle[false] обнуляется; вид операции (объединение/вырезание) - OperationResult из ksOperationResultEnum; мост API5→API7 документирован (ksGetApplication7 + TransferInterface).
-**Документированные интерфейсы и члены:**
-- `IModelContainer.Rotateds.Add` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/irotateds_add.html>
-- `IRotated.Profile / Axis / Angle / Direction / RotatedType` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/irotated_props.html>
-- `IRotated1.OperationResult` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/irotated1_operationresult.html>
-- `IAuxiliaryGeomContainer.Axes3D + IAxis3DBy2Points.Point1/Point2` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/iaxis3dby2points_props.html>
-- `KompasObject.ksGetApplication7 / TransferInterface` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kompasobject_ksgetapplication7.html>
-- `IPart7.RebuildModel` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ipart7_rebuildmodel.html>
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Подтверждено** - маршрут целиком лежит на документированных интерфейсах и членах
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `SM-03.base_rotated.full_turn` | 10/10 verified | 26 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-03.base_rotated.partial_angle` | 10/10 verified | 26 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-03.base_rotated.axis_explicit` | 10/10 verified | 27 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-03.boss_rotated.full_turn` | 10/10 verified | 45 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-03.cut_rotated.full_turn` | 10/10 verified | 31 строк · PASS · `303ccf6c` | Подтверждено | - |
-
-### SM-15 - Булевы операции API7
-**Инструмент:** `kompas_boolean`, `kompas_update_feature`.
-**Место в коде:** `src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs — SolidBoolean()`; `src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs — IBoolean`.
-**Существенные условия:** Тип операции - ksUnion/ksDifference/ksIntersect из перечисления (значения 3/2/1, НЕ из пользовательской справки); цель и инструменты - перенесённые в API7 объекты; сохранение инструментов - SaveCopyModifyObjects. Положительный union произвольных разнесённых тел не является требованием: обычное объединение требует пересечения или общей поверхности.
-**Документированные интерфейсы и члены:**
-- `IModelContainer.Booleans.Add` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/imodelcontainer.html>
-- `IBoolean.BaseObject / ModifyObjects / BooleanType` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/iboolean_propers.html>
-- `IBoolean.SaveCopyModifyObjects / SaveCopyBaseObject` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/iboolean_savecopymodifyobjects.html>
-- `ksBooleanType (ksUnion/ksDifference/ksIntersect)` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksoperationresultenum.html>
-- указатель (не подтверждение маршрута): `IBoolean.SaveCopyBaseObject` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/iboolean_savecopybaseobject.html>
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Не подтверждено** - возможность запланирована: маршрут в коде отсутствует и в матрице не заявлен, поэтому документированность МАРШРУТА в этом аудите не подтверждена. Документированные интерфейсы семейства в справке v24 есть - это указатель для будущей реализации, а не подтверждение маршрута / маршрут целиком лежит на документированных интерфейсах и членах
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `SM-15.subtract` | 10/10 verified | 15 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-15.intersect` | 10/10 verified | 15 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-15.union.mode_save_tools` | 10/10 verified | 12 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-15.union.mode_multi_tools` | 10/10 verified | 12 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-15.union.mode_save_base_copy` | 0/10 verified; открыты: `discover`, `create`, `read`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies`, `negative_tests`, `geometry_validation` | строк приёмки нет | Не реализовано | не требуется в этом аудите: строка объявлена планом и за реализованную не выдаётся |
-| `SM-15.union.explicit_target_and_tools` | 10/10 verified | 14 строк · PASS · `303ccf6c` | Подтверждено | - |
-
-### SM-16-split - Разделение тела (API7)
-**Инструмент:** `kompas_split`, `kompas_update_feature`.
-**Место в коде:** `src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs — SolidSplit()`; `src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs — ISplitSolid`.
-**Существенные условия:** Опора разделения - секущие объекты (эскизы и поверхности), читаются и правятся переносом трёх точек СОБСТВЕННОЙ опоры признака.
-**Документированные интерфейсы и члены:**
-- `IModelContainer.SplitSolids.Add` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/imodelcontainer.html>
-- `ISplitSolid.CutObjects` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/isplitsolid_props.html>
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Подтверждено** - маршрут целиком лежит на документированных интерфейсах и членах
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `SM-16.split.mode_keep_parts` | 10/10 verified | 18 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-16.split.plane_tool` | 10/10 verified | 19 строк · PASS · `303ccf6c` | Подтверждено | - |
-
-### SM-16-cut - Отсечение по одну сторону (API7)
-**Инструмент:** `kompas_cut_by_plane`, `kompas_update_feature`.
-**Место в коде:** `src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs — SolidCutByPlane()`; `src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs — ICut`.
-**Существенные условия:** Способ построения - ksCutByPlane; сторона - Direction (читается как записана); опора - CutObject.
-**Документированные интерфейсы и члены:**
-- `IModelContainer.Cuts.Add` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/imodelcontainer.html>
-- `ICut.BuildingType / CutObject / Direction` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/icut_propers.html>
-- `ksCutBuildingTypeEnum` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kscutbuildingtypeenum.html>
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Подтверждено** - маршрут целиком лежит на документированных интерфейсах и членах
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `SM-16.cut_by_plane.mode_side_removed` | 10/10 verified | 28 строк · PASS · `303ccf6c` | Подтверждено | - |
-
-### SM-17 - Перенос и поворот тела (API7)
-**Инструмент:** `kompas_get_feature`, `kompas_reposition`, `kompas_update_feature`.
-**Место в коде:** `src/KompasMcp.Api5Adapter/Api5Session.SolidOps.cs — SolidReposition()`; `src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs — ReadPlacement / WritePlacement`; `src/KompasMcp.Domain/Geometry/EulerOrientation.cs — ось+угол ↔ углы Эйлера`.
-**Существенные условия:** Размещение выражается ПАРАМЕТРАМИ: OrientationType = ksEulerCorners + три угла Эйлера (порядок композиции справка задаёт рисунком - проверен по матрице, порядок PNR, градусы) и ParameterType = ksPDisplace + DX/DY/DZ. Точки оси поворота среди документированных членов цепочки нет, и она не является свойством размещения.
-**Документированные интерфейсы и члены:**
-- `IModelContainer.BodyRepositions.Add` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ibodyrepositions_add.html>
-- `IBodyReposition.RepositionBody / Position` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ibodyreposition_propers.html>
-- `ILocalCoordinateSystem.OrientationType` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ilocalcoordinatesystem_props.html>
-- `IPoint3D.ParameterType (унаследован в ILocalCoordinateSystem)` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ipoint3d_props.html>
-- `ILocalCoordinateSystem.LocalCSParameters → ILocalCSEulerParam` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ilocalcseulerparam_props.html>
-- `IPoint3D.Parameters → IPoint3DParamDisplace` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ipoint3dparamdisplace_props.html>
-- `ILocalCSEulerParam.PrecessionAngle / NutationAngle / RotationAngle` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ilocalcseulerparam_props.html>
-- `IPoint3DParamDisplace.DX / DY / DZ` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ipoint3dparamdisplace_props.html>
-- `ksEulerCorners / ksPDisplace / ksOrientationTypeEnum` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksorientationtypeenum.html>
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Подтверждено** - маршрут целиком лежит на документированных интерфейсах и членах
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `SM-17.reposition.translate_by_vector` | 10/10 verified | 27 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-17.reposition.rotate_about_axis` | 10/10 verified | 27 строк · PASS · `303ccf6c` | Подтверждено | - |
-
-### SKETCH - Эскиз: создание, правка геометрии, базовые плоскости
-**Инструмент:** `kompas_create_sketch`, `kompas_edit_sketch`, `kompas_finish_sketch`, `kompas_get_sketch_status`.
-**Место в коде:** `src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs — CreateSketch/EditSketch/FinishSketch`; `src/KompasMcp.Api5Adapter/Api5Session.SketchStatus.cs`; `src/KompasMcp.Api5Adapter/Api5Session.SketchPlane.cs — ResolveSupportPlane` (общая проверка опоры).
-**Существенные условия:** Геометрия эскиза строится функциями 2D API на интерфейсе ksDocument2D внутри BeginEdit/EndEdit; базовая плоскость эскиза - SetPlane/GetPlane.
-**Маршрут `SetPlane` с опорой-плоскостью по ССЫЛКЕ (дополнено 07.10.2026).** Опора задаётся формой `plane` у ОБОИХ инструментов (`kompas_create_sketch`, `kompas_set_sketch_plane`): `base` (xy/xz/yz, при необходимости с `offset_mm`) ЛИБО `reference` (ссылка вида `plane`), ровно одно из двух. Документированным членом остаётся `ksSketchDefinition.SetPlane`; ИЗМЕРЕНО, что ядро принимает объект детали, взятый из документированного перечисления `ksPart.EntityCollection(o3d_planeOffset)`, и НЕ принимает объект API7-плоскости (`IPlane3D`). **Уточнено 07.10.2026:** документированный обратный перенос `TransferInterface(…, ksAPI5Auto, o3d_planeOffset)` для плоскости, созданной через API7, `ksEntity` НЕ даёт (ИЗМЕРЕНО, проба SP, шаг SP.10, три вызова записаны отдельно); прежнее «обратный перенос 7→5 возвращает тот же объект» получено вызовом с `apiNewType = ksAPI7Dual = 2`, который просит тот же API, и потому является документированным ответом на такой вызов (примечания 2/3 страницы `kompasobject_transferinterface.html`), а не свойством ядра. Поэтому ссылка разрешается в объект модели по имени и типу — допущение, названное допущением. Плоскость у грани строится документированным `kompas_create_aux_geometry` (`kind=plane`, `mode=offset`, `base_face_ref`). Грань и ребро опорой НЕ являются: отказ `INVALID_ARGUMENT` по виду ссылки ДО COM. Основание — `docs/decisions/adapter-sketch.md#sketch-plane-reference`.
-**Документированные интерфейсы и члены:**
-- `ksSketchDefinition.SetPlane / GetPlane` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kssketchdefinition_setplane.html>
-- `ksSketchDefinition.BeginEdit / EndEdit` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kssketchdefinition_beginedit.html>
-- `ksDocument2D.ksLineSeg / ksCircle / ksArcByAngle` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument2d_kslineseg.html>
-- `ksPlaneOffsetDefinition.SetPlane / GetPlane` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksplaneoffsetdefinition_props.html>
-- `KompasObject.TransferInterface / ksAPITypeEnum` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kompasobject_transferinterface.html> (цитируется для проверки обратного переноса; продуктом НЕ вызывается — измерено, что `ksEntity` он не даёт)
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Подтверждено** - маршрут целиком лежит на документированных интерфейсах и членах
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `AUX-SKETCH.plane_and_profile_lifecycle` | 10/10 verified | 28 строк · PASS · `303ccf6c` | Подтверждено | - |
-
-### PATTERN - Массивы: по сетке, круговой (концентрический), зеркальный
-**Инструмент:** `kompas_get_pattern`, `kompas_pattern_circular`, `kompas_pattern_grid`, `kompas_pattern_mirror`.
-**Место в коде:** `src/KompasMcp.Api5Adapter/Api5Session.Pattern.cs — создание`; `src/KompasMcp.Api5Adapter/Api5Session.PatternEdit.cs — правка, чтение`; `src/KompasMcp.Api5Adapter/Api7/Api7Pattern.cs — мост API7 (ILinearPattern / ICircularPattern / IMirrorPattern)`.
-**Существенные условия:** Массив создаётся через IModelContainer.FeaturePatterns.Add(ksObj3dTypeEnum) и приведение QI к ILinearPattern / ICircularPattern / IMirrorPattern; типизированный вызов, не отражение. ИЗМЕРЕНО ПРОГОНОМ 20.09.2026: у копирования ТЕЛ СВОЙ номер типа в дереве - o3d_BodiesMeshCopy=528 и o3d_BodiesCircularCopy=529, отличный от копирования ОПЕРАЦИЙ (o3d_meshCopy=35, o3d_circularCopy=36); отображение у них ОДНО («Массив по сетке:1»), поэтому различает только тип. Область действия SaveInitialObjects ограничена справкой: свойство работает ТОЛЬКО для o3d_mirrorAllOperation, у прочих операций зеркального копирования возможность скрыть экземпляры отсутствует - проверено на операции 48 (запись false читается обратно true, геометрия не меняется). Углы задаются nullable и пишутся ТОЛЬКО когда переданы: запись нуля вместо неуказанного угла уничтожает умолчание модели. Angle2 - угол МЕЖДУ направлениями сетки (90° прямоугольная, 0° вырождает сетку в линию), Angle1 отводит направление от построенной оси.
-**Документированные интерфейсы и члены:**
-- `IModelContainer.FeaturePatterns / IFeaturePatterns.Add` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ifeaturepatterns_add.html>
-- `IFeaturePattern` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ifeaturepattern.html>
-- `IFeaturePatterns` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ifeaturepatterns.html>
-- `ILinearPattern (свойства)` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ilinearpattern_props.html>
-- `ICircularPattern (свойства)` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/icircularpattern_props.html>
-- `IMirrorPattern (свойства)` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/imirrorpattern_props.html>
-- `IMirrorPattern.SaveInitialObjects` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/imirrorpattern_saveinitialobjects.html>
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Подтверждено** - маршрут целиком лежит на документированных интерфейсах и членах
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `SM-18.grid.single_row` | 10/10 verified | 15 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-18.grid.rectangular_grid` | 10/10 verified | 15 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-18.grid.operations` | 10/10 verified | 14 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-18.grid.bodies` | 10/10 verified | 14 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-19.circular.full_circle_no_duplicate` | 10/10 verified | 14 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-19.circular.angular_range` | 10/10 verified | 14 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-19.circular.operations` | 10/10 verified | 14 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-19.circular.bodies` | 10/10 verified | 14 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-23.mirror_all.bodies_selection` | 10/10 verified | 14 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-23.mirror_array.selected_operations` | 10/10 verified | 15 строк · PASS · `303ccf6c` | Подтверждено | - |
-
-### SM-04 - Кинематическая операция - элемент по траектории (API5)
-**Инструмент:** `kompas_get_feature`, `kompas_sweep`, `kompas_update_feature`.
-**Место в коде:** `src/KompasMcp.Api5Adapter/Api5Session.FeatureEdit.B5.cs — правка режима движения сечения`; `src/KompasMcp.Api5Adapter/Api5Session.FeatureRead.B5.cs — чтение признака`; `src/KompasMcp.Api5Adapter/Api5Session.Sweep.cs — Sweep()`.
-**Существенные условия:** Тип базовой кинематической операции - 45 (o3d_baseEvolution) по таблице Obj3dType; фабрика API7 этот тип НЕ документирует (ievolutions_add.html перечисляет допустимыми только o3d_bossEvolution 46 и o3d_cutEvolution 47), поэтому создание идёт ksPart.NewEntity(45) + ksEntity::GetDefinition → ksBaseEvolutionDefinition. В дереве признак виден под номером 46 (o3d_bossEvolution), поэтому опознание идёт ПО ИНТЕРФЕЙСУ ОПРЕДЕЛЕНИЯ, а не по номеру типа. Траектория присоединяется к ksEntityCollection, полученному от PathPartArray(): держатель отвечает System.__ComObject, приведение к ksEntityCollection работает, а отражение по нему членов не находит вовсе. Режим движения сечения - sketchShiftType 0/1/2 (ksevolutionshiftsketchtypeenum.html): на ПРЯМОЙ траектории режимы неразличимы (одно тело), различающая постановка - дуга R50/90°, где ортогональный режим даёт 24674.011002723353, параллельный - 15707.963267948984 (разность 8966.047734774369 мм³). Длина траектории читается GetPathLength(1) ПОСЛЕ построения: тот же вызов до Create() отвечал нулём, и это был дефект прибора, а не факт о продукте. ПРАВКА ВХОДА не выражается ни одним из двух хранилищ, и это измерено на ОБОИХ (шаги B5.15 и B5.22): SetSketch определения API5 принят и не применён; запись в документированное свойство API7 IEvolution.Sketch (объявленный тип KompasAPI7.IModelObject) принята, Update() = true и тоже не применена; запись в ОБА хранилища подряд - не применена; запись ДО первого обращения к API7 - тоже не применена, причём держатель траектории перечисляет подставленный эскиз, то есть запись ДОШЛА. Признак при этом жив, и прибор видит изменения: правка режима применяется и через определение, и через хранилище API7 (15707.963267948984), поэтому «не применено» отличимо от «признак умер». Имя сечения через свойство API7 прибором НЕ ПРОЧИТАНО (значение приходит как System.__ComObject, и ни прямой, ни обратный перенос не даёт ksEntity) - это названный предел прибора, а не факт о продукте, и «не применено» доказано объёмом, а не именем. Поэтому вход строки читается, но не перепривязывается, а sketch_ref отвергается по имени.
-**Документированные интерфейсы и члены:**
-- `ksPart.NewEntity(45 = o3d_baseEvolution)` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspart_newentity.html>
-- `ksBaseEvolutionDefinition (состав интерфейса)` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksbaseevolutiondefinition.html>
-- `ksBaseEvolutionDefinition.SetSketch` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksbaseevolutiondefinition_setsketch.html>
-- `ksBaseEvolutionDefinition.sketchShiftType` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksbaseevolutiondefinition_sketchshifttype.html>
-- `ksBaseEvolutionDefinition.PathPartArray → ksEntityCollection` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksbaseevolutiondefinition_pathpartarray.html>
-- `ksBaseEvolutionDefinition.GetPathLength` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksbaseevolutiondefinition_getpathlength.html>
-- `ksEvolutionShiftSketchTypeEnum (0/1/2)` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksevolutionshiftsketchtypeenum.html>
-- `ksEntity.Create` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksentity_create.html>
-- `ksEntityCollection.Add` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksentitycollection_add.html>
-- `Obj3dType: o3d_baseEvolution = 45` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/obj3dtype.html>
-- указатель (не подтверждение маршрута): `IEvolution` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ievolution.html>
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Не подтверждено** - возможность запланирована: маршрут в коде отсутствует и в матрице не заявлен, поэтому документированность МАРШРУТА в этом аудите не подтверждена. Документированные интерфейсы семейства в справке v24 есть - это указатель для будущей реализации, а не подтверждение маршрута / маршрут целиком лежит на документированных интерфейсах и членах
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `SM-04.base.mode_orthogonal` | 10/10 verified | 12 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-04.boss` | 0/10 verified; открыты: `discover`, `create`, `read`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies`, `negative_tests`, `geometry_validation` | строк приёмки нет | Не реализовано | не требуется в этом аудите: строка объявлена планом и за реализованную не выдаётся |
-| `SM-04.base.single_profile_flat_path` | 10/10 verified | 13 строк · PASS · `303ccf6c` | Подтверждено | - |
-
-### SM-05 - Элемент по сечениям (API7)
-**Инструмент:** `kompas_get_feature`, `kompas_loft`, `kompas_update_feature`.
-**Место в коде:** `src/KompasMcp.Api5Adapter/Api5Session.FeatureEdit.B5.cs — правка набора сечений записью в ОБА хранилища`; `src/KompasMcp.Api5Adapter/Api5Session.FeatureRead.B5.cs — чтение признака и сечений`; `src/KompasMcp.Api5Adapter/Api5Session.Loft.cs — Loft()`; `src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs — Api7Loft (счётчики, чтение)`.
-**Существенные условия:** Цепочки соответствия сечений есть ТОЛЬКО в API7: ни ksBaseLoftDefinition, ни ksBossLoftDefinition не объявляют ни AddCoupling, ни Coupling, поэтому семейство ведётся одним маршрутом API7 - на нём выразимы все его обязательные строки. Фабрика принимает o3d_bossLoft (31) и o3d_cutLoft, параметры задаются до IModelObject::Update, сечения - свойство ILoft.Sketchs типа VARIANT (SAFEARRAY указателей LPDISPATCH). ВХОД ЛЕЖИТ В ДВУХ ХРАНИЛИЩАХ, И ЭТО ИЗМЕРЕНО (шаг B5.21): пока определение API5 не прочитано, запись только в ILoft.Sketchs применяется (3 → 2, объём 48000, воспроизведено четырежды); ОДНОГО чтения ksBaseLoftDefinition.Sketchs() достаточно, чтобы владельцем ЧИСЛА сечений стало определение, и после этого та же запись отменяется первым же обновлением (после присваивания 2, после ksEntity.Update() 3, объём 16114.2858257129); запись набора в ОБА хранилища - сначала ksEntityCollection определения через Clear() + Add(), затем ILoft.Sketchs - применяется (2, объём 48000). Порядок сечений ОБЪЁМОМ не доказывается: концентрические параллельные сечения дают 28000 в любом порядке, и порядок доказывается цепочкой соответствия (0/20 → 20000 против 25999.99700225 на переставленном). Присваивание ILoft.Sketchs СБРАСЫВАЕТ цепочки (1 → 0). Непараллельные плоскости сечений отвергаются вызывающей стороной по измеренному расхождению осей нормалей, а не по умолчанию.
-**Документированные интерфейсы и члены:**
-- `ILofts.Add (допустимые типы o3d_bossLoft / o3d_cutLoft)` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ilofts_add.html>
-- `ILoft (состав интерфейса)` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/iloft_propers.html>
-- `ILoft.Sketchs (VARIANT, SAFEARRAY LPDISPATCH)` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/iloft_sketchs.html>
-- `ILoft.AddCoupling → ICoupling` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/iloft_addcoupling.html>
-- `IModelObject.Update` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/imodelobject_update.html>
-- `IPart7.RebuildModel` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ipart7_rebuildmodel.html>
-- `ksBaseLoftDefinition.Sketches` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksbaseloftdefinition_sketches.html>
-- `ksBossLoftDefinition.Sketches` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksbossloftdefinition_sketches.html>
-- `ksEntityCollection.Clear / Add` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksentitycollection_clear.html>
-- `Obj3dType: o3d_bossLoft = 31` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/obj3dtype.html>
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Подтверждено** - маршрут целиком лежит на документированных интерфейсах и членах
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `SM-05.base.mode_couplings` | 10/10 verified | 14 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-05.base.parallel_sections_order` | 10/10 verified | 13 строк · PASS · `303ccf6c` | Подтверждено | - |
-
-### SM-13 - Оболочка - тонкостенный элемент (API5)
-**Инструмент:** `kompas_get_feature`, `kompas_shell`, `kompas_update_feature`.
-**Место в коде:** `src/KompasMcp.Api5Adapter/Api5Session.FeatureEdit.B5.cs — правка набора удаляемых граней`; `src/KompasMcp.Api5Adapter/Api5Session.FeatureRead.B5.cs — чтение признака`; `src/KompasMcp.Api5Adapter/Api5Session.Shell.cs — Shell()`.
-**Существенные условия:** Тип признака - 43 (o3d_shellOperation) по таблице Obj3dType, определение берётся у элемента модели (ksEntity::GetDefinition). Состав: толщина thickness, направление thinType - документировано буквально «TRUE — внутрь, FALSE — наружу» и подтверждено числом на коробе 100×80×10 с удалённой верхней гранью при t = 2: thinType = true → 21631.999999999996 мм³ (полость 96×76×8), thinType = false → 24832.000000000022 мм³ (тело 104×84×12 минус 100×80×10) - оба совпали с аналитикой, то есть соответствие установлено дважды: страницей и объёмом. FaceArray() возвращает ksEntityCollection удаляемых граней. ПУСТОЙ СПИСОК ГРАНЕЙ ОТВЕРГАЕТСЯ ДО COM, и это измеренный отказ, а не осторожность: и API5 (шаг B5.6), и API7 (шаг B5.10, четыре постановки) принимают такой вызов (Create/Update = true), но тело не меняется - 80000 при 6 гранях, ровно как у исходного короба, тогда как открытая оболочка даёт 21632 при 11 гранях. Касательные грани - член ТОЛЬКО API7 (IShell.SetFaces(Faces, TangentFaces)); у API5 ksShellDefinition такого члена нет, поэтому tangent_faces = true отвергается именованно, а не принимается молча. Переменная толщина по граням вне обязательного объёма этапа (OQ-A13).
-**Документированные интерфейсы и члены:**
-- `ksShellDefinition (состав интерфейса)` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksshelldefinition.html>
-- `ksShellDefinition.thinType (TRUE — внутрь, FALSE — наружу)` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksshelldefinition_thintype.html>
-- `ksShellDefinition.FaceArray → ksEntityCollection` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksshelldefinition_facearray.html>
-- `ksPart.NewEntity(43 = o3d_shellOperation)` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspart_newentity.html>
-- `ksEntity.Create` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksentity_create.html>
-- `ksEntityCollection.Add` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksentitycollection_add.html>
-- `Obj3dType: o3d_shellOperation = 43` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/obj3dtype.html>
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Подтверждено** - маршрут целиком лежит на документированных интерфейсах и членах
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `SM-13.shell.mode_remove_faces` | 10/10 verified | 12 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-13.shell.mode_direction` | 10/10 verified | 13 строк · PASS · `303ccf6c` | Подтверждено | - |
-| `SM-13.shell.uniform_thickness` | 10/10 verified | 12 строк · PASS · `303ccf6c` | Подтверждено | - |
-
-### None
-**Инструмент:** не опубликован.
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Не подтверждено** - строка не отнесена к проверенному семейству: маршрут в коде не заявлен, поэтому документированность МАРШРУТА не подтверждена и не опровергнута
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `AUX-IMAGE.raster_export` | 10/10 verified | 16 строк · PASS · `303ccf6c` | Подтверждено | - |
-
-### ASM-01
-**Инструмент:** не опубликован.
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Не подтверждено** - строка не отнесена к проверенному семейству: маршрут в коде не заявлен, поэтому документированность МАРШРУТА не подтверждена и не опровергнута
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `ASM-01.document.create_open` | 10/10 verified | 8 строк · PASS · `303ccf6c` | Подтверждено | - |
-
-### ASM-02
-**Инструмент:** не опубликован.
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Не подтверждено** - строка не отнесена к проверенному семейству: маршрут в коде не заявлен, поэтому документированность МАРШРУТА не подтверждена и не опровергнута
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `ASM-02.component.insert` | 10/10 verified | 11 строк · PASS · `303ccf6c` | Подтверждено | - |
-
-### ASM-03
-**Инструмент:** не опубликован.
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Не подтверждено** - строка не отнесена к проверенному семейству: маршрут в коде не заявлен, поэтому документированность МАРШРУТА не подтверждена и не опровергнута
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `ASM-03.structure.read` | 10/10 verified | 7 строк · PASS · `303ccf6c` | Подтверждено | - |
-
-### ASM-04
-**Инструмент:** не опубликован.
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Не подтверждено** - строка не отнесена к проверенному семейству: маршрут в коде не заявлен, поэтому документированность МАРШРУТА не подтверждена и не опровергнута
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `ASM-04.placement.set_read` | 10/10 verified | 10 строк · PASS · `303ccf6c` | Подтверждено | - |
-
-### ASM-05
-**Инструмент:** не опубликован.
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Не подтверждено** - строка не отнесена к проверенному семейству: маршрут в коде не заявлен, поэтому документированность МАРШРУТА не подтверждена и не опровергнута
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `ASM-05.component.replace` | 10/10 verified | 9 строк · PASS · `303ccf6c` | Подтверждено | - |
-
-### ASM-06
-**Инструмент:** не опубликован.
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Не подтверждено** - строка не отнесена к проверенному семейству: маршрут в коде не заявлен, поэтому документированность МАРШРУТА не подтверждена и не опровергнута
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `ASM-06.links.check` | 10/10 verified | 5 строк · PASS · `303ccf6c` | Подтверждено | - |
-
-### ASM-07
-**Инструмент:** не опубликован.
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Не подтверждено** - строка не отнесена к проверенному семейству: маршрут в коде не заявлен, поэтому документированность МАРШРУТА не подтверждена и не опровергнута
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `ASM-07.save_reopen` | 10/10 verified | 7 строк · PASS · `303ccf6c` | Подтверждено | - |
-
-### MATE-01
-**Инструмент:** не опубликован.
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Не подтверждено** - строка не отнесена к проверенному семейству: маршрут в коде не заявлен, поэтому документированность МАРШРУТА не подтверждена и не опровергнута
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `MATE-01.mate.create` | 10/10 verified | 9 строк · PASS · `303ccf6c` | Подтверждено | - |
-
-### MATE-02
-**Инструмент:** не опубликован.
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Не подтверждено** - строка не отнесена к проверенному семейству: маршрут в коде не заявлен, поэтому документированность МАРШРУТА не подтверждена и не опровергнута
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `MATE-02.mate.read` | 10/10 verified | 6 строк · PASS · `303ccf6c` | Подтверждено | - |
-
-### MATE-03
-**Инструмент:** не опубликован.
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Не подтверждено** - строка не отнесена к проверенному семейству: маршрут в коде не заявлен, поэтому документированность МАРШРУТА не подтверждена и не опровергнута
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `MATE-03.mate.param_edit` | 10/10 verified | 8 строк · PASS · `303ccf6c` | Подтверждено | - |
-
-### MATE-04
-**Инструмент:** не опубликован.
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Не подтверждено** - строка не отнесена к проверенному семейству: маршрут в коде не заявлен, поэтому документированность МАРШРУТА не подтверждена и не опровергнута
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `MATE-04.mate.fixed` | 10/10 verified | 6 строк · PASS · `303ccf6c` | Подтверждено | - |
-
-### MATE-05
-**Инструмент:** не опубликован.
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Не подтверждено** - строка не отнесена к проверенному семейству: маршрут в коде не заявлен, поэтому документированность МАРШРУТА не подтверждена и не опровергнута
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `MATE-05.mate.delete` | 10/10 verified | 7 строк · PASS · `303ccf6c` | Подтверждено | - |
-
-### MATE-06
-**Инструмент:** не опубликован.
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Не подтверждено** - строка не отнесена к проверенному семейству: маршрут в коде не заявлен, поэтому документированность МАРШРУТА не подтверждена и не опровергнута
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `MATE-06.mate.placement_effect` | 10/10 verified | 6 строк · PASS · `303ccf6c` | Подтверждено | - |
-
-### VM-04 / VM-05 - Переменные и материал (блок VM): чтение плотности маршрутом МЦХ API5
-**Инструмент:** `kompas_get_material`, `kompas_set_material` (в блоке также `kompas_list_variables`, `kompas_set_variable`).
-**Место в коде:** `src/KompasMcp.Api5Adapter/Api5Session.VariablesMaterial.cs`.
-**Существенные условия:** единицу длины и массы ВСЕХ данных, возвращаемых `ksMassInertiaParam`, задаёт АРГУМЕНТ `bitVector` вызова, а не страница свойства: при `ST_MIX_M|ST_MIX_KG` плотность `r` — в кг/м³, при `ST_MIX_MM|ST_MIX_KG` — в кг/мм³. Запись `SetMaterial` документирована в г/куб.см, поэтому перевод кг/м³ → г/см³ выполняет `DensityUnits`. Старый `ksPart.GetDensity()` остаётся ДИАГНОСТИКОЙ (единица страницы г/куб.мм) и плотностью не публикуется.
-**Документированные интерфейсы и члены:**
-- `ksPart.CalcMassInertiaProperties` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspart_calcmassinertiaproperties.html>
-- `ksMassInertiaParam.r / m / v` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksmassinertiaparam_props.html>
-- `ksMassInertiaParam.SetBitVectorValue` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksmassinertiaparam_setbitvectorvalue.html>
-- константы `ST_MIX_*` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/mtypes.html>
-- `ksPart.SetMaterial / Update` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspart_setmaterial.html>
-- `ksPart.material` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspart_material.html>
-- `ksPart.VariableCollection` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspart_variablecollection.html>
-- `ksVariable.value / Expression` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksvariable_value.html>
-- `ksDocument3D.RebuildDocument` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_rebuilddocument.html>
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера. Цитаты - `docs/04_KOMPAS_API_NOTES.md` §4.44; живое измерение - §4.44.1.
-**Оценка документации:** **Подтверждено** - единицу `r` задаёт аргумент `bitVector` по примечанию 3 `ksmassinertiaparam.html`; прочтение подтверждено живым измерением прибора `--vm-density-mci` на двух плотностях
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `VM-04.material.read` | 10/10 verified | 56 строк группы `variables-material` · PASS · `8a04bc7e` | Подтверждено | - |
-| `VM-05.material.write` | 10/10 verified | 56 строк группы `variables-material` · PASS · `8a04bc7e` | Подтверждено | - |
-| `VM-06.mass.computed_via_measure` | сквозная (не режим профиля) | 56 строк группы `variables-material` · PASS · `8a04bc7e` | Подтверждено | - |
-
-### dep.vm.units - Документированные единицы плотности - зависимость блока VM
-**Инструмент:** `kompas_get_material`, `kompas_set_material`.
-**Существенные условия:** единица чтения приходит из аргумента вызова; сервер ничего не пересчитывает. Отношение `r` двух комбинаций равно переводному множителю между заданными единицами (1e9), а не 1000 «по опыту».
-**Документированные интерфейсы и члены:**
-- `ksPart.CalcMassInertiaProperties` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspart_calcmassinertiaproperties.html>
-- константы `ST_MIX_*` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/mtypes.html>
-- `ksPart.SetMaterial` (г/куб.см) - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspart_setmaterial.html>
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Подтверждено** - измерено прибором `--vm-density-mci` на двух плотностях в обеих комбинациях
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `dep.vm.units` | 10/10 verified | 56 строк группы `variables-material` · PASS · `8a04bc7e` | Подтверждено | - |
-
-## 3. Запланированные семейства: маршрута в коде нет
-
-Эти строки присутствуют в матрице как план (`metadata_found`): реализации нет, вызовов COM нет. Документированность **маршрута** здесь не подтверждена - подтверждать нечего; приведённые интерфейсы справки v24 - указатель для будущей реализации, а не доказательство. За реализованные эти строки не выдаются.
-
-### SM-01 - Примитивы API7 (параллелепипед)
-**Инструмент:** не опубликован.
-**Документированные интерфейсы и члены:**
-- указатель (не подтверждение маршрута): `IModelContainer.ElementaryBodies / IElementaryBodies` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/imodelcontainer_elementarybodies.html>, также <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ielementarybodies.html>
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Не подтверждено** - возможность запланирована: маршрут в коде отсутствует и в матрице не заявлен, поэтому документированность МАРШРУТА в этом аудите не подтверждена. Документированные интерфейсы семейства в справке v24 есть - это указатель для будущей реализации, а не подтверждение маршрута
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `SM-01.primitive_box` | 0/10 verified; открыты: `discover`, `create`, `read`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies`, `negative_tests`, `geometry_validation` | строк приёмки нет | Не реализовано | не требуется в этом аудите: строка объявлена планом и за реализованную не выдаётся |
-
-## 4. Общие зависимости
-
-Сеанс, жизненный цикл, ссылки, эскизы, единицы, общий слой API7. Это не «возможность», а основание для остальных строк: она либо покрыта прогонами, либо покрыта не полностью, и второе называется прямо. Числа действий здесь - из тех же строк матрицы, что и выше, повторно они не считаются.
-
-### LIFECYCLE - Документ и признак: создание, открытие, сохранение, закрытие, перестроение, удаление - зависимости
-**Инструмент:** `kompas_close_document`, `kompas_create_document`, `kompas_delete_feature`, `kompas_list_documents`, `kompas_open_document`, `kompas_rebuild`, `kompas_save_document`, `kompas_set_feature_suppressed`.
-**Место в коде:** `src/KompasMcp.Api5Adapter/Api5Session.Features.cs`; `src/KompasMcp.Api5Adapter/Api5Session.Lifecycle.cs`; `src/KompasMcp.Api5Adapter/Api5Session.cs — CreateDocument/OpenDocument/SaveDocument/CloseDocument`.
-**Существенные условия:** Документ адресуется UUID, а не «активным»: Document3D() - фабрика, а не текущий документ. ksEntity.Update() = true означает «принято», не «применено»; перестроение - RebuildDocument. Ветка IsSaved из продукта УДАЛЕНА в наряде исправлений (F-02): члена нет ни в справке, ни в interop, а «документ изменён» выводился из сравнения отпечатков. Сохранённость ведётся отдельным состоянием (`DocumentSaveState`) и подтверждается успешным сохранением с перечитыванием файла, а не сбросом признака CAD.
-**Документированные интерфейсы и члены:**
-- `ksDocument3D.Create / Open / Save / SaveAs / close` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_create.html>
-- `ksDocument3D.RebuildDocument / DeleteObject / GetPart` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_rebuilddocument.html>
-- `ksDocument3D.SetActive / UpdateDocumentParam` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_setactive.html>
-- `ksPart.NewEntity / GetDefaultEntity / RebuildModel` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspart_newentity.html>
-- `ksEntity.Create / Update / GetDefinition / IsCreated` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksentity_create.html>
-- `ksDocument3D.IsDetail` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_isdetail.html>
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Подтверждено** - маршрут целиком лежит на документированных интерфейсах и членах
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `dep.selection.unambiguous` | 3/10 verified; открыты: `create`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies`, `geometry_validation` | 3 строк · PASS · `303ccf6c` | Покрыто проверками | - |
-| `dep.lifecycle.feature_cycle` | 7/10 verified; открыты: `discover`, `create`, `geometry_validation` | 14 строк · PASS · `303ccf6c` | Покрыто проверками | - |
-| `dep.bodies.multibody` | 3/10 verified; открыты: `discover`, `create`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies` | 3 строк · PASS · `303ccf6c` | Покрыто проверками | - |
-| `dep.foundation` | 2/10 verified; открыты: `discover`, `create`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies`, `geometry_validation` | 2 строк · PASS · `303ccf6c` | Покрыто проверками | - |
-| `dep.preserve_unknown` | 4/10 verified; открыты: `discover`, `create`, `rebuild`, `suppress_restore`, `delete_dependencies`, `negative_tests` | 4 строк · PASS · `303ccf6c` | Покрыто проверками | - |
-
-### SKETCH - Эскиз: создание, правка геометрии, базовые плоскости - зависимости
-**Инструмент:** `kompas_create_sketch`, `kompas_edit_sketch`, `kompas_finish_sketch`, `kompas_get_sketch_status`.
-**Место в коде:** `src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs — CreateSketch/EditSketch/FinishSketch`; `src/KompasMcp.Api5Adapter/Api5Session.SketchStatus.cs`.
-**Существенные условия:** Геометрия эскиза строится функциями 2D API на интерфейсе ksDocument2D внутри BeginEdit/EndEdit; базовая плоскость эскиза - SetPlane/GetPlane.
-**Документированные интерфейсы и члены:**
-- `ksSketchDefinition.SetPlane / GetPlane` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kssketchdefinition_setplane.html>
-- `ksSketchDefinition.BeginEdit / EndEdit` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kssketchdefinition_beginedit.html>
-- `ksDocument2D.ksLineSeg / ksCircle / ksArcByAngle` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument2d_kslineseg.html>
-- `ksPlaneOffsetDefinition.SetPlane / GetPlane` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksplaneoffsetdefinition_props.html>
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Подтверждено** - маршрут целиком лежит на документированных интерфейсах и членах
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `dep.sketch.entities` | 7/10 verified; открыты: `rebuild`, `suppress_restore`, `delete_dependencies` | 15 строк · PASS · `303ccf6c` | Покрыто проверками | - |
-| `dep.refs.planes` | 6/10 verified; открыты: `rebuild`, `suppress_restore`, `delete_dependencies`, `geometry_validation` | 6 строк · PASS · `303ccf6c` | Покрыто проверками | - |
-| `dep.refs.axes` | 5/10 verified; открыты: `edit`, `rebuild`, `suppress_restore`, `delete_dependencies`, `geometry_validation` | 5 строк · PASS · `303ccf6c` | Покрыто проверками | - |
-
-### READ - Чтение геометрии и измерения - зависимости
-**Инструмент:** `kompas_list_bodies`, `kompas_list_features`, `kompas_measure`, `kompas_read_topology`, `kompas_resolve_selection`.
-**Место в коде:** `src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs — Measure/Topology`; `src/KompasMcp.Api5Adapter/Api5Session.SolidRead.cs`.
-**Существенные условия:** Объём основного тела читается GetGabarit/CalcMassInertiaProperties по ссылке тела, а не «объём того, что построено сейчас»; площадь грани - GetArea, длина ребра - GetLength; чтение производных величин не заменяет чтение исходных параметров.
-**Документированные интерфейсы и члены:**
-- `ksBody.IsSolid / GetGabarit / CalcMassInertiaProperties` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksbody_issolid.html>
-- `ksFaceDefinition.GetArea / GetSurface / GetNormal` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksfacedefinition_getarea.html>
-- `ksSurface.GetParamUMin/UMax/VMin/VMax / IsPlanar / IsCylinder` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kssurface_getparamumin.html>
-- `ksCurve3D.GetLength / GetCurveParam / IsArc / IsCircle` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kscurve3d_getlength.html>
-- `ksBodyCollection.* / ksEntityCollection.*` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksbodycollection_getcount.html>
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Подтверждено** - маршрут целиком лежит на документированных интерфейсах и членах
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `dep.refs.planar_face` | 4/10 verified; открыты: `create`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies` | 4 строк · PASS · `303ccf6c` | Покрыто проверками | - |
-| `dep.refs.edges_faces` | 3/10 verified; открыты: `create`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies`, `geometry_validation` | 3 строк · PASS · `303ccf6c` | Покрыто проверками | - |
-
-### EXCHANGE - Обмен: STEP import/export, единицы измерения - зависимости
-**Инструмент:** `kompas_export_step`, `kompas_import_step`, `kompas_probe_units`.
-**Место в коде:** `src/KompasMcp.Api5Adapter/Api5Session.Exchange.cs`.
-**Существенные условия:** Формат задаётся параметрами конвертации (Init + format), а не расширением файла; единицы - из ksLengthUnitsEnum.
-**Документированные интерфейсы и члены:**
-- `ksDocument3D.AdditionFormatParam + SaveAsToAdditionFormat` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_saveastoadditionformat.html>
-- `ksDocument3D.LoadFromAdditionFormat` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument3d_loadfromadditionformat.html>
-- `ksAdditionFormatParam.Init / Properties` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksadditionformatparam_props.html>
-- `ksLengthUnitsEnum` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kslengthunitsenum.html>
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Подтверждено** - маршрут целиком лежит на документированных интерфейсах и членах
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `dep.units.confirm` | 1/10 verified; открыты: `discover`, `create`, `read`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies`, `negative_tests` | 1 строк · PASS · `303ccf6c` | Покрыто проверками | - |
-
-### CONNECT - Сеанс: подключение, видимость, версия, отсоединение - зависимости
-**Инструмент:** `kompas_capabilities`, `kompas_connect`, `kompas_disconnect`, `kompas_get_context`, `kompas_health`.
-**Место в коде:** `src/KompasMcp.Api5Adapter/Api5Session.Visibility.cs`; `src/KompasMcp.Api5Adapter/Api5Session.cs — Connect/Disconnect`.
-**Существенные условия:** Экземпляр либо подключается (attach) к уже запущенному, либо запускается своим (launch); принадлежность процесса проверяется по PID, а не по видимости окна: ksGetHWindow даёт дескриптор главного окна, и наличие HWND о видимости не говорит.
-**Документированные интерфейсы и члены:**
-- `KompasObject.ksGetHWindow` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kompasobject_ksgethwindow.html>
-- `KompasObject.ksGetSystemVersion` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kompasobject_ksgetsystemversion.html>
-- `KompasObject.Quit / TransferInterface` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kompasobject_quit.html>
-- `ksDocument3D.ActiveDocument3D (через KompasObject)` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kompasobject_activedocument3d.html>
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Подтверждено** - маршрут целиком лежит на документированных интерфейсах и членах
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `dep.api7.in_same_adapter` | 4/10 verified; открыты: `create`, `rebuild`, `suppress_restore`, `delete_dependencies`, `negative_tests`, `geometry_validation` | 15 строк · PASS · `303ccf6c` | Покрыто проверками | - |
-
-### SM-07 - Родное отверстие API7 - зависимости
-**Инструмент:** `kompas_hole`.
-**Место в коде:** `src/KompasMcp.Api5Adapter/Api5Session.Hole.cs — Hole()`; `src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs — создание отверстия и позиционирование`.
-**Существенные условия:** Форма и дно - ksHTBase / ksHTCounterbore / ksHTCountersinking и ksEFFlat / ksDTValue / ksDTReachThrough; позиция - Point3DParamSurface + ksOffsetByCoords и Offset1/Offset2; ось по нормали грани - BaseSurface + Perpendicular; параметры пишутся до Update().
-**Документированные интерфейсы и члены:**
-- `IHoles3D.Add` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/iholes3d_add.html>
-- `IHoleDisposal.BaseSurface / Perpendicular / Point3DParamSurface` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/iholedisposal_propers.html>
-- `ICountersinkHoleParameters.*` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/icountersinkholeparameters_propers.html>
-- `ISpotfacingHoleParameters.*` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ispotfacingholeparameters_propers.html>
-- `ksDepthTypeEnum / ksEndFaceTypeEnum / ksHoleTypeEnum` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdepthtypeenum.html>
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Подтверждено** - маршрут целиком лежит на документированных интерфейсах и членах
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `dep.refs.points_axes` | 3/10 verified; открыты: `discover`, `edit`, `rebuild`, `suppress_restore`, `delete_dependencies`, `negative_tests`, `geometry_validation` | 3 строк · PASS · `303ccf6c` | Покрыто проверками | - |
-
-### SM-04 - Кинематическая операция - элемент по траектории (API5) - зависимости
-**Инструмент:** `kompas_get_feature`, `kompas_sweep`, `kompas_update_feature`.
-**Место в коде:** `src/KompasMcp.Api5Adapter/Api5Session.FeatureEdit.B5.cs — правка режима движения сечения`; `src/KompasMcp.Api5Adapter/Api5Session.FeatureRead.B5.cs — чтение признака`; `src/KompasMcp.Api5Adapter/Api5Session.Sweep.cs — Sweep()`.
-**Существенные условия:** Тип базовой кинематической операции - 45 (o3d_baseEvolution) по таблице Obj3dType; фабрика API7 этот тип НЕ документирует (ievolutions_add.html перечисляет допустимыми только o3d_bossEvolution 46 и o3d_cutEvolution 47), поэтому создание идёт ksPart.NewEntity(45) + ksEntity::GetDefinition → ksBaseEvolutionDefinition. В дереве признак виден под номером 46 (o3d_bossEvolution), поэтому опознание идёт ПО ИНТЕРФЕЙСУ ОПРЕДЕЛЕНИЯ, а не по номеру типа. Траектория присоединяется к ksEntityCollection, полученному от PathPartArray(): держатель отвечает System.__ComObject, приведение к ksEntityCollection работает, а отражение по нему членов не находит вовсе. Режим движения сечения - sketchShiftType 0/1/2 (ksevolutionshiftsketchtypeenum.html): на ПРЯМОЙ траектории режимы неразличимы (одно тело), различающая постановка - дуга R50/90°, где ортогональный режим даёт 24674.011002723353, параллельный - 15707.963267948984 (разность 8966.047734774369 мм³). Длина траектории читается GetPathLength(1) ПОСЛЕ построения: тот же вызов до Create() отвечал нулём, и это был дефект прибора, а не факт о продукте. ПРАВКА ВХОДА не выражается ни одним из двух хранилищ, и это измерено на ОБОИХ (шаги B5.15 и B5.22): SetSketch определения API5 принят и не применён; запись в документированное свойство API7 IEvolution.Sketch (объявленный тип KompasAPI7.IModelObject) принята, Update() = true и тоже не применена; запись в ОБА хранилища подряд - не применена; запись ДО первого обращения к API7 - тоже не применена, причём держатель траектории перечисляет подставленный эскиз, то есть запись ДОШЛА. Признак при этом жив, и прибор видит изменения: правка режима применяется и через определение, и через хранилище API7 (15707.963267948984), поэтому «не применено» отличимо от «признак умер». Имя сечения через свойство API7 прибором НЕ ПРОЧИТАНО (значение приходит как System.__ComObject, и ни прямой, ни обратный перенос не даёт ksEntity) - это названный предел прибора, а не факт о продукте, и «не применено» доказано объёмом, а не именем. Поэтому вход строки читается, но не перепривязывается, а sketch_ref отвергается по имени.
-**Документированные интерфейсы и члены:**
-- `ksPart.NewEntity(45 = o3d_baseEvolution)` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kspart_newentity.html>
-- `ksBaseEvolutionDefinition (состав интерфейса)` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksbaseevolutiondefinition.html>
-- `ksBaseEvolutionDefinition.SetSketch` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksbaseevolutiondefinition_setsketch.html>
-- `ksBaseEvolutionDefinition.sketchShiftType` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksbaseevolutiondefinition_sketchshifttype.html>
-- `ksBaseEvolutionDefinition.PathPartArray → ksEntityCollection` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksbaseevolutiondefinition_pathpartarray.html>
-- `ksBaseEvolutionDefinition.GetPathLength` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksbaseevolutiondefinition_getpathlength.html>
-- `ksEvolutionShiftSketchTypeEnum (0/1/2)` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksevolutionshiftsketchtypeenum.html>
-- `ksEntity.Create` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksentity_create.html>
-- `ksEntityCollection.Add` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksentitycollection_add.html>
-- `Obj3dType: o3d_baseEvolution = 45` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/obj3dtype.html>
-- указатель (не подтверждение маршрута): `IEvolution` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ievolution.html>
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Подтверждено** - маршрут целиком лежит на документированных интерфейсах и членах
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `dep.paths.flat` | 3/10 verified; открыты: `discover`, `edit`, `rebuild`, `save_reopen`, `suppress_restore`, `delete_dependencies`, `geometry_validation` | 3 строк · PASS · `303ccf6c` | Покрыто проверками | - |
-
-### PATTERN - Массивы: по сетке, круговой (концентрический), зеркальный - зависимости
-**Инструмент:** `kompas_get_pattern`, `kompas_pattern_circular`, `kompas_pattern_grid`, `kompas_pattern_mirror`.
-**Место в коде:** `src/KompasMcp.Api5Adapter/Api5Session.Pattern.cs — создание`; `src/KompasMcp.Api5Adapter/Api5Session.PatternEdit.cs — правка, чтение`; `src/KompasMcp.Api5Adapter/Api7/Api7Pattern.cs — мост API7 (ILinearPattern / ICircularPattern / IMirrorPattern)`.
-**Существенные условия:** Массив создаётся через IModelContainer.FeaturePatterns.Add(ksObj3dTypeEnum) и приведение QI к ILinearPattern / ICircularPattern / IMirrorPattern; типизированный вызов, не отражение. ИЗМЕРЕНО ПРОГОНОМ 20.09.2026: у копирования ТЕЛ СВОЙ номер типа в дереве - o3d_BodiesMeshCopy=528 и o3d_BodiesCircularCopy=529, отличный от копирования ОПЕРАЦИЙ (o3d_meshCopy=35, o3d_circularCopy=36); отображение у них ОДНО («Массив по сетке:1»), поэтому различает только тип. Область действия SaveInitialObjects ограничена справкой: свойство работает ТОЛЬКО для o3d_mirrorAllOperation, у прочих операций зеркального копирования возможность скрыть экземпляры отсутствует - проверено на операции 48 (запись false читается обратно true, геометрия не меняется). Углы задаются nullable и пишутся ТОЛЬКО когда переданы: запись нуля вместо неуказанного угла уничтожает умолчание модели. Angle2 - угол МЕЖДУ направлениями сетки (90° прямоугольная, 0° вырождает сетку в линию), Angle1 отводит направление от построенной оси.
-**Документированные интерфейсы и члены:**
-- `IModelContainer.FeaturePatterns / IFeaturePatterns.Add` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ifeaturepatterns_add.html>
-- `IFeaturePattern` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ifeaturepattern.html>
-- `IFeaturePatterns` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ifeaturepatterns.html>
-- `ILinearPattern (свойства)` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ilinearpattern_props.html>
-- `ICircularPattern (свойства)` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/icircularpattern_props.html>
-- `IMirrorPattern (свойства)` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/imirrorpattern_props.html>
-- `IMirrorPattern.SaveInitialObjects` - <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/imirrorpattern_saveinitialobjects.html>
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Подтверждено** - маршрут целиком лежит на документированных интерфейсах и членах
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `dep.pattern.associativity` | 4/10 verified; открыты: `discover`, `create`, `read`, `suppress_restore`, `delete_dependencies`, `negative_tests` | 45 строк · PASS · `303ccf6c` | Покрыто проверками | - |
-
-### None - зависимости
-**Инструмент:** не опубликован.
-**Источник:** справка SDK КОМПАС-3D v24 (сборка 24.0.0.2799), ссылки выше; маршрут - из `coverage/solid-v24/matrix.json` и исходников адаптера.
-**Оценка документации:** **Не подтверждено** - строка не отнесена к проверенному семейству: маршрут в коде не заявлен, поэтому документированность МАРШРУТА не подтверждена и не опровергнута
-
-| Режим (строка матрицы) | Действия | Проверка и хеш поставки | Реализация | Необходимое исправление |
-|---|---|---|---|---|
-| `dep.assembly.document_lifecycle` | 10/10 verified | 12 строк · PASS · `303ccf6c` | Покрыто проверками | - |
-| `dep.assembly.source_file` | 10/10 verified | 12 строк · PASS · `303ccf6c` | Покрыто проверками | - |
-| `dep.assembly.component_address` | 10/10 verified | 12 строк · PASS · `303ccf6c` | Покрыто проверками | - |
-| `dep.assembly.revisions` | 10/10 verified | 8 строк · PASS · `303ccf6c` | Покрыто проверками | - |
-| `dep.assembly.idempotency` | 10/10 verified | 5 строк · PASS · `303ccf6c` | Покрыто проверками | - |
-| `dep.mate.object_address` | 10/10 verified | 3 строк · PASS · `303ccf6c` | Покрыто проверками | - |
-| `dep.mate.component_insert` | 10/10 verified | 4 строк · PASS · `303ccf6c` | Покрыто проверками | - |
-| `dep.mate.revisions` | 10/10 verified | 3 строк · PASS · `303ccf6c` | Покрыто проверками | - |
-| `dep.mate.idempotency` | 10/10 verified | 3 строк · PASS · `303ccf6c` | Покрыто проверками | - |
-| `dep.mate.save_reopen` | 10/10 verified | 2 строк · PASS · `303ccf6c` | Покрыто проверками | - |
-
-## 5. Находки
-
-### F-01 - исправленный дефект продукта (мёртвая ветка удалена)
-
-**Существо.** `Api5Session.PlanarNormal` строит отражённый вызов `GetNormal` только для сигнатур с 0 или 2 параметрами, тогда как документированная сигнатура `ksSurface.GetNormal(paramU, paramV, out x, out y, out z)` имеет пять параметров (две входные величины и три выходные). Для документированной сигнатуры ветка всегда возвращает null.
-
-**Класс и вес.** исправленный дефект продукта (мёртвая ветка удалена); была низкой - на результат не влияла; исправлено.
-
-**Где.** `было: src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs, PlanarNormal (~3052–3072); после исправления `PlanarNormal` в исходниках отсутствует`
-
-**Документация.** <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/kssurface_getnormal.html>; <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksfacedefinition_getsurface.html>
-
-**Ожидание.** нормаль плоской грани читается документированным GetNormal
-
-**Наблюдено.** ИСПРАВЛЕНО: отражённая ветка `PlanarNormal` и её точки вызова удалены, остался типизированный `SurfaceNormalAtMiddle`. Прибором с установленным типом получателя подтверждено: `ksSurface.GetNormal(Double paramU, Double paramV, out Double& x, out Double& y, out Double& z)` - ОДНА точка вызова (`Api5Session.Geometry.cs:3033`), `PlanarNormal` в маршрутах не встречается
-
-**Затронутые инструменты.** `kompas_hole`, `kompas_measure`, `kompas_read_topology`
-
-**Что исправлять.** исправлено в наряде 20.09.2026: ветка удалена (выбран второй из двух названных путей - удаление, потому что недостижимая ветка читается как существующий маршрут). Проверки «на отсутствие метода» не заводилось: её отсутствие не является измерением поведения
-
-### F-02 - исправленный дефект продукта (мёртвая ветка удалена, состояние сохранённости отделено от ревизии)
-
-**Существо.** `Api5Session.IsDirty` ищет отражением член `IsSaved` у `ksDocument3D`. Этого члена нет ни в официальной справке SDK v24, ни в interop установленной версии, поэтому `GetMethod("IsSaved")` всегда возвращает null и ветка недостижима. Состояние «документ изменён» обеспечивается сравнением отпечатка, то есть заявленный маршрут не существует, а результат получается другим.
-
-**Класс и вес.** исправленный дефект продукта (мёртвая ветка удалена, состояние сохранённости отделено от ревизии); была низкой - работал отпечаток; исправлено.
-
-**Где.** `было: src/KompasMcp.Api5Adapter/Api5Session.cs:613–634; после исправления член `IsSaved` в продукте отсутствует`
-
-**Измерено.** в зеркале справки (2175 страниц) страниц с `IsSaved` - 0; в `docs/compatibility/kompas-api5-metadata.json` - 0 вхождений; в `Interop.Kompas6API5.dll` (D:\Programs\KOMPAS-3Dv24\Libs\PolynomLib\Bin\Client) строка `IsSaved` отсутствует, `IsDetail` присутствует
-
-**Ожидание.** признак сохранённости документа берётся документированным членом
-
-**Наблюдено.** ИСПРАВЛЕНО: отражённый `IsSaved` из продукта удалён. Состояние сохранённости ведётся отдельным состоянием `DocumentSaveState {Clean, Dirty, Unknown}` (`src/KompasMcp.Domain/Documents/DocumentSaveTracking.cs`) и отделено от состояния ревизии: мутация, чтение контекста и подъём ревизии сохранённость НЕ объявляют, а подтверждается она успешным сохранением с ПЕРЕЧИТЫВАНИЕМ файла. Признак CAD под тест не сбрасывался. Измерено на поставке 20.09.2026 группой DL (12 строк, 33 проверки, FAIL 0): `close(refuse)` даёт `DOCUMENT_DIRTY` и документ остаётся доступен; `close(save)` переживает переоткрытие; `close(discard)` теряет правку; неудачное сохранение (`SAVE_FAILED`) не очищает состояние; документ без пути не даёт ложного успеха. Обработка ошибки чтения состояния проверена управляемым швом: `DocumentSaveState.Unknown` не выдаётся за `Clean` и при политике `refuse` закрытие ОТКЛОНЯЕТСЯ, а не разрешается
-
-**Затронутые инструменты.** `kompas_close_document`, `kompas_save_document`, `kompas_get_context`
-
-**Что исправлять.** исправлено в наряде 20.09.2026: ветка удалена, состояние сохранённости отделено от ревизии, поведение закрытия доказано СОДЕРЖИМЫМ файла и объёмом после переоткрытия, а не отсутствием исключения
-
-### F-03 - состояние объёма будущей работы (не дефект)
-
-**Существо.** Обязательный объём профиля не закрыт: часть режимов и зависимостей профиля лежит на уровне `metadata_found`. Строки SM-01.primitive_box, SM-04.boss, SM-15.union.mode_save_base_copy не реализованы - это ПЛАН, а не текущий дефект, и живой проверки в этом аудите они не требуют.
-
-**Класс и вес.** состояние объёма будущей работы (не дефект); -.
-
-**Где.** `coverage/solid-v24/matrix.json`
-
-**Ожидание.** у каждой ОПУБЛИКОВАННОЙ возможности есть приёмочная запись
-
-**Наблюдено.** у каждой закрытой строки есть запись и доказательство; строки плана названы планом и не выдаются за реализованные
-
-**Что исправлять.** не требуется: это состояние объёма будущей работы. Удаление таких строк подняло бы готовность без реализации и потому запрещено
-
-### F-04 - названная граница непубликуемого поля (не дефект)
-
-**Существо.** `reposition_axis_point_mm` не читается и не публикуется, и это ОБОСНОВАННАЯ граница, а не «не прочитано». Документированного члена для точки оси поворота в цепочке `IBodyReposition → ILocalCoordinateSystem → ILocalCSEulerParam / IPoint3DParamDisplace` нет: поворот вокруг любой точки одной прямой даёт то же размещение, поэтому точка оси не является свойством размещения.
-
-**Класс и вес.** названная граница непубликуемого поля (не дефект); -.
-
-**Где.** `src/KompasMcp.Api5Adapter/Api7/Api7Bridge.cs — ReadPlacement`
-
-**Документация.** <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ibodyreposition_propers.html>; <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ilocalcoordinatesystem_props.html>; <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ipoint3d_props.html>; <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ilocalcseulerparam_props.html>; <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ipoint3dparamdisplace_props.html>
-
-**Ожидание.** чтение размещения документированными параметрами
-
-**Наблюдено.** чтение есть и переживает переоткрытие; точка оси не читается, и поле не публикуется
-
-**Затронутые инструменты.** `kompas_get_feature`, `kompas_update_feature`
-
-**Что исправлять.** не требуется: поле остаётся названным непубликуемым. Публиковать представитель прямой под именем входного параметра значило бы подменить параметр операции его следствием, а новое требование читать эту точку не создаётся
-
-### F-05 - исправленный дефект доказательств (не дефект продукта)
-
-**Существо.** Прежний отчёт приписывал строке `S02` исполнение инструмента `kompas_list_documents`. Измерено: `S02` (`scripts/mcp-smoke.py`) проверяет ТОЛЬКО `tools/list`, перечисления документов в ней нет, поэтому утверждение о работе инструмента во всех 12 групповых прогонах было ложным.
-
-**Класс и вес.** исправленный дефект доказательств (не дефект продукта); -.
-
-**Где.** `scripts/mcp-smoke.py — строки S02b / S02c / S02d; coverage/solid-v24/matrix.json`
-
-**Измерено.** `scripts/mcp-smoke.py` - S02 собирает список имён инструментов; `scripts/mcp-attach-test.py:143` вызывает `kompas_list_documents` через присоединённый сеанс, но это отдельная диагностика, а не отчёт приёмки поставки; в отчётах групп строки с этим инструментом не было
-
-**Ожидание.** у каждого опубликованного инструмента есть проверка с наблюдаемым результатом
-
-**Наблюдено.** проверка разделена на ДВЕ половины, исполняемые в одной постановке. `S02b` (контрактная): вызов без обязательного `application_id` отвергается кодом INVALID_ARGUMENT - исполняется до сеанса, поэтому работает и в `--contract-only`. `S02c`/`S02d` (поведенческие): на живом сеансе маршрут отвечает списком, а запись несёт id/kind/revision - `S02c` сразу после connect (список законно пуст), `S02d` после создания документа (запись обязана быть). Первая редакция строки падала ВСЕГДА из-за собственного дефекта: `is_err` - boolean `isError`, а сравнивался с None; измерено на поставке 20.09.2026 (S02c/S02d FAIL при err=None и верной записи). Ложное утверждение о `S02` снято
-
-**Затронутые инструменты.** `kompas_list_documents`
-
-**Что исправлять.** исправлено в этом наряде: строки S02b/S02c/S02d, привязка инструмента к семейству жизненного цикла документа (снят пункт «инструмент без строки матрицы»); кроме того снято неоднозначное сопоставление проверок по `startswith` и разделены метрики схемы (имена свойств и значимая форма)
-
-### F-06 - исправленный дефект прибора аудита
-
-**Существо.** Прежний инвентарь COM-членов отбирал вызовы регулярным выражением по ИМЕНИ члена и сверял имя со словарём метаданных, НЕ определяя тип получателя. Измеренный ложный случай: `com_members[member=Add]` указывал на `Api5Session.Chamfer.cs:164,172`, где `checks.Add(...)` - вызов `List<NamedCheck>`, и подкреплялся страницами COM-коллекций. Совпадение имён выдавалось за проверку маршрута.
-
-**Класс и вес.** исправленный дефект прибора аудита; высокая - прибор подтверждал несуществующий маршрут.
-
-**Где.** `scratch/_audit_inventory.py — com_usage; заменено на scratch/_com_routes.py`
-
-**Измерено.** новый прибор разрешает цепочку по объявлениям (параметры, поля, локальные, приведение, `as`/`is`, `foreach`, вывод `var`, `out var`) и берёт сигнатуру и вид доступа из метаданных interop; `List.Add` отнесён к собственным получателям
-
-**Ожидание.** маршрут подтверждается типом получателя, а не совпадением имени
-
-**Наблюдено.** измерено: 204 маршрута (API5 111 / API7 93) против 128 совпадений по имени; 697 обращений к собственным получателям исключены из таблицы COM
-
-**Что исправлять.** исправлено в этом наряде: scratch/_com_routes.py; счёт совпадений по имени сохранён отдельно и назван подготовкой
-
-### F-07 - исправленный дефект прибора аудита
-
-**Существо.** Размещение описывалось как `IPosition.OrientationType / LocalCSParameters / ParameterType / Parameters`. Интерфейса `IPosition` в API7 НЕТ: в индексе `Interop.KompasAPI7` такого имени нет (есть только `IPositionLeader`). Свойства объявлены иначе: `OrientationType` - на `ILocalCoordinateSystem`, `ParameterType` и `Parameters` - на его БАЗОВОМ `IPoint3D`, параметры режимов берутся с `ILocalCoordinateSystem.LocalCSParameters` и `IPoint3D.Parameters`.
-
-**Класс и вес.** исправленный дефект прибора аудита; средняя - владелец маршрута был назван несуществующим интерфейсом.
-
-**Где.** `scratch/_build_api_compliance.py — семейство SM-17; scratch/_com_routes.py`
-
-**Документация.** <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ilocalcoordinatesystem.html>; <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ilocalcoordinatesystem_props.html>; <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ipoint3d.html>; <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ipoint3d_props.html>; <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ilocalcseulerparam_props.html>; <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ipoint3dparamdisplace_props.html>
-
-**Измерено.** справка v24 задаёт иерархию `IDispatch → IKompasAPIObject → IPoint3D → ILocalCoordinateSystem`; `OrientationType` перечислен на странице свойств `ILocalCoordinateSystem`, `ParameterType` и `Parameters` - на странице свойств `IPoint3D`; переходы к параметрам режимов описаны на страницах интерфейсов `ILocalCSEulerParam` и `IPoint3DParamDisplace`
-
-**Ожидание.** владелец члена называется фактическим интерфейсом с учётом наследования
-
-**Наблюдено.** владельцы исправлены; наследованные члены помечены (`IPoint3D.ParameterType`), переходы описаны парой «свойство → интерфейс»
-
-**Затронутые инструменты.** `kompas_reposition`, `kompas_get_feature`, `kompas_update_feature`
-
-**Что исправлять.** исправлено в этом наряде: семейство SM-17 и подробная таблица маршрутов
-
-### F-08 - названный пробел трассируемости доказательств (не дефект продукта)
-
-**Существо.** Строка матрицы заявляет десять действий и их статусы, а отчёт приёмки объявляет имена строк и вердикты; прямой сверки между ними не было, и `implementation.status` выводился из `catalog_level` и наличия хотя бы одного PASS. Связь «действие → проверка» записана по действиям только у семейства B3 (строки `B3M.<режим>.<действие>`, 10 из 10 на режим); у остальных семейств она записана «предметно» (`G01`, `HO.1`, `FL01`), и по имени строки действие не восстанавливается.
-
-**Класс и вес.** названный пробел трассируемости доказательств (не дефект продукта); средняя - статус строки опирался на ярлык действия, а не на доказательство под ним; измерена тремя независимыми сверками и двумя приборами 20.09.2026.
-
-**Где.** `scripts/mcp-smoke.py — журнал вызовов и окна строк (`CALL_LOG`, `calls_window`); scratch/_build_api_compliance.py — verify_claimed_actions(), derive_actions(), calls_calibration(); scratch/_f08_link_gap.py, scratch/_f08_candidate_ownership.py — разбор остатка; coverage/solid-v24/matrix.json`
-
-**Измерено.** scratch/mcp-smoke/delivery-core-c1-c2-20261005/*.json - журнал вызовов ПО КАТАЛОГУ ОТЧЁТОВ: 10627 вызовов, 1147 строк приёмки с окном, 508 эпох документа. Полный прогон: 1095 строк, 10392 вызовов, отказов 0 - на бинарях поставки `publish-core-c1-c2-20261005`. Групповые отчёты каталога: `assembly.json` (67 строк, в полном прогоне 21, УНИКАЛЬНЫХ 46) - НЕ подмножество; `mate.json` (55 строк, в полном прогоне 21, УНИКАЛЬНЫХ 34) - НЕ подмножество. Общее число различных ИМЁН строк - 1149 (объединение по идентификаторам; полный прогон даёт 1070 различных имён при 1095 строках - внутри отчёта имена повторяются). Сложение отчётов посчитало бы общие строки дважды. Вызовы каждого отчёта свои и с полным прогоном не складываются.
-
-**Ожидание.** заявленное действие строки подтверждается строкой приёмки, которую можно найти по имени, а не по сходству
-
-**Наблюдено.** сверка ведётся ТРЕМЯ независимыми способами, и все три числа измерены на одной поставке: (1) ПО ИМЕНИ РЕЖИМА, как искал бы рецензент: из 41 строки, заявившей `verified`, у 31 ни одна строка приёмки не называет режим ни идентификатором, ни описанием - находятся только 10 режимов B3; (2) ПО ПРИВЯЗКЕ И ВЫЗОВАМ: у 22 строк есть действие, которого нет в вызовах привязанных проверок; (3) ПО ИМЕНИ СТРОКИ: у 10 строк все действия названы одноимённой строкой, у 31 - нет. Приписок (ни одной разрешившейся ссылки) 0, противоречий (`verified` рядом с FAIL) 0. Числа НАЗВАНЫ отдельными ключами `claimed_actions_check.*`, а не растворены в числе PASS: «ноль отказов» не доказывает непроверенное действие. ОСТАТОК РАЗОБРАН ДО КОНЦА, и это главное измерение наряда: у 23 строк он выглядел как «недостающая привязка», но разбор показал, что привязка недостаёт РОВНО У ОДНОЙ - `SM-02.base_extrusion.blind`, где `G03i` и `G03r` читают признак ТОГО ЖЕ режима (базовое глухое выдавливание 10 мм) и до правки не были привязаны ни к одной строке. У остальных 22 проверки-кандидаты уже принадлежат ДРУГИМ режимам (измерено: 2712 пар «строка × действие» указывают на проверку, привязанную к другой строке; например `edit` скругления лежит в `FL04` у `SM-09.fillet.change_radius_in_place`, а `SM-09.fillet.read_radius_back` его не привязывает), поэтому приписать их значило бы выдать чужое доказательство за своё. Это РАБОТА (проверки для этих режимов либо честное понижение заявленных действий), а не правка отчёта, и она названа, а не закрыта
-
-**Затронутые инструменты.** `kompas_extrude`, `kompas_hole`, `kompas_fillet`, `kompas_chamfer`, `kompas_rotated`, `kompas_create_sketch`, `kompas_edit_sketch`
-
-**Что исправлять.** механизм исправлен и расширен в этом наряде: доказательство теперь измеряется, а не угадывается по имени строки. Прибор получил журнал вызовов, окно на каждую строку и семантическую подпись действия; подпись снабжена положительным контролем (на строках B3M, где действие названо именем строки: 9 действий из 10 выводятся в 10/10 строк) и отрицательным (подпись выполняется и на чужих строках, поэтому вывод по вызовам употребляется как ОТКАЗ, а не как подтверждение). Контроли нашли ЧЕТЫРЕ дефекта самого прибора до публикации: `discover` требовал оба обзора вместо любого; `rebuild` требовал вызова `kompas_rebuild`, тогда как наряд §9.1 определяет действие как проверку перестроения зависимых признаков; подпись считалась по каждой строке отдельно, из-за чего `save_reopen` (сохранение в V07, открытие в V09) не находился ни в одной; привязка по документу отброшена как НЕСОСТОЯТЕЛЬНАЯ - `document_id` есть не у всех вызовов, и она дала бы 75 ложных клеток «не выполнено». ДОПОЛНЕНО 20.09.2026, вторым проходом. (1) Отказ сторожа ТЕПЕРЬ ПОНИЖАЕТ СТАТУС СТРОКИ: `implementation.status` требует не только закрытости по ярлыкам и хотя бы одного PASS, но и того, чтобы вызовы привязанных строк содержали каждое заявленное действие. Прежде этих двух условий хватало, и отчёт говорил «Подтверждено» 21 строке, которой ТА ЖЕ сверка отказывала в заявлении: ярлык читался как доказательство. Число подтверждённых строк поэтому упало 38 → 18 - изменилось ПРАВИЛО ВЫВОДА, а не измерение, и понижение названо отдельным ключом `rows_status_lowered_by_unsupported_actions`. (2) ОСТАТОК РАЗОБРАН ДВУМЯ ПРИБОРАМИ, и он оказался НЕ тем, чем выглядел. `scratch/_f08_link_gap.py` искал проверку-кандидата по вызовам, `scratch/_f08_candidate_ownership.py` спрашивал, КОМУ она принадлежит. Первая редакция прибора считала кандидатом любую строку с нужным инструментом и потому отдавала `edit` строки `L11`/`L12`/`L13` - а они проверяют ОТКАЗ правки; дефект исправлен требованием, чтобы действие ВЫВОДИЛОСЬ из окна. Итог: привязка недостаёт ровно у ОДНОЙ строки (`SM-02.base_extrusion.blind` - `G03i`, `G03r`, привязка добавлена, `coverage/solid-v24/matrix.json` → `meta.f08_linkage_note`), а у остальных 22 проверки-кандидаты принадлежат ДРУГИМ режимам (2712 пар) либо чужим семействам (282) - приписать их было бы припиской чужого доказательства. Остаток - РАБОТА, а не правка отчёта: у 31 строки доказательство надо сделать находимым по имени режима (как `B3M.<NN>.<действие>`), у 22 - либо поставить проверки для этих режимов, либо честно понизить заявленные действия. Открытый пробел назван, а не закрыт переименованием строк и не закрыт дописыванием привязок, которых нет. ЗАКРЫТО 05.10.2026 (наряд `CORE_C1_C2_FULL_COMPLETION_DEVELOPER_PROMPT.md` §5) - ИЗМЕРЕНИЕМ, а не переименованием. (1) Пятнадцать общих зависимостей, у которых ВСЕ обязательные действия были закрыты И подтверждены вызовами, печатались как «Недостаточно проверки» только потому, что у прибора не было ярлыка для НЕреализуемой строки: заведён «Покрыто проверками» с отрицательным контролем (`dependency_verdict_control`). (2) Двадцать три строки блоков C1/C2 получили ПОСТРОЧНЫЕ маршруты `<действие>_route`, объявленные прибором `scratch/_declare_c1c2_routes.py` ТОЛЬКО ПОСЛЕ проверки, что объявленный инструмент лежит в окне строки УСПЕШНЫМ вызовом. (3) Приёмочные строки переработаны так, что строка с именем действия ИСПОЛНЯЕТ его сама: `*.save_reopen` проходит save→close→open в собственном окне (прежде читала результат соседней строки), `geometry_validation` измеряет геометрию (`kompas_measure`), `discover` делает ОТДЕЛЬНЫЙ обзор документов, `delete_dependencies` удаляет сопряжение и восстанавливает состояние. (4) Одна связь осталась ПРЕДМЕТНОЙ - `MATE.01.face_range` для `negative_tests` - и объявлена ЯВНО полем `<действие>_row`, как требует наряд, вместо возврата удалённого дубликата ради совпадения имени. ИЗМЕРЕНО сторожем `scratch/_verify_matrix_claims.py` на поставке `publish-core-c1-c2-20261005`: строк с заявленным `verified` - 94, полностью подтверждённых - 94, названных пробелов - 0, приписок - 0, противоречий - 0. Строк «Недостаточно проверки» - 0 (было 38)
-
-### F-09 - исправленный дефект продукта (знак дуги не доходил до конечного угла)
-
-**Существо.** `DrawSketchEntity` в ветке `SketchEntityKind.Arc` вычислял конечный угол дуги как `start_deg + Math.Abs(sweep_deg)`. Для отрицательного `sweep_deg` конечный угол уезжал на ДРУГУЮ сторону от начального, и ядро строило дугу, отражённую относительно луча `start_deg`, - не ту, которую запросил вызывающий. Схема `kompas_create_sketch` объявляет «Знак задаёт направление», а комментарий рядом с кодом обещал, что знак «must survive the call»: обещание было объявлено и не выполнено, поэтому это дефект, а не граница возможностей. Найден сценарием «Скоба Model Mania 2021» (наряд §3.3): контур скобы содержит четыре ВОГНУТЫЕ стороны R75, и они выражаются только дугами с отрицательным `sweep_deg` - то есть первой же постановкой, где знак был нужен.
-
-**Класс и вес.** исправленный дефект продукта (знак дуги не доходил до конечного угла); высокая для вызывающего - дуга с ОТРИЦАТЕЛЬНЫМ `sweep_deg` строила отражённую геометрию, то есть не ту, которую просили, и молча; исправлено, поставка переиздана, все прогоны пересняты, различающая пара стоит строкой `MANIA.17`.
-
-**Где.** `было: src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs, `DrawSketchEntity`, ветка `SketchEntityKind.Arc` — конечный угол `start + Math.Abs(sweep)`; после исправления концы дуги УПОРЯДОЧЕНЫ: `start + Math.Min(sweep, 0.0)` и `start + Math.Max(sweep, 0.0)`, флаг направления остался `sweep >= 0 ? 1 : 0``
-
-**Документация.** <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument2d_ksarcbyangle.html>
-
-**Измерено.** ИЗМЕРЕНО ДО И ПОСЛЕ ИСПРАВЛЕНИЯ, на двух разных поставках, одним и тем же зондом `scratch/_mania_contour_probe.py`: ДО - поставка `artifacts/publish-b5f08-20260920`, адаптер `1723bf9eba687c43bacc325afac232181111da2e758b5be441672e68696ef3ad`: контур скобы «как есть», с ЗНАКОМ дуг, → `GEOMETRY_FAILED` («Entity.Create() выдавливания вернул false: признак не появился»); тот же точечный набор, выраженный дугами с углами внутри диапазона, → 174799.7403608485 при аналитическом 174799.740134. ПОСЛЕ - поставка `artifacts/publish-core-c1-c2-20261005`, адаптер `3e656699f8e585eb1e53e50db68e1a2ed7de8ab3a0e1baae35eac59d2fe468c6`: ТОТ ЖЕ знаковый контур → V=174799.74036084852, отказ отсутствует (повторный прогон зонда 20.09.2026, вариант V1). Хеши Host и Worker между поставками НЕ менялись (`dd1d7ffe5ea5587345a9575288ffd6a75e69b9d29164970177bb1e57fbae0c6e` и `b0aba49019dc927a0c1534ddcf337cdc1753695ffa4570cc05799f1cebc7b409`), то есть правка лежит ИМЕННО в адаптере, где и была. В прогоне поставки: `scratch/mcp-smoke/delivery-core-c1-c2-20261005/mania.json` - `MANIA.01.create` площадь контура Грин=8739.987007 против сегментов 8739.987007 (расхождение 0.000e+00) и `MANIA.02.create` V=174799.740361 против площадь×20=174799.740134
-
-**Ожидание.** дуга с отрицательным `sweep_deg` строит ТОТ ЖЕ точечный набор, что та же дуга с положительным `sweep_deg` при переставленных концах
-
-**Наблюдено.** ИСПРАВЛЕНО И ПЕРЕПРОВЕРЕНО РАЗЛИЧАЮЩЕЙ ПАРОЙ. Строка `MANIA.17.negative_tests` строит одну и ту же четверть диска R30 двумя способами - дугой (start 0°, sweep +90°) и дугой (start 90°, sweep −90°) - и требует от обеих одного эталона 20·π·30²/4. Измерено: положительный sweep → V=14137.166941154068; отрицательный sweep → V=14137.166941154068; совпадение True. Пара различающая, а не подтверждающая: при дефекте ветвь с отрицательным sweep уходила на другую сторону и совпадения быть не могло. ПОЧЕМУ ДЕФЕКТ ДОЖИЛ ДО СИХ ПОР - измерено, а не предположено: во всей приёмке до появления этой группы `sweep_deg` встречался РОВНО ОДИН раз и всегда положительным (`scripts/mcp-smoke.py`, строка пути sweep B5.2: start −90°, sweep +90°), поэтому отрицательная ветвь не измерялась ни одной строкой. Группа добавила ещё три точки записи, из них четыре дуги контура скобы - с отрицательным sweep. ДАТИРОВАННАЯ ПОМЕТА 20.09.2026, 22:05 - ЧИСЛА ВЫШЕ БЫЛИ ПОЛУЧЕНЫ ЧУЖИМ ИЗМЕРЕНИЕМ. Строка `MANIA.17` в редакции 21:05 строила оба сектора в ОДНОМ документе и читала объём тела `bs[0]`; тела при выдавливании НАКАПЛИВАЮТСЯ, поэтому `bs[0]` оба раза был первым телом, и пара НЕ РАЗЛИЧАЛА НИЧЕГО - она сравнивала тело с самим собой. Значит утверждение «пара различающая» в тот момент было НЕВЕРНО, и подтверждение исправления F-09 этой строкой было приписано. Дефект продукта (F-09) при этом НЕ опровергнут: он измерен ЗОНДОМ `scratch/_mania_contour_probe.py`, который строит по документу на вариант, и там знаковый контур давал `GEOMETRY_FAILED` до правки и 174799.74036084852 после. После исправления прибора (находка F-11, один документ - одно тело) строка измерена заново и даёт РАЗЛИЧИМЫЕ числа: положительный sweep 14137.166941154068, отрицательный 14137.166941154068. Правило: **проверка, читающая «первый элемент» списка, обязана доказать, что элемент ровно один**
-
-**Затронутые инструменты.** `kompas_create_sketch`, `kompas_edit_sketch`
-
-**Что исправлять.** исправлено 20.09.2026 в наряде §3.3/§3.5: концы дуги упорядочены (`Math.Min`/`Math.Max`), флаг направления не тронут. Дефект НЕ замаскирован: поставка переиздана (`artifacts/publish-mania-20260920`), все прогоны пересняты на её бинарниках (группа `mania` 43 строки, полный прогон 1009 строк, отказов 0), утверждение о знаке не понижено. Различающая проверка оставлена в наборе строкой `MANIA.17`, чтобы отрицательная ветвь не осталась непокрытой снова. ДОПОЛНЕНО 20.09.2026, 22:05: САМА ЭТА СТРОКА оказалась дефектом прибора (находка F-11) - она читала объём первого тела при накапливающихся телах и потому не различала ничего; исправлена адресацией «один документ — одно тело», после чего действительно различает. Правило: **оставленная в наборе проверка считается покрытием только после того, как доказано, что она РАЗЛИЧАЕТ, - иначе запись «проверка оставлена» сама становится припиской**
-
-### F-10 - исправленный дефект продукта (объявленный диапазон углов дуги шире выражаемого; первая редакция правки была НЕ аддитивной, и это поймал контроль зонда)
-
-**Существо.** Схема `kompas_create_sketch` объявляет `start_deg` и `sweep_deg` в диапазоне [−720, 720]. Адаптер передаёт в ядро ДВА УГЛА (`ksArcByAngle(xc, yc, rad, f1, f2, direction, style)`), а не пару «начало + размах», и вызов ОТКАЗЫВАЛ, когда конечный угол покидал [−360°, 360°]. То есть объявленный диапазон шире выражаемого, и вызывающий, не выходя за объявленное, получал отказ. Найдено сценарием «Скоба Model Mania 2021» (наряд §3.3/§3.5) как ОТДЕЛЬНЫЙ факт от знака дуги (F-09): отказ пережил исправление знака, поэтому к нему не сводится.
-
-**Класс и вес.** исправленный дефект продукта (объявленный диапазон углов дуги шире выражаемого; первая редакция правки была НЕ аддитивной, и это поймал контроль зонда); средняя - вызывающий, не выходя за объявленный [−720, 720], получал `GEOMETRY_FAILED` без объяснения; исправлено, поставка переиздана, все прогоны пересняты.
-
-**Где.** `src/KompasMcp.Api5Adapter/Api5Session.Geometry.cs, `DrawSketchEntity` (ветка `SketchEntityKind.Arc`) и новый помощник `ArcEndpoints`; объявленный диапазон — artifacts/*/schemas/kompas_create_sketch.json (`start_deg`, `sweep_deg`: `minimum: -720`, `maximum: 720`)`
-
-**Документация.** <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument2d_ksarcbyangle.html>
-
-**Измерено.** ПОРОГ ИЗМЕРЕН РАЗЛИЧАЮЩЕЙ ПОСТАНОВКОЙ, а не выведен: зонд `scratch/_arc_angle_range_probe.py` держит ТОЧЕЧНЫЙ НАБОР неизменным и меняет только числовое представление дуги (аналитический объём у всех проб один - 20·π·30²/4). Измерено на поставке `artifacts/publish-mania-20260920`: R1 (0°, +90°, конец 90°) → 14137.166941; R2 (360°, +90°, конец 450°) → `GEOMETRY_FAILED`; R3 (360°, −90°, конец 270°) → 14137.166941; R4 (270°, +90°, конец 360°) → 14137.166941; R5 (315°, +90°, конец 405°) → `GEOMETRY_FAILED`; R6 (−45°, +90°, конец 45°) → 14137.166941; R7 (−350°, −90°, конец −440°) → `GEOMETRY_FAILED`; R8 (10°, −90°, конец −80°) → 14137.166941. РАЗДЕЛЯЮЩИЕ СЛУЧАИ: R3 (старт РОВНО 360°) и R4 (конец РОВНО 360°) ПРОХОДЯТ, поэтому триггер - не «старт 360» и не «конец 360», а ВЫХОД ЗА ±360°; пары R5↔R6 и R7↔R8 - это один и тот же сектор, записанный двумя способами, то есть отказ принадлежит ПРЕДСТАВЛЕНИЮ, а не геометрии. Сторон ДВЕ (за +360° и за −360°), иначе правило выведено из половины наблюдений. Приведение углов не переистолковывает большие дуги: зонд контура, вариант G - дуга (0°, +270°) даёт 42411.500823 = 20·(270/360)·π·30², то есть ядро соблюдает размах больше 180°, а не берёт меньшую дугу. ПОСЛЕ ПРАВКИ на поставке `artifacts/publish-arcrange-20260920` ВСЕ ВОСЕМЬ проб дают эталон: R2, R5 и R7 перестали отказывать, а R1, R3, R4, R6 и R8 не изменились. Покрытие в приёмке: `mania.json` - `MANIA.17.negative_tests` проверяет ОБЕ стороны (`angle_range_pairs`), сравнивая сектор, записанный углами за пределом, с его двойником внутри диапазона
-
-**Ожидание.** вызывающий, не выходящий за объявленный диапазон `start_deg`/`sweep_deg`, получает ту же геометрию, что и при записи того же сектора углами внутри диапазона
-
-**Наблюдено.** ИСПРАВЛЕНО: углы сдвигаются на целое число оборотов - ровно на столько, чтобы конечный угол вошёл в [−360°, 360°]; размах при сдвиге НЕ меняется, поэтому дуга остаётся той же. Если конечный угол уже внутри диапазона, значения возвращаются как есть. ДЕФЕКТ ПРИБОРА, ПОЙМАННЫЙ КОНТРОЛЕМ, А НЕ РАССУЖДЕНИЕМ: первая редакция правки передала в ядро `first, second` (начало, конец) вместо прежних `Min`/`Max` - и пробы с ОБОИМИ углами внутри диапазона, которых правка не должна касаться, поменяли результат: R8 дал 42411.500823 вместо 14137.166941, R3 - то же. То есть ПОРЯДОК ДВУХ УГЛОВ НЕСУЩИЙ: при отрицательном sweep прежний код подавал меньший угол первым. Утверждение «правка аддитивна» стояло в комментарии ДО того, как стало верным; верным его сделал возврат `Min`/`Max`. ДОПОЛНЕНО 20.09.2026, 22:05 - ПОСЛЕДНЯЯ ВЕТВЬ ТЕПЕРЬ ИЗМЕРЕНА, а не названа неизмеренной: случай `|sweep_deg| > 360` с конечным углом ВНУТРИ диапазона (например старт −180°, sweep +400° - то, чего правка НЕ касается, потому что она сдвигает углы, но размах не меняет) ОТКАЗЫВАЕТ ИМЕНОВАННО и ДО COM: `INVALID_ARGUMENT`, «Эскиз не прошёл проверку (sweep_deg): Дуга не может перекрыть 400 градусов». Измерено зондом `scratch/_arc_sweep_over_turn_probe.py` на поставке `publish-arcrange-20260920`, восемь проб: B1 (0°,+90°) 14137.166941; B2 (0°,+270°) 42411.500823; B3 (0°,+360°) 56548.667764616344 - полный круг; B4 (−180°,+360°) 56548.667764616344 - тот же полный круг с другого старта, то есть запись полного оборота от старта НЕ зависит; B5/B6 (0°,+400° и −180°,+400°) и B7/B8 (0°,−400° и 10°,−370°) - все четыре `INVALID_ARGUMENT`. Пары B5↔B6 и B7↔B8 различающие по ПРЕДСТАВЛЕНИЮ: первое написание правка сдвигает, второе не трогает, и отказ ОДИНАКОВ, значит поведение не зависит от того, сработала ли правка. Схема при этом объявляет `sweep_deg` до ±720°, то есть объявленный диапазон ШИРЕ принимаемого - но расхождение закрыто ИМЕНОВАННЫМ отказом с названной величиной, а не молчанием и не подменой геометрии; поэтому это граница ОБЪЯВЛЕНИЯ (находка F-11), а не дефект поведения. `start_deg` вне ±720 отказывает на уровне контракта: «Значение 800 больше допустимого 720» - то есть у `start_deg` объявление и приём СОВПАДАЮТ, и расходится только `sweep_deg`. Схема НЕ сужена, и причина названа честно: сузить её запрещает §5 наряда, а не отсутствие измерения, - в отличие от прежней редакции, где причина была именно в неизмеренности
-
-**Затронутые инструменты.** `kompas_create_sketch`, `kompas_edit_sketch`
-
-**Что исправлять.** исправлено 20.09.2026 в наряде §3.5: добавлен `ArcEndpoints`, приводящий конечный угол в выражаемый диапазон; порядок аргументов `Min`/`Max` СОХРАНЁН. Поставка переиздана (`artifacts/publish-arcrange-20260920`), все прогоны пересняты на её бинарниках (группа `mania` 43 строки, полный прогон 1009 строк, отказов 0), зонд повторён - 8 проб из 8. Правило, выведенное здесь: АДДИТИВНОСТЬ ПРАВКИ ДОКАЗЫВАЕТСЯ КОНТРОЛЕМ НА ВХОДАХ, КОТОРЫХ ПРАВКА НЕ КАСАЕТСЯ, а не рассуждением о её ветках. Зонд получил эту проверку как обязательную: без неё две испорченные пробы выглядели бы исправленными. ДОПОЛНЕНО 22:05: ветвь `|sweep_deg| > 360` доведена до измерения и до ПРИЁМКИ - строка `MANIA.17.negative_tests` проверяет теперь и знак, и конечный угол за ±360°, и полный оборот с разных стартов, и размах больше оборота (см. F-11 о том, почему прежняя редакция этой строки ничего не различала)
-
-### F-11 - исправленный дефект прибора ПРИЁМКИ (строка `MANIA.17` читала объём ПЕРВОГО тела документа при накапливающихся телах и проходила, не различая ничего; объявленный диапазон `sweep_deg` шире принимаемого - расхождение ОБЪЯВЛЕНИЯ)
-
-**Существо.** ДВЕ ЧАСТИ, обе измерены 20.09.2026. (1) ДЕФЕКТ ПРИБОРА ПРИЁМКИ. Строка `MANIA.17.negative_tests` строила все секторы в ОДНОМ документе и после каждого выдавливания читала объём тела `bs[0]` - ПЕРВОГО в списке. Выдавливание `operation: base` ДОБАВЛЯЕТ тело, поэтому `bs[0]` навсегда остаётся первым: ОБЕ половины «различающей пары» измеряли ОДНО И ТО ЖЕ тело, и строка проходила, не различая ничего. Обнаружено при попытке расширить строку на полный оборот: новая проба вернула объём четверти диска там, где обязан был получиться полный круг. (2) РАСХОЖДЕНИЕ ОБЪЯВЛЕНИЯ. Схема `kompas_create_sketch` объявляет `sweep_deg` в [−720, 720], а принимается (−360°, 360]: размах больше полного оборота отказывает. У `start_deg` объявление и приём совпадают (вне ±720 отказ на уровне контракта), то есть расходится ТОЛЬКО `sweep_deg`.
-
-**Класс и вес.** исправленный дефект прибора ПРИЁМКИ (строка `MANIA.17` читала объём ПЕРВОГО тела документа при накапливающихся телах и проходила, не различая ничего; объявленный диапазон `sweep_deg` шире принимаемого - расхождение ОБЪЯВЛЕНИЯ); высокая по последствиям доказательства: строка приёмки ЗАЯВЛЯЛА различение, которого не делала, то есть подтверждала исправление F-09 и F-10 чужим измерением; дефект продукта при этом отсутствует - поведение продукта корректно.
-
-**Где.** `прибор: `scripts/mcp-smoke.py`, строка `MANIA.17.negative_tests` (помощник `probe_sector`); объявление: `artifacts/*/schemas/kompas_create_sketch.json`; приём: `src/KompasMcp.Domain/Geometry/SketchValidation.cs:48-51``
-
-**Документация.** <https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ksdocument2d_ksarcbyangle.html>
-
-**Измерено.** (1) Измерено зондом `scratch/_mania_body_addressing_probe.py` (поставка `publish-arcrange-20260920`): три сектора 90°/180°/270° в одном документе дают тел 1 → 2 → 3 с объёмами по индексам 14137.166941 / 28274.333882 / 42411.500823, а `bs[0]` на ВСЕХ трёх шагах равен 14137.166941 - то есть прежняя строка читала первое тело трижды. Ссылка на тело не годится и как адрес между вызовами: измерено, что набор ссылок в новом перечислении не совпадает со старым (в «новых» оказывались ВСЕ тела, 2 и 3 штуки). ИСПРАВЛЕНО адресацией, которая не угадывается, а обеспечивается: ОДИН ДОКУМЕНТ - ОДНО ТЕЛО; помощник отказывается измерять, если тел не ровно одно («тел не одно: N»). После правки строка даёт РАЗЛИЧАЮЩИЕСЯ числа: положительный sweep 14137.166941154068, отрицательный 14137.166941154068, сторона «+360°» 14137.166941154068 против 14137.166941154068, сторона «−360°» 14137.166941054347 против 14137.166941054347 (у сторон РАЗНЫЕ последние цифры - признак того, что тела действительно разные, а не одно и то же), полный круг 56548.667764616344 на обоих стартах и обоих знаках. (2) Измерено зондом `scratch/_arc_sweep_over_turn_probe.py`: (0°, +360°) и (−180°, +360°) дают 56548.667764616344 = π·R²·h; (0°, +400°), (−180°, +400°), (0°, −400°), (10°, −370°) дают `INVALID_ARGUMENT` «Дуга не может перекрыть N градусов»; (800°, +90°) и (−800°, +90°) дают `INVALID_ARGUMENT` «Аргументы не прошли контракт: Значение 800 больше допустимого 720». Покрытие в приёмке после правки: `mania.json` - `MANIA.17.negative_tests` несёт `angle_range_pairs`, `full_circle_pairs` и `over_turn_pairs`
-
-**Ожидание.** строка приёмки измеряет ИМЕННО то тело, которое создала проверяемая операция, и разные написания одного сектора дают различимые измерения; объявленный диапазон поля совпадает с принимаемым
-
-**Наблюдено.** ИСПРАВЛЕНО (1): адресация тела обеспечивается постановкой (один документ - одно тело), а не выбором элемента списка; помощник отказывается измерять при числе тел, не равном одному, - «одно слово для „пусто“ и „не прочитано“» здесь применено к «одно тело / не одно». Строка переизмерена на поставке `publish-arcrange-20260920`: группа `mania` **43 PASS / 0 FAIL**, полный прогон **1009 PASS / 0 FAIL**. НАЗВАНО, НЕ ИСПРАВЛЕНО (2): объявленный `sweep_deg` шире принимаемого; схема НЕ сужена, потому что §5 наряда запрещает править схемы опубликованных инструментов. Это НЕ технический долг и не отложенная возможность: это расхождение объявления, названное с измеренным порогом, и закрыть его может только наряд, которому разрешено трогать схемы. Молчания нет: вызывающий получает отказ с названной величиной
-
-**Затронутые инструменты.** `kompas_create_sketch`, `kompas_edit_sketch`
-
-**Что исправлять.** часть (1) исправлена 20.09.2026, 21:55: `scripts/mcp-smoke.py`, помощник `probe_sector` - один документ на пробу, отказ измерять при числе тел ≠ 1; группа и полный прогон пересняты на бинарниках поставки `publish-arcrange-20260920` (`src/` НЕ менялся, поэтому поставка та же и переиздание не требуется - измерено: адаптер в поставке байт в байт равен свежей сборке). Правило, выведенное здесь: **адрес объекта, который измеряет проверка, ОБЕСПЕЧИВАЕТСЯ постановкой, а не угадывается по индексу в списке; проверка, читающая „первый элемент“, обязана доказать, что элементов ровно один.** Часть (2) НЕ исправляется в этом наряде по прямому запрету §5 и названа открытой
-
-### F-12 - исправленный дефект ПРИБОРА (проба штампа объявляла круговорот запись→чтение доказательством записи)
-
-**Существо.** Прежняя запись утверждала, что запись в ячейку основной надписи ПОДТВЕРЖДАЕТСЯ перечитыванием: «запись в `IStamp.Text(id).Str` возвращается тем же свойством после `Update()`, id=1 читается обратно как записанный текст». Измерено на живом КОМПАС v24 (06.10.2026): это НЕВЕРНО. Присвоение `IStamp.Text(id).Str` НЕ меняет то, что возвращает ТО ЖЕ свойство. Ячейка `id=6` в свежем ассоциативном чертеже РЕАЛЬНА (по умолчанию читается `'1:1'`), прочие номера 1..100 читаются пустыми; но после записи `'ZZTOP'`, `'1'`, `'KompasMCP'` ячейка 6 по-прежнему читается `'1:1'`. Класс ошибки — тот же, что `4/tan`: прибор описал себя, а не объект. Проба, вероятно, писала и читала ячейку, чьё значение по умолчанию совпало с присвоенным, и объявила круговорот доказательством. Это дало ЛОЖНЫЙ PASS, который и был целью замечания R3 повторного ревью.
-
-**Класс и вес.** исправленный дефект ПРИБОРА (проба выдавала круговорот запись→чтение за доказательство записи, хотя маршрут записи перечитыванием не подтверждается); высокая по последствиям доказательства.
-
-**Где.** `прибор: `scripts/mcp-smoke.py`, строка `DRW-04.title_block.set.create`; разведка: `scratch/_probe_stamp_cells.py`; сообщение продукта: `src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs` (`SetTitleBlock`, `unverified_aspects`)``
-
-**Документация.** `istamp_text.html` (`Text(Id)` - только чтение, возвращает `IText`), `itext_str.html` (`Str` - чтение/запись), `istamp_update.html` (`Update()` - «применить заданные параметры»). Числовые номера ячеек справкой НЕ документированы.
-
-**Измерено.** Разведка на живом КОМПАС v24, свежий ассоциативный чертёж, ids 0..100: реальная ячейка одна (`id=6`, по умолчанию `'1:1'`), все прочие читаются пустыми; запись значений у `id=6` НЕ отражается в перечитывании (`'1:1'` до и после). Чистый живой прогон DRW на поставке `artifacts/publish-drawings-rework-20261006` (`scratch/drw-runs/20261006-rework3/drawing-acceptance.json`): `DRW-04.title_block.set.create` - **FAIL** (`cell=6 default='1:1' write='KompasMCP' read_back='1:1' matched=0/1 запись_подтверждена=False`); `DRW-04.title_block.set.save_reopen` - **PASS** (`'1:1'` до закрытия = `'1:1'` после, без дозаписи).
-
-**Ожидание.** запись величины выдерживает круг «присвоить → перечитать тем же свойством»; проверка сохранности при переоткрытии сравнивает ПРЕДЫДУЩЕЕ ЧТЕНИЕ, а не задуманный текст.
-
-**Наблюдено.** ИСПРАВЛЕНО: строка ВЫБИРАЕТ ячейку ОСМОТРОМ (первая непустая из ids 1..10), объявляет запись НЕПОДТВЕРЖДЁННОЙ и держится FAIL — положительную строку ставить нечем, и это НАЗВАНО. `save_reopen` переведена на сравнение предыдущего ЧТЕНИЯ с переоткрытым (маршрутом только для чтения `kompas_get_title_block`, без ожидаемого значения) и теперь PASS. Ошибочные формулировки в комментариях адаптера («read route DOES work») заменены измеренным; `docs/decisions/drawings.md#stamp-cells` исправлен.
-
-**Затронутые инструменты.** `kompas_set_title_block`, `kompas_get_title_block`
-
-### F-13 - исправленный дефект ПРИБОРА И КОДА (конвертер брали по `Type.Missing`, переименованный контейнер проходил за DXF/DWG)
-
-**Существо.** Прежняя редакция брала `IApplication.Converter` по `Type.Missing` и вызывала
-`GetFilter(KompasDocumentTypes.Drawing, true, out formatCode)`, ЗАТИРАЯ подготовленный литерал формата
-выходным параметром. Измерено на живом КОМПАС v24 (06.10.2026): при `Type.Missing` `GetFilter` для
-всех типов документов возвращает `command=0` и пустой фильтр; `Convert` идёт по пустой команде, и
-КОМПАС сохраняет НАТИВНЫЙ документ (`.cdw`, PK-контейнер) под именем `.dxf`/`.dwg`. Прибор же считал
-непустой файл успехом и печатал PASS — это и был дефект R1 повторного ревью: переименованный контейнер
-проходил за выгрузку.
-
-**Класс и вес.** исправленный дефект ПРИБОРА И КОДА (ложный PASS на неправильном формате); высокая по
-последствиям доказательства.
-
-**Где.** `код: `src/KompasMcp.Api5Adapter/Api5Session.Drawings.cs` (`ExportDrawing`, `TryResolveExportFormat`, `DetectDxfSignature`, `DetectDwgSignature`); контракт: `src/KompasMcp.Contracts/DrawingCommands.cs` (`ExportDrawingResult.ConvertResult`); правило формы: `src/KompasMcp.Domain/Files/ExportFormatShape.cs`; прибор: `scripts/mcp-smoke.py``
-
-**Документация.** `iapplication_converter.html` (`IApplication.Converter` - индексированное свойство,
-аргумент - путь к библиотеке), `iconverter_getfilter.html` (`GetFilter(DocType, SaveAs, out Command)`;
-`FORMAT_DXF=1`, `FORMAT_DWG=2` - тип документа, который КОНВЕРТЕР выдаёт), `iconverter_convert.html`
-(возврат: `1` - успех, `0` - неудача).
-
-**Измерено.** Документированный маршрут: библиотека по ПОЛНОМУ пути `Libs\ImpExp\dwgdxfExp.rtw`;
-`GetFilter(FORMAT_DXF=1)` → `command=1` «AutoCAD DXF (*.dxf)», `GetFilter(FORMAT_DWG=2)` → `command=2`
-«AutoCAD DWG (*.dwg)»; `Convert` пишет DXF 660 894 байта, начало `0\r\nSECTION`, и DWG 19 679 байт,
-начало `AC1032`. Родной `.cdw` - PK-контейнер. Живой прогон на поставке
-`artifacts/publish-drawings-rework2-20261006`: строки `DRW-05.export.create.dxf` / `.dwg` несут
-`convert_result=1` вместе с размером и подписью (`scratch/drw-runs/20261006-final/`). Прежний код при
-`Type.Missing` писал ~29 KB PK-контейнер под обоими именами.
-
-**Наблюдено.** ИСПРАВЛЕНО: конвертер берётся по пути библиотеки; `GetFilter` вызывается с кодом ФОРМАТА
-(1/2) и её собственным `command`; `commandId <= 0` - именованный отказ, а не выгрузка наугад; результат
-несёт документированный возврат `Convert`; форма проверяется по СОДЕРЖИМОМУ и переименованный контейнер
-назван (`zip_container`) и отвергнут. Правило вынесено в чистую функцию `ExportFormatShape`
-(`KompasMcp.Domain.Files`) и покрыто 18 модульными тестами, ловящими неправильный формат.
-
-**Затронутые инструменты.** `kompas_export_drawing`
-
-**Затронутые инструменты.** `kompas_set_title_block`, `kompas_get_title_block`
-
-**Что исправлять.** исправлено 06.10.2026: `scripts/mcp-smoke.py` (строки `DRW-04.title_block.set.create` и `.save_reopen`), `Api5Session.Drawings.cs` (текст `unverified_aspects` и remarks), `docs/decisions/drawings.md#stamp-cells`. Правило: **круговорот «запись → перечитывание тем же свойством» доказывает запись только тогда, когда присвоенное значение ОТЛИЧАЕТСЯ от значения по умолчанию измеряемой ячейки; ячейку берут осмотром, а не по имени.**
-
-## 6. Что осталось неподтверждённым
-
-Разделено по причине, а не свалено в один список:
-
-| Причина | Сколько строк | Что это значит |
-|---|---|---|
-| Маршрута нет в коде (план) | 3 | документированность маршрута подтвердить нечем; за реализованное не выдаётся |
-| Действия не доведены до `verified` | 0 | общие зависимости: часть действий не проверена, строка не закрыта |
-| Строки со ссылкой на схему инструмента нет в матрице | 40 | связь «режим → инструмент» восстановлена по семейству и по исходникам, а не прочитана из матрицы (F-05) |
-| Инструмент без присутствия в матрице | 3 | `kompas_acquire_session`, `kompas_release_session`, `kompas_session_status` - ни собственной строки, ни объявленного маршрута строки (наряд §3: прежнее имя счётчика мерило только собственную строку и читалось находкой «инструмент без покрытия») |
-| Мёртвые ветки в адаптере | 0 | F-01 и F-02 исправлены в этом наряде: `PlanarNormal` удалён, неподтверждённый `IsSaved` из продукта удалён |
-| Знак дуги в эскизе | исправлено | F-09: конечный угол дуги брался как `start + abs(sweep)`, поэтому дуга с отрицательным `sweep_deg` строилась отражённой. Концы упорядочены, поставка переиздана, различающая пара (плюс/минус 90° на четверти диска R30) стоит строкой `MANIA.17` и даёт один и тот же объём |
-| Выразимость объявленного диапазона углов | исправлено | F-10: схема объявляет `start_deg` и `sweep_deg` до ±720°, но адаптер передаёт в ядро два угла, и набор с конечным углом 405° отказывал с `GEOMETRY_FAILED`. Порог ИЗМЕРЕН (выход за ±360°), углы приводятся в выражаемый диапазон, порядок аргументов `Min`/`Max` сохранён. Последняя ветвь доведена до измерения: размах больше оборота отказывает ИМЕНОВАННО («Дуга не может перекрыть N градусов»), полный оборот (0°,+360°) и (−180°,+360°) даёт один и тот же объём π·R²·h |
-| Строка приёмки читала ЧУЖОЕ тело | исправлено | F-11: `MANIA.17` строила все секторы в одном документе и читала объём тела `bs[0]` - ПЕРВОГО. Тела при выдавливании накапливаются (измерено 1 → 2 → 3), поэтому обе половины «различающей пары» измеряли одно и то же тело: строка проходила, НЕ РАЗЛИЧАЯ НИЧЕГО. Исправлено адресацией «один документ — одно тело» с отказом измерять при числе тел ≠ 1 |
-| Объявленный `sweep_deg` шире принимаемого | названо, НЕ исправлено | F-11, часть 2: схема объявляет ±720°, принимается (−360°, 360°]. Схема **не сужена**, и причина названа честно: сузить её запрещает §5 наряда, а не отсутствие измерения. Молчания нет - отказ именованный, с названной величиной. У `start_deg` объявление и приём совпадают |
-| Запись ячейки штампа не подтверждается перечитыванием | названо, НЕ исправлено | F-12: присвоение `IStamp.Text(id).Str` не меняет то, что возвращает ТО ЖЕ свойство, ни для одного измеренного номера. Это поведение VENDOR-маршрута, а не дефект кода; строка `DRW-04.title_block.set.create` держится FAIL и объявляется открытой. Потеря содержимого при переоткрытии при этом ЛОВИТСЯ маршрутом только для чтения (`kompas_get_title_block`), и эта строка PASS |
-| Обновление ассоциативного вида после изменения модели | названо, НЕ исправлено | R4: `IAssociationView.Rebuild` в поставляемом interop ОТСУТСТВУЕТ (перечислено 144 члена, поиск даёт NOT FOUND); живьём доступен документированный `IKompasDocument2D1.RebuildDocument` (True), но инструментом не выведен. Строка `DRW-01.views.create_standard.rebuild` НЕ закрывается читаемостью коллекции видов и держится FAIL |
-| `create_drawing_views` и запись техтребований на ПЕРЕОТКРЫТОМ чертеже | названо, НЕ исправлено | Измерено: на переоткрытом документе API7-маршрут чертежа недоступен (`RequireDrawing7` не переносит 2D-дескриптор и не находит документ по пути) → `WRONG_DOCUMENT_KIND`. Строки `dep.drawing.idempotency.create` и `dep.drawing.revisions.edit.demand` держатся FAIL и НАЗЫВАЮТ границу, не выдавая отказ маршрута за проверку идемпотентности или ревизии |
-
-Документация **не** подтверждена у 27 строк из 97: у 3 это строки-план, у остальных - зависимости и режимы семейств, маршрут которых в коде не заявлен. Ни одна из этих строк не выдана за проверенную.
-
-## 7. Границы аудита
-
-- Проверка документации - по официальной справке SDK целевой версии; TLB, interop, IntelliSense и прежние отчёты основанием не считались. `QueryInterface`, позднее связывание и совместное использование API5/API7 сами по себе нарушением не считаются - проверялась документированность запрошенного интерфейса, исходного объекта и перехода.
-- Поведение реализации оценено на бинарях поставки, указанных выше; строки приёмки взяты из групповых отчётов этой же поставки. Полный прогон и групповые прогоны не складывались.
-- Рабочий код правился ТОЛЬКО там, где это предписывал наряд: удалены обе недостижимые ветки (F-01, F-02), исправлен знак дуги в эскизе (F-09) и приведение конечного угла дуги в выражаемый диапазон (F-10) - оба последних вскрыл сценарий Model Mania (наряд §3.3/§3.5). Возможности не удалялись, требования ради зелёного результата не менялись, схемы опубликованных инструментов не трогались. Остальное найденное оформлено как пункты исправления (F-03…F-11), причём F-03 и F-04 названы состояниями, а не дефектами. Отдельно: строка приёмки `MANIA.17` САМА оказалась прибором, читавшим чужое тело (F-11) - её подтверждение F-09 и F-10 было приписанным и снято; после исправления адресации строка измерена заново.
-- Клиентская приёмка не запускалась, Trust не менялся, в АСКОН обращений не было, модели заказчика для изменения не запускались.
-- Зеркало справки лежит вне поставки; секреты и содержимое конфигураций в документ не попали.
-- Каждая ссылка на справку в этом документе открывалась по проводу отдельной проверкой (`scratch/_check_compliance_links.py`): битая ссылка читалась бы как подтверждение документации, поэтому исходов три - годная, битая, не проверена (отказ сети назван отдельно, а не зачтён годной).
-
-## 8. Итог
-
-- **Инструментов проверено:** 63 - все опубликованные; схем 63, имена свойств совпадают с проводом у 63, значимая форма - у 63. Инструментов без присутствия в матрице (ни собственной строки, ни объявленного маршрута): 3 - `kompas_acquire_session`, `kompas_release_session`, `kompas_session_status`.
-  - **присутствие названо двумя способами** (наряд §3): собственной строкой - 43 инструментов, объявленным маршрутом строки - 30. Разница названа, а не слита в одно число: «строку инструменту дали» и «строку инструмент обслуживает объявленным маршрутом» - разные состояния;
-  - **отрицательный контроль присутствия - три половины, сторож доказан: True**: (а) синтетический опубликованный инструмент, не упомянутый нигде, назван - True; (б) инструмент, названный только объявлением поддержки каталога и не опубликованный, назван проверкой каталога - True; (в) у инструмента `kompas_check_component_links`, присутствующего ТОЛЬКО объявленным маршрутом, маршрут снят - назван: True. Половина (в) доказывает, что способ «объявленный маршрут» действительно зачитывается;
-  - **объявление поддержки каталога проверено отдельно** (класс дефекта AUX-SKETCH): объявлений прочитано 33 (форм записи: строка - 69, словарь - 36), инструментов НЕТ на проводе - ни одного. Поле `notes` словарной формы НЕ читается (11 объяснений): в нём инструменты названы именно тогда, когда их НЕТ, и чтение имён оттуда дало бы ложную находку на записи, которая поддержку отрицает.
-- **Режимов проверено:** 97 строк матрицы; документация подтверждена у 70, реализация - у 69.
-- **COM-маршруты:** 262 из 334 имеют страницу члена или список членов интерфейса; числовые идентификаторы типов: 35 совпали, 0 не найдено в таблице.
-- **Заявленные действия против доказательств - три сверки (F-08):** строк с заявленным `verified` - 94; приписок (статус без единой привязанной строки) - 0; `verified` рядом с FAIL - 0.
-  - **по имени режима** (так искал бы рецензент): у 23 строк НИ ОДНА строка приёмки не называет режим ни идентификатором, ни описанием - доказательство по имени режима не находится;
-  - **по привязке и вызовам**: у 0 строк есть действие, которого нет в вызовах привязанных проверок (прибор: 10627 вызовов, 1147 строк с окном);
-  - **по имени строки**: у 93 строк все действия названы одноимённой строкой (`B3M.<режим>.<действие>`), у 1 - нет.
-  - **следствие для статуса строки**: отказ сторожа понижает `implementation.status` до «Недостаточно проверки» и называется причиной понижения; строк, потерявших «Подтверждено» именно поэтому - 0 (подтверждённых строк стало 69). Изменилось ПРАВИЛО ВЫВОДА, а не измерение: прежде «Подтверждено» требовало закрытости по ярлыкам и хотя бы одного PASS, но не спрашивало, подтверждают ли привязанные строки заявленные действия.
-  - **остаток отказа разобран, а не закрыт дописыванием привязок** (`scratch/_f08_link_gap.py`, `scratch/_f08_candidate_ownership.py`): привязка недостаёт РОВНО У ОДНОЙ строки - `SM-02.base_extrusion.blind`, где `G03i` и `G03r` читают признак того же режима и не были привязаны ни к одной строке (привязка добавлена, `coverage/solid-v24/matrix.json` → `meta.f08_linkage_note`); у остальных проверки-кандидаты уже принадлежат ДРУГИМ режимам (2712 пар) либо чужим семействам (282) - приписать их значило бы выдать чужое доказательство за своё. Это работа, а не правка отчёта.
-  - **Контроли прибора «действие из вызовов»:** положительный - на строках B3M, где действие названо именем строки, выводятся 8 действий из 9; не выводится geometry_validation (измерение объёма записывается в окно строки `create`); отрицательный - подпись выполняется и на ЧУЖИХ строках, поэтому вывод по вызовам употребляется как отказ, а не как подтверждение; неразличимы по вызовам: geometry_validation и read.
-  - **Отрицательный контроль сторожа:** половина «обязан отказать» - отказал, «обязан молчать» - молчит; сторож доказан: да; отказов на реальных данных - 0.
-- **Находки:**
-  - **F-01** - исправленный дефект продукта (мёртвая ветка удалена). была низкой - на результат не влияла; исправлено
-  - **F-02** - исправленный дефект продукта (мёртвая ветка удалена, состояние сохранённости отделено от ревизии). была низкой - работал отпечаток; исправлено
-  - **F-03** - состояние объёма будущей работы (не дефект). -
-  - **F-04** - названная граница непубликуемого поля (не дефект). -
-  - **F-05** - исправленный дефект доказательств (не дефект продукта). -
-  - **F-06** - исправленный дефект прибора аудита. высокая - прибор подтверждал несуществующий маршрут
-  - **F-07** - исправленный дефект прибора аудита. средняя - владелец маршрута был назван несуществующим интерфейсом
-  - **F-08** - названный пробел трассируемости доказательств (не дефект продукта). средняя - статус строки опирался на ярлык действия, а не на доказательство под ним; измерена тремя независимыми сверками и двумя приборами 20.09.2026
-  - **F-09** - исправленный дефект продукта (знак дуги не доходил до конечного угла). высокая для вызывающего - дуга с ОТРИЦАТЕЛЬНЫМ `sweep_deg` строила отражённую геометрию, то есть не ту, которую просили, и молча; исправлено, поставка переиздана, все прогоны пересняты, различающая пара стоит строкой `MANIA.17`
-  - **F-10** - исправленный дефект продукта (объявленный диапазон углов дуги шире выражаемого; первая редакция правки была НЕ аддитивной, и это поймал контроль зонда). средняя - вызывающий, не выходя за объявленный [−720, 720], получал `GEOMETRY_FAILED` без объяснения; исправлено, поставка переиздана, все прогоны пересняты
-  - **F-11** - исправленный дефект прибора ПРИЁМКИ (строка `MANIA.17` читала объём ПЕРВОГО тела документа при накапливающихся телах и проходила, не различая ничего; объявленный диапазон `sweep_deg` шире принимаемого - расхождение ОБЪЯВЛЕНИЯ). высокая по последствиям доказательства: строка приёмки ЗАЯВЛЯЛА различение, которого не делала, то есть подтверждала исправление F-09 и F-10 чужим измерением; дефект продукта при этом отсутствует - поведение продукта корректно
-
-- **Границы, названные прямо:** утверждение «MCP полностью согласуется с документацией» не делается; отсутствие отказов в прогоне не закрывает непроверенные обязательные действия; обязательный объём профиля - 3 строк объявлены планом, и они не считаются сделанными.
-
-**Дополнено 08.10.2026 (блок G2: массовая геометрия эскиза).** Числа аудита выше относятся к составу
-прогона 05.10.2026 и НЕ переписываются. Блок G2 добавлен в поставку после этой даты, и его маршруты -
-новые ДОКУМЕНТИРОВАННЫЕ пути, в аудит 05.10.2026 не входившие:
-
-- **Полилиния одним объектом** - `ksDocument2D.ksPolylineByParam(ksPolylineParam)` с блоком вершин
-  `POINT_ARR` из `ksMathPointParam`; замкнутость - собственный признак блока
-  (`kspolylineparam_closed.html`: «TRUE - ломаная замкнута, FALSE - ломаная разомкнута»), потому что у
-  `ksPolyline` параметра замкнутости нет вовсе. Чтение - `IPolyLine2D.Closed` / `.PointsCount`
-  (`ipolyline2d_props.html`).
-- **Сплайн одним объектом** - `ksBezier(closed, style)` + `ksBezierPoint(ksBezierPointParam)` +
-  `ksEndObj` (`ksdocument2d_ksbezier.html`, `ksbezierpointparam_props.html`), то есть кривая ЧЕРЕЗ
-  заданные вершины. Маршрут `ksNurbs` документирован и ИЗМЕРЕН, но отвергнут: его узлы - полюса, и
-  замкнутая кривая уходит внутрь контура на проценты, тогда как контракт называет точки «вершинами».
-- **Пределы объёма вызова** - `entities` = 5000 и `points_mm` = 2000. Это пределы СХЕМЫ MCP, а не
-  ядра: они живут в одном месте (`KompasMcp.Contracts.SketchLimits`) и выбраны измерением.
-- **Вставка контура из файла фрагмента в эскиз - НЕ реализована и в объём не входит.**
-  `ksfragment.html`, `ksfragment_ksfragmentdefinition.html` и `ksfragment_ksinsertfragmentex.html`
-  описывают вставку в «Графический документ» и НИ НА ОДНОЙ странице не описывают документ-эскиз;
-  измерено, что `ksFragmentDefinition` на редакторе эскиза не возвращает управления (бюджет 240 с,
-  `OUTCOME_UNKNOWN`, эскиз остался в режиме правки). Инструмент не публикуется.
-
-Дословные цитаты страниц, числа из поставленной библиотеки типов и измеренные пределы -
-`docs/04_KOMPAS_API_NOTES.md` §4.54; живой прогон - `docs/acceptance/sketch-bulk/sketch-bulk-acceptance.json`
-(группа `--sketch-bulk-only`, 32 PASS, 0 FAIL, 1 NAMED); машинная запись дополнения - ключ `addenda`,
-элемент `A-03`, в `docs/API_COMPLIANCE.json`. Полное сведение матрицы под живой прогон не выполнялось.
+Артефакт: `docs/API_COMPLIANCE.json` (машинный) и этот файл, ПОРОЖДЁННЫЙ из него. Вручную не правится: правится источник, потом перегенерируется.
+
+Дата сборки аудита: 2026-10-13T13:26:04+02:00, часы машины +02:00.
+
+## 1. Что измерено
+
+- Целевая версия: КОМПАС-3D v24, сборка 24.0.0.2799, `KOMPAS.Exe` sha256 `8c17b394da430db809ef85838f55727511004b937ead4836630be28407813524`.
+- Документация: https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/, прочитано по проводу; интерфейсов 111, маршрутов 517.
+- Измеряемая сборка: `release_build`, коммит `6e0ed39`, дерево ГРЯЗНОЕ; `KompasMcp.Host.dll` sha256 `53d37fb319cfb77e1db1c878a4a63867b506235397ce7f68554c00d0d4d473c8`.
+
+## 2. Сверка полноты
+
+| Показатель | Значение |
+|---|---|
+| tools_on_wire | 90 |
+| schemas_on_disk | 90 |
+| tools_with_schema | 90 |
+| schemas_matching_wire_by_property_names | 90 |
+| schemas_matching_wire_by_shape | 90 |
+| matrix_rows | 171 |
+| catalog_modes_and_variants | 209 |
+| com_routes | 517 |
+| com_routes_confirmed_by_documentation | 117 |
+| com_routes_unconfirmed | 400 |
+| object_type_constants_checked | 8 |
+| object_type_constants_mismatched | 1 |
+| rows_claiming_verified | 167 |
+| rows_verified_without_any_linked_row | 0 |
+| rows_verified_contradicted_by_fail | 1 |
+| rows_action_without_dedicated_row | 20 |
+| rows_actions_without_required_calls | 37 |
+| acceptance_rows | 1595 |
+| acceptance_calls_journal | 15297 |
+| acceptance_rows_with_call_window | 1595 |
+| required_of_mismatches_matrix_vs_profile | 30 |
+
+Инструментов без присутствия в записях покрытия: 19.
+Классы присутствия: {'absent': 19, 'route_field': 26, 'route_field+schema_field': 25, 'schema_field': 20}.
+COM-маршрутов по сборкам: {'api7': 292, 'api5': 215, 'adapter-twins': 10}.
+
+## 3. Инструменты
+
+| Инструмент | Свойств | Обязательных | Схема совпала по именам | по форме | Присутствие |
+|---|---|---|---|---|---|
+| `kompas_acquire_session` | 1 | - | да | да | нет |
+| `kompas_add_dimension` | 10 | document_id, expected_revision, view_ref, dimension_type, point1, operation_id | да | да | route_field+schema_field |
+| `kompas_bind_parameter` | 8 | document_id, expected_revision, feature_ref, parameter_name, expression, operation_id | да | да | route_field+schema_field |
+| `kompas_boolean` | 9 | target_body_ref, tool_body_refs, operation, keep_tools, document_id, expected_revision, operation_id | да | да | schema_field |
+| `kompas_capabilities` | 1 | - | да | да | нет |
+| `kompas_chamfer` | 10 | edge_refs, expected_revision, mode, distance1_mm, operation_id | да | да | schema_field |
+| `kompas_check_component_links` | 2 | document_id | да | да | route_field |
+| `kompas_check_interference` | 5 | document_id | да | да | schema_field |
+| `kompas_close_document` | 4 | document_id, dirty_policy, operation_id | да | да | route_field |
+| `kompas_connect` | 5 | mode, make_visible, operation_id | да | да | нет |
+| `kompas_create_aux_geometry` | 20 | document_id, expected_revision, kind, mode, operation_id | да | да | нет |
+| `kompas_create_document` | 6 | application_id, kind, operation_id | да | да | route_field |
+| `kompas_create_drawing_views` | 12 | document_id, expected_revision, source_path, x, y, operation_id | да | да | route_field+schema_field |
+| `kompas_create_mate` | 11 | document_id, expected_revision, constraint_type, first_component_ref, first_face_index, second_component_ref, second_face_index, operation_id | да | да | route_field |
+| `kompas_create_sketch` | 6 | document_id, expected_revision, plane, operation_id | да | да | schema_field |
+| `kompas_create_sketch_constraint` | 14 | sketch_ref, expected_revision, constraint_type, object_ref, operation_id | да | да | route_field+schema_field |
+| `kompas_create_sketch_dimension` | 10 | sketch_ref, expected_revision, object_ref, operation_id | да | да | schema_field |
+| `kompas_create_variable` | 9 | document_id, expected_revision, name, value, operation_id | да | да | route_field+schema_field |
+| `kompas_cut_by_plane` | 8 | target_body_ref, plane, keep_side, document_id, expected_revision, operation_id | да | да | schema_field |
+| `kompas_delete_component` | 6 | document_id, expected_revision, component_ref, operation_id | да | да | route_field |
+| `kompas_delete_feature` | 6 | feature_ref, expected_revision, confirm_dependents, operation_id | да | да | route_field+schema_field |
+| `kompas_delete_mate` | 5 | document_id, expected_revision, mate_ref, operation_id | да | да | route_field |
+| `kompas_delete_sketch_constraint` | 7 | sketch_ref, expected_revision, object_ref, operation_id | да | да | schema_field |
+| `kompas_disconnect` | 4 | application_id, close_owned_application, operation_id | да | да | нет |
+| `kompas_edit_sketch` | 6 | sketch_ref, expected_revision, mode, entities, operation_id | да | да | schema_field |
+| `kompas_edit_sketch_entity` | 7 | sketch_ref, expected_revision, address, action, operation_id | да | да | нет |
+| `kompas_edit_view` | 8 | document_id, expected_revision, view_ref, operation_id | да | да | route_field |
+| `kompas_export_drawing` | 6 | document_id, output_path, format, operation_id | да | да | route_field+schema_field |
+| `kompas_export_image` | 12 | document_id, expected_revision, format, operation_id | да | да | route_field+schema_field |
+| `kompas_export_step` | 5 | document_id, expected_revision, output_path, operation_id | да | да | нет |
+| `kompas_export_stl` | 8 | document_id, expected_revision, target_path, binary, max_edge_length_mm, normal_angle_deg, operation_id | да | да | route_field+schema_field |
+| `kompas_extrude` | 10 | sketch_ref, expected_revision, operation, operation_id | да | да | route_field+schema_field |
+| `kompas_fillet` | 6 | edge_refs, expected_revision, radius_mm, operation_id | да | да | schema_field |
+| `kompas_finish_sketch` | 4 | sketch_ref, require_closed_profile, operation_id | да | да | нет |
+| `kompas_get_context` | 3 | document_id, detail | да | да | route_field |
+| `kompas_get_feature` | 2 | feature_ref | да | да | route_field+schema_field |
+| `kompas_get_material` | 2 | document_id | да | да | route_field+schema_field |
+| `kompas_get_pattern` | 2 | feature_ref | да | да | нет |
+| `kompas_get_sketch_status` | 2 | sketch_ref | да | да | route_field+schema_field |
+| `kompas_get_technical_demand` | 2 | document_id | да | да | нет |
+| `kompas_get_title_block` | 3 | document_id, cell_ids | да | да | нет |
+| `kompas_health` | 2 | detail | да | да | нет |
+| `kompas_hole` | 14 | face_ref, expected_revision, mode, diameter_mm, operation_id | да | да | schema_field |
+| `kompas_import_step` | 6 | application_id, input_path, desired_kind, operation_id | да | да | нет |
+| `kompas_insert_component` | 7 | document_id, expected_revision, source_path, operation_id | да | да | route_field |
+| `kompas_list_aux_geometry` | 5 | document_id, include | да | да | route_field |
+| `kompas_list_bodies` | 2 | document_id | да | да | route_field |
+| `kompas_list_components` | 3 | document_id | да | да | route_field |
+| `kompas_list_dimensions` | 4 | document_id, view_ref | да | да | route_field |
+| `kompas_list_documents` | 2 | application_id | да | да | route_field |
+| `kompas_list_drawing_views` | 2 | document_id | да | да | route_field+schema_field |
+| `kompas_list_feature_parameters` | 3 | document_id, feature_ref | да | да | route_field+schema_field |
+| `kompas_list_features` | 2 | document_id | да | да | нет |
+| `kompas_list_mates` | 2 | document_id | да | да | route_field |
+| `kompas_list_sketch_constraints` | 4 | sketch_ref | да | да | route_field+schema_field |
+| `kompas_list_sketch_entities` | 5 | sketch_ref | да | да | route_field |
+| `kompas_list_sketches` | 2 | document_id | да | да | route_field+schema_field |
+| `kompas_list_variables` | 3 | document_id | да | да | route_field+schema_field |
+| `kompas_loft` | 9 | document_id, section_refs, expected_revision, operation_id | да | да | schema_field |
+| `kompas_measure` | 5 | target_ref, properties | да | да | route_field+schema_field |
+| `kompas_measure_gap` | 4 | document_id, object1, object2 | да | да | schema_field |
+| `kompas_open_document` | 5 | application_id, path, access, operation_id | да | да | route_field |
+| `kompas_pattern_circular` | 25 | document_id, expected_revision, copy_kind, source_refs, axis_point1_mm, axis_point2_mm, count2, step2_deg, operation_id | да | да | schema_field |
+| `kompas_pattern_grid` | 28 | document_id, expected_revision, copy_kind, source_refs, axis1_point1_mm, axis1_point2_mm, step1_mm, count1, operation_id | да | да | schema_field |
+| `kompas_pattern_mirror` | 15 | document_id, expected_revision, mode, source_refs, plane, save_initial_objects, operation_id | да | да | schema_field |
+| `kompas_probe_units` | 5 | application_id, known_length_mm, known_radius_mm, operation_id | да | да | нет |
+| `kompas_read_topology` | 4 | document_id, body_ref, include | да | да | route_field |
+| `kompas_rebuild` | 3 | document_id, operation_id | да | да | route_field |
+| `kompas_rebuild_drawing_views` | 5 | document_id, expected_revision, view_ref, operation_id | да | да | нет |
+| `kompas_release_session` | 3 | - | да | да | нет |
+| `kompas_replace_component` | 6 | document_id, expected_revision, component_ref, source_path, operation_id | да | да | route_field |
+| `kompas_reposition` | 11 | target_body_ref, kind, document_id, expected_revision, operation_id | да | да | schema_field |
+| `kompas_resolve_selection` | 5 | body_ref, predicate, require_unique, limit | да | да | route_field |
+| `kompas_rotated` | 12 | sketch_ref, expected_revision, operation, angle_deg, axis_point1_mm, axis_point2_mm, operation_id | да | да | schema_field |
+| `kompas_save_document` | 5 | document_id, expected_revision, operation_id | да | да | route_field |
+| `kompas_session_status` | 1 | - | да | да | нет |
+| `kompas_set_component_placement` | 6 | document_id, expected_revision, component_ref, transform, operation_id | да | да | route_field |
+| `kompas_set_feature_suppressed` | 6 | feature_ref, expected_revision, suppressed, operation_id | да | да | route_field+schema_field |
+| `kompas_set_mate_fixed` | 6 | document_id, expected_revision, mate_ref, fixed, operation_id | да | да | route_field |
+| `kompas_set_mate_parameter` | 6 | document_id, expected_revision, mate_ref, param_value, operation_id | да | да | route_field |
+| `kompas_set_material` | 6 | document_id, expected_revision, material_name, density_kg_per_m3, operation_id | да | да | route_field+schema_field |
+| `kompas_set_sketch_plane` | 6 | document_id, sketch_ref, expected_revision, plane, operation_id | да | да | route_field |
+| `kompas_set_technical_demand` | 5 | document_id, expected_revision, text, operation_id | да | да | route_field+schema_field |
+| `kompas_set_title_block` | 5 | document_id, expected_revision, cells, operation_id | да | да | route_field+schema_field |
+| `kompas_set_variable` | 7 | document_id, expected_revision, name, operation_id | да | да | route_field+schema_field |
+| `kompas_shell` | 9 | document_id, face_refs, thickness_mm, expected_revision, operation_id | да | да | schema_field |
+| `kompas_split` | 7 | target_body_ref, plane, document_id, expected_revision, operation_id | да | да | schema_field |
+| `kompas_sweep` | 7 | sketch_ref, path_ref, expected_revision, operation_id | да | да | schema_field |
+| `kompas_update_feature` | 42 | feature_ref, expected_revision, operation_id | да | да | route_field+schema_field |
+| `kompas_update_plane` | 9 | document_id, expected_revision, plane_ref, operation_id | да | да | нет |
+
+## 4. Режимы и варианты каталога
+
+Всего строк матрицы: 171.
+
+| Операция | Семейство | Уровень каталога | Инструменты | Маршрут | Документация |
+|---|---|---|---|---|---|
+| `SM-02.base_extrusion.blind` | SM-02 | mcp_verified | kompas_extrude | API5 o3d_baseExtrusion(24) + SetSideParam(etBlind=0) | Подтверждено |
+| `SM-02.cut_extrusion.through` | SM-02 | mcp_verified | kompas_extrude | API5 o3d_cutExtrusion(26) + chooseType=3 + ChooseBodies().Bo | Не подтверждено |
+| `SM-09.fillet.constant_radius_body_edges` | SM-09 | mcp_verified | kompas_fillet | API5 o3d_fillet(34) + ksFilletDefinition{radius,tangent,arra | Не подтверждено |
+| `SM-07.native_hole.through_cylindrical` | SM-07 | mcp_verified | kompas_hole | API7 IHoles3D.Add() + IHoleDisposal.BaseSurface(грань) + ksH | Не подтверждено |
+| `SM-01.primitive_box` | SM-01 | metadata_found | - | API7 IModelContainer.ElementaryBodies (подтвердить типом уст | Не подтверждено |
+| `AUX-SKETCH.plane_and_profile_lifecycle` | AUX-SKETCH | mcp_verified | kompas_create_sketch, kompas_read_topology, kompas_set_sketch_plane | API5: GetDefaultEntity(1/2/3), NewEntity(o3d_planeOffset=14) | Не подтверждено |
+| `SM-02.base_extrusion.additional_body` | SM-02 | mcp_verified | kompas_extrude | API5 o3d_baseExtrusion(24) вторым независимым контуром; choo | Не подтверждено |
+| `SM-02.base_extrusion.direction_negative` | SM-02 | mcp_verified | kompas_extrude | API5 o3d_baseExtrusion(24) + directionType=1 (dtReverse) + S | Подтверждено |
+| `SM-02.boss_extrusion.blind` | SM-02 | mcp_verified | kompas_extrude | API5 o3d_bossExtrusion(25) + chooseType=3 + ChooseBodies().B | Не подтверждено |
+| `SM-02.boss_extrusion.explicit_target_body` | SM-02 | mcp_verified | kompas_extrude | API5 o3d_bossExtrusion(25) + chooseType=3 + ChooseBodies().B | Не подтверждено |
+| `SM-02.cut_extrusion.blind` | SM-02 | mcp_verified | kompas_extrude | API5 o3d_cutExtrusion(26) + chooseType=3 + ChooseBodies().Bo | Не подтверждено |
+| `SM-02.cut_extrusion.explicit_target_body` | SM-02 | mcp_verified | kompas_extrude | API5 o3d_cutExtrusion(26) + chooseType=3 + ChooseBodies().Bo | Не подтверждено |
+| `SM-02.cut_extrusion.direction_symmetric` | SM-02 | mcp_verified | kompas_extrude | API5 o3d_cutExtrusion(26) + directionType=2 (dtBoth) + два S | Не подтверждено |
+| `SM-03.base_rotated.full_turn` | SM-03 | mcp_verified | kompas_rotated | API7 Api7Rotated.TryCreate: IModelContainer.Rotateds.Add(o3d | Не подтверждено |
+| `SM-03.base_rotated.partial_angle` | SM-03 | mcp_verified | kompas_rotated | тот же маршрут, что у полного оборота; угол пишется в Angle[ | Не подтверждено |
+| `SM-03.base_rotated.axis_explicit` | SM-03 | mcp_verified | kompas_rotated | ось подаётся ДВУМЯ точками контракта (axis_point1_mm, axis_p | Не подтверждено |
+| `SM-03.boss_rotated.full_turn` | SM-03 | mcp_verified | kompas_rotated | API7 Api7Rotated.TryCreate: IModelContainer.Rotateds.Add(o3d | Не подтверждено |
+| `SM-03.cut_rotated.full_turn` | SM-03 | mcp_verified | kompas_rotated | API7 Api7Rotated.TryCreate: IModelContainer.Rotateds.Add(o3d | Не подтверждено |
+| `SM-04.base.mode_orthogonal` | SM-04 | mcp_verified | kompas_sweep | тот же маршрут, что у SM-04.base.single_profile_flat_path; р | Не подтверждено |
+| `SM-04.boss` | SM-04 | metadata_found | - | - | Не подтверждено |
+| `SM-05.base.mode_couplings` | SM-05 | mcp_verified | kompas_loft | тот же маршрут API7; цепочки — ILoft.AddCoupling() → ICoupli | Не подтверждено |
+| `SM-07.native_hole.blind_flat_bottom` | SM-07 | mcp_verified | kompas_hole | API7 IHoles3D.Add() + IHoleDisposal.BaseSurface(грань) + ksH | Не подтверждено |
+| `SM-07.native_hole.through_counterbore` | SM-07 | mcp_verified | kompas_hole | API7 IHoles3D.Add() + ksHTCounterbore + DepthType=ksDTReachT | Не подтверждено |
+| `SM-07.native_hole.through_countersink` | SM-07 | mcp_verified | kompas_hole | API7 IHoles3D.Add() + ksHTCountersinking + DepthType=ksDTRea | Не подтверждено |
+| `SM-07.native_hole.axis_by_face_normal` | SM-07 | mcp_verified | kompas_hole | IHoleDisposal.BaseSurface(перенесённая опорная грань) + IHol | Не подтверждено |
+| `SM-07.native_hole.position_off_origin` | SM-07 | mcp_verified | kompas_hole | IHoleDisposal.Point3DParamSurface → IPoint3DParamSurface, Of | Не подтверждено |
+| `SM-09.fillet.read_radius_back` | SM-09 | mcp_verified | kompas_get_feature | API7 IFillet.Radius1/Radius2/Tangent/BuildingType/BaseObject | Не подтверждено |
+| `SM-09.fillet.change_radius_in_place` | SM-09 | mcp_verified | kompas_update_feature | API7 IFillet.Radius1 на живой модели: признак API5 сопоставл | Не подтверждено |
+| `SM-09.fillet.change_edge_set` | SM-09 | mcp_verified | kompas_update_feature | API7: IModelContainer.Fillets[i] -> IFillet.BaseObjects (чте | Не подтверждено |
+| `SM-11.chamfer.mode_two_distances` | SM-11 | mcp_verified | kompas_chamfer | API5 NewEntity(o3d_chamfer=33) + ksChamferDefinition.SetCham | Не подтверждено |
+| `SM-11.chamfer.mode_distance_angle` | SM-11 | mcp_verified | kompas_chamfer | API7 IModelContainer.Chamfers.Add() + BaseObjects=object[] п | Не подтверждено |
+| `SM-11.chamfer.mode_direction` | SM-11 | mcp_verified | kompas_chamfer | API5 SetChamferParam(transfer=direction,…) и API7 IChamfer.D | Не подтверждено |
+| `SM-13.shell.mode_remove_faces` | SM-13 | mcp_verified | kompas_read_topology, kompas_shell | API5: NewEntity(43 = o3d_shellOperation) → ksShellDefinition | Не подтверждено |
+| `SM-13.shell.mode_direction` | SM-13 | mcp_verified | kompas_shell | тот же маршрут API5; направление стенки — ksShellDefinition. | Не подтверждено |
+| `SM-15.subtract` | SM-15 | mcp_verified | kompas_boolean | API7: IModelContainer (TransferInterface(document, ksAPI7Dua | Не подтверждено |
+| `SM-15.intersect` | SM-15 | mcp_verified | kompas_boolean | API7: IModelContainer (TransferInterface(document, ksAPI7Dua | Не подтверждено |
+| `SM-15.union.mode_save_tools` | SM-15 | mcp_verified | kompas_boolean | API7: IModelContainer (TransferInterface(document, ksAPI7Dua | Не подтверждено |
+| `SM-15.union.mode_multi_tools` | SM-15 | mcp_verified | kompas_boolean | API7: IModelContainer (TransferInterface(document, ksAPI7Dua | Не подтверждено |
+| `SM-16.split.mode_keep_parts` | SM-16 | mcp_verified | kompas_split | API7: container.SplitSolids.Add() → QI(ISplitSolid) → CutObj | Не подтверждено |
+| `SM-16.cut_by_plane.mode_side_removed` | SM-16 | mcp_verified | kompas_cut_by_plane | API7: container.Cuts.Add() → QI(ICut) → BuildingType = ksCut | Не подтверждено |
+| `SM-17.reposition.translate_by_vector` | SM-17 | mcp_verified | kompas_reposition | API7: container.BodyRepositions.Add() → QI(IBodyReposition)  | Не подтверждено |
+| `SM-17.reposition.rotate_about_axis` | SM-17 | mcp_verified | kompas_reposition | API7: container.BodyRepositions.Add() → QI(IBodyReposition)  | Не подтверждено |
+| `SM-18.grid.single_row` | SM-18 | mcp_verified | kompas_pattern_grid | API7 IModelContainer.FeaturePatterns.Add(o3d_meshCopy=35) →  | Не подтверждено |
+| `SM-18.grid.rectangular_grid` | SM-18 | mcp_verified | kompas_pattern_grid | то же, плюс второе направление: Axis2/Angle2, Count2/Step2.  | Не подтверждено |
+| `SM-18.grid.operations` | SM-18 | mcp_verified | kompas_pattern_grid | то же, copy_kind=operations: копии наследуют область примене | Не подтверждено |
+| `SM-18.grid.bodies` | SM-18 | mcp_verified | kompas_pattern_grid | FeaturePatterns.Add(o3d_BodiesMeshCopy=528) → QI(ILinearPatt | Не подтверждено |
+| `SM-19.circular.full_circle_no_duplicate` | SM-19 | mcp_verified | kompas_pattern_circular | FeaturePatterns.Add(o3d_circularCopy=36) → QI(ICircularPatte | Не подтверждено |
+| `SM-19.circular.angular_range` | SM-19 | mcp_verified | kompas_pattern_circular | то же; Count2 × Step2 < 360° даёт сектор, а не полный круг.  | Не подтверждено |
+| `SM-19.circular.operations` | SM-19 | mcp_verified | kompas_pattern_circular | то же, copy_kind=operations. В дереве — тип 36. | Не подтверждено |
+| `SM-19.circular.bodies` | SM-19 | mcp_verified | kompas_pattern_circular | FeaturePatterns.Add(o3d_BodiesCircularCopy=529) → QI(ICircul | Не подтверждено |
+| `SM-23.mirror_all.bodies_selection` | SM-23 | mcp_verified | kompas_pattern_mirror | FeaturePatterns.Add(o3d_mirrorAllOperation=49) → QI(IMirrorP | Не подтверждено |
+| `SM-15.union.mode_save_base_copy` | SM-15 | metadata_found | - | - | Не подтверждено |
+| `dep.sketch.entities` | AUX-SKETCH | None | kompas_list_sketch_entities | в API5 перечисления объектов эскиза нет (P2.6), поэтому адре | Не подтверждено |
+| `dep.refs.planes` | AUX-SKETCH | None | kompas_list_aux_geometry | G07 (знаки XZ/YZ) через MCP не подтверждена ПОПРАВКА 21.09.2 | Не подтверждено |
+| `dep.refs.axes` | AUX-SKETCH | None | kompas_list_aux_geometry | Ось по двум точкам создаётся `kompas_create_aux_geometry` (` | Не подтверждено |
+| `dep.refs.points_axes` | AUX-SKETCH | None | kompas_list_aux_geometry | попытка задать позицию отверстия точкой AssociationVertex из | Не подтверждено |
+| `dep.refs.planar_face` | AUX-SKETCH | None | kompas_read_topology | - | Не подтверждено |
+| `dep.refs.edges_faces` | AUX-SKETCH | None | kompas_read_topology | - | Не подтверждено |
+| `dep.paths.flat` | AUX-SKETCH | None | - | - | Не подтверждено |
+| `dep.selection.unambiguous` | AUX-SKETCH | None | kompas_resolve_selection | G05 (неоднозначный выбор) не проверялась вообще | Не подтверждено |
+| `dep.lifecycle.feature_cycle` | SM-30 | None | kompas_delete_feature, kompas_set_feature_suppressed | API5 ksFeature.excluded и ksDocument3D.DeleteObject, измерен | Не подтверждено |
+| `dep.bodies.multibody` | SM-02 | None | kompas_measure, kompas_read_topology | - | Не подтверждено |
+| `dep.pattern.associativity` | SM-18 | None | - | OQ-B-01: фактическое поведение при правке источника не прове | Не подтверждено |
+| `dep.units.confirm` | dep | None | - | - | Не подтверждено |
+| `dep.api7.in_same_adapter` | dep | None | - | Api7Bridge — единственная точка входа в API7 в src/: Applica | Не подтверждено |
+| `dep.foundation` | dep | None | kompas_get_context | - | Не подтверждено |
+| `dep.preserve_unknown` | SM-30 | None | - | - | Не подтверждено |
+| `SM-04.base.single_profile_flat_path` | SM-04 | mcp_verified | kompas_sweep | API5: NewEntity(45 = o3d_baseEvolution) → ksBaseEvolutionDef | Не подтверждено |
+| `SM-05.base.parallel_sections_order` | SM-05 | mcp_verified | kompas_loft | API7: IModelContainer.Lofts.Add(o3d_bossLoft = 31) → ILoft.S | Не подтверждено |
+| `SM-13.shell.uniform_thickness` | SM-13 | mcp_verified | kompas_shell | тот же маршрут API5; толщина — ksShellDefinition.thickness,  | Не подтверждено |
+| `SM-15.union.explicit_target_and_tools` | SM-15 | mcp_verified | kompas_boolean | API7: IModelContainer (TransferInterface(document, ksAPI7Dua | Не подтверждено |
+| `SM-16.split.plane_tool` | SM-16 | mcp_verified | kompas_split | API7: container.SplitSolids.Add() → QI(ISplitSolid) → CutObj | Не подтверждено |
+| `SM-23.mirror_array.selected_operations` | SM-23 | mcp_verified | kompas_pattern_mirror | FeaturePatterns.Add(o3d_mirrorOperation=48) → QI(IMirrorPatt | Не подтверждено |
+| `AUX-IMAGE.raster_export` | AUX-IMAGE | mcp_verified | kompas_export_image | API5: ksDocument3D.RasterFormatParam() -> ksRasterFormatPara | Не подтверждено |
+| `ASM-01.document.create_open` | ASM | mcp_verified | kompas_close_document, kompas_create_document, kompas_get_context, kompas_list_documents, kompas_open_document, kompas_save_document | kompas_create_document(kind=assembly) / kompas_open_document | Подтверждено |
+| `ASM-02.component.insert` | ASM | mcp_verified | kompas_insert_component, kompas_list_components, kompas_measure | kompas_insert_component: API7 IPart7.Parts → IParts7.AddFrom | Не подтверждено |
+| `ASM-03.structure.read` | ASM | mcp_verified | kompas_check_component_links, kompas_list_components, kompas_open_document, kompas_save_document | kompas_list_components: API7 IAssemblyDocument.TopPart → IPa | Не подтверждено |
+| `ASM-04.placement.set_read` | ASM | mcp_verified | kompas_list_components, kompas_list_documents, kompas_measure, kompas_open_document, kompas_save_document, kompas_set_component_placement | kompas_set_component_placement: API5 ksDocument3D.DefaultPla | Не подтверждено |
+| `ASM-05.component.replace` | ASM | mcp_verified | kompas_list_components, kompas_list_documents, kompas_measure, kompas_open_document, kompas_replace_component, kompas_save_document | kompas_replace_component: ksPart.fileName (kspart_setfilenam | Не подтверждено |
+| `ASM-06.links.check` | ASM | mcp_verified | kompas_check_component_links, kompas_open_document, kompas_save_document | kompas_check_component_links: API7 IPart7.FileName + IPart7. | Не подтверждено |
+| `ASM-07.save_reopen` | ASM | mcp_verified | kompas_close_document, kompas_get_context, kompas_list_documents, kompas_measure, kompas_open_document, kompas_save_document | kompas_save_document / kompas_open_document / kompas_close_d | Не подтверждено |
+| `dep.assembly.document_lifecycle` | dep | mcp_verified | kompas_create_document, kompas_get_context, kompas_list_components, kompas_list_documents | kompas_list_components: API7 IAssemblyDocument.TopPart → IPa | Не подтверждено |
+| `dep.assembly.source_file` | dep | mcp_verified | kompas_list_components | kompas_list_components: API7 IAssemblyDocument.TopPart → IPa | Не подтверждено |
+| `dep.assembly.component_address` | dep | mcp_verified | kompas_list_components, kompas_list_documents, kompas_measure, kompas_open_document, kompas_save_document | kompas_list_components: API7 IAssemblyDocument.TopPart → IPa | Не подтверждено |
+| `dep.assembly.revisions` | dep | mcp_verified | kompas_get_context, kompas_list_components, kompas_list_documents, kompas_open_document, kompas_save_document, kompas_set_component_placement | kompas_list_components: API7 IAssemblyDocument.TopPart → IPa | Не подтверждено |
+| `dep.assembly.idempotency` | dep | mcp_verified | kompas_insert_component, kompas_list_components, kompas_list_documents | kompas_list_components: API7 IAssemblyDocument.TopPart → IPa | Не подтверждено |
+| `MATE-01.mate.create` | MATE | mcp_verified | kompas_create_mate, kompas_list_documents, kompas_list_mates, kompas_measure | kompas_create_mate: IPart7.MateConstraints → IMateConstraint | Не подтверждено |
+| `MATE-02.mate.read` | MATE | mcp_verified | kompas_list_documents, kompas_list_mates | kompas_list_mates: ksDocument3D.MateConstraintCollection → G | Не подтверждено |
+| `MATE-03.mate.param_edit` | MATE | mcp_verified | kompas_list_documents, kompas_list_mates, kompas_measure, kompas_set_mate_parameter | kompas_set_mate_parameter: IMateConstraint3D.ParamValue = …  | Не подтверждено |
+| `MATE-04.mate.fixed` | MATE | mcp_verified | kompas_list_documents, kompas_list_mates, kompas_set_mate_fixed | kompas_set_mate_fixed: IMateConstraint3D.Fixed = ksMateFixed | Не подтверждено |
+| `MATE-05.mate.delete` | MATE | mcp_verified | kompas_delete_mate, kompas_list_documents, kompas_list_mates | kompas_delete_mate: ksDocument3D.RemoveMateConstraint(constr | Не подтверждено |
+| `MATE-06.mate.placement_effect` | MATE | mcp_verified | kompas_list_components, kompas_list_documents, kompas_list_mates, kompas_measure, kompas_open_document, kompas_save_document | kompas_list_components: ksPlacement.GetMatrix3D по компонент | Не подтверждено |
+| `dep.mate.object_address` | dep | mcp_verified | kompas_list_documents, kompas_list_mates | см. строки режимов MATE-01…MATE-06 | Не подтверждено |
+| `dep.mate.component_insert` | dep | mcp_verified | kompas_insert_component, kompas_list_mates, kompas_measure | см. строки режимов MATE-01…MATE-06 | Не подтверждено |
+| `dep.mate.revisions` | dep | mcp_verified | kompas_list_mates, kompas_set_mate_parameter | см. строки режимов MATE-01…MATE-06 | Не подтверждено |
+| `dep.mate.idempotency` | dep | mcp_verified | kompas_create_mate, kompas_list_mates | см. строки режимов MATE-01…MATE-06 | Не подтверждено |
+| `dep.mate.save_reopen` | dep | mcp_verified | kompas_list_mates | см. строки режимов MATE-01…MATE-06 | Не подтверждено |
+| `DRW-01.views.create_standard` | DRW | mcp_verified | kompas_create_drawing_views, kompas_edit_view, kompas_list_drawing_views | kompas_create_drawing_views: API7 IDrawingDocument.ViewsAndL | Не подтверждено |
+| `DRW-02.views.list` | DRW | mcp_verified | kompas_list_drawing_views | kompas_list_drawing_views: API7 IViews.View / ViewByNumber / | Не подтверждено |
+| `DRW-03.dimension.add` | DRW | mcp_verified | kompas_add_dimension, kompas_list_dimensions | kompas_add_dimension: API7 IView как ISymbols2DContainer → L | Не подтверждено |
+| `DRW-04.title_block.set` | DRW | mcp_verified | kompas_set_title_block | kompas_set_title_block: API7 ILayoutSheet.Stamp → IStamp.get | Не подтверждено |
+| `DRW-05.export` | DRW | mcp_verified | kompas_export_drawing | kompas_export_drawing: API7 IApplication.get_Converter(Type. | Не подтверждено |
+| `dep.drawing.document_lifecycle` | dep | None | - | - | Не подтверждено |
+| `dep.drawing.source_file` | dep | None | - | - | Не подтверждено |
+| `dep.drawing.view_address` | dep | None | - | - | Не подтверждено |
+| `dep.drawing.revisions` | dep | None | - | - | Не подтверждено |
+| `dep.drawing.idempotency` | dep | None | - | - | Не подтверждено |
+| `dep.drawing.export_file` | dep | None | - | - | Не подтверждено |
+| `DRW-06.technical_demand` | DRW | mcp_verified | kompas_set_technical_demand | kompas_set_technical_demand: API7 IDrawingDocument.Technical | Не подтверждено |
+| `DRW-03.dimension.add.linear` | DRW | mcp_verified | kompas_add_dimension | kompas_add_dimension: API7 IView как ISymbols2DContainer → L | Не подтверждено |
+| `DRW-03.dimension.add.radial` | DRW | mcp_verified | kompas_add_dimension | kompas_add_dimension: API7 IView как ISymbols2DContainer → L | Не подтверждено |
+| `DRW-03.dimension.add.diametral` | DRW | mcp_verified | kompas_add_dimension | kompas_add_dimension: API7 IView как ISymbols2DContainer → L | Не подтверждено |
+| `VM-01.variables.read` | VM | mcp_implemented | kompas_list_variables | kompas_list_variables: ksPart.VariableCollection → ksVariabl | Не подтверждено |
+| `VM-02.variable.set_value` | VM | mcp_implemented | kompas_list_variables, kompas_measure, kompas_set_variable | kompas_set_variable (mode=value): проверка документа, ревизи | Не подтверждено |
+| `VM-03.variable.set_expression` | VM | mcp_implemented | kompas_list_variables, kompas_measure, kompas_set_variable | kompas_set_variable (mode=expression): запись ksVariable.Exp | Не подтверждено |
+| `VM-04.material.read` | VM | mcp_verified | kompas_get_material | kompas_get_material: ksPart.material (свойство ТОЛЬКО ДЛЯ ЧТ | Не подтверждено |
+| `VM-05.material.write` | VM | mcp_verified | kompas_get_material, kompas_set_material | kompas_set_material: ksPart.SetMaterial(name, плотность в до | Не подтверждено |
+| `VM-06.mass.computed_via_measure` | VM | mcp_verified | kompas_get_material, kompas_measure | kompas_measure получает плотность ОТ ВЫЗЫВАЮЩЕГО (параметр d | Не подтверждено |
+| `dep.vm.part_addressing` | dep | None | - | - | Не подтверждено |
+| `dep.vm.revisions` | dep | None | - | - | Не подтверждено |
+| `dep.vm.idempotency` | dep | None | - | - | Не подтверждено |
+| `dep.vm.save_reopen` | dep | None | - | - | Не подтверждено |
+| `dep.vm.units` | dep | None | - | Единицы плотности: запись — документированные г/куб.см (ksPa | Не подтверждено |
+| `dep.sketches.enumeration` | AUX-SKETCH | None | kompas_list_sketches | API5 ksPart.EntityCollection(o3d_sketch = 5) — «При создании | Не подтверждено |
+| `INT-01.pairs.volumetric` | G1 | mcp_verified | kompas_check_interference | ksDocument3D.PartCollection(true) → ksPart.BodyCollection →  | Не подтверждено |
+| `INT-02.pairs.tangent` | G1 | mcp_verified | kompas_check_interference | ksBody.CheckIntersectionWithBody(other, checkTangent); справ | Не подтверждено |
+| `INT-03.pairs.faces` | G1 | mcp_verified | kompas_check_interference | ksBody.GetIntersectionFacesWithBody(other, intersectionFaces | Не подтверждено |
+| `INT-04.gap.min_distance` | G1 | mcp_verified | kompas_measure_gap | IKompasDocument3D.TopPart → проверка версии КОМПАС (не ниже  | Не подтверждено |
+| `dep.interference.component_address` | dep | None | - | ksDocument3D.PartCollection(true) → ksPart; ksPart.BodyColle | Подтверждено |
+| `dep.interference.face_address` | dep | None | - | ksPart.BodyCollection → ksBody.FaceCollection → GetByIndex;  | Не подтверждено |
+| `dep.interference.api7_measurer` | dep | None | - | IKompasDocument3D.TopPart → проверка версии КОМПАС (не ниже  | Не подтверждено |
+| `dep.interference.distance_unit` | dep | None | - | IMeasurement3D.Lmin / GetMinPoint1/2; единица справкой не на | Не подтверждено |
+| `dep.interference.read_only` | dep | None | - | оба инструмента отвечают requires_operation_id: false и не п | Не подтверждено |
+| `SKB-01.limits` | G2 | mcp_verified | kompas_edit_sketch | Схема и описание поля берут число из KompasMcp.Contracts.Ske | Не подтверждено |
+| `SKB-02.polyline_native` | G2 | mcp_verified | kompas_edit_sketch | ksPolylineByParam(ksPolylineParam.closed) — один объект; чте | Не подтверждено |
+| `SKB-03.spline` | G2 | mcp_verified | kompas_edit_sketch | ksBezier(closed) + ksBezierPoint(ksBezierPointParam) + ksEnd | Не подтверждено |
+| `dep.sketch_bulk.limits_source` | dep | None | - | KompasMcp.Contracts.SketchLimits → ToolCatalog (maxItems и т | Не подтверждено |
+| `dep.sketch_bulk.entity_read_back` | dep | None | - | ISketch.BeginEditEx(true) → IDrawingContainer.GetObjects(ksA | Не подтверждено |
+| `dep.sketch_bulk.profile_area_rule` | dep | None | - | KompasMcp.Domain.Geometry.ProfileArea — общая формула профил | Не подтверждено |
+| `VB-01.variable.create` | G3 | mcp_verified | kompas_create_variable, kompas_list_variables | kompas_create_variable: IPart7.IsVariableNameValid ДО записи | Не подтверждено |
+| `VB-02.feature_parameters.list` | G3 | mcp_verified | kompas_list_feature_parameters, kompas_list_features) | kompas_list_feature_parameters: признак (ссылка из kompas_li | Не подтверждено |
+| `VB-03.parameter.bind` | G3 | mcp_verified | kompas_bind_parameter, kompas_list_feature_parameters, kompas_measure | kompas_bind_parameter: поиск параметра по ТОЧНОМУ имени в ks | Не подтверждено |
+| `VB-04.parameter.unbind` | G3 | mcp_verified | kompas_bind_parameter, kompas_list_feature_parameters, kompas_measure | kompas_bind_parameter с числовым expression: тот же порядок, | Не подтверждено |
+| `dep.vb.parameter_address` | dep | None | kompas_list_feature_parameters | Адрес параметра — поле name из kompas_list_feature_parameter | Не подтверждено |
+| `dep.vb.units` | dep | None | - | Значение параметра читается и пишется как число в собственно | Не подтверждено |
+| `dep.vb.rebuild_document` | dep | None | - | После записи выражения вызывается ksDocument3D.RebuildDocume | Не подтверждено |
+| `dep.vb.read_only_list` | dep | None | kompas_list_feature_parameters | kompas_list_feature_parameters не требует operation_id и exp | Не подтверждено |
+| `dep.vb.idempotency` | dep | None | kompas_bind_parameter), kompas_create_variable | Оба мутирующих инструмента (kompas_create_variable, kompas_b | Не подтверждено |
+| `EI-01.stl.export` | G5 | mcp_verified | kompas_export_stl | kompas_export_stl: политика путей (Host, поле target_path) → | Не подтверждено |
+| `EI-02.stl.tessellation` | G5 | mcp_verified | kompas_export_stl | kompas_export_stl: max_edge_length_mm -> ksAdditionFormatPar | Не подтверждено |
+| `EI-03.inertia.central` | G7 | mcp_verified | kompas_measure | kompas_measure со свойством inertia: ksBody.CalcMassInertiaP | Не подтверждено |
+| `EI-04.inertia.principal` | G7 | mcp_verified | kompas_measure | kompas_measure со свойством inertia: ksMassInertiaParam.jx0/ | Не подтверждено |
+| `EI-05.inertia.units` | G7 | mcp_verified | kompas_measure | kompas_measure: inertia_units mm_kg → bitVector ST_MIX_MM|ST | Не подтверждено |
+| `dep.ei.path_policy` | dep | None | - | Поле target_path входит в список полей пути Host'а (ToolInvo | Не подтверждено |
+| `dep.ei.triangle_count_from_file` | dep | None | - | StlFileInspector: двоичный — (размер − 84) / 50 с чтением ве | Не подтверждено |
+| `dep.ei.units_system` | dep | None | - | bitVector собирается из аргумента inertia_units (ST_MIX_MM|S | Не подтверждено |
+| `dep.ei.read_only_measure` | dep | None | kompas_measure | kompas_measure зарегистрирован как ReadOnly (requiresOperati | Не подтверждено |
+| `dep.ei.idempotency` | dep | None | kompas_export_step) | Мутирующий инструмент: журнал и дедупликация — на уровне Hos | Не подтверждено |
+| `SKC-01.geometric_types` | G6 | mcp_verified | kompas_create_sketch_constraint | IDrawingObject1.NewConstraint() → задать ConstraintType/Inde | Не подтверждено |
+| `SKC-02.dimension_types` | G6 | mcp_verified | kompas_create_sketch_dimension | У каждого вида СВОЯ коллекция контейнера ISymbols2DContainer | Не подтверждено |
+| `SKC-03.read` | G6 | mcp_verified | kompas_list_sketch_constraints | ISketch.BeginEditEx(true) → контейнер эскиза → QI(IDrawingOb | Не подтверждено |
+| `SKC-04.delete` | G6 | mcp_verified | kompas_delete_sketch_constraint | Внутри сеанса записи: перечитать список → Delete() по позици | Не подтверждено |
+| `SKC-05.state_read` | G6 | mcp_verified | kompas_get_sketch_status | Агрегатное состояние — ISketch.ConstraintsState; состояние о | Не подтверждено |
+| `SKC-06.association_bisector` | G6 | metadata_found | kompas_create_sketch_constraint | Тот же маршрут; партнёр передаётся массивом (partner_refs),  | Не подтверждено |
+| `dep.sketch_constraints.object_address` | G6 | None | kompas_list_sketch_entities | Устойчивая адресация объекта эскиза для ограничения | Не подтверждено |
+| `dep.sketch_constraints.interop_presence` | G6 | None | kompas_list_sketch_constraints | Каждый используемый член присутствует в ПОСТАВЛЕННОМ interop | Не подтверждено |
+| `dep.sketch_constraints.type_vocabulary` | G6 | None | kompas_create_sketch_constraint, kompas_list_sketch_constraints | Перечень типов берётся из ОДНОЙ сборки, числа не дублируются | Не подтверждено |
+| `dep.sketch_constraints.state_agreement` | G6 | None | kompas_list_sketch_constraints | Состояние объекта и агрегатное состояние эскиза не подменяют | Не подтверждено |
+| `dep.sketch_constraints.no_silent_rewrite` | G6 | None | kompas_list_sketch_entities | Перемещение геометрии ядром не скрывается: дельта публикуетс | Не подтверждено |
+| `ASM-08.component.delete` | ASM | mcp_verified | kompas_delete_component, kompas_list_components, kompas_list_documents, kompas_list_mates, kompas_open_document, kompas_rebuild, kompas_save_document | kompas_delete_component: API5 ksDocument3D.DeleteObject(ksPa | Не подтверждено |
+| `SM-02.material_toward` | SM-02 | mcp_verified | kompas_extrude, kompas_get_feature, kompas_list_bodies, kompas_measure, kompas_open_document, kompas_rebuild, kompas_save_document | kompas_extrude, вход material_toward: ExtrusionSide.Directio | Не подтверждено |
+
+## 5. COM-маршруты адаптера
+
+| Маршрут | Сборка | Вид | Сигнатура | Мест | Документация |
+|---|---|---|---|---|---|
+| `IPart7.get_PartsEx` | api7 | method | `Object get_PartsEx(Object PartCollectionType)` | 1 | не проверено |
+| `IPart7.Reference` | api7 | property | `prop Int32 Reference` | 1 | не проверено |
+| `IPart7.Name` | api7 | property | `prop String Name` | 2 | не проверено |
+| `IPart7.Marking` | api7 | property | `prop String Marking` | 1 | не проверено |
+| `IPart7.FileName` | api7 | property | `prop String FileName` | 4 | не проверено |
+| `IPart7.Detail` | api7 | property | `prop Boolean Detail` | 1 | не проверено |
+| `IPart7.Fixed` | api7 | property | `prop Boolean Fixed` | 1 | не проверено |
+| `IPart7.LoadState` | api7 | property | `prop ksLoadStateEnum LoadState` | 1 | не проверено |
+| `IPart7.GetSummMatrix` | api7 | method | `Object GetSummMatrix(Part7 Part)` | 1 | не проверено |
+| `IPart7.InstanceCount` | api7 | property | `prop Int32 InstanceCount` | 1 | не проверено |
+| `ksDocument3D.PartCollection` | api5 | method | `Object PartCollection(Boolean refresh)` | 1 | Подтверждено |
+| `ksPartCollection.GetCount` | api5 | method | `Int32 GetCount()` | 1 | Подтверждено |
+| `ksPartCollection.GetByIndex` | api5 | method | `Object GetByIndex(Int32 index)` | 1 | Подтверждено |
+| `ksDocument3D.DefaultPlacement` | api5 | method | `placement DefaultPlacement()` | 1 | Подтверждено |
+| `ksPlacement.InitByMatrix3D` | api5 | method | `Boolean InitByMatrix3D(Object mtr)` | 1 | не проверено |
+| `IKompasDocument3D.TopPart` | api7 | property | `prop Part7 TopPart` | 1 | не проверено |
+| `ksDocument3D.RebuildDocument` | api5 | method | `Boolean RebuildDocument()` | 13 | Подтверждено |
+| `ksPart.GetPlacement` | api5 | method | `Object GetPlacement()` | 1 | Подтверждено |
+| `ksPart.SetPlacement` | api5 | method | `Boolean SetPlacement(Object placement)` | 1 | не проверено |
+| `ksPart.UpdatePlacement` | api5 | method | `Boolean UpdatePlacement()` | 1 | не проверено |
+| `ksPart.fileName` | api5 | property | `prop String fileName` | 6 | не проверено |
+| `ksPart.Update` | api5 | method | `Boolean Update()` | 3 | Подтверждено |
+| `ksDocument3D.DeleteObject` | api5 | method | `Boolean DeleteObject(Object obj)` | 3 | Подтверждено |
+| `ksMateConstraint.GetBaseObj` | api5 | method | `Object GetBaseObj(Int16 number)` | 5 | не проверено |
+| `IModelObject.Part` | api7 | property | `prop Part7 Part` | 1 | не проверено |
+| `ksPart.name` | api5 | property | `prop String name` | 2 | не проверено |
+| `ksPart.GetDefaultEntity` | api5 | method | `Object GetDefaultEntity(Int16 objType)` | 3 | Подтверждено |
+| `IModelContainer.Points3D` | api7 | property | `prop Points3D Points3D` | 6 | не проверено |
+| `IAuxiliaryGeomContainer.Planes3D` | api7 | property | `prop Planes3D Planes3D` | 3 | не проверено |
+| `IAuxiliaryGeomContainer.Axes3D` | api7 | property | `prop Axes3D Axes3D` | 3 | не проверено |
+| `ksPart.EntityCollection` | api5 | method | `Object EntityCollection(Int16 objType)` | 15 | Подтверждено |
+| `ksEntityCollection.GetCount` | api5 | method | `Int32 GetCount()` | 34 | Подтверждено |
+| `ksEntityCollection.GetByIndex` | api5 | method | `Object GetByIndex(Int32 index)` | 23 | Подтверждено |
+| `ksEntity.type` | api5 | property | `prop Int16 type` | 18 | не проверено |
+| `ksEntity.GetDefinition` | api5 | method | `Object GetDefinition()` | 36 | Подтверждено |
+| `ksChamferDefinition.SetChamferParam` | api5 | method | `Boolean SetChamferParam(Boolean transfer, Double distance1, Double dis` | 1 | Подтверждено |
+| `ksEntity.Update` | api5 | method | `Boolean Update()` | 6 | Подтверждено |
+| `IViews.AddStandartViews` | api7 | method | `Boolean AddStandartViews(String FileName, String ProjectionName, Objec` | 1 | не проверено |
+| `IView.Scale` | api7 | property | `prop Double Scale` | 2 | не проверено |
+| `IView.X` | api7 | property | `prop Double X` | 2 | не проверено |
+| `IView.Y` | api7 | property | `prop Double Y` | 2 | не проверено |
+| `IKompasDocument2D1.RebuildDocument` | api7 | method | `Boolean RebuildDocument()` | 1 | не проверено |
+| `ISymbols2DContainer.LineDimensions` | api7 | property | `prop LineDimensions LineDimensions` | 2 | не проверено |
+| `ISymbols2DContainer.RadialDimensions` | api7 | property | `prop RadialDimensions RadialDimensions` | 2 | не проверено |
+| `ISymbols2DContainer.DiametralDimensions` | api7 | property | `prop DiametralDimensions DiametralDimensions` | 2 | не проверено |
+| `IDiametralDimension.DrawingObjectType` | api7 | property | `prop DrawingObjectTypeEnum DrawingObjectType` | 3 | не проверено |
+| `IDiametralDimension.Valid` | api7 | property | `prop Boolean Valid` | 4 | не проверено |
+| `IDiametralDimension.Xc` | api7 | property | `prop Double Xc` | 2 | не проверено |
+| `IDiametralDimension.Yc` | api7 | property | `prop Double Yc` | 2 | не проверено |
+| `IDiametralDimension.Radius` | api7 | property | `prop Double Radius` | 2 | не проверено |
+| `IDiametralDimension.Update` | api7 | method | `Boolean Update()` | 1 | не проверено |
+| `IText.Str` | api7 | property | `prop String Str` | 1 | не проверено |
+| `IConverter.GetFilter` | api7 | method | `String GetFilter(Int32 DocType, Boolean SaveAs, Int32& Command)` | 1 | не проверено |
+| `IConverter.Convert` | api7 | method | `Int32 Convert(String InputFile, String Outfile, Int32 Command, Boolean` | 1 | не проверено |
+| `IApplication.Application` | api7 | property | `prop IApplication Application` | 1 | не проверено |
+| `IApplication.Documents` | api7 | property | `prop Documents Documents` | 2 | не проверено |
+| `IView.Name` | api7 | property | `prop String Name` | 2 | не проверено |
+| `IViews.Count` | api7 | property | `prop Int32 Count` | 4 | не проверено |
+| `IViews.get_View` | api7 | method | `IView get_View(Object Index)` | 3 | не проверено |
+| `IView.Reference` | api7 | property | `prop Int32 Reference` | 3 | не проверено |
+| `IView.Number` | api7 | property | `prop Int32 Number` | 1 | не проверено |
+| `IView.ViewType` | api7 | property | `prop LtViewType ViewType` | 1 | не проверено |
+| `IAssociationView.SourceFileName` | api7 | property | `prop String SourceFileName` | 1 | не проверено |
+| `IAssociationView.ProjectionName` | api7 | property | `prop String ProjectionName` | 1 | не проверено |
+| `IAssociationView.HiddenLinesVisible` | api7 | property | `prop Boolean HiddenLinesVisible` | 1 | не проверено |
+| `IAssociationView.CenterLinesVisible` | api7 | property | `prop Boolean CenterLinesVisible` | 1 | не проверено |
+| `IView.ObjectCount` | api7 | property | `prop Int32 ObjectCount` | 1 | не проверено |
+| `IView.Valid` | api7 | property | `prop Boolean Valid` | 1 | не проверено |
+| `ksAdditionFormatParam.Init` | api5 | method | `Boolean Init()` | 3 | Подтверждено |
+| `ksAdditionFormatParam.format` | api5 | property | `prop Int16 format` | 3 | не проверено |
+| `KompasObject.Document3D` | api5 | method | `Object Document3D()` | 1 | Подтверждено |
+| `ksDocument3D.Create` | api5 | method | `Boolean Create(Boolean invisible, Boolean typeDoc)` | 2 | Подтверждено |
+| `ksDocument3D.AdditionFormatParam` | api5 | method | `Object AdditionFormatParam()` | 1 | Подтверждено |
+| `ksDocument3D.LoadFromAdditionFormat` | api5 | method | `Boolean LoadFromAdditionFormat(String fileName, Object additionPar)` | 1 | Подтверждено |
+| `ksDocument3D.UpdateDocumentParam` | api5 | method | `Boolean UpdateDocumentParam()` | 2 | Подтверждено |
+| `ksDocument3D.GetPart` | api5 | method | `Object GetPart(Int32 type)` | 3 | Подтверждено |
+| `KompasObject.ActiveDocument3D` | api5 | method | `Object ActiveDocument3D()` | 1 | Подтверждено |
+| `ksBody.FaceCollection` | api5 | method | `Object FaceCollection()` | 10 | Подтверждено |
+| `ksFaceCollection.GetCount` | api5 | method | `Int32 GetCount()` | 13 | Подтверждено |
+| `ksFaceCollection.GetByIndex` | api5 | method | `Object GetByIndex(Int32 index)` | 9 | Подтверждено |
+| `ksFaceDefinition.EdgeCollection` | api5 | method | `Object EdgeCollection()` | 3 | Подтверждено |
+| `ksEdgeCollection.GetCount` | api5 | method | `Int32 GetCount()` | 3 | Подтверждено |
+| `ksEdgeCollection.GetByIndex` | api5 | method | `Object GetByIndex(Int32 index)` | 3 | Подтверждено |
+| `ksEdgeDefinition.GetLength` | api5 | method | `Double GetLength(UInt32 bitVector)` | 2 | Подтверждено |
+| `ksPart.RebuildModel` | api5 | method | `Boolean RebuildModel()` | 3 | Подтверждено |
+| `ksBaseEvolutionDefinition.sketchShiftType` | api5 | property | `prop Int16 sketchShiftType` | 3 | Подтверждено |
+| `ksBossEvolutionDefinition.sketchShiftType` | api5 | property | `prop Int16 sketchShiftType` | 2 | не проверено |
+| `ILoft.Sketchs` | api7 | property | `prop Object Sketchs` | 2 | Подтверждено |
+| `ksBaseLoftDefinition.Sketchs` | api5 | method | `Object Sketchs()` | 3 | не проверено |
+| `ksBossLoftDefinition.Sketchs` | api5 | method | `Object Sketchs()` | 3 | не проверено |
+| `ksEntityCollection.Clear` | api5 | method | `Boolean Clear()` | 2 | Подтверждено |
+| `ksEntityCollection.Add` | api5 | method | `Boolean Add(Object entity)` | 7 | Подтверждено |
+| `ksEntity.name` | api5 | property | `prop String name` | 12 | не проверено |
+| `ksEntityCollection.refresh` | api5 | method | `Boolean refresh()` | 3 | Подтверждено |
+| `ksShellDefinition.thickness` | api5 | property | `prop Double thickness` | 5 | не проверено |
+| `ksShellDefinition.thinType` | api5 | property | `prop Boolean thinType` | 5 | Подтверждено |
+| `ksShellDefinition.FaceArray` | api5 | method | `Object FaceArray()` | 4 | Подтверждено |
+| `ksBaseEvolutionDefinition.GetSketch` | api5 | method | `Object GetSketch()` | 2 | не проверено |
+| `ksBaseEvolutionDefinition.PathPartArray` | api5 | method | `Object PathPartArray()` | 3 | Подтверждено |
+| `ksBaseEvolutionDefinition.GetPathLength` | api5 | method | `Double GetPathLength(UInt32 bitVector)` | 2 | Подтверждено |
+| `ksBossEvolutionDefinition.GetSketch` | api5 | method | `Object GetSketch()` | 1 | не проверено |
+| `ksBossEvolutionDefinition.PathPartArray` | api5 | method | `Object PathPartArray()` | 1 | не проверено |
+| `ksBossEvolutionDefinition.GetPathLength` | api5 | method | `Double GetPathLength(UInt32 bitVector)` | 1 | не проверено |
+| `ksBaseExtrusionDefinition.GetSketch` | api5 | method | `Object GetSketch()` | 15 | Подтверждено |
+| `ksBossExtrusionDefinition.GetSketch` | api5 | method | `Object GetSketch()` | 4 | Подтверждено |
+| `ksCutExtrusionDefinition.GetSketch` | api5 | method | `Object GetSketch()` | 4 | Подтверждено |
+| `ksBaseExtrusionDefinition.SetSketch` | api5 | method | `Boolean SetSketch(Object sketch)` | 1 | Подтверждено |
+| `ksBossExtrusionDefinition.SetSketch` | api5 | method | `Boolean SetSketch(Object sketch)` | 1 | Подтверждено |
+| `ksCutExtrusionDefinition.SetSketch` | api5 | method | `Boolean SetSketch(Object sketch)` | 1 | Подтверждено |
+| `ksBaseExtrusionDefinition.directionType` | api5 | property | `prop Int16 directionType` | 1 | Подтверждено |
+| `ksBaseExtrusionDefinition.GetSideParam` | api5 | method | `Boolean GetSideParam(Boolean side1, Int16& type, Double& depth, Double` | 1 | не проверено |
+| `ksBaseExtrusionDefinition.GetThinParam` | api5 | method | `Boolean GetThinParam(Boolean& thin, Int16& thinType, Double& normalThi` | 1 | Подтверждено |
+| `ksCutExtrusionDefinition.directionType` | api5 | property | `prop Int16 directionType` | 1 | Подтверждено |
+| `ksCutExtrusionDefinition.GetSideParam` | api5 | method | `Boolean GetSideParam(Boolean side1, Int16& type, Double& depth, Double` | 1 | Подтверждено |
+| `ksCutExtrusionDefinition.GetThinParam` | api5 | method | `Boolean GetThinParam(Boolean& thin, Int16& thinType, Double& normalThi` | 1 | Подтверждено |
+| `ksBaseExtrusionDefinition.SetSideParam` | api5 | method | `Boolean SetSideParam(Boolean side1, Int16 type, Double depth, Double d` | 3 | Подтверждено |
+| `ksEntity.GetFeature` | api5 | method | `Object GetFeature()` | 6 | Подтверждено |
+| `ksFeature.IsValid` | api5 | method | `Boolean IsValid()` | 1 | не проверено |
+| `ksFeature.IsRollBacked` | api5 | method | `Boolean IsRollBacked()` | 1 | не проверено |
+| `ksFeature.objectError` | api5 | property | `prop Int32 objectError` | 1 | не проверено |
+| `ksFeature.updateStamp` | api5 | property | `prop UInt32 updateStamp` | 1 | не проверено |
+| `ksFeature.GetOwnerFeature` | api5 | method | `Object GetOwnerFeature()` | 1 | Подтверждено |
+| `ksEntity.excluded` | api5 | property | `prop Boolean excluded` | 1 | не проверено |
+| `ksFilletDefinition.radius` | api5 | property | `prop Double radius` | 1 | не проверено |
+| `ksFilletDefinition.tangent` | api5 | property | `prop Boolean tangent` | 1 | не проверено |
+| `IModelObject.Reference` | api7 | property | `prop Int32 Reference` | 1 | не проверено |
+| `ksPart.NewEntity` | api5 | method | `Object NewEntity(Int16 objType)` | 5 | Подтверждено |
+| `ksEntity.Create` | api5 | method | `Boolean Create()` | 5 | Подтверждено |
+| `ksSketchDefinition.BeginEdit` | api5 | method | `Object BeginEdit()` | 1 | Подтверждено |
+| `ksDocument2D.ksFindObj` | api5 | method | `Int32 ksFindObj(Double x, Double y, Double limit)` | 1 | Подтверждено |
+| `ksDocument2D.ksDeleteObj` | api5 | method | `Int32 ksDeleteObj(Int32 ref)` | 1 | не проверено |
+| `ksSketchDefinition.GetPlane` | api5 | method | `Object GetPlane()` | 3 | Подтверждено |
+| `ksPart.GetMainBody` | api5 | method | `Object GetMainBody()` | 14 | Подтверждено |
+| `ksDocument2D.ksLineSeg` | api5 | method | `Int32 ksLineSeg(Double x1, Double y1, Double x2, Double y2, Int32 styl` | 5 | не подтверждено |
+| `ksDocument2D.ksCircle` | api5 | method | `Int32 ksCircle(Double xc, Double yc, Double rad, Int32 style)` | 1 | не подтверждено |
+| `ksDocument2D.ksArcByPoint` | api5 | method | `Int32 ksArcByPoint(Double xc, Double yc, Double rad, Double x1, Double` | 1 | не проверено |
+| `ksDocument2D.ksArcByAngle` | api5 | method | `Int32 ksArcByAngle(Double xc, Double yc, Double rad, Double f1, Double` | 1 | не подтверждено |
+| `KompasObject.GetParamStruct` | api5 | method | `Object GetParamStruct(Int16 structType)` | 3 | Подтверждено |
+| `KompasObject.GetDynamicArray` | api5 | method | `Object GetDynamicArray(Int32 type)` | 1 | Подтверждено |
+| `ksDocument2D.ksPolylineByParam` | api5 | method | `Int32 ksPolylineByParam(Object par)` | 1 | Подтверждено |
+| `ksDocument2D.ksBezier` | api5 | method | `Int32 ksBezier(Int16 closed, Int32 style)` | 1 | не проверено |
+| `ksDocument2D.ksBezierPoint` | api5 | method | `Int32 ksBezierPoint(Object par)` | 1 | не проверено |
+| `ksDocument2D.ksEndObj` | api5 | method | `Int32 ksEndObj()` | 1 | не проверено |
+| `ksSurface.IsPlane` | api5 | method | `Boolean IsPlane()` | 1 | не проверено |
+| `ksSurface.GetSurfaceParam` | api5 | method | `Object GetSurfaceParam()` | 2 | Подтверждено |
+| `ksPlacement.GetVector` | api5 | method | `Boolean GetVector(Int32 type, Double& x, Double& y, Double& z)` | 2 | Подтверждено |
+| `ksPlacement.GetOrigin` | api5 | method | `Boolean GetOrigin(Double& x, Double& y, Double& z)` | 3 | Подтверждено |
+| `ksPart.BodyCollection` | api5 | method | `Object BodyCollection()` | 5 | Подтверждено |
+| `ksBodyCollection.refresh` | api5 | method | `Boolean refresh()` | 5 | не проверено |
+| `ksBodyCollection.GetCount` | api5 | method | `Int32 GetCount()` | 6 | Подтверждено |
+| `ksBodyCollection.GetByIndex` | api5 | method | `Object GetByIndex(Int32 index)` | 7 | Подтверждено |
+| `ksBody.GetGabarit` | api5 | method | `Boolean GetGabarit(Double& x1, Double& y1, Double& z1, Double& x2, Dou` | 4 | Подтверждено |
+| `ksFaceCollection.refresh` | api5 | method | `Boolean refresh()` | 1 | не проверено |
+| `ksChooseBodies.ChooseBodiesType` | api5 | property | `prop Int32 ChooseBodiesType` | 1 | не проверено |
+| `ksChooseBodies.BodyCollection` | api5 | method | `Object BodyCollection()` | 1 | Подтверждено |
+| `KompasObject.ksReturnResult` | api5 | method | `Int32 ksReturnResult()` | 1 | не проверено |
+| `KompasObject.ksStrResult` | api5 | method | `String ksStrResult()` | 1 | не проверено |
+| `ksEdgeDefinition.GetEntity` | api5 | method | `Object GetEntity()` | 1 | Подтверждено |
+| `ksEdgeDefinition.GetOwnerEntity` | api5 | method | `Object GetOwnerEntity()` | 1 | Подтверждено |
+| `ksFaceDefinition.GetArea` | api5 | method | `Double GetArea(UInt32 bitVector)` | 3 | Подтверждено |
+| `ksFaceDefinition.IsPlanar` | api5 | method | `Boolean IsPlanar()` | 2 | Подтверждено |
+| `ksFaceDefinition.GetSurface` | api5 | method | `Object GetSurface()` | 5 | Подтверждено |
+| `ksSurface.IsCylinder` | api5 | method | `Boolean IsCylinder()` | 1 | Подтверждено |
+| `ksCylinderParam.GetPlacement` | api5 | method | `Object GetPlacement()` | 3 | не проверено |
+| `ksCylinderParam.radius` | api5 | property | `prop Double radius` | 5 | не проверено |
+| `ksCylinderParam.height` | api5 | property | `prop Double height` | 4 | не проверено |
+| `ksSurface.GetParamUMin` | api5 | method | `Double GetParamUMin()` | 1 | Подтверждено |
+| `ksSurface.GetParamUMax` | api5 | method | `Double GetParamUMax()` | 1 | Подтверждено |
+| `ksSurface.GetParamVMin` | api5 | method | `Double GetParamVMin()` | 1 | Подтверждено |
+| `ksSurface.GetParamVMax` | api5 | method | `Double GetParamVMax()` | 1 | Подтверждено |
+| `ksSurface.GetNormal` | api5 | method | `Boolean GetNormal(Double paramU, Double paramV, Double& x, Double& y, ` | 1 | Подтверждено |
+| `ksFaceDefinition.normalOrientation` | api5 | property | `prop Boolean normalOrientation` | 1 | не проверено |
+| `ksFaceDefinition.IsCylinder` | api5 | method | `Boolean IsCylinder()` | 1 | Подтверждено |
+| `ksFaceDefinition.IsCone` | api5 | method | `Boolean IsCone()` | 1 | Подтверждено |
+| `ksFaceDefinition.IsSphere` | api5 | method | `Boolean IsSphere()` | 1 | Подтверждено |
+| `ksFaceDefinition.IsTorus` | api5 | method | `Boolean IsTorus()` | 1 | Подтверждено |
+| `ksEdgeDefinition.IsStraight` | api5 | method | `Boolean IsStraight()` | 1 | Подтверждено |
+| `ksEdgeDefinition.IsCircle` | api5 | method | `Boolean IsCircle()` | 1 | Подтверждено |
+| `ksEdgeDefinition.IsArc` | api5 | method | `Boolean IsArc()` | 1 | Подтверждено |
+| `ksEdgeDefinition.GetCurve3D` | api5 | method | `Object GetCurve3D()` | 1 | Подтверждено |
+| `ksCircle3dParam.GetPlacement` | api5 | method | `Object GetPlacement()` | 1 | не проверено |
+| `ksCircle3dParam.radius` | api5 | property | `prop Double radius` | 1 | не проверено |
+| `ksBody.IsSolid` | api5 | method | `Boolean IsSolid()` | 1 | Подтверждено |
+| `ksEdgeDefinition.GetVertex` | api5 | method | `Object GetVertex(Boolean start)` | 1 | Подтверждено |
+| `ksBody.CalcMassInertiaProperties` | api5 | method | `Object CalcMassInertiaProperties(UInt32 bitVector)` | 1 | не проверено |
+| `ksMassInertiaParam.jx` | api5 | property | `prop Double jx` | 1 | не проверено |
+| `ksMassInertiaParam.jy` | api5 | property | `prop Double jy` | 1 | не проверено |
+| `ksMassInertiaParam.jz` | api5 | property | `prop Double jz` | 1 | не проверено |
+| `ksMassInertiaParam.jxy` | api5 | property | `prop Double jxy` | 1 | не проверено |
+| `ksMassInertiaParam.jxz` | api5 | property | `prop Double jxz` | 1 | не проверено |
+| `ksMassInertiaParam.jyz` | api5 | property | `prop Double jyz` | 1 | не проверено |
+| `ksMassInertiaParam.jx0z` | api5 | property | `prop Double jx0z` | 1 | не проверено |
+| `ksMassInertiaParam.jy0z` | api5 | property | `prop Double jy0z` | 1 | не проверено |
+| `ksMassInertiaParam.jx0y` | api5 | property | `prop Double jx0y` | 1 | не проверено |
+| `ksMassInertiaParam.jx0` | api5 | property | `prop Double jx0` | 1 | не проверено |
+| `ksMassInertiaParam.jy0` | api5 | property | `prop Double jy0` | 1 | не проверено |
+| `ksMassInertiaParam.jz0` | api5 | property | `prop Double jz0` | 1 | не проверено |
+| `ksMassInertiaParam.GetAxisX` | api5 | method | `Boolean GetAxisX(Double& x, Double& y, Double& z)` | 1 | не проверено |
+| `ksMassInertiaParam.GetAxisY` | api5 | method | `Boolean GetAxisY(Double& x, Double& y, Double& z)` | 1 | не проверено |
+| `ksMassInertiaParam.GetAxisZ` | api5 | method | `Boolean GetAxisZ(Double& x, Double& y, Double& z)` | 1 | не проверено |
+| `ksEntity.IsCreated` | api5 | method | `Boolean IsCreated()` | 2 | Подтверждено |
+| `ksDocument3D.RasterFormatParam` | api5 | method | `Object RasterFormatParam()` | 1 | Подтверждено |
+| `ksRasterFormatParam.Init` | api5 | method | `Boolean Init()` | 1 | Подтверждено |
+| `ksRasterFormatParam.format` | api5 | property | `prop Int16 format` | 1 | не проверено |
+| `ksRasterFormatParam.colorBPP` | api5 | property | `prop Int16 colorBPP` | 1 | не проверено |
+| `ksRasterFormatParam.extResolution` | api5 | property | `prop Int32 extResolution` | 1 | не проверено |
+| `ksRasterFormatParam.extScale` | api5 | property | `prop Double extScale` | 1 | не проверено |
+| `ksRasterFormatParam.returnResultAsArrayBytes` | api5 | property | `prop Boolean returnResultAsArrayBytes` | 1 | не проверено |
+| `ksDocument3D.SaveAsToRasterFormat` | api5 | method | `Boolean SaveAsToRasterFormat(String fileName, Object rasterPar)` | 1 | Подтверждено |
+| `ksRasterFormatParam.resultArrayBytes` | api5 | property | `prop Object resultArrayBytes` | 1 | не проверено |
+| `ksIntersectionResult.GetCount` | api5 | method | `Int32 GetCount()` | 1 | не проверено |
+| `ksIntersectionResult.GetIntersectionType` | api5 | method | `Int32 GetIntersectionType(Int32 index)` | 1 | не проверено |
+| `ksBody.GetIntersectionFacesWithBody` | api5 | method | `Int32 GetIntersectionFacesWithBody(Object otherBody, Object& intersect` | 1 | не проверено |
+| `IMeasurement3DTwin.set_Object1` | adapter-twins | method | `Void set_Object1(IKompasAPIObject Result)` | 1 | не проверено |
+| `IMeasurement3DTwin.set_Object2` | adapter-twins | method | `Void set_Object2(IKompasAPIObject Result)` | 1 | не проверено |
+| `IMeasurement3DTwin.Calculate` | adapter-twins | method | `ksMeasureResultEnum Calculate()` | 1 | не проверено |
+| `IMeasurement3DTwin.get_Lmin` | adapter-twins | method | `Double get_Lmin()` | 1 | не проверено |
+| `IMeasurement3DTwin.get_Angle` | adapter-twins | method | `Double get_Angle()` | 1 | не проверено |
+| `IMeasurement3DTwin.get_IsAngleValid` | adapter-twins | method | `Boolean get_IsAngleValid()` | 1 | не проверено |
+| `IMeasurement3DTwin.GetMinPoint1` | adapter-twins | method | `Boolean GetMinPoint1(Double& X, Double& Y, Double& Z)` | 1 | не проверено |
+| `IMeasurement3DTwin.GetMinPoint2` | adapter-twins | method | `Boolean GetMinPoint2(Double& X, Double& Y, Double& Z)` | 1 | не проверено |
+| `IPart7Twin.get_Measurement3D` | adapter-twins | method | `IMeasurement3DTwin get_Measurement3D()` | 1 | не проверено |
+| `ksFeature.excluded` | api5 | property | `prop Boolean excluded` | 1 | не проверено |
+| `ksEntityCollection.FindIt` | api5 | method | `Int32 FindIt(Object entity)` | 2 | Подтверждено |
+| `ILofts.Add` | api7 | method | `Loft Add(ksObj3dTypeEnum LoftType)` | 1 | не проверено |
+| `ksDocument3D.RemoveMateConstraint` | api5 | method | `Boolean RemoveMateConstraint(Int32 constraintType, Object obj1, Object` | 1 | Подтверждено |
+| `IMateConstraint3D.ConstraintType` | api7 | property | `prop MateConstraintType ConstraintType` | 2 | не проверено |
+| `IMateConstraint3D.BaseObject1` | api7 | property | `prop IModelObject BaseObject1` | 1 | не проверено |
+| `IMateConstraint3D.BaseObject2` | api7 | property | `prop IModelObject BaseObject2` | 1 | не проверено |
+| `ksDocument3D.MateConstraintCollection` | api5 | method | `Object MateConstraintCollection()` | 3 | Подтверждено |
+| `ksMateConstraintCollection.GetCount` | api5 | method | `Int32 GetCount()` | 2 | не проверено |
+| `ksMateConstraintCollection.GetByIndex` | api5 | method | `Object GetByIndex(Int32 index)` | 2 | не проверено |
+| `IModelContainer.FeaturePatterns` | api7 | property | `prop FeaturePatterns FeaturePatterns` | 7 | Подтверждено |
+| `IRotated.Angle` | api7 | property | `prop Double Angle` | 7 | не проверено |
+| `IKompasDocument2D1Twin.get_ParametricMode` | adapter-twins | method | `Boolean get_ParametricMode()` | 1 | не проверено |
+| `ISketch.BeginEdit` | api7 | method | `FragmentDocument BeginEdit()` | 1 | не проверено |
+| `IDrawingObject.LayerNumber` | api7 | property | `prop Int32 LayerNumber` | 2 | не проверено |
+| `IDrawingObject.Delete` | api7 | method | `Boolean Delete()` | 1 | не проверено |
+| `ISketch.EndEdit` | api7 | method | `Boolean EndEdit()` | 2 | не проверено |
+| `IDrawingObject.Update` | api7 | method | `Boolean Update()` | 1 | не проверено |
+| `ksSketchDefinition.SetPlane` | api5 | method | `Boolean SetPlane(Object plane)` | 1 | Подтверждено |
+| `IModelContainer.Booleans` | api7 | property | `prop Booleans Booleans` | 3 | не проверено |
+| `IBoolean.BooleanType` | api7 | property | `prop ksBooleanType BooleanType` | 4 | не проверено |
+| `IBoolean.SaveCopyModifyObjects` | api7 | property | `prop Boolean SaveCopyModifyObjects` | 2 | не проверено |
+| `IModelContainer.Cuts` | api7 | property | `prop Cuts Cuts` | 2 | не проверено |
+| `ICut.CutObject` | api7 | property | `prop IModelObject CutObject` | 3 | не проверено |
+| `ICut.Direction` | api7 | property | `prop Boolean Direction` | 3 | не проверено |
+| `IModelContainer.SplitSolids` | api7 | property | `prop SplitSolids SplitSolids` | 2 | не проверено |
+| `ISplitSolid.CutObjects` | api7 | property | `prop Object CutObjects` | 3 | не проверено |
+| `IModelContainer.BodyRepositions` | api7 | property | `prop BodyRepositions BodyRepositions` | 3 | не проверено |
+| `IPlane3DBy3Points.Point1` | api7 | property | `prop IModelObject Point1` | 3 | Подтверждено |
+| `IPlane3DBy3Points.Point2` | api7 | property | `prop IModelObject Point2` | 3 | Подтверждено |
+| `IPlane3DBy3Points.Point3` | api7 | property | `prop IModelObject Point3` | 3 | Подтверждено |
+| `IPoint3D.X` | api7 | property | `prop Double X` | 7 | не проверено |
+| `IPoint3D.Y` | api7 | property | `prop Double Y` | 7 | не проверено |
+| `IPoint3D.Z` | api7 | property | `prop Double Z` | 7 | не проверено |
+| `ksAdditionFormatParam.formatBinary` | api5 | property | `prop Boolean formatBinary` | 2 | не проверено |
+| `ksAdditionFormatParam.length` | api5 | property | `prop Double length` | 2 | не проверено |
+| `ksAdditionFormatParam.angle` | api5 | property | `prop Double angle` | 2 | не проверено |
+| `ksBaseEvolutionDefinition.SetSketch` | api5 | method | `Boolean SetSketch(Object sketch)` | 1 | не проверено |
+| `IPart7.IsVariableNameValid` | api7 | method | `Boolean IsVariableNameValid(String Name)` | 1 | не проверено |
+| `IPart7.AddVariable` | api7 | method | `Variable7 AddVariable(String Name, Double Value, String Note)` | 1 | не проверено |
+| `IVariable7.External` | api7 | property | `prop Boolean External` | 1 | не проверено |
+| `IVariable7.Expression` | api7 | property | `prop String Expression` | 1 | не проверено |
+| `ksFeature.name` | api5 | property | `prop String name` | 1 | не проверено |
+| `ksFeature.VariableCollection` | api5 | property | `prop Object VariableCollection` | 1 | не проверено |
+| `ksVariableCollection.GetCount` | api5 | method | `Int32 GetCount()` | 2 | не проверено |
+| `ksVariableCollection.GetByIndex` | api5 | method | `Object GetByIndex(Int32 index)` | 2 | не проверено |
+| `ksPart.material` | api5 | property | `prop String material` | 2 | не проверено |
+| `ksPart.density` | api5 | property | `prop Double density` | 1 | не проверено |
+| `ksPart.CalcMassInertiaProperties` | api5 | method | `Object CalcMassInertiaProperties(UInt32 bitVector)` | 1 | Подтверждено |
+| `ksMassInertiaParam.r` | api5 | property | `prop Double r` | 1 | не проверено |
+| `ksPart.SetMaterial` | api5 | method | `Boolean SetMaterial(String material, Double density)` | 1 | не проверено |
+| `ksPart.VariableCollection` | api5 | method | `Object VariableCollection()` | 1 | не проверено |
+| `ksVariableCollection.GetByName` | api5 | method | `Object GetByName(String name, Boolean testFullName, Boolean testIgnore` | 1 | не проверено |
+| `ksVariable.name` | api5 | property | `prop String name` | 1 | не проверено |
+| `ksVariable.value` | api5 | property | `prop Double value` | 2 | не проверено |
+| `ksVariable.Expression` | api5 | property | `prop String Expression` | 2 | не проверено |
+| `ksVariable.displayName` | api5 | property | `prop String displayName` | 1 | не проверено |
+| `ksVariable.note` | api5 | property | `prop String note` | 1 | не проверено |
+| `KompasObject.Visible` | api5 | property | `prop Boolean Visible` | 2 | Подтверждено |
+| `KompasObject.ksGetHWindow` | api5 | method | `Int32 ksGetHWindow()` | 2 | не подтверждено |
+| `ksDocument3D.invisibleMode` | api5 | property | `prop Boolean invisibleMode` | 1 | не подтверждено |
+| `ksDocument3D.SetActive` | api5 | method | `Boolean SetActive()` | 1 | Подтверждено |
+| `KompasObject.ksRefreshActiveWindow` | api5 | method | `Int32 ksRefreshActiveWindow()` | 1 | Подтверждено |
+| `KompasObject.ksGetSystemVersion` | api5 | method | `Int32 ksGetSystemVersion(Int32& iMajor, Int32& iMinor, Int32& iRelease` | 1 | не подтверждено |
+| `IKompasDocument.SaveAs` | api7 | method | `Void SaveAs(String PathName)` | 2 | не проверено |
+| `ksPart.marking` | api5 | property | `prop String marking` | 1 | не проверено |
+| `ksDocument3D.Open` | api5 | method | `Boolean Open(String fileName, Boolean invisible)` | 1 | Подтверждено |
+| `ksDocumentParam.Init` | api5 | method | `Boolean Init()` | 1 | Подтверждено |
+| `ksDocumentParam.type` | api5 | property | `prop Int16 type` | 1 | не проверено |
+| `ksDocumentParam.regime` | api5 | property | `prop Int16 regime` | 1 | не проверено |
+| `ksDocumentParam.comment` | api5 | property | `prop String comment` | 1 | не проверено |
+| `ksDocument2D.ksCreateDocument` | api5 | method | `Boolean ksCreateDocument(Object par)` | 1 | не проверено |
+| `ksDocument2D.ksOpenDocument` | api5 | method | `Boolean ksOpenDocument(String nameDoc, Boolean regim)` | 1 | не проверено |
+| `IKompasDocument.Close` | api7 | method | `Boolean Close(DocumentCloseOptions closeOptions)` | 1 | не проверено |
+| `IKompasDocument.Save` | api7 | method | `Void Save()` | 1 | не проверено |
+| `ksViewProjectionCollection.refresh` | api5 | method | `Boolean refresh()` | 3 | не проверено |
+| `ksDocument3D.GetViewProjectionCollection` | api5 | method | `Object GetViewProjectionCollection()` | 1 | Подтверждено |
+| `ksViewProjectionCollection.GetCount` | api5 | method | `Int32 GetCount()` | 3 | не проверено |
+| `ksViewProjectionCollection.GetByIndex` | api5 | method | `Object GetByIndex(Int32 index)` | 3 | не проверено |
+| `ksViewProjection.IsCurrent` | api5 | method | `Boolean IsCurrent()` | 1 | не проверено |
+| `ksViewProjection.GetViewProjectonType` | api5 | method | `Int32 GetViewProjectonType()` | 1 | не проверено |
+| `ksViewProjectionCollection.viewProjectionScheme` | api5 | property | `prop Int32 viewProjectionScheme` | 1 | не проверено |
+| `IPlanes3D.Count` | api7 | property | `prop Int32 Count` | 3 | не проверено |
+| `IPlanes3D.get_Plane3D` | api7 | method | `IPlane3D get_Plane3D(Object Index)` | 2 | не проверено |
+| `IAxes3D.Count` | api7 | property | `prop Int32 Count` | 2 | не проверено |
+| `IAxes3D.get_Axis3D` | api7 | method | `IAxis3D get_Axis3D(Object Index)` | 1 | не проверено |
+| `IPoints3D.Count` | api7 | property | `prop Int32 Count` | 2 | не проверено |
+| `IPoints3D.get_Point3D` | api7 | method | `IPoint3D get_Point3D(Object Index)` | 1 | не проверено |
+| `IPoint3D.Name` | api7 | property | `prop String Name` | 2 | не проверено |
+| `IPlane3D.Name` | api7 | property | `prop String Name` | 5 | не проверено |
+| `IPoints3D.Add` | api7 | method | `IPoint3D Add()` | 2 | не проверено |
+| `IPoint3D.Update` | api7 | method | `Boolean Update()` | 5 | не проверено |
+| `IPoint3D.ParameterType` | api7 | property | `prop ksPoint3DTypeEnum ParameterType` | 1 | не проверено |
+| `IPoint3D.SetAssociationObject` | api7 | method | `Boolean SetAssociationObject(IModelObject NewVal)` | 1 | не проверено |
+| `IPoint3D.Parameters` | api7 | property | `prop IKompasAPIObject Parameters` | 1 | не проверено |
+| `IPoint3DParamDisplace.DX` | api7 | property | `prop Double DX` | 3 | не проверено |
+| `IPoint3DParamDisplace.DY` | api7 | property | `prop Double DY` | 3 | не проверено |
+| `IPoint3DParamDisplace.DZ` | api7 | property | `prop Double DZ` | 3 | не проверено |
+| `IPoint3D.AssociationObject` | api7 | property | `prop IModelObject AssociationObject` | 1 | не проверено |
+| `IPlanes3D.Add` | api7 | method | `IPlane3D Add(ksObj3dTypeEnum PlaneType)` | 2 | не проверено |
+| `IPlane3DByOffset.BasePlane` | api7 | property | `prop IModelObject BasePlane` | 2 | не проверено |
+| `IPlane3DByOffset.Offset` | api7 | property | `prop Double Offset` | 3 | не проверено |
+| `IPlane3DByOffset.Direction` | api7 | property | `prop Boolean Direction` | 2 | не проверено |
+| `IPlane3D.Update` | api7 | method | `Boolean Update()` | 5 | не проверено |
+| `IPlane3DByAngle.BasePlane` | api7 | property | `prop IModelObject BasePlane` | 2 | не проверено |
+| `IPlane3DByAngle.BaseLine` | api7 | property | `prop IModelObject BaseLine` | 3 | не проверено |
+| `IPlane3DByAngle.Angle` | api7 | property | `prop Double Angle` | 3 | не проверено |
+| `IPlane3DByAngle.Direction` | api7 | property | `prop Boolean Direction` | 2 | не проверено |
+| `IPlane3D.Surface` | api7 | property | `prop MathSurface3D Surface` | 1 | не проверено |
+| `IMathSurface3D.ParamUMin` | api7 | property | `prop Double ParamUMin` | 1 | не проверено |
+| `IMathSurface3D.ParamVMin` | api7 | property | `prop Double ParamVMin` | 1 | не проверено |
+| `IMathSurface3D.GetPoint` | api7 | method | `Boolean GetPoint(Double ParamU, Double ParamV, Double& X, Double& Y, D` | 1 | не проверено |
+| `IMathSurface3D.GetNormal` | api7 | method | `Boolean GetNormal(Double ParamU, Double ParamV, Double& X, Double& Y, ` | 1 | не проверено |
+| `IAxes3D.Add` | api7 | method | `IAxis3D Add(ksObj3dTypeEnum Type)` | 3 | не проверено |
+| `IAxis3D.Name` | api7 | property | `prop String Name` | 4 | не проверено |
+| `IAxis3DBy2Points.Point1` | api7 | property | `prop IModelObject Point1` | 3 | не проверено |
+| `IAxis3DBy2Points.Point2` | api7 | property | `prop IModelObject Point2` | 3 | не проверено |
+| `IAxis3D.Update` | api7 | method | `Boolean Update()` | 3 | не проверено |
+| `IAxis3DByConeface.Face` | api7 | property | `prop IModelObject Face` | 2 | не проверено |
+| `IAxis3DByEdge.Edge` | api7 | property | `prop IModelObject Edge` | 2 | не проверено |
+| `IAxis3D.MathCurve` | api7 | property | `prop MathCurve3D MathCurve` | 1 | не проверено |
+| `KompasObject.ksGetApplication7` | api5 | method | `Object ksGetApplication7()` | 1 | Подтверждено |
+| `KompasObject.TransferInterface` | api5 | method | `Object TransferInterface(Object obj, Int32 apiNewType, Int32 objNewTyp` | 3 | не подтверждено |
+| `IPart7.RebuildModel` | api7 | method | `Boolean RebuildModel(Boolean Redraw)` | 1 | Подтверждено |
+| `IChamfer.Name` | api7 | property | `prop String Name` | 1 | не проверено |
+| `IChamfer.BuildingType` | api7 | property | `prop ksChamferBuildingTypeEnum BuildingType` | 1 | не проверено |
+| `IChamfer.BaseObjects` | api7 | property | `prop Object BaseObjects` | 2 | не проверено |
+| `IChamfer.Distance1` | api7 | property | `prop Double Distance1` | 3 | не проверено |
+| `IChamfer.Angle` | api7 | property | `prop Double Angle` | 3 | не проверено |
+| `IChamfer.Direction` | api7 | property | `prop Boolean Direction` | 3 | не проверено |
+| `IChamfer.Update` | api7 | method | `Boolean Update()` | 2 | не проверено |
+| `IModelContainer.Chamfers` | api7 | property | `prop Chamfers Chamfers` | 2 | не проверено |
+| `IChamfer.Distance2` | api7 | property | `prop Double Distance2` | 2 | не проверено |
+| `IChamfer.Tangent` | api7 | property | `prop Boolean Tangent` | 1 | не проверено |
+| `IModelContainer.Holes3D` | api7 | property | `prop Holes3D Holes3D` | 4 | не проверено |
+| `IHole3D.HoleParameters` | api7 | property | `prop IKompasAPIObject HoleParameters` | 6 | не проверено |
+| `IHole3D.Diameter` | api7 | property | `prop Double Diameter` | 7 | не проверено |
+| `IHole3D.Depth` | api7 | property | `prop Double Depth` | 3 | не проверено |
+| `ISpotfacingHoleParameters.SpotfacingDiameter` | api7 | property | `prop Double SpotfacingDiameter` | 3 | не проверено |
+| `ISpotfacingHoleParameters.SpotfacingDepth` | api7 | property | `prop Double SpotfacingDepth` | 3 | не проверено |
+| `ICountersinkHoleParameters.CountersinkDiameter` | api7 | property | `prop Double CountersinkDiameter` | 3 | не проверено |
+| `ICountersinkHoleParameters.CountersinkAngle` | api7 | property | `prop Double CountersinkAngle` | 3 | не проверено |
+| `ICountersinkHoleParameters.CountersinkDepth` | api7 | property | `prop Double CountersinkDepth` | 4 | не проверено |
+| `IHole3D.HoleType` | api7 | property | `prop ksHoleTypeEnum HoleType` | 6 | не проверено |
+| `IHole3D.DepthType` | api7 | property | `prop ksDepthTypeEnum DepthType` | 6 | не проверено |
+| `IHole3D.EndFaceType` | api7 | property | `prop ksEndFaceTypeEnum EndFaceType` | 2 | не проверено |
+| `IHole3D.Update` | api7 | method | `Boolean Update()` | 7 | не проверено |
+| `ICountersinkHoleParameters.CountersinkType` | api7 | property | `prop ksCountersinkTypeEnum CountersinkType` | 2 | не проверено |
+| `IHoleDisposal.BaseSurface` | api7 | property | `prop IModelObject BaseSurface` | 4 | не проверено |
+| `IHoleDisposal.Perpendicular` | api7 | property | `prop Boolean Perpendicular` | 3 | не проверено |
+| `IHoleDisposal.Point3DParamSurface` | api7 | property | `prop IKompasAPIObject Point3DParamSurface` | 2 | не проверено |
+| `IHoleDisposal.OffsetType` | api7 | property | `prop ksPoint3DSurfaceParamTypeEnum OffsetType` | 1 | не проверено |
+| `IPoint3DParamSurface.Offset1` | api7 | property | `prop Double Offset1` | 1 | не проверено |
+| `IPoint3DParamSurface.Offset2` | api7 | property | `prop Double Offset2` | 1 | не проверено |
+| `IPoint3DParamSurface.SetSurfaceObject` | api7 | method | `Boolean SetSurfaceObject(IModelObject NewVal)` | 1 | не проверено |
+| `IModelContainer.Rotateds` | api7 | property | `prop Rotateds Rotateds` | 4 | не проверено |
+| `IAxis3DBy2Points.Update` | api7 | method | `Boolean Update()` | 1 | не проверено |
+| `IAxis3DBy2Points.Valid` | api7 | property | `prop Boolean Valid` | 1 | не проверено |
+| `IRotated.Profile` | api7 | property | `prop IModelObject Profile` | 2 | не проверено |
+| `IRotated.Axis` | api7 | property | `prop IModelObject Axis` | 2 | не проверено |
+| `IRotated.Direction` | api7 | property | `prop ksDirectionTypeEnum Direction` | 2 | не проверено |
+| `IRotated.RotatedType` | api7 | property | `prop ksRotatedTypeEnum RotatedType` | 2 | не проверено |
+| `IRotated.ToroidShapeType` | api7 | property | `prop Boolean ToroidShapeType` | 1 | не проверено |
+| `IRotated1.OperationResult` | api7 | property | `prop ksOperationResultEnum OperationResult` | 1 | не проверено |
+| `IThinParameters.Thin` | api7 | property | `prop Boolean Thin` | 1 | не проверено |
+| `IRotated.Update` | api7 | method | `Boolean Update()` | 2 | не проверено |
+| `IModelContainer.Fillets` | api7 | property | `prop Fillets Fillets` | 4 | не проверено |
+| `IFillet.Radius1` | api7 | property | `prop Double Radius1` | 2 | не проверено |
+| `IFillet.Radius2` | api7 | property | `prop Double Radius2` | 2 | не проверено |
+| `IFillet.Tangent` | api7 | property | `prop Boolean Tangent` | 2 | не проверено |
+| `IFillet.BaseObjects` | api7 | property | `prop Object BaseObjects` | 3 | не проверено |
+| `IFillet.Update` | api7 | method | `Boolean Update()` | 2 | не проверено |
+| `IBoolean.Name` | api7 | property | `prop String Name` | 1 | не проверено |
+| `IBoolean.BaseObject` | api7 | property | `prop IKompasAPIObject BaseObject` | 1 | не проверено |
+| `IBoolean.ModifyObjects` | api7 | property | `prop Object ModifyObjects` | 1 | не проверено |
+| `IBoolean.SaveCopyBaseObject` | api7 | property | `prop Boolean SaveCopyBaseObject` | 1 | не проверено |
+| `IBoolean.Update` | api7 | method | `Boolean Update()` | 2 | не проверено |
+| `ISplitSolid.Name` | api7 | property | `prop String Name` | 1 | не проверено |
+| `ISplitSolid.Update` | api7 | method | `Boolean Update()` | 1 | не проверено |
+| `ICut.Name` | api7 | property | `prop String Name` | 1 | не проверено |
+| `ICut.BuildingType` | api7 | property | `prop ksCutBuildingTypeEnum BuildingType` | 1 | не проверено |
+| `ICut.ChooseType` | api7 | property | `prop ksChooseType ChooseType` | 3 | не проверено |
+| `ICut.ChoosePartsType` | api7 | property | `prop ksChoosePartsType ChoosePartsType` | 2 | не проверено |
+| `ICut.ChooseBodies` | api7 | property | `prop Object ChooseBodies` | 3 | не проверено |
+| `ICut.Update` | api7 | method | `Boolean Update()` | 2 | не проверено |
+| `IBodyReposition.Name` | api7 | property | `prop String Name` | 1 | не проверено |
+| `IBodyReposition.RepositionBody` | api7 | property | `prop IKompasAPIObject RepositionBody` | 1 | не проверено |
+| `IBodyReposition.Position` | api7 | property | `prop LocalCoordinateSystem Position` | 3 | не проверено |
+| `IBodyReposition.Update` | api7 | method | `Boolean Update()` | 2 | не проверено |
+| `ILocalCSEulerParam.PrecessionAngle` | api7 | property | `prop Double PrecessionAngle` | 2 | не проверено |
+| `ILocalCSEulerParam.NutationAngle` | api7 | property | `prop Double NutationAngle` | 2 | не проверено |
+| `ILocalCSEulerParam.RotationAngle` | api7 | property | `prop Double RotationAngle` | 2 | не проверено |
+| `IModelContainer.Lofts` | api7 | property | `prop Lofts Lofts` | 2 | Подтверждено |
+| `ILoft.CouplingsCount` | api7 | property | `prop Int32 CouplingsCount` | 1 | не проверено |
+| `ILoft.Closed` | api7 | property | `prop Boolean Closed` | 1 | не проверено |
+| `ILoft.BuildingType` | api7 | property | `prop ksLoftBuildingType BuildingType` | 1 | не проверено |
+| `IModelContainer.Shells` | api7 | property | `prop Shells Shells` | 2 | Подтверждено |
+| `IShell.Thickness` | api7 | property | `prop Double Thickness` | 1 | не проверено |
+| `IShell.ThinType` | api7 | property | `prop ksDirectionTypeEnum ThinType` | 1 | не проверено |
+| `IShell.DeletedFaces` | api7 | property | `prop Object DeletedFaces` | 1 | не проверено |
+| `IModelContainer.Evolutions` | api7 | property | `prop Evolutions Evolutions` | 2 | Подтверждено |
+| `ILinearPattern.InitialObjects` | api7 | property | `prop Object InitialObjects` | 1 | не проверено |
+| `ILinearPattern.Axis1` | api7 | property | `prop IModelObject Axis1` | 2 | не проверено |
+| `ILinearPattern.Step1` | api7 | property | `prop Double Step1` | 4 | не проверено |
+| `ILinearPattern.Count1` | api7 | property | `prop Int32 Count1` | 3 | не проверено |
+| `ILinearPattern.Angle1` | api7 | property | `prop Double Angle1` | 4 | не проверено |
+| `ILinearPattern.Direction1` | api7 | property | `prop Boolean Direction1` | 4 | не проверено |
+| `ILinearPattern.BoundaryInstancesStepFactor1` | api7 | property | `prop Boolean BoundaryInstancesStepFactor1` | 2 | не проверено |
+| `ILinearPattern.Axis2` | api7 | property | `prop IModelObject Axis2` | 2 | не проверено |
+| `ILinearPattern.Step2` | api7 | property | `prop Double Step2` | 4 | не проверено |
+| `ILinearPattern.Count2` | api7 | property | `prop Int32 Count2` | 4 | не проверено |
+| `ILinearPattern.Angle2` | api7 | property | `prop Double Angle2` | 4 | не проверено |
+| `ILinearPattern.Direction2` | api7 | property | `prop Boolean Direction2` | 4 | не проверено |
+| `ILinearPattern.BoundaryInstancesStepFactor2` | api7 | property | `prop Boolean BoundaryInstancesStepFactor2` | 2 | не проверено |
+| `ILinearPattern.BuildingType` | api7 | property | `prop ksLinearPatternBuildingTypeEnum BuildingType` | 2 | не проверено |
+| `ILinearPattern.GeometryPattern` | api7 | property | `prop Boolean GeometryPattern` | 2 | не проверено |
+| `ILinearPattern.Update` | api7 | method | `Boolean Update()` | 1 | не проверено |
+| `ICircularPattern.InitialObjects` | api7 | property | `prop Object InitialObjects` | 1 | не проверено |
+| `ICircularPattern.Axis` | api7 | property | `prop IModelObject Axis` | 2 | не проверено |
+| `ICircularPattern.Count1` | api7 | property | `prop Int32 Count1` | 3 | не проверено |
+| `ICircularPattern.Step1` | api7 | property | `prop Double Step1` | 4 | не проверено |
+| `ICircularPattern.BoundaryInstancesStepFactor1` | api7 | property | `prop Boolean BoundaryInstancesStepFactor1` | 2 | не проверено |
+| `ICircularPattern.Count2` | api7 | property | `prop Int32 Count2` | 3 | не проверено |
+| `ICircularPattern.Step2` | api7 | property | `prop Double Step2` | 4 | не проверено |
+| `ICircularPattern.BoundaryInstancesStepFactor2` | api7 | property | `prop Boolean BoundaryInstancesStepFactor2` | 2 | не проверено |
+| `ICircularPattern.StepByAxis` | api7 | property | `prop Double StepByAxis` | 4 | не проверено |
+| `ICircularPattern.ReverseDirection` | api7 | property | `prop Boolean ReverseDirection` | 4 | не проверено |
+| `ICircularPattern.SaveInitialOrientation` | api7 | property | `prop Boolean SaveInitialOrientation` | 4 | не проверено |
+| `ICircularPattern.BuildingType` | api7 | property | `prop ksCircularPatternBuildingTypeEnum BuildingType` | 2 | не проверено |
+| `ICircularPattern.GeometryPattern` | api7 | property | `prop Boolean GeometryPattern` | 2 | не проверено |
+| `ICircularPattern.Update` | api7 | method | `Boolean Update()` | 1 | не проверено |
+| `IMirrorPattern.InitialObjects` | api7 | property | `prop Object InitialObjects` | 1 | не проверено |
+| `IMirrorPattern.Plane` | api7 | property | `prop IModelObject Plane` | 2 | не проверено |
+| `IMirrorPattern.SaveInitialObjects` | api7 | property | `prop Boolean SaveInitialObjects` | 6 | не проверено |
+| `IChooseBodies7.ChooseBodiesType` | api7 | property | `prop ksChooseBodiesType ChooseBodiesType` | 1 | не проверено |
+| `IChooseBodies7.Bodies` | api7 | property | `prop Object Bodies` | 1 | не проверено |
+| `IMirrorPattern.Update` | api7 | method | `Boolean Update()` | 1 | не проверено |
+| `IFeaturePattern.Update` | api7 | method | `Boolean Update()` | 1 | не проверено |
+| `IFeaturePattern.Owner` | api7 | property | `prop IFeature7 Owner` | 8 | не проверено |
+| `IMirrorPattern.GeometryPattern` | api7 | property | `prop Boolean GeometryPattern` | 1 | не проверено |
+| `IFeaturePattern.GeometryPattern` | api7 | property | `prop Boolean GeometryPattern` | 1 | Подтверждено |
+| `IFeaturePattern.GetExemplarsCounts` | api7 | method | `Boolean GetExemplarsCounts(Int32& Count1, Int32& Count2)` | 1 | не проверено |
+| `IFeaturePattern.Exemplar` | api7 | property | `prop IModelObject Exemplar` | 1 | не проверено |
+| `IFeaturePattern.InitialObjects` | api7 | property | `prop Object InitialObjects` | 1 | не проверено |
+| `IFeaturePattern.InstanceDeletedIndexes` | api7 | property | `prop Object InstanceDeletedIndexes` | 1 | не проверено |
+| `IFragmentDocument.ViewsAndLayersManager` | api7 | property | `prop ViewsAndLayersManager ViewsAndLayersManager` | 2 | не проверено |
+| `IDrawingContainer.get_Objects` | api7 | method | `Object get_Objects(Object ObjType)` | 2 | не проверено |
+| `IDrawingObject1.Constraints` | api7 | property | `prop Object Constraints` | 2 | не проверено |
+| `IDrawingObject1.NewConstraint` | api7 | method | `ParametriticConstraint NewConstraint()` | 1 | не проверено |
+| `IDrawingObject1.DeleteConstraints` | api7 | method | `Boolean DeleteConstraints()` | 1 | не проверено |
+| `IDrawingObject1.ConstraintsState` | api7 | property | `prop ksObjectConstraintsStateEnum ConstraintsState` | 1 | не проверено |
+| `IKompasAPIObject.Parent` | api7 | property | `prop IKompasAPIObject Parent` | 1 | не проверено |
+| `ISketch.BeginEditEx` | api7 | method | `FragmentDocument BeginEditEx(Boolean ReadOnly)` | 1 | не проверено |
+| `IDrawingContainer.LineSegments` | api7 | property | `prop LineSegments LineSegments` | 1 | не проверено |
+| `IDrawingContainer.Circles` | api7 | property | `prop Circles Circles` | 1 | не проверено |
+| `IDrawingContainer.Arcs` | api7 | property | `prop Arcs Arcs` | 1 | не проверено |
+| `IDrawingContainer.PolyLines2D` | api7 | property | `prop PolyLines2D PolyLines2D` | 1 | не проверено |
+| `IDrawingContainer.Nurbses` | api7 | property | `prop Nurbses Nurbses` | 1 | не проверено |
+| `IDrawingContainer.Beziers` | api7 | property | `prop Beziers Beziers` | 1 | не проверено |
+| `IDrawingContainer.Rectangles` | api7 | property | `prop Rectangles Rectangles` | 1 | не проверено |
+| `IDrawingContainer.Points` | api7 | property | `prop Points Points` | 1 | не проверено |
+| `IKompasAPIObject.Type` | api7 | property | `prop KompasAPIObjectTypeEnum Type` | 1 | не проверено |
+| `IDrawingObject.DrawingObjectType` | api7 | property | `prop DrawingObjectTypeEnum DrawingObjectType` | 1 | не проверено |
+| `IModelObject.Name` | api7 | property | `prop String Name` | 2 | не проверено |
+| `ILineSegment.Length` | api7 | property | `prop Double Length` | 1 | не проверено |
+| `ILineSegment.Angle` | api7 | property | `prop Double Angle` | 1 | не проверено |
+| `ILineSegment.X1` | api7 | property | `prop Double X1` | 1 | не проверено |
+| `ILineSegment.Y1` | api7 | property | `prop Double Y1` | 1 | не проверено |
+| `ILineSegment.X2` | api7 | property | `prop Double X2` | 1 | не проверено |
+| `ILineSegment.Y2` | api7 | property | `prop Double Y2` | 1 | не проверено |
+| `IArc.Radius` | api7 | property | `prop Double Radius` | 1 | не проверено |
+| `IArc.Xc` | api7 | property | `prop Double Xc` | 1 | не проверено |
+| `IArc.Yc` | api7 | property | `prop Double Yc` | 1 | не проверено |
+| `IArc.X1` | api7 | property | `prop Double X1` | 1 | не проверено |
+| `IArc.Y1` | api7 | property | `prop Double Y1` | 1 | не проверено |
+| `IArc.X2` | api7 | property | `prop Double X2` | 1 | не проверено |
+| `IArc.Y2` | api7 | property | `prop Double Y2` | 1 | не проверено |
+| `IArc.X3` | api7 | property | `prop Double X3` | 1 | не проверено |
+| `IArc.Y3` | api7 | property | `prop Double Y3` | 1 | не проверено |
+| `ICircle.Radius` | api7 | property | `prop Double Radius` | 1 | не проверено |
+| `ICircle.Xc` | api7 | property | `prop Double Xc` | 1 | не проверено |
+| `ICircle.Yc` | api7 | property | `prop Double Yc` | 1 | не проверено |
+| `IPoint.X` | api7 | property | `prop Double X` | 1 | не проверено |
+| `IPoint.Y` | api7 | property | `prop Double Y` | 1 | не проверено |
+| `IPolyLine2D.PointsCount` | api7 | property | `prop Int32 PointsCount` | 1 | не проверено |
+| `IPolyLine2D.Closed` | api7 | property | `prop Boolean Closed` | 1 | не проверено |
+| `IBezier.PointsCount` | api7 | property | `prop Int32 PointsCount` | 1 | не проверено |
+| `IBezier.Closed` | api7 | property | `prop Boolean Closed` | 1 | не проверено |
+| `INurbs.PointsCount` | api7 | property | `prop Int32 PointsCount` | 1 | не проверено |
+| `INurbs.Closed` | api7 | property | `prop Boolean Closed` | 1 | не проверено |
+| `IPolyLine2D.GetPoint` | api7 | method | `Boolean GetPoint(Int32 Index, Double& X, Double& Y)` | 1 | не проверено |
+| `IBezier.GetPoint` | api7 | method | `Boolean GetPoint(Int32 Index, Double& XBase, Double& YBase, Double& XL` | 1 | не проверено |
+| `INurbs.GetPoint` | api7 | method | `Boolean GetPoint(Int32 Index, Double& X, Double& Y, Double& Weight)` | 1 | не проверено |
+| `ISketch.Plane` | api7 | property | `prop IModelObject Plane` | 2 | не проверено |
+| `ISketch.Update` | api7 | method | `Boolean Update()` | 1 | не проверено |
+
+## 6. Типы объектов
+
+Проверено по документированной таблице: 8, расхождений 1, констант без названного имени 26.
+
+## 7. Находки
+
+### F-03 - дефект документации в коде (названо имя, которого нет в таблице)
+
+Серьёзность: низкая.
+
+doc-блок константы называет идентификатор, отсутствующий в документированной таблице типов объектов: Rotated3D=29 при o3d_Rotated3D
+
+Исправление: назвать документированное имя; значение при этом измерено и не меняется
+
+### F-05 - противоречие (verified при FAIL в связанной строке)
+
+Серьёзность: высокая.
+
+1 строк(и): SM-09.fillet.change_edge_set
+
+Исправление: разобрать противоречие до снятия заявки
+
+### F-06 - заявка не подтверждена вызовами (отказ сторожа)
+
+Серьёзность: средняя.
+
+37 строк(и): ASM-08.component.delete, AUX-IMAGE.raster_export, DRW-04.title_block.set, DRW-05.export, DRW-06.technical_demand, EI-01.stl.export, EI-03.inertia.central, EI-04.inertia.principal, EI-05.inertia.units, INT-02.pairs.tangent, INT-04.gap.min_distance, SKC-04.delete
+
+Исправление: маршрут строки, посвящённая строка приёмки или понижение заявки
+
+### F-07 - пробел трассируемости (действие не названо строкой)
+
+Серьёзность: низкая.
+
+20 строк(и): EI-01.stl.export, EI-03.inertia.central, EI-04.inertia.principal, EI-05.inertia.units, SKC-04.delete, SKC-05.state_read, VM-02.variable.set_value, VM-03.variable.set_expression, VM-05.material.write, dep.ei.idempotency, dep.ei.triangle_count_from_file, dep.ei.units_system
+
+Исправление: назвать действие в имени строки или объявить маршрут строки
+
+### F-20 - инструмент на проводе без присутствия в записях покрытия
+
+Серьёзность: средняя.
+
+19 инструмент(ов) не названы ни своей строкой, ни маршрутом, ни схемой: kompas_acquire_session, kompas_capabilities, kompas_connect, kompas_create_aux_geometry, kompas_disconnect, kompas_edit_sketch_entity, kompas_export_step, kompas_finish_sketch, kompas_get_pattern, kompas_get_technical_demand, kompas_get_title_block, kompas_health, kompas_import_step, kompas_list_features, kompas_probe_units, kompas_rebuild_drawing_views, kompas_release_session, kompas_session_status, kompas_update_plane
+
+Исправление: назвать инструмент в маршруте строки, которая его исполняет, или объявить его вне покрытия режимов
+
+## 8. Что осталось неподтверждённым
+
+- `report_route_check` - в текущих отчётах приёмки поле режима аргументов (`args_keys`) есть, но отдельный сторож «отчёт прежней редакции прибора» не строился: перевыпуск отчёта на текущей поставке делает его неприменимым
+- `com_snapshot_check` - снапшот COM-маршрутов больше не отдельный файл: инвентарь строится в самом аудите (`api-audit-routes.py`) и сверяется по времени правки исходников адаптера
+

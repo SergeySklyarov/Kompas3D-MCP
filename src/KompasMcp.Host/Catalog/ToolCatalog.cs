@@ -72,28 +72,25 @@ public static class ToolCatalog
             {
                 ("offsets_mm", Sch.Arr(
                     Sch.Num(
-                        "Смещение точки вдоль контура ЭТОГО сечения, мм — ICoupling.PositionOffset(Index). " +
-                        "Ноль — начало контура; это же значение воспроизводит автоматическое " +
-                        "соответствие. Отрицательное значение означает смещение в другую сторону по " +
-                        "контуру и отдельно не измерялось, поэтому не запрещается, но и не обещается."),
+                        "Смещение точки вдоль контура ЭТОГО сечения, мм. Ноль - начало контура; это же " +
+                        "значение воспроизводит автоматическое соответствие. Отрицательное значение " +
+                        "означает смещение в другую сторону по контуру и отдельно не измерялось, " +
+                        "поэтому не запрещается, но и не обещается."),
                     "Точки по сечениям В ПОРЯДКЕ section_refs: ровно одна точка на каждое сечение. " +
-                    "Число точек обязано совпасть с числом сечений — ICoupling.Count так и называется, " +
-                    "«количество сечений в цепочке» (измерено: 2 у двух сечений). Несовпадение " +
-                    "отвергается до COM: цепочка короче набора описывала бы другое соответствие.",
+                    "Число точек обязано совпасть с числом сечений: цепочка короче набора описывала " +
+                    "бы другое соответствие. Несовпадение отвергается до обращения к КОМПАС.",
                     2, 64)),
             },
             "Одна цепочка соответствия: по точке на КАЖДОЕ сечение, в порядке section_refs. " +
             "Несколько цепочек задают несколько соответствий; полное отсутствие цепочек означает " +
             "автоматическое соответствие КОМПАС."),
-        "Цепочки соответствия сечений — то, чем режим SM-05.base.mode_couplings отличается от «просто " +
-        "тела по сечениям». В API5 цепочек нет вовсе: ни ksBaseLoftDefinition, ни ksBossLoftDefinition " +
-        "не объявляют ни AddCoupling, ни Coupling, поэтому маршрут семейства — API7. Полная замена: " +
-        "заданный список становится всем набором цепочек признака. Пустой список означает «без " +
-        "цепочек» и применяется как ClearCouplings().",
-        // The lower bound is 0, not 1 — a corrected contradiction of the schema's own declaration.
-        // The description promised an empty list means "no couplings" (ClearCouplings()), while the
-        // schema forbade it (`minItems: 1`): MEASURED, `couplings: []` returned INVALID_ARGUMENT
-        // "minimum 1, got 0" on $/couplings.
+        "Цепочки соответствия сечений - то, чем операция с заданным соответствием отличается от " +
+        "«просто тела по сечениям». Полная замена: заданный список становится всем набором цепочек " +
+        "признака. Пустой список означает «без цепочек».",
+        // The lower bound is 0, not 1 - a corrected contradiction of the schema's own declaration.
+        // The description promised an empty list means "no couplings", while the schema forbade it
+        // (`minItems: 1`): MEASURED, `couplings: []` returned INVALID_ARGUMENT "minimum 1, got 0"
+        // on $/couplings.
         // History: docs/decisions/host.md#couplings-minitems
         0, 64);
 
@@ -3393,10 +3390,10 @@ public static class ToolCatalog
             ("point_mm", Sch.Nullable(Sch.Ref("#/$defs/vector3"))),
             ("normal_mm", Sch.Nullable(Sch.Ref("#/$defs/vector3"))),
             ("base", Sch.Nullable(Sch.Enum(
-                "Объявлено, но НЕ поддержано: маршрут вспомогательной плоскости API7 со смещением "
+                "Объявлено, но НЕ поддержано: маршрут вспомогательной плоскости со смещением "
                 + "не измерен, и вызов с этим полем отказывает CAPABILITY_UNAVAILABLE (до мутации, "
                 + "retry_policy=never). Задайте плоскость точкой и нормалью. base вместе с другим "
-                + "способом (plane_ref или точка с нормалью) — противоречивый запрос: "
+                + "способом (plane_ref или точка с нормалью) - противоречивый запрос: "
                 + "INVALID_ARGUMENT, а не отказ возможности.", "xy", "xz", "yz"))),
             ("offset_mm", Sch.Nullable(Sch.Num(
                 "Смещение для base, мм. Имеет смысл только вместе с base: без него смещение не "
@@ -3429,7 +3426,7 @@ public static class ToolCatalog
                 + "получают инструментом kompas_create_aux_geometry: kind=plane, mode=offset, "
                 + "base_face_ref=<ссылка на грань>, offset_mm=<смещение>; его reference_id и подаётся "
                 + "здесь. offset_mm вместе с reference отвергается, а не игнорируется молча.")),
-            ("offset_mm", Sch.Num("Смещение вдоль нормали базовой плоскости, мм (измерено пробою P2.4: direction=true = вдоль нормали для XY/XZ/YZ; нормаль YOZ направлена в -X, поэтому +15 на YZ даёт x=-15). Имеет смысл только вместе с base.", -1e6, 1e6, defaultTo: 0d))),
+            ("offset_mm", Sch.Num("Смещение вдоль нормали базовой плоскости, мм. Отсчёт идёт вдоль нормали плоскости: у плоскости yz нормаль направлена в -X, поэтому смещение +15 даёт x = -15. Имеет смысл только вместе с base.", -1e6, 1e6, defaultTo: 0d))),
         ["additionalProperties"] = false,
     };
 
@@ -3453,8 +3450,8 @@ public static class ToolCatalog
         ["type"] = "object",
         ["title"] = "sketch_entity",
         ["description"] = "Примитив эскиза в локальных миллиметрах. Набор полей зависит от kind; лишние поля отклоняются. "
-            + "kind=polyline рисуется ОДНИМ нативным объектом ломаной (ksPolylineByParam), kind=spline — одним сплайном "
-            + "(кривая Безье через заданные вершины: ksBezier → ksBezierPoint → ksEndObj); оба перечитываются одним объектом.",
+            + "kind=polyline рисуется ОДНИМ объектом ломаной, kind=spline - одним сплайном (кривая Безье через "
+            + "заданные вершины); оба перечитываются одним объектом.",
         ["properties"] = Sch.Props(
             ("kind", Sch.Enum("Тип примитива.", "line", "circle", "arc", "rectangle", "polyline", "spline")),
             ("start_mm", Sch.Nullable(Sch.Arr(Sch.Num("Координата эскиза, мм."), "Начало / угол прямоугольника.", 2, 2))),
@@ -3484,15 +3481,14 @@ public static class ToolCatalog
             ("height_mm", Sch.Nullable(Sch.PositiveMm("Высота прямоугольника"))),
             ("points_mm", Sch.Nullable(Sch.Arr(Sch.Arr(Sch.Num("Координата, мм."), "Точка", 2, 2),
                 "Вершины полилинии или сплайна, мм. Предел " + SketchLimits.MaxPolylineVertices + " вершин на один примитив "
-                + "задан СХЕМОЙ MCP, а не ядром. Полилиния рисуется ОДНИМ нативным объектом ломаной "
-                + "(ksPolylineByParam) и перечитывается одним объектом: в kompas_list_sketch_entities на неё "
-                + "приходит одна строка с entity_kind=polyline (вид ksDrPolyline) и полями points_count и closed, "
-                + "а collection_counts показывает poly_lines = 1, а НЕ N отрезков. Замкнутость задаётся полем "
-                + "closed и передаётся ядру собственным признаком ломаной (ksPolylineParam.closed). Сплайн "
-                + "рисуется одним объектом — кривой Безье ЧЕРЕЗ заданные вершины (ksBezier), — и перечитывается "
-                + "одной строкой с entity_kind=spline (вид ksDrBezier); замкнутость несёт его собственный признак "
-                + "closed. Полилиния и сплайн — разные объекты: точки полилинии соединяются отрезками, сплайн "
-                + "проходит через них кривой.", 2, SketchLimits.MaxPolylineVertices))),
+                + "задан СХЕМОЙ MCP, а не ядром. Полилиния рисуется ОДНИМ объектом ломаной и перечитывается одним "
+                + "объектом: в kompas_list_sketch_entities на неё приходит одна строка с entity_kind=polyline и "
+                + "полями points_count и closed, а collection_counts показывает poly_lines = 1, а НЕ N отрезков. "
+                + "Замкнутость задаётся полем closed и передаётся ядру собственным признаком ломаной. Сплайн "
+                + "рисуется одним объектом - кривой Безье ЧЕРЕЗ заданные вершины - и перечитывается одной строкой "
+                + "с entity_kind=spline; замкнутость несёт его собственный признак closed. Полилиния и сплайн - "
+                + "разные объекты: точки полилинии соединяются отрезками, сплайн проходит через них кривой.",
+                2, SketchLimits.MaxPolylineVertices))),
             ("closed", Sch.Nullable(Sch.Bool("Замкнутая полилиния: замыкающее ребро из последней вершины в первую. Замкнутый сплайн: замыкающий участок кривой. У обоих это собственный признак ядра, а не повторённая вершина.")))),
         ["required"] = new JsonArray("kind"),
         ["additionalProperties"] = false,

@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import datetime
 import json
 import os
 import re
@@ -63,23 +64,36 @@ EXCEPTIONS = {
 # documentation column would have been a measurement of the network instead of the help.
 USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
               "Chrome/124.0 Safari/537.36")
+# Network failures (a dropped connection, a timeout): the server is there, the request did not arrive.
 RETRY_DELAYS = (3.0, 8.0)
-# One request per second. MEASURED: a burst of ~2000 requests made the server answer `445` to EVERY
-# page for several minutes, including pages it had served a moment before; at this rate it serves.
+# THE PAUSE BETWEEN REQUESTS - MEASURED, not chosen. Measured 13.10.2026 against
+# `https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/`: a burst of 1500 requests with NO pause (2.3
+# requests/s) was served - 1467 answered 200, 33 dropped the connection and the next request
+# answered 200 again - and 20 distinct pages at 0.5 s spacing answered 20/20. 1.0 s therefore sits
+# below a rate the server demonstrably tolerates, and is the value the column is measured at.
 POLITE_DELAY_S = 1.0
-# CIRCUIT BREAKER. When the server refuses page after page, retrying each one four times turns the run
-# into an all-night wait whose result is already known. After this many consecutive refusals the
-# instrument stops retrying and records the refusal ONCE per page: a `not_checked` column with a named
-# reason is honest, a column that takes 20 hours to say the same thing is not more honest.
+# REFUSALS THAT MEAN "SLOW DOWN", and the backoff for them. `429` is the standard status and `445` is
+# this server's own; both are transient, so neither may be written down as "the member is
+# undocumented". MEASURED 13.10.2026: the `445` could NOT be reproduced - 1500 rapid requests drew
+# only dropped connections, which recovered on the very next request - while the earlier ~2000-request
+# burst (recorded in `docs/decisions/api-audit.md`) made the server answer `445` to every page "for
+# several minutes". The first wait is therefore the shortest value that record admits (one minute),
+# and each further wait doubles it; a refusal that survives the first wait is not the same event as
+# one that survives the third.
+REFUSAL_CODES = (429, 445)
+REFUSAL_BACKOFF_S = (60.0, 120.0, 240.0)
+# The breaker no longer stops the run: it counts how many routes could not be measured at all, so
+# `documentation_column_complete` is derived from the ROUTES rather than from the server's mood.
 CIRCUIT_BREAKER_AFTER = 5
-_STATE = {"refusals": 0, "open": False}
+_STATE = {"refusals": 0, "open": False, "max_consecutive_refusals": 0, "refusal_backoffs": 0}
 
 
 def fetch(url, cache=CACHE, timeout=30):
     """(status, body). Status is an int for a definitive answer, or a string naming the failure.
 
     ONLY a 200 is cached: a cached non-200 freezes a transient refusal as a fact about the help.
-    A non-200 is retried with backoff; if it persists, a `404` is reported as `404` (the page is not
+    A refusal (`429`/`445`) is waited out with an escalating backoff and retried; a network failure is
+    retried with the shorter delays. If it persists, a `404` is reported as `404` (the page is not
     there) and any OTHER code as `http:<code>` - which the caller keeps in `not_checked`, never in
     "undocumented".
     """
@@ -90,7 +104,7 @@ def fetch(url, cache=CACHE, timeout=30):
         with open(path, encoding="utf-8", errors="replace") as handle:
             return 200, handle.read()
     last = None
-    attempts = 1 if _STATE["open"] else len(RETRY_DELAYS) + 1
+    attempts = 1 + max(len(RETRY_DELAYS), len(REFUSAL_BACKOFF_S))
     for attempt in range(attempts):
         request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT,
                                                        "Accept-Language": "ru,en;q=0.8"})
@@ -104,12 +118,18 @@ def fetch(url, cache=CACHE, timeout=30):
             return 200, body
         except urllib.error.HTTPError as error:
             last = error.code
+            if error.code in REFUSAL_CODES and attempt < len(REFUSAL_BACKOFF_S):
+                _STATE["refusal_backoffs"] += 1
+                time.sleep(REFUSAL_BACKOFF_S[attempt])
+                continue
         except Exception as error:  # noqa: BLE001 - the class is reported, not swallowed
             last = f"network:{type(error).__name__}"
         if attempt < attempts - 1:
-            time.sleep(RETRY_DELAYS[attempt])
+            time.sleep(RETRY_DELAYS[min(attempt, len(RETRY_DELAYS) - 1)])
     if isinstance(last, int):
         _STATE["refusals"] += 1
+        _STATE["max_consecutive_refusals"] = max(_STATE["max_consecutive_refusals"],
+                                                 _STATE["refusals"])
         if _STATE["refusals"] >= CIRCUIT_BREAKER_AFTER:
             _STATE["open"] = True
     if last == 404:
@@ -133,6 +153,35 @@ def mirror_page(url):
         return None
     with open(path, encoding="utf-8", errors="replace") as handle:
         return handle.read()
+
+
+def mirror_info():
+    """Зеркало как ВТОРАЯ ОСНОВА: каталог, дата снятия и число страниц.
+
+    Зеркало покрывает ЧАСТЬ справки, поэтому «страницы нет» по зеркалу — утверждение о копии, а не о
+    справке. Число страниц и дата снятия называются здесь, чтобы читатель видел границу копии.
+    """
+    if not os.path.isdir(MIRROR_DIR):
+        return {"directory": os.path.relpath(MIRROR_DIR, ROOT).replace("\\", "/"), "present": False,
+                "pages": 0, "captured": None,
+                "note": "зеркала в репозитории нет: подтверждение возможно только по проводу"}
+    pages = 0
+    newest = 0.0
+    for root, _dirs, files in os.walk(MIRROR_DIR):
+        for name in files:
+            if name.lower().endswith(".html"):
+                pages += 1
+                try:
+                    newest = max(newest, os.path.getmtime(os.path.join(root, name)))
+                except OSError:
+                    pass
+    captured = (datetime.datetime.fromtimestamp(newest).astimezone().date().isoformat()
+                if newest else None)
+    return {"directory": os.path.relpath(MIRROR_DIR, ROOT).replace("\\", "/"), "present": True,
+            "pages": pages, "captured": captured,
+            "note": "вторая основа, названная заказчиком 13.10.2026: страница читается из копии, когда "
+                    "провод отказал, и вердикт помечается `basis = mirror`. Копия НЕПОЛНА, поэтому "
+                    "«страницы нет» по ней не равно «страницы нет в справке»"}
 
 
 def page_title(body):
@@ -310,6 +359,8 @@ def collect(routes_path):
     bases = collections.Counter(item.get("basis", "нет") for item in checked)
     exceptions = [{"route": name, "note": note} for name, note in EXCEPTIONS.items()
                   if any(route["route"].split(".")[0] == name for route in routes)]
+    unmeasured = [item for item in checked if item["status"] == "не проверено"]
+    unconfirmed = [item for item in checked if item["status"] != "Подтверждено"]
     return {
         "instrument": "api-audit-docs",
         "date": stamp(),
@@ -319,16 +370,27 @@ def collect(routes_path):
         "routes_checked": len(checked),
         "statuses": dict(counts),
         "bases": dict(bases),
+        # Полнота столбца — свойство МАРШРУТОВ, а не настроения сервера: столбец полон, когда у
+        # каждого маршрута есть ответ (подтверждено / страницы нет / противоречие), и НЕ полон, пока
+        # хоть один остался `не проверено`. Прежде это выводилось из предохранителя, и открытый
+        # предохранитель назывался неполнотой даже там, где ответ был получен по зеркалу.
+        "documentation_column_complete": not unmeasured,
+        "unmeasured": [item["route"] for item in unmeasured],
+        "unconfirmed": unconfirmed,
         "confirmed": sorted(item["route"] for item in checked
                             if item["status"] == "Подтверждено"),
-        "unconfirmed": [item for item in checked if item["status"] != "Подтверждено"],
+        "mirror": mirror_info(),
         "exceptions": exceptions,
         "object_types": check_object_types(payload.get("object_type_constants") or []),
         "circuit_breaker": {
             "open": _STATE["open"], "after_consecutive_refusals": CIRCUIT_BREAKER_AFTER,
-            "note": "сервер справки отвечал отказом на страницу за страницей; повтор запроса на каждом "
-                    "члене умножал бы один отказ на число членов. Открытый предохранитель означает, что "
-                    "столбец документации НЕПОЛОН, и это названо, а не выдано за чистый результат",
+            "max_consecutive_refusals": _STATE["max_consecutive_refusals"],
+            "refusal_backoffs": _STATE["refusal_backoffs"],
+            "refusal_backoff_s": list(REFUSAL_BACKOFF_S),
+            "polite_delay_s": POLITE_DELAY_S,
+            "note": "отказы 429/445 пережидаются отступом и повторяются; предохранитель только "
+                    "СЧИТАЕТ, сколько отказов шло подряд, и больше не обрывает прогон. Полнота "
+                    "столбца выводится из маршрутов (`documentation_column_complete`), а не отсюда",
         },
         "routes": checked,
     }

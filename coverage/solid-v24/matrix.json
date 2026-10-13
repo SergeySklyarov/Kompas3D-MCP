@@ -614,7 +614,7 @@
    "context": "part.single_body",
    "catalog_ref": "AUX-SKETCH",
    "parameters_schema": "schemas/kompas_create_sketch.json",
-   "adapter_route": "API5: GetDefaultEntity(1/2/3), NewEntity(o3d_planeOffset=14) + ksPlaneOffsetDefinition{offset,direction}, SketchDefinition.SetPlane, ksDocument2D для примитивов; после reopen координата для ksFindObj выводится из цилиндрической грани зависимого тела (GetSurfaceParam → ksCylinderParam, точка (cx + r; cy))",
+   "adapter_route": "API5: GetDefaultEntity(1/2/3), NewEntity(o3d_planeOffset=14) + ksPlaneOffsetDefinition{offset,direction}, SketchDefinition.SetPlane, ksDocument2D для примитивов; после reopen координата для ksFindObj выводится из цилиндрической грани зависимого тела (GetSurfaceParam → ksCylinderParam, точка (cx + r; cy)) Присутствие инструмента `kompas_finish_sketch` (наряд API_AUDIT_FOLLOWUP §5): строка жизненного цикла плоскости и контура: закрытие контура - его шаг.",
    "actions": {
     "discover": "verified",
     "create": "verified",
@@ -4462,7 +4462,7 @@
    ],
    "title": "Ассоциативность массивов и зеркала: изменение исходного элемента обновляет копии",
    "parameters_schema": null,
-   "adapter_route": "OQ-B-01: фактическое поведение при правке источника не проверялось",
+   "adapter_route": "OQ-B-01: фактическое поведение при правке источника не проверялось Присутствие инструмента `kompas_get_pattern` (наряд API_AUDIT_FOLLOWUP §5): строка ассоциативности массивов: копии сверяются ОБРАТНЫМ чтением массива.",
    "actions": {
     "discover": "not_started",
     "create": "not_started",
@@ -5191,21 +5191,17 @@
     ],
     "note": "`read` этой строки — перечитывание СОЗДАННОГО снимка: габариты из IHDR и длина байтов (IMG.05.read, IMG.06.read). Инструмент модель только читает, поэтому маршрут чтения — он же; `resolution` обязателен, потому что без него габарит снимка не определён: измерено (проба P5/P6), что габарит линеен по extResolution и extScale. Глобальная подпись `read` (чтение параметров признака) к этой строке неприменима — признаков она не создаёт."
    },
-   "geometry_route": {
+   "geometry_validation_route": {
     "mode": "any",
     "routes": [
      {
       "tool": "kompas_export_image",
       "require_args": [
-       "document_id",
-       "resolution"
-      ],
-      "forbid_args": [
-       "save_path"
+       "document_id"
       ]
      }
     ],
-    "note": "`geometry_validation` этой строки — детерминированность ГАБАРИТА СНИМКА (наряд §5, серия P6): два снимка одного вида совпали габаритом и побайтово (IMG.07), серия resolution 50/100/200 дала 165x224 / 328x448 / 655x894 (IMG.08), серия scale 0.5/1/2 — те же габариты (IMG.09). Серия измерена в БАЙТОВОМ режиме, `save_path` не передаётся, — отсюда `forbid_args`. Глобальная подпись действия требует `kompas_measure`, то есть измерения геометрии МОДЕЛИ, которого эта строка не делает и делать не должна: инструмент модель не меняет и не измеряет."
+    "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
    },
    "actions": {
     "discover": "not_applicable",
@@ -5929,7 +5925,8 @@
     "ASM-04.placement.set_read",
     "ASM-05.component.replace",
     "ASM-06.links.check",
-    "ASM-07.save_reopen"
+    "ASM-07.save_reopen",
+    "ASM-08.component.delete"
    ],
    "partial_note": "Потребители объявляют зависимость сами в своём depends_on; required_of выведен из него.",
    "blocked_reasons": {},
@@ -6111,7 +6108,8 @@
     "ASM-04.placement.set_read",
     "ASM-05.component.replace",
     "ASM-06.links.check",
-    "ASM-07.save_reopen"
+    "ASM-07.save_reopen",
+    "ASM-08.component.delete"
    ],
    "partial_note": "Потребители объявляют зависимость сами в своём depends_on; required_of выведен из него.",
    "blocked_reasons": {},
@@ -6217,7 +6215,8 @@
     "ASM-02.component.insert",
     "ASM-04.placement.set_read",
     "ASM-05.component.replace",
-    "ASM-07.save_reopen"
+    "ASM-07.save_reopen",
+    "ASM-08.component.delete"
    ],
    "partial_note": "Потребители объявляют зависимость сами в своём depends_on; required_of выведен из него.",
    "blocked_reasons": {},
@@ -6318,7 +6317,8 @@
    "required_of": [
     "ASM-02.component.insert",
     "ASM-04.placement.set_read",
-    "ASM-05.component.replace"
+    "ASM-05.component.replace",
+    "ASM-08.component.delete"
    ],
    "partial_note": "Потребители объявляют зависимость сами в своём depends_on; required_of выведен из него.",
    "blocked_reasons": {},
@@ -7156,7 +7156,7 @@
    "catalog_ref": "DRW",
    "catalog_level": "mcp_verified",
    "parameters_schema": "schemas/kompas_create_drawing_views.json",
-   "adapter_route": "kompas_create_drawing_views: API7 IDrawingDocument.ViewsAndLayersManager → IViewsAndLayersManager.Views → IViews.AddStandartViews(FileName, ProjectionName, ProjectionsTypes[] (SAFEARRAY VT_I4), X, Y, Scale, DX, DY) → BOOL; перечитывание — IView/IAssociationView (iviews_addstandartviews.html)",
+   "adapter_route": "kompas_create_drawing_views: API7 IDrawingDocument.ViewsAndLayersManager → IViewsAndLayersManager.Views → IViews.AddStandartViews(FileName, ProjectionName, ProjectionsTypes[] (SAFEARRAY VT_I4), X, Y, Scale, DX, DY) → BOOL; перечитывание — IView/IAssociationView (iviews_addstandartviews.html) Присутствие инструмента `kompas_rebuild_drawing_views` (наряд API_AUDIT_FOLLOWUP §5): строка стандартных видов: перестроение видов принадлежит ей.",
    "actions": {
     "discover": "not_applicable",
     "create": "verified",
@@ -7395,7 +7395,7 @@
    "catalog_ref": "DRW",
    "catalog_level": "mcp_verified",
    "parameters_schema": "schemas/kompas_set_title_block.json",
-   "adapter_route": "kompas_set_title_block: API7 ILayoutSheet.Stamp → IStamp.get_Text(Id) → IText.Str (запись) → IStamp.Update() → перечитать значения ячеек (istamp_text.html, ilayoutsheet_stamp.html, itext_str.html)",
+   "adapter_route": "kompas_set_title_block: API7 ILayoutSheet.Stamp → IStamp.get_Text(Id) → IText.Str (запись) → IStamp.Update() → перечитать значения ячеек (istamp_text.html, ilayoutsheet_stamp.html, itext_str.html) Присутствие инструмента `kompas_get_title_block` (наряд API_AUDIT_FOLLOWUP §5): строка основной надписи: запись сверяется обратным чтением.",
    "actions": {
     "discover": "not_applicable",
     "create": "verified",
@@ -7450,6 +7450,18 @@
       "tool": "kompas_set_title_block"
      }
     ]
+   },
+   "create_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_set_title_block",
+      "require_args": [
+       "document_id"
+      ]
+     }
+    ],
+    "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
    }
   },
   {
@@ -7516,6 +7528,18 @@
       "tool": "kompas_export_drawing"
      }
     ]
+   },
+   "geometry_validation_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_export_drawing",
+      "require_args": [
+       "document_id"
+      ]
+     }
+    ],
+    "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
    }
   },
   {
@@ -7822,7 +7846,19 @@
     "DRW-03.dimension.add",
     "DRW-04.title_block.set",
     "DRW-06.technical_demand"
-   ]
+   ],
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_drawing_views",
+      "require_args": [
+       "document_id"
+      ]
+     }
+    ],
+    "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
+   }
   },
   {
    "operation_id": "dep.drawing.export_file",
@@ -7880,7 +7916,19 @@
    ],
    "required_of": [
     "DRW-05.export"
-   ]
+   ],
+   "create_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_export_drawing",
+      "require_args": [
+       "document_id"
+      ]
+     }
+    ],
+    "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
+   }
   },
   {
    "operation_id": "DRW-06.technical_demand",
@@ -7892,7 +7940,7 @@
    "catalog_ref": "DRW",
    "catalog_level": "mcp_verified",
    "parameters_schema": "schemas/kompas_set_technical_demand.json",
-   "adapter_route": "kompas_set_technical_demand: API7 IDrawingDocument.TechnicalDemand → ITechnicalDemand.Text (read-only свойство → IText) → IText.Str (запись) → ITechnicalDemand.Update() → перечитать текст и IsCreated (idrawingdocument_technicaldemand.html, itechnicaldemand_text.html, itechnicaldemand_update.html, itechnicaldemand_iscreated.html)",
+   "adapter_route": "kompas_set_technical_demand: API7 IDrawingDocument.TechnicalDemand → ITechnicalDemand.Text (read-only свойство → IText) → IText.Str (запись) → ITechnicalDemand.Update() → перечитать текст и IsCreated (idrawingdocument_technicaldemand.html, itechnicaldemand_text.html, itechnicaldemand_update.html, itechnicaldemand_iscreated.html) Присутствие инструмента `kompas_get_technical_demand` (наряд API_AUDIT_FOLLOWUP §5): строка техтребований чертежа - единственный их потребитель.",
    "actions": {
     "discover": "not_applicable",
     "create": "verified",
@@ -8348,7 +8396,20 @@
     "эталон: прямоугольник 100×80 с глубиной 10 → 20 мм даёт объём 80000 → 160000 мм³",
     "повтор с тем же operation_id и теми же аргументами не выполняет правку дважды",
     "устаревшая ревизия отвергается, текущая принимается, в том числе после переоткрытия"
-   ]
+   ],
+   "edit_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_set_variable",
+      "require_args": [
+       "document_id",
+       "name"
+      ]
+     }
+    ],
+    "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
+   }
   },
   {
    "operation_id": "VM-03.variable.set_expression",
@@ -8432,7 +8493,20 @@
     "заданное допустимое выражение вычислено КОМПАС; значение переменной совпало с ожидаемым",
     "изменение ИСХОДНОЙ переменной выражения меняет зависимую величину — то есть выражение действует, а не просто записано",
     "недопустимое выражение даёт названный отказ без ложного успеха и с перечислением частичных последствий"
-   ]
+   ],
+   "edit_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_set_variable",
+      "require_args": [
+       "document_id",
+       "name"
+      ]
+     }
+    ],
+    "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
+   }
   },
   {
    "operation_id": "VM-04.material.read",
@@ -8583,7 +8657,19 @@
     "два разных имени материала и две разные плотности назначены по очереди",
     "обе пары перечитаны независимо документированным маршрутом МЦХ в кг/м³ и совпали с запрошенными в допуске",
     "нечисловая и неположительная плотность отвергаются до COM с названным кодом"
-   ]
+   ],
+   "edit_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_set_material",
+      "require_args": [
+       "document_id"
+      ]
+     }
+    ],
+    "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
+   }
   },
   {
    "operation_id": "VM-06.mass.computed_via_measure",
@@ -8722,8 +8808,7 @@
     "VM-02.variable.set_value",
     "VM-03.variable.set_expression",
     "VM-04.material.read",
-    "VM-05.material.write",
-    "VM-06.mass.computed_via_measure"
+    "VM-05.material.write"
    ]
   },
   {
@@ -8785,9 +8870,20 @@
     "VM-02.variable.set_value",
     "VM-03.variable.set_expression",
     "VM-04.material.read",
-    "VM-05.material.write",
-    "VM-06.mass.computed_via_measure"
-   ]
+    "VM-05.material.write"
+   ],
+   "edit_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_set_material",
+      "require_args": [
+       "document_id"
+      ]
+     }
+    ],
+    "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
+   }
   },
   {
    "operation_id": "dep.vm.idempotency",
@@ -8848,8 +8944,7 @@
     "VM-02.variable.set_value",
     "VM-03.variable.set_expression",
     "VM-04.material.read",
-    "VM-05.material.write",
-    "VM-06.mass.computed_via_measure"
+    "VM-05.material.write"
    ]
   },
   {
@@ -8910,8 +9005,7 @@
     "VM-02.variable.set_value",
     "VM-03.variable.set_expression",
     "VM-04.material.read",
-    "VM-05.material.write",
-    "VM-06.mass.computed_via_measure"
+    "VM-05.material.write"
    ]
   },
   {
@@ -8976,8 +9070,7 @@
     "VM-02.variable.set_value",
     "VM-03.variable.set_expression",
     "VM-04.material.read",
-    "VM-05.material.write",
-    "VM-06.mass.computed_via_measure"
+    "VM-05.material.write"
    ],
    "adapter_route": "Единицы плотности: запись — документированные г/куб.см (ksPart.SetMaterial), перевод кг/м³ → г/см³ делает DensityUnits; чтение — документированный маршрут МЦХ API5, где единицу возвращаемых данных задаёт АРГУМЕНТ (bitVector): при ST_MIX_M|ST_MIX_KG плотность r публикуется в кг/м³ без пересчёта."
   },
@@ -9164,7 +9257,19 @@
    "depends_on": [
     "dep.interference.component_address",
     "dep.interference.read_only"
-   ]
+   ],
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_check_interference",
+      "require_args": [
+       "document_id"
+      ]
+     }
+    ],
+    "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
+   }
   },
   {
    "operation_id": "INT-03.pairs.faces",
@@ -9279,7 +9384,21 @@
     "dep.interference.api7_measurer",
     "dep.interference.distance_unit",
     "dep.interference.read_only"
-   ]
+   ],
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_measure_gap",
+      "require_args": [
+       "document_id",
+       "object1",
+       "object2"
+      ]
+     }
+    ],
+    "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
+   }
   },
   {
    "operation_id": "dep.interference.component_address",
@@ -9335,7 +9454,24 @@
    "acceptance": [
     "компонент адресуется ссылкой kompas_list_components; вложенный компонент отвергается, а не проверяется по догадке",
     "тела компонента читаются документированным ksPart.BodyCollection"
-   ]
+   ],
+   "required_of": [
+    "INT-01.pairs.volumetric",
+    "INT-02.pairs.tangent",
+    "INT-04.gap.min_distance"
+   ],
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_components",
+      "require_args": [
+       "document_id"
+      ]
+     }
+    ],
+    "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
+   }
   },
   {
    "operation_id": "dep.interference.face_address",
@@ -9392,6 +9528,10 @@
    "acceptance": [
     "грань адресуется номером в FaceCollection того же тела, что у kompas_create_mate",
     "номер вне диапазона отвергается INVALID_ARGUMENT с диапазоном"
+   ],
+   "required_of": [
+    "INT-03.pairs.faces",
+    "INT-04.gap.min_distance"
    ]
   },
   {
@@ -9452,6 +9592,9 @@
     "недоступность измерителя называется CAPABILITY_UNAVAILABLE с причиной, а не нулевым расстоянием",
     "раскладка двойника — IID, порядок слотов до последнего объявленного члена и сигнатуры используемых членов — совпадает с УСТАНОВЛЕННОЙ библиотекой типов; расхождение называется номером первого несовпавшего слота (строка INT.13.twin_layout)",
     "ниже порога версии и при непрочитанной версии измеритель НЕ вызывается: CAPABILITY_UNAVAILABLE с названной версией и порогом"
+   ],
+   "required_of": [
+    "INT-04.gap.min_distance"
    ]
   },
   {
@@ -9510,7 +9653,24 @@
    "acceptance": [
     "единица Lmin и точек ИЗМЕРЕНА против аналитически известного зазора на трёх конфигурациях: совпала с миллиметрами и НЕ совпала с переводом в метры или сантиметры (строка INT.04.unit)",
     "непрочитанное значение остаётся null с причиной, а не превращается в ноль"
-   ]
+   ],
+   "required_of": [
+    "INT-04.gap.min_distance"
+   ],
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_measure_gap",
+      "require_args": [
+       "document_id",
+       "object1",
+       "object2"
+      ]
+     }
+    ],
+    "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
+   }
   },
   {
    "operation_id": "dep.interference.read_only",
@@ -9565,7 +9725,25 @@
    "acceptance": [
     "ревизия, признак изменения, число признаков и состав дерева после вызова не меняются",
     "изменение документа вызовом чтения — FAIL, а не допустимый побочный эффект"
-   ]
+   ],
+   "required_of": [
+    "INT-01.pairs.volumetric",
+    "INT-02.pairs.tangent",
+    "INT-03.pairs.faces",
+    "INT-04.gap.min_distance"
+   ],
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_check_interference",
+      "require_args": [
+       "document_id"
+      ]
+     }
+    ],
+    "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
+   }
   },
   {
    "operation_id": "SKB-01.limits",
@@ -9773,7 +9951,24 @@
    "acceptance": [
     "число живёт в одном месте; схема и описание берут его оттуда, а не повторяют литералом",
     "описание называет число и говорит, что предел задан схемой MCP, а не ядром"
-   ]
+   ],
+   "required_of": [
+    "SKB-01.limits",
+    "SKB-02.polyline_native",
+    "SKB-03.spline"
+   ],
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_sketch_entities",
+      "require_args": [
+       "sketch_ref"
+      ]
+     }
+    ],
+    "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
+   }
   },
   {
    "operation_id": "dep.sketch_bulk.entity_read_back",
@@ -9833,6 +10028,10 @@
     "полилиния и сплайн читаются ОДНИМ объектом с entity_kind, points_count и closed",
     "непрочитанное поле остаётся null с причиной в notes",
     "collection_counts показывает poly_lines и beziers по видам"
+   ],
+   "required_of": [
+    "SKB-02.polyline_native",
+    "SKB-03.spline"
    ]
   },
   {
@@ -9891,6 +10090,10 @@
    "acceptance": [
     "площадь замкнутой полилинии считается прежней формулой по вершинам и совпадает с аналитической",
     "у сплайна площадь null с причиной, и проверка объёма честно помечена в unverified_aspects"
+   ],
+   "required_of": [
+    "SKB-02.polyline_native",
+    "SKB-03.spline"
    ]
   },
   {
@@ -10314,7 +10517,12 @@
     "параметр адресуется полем name; ноль или несколько совпадений — INVALID_ARGUMENT с перечнем имён и БЕЗ записи",
     "две переменные с равным значением не путаются: привязка идёт к названному параметру"
    ],
-   "adapter_route": "Адрес параметра — поле name из kompas_list_feature_parameters; совпадение ищется ПОСИМВОЛЬНО по коллекции признака, и ноль или несколько совпадений — INVALID_ARGUMENT с перечнем имён до записи. Значение и позиция адресом не являются."
+   "adapter_route": "Адрес параметра — поле name из kompas_list_feature_parameters; совпадение ищется ПОСИМВОЛЬНО по коллекции признака, и ноль или несколько совпадений — INVALID_ARGUMENT с перечнем имён до записи. Значение и позиция адресом не являются.",
+   "required_of": [
+    "VB-02.feature_parameters.list",
+    "VB-03.parameter.bind",
+    "VB-04.parameter.unbind"
+   ]
   },
   {
    "operation_id": "dep.vb.units",
@@ -10371,7 +10579,11 @@
     "прочитанное value совпадает с выражением-константой численно в допуске",
     "числовое снятие привязки даёт ожидаемый объём: 100*80*10 = 80000"
    ],
-   "adapter_route": "Значение параметра читается и пишется как число в собственной размерности; сервер его не переводит. Выражение-константа задаётся строкой, и прочитанное значение сверяется с ней численно в допуске профиля."
+   "adapter_route": "Значение параметра читается и пишется как число в собственной размерности; сервер его не переводит. Выражение-константа задаётся строкой, и прочитанное значение сверяется с ней численно в допуске профиля.",
+   "required_of": [
+    "VB-03.parameter.bind",
+    "VB-04.parameter.unbind"
+   ]
   },
   {
    "operation_id": "dep.vb.rebuild_document",
@@ -10428,7 +10640,12 @@
     "после записи выражения вызывается ksDocument3D.RebuildDocument, а не ksPart.RebuildModel",
     "геометрия следует за переменной: смена depth меняет объём тел 100*80*20 + 400*40 = 176000 в допуске профиля"
    ],
-   "adapter_route": "После записи выражения вызывается ksDocument3D.RebuildDocument (НЕ ksPart.RebuildModel, который на установленной сборке геометрию не двигает — ИЗМЕРЕНО, docs/04_KOMPAS_API_NOTES.md §4.42). Геометрия сверяется независимым измерением объёма."
+   "adapter_route": "После записи выражения вызывается ksDocument3D.RebuildDocument (НЕ ksPart.RebuildModel, который на установленной сборке геометрию не двигает — ИЗМЕРЕНО, docs/04_KOMPAS_API_NOTES.md §4.42). Геометрия сверяется независимым измерением объёма.",
+   "required_of": [
+    "VB-01.variable.create",
+    "VB-03.parameter.bind",
+    "VB-04.parameter.unbind"
+   ]
   },
   {
    "operation_id": "dep.vb.read_only_list",
@@ -10484,7 +10701,10 @@
     "ревизия, число признаков и признак изменения те же после каждого вызова kompas_list_feature_parameters",
     "непрочитанное поле остаётся null с причиной, а не нулём или пустой строкой"
    ],
-   "adapter_route": "kompas_list_feature_parameters не требует operation_id и expected_revision и не меняет ревизию, число признаков и признак изменения. Непрочитанное поле остаётся null с причиной."
+   "adapter_route": "kompas_list_feature_parameters не требует operation_id и expected_revision и не меняет ревизию, число признаков и признак изменения. Непрочитанное поле остаётся null с причиной.",
+   "required_of": [
+    "VB-02.feature_parameters.list"
+   ]
   },
   {
    "operation_id": "dep.vb.idempotency",
@@ -10540,7 +10760,23 @@
     "другие аргументы при том же operation_id — OPERATION_ID_CONFLICT",
     "устаревшая ревизия — REVISION_CONFLICT без частичных эффектов"
    ],
-   "adapter_route": "Оба мутирующих инструмента (kompas_create_variable, kompas_bind_parameter) идут через общий механизм журнала operation_id, дедупликации и ревизий. Повтор с тем же operation_id и теми же аргументами не выполняет изменение дважды; другие аргументы — OPERATION_ID_CONFLICT; устаревшая ревизия — REVISION_CONFLICT."
+   "adapter_route": "Оба мутирующих инструмента (kompas_create_variable, kompas_bind_parameter) идут через общий механизм журнала operation_id, дедупликации и ревизий. Повтор с тем же operation_id и теми же аргументами не выполняет изменение дважды; другие аргументы — OPERATION_ID_CONFLICT; устаревшая ревизия — REVISION_CONFLICT.",
+   "required_of": [
+    "VB-01.variable.create",
+    "VB-03.parameter.bind"
+   ],
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_variables",
+      "require_args": [
+       "document_id"
+      ]
+     }
+    ],
+    "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
+   }
   },
   {
    "operation_id": "EI-01.stl.export",
@@ -10625,6 +10861,18 @@
       "tool": "kompas_export_stl"
      }
     ]
+   },
+   "geometry_validation_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_bodies",
+      "require_args": [
+       "document_id"
+      ]
+     }
+    ],
+    "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
    }
   },
   {
@@ -10987,7 +11235,11 @@
     "путь вне разрешённых корней даёт PATH_NOT_ALLOWED без обращения к КОМПАС",
     "неверные max_edge_length_mm и normal_angle_deg отвергаются до COM"
    ],
-   "adapter_route": "Поле target_path входит в список полей пути Host'а (ToolInvoker.PathFields), поэтому политика корней судит его до диспетчеризации; неверные length/angle отвергаются в адаптере до COM."
+   "adapter_route": "Поле target_path входит в список полей пути Host'а (ToolInvoker.PathFields), поэтому политика корней судит его до диспетчеризации; неверные length/angle отвергаются в адаптере до COM.",
+   "required_of": [
+    "EI-01.stl.export",
+    "EI-02.stl.tessellation"
+   ]
   },
   {
    "operation_id": "dep.ei.triangle_count_from_file",
@@ -11047,7 +11299,11 @@
     "для двоичного STL число треугольников читается из заголовка, для текстового — по строкам facet normal",
     "способ чтения назван полем triangle_count_source"
    ],
-   "adapter_route": "StlFileInspector: двоичный — (размер − 84) / 50 с чтением вершин для габарита; текстовый — подсчёт строк facet normal и разбор строк vertex."
+   "adapter_route": "StlFileInspector: двоичный — (размер − 84) / 50 с чтением вершин для габарита; текстовый — подсчёт строк facet normal и разбор строк vertex.",
+   "required_of": [
+    "EI-01.stl.export",
+    "EI-02.stl.tessellation"
+   ]
   },
   {
    "operation_id": "dep.ei.units_system",
@@ -11107,7 +11363,24 @@
     "units принимает mm|kg и m|kg и следует за аргументом вызова",
     "смена единицы длины мм→м делит момент на 1e6"
    ],
-   "adapter_route": "bitVector собирается из аргумента inertia_units (ST_MIX_MM|ST_MIX_KG или ST_MIX_M|ST_MIX_KG); блок inertia публикует units и system."
+   "adapter_route": "bitVector собирается из аргумента inertia_units (ST_MIX_MM|ST_MIX_KG или ST_MIX_M|ST_MIX_KG); блок inertia публикует units и system.",
+   "required_of": [
+    "EI-03.inertia.central",
+    "EI-04.inertia.principal",
+    "EI-05.inertia.units"
+   ],
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_measure",
+      "require_args": [
+       "target_ref"
+      ]
+     }
+    ],
+    "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
+   }
   },
   {
    "operation_id": "dep.ei.read_only_measure",
@@ -11167,7 +11440,12 @@
     "kompas_measure не требует operation_id и expected_revision и не меняет ревизию, число признаков и объём",
     "непрочитанное свойство остаётся null с причиной, а не нулём"
    ],
-   "adapter_route": "kompas_measure зарегистрирован как ReadOnly (requiresOperationId: false); диспетчер идёт через Tagged, ревизия не двигается."
+   "adapter_route": "kompas_measure зарегистрирован как ReadOnly (requiresOperationId: false); диспетчер идёт через Tagged, ревизия не двигается.",
+   "required_of": [
+    "EI-03.inertia.central",
+    "EI-04.inertia.principal",
+    "EI-05.inertia.units"
+   ]
   },
   {
    "operation_id": "dep.ei.idempotency",
@@ -11227,7 +11505,22 @@
     "тот же operation_id с другими аргументами даёт OPERATION_ID_CONFLICT",
     "устаревшая ревизия даёт REVISION_CONFLICT без частичных эффектов"
    ],
-   "adapter_route": "Мутирующий инструмент: журнал и дедупликация — на уровне Host по operation_id; проверка ревизии — в адаптере до конвертера (как у kompas_export_step)."
+   "adapter_route": "Мутирующий инструмент: журнал и дедупликация — на уровне Host по operation_id; проверка ревизии — в адаптере до конвертера (как у kompas_export_step).",
+   "required_of": [
+    "EI-01.stl.export"
+   ],
+   "create_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_export_stl",
+      "require_args": [
+       "document_id"
+      ]
+     }
+    ],
+    "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
+   }
   },
   {
    "operation_id": "SKC-01.geometric_types",
@@ -11453,7 +11746,19 @@
    "acceptance": [
     "DeleteConstraints() снимает все записи объекта, Delete() — одну, и оба подтверждены перечитыванием",
     "число записей ДО и ПОСЛЕ снято внутри одного сеанса"
-   ]
+   ],
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_sketch_constraints",
+      "require_args": [
+       "sketch_ref"
+      ]
+     }
+    ],
+    "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
+   }
   },
   {
    "operation_id": "SKC-05.state_read",
@@ -11619,7 +11924,14 @@
       ]
      }
     ]
-   }
+   },
+   "required_of": [
+    "SKC-01.geometric_types",
+    "SKC-02.dimension_types",
+    "SKC-03.read",
+    "SKC-04.delete",
+    "SKC-05.state_read"
+   ]
   },
   {
    "operation_id": "dep.sketch_constraints.interop_presence",
@@ -11688,7 +12000,11 @@
      }
     ]
    },
-   "discover_route": null
+   "discover_route": null,
+   "required_of": [
+    "SKC-01.geometric_types",
+    "SKC-05.state_read"
+   ]
   },
   {
    "operation_id": "dep.sketch_constraints.type_vocabulary",
@@ -11767,7 +12083,13 @@
       ]
      }
     ]
-   }
+   },
+   "required_of": [
+    "SKC-01.geometric_types",
+    "SKC-02.dimension_types",
+    "SKC-05.state_read",
+    "SKC-06.association_bisector"
+   ]
   },
   {
    "operation_id": "dep.sketch_constraints.state_agreement",
@@ -11828,14 +12150,20 @@
     "mode": "any",
     "routes": [
      {
-      "tool": "kompas_list_sketch_constraints",
+      "tool": "kompas_get_sketch_status",
       "require_args": [
        "sketch_ref"
       ]
      }
-    ]
+    ],
+    "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
    },
-   "discover_route": null
+   "discover_route": null,
+   "required_of": [
+    "SKC-03.read",
+    "SKC-04.delete",
+    "SKC-05.state_read"
+   ]
   },
   {
    "operation_id": "dep.sketch_constraints.no_silent_rewrite",
@@ -11905,7 +12233,11 @@
      }
     ]
    },
-   "discover_route": null
+   "discover_route": null,
+   "required_of": [
+    "SKC-02.dimension_types",
+    "SKC-05.state_read"
+   ]
   },
   {
    "operation_id": "ASM-08.component.delete",
@@ -11963,12 +12295,13 @@
     "mode": "any",
     "routes": [
      {
-      "tool": "kompas_list_documents"
-     },
-     {
-      "tool": "kompas_list_components"
+      "tool": "kompas_list_components",
+      "require_args": [
+       "document_id"
+      ]
      }
-    ]
+    ],
+    "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
    },
    "read_route": {
     "mode": "any",

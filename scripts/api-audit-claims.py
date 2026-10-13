@@ -158,26 +158,31 @@ def route_satisfied(route, calls):
 
     `require_args` demands the argument NAMES in the journal, because the journal records `args_keys`:
     a route without its arguments is a different call, and treating it as the same would credit a row
-    with a call it never made.
+    with a call it never made. `require_args` and `forbid_args` are judged on the SAME call: a route
+    names ONE call shape (an enumeration call carries the sketch and NOT the address; an addressed
+    read carries both), so judging the two halves independently over the whole window refuses a route
+    as soon as the same tool was called once more with the forbidden argument. Measured on
+    `dep.sketch.entities`, whose `discover_route` was satisfied in its own window and still read as
+    refused because a neighbouring linked row read the same list WITH the address.
     """
     problems = []
     for item in (route or {}).get("routes") or []:
         tool = item.get("tool")
+        require = set(item.get("require_args") or [])
+        forbid = set(item.get("forbid_args") or [])
         matched = [call for call in calls if call.get("tool") == tool and not call.get("error")]
         if not matched:
             problems.append(f"нет вызова {tool}")
             continue
-        require = set(item.get("require_args") or [])
-        forbid = set(item.get("forbid_args") or [])
-        if require:
-            with_args = [call for call in matched if require <= set(call.get("args_keys") or [])]
-            if not with_args:
-                problems.append(f"{tool} без обязательных аргументов {sorted(require)}")
-        if forbid:
-            with_forbidden = [call for call in matched
-                              if forbid & set(call.get("args_keys") or [])]
-            if with_forbidden:
-                problems.append(f"{tool} с запрещёнными аргументами {sorted(forbid)}")
+        satisfying = [call for call in matched
+                      if require <= set(call.get("args_keys") or [])
+                      and not (forbid & set(call.get("args_keys") or []))]
+        if satisfying:
+            continue
+        if [call for call in matched if not (require <= set(call.get("args_keys") or []))]:
+            problems.append(f"{tool} без обязательных аргументов {sorted(require)}")
+        else:
+            problems.append(f"{tool} с запрещёнными аргументами {sorted(forbid)}")
     return (not problems), "; ".join(problems)
 
 
@@ -261,26 +266,50 @@ def calibrate(report, pattern="B3M."):
             "negative_foreign_derivations": {key: dict(value) for key, value in sorted(foreign.items())}}
 
 
-def required_of_check(matrix, profiles_dir):
-    """The matrix's `required_of` against the release profiles that declare the dependency."""
+def required_of_mismatches(matrix, profiles):
+    """The matrix's `required_of` against the profiles that declare the dependency.
+
+    The profile is the SOURCE of the dependency relation; the matrix keeps a copy. A dependency is
+    matched by its `id` (its own `operation_id`), never by the value of `required_of` - that value is
+    a LIST of consumers, and comparing it to a profile KEY matches nothing, so every dependency read
+    as "named by no profile" while all of them were named. The two sides are compared as SETS: the
+    ORDER of a consumer list is not a fact, and re-ordering it is not a discrepancy.
+
+    Both directions are reported, because they are two different faults: a profile that declares
+    consumers the matrix does not keep (a stale copy) and a matrix that claims consumers no profile
+    declares (an unsupported claim).
+    """
+    declared = collections.OrderedDict()
+    for name in sorted(profiles):
+        for dep in profiles[name].get("common_dependencies") or []:
+            declared.setdefault(dep.get("id"), []).append((name, set(dep.get("required_of") or [])))
     mismatches = []
+    for row in matrix.get("rows") or []:
+        dep_id = row.get("operation_id")
+        matrix_side = set(row.get("required_of") or [])
+        if dep_id in declared:
+            for name, profile_side in declared[dep_id]:
+                if matrix_side != profile_side:
+                    mismatches.append({
+                        "operation_id": dep_id, "profile": name,
+                        "matrix_only": sorted(matrix_side - profile_side),
+                        "profile_only": sorted(profile_side - matrix_side),
+                        "reason": "состав потребителей зависимости расходится: профиль - источник"})
+        elif matrix_side:
+            mismatches.append({
+                "operation_id": dep_id, "profile": None,
+                "matrix_only": sorted(matrix_side), "profile_only": [],
+                "reason": "зависимость не названа ни одним профилем выпуска"})
+    return mismatches
+
+
+def required_of_check(matrix, profiles_dir):
     profiles = {}
     for name in sorted(os.listdir(profiles_dir)):
         if name.endswith(".json"):
             profiles[name] = load_json(os.path.join(profiles_dir, name))
-    for row in matrix.get("rows") or []:
-        declared = row.get("required_of")
-        if not declared:
-            continue
-        found = {}
-        for name, profile in profiles.items():
-            for key, value in profile.items():
-                if isinstance(value, dict) and key == declared:
-                    found[name] = value.get("required_actions")
-        if not found:
-            mismatches.append({"operation_id": row.get("operation_id"), "required_of": declared,
-                               "reason": "зависимость не названа ни одним профилем выпуска"})
-    return {"profiles_read": sorted(profiles), "mismatches": mismatches,
+    return {"profiles_read": sorted(profiles),
+            "mismatches": required_of_mismatches(matrix, profiles),
             "note": "пустой список - матрица и профили называют одних и тех же потребителей; "
                     "null - профиль не прочитан, то есть проверки НЕ БЫЛО, а не «всё сходится»"}
 
@@ -405,6 +434,24 @@ def self_test():
                                    "args_keys": ["force"]}])
     check("запрещённый аргумент отвергает маршрут", not ok, reason)
 
+    # Обе половины маршрута судятся на ОДНОМ вызове. Окно держит два вызова того же инструмента:
+    # голый (перечисление) и с адресом (адресное чтение). Маршрут перечисления обязан быть засчитан,
+    # маршрут адресного чтения - тоже, а маршрут, требующий ОБА аргумента сразу, - отвергнут.
+    both = [{"tool": "kompas_list_sketch_entities", "error": None, "args_keys": ["sketch_ref"]},
+            {"tool": "kompas_list_sketch_entities", "error": None,
+             "args_keys": ["sketch_ref", "address"]}]
+    ok, reason = route_satisfied({"routes": [{"tool": "kompas_list_sketch_entities",
+                                              "require_args": ["sketch_ref"],
+                                              "forbid_args": ["address"]}]}, both)
+    check("маршрут перечисления засчитан в окне с адресным вызовом того же инструмента", ok, reason)
+    ok, reason = route_satisfied({"routes": [{"tool": "kompas_list_sketch_entities",
+                                              "require_args": ["address"]}]}, both)
+    check("маршрут адресного чтения засчитан в том же окне", ok, reason)
+    ok, reason = route_satisfied({"routes": [{"tool": "kompas_list_sketch_entities",
+                                              "require_args": ["address"],
+                                              "forbid_args": ["address"]}]}, both)
+    check("несовместимые половины маршрута отвергают его", not ok, reason)
+
     check("действие считается названным только по последнему сегменту имени",
           named_actions(["B3M.01.read", "G01"], "read") == ["B3M.01.read"]
           and named_actions(["G01", "V07"], "read") == [])
@@ -424,6 +471,27 @@ def self_test():
           control["must_stay_silent"] and control["must_stay_silent"]["silent"],
           str(control["must_stay_silent"]))
     check("сторож доказан только обеими половинами", control["guard_proved"])
+
+    # required_of: сверка по id зависимости и по СОСТАВУ потребителей. Обе половины в одной
+    # постановке: строка, чей состав расходится с профилем, обязана быть названа; строка, где
+    # различается только ПОРЯДОК, обязана промолчать. Без второй половины переупорядочивание
+    # читалось бы как расхождение, без первой - прибор не различал бы «сходится» и «не смотрит».
+    profile = {"p.json": {"common_dependencies": [
+        {"id": "dep.a", "required_of": ["M-2", "M-1"]}]}}
+    same = {"rows": [{"operation_id": "dep.a", "required_of": ["M-1", "M-2"]}]}
+    other = {"rows": [{"operation_id": "dep.a", "required_of": ["M-1"]}]}
+    check("required_of: расхождение состава названо",
+          required_of_mismatches(other, profile) == [
+              {"operation_id": "dep.a", "profile": "p.json", "matrix_only": [],
+               "profile_only": ["M-2"],
+               "reason": "состав потребителей зависимости расходится: профиль - источник"}],
+          str(required_of_mismatches(other, profile)))
+    check("required_of: различие только в порядке НЕ расхождение",
+          required_of_mismatches(same, profile) == [],
+          str(required_of_mismatches(same, profile)))
+    check("required_of: заявка без профиля названа",
+          len(required_of_mismatches({"rows": [{"operation_id": "dep.b",
+                                                "required_of": ["M-1"]}]}, profile)) == 1)
 
     print(f"\nСамопроверка прибора: {checks} проверок, "
           f"{len(failures)} FAIL" + (f" - {failures}" if failures else ""))

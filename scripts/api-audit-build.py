@@ -188,12 +188,14 @@ def findings_of(evidence, matrix, catalog, claims):
 
     docs = evidence.get("docs") or {}
     unconfirmed = docs.get("unconfirmed") or []
-    without_page = [item for item in unconfirmed
-                    if "не назван на страницах своего интерфейса" in (item.get("reason") or "")]
-    if without_page:
+    # Столбец документации доведён до полноты: неподтверждённый маршрут — это маршрут, для которого
+    # страницы нет НИ на проводе, НИ в зеркале (аудит: `documentation_column_complete`). Каждый такой
+    # маршрут назван находкой; по §6 исходного наряда он идёт перечнем заказчику до поставки.
+    if unconfirmed:
         add("F-01", "несоответствие документации (член вызывается, страницы нет)", "высокая",
-            f"{len(without_page)} COM-член(ов), вызываемых адаптером, не названы на страницах своего "
-            f"интерфейса: " + "; ".join(item["route"] for item in without_page[:10]),
+            f"{len(unconfirmed)} COM-член(ов), вызываемых адаптером, не имеют подтверждающей "
+            f"страницы ни на проводе, ни в зеркале справки: "
+            + "; ".join(f"{item['route']} ({item.get('reason')})" for item in unconfirmed[:10]),
             "перечень заказчику: либо документированный маршрут, либо исключение, названное как "
             "исключение",
             [docs.get("source")])
@@ -237,6 +239,18 @@ def findings_of(evidence, matrix, catalog, claims):
             "назвать инструмент в маршруте строки, которая его исполняет, или объявить его вне "
             "покрытия режимов",
             [wire.get("source") or "docs/acceptance/evidence/"])
+    outside = wire.get("tools_outside_profiles") or []
+    return items
+    required_of = (claims.get("required_of_check") or {}).get("mismatches") or []
+    if required_of:
+        add("F-21", "расхождение матрицы и профиля по составу потребителей зависимости", "средняя",
+            f"{len(required_of)} зависимост(ей): матрица и профиль называют разных потребителей "
+            f"(`required_of`): "
+            + "; ".join(f"{item['operation_id']} (+{item.get('profile_only')} / "
+                        f"-{item.get('matrix_only')})" for item in required_of[:10]),
+            "профиль — источник обязательности режима: привести запись матрицы к профилю либо "
+            "исправить профиль с записью в его revision_history",
+            [claims.get("source")])
     return items
 
 
@@ -253,6 +267,7 @@ def completeness(evidence, matrix, catalog, claims, wire):
         "schemas_matching_wire_by_shape": (wire.get("reconciliation") or {}).get(
             "schemas_match_wire_by_shape"),
         "tools_without_matrix_presence": wire.get("tools_without_matrix_presence") or [],
+        "tools_outside_profiles": wire.get("tools_outside_profiles") or [],
         "presence_classes": {key: len(value) for key, value
                              in (wire.get("presence_classes") or {}).items()},
         "matrix_rows": len(matrix.get("rows") or []),
@@ -263,7 +278,8 @@ def completeness(evidence, matrix, catalog, claims, wire):
         "com_routes_confirmed_over_wire": (docs.get("bases") or {}).get("wire", 0),
         "com_routes_confirmed_from_mirror": (docs.get("bases") or {}).get("mirror", 0),
         "com_routes_unconfirmed": len(docs.get("unconfirmed") or []),
-        "documentation_column_complete": not (docs.get("circuit_breaker") or {}).get("open"),
+        "documentation_column_complete": bool(docs.get("documentation_column_complete")),
+        "documentation_routes_unmeasured": len(docs.get("unmeasured") or []),
         "object_type_constants_checked": len((docs.get("object_types") or {}).get("matched") or []),
         "object_type_constants_mismatched": len(
             (docs.get("object_types") or {}).get("mismatched") or []),
@@ -344,6 +360,7 @@ def build(evidence_dir):
                                   "прочитана из зеркала справки в репозитории, потому что провод "
                                   "отказал. Подтверждение по зеркалу названо отдельно: это "
                                   "подтверждение по копии, а не по проводу"},
+                "mirror": docs.get("mirror") or {},
                 "circuit_breaker": docs.get("circuit_breaker"),
                 "links": {"checked": docs.get("routes_checked"),
                           "ok": (docs.get("statuses") or {}).get("Подтверждено", 0),
@@ -459,6 +476,10 @@ def render(document):
         "",
         f"Инструментов без присутствия в записях покрытия: "
         f"{len(completeness_.get('tools_without_matrix_presence') or [])}.",
+        f"Инструментов вне профилей по природе (названный класс): "
+        f"{len(completeness_.get('tools_outside_profiles') or [])} - "
+        + "; ".join(f"`{item['tool']}` ({item['reason']})"
+                    for item in completeness_.get("tools_outside_profiles") or []) + ".",
         f"Классы присутствия: {completeness_.get('presence_classes')}.",
         f"COM-маршрутов по сборкам: {completeness_.get('com_routes_by_assembly')}.",
         "",

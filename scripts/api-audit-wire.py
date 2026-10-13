@@ -148,6 +148,34 @@ def presence_classes(presence_map):
     return {key: sorted(items) for key, items in sorted(classes.items())}
 
 
+# TOOLS THAT BY NATURE ARE NOT MODES OF A PROFILE. The MCP's own session machinery and its
+# calibration instrument serve the TRANSPORT and the MEASUREMENT, not a modelling mode, so no row can
+# honestly declare them and forcing them into the matrix would be a false attribution. Each is named
+# with its reason, and the count is reported separately from the genuine gaps.
+# AGENTS.md: a КОМПАС help page is not demanded for the MCP's own machinery.
+OUTSIDE_PROFILES = {
+    "kompas_connect": "подключение к уже запущенному КОМПАС - владение сеансом, а не режим",
+    "kompas_disconnect": "отсоединение от КОМПАС - владение сеансом, а не режим",
+    "kompas_acquire_session": "захват сеанса вторым клиентом - владение сеансом, а не режим",
+    "kompas_release_session": "освобождение сеанса - владение сеансом, а не режим",
+    "kompas_session_status": "состояние сеанса и владельца - владение сеансом, а не режим",
+    "kompas_health": "состояние сервера (в том числе разрыв связи) - служебный отчёт",
+    "kompas_capabilities": "что реально поддержано на этой установке - служебный отчёт",
+    "kompas_probe_units": "калибровка единиц: строит известную геометрию и отдаёт СЫРЫЕ показания "
+                          "измерительных вызовов; измерительный прибор приёмки, а не режим "
+                          "(исполняется строкой DEP.DUN.01.geometry_validation)",
+    "kompas_import_step": "импорт STEP: каталог не заводит режима импорта, инструмент исполняется "
+                          "вертикальным сценарием (строки E01-E03), а не режимом профиля. Это "
+                          "названный пробел МОДЕЛИ покрытия, и его закрытие меняет знаменатель "
+                          "каталога - решение заказчика",
+}
+
+
+def outside_profiles(tools):
+    """The named class: tools on the wire that no profile can honestly declare."""
+    return sorted(tool for tool in tools if tool in OUTSIDE_PROFILES)
+
+
 def only_in(rows, tools, mode):
     """Tools whose ONLY presence is the named mode - the half a widened reading must be checked on."""
     presence_map = presence(tools, rows, {})
@@ -209,8 +237,13 @@ def collect(host=None):
     tools_rows = schema_comparison(tools, SCHEMAS_DIR)
     presence_map = presence([tool["name"] for tool in tools], rows, support)
     counts = reconcile(tools, schemas, rows)
-    without_presence = sorted(name for name, record in presence_map.items()
-                              if not record["present"])
+    names = [tool["name"] for tool in tools]
+    absent = sorted(name for name, record in presence_map.items() if not record["present"])
+    outside = outside_profiles(names)
+    # The two lists are non-overlapping and sum to the absent count: a tool that no profile can declare
+    # is not a gap in the RECORD, and the two must not be added into one number.
+    gaps = [name for name in absent if name not in outside]
+    assert sorted(gaps + [name for name in absent if name in outside]) == absent, absent
     return {
         "instrument": "api-audit-wire",
         "date": stamp(),
@@ -220,7 +253,10 @@ def collect(host=None):
         "catalog_support_notes_not_read": notes_not_read,
         "catalog_support_mentions": sorted(support),
         "tools": [{**row, "presence": presence_map[row["name"]]} for row in tools_rows],
-        "tools_without_matrix_presence": without_presence,
+        "tools_without_matrix_presence": gaps,
+        "tools_outside_profiles": [{"tool": name, "reason": OUTSIDE_PROFILES[name]}
+                                   for name in outside],
+        "tools_outside_profiles_reasons": OUTSIDE_PROFILES,
         "presence_classes": presence_classes(presence_map),
         "tools_only_in_declared_route": only_in(rows, [t["name"] for t in tools], "route_field"),
         "tools_only_in_schema_field": only_in(rows, [t["name"] for t in tools], "schema_field"),
@@ -323,6 +359,18 @@ def self_test():
     text_result = presence([SELF_TEST_PREFIX + "text"], text_rows, {})
     check("маршрут строковой формы читается", text_result[SELF_TEST_PREFIX + "text"]["present"])
 
+    # РАЗМЕТКА ВОКРУГ ИМЕНИ — НЕ ЧАСТЬ ИМЕНИ. Имя, названное в обратных кавычках или в кавычках,
+    # обязано читаться; та же строка БЕЗ имени обязана не считаться присутствием. Обе половины в
+    # одной постановке: без второй счётчик мог бы засчитывать присутствие по любому упоминанию.
+    marked = SELF_TEST_PREFIX + "marked"
+    marked_rows = [{"operation_id": "T3m",
+                    "adapter_route": f"маршрут создаётся `{marked}` (`kind=axis`), см. «{marked}»"}]
+    marked_result = presence([marked], marked_rows, {})
+    check("имя в обратных кавычках считается присутствием", marked_result[marked]["present"],
+          str(marked_result[marked]))
+    unmarked = presence([marked], [{"operation_id": "T3m", "adapter_route": "маршрут создаётся"}], {})
+    check("тот же маршрут без имени присутствием не считается", not unmarked[marked]["present"])
+
     # Третий вид присутствия - названная СХЕМА. Обе половины: строка, называющая схему, считается
     # присутствием, а та же строка со снятым полем схемы - нет.
     schema_rows = [{"operation_id": "T4",
@@ -337,6 +385,13 @@ def self_test():
     check("классы присутствия не пересекаются и дают целое",
           sum(len(items) for items in classes.values()) == 1 and list(classes) == ["schema_field"],
           str({key: len(items) for key, items in classes.items()}))
+
+    # Класс «вне профилей» назван отдельно и НЕ сливается с пробелами записи: части обязаны давать
+    # целое, а служебный инструмент не может попасть в перечень пробелов.
+    outside = outside_profiles(list(OUTSIDE_PROFILES) + [nowhere])
+    check("служебные инструменты названы классом", outside == sorted(OUTSIDE_PROFILES),
+          str(outside[:3]))
+    check("инструмент вне класса в этот перечень не попадает", nowhere not in outside)
 
     print(f"\nСамопроверка прибора: {checks} проверок, "
           f"{len(failures)} FAIL" + (f" - {failures}" if failures else ""))
@@ -366,6 +421,7 @@ def main():
     print(f"имён не совпало: {counts['tools_on_wire'] - result['reconciliation']['schemas_match_wire_by_names']}")
     print(f"форм не совпало: {counts['tools_on_wire'] - result['reconciliation']['schemas_match_wire_by_shape']}")
     print(f"без присутствия в записях покрытия: {result['tools_without_matrix_presence']}")
+    print(f"вне профилей по природе: {[item['tool'] for item in result['tools_outside_profiles']]}")
     print(f"только в объявленном маршруте: {result['tools_only_in_declared_route']}")
     print(f"режимов и вариантов каталога: {len(result['modes'])}")
     print(f"записано: {out}")

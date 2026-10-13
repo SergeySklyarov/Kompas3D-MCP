@@ -16,6 +16,7 @@ import datetime
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -264,11 +265,17 @@ def route_tool_names(value, found=None):
     A route is a STRING (`adapter_route`: "API5 o3d_baseExtrusion(24) + ...") or a DICT
     (`read_route`: {"mode": ..., "routes": [{"tool": "kompas_get_feature", ...}]}). Reading only one
     shape silently finds nothing, and "found nothing" then reads as "no route was declared".
+
+    MARKUP AROUND A NAME IS NOT PART OF IT. The route prose names a tool in backticks (`` `kompas_x` ``)
+    or in quotes, and a tokenizer that keeps the delimiter reads "no route declared" - measured: five
+    tools (`kompas_create_aux_geometry`, `kompas_edit_sketch_entity`, `kompas_export_step`,
+    `kompas_list_features`, `kompas_update_plane`) were reported as having no presence at all while the
+    row they belong to named them in backticks.
     """
     found = found if found is not None else set()
     if isinstance(value, str):
-        for token in value.replace(",", " ").replace(";", " ").replace("(", " ").split():
-            token = token.strip(".:")
+        for token in re.split(r"[,;()\s]+", value):
+            token = token.strip(".:`\"'«»[]*")
             if token.startswith("kompas_"):
                 found.add(token)
     elif isinstance(value, dict):

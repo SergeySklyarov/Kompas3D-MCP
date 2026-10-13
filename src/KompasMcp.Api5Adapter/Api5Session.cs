@@ -2165,9 +2165,11 @@ public static class KompasObjectTypes
     /// <summary><c>o3d_cutRotated</c> — cut by rotation, factory number (MEASURED R.24: 29).</summary>
     public const int CutRotated = 29;
 
-    /// <summary><c>o3d_Rotated3D</c> — the number under which a finished rotation feature lies in the API5 tree.</summary>
-    /// <remarks>MEASURED: for a rotation the FACTORY number and the tree number COINCIDE (29 =
-    /// <c>o3d_cutRotated</c>), unlike a hole — the value is measured, not derived.
+    /// <summary>MEASURED 29 — the type a finished rotation feature is seen under in the API5 tree.</summary>
+    /// <remarks>DOC: the documented table names the number 29 <c>o3d_cutRotated</c> and declares no
+    /// separate rotation tree type, so the constant cites the name the table gives that number instead of
+    /// a name the table does not have. MEASURED: for a rotation the FACTORY number and the tree number
+    /// COINCIDE (29), unlike a hole — the value is measured, not derived.
     /// History: docs/decisions/adapter-core.md#rotated3d-numbering</remarks>
     public const int Rotated3D = 29;
     public const int BaseLoft = 30;

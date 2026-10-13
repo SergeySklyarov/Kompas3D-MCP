@@ -666,8 +666,9 @@ public sealed partial class Api5Session : IDisposable
     /// <summary>Session inventory: the instances and documents this adapter holds, with their unsaved flag.
     /// Changes nothing — it reads the registry and the document fingerprint.</summary>
     /// <remarks>The unsaved flag comes ONLY from <see cref="SaveStateOf"/> (the fingerprint and the state the
-    /// server itself keeps), because the target version has no documented "document modified" property. That
-    /// is why the inventory runs on the CAD lane: the fingerprint has to be read through COM.</remarks>
+    /// server itself keeps). DOC: a "document modified" property does exist (<c>IKompasDocument.Changed</c>,
+    /// ikompasdocument_changed.html); the inventory does not read it. The fingerprint is read through COM,
+    /// which is why the inventory runs on the CAD lane.</remarks>
     public object Inventory()
     {
         var documents = Documents.Select(document =>

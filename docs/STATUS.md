@@ -49,7 +49,7 @@
   Контракт MCP: структурных ломок 0 (добавлено поле `rescue_copies_directory` в ответе release и
   `owned_instance_shutdown` в ответе disconnect); размер `tools/list` 342 899 → 343 982 (компактно
   333 078 → 334 161), потолок 367 100 не поднимался. Доказательства —
-  `docs/acceptance/evidence/20261013-shutdown-7164d90/`; отчёт — `SHUTDOWN_NO_ORPHANS_REPORT_20261013.md`.
+  `docs/acceptance/evidence/20261013-shutdown-aa74e79/`; отчёт — `SHUTDOWN_NO_ORPHANS_REPORT_20261013.md`.
 - **Три замечания ревью к `COMMAND_TABLE_CATALOG_SIZE` закрыты (13.10.2026, наряд `CTCS_REVIEW_FIXES`).**
   (1) Общие схемы каталога избавлены от внутренних имён: в схеме цепочек соответствия (одна на
   `kompas_loft` и `kompas_update_feature` - потому §2.2 её и не задел) убраны имя строки матрицы

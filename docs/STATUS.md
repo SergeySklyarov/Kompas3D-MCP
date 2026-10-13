@@ -502,7 +502,11 @@
   заказчиком.
 - Проверка установщика `Install-KompasMcp.ps1` на машине владельца - за владельцем.
 - `docs/API_COMPLIANCE.*` не перегенерированы; приборы цепочки утрачены 10.10.2026 (чистка
-  `scratch/`); наряд `API_AUDIT_TOOLS` после 0.7.0.
+  `scratch/`); наряд `API_AUDIT_TOOLS` - до поставки 0.8.0, после `SHUTDOWN_NO_ORPHANS`.
+- **Очередь 0.8.0 (сверена 13.10.2026, план - поправка того же дня):** `SHUTDOWN_NO_ORPHANS` ->
+  `API_AUDIT_TOOLS` -> `DEBT20_NOT_INCLUDED` (долг 20) -> `RELEASE_0_8_0` (поставка, приёмка,
+  публикация, перенос журнала). Затем
+  `SKETCH_COPY_PROJECT_RESEARCH`, G4, SM-12, резьба.
 - **ЗАКРЫТО 10.10.2026 нарядом `DRW_REGRESSION_FIX`.** `python scripts/emit-coverage-matrix.py` -
   целостность OK (было 12 нарушений после `EVIDENCE_REBUILD`, до него 98); `check-evidence-links.py` -
   0. Регрессия `e578b47` исправлена (проба числа признаков не бросает на документе без дерева), группа

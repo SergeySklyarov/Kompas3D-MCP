@@ -68,6 +68,16 @@ class McpError(Exception):
 # поэтому окно `calls_window` строки и есть её доказательство.
 CALL_LOG = []
 
+# ПОЛНЫЕ ОТВЕТЫ ВЫЗОВОВ — доказательство РАЗБОРА ОТКАЗА, а не журнал на каждый прогон.
+#
+# CALL_LOG хранит сводку вызова (имя, код, уровень, ревизии, ИМЕНА аргументов). Этого хватает
+# строке, чтобы доказать, ЧТО она сделала, но не хватает, чтобы разобрать, ПОЧЕМУ она упала:
+# полный ответ (`result`, `verification`, `checks`, `warnings`, `details`) прибор не сохранял, и
+# разбор отказа начинался с повторного прогона. Наряд FL25_FALSE_SUCCESS §1.1 требует сохранять
+# полный ответ вызовов ОКНА упавшей строки. Хранится рядом с CALL_LOG и тем же индексом `seq`,
+# чтобы окно `calls_window` строки указывало на те же вызовы. На успешном прогоне пуст.
+CALL_FULL = []
+
 # Как часто прибор переспрашивает исход операции, ответившей `status = running` (наряд
 # PRE_RELEASE_0_6_0 П3.3). Полсекунды — компромисс: операция, упёршаяся в бюджет синхронизации,
 # завершается вскоре после него, а частый опрос не забивает канал.
@@ -195,8 +205,9 @@ class Client:
         env = result.get("structuredContent")
         # Запись делается ДО возврата: окно строки должно содержать вызов даже тогда, когда строка
         # падает на разборе ответа. Иначе неудачная проверка выглядела бы как «вызова не было».
+        seq = len(CALL_LOG)
         CALL_LOG.append({
-            "seq": len(CALL_LOG),
+            "seq": seq,
             "tool": name,
             "operation_id": (env or {}).get("operation_id"),
             "error": error_code(env),
@@ -224,6 +235,17 @@ class Client:
             # имени. Отсутствие ключа у старых отчётов — это «не измерено», а не «аргументов не было»:
             # различие сохраняется и называется.
             "args_keys": sorted(str(k) for k in (arguments or {}).keys()),
+        })
+        # Полный ответ — тем же индексом `seq`, что и сводка: строка, упавшая на разборе ответа,
+        # обязана получить ИМЕННО тот конверт, который разбирала. Значения аргументов здесь ЕСТЬ
+        # (в отличие от сводки): без входа разбор отказа не воспроизводим, а цена записи платится
+        # только тогда, когда строка действительно упала (см. Report._write_failures).
+        CALL_FULL.append({
+            "seq": seq,
+            "tool": name,
+            "arguments": arguments,
+            "is_error": bool(result.get("isError", False)),
+            "result": result,
         })
         return result.get("isError", False), env, result
 
@@ -279,6 +301,11 @@ class Report:
         # `group` выставляется ПЕРЕД прогоном группы; без него строка относится к «вертикали».
         self.grouped = False
         self.group = None
+        # ДОКАЗАТЕЛЬСТВО РАЗБОРА ОТКАЗА: полные ответы вызовов окна каждой упавшей строки. Пишется
+        # РЯДОМ с отчётом (одним файлом на прогон), чтобы отчёт остался сводкой, а разбор отказа не
+        # зависел от повторного прогона (наряд FL25_FALSE_SUCCESS §1.1).
+        self.failures = []
+        self.failure_path = os.path.splitext(self.path)[0] + ".failures.json"
 
     def add(self, cid, desc, verdict, detail="", details=None):
         """`detail` — короткая сводка для строки; `details` — полные данные измерения.
@@ -302,11 +329,50 @@ class Report:
             self._start = self._mark
             self._mark = end
         row["calls_window"] = [self._start, self._mark]
+        # На отказе полные ответы окна уходят в отдельный файл, а строка получает на него ссылку.
+        # Механизм общий для ВСЕХ строк: без него отказ разбирается повторным прогоном, а не снимком.
+        if verdict == "FAIL":
+            self._record_failure(row)
         self.rows.append(row)
         print(f"  [{verdict:7}] {cid:6} {desc}"
               + (f"\n           {clip(detail, 300)}" if detail else ""))
         if details is not None:
             print("           details=" + json.dumps(details, ensure_ascii=False))
+
+    def _record_failure(self, row):
+        """Сохранить полные ответы вызовов окна упавшей строки рядом с отчётом.
+
+        Пишется СРАЗУ при отказе, а не в `save()`: разбор отказа не должен зависеть от того, что
+        прогон дошёл до конца. Пустое окно — не повод молчать: запись об отказе делается и тогда,
+        когда вызовов не было, иначе «окно пусто» и «строку не разбирали» неразличимы."""
+        start, end = row["calls_window"]
+        calls = [CALL_FULL[i] for i in range(start, min(end, len(CALL_FULL)))]
+        self.failures.append({
+            "row": row["id"],
+            "description": row["description"],
+            "detail": clip(row["detail"], 4000),
+            "details": row.get("details"),
+            "calls_window": [start, end],
+            "calls": calls,
+        })
+        row["failure_evidence"] = os.path.basename(self.failure_path)
+        self._write_failures()
+
+    def _write_failures(self):
+        target = os.path.abspath(self.failure_path)
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        payload = {
+            "title": self.title,
+            "report": os.path.basename(self.path),
+            "note": "Полные ответы вызовов окна каждой строки со вердиктом FAIL: `result` (в том "
+                    "числе `verification`, `checks`, `warnings`), `details` строки и аргументы "
+                    "вызова. Пишется прибором при отказе (наряд FL25_FALSE_SUCCESS §1.1), чтобы "
+                    "разбор шёл по снимку, а не по повторному прогону.",
+            "failures": self.failures,
+        }
+        with open(target, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, ensure_ascii=False, indent=2)
+        print(f"           доказательство отказа: {target}")
 
     def save(self):
         payload = {"title": self.title}
@@ -326,6 +392,14 @@ class Report:
                 "этом списке; строка подтверждает ДЕЙСТВИЕ, если её окно содержит вызовы, требуемые "
                 "подписью действия, а подпись калибруется на строках `B3M.<режим>.<действие>`, где "
                 "действие названо именем строки (scratch/_build_api_compliance.py, action_signatures).")
+        if self.failures:
+            # Ссылка на доказательство разбора: отчёт называет файл рядом с собой, где лежат полные
+            # ответы вызовов упавших строк. Без ссылки файл пришлось бы искать угадыванием имени.
+            payload["failure_evidence"] = {
+                "path": os.path.basename(self.failure_path),
+                "rows": [f["row"] for f in self.failures],
+                "note": "полные ответы вызовов окна каждой упавшей строки",
+            }
         with open(self.path, "w", encoding="utf-8") as fh:
             json.dump(payload, fh, ensure_ascii=False, indent=2)
         for mirror in self.mirror_paths:
@@ -1115,6 +1189,36 @@ def instrument_self_test():
     check("возраст сеанса до старта сеанса не выдумывается", session_seconds() is None)
     check("число выдавливаний считается по журналу вызовов",
           extrudes_so_far() == sum(1 for c in CALL_LOG if c.get("tool") == "kompas_extrude"))
+
+    # Полный ответ при отказе (наряд FL25_FALSE_SUCCESS §1.1): прибор обязан сохранить ПОЛНЫЙ ответ
+    # вызовов ОКНА упавшей строки, а не одни имена ключей. Обе половины: подсаженный отказ пишет
+    # доказательство (с `checks` внутри), успешная строка его не пишет.
+    with tempfile.TemporaryDirectory() as tmp:
+        probe = Report("t", os.path.join(tmp, "smoke-report.json"))
+        planted = len(CALL_LOG)
+        CALL_LOG.append({"seq": planted, "tool": "kompas_fillet", "error": None})
+        CALL_FULL.append({
+            "seq": planted, "tool": "kompas_fillet",
+            "arguments": {"edge_refs": ["edge:1"], "radius_mm": 3}, "is_error": False,
+            "result": {"structuredContent": {"status": "succeeded", "verification": {
+                "level": "call_returned",
+                "checks": [{"name": "face_count_grew", "passed": False}]}}}})
+        probe.add("FL25", "подсаженный отказ", "FAIL", "скругление не создано")
+        with open(probe.failure_path, encoding="utf-8") as fh:
+            saved = json.load(fh)
+        calls = saved["failures"][-1]["calls"] if saved["failures"] else []
+        stored_checks = (((calls[-1]["result"] if calls else {}).get("structuredContent") or {})
+                         .get("verification") or {}).get("checks") or []
+        check("отказ сохраняет полный ответ вызовов своего окна",
+              len(saved["failures"]) == 1 and len(calls) == 1 and bool(stored_checks)
+              and stored_checks[0]["name"] == "face_count_grew", probe.failure_path)
+        check("строка отказа ссылается на доказательство",
+              probe.rows[-1].get("failure_evidence") == os.path.basename(probe.failure_path))
+        probe.add("FL26", "успешная строка", "PASS")
+        with open(probe.failure_path, encoding="utf-8") as fh:
+            after = json.load(fh)
+        check("успешная строка доказательства отказа не пишет",
+              len(after["failures"]) == 1 and "failure_evidence" not in probe.rows[-1])
 
     # Опыт «второй экземпляр»: план, разбор плеч и умолчания сужения. Все три — чистые функции, и
     # проверяются здесь, а не живым прогоном: живой прогон проверяет среду, а не прибор.

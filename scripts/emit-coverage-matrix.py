@@ -46,6 +46,74 @@ def load(*parts):
         return json.load(handle)
 
 
+def catalog_counters(catalog):
+    """The counters `meta.counters` claims, RECOMPUTED from the document itself.
+
+    They were 99 operations and 146 modes while the document held 124 operations and 209
+    modes/variants: the numbers had been written once and never recomputed, and the emitter fell back
+    to them, so the published matrix printed a stale denominator. Recomputing here is what makes the
+    counter unable to drift: the guard below refuses to emit when the file disagrees with itself.
+    """
+    operations = set()
+    modes = set()
+    for family in catalog.get("families") or []:
+        for operation in family.get("operations") or []:
+            if not isinstance(operation, dict) or not operation.get("id"):
+                continue
+            operations.add(operation["id"])
+            for key in MODE_CONTAINERS:
+                for index, item in enumerate(operation.get(key) or []):
+                    if isinstance(item, dict) and item.get("id"):
+                        modes.add(item["id"])
+                    else:
+                        # Строковый режим места в инвентаре не теряет: он всё равно в знаменателе.
+                        modes.add(f"{operation['id']}.{key}[{index}]")
+    return {"families": len(catalog.get("families") or []),
+            "operations": len(operations),
+            "modes_and_variants": len(modes)}
+
+
+def counters_problems(catalog):
+    """Disagreements between the counters written in the file and the recomputed ones."""
+    declared = catalog.get("meta", {}).get("counters") or {}
+    actual = catalog_counters(catalog)
+    return [f"{key}: в файле {declared.get(key)}, пересчёт {value}"
+            for key, value in actual.items()
+            if declared.get(key) != value]
+
+
+def fix_counters():
+    """Rewrite `meta.counters` from the document. Not a hand edit: the number comes from the file."""
+    path = os.path.join(COVERAGE, "catalog.json")
+    with open(path, "rb") as handle:
+        raw_bytes = handle.read()
+    # BOM сохраняется: файлы покрытия записаны с ним (проектное соглашение), и запись без BOM
+    # отличала бы весь файл, а не одно поле.
+    bom = raw_bytes[:3] == b"\xef\xbb\xbf"
+    raw = raw_bytes.decode("utf-8-sig")
+    catalog = json.loads(raw)
+    problems = counters_problems(catalog)
+    if not problems:
+        print("счётчики каталога согласованы, изменений нет")
+        return 0
+    before = dict(catalog["meta"]["counters"])
+    catalog["meta"]["counters"] = {**before, **catalog_counters(catalog)}
+    # `indent=1` - тот же отступ, что в файле: другой отступ переписал бы все 7 400 строк, и правка
+    # одного поля выглядела бы как переписанный каталог.
+    payload = json.dumps(catalog, ensure_ascii=False, indent=1) + "\n"
+    if payload == raw:
+        print("счётчики каталога согласованы, изменений нет")
+        return 0
+    with open(path, "w", encoding="utf-8-sig" if bom else "utf-8") as handle:
+        handle.write(payload)
+    print("счётчики каталога пересчитаны:")
+    for item in problems:
+        print("  -", item)
+    print("было:", before)
+    print("стало:", catalog["meta"]["counters"])
+    return 0
+
+
 def catalog_rows(catalog):
     """{row_id: (family, operation_id, name, level)} — режим, либо операция без режимов."""
     rows = collections.OrderedDict()
@@ -64,8 +132,20 @@ def catalog_rows(catalog):
 
 
 def main():
+    if "--fix-counters" in sys.argv:
+        # Явный режим правки: число берётся из САМОГО документа, а не вписывается рукой.
+        return fix_counters()
+    if "--check-counters" in sys.argv:
+        problems = counters_problems(load("coverage", "solid-v24", "catalog.json"))
+        for item in problems:
+            print("  -", item)
+        print("счётчики каталога:", "РАСХОДЯТСЯ" if problems else "согласованы")
+        return 1 if problems else 0
     problems = []
     catalog = load("coverage", "solid-v24", "catalog.json")
+    # Страж ПЕРЕД выгрузкой: счётчик, записанный в файле, попадает в метрику `matrix.md`, и
+    # расхождение с самим документом печатало бы устаревший знаменатель молча.
+    problems += [f"счётчики каталога {item}" for item in counters_problems(catalog)]
     matrix = load("coverage", "solid-v24", "matrix.json")
     profiles = collections.OrderedDict()
     if os.path.isdir(PROFILE_DIR):

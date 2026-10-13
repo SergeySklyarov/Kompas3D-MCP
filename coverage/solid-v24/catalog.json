@@ -62,10 +62,10 @@
    "level": "отсутствие уровня у записи означает «не описано», а не «не поддержано» и не «verified»"
   },
   "counters": {
-   "families": 36,
-   "operations": 99,
+   "families": 42,
+   "operations": 124,
    "operations_as_bare_strings": 0,
-   "modes_and_variants": 146,
+   "modes_and_variants": 209,
    "operations_without_level": 0,
    "modes_without_level": 31,
    "levels_out_of_vocabulary": [],

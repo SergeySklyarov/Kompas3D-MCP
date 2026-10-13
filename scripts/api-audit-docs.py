@@ -122,11 +122,23 @@ def fetch(url, cache=CACHE, timeout=30):
                 _STATE["refusal_backoffs"] += 1
                 time.sleep(REFUSAL_BACKOFF_S[attempt])
                 continue
+            if error.code == 404:
+                # A `404` is a DEFINITIVE answer: the page is not there. It is retried ONCE, briefly,
+                # so that a transient 404 cannot be frozen as "undocumented", and then accepted.
+                # MEASURED: without this, the long network delays were applied to every absent page,
+                # and a pass over the 517 routes spent over an hour on pages that answer 404 at once.
+                if attempt == 0:
+                    time.sleep(RETRY_DELAYS[0])
+                    continue
+                break
         except Exception as error:  # noqa: BLE001 - the class is reported, not swallowed
             last = f"network:{type(error).__name__}"
         if attempt < attempts - 1:
             time.sleep(RETRY_DELAYS[min(attempt, len(RETRY_DELAYS) - 1)])
-    if isinstance(last, int):
+    if isinstance(last, int) and last != 404:
+        # A `404` is not a refusal of the SERVER - the page simply is not there - so it is not counted
+        # with the throttling answers. Counting it would make `max_consecutive_refusals` name the
+        # help's gaps instead of the server's mood.
         _STATE["refusals"] += 1
         _STATE["max_consecutive_refusals"] = max(_STATE["max_consecutive_refusals"],
                                                  _STATE["refusals"])

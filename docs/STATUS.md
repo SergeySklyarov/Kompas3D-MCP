@@ -14,6 +14,22 @@
 
 ## Текущее состояние
 
+- **Самопроверка установщика проходит на Windows PowerShell 5.1 (14.10.2026, наряд
+  `INSTALLER_PS51_FIX`, отчёт `INSTALLER_PS51_FIX_REPORT_20261014.md`).**
+  **Что было не так.** Шаг 5 (`Invoke-SelfTest`) падал на `$psi.EnvironmentVariables.Remove(...)`:
+  `You cannot call a method on a null-valued expression`, код 1, без `ОСТАНОВЛЕНО:`; `installed.json`
+  не записывался. Причина измерена: чтение `ProcessStartInfo.EnvironmentVariables` копирует окружение
+  родителя в `StringDictionary` (регистронезависимый) и обрывается, если в блоке есть два имени,
+  отличающихся только регистром (`Path`, `PATH`, `path`); оборванное копирование оставляет в поле
+  ЧАСТИЧНЫЙ словарь (16 записей из 159), а первое обращение PowerShell отдаёт как `$null`.
+  **Что сделано.** Лишние написания таких имён снимаются с окружения установщика до копирования;
+  вызов `Invoke-SelfTest` обёрнут - любой отказ шага 5 заканчивается `Stop-Install` с названием шага и
+  причиной. Менялся только `scripts/Install-KompasMcp.ps1`; `src/` не тронут, `--all` не требовался.
+  **Проверено.** Установщик `-Tag v0.7.0 -UseInstalled` на 5.1 - код 0, шаг 5 весь `[OK]`,
+  `installed.json` записан; с `KOMPAS_MCP_WORKER_PATH` на несуществующий файл - тоже код 0 (переменная
+  действительно снимается). Запись клиента не изменилась (`verify-mcp-approval.py` 5/0, хеш тот же).
+  `package-release.py --self-test` 31/0; стражи 0. Строки в `TECH_DEBT.md` нет (решение заказчика).
+
 - **Строки «не входит» манифеста выпуска перестали быть прозой прибора (14.10.2026, наряд
   `DEBT20_NOT_INCLUDED`, отчёт `DEBT20_NOT_INCLUDED_REPORT_20261014.md`).**
   **Что было не так.** Список `not_included` был прописан руками в `scripts/package-release.py`, и

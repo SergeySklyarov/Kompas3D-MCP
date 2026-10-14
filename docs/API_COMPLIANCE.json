@@ -2,7 +2,7 @@
  "meta": {
   "artifact": "docs/API_COMPLIANCE.json",
   "audit": "соответствие MCP официальной документации КОМПАС",
-  "date": "2026-10-14T16:45:08+02:00, часы машины +02:00",
+  "date": "2026-10-14T20:51:37+02:00, часы машины +02:00",
   "target": {
    "product": "КОМПАС-3D v24",
    "build": "24.0.0.2799",
@@ -20,7 +20,7 @@
    "routes_checked": 507,
    "note": "страницы читались по проводу; подтверждающей считается только страница СВОЕГО интерфейса и СВОЕГО члена, страница предка, групповая страница или страница с опечаткой в заголовке; у каждого маршрута назван способ подтверждения (`how`), и шесть подтверждены поимённым перечнем (`named_name_mismatch`), а не правилом",
    "basis": {
-    "wire": 506,
+    "wire": 507,
     "mirror": 0,
     "note": "`wire` - страница открыта по проводу (HTTP 200); `mirror` - прочитана из зеркала справки в репозитории, потому что провод отказал. Подтверждение по зеркалу названо отдельно: это подтверждение по копии, а не по проводу"
    },
@@ -46,8 +46,8 @@
    },
    "links": {
     "checked": 507,
-    "ok": 506,
-    "failed": 1,
+    "ok": 507,
+    "failed": 0,
     "not_verified": 0
    }
   },
@@ -55,16 +55,16 @@
    "kind": "release_build",
    "dir": "src/KompasMcp.Host/bin/x64/Release/net10.0-windows",
    "host_path": "src/KompasMcp.Host/bin/x64/Release/net10.0-windows/KompasMcp.Host.exe",
-   "host_sha256": "f74ac0bf14ee99c6673d33137bfa05187be4ef08c3eaedf43059ee73ff46130e",
-   "host_dll_sha256": "5c6c5fe3e223f3807c8f4097440438bb19ba0062309bbb327d2818794844af6a",
+   "host_sha256": "ef682a7366b324b0549334700d049825897777d4df916bf0feaab1f0300df4b4",
+   "host_dll_sha256": "271185bdec08ff48e73afe48b9ec6167d63c894dded66fa4e155ad23d0948534",
    "worker_path": "src/KompasMcp.Worker/bin/x64/Release/net10.0-windows/KompasMcp.Worker.exe",
-   "worker_sha256": "cfff7ad2bc9144990892e83b23f157b2bb0bcb534fa9bbb53153b25184b1ff4a",
-   "worker_dll_sha256": "e80e128c78d3a7f4e5fc771d1a9db6b119b888d871161ff0679463f06e011652",
-   "adapter_sha256": "ae55bf0876be77e863dd4e08e853f8b58a71ac7b13289a0d482a0fab6ddf6f6e",
-   "source_commit": "d7824cb",
-   "source_tree_dirty": false,
+   "worker_sha256": "a6e0469ccaba5a37e2b60d54164be609ea2f165d3c85aee5d3c6a8ecdf042e20",
+   "worker_dll_sha256": "78a874a5deaa927f1dcbcc7c41abd401a99e1b33368925bc5853737d36c56189",
+   "adapter_sha256": "f60ba9a8c435fc22723968256471e63b11aeae8b860384ca57c00a48bbd0a4b7",
+   "source_commit": "f1edf16",
+   "source_tree_dirty": true,
    "tools_count": 90,
-   "rows_complete_run": 1598,
+   "rows_complete_run": 1618,
    "failed": null,
    "identity_source": "сборка Release чистого коммита (поставка 0.8.0 ещё не выпущена)"
   },
@@ -146,10 +146,10 @@
     "api5": 215,
     "adapter-twins": 10
    },
-   "com_routes_confirmed_by_documentation": 506,
-   "com_routes_confirmed_over_wire": 506,
+   "com_routes_confirmed_by_documentation": 507,
+   "com_routes_confirmed_over_wire": 507,
    "com_routes_confirmed_from_mirror": 0,
-   "com_routes_unconfirmed": 1,
+   "com_routes_unconfirmed": 0,
    "com_routes_confirmed_by_name": 6,
    "documentation_column_complete": true,
    "documentation_routes_unmeasured": 0,
@@ -158,12 +158,12 @@
    "rows_claiming_verified": 167,
    "rows_verified_without_any_linked_row": 0,
    "rows_verified_contradicted_by_fail": 0,
-   "rows_action_without_dedicated_row": 15,
-   "rows_actions_without_required_calls": 24,
-   "rows_status_lowered_by_unsupported_actions": 24,
-   "acceptance_rows": 1598,
-   "acceptance_calls_journal": 15333,
-   "acceptance_rows_with_call_window": 1598,
+   "rows_action_without_dedicated_row": 0,
+   "rows_actions_without_required_calls": 0,
+   "rows_status_lowered_by_unsupported_actions": 0,
+   "acceptance_rows": 1618,
+   "acceptance_calls_journal": 15437,
+   "acceptance_rows_with_call_window": 1618,
    "required_of_mismatches_matrix_vs_profile": 0,
    "dependency_verdict_control_proved": null
   }
@@ -535,7 +535,7 @@
   },
   {
    "name": "kompas_create_drawing_views",
-   "description_len": 952,
+   "description_len": 953,
    "properties_on_wire": 12,
    "required_on_wire": [
     "document_id",
@@ -554,7 +554,8 @@
     "own_row": [],
     "route_field": [
      "DRW-01.views.create_standard:adapter_route",
-     "DRW-01.views.create_standard:create_route"
+     "DRW-01.views.create_standard:create_route",
+     "dep.drawing.source_file:create_route"
     ],
     "schema_field": [
      "DRW-01.views.create_standard"
@@ -1009,7 +1010,8 @@
      "DRW-05.export:adapter_route",
      "DRW-05.export:create_route",
      "DRW-05.export:geometry_validation_route",
-     "dep.drawing.export_file:create_route"
+     "dep.drawing.export_file:create_route",
+     "dep.drawing.export_file:read_route"
     ],
     "schema_field": [
      "DRW-05.export"
@@ -1243,7 +1245,8 @@
      "ASM-01.document.create_open:read_route",
      "ASM-07.save_reopen:read_route",
      "dep.assembly.document_lifecycle:read_route",
-     "dep.assembly.revisions:read_route"
+     "dep.assembly.revisions:read_route",
+     "dep.drawing.revisions:read_route"
     ],
     "schema_field": [],
     "mcp_support": null,
@@ -1301,7 +1304,8 @@
      "VM-04.material.read:discover_route",
      "VM-04.material.read:read_route",
      "VM-05.material.write:read_route",
-     "VM-06.mass.computed_via_measure:read_route"
+     "VM-06.mass.computed_via_measure:read_route",
+     "dep.vm.idempotency:read_route"
     ],
     "schema_field": [
      "VM-04.material.read"
@@ -1694,7 +1698,7 @@
   },
   {
    "name": "kompas_list_drawing_views",
-   "description_len": 407,
+   "description_len": 408,
    "properties_on_wire": 2,
    "required_on_wire": [
     "document_id"
@@ -1711,6 +1715,8 @@
      "DRW-02.views.list:adapter_route",
      "DRW-02.views.list:discover_route",
      "DRW-02.views.list:read_route",
+     "dep.drawing.source_file:read_route",
+     "dep.drawing.view_address:read_route",
      "dep.drawing.idempotency:read_route"
     ],
     "schema_field": [
@@ -1870,6 +1876,7 @@
      "dep.sketch.entities:read_route",
      "dep.sketch.entities:discover_route",
      "dep.sketch_bulk.limits_source:read_route",
+     "SKC-05.state_read:geometry_validation_route",
      "dep.sketch_constraints.object_address:read_route",
      "dep.sketch_constraints.object_address:discover_route",
      "dep.sketch_constraints.no_silent_rewrite:read_route"
@@ -2019,6 +2026,7 @@
      "EI-05.inertia.units:read_route",
      "dep.ei.units_system:read_route",
      "dep.ei.read_only_measure:adapter_route",
+     "SKC-04.delete:geometry_validation_route",
      "SM-02.material_toward:geometry_validation_route"
     ],
     "schema_field": [
@@ -2093,6 +2101,12 @@
      "dep.assembly.component_address:save_reopen_route",
      "dep.assembly.revisions:save_reopen_route",
      "MATE-06.mate.placement_effect:save_reopen_route",
+     "DRW-04.title_block.set:save_reopen_route",
+     "DRW-06.technical_demand:save_reopen_route",
+     "VM-02.variable.set_value:save_reopen_route",
+     "VM-03.variable.set_expression:save_reopen_route",
+     "VM-05.material.write:save_reopen_route",
+     "SKC-04.delete:save_reopen_route",
      "ASM-08.component.delete:save_reopen_route",
      "SM-02.material_toward:save_reopen_route"
     ],
@@ -2486,6 +2500,12 @@
      "dep.assembly.component_address:save_reopen_route",
      "dep.assembly.revisions:save_reopen_route",
      "MATE-06.mate.placement_effect:save_reopen_route",
+     "DRW-04.title_block.set:save_reopen_route",
+     "DRW-06.technical_demand:save_reopen_route",
+     "VM-02.variable.set_value:save_reopen_route",
+     "VM-03.variable.set_expression:save_reopen_route",
+     "VM-05.material.write:save_reopen_route",
+     "SKC-04.delete:save_reopen_route",
      "ASM-08.component.delete:save_reopen_route",
      "SM-02.material_toward:save_reopen_route"
     ],
@@ -13039,17 +13059,13 @@
      "documentation": "Подтверждено"
     },
     {
-     "member": "IFragmentDocument.ViewsAndLayersManager",
-     "documentation": "не подтверждено"
+     "member": "IKompasDocument2D.ViewsAndLayersManager",
+     "documentation": "Подтверждено"
     }
    ],
    "documentation": {
-    "status": "Не подтверждено",
-    "members": 8,
-    "counts": {
-     "Подтверждено": 7,
-     "не подтверждено": 1
-    }
+    "status": "Подтверждено",
+    "members": 8
    },
    "actions": {
     "discover": "not_applicable",
@@ -13363,6 +13379,8 @@
    "catalog_level": "mcp_verified",
    "tools": [
     "kompas_get_title_block",
+    "kompas_open_document",
+    "kompas_save_document",
     "kompas_set_title_block"
    ],
    "schemas": [
@@ -13372,6 +13390,14 @@
    "com": [
     {
      "member": "ksVariable.note",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksDocument3D.Open",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IKompasDocument.Save",
      "documentation": "Подтверждено"
     },
     {
@@ -13465,7 +13491,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 23
+    "members": 25
    },
    "actions": {
     "discover": "not_applicable",
@@ -13597,13 +13623,21 @@
    "kind": "common_dependency",
    "context": "drawing",
    "catalog_level": null,
-   "tools": [],
+   "tools": [
+    "kompas_create_drawing_views",
+    "kompas_list_drawing_views"
+   ],
    "schemas": [],
    "declared_route": null,
-   "com": [],
+   "com": [
+    {
+     "member": "ksVariable.note",
+     "documentation": "Подтверждено"
+    }
+   ],
    "documentation": {
-    "status": "Не подтверждено",
-    "note": "маршрут не назвал ни одного COM-члена"
+    "status": "Подтверждено",
+    "members": 1
    },
    "actions": {
     "discover": "not_applicable",
@@ -13630,13 +13664,20 @@
    "kind": "common_dependency",
    "context": "drawing",
    "catalog_level": null,
-   "tools": [],
+   "tools": [
+    "kompas_list_drawing_views"
+   ],
    "schemas": [],
    "declared_route": null,
-   "com": [],
+   "com": [
+    {
+     "member": "ksVariable.note",
+     "documentation": "Подтверждено"
+    }
+   ],
    "documentation": {
-    "status": "Не подтверждено",
-    "note": "маршрут не назвал ни одного COM-члена"
+    "status": "Подтверждено",
+    "members": 1
    },
    "actions": {
     "discover": "verified",
@@ -13663,13 +13704,20 @@
    "kind": "common_dependency",
    "context": "drawing",
    "catalog_level": null,
-   "tools": [],
+   "tools": [
+    "kompas_get_context"
+   ],
    "schemas": [],
    "declared_route": null,
-   "com": [],
+   "com": [
+    {
+     "member": "ksVariable.note",
+     "documentation": "Подтверждено"
+    }
+   ],
    "documentation": {
-    "status": "Не подтверждено",
-    "note": "маршрут не назвал ни одного COM-члена"
+    "status": "Подтверждено",
+    "members": 1
    },
    "actions": {
     "discover": "not_applicable",
@@ -13779,6 +13827,8 @@
    "catalog_level": "mcp_verified",
    "tools": [
     "kompas_get_technical_demand",
+    "kompas_open_document",
+    "kompas_save_document",
     "kompas_set_technical_demand"
    ],
    "schemas": [
@@ -13788,6 +13838,18 @@
    "com": [
     {
      "member": "ksEntity.IsCreated",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksVariable.note",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksDocument3D.Open",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IKompasDocument.Save",
      "documentation": "Подтверждено"
     },
     {
@@ -13881,7 +13943,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 23
+    "members": 26
    },
    "actions": {
     "discover": "not_applicable",
@@ -14561,6 +14623,8 @@
    "tools": [
     "kompas_list_variables",
     "kompas_measure",
+    "kompas_open_document",
+    "kompas_save_document",
     "kompas_set_variable"
    ],
    "schemas": [
@@ -14637,6 +14701,10 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "ksDocument3D.Open",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksDocument3D.RebuildDocument",
      "documentation": "Подтверждено"
     },
@@ -14653,13 +14721,17 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "IKompasDocument.Save",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksVariable.value",
      "documentation": "Подтверждено"
     }
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 22
+    "members": 24
    },
    "actions": {
     "discover": "not_applicable",
@@ -14677,7 +14749,8 @@
     "VM-02.variable.set_value.create",
     "VM-02.variable.set_value.read",
     "VM-02.variable.set_value.rebuild",
-    "VM-02.variable.set_value.negative_tests"
+    "VM-02.variable.set_value.negative_tests",
+    "VM-02.variable.set_value.save_reopen"
    ]
   },
   {
@@ -14690,6 +14763,8 @@
    "tools": [
     "kompas_list_variables",
     "kompas_measure",
+    "kompas_open_document",
+    "kompas_save_document",
     "kompas_set_variable"
    ],
    "schemas": [
@@ -14770,17 +14845,25 @@
      "documentation": "Подтверждено"
     },
     {
+     "member": "ksDocument3D.Open",
+     "documentation": "Подтверждено"
+    },
+    {
      "member": "ksDocument3D.RebuildDocument",
      "documentation": "Подтверждено"
     },
     {
      "member": "IKompasDocument2D1.RebuildDocument",
      "documentation": "Подтверждено"
+    },
+    {
+     "member": "IKompasDocument.Save",
+     "documentation": "Подтверждено"
     }
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 20
+    "members": 22
    },
    "actions": {
     "discover": "not_applicable",
@@ -14798,7 +14881,9 @@
     "VM-03.variable.set_expression.create",
     "VM-03.variable.set_expression.read",
     "VM-03.variable.set_expression.rebuild",
-    "VM-03.variable.set_expression.negative_tests"
+    "VM-03.variable.set_expression.negative_tests",
+    "VM-03.variable.set_expression.geometry_validation",
+    "VM-03.variable.set_expression.save_reopen"
    ]
   },
   {
@@ -14861,6 +14946,8 @@
    "catalog_level": "mcp_verified",
    "tools": [
     "kompas_get_material",
+    "kompas_open_document",
+    "kompas_save_document",
     "kompas_set_material"
    ],
    "schemas": [
@@ -14938,6 +15025,14 @@
     },
     {
      "member": "ksVariable.note",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksDocument3D.Open",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IKompasDocument.Save",
      "documentation": "Подтверждено"
     },
     {
@@ -15031,7 +15126,7 @@
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 40
+    "members": 42
    },
    "actions": {
     "discover": "not_applicable",
@@ -15048,7 +15143,8 @@
    "tests": [
     "VM-05.material.write.create",
     "VM-05.material.write.read",
-    "VM-05.material.write.negative_tests"
+    "VM-05.material.write.negative_tests",
+    "VM-05.material.write.save_reopen"
    ]
   },
   {
@@ -15168,13 +15264,20 @@
    "kind": "common_dependency",
    "context": "part",
    "catalog_level": null,
-   "tools": [],
+   "tools": [
+    "kompas_get_material"
+   ],
    "schemas": [],
    "declared_route": null,
-   "com": [],
+   "com": [
+    {
+     "member": "ksVariable.note",
+     "documentation": "Подтверждено"
+    }
+   ],
    "documentation": {
-    "status": "Не подтверждено",
-    "note": "маршрут не назвал ни одного COM-члена"
+    "status": "Подтверждено",
+    "members": 1
    },
    "actions": {
     "discover": "not_applicable",
@@ -15460,7 +15563,8 @@
    "tests": [
     "INT.02.read",
     "INT.02.negative_tests",
-    "INT.06.read"
+    "INT.06.read",
+    "INT-02.pairs.tangent.negative_tests"
    ]
   },
   {
@@ -15765,7 +15869,8 @@
     "INT.04.read",
     "INT.04.read2",
     "INT.04.geometry_validation",
-    "INT.13.twin_layout"
+    "INT.13.twin_layout",
+    "dep.interference.api7_measurer.negative_tests"
    ]
   },
   {
@@ -15815,7 +15920,8 @@
     "INT.04.geometry_validation2",
     "INT.07.geometry_validation",
     "INT.06.read",
-    "INT.04.unit"
+    "INT.04.unit",
+    "dep.interference.distance_unit.negative_tests"
    ]
   },
   {
@@ -15854,7 +15960,8 @@
    },
    "tests": [
     "INT.09.read",
-    "INT.09.negative_tests"
+    "INT.09.negative_tests",
+    "dep.interference.read_only.negative_tests"
    ]
   },
   {
@@ -16153,7 +16260,8 @@
     "SB-06.polyline_open",
     "SB-07.spline",
     "SB-08.spline_open",
-    "SB-10.reopen"
+    "SB-10.reopen",
+    "dep.sketch_bulk.entity_read_back.negative_tests"
    ]
   },
   {
@@ -16187,7 +16295,8 @@
     "SB-03.polyline_native",
     "SB-04.polyline_limit",
     "SB-05.client_contour",
-    "SB-07.spline"
+    "SB-07.spline",
+    "dep.sketch_bulk.profile_area_rule.negative_tests"
    ]
   },
   {
@@ -16872,7 +16981,8 @@
    },
    "tests": [
     "VB.04.read",
-    "VB.14.no_mutation"
+    "VB.14.no_mutation",
+    "dep.vb.read_only_list.negative_tests"
    ]
   },
   {
@@ -17167,7 +17277,8 @@
     "EI.06.inertia_central",
     "EI.08.inertia_offdiag",
     "EI.12.no_mutation",
-    "EI.13.applicability"
+    "EI.13.applicability",
+    "EI-03.inertia.central.negative_tests"
    ]
   },
   {
@@ -17219,7 +17330,8 @@
     "geometry_validation": "verified"
    },
    "tests": [
-    "EI.07.inertia_principal"
+    "EI.07.inertia_principal",
+    "EI-04.inertia.principal.negative_tests"
    ]
   },
   {
@@ -17254,7 +17366,8 @@
     "geometry_validation": "not_applicable"
    },
    "tests": [
-    "EI.09.inertia_units"
+    "EI.09.inertia_units",
+    "EI-05.inertia.units.negative_tests"
    ]
   },
   {
@@ -17347,7 +17460,8 @@
    },
    "tests": [
     "EI.02.stl_binary",
-    "EI.03.stl_text"
+    "EI.03.stl_text",
+    "dep.ei.triangle_count_from_file.negative_tests"
    ]
   },
   {
@@ -17386,7 +17500,8 @@
    },
    "tests": [
     "EI.06.inertia_central",
-    "EI.09.inertia_units"
+    "EI.09.inertia_units",
+    "dep.ei.units_system.negative_tests"
    ]
   },
   {
@@ -17771,7 +17886,10 @@
    "catalog_level": "mcp_verified",
    "tools": [
     "kompas_delete_sketch_constraint",
-    "kompas_list_sketch_constraints"
+    "kompas_list_sketch_constraints",
+    "kompas_measure",
+    "kompas_open_document",
+    "kompas_save_document"
    ],
    "schemas": [
     "schemas/kompas_delete_sketch_constraint.json"
@@ -17789,11 +17907,19 @@
     {
      "member": "ksVariable.note",
      "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksDocument3D.Open",
+     "documentation": "Подтверждено"
+    },
+    {
+     "member": "IKompasDocument.Save",
+     "documentation": "Подтверждено"
     }
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 3
+    "members": 5
    },
    "actions": {
     "discover": "verified",
@@ -17810,7 +17936,9 @@
    "tests": [
     "SKC.08.delete_dependencies",
     "SKC.04.edit",
-    "SKC.09.negative_tests"
+    "SKC.09.negative_tests",
+    "SKC-04.delete.save_reopen",
+    "SKC-04.delete.geometry_validation"
    ]
   },
   {
@@ -17821,7 +17949,8 @@
    "context": "part.sketch",
    "catalog_level": "mcp_verified",
    "tools": [
-    "kompas_get_sketch_status"
+    "kompas_get_sketch_status",
+    "kompas_list_sketch_entities"
    ],
    "schemas": [
     "schemas/kompas_get_sketch_status.json"
@@ -17831,11 +17960,15 @@
     {
      "member": "IDrawingObject1.ConstraintsState",
      "documentation": "Подтверждено"
+    },
+    {
+     "member": "ksVariable.note",
+     "documentation": "Подтверждено"
     }
    ],
    "documentation": {
     "status": "Подтверждено",
-    "members": 1
+    "members": 2
    },
    "actions": {
     "discover": "verified",
@@ -17851,7 +17984,9 @@
    },
    "tests": [
     "SKC.12.state_read",
-    "SKC.15.state_agreement"
+    "SKC.15.state_agreement",
+    "SKC-05.state_read.negative_tests",
+    "SKC-05.state_read.geometry_validation"
    ]
   },
   {
@@ -31509,32 +31644,6 @@
    }
   },
   {
-   "route": "IFragmentDocument.ViewsAndLayersManager",
-   "assembly": "api7",
-   "interface": "IFragmentDocument",
-   "declared_on": "IFragmentDocument",
-   "receiver_type": "IFragmentDocument",
-   "inherited": false,
-   "member": "ViewsAndLayersManager",
-   "kind": "property",
-   "signature": "prop ViewsAndLayersManager ViewsAndLayersManager",
-   "type": "ViewsAndLayersManager",
-   "sites": [
-    "src/KompasMcp.Api5Adapter/Api7/Api7SketchConstraints.cs:81",
-    "src/KompasMcp.Api5Adapter/Api7/Api7SketchEntities.cs:174"
-   ],
-   "receivers": [
-    "fragment",
-    "fragmentDoc"
-   ],
-   "documentation": {
-    "status": "не подтверждено",
-    "source": [],
-    "how": null,
-    "documented_on": null
-   }
-  },
-  {
    "route": "IDrawingContainer.get_Objects",
    "assembly": "api7",
    "interface": "IDrawingContainer",
@@ -32812,26 +32921,52 @@
     "how": "перечень интерфейса",
     "documented_on": "IModelObject"
    }
+  },
+  {
+   "route": "IKompasDocument2D.ViewsAndLayersManager",
+   "assembly": "api7",
+   "interface": "IKompasDocument2D",
+   "declared_on": "IKompasDocument2D",
+   "receiver_type": "IKompasDocument2D",
+   "inherited": false,
+   "member": "ViewsAndLayersManager",
+   "kind": "property",
+   "signature": "prop ViewsAndLayersManager ViewsAndLayersManager",
+   "type": "ViewsAndLayersManager",
+   "sites": [
+    "src/KompasMcp.Api5Adapter/Api7/Api7Views.cs:24"
+   ],
+   "receivers": [
+    "document2D"
+   ],
+   "documentation": {
+    "status": "Подтверждено",
+    "source": [
+     "https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/ikompasdocument2d_viewsandlayersmanager.html"
+    ],
+    "how": "перечень интерфейса",
+    "documented_on": "IKompasDocument2D"
+   }
   }
  ],
  "com_snapshot_check": {
-  "source": "docs/acceptance/evidence/20261014-api-audit-d7824cb/routes.json",
+  "source": "docs/acceptance/evidence/20261014-api-audit-f1edf16/routes.json",
   "scanner": "tools/KompasMcp.InteropScan/bin/x64/Release/net10.0-windows/KompasMcp.InteropScan.exe",
   "adapter_sources": "src/KompasMcp.Api5Adapter",
   "fresh": true,
-  "lag_seconds": 54.4,
+  "lag_seconds": 2414.0,
   "newest_input": "src/KompasMcp.Api5Adapter/obj/x64/Release/net10.0-windows/KompasMc.15BECDC6.Up2Date",
   "reason": "свеж"
  },
  "inventory_check": {
-  "source": "docs/acceptance/evidence/20261014-api-audit-d7824cb/wire.json",
+  "source": "docs/acceptance/evidence/20261014-api-audit-f1edf16/wire.json",
   "inputs": [
    "coverage/solid-v24/matrix.json",
    "coverage/solid-v24/catalog.json",
    "schemas/"
   ],
   "fresh": true,
-  "lag_seconds": 82105.5,
+  "lag_seconds": 3347.4,
   "newest_input": "coverage/solid-v24/matrix.json",
   "reason": "свеж"
  },
@@ -32853,9 +32988,9 @@
   "note": "обращения по ИМЕНИ через отражение: поиск по `.Член(` их не видит; попадание имени в другой интерфейс подтверждением не считается"
  },
  "receivers_without_type": {
-  "total": 6829,
+  "total": 6832,
   "by_kind": {
-   "foreign-receiver": 6231,
+   "foreign-receiver": 6234,
    "unknown": 405,
    "unknown-member": 193
   },
@@ -33861,53 +33996,12 @@
   "note": "пустой список - матрица и профили называют одних и тех же потребителей; null - профиль не прочитан, то есть проверки НЕ БЫЛО, а не «всё сходится»"
  },
  "claimed_actions_check": {
-  "source": "docs/acceptance/evidence/20261013-api-audit-b635fa4/all-report.json",
+  "source": "docs/acceptance/evidence/20261014-api-audit-f1edf16/all-report.json",
   "rows_claiming_verified": 167,
   "rows_without_any_linked_row": [],
   "rows_contradicted_by_fail": [],
-  "rows_action_without_dedicated_row": [
-   "EI-03.inertia.central",
-   "EI-04.inertia.principal",
-   "EI-05.inertia.units",
-   "SKC-04.delete",
-   "SKC-05.state_read",
-   "VM-02.variable.set_value",
-   "VM-03.variable.set_expression",
-   "VM-05.material.write",
-   "dep.ei.triangle_count_from_file",
-   "dep.ei.units_system",
-   "dep.interference.api7_measurer",
-   "dep.interference.distance_unit",
-   "dep.sketch_bulk.entity_read_back",
-   "dep.sketch_bulk.profile_area_rule",
-   "dep.vb.read_only_list"
-  ],
-  "rows_actions_without_required_calls": [
-   "DRW-04.title_block.set",
-   "DRW-06.technical_demand",
-   "EI-03.inertia.central",
-   "EI-04.inertia.principal",
-   "EI-05.inertia.units",
-   "INT-02.pairs.tangent",
-   "SKC-04.delete",
-   "SKC-05.state_read",
-   "VM-02.variable.set_value",
-   "VM-03.variable.set_expression",
-   "VM-05.material.write",
-   "dep.drawing.export_file",
-   "dep.drawing.revisions",
-   "dep.drawing.source_file",
-   "dep.drawing.view_address",
-   "dep.ei.triangle_count_from_file",
-   "dep.ei.units_system",
-   "dep.interference.api7_measurer",
-   "dep.interference.distance_unit",
-   "dep.interference.read_only",
-   "dep.sketch_bulk.entity_read_back",
-   "dep.sketch_bulk.profile_area_rule",
-   "dep.vb.read_only_list",
-   "dep.vm.idempotency"
-  ],
+  "rows_action_without_dedicated_row": [],
+  "rows_actions_without_required_calls": [],
   "guard_control": {
    "must_refuse": {
     "row": "СИНТЕТИЧЕСКАЯ (окно журнала [2, 3])",
@@ -34024,47 +34118,6 @@
    }
   }
  },
- "findings": [
-  {
-   "id": "F-01",
-   "class": "несоответствие документации (член вызывается, страницы нет)",
-   "severity": "высокая",
-   "statement": "1 COM-член(ов), вызываемых адаптером, не имеют подтверждающей страницы ни на проводе, ни в зеркале справки: IFragmentDocument.ViewsAndLayersManager (HTTP 404)",
-   "fix": "перечень заказчику: либо документированный маршрут, либо исключение, названное как исключение",
-   "evidence": [
-    "docs/acceptance/evidence/20261014-api-audit-d7824cb/routes.json"
-   ]
-  },
-  {
-   "id": "F-02",
-   "class": "подкласс F-01: страницы нет по ожидаемому адресу (HTTP 404)",
-   "severity": "высокая",
-   "statement": "1 маршрут(ов) из F-01: по адресу `<интерфейс>_<член>.html` страницы нет (HTTP 404), и в перечне своего интерфейса член тоже не назван: IFragmentDocument.ViewsAndLayersManager",
-   "fix": "перечень заказчику вместе с F-01: либо документированный маршрут, либо исключение, названное как исключение",
-   "evidence": [
-    "docs/acceptance/evidence/20261014-api-audit-d7824cb/routes.json"
-   ]
-  },
-  {
-   "id": "F-06",
-   "class": "заявка не подтверждена вызовами (отказ сторожа)",
-   "severity": "средняя",
-   "statement": "24 строк(и): DRW-04.title_block.set, DRW-06.technical_demand, EI-03.inertia.central, EI-04.inertia.principal, EI-05.inertia.units, INT-02.pairs.tangent, SKC-04.delete, SKC-05.state_read, VM-02.variable.set_value, VM-03.variable.set_expression, VM-05.material.write, dep.drawing.export_file",
-   "fix": "маршрут строки, посвящённая строка приёмки или понижение заявки",
-   "evidence": [
-    "docs/acceptance/evidence/20261013-api-audit-b635fa4/all-report.json"
-   ]
-  },
-  {
-   "id": "F-07",
-   "class": "пробел трассируемости (действие не названо строкой)",
-   "severity": "низкая",
-   "statement": "15 строк(и): EI-03.inertia.central, EI-04.inertia.principal, EI-05.inertia.units, SKC-04.delete, SKC-05.state_read, VM-02.variable.set_value, VM-03.variable.set_expression, VM-05.material.write, dep.ei.triangle_count_from_file, dep.ei.units_system, dep.interference.api7_measurer, dep.interference.distance_unit",
-   "fix": "назвать действие в имени строки или объявить маршрут строки",
-   "evidence": [
-    "docs/acceptance/evidence/20261013-api-audit-b635fa4/all-report.json"
-   ]
-  }
- ],
+ "findings": [],
  "addenda": []
 }

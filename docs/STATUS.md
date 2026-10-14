@@ -14,6 +14,37 @@
 
 ## Текущее состояние
 
+- **24 строки матрицы получили проверки, которые их действительно исполняют (14.10.2026, наряд
+  `ACCEPTANCE_GAPS_B`, отчёт `ACCEPTANCE_GAPS_B_REPORT_20261014.md`).**
+  **Что было не так.** Прибор заявок (`api-audit-claims.py`) судит ОКНО ВЫЗОВОВ строки - вызовы между
+  двумя соседними `rep.add`. У 24 строк окно связанных проверок не содержало вызова, которого требует
+  действие: строка `save_reopen` читала предмет после ОБЩЕГО цикла сохранения, отнесённого соседям;
+  строки `negative_tests` несли смысловой отрицательный результат вместо вызова с кодом отказа;
+  строки `read` держали в окне запись или отказ.
+  **Что сделано.** По виду действия: свой цикл save → close → reopen у `DRW-04`, `DRW-06`, `VM-02`,
+  `VM-03`, `VM-05`, `SKC-04`; отказной вызов того же инструмента на заведомо негодном входе у
+  `DRW-06`, `VM-03`, `SKC-05`, `INT-02`, `dep.interference.*` (4), `dep.sketch_bulk.*` (2),
+  `dep.vb.read_only_list`, `EI-03/04/05`, `dep.ei.*` (2); измерение итога у `VM-03` (объём 80000 мм³),
+  `SKC-04` (12000 мм³), `SKC-05` (геометрия контура 40×30); вызов читающего инструмента у
+  `dep.vm.idempotency`, `dep.drawing.view_address`, `dep.drawing.revisions`, `dep.drawing.export_file`,
+  `dep.drawing.source_file`. Матрица называет маршрут действия построчно (`save_reopen_route`,
+  `read_route`, `create_route`, `geometry_validation_route`), `matrix.md` перегенерирован.
+  **`create` у `dep.drawing.source_file`.** Единственный вызов создания был отвергнут
+  `OPERATION_ID_CONFLICT` не продуктом, а ПРИБОРОМ: строка была отнесена к окну, где лежал только
+  этот отказ, а успешные создания шли строкой выше. Продукт на новом `operation_id` не отказывал.
+  **Проверено.** Сборка Release 0/0; полный прогон `python scripts/mcp-smoke.py --all --host <Release>`
+  на Release-сборке чистого коммита `f1edf16` (`source_tree_dirty` = false) - код 0, **PASS 1613,
+  NAMED 5, FAIL 0** (было 1593); прибор заявок на этом прогоне: `rows_actions_without_required_calls`
+  **0** (было 24), `rows_action_without_dedicated_row` **0** (было 15),
+  `rows_verified_without_any_linked_row` 0, `rows_verified_contradicted_by_fail` 0, сторож заявки
+  доказан. Группы с новыми проверками прогнаны отдельно ДО полного прогона (interference, drawing,
+  variables-material, variables-bind, export-inertia, sketch-bulk, sketch-constraints) - 0 FAIL.
+  Стражи: `lint-dashes.py` 0, `check-evidence-links.py` 0, `long-comment-blocks.py` по изменённым 0;
+  `mcp-smoke.py --self-test` 68/0; `acceptance-levels.py` `COMPLETE`.
+  **Записи.** `docs/API_COMPLIANCE.*` перевыпущены; `docs/status/TECH_DEBT.md` - строки 27 и 28,
+  названные отчётом `API_AUDIT_FOLLOWUP` §2.3 (устаревшие поля сопоставления; пробел модели у
+  `kompas_import_step`).
+
 - **Виды документа берутся документированным членом `IKompasDocument2D.ViewsAndLayersManager`; аудит
   больше не знает неподтверждённых маршрутов (14.10.2026, наряд `FRAGMENT_VIEWS_ROUTE`, отчёт
   `FRAGMENT_VIEWS_ROUTE_REPORT_20261014.md`).**

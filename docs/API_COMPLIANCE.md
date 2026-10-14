@@ -2,13 +2,13 @@
 
 Артефакт: `docs/API_COMPLIANCE.json` (машинный) и этот файл, ПОРОЖДЁННЫЙ из него. Вручную не правится: правится источник, потом перегенерируется.
 
-Дата сборки аудита: 2026-10-14T16:45:08+02:00, часы машины +02:00.
+Дата сборки аудита: 2026-10-14T20:51:37+02:00, часы машины +02:00.
 
 ## 1. Что измерено
 
 - Целевая версия: КОМПАС-3D v24, сборка 24.0.0.2799, `KOMPAS.Exe` sha256 `13e9913bc8115828914abca3353060279a41043e3543354dbabf964f7fce6756`.
 - Документация: https://help.ascon.ru/KOMPAS_SDK/24/ru-RU/, прочитано по проводу; интерфейсов 108, маршрутов 507.
-- Измеряемая сборка: `release_build`, коммит `d7824cb`, дерево чистое; `KompasMcp.Host.dll` sha256 `5c6c5fe3e223f3807c8f4097440438bb19ba0062309bbb327d2818794844af6a`.
+- Измеряемая сборка: `release_build`, коммит `f1edf16`, дерево ГРЯЗНОЕ; `KompasMcp.Host.dll` sha256 `271185bdec08ff48e73afe48b9ec6167d63c894dded66fa4e155ad23d0948534`.
 
 ## 2. Сверка полноты
 
@@ -22,10 +22,10 @@
 | matrix_rows | 171 |
 | catalog_modes_and_variants | 209 |
 | com_routes | 517 |
-| com_routes_confirmed_by_documentation | 506 |
-| com_routes_confirmed_over_wire | 506 |
+| com_routes_confirmed_by_documentation | 507 |
+| com_routes_confirmed_over_wire | 507 |
 | com_routes_confirmed_from_mirror | 0 |
-| com_routes_unconfirmed | 1 |
+| com_routes_unconfirmed | 0 |
 | com_routes_confirmed_by_name | 6 |
 | documentation_column_complete | True |
 | documentation_routes_unmeasured | 0 |
@@ -34,12 +34,12 @@
 | rows_claiming_verified | 167 |
 | rows_verified_without_any_linked_row | 0 |
 | rows_verified_contradicted_by_fail | 0 |
-| rows_action_without_dedicated_row | 15 |
-| rows_actions_without_required_calls | 24 |
-| rows_status_lowered_by_unsupported_actions | 24 |
-| acceptance_rows | 1598 |
-| acceptance_calls_journal | 15333 |
-| acceptance_rows_with_call_window | 1598 |
+| rows_action_without_dedicated_row | 0 |
+| rows_actions_without_required_calls | 0 |
+| rows_status_lowered_by_unsupported_actions | 0 |
+| acceptance_rows | 1618 |
+| acceptance_calls_journal | 15437 |
+| acceptance_rows_with_call_window | 1618 |
 | required_of_mismatches_matrix_vs_profile | 0 |
 | dependency_verdict_control_proved | None |
 
@@ -246,30 +246,30 @@ COM-маршрутов по сборкам: {'api7': 292, 'api5': 215, 'adapter-
 | `dep.mate.revisions` | dep | mcp_verified | kompas_list_mates, kompas_set_mate_parameter | см. строки режимов MATE-01…MATE-06 | Не подтверждено |
 | `dep.mate.idempotency` | dep | mcp_verified | kompas_create_mate, kompas_list_mates | см. строки режимов MATE-01…MATE-06 | Не подтверждено |
 | `dep.mate.save_reopen` | dep | mcp_verified | kompas_list_mates | см. строки режимов MATE-01…MATE-06 | Не подтверждено |
-| `DRW-01.views.create_standard` | DRW | mcp_verified | kompas_create_drawing_views, kompas_edit_view, kompas_list_drawing_views, kompas_rebuild_drawing_views | kompas_create_drawing_views: API7 IDrawingDocument.ViewsAndL | Не подтверждено |
+| `DRW-01.views.create_standard` | DRW | mcp_verified | kompas_create_drawing_views, kompas_edit_view, kompas_list_drawing_views, kompas_rebuild_drawing_views | kompas_create_drawing_views: API7 IDrawingDocument.ViewsAndL | Подтверждено |
 | `DRW-02.views.list` | DRW | mcp_verified | kompas_list_drawing_views | kompas_list_drawing_views: API7 IViews.View / ViewByNumber / | Подтверждено |
 | `DRW-03.dimension.add` | DRW | mcp_verified | kompas_add_dimension, kompas_list_dimensions | kompas_add_dimension: API7 IView как ISymbols2DContainer → L | Подтверждено |
-| `DRW-04.title_block.set` | DRW | mcp_verified | kompas_get_title_block, kompas_set_title_block | kompas_set_title_block: API7 ILayoutSheet.Stamp → IStamp.get | Подтверждено |
+| `DRW-04.title_block.set` | DRW | mcp_verified | kompas_get_title_block, kompas_open_document, kompas_save_document, kompas_set_title_block | kompas_set_title_block: API7 ILayoutSheet.Stamp → IStamp.get | Подтверждено |
 | `DRW-05.export` | DRW | mcp_verified | kompas_export_drawing | kompas_export_drawing: API7 IApplication.get_Converter(Type. | Подтверждено |
 | `dep.drawing.document_lifecycle` | dep | None | - | - | Не подтверждено |
-| `dep.drawing.source_file` | dep | None | - | - | Не подтверждено |
-| `dep.drawing.view_address` | dep | None | - | - | Не подтверждено |
-| `dep.drawing.revisions` | dep | None | - | - | Не подтверждено |
+| `dep.drawing.source_file` | dep | None | kompas_create_drawing_views, kompas_list_drawing_views | - | Подтверждено |
+| `dep.drawing.view_address` | dep | None | kompas_list_drawing_views | - | Подтверждено |
+| `dep.drawing.revisions` | dep | None | kompas_get_context | - | Подтверждено |
 | `dep.drawing.idempotency` | dep | None | kompas_list_drawing_views | - | Подтверждено |
 | `dep.drawing.export_file` | dep | None | kompas_export_drawing | - | Подтверждено |
-| `DRW-06.technical_demand` | DRW | mcp_verified | kompas_get_technical_demand, kompas_set_technical_demand | kompas_set_technical_demand: API7 IDrawingDocument.Technical | Подтверждено |
+| `DRW-06.technical_demand` | DRW | mcp_verified | kompas_get_technical_demand, kompas_open_document, kompas_save_document, kompas_set_technical_demand | kompas_set_technical_demand: API7 IDrawingDocument.Technical | Подтверждено |
 | `DRW-03.dimension.add.linear` | DRW | mcp_verified | kompas_add_dimension | kompas_add_dimension: API7 IView как ISymbols2DContainer → L | Подтверждено |
 | `DRW-03.dimension.add.radial` | DRW | mcp_verified | kompas_add_dimension | kompas_add_dimension: API7 IView как ISymbols2DContainer → L | Подтверждено |
 | `DRW-03.dimension.add.diametral` | DRW | mcp_verified | kompas_add_dimension | kompas_add_dimension: API7 IView как ISymbols2DContainer → L | Подтверждено |
 | `VM-01.variables.read` | VM | mcp_implemented | kompas_list_variables | kompas_list_variables: ksPart.VariableCollection → ksVariabl | Подтверждено |
-| `VM-02.variable.set_value` | VM | mcp_implemented | kompas_list_variables, kompas_measure, kompas_set_variable | kompas_set_variable (mode=value): проверка документа, ревизи | Подтверждено |
-| `VM-03.variable.set_expression` | VM | mcp_implemented | kompas_list_variables, kompas_measure, kompas_set_variable | kompas_set_variable (mode=expression): запись ksVariable.Exp | Подтверждено |
+| `VM-02.variable.set_value` | VM | mcp_implemented | kompas_list_variables, kompas_measure, kompas_open_document, kompas_save_document, kompas_set_variable | kompas_set_variable (mode=value): проверка документа, ревизи | Подтверждено |
+| `VM-03.variable.set_expression` | VM | mcp_implemented | kompas_list_variables, kompas_measure, kompas_open_document, kompas_save_document, kompas_set_variable | kompas_set_variable (mode=expression): запись ksVariable.Exp | Подтверждено |
 | `VM-04.material.read` | VM | mcp_verified | kompas_get_material | kompas_get_material: ksPart.material (свойство ТОЛЬКО ДЛЯ ЧТ | Подтверждено |
-| `VM-05.material.write` | VM | mcp_verified | kompas_get_material, kompas_set_material | kompas_set_material: ksPart.SetMaterial(name, плотность в до | Подтверждено |
+| `VM-05.material.write` | VM | mcp_verified | kompas_get_material, kompas_open_document, kompas_save_document, kompas_set_material | kompas_set_material: ksPart.SetMaterial(name, плотность в до | Подтверждено |
 | `VM-06.mass.computed_via_measure` | VM | mcp_verified | kompas_get_material, kompas_measure | kompas_measure получает плотность ОТ ВЫЗЫВАЮЩЕГО (параметр d | Не подтверждено |
 | `dep.vm.part_addressing` | dep | None | - | - | Не подтверждено |
 | `dep.vm.revisions` | dep | None | kompas_set_material | - | Подтверждено |
-| `dep.vm.idempotency` | dep | None | - | - | Не подтверждено |
+| `dep.vm.idempotency` | dep | None | kompas_get_material | - | Подтверждено |
 | `dep.vm.save_reopen` | dep | None | - | - | Не подтверждено |
 | `dep.vm.units` | dep | None | - | Единицы плотности: запись — документированные г/куб.см (ksPa | Подтверждено |
 | `dep.sketches.enumeration` | AUX-SKETCH | None | kompas_list_sketches | API5 ksPart.EntityCollection(o3d_sketch = 5) — «При создании | Подтверждено |
@@ -310,8 +310,8 @@ COM-маршрутов по сборкам: {'api7': 292, 'api5': 215, 'adapter-
 | `SKC-01.geometric_types` | G6 | mcp_verified | kompas_create_sketch_constraint | IDrawingObject1.NewConstraint() → задать ConstraintType/Inde | Подтверждено |
 | `SKC-02.dimension_types` | G6 | mcp_verified | kompas_create_sketch_dimension | У каждого вида СВОЯ коллекция контейнера ISymbols2DContainer | Подтверждено |
 | `SKC-03.read` | G6 | mcp_verified | kompas_list_sketch_constraints | ISketch.BeginEditEx(true) → контейнер эскиза → QI(IDrawingOb | Подтверждено |
-| `SKC-04.delete` | G6 | mcp_verified | kompas_delete_sketch_constraint, kompas_list_sketch_constraints | Внутри сеанса записи: перечитать список → Delete() по позици | Подтверждено |
-| `SKC-05.state_read` | G6 | mcp_verified | kompas_get_sketch_status | Агрегатное состояние — ISketch.ConstraintsState; состояние о | Подтверждено |
+| `SKC-04.delete` | G6 | mcp_verified | kompas_delete_sketch_constraint, kompas_list_sketch_constraints, kompas_measure, kompas_open_document, kompas_save_document | Внутри сеанса записи: перечитать список → Delete() по позици | Подтверждено |
+| `SKC-05.state_read` | G6 | mcp_verified | kompas_get_sketch_status, kompas_list_sketch_entities | Агрегатное состояние — ISketch.ConstraintsState; состояние о | Подтверждено |
 | `SKC-06.association_bisector` | G6 | metadata_found | kompas_create_sketch_constraint | Тот же маршрут; партнёр передаётся массивом (partner_refs),  | Не подтверждено |
 | `dep.sketch_constraints.object_address` | G6 | None | kompas_list_sketch_entities | Устойчивая адресация объекта эскиза для ограничения | Не подтверждено |
 | `dep.sketch_constraints.interop_presence` | G6 | None | kompas_list_sketch_constraints | Каждый используемый член присутствует в ПОСТАВЛЕННОМ interop | Не подтверждено |
@@ -792,7 +792,6 @@ COM-маршрутов по сборкам: {'api7': 292, 'api5': 215, 'adapter-
 | `IFeaturePattern.Exemplar` | api7 | property | `prop IModelObject Exemplar` | 1 | Подтверждено | перечень интерфейса |
 | `IFeaturePattern.InitialObjects` | api7 | property | `prop Object InitialObjects` | 1 | Подтверждено | перечень интерфейса |
 | `IFeaturePattern.InstanceDeletedIndexes` | api7 | property | `prop Object InstanceDeletedIndexes` | 1 | Подтверждено | перечень интерфейса |
-| `IFragmentDocument.ViewsAndLayersManager` | api7 | property | `prop ViewsAndLayersManager ViewsAndLayersManager` | 2 | не подтверждено | - |
 | `IDrawingContainer.get_Objects` | api7 | method | `Object get_Objects(Object ObjType)` | 2 | Подтверждено | перечень интерфейса |
 | `IDrawingObject1.Constraints` | api7 | property | `prop Object Constraints` | 2 | Подтверждено | перечень интерфейса |
 | `IDrawingObject1.NewConstraint` | api7 | method | `ParametriticConstraint NewConstraint()` | 1 | Подтверждено | перечень интерфейса |
@@ -842,6 +841,7 @@ COM-маршрутов по сборкам: {'api7': 292, 'api5': 215, 'adapter-
 | `INurbs.GetPoint` | api7 | method | `Boolean GetPoint(Int32 Index, Double& X, Double& Y, Double& Weight)` | 1 | Подтверждено | перечень интерфейса |
 | `ISketch.Plane` | api7 | property | `prop IModelObject Plane` | 2 | Подтверждено | перечень интерфейса |
 | `ISketch.Update` | api7 | method | `Boolean Update()` | 1 | Подтверждено | перечень интерфейса |
+| `IKompasDocument2D.ViewsAndLayersManager` | api7 | property | `prop ViewsAndLayersManager ViewsAndLayersManager` | 1 | Подтверждено | перечень интерфейса |
 
 ## 6. Типы объектов
 
@@ -849,38 +849,7 @@ COM-маршрутов по сборкам: {'api7': 292, 'api5': 215, 'adapter-
 
 ## 7. Находки
 
-### F-01 - несоответствие документации (член вызывается, страницы нет)
-
-Серьёзность: высокая.
-
-1 COM-член(ов), вызываемых адаптером, не имеют подтверждающей страницы ни на проводе, ни в зеркале справки: IFragmentDocument.ViewsAndLayersManager (HTTP 404)
-
-Исправление: перечень заказчику: либо документированный маршрут, либо исключение, названное как исключение
-
-### F-02 - подкласс F-01: страницы нет по ожидаемому адресу (HTTP 404)
-
-Серьёзность: высокая.
-
-1 маршрут(ов) из F-01: по адресу `<интерфейс>_<член>.html` страницы нет (HTTP 404), и в перечне своего интерфейса член тоже не назван: IFragmentDocument.ViewsAndLayersManager
-
-Исправление: перечень заказчику вместе с F-01: либо документированный маршрут, либо исключение, названное как исключение
-
-### F-06 - заявка не подтверждена вызовами (отказ сторожа)
-
-Серьёзность: средняя.
-
-24 строк(и): DRW-04.title_block.set, DRW-06.technical_demand, EI-03.inertia.central, EI-04.inertia.principal, EI-05.inertia.units, INT-02.pairs.tangent, SKC-04.delete, SKC-05.state_read, VM-02.variable.set_value, VM-03.variable.set_expression, VM-05.material.write, dep.drawing.export_file
-
-Исправление: маршрут строки, посвящённая строка приёмки или понижение заявки
-
-### F-07 - пробел трассируемости (действие не названо строкой)
-
-Серьёзность: низкая.
-
-15 строк(и): EI-03.inertia.central, EI-04.inertia.principal, EI-05.inertia.units, SKC-04.delete, SKC-05.state_read, VM-02.variable.set_value, VM-03.variable.set_expression, VM-05.material.write, dep.ei.triangle_count_from_file, dep.ei.units_system, dep.interference.api7_measurer, dep.interference.distance_unit
-
-Исправление: назвать действие в имени строки или объявить маршрут строки
-
+Находок нет: измерения не дали ни одного несоответствия.
 ## 8. Что осталось неподтверждённым
 
 - `report_route_check` - в текущих отчётах приёмки поле режима аргументов (`args_keys`) есть, но отдельный сторож «отчёт прежней редакции прибора» не строился: перевыпуск отчёта на текущей поставке делает его неприменимым

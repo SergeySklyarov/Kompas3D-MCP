@@ -59,5 +59,19 @@ Interop.Kompas6API5.dll» без подсказки, почему переопр
 называет старый путь `D:\Programs\KOMPAS-3Dv24\Libs\PolynomLib\Bin\Client`; без файла `.local` - то же
 (условие `Exists`).
 
-Прибор приёмки `mcp-smoke.py` эти свойства не читает: свой путь к установке он берёт из
-`KOMPAS_MCP_INSTALL` (`docs/operator-guide/build.md`).
+**Поправка 14.10.2026 (наряд `INSTALL_ROOT_TOOLS`).** Прежняя редакция этого абзаца говорила, что
+прибор приёмки свойства не читает. Теперь порядок один для всех приборов: `KOMPAS_MCP_INSTALL`,
+затем `KompasRoot` из `Directory.Build.props.local` (разбор XML, без MSBuild), затем прежнее
+значение по умолчанию `D:/Programs/KOMPAS-3Dv24`. Общий помощник - `scripts/kompas_install.py`
+(Python) и `scripts/kompas-install.ps1` (PowerShell, тот же порядок своим кодом). Каждый прибор
+печатает корень и его источник, поэтому неверный корень виден в выводе.
+
+**Почему поправка понадобилась.** Приборы аудита и выпуска зашили путь `D:\Programs\KOMPAS-3Dv24`,
+и на машине, где КОМПАС стоит в `C:\Program Files\ASCON\KOMPAS-3D v24`, `python scripts/api-audit.py
+--self-test` давал 1 FAIL из 5 (`api-audit-routes.py`, `InteropScan LOAD_FAILED`), а отказы
+приёмки (`DEP.DPU.*`, `INT.13`) читались как дефекты продукта, хотя продукт исправен. После
+поправки `--self-test` аудита - 5/5.
+
+**Границы поправки.** `src/` и `tools/KompasMcp.Api7Probe/InteropResolver.cs` не тронуты: там
+каталог interop сначала берётся из регистрации COM, а зашитый путь - лишь последний запасной
+вариант. Порядок и способ проверки - `docs/operator-guide/build.md`.

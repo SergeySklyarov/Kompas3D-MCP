@@ -26,13 +26,16 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import kompas_install  # noqa: E402
 from api_audit_common import (CATALOG, MATRIX, PROFILES_DIR, ROOT, SCHEMAS_DIR, build_identity,  # noqa: E402
                               file_sha256, load_json, route_tool_names, save_json, stamp)
 
 JSON_OUT = os.path.join(ROOT, "docs", "API_COMPLIANCE.json")
 MD_OUT = os.path.join(ROOT, "docs", "API_COMPLIANCE.md")
-KOMPAS_EXE = r"D:\Programs\KOMPAS-3Dv24\Bin\KOMPAS.Exe"
-INTEROP_DIR = r"D:\Programs\KOMPAS-3Dv24\Libs\PolynomLib\Bin\Client"
+# INVARIANT: the audited installation is the one the shared root names. The hashes below must belong
+# to that installation; a literal here would hash a foreign tree and certify it under this product.
+KOMPAS_EXE = kompas_install.kompas_exe()
+INTEROP_DIR = kompas_install.interop_dir()
 VOCABULARY = {
     "documentation": ["Подтверждено", "Противоречие", "Не подтверждено"],
     "implementation": ["Подтверждено", "Покрыто проверками", "Дефект", "Недостаточно проверки",
@@ -343,7 +346,8 @@ def build(evidence_dir):
             "target": {
                 "product": "КОМПАС-3D v24",
                 "build": "24.0.0.2799",
-                "install_root": r"D:\Programs\KOMPAS-3Dv24",
+                "install_root": kompas_install.install_root(),
+                "install_root_source": kompas_install.install_source(),
                 "kompas_exe_sha256": file_sha256(KOMPAS_EXE),
                 "interop": "Interop.Kompas6API5 + Interop.KompasAPI7 (PolynomLib/Bin/Client)",
                 "interop_dir": INTEROP_DIR,

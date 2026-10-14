@@ -37,11 +37,15 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import kompas_install  # noqa: E402
 from api_audit_common import (ADAPTER_SRC, ROOT, default_out, save_json, stamp)  # noqa: E402
 
 SCAN = os.path.join(ROOT, "tools", "KompasMcp.InteropScan", "bin", "x64", "Release",
                     "net10.0-windows", "KompasMcp.InteropScan.exe")
-INTEROP_DIR = r"D:\Programs\KOMPAS-3Dv24\Libs\PolynomLib\Bin\Client"
+# INVARIANT: the interop comes from the shared installation root, never from a literal here. A
+# literal made the scanner report LOAD_FAILED on a machine where KOMPAS is installed elsewhere, and
+# that read as "the adapter's COM members cannot be resolved" instead of "wrong machine path".
+INTEROP_DIR = kompas_install.interop_dir()
 VENDOR = (("api5", "Interop.Kompas6API5.dll"), ("api7", "Interop.KompasAPI7.dll"))
 ADAPTER_DLL = os.path.join(ROOT, "src", "KompasMcp.Api5Adapter", "bin", "x64", "Release",
                            "net10.0-windows", "KompasMcp.Api5Adapter.dll")
@@ -522,6 +526,10 @@ def main():
     parser.add_argument("--out", default=None, help="куда записать измерение (JSON)")
     parser.add_argument("--self-test", action="store_true", help="проверить прибор, ничего не измеряя")
     args = parser.parse_args()
+
+    # The instrument names the installation it read, and where that path came from: a wrong root
+    # must be visible in the output, not only in a failure that reads as a product defect.
+    print(f"КОМПАС: {kompas_install.install_root()} (источник: {kompas_install.install_source()})")
 
     if args.self_test:
         return self_test()

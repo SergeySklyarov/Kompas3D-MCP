@@ -50,7 +50,8 @@ for stream in (sys.stdout, sys.stderr):
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from localconfig import isolate_config, local_config
+import kompas_install  # noqa: E402
+from localconfig import isolate_config, local_config  # noqa: E402
 
 
 class McpError(Exception):
@@ -39062,9 +39063,10 @@ DEP_CODES = {
 
 DEP_PROFILE_REL = "coverage/solid-v24/release-profiles/mechanical-core-v1.json"
 
-# Корень установки КОМПАС отдельной константой, а не литералом внутри постановки: путь к поставке
-# КОМПАС — свойство машины, и его смена не должна требовать правки приёмочной логики.
-KOMPAS_INSTALL = os.environ.get("KOMPAS_MCP_INSTALL", "D:/Programs/KOMPAS-3Dv24")
+# INVARIANT: the installation the acceptance run reads is the one the shared root names - the same
+# order the build uses. MEASURED: with a literal here, the vendor samples and kAPI7.tlb were reported
+# as missing on a machine where KOMPAS is installed elsewhere, and the rows read as product defects.
+KOMPAS_INSTALL = kompas_install.install_root()
 
 # Внешняя модель для `dep.preserve_unknown`: деталь, которую выпуск НЕ создавал. Список кандидатов
 # назван поимённо, и берётся ПЕРВЫЙ, который не только открылся, но и несёт признак ВНЕ реестра

@@ -18,7 +18,7 @@
   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\compare-api7-interop-tlb.ps1 -Member Curves
 #>
 param(
-    [string]$KompasRoot = 'D:\Programs\KOMPAS-3Dv24',
+    [string]$KompasRoot = '',
     [string]$TlbImp = 'C:\Program Files (x86)\Microsoft SDKs\Windows\v8.1A\bin\NETFX 4.5.1 Tools\x64\TlbImp.exe',
     [string]$Member = 'ModelObjects',
     [string]$Type = 'ISketch',
@@ -26,6 +26,25 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+# The installation root comes from the shared helper, so this script and the build cannot disagree
+# about which installation is compared. A missing helper falls back to the historical default rather
+# than failing: the script's own answer is still about whatever root it names in its output.
+$installHelper = Join-Path $PSScriptRoot 'kompas-install.ps1'
+if (Test-Path -LiteralPath $installHelper) {
+    . $installHelper
+} else {
+    function Get-KompasInstallRoot { 'D:\Programs\KOMPAS-3Dv24' }
+    function Get-KompasInstallSource { 'значение по умолчанию (scripts/kompas-install.ps1 не найден)' }
+}
+if (-not $KompasRoot) {
+    $KompasRoot = Get-KompasInstallRoot
+    $installSource = Get-KompasInstallSource
+} else {
+    $installSource = 'параметр -KompasRoot'
+}
+Write-Output ("КОМПАС: {0} (источник: {1})" -f $KompasRoot, $installSource)
+
 $prebuilt = Join-Path $KompasRoot 'Libs\PolynomLib\Bin\Client\Interop.KompasAPI7.dll'
 $tlb = Join-Path $KompasRoot 'Bin\kAPI7.tlb'
 

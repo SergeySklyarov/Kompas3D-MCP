@@ -34,6 +34,12 @@ for stream in (sys.stdout, sys.stderr):
     except (AttributeError, ValueError):
         pass
 
+# INVARIANT: the installation measured by the passport is the one the shared root names, never a
+# literal of this script. The facts below are hashes of a real file, so a wrong root would describe a
+# foreign installation under the name of the delivered product.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import kompas_install  # noqa: E402
+
 
 def find_root(start):
     """Корень ищется по файлу решения, а не по числу уровней: скрипт запускают и из scripts/, и из
@@ -356,8 +362,10 @@ def kompas_facts():
     """Факты об установленном КОМПАСе: хеш и разрядность — измерены сейчас, версия — из паспорта
     окружения, снятого на этой же машине 18.09.2026 (проверять версию продукта заново незачем,
     а выдумывать её нельзя)."""
-    exe = r"D:\Programs\KOMPAS-3Dv24\Bin\KOMPAS.Exe"
-    facts = {"install_root": r"D:\Programs\KOMPAS-3Dv24", "local_server_path": exe}
+    exe = kompas_install.kompas_exe()
+    facts = {"install_root": kompas_install.install_root(),
+             "install_root_source": kompas_install.install_source(),
+             "local_server_path": exe}
     facts["kompas_sha256"] = sha256_of(exe) if os.path.exists(exe) else None
     facts["local_server_pe_machine"] = f"0x{pe_machine(exe):04X}" if os.path.exists(exe) else None
     facts["kompas_file_version"] = None

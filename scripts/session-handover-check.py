@@ -40,6 +40,7 @@ import uuid
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import kompas_install  # noqa: E402
 from localconfig import isolate_config, local_config  # noqa: E402
 
 
@@ -299,7 +300,10 @@ def user_kompas_pids():
     return kompas_pids()
 
 
-KOMPAS_EXE = "D:/Programs/KOMPAS-3Dv24/Bin/KOMPAS.exe"
+# INVARIANT: the instance this instrument raises comes from the shared installation root, never from
+# a literal. MEASURED: with a literal the instrument reported "не найден" and skipped the instance
+# policy row on a machine where KOMPAS is installed elsewhere - a named SKIP that read as a finding.
+KOMPAS_EXE = kompas_install.kompas_exe()
 
 
 def start_attachable_kompas():

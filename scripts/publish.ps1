@@ -8,12 +8,30 @@ Usage:  .\scripts\publish.ps1 [-Configuration Release] [-OutDir artifacts\publis
 param(
     [string]$Configuration = "Release",
     [string]$OutDir = "artifacts\publish",
-    [string]$KompasRoot = "D:\Programs\KOMPAS-3Dv24"
+    [string]$KompasRoot = ""
 )
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $full = Join-Path $root $OutDir
+
+# The installation root comes from the shared helper, so publishing and the build it publishes
+# cannot disagree about which installation is installed. A missing helper falls back to the
+# historical default rather than failing the publish.
+$installHelper = Join-Path $PSScriptRoot "kompas-install.ps1"
+if (Test-Path -LiteralPath $installHelper) {
+    . $installHelper
+} else {
+    function Get-KompasInstallRoot { "D:\Programs\KOMPAS-3Dv24" }
+    function Get-KompasInstallSource { "значение по умолчанию (scripts/kompas-install.ps1 не найден)" }
+}
+if (-not $KompasRoot) {
+    $KompasRoot = Get-KompasInstallRoot
+    $installSource = Get-KompasInstallSource
+} else {
+    $installSource = "параметр -KompasRoot"
+}
+Write-Host ("КОМПАС: {0} (источник: {1})" -f $KompasRoot, $installSource)
 
 # ORDER AND -p:Platform ARE BOTH LOAD-BEARING — measured 18.09.2026, when this script could not
 # publish a delivery at all.

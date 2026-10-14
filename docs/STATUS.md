@@ -14,6 +14,33 @@
 
 ## Текущее состояние
 
+- **Приборы берут корень установки КОМПАС из одного места; аудит снова проходит самопроверку целиком
+  (14.10.2026, наряд `INSTALL_ROOT_TOOLS`, отчёт `INSTALL_ROOT_TOOLS_REPORT_20261014.md`).**
+  **Что сделано.** Новый общий помощник `scripts/kompas_install.py` (Python) и
+  `scripts/kompas-install.ps1` (PowerShell, тот же порядок своим кодом) отдают корень установки в
+  порядке: `KOMPAS_MCP_INSTALL` -> `KompasRoot` из `Directory.Build.props.local` (разбор XML, без
+  MSBuild) -> прежнее значение по умолчанию `D:/Programs/KOMPAS-3Dv24`. На помощника переведены
+  `api-audit-routes.py`, `api-audit-build.py`, `make-delivery-passport.py`,
+  `session-handover-check.py`, константа `KOMPAS_INSTALL` в `mcp-smoke.py`,
+  `compare-api7-interop-tlb.ps1` и `publish.ps1`; производные пути (`Bin\KOMPAS.Exe`,
+  `Bin\kAPI7.tlb`, `Libs\PolynomLib\Bin\Client`) считаются от корня. Каждый прибор печатает корень
+  и его источник. `src/` и `tools/KompasMcp.Api7Probe/InteropResolver.cs` не тронуты (там каталог
+  берётся из регистрации COM).
+  **Проверено.** `python scripts/api-audit.py --self-test` - **5 приборов, 0 FAIL** (было 4/5:
+  `api-audit-routes.py` давал `InteropScan LOAD_FAILED`); самопроверки помощника 12/0,
+  `api-audit-routes.py` 11/0, `api-audit-build.py` 6/0, `mcp-smoke.py` 68/0,
+  `make-delivery-passport.py` 0. Живая проверка без переменной окружения: интероп читается из
+  `C:\Program Files\ASCON\KOMPAS-3D v24\Libs\PolynomLib\Bin\Client` (источник - `.local`),
+  `route_count` 517 - как в прежних измерениях. `python scripts/mcp-smoke.py --dep-only` без
+  `KOMPAS_MCP_INSTALL` - **86 PASS, 0 FAIL**, файла отказов нет (прежний отказ `DEP.DPU.*` «нет
+  файла» снят). `publish.ps1` прогнан целиком в `scratch/` - код 0, `inspect-package.ps1` OK.
+  Стражи: `lint-dashes.py` 0, `check-evidence-links.py` 0, `long-comment-blocks.py` по девяти
+  изменённым файлам 0. Полный прогон `--all` не делался - наряд его не требует.
+  **Записи.** Решения - `docs/decisions/build.md#kompasroot` (датированная поправка), порядок для
+  оператора - `docs/operator-guide/build.md`. Попутная находка (не исправлялась): обрыв канала к
+  Хосту прибор приёмки показывает как `OSError: [Errno 22]` без трассировки - разбор шёл по
+  догадке; первый прогон группы `DEP` дал 5 таких строк, потому что шёл одновременно со сборкой.
+
 - **Столбец документации пересчитан: 65 маршрутов без страницы -> 7; правок кода НЕТ, исполнение
   остановлено по §7 (14.10.2026, наряд `API_DOC_ROUTES`, попытка 1, отчёт
   `API_DOC_ROUTES_REPORT_20261014.md`).** Прибор `scripts/api-audit-docs.py` расширен названными

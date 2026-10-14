@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "artifact": "coverage/solid-v24/release-not-included.json",
+    "purpose": "Строки «не входит» манифеста выпуска. Читает scripts/package-release.py: строка идёт в манифест, а названные ею инструменты проверяются против набора схем поставки, и выпуск не собирается, если строка противоречит составу.",
+    "revision": "1.0",
+    "checked_by": "scripts/package-release.py (not_included_problems, --self-test)",
+    "note": "Строка про полный каталог P6 здесь НЕ лежит: она считается из числа профилей выпуска и остаётся вычисляемой."
+  },
+  "entries": [
+    {
+      "text": "удаление и переименование переменных (kompas_create_variable создаёт переменную, kompas_set_variable меняет значение существующей)",
+      "contradicted_by_tools": [
+        "kompas_delete_variable",
+        "kompas_rename_variable"
+      ]
+    },
+    {
+      "text": "массивы компонентов сборки",
+      "contradicted_by_tools": [],
+      "why_no_tool": "инструмента массивов компонентов в наборе нет, и имя, под которым он появился бы, из нынешних имён не следует: kompas_pattern_* - массивы операций детали, а не компонентов сборки. Стража нет, потому что проверять нечего - имени, по которому её ставить, не существует."
+    },
+    {
+      "text": "полная спецификация (BOM)",
+      "contradicted_by_tools": [],
+      "why_no_tool": "инструмента спецификации в наборе нет, и имя, под которым он появился бы, из нынешних имён не следует: kompas_export_* выгружает геометрию и картинку, а не состав изделия."
+    },
+    {
+      "text": "расширенные виды сопряжений сверх mates-minimal-v1",
+      "contradicted_by_tools": [],
+      "why_no_tool": "расширение - это новые значения перечисления внутри существующего kompas_create_mate, а не новый инструмент: страж по именам схем такого расширения не видит, и проверка остаётся перечнем значений (coincidence, parallel, perpendicular, tangency, concentric, distance, angle)."
+    },
+    {
+      "text": "спецификации и другие 2D-документы, кроме чертежей профиля drawings-minimal-v1",
+      "contradicted_by_tools": [],
+      "why_no_tool": "создание таких документов держится отказом в адаптере, а не отсутствием инструмента: kompas_create_document принимает kind=fragment, но отвечает CAPABILITY_UNAVAILABLE (supported_kinds: part, assembly, drawing). Страж по именам схем этого не проверяет."
+    }
+  ]
+}

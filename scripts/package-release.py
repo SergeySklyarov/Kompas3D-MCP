@@ -95,6 +95,14 @@ def profiles_phrase(count):
     return f"{NUMERAL_WORDS[count]} {noun}"
 
 
+# INVARIANT (release wording): each «not included» line lives in data next to the profiles and names
+# the tools whose presence in the delivery would make it false. The manifest must not describe the
+# memory of whoever assembles the release: the 0.7.0 line about the variable editor was false while
+# kompas_create_variable was in that release. An empty tool list needs `why_no_tool`.
+# History: docs/decisions/releases.md#not-included
+NOT_INCLUDED_REL = "coverage/solid-v24/release-not-included.json"
+
+
 def _load_levels():
     """scripts/acceptance-levels.py as a module: one definition of the release scope for both tools."""
     spec = importlib.util.spec_from_file_location(
@@ -128,6 +136,45 @@ def measured_profiles(root):
             "deps": f'{profile["deps_closed"]}/{profile["deps_total"]}',
         })
     return entries
+
+
+def not_included_entries(root):
+    """The «not included» entries as data: the wording plus the tools that would contradict it."""
+    with open(os.path.join(root, NOT_INCLUDED_REL), encoding="utf-8-sig") as handle:
+        return json.load(handle)["entries"]
+
+
+def not_included_problems(entries, tools):
+    """Why the wording cannot describe a release of `tools`; empty when it can.
+
+    `tools` is the schema set of the DELIVERY - the same one the manifest `tools` is built from.
+    """
+    problems = []
+    for index, entry in enumerate(entries, 1):
+        text = (entry.get("text") or "").strip()
+        if not text:
+            problems.append(f"{NOT_INCLUDED_REL}: запись {index} без поля text")
+            continue
+        contradicted = entry.get("contradicted_by_tools")
+        if not isinstance(contradicted, list):
+            problems.append(f"{NOT_INCLUDED_REL}: строка «{text}» без списка contradicted_by_tools")
+            continue
+        if not contradicted and not (entry.get("why_no_tool") or "").strip():
+            problems.append(f"{NOT_INCLUDED_REL}: строка «{text}» не назвала ни инструмента, "
+                            "который её опроверг бы, ни why_no_tool: проверить её нечем")
+            continue
+        for tool in contradicted:
+            if tool in tools:
+                problems.append(f"{NOT_INCLUDED_REL}: строка «{text}» объявляет «не входит», "
+                                f"а инструмент {tool} есть в наборе схем выпуска")
+    return problems
+
+
+def not_included_lines(entries, profile_count):
+    """The manifest wording: the data lines in order, then the P6 line counted from the profiles."""
+    return [entry["text"] for entry in entries] + [
+        f"полный каталог P6 (выпуск закрывает {profiles_phrase(profile_count)} выше)"]
+
 
 TAG_RE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
 PROPS_VERSION_RE = re.compile(r"<Version>\s*([^<\s]+)\s*</Version>")
@@ -272,6 +319,43 @@ def self_test_profile_catalog():
             f"(ожидание {expected})")
 
 
+def self_test_not_included():
+    """The «not included» guard on COPIES of both inputs: the wording file and the schema set.
+
+    The literal this replaces went stale by itself, so the controls are about the check firing, not
+    about one particular line: an injected line contradicting a tool the copy really carries must
+    refuse, the same line without that tool must pass, and a line naming neither a tool nor a reason
+    must refuse. The last control runs the SHIPPED wording against the SHIPPED schema set.
+    """
+    with tempfile.TemporaryDirectory(prefix="not-included-") as root:
+        target = os.path.join(root, "coverage", "solid-v24")
+        os.makedirs(target)
+        shutil.copy(os.path.join(ROOT, NOT_INCLUDED_REL),
+                    os.path.join(target, os.path.basename(NOT_INCLUDED_REL)))
+        shutil.copytree(os.path.join(ROOT, "schemas"), os.path.join(root, "schemas"))
+        real = not_included_entries(root)
+        # Tool names carry the `kompas_` prefix, exactly as `schemas` does in main(): a copy that
+        # dropped it would let every control pass without ever comparing a name.
+        tools = sorted(name[:-len(".json")]
+                       for name in os.listdir(os.path.join(root, "schemas"))
+                       if name.startswith("kompas_") and name.endswith(".json"))
+        tool = tools[0]
+        injected = {"text": "контроль прибора: строка, противоречащая инструменту выпуска",
+                    "contradicted_by_tools": [tool]}
+        blind = {"text": "контроль прибора: строка без стражи", "contradicted_by_tools": []}
+        without = [name for name in tools if name != tool]
+        return [
+            (not_included_problems(real + [injected], tools) != [],
+             "строка, противоречащая инструменту набора схем, отвергнута"),
+            (not_included_problems(real + [injected], without) == [],
+             "та же строка без этого инструмента проходит"),
+            (not_included_problems(real + [blind], tools) != [],
+             "пустой contradicted_by_tools без why_no_tool отвергнут"),
+            (not_included_problems(real, tools) == [],
+             f"строк «не входит» в данных {len(real)} - против набора схем поставки расходятся 0"),
+        ]
+
+
 def self_test():
     """The pure checks on fixed inputs: each refusal fires, and the clean case passes."""
     props = "<Project><PropertyGroup><Version>0.4.1</Version></PropertyGroup></Project>"
@@ -312,6 +396,7 @@ def self_test():
          "заметки под другим заголовком отвергнуты"),
         (notes_problems("n.md", None, "KompasMCP 0.4.1 - уклоны") != [], "нет заметок - отказ"),
         self_test_profile_catalog(),
+        *self_test_not_included(),
     ]
     failed = [title for ok, title in cases if not ok]
     for ok, title in cases:
@@ -402,7 +487,6 @@ def main():
                           "modes": entry["modes"], "deps": entry["deps"]} for entry in profiles]
 
     out = os.path.abspath(a.out or os.path.join(ROOT, "artifacts", "release", a.tag))
-    os.makedirs(out, exist_ok=True)
     zip_name = f"KompasMCP-{a.tag}-win-x64.zip"
     zip_path = os.path.join(out, zip_name)
 
@@ -425,6 +509,15 @@ def main():
     if not os.path.isfile(os.path.join(delivery, "config", "kompas-mcp.example.json")):
         sys.exit("в поставке нет шаблона config/kompas-mcp.example.json")
 
+    # INVARIANT: the manifest cannot declare «not included» something the delivery carries. The
+    # schema set above is the very one the manifest `tools` is built from, so the two cannot drift.
+    entries = not_included_entries(ROOT)
+    problems = not_included_problems(entries, schemas)
+    if problems:
+        sys.exit("ОТКАЗ: выпуск не собран.\n  - " + "\n  - ".join(problems))
+
+    os.makedirs(out, exist_ok=True)
+
     # Fixed timestamps keep the archive reproducible from the same inputs.
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         for rel, full in files:
@@ -443,14 +536,7 @@ def main():
         "installer": "Install-KompasMcp.ps1",
         "scope": scope_text,
         "profiles": manifest_profiles,
-        "not_included": [
-            "массивы компонентов сборки",
-            "полная спецификация (BOM)",
-            "расширенные виды сопряжений сверх mates-minimal-v1",
-            "спецификации и другие 2D-документы, кроме чертежей профиля drawings-minimal-v1",
-            "создание и удаление переменных (kompas_set_variable меняет существующую внешнюю переменную)",
-            f"полный каталог P6 (выпуск закрывает {profiles_phrase(len(profiles))} выше)",
-        ],
+        "not_included": not_included_lines(entries, len(profiles)),
         "tools_count": len(schemas),
         "tools": schemas,
         "server_info": {"name": "kompas-mcp", "version": version, "protocol": "2025-06-18"},

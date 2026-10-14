@@ -6560,6 +6560,28 @@ Release-сборка v24. На пластине 100×80×10 все четыре 
 страницам наследников значило бы выдумывать. Шестая - по §7.1 наряда: документированной замены нет,
 вызов оставлен как есть, решение за заказчиком.
 
+**ДОПОЛНЕНО 14.10.2026, ПОПЫТКА 2 (наряд `API_DOC_ROUTES`; решение техлида от 14.10.2026). Шесть
+расхождений имён подтверждены ПОИМЁННО; неподтверждённым остался ОДИН маршрут.** Общих правил «другое
+написание», «`Get<Член>`», «имя из раздела Синтаксис» НЕ введено: такое правило подтверждало бы и то,
+чего никто не проверял, и размывало бы границу документации. Вместо них - закрытый поимённый перечень
+(`how = named_name_mismatch`): шесть записей, у каждой вид расхождения и дословная цитата со страницы.
+
+| Маршрут | Документировано страницей | Чем доказано, что член ТОТ ЖЕ |
+|---|---|---|
+| `ksBaseLoftDefinition.Sketchs`, `ksBossLoftDefinition.Sketchs` | `ksbaseloftdefinition_sketches.html`, `ksbossloftdefinition_sketches.html` | «`LPDISPATCH Sketches();`»; интероп и справка API7 (`iloft_sketchs.html`) пишут `Sketchs` |
+| `ksBody.CalcMassInertiaProperties` | `ksbody_massinertiaparam.html` | раздел «Синтаксис»: «`LPDISPATCH CalcMassInertiaProperties (long bitVector)`» |
+| `ksPart.density` | `kspart_getdensity.html` | «`double GetDensity()`» - возвращает «плотность (г/куб.мм)» |
+| `IFeaturePattern.Update` | `imodelobject_update.html` | «`BOOL Update( );`»; цепочку называют страницы наследников, а своя страница интерфейса - нет |
+| `IFeaturePattern.Owner` | `imodelobject_props.html` | перечень свойств `IModelObject` называет `Owner`; то же противоречие справки |
+
+Страница при подтверждении ЧИТАЕТСЯ (провод или зеркало) и обязана нести документированное имя - сам
+перечень маршрут не подтверждает. Неподтверждённым остался ОДИН маршрут -
+`IFragmentDocument.ViewsAndLayersManager`: документированного члена нет ни у него, ни у предков
+(§7.1). Он назван единственным; поиск документированного маршрута - отдельный наряд
+`FRAGMENT_VIEWS_ROUTE`. Замен в коде по-прежнему НЕТ: членов `Sketches`/`MassInertiaParam` интероп не
+объявляет, а `ksBody.CalcMassInertiaProperties(bitVector)` - уже документированный вызов с тем же
+выбором единиц.
+
 ## §4.86. `IFillets::Add` и `IChamfers::Add`: документированные страницы ЕСТЬ (справка SDK 24 по проводу, 14.10.2026, наряд `API_DOC_ROUTES`)
 
 **Что проверено.** `ifillet.html` называет `IFillets::Add`, а прежние записи (наряд

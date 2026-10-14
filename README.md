@@ -16,7 +16,7 @@
 > STEP and image export. Every mutating call reports a
 > measured verification level (volume, bodies, faces, re-read parameters, save/reopen), journals
 > operations for idempotent retries, rejects stale revisions, and is confined to configured disk
-> roots. No arbitrary code execution. 85 tools, MIT licensed. Documentation is in Russian.
+> roots. No arbitrary code execution. 90 tools, MIT licensed. Documentation is in Russian.
 
 ## Быстрая установка через ChatGPT Codex
 
@@ -40,7 +40,7 @@ https://github.com/SergeySklyarov/Kompas3D-MCP
 Codex проверит зависимости, скачает готовый пакет из Releases, сверит контрольную сумму, создаст
 конфигурацию и подключит сервер. Разрешите ему скачивание и запуск установщика, когда он спросит.
 В конце перезапустите Codex (в приложении **Restart**) и в новом чате напишите
-«вызови kompas_health и kompas_capabilities»: должно прийти 85 инструментов. Подробности и ручной
+«вызови kompas_health и kompas_capabilities»: должно прийти 90 инструментов. Подробности и ручной
 путь: [подключение к Codex](docs/operator-guide/codex-setup.md).
 
 <sub>ChatGPT, Codex и логотип OpenAI являются товарными знаками OpenAI. Проект не связан с OpenAI и
@@ -64,7 +64,7 @@ https://github.com/SergeySklyarov/Kompas3D-MCP
 Claude проверит зависимости, скачает готовый пакет, сверит контрольную сумму, создаст конфигурацию
 и зарегистрирует сервер командой `claude mcp add`. Разрешите ему скачивание и запуск команд, когда
 он спросит. Затем начните новую сессию и попросите вызвать `kompas_health` и `kompas_capabilities`:
-должно прийти 85 инструментов. Подробности и вариант для обычного чата Claude Desktop:
+должно прийти 90 инструментов. Подробности и вариант для обычного чата Claude Desktop:
 [подключение к Claude](docs/operator-guide/claude-setup.md).
 
 <sub>Claude и логотип Claude являются товарными знаками Anthropic. Проект не связан с Anthropic и не
@@ -203,14 +203,14 @@ JSON-конфигурацией:
 
 ## Инструменты
 
-85 инструментов с названием и назначением каждого: [docs/TOOLS.md](docs/TOOLS.md).
+90 инструментов с названием и назначением каждого: [docs/TOOLS.md](docs/TOOLS.md).
 Схемы аргументов лежат в [`schemas/`](schemas/).
 
 ## Состояние и планы
 
 Целевая версия: КОМПАС-3D v24.0.0.2799 x64. Текущий выпуск -
-[`v0.7.0`](https://github.com/SergeySklyarov/Kompas3D-MCP/releases/tag/v0.7.0), заметки:
-[docs/distribution/v0.7.0.md](docs/distribution/v0.7.0.md). Теги выпусков - версия продукта
+[`v0.8.0`](https://github.com/SergeySklyarov/Kompas3D-MCP/releases/tag/v0.8.0), заметки:
+[docs/distribution/v0.8.0.md](docs/distribution/v0.8.0.md). Теги выпусков - версия продукта
 `vMAJOR.MINOR.PATCH` ([правило](AGENTS.md)). Обязательный объём закрывается, только когда каждое применимое
 действие режима (создание, чтение, правка, перестроение, сохранение и повторное открытие,
 подавление, удаление зависимостей, отрицательные проверки, проверка геометрии) подтверждено живым
@@ -219,7 +219,7 @@ JSON-конфигурацией:
 | Профиль | Режимы | Общие зависимости |
 |---|---|---|
 | Твердотельное моделирование деталей (`mechanical-core-v1`) | 54/54 | 16/16 |
-| Сборки (`assemblies-minimal-v1`) | 7/7 | 5/5 |
+| Сборки (`assemblies-minimal-v1`) | 8/8 | 5/5 |
 | Сопряжения (`mates-minimal-v1`) | 6/6 | 5/5 |
 | Чертежи (`drawings-minimal-v1`) | 6/6 | 6/6 |
 | Переменные и материал детали (`variables-material-minimal-v1`) | 5/5 | 5/5 |
@@ -227,16 +227,18 @@ JSON-конфигурацией:
 | Массовая геометрия эскиза (`sketch-bulk-minimal-v1`) | 3/3 | 3/3 |
 | Создание переменных и привязка параметров (`variables-bind-minimal-v1`) | 4/4 | 5/5 |
 | Экспорт STL и моменты инерции (`export-inertia-minimal-v1`) | 5/5 | 5/5 |
+| Ограничения и размеры эскиза (`sketch-constraints-minimal-v1`) | 5/5 | 5/5 |
+| Сторона материала (`material-toward-minimal-v1`) | 1/1 | 0/0 |
 
-Закрыты все **девять** профилей: режимов **94/94**, зависимостей **55/55**, открыто **0**,
-`problems: []` (`scripts/acceptance-levels.py`, 10.10.2026).
+Закрыты все **одиннадцать** профилей: режимов **101/101**, зависимостей **60/60**, открыто **0**,
+`problems: []` (`scripts/acceptance-levels.py`).
 
-**Приёмка выпуска 0.7.0** (на бинарях пакета): полный живой прогон **1479 PASS / 3 NAMED / 0 FAIL**
-(1482 строки); дополнительный прогон «подавить -> снять» (20 повторов) - **33 PASS / 1 NAMED / 0
-FAIL**; клиентская приёмка рабочим MCP-клиентом - **60 строк исполнено и выполнено ожиданию, 2
-неприменимы**, несделанных нет. Паспорт поставки - итог PASS по всем уровням: доставка,
-функциональная приёмка, обязательный объём и клиентская приёмка. Текущее состояние и измеренные
-числа: [`docs/STATUS.md`](docs/STATUS.md); каталог операций, матрица покрытия и
+**Приёмка выпуска 0.8.0** (на бинарях пакета): полный живой прогон **1613 PASS / 5 NAMED / 0 FAIL**
+(1618 строк); дополнительный прогон «подавить -> снять» (20 повторов) - **33 PASS / 1 NAMED / 0
+FAIL**; клиентская приёмка рабочим MCP-клиентом - **15 строк из 15 исполнено и выполнено ожиданию**,
+несделанных нет. Паспорт поставки - итог PASS по всем уровням: доставка, функциональная приёмка,
+обязательный объём и клиентская приёмка, `fully_ready = true`. Текущее состояние и измеренные числа:
+[`docs/STATUS.md`](docs/STATUS.md); каталог операций, матрица покрытия и
 профили: [`coverage/solid-v24/`](coverage/solid-v24/).
 
 ![Дашборд прогресса профиля mechanical-core-v1: готовность 100 %, 54 режима из 54 и 15 зависимостей из 15](docs/assets/dashboard-20260923.png)

@@ -35,6 +35,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import uuid
@@ -532,13 +533,15 @@ def file_sha256(path):
 # КАТАЛОГ ПРОГОНА: у каждого запуска СВОЙ отчёт и СВОИ журналы
 # -----------------------------------------------------------------------------------------------
 #
-# ЗАЧЕМ. До 09.10.2026 отчёт прогона лежал под одним общим именем, и повторный прогон затирал
-# прежний. Измерено 09.10.2026: отчёт первого полного прогона доводки (30 FAIL в F08) исчез -
-# уцелели только журнал хоста и журнал операций сеанса, и причину отказа пришлось разбирать по ним.
-# Правило «упавший прогон сохраняется и называется» было невыполнимо технически, пока имя одно на
-# все прогоны. Здесь у каждого запуска свой каталог `runs/<UTC>-<группа>-<коммит>[-dirty]/`, а
-# прежнее имя остаётся КОПИЕЙ последнего прогона: привычный путь не пропадает, но перестаёт быть
-# единственным экземпляром. Ничего не удаляется - накопление называет отчёт, решение за заказчиком.
+# WHY ONE DIRECTORY PER RUN. A single shared report name meant a repeated run overwrote the
+# previous one: the report of the first full soak run was lost, and its refusal had to be
+# reconstructed from the host journal alone. Each run now owns `runs/<UTC>-<group>-<commit>[-dirty]/`,
+# and the shared name stays a COPY of the last run - a familiar path, no longer the only copy of the
+# evidence.
+#
+# INVARIANT: old run directories are pruned at start, but never one whose name a TRACKED file
+# mentions, never one of the newest RUNS_KEEP_RECENT, and never a run still in flight.
+# History: docs/decisions/probes.md#run-directory
 
 # ОЖИДАЕМОЕ ЧИСЛО ИНСТРУМЕНТОВ — В ОДНОМ МЕСТЕ. Прежде это число было литералом 85 в четырёх
 # строках `*.01.discover`, и блок G6, добавивший три инструмента, уронил все четыре: строка
@@ -1017,6 +1020,194 @@ def create_run_directory(workdir, started_utc, group, commit, dirty):
     return path
 
 
+# -----------------------------------------------------------------------------------------------
+# PRUNING PREVIOUS RUNS
+# -----------------------------------------------------------------------------------------------
+#
+# DOC: a run leaves a host journal of tens of megabytes, so the runs directory grows without bound.
+# INVARIANT: only a DIRECTORY whose name carries the run stamp is ever a candidate, and it is deleted
+# only when it is neither recent, nor named by tracked files, nor still in flight. A foreign entry
+# under runs/ is left alone and named in the record.
+# ASSUMPTION: an UNKNOWN reference list deletes nothing - a name some evidence points at would
+# otherwise be removed blind.
+RUNS_KEEP_RECENT = 20
+
+# The stamp is the UTC start of the run, so name order IS chronological order.
+RUN_DIR_NAME = re.compile(r"^\d{8}-\d{6}-.+$")
+
+# A run without its final report is treated as still in flight for this long.
+PARALLEL_RUN_FRESH_S = 3600
+
+
+def directory_bytes(path):
+    """Total size of the files under `path`, in bytes."""
+    total = 0
+    for root, _dirs, files in os.walk(path):
+        for name in files:
+            try:
+                total += os.path.getsize(os.path.join(root, name))
+            except OSError:
+                pass
+    return total
+
+
+def run_dir_has_final_report(path):
+    """True when the run left its final report, i.e. `run.json` says `state = finished`."""
+    try:
+        with open(os.path.join(path, "run.json"), encoding="utf-8") as fh:
+            return json.load(fh).get("state") == "finished"
+    except (OSError, ValueError):
+        return False
+
+
+def run_dir_in_flight(path, now, fresh_s=PARALLEL_RUN_FRESH_S):
+    """True when the run has no final report and started less than `fresh_s` seconds ago.
+
+    INVARIANT: a run started in parallel must not be pruned - its directory holds the evidence it has
+    not written yet. ABSENCE of the manifest is not evidence of a finished run.
+    """
+    if run_dir_has_final_report(path):
+        return False
+    try:
+        age = now - os.path.getmtime(path)
+    except OSError:
+        return True
+    return age < fresh_s
+
+
+def default_git_runner(args, cwd):
+    """Run `git <args>` in `cwd`; a missing git or a timeout is a failed call, not an exception."""
+    try:
+        return subprocess.run(["git"] + list(args), cwd=cwd, capture_output=True, text=True,
+                              timeout=120)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return subprocess.CompletedProcess(["git"] + list(args), 127, "", str(exc))
+
+
+def referenced_run_names(names, root, rel_runs, git_runner=None):
+    """(names mentioned by TRACKED files, note) for the given run directory names.
+
+    `None` instead of the set means the answer is UNKNOWN - no git, not a repository, the search
+    failed. The caller then prunes nothing. Both the repository-relative path and the bare name are
+    searched: a reference may carry a full path of another checkout, and a false KEEP is harmless
+    while a false DELETE destroys an evidence file.
+    """
+    if not names:
+        return set(), "каталогов прогонов нет"
+    patterns = []
+    for name in names:
+        patterns.append(f"{rel_runs}/{name}")
+        patterns.append(name)
+    handle = tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".patterns", delete=False)
+    try:
+        with handle as fh:
+            fh.write("\n".join(patterns) + "\n")
+        done = (git_runner or default_git_runner)(["grep", "-l", "-F", "-f", handle.name], root)
+    finally:
+        try:
+            os.unlink(handle.name)
+        except OSError:
+            pass
+    if done.returncode not in (0, 1):
+        reason = (done.stderr or "").strip().splitlines()
+        return None, reason[0] if reason else f"git grep вернул {done.returncode}"
+    if done.returncode == 1:
+        return set(), "ссылок на каталоги прогонов нет"
+    files = [line.strip() for line in done.stdout.splitlines() if line.strip()]
+    found = set()
+    for rel in files:
+        try:
+            with open(os.path.join(root, rel), encoding="utf-8", errors="replace") as fh:
+                text = fh.read()
+        except OSError:
+            continue
+        for name in names:
+            if name not in found and (f"{rel_runs}/{name}" in text or name in text):
+                found.add(name)
+    return found, f"отслеживаемых файлов со ссылками: {len(files)}"
+
+
+def prune_run_directories(workdir, current=None, referenced=None, keep_recent=RUNS_KEEP_RECENT,
+                          now=None, log=print):
+    """Prune old run directories and return the record for `context.runs_pruned`.
+
+    `referenced is None` means the reference list is unknown, and then NOTHING is deleted. The
+    record names every decision: what stayed because it is recent, named, current or in flight, and
+    what was deleted with its size.
+    """
+    runs = os.path.join(workdir, "runs")
+    record = {
+        "when": "start",
+        "runs_root": runs,
+        "keep_recent": keep_recent,
+        "scanned": 0,
+        "kept_recent": [],
+        "kept_named": [],
+        "kept_current": [],
+        "kept_in_flight": [],
+        "kept_foreign": [],
+        "failed": [],
+        "deleted": [],
+        "deleted_count": 0,
+        "deleted_bytes": 0,
+        "skipped": None,
+    }
+    if referenced is None:
+        record["skipped"] = "перечень названных имён неизвестен — не удалено ничего"
+        return record
+    if not os.path.isdir(runs):
+        record["skipped"] = "каталога runs/ нет"
+        return record
+    now = time.time() if now is None else now
+    current_abs = os.path.abspath(current) if current else None
+    entries = sorted((d for d in os.listdir(runs) if os.path.isdir(os.path.join(runs, d))),
+                     reverse=True)
+    candidates = [d for d in entries if RUN_DIR_NAME.match(d)]
+    record["scanned"] = len(candidates)
+    record["kept_foreign"] = [d for d in entries if d not in candidates]
+    recent = set(candidates[:keep_recent])
+    for name in candidates:
+        path = os.path.join(runs, name)
+        if current_abs and os.path.abspath(path) == current_abs:
+            record["kept_current"].append(name)
+        elif name in recent:
+            record["kept_recent"].append(name)
+        elif name in referenced:
+            record["kept_named"].append(name)
+        elif run_dir_in_flight(path, now):
+            record["kept_in_flight"].append(name)
+        else:
+            size = directory_bytes(path)
+            try:
+                shutil.rmtree(path)
+            except OSError as exc:
+                log(f"  Каталог прогона {name} не удалён: {exc}")
+                record["failed"].append({"name": name, "error": str(exc)})
+                continue
+            record["deleted"].append({"name": name, "bytes": size})
+            record["deleted_count"] += 1
+            record["deleted_bytes"] += size
+    return record
+
+
+def prune_and_record(rep, workdir, current_run_dir, log=print):
+    """Prune previous runs and record the outcome in `context.runs_pruned`, like `preflight_closed`."""
+    runs = os.path.join(workdir, "runs")
+    names = []
+    if os.path.isdir(runs):
+        names = sorted(d for d in os.listdir(runs)
+                       if os.path.isdir(os.path.join(runs, d)) and RUN_DIR_NAME.match(d))
+    rel_runs = os.path.relpath(runs, ROOT).replace(os.sep, "/")
+    referenced, note = referenced_run_names(names, ROOT, rel_runs)
+    record = prune_run_directories(workdir, current=current_run_dir, referenced=referenced, log=log)
+    record["reference_lookup"] = note
+    rep.context.setdefault("runs_pruned", []).append(record)
+    if record["deleted_count"]:
+        print(f"  Прежних прогонов удалено: {record['deleted_count']} "
+              f"({record['deleted_bytes'] / (1024 * 1024):.1f} МиБ)")
+    return record
+
+
 def git_state(root):
     """(короткий коммит, признак грязного дерева) рабочего дерева исходников.
 
@@ -1068,8 +1259,6 @@ def instrument_self_test():
     Отрицательные контроли стоят рядом с положительными: прибор, который проходит только
     положительную половину, не отличает «различает» от «всегда пишет в одно место».
     """
-    import tempfile
-
     failures = []
     checks = 0
 
@@ -1112,6 +1301,66 @@ def instrument_self_test():
         check("отказ называет выход (--report-overwrite)", "--report-overwrite" in message)
         ok, message = report_path_decision(free, True)
         check("--report-overwrite снимает отказ", ok, message)
+
+    # Pruning keeps the newest runs and every run a tracked file names; it deletes only a directory
+    # carrying the run stamp. Both halves are checked: what is deleted and what survives, and the
+    # negative control - an UNKNOWN reference list deletes nothing at all.
+    def plant(runs_root, index, finished=True, day="20261001"):
+        name = f"{day}-{index:06d}-f08-28d4610"
+        path = os.path.join(runs_root, name)
+        os.makedirs(path)
+        if finished:
+            with open(os.path.join(path, "run.json"), "w", encoding="utf-8") as fh:
+                json.dump({"state": "finished"}, fh)
+        return name
+
+    with tempfile.TemporaryDirectory() as tmp:
+        runs_root = os.path.join(tmp, "runs")
+        names = [plant(runs_root, i) for i in range(25)]
+        named = [names[0], names[1]]
+        record = prune_run_directories(tmp, referenced=set(named), log=lambda *_: None)
+        left = sorted(os.listdir(runs_root))
+        check("уборка оставляет последние 20 прогонов", record["deleted_count"] == 3,
+              f"удалено {record['deleted_count']} из {record['scanned']}")
+        check("названные отслеживаемыми файлами прогоны пережили уборку",
+              all(n in left for n in named), str([n for n in named if n not in left]))
+        check("последние 20 прогонов пережили уборку", all(n in left for n in names[-20:]))
+        check("уборка называет объём и перечень удалённого",
+              len(record["deleted"]) == record["deleted_count"] and record["deleted_bytes"] > 0,
+              str(record["deleted"]))
+        check("неизвестный перечень ссылок не удаляет ничего",
+              prune_run_directories(tmp, referenced=None,
+                                    log=lambda *_: None)["deleted_count"] == 0)
+        check("при неизвестном перечне ссылок причина названа",
+              bool(prune_run_directories(tmp, referenced=None, log=lambda *_: None)["skipped"]))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        runs_root = os.path.join(tmp, "runs")
+        names = [plant(runs_root, i) for i in range(25)]
+        current = names[0]
+        record = prune_run_directories(tmp, current=os.path.join(runs_root, current),
+                                       referenced=set(), log=lambda *_: None)
+        check("текущий прогон защищён от уборки", record["kept_current"] == [current],
+              str(record["kept_current"]))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        runs_root = os.path.join(tmp, "runs")
+        for i in range(25):
+            plant(runs_root, i)
+        in_flight = plant(runs_root, 0, finished=False, day="20260901")
+        stale = plant(runs_root, 0, finished=False, day="20260801")
+        old = time.time() - 2 * PARALLEL_RUN_FRESH_S
+        os.utime(os.path.join(runs_root, stale), (old, old))
+        os.makedirs(os.path.join(runs_root, "not-a-run"))
+        with open(os.path.join(runs_root, "notes.json"), "w", encoding="utf-8") as fh:
+            fh.write("{}")
+        record = prune_run_directories(tmp, referenced=set(), log=lambda *_: None)
+        left = sorted(os.listdir(runs_root))
+        check("прогон без итогового отчёта не удаляется, пока свеж",
+              in_flight in left and record["kept_in_flight"] == [in_flight], str(left[:3]))
+        check("прогон без итогового отчёта старше часа удаляется", stale not in left)
+        check("посторонняя запись в runs/ не удаляется",
+              "not-a-run" in left and "notes.json" in left, str(record["kept_foreign"]))
 
     # Отказ обязан быть ВИДЕН в строке отчёта (наряд NEST_CREATE_FALSE, N3). Обе половины: у отказа
     # со снимком снимок доходит, у отказа без снимка на его месте стоит причина, а не пустое поле.
@@ -13187,6 +13436,9 @@ def main():
     # в отчёте (решение заказчика 12.10.2026). Своих процессов прогона в этот момент ещё нет, поэтому
     # список своих пуст и родство не вычисляется.
     preflight_and_record(rep, [], "start")
+    # Уборка прежних прогонов идёт ЗДЕСЬ: каталог этого прогона уже создан и потому защищён, а
+    # удалённое названо в отчёте так же, как `preflight_closed`.
+    prune_and_record(rep, workdir, run_dir)
     write_run_manifest(run_dir, {"state": "started", "context": rep.context})
     print("Измеряется: " + json.dumps(rep.context, ensure_ascii=False))
 

@@ -992,7 +992,7 @@ History: docs/decisions/contracts.md#update-plane-route</remarks>
 ## <a id="sketch-entities-route"></a>Маршрут перечисления сущностей эскиза
 
 <summary>Enumerates the entities of an EXISTING sketch with a STABLE ADDRESS (<c>dep.sketch.entities</c>, actions <c>discover</c> and <c>read</c>).</summary>
-<remarks>DOC: route documented by the v24 help: <c>ISketch.BeginEditEx(true)</c> → <c>IFragmentDocument.ViewsAndLayersManager.Views</c> →
+<remarks>DOC: route documented by the v24 help: <c>ISketch.BeginEditEx(true)</c> → <c>IKompasDocument2D.ViewsAndLayersManager.Views</c> →
 <c>IView</c> → <c>IDrawingContainer.GetObjects(ksAllObj)</c> → address <c>IKompasDocument1.GetObjectId</c> → <c>ISketch.EndEdit()</c>.
 The address is not "the Nth object of the collection" nor a coordinate: it is the <c>GetObjectId</c> string that
 <c>FindObjectById</c> accepts back, so it survives a model rebuild and a document reopen. A collection index is NOT declared a stable address.</remarks>

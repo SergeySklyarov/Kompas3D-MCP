@@ -303,7 +303,7 @@ public static class WorkerCommands
 
     /// <summary>Enumerates the entities of an EXISTING sketch with a STABLE ADDRESS (<c>dep.sketch.entities</c>,
     /// actions <c>discover</c> and <c>read</c>).</summary> <remarks>DOC: route documented by the v24 help:
-    /// <c>ISketch.BeginEditEx(true)</c> → <c>IFragmentDocument.ViewsAndLayersManager.Views</c> → <c>IView</c> →
+    /// <c>ISketch.BeginEditEx(true)</c> → <c>IKompasDocument2D.ViewsAndLayersManager.Views</c> → <c>IView</c> →
     /// <c>IDrawingContainer.GetObjects(ksAllObj)</c> → address <c>IKompasDocument1.GetObjectId</c> →
     /// <c>ISketch.EndEdit()</c>. The address is not a collection index nor a coordinate: it is the <c>GetObjectId</c>
     /// string that <c>FindObjectById</c> accepts back, so it survives a rebuild and a reopen; a collection index is NOT

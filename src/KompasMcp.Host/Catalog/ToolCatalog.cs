@@ -2327,7 +2327,7 @@ public static class ToolCatalog
 
             Mutation("kompas_create_drawing_views", "Создать стандартные виды чертежа",
                 "Строит группу стандартных ассоциативных видов модели документированным маршрутом "
-                + "API7: IDrawingDocument.ViewsAndLayersManager → IViews.AddStandartViews(FileName, "
+                + "API7: IKompasDocument2D.ViewsAndLayersManager → IViews.AddStandartViews(FileName, "
                 + "ProjectionName, ProjectionsTypes, X, Y, Scale, DX, DY) (справка v24: "
                 + "iviews_addstandartviews.html). ИСТОЧНИК — ФАЙЛ МОДЕЛИ НА ДИСКЕ: стандартный вид есть "
                 + "проекция ФАЙЛА, и несохранённая модель даёт явный отказ DOCUMENT_NOT_FOUND, а не "
@@ -2367,7 +2367,7 @@ public static class ToolCatalog
                 requiresRevision: true),
 
             ReadOnly("kompas_list_drawing_views", "Перечень видов чертежа",
-                "Читает виды чертежа через IDrawingDocument.ViewsAndLayersManager.Views: номер, имя, "
+                "Читает виды чертежа через IKompasDocument2D.ViewsAndLayersManager.Views: номер, имя, "
                 + "тип, масштаб, координаты точки привязки и — для ассоциативных видов — файл-источник, "
                 + "имя проекции, видимость скрытых и осевых линий, число объектов. Только чтение; "
                 + "габарит вида не выдаётся, потому что IView его не публикует (справка маршрута не "
@@ -2955,7 +2955,7 @@ public static class ToolCatalog
             ReadOnly("kompas_list_sketch_entities", "Сущности эскиза",
                 "Перечисляет сущности СУЩЕСТВУЮЩЕГО эскиза и читает ОДНУ из них по УСТОЙЧИВОМУ "
                 + "АДРЕСУ. Маршрут — документированная справка v24: ISketch.BeginEditEx(true) → "
-                + "IFragmentDocument.ViewsAndLayersManager.Views → IView → "
+                + "IKompasDocument2D.ViewsAndLayersManager.Views → IView → "
                 + "IDrawingContainer.GetObjects(ksAllObj) → адрес IKompasDocument1.GetObjectId → "
                 + "ISketch.EndEdit(). "
                 + "АДРЕС — ЭТО СТРОКА GetObjectId, которую FindObjectById принимает обратно, поэтому "
@@ -3181,7 +3181,7 @@ public static class ToolCatalog
                 + "(ksObjectConstraintsStateEnum). Без object_ref перечисляются все объекты эскиза, с ним — "
                 + "один названный адресом. "
                 + "МАРШРУТ: ISketch.BeginEditEx(true) — ТОЛЬКО НА ЧТЕНИЕ — → "
-                + "IFragmentDocument.ViewsAndLayersManager.Views → IView → QI(IDrawingContainer) → "
+                + "IKompasDocument2D.ViewsAndLayersManager.Views → IView → QI(IDrawingContainer) → "
                 + "GetObjects(ksAllObj) → QI(IDrawingObject1) → IDrawingObject1.Constraints → ISketch.EndEdit(). "
                 + "ИЗМЕРЕННАЯ ЛОВУШКА: объект и его список ограничений живы ТОЛЬКО ВНУТРИ сеанса "
                 + "редактирования; прочитанный после EndEdit() тот же самый объект отвечает "

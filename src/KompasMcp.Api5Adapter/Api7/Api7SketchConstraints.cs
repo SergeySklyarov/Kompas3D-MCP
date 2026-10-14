@@ -45,13 +45,13 @@ internal static class Api7SketchConstraints
     /// <summary>The write route, named once so the response and the acceptance evidence cannot
     /// drift apart.</summary>
     public const string Route =
-        "ISketch.BeginEdit() → IFragmentDocument.ViewsAndLayersManager.Views → IView(QI IDrawingContainer)" +
+        "ISketch.BeginEdit() → IKompasDocument2D.ViewsAndLayersManager.Views → IView(QI IDrawingContainer)" +
         ".GetObjects(ksAllObj) → QI(IDrawingObject1) → NewConstraint() → set → Create() → " +
         "IDrawingObject1.Constraints (внутри сеанса) → ISketch.EndEdit()";
 
     /// <summary>The read route: the same enumeration, entered READ-ONLY.</summary>
     public const string ReadRoute =
-        "ISketch.BeginEditEx(true) → IFragmentDocument.ViewsAndLayersManager.Views → " +
+        "ISketch.BeginEditEx(true) → IKompasDocument2D.ViewsAndLayersManager.Views → " +
         "IView(QI IDrawingContainer).GetObjects(ksAllObj) → QI(IDrawingObject1) → " +
         "IDrawingObject1.Constraints (внутри сеанса) → ISketch.EndEdit()";
 
@@ -78,16 +78,16 @@ internal static class Api7SketchConstraints
         IViews? views;
         try
         {
-            views = fragment.ViewsAndLayersManager?.Views;
+            views = Api7Views.Of(fragment);
         }
         catch (Exception ex) when (ex is COMException or InvalidCastException)
         {
-            return (rows, "IFragmentDocument.ViewsAndLayersManager.Views: " + ex.GetType().Name);
+            return (rows, "IKompasDocument2D.ViewsAndLayersManager.Views: " + ex.GetType().Name);
         }
 
         if (views is null)
         {
-            return (rows, "IFragmentDocument.ViewsAndLayersManager.Views → null");
+            return (rows, "IKompasDocument2D.ViewsAndLayersManager.Views → null");
         }
 
         // The fragment document issues the address: under BeginEdit the current document IS the sketch

@@ -37,8 +37,8 @@ public sealed partial class Api5Session
     /// <summary>Create standard associative views of a saved model file.</summary>
     /// <remarks>DOC: <c>iviews_addstandartviews.html</c> —
     /// <c>AddStandartViews(FileName, ProjectionName, ProjectionsTypes, X, Y, Scale, DX, DY)</c>;
-    /// reached through <c>IDrawingDocument.ViewsAndLayersManager.Views</c>
-    /// (<c>iviewsandlayersmanager.html</c>, <c>idrawingdocument.html</c>).
+    /// reached through <c>IKompasDocument2D.ViewsAndLayersManager.Views</c>
+    /// (<c>ikompasdocument2d_viewsandlayersmanager.html</c>, <c>ikompasdocument2d.html</c>).
     /// MEASURED: the returned <c>bool</c> only says the call was accepted — the views are re-read from
     /// <c>IViews</c> afterwards, and the count of NEW views is what is reported.
     /// History: docs/decisions/drawings.md#create-views</remarks>
@@ -64,7 +64,7 @@ public sealed partial class Api5Session
         var projectionTypes = ResolveProjectionTypes(command.Projections);
 
         var drawing7 = RequireDrawing7(document);
-        var views = (drawing7.ViewsAndLayersManager as IViewsAndLayersManager)?.Views as IViews
+        var views = Api7Views.Of(drawing7)
             ?? throw new KompasContractException(
                 ErrorCodes.WrongDocumentKind,
                 $"Документ «{document.Id}» не отдал коллекцию видов (Views = null): это не чертёж либо "
@@ -380,7 +380,7 @@ public sealed partial class Api5Session
         DocumentEntry document, string viewRef, DrawingViewRowDto before)
     {
         var drawing7 = RequireDrawing7(document);
-        var views = (drawing7.ViewsAndLayersManager as IViewsAndLayersManager)?.Views as IViews;
+        var views = Api7Views.Of(drawing7);
         if (views is null)
         {
             return (null, "views_collection_unavailable_after_rebuild");
@@ -415,12 +415,12 @@ public sealed partial class Api5Session
         }
 
         var drawing7 = RequireDrawing7(document);
-        var views = (drawing7.ViewsAndLayersManager as IViewsAndLayersManager)?.Views as IViews;
+        var views = Api7Views.Of(drawing7);
         if (views is null)
         {
             return new ListDrawingViewsResult(
                 Array.Empty<DrawingViewRowDto>(),
-                "IDrawingDocument.ViewsAndLayersManager.Views",
+                "IKompasDocument2D.ViewsAndLayersManager.Views",
                 new[] { "views_collection_unavailable — чертёж не отдал коллекцию видов" });
         }
 
@@ -431,7 +431,7 @@ public sealed partial class Api5Session
             notes.Add("view_gabarit_not_read — IView не публикует габарит; справка маршрута не даёт");
         }
 
-        return new ListDrawingViewsResult(rows, "IDrawingDocument.ViewsAndLayersManager.Views", notes);
+        return new ListDrawingViewsResult(rows, "IKompasDocument2D.ViewsAndLayersManager.Views", notes);
     }
 
     /// <summary>Read the dimensions of a view WITHOUT creating any object.</summary>
@@ -1954,7 +1954,7 @@ public sealed partial class Api5Session
         }
 
         var drawing7 = RequireDrawing7(document);
-        var views = (drawing7.ViewsAndLayersManager as IViewsAndLayersManager)?.Views as IViews
+        var views = Api7Views.Of(drawing7)
             ?? throw new KompasContractException(
                 ErrorCodes.WrongDocumentKind,
                 $"Документ «{document.Id}» не отдал коллекцию видов: адрес вида '{viewRef}' разрешить нечем.",

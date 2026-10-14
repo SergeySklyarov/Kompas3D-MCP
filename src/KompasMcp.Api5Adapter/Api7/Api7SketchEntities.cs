@@ -70,7 +70,7 @@ internal sealed record SketchEntitiesRead(
 /// <summary>Sketch entities as OBJECTS with a stable address (<c>dep.sketch.entities</c>).</summary>
 /// <remarks>DOC: the route is from the official v24 help, not a guess
 /// (<c>DEPENDENCIES_PRODUCT_ROUTES_STEP0_REPORT_20260921.md</c> §6.4): <c>ISketch.BeginEdit</c> →
-/// <c>IFragmentDocument</c> → <c>IViewsAndLayersManager.Views</c> → <c>IView</c> →
+/// <c>IKompasDocument2D</c> → <c>IViewsAndLayersManager.Views</c> → <c>IView</c> →
 /// <c>IDrawingContainer.GetObjects</c>; the address is <c>IKompasDocument1.GetObjectId</c>; the exit
 /// is <c>ISketch.EndEdit</c>. MEASURED (InteropScan): the help and the shipped interop diverge on
 /// four points; a name is resolved by ENUMERATING the collection and comparing <c>Name</c> (<c>ByName</c> absent).
@@ -80,7 +80,7 @@ internal static class Api7SketchEntities
     /// <summary>Enumeration route. The string goes to the client response and to the acceptance
     /// evidence, so it is one for both: a divergence would make the records incomparable.</summary>
     public const string Route =
-        "ISketch.BeginEditEx(true) → IFragmentDocument.ViewsAndLayersManager.Views → " +
+        "ISketch.BeginEditEx(true) → IKompasDocument2D.ViewsAndLayersManager.Views → " +
         "IView(QI IDrawingContainer).GetObjects(ksAllObj) → IKompasDocument1.GetObjectId → " +
         "ISketch.EndEdit()";
 
@@ -171,10 +171,10 @@ internal static class Api7SketchEntities
                     "co-class FragmentDocument несёт ноль членов, члены живут на IFragmentDocument");
             }
 
-            var views = fragmentDoc.ViewsAndLayersManager?.Views;
+            var views = Api7Views.Of(fragmentDoc);
             if (views is null)
             {
-                return (null, "IFragmentDocument.ViewsAndLayersManager.Views → null");
+                return (null, "IKompasDocument2D.ViewsAndLayersManager.Views → null");
             }
 
             var counts = new Dictionary<string, int?>(StringComparer.Ordinal);

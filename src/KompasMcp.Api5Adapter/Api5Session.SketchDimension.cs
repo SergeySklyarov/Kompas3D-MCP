@@ -465,7 +465,7 @@ public sealed partial class Api5Session
         var failed = new KindOutcome(null, null, null, false, false, 0, null, null);
         try
         {
-            var view = fragment.ViewsAndLayersManager?.Views?.get_View(0);
+            var view = Api7Views.Of(fragment)?.get_View(0);
             if (view is not KompasAPI7.ISymbols2DContainer symbols)
             {
                 return failed with
@@ -804,7 +804,7 @@ public sealed partial class Api5Session
     {
         try
         {
-            var view = fragment.ViewsAndLayersManager?.Views?.get_View(0);
+            var view = Api7Views.Of(fragment)?.get_View(0);
             if (view is not KompasAPI7.ISymbols2DContainer symbols)
             {
                 return new(null, lengthBefore, null, null, null, false, false, false, 0,

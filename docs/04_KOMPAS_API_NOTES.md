@@ -3964,8 +3964,9 @@ ProcessTypeEnum)` → BOOL (`…insertcomponentfromfile.html`) - адреса с
   имя файла документа не задано, то конвертация будет происходить в новый документ системы КОМПАС»)
   относится к ОТСУТСТВУЮЩЕМУ имени выходного файла, а инструмент имя передаёт, поэтому оно наблюдаемое
   различие не объясняет и причиной не называется. Следствие в коде — `Api5Session.DrawingOpenRegimVisible`.
-- **Стандартные виды (API7).** `IDrawingDocument.ViewsAndLayersManager` → `IViewsAndLayersManager.Views`
-  (`IViews`); `IViews.AddStandartViews(FileName, ProjectionName, ProjectionsTypes, X, Y, Scale, DX, DY)`
+- **Стандартные виды (API7).** `IKompasDocument2D.ViewsAndLayersManager` → `IViewsAndLayersManager.Views`
+  (`IViews`); — имя владельца свойства исправлено 14.10.2026, см. §4.87: своего члена
+  `IDrawingDocument` не документирует, свойство документировано на общем предке. `IViews.AddStandartViews(FileName, ProjectionName, ProjectionsTypes, X, Y, Scale, DX, DY)`
   → `BOOL`. `ProjectionsTypes` — `SAFEARRAY VT_I4` из перечисления `ProjectionType`
   (`projectiontype.html`): `vp_Front=1, vp_Rear=2, vp_Up=3, vp_Down=4, vp_Left=5, vp_Right=6,
   vp_IsoXYZ=7, vp_IsoYZX=8, vp_IsoZXY=9, vp_Dio=10`. Опубликованные имена — `front, rear, top, bottom,
@@ -5576,9 +5577,10 @@ R-095) тот же путь падал `IOException`, потому что фай
 
 **Адресация объекта (OQ-1).** Эскиз берётся `ksGetApplication7()` → `TransferInterface(entity,
 ksAPI7Dual)` → `ISketch`. Внутри сеанса `ISketch.BeginEditEx(true)` (чтение) или `BeginEdit()` (запись) →
-`IFragmentDocument.ViewsAndLayersManager.Views` → `IView` → QI `IDrawingContainer` →
+`IKompasDocument2D.ViewsAndLayersManager.Views` → `IView` → QI `IDrawingContainer` →
 `GetObjects([ksAllObj])`. Измерено: 4 отрезка прямоугольника дают 4 объекта, и КАЖДЫЙ отвечает
-`IDrawingObject1`. Это тот же маршрут, которым уже пользуется `Api7SketchEntities`.
+`IDrawingObject1`. Это тот же маршрут, которым уже пользуется `Api7SketchEntities`. (Имя владельца
+свойства исправлено 14.10.2026, см. §4.87: справка документирует член на `IKompasDocument2D`.)
 
 **ГЛАВНАЯ ЛОВУШКА ПРИБОРА, измеренная первой же пробой.** Объект и его `Constraints` живы ТОЛЬКО внутри
 сеанса редактирования. Тот же `IDrawingObject1`, прочитанный после `EndEdit()`, отвечает
@@ -6604,3 +6606,55 @@ Release-сборка v24. На пластине 100×80×10 все четыре 
 результата по объёму и прилеганию (§4.83, §4.84). `IFillets::Add` появляется как КАНДИДАТ для опыта
 причины сдвига (долг 25): маршрут создания API7 - это то, чем можно отличить «сдвигает перестроение»
 от «сдвигает создание API5».
+
+## §4.87. Маршрут к видам документа-фрагмента ЕСТЬ: `IKompasDocument2D.ViewsAndLayersManager` (справка SDK 24 по проводу, 14.10.2026, наряд `FRAGMENT_VIEWS_ROUTE`)
+
+**Что было.** Наряд `API_DOC_ROUTES` (§4.85) назвал единственным неподтверждённым маршрутом
+`IFragmentDocument.ViewsAndLayersManager`: страницы по имени своего интерфейса не было (HTTP 404), и
+перечень своего интерфейса член не называл. Заказчик 14.10.2026 решил искать документированный
+маршрут отдельным нарядом.
+
+**Что проверено.** По проводу 14.10.2026 открыты и прочитаны тела страниц:
+
+| Адрес | HTTP | Заголовок | Что даёт |
+|---|---|---|---|
+| `ikompasdocument2d_viewsandlayersmanager.html` | 200 | `ViewsAndLayersManager - Возвращает менеджер видов и слоев документа` | документированное СВОЙСТВО |
+| `ikompasdocument2d_props.html` | 200 | `IKompasDocument2D - свойства` | перечень интерфейса называет `ViewsAndLayersManager` |
+| `ikompasdocument2d.html` | 200 | `Интерфейс IKompasDocument2D` | «базовый для интерфейсов графических документов ... чертежа и фрагмента» |
+| `ikompasdocument2d_methods.html` | 200 | `IKompasDocument2D - методы` | в подразделах - «Интерфейс IFragmentDocument» и «Интерфейс IDrawingDocument» |
+| `iviewsandlayersmanager_props.html` | 200 | `IViewsAndLayersManager - свойства` | `Views - Возвращает коллекцию видов` |
+| `iviews_props.html` | 200 | `IViews - свойства` | `ActiveView - Активный вид`, `View`, `ViewByNumber` |
+| `ifragmentdocument_props.html` | 200 | `IFragmentDocument - свойства` | называет РОВНО ОДНО свойство - `IsSketch` |
+| `idrawingdocument_props.html` | 200 | `IDrawingDocument - свойства` | `ChangeListDescriptions`, `SpecRough`, `TechnicalDemand` - `ViewsAndLayersManager` НЕ назван |
+| `ifragmentdocument_viewsandlayersmanager.html` | 404 | - | контроль: по имени СВОЕГО интерфейса страницы нет |
+
+**Цитаты.** `ikompasdocument2d_viewsandlayersmanager.html`: «Тип данных: IViewsAndLayersManager»,
+«Синтаксис Automation : ViewsAndLayersManager = iObject.ViewsAndLayersManager», «Синтаксис COM :
+iObject->get_ViewsAndLayersManager (&ViewsAndLayersManager)», «Примечание : Свойство доступно только
+для чтения.» `ikompasdocument2d.html`: «Данный интерфейс является базовым для интерфейсов графических
+документов КОМПАС API - чертежа и фрагмента.» и «Интерфейс может быть получен с помощью метода
+IUnknown QueryInterface от ... интерфейса фрагмента IFragmentDocument.»
+
+**ДАТИРОВАННАЯ ПОПРАВКА.** Утверждение «такого члена справка v24 не описывает ни у
+`IFragmentDocument`, ни у его предков» ОТМЕНЯЕТСЯ. Член ДОКУМЕНТИРОВАН, и документирован именно на
+`IKompasDocument2D` - предке `IFragmentDocument`. Ошибка была в приборе, не в справке: цепочка предков
+читается со строки «Иерархия» страницы САМОГО интерфейса, а `ifragmentdocument.html` печатает на
+втором уровне `IKompasDocument` ВТОРОЙ раз вместо `IKompasDocument2D` (ссылка ведёт на
+`ikompasdocument.html`), поэтому `IKompasDocument2D` в проверяемую цепочку не попал. Тот же дефект
+страницы: подписи «Иерархия :» на ней нет. Параллельная страница того же раздела справки (KsAPI)
+цепочку печатает верно: `ksapi_ifragmentdocument.html` (зеркало,
+`reference/kompas-sdk-v24/dep0-docs/`) - `IAPIObject → IKompasAPIObject → IKompasDocument →
+IKompasDocument2D → IFragmentDocument`.
+
+**Что решено.** Маршрут - `IKompasDocument2D.ViewsAndLayersManager` → `IViewsAndLayersManager` →
+`IViews` (текущий вид - `IViews.ActiveView`). Он ОДИН и для фрагмента, и для чертежа: своего члена ни
+`IFragmentDocument`, ни `IDrawingDocument` не документируют (см. таблицу), а `IKompasDocument2D`
+документирован как базовый для обоих. Адаптер переведён на него одной точкой -
+`Api7Views.Of` (`src/KompasMcp.Api5Adapter/Api7/Api7Views.cs`); решение -
+`docs/decisions/drawings.md#views-route`.
+
+**Инструмент аудита.** После перевода маршрут собирается прибором как
+`IKompasDocument2D.ViewsAndLayersManager` (член объявлен на этом интерфейсе и в поставленном
+интеропе) и подтверждается страницей `ikompasdocument2d_viewsandlayersmanager.html` способом
+«перечень интерфейса». Прежнее имя `IFragmentDocument.ViewsAndLayersManager` из инвентаря ИСЧЕЗАЕТ:
+вызовов на нём больше нет.

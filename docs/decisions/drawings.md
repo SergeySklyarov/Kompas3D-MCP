@@ -21,8 +21,10 @@
 - `iassociationview_props.html`, `iassociationview_projectionname.html` - `ProjectionName` - имя из
   списка проекций документа-источника; `SourceFileName`, `HiddenLinesVisible`, `CenterLinesVisible`,
   `Scale`, `X`, `Y`.
-- `idrawingdocument.html`, `iviewsandlayersmanager.html` - путь к коллекции видов:
-  `IDrawingDocument.ViewsAndLayersManager` → `IViewsAndLayersManager.Views`.
+- `iviewsandlayersmanager.html` - `IViewsAndLayersManager.Views` (путь к коллекции видов). Адрес
+  владельца свойства здесь был назван НЕВЕРНО (`idrawingdocument.html`): своего члена
+  `IDrawingDocument` не документирует. Исправлено 14.10.2026 - см. `#views-route` ниже и
+  `docs/04_KOMPAS_API_NOTES.md` §4.87.
 - `isymbols2dcontainer.html` - контейнер размеров получается из `IView`; коллекции `LineDimensions`,
   `RadialDimensions`, `DiametralDimensions`, `AngleDimensions` и др.
 - `ilinedimensions_add.html` / `iradialdimensions_add.html` / `idiametraldimensions_add.html` -
@@ -61,6 +63,38 @@
 имени. Числовые идентификаторы ячеек основной надписи: справка описывает `IStamp.Text(Id)`, но
 таблицы «понятие → номер ячейки» в ней нет - номера передаёт вызывающий, и это названо в описании
 инструмента и в `unverified_aspects`.
+
+## <a id="views-route"></a>Маршрут к видам: ОДИН документированный член на оба вида документа (14.10.2026, наряд `FRAGMENT_VIEWS_ROUTE`)
+
+**Что было.** Адаптер читал коллекцию видов с того интерфейса, который оказывался под рукой:
+`IFragmentDocument.ViewsAndLayersManager` в блоках эскиза (размеры, ограничения, сущности) и
+`IDrawingDocument.ViewsAndLayersManager` в DRW. Аудит (`API_DOC_ROUTES`) назвал первое из них
+единственным неподтверждённым маршрутом: по имени своего интерфейса страницы нет (404), а перечень
+`IFragmentDocument - свойства` называет ровно одно свойство - `IsSketch`.
+
+**Что измерено.** Справка v24 документирует это свойство РОВНО ОДИН раз - на предке обоих документов.
+`ikompasdocument2d_viewsandlayersmanager.html`: «ViewsAndLayersManager - Возвращает менеджер видов и
+слоев документа», тип `IViewsAndLayersManager`, «Свойство доступно только для чтения».
+`ikompasdocument2d.html`: «Данный интерфейс является базовым для интерфейсов графических документов
+КОМПАС API - чертежа и фрагмента» и получается «IUnknown QueryInterface от ... интерфейса фрагмента
+IFragmentDocument»; перечень `IKompasDocument2D - методы` держит подразделами и `IFragmentDocument`, и
+`IDrawingDocument`. Полная таблица страниц с кодами - `docs/04_KOMPAS_API_NOTES.md` §4.87.
+
+**Что решено.** Один маршрут на оба вида документа: `IKompasDocument2D.ViewsAndLayersManager` →
+`IViewsAndLayersManager.Views` → `IViews`. Адаптер берёт его в ОДНОЙ точке - `Api7Views.Of(document)`
+(`src/KompasMcp.Api5Adapter/Api7/Api7Views.cs`); через неё идут все прежние вызовы: эскиз - размещение
+управляющего размера, перечисление ограничений, перечисление сущностей с адресом; чертёж - создание
+стандартных видов, перечень видов, перечитывание вида после перестроения, разрешение адреса вида.
+Строки ответов и описания инструментов называют тот же маршрут: два имени одного свойства разошлись бы
+с приёмкой.
+
+**Почему это НЕ смена поведения.** Поставленный интероп несёт свойство на всех трёх интерфейсах
+(`IFragmentDocument`, `IDrawingDocument`, `IKompasDocument2D`), а объявление `IKompasDocument2D` в нём
+совпадает с интеропом, сгенерированным из УСТАНОВЛЕННОЙ библиотеки типов: 42 члена, `ViewsAndLayersManager`
+на том же месте, лишних и недостающих имён нет. Значит чтение идёт по тому же слоту той же таблицы
+методов, и правка меняет названный интерфейс, а не вызов. Равенство поведения проверено приёмкой
+управляющих размеров эскиза (`SKC.11.dimension_types`, `SKC.17.dimension_drives_length`,
+`SKC.18.dimension_survives_reopen`, `SKC.19.dimension_variable`) и полным прогоном - см. отчёт наряда.
 
 ## <a id="contracts"></a>Контракты DRW
 

@@ -33,6 +33,13 @@ A TITLE MAY MISSPELL THE MEMBER. Where the page's ADDRESS carries the member
 own page: it is confirmed with the misspelling NAMED (`doc_typo`), never reported as "the member has
 no page".
 
+A FEW MEMBERS THE HELP SPELLS DIFFERENTLY ARE CONFIRMED BY NAME, ONE BY ONE. Where the help
+describes the SAME member under another spelling (`ksBody.CalcMassInertiaProperties` on a page
+titled `MassInertiaParam`; `ksPart.density` on `kspart_getdensity.html`, which prints `GetDensity`),
+no rule can tell "another spelling of one member" from "a different member" - and a rule that tried
+would confirm routes nobody checked. These are listed in `NAMED_NAME_MISMATCH`, each with its page
+and a verbatim quote proving the member is the same; the way is named `named_name_mismatch`.
+
 Three outcomes, never two: `confirmed` (200, same interface, same member), `broken` (404 - an
 instrument defect if it is cited as evidence), `not_checked` (network failure - NOT counted as good).
 
@@ -83,6 +90,67 @@ ENTRY = re.compile(r"\s+[-–—]\s+")
 EXCEPTIONS = {
     "ksCBisector": "исключение заказчика 11.10.2026: измеренная постановка ролей (AGENTS.md, "
                    "раздел о маршрутах); основание - измерение, а не страница справки",
+}
+
+# A CLOSED, BY-NAME LIST, NOT A RULE. Six routes call a member the help documents under another
+# spelling or on an ancestor's page that the interface's own «Иерархия» line does not name. A general
+# rule ("another spelling", "Get<Member>", "the name from Синтаксис") would also confirm members
+# nobody checked, so the six are listed by hand - `(interface, member) -> page, quote`. Each quote is
+# verbatim from the page and is what makes the member the SAME one; the page is fetched and the
+# documented name must be found in it, so the table alone never confirms a route.
+# INVARIANT: an entry confirms exactly its own route; any other route is left to the rules above.
+NAMED_NAME_MISMATCH = {
+    ("ksbaseloftdefinition", "sketchs"): {
+        "page": "ksbaseloftdefinition_sketches.html",
+        "documented_on": "ksBaseLoftDefinition",
+        "doc_name": "Sketches",
+        "kind": "опечатка библиотеки типов: интероп и справка API7 пишут `Sketchs` "
+                "(`iloft_sketchs.html`), страница названа `Sketches`",
+        "quote": "«LPDISPATCH Sketches();» - тот же метод по тому же адресу",
+    },
+    ("ksbossloftdefinition", "sketchs"): {
+        "page": "ksbossloftdefinition_sketches.html",
+        "documented_on": "ksBossLoftDefinition",
+        "doc_name": "Sketches",
+        "kind": "то же расхождение написания, что у `ksBaseLoftDefinition.Sketchs`",
+        "quote": "«LPENTITYCOLLECTION Sketches();» - тот же метод по тому же адресу",
+    },
+    ("ksbody", "calcmassinertiaproperties"): {
+        "page": "ksbody_massinertiaparam.html",
+        "documented_on": "ksBody",
+        "doc_name": "CalcMassInertiaProperties",
+        "kind": "имя страницы и заголовка - `MassInertiaParam`, а документирует она другой член",
+        "quote": "«Automation : LPDISPATCH CalcMassInertiaProperties (long bitVector);» - раздел "
+                 "«Синтаксис» называет член, который вызывает адаптер",
+    },
+    ("kspart", "density"): {
+        "page": "kspart_getdensity.html",
+        "documented_on": "ksPart",
+        "doc_name": "GetDensity",
+        "kind": "имя справки - аксессор `GetDensity`; интероп отдаёт то же свойство как `density`",
+        "quote": "«double GetDensity()» - возвращает «плотность (г/куб.мм)»",
+    },
+    ("ifeaturepattern", "update"): {
+        "page": "imodelobject_update.html",
+        "documented_on": "IModelObject",
+        "doc_name": "Update",
+        "kind": "член предка; страница САМОГО интерфейса цепочку предков не называет",
+        "quote": "«BOOL Update( );» - метод, который документирует `IModelObject`",
+        "contradiction": "`ifeaturepattern.html` печатает «Иерархия: IDispatch IFeaturePattern», "
+                         "тогда как страницы наследников ставят `IModelObject` перед "
+                         "`IFeaturePattern`",
+        "hierarchy_from": ["ilinearpattern.html", "icircularpattern.html", "imirrorpattern.html"],
+    },
+    ("ifeaturepattern", "owner"): {
+        "page": "imodelobject_props.html",
+        "documented_on": "IModelObject",
+        "doc_name": "Owner",
+        "kind": "член предка; страница САМОГО интерфейса цепочку предков не называет",
+        "quote": "страница «IModelObject - свойства» перечисляет `Owner`",
+        "contradiction": "то же противоречие справки, что у `IFeaturePattern.Update`: своя страница "
+                         "интерфейса предка не называет, страницы наследников называют",
+        "hierarchy_from": ["ilinearpattern.html", "icircularpattern.html", "imirrorpattern.html"],
+    },
 }
 
 
@@ -407,7 +475,34 @@ def confirm_member_on(interface, member, listing_cache):
     return None
 
 
-def check_route(route, listing_cache, hierarchy_cache):
+def named_name_mismatch(interface, member, cache):
+    """The by-name confirmation of a member the help spells differently, or None.
+
+    Reads `NAMED_NAME_MISMATCH` by `(interface, member)` and then FETCHES the page: the entry alone
+    proves nothing, so the page must answer (wire or mirror) and carry the documented name. The
+    confirmation is named `named_name_mismatch`, so a reader sees it was reached by name, not by rule.
+    """
+    key = (interface.lower(), member.lower())
+    if key in cache:
+        return cache[key]
+    record = NAMED_NAME_MISMATCH.get(key)
+    result = None
+    if record:
+        page = HELP_ROOT + record["page"]
+        status, body = fetch(page)
+        plain = re.sub(r"<[^>]+>", " ", body or "").lower()
+        if status in (200, "mirror") and record["doc_name"].lower() in plain:
+            result = {"page": page, "title": page_title(body),
+                      "basis": "wire" if status == 200 else "mirror",
+                      "documented_on": record["documented_on"], "kind": record["kind"],
+                      "quote": record["quote"], "doc_name": record["doc_name"],
+                      "contradiction": record.get("contradiction"),
+                      "hierarchy_from": record.get("hierarchy_from")}
+    cache[key] = result
+    return result
+
+
+def check_route(route, listing_cache, hierarchy_cache, named_cache):
     """One route: confirmed on its interface or on an ancestor, else named unconfirmed."""
     interface = route["declared_on"]
     member = route["member"]
@@ -422,6 +517,22 @@ def check_route(route, listing_cache, hierarchy_cache):
                     "relation": "сам интерфейс" if position == 0 else "предок",
                     "how": hit["how"], "doc_typo": hit["doc_typo"],
                     "ancestors_checked": ancestors, "source": [hit["page"]]}
+
+    # The closed by-name list, AFTER the rules: a member the help spells differently is confirmed
+    # only by its own named entry, and the page is fetched before the confirmation stands.
+    named = named_name_mismatch(interface, member, named_cache)
+    if named:
+        return {"route": route["route"], "member": member, "status": "Подтверждено",
+                "page": named["page"], "title": named["title"], "basis": named["basis"],
+                "documented_on": named["documented_on"],
+                "relation": "сам интерфейс" if named["documented_on"].lower() == interface.lower()
+                            else "предок",
+                "how": "named_name_mismatch", "doc_typo": None,
+                "named_mismatch": {"kind": named["kind"], "quote": named["quote"],
+                                   "doc_name": named["doc_name"],
+                                   "contradiction": named["contradiction"],
+                                   "hierarchy_from": named["hierarchy_from"]},
+                "ancestors_checked": ancestors, "source": [named["page"]]}
 
     listing, statuses, _groups = listing_cache.get(interface) or member_list(interface)
     listing_cache[interface] = (listing, statuses, _groups)
@@ -510,7 +621,8 @@ def collect(routes_path):
     judged = [route for route in routes if route.get("assembly") != "adapter-twins"]
     listing_cache = {}
     hierarchy_cache = {}
-    checked = [check_route(route, listing_cache, hierarchy_cache) for route in judged]
+    named_cache = {}
+    checked = [check_route(route, listing_cache, hierarchy_cache, named_cache) for route in judged]
     counts = collections.Counter(item["status"] for item in checked)
     bases = collections.Counter(item.get("basis", "нет") for item in checked)
     exceptions = [{"route": name, "note": note} for name, note in EXCEPTIONS.items()
@@ -521,6 +633,7 @@ def collect(routes_path):
     inherited = [item for item in confirmed if item["relation"] == "предок"]
     groups = [item for item in confirmed if item["how"] == "групповая страница"]
     typos = [item for item in confirmed if item["doc_typo"]]
+    named = [item for item in confirmed if item["how"] == "named_name_mismatch"]
     return {
         "instrument": "api-audit-docs",
         "date": stamp(),
@@ -547,17 +660,29 @@ def collect(routes_path):
         # documenting a group, or a page whose title misspells the member. Named separately so that
         # the reader sees which part of the column rests on an inherited page.
         "confirmation_ways": {
-            "own_interface": len([item for item in confirmed if item["relation"] == "сам интерфейс"]),
-            "inherited": len(inherited),
+            "own_interface": len([item for item in confirmed if item["relation"] == "сам интерфейс"
+                                  and item["how"] != "named_name_mismatch"]),
+            "inherited": len([item for item in inherited if item["how"] != "named_name_mismatch"]),
             "group_page": len(groups),
             "title_typo": len(typos),
+            "named_name_mismatch": len(named),
         },
         "inherited": [{"route": item["route"], "documented_on": item["documented_on"],
-                       "page": item["page"]} for item in inherited],
+                       "page": item["page"]} for item in inherited
+                      if item["how"] != "named_name_mismatch"],
         "group_pages": [{"route": item["route"], "documented_on": item["documented_on"],
                          "page": item["page"]} for item in groups],
         "title_typos": [{"route": item["route"], "documented_on": item["documented_on"],
                          "typo": item["doc_typo"], "title": item["title"]} for item in typos],
+        # The six confirmed BY NAME: each with its kind of mismatch and the verbatim quote that makes
+        # the member the same one. Named separately so a reader can re-check the six by hand.
+        "named_name_mismatches": [{"route": item["route"], "documented_on": item["documented_on"],
+                                   "page": item["page"], "kind": item["named_mismatch"]["kind"],
+                                   "quote": item["named_mismatch"]["quote"],
+                                   "doc_name": item["named_mismatch"]["doc_name"],
+                                   "contradiction": item["named_mismatch"]["contradiction"],
+                                   "hierarchy_from": item["named_mismatch"]["hierarchy_from"]}
+                                  for item in named],
         "mirror": mirror_info(),
         "exceptions": exceptions,
         "object_types": check_object_types(payload.get("object_type_constants") or []),
@@ -656,6 +781,36 @@ def self_test():
     typo = confirm_member_on("ksFeature", "IsValid", {})
     check("опечатка заголовка названа, а не выдана за противоречие",
           bool(typo) and typo.get("doc_typo") == "isvialid", str(typo and typo.get("doc_typo")))
+
+    # The closed by-name list. Both halves in ONE setting: an entry confirms its own route, and the
+    # same way confirms no other route - a table that confirmed everything would confirm nothing.
+    direct = named_name_mismatch("ksPart", "density", {})
+    check("запись поимённого перечня подтверждает РОВНО свой маршрут",
+          bool(direct) and direct["documented_on"] == "ksPart"
+          and direct["page"].endswith("kspart_getdensity.html"), str(direct and direct["page"]))
+    check("маршрут, которого нет в перечне, тем же способом НЕ подтверждается",
+          named_name_mismatch("ksPart", "newentity", {}) is None
+          and named_name_mismatch("ksPart", "material", {}) is None)
+    ancestor_named = named_name_mismatch("IFeaturePattern", "Owner", {})
+    check("расхождение подтверждается страницей ПРЕДКА, и противоречие справки названо",
+          bool(ancestor_named) and ancestor_named["documented_on"] == "IModelObject"
+          and bool(ancestor_named["contradiction"]),
+          str(ancestor_named and ancestor_named["documented_on"]))
+    # The TABLE alone must not confirm: an entry whose page does not answer confirms nothing, so this
+    # control proves the page is really fetched rather than the table really read.
+    probe = ("zzzaudit", "zzzabsent")
+    NAMED_NAME_MISMATCH[probe] = {"page": "zzz-audit-selftest-404.html", "documented_on": "ZzzAudit",
+                                  "doc_name": "ZzzAbsent", "kind": "контроль", "quote": "контроль"}
+    try:
+        check("запись перечня без отвечающей страницы НЕ подтверждает",
+              named_name_mismatch("ZzzAudit", "ZzzAbsent", {}) is None)
+    finally:
+        del NAMED_NAME_MISMATCH[probe]
+    verdict = check_route({"route": "ksPart.density", "declared_on": "ksPart", "member": "density"},
+                          {}, {}, {})
+    check("маршрут остатка подтверждён способом `named_name_mismatch`",
+          verdict.get("status") == "Подтверждено" and verdict.get("how") == "named_name_mismatch",
+          f"{verdict.get('status')}/{verdict.get('how')}")
 
     print(f"\nСамопроверка прибора: {checks} проверок, "
           f"{len(failures)} FAIL" + (f" - {failures}" if failures else ""))

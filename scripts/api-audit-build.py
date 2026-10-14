@@ -283,6 +283,8 @@ def completeness(evidence, matrix, catalog, claims, wire):
         "com_routes_confirmed_over_wire": (docs.get("bases") or {}).get("wire", 0),
         "com_routes_confirmed_from_mirror": (docs.get("bases") or {}).get("mirror", 0),
         "com_routes_unconfirmed": len(docs.get("unconfirmed") or []),
+        "com_routes_confirmed_by_name": len([item for item in docs.get("routes") or []
+                                             if item.get("how") == "named_name_mismatch"]),
         "documentation_column_complete": bool(docs.get("documentation_column_complete")),
         "documentation_routes_unmeasured": len(docs.get("unmeasured") or []),
         "object_type_constants_checked": len((docs.get("object_types") or {}).get("matched") or []),
@@ -332,6 +334,7 @@ def build(evidence_dir):
     docs = evidence.get("docs") or {}
     claims = evidence.get("claims") or {}
     docs_by_route = {item["route"]: item["status"] for item in docs.get("routes") or []}
+    docs_record = {item["route"]: item for item in docs.get("routes") or []}
 
     build_id = build_identity()
     build_id["host_dll_sha256"] = (wire.get("build") or {}).get("host_dll_sha256") \
@@ -359,7 +362,10 @@ def build(evidence_dir):
                 "pages_read": docs.get("interfaces_checked"),
                 "routes_checked": docs.get("routes_checked"),
                 "note": "страницы читались по проводу; подтверждающей считается только страница "
-                        "СВОЕГО интерфейса и СВОЕГО члена",
+                        "СВОЕГО интерфейса и СВОЕГО члена, страница предка, групповая страница или "
+                        "страница с опечаткой в заголовке; у каждого маршрута назван способ "
+                        "подтверждения (`how`), и шесть подтверждены поимённым перечнем "
+                        "(`named_name_mismatch`), а не правилом",
                 "basis": {"wire": (docs.get("bases") or {}).get("wire", 0),
                           "mirror": (docs.get("bases") or {}).get("mirror", 0),
                           "note": "`wire` - страница открыта по проводу (HTTP 200); `mirror` - "
@@ -393,6 +399,11 @@ def build(evidence_dir):
             "status": docs_by_route.get(route["route"], "не проверено"),
             "source": [item["page"] for item in docs.get("routes") or []
                        if item["route"] == route["route"] and item["status"] == "Подтверждено"],
+            # HOW the confirmation was reached - the interface itself, an ancestor, a group page, a
+            # misspelled title, or the closed by-name list. Named in the PUBLISHED audit so a reader
+            # can tell a route confirmed by name from one confirmed by a rule.
+            "how": (docs_record.get(route["route"]) or {}).get("how"),
+            "documented_on": (docs_record.get(route["route"]) or {}).get("documented_on"),
         }} for route in routes],
         "com_snapshot_check": {
             "source": os.path.relpath(os.path.join(evidence_dir, "routes.json"), ROOT).replace("\\", "/"),
@@ -516,13 +527,14 @@ def render(document):
         "",
         "## 5. COM-маршруты адаптера",
         "",
-        "| Маршрут | Сборка | Вид | Сигнатура | Мест | Документация |",
-        "|---|---|---|---|---|---|",
+        "| Маршрут | Сборка | Вид | Сигнатура | Мест | Документация | Способ |",
+        "|---|---|---|---|---|---|---|",
     ]
     for route in document["com_routes"]:
         lines.append(f"| `{route['route']}` | {route.get('assembly')} | {route.get('kind')} | "
                      f"`{(route.get('signature') or '')[:70]}` | {len(route.get('sites') or [])} | "
-                     f"{route['documentation']['status']} |")
+                     f"{route['documentation']['status']} | "
+                     f"{route['documentation'].get('how') or '-'} |")
     lines += [
         "",
         "## 6. Типы объектов",

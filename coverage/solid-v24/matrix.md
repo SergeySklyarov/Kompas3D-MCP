@@ -189,7 +189,7 @@
 | режим/операция | семья | приоритет | очередь | уровень каталога | поиск | созд | чтен | правк | перестр | reopen | подавл | удал | отказ | геом | проверки |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
 | `INT-01.pairs.volumetric` | G1 | practical_required | G1 | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | INT.01.discover, INT.01.read, INT.05.read, INT.11.negative_tests, INT.11.negative_tests_nested, INT.12.read, INT.12.read2 |
-| `INT-02.pairs.tangent` | G1 | practical_required | G1 | mcp_verified | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | INT.02.read, INT.02.negative_tests, INT.06.read |
+| `INT-02.pairs.tangent` | G1 | practical_required | G1 | mcp_verified | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | INT.02.read, INT.02.negative_tests, INT.06.read, INT-02.pairs.tangent.negative_tests |
 | `INT-03.pairs.faces` | G1 | practical_required | G1 | mcp_verified | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | INT.03.read, INT.03.geometry_validation, INT.FACES, INT.11.negative_tests |
 | `INT-04.gap.min_distance` | G1 | practical_required | G1 | mcp_verified | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | INT.04.read, INT.04.read2, INT.04.geometry_validation, INT.04.geometry_validation2, INT.07.geometry_validation, INT.07.geometry_validation2, INT.08.geometry_validation, INT.11.negative_tests, INT.04.unit |
 
@@ -199,9 +199,9 @@
 |---|---|---|---|
 | `dep.interference.component_address` | да | discover, read, negative_tests | INT.01.read, INT.11.negative_tests, INT.11.negative_tests_nested, INT.09.read |
 | `dep.interference.face_address` | да | discover, read, negative_tests | INT.03.geometry_validation, INT.FACES, INT.11.negative_tests |
-| `dep.interference.api7_measurer` | да | discover, read, negative_tests | INT.04.read, INT.04.read2, INT.04.geometry_validation, INT.13.twin_layout |
-| `dep.interference.distance_unit` | да | read, geometry_validation, negative_tests | INT.04.geometry_validation, INT.04.geometry_validation2, INT.07.geometry_validation, INT.06.read, INT.04.unit |
-| `dep.interference.read_only` | да | read, negative_tests | INT.09.read, INT.09.negative_tests |
+| `dep.interference.api7_measurer` | да | discover, read, negative_tests | INT.04.read, INT.04.read2, INT.04.geometry_validation, INT.13.twin_layout, dep.interference.api7_measurer.negative_tests |
+| `dep.interference.distance_unit` | да | read, geometry_validation, negative_tests | INT.04.geometry_validation, INT.04.geometry_validation2, INT.07.geometry_validation, INT.06.read, INT.04.unit, dep.interference.distance_unit.negative_tests |
+| `dep.interference.read_only` | да | read, negative_tests | INT.09.read, INT.09.negative_tests, dep.interference.read_only.negative_tests |
 
 ## Метрика 1 — обязательные режимы профиля `drawings-minimal-v1`
 
@@ -231,17 +231,17 @@
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
 | `EI-01.stl.export` | G5 | practical_required | G5+G7 | mcp_verified | OK | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | EI.01.discover, EI.02.stl_binary, EI.03.stl_text, EI.11.idempotency, EI.04b.tessellation_independence |
 | `EI-02.stl.tessellation` | G5 | practical_required | G5+G7 | mcp_verified | OK | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | EI.04.tessellation, EI.04b.tessellation_independence, EI.05.box, EI.10.refusals |
-| `EI-03.inertia.central` | G7 | practical_required | G5+G7 | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | EI.06.inertia_central, EI.08.inertia_offdiag, EI.12.no_mutation, EI.13.applicability |
-| `EI-04.inertia.principal` | G7 | practical_required | G5+G7 | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | EI.07.inertia_principal |
-| `EI-05.inertia.units` | G7 | practical_required | G5+G7 | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | EI.09.inertia_units |
+| `EI-03.inertia.central` | G7 | practical_required | G5+G7 | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | EI.06.inertia_central, EI.08.inertia_offdiag, EI.12.no_mutation, EI.13.applicability, EI-03.inertia.central.negative_tests |
+| `EI-04.inertia.principal` | G7 | practical_required | G5+G7 | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | EI.07.inertia_principal, EI-04.inertia.principal.negative_tests |
+| `EI-05.inertia.units` | G7 | practical_required | G5+G7 | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | EI.09.inertia_units, EI-05.inertia.units.negative_tests |
 
 ### Общие зависимости профиля `export-inertia-minimal-v1`
 
 | зависимость | закрыто | приоритетные действия | проверки |
 |---|---|---|---|
 | `dep.ei.path_policy` | да | discover, negative_tests | EI.01.discover, EI.10.refusals |
-| `dep.ei.triangle_count_from_file` | да | read, negative_tests | EI.02.stl_binary, EI.03.stl_text |
-| `dep.ei.units_system` | да | read, negative_tests | EI.06.inertia_central, EI.09.inertia_units |
+| `dep.ei.triangle_count_from_file` | да | read, negative_tests | EI.02.stl_binary, EI.03.stl_text, dep.ei.triangle_count_from_file.negative_tests |
+| `dep.ei.units_system` | да | read, negative_tests | EI.06.inertia_central, EI.09.inertia_units, dep.ei.units_system.negative_tests |
 | `dep.ei.read_only_measure` | да | read, negative_tests | EI.12.no_mutation, EI.10.refusals |
 | `dep.ei.idempotency` | да | create, negative_tests | EI.11.idempotency |
 
@@ -370,8 +370,8 @@
 | зависимость | закрыто | приоритетные действия | проверки |
 |---|---|---|---|
 | `dep.sketch_bulk.limits_source` | да | discover, read, negative_tests | SB-01.discover, SB-02.limits |
-| `dep.sketch_bulk.entity_read_back` | да | discover, read, negative_tests | SB-03.polyline_native, SB-06.polyline_open, SB-07.spline, SB-08.spline_open, SB-10.reopen |
-| `dep.sketch_bulk.profile_area_rule` | да | read, geometry_validation, negative_tests | SB-03.polyline_native, SB-04.polyline_limit, SB-05.client_contour, SB-07.spline |
+| `dep.sketch_bulk.entity_read_back` | да | discover, read, negative_tests | SB-03.polyline_native, SB-06.polyline_open, SB-07.spline, SB-08.spline_open, SB-10.reopen, dep.sketch_bulk.entity_read_back.negative_tests |
+| `dep.sketch_bulk.profile_area_rule` | да | read, geometry_validation, negative_tests | SB-03.polyline_native, SB-04.polyline_limit, SB-05.client_contour, SB-07.spline, dep.sketch_bulk.profile_area_rule.negative_tests |
 
 ## Метрика 1 — обязательные режимы профиля `sketch-constraints-minimal-v1`
 
@@ -380,8 +380,8 @@
 | `SKC-01.geometric_types` | G6 | practical_required | G6 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | OK | OK | OK | SKC.01.discover, SKC.02.create, SKC.03.read, SKC.04.edit, SKC.05.rebuild, SKC.06.save_reopen, SKC.08.delete_dependencies, SKC.09.negative_tests, SKC.10.geometry_validation, SKC.13.type_vocabulary, SKC.14.object_address |
 | `SKC-02.dimension_types` | G6 | practical_required | G6 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | SKC.11.dimension_types, SKC.17.dimension_drives_length, SKC.18.dimension_survives_reopen, SKC.19.dimension_variable, SKC.23.diametral_dimension, SKC.24.radial_dimension, SKC.25.angular_dimension, SKC.26.dimension_value_control, SKC.27.dimension_kind_refusals, SKC.28.diametral_dimension_extruded_body |
 | `SKC-03.read` | G6 | practical_required | G6 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | OK | SKC.03.read, SKC.06.save_reopen, SKC.09.negative_tests, SKC.14.object_address, SKC.15.state_agreement, SKC.16.no_silent_rewrite |
-| `SKC-04.delete` | G6 | practical_required | G6 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | OK | OK | OK | SKC.08.delete_dependencies, SKC.04.edit, SKC.09.negative_tests |
-| `SKC-05.state_read` | G6 | practical_required | G6 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | SKC.12.state_read, SKC.15.state_agreement |
+| `SKC-04.delete` | G6 | practical_required | G6 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | OK | OK | OK | SKC.08.delete_dependencies, SKC.04.edit, SKC.09.negative_tests, SKC-04.delete.save_reopen, SKC-04.delete.geometry_validation |
+| `SKC-05.state_read` | G6 | practical_required | G6 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | SKC.12.state_read, SKC.15.state_agreement, SKC-05.state_read.negative_tests, SKC-05.state_read.geometry_validation |
 
 ### Общие зависимости профиля `sketch-constraints-minimal-v1`
 
@@ -409,7 +409,7 @@
 | `dep.vb.parameter_address` | да | discover, read, negative_tests | VB.01.discover, VB.04.read, VB.11.address_by_name, VB.13.refusals |
 | `dep.vb.units` | да | read, negative_tests | VB.05.bind, VB.09.unbind, VB.13.refusals |
 | `dep.vb.rebuild_document` | да | rebuild, geometry_validation | VB.05.bind, VB.06.bind, VB.07.rebuild, VB.09.unbind |
-| `dep.vb.read_only_list` | да | read, negative_tests | VB.04.read, VB.14.no_mutation |
+| `dep.vb.read_only_list` | да | read, negative_tests | VB.04.read, VB.14.no_mutation, dep.vb.read_only_list.negative_tests |
 | `dep.vb.idempotency` | да | create, read, negative_tests | VB.12.idempotency |
 
 ## Метрика 1 — обязательные режимы профиля `variables-material-minimal-v1`
@@ -417,10 +417,10 @@
 | режим/операция | семья | приоритет | очередь | уровень каталога | поиск | созд | чтен | правк | перестр | reopen | подавл | удал | отказ | геом | проверки |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---||---|
 | `VM-01.variables.read` | VM | practical_required | VM | mcp_implemented | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | VM-01.variables.read.discover, VM-01.variables.read.negative_tests |
-| `VM-02.variable.set_value` | VM | practical_required | VM | mcp_implemented | н/п | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | VM-02.variable.set_value.create, VM-02.variable.set_value.read, VM-02.variable.set_value.rebuild, VM-02.variable.set_value.negative_tests |
-| `VM-03.variable.set_expression` | VM | practical_required | VM | mcp_implemented | н/п | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | VM-03.variable.set_expression.create, VM-03.variable.set_expression.read, VM-03.variable.set_expression.rebuild, VM-03.variable.set_expression.negative_tests |
+| `VM-02.variable.set_value` | VM | practical_required | VM | mcp_implemented | н/п | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | VM-02.variable.set_value.create, VM-02.variable.set_value.read, VM-02.variable.set_value.rebuild, VM-02.variable.set_value.negative_tests, VM-02.variable.set_value.save_reopen |
+| `VM-03.variable.set_expression` | VM | practical_required | VM | mcp_implemented | н/п | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | VM-03.variable.set_expression.create, VM-03.variable.set_expression.read, VM-03.variable.set_expression.rebuild, VM-03.variable.set_expression.negative_tests, VM-03.variable.set_expression.geometry_validation, VM-03.variable.set_expression.save_reopen |
 | `VM-04.material.read` | VM | practical_required | VM | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | VM-04.material.read.discover, VM-04.material.read.negative_tests, dep.vm.units.read, VM-05.material.write.read |
-| `VM-05.material.write` | VM | practical_required | VM | mcp_verified | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | н/п | VM-05.material.write.create, VM-05.material.write.read, VM-05.material.write.negative_tests |
+| `VM-05.material.write` | VM | practical_required | VM | mcp_verified | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | н/п | VM-05.material.write.create, VM-05.material.write.read, VM-05.material.write.negative_tests, VM-05.material.write.save_reopen |
 
 ### Общие зависимости профиля `variables-material-minimal-v1`
 
@@ -690,13 +690,13 @@
 | `DRW-05.export` | DRW | practical_required | C3 | mcp_verified | н/п | OK | н/п | н/п | н/п | н/п | н/п | н/п | OK | OK | DRW-05.export.create, DRW-05.export.create.dwg, DRW-05.export.create.dxf, DRW-05.export.geometry_validation, DRW-05.export.geometry_validation.dwg, DRW-05.export.geometry_validation.dxf, DRW-05.export.negative_tests, dep.drawing.export_file.read |
 | `DRW-06.technical_demand` | DRW | practical_required | C3 | mcp_verified | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | н/п | DRW-06.technical_demand.create, DRW-06.technical_demand.negative_tests, DRW-06.technical_demand.save_reopen |
 | `VM-01.variables.read` | VM | practical_required | VM | mcp_implemented | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | VM-01.variables.read.discover, VM-01.variables.read.negative_tests |
-| `VM-02.variable.set_value` | VM | practical_required | VM | mcp_implemented | н/п | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | VM-02.variable.set_value.create, VM-02.variable.set_value.read, VM-02.variable.set_value.rebuild, VM-02.variable.set_value.negative_tests |
-| `VM-03.variable.set_expression` | VM | practical_required | VM | mcp_implemented | н/п | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | VM-03.variable.set_expression.create, VM-03.variable.set_expression.read, VM-03.variable.set_expression.rebuild, VM-03.variable.set_expression.negative_tests |
+| `VM-02.variable.set_value` | VM | practical_required | VM | mcp_implemented | н/п | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | VM-02.variable.set_value.create, VM-02.variable.set_value.read, VM-02.variable.set_value.rebuild, VM-02.variable.set_value.negative_tests, VM-02.variable.set_value.save_reopen |
+| `VM-03.variable.set_expression` | VM | practical_required | VM | mcp_implemented | н/п | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | VM-03.variable.set_expression.create, VM-03.variable.set_expression.read, VM-03.variable.set_expression.rebuild, VM-03.variable.set_expression.negative_tests, VM-03.variable.set_expression.geometry_validation, VM-03.variable.set_expression.save_reopen |
 | `VM-04.material.read` | VM | practical_required | VM | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | VM-04.material.read.discover, VM-04.material.read.negative_tests, dep.vm.units.read, VM-05.material.write.read |
-| `VM-05.material.write` | VM | practical_required | VM | mcp_verified | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | н/п | VM-05.material.write.create, VM-05.material.write.read, VM-05.material.write.negative_tests |
+| `VM-05.material.write` | VM | practical_required | VM | mcp_verified | н/п | OK | OK | OK | н/п | OK | н/п | н/п | OK | н/п | VM-05.material.write.create, VM-05.material.write.read, VM-05.material.write.negative_tests, VM-05.material.write.save_reopen |
 | `VM-06.mass.computed_via_measure` | VM | practical_required | VM | mcp_verified | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | н/п | OK | VM-06.mass.computed_via_measure.read, VM-06.mass.computed_via_measure.geometry_validation |
 | `INT-01.pairs.volumetric` | G1 | practical_required | G1 | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | INT.01.discover, INT.01.read, INT.05.read, INT.11.negative_tests, INT.11.negative_tests_nested, INT.12.read, INT.12.read2 |
-| `INT-02.pairs.tangent` | G1 | practical_required | G1 | mcp_verified | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | INT.02.read, INT.02.negative_tests, INT.06.read |
+| `INT-02.pairs.tangent` | G1 | practical_required | G1 | mcp_verified | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | INT.02.read, INT.02.negative_tests, INT.06.read, INT-02.pairs.tangent.negative_tests |
 | `INT-03.pairs.faces` | G1 | practical_required | G1 | mcp_verified | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | INT.03.read, INT.03.geometry_validation, INT.FACES, INT.11.negative_tests |
 | `INT-04.gap.min_distance` | G1 | practical_required | G1 | mcp_verified | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | INT.04.read, INT.04.read2, INT.04.geometry_validation, INT.04.geometry_validation2, INT.07.geometry_validation, INT.07.geometry_validation2, INT.08.geometry_validation, INT.11.negative_tests, INT.04.unit |
 | `SKB-01.limits` | G2 | practical_required | G2 | mcp_verified | OK | OK | OK | н/п | н/п | OK | н/п | н/п | OK | OK | SB-01.discover, SB-02.limits, SB-04.polyline_limit, SB-09.refusals, SB-10.reopen |
@@ -708,14 +708,14 @@
 | `VB-04.parameter.unbind` | G3 | practical_required | G3 | mcp_verified | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | VB.01.discover, VB.09.unbind, VB.10.save_reopen, VB.13.refusals |
 | `EI-01.stl.export` | G5 | practical_required | G5+G7 | mcp_verified | OK | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | EI.01.discover, EI.02.stl_binary, EI.03.stl_text, EI.11.idempotency, EI.04b.tessellation_independence |
 | `EI-02.stl.tessellation` | G5 | practical_required | G5+G7 | mcp_verified | OK | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | EI.04.tessellation, EI.04b.tessellation_independence, EI.05.box, EI.10.refusals |
-| `EI-03.inertia.central` | G7 | practical_required | G5+G7 | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | EI.06.inertia_central, EI.08.inertia_offdiag, EI.12.no_mutation, EI.13.applicability |
-| `EI-04.inertia.principal` | G7 | practical_required | G5+G7 | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | EI.07.inertia_principal |
-| `EI-05.inertia.units` | G7 | practical_required | G5+G7 | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | EI.09.inertia_units |
+| `EI-03.inertia.central` | G7 | practical_required | G5+G7 | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | EI.06.inertia_central, EI.08.inertia_offdiag, EI.12.no_mutation, EI.13.applicability, EI-03.inertia.central.negative_tests |
+| `EI-04.inertia.principal` | G7 | practical_required | G5+G7 | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | EI.07.inertia_principal, EI-04.inertia.principal.negative_tests |
+| `EI-05.inertia.units` | G7 | practical_required | G5+G7 | mcp_verified | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | EI.09.inertia_units, EI-05.inertia.units.negative_tests |
 | `SKC-01.geometric_types` | G6 | practical_required | G6 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | OK | OK | OK | SKC.01.discover, SKC.02.create, SKC.03.read, SKC.04.edit, SKC.05.rebuild, SKC.06.save_reopen, SKC.08.delete_dependencies, SKC.09.negative_tests, SKC.10.geometry_validation, SKC.13.type_vocabulary, SKC.14.object_address |
 | `SKC-02.dimension_types` | G6 | practical_required | G6 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | SKC.11.dimension_types, SKC.17.dimension_drives_length, SKC.18.dimension_survives_reopen, SKC.19.dimension_variable, SKC.23.diametral_dimension, SKC.24.radial_dimension, SKC.25.angular_dimension, SKC.26.dimension_value_control, SKC.27.dimension_kind_refusals, SKC.28.diametral_dimension_extruded_body |
 | `SKC-03.read` | G6 | practical_required | G6 | mcp_verified | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | OK | SKC.03.read, SKC.06.save_reopen, SKC.09.negative_tests, SKC.14.object_address, SKC.15.state_agreement, SKC.16.no_silent_rewrite |
-| `SKC-04.delete` | G6 | practical_required | G6 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | OK | OK | OK | SKC.08.delete_dependencies, SKC.04.edit, SKC.09.negative_tests |
-| `SKC-05.state_read` | G6 | practical_required | G6 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | SKC.12.state_read, SKC.15.state_agreement |
+| `SKC-04.delete` | G6 | practical_required | G6 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | OK | OK | OK | SKC.08.delete_dependencies, SKC.04.edit, SKC.09.negative_tests, SKC-04.delete.save_reopen, SKC-04.delete.geometry_validation |
+| `SKC-05.state_read` | G6 | practical_required | G6 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | SKC.12.state_read, SKC.15.state_agreement, SKC-05.state_read.negative_tests, SKC-05.state_read.geometry_validation |
 | `SKC-06.association_bisector` | G6 | next | G6 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `AUX-SKETCH.plane_and_profile_lifecycle` *(вне каталога)* | AUX-SKETCH | later | — | — | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | V03, V04, V05, G07_xy, G07_xz, G07_yz, V04r, V04d, V04e, V04f, G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, F08.28.discover, F08.28.create, F08.28.read, F08.28.edit, F08.28.rebuild, F08.28.save_reopen, F08.28.negative_tests, F08.28.geometry_validation, AUXS.01.edit, AUXS.02.negative_tests, AUXS.03.create, AUXS.04.edit, AUXS.05.save_reopen |
 | `SM-04.boss` *(вне каталога)* | SM-04 | later | B5 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
@@ -759,20 +759,20 @@
 | `dep.sketches.enumeration` *(вне каталога)* | AUX-SKETCH | dependency_of | — | — | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | DEP.DSK.01.discover, DEP.DSK.02.read, DEP.DSK.03.save_reopen, DEP.DSK.04.negative_tests |
 | `dep.interference.component_address` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | OK | INT.01.read, INT.11.negative_tests, INT.11.negative_tests_nested, INT.09.read |
 | `dep.interference.face_address` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | INT.03.geometry_validation, INT.FACES, INT.11.negative_tests |
-| `dep.interference.api7_measurer` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | INT.04.read, INT.04.read2, INT.04.geometry_validation, INT.13.twin_layout |
-| `dep.interference.distance_unit` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | INT.04.geometry_validation, INT.04.geometry_validation2, INT.07.geometry_validation, INT.06.read, INT.04.unit |
-| `dep.interference.read_only` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | INT.09.read, INT.09.negative_tests |
+| `dep.interference.api7_measurer` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | INT.04.read, INT.04.read2, INT.04.geometry_validation, INT.13.twin_layout, dep.interference.api7_measurer.negative_tests |
+| `dep.interference.distance_unit` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | INT.04.geometry_validation, INT.04.geometry_validation2, INT.07.geometry_validation, INT.06.read, INT.04.unit, dep.interference.distance_unit.negative_tests |
+| `dep.interference.read_only` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | INT.09.read, INT.09.negative_tests, dep.interference.read_only.negative_tests |
 | `dep.sketch_bulk.limits_source` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | SB-01.discover, SB-02.limits |
-| `dep.sketch_bulk.entity_read_back` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | SB-03.polyline_native, SB-06.polyline_open, SB-07.spline, SB-08.spline_open, SB-10.reopen |
-| `dep.sketch_bulk.profile_area_rule` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | SB-03.polyline_native, SB-04.polyline_limit, SB-05.client_contour, SB-07.spline |
+| `dep.sketch_bulk.entity_read_back` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | OK | н/п | н/п | OK | н/п | SB-03.polyline_native, SB-06.polyline_open, SB-07.spline, SB-08.spline_open, SB-10.reopen, dep.sketch_bulk.entity_read_back.negative_tests |
+| `dep.sketch_bulk.profile_area_rule` *(вне каталога)* | — | dependency_of | — | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | OK | SB-03.polyline_native, SB-04.polyline_limit, SB-05.client_contour, SB-07.spline, dep.sketch_bulk.profile_area_rule.negative_tests |
 | `dep.vb.parameter_address` *(вне каталога)* | — | dependency_of | G3 | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | VB.01.discover, VB.04.read, VB.11.address_by_name, VB.13.refusals |
 | `dep.vb.units` *(вне каталога)* | — | dependency_of | G3 | — | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | VB.05.bind, VB.09.unbind, VB.13.refusals |
 | `dep.vb.rebuild_document` *(вне каталога)* | — | dependency_of | G3 | — | н/п | н/п | OK | н/п | OK | н/п | н/п | н/п | н/п | OK | VB.05.bind, VB.06.bind, VB.07.rebuild, VB.09.unbind |
-| `dep.vb.read_only_list` *(вне каталога)* | — | dependency_of | G3 | — | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | VB.04.read, VB.14.no_mutation |
+| `dep.vb.read_only_list` *(вне каталога)* | — | dependency_of | G3 | — | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | VB.04.read, VB.14.no_mutation, dep.vb.read_only_list.negative_tests |
 | `dep.vb.idempotency` *(вне каталога)* | — | dependency_of | G3 | — | н/п | OK | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | VB.12.idempotency |
 | `dep.ei.path_policy` *(вне каталога)* | — | dependency_of | G5+G7 | — | OK | н/п | н/п | н/п | н/п | н/п | н/п | н/п | OK | н/п | EI.01.discover, EI.10.refusals |
-| `dep.ei.triangle_count_from_file` *(вне каталога)* | — | dependency_of | G5+G7 | — | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | EI.02.stl_binary, EI.03.stl_text |
-| `dep.ei.units_system` *(вне каталога)* | — | dependency_of | G5+G7 | — | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | EI.06.inertia_central, EI.09.inertia_units |
+| `dep.ei.triangle_count_from_file` *(вне каталога)* | — | dependency_of | G5+G7 | — | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | EI.02.stl_binary, EI.03.stl_text, dep.ei.triangle_count_from_file.negative_tests |
+| `dep.ei.units_system` *(вне каталога)* | — | dependency_of | G5+G7 | — | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | EI.06.inertia_central, EI.09.inertia_units, dep.ei.units_system.negative_tests |
 | `dep.ei.read_only_measure` *(вне каталога)* | — | dependency_of | G5+G7 | — | н/п | н/п | OK | н/п | н/п | н/п | н/п | н/п | OK | н/п | EI.12.no_mutation, EI.10.refusals |
 | `dep.ei.idempotency` *(вне каталога)* | — | dependency_of | G5+G7 | — | н/п | OK | н/п | н/п | н/п | н/п | н/п | н/п | OK | н/п | EI.11.idempotency |
 | `dep.sketch_constraints.object_address` *(вне каталога)* | G6 | dependency_of | G6 | — | OK | н/п | OK | н/п | н/п | н/п | н/п | н/п | н/п | н/п | SKC.14.object_address, SKC.01.discover |

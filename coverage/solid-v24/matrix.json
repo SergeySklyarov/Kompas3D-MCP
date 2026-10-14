@@ -7462,6 +7462,18 @@
      }
     ],
     "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
+   },
+   "save_reopen_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_save_document"
+     },
+     {
+      "tool": "kompas_open_document"
+     }
+    ],
+    "note": "объявленный маршрут строки: сохранность подтверждается ВЫЗОВАМИ save → open в окне самой строки, а не общим циклом соседних строк (наряд ACCEPTANCE_GAPS_B §2)"
    }
   },
   {
@@ -7663,7 +7675,29 @@
    ],
    "required_of": [
     "DRW-01.views.create_standard"
-   ]
+   ],
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_drawing_views"
+     }
+    ],
+    "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд ACCEPTANCE_GAPS_B §2)"
+   },
+   "create_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_create_drawing_views",
+      "require_args": [
+       "document_id",
+       "source_path"
+      ]
+     }
+    ],
+    "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд ACCEPTANCE_GAPS_B §2)"
+   }
   },
   {
    "operation_id": "dep.drawing.view_address",
@@ -7723,7 +7757,16 @@
     "DRW-01.views.create_standard",
     "DRW-02.views.list",
     "DRW-03.dimension.add"
-   ]
+   ],
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_drawing_views"
+     }
+    ],
+    "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд ACCEPTANCE_GAPS_B §2)"
+   }
   },
   {
    "operation_id": "dep.drawing.revisions",
@@ -7785,7 +7828,16 @@
     "DRW-03.dimension.add",
     "DRW-04.title_block.set",
     "DRW-06.technical_demand"
-   ]
+   ],
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_get_context"
+     }
+    ],
+    "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд ACCEPTANCE_GAPS_B §2)"
+   }
   },
   {
    "operation_id": "dep.drawing.idempotency",
@@ -7928,6 +7980,18 @@
      }
     ],
     "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_export_drawing",
+      "require_args": [
+       "document_id"
+      ]
+     }
+    ],
+    "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд ACCEPTANCE_GAPS_B §2)"
    }
   },
   {
@@ -8003,6 +8067,18 @@
       "tool": "kompas_set_technical_demand"
      }
     ]
+   },
+   "save_reopen_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_save_document"
+     },
+     {
+      "tool": "kompas_open_document"
+     }
+    ],
+    "note": "объявленный маршрут строки: сохранность подтверждается ВЫЗОВАМИ save → open в окне самой строки, а не общим циклом соседних строк (наряд ACCEPTANCE_GAPS_B §2)"
    }
   },
   {
@@ -8340,7 +8416,8 @@
     "VM-02.variable.set_value.create",
     "VM-02.variable.set_value.read",
     "VM-02.variable.set_value.rebuild",
-    "VM-02.variable.set_value.negative_tests"
+    "VM-02.variable.set_value.negative_tests",
+    "VM-02.variable.set_value.save_reopen"
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
@@ -8409,6 +8486,18 @@
      }
     ],
     "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
+   },
+   "save_reopen_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_save_document"
+     },
+     {
+      "tool": "kompas_open_document"
+     }
+    ],
+    "note": "объявленный маршрут строки: сохранность подтверждается ВЫЗОВАМИ save → open в окне самой строки, а не общим циклом соседних строк (наряд ACCEPTANCE_GAPS_B §2)"
    }
   },
   {
@@ -8438,7 +8527,9 @@
     "VM-03.variable.set_expression.create",
     "VM-03.variable.set_expression.read",
     "VM-03.variable.set_expression.rebuild",
-    "VM-03.variable.set_expression.negative_tests"
+    "VM-03.variable.set_expression.negative_tests",
+    "VM-03.variable.set_expression.geometry_validation",
+    "VM-03.variable.set_expression.save_reopen"
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
@@ -8506,6 +8597,18 @@
      }
     ],
     "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
+   },
+   "save_reopen_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_save_document"
+     },
+     {
+      "tool": "kompas_open_document"
+     }
+    ],
+    "note": "объявленный маршрут строки: сохранность подтверждается ВЫЗОВАМИ save → open в окне самой строки, а не общим циклом соседних строк (наряд ACCEPTANCE_GAPS_B §2)"
    }
   },
   {
@@ -8610,7 +8713,8 @@
    "tests": [
     "VM-05.material.write.create",
     "VM-05.material.write.read",
-    "VM-05.material.write.negative_tests"
+    "VM-05.material.write.negative_tests",
+    "VM-05.material.write.save_reopen"
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
@@ -8669,6 +8773,18 @@
      }
     ],
     "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
+   },
+   "save_reopen_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_save_document"
+     },
+     {
+      "tool": "kompas_open_document"
+     }
+    ],
+    "note": "объявленный маршрут строки: сохранность подтверждается ВЫЗОВАМИ save → open в окне самой строки, а не общим циклом соседних строк (наряд ACCEPTANCE_GAPS_B §2)"
    }
   },
   {
@@ -8945,7 +9061,16 @@
     "VM-03.variable.set_expression",
     "VM-04.material.read",
     "VM-05.material.write"
-   ]
+   ],
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_get_material"
+     }
+    ],
+    "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд ACCEPTANCE_GAPS_B §2)"
+   }
   },
   {
    "operation_id": "dep.vm.save_reopen",
@@ -9242,7 +9367,8 @@
    "tests": [
     "INT.02.read",
     "INT.02.negative_tests",
-    "INT.06.read"
+    "INT.06.read",
+    "INT-02.pairs.tangent.negative_tests"
    ],
    "evidence": [
     "docs/acceptance/interference/interference-acceptance.json",
@@ -9578,7 +9704,8 @@
     "INT.04.read",
     "INT.04.read2",
     "INT.04.geometry_validation",
-    "INT.13.twin_layout"
+    "INT.13.twin_layout",
+    "dep.interference.api7_measurer.negative_tests"
    ],
    "evidence": [
     "docs/acceptance/interference/interference-acceptance.json",
@@ -9641,7 +9768,8 @@
     "INT.04.geometry_validation2",
     "INT.07.geometry_validation",
     "INT.06.read",
-    "INT.04.unit"
+    "INT.04.unit",
+    "dep.interference.distance_unit.negative_tests"
    ],
    "evidence": [
     "docs/acceptance/interference/interference-acceptance.json",
@@ -9713,7 +9841,8 @@
    ],
    "tests": [
     "INT.09.read",
-    "INT.09.negative_tests"
+    "INT.09.negative_tests",
+    "dep.interference.read_only.negative_tests"
    ],
    "evidence": [
     "docs/acceptance/interference/interference-acceptance.json",
@@ -10014,7 +10143,8 @@
     "SB-06.polyline_open",
     "SB-07.spline",
     "SB-08.spline_open",
-    "SB-10.reopen"
+    "SB-10.reopen",
+    "dep.sketch_bulk.entity_read_back.negative_tests"
    ],
    "evidence": [
     "docs/acceptance/sketch-bulk/sketch-bulk-acceptance.json",
@@ -10077,7 +10207,8 @@
     "SB-03.polyline_native",
     "SB-04.polyline_limit",
     "SB-05.client_contour",
-    "SB-07.spline"
+    "SB-07.spline",
+    "dep.sketch_bulk.profile_area_rule.negative_tests"
    ],
    "evidence": [
     "docs/acceptance/sketch-bulk/sketch-bulk-acceptance.json",
@@ -10682,7 +10813,8 @@
    },
    "tests": [
     "VB.04.read",
-    "VB.14.no_mutation"
+    "VB.14.no_mutation",
+    "dep.vb.read_only_list.negative_tests"
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
@@ -10992,7 +11124,8 @@
     "EI.06.inertia_central",
     "EI.08.inertia_offdiag",
     "EI.12.no_mutation",
-    "EI.13.applicability"
+    "EI.13.applicability",
+    "EI-03.inertia.central.negative_tests"
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
@@ -11065,7 +11198,8 @@
     "delete_dependencies": "удаление признаков к чтению МЦХ не относится"
    },
    "tests": [
-    "EI.07.inertia_principal"
+    "EI.07.inertia_principal",
+    "EI-04.inertia.principal.negative_tests"
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
@@ -11137,7 +11271,8 @@
     "geometry_validation": "смена единицы — свойство аргумента, геометрию она не двигает"
    },
    "tests": [
-    "EI.09.inertia_units"
+    "EI.09.inertia_units",
+    "EI-05.inertia.units.negative_tests"
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
@@ -11278,7 +11413,8 @@
    },
    "tests": [
     "EI.02.stl_binary",
-    "EI.03.stl_text"
+    "EI.03.stl_text",
+    "dep.ei.triangle_count_from_file.negative_tests"
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
@@ -11342,7 +11478,8 @@
    },
    "tests": [
     "EI.06.inertia_central",
-    "EI.09.inertia_units"
+    "EI.09.inertia_units",
+    "dep.ei.units_system.negative_tests"
    ],
    "evidence": [
     "scripts/mcp-smoke.py",
@@ -11732,7 +11869,9 @@
    "tests": [
     "SKC.08.delete_dependencies",
     "SKC.04.edit",
-    "SKC.09.negative_tests"
+    "SKC.09.negative_tests",
+    "SKC-04.delete.save_reopen",
+    "SKC-04.delete.geometry_validation"
    ],
    "evidence": [
     "docs/acceptance/sketch-constraints/sketch-constraints-acceptance.json",
@@ -11758,6 +11897,27 @@
      }
     ],
     "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
+   },
+   "save_reopen_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_save_document"
+     },
+     {
+      "tool": "kompas_open_document"
+     }
+    ],
+    "note": "объявленный маршрут строки: сохранность подтверждается ВЫЗОВАМИ save → open в окне самой строки, а не общим циклом соседних строк (наряд ACCEPTANCE_GAPS_B §2)"
+   },
+   "geometry_validation_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_measure"
+     }
+    ],
+    "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд ACCEPTANCE_GAPS_B §2)"
    }
   },
   {
@@ -11791,7 +11951,9 @@
    },
    "tests": [
     "SKC.12.state_read",
-    "SKC.15.state_agreement"
+    "SKC.15.state_agreement",
+    "SKC-05.state_read.negative_tests",
+    "SKC-05.state_read.geometry_validation"
    ],
    "evidence": [
     "docs/acceptance/sketch-constraints/sketch-constraints-acceptance.json",
@@ -11808,7 +11970,16 @@
     "параметрический режим документа включается документированным членом и перечитывается",
     "эскиз доходит до состояния 1 при включённом режиме",
     "состояние 1 прочитано ПОСЛЕ save → close → reopen"
-   ]
+   ],
+   "geometry_validation_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_sketch_entities"
+     }
+    ],
+    "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд ACCEPTANCE_GAPS_B §2)"
+   }
   },
   {
    "operation_id": "SKC-06.association_bisector",

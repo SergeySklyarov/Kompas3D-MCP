@@ -3223,6 +3223,38 @@ def sketch_bulk_checks(client, rep, app_id, workdir):
              "addressed_edits": named_refusals, "polyline_error": code_p, "spline_error": code_s,
              "set_layer_control": control_code,
              "set_layer_applied": result(control_env).get("applied")})
+
+    # ── negative controls of the SB dependencies: a REFUSED call of the SAME tool ─────────────
+    # INVARIANT: `negative_tests` is proven by a call that CARRIES AN ERROR CODE inside the row's
+    # window, not by a semantic negative answer. Every row makes a deliberately invalid call of its
+    # own tool; a refusal must leave the model untouched and its code comes from the tool description.
+    entities_before_neg = len(rows_summary(listing(sk)[0]))
+    neg_env, code_unknown_sketch = call("kompas_list_sketch_entities", {
+        "sketch_ref": "sketch:00000000000000000000000000000000"})
+    entities_after_neg = len(rows_summary(listing(sk)[0]))
+    rep.add("dep.sketch_bulk.entity_read_back.negative_tests",
+            "несуществующая ссылка эскиза отвергается НАЗВАННО (STALE_REFERENCE), а не отдаёт "
+            "пустое перечисление: «объектов нет» и «эскиза нет» — два разных состояния",
+            "PASS" if (code_unknown_sketch == "STALE_REFERENCE"
+                       and entities_before_neg == entities_after_neg) else "FAIL",
+            f"error={code_unknown_sketch} msg={emsg(neg_env)} сущностей "
+            f"{entities_before_neg} → {entities_after_neg}")
+    # The profile area is defined for a CLOSED contour; an open one must be refused by a NAMED code
+    # while no body appears. The expected refusal is read from the tool description, not invented.
+    neg_doc, neg_rev, _nc = new_part("SB_PROFILE_AREA_NEG")
+    neg_sk, neg_rev, _nc = new_sketch(neg_doc, neg_rev, "profile-area-neg")
+    _ne, _neg_edit_code, neg_rev = edit(neg_sk, neg_rev, [
+        {"kind": "polyline", "points_mm": [[0, 0], [20, 0], [20, 10]], "closed": False}])
+    body_before_neg = body_measure(neg_doc) is not None
+    neg_env, neg_extrude_code, _nr = extrude(neg_sk, neg_rev, 5.0)
+    body_after_neg = body_measure(neg_doc) is not None
+    rep.add("dep.sketch_bulk.profile_area_rule.negative_tests",
+            "незамкнутый контур отвергается НАЗВАННЫМ кодом, и тело не появляется: площадь профиля "
+            "не выдумывается для негодного контура",
+            "PASS" if (neg_extrude_code is not None
+                       and body_before_neg == body_after_neg) else "FAIL",
+            f"error={neg_extrude_code} msg={emsg(neg_env)} тело {body_before_neg} → {body_after_neg}")
+    close(neg_doc)
     close(doc)
 
     # ── SB-10: сохранение → закрытие → переоткрытие ───────────────────────────────────────
@@ -3712,6 +3744,71 @@ def sketch_constraints_checks(client, rep, app_id, workdir):
                 "шесть отказов ПО ИСХОДУ, каждый назван своим кодом; принятое не выдано за отказ",
                 "NAMED", json.dumps(neg, ensure_ascii=False), {"codes": neg})
 
+    # ── SKC-04.delete: the deletion is confirmed by its OWN cycle and by a MEASUREMENT ──────────
+    # INVARIANT: `save_reopen` is proven by save -> close -> open calls inside the row's window, and
+    # `geometry_validation` by a measurement of the outcome. The setup and the document are the row's
+    # OWN, so the neighbouring rows' document is not touched. The expectation is written BEFORE the
+    # call: two records on the object, one after deleting one of them, and the same one after reopen.
+    doc_c04, _c04 = new_part("skc-04-delete")
+    sk_c04, rev_c04 = fresh(doc_c04)
+    call("kompas_create_sketch", {"document_id": doc_c04, "expected_revision": rev_c04,
+                                  "plane": {"base": "xy", "offset_mm": 0}, "name": "skc04-profile"})
+    sk_c04, rev_c04 = fresh(doc_c04)
+    call("kompas_edit_sketch", {"sketch_ref": sk_c04, "expected_revision": rev_c04,
+                                "mode": "replace", "entities": rectangle()})
+    sk_c04, rev_c04 = fresh(doc_c04)
+    call("kompas_extrude", {"sketch_ref": sk_c04, "expected_revision": rev_c04, "operation": "base",
+                            "depth_mm": 10.0, "direction": "positive", "end_condition": "blind"})
+    sk_c04, rev_c04 = fresh(doc_c04)
+    addr_c04, _ac04 = addresses(sk_c04)
+    obj_c04 = addr_c04[0] if addr_c04 else None
+    create_constraint(sk_c04, rev_c04, obj_c04, "ksCFixedLenght")
+    sk_c04, rev_c04 = fresh(doc_c04)
+    partner_c04 = addr_c04[1] if len(addr_c04) > 1 else None
+    create_constraint(sk_c04, rev_c04, obj_c04, "ksCFixedAngle", partner_ref=partner_c04)
+    sk_c04, rev_c04 = fresh(doc_c04)
+    env_c04_before, _cb04 = constraints_of(sk_c04, obj_c04)
+    skc04_before = len(rows_for(result(env_c04_before), obj_c04))
+    call("kompas_delete_sketch_constraint", {
+        "sketch_ref": sk_c04, "expected_revision": rev_c04, "object_ref": obj_c04,
+        "constraint_index": 0})
+    sk_c04, rev_c04 = fresh(doc_c04)
+    env_c04_mid, _cm04 = constraints_of(sk_c04, obj_c04)
+    skc04_mid = len(rows_for(result(env_c04_mid), obj_c04))
+    skc04_vol_before = (body_measure(doc_c04) or {}).get("volume_mm3")
+    skc04_path = _os.path.join(workdir, "skc-04-delete-reopen.m3d")
+    clear_path(skc04_path)
+    env_sv04, code_sv04 = call("kompas_save_document", {
+        "document_id": doc_c04, "target_path": skc04_path, "expected_revision": rev_c04})
+    call("kompas_close_document", {"document_id": doc_c04, "dirty_policy": "discard"})
+    env_op04, code_op04 = call("kompas_open_document", {
+        "application_id": app_id, "path": skc04_path, "access": "edit"})
+    doc_c04r = doc_of(env_op04)
+    sk_c04r, _rc04 = fresh(doc_c04r) if doc_c04r else (None, None)
+    addr_c04r, _ar04 = addresses(sk_c04r) if sk_c04r else ([], "нет эскиза")
+    obj_c04r = addr_c04r[0] if addr_c04r else None
+    env_c04_re, code_re04 = (constraints_of(sk_c04r, obj_c04r) if obj_c04r else ({}, "нет адреса"))
+    skc04_reopen = len(rows_for(result(env_c04_re), obj_c04r)) if obj_c04r else None
+    skc04_vol_reopen = (body_measure(doc_c04r) or {}).get("volume_mm3") if doc_c04r else None
+    rep.add("SKC-04.delete.save_reopen",
+            "удалённое ограничение остаётся удалённым после СОБСТВЕННОГО для строки "
+            "save → close → reopen: до удаления две записи, после удаления одна, после переоткрытия "
+            "одна — и это не «два пустых чтения» (адрес объекта переиздан из переоткрытого документа)",
+            "PASS" if (skc04_before == 2 and skc04_mid == 1 and skc04_reopen == 1
+                       and code_sv04 is None and code_op04 is None and code_re04 is None) else "FAIL",
+            f"до={skc04_before} после_удаления={skc04_mid} после_переоткрытия={skc04_reopen}; "
+            f"save={code_sv04} open={code_op04} read={code_re04}")
+    rep.add("SKC-04.delete.geometry_validation",
+            "геометрия после удаления ограничения ИЗМЕРЕНА и совпала с эталоном объёма: удаление "
+            "записи параметрической системы не разрушает построенное тело",
+            "PASS" if (skc04_vol_before is not None and skc04_vol_reopen is not None
+                       and near(skc04_vol_before, expected_volume, volume_tolerance(expected_volume))
+                       and near(skc04_vol_reopen, expected_volume,
+                                volume_tolerance(expected_volume))) else "FAIL",
+            f"объём до={skc04_vol_before} после_переоткрытия={skc04_vol_reopen} "
+            f"эталон={expected_volume} допуск={volume_tolerance(expected_volume)}")
+    close(doc_c04r)
+
     # ── SKC.10.geometry_validation ──────────────────────────────────────────────────────────────
     # РАЗЛИЧАЮЩИЙ КОНТРОЛЬ наряда §11.2, с ожиданием, зафиксированным ДО прогона. Ожидание наряда
     # («конец уходит в (25,0), Y-габарит 12.5 → 0») измерением ОПРОВЕРГНУТО: ядро доворачивает отрезок
@@ -4047,6 +4144,43 @@ def sketch_constraints_checks(client, rep, app_id, workdir):
                 "FAIL",
                 f"до {st_state_before}, после {st_state_after}, после переоткрытия {st_state_reopen}; "
                 f"коды {st_codes}")
+
+    # ── SKC-05.state_read: a refusal control and a MEASUREMENT of the geometry ───────────────────
+    # INVARIANT: `negative_tests` is proven by a call that CARRIES AN ERROR CODE inside the row's
+    # window, and `geometry_validation` by READING THE SKETCH GEOMETRY (work order §2: "kompas_measure
+    # or a read of the sketch geometry"). "Fully defined" is confirmed by the contour coordinates,
+    # not by the flag alone; the measuring route is `kompas_list_sketch_entities`.
+    st_neg_env, st_neg_code = call("kompas_get_sketch_status", {
+        "sketch_ref": "sketch:00000000000000000000000000000000"})
+    rep.add("SKC-05.state_read.negative_tests",
+            "несуществующая ссылка эскиза отвергается НАЗВАННО, а не отдаёт «состояние 0»: "
+            "«эскиза нет» и «эскиз не определён» — два разных состояния",
+            "PASS" if st_neg_code == "STALE_REFERENCE" else "FAIL",
+            f"error={st_neg_code} msg={emsg(st_neg_env)}")
+
+    def _segment_key(row):
+        # MEASURED: the sketch listing publishes `x1_mm`/`y1_mm`/`x2_mm`/`y2_mm` and `kind` carrying
+        # `ksDrLineSeg`; this is read from the neighbouring SKC.29-SKC.46 rows, not assumed.
+        a = (round(row.get("x1_mm"), 6), round(row.get("y1_mm"), 6))
+        b = (round(row.get("x2_mm"), 6), round(row.get("y2_mm"), 6))
+        return tuple(sorted([a, b]))
+
+    st_geo_env, st_geo_code = call("kompas_list_sketch_entities",
+                                   {"sketch_ref": sk_st2, "limit": 500})
+    st_geo_rows = (result(st_geo_env) or {}).get("rows") or []
+    st_lines = [r for r in st_geo_rows if r.get("kind") == "ksDrLineSeg"]
+    st_segments = {_segment_key(r) for r in st_lines}
+    st_expected = {_segment_key({"x1_mm": e["start_mm"][0], "y1_mm": e["start_mm"][1],
+                                 "x2_mm": e["end_mm"][0], "y2_mm": e["end_mm"][1]})
+                   for e in rectangle()}
+    st_geometry_ok = (not st_geo_code and len(st_lines) == 4 and st_segments == st_expected)
+    rep.add("SKC-05.state_read.geometry_validation",
+            "геометрия эскиза ПРОЧИТАНА и совпала с эталоном контура (четыре отрезка 40×30 мм): "
+            "состояние «полностью определён» подтверждено координатами, а не только флагом",
+            "PASS" if (st_state_reopen == 1 and st_geometry_ok) else "FAIL",
+            f"отрезков={len(st_segments)} из {len(st_lines)} ожидание={len(st_expected)} "
+            f"координаты_совпали={st_segments == st_expected} состояние_после_переоткрытия="
+            f"{st_state_reopen} error={st_geo_code}")
 
     # ── SKC.21.session_before_save (ГРАНИЦА, ИЗМЕРЕННАЯ 11.10.2026) ──────────────────────────────
     # ЧТО ЗДЕСЬ ИЗМЕРЯЕТСЯ И ПОЧЕМУ ЭТО НАЗВАННАЯ СТРОКА, А НЕ ПРОВАЛ. Открыть и закрыть сеанс на
@@ -6079,6 +6213,45 @@ def interference_checks(client, rep, app_id, workdir):
             "PASS" if nested_code in ("CAPABILITY_UNAVAILABLE", "STALE_REFERENCE") else "FAIL",
             f"error={nested_code} вложенных строк найдено={1 if nested_ref else 0}")
 
+    # ── negative controls of the dependencies: a REFUSED call of the SAME tool ────────────────
+    # INVARIANT: `negative_tests` is proven by a call that CARRIES AN ERROR CODE inside the row's
+    # window, not by a semantic negative answer ("no intersections" is not a refusal).
+    # MEASURED: every row makes a deliberately invalid call of its OWN tool and compares the context
+    # before and after - a refusal must leave the model untouched; the expected code is read from the
+    # tool description, never invented.
+    neg_ctx_before = context(asm2)
+    neg_anchor = fresh_refs[0] if fresh_refs else ref_a
+    neg_other = fresh_refs[1] if len(fresh_refs) > 1 else ref_b
+    neg_env, code_stale_pair = check(asm2, [neg_anchor,
+                                            "component:00000000000000000000000000000000"])
+    rep.add("INT-02.pairs.tangent.negative_tests",
+            "несуществующая ссылка компонента отвергается НАЗВАННО (STALE_REFERENCE), а не "
+            "разрешается вслепую: касание проверяется только по адресуемым компонентам",
+            "PASS" if code_stale_pair == "STALE_REFERENCE" else "FAIL",
+            f"error={code_stale_pair} msg={emsg(neg_env)}")
+    neg_env, code_bad_face = gap(asm2, {"component_ref": neg_anchor, "face_index": 9999},
+                                 {"component_ref": neg_other})
+    rep.add("dep.interference.api7_measurer.negative_tests",
+            "грань вне диапазона отвергается ИМЕНОВАННЫМ кодом до обращения к измерителю API7, а "
+            "не отдаёт выдуманное расстояние",
+            "PASS" if code_bad_face == "INVALID_ARGUMENT" else "FAIL",
+            f"error={code_bad_face} msg={emsg(neg_env)}")
+    neg_env, code_stale_gap = gap(asm2,
+                                  {"component_ref": "component:00000000000000000000000000000000"},
+                                  {"component_ref": neg_anchor})
+    rep.add("dep.interference.distance_unit.negative_tests",
+            "несуществующая ссылка при измерении зазора отвергается НАЗВАННО: единица не выдаётся "
+            "за измеренную на несостоявшемся вызове",
+            "PASS" if code_stale_gap == "STALE_REFERENCE" else "FAIL",
+            f"error={code_stale_gap} msg={emsg(neg_env)}")
+    neg_env, code_single = check(asm2, [neg_anchor])
+    neg_ctx_after = context(asm2)
+    rep.add("dep.interference.read_only.negative_tests",
+            "вырожденный запрос (один компонент) отвергается НАЗВАННО, а ревизия и признак изменения "
+            "после отказных чтений те же: чтение не мутирует документ",
+            "PASS" if (code_single == "INVALID_ARGUMENT" and neg_ctx_before == neg_ctx_after) else "FAIL",
+            f"error={code_single} context {neg_ctx_before} → {neg_ctx_after}")
+
     call("kompas_close_document", {"document_id": asm2, "dirty_policy": "discard"})
 
     # ========= INT.12: нагрузка =========
@@ -7339,10 +7512,23 @@ def drawing_checks(client, rep, app_id, workdir):
             f"level={level(env)} error={code}")
     env, code = call("kompas_set_technical_demand", {
         "document_id": drw, "expected_revision": current_rev(drw), "text": ""})
+    empty_demand_ok = (not code and result(env).get("read_back") == "")
+    # A REFUSED call of the SAME tool: a nonexistent document must answer with a NAMED code instead
+    # of "an empty text". The refusal leaves the document untouched - the demand text stays as it was,
+    # and that is compared by a read.
+    env_refuse, code_refuse = call("kompas_set_technical_demand", {
+        "document_id": "00000000000000000000000000000000",
+        "expected_revision": 1, "text": "текст-в-несуществующий-документ"})
+    env_re, _code_re = call("kompas_get_technical_demand", {"document_id": drw})
+    demand_after_refusal = result(env_re).get("text")
     rep.add("DRW-06.technical_demand.negative_tests",
-            "пустой текст принимается как состояние «не задано», а не выдаётся за ошибку COM",
-            "PASS" if (not code and result(env).get("read_back") == "") else "FAIL",
-            f"read_back={result(env).get('read_back')!r} error={code}")
+            "пустой текст принимается как состояние «не задано», а не выдаётся за ошибку COM; "
+            "несуществующий документ отвергается НАЗВАННЫМ кодом, и текст документа не меняется",
+            "PASS" if (empty_demand_ok
+                       and code_refuse in ("DOCUMENT_NOT_FOUND", "INVALID_ARGUMENT")
+                       and (demand_after_refusal or "") == "") else "FAIL",
+            f"read_back={result(env).get('read_back')!r} error={code} "
+            f"refusal_error={code_refuse} demand_after_refusal={demand_after_refusal!r}")
     # Возвращаем рабочий текст: пустой блок и дальше переживает save/reopen.
     call("kompas_set_technical_demand", {
         "document_id": drw, "expected_revision": current_rev(drw), "text": DEMAND_TEXT})
@@ -7628,28 +7814,21 @@ def drawing_checks(client, rep, app_id, workdir):
     cells_re = result(env).get("cells") or []
     _rcell = STAMP_LAYOUT_CELL or STAMP_CELL
     cell_re = next((c for c in cells_re if c.get("cell_id") == _rcell), {})
-
-    rep.add("DRW-04.title_block.set.save_reopen",
-            "ячейка штампа СОХРАНЯЕТ прочитанное до закрытия значение при переоткрытии (сравнение "
-            "МАРШРУТОМ ТОЛЬКО ДЛЯ ЧТЕНИЯ против ПРЕДЫДУЩЕГО ЧТЕНИЯ, а не против задуманного текста; "
-            "потеря/порча содержимого обнаруживается без дозаписи)",
-            "PASS" if (isinstance(pre_state.get("stamp_read_back"), str)
+    stamp_reopen_ok = (isinstance(pre_state.get("stamp_read_back"), str)
                        and pre_state.get("stamp_read_back") != ""
                        and cell_re.get("read_back") == pre_state.get("stamp_read_back")
-                       and code is None) else "FAIL",
-            f"cell={_rcell} read_back_переоткрыт={cell_re.get('read_back')!r} "
-            f"до_закрытия_прочитано={pre_state.get('stamp_read_back')!r} error={code}")
-
+                       and code is None)
     env, code = call("kompas_get_technical_demand", {"document_id": drw2})
     demand_re = result(env).get("text")
     demand_created_re = result(env).get("is_created")
-    rep.add("DRW-06.technical_demand.save_reopen",
-            "текст техтребований ПЕРЕЖИЛ save → close → reopen: перечитанное МАРШРУТОМ ТОЛЬКО ДЛЯ "
-            "ЧТЕНИЯ совпадает с записанным до закрытия (потеря обнаруживается)",
-            "PASS" if (code is None and norm_demand(demand_re) == norm_demand(pre_state["demand_text"])
-                       and demand_created_re is True) else "FAIL",
-            f"read_back={(demand_re or '')[:70]!r} до_закрытия={(pre_state['demand_text'])[:70]!r} "
-            f"is_created={demand_created_re} error={code}")
+    demand_reopen_ok = (code is None
+                        and norm_demand(demand_re) == norm_demand(pre_state["demand_text"])
+                        and demand_created_re is True)
+    # ROWS DRW-04.save_reopen AND DRW-06.save_reopen ARE ADDED BELOW, AT THEIR OWN SAVE CYCLE.
+    # INVARIANT: a row's window is the calls between two neighbouring `rep.add`, so the shared
+    # save->close->reopen cycle already attributed to DRW-01/02/03 cannot confirm another row: its
+    # window holds neither `kompas_save_document` nor `kompas_open_document`. The reads stay here as
+    # intermediate diagnostics, and the row is attributed to its own cycle (see below).
 
     # ========= DRW-05: экспорт в DXF и DWG =========
     # ЭКСПОРТ ИДЁТ ПОСЛЕ СОХРАНЕНИЯ: конвертер берёт входной файл ПО ПУТИ, и чертёж без файла на
@@ -7700,6 +7879,21 @@ def drawing_checks(client, rep, app_id, workdir):
                           and os.path.getsize(os.path.join(work, f"drw-01.{f}")) > 0
                           for f in ("dxf", "dwg")) else "FAIL",
             f"sizes={export_sizes}")
+    # THE EXPORTED FILE IS READ INSIDE THE EXPORT'S OWN WINDOW: the file is re-read from disk, and the
+    # server reads it back as well, answering with `signature` and `byte_length` (the reading route is
+    # the same `kompas_export_drawing`). The previous edition attributed this row to a window whose
+    # only call was the PDF REFUSAL, so "reading" was confirmed by a refusal instead of by a read.
+    reread = {}
+    for fmt in ("dxf", "dwg"):
+        path = os.path.join(work, f"drw-01.{fmt}")
+        if os.path.isfile(path):
+            reread[fmt] = os.path.getsize(path)
+    rep.add("dep.drawing.export_file.read",
+            "выгруженные файлы перечитываются С ДИСКА (непустой размер), и выгрузка того же окна "
+            "отдаёт сигнатуру и размер, прочитанные из записанного файла",
+            "PASS" if (reread.get("dxf", 0) > 0 and reread.get("dwg", 0) > 0
+                       and export_ok_all) else "FAIL",
+            f"sizes={reread} export_ok_all={export_ok_all}")
 
     # ========= отрицательные контроли =========
     # ВНИМАНИЕ: `x`/`y` ОБЯЗАТЕЛЬНЫ в схеме, поэтому они передаются И в отрицательных вызовах —
@@ -7750,16 +7944,6 @@ def drawing_checks(client, rep, app_id, workdir):
             "PASS" if (code and code in ("INVALID_ARGUMENT", "FORMAT_UNAVAILABLE")) else "FAIL",
             f"error={code}")
 
-    reread = {}
-    for fmt in ("dxf", "dwg"):
-        path = os.path.join(work, f"drw-01.{fmt}")
-        if os.path.isfile(path):
-            reread[fmt] = os.path.getsize(path)
-    rep.add("dep.drawing.export_file.read",
-            "выгруженные файлы перечитываются С ДИСКА (непустой размер)",
-            "PASS" if (reread.get("dxf", 0) > 0 and reread.get("dwg", 0) > 0) else "FAIL",
-            f"sizes={reread}")
-
     # Идемпотентность на ПЕРЕОТКРЫТОМ чертеже. Требование: повтор того же operation_id НЕ создаёт виды
     # второй раз, а первый вызов ДОБАВЛЯЕТ ровно один вид. Разрешение API7 переоткрытого документа
     # переработано (тип документа + путь), поэтому строка проверяет ФАКТ, а не называет границу:
@@ -7791,22 +7975,37 @@ def drawing_checks(client, rep, app_id, workdir):
             "PASS" if error_code(env3) == "OPERATION_ID_CONFLICT" else "FAIL",
             f"error={error_code(env3)}")
 
+    # ── view addressing and the source file: the row's own read and create calls ───────────────
+    # INVARIANT: `read` is proven by a reading tool's call inside the row's window, `create` by a
+    # creation call. The previous edition attributed both rows to a window whose only call was the
+    # OPERATION_ID_CONFLICT refusal, so "read" and "create" were confirmed by a refusal.
+    env, code = call("kompas_create_drawing_views", {
+        "document_id": drw2, "expected_revision": current_rev(drw2),
+        "source_path": src, "projections": ["front"], "x": 500.0, "y": 0.0})
+    source_view_created = (not code) and bool(result(env).get("created_count"))
+    env, code = call("kompas_list_drawing_views", {"document_id": drw2})
+    views_now = result(env).get("views") or []
     rep.add("dep.drawing.view_address.discover",
             "виды адресуются ссылкой, перечитанной из чертежа (а не номером вслепую)",
-            "PASS" if views_re and views_re[0].get("view_ref") else "FAIL",
-            f"ref={views_re[0].get('view_ref') if views_re else None}")
+            "PASS" if views_now and views_now[0].get("view_ref") else "FAIL",
+            f"ref={views_now[0].get('view_ref') if views_now else None} error={code}")
     rep.add("dep.drawing.view_address.read",
-            "ссылка вида перечитывается из коллекции после переоткрытия",
-            "PASS" if views_re else "FAIL", f"views={len(views_re)}")
-
+            "ссылка вида перечитывается СВЕЖИМ чтением коллекции, а не берётся из переменной "
+            "предыдущего шага",
+            "PASS" if (not code and views_now) else "FAIL", f"views={len(views_now)} error={code}")
     rep.add("dep.drawing.source_file.read",
             "перечитанный вид несёт файл-источник проекции",
             "PASS" if any((v.get("source_path") or "").endswith("drw-source.m3d")
-                          for v in views_re) else "FAIL",
-            f"sources={[v.get('source_path') for v in views_re]}")
+                          for v in views_now) else "FAIL",
+            f"sources={[v.get('source_path') for v in views_now]}")
     rep.add("dep.drawing.source_file.create",
-            "файл-источник существует на диске (вид проекция ФАЙЛА, не памяти)",
-            "PASS" if os.path.isfile(src) else "FAIL", f"path={src}")
+            "файл-источник существует на диске, и вид-проекция ФАЙЛА построен вызовом создания с этим "
+            "путём: создание подтверждено ВЫЗОВОМ окна строки, а не наличием файла",
+            "PASS" if (os.path.isfile(src) and source_view_created
+                       and any((v.get("source_path") or "").endswith("drw-source.m3d")
+                               for v in views_now)) else "FAIL",
+            f"path={src} created={source_view_created} "
+            f"sources={[v.get('source_path') for v in views_now]}")
     env, code = call("kompas_create_drawing_views", {
         "document_id": drw2, "expected_revision": current_rev(drw2),
         "source_path": os.path.join(work, "нет-такого-источника.m3d"), "projections": ["front"],
@@ -8036,7 +8235,58 @@ def drawing_checks(client, rep, app_id, workdir):
             "PASS" if r_before == r_after else "FAIL",
             f"revision_before={r_before} revision_after={r_after}")
 
-    call("kompas_close_document", {"document_id": drw2, "dirty_policy": "discard"})
+    # ========= DRW-04 / DRW-06: EACH ROW GETS ITS OWN SAVE CYCLE =========
+    # Every row runs ITS OWN save -> close -> reopen and reads its own subject through the same
+    # reading route. Otherwise the row's window carries neither `kompas_save_document` nor
+    # `kompas_open_document`, and "survives a reopen" is confirmed by a read without the reopen.
+    drw04_path = os.path.join(work, "drw-01-stamp.cdw")
+    env, code = call("kompas_save_document", {"document_id": drw2,
+                                              "expected_revision": current_rev(drw2),
+                                              "target_path": drw04_path})
+    drw04_saved = (not code) and os.path.isfile(drw04_path)
+    call("kompas_close_document", {"document_id": drw2, "dirty_policy": "save"})
+    env, code = call("kompas_open_document", {"application_id": app_id, "path": drw04_path,
+                                              "access": "edit"})
+    drw04 = doc_id(env)
+    env, code = call("kompas_get_title_block",
+                     {"document_id": drw04, "cell_ids": [_rcell]})
+    cells_04 = result(env).get("cells") or []
+    cell_04 = next((c for c in cells_04 if c.get("cell_id") == _rcell), {})
+    rep.add("DRW-04.title_block.set.save_reopen",
+            "ячейка штампа переживает СОБСТВЕННЫЙ для строки save → close → reopen: значение, "
+            "прочитанное ДО закрытия, совпадает с прочитанным ПОСЛЕ переоткрытия маршрутом только для "
+            "чтения (потеря/порча содержимого обнаруживается без дозаписи)",
+            "PASS" if (drw04_saved and drw04
+                       and isinstance(pre_state.get("stamp_read_back"), str)
+                       and pre_state.get("stamp_read_back") != ""
+                       and cell_04.get("read_back") == pre_state.get("stamp_read_back")
+                       and code is None) else "FAIL",
+            f"cell={_rcell} saved={drw04_saved} read_back_переоткрыт={cell_04.get('read_back')!r} "
+            f"до_закрытия_прочитано={pre_state.get('stamp_read_back')!r} "
+            f"промежуточное_чтение_общего_цикла_ок={stamp_reopen_ok} error={code}")
+
+    drw06_path = os.path.join(work, "drw-01-demand.cdw")
+    env, code = call("kompas_save_document", {"document_id": drw04,
+                                              "expected_revision": current_rev(drw04),
+                                              "target_path": drw06_path})
+    drw06_saved = (not code) and os.path.isfile(drw06_path)
+    call("kompas_close_document", {"document_id": drw04, "dirty_policy": "save"})
+    env, code = call("kompas_open_document", {"application_id": app_id, "path": drw06_path,
+                                              "access": "edit"})
+    drw06 = doc_id(env)
+    env, code = call("kompas_get_technical_demand", {"document_id": drw06})
+    demand_06 = result(env).get("text")
+    demand_06_created = result(env).get("is_created")
+    rep.add("DRW-06.technical_demand.save_reopen",
+            "текст техтребований переживает СОБСТВЕННЫЙ для строки save → close → reopen: "
+            "перечитанное маршрутом только для чтения совпадает с записанным до закрытия",
+            "PASS" if (drw06_saved and drw06 and code is None
+                       and norm_demand(demand_06) == norm_demand(pre_state["demand_text"])
+                       and demand_06_created is True) else "FAIL",
+            f"saved={drw06_saved} read_back={(demand_06 or '')[:70]!r} "
+            f"до_закрытия={(pre_state['demand_text'])[:70]!r} is_created={demand_06_created} "
+            f"промежуточное_чтение_общего_цикла_ок={demand_reopen_ok} error={code}")
+    call("kompas_close_document", {"document_id": drw06, "dirty_policy": "discard"})
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -8203,6 +8453,8 @@ def variables_material_checks(client, rep, app_id, workdir, reference_path=None)
             ("VM-05.material.write.create", "материал и плотность назначаются"),
             ("VM-05.material.write.read", "обе пары материал/плотность перечитаны"),
             ("VM-05.material.write.negative_tests", "недопустимая плотность отвергается"),
+            ("VM-05.material.write.save_reopen",
+             "материал и плотность переживают собственный для строки save → close → reopen"),
             ("VM-06.mass.computed_via_measure.read", "плотность взята из ответа get_material"),
             ("VM-06.mass.computed_via_measure.geometry_validation",
              "масса через measure согласована с независимым эталоном"),
@@ -8476,12 +8728,25 @@ def variables_material_checks(client, rep, app_id, workdir, reference_path=None)
         # другие аргументы, и проверялось бы не то (ревью V3).
         env, code_repeat = call("kompas_set_material", payload)
         r_after_repeat = current_rev(plain)
+        # INVARIANT: `read` is proven by a READING tool inside the row's window. The previous edition
+        # kept only the material write there, so "read" was confirmed by a write; the material is now
+        # read back through the same route as in VM-05.material.write.read.
+        repeat_read, repeat_read_code = get_material(plain)
+        repeat_name = repeat_read.get("material_name")
+        repeat_density = repeat_read.get("density_kg_per_m3")
+        repeat_read_ok = (not repeat_read_code and repeat_name == first_name
+                          and repeat_density is not None
+                          and abs(repeat_density - first_density)
+                          <= ref["density_tolerance_kg_per_m3"])
         rep.add("dep.vm.idempotency.read",
                 "повтор ТОГО ЖЕ payload (тот же operation_id и те же аргументы) не выполняет правку "
-                "второй раз и не двигает ревизию",
-                "PASS" if (not code_repeat and r_after_repeat == r_after_first) else "FAIL",
+                "второй раз и не двигает ревизию, а материал читается НЕЗАВИСИМЫМ чтением и совпадает "
+                "с записанным",
+                "PASS" if (not code_repeat and r_after_repeat == r_after_first
+                           and repeat_read_ok) else "FAIL",
                 f"op_id={op_id} revision_first={r_after_first} revision_repeat={r_after_repeat} "
-                f"error={code_repeat}")
+                f"error={code_repeat} read_name={repeat_name!r} read_density={repeat_density} "
+                f"read_ok={repeat_read_ok} read_error={repeat_read_code}")
 
         changed = dict(payload)
         changed["material_name"] = material_pairs[1][0]
@@ -8561,7 +8826,35 @@ def variables_material_checks(client, rep, app_id, workdir, reference_path=None)
                         f"model_density={chain_density} "
                         f"unverified={measured.get('unverified_aspects')}")
 
-    close(plain)
+        # ── VM-05.material.write: survival through its OWN save -> close -> reopen cycle ────────
+        # INVARIANT: a row's window is the calls between two neighbouring `rep.add`, so the row runs
+        # its own cycle: material and density are read from the REOPENED document BEFORE any rewrite.
+        # The expectation is the last written material/density pair.
+        vm05_path = os.path.join(workdir, "vm-ordinary", "vm-ordinary-saved.m3d")
+        os.makedirs(os.path.dirname(vm05_path), exist_ok=True)
+        env, code = call("kompas_save_document", {"document_id": plain,
+                                                  "expected_revision": current_rev(plain),
+                                                  "target_path": vm05_path})
+        vm05_saved = (not code) and os.path.isfile(vm05_path)
+        call("kompas_close_document", {"document_id": plain, "dirty_policy": "save"})
+        env, code = call("kompas_open_document", {"application_id": app_id, "path": vm05_path,
+                                                  "access": "edit"})
+        plain_re = doc_of(env)
+        mat_re, mat_re_code = get_material(plain_re) if plain_re else ({}, "DOCUMENT_NOT_FOUND")
+        mat_re_name = mat_re.get("material_name")
+        mat_re_density = mat_re.get("density_kg_per_m3")
+        mat_re_ok = (mat_re_name == first_name and mat_re_density is not None
+                     and abs(mat_re_density - ref["density_kg_per_m3"])
+                     <= ref["density_tolerance_kg_per_m3"])
+        rep.add("VM-05.material.write.save_reopen",
+                "материал и плотность переживают СОБСТВЕННЫЙ для строки save → close → reopen: "
+                "перечитанные документированным маршрутом МЦХ из переоткрытого документа совпали с "
+                "последней записанной парой в допуске (потеря обнаруживается без дозаписи)",
+                "PASS" if (vm05_saved and plain_re and not mat_re_code and mat_re_ok) else "FAIL",
+                f"saved={vm05_saved} read_name={mat_re_name!r} read_density={mat_re_density} "
+                f"expected={first_name!r}/{ref['density_kg_per_m3']} read_ok={mat_re_ok} "
+                f"error={mat_re_code}")
+        close(plain_re)
 
     # ══ ЧАСТЬ 2. ПЕРЕМЕННЫЕ: требует эталон; без него строки НАЗЫВАЮТСЯ, а не подменяются ══════════
     reference_rows = (
@@ -8575,14 +8868,20 @@ def variables_material_checks(client, rep, app_id, workdir, reference_path=None)
          "объём детали после применения равен эталону для изменённой глубины"),
         ("VM-02.variable.set_value.negative_tests",
          "запись value поверх действующего выражения отклонена, выражение не уничтожено"),
+        ("VM-02.variable.set_value.save_reopen",
+         "управляющее значение переживает собственный для строки save → close → reopen"),
         ("VM-03.variable.set_expression.create",
          "допустимое выражение записано и подтверждено перечитыванием"),
         ("VM-03.variable.set_expression.read",
          "выражение и вычисленное значение перечитаны из вновь полученной коллекции"),
         ("VM-03.variable.set_expression.rebuild",
          "изменение ИСХОДНОЙ переменной меняет ЗАВИСИМУЮ величину: выражение вычислил КОМПАС"),
+        ("VM-03.variable.set_expression.geometry_validation",
+         "объём после смены выражения равен расчётному для действующего значения источника"),
         ("VM-03.variable.set_expression.negative_tests",
          "неверное выражение не даёт ложного успеха; последствия названы"),
+        ("VM-03.variable.set_expression.save_reopen",
+         "выражение и вычисленное значение переживают собственный для строки save → close → reopen"),
         ("dep.vm.save_reopen.save_reopen",
          "save → close → reopen возвращает НОВЫЙ документ, файл существует"),
         ("dep.vm.save_reopen.read",
@@ -8700,6 +8999,42 @@ def variables_material_checks(client, rep, app_id, workdir, reference_path=None)
             f"error={code} expression_after_attempt={expr_kept!r} "
             f"current_expression_field={refused.get('expression_before')!r}")
 
+    # ── VM-02.variable.set_value: survival through its OWN save -> close -> reopen cycle ────────
+    # INVARIANT: a row's window is the calls between two neighbouring `rep.add`; the row runs its own
+    # cycle and reads the variable value from the REOPENED document BEFORE any rewrite.
+    vm02_path = os.path.join(workdir, "vm-reference", "vm-reference-vm02.m3d")
+    os.makedirs(os.path.dirname(vm02_path), exist_ok=True)
+    env, code = call("kompas_save_document", {"document_id": ref_doc,
+                                              "expected_revision": current_rev(ref_doc),
+                                              "target_path": vm02_path})
+    vm02_saved = (not code) and os.path.isfile(vm02_path)
+    close(ref_doc)
+    env, code = call("kompas_open_document", {"application_id": app_id, "path": vm02_path,
+                                              "access": "edit"})
+    ref_doc_re = doc_of(env)
+    listing_vm02, lv02_code = list_variables(ref_doc_re) if ref_doc_re else ({}, "DOCUMENT_NOT_FOUND")
+    depth_re = next((v for v in (listing_vm02.get("variables") or [])
+                     if v.get("name") == ref["depth_name"]), {})
+    rep.add("VM-02.variable.set_value.save_reopen",
+            "управляющее значение переживает СОБСТВЕННЫЙ для строки save → close → reopen: "
+            "перечитанное НЕЗАВИСИМЫМ list_variables из переоткрытого документа равно записанному",
+            "PASS" if (vm02_saved and ref_doc_re and not lv02_code
+                       and depth_re.get("value") == ref["depth_changed_mm"]) else "FAIL",
+            f"saved={vm02_saved} value_after_reopen={depth_re.get('value')} "
+            f"ожидание={ref['depth_changed_mm']} error={lv02_code}")
+    ref_doc = ref_doc_re
+    if not ref_doc:
+        for cid, desc in reference_rows:
+            if cid.startswith("VM-03.") or cid.startswith("dep.vm.save_reopen."):
+                rep.add(cid, desc, "FAIL", f"переоткрытие не дало документ: error={code}")
+        rep.add("VM-03.variable.set_expression.geometry_validation",
+                "объём после смены выражения равен расчётному", "FAIL",
+                f"переоткрытие не дало документ: error={code}")
+        rep.add("VM-03.variable.set_expression.save_reopen",
+                "выражение и вычисленное значение переживают save → close → reopen", "FAIL",
+                f"переоткрытие не дало документ: error={code}")
+        return
+
     # ── VM-03: выражение вычисляет КОМПАС ───────────────────────────────────────────────────────
     # СНАЧАЛА записываем допустимое выражение, затем ПЕРЕЧИТЫВАЕМ его и вычисленное значение, и лишь
     # потом меняем источник: одного совпадения строки выражения недостаточно (ревью V3).
@@ -8751,18 +9086,69 @@ def variables_material_checks(client, rep, app_id, workdir, reference_path=None)
             f"(формула даёт {dependent_expected_before}) after={dependent_after} "
             f"(формула даёт {dependent_expected_after}) error={l4code}")
 
+    # ── VM-03.geometry_validation: the volume is MEASURED, not derived from a successful call ────
+    # INVARIANT: `geometry_validation` is proven by a MEASUREMENT of the outcome. After the expression
+    # changed, the source is back at its initial value, so the volume must equal the value COMPUTED
+    # for that source value.
+    vol_expr, eerr = measure(ref_doc, ["volume"])
+    volume_expr = (vol_expr or {}).get("volume_mm3")
+    volume_expr_ok = (volume_expr is not None
+                      and abs(volume_expr - ref["volume_initial_mm3"])
+                      <= ref["volume_tolerance_mm3"])
+    rep.add("VM-03.variable.set_expression.geometry_validation",
+            "объём детали после смены выражения равен РАСЧЁТНОМУ для действующего значения источника "
+            f"({ref['volume_initial_mm3']:.0f} мм³ при глубине {ref['depth_initial_mm']} мм): "
+            "независимое измерение, а не «вызов вернул успех»",
+            "PASS" if volume_expr_ok else "FAIL",
+            f"volume_mm3={volume_expr} (расчёт {ref['volume_initial_mm3']}) err={eerr}")
+
     # неверное выражение: либо названный отказ, либо явное НЕподтверждение — но не голый PASS
     env, code = call("kompas_set_variable", {
         "document_id": ref_doc, "expected_revision": current_rev(ref_doc),
         "name": ref["dependent_name"], "expression": "(((( неверное выражение *** "})
     bad = result(env)
     bad_ok = (code is not None) or (bad.get("read_back_verified") is False)
+    # A REFUSED call of the SAME tool on a deliberately invalid input: a nonexistent variable name
+    # must answer with a NAMED code instead of a silent "nothing was done".
+    env, vm03_refusal_code = call("kompas_set_variable", {
+        "document_id": ref_doc, "expected_revision": current_rev(ref_doc),
+        "name": "ЭтойПеременнойНет_12345", "value": 1.0})
     rep.add("VM-03.variable.set_expression.negative_tests",
             "неверное выражение не даёт ложного успеха: названный отказ ИЛИ явное неподтверждение "
-            "чтением; конкретное недокументированное поведение ядра не требуется",
-            "PASS" if bad_ok else "FAIL",
+            "чтением; несуществующее имя переменной отвергается НАЗВАННЫМ кодом",
+            "PASS" if (bad_ok and vm03_refusal_code is not None) else "FAIL",
             f"error={code} read_back_verified={bad.get('read_back_verified')} "
-            f"diagnostics={bad.get('diagnostics')}")
+            f"refusal_error={vm03_refusal_code} diagnostics={bad.get('diagnostics')}")
+
+    # ── VM-03.variable.set_expression: survival through its OWN save -> close -> reopen cycle ────
+    # INVARIANT: a row's window is the calls between two neighbouring `rep.add`; the row runs its own
+    # cycle and reads the expression and the computed value from the REOPENED document BEFORE any
+    # rewrite.
+    vm03_path = os.path.join(workdir, "vm-reference", "vm-reference-vm03.m3d")
+    os.makedirs(os.path.dirname(vm03_path), exist_ok=True)
+    env, code = call("kompas_save_document", {"document_id": ref_doc,
+                                              "expected_revision": current_rev(ref_doc),
+                                              "target_path": vm03_path})
+    vm03_saved = (not code) and os.path.isfile(vm03_path)
+    close(ref_doc)
+    env, code = call("kompas_open_document", {"application_id": app_id, "path": vm03_path,
+                                              "access": "edit"})
+    ref_doc_03 = doc_of(env)
+    listing_vm03, lv03_code = list_variables(ref_doc_03) if ref_doc_03 else ({}, "DOCUMENT_NOT_FOUND")
+    expr_re = next((v for v in (listing_vm03.get("variables") or [])
+                    if v.get("name") == ref["dependent_name"]), {})
+    rep.add("VM-03.variable.set_expression.save_reopen",
+            "выражение и вычисленное значение переживают СОБСТВЕННЫЙ для строки save → close → reopen: "
+            "перечитанные независимым list_variables из переоткрытого документа совпали с расчётным "
+            "результатом формулы для действующего значения источника",
+            "PASS" if (vm03_saved and ref_doc_03 and not lv03_code
+                       and expr_re.get("expression") == ref["dependent_expression"]
+                       and expr_re.get("value") is not None
+                       and abs(expr_re.get("value") - ref["depth_initial_mm"] * 2.0) <= 1e-6) else "FAIL",
+            f"saved={vm03_saved} expression_after_reopen={expr_re.get('expression')!r} "
+            f"value_after_reopen={expr_re.get('value')} "
+            f"(формула даёт {ref['depth_initial_mm'] * 2.0}) error={lv03_code}")
+    ref_doc = ref_doc_03
 
     # ── dep.vm.save_reopen: снимок → save → close → reopen → чтение ДО повторной записи ─────────
     snapshot_vars = {v.get("name"): (v.get("value"), v.get("expression"))
@@ -10700,6 +11086,59 @@ def export_inertia_checks(client, rep, app_id, workdir):
             f"face_ref={face_ref} face_code={face_code} face_inertia={face_result.get('inertia')} "
             f"face_unverified={face_result.get('unverified_aspects')}")
 
+    # ── negative controls of the EI dependencies: a REFUSED call of the SAME tool ───────────────
+    # INVARIANT: `negative_tests` is proven by a call that CARRIES AN ERROR CODE inside the row's
+    # window, not by a semantic negative answer. Every refusal is read from the tool DESCRIPTION (its
+    # schema), never invented; the model is untouched by the refused calls - the revision and the
+    # volume are compared before and after.
+    neg_rev_before = current_rev(cyl_doc)
+    neg_volume_before = volume_of(cyl_body)
+    # The density is documented as «Только конечное положительное значение»: a negative one is
+    # refused before COM.
+    ei03_env, ei03_code = call_raw("kompas_measure", {
+        "target_ref": cyl_body, "properties": ["inertia"], "density_kg_per_m3": -1.0})
+    ei04_env, ei04_code = measure("body:00000000000000000000000000000000", ["inertia"])
+    # `properties` is documented with `minItems: 1`: an empty list is not a request for properties.
+    ei05_env, ei05_code = measure(cyl_body, [])
+    # `inertia_units` publishes a list of exactly two values; cm_kg is outside it.
+    units_env, units_code = call_raw("kompas_measure", {
+        "target_ref": cyl_body, "properties": ["inertia"], "inertia_units": "cm_kg"})
+    # `max_edge_length_mm` carries the same «только конечное положительное значение» restriction.
+    tri_env, tri_code = export_stl(cyl_doc, _os.path.join(evidence_dir, "neg-step.stl"), True, 0.0)
+    neg_rev_after = current_rev(cyl_doc)
+    neg_volume_after = volume_of(cyl_body)
+    neg_model_intact = (neg_rev_before == neg_rev_after
+                        and near(neg_volume_before, neg_volume_after, 1e-6))
+    neg_model_line = (f"ревизия {neg_rev_before}→{neg_rev_after} (та же={neg_rev_before == neg_rev_after}), "
+                      f"объём {neg_volume_before}→{neg_volume_after} "
+                      f"(тот же={near(neg_volume_before, neg_volume_after, 1e-6)})")
+    rep.add("EI-03.inertia.central.negative_tests",
+            "недопустимая плотность (отрицательная) отвергается НАЗВАННЫМ кодом до COM: центральные "
+            "моменты не считаются по негодному входу, и модель не меняется",
+            "PASS" if (ei03_code == "INVALID_ARGUMENT" and neg_model_intact) else "FAIL",
+            f"error={ei03_code} msg={emsg(ei03_env)}; {neg_model_line}")
+    rep.add("EI-04.inertia.principal.negative_tests",
+            "несуществующая ссылка тела отвергается НАЗВАННО, а не отдаёт нулевые главные моменты: "
+            "«тела нет» и «моменты нулевые» — два разных состояния; модель не меняется",
+            "PASS" if (ei04_code in ("STALE_REFERENCE", "INVALID_ARGUMENT")
+                       and neg_model_intact) else "FAIL",
+            f"error={ei04_code} msg={emsg(ei04_env)}; {neg_model_line}")
+    rep.add("EI-05.inertia.units.negative_tests",
+            "пустой список свойств отвергается НАЗВАННЫМ кодом: единицы не выдаются за измеренные на "
+            "вызове, который ничего не запросил; модель не меняется",
+            "PASS" if (ei05_code == "INVALID_ARGUMENT" and neg_model_intact) else "FAIL",
+            f"error={ei05_code} msg={emsg(ei05_env)}; {neg_model_line}")
+    rep.add("dep.ei.units_system.negative_tests",
+            "единица вне опубликованного перечня (cm_kg) отвергается НАЗВАННЫМ кодом: система единиц "
+            "не подменяется значением по умолчанию; модель не меняется",
+            "PASS" if (units_code == "INVALID_ARGUMENT" and neg_model_intact) else "FAIL",
+            f"error={units_code} msg={emsg(units_env)}; {neg_model_line}")
+    rep.add("dep.ei.triangle_count_from_file.negative_tests",
+            "неположительный шаг триангуляции отвергается НАЗВАННЫМ кодом, а файл не выдаётся за "
+            "исправный: число треугольников не подтверждается вызовом, который не состоялся",
+            "PASS" if (tri_code == "INVALID_ARGUMENT" and neg_model_intact) else "FAIL",
+            f"error={tri_code} msg={emsg(tri_env)}; {neg_model_line}")
+
     # ── EI.11.idempotency ──────────────────────────────────────────────────────────────────────────
     idem_path = _os.path.join(evidence_dir, "idempotent.stl")
     op_id = str(uuid.uuid4())
@@ -11427,6 +11866,29 @@ def variables_bind_checks(client, rep, app_id, workdir):
                        and features_a == features_b and bodies_a == bodies_b) else "FAIL",
             f"revision {rev_a}→{rev_b} dirty {dirty_a}→{dirty_b} features {features_a}→{features_b} "
             f"bodies {bodies_a}→{bodies_b}")
+
+    # ── dep.vb.read_only_list.negative_tests: a REFUSED call of the SAME tool ───────────────────
+    # INVARIANT: `negative_tests` is proven by a call that CARRIES AN ERROR CODE inside the row's
+    # window. The parameter list is addressed by a feature reference; a nonexistent document and a
+    # nonexistent feature reference must be refused by NAMED codes, and the document must not change
+    # (revision, dirty flag, body count).
+    vb_neg_env, vb_neg_code = call("kompas_list_feature_parameters", {
+        "document_id": target_doc, "feature_ref": "feature:00000000000000000000000000000000"})
+    vb_neg2_env, vb_neg2_code = call("kompas_list_feature_parameters", {
+        "document_id": "00000000000000000000000000000000",
+        "feature_ref": "feature:00000000000000000000000000000000"})
+    rev_neg = current_rev(target_doc)
+    dirty_neg = dirty_of(target_doc)
+    bodies_neg = len(list_bodies(target_doc))
+    rep.add("dep.vb.read_only_list.negative_tests",
+            "несуществующий документ и несуществующий адрес признака отвергаются НАЗВАННЫМИ кодами, а "
+            "документ не меняется: отказ чтения не подменяется пустым списком и не мутирует модель",
+            "PASS" if (vb_neg2_code in ("DOCUMENT_NOT_FOUND", "INVALID_ARGUMENT")
+                       and rev_neg == rev_b and dirty_neg == dirty_b
+                       and bodies_neg == bodies_b) else "FAIL",
+            f"bad_document={vb_neg2_code} bad_feature_ref={vb_neg_code} "
+            f"msg={emsg(vb_neg2_env)} ревизия {rev_b}→{rev_neg} "
+            f"dirty {dirty_b}→{dirty_neg} тел {bodies_b}→{bodies_neg}")
 
     # ── VB.13.refusals: предусмотренные коды без ложного успеха ───────────────────────────────
     refusals = {}

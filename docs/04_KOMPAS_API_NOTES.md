@@ -6536,3 +6536,49 @@ Release-сборка v24. На пластине 100×80×10 все четыре 
 названное как исключение. Исключение `ksCBisector` (измеренная постановка ролей) названо по `AGENTS.md`
 и в перечень не входит. Собственные типы адаптера (`*Twin`) в перечень тоже не входят: они не
 интерфейсы КОМПАС, и страницы вендора у них нет по построению.
+
+**ДОПОЛНЕНО 14.10.2026 (наряд `API_DOC_ROUTES`). Перечень пересчитан: 65 -> 7, и ни один маршрут не
+заменён соседним членом.** Прибор сверки расширен названными правилами (наследование из строки
+«Иерархия», групповая страница, имя члена из ТЕКСТА перечня, опечатка заголовка при адресе члена,
+поиск перечня под написанием аксессора) - `docs/decisions/api-audit.md`. Из 507 маршрутов (517 минус
+10 собственных типов адаптера `*Twin`) подтверждено **500**: 456 - страницей самого интерфейса, 44 -
+страницей предка, 13 - групповой страницей, 3 - страницей с опечаткой в заголовке. Классы 1 и 2
+закрыты; «страницы нет» осталось у СЕМИ маршрутов.
+
+| Остаток | Что измерено | Документированный член |
+|---|---|---|
+| `ksBaseLoftDefinition.Sketchs`, `ksBossLoftDefinition.Sketchs` | страницы `ksbaseloftdefinition_sketches.html` и `ksbossloftdefinition_sketches.html` есть, имя справки - `Sketches`; интероп объявляет член `Sketchs` (без `e`), и у API7 справка пишет `iloft_sketchs.html` так же | тот же метод, другое написание |
+| `ksBody.CalcMassInertiaProperties` | перечень `ksbody_methods.html` называет запись `MassInertiaParam`, и её страница `ksbody_massinertiaparam.html` в разделе «Синтаксис» документирует `CalcMassInertiaProperties(long bitVector)`; у `ksBody` интеропа члена `MassInertiaParam` НЕТ (метаданные: только `CalcMassInertiaProperties(UInt32 bitVector)`) | тот же метод, чужое имя у записи перечня и заголовка |
+| `ksPart.density` | страница `kspart_getdensity.html` документирует `double GetDensity()`; интероп отдаёт это же свойство как `density` (и как метод `get_density`) | тот же член, имя справки - `GetDensity` |
+| `IFeaturePattern.Update`, `IFeaturePattern.Owner` | `ifeaturepattern.html` печатает «Иерархия: IDispatch IFeaturePattern», хотя страницы наследников (`ilinearpattern.html` и другие) ставят `IModelObject` перед `IFeaturePattern`; справка документирует `Update` (`imodelobject_update.html`) и `Owner` (`imodelobject_props.html`) | член предка, цепочка на СВОЕЙ странице интерфейса не названа |
+| `IFragmentDocument.ViewsAndLayersManager` | страниц `ifragmentdocument_viewsandlayersmanager.html`, `idrawingdocument_viewsandlayersmanager.html`, `ikompasdocument_viewsandlayersmanager.html` нет (404); интерфейс `IViewsAndLayersManager` документирован (`iviewsandlayersmanager.html`, `iviewsandlayersmanager_views.html`), но ЧЛЕНА у `IFragmentDocument` справка не описывает | документированного члена НЕТ |
+
+**Замены не сделаны, и это не молчание.** Четыре первые строки - справка описывает ТОТ ЖЕ член под
+другим именем: заменять в коде нечего (членов `MassInertiaParam` и `Sketches` интероп не объявляет
+вовсе, а `ksBody.CalcMassInertiaProperties(bitVector)` - уже документированный вызов с тем же выбором
+единиц `bitVector`). Пятая - цепочка не названа САМОЙ страницей интерфейса, и достраивать её по
+страницам наследников значило бы выдумывать. Шестая - по §7.1 наряда: документированной замены нет,
+вызов оставлен как есть, решение за заказчиком.
+
+## §4.86. `IFillets::Add` и `IChamfers::Add`: документированные страницы ЕСТЬ (справка SDK 24 по проводу, 14.10.2026, наряд `API_DOC_ROUTES`)
+
+**Что проверено.** `ifillet.html` называет `IFillets::Add`, а прежние записи (наряд
+`FILLET_REBUILD_STABILITY`, §4.83, долг 23 и 25) исходили из того, что документированного маршрута
+создания скругления через API7 нет. Проверено по проводу:
+
+| Адрес | HTTP | Заголовок |
+|---|---|---|
+| `ifillets.html` | 200 | Интерфейс IFillets |
+| `ifillets_methods.html` | 200 | IFillets - методы |
+| `ifillets_add.html` | 200 | `Add - Создает новый элемент и добавляет его в коллекцию` |
+| `ichamfers.html` | 200 | Интерфейс IChamfers |
+| `ichamfers_methods.html` | 200 | IChamfers - методы |
+| `ichamfers_add.html` | 200 | `Add - Создает новый элемент и добавляет его в коллекцию` |
+
+**ДАТИРОВАННАЯ ПОПРАВКА.** Утверждение «документированного маршрута создания скругления через API7
+нет» ОТМЕНЯЕТСЯ: страницы `IFillets::Add` и `IChamfers::Add` существуют и обещают «создает новый
+элемент и добавляет его в коллекцию». Маршрут создания в этом наряде НЕ менялся (§4 наряда), и
+создание по-прежнему идёт маршрутом API5 (`ksFilletDefinition` + `ksEntity.Update()`) с контролем
+результата по объёму и прилеганию (§4.83, §4.84). `IFillets::Add` появляется как КАНДИДАТ для опыта
+причины сдвига (долг 25): маршрут создания API7 - это то, чем можно отличить «сдвигает перестроение»
+от «сдвигает создание API5».

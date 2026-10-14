@@ -14,6 +14,41 @@
 
 ## Текущее состояние
 
+- **Виды документа берутся документированным членом `IKompasDocument2D.ViewsAndLayersManager`; аудит
+  больше не знает неподтверждённых маршрутов (14.10.2026, наряд `FRAGMENT_VIEWS_ROUTE`, отчёт
+  `FRAGMENT_VIEWS_ROUTE_REPORT_20261014.md`).**
+  **Что было не так.** Адаптер читал коллекцию видов с того интерфейса, который оказывался под рукой:
+  `IFragmentDocument.ViewsAndLayersManager` в блоках эскиза и `IDrawingDocument.ViewsAndLayersManager`
+  в DRW. Аудит (`API_DOC_ROUTES`) назвал первое единственным неподтверждённым маршрутом, и это было
+  прочитано как «справка такого члена не описывает».
+  **Что измерено.** Член ДОКУМЕНТИРОВАН - один раз и на общем предке обоих документов:
+  `ikompasdocument2d_viewsandlayersmanager.html` («ViewsAndLayersManager - Возвращает менеджер видов и
+  слоев документа», тип `IViewsAndLayersManager`, «Свойство доступно только для чтения»),
+  `ikompasdocument2d_props.html` называет его в перечне, `ikompasdocument2d.html` - «является базовым
+  для интерфейсов графических документов КОМПАС API - чертежа и фрагмента» и берётся «QueryInterface
+  от ... интерфейса фрагмента IFragmentDocument». Своего перечня у `IFragmentDocument` член не
+  называет (там ровно одно свойство - `IsSketch`), у `IDrawingDocument` - тоже. Прибор не находил
+  страницу потому, что цепочка предков читается со строки «Иерархия» страницы самого интерфейса, а
+  `ifragmentdocument.html` печатает `IKompasDocument` второй раз вместо `IKompasDocument2D`; страница
+  KsAPI того же раздела печатает цепочку верно.
+  **Что сделано.** Один маршрут на оба вида документа, одна точка чтения - `Api7Views.Of`
+  (`src/KompasMcp.Api5Adapter/Api7/Api7Views.cs`); переведены все восемь прежних точек (эскиз:
+  размеры, ограничения, сущности; чертёж: создание видов, перечень, перечитывание после
+  перестроения, адрес вида). Строки ответов, описания инструментов и записи решений называют тот же
+  маршрут; `docs/TOOLS.md` перегенерирован.
+  **Проверено.** Сборка Release 0 предупреждений 0 ошибок; тесты Release **1133 PASS, 0 FAIL**; полный
+  прогон `python scripts/mcp-smoke.py --all --host <Release>` на Release-сборке чистого коммита
+  `19e2abe` (`source_tree_dirty` = false) - код 0, **PASS 1593, NAMED 5, FAIL 0** (как и предыдущий
+  `--all`). Прибор аудита: `api-audit-routes.py` - 517 маршрутов, наш теперь
+  `IKompasDocument2D.ViewsAndLayersManager`, прежнее имя из инвентаря исчезло;
+  `api-audit-docs.py` - 507 маршрутов, **не подтверждено 0** (было 1). Доказательства -
+  `docs/acceptance/evidence/20261014-fragment-views-route-19e2abe/`. Стражи: `lint-dashes.py` 0,
+  `check-evidence-links.py` 0, `long-comment-blocks.py` по изменённым файлам 0 (`src tests` - 4
+  ПРЕЖНИХ блока, техдолг 26).
+  **Записи.** `docs/04_KOMPAS_API_NOTES.md` §4.87, `docs/decisions/drawings.md#views-route`,
+  датированная поправка в `docs/decisions/api-audit.md`. Перевыпуск `docs/API_COMPLIANCE.*` - за
+  повторной попыткой `API_DOC_ROUTES`.
+
 - **Поиск владельца занятого файла не зависит от загрузки пула потоков; плавающий тест закрыт
   (14.10.2026, наряд `FILE_LOCK_LOOKUP_FLAKE`, отчёт `FILE_LOCK_LOOKUP_FLAKE_REPORT_20261014.md`).**
   **Что было не так.** Проба поиска владельца запускалась `Task.Run`, то есть в ОБЩЕМ пуле потоков, а

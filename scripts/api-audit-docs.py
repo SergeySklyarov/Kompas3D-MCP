@@ -12,6 +12,27 @@ pages (`<iface>_methods.html`, `<iface>_props.html`, `<iface>_propers.html`) rat
 the member page is matched by its `<title>` - never by the first `<h1>`, which on every page of this
 site is the header «Справочная система SDK КОМПАС-3D».
 
+THE SAME MEMBER MAY BE DOCUMENTED ON AN ANCESTOR. The help prints the inheritance chain in the
+«Иерархия» line of the interface's own page (`ichamfer.html` -> «IDispatch IKompasAPIObject
+IModelObject IChamfer»), and an inherited member is documented THERE (`imodelobject_update.html`),
+not on the interface's own page. The chain is read from that line and NEVER guessed: an interface
+without the line is judged by its own pages alone. `documented_on` names the interface whose page
+carries the confirmation.
+
+ONE PAGE MAY DOCUMENT A GROUP OF MEMBERS. The help groups related members and names them together in
+the listing (`ksmassinertiaparam_props.html`: «jx, jy, jz - Осевые моменты инерции»); every name of
+such a group is documented by that one page.
+
+THE LISTING NAMES THE MEMBER, NOT ALWAYS THE PAGE. A member page is usually named
+`<interface>_<member>.html`, but not always: `idrawingobject1_props.html` links `ConstraintsState` to
+`constraintsstate.html`. The interface's OWN listing naming the member is the evidence, so the name
+is taken from the listing TEXT as well as from the file name.
+
+A TITLE MAY MISSPELL THE MEMBER. Where the page's ADDRESS carries the member
+(`ksfeature_isvalid.html`) while its title misspells it («IsVIalid»), the page is still the member's
+own page: it is confirmed with the misspelling NAMED (`doc_typo`), never reported as "the member has
+no page".
+
 Three outcomes, never two: `confirmed` (200, same interface, same member), `broken` (404 - an
 instrument defect if it is cited as evidence), `not_checked` (network failure - NOT counted as good).
 
@@ -46,6 +67,14 @@ CACHE = os.path.join(ROOT, "scratch", "api-audit", "help-cache")
 MIRROR_DIR = os.path.join(ROOT, "reference", "kompas-sdk-v24", "sdk-docs")
 TITLE = re.compile(r"<title[^>]*>(.*?)</title>", re.S | re.I)
 LINK = re.compile(r"""<a\s[^>]*href\s*=\s*["']([^"'#]+)["'][^>]*>(.*?)</a>""", re.S | re.I)
+# THE HIERARCHY LINE of an interface page: one <p class="p_Hier_N_..."> per name, the deepest being
+# the interface itself. The meta description repeats the same names as plain text and is read only
+# when the body paragraphs are absent.
+HIER_P = re.compile(r'<p class="p_Hier_[^"]*">(.*?)</p>', re.S)
+HIER_META = re.compile(r"Иерархия:\s*([A-Za-z_][A-Za-z0-9_]*(?:\s+[A-Za-z_][A-Za-z0-9_]*)*)")
+# The description separator of a listing entry: «Name - Описание». A link WITHOUT it is not a member
+# entry (the interface links to other interfaces as «Интерфейс IX», with no separator).
+ENTRY = re.compile(r"\s+[-–—]\s+")
 
 # Customer exception of 11.10.2026: `ksCBisector` is supported on a MEASURED role assignment (the
 # object is the bisector itself, the partner and the direction are named separately), and that
@@ -201,36 +230,53 @@ def page_title(body):
     return re.sub(r"\s+", " ", match.group(1)).strip() if match else ""
 
 
-def member_list(interface):
-    """`{member name lowercased: url}` from the interface's OWN member-list pages.
+def hierarchy_entries(body):
+    """Interface names of the page's own «Иерархия» line, in page order.
 
-    The pages are named `_methods`, `_props` and `_propers` on this site; all three are read because
-    a member may be listed on any of them, and guessing one of them loses the others.
+    The line is rendered as one `<p class="p_Hier_N_...">` per name; the meta description repeats the
+    same names as plain text and is read only when the body paragraphs are absent. An empty list
+    means the page carries no hierarchy line - the chain is then NOT invented.
     """
-    base = interface.lower()
-    listing = {}
-    statuses = {}
-    for suffix in ("_methods", "_props", "_propers"):
-        url = f"{HELP_ROOT}{base}{suffix}.html"
-        status, body = fetch(url)
-        statuses[suffix] = status
-        if status not in (200, "mirror"):
-            continue
-        for href, text in LINK.findall(body):
-            href = href.strip()
-            if not href.lower().startswith(base + "_") or not href.lower().endswith(".html"):
-                continue
-            # The member NAME is taken from the page's own slug (`kspart_newentity.html` ->
-            # `newentity`), not from the link text: the text carries the description as well
-            # ("NewEntity - Создать новый интерфейс ..."), and keying on it made every member read
-            # as absent from its own interface listing.
-            slug = href.lower()[len(base) + 1:-len(".html")]
-            listing.setdefault(slug, HELP_ROOT + href.lstrip("./"))
-            plain = re.sub(r"<[^>]+>", "", text).strip().lower()
-            plain = re.split(r"\s+[-–—]\s+", plain, maxsplit=1)[0].strip()
-            if plain:
-                listing.setdefault(plain, HELP_ROOT + href.lstrip("./"))
-    return listing, statuses
+    names = [re.sub(r"<[^>]+>", "", chunk).strip() for chunk in HIER_P.findall(body or "")]
+    names = [name for name in names if name]
+    if names:
+        return names
+    match = HIER_META.search(body or "")
+    return match.group(1).split() if match else []
+
+
+def interface_ancestors(interface, cache):
+    """(ancestors, basis, url) from the «Иерархия» line of the interface's OWN page.
+
+    Ancestors are the names listed BEFORE the interface itself; the names AFTER it belong to other
+    interfaces that share the topic page (`iapplication.html` names `IApplication` and then
+    `IAttrTypeMng`, `IPropertyMng`). `IDispatch` is dropped - COM plumbing with no page of its own.
+    When the interface is not named in the line, or its page cannot be read, the list is empty.
+    """
+    if interface in cache:
+        return cache[interface]
+    url = f"{HELP_ROOT}{interface.lower()}.html"
+    status, body = fetch(url)
+    result = ([], None, url)
+    if status in (200, "mirror"):
+        names = hierarchy_entries(body)
+        target = interface.lower()
+        index = next((i for i, name in enumerate(names) if name.lower() == target), None)
+        ancestors = ([name for name in names[:index] if name.lower() != "idispatch"]
+                     if index is not None else [])
+        result = (ancestors, "wire" if status == 200 else "mirror", url)
+    cache[interface] = result
+    return result
+
+
+def address_names_interface(page, interface):
+    """Whether the page's OWN file name carries the interface: `<interface>_<member>.html`.
+
+    A SECOND, independent way to establish the SAME interface, beside the interface's listing page.
+    The prefix must be the interface PLUS `_`, so `ipart7_x.html` does not confirm a member of `IPart`
+    and a page of another interface never confirms this one.
+    """
+    return os.path.basename(page or "").lower().startswith(interface.lower() + "_")
 
 
 def candidate_names(member):
@@ -247,84 +293,159 @@ def candidate_names(member):
     return names
 
 
-def address_names_interface(page, interface):
-    """Whether the page's OWN file name carries the interface: `<interface>_<member>.html`.
+def names_member(title, member):
+    """Whether a page title names the member (a title carries the member, e.g. «Radius - Радиус»)."""
+    low = (title or "").lower()
+    return any(name in low for name in candidate_names(member))
 
-    A SECOND, independent way to establish the SAME interface, beside the interface's listing page.
-    The prefix must be the interface PLUS `_`, so `ipart7_x.html` does not confirm a member of `IPart`
-    and a page of another interface never confirms this one.
+
+def edit_distance(left, right):
+    """Levenshtein distance - used ONLY to recognise a misspelling, never to guess a member."""
+    if left == right:
+        return 0
+    previous = list(range(len(right) + 1))
+    for i, left_char in enumerate(left, 1):
+        current = [i]
+        for j, right_char in enumerate(right, 1):
+            current.append(min(previous[j] + 1, current[j - 1] + 1,
+                               previous[j - 1] + (left_char != right_char)))
+        previous = current
+    return previous[-1]
+
+
+def near_miss_token(title, member):
+    """The title token that is a ONE-MISSPELLING variant of the member, or None.
+
+    The help has titled pages after a misspelling (`IsVIalid` for `IsValid`, `jxj0` for `jx0`,
+    `jxjy` for `jxy`). The page is still the member's own page - its ADDRESS carries the member - so
+    it is confirmed with the misspelling NAMED. Only a token within edit distance 2 counts: a title
+    about a genuinely different member is a contradiction, not a misspelling.
     """
-    return os.path.basename(page or "").lower().startswith(interface.lower() + "_")
+    member = member.lower()
+    head = re.split(r"\s+[-–—]\s+", title or "", maxsplit=1)[0]
+    for token in re.split(r"[,\s]+", head.strip()):
+        token = token.strip().lower()
+        if not token or token == member:
+            continue
+        if abs(len(token) - len(member)) <= 2 and edit_distance(token, member) <= 2:
+            return token
+    return None
 
 
-def check_interface(interface, routes, listing_cache):
-    """Every route on one interface: confirmed, broken or not checked."""
+def member_list(interface):
+    """(listing, statuses, group_names) from the interface's OWN member-list pages.
+
+    `listing` maps a member name to the page that documents it. The name comes from the page's slug
+    (`kspart_newentity.html` -> `newentity`) AND from the link TEXT, because the help does not always
+    name a member page after the interface: `idrawingobject1_props.html` links `ConstraintsState` to
+    `constraintsstate.html`. The text before the description separator is a comma-separated GROUP
+    («jx, jy, jz - ...»), so every name of it is registered; `group_names` records those names.
+    """
+    base = interface.lower()
+    listing = {}
+    statuses = {}
+    group_names = set()
+    for suffix in ("_methods", "_props", "_propers"):
+        url = f"{HELP_ROOT}{base}{suffix}.html"
+        status, body = fetch(url)
+        statuses[suffix] = status
+        if status not in (200, "mirror"):
+            continue
+        for href, text in LINK.findall(body):
+            href = href.strip()
+            if not href.lower().endswith(".html") or "://" in href:
+                continue
+            page = HELP_ROOT + href.lstrip("./")
+            plain = re.sub(r"<[^>]+>", "", text).strip().lower()
+            head = ENTRY.split(plain, maxsplit=1)[0].strip()
+            names = [name.strip() for name in head.split(",") if name.strip()]
+            # A page named after the interface carries its member in the file name; any page is
+            # registered through the listing TEXT, which is the interface naming its own member.
+            if href.lower().startswith(base + "_"):
+                listing.setdefault(href.lower()[len(base) + 1:-len(".html")], page)
+            if names and not any(" " in name for name in names):
+                for name in names:
+                    listing.setdefault(name, page)
+                if len(names) > 1:
+                    group_names.update(names)
+    return listing, statuses, group_names
+
+
+def confirm_member_on(interface, member, listing_cache):
+    """How `member` is documented ON `interface`, or None.
+
+    Two independent ways: the interface's own listing names the member, or the page's ADDRESS is
+    `<interface>_<member>.html`. A page whose title misspells the member is confirmed with the
+    misspelling NAMED - its address still carries the member.
+    """
     if interface not in listing_cache:
         listing_cache[interface] = member_list(interface)
-    listing, statuses = listing_cache[interface]
-    results = []
+    listing, _statuses, group_names = listing_cache[interface]
+    # THE LISTING IS SEARCHED UNDER EVERY SPELLING the interop may use (`get_PartsEx` -> `PartsEx`),
+    # not only under the name the route carries: the accessor form is how the interop exposes a
+    # property, and the help names the page after the property.
+    listed = next((listing[name] for name in candidate_names(member) if name in listing), None)
+    candidates = [(listed, "перечень интерфейса")] if listed else []
+    address = f"{HELP_ROOT}{interface.lower()}_{member.lower()}.html"
+    if all(page != address for page, _how in candidates):
+        candidates.append((address, "имя файла страницы"))
+    for page, how in candidates:
+        status, body = fetch(page)
+        if status not in (200, "mirror"):
+            continue
+        title = page_title(body)
+        basis = "wire" if status == 200 else "mirror"
+        if names_member(title, member):
+            if how == "перечень интерфейса" and any(name in group_names
+                                                   for name in candidate_names(member)):
+                how = "групповая страница"
+            return {"page": page, "basis": basis, "how": how, "title": title, "doc_typo": None}
+        if page == address:
+            typo = near_miss_token(title, member)
+            if typo:
+                return {"page": page, "basis": basis, "how": how, "title": title, "doc_typo": typo}
+    return None
+
+
+def check_route(route, listing_cache, hierarchy_cache):
+    """One route: confirmed on its interface or on an ancestor, else named unconfirmed."""
+    interface = route["declared_on"]
+    member = route["member"]
+    ancestors, _basis, _url = interface_ancestors(interface, hierarchy_cache)
+    chain = [interface] + ancestors
+    for position, owner in enumerate(chain):
+        hit = confirm_member_on(owner, member, listing_cache)
+        if hit:
+            return {"route": route["route"], "member": member, "status": "Подтверждено",
+                    "page": hit["page"], "title": hit["title"], "basis": hit["basis"],
+                    "documented_on": owner,
+                    "relation": "сам интерфейс" if position == 0 else "предок",
+                    "how": hit["how"], "doc_typo": hit["doc_typo"],
+                    "ancestors_checked": ancestors, "source": [hit["page"]]}
+
+    listing, statuses, _groups = listing_cache.get(interface) or member_list(interface)
+    listing_cache[interface] = (listing, statuses, _groups)
     if not listing and all(status != 200 for status in statuses.values()):
         # Ни одна из страниц перечня интерфейса не открылась: спрашивать его членов нечем, и
         # повторять запрос на каждого члена значило бы умножить один отказ сервера на число членов.
         reason = "; ".join(f"{suffix}={status}" for suffix, status in sorted(statuses.items()))
-        return [{"route": route["route"], "member": route["member"],
-                 "page": f"{HELP_ROOT}{interface.lower()}_methods.html",
-                 "status": "не проверено", "reason": f"перечень интерфейса не прочитан: {reason}",
-                 "source": [f"{HELP_ROOT}{interface.lower()}_methods.html"]}
-                for route in routes]
-    for route in routes:
-        member = route["member"]
-        page = None
-        for name in candidate_names(member):
-            if name in listing:
-                page = listing[name]
-                break
-        # THE INTERFACE IS ESTABLISHED BY THE LISTING PAGE, not by the title: the titles of this help
-        # carry only the member ("Radius - Радиус дуги"), so demanding the interface name in the
-        # title marked 440 of 517 confirmed members as contradictions - an instrument defect that
-        # read as a mass API discrepancy.
-        #
-        # A SECOND ROUTE TO THE SAME CONCLUSION, and it is the page's OWN ADDRESS: on this site a
-        # member page is named `<interface>_<member>.html`, so a fetched page whose file name carries
-        # the interface as its prefix names the SAME interface, even when the interface's own listing
-        # page omits the member. Measured: `ksDocument2D.ksLineSeg` is served at
-        # `ksdocument2d_kslineseg.html` while `ksdocument2d_methods.html` does not list it, and the
-        # listing-only rule called a documented member undocumented. The prefix must be the interface
-        # plus `_`, so `ipart7_x.html` does NOT confirm a member of `IPart`.
-        listed = page is not None
-        if page is None:
-            page = f"{HELP_ROOT}{interface.lower()}_{member.lower()}.html"
-        status, body = fetch(page)
-        title = page_title(body)
-        same_member = any(name in title.lower() for name in candidate_names(member))
-        by_address = address_names_interface(page, interface)
-        basis = {200: "wire", "mirror": "mirror"}.get(status)
-        if basis and same_member and (listed or by_address):
-            results.append({"route": route["route"], "member": member, "page": page,
-                            "status": "Подтверждено", "title": title, "basis": basis,
-                            "interface_established_by": "перечень интерфейса" if listed
-                            else "имя файла страницы",
-                            "owner_established_by": f"{HELP_ROOT}{interface.lower()}_methods.html",
-                            "source": [page]})
-        elif basis and not listed and not by_address:
-            results.append({"route": route["route"], "member": member, "page": page,
-                            "status": "не подтверждено",
-                            "reason": "страница не найдена в перечне членов своего интерфейса",
-                            "listing_statuses": statuses, "title": title,
-                            "source": [f"{HELP_ROOT}{interface.lower()}_methods.html"]})
-        elif status == 200:
-            results.append({"route": route["route"], "member": member, "page": page,
-                            "status": "Противоречие",
-                            "reason": f"заголовок страницы не называет тот же член: {title}",
-                            "source": [page]})
-        elif isinstance(status, int):
-            results.append({"route": route["route"], "member": member, "page": page,
-                            "status": "не подтверждено", "reason": f"HTTP {status}",
-                            "source": [page]})
-        else:
-            results.append({"route": route["route"], "member": member, "page": page,
-                            "status": "не проверено", "reason": status, "source": [page]})
-    return results
+        return {"route": route["route"], "member": member,
+                "page": f"{HELP_ROOT}{interface.lower()}_methods.html", "status": "не проверено",
+                "reason": f"перечень интерфейса не прочитан: {reason}",
+                "ancestors_checked": ancestors,
+                "source": [f"{HELP_ROOT}{interface.lower()}_methods.html"]}
+    page = f"{HELP_ROOT}{interface.lower()}_{member.lower()}.html"
+    status, body = fetch(page)
+    title = page_title(body)
+    if status in (200, "mirror"):
+        return {"route": route["route"], "member": member, "page": page, "status": "Противоречие",
+                "reason": f"заголовок страницы не называет тот же член: {title}",
+                "title": title, "ancestors_checked": ancestors, "source": [page]}
+    if isinstance(status, int):
+        return {"route": route["route"], "member": member, "page": page, "status": "не подтверждено",
+                "reason": f"HTTP {status}", "ancestors_checked": ancestors, "source": [page]}
+    return {"route": route["route"], "member": member, "page": page, "status": "не проверено",
+            "reason": status, "ancestors_checked": ancestors, "source": [page]}
 
 
 TABLE_CELL = re.compile(r'<span class="f_Table_Cell">([^<]+)</span>')
@@ -387,25 +508,25 @@ def collect(routes_path):
     # находками «член без страницы»; в подтверждённые он не попадает.
     twins = [route for route in routes if route.get("assembly") == "adapter-twins"]
     judged = [route for route in routes if route.get("assembly") != "adapter-twins"]
-    by_interface = collections.OrderedDict()
-    for route in judged:
-        by_interface.setdefault(route["declared_on"], []).append(route)
     listing_cache = {}
-    checked = []
-    for interface in sorted(by_interface):
-        checked.extend(check_interface(interface, by_interface[interface], listing_cache))
+    hierarchy_cache = {}
+    checked = [check_route(route, listing_cache, hierarchy_cache) for route in judged]
     counts = collections.Counter(item["status"] for item in checked)
     bases = collections.Counter(item.get("basis", "нет") for item in checked)
     exceptions = [{"route": name, "note": note} for name, note in EXCEPTIONS.items()
                   if any(route["route"].split(".")[0] == name for route in routes)]
     unmeasured = [item for item in checked if item["status"] == "не проверено"]
     unconfirmed = [item for item in checked if item["status"] != "Подтверждено"]
+    confirmed = [item for item in checked if item["status"] == "Подтверждено"]
+    inherited = [item for item in confirmed if item["relation"] == "предок"]
+    groups = [item for item in confirmed if item["how"] == "групповая страница"]
+    typos = [item for item in confirmed if item["doc_typo"]]
     return {
         "instrument": "api-audit-docs",
         "date": stamp(),
         "source": os.path.relpath(routes_path, ROOT).replace("\\", "/"),
         "help_root": HELP_ROOT,
-        "interfaces_checked": len(by_interface),
+        "interfaces_checked": len({route["declared_on"] for route in judged}),
         "routes_checked": len(checked),
         "routes_outside_documentation": [{"route": route["route"],
                                           "reason": "собственный тип адаптера (`*Twin`), объявленный "
@@ -421,8 +542,22 @@ def collect(routes_path):
         "documentation_column_complete": not unmeasured,
         "unmeasured": [item["route"] for item in unmeasured],
         "unconfirmed": unconfirmed,
-        "confirmed": sorted(item["route"] for item in checked
-                            if item["status"] == "Подтверждено"),
+        "confirmed": sorted(item["route"] for item in confirmed),
+        # HOW each confirmation was reached: the interface itself, an ancestor's page, one page
+        # documenting a group, or a page whose title misspells the member. Named separately so that
+        # the reader sees which part of the column rests on an inherited page.
+        "confirmation_ways": {
+            "own_interface": len([item for item in confirmed if item["relation"] == "сам интерфейс"]),
+            "inherited": len(inherited),
+            "group_page": len(groups),
+            "title_typo": len(typos),
+        },
+        "inherited": [{"route": item["route"], "documented_on": item["documented_on"],
+                       "page": item["page"]} for item in inherited],
+        "group_pages": [{"route": item["route"], "documented_on": item["documented_on"],
+                         "page": item["page"]} for item in groups],
+        "title_typos": [{"route": item["route"], "documented_on": item["documented_on"],
+                         "typo": item["doc_typo"], "title": item["title"]} for item in typos],
         "mirror": mirror_info(),
         "exceptions": exceptions,
         "object_types": check_object_types(payload.get("object_type_constants") or []),
@@ -470,14 +605,15 @@ def self_test():
     check("неудачный ответ не попал в кэш", not os.path.isfile(os.path.join(CACHE, key)),
           os.path.join(CACHE, key))
 
-    listing, statuses = member_list("ksPart")
+    listing, statuses, _groups = member_list("ksPart")
     check("перечень членов читается со страниц САМОГО интерфейса", bool(listing),
           f"членов {len(listing)}, статусы {statuses}")
     check("названный член присутствует в перечне", "newentity" in listing,
           str([name for name in listing if name.startswith("new")][:5]))
 
     check("аксессор и свойство считаются одним именем",
-          candidate_names("get_PartsEx") == ["get_partsex", "partsex"], str(candidate_names("get_PartsEx")))
+          candidate_names("get_PartsEx") == ["get_partsex", "partsex"],
+          str(candidate_names("get_PartsEx")))
 
     # Адрес страницы называет СВОЙ интерфейс. Обе половины в одной постановке: страница своего
     # интерфейса подтверждает, страница ДРУГОГО интерфейса - нет (иначе правило «тот же интерфейс»
@@ -487,6 +623,39 @@ def self_test():
     check("адрес страницы ЧУЖОГО интерфейса не подтверждает",
           not address_names_interface(f"{HELP_ROOT}ipart7_measurement3d.html", "IPart")
           and not address_names_interface(f"{HELP_ROOT}iaxis3d_name.html", "IAxes3D"))
+
+    # §1.1: the ancestor chain, read from the interface's OWN page, and its two controls.
+    ancestors, basis, _url = interface_ancestors("IChamfer", {})
+    check("цепочка предков читается со строки «Иерархия» страницы интерфейса",
+          ancestors == ["IKompasAPIObject", "IModelObject"], f"{ancestors}, основа={basis}")
+    owner = None
+    for candidate in ["IChamfer"] + ancestors:
+        if confirm_member_on(candidate, "Name", {}):
+            owner = candidate
+            break
+    check("член предка подтверждается через цепочку", owner == "IModelObject", f"владелец={owner}")
+    check("отрицательный контроль: члена нет ни у интерфейса, ни у предков",
+          confirm_member_on("IChamfer", "ZzzAuditAbsent", {}) is None)
+    check("чужой интерфейс с тем же именем члена вне цепочки НЕ подтверждает (урок F-06)",
+          "IFeaturePattern" not in ancestors
+          and confirm_member_on("IChamfer", "GeometryPattern", {}) is None)
+
+    # §1.2: one page documenting a group of members.
+    _listing, _statuses, group_names = member_list("ksMassInertiaParam")
+    check("групповая страница называет каждого члена группы",
+          {"jy", "jz", "jy0", "jz0"} <= set(group_names), str(sorted(group_names)))
+    check("член группы подтверждается своей группой",
+          (confirm_member_on("ksMassInertiaParam", "jz", {}) or {}).get("how") == "групповая страница")
+
+    # The listing is searched under the accessor spelling too: the route carries `get_PartsEx` while
+    # the help names the page after the property `PartsEx`.
+    check("аксессор находит страницу свойства в перечне интерфейса",
+          bool(confirm_member_on("IPart7", "get_PartsEx", {})))
+
+    # §1.3: a page whose ADDRESS carries the member but whose title misspells it.
+    typo = confirm_member_on("ksFeature", "IsValid", {})
+    check("опечатка заголовка названа, а не выдана за противоречие",
+          bool(typo) and typo.get("doc_typo") == "isvialid", str(typo and typo.get("doc_typo")))
 
     print(f"\nСамопроверка прибора: {checks} проверок, "
           f"{len(failures)} FAIL" + (f" - {failures}" if failures else ""))
@@ -513,6 +682,7 @@ def main():
     save_json(out, result)
     print(f"интерфейсов проверено: {result['interfaces_checked']}, маршрутов: {result['routes_checked']}")
     print(f"статусы: {result['statuses']}")
+    print(f"способы подтверждения: {result['confirmation_ways']}")
     print(f"не подтверждено: {len(result['unconfirmed'])}")
     for item in result["unconfirmed"][:10]:
         print(f"  {item['route']} - {item.get('reason')}")

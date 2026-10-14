@@ -220,6 +220,17 @@ function New-LocalConfig([string]$versionDir, [string]$configPath) {
 
 function Invoke-SelfTest([string]$hostExe, [string]$configPath, $manifest) {
     Say "5. Самопроверка: запуск Host по MCP stdio (КОМПАС не запускается)"
+    # MEASURED: reading EnvironmentVariables copies the parent block into a case-insensitive
+    # StringDictionary; two names differing only by case abort that copy, and the child then
+    # starts with a truncated block. Windows treats such names as one variable, so the extra
+    # spellings are dropped before the copy runs.
+    # DOC: learn.microsoft.com/dotnet/api/system.diagnostics.processstartinfo.environmentvariables
+    # History: docs/decisions/releases.md#installer-selftest-env
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    foreach ($name in @([Environment]::GetEnvironmentVariables().Keys)) {
+        $key = [string]$name
+        if (-not $seen.Add($key)) { [Environment]::SetEnvironmentVariable($key, $null, "Process") }
+    }
     $psi = New-Object Diagnostics.ProcessStartInfo
     $psi.FileName = $hostExe
     $psi.Arguments = "--config `"$configPath`""
@@ -444,9 +455,15 @@ Say "    журнал:        $($cfg.journal_path)"
 
 $selfTestFailed = $false
 if (-not $SkipSelfTest) {
-    $report = Invoke-SelfTest $hostExe $configPath $manifest
+    # INVARIANT: any step-5 failure reaches the operator as ОСТАНОВЛЕНО with the step named,
+    # never as a bare script error that hides which step stopped the install.
+    try {
+        $report = Invoke-SelfTest $hostExe $configPath $manifest
+    } catch {
+        Stop-Install "шаг 5 (самопроверка) прерван ошибкой: $($_.Exception.Message)"
+    }
     $selfTestFailed = [bool]$report.failed
-    if ($selfTestFailed) { Stop-Install "самопроверка не прошла; запись в Codex не делалась." }
+    if ($selfTestFailed) { Stop-Install "шаг 5 (самопроверка) не прошла; запись в Codex не делалась." }
 }
 
 $toml = $null

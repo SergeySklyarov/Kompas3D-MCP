@@ -33,3 +33,31 @@
 без `-p:Platform` - 589/589 PASS; с `-p:Platform=AnyCPU` - ошибка стража.
 
 Правило для разработчиков - в `AGENTS.md`, раздел «Сборка и тесты».
+
+## <a id="kompasroot"></a>Машинный путь к КОМПАС: `Directory.Build.props.local` (14.10.2026)
+
+**Ловушка.** Комментарий в `Directory.Build.props` предлагал переопределять `KompasRoot` через
+`Directory.Build.props.local`, но MSBuild по имени импортирует только `Directory.Build.props`.
+Файл `.local` никто не подключал: на машине, где КОМПАС установлен не в `D:\Programs\KOMPAS-3Dv24`,
+созданный по совету файл ничего не менял, и сборка адаптера падала с «Не найден
+Interop.Kompas6API5.dll» без подсказки, почему переопределение не сработало.
+
+**Решение.**
+
+- В конец `Directory.Build.props` добавлен `<Import Project="Directory.Build.props.local"
+  Condition="Exists(...)" />`. Импорт последний, чтобы машинные значения побеждали значения по
+  умолчанию.
+- `KompasInteropDir` и `KompasTlbDir` выводятся из `KompasRoot` раньше импорта, поэтому в `.local`
+  задаются все три свойства (образец - `docs/operator-guide/build.md`).
+- `Directory.Build.props.local` внесён в `.gitignore`: он содержит путь конкретной машины.
+
+**Проверено 14.10.2026** на машине с КОМПАС в `C:\Program Files\ASCON\KOMPAS-3D v24` (наряд
+`NEW_MACHINE_ENV`): сборка Debug и Release без предупреждений и ошибок; `dotnet test` - Release
+1132/1132 PASS, Debug 1131/1132 (единственный отказ - плавающий
+`FileLockOwnerLookupTests.AProbeThatFaults_IsNamedNotThrown`, в одиночном прогоне 3/3 PASS; техдолг 24).
+Утверждение о трёх свойствах проверено сборкой: с ОДНИМ `KompasRoot` в `.local` сборка падает и
+называет старый путь `D:\Programs\KOMPAS-3Dv24\Libs\PolynomLib\Bin\Client`; без файла `.local` - то же
+(условие `Exists`).
+
+Прибор приёмки `mcp-smoke.py` эти свойства не читает: свой путь к установке он берёт из
+`KOMPAS_MCP_INSTALL` (`docs/operator-guide/build.md`).

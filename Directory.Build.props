@@ -84,4 +84,12 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 
+  <!--
+    INVARIANT: this import stays LAST, so machine-local values win over the defaults above.
+    MSBuild imports Directory.Build.props by name only, so without this line a
+    Directory.Build.props.local does nothing and the documented override is a dead path.
+    History: docs/decisions/build.md#kompasroot
+  -->
+  <Import Project="Directory.Build.props.local" Condition="Exists('Directory.Build.props.local')" />
+
 </Project>

@@ -1,7 +1,14 @@
 # Сборка
 
 Требования: Windows x64, .NET SDK 10 (`global.json` закрепляет 10.0.401 с
-`rollForward: latestFeature`), установленный КОМПАС-3D v24 x64.
+`rollForward: latestFeature`), установленный КОМПАС-3D v24 x64, Windows SDK.
+
+**Windows SDK нужен не для сборки, а для тестов.** Модульный тест
+`ComDisconnectClassificationTests.EveryCodeTheClassifierRecognisesMatchesTheWindowsSdkHeader`
+сверяет распознаваемые коды обрыва COM с `winerror.h` и на отсутствие заголовка ОТКАЗЫВАЕТ -
+намеренно: сторож, который молча ничего не делает, неотличим от прошедшего. Ставится отдельно
+(`Microsoft.WindowsSDK.10.0.18362` или новее); ищется в
+`<Program Files (x86)>\Windows Kits\10\Include\<версия>\shared\winerror.h`.
 
 ## Проверить окружение
 
@@ -30,6 +37,27 @@ dotnet build KompasMcp.sln -p:KompasRoot=D:\Programs\KOMPAS-3Dv24
 dotnet build -p:KompasInteropDir="D:\Programs\KOMPAS-3Dv24\Libs\PolynomLib\Bin\Client"
 ```
 
+### Задать путь один раз для машины
+
+Передавать `-p:KompasRoot=` при каждой сборке не нужно: создайте в корне репозитория
+`Directory.Build.props.local` (он не отслеживается git, см. `.gitignore`), и он подхватится сам.
+
+**Задавать в нём нужно ТРИ свойства, а не одно.** `KompasInteropDir` и `KompasTlbDir` выводятся из
+`KompasRoot` в `Directory.Build.props` с условием «если ещё не задано», и эта выводимость
+вычисляется ДО импорта `.local`. Поэтому одного `KompasRoot` недостаточно: выведенные свойства уже
+запомнили прежний корень, и сборка продолжит искать `Interop.Kompas6API5.dll` там, хотя в ошибке
+будет стоять старый путь и увести это может далеко в сторону.
+
+```xml
+<Project>
+  <PropertyGroup>
+    <KompasRoot>C:\Program Files\ASCON\KOMPAS-3D v24</KompasRoot>
+    <KompasInteropDir>C:\Program Files\ASCON\KOMPAS-3D v24\Libs\PolynomLib\Bin\Client</KompasInteropDir>
+    <KompasTlbDir>C:\Program Files\ASCON\KOMPAS-3D v24\Bin</KompasTlbDir>
+  </PropertyGroup>
+</Project>
+```
+
 Если файл не найден, сборка `KompasMcp.Api5Adapter` падает с внятным сообщением. Адаптер
 **не** собирается в заглушку: молча неработающий COM-слой хуже отсутствующего. Остальные проекты
 (`Contracts`, `Domain`, `Host`, unit-тесты) КОМПАС не требуют и собираются без него.
@@ -37,6 +65,26 @@ dotnet build -p:KompasInteropDir="D:\Programs\KOMPAS-3Dv24\Libs\PolynomLib\Bin\C
 То же самое работает и во время исполнения: `KompasInteropResolver` ищет сборки в порядке
 `KOMPAS_MCP_INTEROP_DIR` → каталог из регистрации COM → исторически наблюдавшийся путь. Найденный
 каталог показывается в ответе `kompas_capabilities`.
+
+## Путь к КОМПАС для приёмки (`KOMPAS_MCP_INSTALL`)
+
+Сборка берёт путь к установке КОМПАС из `KompasRoot` (см. выше). Но **прибор приёмки
+(`scripts/mcp-smoke.py`) этих свойств не читает: вендорские образцы и `kAPI7.tlb` он берёт из
+каталога, заданного своей константой**, и по умолчанию это `D:/Programs/KOMPAS-3Dv24` - путь, исторически наблюдавшийся на
+машине разработки. На другой машине это даёт отказы, которые выглядят как дефекты продукта, хотя
+продукт исправен: группа `DEP.DPU.*` сообщает «внешняя модель не открылась: нет файла:
+Samples/Animation3D/AN_part_01_01.m3d», а `INT.13.twin_layout` - «установленная библиотека типов не
+найдена», хотя и образцы, и `kAPI7.tlb` лежат в установке.
+
+Перед полным прогоном на новой машине задайте путь:
+
+```powershell
+$env:KOMPAS_MCP_INSTALL = "C:\Program Files\ASCON\KOMPAS-3D v24"
+python scripts/mcp-smoke.py --all
+```
+
+Ключ читается из окружения и переопределяет константу; проверяйте его, если строки `DEP.DPU.*` или
+`INT.13` отказывают по «нет файла» / «не найдена», а файл в установке есть.
 
 ## Варианты сборки
 

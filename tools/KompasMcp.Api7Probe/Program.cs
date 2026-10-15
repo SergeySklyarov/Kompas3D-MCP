@@ -800,11 +800,12 @@ public sealed class Options
     public bool ShutdownVisible { get; private set; }
 
     /// <summary><c>--fillet-rebuild &lt;kind&gt;</c>: does a fillet (and a chamfer) created by the API5
-    /// edge route survive a control rebuild, or does the rebuild remove it / move it to another edge
-    /// (order <c>FILLET_REBUILD_STABILITY_DEVELOPER_PROMPT.md</c> §1). <c>kind</c> is <c>fillet</c>,
-    /// <c>chamfer</c> (two legs) or <c>chamfer-da</c> (distance + angle). Each experience launches its own
-    /// instance — the adapter's failures grouped at the start of a repeat series, so the cold state is
-    /// the subject. History: docs/decisions/probes.md#fillet-rebuild</summary>
+    /// edge route survive a control rebuild, or does the rebuild remove it / move it to another edge.
+    /// <c>kind</c> is <c>fillet</c>, <c>chamfer</c> (two legs) or <c>chamfer-da</c> (distance + angle);
+    /// <c>-host</c> after it is the SAME route with the product's own settlement order, and <c>-pair</c>
+    /// runs both orders in ONE series, alternating. Each experience launches its own instance — the
+    /// adapter's failures grouped at the start of a repeat series, so the cold state is the subject.
+    /// History: docs/decisions/probes.md#fillet-rebuild</summary>
     public string? FilletRebuild { get; private set; }
 
     /// <summary>How many cold experiences <c>--fillet-rebuild</c> runs. Default 20.</summary>

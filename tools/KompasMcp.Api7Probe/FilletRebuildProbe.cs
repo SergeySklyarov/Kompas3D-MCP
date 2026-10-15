@@ -9,28 +9,12 @@ namespace KompasMcp.Api7Probe;
 
 /// <summary>Probe FR — does a fillet (and a chamfer) created by the API5 edge route SURVIVE a rebuild,
 /// or does the control rebuild take it away or move it to another edge?</summary>
-/// <remarks>
-/// <b>The question.</b> The shipping adapter settles every body mutation with a control rebuild
-/// (<c>SettleAfterMutation</c>). A fillet created on a Г-plate was measured to be applied by
-/// <c>Create()</c> (V = 67980.6858347058) and then to be REMOVED (V = 68000) or MOVED to the reflex
-/// corner (V = 68019.3141652942) by that very control rebuild. The adapter cannot tell those three
-/// outcomes apart by volume alone on the four-corner reference plate, because all four of its corners
-/// are convex and equivalent.
-/// <b>Why the probe goes to the kernel directly.</b> The adapter always settles, so the product route
-/// cannot answer "did <c>Create()</c> alone apply it, and what does the FIRST rebuild do" — the two
-/// questions the diagnosis needs. A direct COM probe keeps the two moments apart.
-/// <b>The Г-contour, not the reference plate.</b> 100×80 minus 40×30 has ONE REFLEX corner at (10,10)
-/// and five convex ones; a fillet there removes (1 − π/4)·r²·h = 19.3141652942 of material on a convex
-/// corner and ADDS exactly the same amount on the reflex one. So the three outcomes are three different
-/// numbers: 67980.6858347058 / 68000 / 68019.3141652942.
-/// <b>Cold series.</b> The adapter's failures grouped at the START of a repeat series, so each
-/// experience here launches its OWN instance of KOMPAS: a state inherited from the previous experience
-/// is exactly what the diagnosis must not have.
-/// <b>What the probe does NOT do.</b> It does not touch the MCP reference registry, does not go through
-/// the shipping Host, and does not call the adapter's settlement — a probe that measured through the
-/// product could not attribute the shift.
-/// History: docs/decisions/probes.md#fillet-rebuild
-/// </remarks>
+/// <remarks>INVARIANT: the adapter settles every body mutation with a control rebuild, so the product
+/// route cannot tell "Create() applied it" from "the first rebuild moved it"; this probe keeps those two
+/// moments apart, on its OWN instance of KOMPAS per experience, and touches neither the MCP reference
+/// registry nor the shipping Host. MEASURED: on the Г-contour a convex-corner fillet REMOVES (1 − π/4)·r²·h
+/// and a reflex-corner one ADDS the same, so the outcomes differ by volume; the five convex corners do
+/// not, which is why the axis ORIGIN names the corner. History: docs/decisions/probes.md#fillet-rebuild</remarks>
 internal sealed class FilletRebuildProbe
 {
     // KompasObjectTypes numbers, taken from the shipping adapter's own table.
@@ -101,91 +85,95 @@ internal sealed class FilletRebuildProbe
     {
         var kind = _options.FilletRebuild ?? "fillet";
         var iterations = Math.Max(1, _options.Iterations);
-        var summary = _report.Begin("FR.0", $"Сводка холодной серии: {kind}, опытов {iterations}",
+        var arms = Arms(kind);
+        var paired = arms.Length > 1;
+        var summary = _report.Begin("FR.0", paired
+                ? $"Сводка холодной серии: {kind}, опытов {iterations} на каждую постановку, чередуя"
+                : $"Сводка холодной серии: {kind}, опытов {iterations}",
             "Сколько опытов дали сдвиг, и в какую сторону?");
         summary.Data["kind"] = kind;
         summary.Data["iterations"] = iterations;
+        summary.Data["arms"] = arms;
         summary.Data["requested_corner"] = Point(Requested.X, Requested.Y);
         summary.Data["reflex_corner"] = Point(Reflex.X, Reflex.Y);
         summary.Data["expected_convex_volume"] = Num(ConvexFilletVolume);
         summary.Data["expected_reflex_volume"] = Num(ReflexFilletVolume);
 
-        var chains = new List<string>();
-        var creates = new List<string>();
-        var firstRebuild = new List<string>();
-        var reopen = new List<string>();
-        var nextOp = new List<string>();
+        // One bucket per postановка: a paired series is read apart arm by arm, never only together.
+        var buckets = arms.ToDictionary(a => a, _ => new Bucket(), StringComparer.Ordinal);
+        var experience = 0;
 
         for (var k = 1; k <= iterations; k++)
         {
-            var step = _report.Begin($"FR.{k}", $"{kind}: опыт {k} (свой экземпляр КОМПАС)",
-                "Применяется ли признак, и что с ним делает контрольное перестроение?");
-            try
+            for (var a = 0; a < arms.Length; a++)
             {
-                Launch();
-                if (_app is null)
+                // WHICH postановка goes first alternates with the round, so a drift of the machine over
+                // the series reaches both arms instead of only the one that always runs second.
+                var arm = arms[(a + k - 1) % arms.Length];
+                experience++;
+                var step = _report.Begin($"FR.{k}.{a + 1}", $"{arm}: опыт {k} (свой экземпляр КОМПАС)",
+                    "Применяется ли признак, и что с ним делает контрольное перестроение?");
+                try
                 {
-                    step.Fail("Экземпляр КОМПАС не поднят.");
+                    Launch();
+                    if (_app is null)
+                    {
+                        step.Fail("Экземпляр КОМПАС не поднят.");
+                    }
+                    else
+                    {
+                        Measure(step, arm, experience);
+                    }
                 }
-                else
+                catch (Exception ex)
                 {
-                    Measure(step, kind, k);
+                    step.Errors.Add(ex.ToString());
+                    step.Fail("Опыт упал: " + ex.Message);
                 }
-            }
-            catch (Exception ex)
-            {
-                step.Errors.Add(ex.ToString());
-                step.Fail("Опыт упал: " + ex.Message);
-            }
-            finally
-            {
-                Finish();
-            }
+                finally
+                {
+                    Finish();
+                }
 
-            if (step.Data.TryGetValue("chain", out var chain) && chain is string text)
-            {
-                chains.Add(text);
+                buckets[arm].Add(step);
+                var bucket = buckets[arm];
+                Console.WriteLine($"[FR] {arm} {k}/{iterations} опыт {experience}: "
+                                  + "create=" + bucket.Last("create_state")
+                                  + " порядок=" + bucket.Last("rebuild1_state")
+                                  + " прилегание=" + bucket.Last("placement_after_order")
+                                  + " reopen=" + bucket.Last("reopen_state")
+                                  + " nextop=" + bucket.Last("nextop_state")
+                                  + " chain=" + bucket.Last("chain"));
             }
-
-            if (step.Data.TryGetValue("create_state", out var created) && created is string c)
-            {
-                creates.Add(c);
-            }
-
-            if (step.Data.TryGetValue("rebuild1_state", out var rb) && rb is string r)
-            {
-                firstRebuild.Add(r);
-            }
-
-            if (step.Data.TryGetValue("reopen_state", out var ro) && ro is string rr)
-            {
-                reopen.Add(rr);
-            }
-
-            if (step.Data.TryGetValue("nextop_state", out var no) && no is string nn)
-            {
-                nextOp.Add(nn);
-            }
-
-            Console.WriteLine($"[FR] {k}/{iterations} {kind}: create={Last(creates)} rb1={Last(firstRebuild)} "
-                              + $"reopen={Last(reopen)} nextop={Last(nextOp)} chain={Last(chains)}");
         }
 
-        summary.Data["create_states"] = Tally(creates);
-        summary.Data["rebuild1_states"] = Tally(firstRebuild);
-        summary.Data["reopen_states"] = Tally(reopen);
-        summary.Data["nextop_states"] = Tally(nextOp);
-        summary.Data["chains"] = Tally(chains);
-        summary.Observe("Состояния: create=" + Tally(creates));
-        summary.Observe("Состояния: первое перестроение=" + Tally(firstRebuild));
-        summary.Observe("Состояния: reopen=" + Tally(reopen));
-        summary.Observe("Состояния: следующая операция=" + Tally(nextOp));
-        summary.Observe("Цепочки: " + Tally(chains));
-        summary.Pass($"Опытов {iterations}: Create() применил признак в "
-                     + Count(creates, s => s == "convex") + " из " + creates.Count
-                     + "; первое перестроение оставило его на месте в "
-                     + Count(firstRebuild, s => s == "convex") + " из " + firstRebuild.Count
-                     + "; reopen — в " + Count(reopen, s => s == "convex") + " из " + reopen.Count + ".");
+        foreach (var arm in arms)
+        {
+            var bucket = buckets[arm];
+            // A single arm keeps the historical field names; a pair prefixes them, so both arms are read
+            // apart and neither can be mistaken for the whole series.
+            var prefix = paired ? arm + "." : string.Empty;
+            summary.Data[prefix + "create_states"] = Tally(bucket.Values("create_state"));
+            summary.Data[prefix + "rebuild1_states"] = Tally(bucket.Values("rebuild1_state"));
+            summary.Data[prefix + "reopen_states"] = Tally(bucket.Values("reopen_state"));
+            summary.Data[prefix + "nextop_states"] = Tally(bucket.Values("nextop_state"));
+            summary.Data[prefix + "placement_after_order"] = Tally(bucket.Values("placement_after_order"));
+            summary.Data[prefix + "placement_after_reopen"] = Tally(bucket.Values("placement_after_reopen"));
+            summary.Data[prefix + "chains"] = Tally(bucket.Values("chain"));
+            summary.Observe($"{arm}: Create() → " + Tally(bucket.Values("create_state"))
+                            + "; после порядка → " + Tally(bucket.Values("rebuild1_state"))
+                            + "; прилегание после порядка → " + Tally(bucket.Values("placement_after_order"))
+                            + "; reopen → " + Tally(bucket.Values("reopen_state")));
+            summary.Pass($"{arm}: опытов {bucket.Count}: Create() применил признак в "
+                         + Count(bucket.Values("create_state"), s => s == "convex") + " из " + bucket.Count
+                         + "; первое перестроение оставило его на месте в "
+                         + Count(bucket.Values("rebuild1_state"), s => s == "convex") + " из " + bucket.Count
+                         + "; прилегание к запрошенному ребру сошлось в "
+                         + Count(bucket.Values("placement_after_order"), s => s == "по запрошенному ребру")
+                         + " из " + bucket.Count
+                         + "; reopen — в " + Count(bucket.Values("reopen_state"), s => s == "convex")
+                         + " из " + bucket.Count + ".");
+        }
     }
 
     // ══════════════════════════════════════════════════════════════════ one experience ══
@@ -194,9 +182,9 @@ internal sealed class FilletRebuildProbe
     {
         // The "-host" suffix is not a different feature: it is the SAME creation route followed by the
         // adapter's OWN settlement order — one baseline read, then RebuildDocument + UpdateDocumentParam,
-        // with NO read in between. MEASURED: the long chain below never reproduced the shift in 60 cold
-        // experiences, and the chain reads the volume, the faces and the inputs between Create() and the
-        // first rebuild — so the order/moment is the variable that had to be isolated, not the route.
+        // with NO read of the volume, the faces or the inputs in between. That order is the variable this
+        // postановка isolates: the with-reads chain below reads all three between Create() and the first
+        // rebuild, so the two arms differ in WHEN the reads happen, not in how the edge is supplied.
         var hostOrder = kind.EndsWith("-host", StringComparison.Ordinal);
         var baseKind = hostOrder ? kind[..^"-host".Length] : kind;
 
@@ -261,11 +249,11 @@ internal sealed class FilletRebuildProbe
 
             if (hostOrder)
             {
-                SettleAsAdapter(step, baseKind, part, doc);
+                SettleAsAdapter(step, baseKind, part, doc, target, wantConvex);
             }
             else
             {
-                FullChain(step, baseKind, part, doc, feature);
+                FullChain(step, baseKind, part, doc, feature, target, wantConvex);
             }
 
             // ── save → close → reopen: what the user sees when the file is opened ──
@@ -282,7 +270,9 @@ internal sealed class FilletRebuildProbe
             var volumeReopen = Api5.Volume(part);
             step.Data["volume_after_reopen"] = Num(volumeReopen);
             step.Data["reopen_state"] = Label(baseKind, volumeReopen);
-            step.Data["cylinder_after_reopen"] = Cylinders(part);
+            var cylindersReopen = FilletCylinders(part);
+            step.Data["cylinder_after_reopen"] = CylinderLabels(cylindersReopen);
+            step.Data["placement_after_reopen"] = Placement(target, wantConvex, cylindersReopen);
             ReadInputs(step, "inputs_after_reopen", part, doc, baseKind, null);
 
             doc.RebuildDocument();
@@ -296,21 +286,25 @@ internal sealed class FilletRebuildProbe
             step.Data["cut_created"] = cut;
             step.Data["volume_after_next_op"] = Num(volumeNext);
             step.Data["nextop_state"] = NextOpLabel(baseKind, volumeNext);
-            step.Data["cylinder_after_next_op"] = Cylinders(part);
+            step.Data["cylinder_after_next_op"] = CylinderLabels(FilletCylinders(part));
 
+            // The chain names the states in the order the postановка produces them, and a state the arm
+            // never reaches (the product order makes ONE control rebuild) is simply absent, not an error.
             step.Data["chain"] = string.Join("→", new[]
             {
-                step.Data["create_state"]?.ToString(),
-                step.Data["rebuild1_state"]?.ToString(),
-                step.Data["rebuild2_state"]?.ToString(),
-                step.Data["rebuild3_state"]?.ToString(),
-                step.Data["reopen_state"]?.ToString(),
-                step.Data["reopen_rebuild_state"]?.ToString(),
-                step.Data["nextop_state"]?.ToString(),
+                ChainState(step, "create_state"),
+                ChainState(step, "rebuild1_state"),
+                ChainState(step, "rebuild2_state"),
+                ChainState(step, "rebuild3_state"),
+                ChainState(step, "reopen_state"),
+                ChainState(step, "reopen_rebuild_state"),
+                ChainState(step, "nextop_state"),
             }.Where(s => s is not null));
 
-            step.Pass($"Create() → {step.Data["create_state"]}; первое перестроение → "
-                      + $"{step.Data["rebuild1_state"]}; reopen → {step.Data["reopen_state"]}.");
+            step.Pass("Create() → " + ChainState(step, "create_state") + "; первое перестроение → "
+                      + ChainState(step, "rebuild1_state") + "; прилегание → "
+                      + ChainState(step, "placement_after_order") + "; reopen → "
+                      + ChainState(step, "reopen_state") + ".");
         }
         catch (Exception ex)
         {
@@ -328,9 +322,10 @@ internal sealed class FilletRebuildProbe
 
     /// <summary>The adapter's own settlement, reproduced call for call: ONE baseline volume read, then
     /// <c>RebuildDocument()</c> + <c>UpdateDocumentParam()</c> repeated until two readings agree (limit 3).
-    /// Nothing is read between <c>Create()</c> and the first rebuild — that is the whole point of this
-    /// postановка.</summary>
-    private void SettleAsAdapter(ProbeStep step, string baseKind, ksPart part, ksDocument3D doc)
+    /// Nothing ELSE is read between <c>Create()</c> and the first rebuild — the baseline volume is the
+    /// product's own first read, and the volume, the faces and the inputs are read only after the order.</summary>
+    private void SettleAsAdapter(ProbeStep step, string baseKind, ksPart part, ksDocument3D doc,
+        (double X, double Y) target, bool wantConvex)
     {
         var baseline = Api5.Volume(part);
         var previous = baseline;
@@ -363,7 +358,9 @@ internal sealed class FilletRebuildProbe
         step.Data["adapter_stable"] = stable;
         step.Data["create_state"] = Label(baseKind, baseline);
         step.Data["rebuild1_state"] = Label(baseKind, observed);
-        step.Data["cylinder_after_rebuild1"] = Cylinders(part);
+        var cylinders = FilletCylinders(part);
+        step.Data["cylinder_after_rebuild1"] = CylinderLabels(cylinders);
+        step.Data["placement_after_order"] = Placement(target, wantConvex, cylinders);
         ReadInputs(step, "inputs_after_rebuilds", part, doc, baseKind, null);
     }
 
@@ -373,26 +370,36 @@ internal sealed class FilletRebuildProbe
 
     /// <summary>The long chain: reads between <c>Create()</c> and the first rebuild, three rebuilds one at
     /// a time, then the inputs re-read. Kept as the contrast postановка to <see cref="SettleAsAdapter"/>.</summary>
-    private void FullChain(ProbeStep step, string baseKind, ksPart part, ksDocument3D doc, ksEntity? feature)
+    private void FullChain(ProbeStep step, string baseKind, ksPart part, ksDocument3D doc, ksEntity? feature,
+        (double X, double Y) target, bool wantConvex)
     {
         var volumeCreate = Api5.Volume(part);
         var volumeReread = Api5.Volume(part);
         step.Data["volume_after_create"] = Num(volumeCreate);
         step.Data["volume_after_reread"] = Num(volumeReread);
         step.Data["create_state"] = Label(baseKind, volumeCreate);
-        step.Data["cylinder_after_create"] = Cylinders(part);
+        step.Data["cylinder_after_create"] = CylinderLabels(FilletCylinders(part));
         ReadInputs(step, "inputs_after_create", part, doc, baseKind, feature);
 
+        var cylindersAfterOrder = new List<FilletCylinder>();
         for (var attempt = 1; attempt <= 3; attempt++)
         {
             var ok = doc.RebuildDocument();
             var volume = Api5.Volume(part);
+            var cylinders = FilletCylinders(part);
+            if (attempt == 1)
+            {
+                // "After the order" is the SAME moment in both arms: the first control rebuild.
+                cylindersAfterOrder = cylinders;
+            }
+
             step.Data[$"rebuild{attempt}_ok"] = ok;
             step.Data[$"volume_after_rebuild{attempt}"] = Num(volume);
             step.Data[$"rebuild{attempt}_state"] = Label(baseKind, volume);
-            step.Data[$"cylinder_after_rebuild{attempt}"] = Cylinders(part);
+            step.Data[$"cylinder_after_rebuild{attempt}"] = CylinderLabels(cylinders);
         }
 
+        step.Data["placement_after_order"] = Placement(target, wantConvex, cylindersAfterOrder);
         ReadInputs(step, "inputs_after_rebuilds", part, doc, baseKind, feature);
     }
 
@@ -777,17 +784,96 @@ internal sealed class FilletRebuildProbe
 
     // ══════════════════════════════════════════════════════════════ reading ══
 
-    /// <summary>Where the fillet surface ended up: every cylindrical face of the body with its radius and
-    /// the axis origin. A convex-corner fillet at (50,−40) puts the axis at (47,−37); a reflex-corner one
-    /// at (13,13). The volume alone cannot say WHICH corner — this can.</summary>
-    private static List<string> Cylinders(ksPart part)
+    /// <summary>Where the fillet surface ended up: every cylindrical face of the body whose radius is the
+    /// fillet's, with its axis origin. The volume alone cannot say WHICH corner — this can.</summary>
+    private static List<FilletCylinder> FilletCylinders(ksPart part)
     {
         var prepared = new ProbeStep { Id = "—", Title = "чтение цилиндрических граней" };
         return Api5.ReadFaces(part, prepared)
             .Where(f => f.IsCylinder && Math.Abs((f.CylinderRadius ?? 0d) - Radius) < 1e-3)
-            .Select(f => "r=" + Num(f.CylinderRadius) + " начало=" + Api5.FaceReading.Point(f.CylinderOrigin)
-                         + " ось=" + Api5.FaceReading.Point(f.CylinderAxis))
+            .Select(f => new FilletCylinder(
+                "r=" + Num(f.CylinderRadius) + " начало=" + Api5.FaceReading.Point(f.CylinderOrigin)
+                + " ось=" + Api5.FaceReading.Point(f.CylinderAxis),
+                f.CylinderOrigin is { Length: >= 2 } originX ? originX[0] : double.NaN,
+                f.CylinderOrigin is { Length: >= 2 } originY ? originY[1] : double.NaN))
             .ToList();
+    }
+
+    private static List<string> CylinderLabels(IEnumerable<FilletCylinder> cylinders) =>
+        cylinders.Select(c => c.Label).ToList();
+
+    /// <summary>The state recorded under <paramref name="key"/>, or null when this postановка never reached
+    /// that stage. A dictionary INDEXER would turn an absent stage into a KeyNotFoundException and lose the
+    /// whole experience — which is exactly what "the product order makes one control rebuild" must not do.</summary>
+    private static string? ChainState(ProbeStep step, string key) =>
+        step.Data.TryGetValue(key, out var value) ? value?.ToString() : null;
+
+    /// <summary>Whether the fillet's surface really adjoins the edge that was ASKED FOR. The axis of a
+    /// corner fillet stands at the radius from each of the two faces meeting there — on the material side
+    /// of a convex corner and on the void side of a reflex one — so the axis ORIGIN names the corner.</summary>
+    private static string Placement((double X, double Y) corner, bool convex, IReadOnlyList<FilletCylinder> cylinders)
+    {
+        if (cylinders.Count == 0)
+        {
+            return "поверхности нет";
+        }
+
+        if (ExpectedAxis(corner, convex) is not { } expected)
+        {
+            return "ожидаемая ось не определена";
+        }
+
+        if (cylinders.Any(c => Math.Abs(c.X - expected.X) <= 1e-3 && Math.Abs(c.Y - expected.Y) <= 1e-3))
+        {
+            return "по запрошенному ребру";
+        }
+
+        var nearest = cylinders
+            .OrderBy(c => Math.Pow(c.X - expected.X, 2) + Math.Pow(c.Y - expected.Y, 2))
+            .First();
+        var offset = Math.Sqrt(Math.Pow(nearest.X - expected.X, 2) + Math.Pow(nearest.Y - expected.Y, 2));
+        return "не по запрошенному ребру (цилиндров " + cylinders.Count
+               + ", ближайшее начало " + Point(nearest.X, nearest.Y)
+               + ", отступ " + Num(offset) + " мм)";
+    }
+
+    /// <summary>The axis origin a CORRECT corner fillet must have: the corner displaced by the radius along
+    /// each of the two faces meeting there, toward the material for a convex corner and toward the void for
+    /// a reflex one. The faces are taken from the CONTOUR, not from the body: the rule is a fact about the
+    /// corner that was requested, and a body that answered something else must not define it.</summary>
+    private static (double X, double Y)? ExpectedAxis((double X, double Y) corner, bool convex)
+    {
+        for (var i = 0; i < Contour.Length; i++)
+        {
+            if (Math.Abs(Contour[i].X - corner.X) > 1e-3 || Math.Abs(Contour[i].Y - corner.Y) > 1e-3)
+            {
+                continue;
+            }
+
+            var previous = Contour[(i + Contour.Length - 1) % Contour.Length];
+            var next = Contour[(i + 1) % Contour.Length];
+            if (Unit(previous, corner) is not { } incoming || Unit(corner, next) is not { } outgoing)
+            {
+                return null;
+            }
+
+            // The contour is counter-clockwise, so the material lies to the LEFT of every directed side and
+            // the left normal is the inward one. A convex corner is rounded from the material side and a
+            // reflex one from the void side — the same two normals, opposite sign.
+            var sign = convex ? 1d : -1d;
+            return (corner.X + sign * Radius * (-incoming.Y - outgoing.Y),
+                    corner.Y + sign * Radius * (incoming.X + outgoing.X));
+        }
+
+        return null;
+    }
+
+    private static (double X, double Y)? Unit((double X, double Y) from, (double X, double Y) to)
+    {
+        var dx = to.X - from.X;
+        var dy = to.Y - from.Y;
+        var length = Math.Sqrt(dx * dx + dy * dy);
+        return length < 1e-12 ? null : (dx / length, dy / length);
     }
 
     /// <summary>The feature's OWN inputs, by both routes: the API5 definition's <c>array()</c> and the API7
@@ -1051,8 +1137,6 @@ internal sealed class FilletRebuildProbe
     private static int Count(IReadOnlyList<string> values, Func<string, bool> predicate) =>
         values.Count(predicate);
 
-    private static string Last(IReadOnlyList<string> values) => values.Count == 0 ? "-" : values[^1];
-
     // ══════════════════════════════════════════════════════════════ session ══
 
     /// <summary>A fresh, invisible instance for every experience. Nothing is inherited from the previous
@@ -1111,6 +1195,56 @@ internal sealed class FilletRebuildProbe
             // Closing after a crash is cleanup, not measurement.
         }
     }
+
+    /// <summary>The postановки of one cold series. A plain kind is ONE arm; a <c>-pair</c> kind runs the
+    /// SAME creation route twice — with the reads between <c>Create()</c> and the first rebuild, and with
+    /// the product's own order and no such reads — alternating inside ONE series, so the two orders meet
+    /// the same machine conditions.</summary>
+    private static string[] Arms(string kind) =>
+        kind.EndsWith("-pair", StringComparison.Ordinal)
+            ? new[] { kind[..^"-pair".Length], kind[..^"-pair".Length] + "-host" }
+            : new[] { kind };
+
+    /// <summary>One postановка's experiences, keyed by the field each of them recorded.</summary>
+    private sealed class Bucket
+    {
+        private static readonly string[] Keys =
+        {
+            "create_state", "rebuild1_state", "reopen_state", "nextop_state", "chain",
+            "placement_after_order", "placement_after_reopen",
+        };
+
+        private readonly Dictionary<string, List<string>> _values = new(StringComparer.Ordinal);
+
+        public int Count { get; private set; }
+
+        public void Add(ProbeStep step)
+        {
+            Count++;
+            foreach (var key in Keys)
+            {
+                if (step.Data.TryGetValue(key, out var value) && value is string text)
+                {
+                    if (!_values.TryGetValue(key, out var list))
+                    {
+                        _values[key] = list = new List<string>();
+                    }
+
+                    list.Add(text);
+                }
+            }
+        }
+
+        public IReadOnlyList<string> Values(string key) =>
+            _values.TryGetValue(key, out var list) ? list : Array.Empty<string>();
+
+        public string? Last(string key) =>
+            _values.TryGetValue(key, out var list) && list.Count > 0 ? list[^1] : null;
+    }
+
+    /// <summary>A cylindrical face whose radius is the fillet's, reduced to what names its corner: the axis
+    /// origin. Two of its three coordinates are enough — the axis is parallel to Z on this contour.</summary>
+    private sealed record FilletCylinder(string Label, double X, double Y);
 
     private sealed record VerticalEdge(string Label, double X, double Y, bool Convex, ksEntity Entity);
 }

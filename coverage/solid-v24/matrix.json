@@ -521,7 +521,9 @@
     "F08.21.suppress_restore",
     "F08.21.delete_dependencies",
     "F08.21.negative_tests",
-    "F08.21.geometry_validation"
+    "F08.21.geometry_validation",
+    "FL29",
+    "FL29v"
    ],
    "evidence": [
     "docs/acceptance/p2/p2-probe-report.md",
@@ -2323,7 +2325,9 @@
     "F08.25.suppress_restore",
     "F08.25.delete_dependencies",
     "F08.25.negative_tests",
-    "F08.25.geometry_validation"
+    "F08.25.geometry_validation",
+    "CH31",
+    "CH31v"
    ],
    "evidence": [
     "coverage/solid-v24/catalog.json#SM-11.chamfer.mode_two_distances",

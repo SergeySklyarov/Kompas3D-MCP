@@ -3291,10 +3291,9 @@ public sealed partial class Api5Session
             new("radius_read_back", radiusReadBack is double read && Math.Abs(read - command.RadiusMm) <= 1e-6,
                 Observed: radiusReadBack?.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture) ?? "не читается",
                 Expected: command.RadiusMm.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)),
-            new("face_count_grew", facesAfter is double after && facesBefore is double before
-                && after - before == entities.Count,
-                Observed: $"{facesBefore}→{facesAfter}",
-                Expected: $"+{entities.Count}"),
+            new("face_count_grew", FaceCountGrowth.Grew(facesBefore, facesAfter),
+                Observed: FaceCountGrowth.Observed(facesBefore, facesAfter),
+                Expected: FaceCountGrowth.Expected(facesBefore)),
             new("body_count_unchanged", bodiesAfter == bodiesBefore,
                 Observed: bodiesAfter.ToString(System.Globalization.CultureInfo.InvariantCulture)),
         };
@@ -3389,9 +3388,11 @@ public sealed partial class Api5Session
                 Expected: "не задано — проверено только изменение объёма"));
         }
 
-        // Geometry is confirmed when the stored parameter reads back, the topology grew by exactly
-        // the filleted edges, the material went down, and — if the caller supplied one — the
-        // analytic volume matched. Anything less stays "call_returned" with the reason attached.
+        // Geometry is confirmed when the stored parameter reads back, the topology GREW, the material
+        // moved, and — if the caller supplied one — the analytic volume matched. Anything less stays
+        // "call_returned" with the FAILED check named. A growth, not "+N faces": a fillet that meets at
+        // a vertex leaves a corner surface, so the count of new faces is not the count of edges.
+        // History: docs/decisions/adapter-features.md#face-count-growth-rule
         var numericMatch = declared.IsDeclared ? declared.IsConfirmed : (bool?)null;
         var geometryConfirmed = radiusReadBack is double confirmed
             && Math.Abs(confirmed - command.RadiusMm) <= 1e-6
@@ -3417,7 +3418,8 @@ public sealed partial class Api5Session
         }
         else if (!geometryConfirmed)
         {
-            unverified.Add("volume_delta_not_confirmed — КОМПАС сообщил об успехе, но измерение не подтвердило ожидаемую геометрию");
+            // The reason NAMES the check that lowered the level; a PASSED volume_delta is never one.
+            unverified.AddRange(UnconfirmedChecks.Of(checks, "radius_read_back", "face_count_grew", "volume_delta"));
         }
         if (!declared.IsDeclared)
         {
@@ -3605,10 +3607,9 @@ public sealed partial class Api5Session
                     ? "GetChamferParam не читается"
                     : $"transfer={readBack.Transfer} d1={readBack.Distance1Mm:0.####} d2={readBack.Distance2Mm:0.####}",
                 Expected: $"transfer={command.Direction} d1={command.Distance1Mm:0.####} d2={distance2:0.####}"),
-            new("face_count_grew", facesAfter is double after && facesBefore is double before
-                && after - before == entities.Count,
-                Observed: $"{facesBefore}→{facesAfter}",
-                Expected: $"+{entities.Count}"),
+            new("face_count_grew", FaceCountGrowth.Grew(facesBefore, facesAfter),
+                Observed: FaceCountGrowth.Observed(facesBefore, facesAfter),
+                Expected: FaceCountGrowth.Expected(facesBefore)),
             new("body_count_unchanged", bodiesAfter == bodiesBefore,
                 Observed: bodiesAfter.ToString(System.Globalization.CultureInfo.InvariantCulture)),
         };
@@ -3702,6 +3703,10 @@ public sealed partial class Api5Session
                 Expected: "не задано — проверено только изменение объёма"));
         }
 
+        // Geometry is confirmed when the legs read back, the topology GREW, the material moved and — if
+        // the caller supplied one — the analytic volume matched. A growth, not "+N faces": a chamfer that
+        // meets at a vertex leaves a corner face, so the count of new faces is not the count of edges.
+        // History: docs/decisions/adapter-features.md#face-count-growth-rule
         var numericMatch = declared.IsDeclared ? declared.IsConfirmed : (bool?)null;
         var parametersStored = readBack is not null
             && Math.Abs(readBack.Distance1Mm - command.Distance1Mm) <= 1e-6
@@ -3729,7 +3734,8 @@ public sealed partial class Api5Session
         }
         else if (!geometryConfirmed)
         {
-            unverified.Add("volume_delta_not_confirmed — КОМПАС сообщил об успехе, но измерение не подтвердило ожидаемую геометрию");
+            // The reason NAMES the check that lowered the level; a PASSED volume_delta is never one.
+            unverified.AddRange(UnconfirmedChecks.Of(checks, "parameters_read_back", "face_count_grew", "volume_delta"));
         }
 
         if (!declared.IsDeclared)

@@ -28928,6 +28928,79 @@ def fillet_checks(client, rep, app_id, workdir):
                         details=describe_full(foreign_env)[2] or {})
         close(doc_q)
 
+    # ── FL29: КУБ, скругление ВСЕХ 12 рёбер R3 — правило числа граней ─────────────────────────
+    # Предмет строки — ПРАВИЛО, а не маршрут: скругление, сходящееся в вершине, оставляет там
+    # угловую переходную грань, поэтому 12 рёбер дают 20 новых граней (12 цилиндров + 8 углов),
+    # а не 12. Прежнее правило «ровно +N граней» отвергало ВЕРНУЮ геометрию и роняло уровень до
+    # call_returned с чужой причиной volume_delta_not_confirmed при volume_delta PASS.
+    # Объём аналитический для куба L со скруглением всех рёбер r: V = a³ + 6a²r + 3πar² + 4πr³/3
+    # при a = L − 2r (L=100, r=3 → 997718.4594903396, снято 2281.5405096604).
+    def all_line_edges(doc, body):
+        _e, env, _r = client.tool("kompas_read_topology", {
+            "document_id": doc, "body_ref": body, "include": "edges"})
+        rows = ((env or {}).get("result") or {}).get("edges") or []
+        return ([e.get("edge_ref") for e in rows if e.get("curve_type") == "line"],
+                error_code(env))
+
+    cube_side, cube_r = 100.0, fillet_r
+    cube_a = cube_side - 2 * cube_r
+    cube_v = (cube_a ** 3 + 6 * cube_a ** 2 * cube_r + 3 * math.pi * cube_a * cube_r ** 2
+              + 4 * math.pi * cube_r ** 3 / 3)
+    cube_delta = cube_side ** 3 - cube_v
+    doc_c, rev_c, err_c = new_doc("SM09-fillet-cube-12-edges")
+    if err_c:
+        rep.add("FL29", "скругление ВСЕХ 12 рёбер куба: рост граней вместо «ровно +N»", "FAIL",
+                f"документ не создан: {err_c}")
+        rep.add("FL29v", "объём куба со скруглением 12 рёбер совпал с аналитическим", "FAIL", err_c)
+    else:
+        sk_c, rev_c, err_sc = mk_sketch(doc_c, rev_c, [
+            {"kind": "rectangle", "start_mm": [0, 0], "width_mm": cube_side,
+             "height_mm": cube_side}], "FL29-cube")
+        body_c = None
+        err_ex = f"эскиз куба: {err_sc}" if err_sc else None
+        if not err_ex:
+            _e, ex_env, _r = client.tool("kompas_extrude", {
+                "sketch_ref": sk_c, "expected_revision": rev_c, "operation": "base",
+                "depth_mm": cube_side, "direction": "positive", "end_condition": "blind",
+                "operation_id": str(uuid.uuid4())}, timeout=240)
+            rev_c = (ex_env or {}).get("revision_after") or rev_c
+            err_ex = error_code(ex_env)
+            body_c = (bodies(doc_c) or [{}])[0].get("body_ref")
+        if err_ex or not body_c:
+            refs_c, err_te = [], err_ex or "тело куба не найдено"
+        else:
+            refs_c, err_te = all_line_edges(doc_c, body_c)
+        if len(refs_c) != 12:
+            rep.add("FL29", "скругление ВСЕХ 12 рёбер куба: рост граней вместо «ровно +N»", "FAIL",
+                    f"куб не подготовлен: extrude={err_ex} рёбер={len(refs_c)} чтение={err_te}")
+            rep.add("FL29v", "объём куба со скруглением 12 рёбер совпал с аналитическим", "FAIL",
+                    "опорных рёбер нет")
+        else:
+            _e, flc_env, _r = client.tool("kompas_fillet", {
+                "edge_refs": refs_c, "expected_revision": rev_c, "radius_mm": cube_r,
+                "expected_volume_delta_mm3": cube_delta,
+                "operation_id": str(uuid.uuid4())}, timeout=300)
+            flc_res = (flc_env or {}).get("result") or {}
+            flc_ver = (flc_env or {}).get("verification") or {}
+            flc_checks = {c.get("name"): c for c in (flc_ver.get("checks") or [])}
+            flc_unv = flc_ver.get("unverified_aspects") or []
+            rep.add("FL29", "скругление ВСЕХ 12 рёбер куба: рост граней вместо «ровно +N»",
+                    "PASS" if flc_ver.get("level") == "geometry_checked"
+                    and flc_checks.get("face_count_grew", {}).get("passed")
+                    and not any("volume_delta_not_confirmed" in str(a) for a in flc_unv)
+                    else "FAIL",
+                    f"level={flc_ver.get('level')} "
+                    f"граней={flc_checks.get('face_count_grew', {}).get('observed')} "
+                    f"ожидание={flc_checks.get('face_count_grew', {}).get('expected')} "
+                    f"unverified={flc_unv} err={error_code(flc_env)}")
+            got_c = flc_res.get("volume_mm3")
+            rep.add("FL29v", "объём куба со скруглением 12 рёбер совпал с аналитическим",
+                    "PASS" if got_c is not None
+                    and abs(got_c - cube_v) <= max(0.01, 1e-6 * cube_v) else "FAIL",
+                    f"V={got_c} ожидание={cube_v:.6f} "
+                    f"снято={None if got_c is None else cube_side ** 3 - got_c}")
+        close(doc_c)
+
 
 def chamfer_checks(client, rep, app_id, workdir):
     """CH: фаска SM-11 через MCP — создание, чтение, правка, перестроение, reopen и второй способ.
@@ -30038,6 +30111,81 @@ def chamfer_checks(client, rep, app_id, workdir):
                 f"снято/добавлено {sign * chamfer_sweep}) msg={describe(chL_env)[1]}")
         close(docL)
 
+    # ── CH31: КУБ, фаска на ВСЕХ 12 рёбрах — то же правило числа граней у второй ветви ─────────
+    # Фаска, сходящаяся в вершине, оставляет там ТРЕУГОЛЬНУЮ угловую грань (плоскость x+y+z = 3L/2−2d
+    # в системе центра куба), поэтому 12 рёбер дают 20 новых граней, а не 12 (6→26) — как у
+    # скругления, только угловая грань плоская. Прежнее «ровно +N» роняло верную геометрию.
+    # Объём выведен аналитически и сверен с измерением: для куба L=100 с фаской d=3 на всех 12
+    # рёбрах снято 5256.0 мм³ → V = 994744.0. Формула (h = L/2):
+    #   ΔV = L³ − 8(h−d)[h² + h·d − d²/2] − (4/3)d³
+    # Три слагаемых — это три области интегрирования: (h−d)²·h — середина, (h−d)d²/2 + d³/6 — угол
+    # у вершины, 2(h−d)(h·d − d²/2) — полоса вдоль ребра.
+    def all_line_edges(doc, body):
+        _e, env, _r = client.tool("kompas_read_topology", {
+            "document_id": doc, "body_ref": body, "include": "edges"})
+        rows = ((env or {}).get("result") or {}).get("edges") or []
+        return ([e.get("edge_ref") for e in rows if e.get("curve_type") == "line"],
+                error_code(env))
+
+    ch_cube_side, ch_d = 100.0, 3.0
+    ch_h = ch_cube_side / 2
+    ch_removed = (ch_cube_side ** 3
+                  - 8 * (ch_h - ch_d) * (ch_h ** 2 + ch_h * ch_d - ch_d ** 2 / 2)
+                  - 4 / 3 * ch_d ** 3)
+    ch_cube_v = ch_cube_side ** 3 - ch_removed
+    doc_cc, rev_cc, err_cc = new_doc("SM11-chamfer-cube-12-edges")
+    if err_cc:
+        rep.add("CH31", "фаска на ВСЕХ 12 рёбрах куба: рост граней вместо «ровно +N»", "FAIL",
+                f"документ не создан: {err_cc}")
+        rep.add("CH31v", "объём куба с фаской на 12 рёбрах совпал с аналитическим", "FAIL", err_cc)
+    else:
+        sk_cc, rev_cc, err_scc = sketch(doc_cc, rev_cc, [
+            {"kind": "rectangle", "start_mm": [0, 0], "width_mm": ch_cube_side,
+             "height_mm": ch_cube_side}], "CH31-cube")
+        body_cc = None
+        err_ecc = f"эскиз куба: {err_scc}" if err_scc else None
+        if not err_ecc:
+            _e, ex_env, _r = client.tool("kompas_extrude", {
+                "sketch_ref": sk_cc, "expected_revision": rev_cc, "operation": "base",
+                "depth_mm": ch_cube_side, "direction": "positive", "end_condition": "blind",
+                "operation_id": str(uuid.uuid4())}, timeout=240)
+            rev_cc = (ex_env or {}).get("revision_after") or rev_cc
+            err_ecc = error_code(ex_env)
+            body_cc = (bodies(doc_cc) or [{}])[0].get("body_ref")
+        if err_ecc or not body_cc:
+            refs_cc, err_tcc = [], err_ecc or "тело куба не найдено"
+        else:
+            refs_cc, err_tcc = all_line_edges(doc_cc, body_cc)
+        if len(refs_cc) != 12:
+            rep.add("CH31", "фаска на ВСЕХ 12 рёбрах куба: рост граней вместо «ровно +N»", "FAIL",
+                    f"куб не подготовлен: extrude={err_ecc} рёбер={len(refs_cc)} чтение={err_tcc}")
+            rep.add("CH31v", "объём куба с фаской на 12 рёбрах совпал с аналитическим", "FAIL",
+                    "опорных рёбер нет")
+        else:
+            _e, chc_env, _r = client.tool("kompas_chamfer", {
+                "edge_refs": refs_cc, "expected_revision": rev_cc, "mode": "two_distances",
+                "distance1_mm": ch_d, "distance2_mm": ch_d,
+                "expected_volume_delta_mm3": ch_removed,
+                "operation_id": str(uuid.uuid4())}, timeout=300)
+            chc_res = (chc_env or {}).get("result") or {}
+            chc_ver = (chc_env or {}).get("verification") or {}
+            chc_checks = {c.get("name"): c for c in (chc_ver.get("checks") or [])}
+            chc_unv = chc_ver.get("unverified_aspects") or []
+            rep.add("CH31", "фаска на ВСЕХ 12 рёбрах куба: рост граней вместо «ровно +N»",
+                    "PASS" if chc_ver.get("level") == "geometry_checked"
+                    and chc_checks.get("face_count_grew", {}).get("passed")
+                    and not any("volume_delta_not_confirmed" in str(a) for a in chc_unv)
+                    else "FAIL",
+                    f"level={chc_ver.get('level')} "
+                    f"граней={chc_checks.get('face_count_grew', {}).get('observed')} "
+                    f"ожидание={chc_checks.get('face_count_grew', {}).get('expected')} "
+                    f"unverified={chc_unv} err={error_code(chc_env)}")
+            got_cc = chc_res.get("volume_mm3")
+            rep.add("CH31v", "объём куба с фаской на 12 рёбрах совпал с аналитическим",
+                    "PASS" if got_cc is not None
+                    and abs(got_cc - ch_cube_v) <= max(0.01, 1e-6 * ch_cube_v) else "FAIL",
+                    f"V={got_cc} ожидание={ch_cube_v:.6f} снято={ch_removed:.6f}")
+        close(doc_cc)
 
 
 def hole_checks(client, rep, app_id, workdir):

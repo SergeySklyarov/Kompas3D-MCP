@@ -709,7 +709,6 @@ public partial class Api5Session
         // "zero placement" where the placement simply was not read (the same class as fix C).
         var beforeMatrix = ReadPlacementMatrix(part5);
 
-        bool written;
         try
         {
             if (part5.GetPlacement() is not ksPlacement placement)
@@ -722,7 +721,7 @@ public partial class Api5Session
             }
 
             placement.InitByMatrix3D(ToVariant(matrix));
-            written = part5.SetPlacement(placement);
+            part5.SetPlacement(placement);
             part5.UpdatePlacement();
         }
         catch (COMException ex)
@@ -739,9 +738,16 @@ public partial class Api5Session
 
         var afterMatrix = ReadPlacementMatrix(part5);
         var matched = MatrixMatchesRequest(afterMatrix, matrix);
+
+        // INVARIANT: success is named by the RE-READ, never by the API's BOOL return of the write.
+        // DOC: kspart_setplacement.html and kspart_updateplacement.html both promise TRUE on success.
+        // MEASURED: on an already-inserted component BOTH return FALSE while the placement IS applied
+        // and re-read identical, so a check built on that return would report a failed write on every
+        // success. A flag that is false on success is worse than no flag: the caller cannot tell it
+        // from a real failure.
+        // History: docs/decisions/adapter-core.md#set-placement-flag
         var checks = new List<NamedCheck>
         {
-            new("set_placement_returned", written, Observed: written ? "true" : "false"),
             new("placement_read_back_matches_request", matched,
                 Observed: Describe(afterMatrix), Expected: Describe(matrix)),
         };

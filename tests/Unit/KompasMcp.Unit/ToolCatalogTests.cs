@@ -383,4 +383,48 @@ public class ToolCatalogTests
         Assert.Contains("занят", message, StringComparison.Ordinal);
         Assert.Contains("диалог", message, StringComparison.Ordinal);
     }
+
+    /// <summary>INVARIANT: a field whose C# record default is <c>false</c> must not be demanded by the
+    /// published schema — a client that omits it follows the contract instead of breaking it.</summary>
+    /// <remarks>MEASURED: <c>confirm_dependents</c> sat in <c>required</c> while <c>DeleteFeatureCommand</c>
+    /// defaults it to <c>false</c>, so a call without the field died INVALID_ARGUMENT before COM.
+    /// History: docs/decisions/contracts.md#delete-feature-confirm-dependents</remarks>
+    [Fact]
+    public void DeleteFeature_ConfirmDependents_IsOptionalAndNamesItsDefault()
+    {
+        var schema = Tool("kompas_delete_feature").InputSchema;
+        var required = ((JsonArray)schema["required"]!).Select(n => n!.GetValue<string>()).ToArray();
+        Assert.DoesNotContain("confirm_dependents", required);
+
+        var field = (JsonObject)((JsonObject)schema["properties"]!)["confirm_dependents"]!;
+        Assert.False(field["default"]!.GetValue<bool>());
+        Assert.Contains("умолчанию false", field["description"]!.GetValue<string>(), StringComparison.Ordinal);
+
+        // The call the contract promises: no confirm_dependents at all.
+        var payload = JsonNode.Parse("""
+            {"feature_ref":"feature:0123456789abcdef0123456789abcdef","expected_revision":1,
+             "operation_id":"11111111-2222-3333-4444-555555555555"}
+            """)!.AsObject();
+        Assert.Empty(JsonSchemaValidator.Validate(schema, payload));
+    }
+
+    /// <summary>INVARIANT: the schema must not offer a <c>kind</c> the adapter answers
+    /// CAPABILITY_UNAVAILABLE for — a value in the enum is a promise the tool keeps.</summary>
+    /// <remarks>MEASURED: <c>kind=fragment</c> was declared while the adapter refuses it, so a client read
+    /// a working mode in the schema and got a refusal. History: docs/decisions/contracts.md#create-document-kind</remarks>
+    [Fact]
+    public void CreateDocument_Kind_DoesNotOfferFragment()
+    {
+        var schema = Tool("kompas_create_document").InputSchema;
+        var kind = (JsonObject)((JsonObject)schema["properties"]!)["kind"]!;
+        var values = ((JsonArray)kind["enum"]!).Select(n => n!.GetValue<string>()).ToArray();
+
+        Assert.Equal(new[] { "part", "assembly", "drawing" }, values);
+
+        var payload = JsonNode.Parse("""
+            {"application_id":"0123456789abcdef0123456789abcdef","kind":"fragment",
+             "operation_id":"11111111-2222-3333-4444-555555555555"}
+            """)!.AsObject();
+        Assert.NotEmpty(JsonSchemaValidator.Validate(schema, payload));
+    }
 }

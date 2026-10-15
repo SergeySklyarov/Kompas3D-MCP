@@ -228,10 +228,12 @@ public static class ToolCatalog
                 requiresDocument: false),
 
             Mutation("kompas_create_document", "Создать документ",
-                "Новый несохранённый документ с UUID. Возвращает контекст с revision=1.",
+                "Новый несохранённый документ с UUID. Возвращает контекст с revision=1. Создаются "
+                + "деталь, сборка и чертёж; фрагмент не создаётся.",
                 Sch.Props(
                     ("application_id", Sch.Ref("#/$defs/application_id")),
-                    ("kind", Sch.Enum("Тип документа.", "part", "assembly", "drawing", "fragment")),
+                    ("kind", Sch.Enum("Тип документа: деталь, сборка или чертёж.",
+                        "part", "assembly", "drawing")),
                     ("name", Sch.Nullable(Sch.Str("Имя объекта (ksPart.name).", maxLength: 256))),
                     ("marking", Sch.Nullable(Sch.Str("Обозначение.", maxLength: 128)))),
                 WorkerCommands.CreateDocument,
@@ -2146,14 +2148,18 @@ public static class ToolCatalog
                 + "эскиз+выдавливание пережила удаление первой, is_valid=true). Каскад бывает и "
                 + "ТРАНЗИТИВНЫМ: признак, построенный на зависимом, тоже уходит — это называется в "
                 + "cascade_composition_not_confirmed, а не выдаётся за проверенное. "
-                + "ЕСЛИ ЗАВИСИМЫЕ ЕСТЬ ИЛИ ПЕРЕЧЕНЬ ПОСТРОИТЬ НЕ УДАЛОСЬ, удаление без confirm_dependents "
-                + "отказывает кодом DEPENDENT_FEATURES без обращения к КОМПАС. Операция необратима: "
+                + "ЕСЛИ ЗАВИСИМЫЕ ЕСТЬ ИЛИ ПЕРЕЧЕНЬ ПОСТРОИТЬ НЕ УДАЛОСЬ, удаление отказывает кодом "
+                + "DEPENDENT_FEATURES без обращения к КОМПАС, пока не передан confirm_dependents=true "
+                + "(поле необязательное, умолчание false — вызов без него равносилен false). "
+                + "Операция необратима: "
                 + "сохранённая до неё копия документа — единственный откат.",
                 Sch.Props(
                     ("feature_ref", Sch.Ref("#/$defs/reference")),
                     ("expected_revision", Sch.Ref("#/$defs/expected_revision")),
-                    ("confirm_dependents", Sch.Bool("Согласие удалить объект, на котором построено другое "
-                        + "или перечень зависимых построить не удалось.", false)),
+                    ("confirm_dependents", Sch.Nullable(Sch.Bool(
+                        "Согласие удалить объект, на котором построено другое или перечень зависимых "
+                        + "построить не удалось. По умолчанию false: при зависимых вызов отказывает "
+                        + "их перечнем, а модель не меняется.", false))),
                     ("expected_volume_mm3", Sch.Nullable(Sch.Num(
                         "Аналитическое ожидание объёма после удаления." + DeclaredExpectationRule, 0d, 1e18d)))),
                 WorkerCommands.DeleteFeature,

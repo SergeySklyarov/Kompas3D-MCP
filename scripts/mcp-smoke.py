@@ -2277,6 +2277,20 @@ def assembly_checks(client, rep, app_id, workdir):
                 "PASS" if (not code and origin and near(origin[0], 30.0)) else "FAIL",
                 f"origin={origin} level={level(env)} error={code} msg={emsg(env)}")
 
+        # Поля-флага в ответе НЕТ: и SetPlacement, и UpdatePlacement отвечают false на УЖЕ вставленном
+        # компоненте при ПРИМЕНЁННОМ размещении (измерено), поэтому успех называет ТОЛЬКО перечитывание.
+        # Флаг, ложный на успехе, неотличим от настоящего отказа — его в ответе быть не должно.
+        _checks = {c.get("name"): c for c in ((result(env).get("verification") or {}).get("checks") or [])
+                   if isinstance(c, dict)}
+        _back = _checks.get("placement_read_back_matches_request") or {}
+        rep.add("ASM.04.edit_flag",
+                "ответ размещения не несёт выдуманного флага записи: set_placement_returned "
+                "отсутствует, успех назван перечитыванием (placement_read_back_matches_request=true)",
+                "PASS" if ("set_placement_returned" not in _checks
+                           and _back.get("passed") is True) else "FAIL",
+                f"поля_флага={'set_placement_returned' in _checks} read_back={_back.get('passed')} "
+                f"checks={sorted(_checks)} error={code}")
+
         # РЕГРЕССИЯ §1 ЗАДАНИЯ 05.10.2026: ВТОРАЯ ПОДРЯД МУТАЦИЯ ПО ТОЙ ЖЕ ССЫЛКЕ КОМПОНЕНТА.
         #
         # `target` получена из list_components ДО первой мутации. Прежняя редакция сверки тождества
@@ -9983,11 +9997,11 @@ def client_bugs_20261010_checks(client, rep, app_id, workdir):
         deleted = None
         delete_env = {}
         if left_ref:
-            # confirm_dependents объявлено СХЕМОЙ обязательным (не «по умолчанию false»): без него
-            # Host отвергает вызов INVALID_ARGUMENT до COM. Названо в отчёте наряда.
+            # confirm_dependents НЕ передаётся: поле необязательное, умолчание false. Здесь оно и не
+            # требуется — зависимых у признака нет, — но именно этот вызов проверяет, что контракт
+            # держит обещание «умолчание false» и не требует поле явно.
             delete_env, deleted = call("kompas_delete_feature", {
-                "feature_ref": left_ref, "expected_revision": rev_at_refusal,
-                "confirm_dependents": False})
+                "feature_ref": left_ref, "expected_revision": rev_at_refusal})
         volume_after = first_volume(doc3)
         ok = (refuse_code == "NO_GEOMETRY_CHANGE" and det.get("feature_left_in_tree") is True
               and isinstance(left_ref, str) and left_ref and deleted is None
@@ -13508,6 +13522,17 @@ def main():
                 "UNKNOWN" if no_annotations else ("PASS" if not missing_op else "FAIL"),
                 "tools/list не вернул annotations — выводить мутации из них невозможно"
                 if no_annotations else str(missing_op))
+
+        # Заявленный в схеме режим обязан работать: `kind=fragment` стоял в перечислении, а адаптер
+        # отвечал CAPABILITY_UNAVAILABLE — клиент читал в схеме рабочий режим и получал отказ.
+        # Проверка СХЕМНАЯ и COM не трогает: недопустимое значение отвергается до обращения к КОМПАС.
+        _fe, frag_env, _fr = client.tool("kompas_create_document", {
+            "application_id": uuid.uuid4().hex, "kind": "fragment",
+            "operation_id": str(uuid.uuid4())})
+        frag_code = error_code(frag_env)
+        rep.add("S03e", "kompas_create_document: kind=fragment отвергнут схемой (INVALID_ARGUMENT)",
+                "PASS" if frag_code == "INVALID_ARGUMENT" else "FAIL",
+                f"код={frag_code}; " + clip(json.dumps(frag_env, ensure_ascii=False), 240))
 
         # --- обратная совместимость ТЕКСТОВОГО канала (S03c/S03d) ---------------------
         # MCP 2025-06-18: инструмент, возвращающий structuredContent, обязан вернуть и

@@ -2209,3 +2209,42 @@ Worker. Теперь неизвестное поле предиката отве
 **Чем подтверждено.** Схема `schemas/kompas_create_sketch_dimension.json` (переиздана
 `--emit-schemas`), `docs/TOOLS.md` (переиздан генератором), модульные тесты `SketchDimensionRuleTests`,
 строки группы `SKC` приёмки.
+
+## <a id="delete-feature-confirm-dependents"></a>Контракт `kompas_delete_feature`: `confirm_dependents` необязателен (15.10.2026)
+
+**Что решено.** Поле `confirm_dependents` объявлено НЕОБЯЗАТЕЛЬНЫМ (тип `["boolean","null"]`,
+`default: false`) — так же, как у `kompas_delete_component`. Вызов БЕЗ поля равносилен
+`confirm_dependents=false`: при зависимых объектах (или когда перечень зависимых построить не
+удалось) вызов отказывает кодом `DEPENDENT_FEATURES` без обращения к КОМПАС, и модель не меняется.
+Смысл отказа не изменён.
+
+**Почему.** У записи `DeleteFeatureCommand` у поля есть умолчание `false`, а схема требовала его
+явно: клиент, следующий опубликованному описанию «по умолчанию false», получал `INVALID_ARGUMENT`
+до COM. Решение принимается ТАМ, ГДЕ ПОЛЕ ОБЪЯВЛЕНО (`ToolCatalog.cs`), а не правкой `schemas/`:
+схема — порождённый файл, и правка в ней была бы затёрта следующей генерацией.
+
+**Чем подтверждено.** Схема `schemas/kompas_delete_feature.json` (переиздана `--emit-schemas`),
+модульный тест `ToolCatalogTests.DeleteFeature_ConfirmDependents_IsOptionalAndNamesItsDefault`,
+строка `CB10.11` приёмки (вызов БЕЗ поля проходит).
+
+## <a id="create-document-kind"></a>Контракт `kompas_create_document`: `kind` без `fragment` (15.10.2026)
+
+**Что решено.** Из перечисления `kind` убран `fragment`; остаются `part`, `assembly`, `drawing`.
+Описание инструмента и описание поля называют тот же набор.
+
+**Почему.** На `fragment` адаптер отвечает кодом `CAPABILITY_UNAVAILABLE` с `supported_kinds:
+part, assembly, drawing`: перечисление схемы обещало клиенту режим, который заведомо не работает.
+Реализация создания фрагмента — новая возможность, а не долг, поэтому в этот наряд она не входит.
+
+**Граница.** Значение `DocumentKind.Fragment` в контрактах остаётся: оно называет ВИД документа, а не
+обещание его создать. Отказ адаптера сохранён как защита от вызова в обход схемы.
+
+**Кандидат в план (назван, не реализован).** Документированный маршрут создания фрагмента, похоже,
+есть: тот же 2D-маршрут, которым создаётся чертёж, с типом `lt_DocFragment = 3` —
+`doctype.html` («lt_DocFragment 3 - фрагмент»), `ksdocumentparam_type.html`,
+`ksdocument2d_kscreatedocument.html`; маршрут чертежа — `docs/decisions/drawings.md#create-drawing`.
+Проверка и включение — отдельный наряд.
+
+**Чем подтверждено.** Схема `schemas/kompas_create_document.json` (переиздана `--emit-schemas`),
+модульный тест `ToolCatalogTests.CreateDocument_Kind_DoesNotOfferFragment`, строка `S03e` приёмки
+(вызов с `kind=fragment` отвергается схемой до COM).

@@ -62,8 +62,8 @@
    "level": "отсутствие уровня у записи означает «не описано», а не «не поддержано» и не «verified»"
   },
   "counters": {
-   "families": 42,
-   "operations": 124,
+   "families": 43,
+   "operations": 125,
    "operations_as_bare_strings": 0,
    "modes_and_variants": 209,
    "operations_without_level": 0,
@@ -7427,6 +7427,51 @@
      "modes": [],
      "mcp_support": "kompas_create_sketch_constraint",
      "next_step": "Не входит в обязательный объём: приоритет next."
+    }
+   ]
+  },
+  {
+   "id": "STEP",
+   "title": "Импорт STEP: тело из внешнего файла в отдельный документ",
+   "classification": "solid",
+   "level": "mcp_verified",
+   "evidence": {
+    "documentation": "Проводная проверка справки SDK 24 (зеркало репозитория): ksdocument3d_loadfromadditionformat.html — «LoadFromAdditionFormat - Загрузить документ из дополнительных форматов jgs, sat, xt, x_b, step, stl, jt, C3D», BOOL LoadFromAdditionFormat( BSTR fileName, LPDISPATCH additionPar ); d3formatconvtype.html — load_format_STEP = -3, «формат STEP, для открытия документов»; ksdocument3d_additionformatparam.html, ksadditionformatparam.html, ksadditionformatparam_init.html. Артефакты зеркала: reference/kompas-sdk-v24/sdk-docs/ksdocument3d_loadfromadditionformat.html, reference/kompas-sdk-v24/omega-docs/d3formatconvtype.html",
+    "metadata": "Сканер tools/KompasMcp.InteropScan по поставленным обёрткам 24.0.0.2799: ksDocument3D.LoadFromAdditionFormat(BSTR, LPDISPATCH)→Boolean, ksDocument3D.AdditionFormatParam()→ksAdditionFormatParam, ksAdditionFormatParam.format(Int16)/Init()",
+    "runtime": "Живой прогон строк STEP.import.<действие> вертикального сценария scripts/mcp-smoke.py на Release-сборке: файл импорта — STEP, экспортированный тем же прогоном строкой E01"
+   },
+   "route": "Импорт — API5: ksDocument3D.Create(true, true) → ksDocument3D.AdditionFormatParam() → ksAdditionFormatParam.Init() → format = load_format_STEP(-3) → ksDocument3D.LoadFromAdditionFormat(fileName, param) → RebuildDocument() → UpdateDocumentParam(). Маршрут пробуется ДВАЖДЫ — с читающим селектором load_format_STEP и с умолчанием вендора; успехом считается только подтверждённая геометрия (тело или компонент), а не возврат конвертера.",
+   "mcp_support": "kompas_import_step",
+   "operations": [
+    {
+     "id": "STEP.import",
+     "name": "Импорт STEP: чтение тела из внешнего файла в отдельный документ",
+     "level": "mcp_verified",
+     "doc_source": [
+      "ksdocument3d_loadfromadditionformat",
+      "d3formatconvtype",
+      "ksdocument3d_additionformatparam",
+      "ksadditionformatparam",
+      "ksadditionformatparam_init"
+     ],
+     "interfaces": {
+      "api5": [
+       "ksDocument3D.Create(invisible, isDetail) → Boolean",
+       "ksDocument3D.AdditionFormatParam() → ksAdditionFormatParam",
+       "ksAdditionFormatParam.Init() → Boolean",
+       "ksAdditionFormatParam.format (Int16) = load_format_STEP = -3",
+       "ksDocument3D.LoadFromAdditionFormat(BSTR fileName, LPDISPATCH additionPar) → Boolean",
+       "ksDocument3D.RebuildDocument(), ksDocument3D.UpdateDocumentParam()"
+      ]
+     },
+     "route": "Тело читается из файла в НОВЫЙ документ: исходная модель не адресуется и не меняется. Что именно появилось, называется по факту — созданные документы, их типы, число тел и компонентов; совпадение объёма и габарита с исходником инструмент НЕ заявляет (unverified_aspects: geometry_roundtrip_not_checked, units_conversion_not_checked).",
+     "modes": [],
+     "mcp_support": "kompas_import_step",
+     "limitations": [
+      "created_document_ids ответа несёт СЫРОЙ указатель COM («0x…»), а не идентификатор документа Хоста: адресуемый id — тот, который прибавился в kompas_list_documents (измерено на живом прогоне).",
+      "Отказ импорта оставляет ЗАРЕГИСТРИРОВАННЫЕ документы: обе попытки маршрута начинаются с Create, и при LoadFromAdditionFormat → false в сеансе остаются документы без тел, хотя partial_effects в отказе равен false (измерено).",
+      "Импортированное тело приходит ОДНИМ признаком «Операция без истории:1» (kompas_list_features: type 79, dependencies пуст): редактируемой истории построения у него нет (измерено)."
+     ]
     }
    ]
   }

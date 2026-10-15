@@ -12824,6 +12824,107 @@
      }
     ]
    }
+  },
+  {
+   "operation_id": "STEP.import",
+   "kind": "profile_operation",
+   "profile": "mechanical-core-v1",
+   "priority": "practical_required",
+   "queue": null,
+   "context": "part.single_body",
+   "catalog_ref": "STEP",
+   "catalog_level": "mcp_verified",
+   "parameters_schema": "schemas/kompas_import_step.json",
+   "adapter_route": "kompas_import_step читает файл в НОВЫЙ документ: API5 ksDocument3D.Create(true, true) → ksDocument3D.AdditionFormatParam() → ksAdditionFormatParam.Init() → format = load_format_STEP(-3) → ksDocument3D.LoadFromAdditionFormat(inputPath, param) → RebuildDocument() → UpdateDocumentParam(). Маршрут пробуется ДВАЖДЫ — с читающим селектором и с умолчанием вендора; успех — только подтверждённая геометрия (тело или компонент), а не возврат конвертера. Страница справки v24 на маршрут: ksdocument3d_loadfromadditionformat.html («LoadFromAdditionFormat - Загрузить документ из дополнительных форматов … step …»); селектор — d3formatconvtype.html (load_format_STEP = -3, «формат STEP, для открытия документов»); параметр — ksdocument3d_additionformatparam.html, ksadditionformatparam.html, ksadditionformatparam_init.html.",
+   "actions": {
+    "discover": "verified",
+    "create": "verified",
+    "read": "verified",
+    "edit": "not_applicable",
+    "rebuild": "verified",
+    "save_reopen": "verified",
+    "suppress_restore": "not_applicable",
+    "delete_dependencies": "not_applicable",
+    "negative_tests": "verified",
+    "geometry_validation": "verified"
+   },
+   "not_applicable_reasons": {
+    "edit": "импорт модель НЕ правит: он читает файл в НОВЫЙ документ, а исходная модель не адресуется. Измерено строкой STEP.import.read: ревизия и отпечаток исходного документа после импорта не изменились",
+    "suppress_restore": "подавлять и восстанавливать в импортированном документе нечего: он несёт ОДИН признак — само тело, «Операция без истории:1» с пустым dependencies (измерено строкой STEP.import.read)",
+    "delete_dependencies": "у импортированного тела нет зависимостей, которые удалялись бы вместе с ним: импорт создаёт ОТДЕЛЬНЫЙ документ и ничего в исходной модели не привязывает (измерено: dependencies признака пуст, исходный документ не изменился)"
+   },
+   "tests": [
+    "STEP.import.discover",
+    "STEP.import.create",
+    "STEP.import.read",
+    "STEP.import.rebuild",
+    "STEP.import.save_reopen",
+    "STEP.import.negative_tests",
+    "STEP.import.geometry_validation"
+   ],
+   "evidence": [
+    "scripts/mcp-smoke.py",
+    "docs/04_KOMPAS_API_NOTES.md",
+    "docs/decisions/api-audit.md#step-import-mode",
+    "coverage/solid-v24/catalog.json#STEP.import"
+   ],
+   "limitations": [
+    "created_document_ids ответа несёт СЫРОЙ указатель COM («0x…»), а не идентификатор документа Хоста: адресуемый id — тот, который прибавился в kompas_list_documents. Измерено строкой STEP.import.discover; клиенту, который возьмёт id из ответа импорта, продукт его не примет.",
+    "Отказ импорта оставляет ЗАРЕГИСТРИРОВАННЫЕ документы: обе попытки маршрута начинаются с Create, и при LoadFromAdditionFormat → false в сеансе остаются документы без тел, хотя partial_effects в отказе равен false (измерено строкой STEP.import.negative_tests).",
+    "Инструмент заявляет уровень structure_checked и НЕ проверяет roundtrip: unverified_aspects несёт geometry_roundtrip_not_checked и units_conversion_not_checked. Совпадение объёма и габарита с исходником проверяет строка приёмки STEP.import.geometry_validation, а не сам инструмент.",
+    "Документ импорта — деталь; сборка и чертёж этим режимом не проверялись (desired_kind принимает auto|part|assembly, измерен только auto на детали)."
+   ],
+   "depends_on": [],
+   "discover_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_documents"
+     }
+    ],
+    "note": "признак появления нового документа: список документов сеанса до и после импорта; созданный id берётся из РАЗНИЦЫ, а не из created_document_ids"
+   },
+   "create_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_import_step"
+     }
+    ]
+   },
+   "read_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_list_bodies",
+      "require_args": [
+       "document_id"
+      ]
+     }
+    ],
+    "note": "импортированное тело читается по адресу созданного документа: габарит и число граней/рёбер из kompas_list_bodies, признак — из kompas_list_features"
+   },
+   "rebuild_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_rebuild"
+     }
+    ],
+    "note": "объявленный маршрут строки: перестроение импортированного документа выполняется этим инструментом"
+   },
+   "geometry_validation_route": {
+    "mode": "any",
+    "routes": [
+     {
+      "tool": "kompas_measure",
+      "require_args": [
+       "target_ref"
+      ]
+     }
+    ],
+    "note": "объём и габарит импортированного тела сверяются с исходной деталью в пределах допуска STEP-roundtrip (docs/03_ACCEPTANCE_PLAN.md §3.3: bbox 0,002 мм, объём max(0,1 мм³, 1e-5 x исходный))"
+   }
   }
  ],
  "pending_families": [

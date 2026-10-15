@@ -13110,6 +13110,238 @@ def sketch_vertex_checks(client, rep, app_id, workdir):
     close(doc)
 
 
+def step_import_checks(client, rep, app_id, workdir, step_path, source_doc):
+    """STEP.import.* — импорт STEP как строка матрицы (семья `STEP`, профиль `mechanical-core-v1`).
+
+    ЗАЧЕМ ЭТА ПРОВЕРКА. `kompas_import_step` исполнялся только вертикальным сценарием (строки
+    `E01`-`E03`) и не был зарегистрирован в каталоге покрытия (долг 28, наряд
+    `DEBT_IMPORT_STEP_ROW`). Строка матрицы обязана опираться на СВОИ вызовы, поэтому режим
+    исполняется здесь заново, а файл берётся тот же, что экспортировала строка `E01`.
+
+    ЧЕГО ЗДЕСЬ НЕТ. `desired_kind=assembly`, сборка и чертёж, единицы импортированного документа -
+    вне строки; Trust и клиентская приёмка не трогаются.
+    """
+    import os as _os
+
+    # INVARIANT: the created document is addressed by the id the document LIST gained.
+    # MEASURED: `created_document_ids` of the response carries the raw COM handle ("0x…"), which no
+    # tool accepts, so the row proves BOTH halves - the list id works and the response id does not.
+    # DOC: ksdocument3d_loadfromadditionformat.html, d3formatconvtype.html (load_format_STEP = -3).
+    # History: docs/decisions/api-audit.md#step-import-mode
+
+    def call(tool, args, timeout=300):
+        payload = dict(args)
+        if client.declares_operation_id(tool):
+            payload.setdefault("operation_id", str(uuid.uuid4()))
+        _e, env, _r = client.tool(tool, payload, timeout=timeout)
+        return env, error_code(env)
+
+    def result(env):
+        return (env or {}).get("result") or {}
+
+    def emsg(env):
+        err = (env or {}).get("error") or {}
+        return err.get("message") if isinstance(err, dict) else None
+
+    def near(a, b, tol):
+        return isinstance(a, (int, float)) and isinstance(b, (int, float)) and abs(a - b) <= tol
+
+    def documents():
+        env, _ = call("kompas_list_documents", {"application_id": app_id})
+        rows = result(env)
+        return rows if isinstance(rows, list) else []
+
+    def bodies(doc):
+        env, code = call("kompas_list_bodies", {"document_id": doc})
+        rows = result(env)
+        return (rows if isinstance(rows, list) else []), code
+
+    def features(doc):
+        env, code = call("kompas_list_features", {"document_id": doc})
+        rows = result(env)
+        return (rows if isinstance(rows, list) else []), code
+
+    def measure(ref_, props=("volume", "bbox")):
+        env, code = call("kompas_measure", {"target_ref": ref_, "properties": list(props)})
+        return result(env), code
+
+    def context(doc):
+        env, code = call("kompas_get_context", {"document_id": doc, "detail": "minimal"})
+        return result(env), code
+
+    def close(doc):
+        if doc:
+            call("kompas_close_document", {"document_id": doc, "dirty_policy": "discard"})
+
+    def bbox_near(left, right, tol):
+        if not isinstance(left, dict) or not isinstance(right, dict):
+            return False
+        for key in ("min_mm", "max_mm"):
+            a, b = left.get(key) or [], right.get(key) or []
+            if len(a) != len(b) or not a:
+                return False
+            if any(not near(x, y, tol) for x, y in zip(a, b)):
+                return False
+        return True
+
+    rows = (
+        ("STEP.import.discover",
+         "импорт создаёт НОВЫЙ документ сеанса: список документов растёт ровно на него, вид — "
+         "деталь, и адресуется он только по id из списка"),
+        ("STEP.import.create",
+         "импорт отвечает успехом и подтверждает геометрию: тело или компонент, уровень "
+         "structure_checked"),
+        ("STEP.import.read",
+         "созданный документ читается: одно тело, один признак «Операция без истории» без "
+         "зависимостей; исходная модель не изменилась"),
+        ("STEP.import.rebuild",
+         "перестроение импортированного документа оставляет тело и объём на месте"),
+        ("STEP.import.save_reopen",
+         "импортированный документ переживает save -> close -> reopen: тело и объём те же"),
+        ("STEP.import.negative_tests",
+         "отказы названными кодами: нет файла INVALID_ARGUMENT, не-STEP файл IMPORT_FAILED — "
+         "без ложного успеха"),
+        ("STEP.import.geometry_validation",
+         "объём и габарит импортированного тела совпали с исходной деталью в пределах допуска "
+         "STEP-roundtrip"),
+    )
+
+    def fail_all(reason):
+        for cid, desc in rows:
+            rep.add(cid, desc, "FAIL", reason)
+
+    if not step_path or not _os.path.isfile(step_path):
+        fail_all(f"файл STEP от строки E01 отсутствует: {step_path}")
+        return
+
+    # ЭТАЛОН — САМА ИСХОДНАЯ ДЕТАЛЬ, а не аналитика: объём читается измерением, габарит — из
+    # `kompas_list_bodies` (у переоткрытого только для чтения документа `measure.bbox` пуст).
+    src_bodies, src_body_code = bodies(source_doc)
+    src_ref = src_bodies[0].get("body_ref") if src_bodies else None
+    src_measure, src_measure_code = measure(src_ref) if src_ref else ({}, "no_source_body")
+    src_bbox = src_bodies[0].get("bbox") if src_bodies else None
+    src_volume = src_measure.get("volume_mm3")
+    src_before, _ = context(source_doc)
+
+    before = {d.get("id") for d in documents()}
+    imp_env, imp_code = call("kompas_import_step", {
+        "application_id": app_id, "input_path": step_path, "desired_kind": "auto"}, timeout=300)
+    imp_res = result(imp_env)
+    after_rows = documents()
+    new_ids = sorted({d.get("id") for d in after_rows} - before)
+    imp_doc = new_ids[0] if len(new_ids) == 1 else None
+    imp_listed = next((d for d in after_rows if d.get("id") == imp_doc), {})
+    raw_ids = imp_res.get("created_document_ids") or []
+    raw_ctx, raw_code = context(raw_ids[0]) if raw_ids else ({}, "no_id_in_response")
+
+    rep.add("STEP.import.discover",
+            rows[0][1],
+            "PASS" if (not imp_code and len(new_ids) == 1
+                       and imp_listed.get("kind") == "part"
+                       and imp_res.get("created_document_kinds") == ["part"]
+                       and raw_ids and raw_code) else "FAIL",
+            f"новых документов={len(new_ids)} kind={imp_listed.get('kind')} "
+            f"kinds_в_ответе={imp_res.get('created_document_kinds')} "
+            f"created_document_ids={raw_ids} код_по_id_из_ответа={raw_code} "
+            f"(адресуемый id взят из разницы списков) err={imp_code} {emsg(imp_env)}")
+
+    rep.add("STEP.import.create",
+            rows[1][1],
+            "PASS" if ((imp_env or {}).get("status") == "succeeded"
+                       and (imp_res.get("body_count") or 0)
+                       + (imp_res.get("component_count") or 0) > 0
+                       and imp_res.get("reached_level") == "structure_checked") else "FAIL",
+            f"status={(imp_env or {}).get('status')} bodies={imp_res.get('body_count')} "
+            f"comps={imp_res.get('component_count')} level={imp_res.get('reached_level')} "
+            f"unverified={imp_res.get('unverified_aspects')} err={imp_code}")
+
+    imp_bodies, imp_bodies_code = bodies(imp_doc) if imp_doc else ([], "no_imported_document")
+    imp_ref = imp_bodies[0].get("body_ref") if imp_bodies else None
+    imp_measure, imp_measure_code = measure(imp_ref) if imp_ref else ({}, "no_imported_body")
+    imp_volume = imp_measure.get("volume_mm3")
+    imp_bbox = imp_bodies[0].get("bbox") if imp_bodies else None
+    imp_feats, imp_feats_code = features(imp_doc) if imp_doc else ([], "no_imported_document")
+    imp_ctx, imp_ctx_code = context(imp_doc) if imp_doc else ({}, "no_imported_document")
+    src_after, _ = context(source_doc)
+    src_untouched = (src_after.get("revision") == src_before.get("revision")
+                     and src_after.get("fingerprint") == src_before.get("fingerprint")
+                     and bool(src_before.get("fingerprint")))
+
+    rep.add("STEP.import.read",
+            rows[2][1],
+            "PASS" if (len(imp_bodies) == 1 and imp_ctx.get("kind") == "part"
+                       and len(imp_feats) == 1
+                       and not (imp_feats[0].get("dependencies") or [])
+                       and src_untouched) else "FAIL",
+            f"тел={len(imp_bodies)} признаков={len(imp_feats)} "
+            f"признак={imp_feats[0].get('name') if imp_feats else None} "
+            f"deps={imp_feats[0].get('dependencies') if imp_feats else None} bbox={imp_bbox} "
+            f"исходный: ревизия {src_before.get('revision')}->{src_after.get('revision')} "
+            f"отпечаток_тот_же={src_after.get('fingerprint') == src_before.get('fingerprint')} "
+            f"коды={imp_bodies_code}/{imp_feats_code}/{imp_ctx_code}")
+
+    rb_env, rb_code = (call("kompas_rebuild", {"document_id": imp_doc}) if imp_doc
+                       else ({}, "no_imported_document"))
+    rb_bodies, _ = bodies(imp_doc) if imp_doc else ([], None)
+    rb_ref = rb_bodies[0].get("body_ref") if rb_bodies else None
+    rb_measure, _ = measure(rb_ref, ["volume"]) if rb_ref else ({}, None)
+    rep.add("STEP.import.rebuild",
+            rows[3][1],
+            "PASS" if (not rb_code and imp_volume is not None
+                       and near(rb_measure.get("volume_mm3"), imp_volume, 1e-6)) else "FAIL",
+            f"код={rb_code} объём до={imp_volume} после={rb_measure.get('volume_mm3')} "
+            f"тел={len(rb_bodies)} new_revision={result(rb_env).get('new_revision')} {emsg(rb_env)}")
+
+    saved = _os.path.join(workdir, "P1_Block_imported.m3d")
+    imp_rev, _ = context(imp_doc) if imp_doc else ({}, None)
+    sv_env, sv_code = call("kompas_save_document", {
+        "document_id": imp_doc, "target_path": saved,
+        "expected_revision": imp_rev.get("revision")}) if imp_doc else ({}, "no_imported_document")
+    close(imp_doc)
+    op_env, op_code = call("kompas_open_document", {
+        "application_id": app_id, "path": saved, "access": "read_only"})
+    re_doc = result(op_env).get("id") or result(op_env).get("document_id")
+    re_bodies, _ = bodies(re_doc) if re_doc else ([], None)
+    re_ref = re_bodies[0].get("body_ref") if re_bodies else None
+    re_measure, _ = measure(re_ref, ["volume"]) if re_ref else ({}, None)
+    rep.add("STEP.import.save_reopen",
+            rows[4][1],
+            "PASS" if (not sv_code and not op_code and len(re_bodies) == 1
+                       and near(re_measure.get("volume_mm3"), imp_volume, 1e-6)) else "FAIL",
+            f"save={sv_code} open={op_code} тел_после_переоткрытия={len(re_bodies)} "
+            f"объём={re_measure.get('volume_mm3')} ожидание={imp_volume} файл={saved}")
+    close(re_doc)
+
+    miss_env, miss_code = call("kompas_import_step", {
+        "application_id": app_id, "input_path": _os.path.join(workdir, "no-such-file.step"),
+        "desired_kind": "auto"}, timeout=300)
+    before_bad = {d.get("id") for d in documents()}
+    bad_env, bad_code = call("kompas_import_step", {
+        "application_id": app_id, "input_path": saved, "desired_kind": "auto"}, timeout=300)
+    leftover = sorted({d.get("id") for d in documents()} - before_bad)
+    for doc in leftover:
+        close(doc)
+    rep.add("STEP.import.negative_tests",
+            rows[5][1],
+            "PASS" if (miss_code == "INVALID_ARGUMENT" and bad_code == "IMPORT_FAILED"
+                       and (miss_env or {}).get("status") == "failed"
+                       and (bad_env or {}).get("status") == "failed"
+                       and not result(miss_env) and not result(bad_env)) else "FAIL",
+            f"нет_файла={miss_code} не-STEP={bad_code} "
+            f"документов_оставлено_отказом={len(leftover)} (закрыты здесь) "
+            f"partial_effects={(bad_env or {}).get('error', {}).get('partial_effects')}")
+
+    rep.add("STEP.import.geometry_validation",
+            rows[6][1],
+            "PASS" if (imp_volume is not None and src_volume is not None
+                       and near(imp_volume, src_volume, max(0.1, 1e-5 * src_volume))
+                       and bbox_near(imp_bbox, src_bbox, 0.002)) else "FAIL",
+            f"объём импорта={imp_volume} исходника={src_volume} допуск="
+            f"{max(0.1, 1e-5 * src_volume) if src_volume else None} "
+            f"bbox импорта={imp_bbox} исходника={src_bbox} допуск=0.002 "
+            f"коды эталона={src_body_code}/{src_measure_code}")
+
+
 def main():
     if "--self-test" in sys.argv[1:]:
         # Самопроверка прибора прогонов (наряд ENTITY_CREATE_FALSE, п. 1.5). Стоит ПЕРВОЙ строкой:
@@ -14593,6 +14825,16 @@ def main():
         rep.add("E03", "у импорта указан достигнутый уровень проверки",
                 "PASS" if ((im_env or {}).get("verification") or {}).get("level") else "UNKNOWN",
                 f"level={((im_env or {}).get('verification') or {}).get('level')} unverified={((im_env or {}).get('verification') or {}).get('unverified_aspects')}")
+
+        # ── STEP.import: режим импорта STEP получает строку матрицы (наряд DEBT_IMPORT_STEP_ROW) ──
+        # INVARIANT: the row is proven by the mode's OWN calls in this run - the file is the STEP
+        # `E01` exported a moment ago, and the imported document is addressed by the id the document
+        # LIST gained. DOC: ksdocument3d_loadfromadditionformat.html, d3formatconvtype.html
+        # (load_format_STEP = -3). MEASURED: the imported body arrives as ONE feature named
+        # «Операция без истории:1» with no dependencies; volume and bbox match the source exactly.
+        # History: docs/decisions/api-audit.md#step-import-mode
+        step_import_checks(client, rep, app_id, workdir, exp_path,
+                           reopened.get("id") or reopened.get("document_id") or document_id)
 
         # СТРОКА V10 «чертёж в v1 не создаётся» УДАЛЕНА 06.10.2026 как ОШИБОЧНОЕ требование, а не
         # превращена в PASS. Её посылка («создание чертежа в v1 не реализовано») была верна до блока

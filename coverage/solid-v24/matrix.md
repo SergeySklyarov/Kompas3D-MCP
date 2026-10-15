@@ -86,13 +86,13 @@
 
 ### профиль mechanical-core-v1 — Практическое твердотельное моделирование v24
 
-- **обязательных_режимов:** 54
-- **режимов_закрыто:** 54
+- **обязательных_режимов:** 55
+- **режимов_закрыто:** 55
 - **общих_зависимостей:** 16
 - **зависимостей_закрыто:** 16
 - **профиль_закрыт:** да
 - **готовность_процента:** 100.0%
-- **по_очередям:** B1 16/16; B2 11/11; B3 10/10; B4 10/10; B5 7/7
+- **по_очередям:** B1 16/16; B2 11/11; B3 10/10; B4 10/10; B5 7/7; — 1/1
 - **открытые_режимы:** []
 - **открытые_зависимости:** []
 
@@ -146,18 +146,18 @@
 
 ### Метрика 2 — полный нормализованный каталог P6
 
-- **строк_каталога:** 342
-- **строк_полностью_закрыто:** 152
-- **строк_с_каким_либо_прогрессом:** 167
-- **семейств_в_каталоге:** 42
+- **строк_каталога:** 343
+- **строк_полностью_закрыто:** 153
+- **строк_с_каким_либо_прогрессом:** 168
+- **семейств_в_каталоге:** 43
 - **семейств_без_строк:** 14
-- **операций:** 124
+- **операций:** 125
 - **режимов_и_вариантов:** 209
-- **применимых_действий:** 2866
-- **действий_verified:** 1025
-- **покрытие_действий:** 35.8%
-- **распределение_статусов:** {'not_started': 1841, 'verified': 1025, 'not_applicable': 554}
-- **уровни_каталога_операций:** {'metadata_found': 51, 'mcp_verified': 53, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 4}
+- **применимых_действий:** 2873
+- **действий_verified:** 1032
+- **покрытие_действий:** 35.9%
+- **распределение_статусов:** {'not_started': 1841, 'verified': 1032, 'not_applicable': 557}
+- **уровни_каталога_операций:** {'metadata_found': 51, 'mcp_verified': 54, 'runtime_verified': 6, 'documented': 10, 'mcp_implemented': 4}
 - **уровни_каталога_режимов:** {'mcp_verified': 55, 'documented': 19, 'runtime_verified': 3, 'metadata_found': 48, 'не указан': 84}
 - **осторожно:** проценты двух метрик не сводятся к одному числу; доля verified-действий — по строкам каталога, а прогресс выпуска — по фиксированному составу профиля. «начато» не означает «пригодно»
 
@@ -335,6 +335,7 @@
 | `SM-19.circular.bodies` | SM-19 | practical_required | B4 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | B4M.08.discover, B4M.08.create, B4M.08.read, B4M.08.edit, B4M.08.rebuild, B4M.08.save_reopen, B4M.08.suppress_restore, B4M.08.delete_dependencies, B4M.08.negative_tests, B4M.08.geometry_validation, B4.00, B4.02, B4.04, B4.08 |
 | `SM-23.mirror_array.selected_operations` | SM-23 | practical_required | B4 | mcp_verified | OK | OK | OK | н/п | OK | OK | OK | OK | OK | OK | B4M.09.discover, B4M.09.create, B4M.09.read, B4M.09.edit, B4M.09.rebuild, B4M.09.save_reopen, B4M.09.suppress_restore, B4M.09.delete_dependencies, B4M.09.negative_tests, B4M.09.geometry_validation, B4.00, B4.03, B4.03b, B4.04, B4.08, SR.b4m09.repeat, SR.b4m09.control, SR.b4m09.declared_correct, SR.b4m09.declared_wrong, SR.b4m09.comparison_unavailable |
 | `SM-23.mirror_all.bodies_selection` | SM-23 | practical_required | B4 | mcp_verified | OK | OK | OK | OK | OK | OK | OK | OK | OK | OK | B4M.10.discover, B4M.10.create, B4M.10.read, B4M.10.edit, B4M.10.rebuild, B4M.10.save_reopen, B4M.10.suppress_restore, B4M.10.delete_dependencies, B4M.10.negative_tests, B4M.10.geometry_validation, B4.00, B4.03, B4.03b, B4.04 |
+| `STEP.import` | STEP | practical_required | None | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | STEP.import.discover, STEP.import.create, STEP.import.read, STEP.import.rebuild, STEP.import.save_reopen, STEP.import.negative_tests, STEP.import.geometry_validation |
 
 ### Общие зависимости профиля `mechanical-core-v1`
 
@@ -717,6 +718,7 @@
 | `SKC-04.delete` | G6 | practical_required | G6 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | OK | OK | OK | SKC.08.delete_dependencies, SKC.04.edit, SKC.09.negative_tests, SKC-04.delete.save_reopen, SKC-04.delete.geometry_validation |
 | `SKC-05.state_read` | G6 | practical_required | G6 | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | SKC.12.state_read, SKC.15.state_agreement, SKC-05.state_read.negative_tests, SKC-05.state_read.geometry_validation |
 | `SKC-06.association_bisector` | G6 | next | G6 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
+| `STEP.import` | STEP | practical_required | — | mcp_verified | OK | OK | OK | н/п | OK | OK | н/п | н/п | OK | OK | STEP.import.discover, STEP.import.create, STEP.import.read, STEP.import.rebuild, STEP.import.save_reopen, STEP.import.negative_tests, STEP.import.geometry_validation |
 | `AUX-SKETCH.plane_and_profile_lifecycle` *(вне каталога)* | AUX-SKETCH | later | — | — | OK | OK | OK | OK | OK | OK | н/п | н/п | OK | OK | V03, V04, V05, G07_xy, G07_xz, G07_yz, V04r, V04d, V04e, V04f, G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, F08.28.discover, F08.28.create, F08.28.read, F08.28.edit, F08.28.rebuild, F08.28.save_reopen, F08.28.negative_tests, F08.28.geometry_validation, AUXS.01.edit, AUXS.02.negative_tests, AUXS.03.create, AUXS.04.edit, AUXS.05.save_reopen |
 | `SM-04.boss` *(вне каталога)* | SM-04 | later | B5 | metadata_found | — | — | — | — | — | — | — | — | — | — | — |
 | `dep.sketch.entities` *(вне каталога)* | AUX-SKETCH | dependency_of | — | — | OK | OK | OK | OK | — | OK | — | — | OK | OK | G10p, G10s, G10s2, G10, G10v, G10r, G11, G12, DEP.DSE.02.create, DEP.DSE.07.geometry_validation, DEP.DSE.06.negative_tests, DEP.DSE.05.save_reopen, DEP.DSE.04.edit, DEP.DSE.01.discover, DEP.DSE.03.read |
@@ -1295,6 +1297,11 @@
   - ParametricMode документирован и присутствует в установленной kAPI7.tlb слотами 74/75; в поставленной обёртке его нет, поэтому продукт читает состояние без него — состояние 1 достигнуто и без вызова этого члена.
 - `SKC-06.association_bisector` — не закрыт
   - Необязательный режим: обязательный объём профиля не закрывает. ksCAssociation измерен как отказ без массива партнёров (ожидаемое предусловие), ksCBisector не измерялся.
+- `STEP.import` — закрыт целиком
+  - created_document_ids ответа несёт СЫРОЙ указатель COM («0x…»), а не идентификатор документа Хоста: адресуемый id — тот, который прибавился в kompas_list_documents. Измерено строкой STEP.import.discover; клиенту, который возьмёт id из ответа импорта, продукт его не примет.
+  - Отказ импорта оставляет ЗАРЕГИСТРИРОВАННЫЕ документы: обе попытки маршрута начинаются с Create, и при LoadFromAdditionFormat → false в сеансе остаются документы без тел, хотя partial_effects в отказе равен false (измерено строкой STEP.import.negative_tests).
+  - Инструмент заявляет уровень structure_checked и НЕ проверяет roundtrip: unverified_aspects несёт geometry_roundtrip_not_checked и units_conversion_not_checked. Совпадение объёма и габарита с исходником проверяет строка приёмки STEP.import.geometry_validation, а не сам инструмент.
+  - Документ импорта — деталь; сборка и чертёж этим режимом не проверялись (desired_kind принимает auto|part|assembly, измерен только auto на детали).
 - `AUX-SKETCH.plane_and_profile_lifecycle` — закрыт целиком
   - замена и очистка после reopen работают для измеренной области: эскиз на основной XY, профиль — окружность, вырезание сквозное; точка поиска выводится из цилиндрической грани зависимого тела (проба G, строки G10…G10r)
   - вне измеренной области (наклонная плоскость, отрезки, дуги, прямоугольники) отказ явный: CAPABILITY_UNAVAILABLE с derivation=profile_not_circle / plane_not_xy, а не догадка (строка G11)

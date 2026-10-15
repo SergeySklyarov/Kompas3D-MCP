@@ -6658,3 +6658,37 @@ IKompasDocument2D → IFragmentDocument`.
 интеропе) и подтверждается страницей `ikompasdocument2d_viewsandlayersmanager.html` способом
 «перечень интерфейса». Прежнее имя `IFragmentDocument.ViewsAndLayersManager` из инвентаря ИСЧЕЗАЕТ:
 вызовов на нём больше нет.
+## §4.88. Импорт STEP: документированный маршрут, два отказа и что возвращает ответ (живое измерение 15.10.2026, наряд `DEBT_IMPORT_STEP_ROW`)
+
+**Маршрут документирован.** `ksdocument3d_loadfromadditionformat.html` — «LoadFromAdditionFormat -
+Загрузить документ из дополнительных форматов jgs, sat, xt, x_b, step, stl, jt, C3D», подпись
+`BOOL LoadFromAdditionFormat( BSTR fileName, LPDISPATCH additionPar )`. Селектор чтения —
+`d3formatconvtype.html`: `load_format_STEP = -3` («формат STEP, для открытия документов»); параметр —
+`ksdocument3d_additionformatparam.html`, `ksadditionformatparam.html`, `ksadditionformatparam_init.html`.
+Зеркало: `reference/kompas-sdk-v24/sdk-docs/ksdocument3d_loadfromadditionformat.html`,
+`reference/kompas-sdk-v24/omega-docs/d3formatconvtype.html`.
+
+**Маршрут продукта.** `ksDocument3D.Create(true, true)` → `AdditionFormatParam()` → `Init()` →
+`format = load_format_STEP(-3)` → `LoadFromAdditionFormat(inputPath, param)` → `RebuildDocument()` →
+`UpdateDocumentParam()`. Маршрут пробуется ДВАЖДЫ — с читающим селектором и с умолчанием вендора;
+успехом считается только подтверждённая геометрия (тело или компонент), а не возврат конвертера.
+Прежняя запись §4.6 (обратный импорт перечислен как неработающий) текущим измерением НЕ
+подтверждается: тот же документированный маршрут вернул тело и признак. Причину расхождения
+измерение не устанавливает — оно говорит только о целевой сборке.
+
+**Что появляется.** Новый документ — деталь (`kind=part`) с ОДНИМ телом и ОДНИМ признаком
+«Операция без истории:1» (`type` 79, `dependencies` пуст, `sketch_ref` null). На плите 100x80x10
+объём и габарит импортированного тела совпали с исходной деталью: `79999.99999999999` мм³ и
+`[0,0,0]…[100,80,10]`. Исходная модель не изменилась: ревизия и отпечаток те же.
+
+**Что возвращает ответ (измерено).** `created_document_ids` несёт СЫРОЙ указатель COM
+(`"0x13B95153910"`), а не идентификатор документа Хоста: `kompas_get_context` по нему отвечает
+`INVALID_ARGUMENT` («Значение не соответствует ^[0-9a-f]{32}$»). Адресуемый id — тот, который
+прибавился в `kompas_list_documents`. `reached_level` = `structure_checked`, а `unverified_aspects`
+называет `geometry_roundtrip_not_checked` и `units_conversion_not_checked`.
+
+**Отказы (измерено).** Несуществующий файл — `INVALID_ARGUMENT` до COM («Файл импорта не найден»).
+Файл не-STEP (собственный `.m3d` того же прогона) — `IMPORT_FAILED` с `trace` обеих попыток
+(«LoadFromAdditionFormat → False»). Оба отказа объявляют `partial_effects: false`, НО оставляют
+ЗАРЕГИСТРИРОВАННЫЕ документы: обе попытки маршрута начинаются с `Create`, поэтому в сеансе
+появляются документы без тел. Это названная особенность, а не «следов нет».

@@ -613,4 +613,7 @@ Worker не читает, поэтому точные пути копий наз
 82/0; `scripts/measure-sketch-bulk.py --self-test` 11/0; `scripts/contract-diff.py` до/после — 0
 структурных ломок (дампы `tools/list` совпали побайтно, 502 288 байт: умолчание бюджета в схемы не
 входит); стражи `lint-dashes`/`check-evidence-links`/`long-comment-blocks` — 0. Зачётный полный
-прогон `--all` — в отчёте `SYNC_BUDGET_RAISE_REPORT_20261015.md`.
+прогон `--all` на ЧИСТОМ коммите `efa4427` (`source_tree_dirty = false`, прогон
+`20261015-220545-all-efa4427`) — **PASS 1629 / NAMED 5 / FAIL 0**: строка `SB-02.limits` прошла за
+9,253 с при пороге 20,000 с и больше не названное исключение. Отчёт —
+`SYNC_BUDGET_RAISE_REPORT_20261015.md`.

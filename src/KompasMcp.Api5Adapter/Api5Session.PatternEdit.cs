@@ -1,4 +1,4 @@
-using Kompas6API5;
+﻿using Kompas6API5;
 using Kompas6Constants3D;
 using KompasAPI7;
 using KompasMcp.Api5Adapter.Api7;
@@ -84,6 +84,11 @@ public partial class Api5Session
         var bodiesAfter = CountBodies(document);
         var featuresAfter = CountFeatures(document);
         var stateAfter = ReadFeatureState(entity);
+
+        // The feature's OWN state decides, not "Update() answered true": a refused edit can leave
+        // the feature in the tree carrying a kernel error. The reference is the caller's own.
+        // History: docs/decisions/adapter-features.md#feature-error-refusal
+        RequireNoFeatureError(document, entity, command.FeatureRef, "Массив (правка)");
 
         var checks = new List<NamedCheck>(written.Writes);
         checks.AddRange(ReadBackChecks(edit, after));

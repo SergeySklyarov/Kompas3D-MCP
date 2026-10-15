@@ -204,9 +204,12 @@ public partial class Api5Session
                 });
         }
 
+        ClearKompasResult(document);
         var updated = SafeBool(loft.Update);
         if (updated != true)
         {
+            var refusalDetails = new Dictionary<string, object?> { ["named_code"] = "GEOMETRY_FAILED" };
+            AddKompasFailure(refusalDetails, ReadKompasFailure(document));
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
                 "ILoft.Update() вернул " + (updated is null ? "ошибку вызова" : "false") +
@@ -214,13 +217,18 @@ public partial class Api5Session
                 "требуется замкнутое, или несовместимые контуры дают именно этот исход.",
                 RetryPolicy.ReacquireContext,
                 partialEffects: true,
-                details: new Dictionary<string, object?> { ["named_code"] = "GEOMETRY_FAILED" });
+                details: refusalDetails);
         }
 
         RebuildApi7AndSettle(container, document);
 
         var reference = References.Register("feature", document.Id, document.Revision, loft);
         BumpRevision(document, "loft.create");
+
+        // The feature's OWN state decides, not Update()=true: a loft can stay in the tree carrying a
+        // kernel error. The reference is registered above, so the refusal names the feature to remove.
+        // History: docs/decisions/adapter-features.md#feature-error-refusal
+        RequireNoApi7FeatureError(document, loft, reference.Id, "Операция по сечениям");
 
         var volumeAfter = ReadVolume(document);
         var bodiesAfter = CountBodies(document);

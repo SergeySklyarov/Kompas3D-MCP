@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using Kompas6API5;
 using Kompas6Constants3D;
 using KompasAPI7;
@@ -106,6 +106,7 @@ public partial class Api5Session
         }
 
         // ── creation ──
+        ClearKompasResult(document);
         var (rotation, failure) = Api7Rotated.TryCreate(
             container,
             command.Operation,
@@ -117,12 +118,14 @@ public partial class Api5Session
 
         if (rotation is null)
         {
+            var refusalDetails = new Dictionary<string, object?> { ["api7_failure"] = failure };
+            AddKompasFailure(refusalDetails, ReadKompasFailure(document));
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
                 "Вращение через фабрику API7 не создано: " + (failure ?? "причина не сообщена"),
                 RetryPolicy.SameOperationId,
                 partialEffects: true,
-                details: new Dictionary<string, object?> { ["api7_failure"] = failure });
+                details: refusalDetails);
         }
 
         // Without a rebuild the API7 write stays a representation — measured by probe E on
@@ -330,6 +333,19 @@ public partial class Api5Session
 
         // ── feature reference ──
         var reference = FindRotatedEntity(document);
+        var referenceDto = reference is null
+            ? null
+            : ToDto(References.Register("feature", document.Id, document.Revision, reference),
+                $"rotated {operationName} {command.AngleDeg:0.###}°");
+        if (reference is not null && referenceDto is not null)
+        {
+            // The feature's OWN state decides, not "the API7 factory returned an object": a rotation can
+            // stay in the tree carrying a kernel error. The reference is registered above, so the refusal
+            // names the feature to remove.
+            // History: docs/decisions/adapter-features.md#feature-error-refusal
+            RequireNoFeatureError(document, reference, referenceDto!.Id, "Вращение");
+        }
+
         if (reference is null)
         {
             // A reference to a feature the API5 tree does not show must not be issued. The level is NOT
@@ -356,8 +372,7 @@ public partial class Api5Session
         }
 
         return new RotatedResult(
-            ToDto(References.Register("feature", document.Id, document.Revision, reference),
-                $"rotated {operationName} {command.AngleDeg:0.###}°"),
+            referenceDto,
             operationName,
             readBack?.AngleDeg,
             readBack?.Direction,
@@ -631,6 +646,11 @@ public partial class Api5Session
         var featuresAfter = CountFeatures(document);
         var readBack = Api7Rotated.Read(container, found);
         var stateAfter = ReadFeatureState(entity);
+
+        // The feature's OWN state decides, not "Update() answered true": a refused edit can leave
+        // the feature in the tree carrying a kernel error. The reference is the caller's own.
+        // History: docs/decisions/adapter-features.md#feature-error-refusal
+        RequireNoFeatureError(document, entity, command.FeatureRef, "Вращение (правка)");
 
         var checks = new List<NamedCheck>
         {

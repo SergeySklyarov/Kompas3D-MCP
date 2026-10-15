@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using Kompas6API5;
 using KompasAPI7;
 using KompasMcp.Api5Adapter.Api7;
@@ -237,6 +237,11 @@ public partial class Api5Session
         var facesAfter = CountFaces(document);
         var featuresAfter = CountFeatures(document);
         var stateAfter = ReadFeatureState(entity);
+
+        // The feature's OWN state decides, not "Update() answered true": a refused edit can leave
+        // the feature in the tree carrying a kernel error. The reference is the caller's own.
+        // History: docs/decisions/adapter-features.md#feature-error-refusal
+        RequireNoFeatureError(document, entity, command.FeatureRef, "Скругление (правка)");
 
         // The radius is re-read from the API5 definition too: if API7 accepted the write while the
         // definition returns the old number, the API5 feature and the live model have diverged, and that
@@ -632,6 +637,11 @@ public partial class Api5Session
         var featuresAfter = CountFeatures(document);
         var stateAfter = ReadFeatureState(entity);
 
+        // The feature's OWN state decides, not "Update() answered true": a refused edit can leave
+        // the feature in the tree carrying a kernel error. The reference is the caller's own.
+        // History: docs/decisions/adapter-features.md#feature-error-refusal
+        RequireNoFeatureError(document, entity, command.FeatureRef, "Скругление (правка)");
+
         // The set is re-read FROM THE LIVE MODEL: a write without effect must not look applied.
         var after = Api7Fillet.ReadBaseObjects(container, owner);
         var afterRefs = after is null ? null : Api7Fillet.ReferencesOf(after);
@@ -988,6 +998,11 @@ public partial class Api5Session
         var volumeAfter = ReadVolume(document);
         var featuresAfter = CountFeatures(document);
         var stateAfter = ReadFeatureState(entity);
+
+        // The feature's OWN state decides, not "Update() answered true": a refused edit can leave
+        // the feature in the tree carrying a kernel error. The reference is the caller's own.
+        // History: docs/decisions/adapter-features.md#feature-error-refusal
+        RequireNoFeatureError(document, entity, command.FeatureRef, "Скругление (правка)");
 
         // The set is re-read FROM THE LIVE MODEL, not from the object written into: a write without
         // effect (like ksFilletDefinition.radius on FL04r) must not look applied.

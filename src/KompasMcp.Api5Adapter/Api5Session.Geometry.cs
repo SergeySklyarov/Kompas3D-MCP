@@ -1240,22 +1240,25 @@ public sealed partial class Api5Session
         ClearKompasResult(document);
         if (!feature.Create())
         {
-            var (resultCode, resultText, resultUnavailable) = ReadKompasResult(document);
+            var failure = ReadKompasFailure(document);
             var snapshot = ObserveRefusedCreate(
-                document, command, operationName, direction, ordinal, resultCode, resultText, resultUnavailable);
+                document, command, operationName, direction, ordinal,
+                failure.ResultCode, failure.ResultText, failure.ResultUnavailable);
             ComApartment.Release(feature);
+            var details = new Dictionary<string, object?>
+            {
+                [FeatureCreateFailure.DetailKey] = FeatureCreateFailure.Snapshot(snapshot),
+            };
+            AddKompasErrorFields(details, failure);
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
                 "Entity.Create() выдавливания вернул false: признак не появился. "
-                + RefusalReason(resultCode, resultText, resultUnavailable)
+                + RefusalReason(failure.ResultCode, failure.ResultText, failure.ResultUnavailable)
                 + " Состояние документа, эскиза и сеанса на момент отказа — в details."
                 + FeatureCreateFailure.DetailKey + ".",
                 RetryPolicy.SameOperationId,
                 partialEffects: true,
-                details: new Dictionary<string, object?>
-                {
-                    [FeatureCreateFailure.DetailKey] = FeatureCreateFailure.Snapshot(snapshot),
-                });
+                details: details);
         }
 
         SettleAfterMutation(document);
@@ -1289,6 +1292,12 @@ public sealed partial class Api5Session
         // The feature is in the tree from here on, so a failure below can still NAME it: "the feature was
         // created but changed nothing" is only actionable if the caller can delete it in one call.
         var featureReference = References.Register("feature", document.Id, document.Revision, feature);
+
+        // The feature's OWN state decides, not the fact that Create() answered true: KOMPAS can leave the
+        // feature in the tree carrying a kernel error. The reference is registered above, so the refusal
+        // hands the client the feature that stayed in the tree.
+        // History: docs/decisions/adapter-features.md#feature-error-refusal
+        RequireNoFeatureError(document, feature, featureReference.Id, "Выдавливание");
 
         // THREE DIFFERENT QUANTITIES that used to be one number (defect EXTRUDE-VOLUME-DELTA-ON-MULTIBODY):
         // (a) the SUM of all document bodies; (b) the volume of the body the operation concerns; (c) the
@@ -2761,9 +2770,7 @@ public sealed partial class Api5Session
         string step,
         ExtrudeCommand command,
         DocumentEntry? document = null,
-        int? kompasResultCode = null,
-        string? kompasResultText = null,
-        string? kompasResultUnavailable = null)
+        KompasFailure? failure = null)
     {
         var reads = ReadSketchAndProfile(command.SketchRef);
         var details = new Dictionary<string, object?>
@@ -2786,10 +2793,12 @@ public sealed partial class Api5Session
 
         if (document is not null)
         {
-            details["kompas_result_code"] = kompasResultCode.HasValue
-                ? kompasResultCode.Value
-                : kompasResultUnavailable ?? "не прочитано: причина не названа";
-            details["kompas_result_text"] = ResultTextOf(kompasResultCode, kompasResultText);
+            var read = failure ?? default;
+            details["kompas_result_code"] = read.ResultCode.HasValue
+                ? read.ResultCode.Value
+                : read.ResultUnavailable ?? "не прочитано: причина не названа";
+            details["kompas_result_text"] = ResultTextOf(read.ResultCode, read.ResultText);
+            AddKompasErrorFields(details, read);
         }
 
         var profile = reads.ProfileAreaUnavailable is null
@@ -2804,7 +2813,10 @@ public sealed partial class Api5Session
 
         var kernel = document is null
             ? string.Empty
-            : " " + RefusalReason(kompasResultCode, kompasResultText, kompasResultUnavailable);
+            : " " + RefusalReason(
+                (failure ?? default).ResultCode,
+                (failure ?? default).ResultText,
+                (failure ?? default).ResultUnavailable);
 
         return new KompasContractException(
             ErrorCodes.GeometryFailed,
@@ -2818,27 +2830,6 @@ public sealed partial class Api5Session
             RetryPolicy.ReacquireContext,
             partialEffects: true,
             details: details);
-    }
-
-    /// <summary>The library-program message that goes next to the code, with a zero code handled as what it
-    /// is. MEASURED: after a refused <c>SetSketch</c> with <c>ksReturnResult = 0</c>, <c>ksStrResult</c>
-    /// still answered «Успешное завершение» — the text of an EARLIER call. Publishing it bare inside a
-    /// refusal would read as a success, so a non-empty text under a zero code is named as a leftover
-    /// instead of being repeated as this refusal's message.
-    /// History: docs/decisions/adapter-sketch.md#set-sketch-refusal</summary>
-    private static string ResultTextOf(int? code, string? text)
-    {
-        if (code == 0)
-        {
-            return string.IsNullOrWhiteSpace(text)
-                ? "КОМПАС кода ошибки не вернул — текста нет"
-                : $"код ошибки не назван (ksReturnResult = 0); ksStrResult вернул «{text.Trim()}» — "
-                    + "это текст предыдущего вызова, к этому отказу он не относится";
-        }
-
-        return string.IsNullOrWhiteSpace(text)
-            ? "код ошибки прочитан, строка сообщения пуста"
-            : text;
     }
 
     /// <summary>Attaches the sketch to an extrusion definition, reading the kernel's own library-program
@@ -2856,8 +2847,7 @@ public sealed partial class Api5Session
             return;
         }
 
-        var (code, text, unavailable) = ReadKompasResult(document);
-        throw Refused("SetSketch", command, document, code, text, unavailable);
+        throw Refused("SetSketch", command, document, ReadKompasFailure(document));
     }
 
     private static string FormatDepth(ExtrudeCommand command) =>
@@ -2949,78 +2939,6 @@ public sealed partial class Api5Session
         }
 
         return (sketchState, sketchStateUnavailable, profileEntities, profileArea, profileAreaUnavailable);
-    }
-
-    /// <summary>Clear a previous NON-FATAL KOMPAS error before a call whose code will be read.</summary>
-    /// <remarks>DOC: KompasObject::ksResultNULL (kompasobject_ksresultnull.html) - «Обнулить результат
-    /// работы библиотеки, если ошибка не фатальная»; returns 1 when an error was cleared. Without it a
-    /// code left by an earlier call would be read as this refusal's reason.
-    /// INVARIANT: a failed reset is not fatal and is not reported as one - the code read afterwards is
-    /// then merely less trustworthy, and ksStrResult's note says it clears the non-fatal flag too.
-    /// History: docs/decisions/adapter-features.md#create-false-snapshot</remarks>
-    private void ClearKompasResult(DocumentEntry document)
-    {
-        try
-        {
-            RequireApplication(document.ApplicationId).Application.ksResultNULL();
-        }
-        catch (Exception ex) when (ex is COMException or InvalidCastException or KompasContractException)
-        {
-            // Nothing to report here: the refusal itself is what the caller must see, and an unreadable
-            // reset only weakens the code read next - it does not make the operation fail differently.
-        }
-    }
-
-    /// <summary>The KOMPAS result code and message of a call that has just returned.</summary>
-    /// <remarks>DOC: KompasObject::ksReturnResult and KompasObject::ksStrResult
-    /// (help.ascon.ru/KOMPAS_SDK/24/ru-RU/kompasobject_ksreturnresult.html,
-    /// .../kompasobject_ksstrresult.html) - "Код ошибки ... при выполнении библиотечной программы",
-    /// "Ошибка с номером >0 не является фатальной. Отрицательный номер ошибки приводит к завершению
-    /// программы", text via ksStrResult. INVARIANT: an unreadable route returns a REASON, never a zero -
-    /// "KOMPAS returned no code" and "we could not read the code" are different facts.
-    /// History: docs/decisions/adapter-features.md#create-false-snapshot</remarks>
-    private (int? Code, string? Text, string? Unavailable) ReadKompasResult(DocumentEntry document)
-    {
-        try
-        {
-            var application = RequireApplication(document.ApplicationId).Application;
-            var code = application.ksReturnResult();
-            string? text;
-            try
-            {
-                text = application.ksStrResult();
-            }
-            catch (Exception ex) when (ex is COMException or InvalidCastException)
-            {
-                text = null;
-            }
-
-            return (code, text, null);
-        }
-        catch (Exception ex) when (ex is COMException or InvalidCastException or KompasContractException)
-        {
-            return (null, null, "не прочитано: " + ex.Message);
-        }
-    }
-
-    /// <summary>The refusal's reason line as the client sees it. INVARIANT: "ПРИЧИНА НЕ УСТАНОВЛЕНА" is
-    /// kept ONLY for the case where KOMPAS returned no code at all - a named code is the cause, and saying
-    /// "not established" next to it would be false.</summary>
-    private static string RefusalReason(int? code, string? text, string? unavailable)
-    {
-        if (code is int named && named != 0)
-        {
-            var message = string.IsNullOrWhiteSpace(text) ? string.Empty : $" («{text.Trim()}»)";
-            return $"КОМПАС вернул код ошибки {named}{message}.";
-        }
-
-        if (code == 0)
-        {
-            return "ПРИЧИНА НЕ УСТАНОВЛЕНА: КОМПАС кода ошибки не вернул (ksReturnResult = 0).";
-        }
-
-        return "ПРИЧИНА НЕ УСТАНОВЛЕНА: код ошибки КОМПАС прочитать не удалось ("
-            + (unavailable ?? "причина не названа") + ").";
     }
 
     /// <summary>Feature count that keeps "could not be read" apart from "zero features".</summary>
@@ -3257,14 +3175,18 @@ public sealed partial class Api5Session
                 details: new Dictionary<string, object?> { ["added"] = added, ["requested"] = entities.Count });
         }
 
+        ClearKompasResult(document);
         if (!feature.Create())
         {
+            var refusalDetails = new Dictionary<string, object?>();
+            AddKompasFailure(refusalDetails, ReadKompasFailure(document));
             ComApartment.Release(feature);
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
                 "Entity.Create() скругления вернул false: признак не появился.",
                 RetryPolicy.SameOperationId,
-                partialEffects: true);
+                partialEffects: true,
+                details: refusalDetails);
         }
 
         SettleAfterMutation(document);
@@ -3274,6 +3196,11 @@ public sealed partial class Api5Session
         // able to NAME the feature it left in the tree, so the client can delete it. The same order as
         // kompas_extrude, whose refusal carries the feature the caller must remove.
         var featureReference = References.Register("feature", document.Id, document.Revision, feature);
+
+        // The feature's OWN state decides, not Create()=true: a fillet can stay in the tree carrying a
+        // kernel error. The reference is registered above, so the refusal names the feature to remove.
+        // History: docs/decisions/adapter-features.md#feature-error-refusal
+        RequireNoFeatureError(document, feature, featureReference.Id, "Скругление");
 
         var volumeAfter = ReadVolume(document);
         var facesAfter = CountFaces(document);
@@ -3560,12 +3487,15 @@ public sealed partial class Api5Session
         // is what the new plane must lie along. Same capture as on the fillet.
         var requestedLines = EdgeLines(entities, edgeRefs);
 
+        ClearKompasResult(document);
         if (!feature.Create())
         {
             // The feature's error number is what KOMPAS reports for the reason this very creation failed
             // (objectError was MEASURED by probe L as a readable feature-state field); returning
             // "Create()=false" silently without it would leave the caller guessing.
             var objectError = (feature.GetFeature() as ksFeature)?.objectError;
+            var refusalDetails = new Dictionary<string, object?> { ["object_error"] = objectError };
+            AddKompasFailure(refusalDetails, ReadKompasFailure(document));
             ComApartment.Release(feature);
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
@@ -3573,7 +3503,7 @@ public sealed partial class Api5Session
                 (objectError is int code && code != 0 ? $" objectError={code}." : string.Empty),
                 RetryPolicy.SameOperationId,
                 partialEffects: true,
-                details: new Dictionary<string, object?> { ["object_error"] = objectError });
+                details: refusalDetails);
         }
 
         SettleAfterMutation(document);
@@ -3582,6 +3512,11 @@ public sealed partial class Api5Session
         // Registered BEFORE the placement check, not after it: a refusal must be able to NAME the feature it
         // left in the tree, so the client can delete it — the same order as kompas_fillet and kompas_extrude.
         var reference2 = References.Register("feature", document.Id, document.Revision, feature);
+
+        // The feature's OWN state decides, not Create()=true: a chamfer can stay in the tree carrying a
+        // kernel error. The reference is registered above, so the refusal names the feature to remove.
+        // History: docs/decisions/adapter-features.md#feature-error-refusal
+        RequireNoFeatureError(document, feature, reference2.Id, "Фаска");
 
         var volumeAfter = ReadVolume(document);
         var facesAfter = CountFaces(document);

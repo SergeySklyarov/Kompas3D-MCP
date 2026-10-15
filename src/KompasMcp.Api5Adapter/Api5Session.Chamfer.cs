@@ -93,6 +93,7 @@ public partial class Api5Session
                 partialEffects: true);
         }
 
+        ClearKompasResult(document);
         var created = Api7Chamfer.TryCreateDistanceAngle(
             container, baseObjects, command.Distance1Mm, angle, command.Direction, name: null);
         if (!created.Created)
@@ -102,7 +103,8 @@ public partial class Api5Session
                 "Фаска через IChamfer не создана: " + created.Failure,
                 RetryPolicy.SameOperationId,
                 partialEffects: true,
-                details: new Dictionary<string, object?> { ["api7_failure"] = created.Failure });
+                details: CodeDetails(
+                    new Dictionary<string, object?> { ["api7_failure"] = created.Failure }, document));
         }
 
         // Without RebuildModel the IChamfer write stays a representation (MEASURED on IExtrusion.Sketch).
@@ -113,6 +115,13 @@ public partial class Api5Session
         var facesAfter = CountFaces(document);
         var bodiesAfter = CountBodies(document);
         var api5Feature = FindChamferEntity(document);
+
+        // The feature's OWN state decides, not "IChamfer was created": a chamfer can stay in the tree
+        // carrying a kernel error. History: docs/decisions/adapter-features.md#feature-error-refusal
+        if (api5Feature is not null)
+        {
+            RequireNoFeatureError(document, api5Feature, null, "Фаска по углу");
+        }
         var readBack = Api7Chamfer.Count(container) is int count and > 0
             ? Api7Chamfer.Read(container, count - 1)
             : null;
@@ -445,6 +454,11 @@ public partial class Api5Session
         var featuresAfter = CountFeatures(document);
         var stateAfter = ReadFeatureState(entity);
 
+        // The feature's OWN state decides, not "Update() answered true": a refused edit can leave
+        // the feature in the tree carrying a kernel error. The reference is the caller's own.
+        // History: docs/decisions/adapter-features.md#feature-error-refusal
+        RequireNoFeatureError(document, entity, command.FeatureRef, "Фаска (правка)");
+
         var expectedDistance1 = distance1 ?? current.Distance1Mm;
         var expectedAngle = angle ?? before?.AngleDeg;
         // The derived leg is d₁·tg α: if the kernel did not recompute it, the angle was not applied.
@@ -657,14 +671,17 @@ public partial class Api5Session
 
         // The order "write → Update() → RebuildDocument()" is part of the contract: without Update()
         // the model stays as it was although every setter returned true.
+        ClearKompasResult(document);
         if (!entity.Update())
         {
+            var refusalDetails = new Dictionary<string, object?> { ["applied_writes"] = writes.Count };
+            AddKompasFailure(refusalDetails, ReadKompasFailure(document));
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
                 "ksEntity.Update() вернул false: записанное значение не применено к модели.",
                 RetryPolicy.ReacquireContext,
                 partialEffects: true,
-                details: new Dictionary<string, object?> { ["applied_writes"] = writes.Count });
+                details: refusalDetails);
         }
 
         SettleAfterMutation(document);
@@ -674,6 +691,11 @@ public partial class Api5Session
         var volumeAfter = ReadVolume(document);
         var featuresAfter = CountFeatures(document);
         var stateAfter = ReadFeatureState(entity);
+
+        // The feature's OWN state decides, not "Update() answered true": a refused edit can leave
+        // the feature in the tree carrying a kernel error. The reference is the caller's own.
+        // History: docs/decisions/adapter-features.md#feature-error-refusal
+        RequireNoFeatureError(document, entity, command.FeatureRef, "Фаска (правка)");
 
         var valueStored = readBack is not null
             && Math.Abs(readBack.Distance1Mm - distance1) <= 1e-6

@@ -98,6 +98,7 @@ public sealed partial class Api5Session
         }
 
         var featureTreeBefore = FeatureTreeSnapshot.Capture(document);
+        ClearKompasResult(document);
         var created = Api7SolidBoolean.TryCreate(
             container, target7, tools7, command.Operation, command.KeepTools, name: null);
 
@@ -113,14 +114,14 @@ public sealed partial class Api5Session
                 ". Ядро отвергает несвязные тела, касание по ребру и касание в точке (измерено).",
                 RetryPolicy.SameOperationId,
                 partialEffects: true,
-                details: new Dictionary<string, object?>
+                details: CodeDetails(new Dictionary<string, object?>
                 {
                     ["operation"] = command.Operation.ToString().ToLowerInvariant(),
                     ["bodies_before"] = bodiesBefore.Count,
                     ["bodies_after"] = after.Count,
                     ["volume_before"] = SumVolumes(bodiesBefore),
                     ["volume_after"] = SumVolumes(after),
-                });
+                }, document));
         }
 
         RebuildApi7AndSettle(container, document);
@@ -129,6 +130,11 @@ public sealed partial class Api5Session
         var rows = ReadSolidBodies(document);
         var address = RequireCreatedFeatureAddress(document, featureTreeBefore, KompasObjectTypes.BooleanOperation, "solid.boolean");
         var resultRef = References.Register(BooleanRefKind, document.Id, document.Revision, address.Entity).Id;
+
+        // The feature's OWN state decides, not the factory's answer: a boolean feature can stay in the
+        // tree carrying a kernel error. The reference is registered above, so the refusal names it.
+        // History: docs/decisions/adapter-features.md#feature-error-refusal
+        RequireNoFeatureError(document, address.Entity, resultRef, "Булева операция");
         var totalVolume = rows.Sum(r => r.VolumeMm3 ?? 0d);
 
         var consumed = new List<string> { command.TargetBodyRef };
@@ -242,6 +248,7 @@ public sealed partial class Api5Session
         }
 
         var featureTreeBefore = FeatureTreeSnapshot.Capture(document);
+        ClearKompasResult(document);
         var created = Api7SolidSplit.TryCreate(container, new object[] { plane.Plane }, name: null);
         if (created.Feature is null)
         {
@@ -251,11 +258,11 @@ public sealed partial class Api5Session
                 "Разделение не построено: " + created.Failure,
                 RetryPolicy.SameOperationId,
                 partialEffects: true,
-                details: new Dictionary<string, object?>
+                details: CodeDetails(new Dictionary<string, object?>
                 {
                     ["bodies_before"] = bodiesBefore.Count,
                     ["bodies_after"] = after.Count,
-                });
+                }, document));
         }
 
         RebuildApi7AndSettle(container, document);
@@ -264,6 +271,10 @@ public sealed partial class Api5Session
         var rows = ReadSolidBodies(document);
         var address = RequireCreatedFeatureAddress(document, featureTreeBefore, KompasObjectTypes.SplitSolid, "solid.split");
         var featureRef = References.Register(SplitRefKind, document.Id, document.Revision, address.Entity).Id;
+
+        // The feature's OWN state decides: a split feature can stay in the tree carrying a kernel error.
+        // History: docs/decisions/adapter-features.md#feature-error-refusal
+        RequireNoFeatureError(document, address.Entity, featureRef, "Разделение тел");
 
         // INVARIANT: parts are the bodies that did not exist before the operation; untouched are
         // those that existed and remain. Identification is by GEOMETRY (bounding box AND volume),
@@ -373,6 +384,7 @@ public sealed partial class Api5Session
         }
 
         var featureTreeBefore = FeatureTreeSnapshot.Capture(document);
+        ClearKompasResult(document);
         var created = Api7SolidCut.TryCreateByPlane(
             container, plane.Plane, keepPositive, name: null, targetBody);
         if (created.Feature is null)
@@ -383,12 +395,12 @@ public sealed partial class Api5Session
                 "Отсечение не построено: " + created.Failure,
                 RetryPolicy.SameOperationId,
                 partialEffects: true,
-                details: new Dictionary<string, object?>
+                details: CodeDetails(new Dictionary<string, object?>
                 {
                     ["keep_side"] = command.KeepSide,
                     ["bodies_before"] = bodiesBefore.Count,
                     ["bodies_after"] = after.Count,
-                });
+                }, document));
         }
 
         RebuildApi7AndSettle(container, document);
@@ -397,6 +409,10 @@ public sealed partial class Api5Session
         var rows = ReadSolidBodies(document);
         var address = RequireCreatedFeatureAddress(document, featureTreeBefore, KompasObjectTypes.CutByPlane, "solid.cut_by_plane");
         var featureRef = References.Register(CutRefKind, document.Id, document.Revision, address.Entity).Id;
+
+        // The feature's OWN state decides: a cut feature can stay in the tree carrying a kernel error.
+        // History: docs/decisions/adapter-features.md#feature-error-refusal
+        RequireNoFeatureError(document, address.Entity, featureRef, "Отсечение по плоскости");
 
         // INVARIANT: the remainder is identified by MATCHING THE BODY COMPOSITION, not by "the first
         // whose volume differs from the target". INVARIANT: snapshot matching also sees VANISHED
@@ -570,6 +586,7 @@ public sealed partial class Api5Session
 
         var before = target.Snapshot;
         var featureTreeBefore = FeatureTreeSnapshot.Capture(document);
+        ClearKompasResult(document);
         var created = Api7SolidReposition.TryCreate(container, body7, matrix, name: null);
         if (created.Feature is null)
         {
@@ -577,7 +594,8 @@ public sealed partial class Api5Session
                 ErrorCodes.GeometryFailed,
                 "Преобразование положения не построено: " + created.Failure,
                 RetryPolicy.SameOperationId,
-                partialEffects: true);
+                partialEffects: true,
+                details: CodeDetails(new Dictionary<string, object?>(), document));
         }
 
         RequirePlacementRoundTrip(created.Feature, matrix, command.Kind);
@@ -588,6 +606,10 @@ public sealed partial class Api5Session
         var rows = ReadSolidBodies(document);
         var address = RequireCreatedFeatureAddress(document, featureTreeBefore, KompasObjectTypes.BodyRepositionFeature, "solid.reposition");
         var featureRef = References.Register(RepositionRefKind, document.Id, document.Revision, address.Entity).Id;
+
+        // The feature's OWN state decides: a reposition feature can stay in the tree carrying a kernel
+        // error. History: docs/decisions/adapter-features.md#feature-error-refusal
+        RequireNoFeatureError(document, address.Entity, featureRef, "Преобразование положения");
 
         // INVARIANT: a successful Update() here is NOT proof — three routes out of four returned
         // true and did not move the body (step RP.2), so the placement is re-read and "did not
@@ -1668,6 +1690,11 @@ public sealed partial class Api5Session
         var featuresAfter = CountFeatures(document);
         var stateAfter = ReadFeatureState(entity);
 
+        // The feature's OWN state decides, not "Update() answered true": a refused edit can leave
+        // the feature in the tree carrying a kernel error. The reference is the caller's own.
+        // History: docs/decisions/adapter-features.md#feature-error-refusal
+        RequireNoFeatureError(document, entity, command.FeatureRef, "Твёрдотельная операция (правка)");
+
         var wanted = new[] { matrix[12], matrix[13], matrix[14] };
 
         // THE EDIT IS READ BACK AND COMPARED BY MATRIX — on the same basis as creation
@@ -2153,6 +2180,11 @@ public sealed partial class Api5Session
 
         var rows = ReadSolidBodies(document);
         var stateAfter = ReadFeatureState(entity);
+
+        // The feature's OWN state decides, not "Update() answered true": a refused edit can leave
+        // the feature in the tree carrying a kernel error. The reference is the caller's own.
+        // History: docs/decisions/adapter-features.md#feature-error-refusal
+        RequireNoFeatureError(document, entity, command.FeatureRef, "Твёрдотельная операция (правка)");
         var featuresAfter = CountFeatures(document);
         var sameFeature = string.Equals(stateBefore.Name, stateAfter.Name, StringComparison.Ordinal);
 
@@ -2449,6 +2481,11 @@ public sealed partial class Api5Session
 
         var rows = ReadSolidBodies(document);
         var stateAfter = ReadFeatureState(entity);
+
+        // The feature's OWN state decides, not "Update() answered true": a refused edit can leave
+        // the feature in the tree carrying a kernel error. The reference is the caller's own.
+        // History: docs/decisions/adapter-features.md#feature-error-refusal
+        RequireNoFeatureError(document, entity, command.FeatureRef, "Твёрдотельная операция (правка)");
         var featuresAfter = CountFeatures(document);
         var sameFeature = string.Equals(stateBefore.Name, stateAfter.Name, StringComparison.Ordinal);
 
@@ -2771,6 +2808,11 @@ public sealed partial class Api5Session
         var volumeAfter = ReadVolume(document);
         var featuresAfter = CountFeatures(document);
         var stateAfter = ReadFeatureState(entity);
+
+        // The feature's OWN state decides, not "Update() answered true": a refused edit can leave
+        // the feature in the tree carrying a kernel error. The reference is the caller's own.
+        // History: docs/decisions/adapter-features.md#feature-error-refusal
+        RequireNoFeatureError(document, entity, command.FeatureRef, "Твёрдотельная операция (правка)");
         var rowsAfter = ReadSolidBodies(document);
 
         var sameFeature = string.Equals(stateBefore.Name, stateAfter.Name, StringComparison.Ordinal);

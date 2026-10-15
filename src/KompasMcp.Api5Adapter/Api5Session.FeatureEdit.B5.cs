@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Runtime.InteropServices;
 using Kompas6API5;
 using Kompas6Constants3D;
@@ -202,6 +202,11 @@ public partial class Api5Session
         var volumeAfter = ReadVolume(document);
         var featuresAfter = CountFeatures(document);
         var stateAfter = ReadFeatureState(entity);
+
+        // The feature's OWN state decides, not "Update() answered true": a refused edit can leave
+        // the feature in the tree carrying a kernel error. The reference is the caller's own.
+        // History: docs/decisions/adapter-features.md#feature-error-refusal
+        RequireNoFeatureError(document, entity, command.FeatureRef, "Правка признака");
 
         var sameFeature = string.Equals(stateBefore.Name, stateAfter.Name, StringComparison.Ordinal)
                           && featuresBefore == featuresAfter;
@@ -626,17 +631,20 @@ public partial class Api5Session
         // cancelled, but the two input stores disagreed; writing INTO BOTH STORES
         // (WriteLoftSectionsToDefinition) lifts the cancellation. What matters is that BOTH stores are
         // written; dropping the definition read would drop kompas_get_feature.
+        ClearKompasResult(document);
         var updated = SafeBool(entity.Update) == true;
         var sectionsAfterEntityUpdate = Api7Loft.SectionCount(loft);
         if (!updated)
         {
+            var refusalDetails = new Dictionary<string, object?> { ["named_code"] = "GEOMETRY_FAILED" };
+            AddKompasFailure(refusalDetails, ReadKompasFailure(document));
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
                 "ksEntity.Update() вернул false: новый набор сечений не построен. Признак изменён "
                 + "частично — вход записан, тело прежнее.",
                 RetryPolicy.ReacquireContext,
                 partialEffects: true,
-                details: new Dictionary<string, object?> { ["named_code"] = "GEOMETRY_FAILED" });
+                details: refusalDetails);
         }
 
         // REBUILD: API5 FIRST, THEN API7, and both numbers are published. Which of the two rebuilds
@@ -663,6 +671,11 @@ public partial class Api5Session
         var volumeAfter = ReadVolume(document);
         var featuresAfter = CountFeatures(document);
         var stateAfter = ReadFeatureState(entity);
+
+        // The feature's OWN state decides, not "Update() answered true": a refused edit can leave
+        // the feature in the tree carrying a kernel error. The reference is the caller's own.
+        // History: docs/decisions/adapter-features.md#feature-error-refusal
+        RequireNoFeatureError(document, entity, command.FeatureRef, "Правка признака");
 
         var sameFeature = string.Equals(stateBefore.Name, stateAfter.Name, StringComparison.Ordinal)
                           && featuresBefore == featuresAfter;
@@ -1176,16 +1189,19 @@ public partial class Api5Session
             }
         }
 
+        ClearKompasResult(document);
         var updated = SafeBool(entity.Update) == true;
         if (!updated)
         {
+            var refusalDetails = new Dictionary<string, object?> { ["named_code"] = "GEOMETRY_FAILED" };
+            AddKompasFailure(refusalDetails, ReadKompasFailure(document));
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
                 "ksEntity.Update() вернул false: записанный режим не применён к модели. Признак "
                 + "изменён частично.",
                 RetryPolicy.ReacquireContext,
                 partialEffects: true,
-                details: new Dictionary<string, object?> { ["named_code"] = "GEOMETRY_FAILED" });
+                details: refusalDetails);
         }
 
         var part = document.PartNow();
@@ -1201,6 +1217,11 @@ public partial class Api5Session
         var volumeAfter = ReadVolume(document);
         var featuresAfter = CountFeatures(document);
         var stateAfter = ReadFeatureState(entity);
+
+        // The feature's OWN state decides, not "Update() answered true": a refused edit can leave
+        // the feature in the tree carrying a kernel error. The reference is the caller's own.
+        // History: docs/decisions/adapter-features.md#feature-error-refusal
+        RequireNoFeatureError(document, entity, command.FeatureRef, "Правка признака");
 
         var sameFeature = string.Equals(stateBefore.Name, stateAfter.Name, StringComparison.Ordinal)
                           && featuresBefore == featuresAfter;

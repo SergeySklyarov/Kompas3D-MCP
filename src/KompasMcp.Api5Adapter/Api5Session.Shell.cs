@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using Kompas6API5;
 using KompasMcp.Contracts;
 using KompasMcp.Contracts.Ipc;
@@ -120,9 +120,14 @@ public partial class Api5Session
                 });
         }
 
+        // The documented reason route is cleared BEFORE the call, so a code read after a refusal is this
+        // call's own and not a stale one from an earlier operation.
+        ClearKompasResult(document);
         var created = SafeBool(entity.Create);
         if (created != true)
         {
+            var details = new Dictionary<string, object?> { ["named_code"] = "GEOMETRY_FAILED" };
+            AddKompasFailure(details, ReadKompasFailure(document));
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
                 "Create() оболочки вернул " + (created is null ? "ошибку вызова" : "false") +
@@ -130,7 +135,7 @@ public partial class Api5Session
                 "и он отказ, а не частичный результат.",
                 RetryPolicy.ReacquireContext,
                 partialEffects: true,
-                details: new Dictionary<string, object?> { ["named_code"] = "GEOMETRY_FAILED" });
+                details: details);
         }
 
         SafeBool(entity.Update);
@@ -139,6 +144,11 @@ public partial class Api5Session
 
         var reference = References.Register("feature", document.Id, document.Revision, entity);
         BumpRevision(document, "shell.create");
+
+        // The feature's OWN state decides, not Create()=true: a shell can stay in the tree carrying a
+        // kernel error. The reference is registered above, so the refusal names the feature to remove.
+        // History: docs/decisions/adapter-features.md#feature-error-refusal
+        RequireNoFeatureError(document, entity, reference.Id, "Оболочка");
 
         var volumeAfter = ReadVolume(document);
         var bodiesAfter = CountBodies(document);

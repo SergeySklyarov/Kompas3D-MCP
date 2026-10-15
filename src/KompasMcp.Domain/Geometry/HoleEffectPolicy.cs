@@ -93,10 +93,10 @@ public static class HoleEffectPolicy
         var volumeRead = volumeBefore is double && volumeAfter is double;
         var facesRead = facesBefore is double && facesAfter is double;
 
-        if (objectError is int code && code != 0)
+        if (FeatureErrorRule.IsRefusal(objectError))
         {
             return new HoleEffectOutcome(
-                HoleEffectVerdict.FeatureError, code, removed, materialRemoved, facesGrew);
+                HoleEffectVerdict.FeatureError, objectError, removed, materialRemoved, facesGrew);
         }
 
         if (volumeRead && facesRead && !materialRemoved && !facesGrew)

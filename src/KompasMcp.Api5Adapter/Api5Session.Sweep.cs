@@ -94,10 +94,25 @@ public partial class Api5Session
 
         var pathPartsReadBack = PathPartCount(() => definition.PathPartArray());
 
+        ClearKompasResult(document);
         var created = SafeBool(entity.Create);
 
         if (created != true)
         {
+            var refusalDetails = new Dictionary<string, object?>
+            {
+                ["named_code"] = "GEOMETRY_FAILED",
+                ["set_sketch_accepted"] = sketchAccepted,
+                ["sketch_read_back_present"] = sketchReadBack,
+                ["path_parts_attached"] = pathParts,
+                ["path_parts_read_back"] = pathPartsReadBack,
+                ["profile_sketch_name"] = target.Sketch.name,
+                ["path_sketch_name"] = path.Sketch.name,
+                ["entity_type_after_new"] = entity.type,
+                ["definition_runtime"] = definition.GetType().Name,
+                ["definition_answers_boss"] = definition is ksBossEvolutionDefinition,
+            };
+            AddKompasFailure(refusalDetails, ReadKompasFailure(document));
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
                 "Create() кинематической операции вернул " + (created is null ? "ошибку вызова" : "false") +
@@ -105,19 +120,7 @@ public partial class Api5Session
                 "именно этот исход, и он отказ, а не частичный результат.",
                 RetryPolicy.ReacquireContext,
                 partialEffects: true,
-                details: new Dictionary<string, object?>
-                {
-                    ["named_code"] = "GEOMETRY_FAILED",
-                    ["set_sketch_accepted"] = sketchAccepted,
-                    ["sketch_read_back_present"] = sketchReadBack,
-                    ["path_parts_attached"] = pathParts,
-                    ["path_parts_read_back"] = pathPartsReadBack,
-                    ["profile_sketch_name"] = target.Sketch.name,
-                    ["path_sketch_name"] = path.Sketch.name,
-                    ["entity_type_after_new"] = entity.type,
-                    ["definition_runtime"] = definition.GetType().Name,
-                    ["definition_answers_boss"] = definition is ksBossEvolutionDefinition,
-                });
+                details: refusalDetails);
         }
 
         SafeBool(entity.Update);
@@ -130,6 +133,11 @@ public partial class Api5Session
 
         var reference = References.Register("feature", document.Id, document.Revision, entity);
         BumpRevision(document, "sweep.create");
+
+        // The feature's OWN state decides, not Create()=true: a sweep can stay in the tree carrying a
+        // kernel error. The reference is registered above, so the refusal names the feature to remove.
+        // History: docs/decisions/adapter-features.md#feature-error-refusal
+        RequireNoFeatureError(document, entity, reference.Id, "Кинематическая операция");
 
         var volumeAfter = ReadVolume(document);
         var bodiesAfter = CountBodies(document);

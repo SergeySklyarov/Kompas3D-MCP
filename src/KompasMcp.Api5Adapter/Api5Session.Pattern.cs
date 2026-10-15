@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using Kompas6API5;
 using Kompas6Constants3D;
 using KompasAPI7;
@@ -79,6 +79,7 @@ public partial class Api5Session
             axisNotes.AddRange(second.Notes);
         }
 
+        ClearKompasResult(document);
         var (pattern, failure) = Api7Pattern.TryCreateLinear(
             container,
             command.CopyKind,
@@ -144,6 +145,7 @@ public partial class Api5Session
                 partialEffects: true);
         }
 
+        ClearKompasResult(document);
         var (pattern, failure) = Api7Pattern.TryCreateCircular(
             container,
             command.CopyKind,
@@ -221,6 +223,7 @@ public partial class Api5Session
                 partialEffects: true);
         }
 
+        ClearKompasResult(document);
         var (pattern, failure, notes) = Api7Pattern.TryCreateMirror(
             container,
             command.Mode,
@@ -363,12 +366,14 @@ public partial class Api5Session
     {
         if (pattern is null)
         {
+            var refusalDetails = new Dictionary<string, object?> { ["api7_failure"] = failure };
+            AddKompasFailure(refusalDetails, ReadKompasFailure(document));
             throw new KompasContractException(
                 ErrorCodes.GeometryFailed,
                 $"Массив не создан фабрикой API7 (семейство {family}): " + (failure ?? "причина не сообщена"),
                 RetryPolicy.SameOperationId,
                 partialEffects: true,
-                details: new Dictionary<string, object?> { ["api7_failure"] = failure });
+                details: refusalDetails);
         }
 
         // Without the rebuild the API7 write stays a representation.
@@ -382,6 +387,11 @@ public partial class Api5Session
         var bounds = SafeBounds(part);
 
         var reference = References.Register("feature", document.Id, document.Revision, pattern);
+
+        // The feature's OWN state decides, not "the factory returned an object": a pattern can stay in the
+        // tree carrying a kernel error. The reference is registered above, so the refusal names it.
+        // History: docs/decisions/adapter-features.md#feature-error-refusal
+        RequireNoApi7FeatureError(document, pattern, reference.Id, "Массив");
 
         var checks = new List<NamedCheck>
         {

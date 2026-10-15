@@ -291,3 +291,6 @@ docs/acceptance/raw/
 #     снимки давали основную часть висячих упоминаний (вхождения 8c: 32 файла набора из 294,
 #     и снимки — первые в этом списке). Для сборки, запуска и понимания продукта снимки не нужны.
 /coverage/solid-v24/archive/
+
+# Customer bug reports dropped for the tech lead; never committed.
+/bugs-inbox/

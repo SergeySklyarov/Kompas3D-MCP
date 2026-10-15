@@ -442,6 +442,22 @@ def error_code(envelope):
     return error.get("code") if isinstance(error, dict) else None
 
 
+def feature_error_refusal(env):
+    """Отказ «признак остался в дереве с ошибкой ядра»: GEOMETRY_FAILED, details.code=feature_error,
+    ненулевой object_error.
+
+    Наряд DEBT_ERROR_CODES. У выреза, который КОМПАС ПРИНЯЛ (`Create()=true`), но не применил,
+    признак остаётся в дереве с ненулевым `objectError` — измерено: 32 на вырезе в пустоту, и это
+    переживает перестроение. Находка точнее измеренного ноль-результата и решается ПЕРВОЙ — тот же
+    порядок, что у отверстия (`docs/decisions/adapter-features.md#feature-error-refusal`). До наряда
+    эти вызовы отвечали `NO_GEOMETRY_CHANGE`; ожидание строк обновлено по измерению, не ослаблено.
+    """
+    error = (env or {}).get("error")
+    det = (error.get("details") or {}) if isinstance(error, dict) else {}
+    return (error_code(env) == "GEOMETRY_FAILED" and det.get("code") == "feature_error"
+            and isinstance(det.get("object_error"), int) and det.get("object_error") != 0)
+
+
 def unverified_of(envelope):
     """Неподтверждённые аспекты конверта — из ОБОИХ мест, где продукт их публикует.
 
@@ -9944,7 +9960,7 @@ def client_bugs_20261010_checks(client, rep, app_id, workdir):
         hash_after = sha256(restore_path)
         mtime_after = _os.path.getmtime(restore_path) if _os.path.exists(restore_path) else None
         copy_path = det.get("control_copy_path")
-        ok = (refuse_code == "NO_GEOMETRY_CHANGE"
+        ok = (feature_error_refusal(env)
               and det.get("restore_attempted") is False
               and det.get("restore_decision") == "copy_kept_document_open"
               and det.get("restored") is False
@@ -9956,7 +9972,9 @@ def client_bugs_20261010_checks(client, rep, app_id, workdir):
                 "restore_attempted=false, restore_decision=copy_kept_document_open, копия сохранена и "
                 "её путь назван; sha256 и время изменения файла документа не изменились",
                 "PASS" if ok else "FAIL",
-                f"code={refuse_code} attempted={det.get('restore_attempted')} "
+                f"code={refuse_code} details.code={det.get('code')!r} "
+                f"object_error={det.get('object_error')!r} "
+                f"attempted={det.get('restore_attempted')} "
                 f"decision={det.get('restore_decision')!r} restored={det.get('restored')} "
                 f"rollback={det.get('rollback_scope_code')!r} "
                 f"sha {str(hash_before)[:12]}→{str(hash_after)[:12]} "
@@ -10024,7 +10042,7 @@ def client_bugs_20261010_checks(client, rep, app_id, workdir):
                 "target_body_ref": body_ref})
             det = details_of(env)
             hash_after = sha256(restore_path)
-            ok = (refuse_code == "NO_GEOMETRY_CHANGE"
+            ok = (feature_error_refusal(env)
                   and det.get("restore_attempted") is False
                   and det.get("restore_decision") == "document_read_only"
                   and hash_before == hash_after)
@@ -10099,7 +10117,7 @@ def client_bugs_20261010_checks(client, rep, app_id, workdir):
             delete_env, deleted = call("kompas_delete_feature", {
                 "feature_ref": left_ref, "expected_revision": rev_at_refusal})
         volume_after = first_volume(doc3)
-        ok = (refuse_code == "NO_GEOMETRY_CHANGE" and det.get("feature_left_in_tree") is True
+        ok = (feature_error_refusal(env) and det.get("feature_left_in_tree") is True
               and isinstance(left_ref, str) and left_ref and deleted is None
               and near(volume_after, volume_before, 1.0))
         rep.add("CB10.11",
@@ -23084,21 +23102,22 @@ def cb9_checks(client, rep, app_id, workdir):
     # отказ приходит от измерения, а не от валидатора.
     doc, rev, body, err = cylinder("CB9-air", 2.0, 1.0)
     if err:
-        rep.add("CB9.5", "вырез в пустоту: NO_GEOMETRY_CHANGE и feature_ref в details", "FAIL", err)
+        rep.add("CB9.5", "вырез в пустоту: отказ называет признак с ошибкой ядра и даёт feature_ref", "FAIL", err)
         close(doc)
     else:
         sk, rev, derr = draw(doc, rev, [circle_r2], "cb9-air", 1.0)
         if derr:
-            rep.add("CB9.5", "вырез в пустоту: NO_GEOMETRY_CHANGE и feature_ref в details", "FAIL", derr)
+            rep.add("CB9.5", "вырез в пустоту: отказ называет признак с ошибкой ядра и даёт feature_ref", "FAIL", derr)
         else:
             rev, env = extrude(doc, rev, sk, operation="cut", depth_mm=0.5, direction="negative",
                                end_condition="blind", target_body_ref=body)
             det = details_of(env)
-            rep.add("CB9.5", "вырез в пустоту: NO_GEOMETRY_CHANGE и feature_ref в details",
-                    "PASS" if (error_code(env) == "NO_GEOMETRY_CHANGE"
+            rep.add("CB9.5", "вырез в пустоту: отказ называет признак с ошибкой ядра и даёт feature_ref",
+                    "PASS" if (feature_error_refusal(env)
                                and isinstance(det.get("feature_ref"), str) and det.get("feature_ref")) else "FAIL",
-                    "code=%s feature_ref=%r partial_effects=%s"
-                    % (error_code(env), det.get("feature_ref"),
+                    "code=%s details.code=%r object_error=%r feature_ref=%r partial_effects=%s"
+                    % (error_code(env), det.get("code"), det.get("object_error"),
+                       det.get("feature_ref"),
                        ((env or {}).get("error") or {}).get("partial_effects")))
         close(doc)
 
@@ -23230,12 +23249,14 @@ def cb9_checks(client, rep, app_id, workdir):
             copy_path = det.get("control_copy_path")
             rep.add("CB9.8", "откат контрольной копии: файл открытого в КОМПАС документа НЕ "
                              "перезаписывается, копия сохранена и названа причиной (OBS-019)",
-                    "PASS" if (error_code(env2) == "NO_GEOMETRY_CHANGE" and attempted is False
+                    "PASS" if (feature_error_refusal(env2) and attempted is False
                                and restored is False
                                and decision == "copy_kept_document_open"
                                and isinstance(copy_path, str) and copy_path) else "FAIL",
-                    "code=%s restore_attempted=%s restored=%s restore_decision=%s path=%r"
-                    % (error_code(env2), attempted, restored, decision, str(copy_path)[:110]))
+                    "code=%s details.code=%r object_error=%r restore_attempted=%s restored=%s "
+                    "restore_decision=%s path=%r"
+                    % (error_code(env2), det.get("code"), det.get("object_error"), attempted,
+                       restored, decision, str(copy_path)[:110]))
         close(doc)
         try:
             os.remove(restore_path)
@@ -27091,6 +27112,52 @@ def extrusion_direction_and_target_checks(client, rep, app_id, workdir):
                                     + str(((env44 or {}).get("error") or {}).get("message", ""))[:110])
                         close(doc)
 
+    # ========= EX45: вырез, который КОМПАС принял, но не построил, - отказ, а не измеренный ноль ===
+    # INVARIANT: успешный вызов, оставивший признак с ошибкой ядра, отвергается ДО измерения нуля.
+    # MEASURED: контур лежит НА теле, поэтому предварительная сверка габаритов проходит, а решение
+    # принимает ошибка признака: отказ называет признак и его код, тело не меняется.
+    # TEST: держит вторую (после отверстия) семью - выдавливание - и связывает её со строкой матрицы.
+    # History: docs/decisions/adapter-features.md#feature-error-refusal
+    ex45_desc = ("вырез в пустоту: КОМПАС принял запись, но признак с ошибкой ядра - отказ, "
+                 "а не измеренный ноль")
+    r2 = {"kind": "circle", "center_mm": [0, 0], "radius_mm": 2.0}
+    doc, rev = new_doc("SM02-cut-void-error")
+    if not doc:
+        rep.add("EX45", ex45_desc, "FAIL", "документ не создан")
+    else:
+        sk, rev, serr = sketch(doc, rev, r2, "ex45-cyl", 0)
+        if serr:
+            rep.add("EX45", ex45_desc, "FAIL", serr)
+        else:
+            rev, _env, code = extrude(doc, rev, sk, operation="base", depth_mm=1,
+                                      direction="positive", end_condition="blind")
+            rows = bodies(doc)
+            body = rows[0]["body_ref"] if rows else None
+            if code is not None or not body:
+                rep.add("EX45", ex45_desc, "FAIL", "цилиндр не создан: code=" + str(code))
+            else:
+                v_before = volume(body)
+                sk2, rev, serr2 = sketch(doc, rev, r2, "ex45-air", 1)
+                if serr2:
+                    rep.add("EX45", ex45_desc, "FAIL", serr2)
+                else:
+                    rev, env_c, code_c = extrude(doc, rev, sk2, operation="cut", depth_mm=0.5,
+                                                 direction="negative", end_condition="blind",
+                                                 target_body_ref=body)
+                    det = ((env_c or {}).get("error") or {}).get("details") or {}
+                    v_after = volume(body)
+                    rep.add("EX45", ex45_desc,
+                            "PASS" if (feature_error_refusal(env_c)
+                                       and isinstance(det.get("feature_ref"), str)
+                                       and det.get("feature_ref")
+                                       and v_before is not None and v_after is not None
+                                       and abs(v_after - v_before) <= 1e-6) else "FAIL",
+                            "code=" + str(code_c) + " details.code=" + repr(det.get("code"))
+                            + " object_error=" + repr(det.get("object_error"))
+                            + " feature_ref=" + repr(det.get("feature_ref"))
+                            + " V " + str(v_before) + "->" + str(v_after))
+        close(doc)
+
 
 def fillet_checks(client, rep, app_id, workdir):
     """FL: скругление SM-09 через MCP — создание, жизненный цикл, удаление с зависимостью.
@@ -28721,8 +28788,17 @@ def fillet_checks(client, rep, app_id, workdir):
                                "отказ после мутации с partial_effects" if refused_after else
                                "СХЛОПЫВАНИЕ, выданное за успех" if collapsed else
                                "исход не отнесён ни к одному приемлемому")
+                    # INVARIANT: отказ правки обязан называть ошибку признака, а не только код вызова.
+                    # MEASURED: этот вход отказывает GEOMETRY_FAILED с details.code=feature_error и
+                    # ненулевым object_error; прочие коды отказа строка не трогает.
+                    # History: docs/decisions/adapter-features.md#feature-error-refusal
+                    fe_ok = (grow_code != "GEOMETRY_FAILED"
+                             or (grow_details.get("code") == "feature_error"
+                                 and isinstance(grow_details.get("object_error"), int)
+                                 and grow_details.get("object_error") != 0))
                     rep.add("FL25", "РАСШИРЕНИЕ 1→2: изделие либо расширяет набор, либо честно отказывает — не выдаёт схлопывание за успех",
-                            "PASS" if did_grow or refused_before or refused_after else "FAIL",
+                            "PASS" if (did_grow or refused_before or refused_after) and fe_ok
+                            else "FAIL",
                             f"исход={outcome} err={grow_code} partial_effects={partial} "
                             f"level={grow_ver.get('level')} стало_входов={count_g} "
                             f"edges_read_back={grow_res.get('edges_read_back')} "

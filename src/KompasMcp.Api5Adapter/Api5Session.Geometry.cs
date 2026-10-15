@@ -1535,12 +1535,14 @@ public sealed partial class Api5Session
                 Expected: "ΔV = 0 вне заявленного тела"));
             geometryConfirmed &= others.Count == 0;
 
-            // A no-op is not a result. KOMPAS reports no error for a declaration that contradicts where the
-            // profile lies (P2.6): Create and RebuildDocument say true and no body changes. Only an explicit
-            // failure keeps that from being read as success. An unreadable volume is not a measured no-op: it
-            // fails the check and says why.
-            // INVARIANT: "no change" means volume AND gabarit AND face count all stayed within their noise —
-            // a small but real feature (9e-4 mm³) is NOT a no-op, and reporting it as one was the defect.
+            // INVARIANT: a no-op is not a result: KOMPAS reports no error when a declaration
+            // contradicts where the profile lies, so Create/RebuildDocument say true while no body
+            // changes; only an explicit failure keeps that from being read as success, and an
+            // unreadable volume is not a measured no-op.
+            // INVARIANT: "no change" means volume, gabarit AND face count stayed within their noise -
+            // a small but real feature (9e-4 mm³) is NOT a no-op, and the feature's OWN error is
+            // decided BEFORE this measurement, so a no-op and a broken feature differ in code.
+            // History: docs/decisions/adapter-features.md#feature-error-refusal
             if (!movedAsExpected)
             {
                 // For a one-sided extrusion that changed nothing, name WHERE the operation went and whether
@@ -1610,7 +1612,7 @@ public sealed partial class Api5Session
                     $"Признак создан (Create=true), но заявленное тело {bodyTarget.Index} не изменилось ни объёмом, ни габаритом, ни числом граней: " +
                     $"ΔV(после−до)={Range(targetDelta)} мм³ при пороге шума {BodyChangePolicy.VolumeNoiseMm3:0.#####e+0} мм³, габарит изменился={targetBoxMoved}, " +
                     $"граней {Range(bodyTarget.Snapshot.FaceCount)} → {Range(affectedAfter?.FaceCount)}. " +
-                    "Так КОМПАС ведёт себя, когда заявленное тело противоречит расположению контура: ошибка не возвращается, " +
+                    "Так КОМПАС ведёт себя, когда заявленное тело противоречит расположению контура: сам вызов ошибку не возвращает, " +
                     "не меняется ни одно тело. Успехом это быть не может. Признак ОСТАЛСЯ в дереве — удалите его вызовом " +
                     "kompas_delete_feature по feature_ref." + sideLine,
                     RetryPolicy.ReacquireContext,

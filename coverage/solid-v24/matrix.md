@@ -1299,7 +1299,7 @@
   - Необязательный режим: обязательный объём профиля не закрывает. ksCAssociation измерен как отказ без массива партнёров (ожидаемое предусловие), ksCBisector не измерялся.
 - `STEP.import` — закрыт целиком
   - created_document_ids ответа несёт СЫРОЙ указатель COM («0x…»), а не идентификатор документа Хоста: адресуемый id — тот, который прибавился в kompas_list_documents. Измерено строкой STEP.import.discover; клиенту, который возьмёт id из ответа импорта, продукт его не примет.
-  - Отказ импорта оставляет ЗАРЕГИСТРИРОВАННЫЕ документы: обе попытки маршрута начинаются с Create, и при LoadFromAdditionFormat → false в сеансе остаются документы без тел, хотя partial_effects в отказе равен false (измерено строкой STEP.import.negative_tests).
+  - Отказ импорта объявляет partial_effects: false, но след в сеансе есть: обе попытки маршрута начинаются с Create, и details.trace отказа называет зарегистрированные документы («документ зарегистрирован как Part (id=…)»). В kompas_list_documents они НЕ появляются — измерено строкой STEP.import.negative_tests (новых документов в списке 0).
   - Инструмент заявляет уровень structure_checked и НЕ проверяет roundtrip: unverified_aspects несёт geometry_roundtrip_not_checked и units_conversion_not_checked. Совпадение объёма и габарита с исходником проверяет строка приёмки STEP.import.geometry_validation, а не сам инструмент.
   - Документ импорта — деталь; сборка и чертёж этим режимом не проверялись (desired_kind принимает auto|part|assembly, измерен только auto на детали).
 - `AUX-SKETCH.plane_and_profile_lifecycle` — закрыт целиком

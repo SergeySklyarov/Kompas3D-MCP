@@ -30313,6 +30313,10 @@ def hole_checks(client, rep, app_id, workdir):
 
     def build_plate(doc, rev, name):
         """Пластина 100×80×10 и опорная грань: верхняя z=10, нормаль +Z, площадь 8000."""
+        return build_plate_xy(doc, rev, name, 100, 80, 10)
+
+    def build_plate_xy(doc, rev, name, width, depth, height):
+        """Пластина width×depth×height с центром в начале координат; возвращает (rev, top, body, err)."""
         _e, env, _r = client.tool("kompas_create_sketch", {
             "document_id": doc, "expected_revision": rev,
             "plane": {"base": "xy", "offset_mm": 0}, "name": name,
@@ -30323,15 +30327,15 @@ def hole_checks(client, rep, app_id, workdir):
             return rev, None, None, f"эскиз пластины: {error_code(env)}"
         _e, env, _r = client.tool("kompas_edit_sketch", {
             "sketch_ref": sk, "expected_revision": rev, "mode": "append",
-            "entities": [{"kind": "rectangle", "start_mm": [-50, -40],
-                          "width_mm": 100, "height_mm": 80}],
+            "entities": [{"kind": "rectangle", "start_mm": [-width / 2, -depth / 2],
+                          "width_mm": width, "height_mm": depth}],
             "operation_id": str(uuid.uuid4())})
         rev = (env or {}).get("revision_after") or rev
         _e, env, _r = client.tool("kompas_finish_sketch", {
             "sketch_ref": sk, "require_closed_profile": False, "operation_id": str(uuid.uuid4())})
         rev = (env or {}).get("revision_after") or rev
         _e, env, _r = client.tool("kompas_extrude", {
-            "sketch_ref": sk, "expected_revision": rev, "operation": "base", "depth_mm": 10,
+            "sketch_ref": sk, "expected_revision": rev, "operation": "base", "depth_mm": height,
             "direction": "positive", "operation_id": str(uuid.uuid4())}, timeout=240)
         rev = (env or {}).get("revision_after") or rev
         if error_code(env) is not None:
@@ -30339,8 +30343,20 @@ def hole_checks(client, rep, app_id, workdir):
         body = (bodies(doc) or [{}])[0].get("body_ref")
         top = top_face(doc, body)
         if not top:
-            return rev, None, body, "верхняя грань z=10 не найдена по нормали и площади"
+            return rev, None, body, "верхняя грань z не найдена по нормали и площади"
         return rev, top, body, None
+
+    def side_face(doc, body):
+        """Плоская грань с нормалью +X наибольшей площади: боковая грань X = ширина/2."""
+        best, best_area = None, -1.0
+        for face in faces(doc, body):
+            normal = face.get("normal_at_center") or []
+            area = face.get("area_mm2")
+            if (face.get("surface_type") == "plane" and area is not None
+                    and len(normal) >= 3 and abs(normal[0] - 1) <= 1e-6 and abs(normal[1]) <= 1e-6
+                    and abs(normal[2]) <= 1e-6 and area > best_area):
+                best, best_area = face.get("face_ref"), area
+        return best, best_area
 
     def hole(args, cid, description, expect_level="geometry_checked", timeout=300):
         call = dict(args, operation_id=str(uuid.uuid4()))
@@ -30824,6 +30840,65 @@ def hole_checks(client, rep, app_id, workdir):
                     close(doc_n2)
 
         close(doc_n)
+
+    # ═════════════ HO.26: отверстие, которое КОМПАС не построил, - отказ, а не succeeded ═════════════
+    # Дефект заказчика 15.10.2026: на боковой грани X=120 плиты 120×80×32 вызов kompas_hole отвечал
+    # status=succeeded и error=null, а материал не снимался: признак «Отверстие:N» оставался в дереве
+    # с object_error=32, число граней не менялось (6→6), объём не менялся, и это переживало
+    # save→close→reopen. До правки вызов объявлял успех уровнем call_returned, предлагая «перечитать
+    # объём». Теперь ошибка признака и измеренный ноль-результат - отказ. Строка исполняет ТОТ ЖЕ
+    # вход, что и воспроизведение §1 наряда (probe.py в каталоге доказательств наряда).
+    plate_fs = 120.0 * 80.0 * 32.0
+    fs_desc = "отверстие, которое КОМПАС не построил, отвергнуто, а не объявлено успехом"
+    doc_f, rev_f, err_f = new_doc("SM07-false-success")
+    if not doc_f:
+        rep.add("HO.26", fs_desc, "FAIL", f"документ не создан: {err_f}")
+    else:
+        rev_f, top_f, body_f, berr_f = build_plate_xy(doc_f, rev_f, "h-fs", 120.0, 80.0, 32.0)
+        if berr_f:
+            rep.add("HO.26", fs_desc, "FAIL", f"заготовка: {berr_f}")
+        else:
+            side_f, side_area = side_face(doc_f, body_f)
+            v_fs_before = volume(body_f)
+            rev_f, _ = ctx(doc_f)
+            _e, fs_env, _r = client.tool("kompas_hole", {
+                "face_ref": side_f, "expected_revision": rev_f, "mode": "blind_flat",
+                "diameter_mm": 6.0, "depth_mm": 8.0,
+                "offset_x_mm": 40.0, "offset_y_mm": 16.0,
+                "expected_volume_delta_mm3": 226.1946710584651,
+                "operation_id": str(uuid.uuid4())}, timeout=300)
+            code_f = error_code(fs_env)
+            det_f = ((fs_env or {}).get("error") or {}).get("details") or {}
+            ref_f = det_f.get("feature_ref")
+            obj_f = det_f.get("object_error")
+            v_fs_after = volume(body_f)
+            cyl_f = [f for f in faces(doc_f, body_f)
+                     if f.get("surface_type") == "cylinder"
+                     and f.get("radius_mm") is not None and abs(f["radius_mm"] - 3.0) <= 0.01]
+            rep.add("HO.26", fs_desc,
+                    "PASS" if code_f in ("GEOMETRY_FAILED", "NO_GEOMETRY_CHANGE")
+                    and ref_f and obj_f is not None
+                    and v_fs_before is not None and v_fs_after is not None
+                    and abs(v_fs_after - v_fs_before) <= 0.01
+                    and len(cyl_f) == 0 else "FAIL",
+                    f"code={code_f} object_error={obj_f} feature_ref={ref_f} "
+                    f"V {v_fs_before}→{v_fs_after} цилиндров_Ø6={len(cyl_f)} грань={side_f} "
+                    f"площадь_грани={side_area} msg={describe(fs_env)[1]}")
+            # Признак действительно ОСТАЛСЯ в дереве: ссылка из отказа адресуема и её object_error
+            # ненулевой. Без этой строки «отказ» доказывал бы только код, а не судьбу признака.
+            if ref_f:
+                _e, gf_f, _r = client.tool("kompas_get_feature", {"feature_ref": ref_f})
+                gfr_f = (gf_f or {}).get("result") or {}
+                rep.add("HO.26t", "признак из отказа адресуем и несёт ненулевую ошибку ядра",
+                        "PASS" if error_code(gf_f) is None and gfr_f.get("family") == "hole"
+                        and isinstance(gfr_f.get("object_error"), int)
+                        and gfr_f.get("object_error") != 0 else "FAIL",
+                        f"family={gfr_f.get('family')} object_error={gfr_f.get('object_error')} "
+                        f"is_valid={gfr_f.get('is_valid')} err={error_code(gf_f)}")
+            else:
+                rep.add("HO.26t", "признак из отказа адресуем и несёт ненулевую ошибку ядра",
+                        "FAIL", "ссылка на признак не выдана в details отказа")
+        close(doc_f)
 
 
 def rotation_checks(client, rep, app_id, workdir):

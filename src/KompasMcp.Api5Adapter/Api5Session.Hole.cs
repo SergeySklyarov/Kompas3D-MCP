@@ -122,11 +122,24 @@ public partial class Api5Session
             document.PartNow(), command.DiameterMm / 2d, HoleRadiusToleranceMm);
         var center = axisOrigins.Count > 0 ? axisOrigins[0] : null;
 
+        // The feature's own state is read BEFORE the checks and the reference is registered FIRST: a
+        // refusal must hand the client the feature that stayed in the tree, so the order is the one
+        // kompas_fillet/kompas_chamfer use. "Update() returned true" is not application.
+        // History: docs/decisions/adapter-features.md#hole-false-success
+        var reference = FindHoleEntity(document);
+        var referenceDto = reference is null
+            ? null
+            : References.Register("feature", document.Id, document.Revision, reference);
+        var objectError = reference is null ? (int?)null : ReadFeatureState(reference).ObjectError;
+
         var checks = new List<NamedCheck>
         {
-            new("hole_created", true,
-                Observed: command.Mode.ToString(),
-                Expected: "режим создан и перестроен"),
+            new("hole_created", reference is not null && objectError == 0,
+                Observed: objectError is int readError
+                    ? command.Mode.ToString() + ", object_error="
+                        + readError.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    : command.Mode.ToString() + ", признак не найден в дереве",
+                Expected: "признак найден в дереве, object_error = 0"),
             new("parameters_read_back", HoleParametersMatch(readBack, command),
                 Observed: DescribeHole(readBack),
                 Expected: DescribeHoleCommand(command)),
@@ -156,7 +169,12 @@ public partial class Api5Session
                     "position_check_frame_unavailable — опорная грань не перпендикулярна оси Z детали, "
                     + "поэтому запрошенные offset_x_mm/offset_y_mm заданы в кадре ГРАНИ, а прочитанная "
                     + "ось — в координатах ДЕТАЛИ: сверить их нечем, и проверка положения не "
-                    + "выполнялась. Центр оси прочитан и опубликован в center_mm");
+                    + "выполнялась. "
+                    + (center is not null
+                        ? "Центр оси прочитан и опубликован в center_mm"
+                        : "Ось диаметра Ø" + command.DiameterMm.ToString("0.###",
+                            System.Globalization.CultureInfo.InvariantCulture)
+                            + " мм на теле не найдена: center_mm пуст, прочитанного центра нет"));
             }
             else
             {
@@ -200,11 +218,66 @@ public partial class Api5Session
                 Expected: "не задано — проверено только направление"));
         }
 
+        // A feature error and a measured no-op are REFUSALS, and both stand BEFORE the declared-expectation
+        // comparison: that comparison is the geometry check of an operation that HAPPENED. A hole always
+        // removes material, so an unmoved volume means the feature never reached the body.
+        // History: docs/decisions/adapter-features.md#hole-false-success
+        var effect = HoleEffectPolicy.Evaluate(
+            objectError, volumeBefore, volumeAfter, facesBefore, facesAfter, declared.IsNotConfirmed);
+        var featureNote = referenceDto is null
+            ? " Признак в дереве API5 не найден: удалять нечего."
+            : " Признак ОСТАЛСЯ в дереве: удалите его вызовом kompas_delete_feature по feature_ref и "
+                + "повторите вызов.";
+        if (effect.Verdict == HoleEffectVerdict.FeatureError)
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                "Отверстие создано (IHole3D.Update() вернул true), но признак сообщает об ошибке ядра "
+                + "КОМПАС: object_error="
+                + effect.ObjectError!.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                + "." + featureNote,
+                RetryPolicy.ReacquireContext,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["code"] = HoleEffectPolicy.FeatureErrorDetailCode,
+                    ["object_error"] = effect.ObjectError,
+                    ["feature_ref"] = referenceDto?.Id,
+                    ["revision_after"] = document.Revision,
+                });
+        }
+
+        if (effect.Verdict == HoleEffectVerdict.NoGeometryChange)
+        {
+            throw new KompasContractException(
+                ErrorCodes.NoGeometryChange,
+                "Отверстие создано (IHole3D.Update() вернул true, object_error=0), но тело не "
+                + "изменилось: объём " + Num(volumeBefore) + " → " + Num(volumeAfter) + ", граней "
+                + Num(facesBefore) + " → " + Num(facesAfter) + " при пороге шума "
+                + BodyChangePolicy.VolumeNoiseMm3.ToString("0.#####e+0",
+                    System.Globalization.CultureInfo.InvariantCulture)
+                + " мм³. Отверстие всегда снимает материал, поэтому неизменный объём означает, что "
+                + "признак не применён к телу." + featureNote,
+                RetryPolicy.ReacquireContext,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["code"] = HoleEffectPolicy.NoEffectDetailCode,
+                    ["object_error"] = effect.ObjectError,
+                    ["feature_ref"] = referenceDto?.Id,
+                    ["revision_after"] = document.Revision,
+                    ["volume_before_mm3"] = volumeBefore,
+                    ["volume_after_mm3"] = volumeAfter,
+                    ["volume_noise_mm3"] = BodyChangePolicy.VolumeNoiseMm3,
+                    ["face_count_before"] = facesBefore,
+                    ["face_count_after"] = facesAfter,
+                });
+        }
+
         var numericMatch = declared.IsDeclared ? declared.IsConfirmed : (bool?)null;
-        var geometryConfirmed = readBack is not null
+        var geometryConfirmed = effect.Verdict == HoleEffectVerdict.Confirmed
+            && readBack is not null
             && checks.Exists(c => c.Name == "parameters_read_back" && c.Passed)
-            && materialRemoved
-            && numericMatch is not false
             && checks.TrueForAll(c => c.Name != "position_applied" || c.Passed);
 
         if (declared.IsUnverifiable)
@@ -251,8 +324,7 @@ public partial class Api5Session
             "single_face_only — измерялся только один базовый случай на режим (M.2/M.3/M.4); " +
             "на наклонных гранях и в многотельных деталях режимы не проверялись");
 
-        var reference = FindHoleEntity(document);
-        if (reference is null)
+        if (referenceDto is null)
         {
             // A reference to a feature the API5 tree does not show must not be issued: an edit through
             // it would fail anyway, and the caller would learn of it later.
@@ -272,8 +344,7 @@ public partial class Api5Session
         }
 
         return new HoleResult(
-            ToDto(References.Register("feature", document.Id, document.Revision, reference),
-                $"hole Ø{command.DiameterMm:0.###} {command.Mode}"),
+            ToDto(referenceDto, $"hole Ø{command.DiameterMm:0.###} {command.Mode}"),
             command.Mode.ToString().ToLowerInvariant(),
             readBack?.DiameterMm,
             readBack?.DepthMm,
@@ -815,6 +886,31 @@ public partial class Api5Session
         var featuresAfter = CountFeatures(document);
         var readBack = Api7Hole.Read(container, 0);
         var stateAfter = ReadFeatureState(entity);
+
+        // The same rule as on creation: a feature that reports a kernel error has not been applied, and
+        // "Update() returned true" does not override its own state. The ZERO-EFFECT rule is deliberately
+        // NOT applied here: writing the values a hole already has is a legitimate no-op edit.
+        // History: docs/decisions/adapter-features.md#hole-false-success
+        if (stateAfter.ObjectError != 0)
+        {
+            throw new KompasContractException(
+                ErrorCodes.GeometryFailed,
+                "Параметры отверстия записаны и признак перестроен, но признак сообщает об ошибке ядра "
+                + "КОМПАС: object_error="
+                + stateAfter.ObjectError.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                + ". КОМПАС не применил изменение к телу. Перечитайте признак вызовом "
+                + "kompas_get_feature и повторите правку.",
+                RetryPolicy.ReacquireContext,
+                partialEffects: true,
+                details: new Dictionary<string, object?>
+                {
+                    ["code"] = HoleEffectPolicy.FeatureErrorDetailCode,
+                    ["object_error"] = stateAfter.ObjectError,
+                    ["feature_ref"] = command.FeatureRef,
+                    ["revision_after"] = document.Revision,
+                    ["hole_mode"] = mode.Value.ToString(),
+                });
+        }
 
         var checks = new List<NamedCheck>
         {

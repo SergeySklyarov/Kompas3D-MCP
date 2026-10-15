@@ -86,6 +86,21 @@ def row_for(ref, entry, family_id, kind, profile_id):
     return row
 
 
+def write_matrix(path, matrix):
+    """Write `matrix.json` in the FILE's own form: its BOM, its indent, its line endings.
+
+    DOC: scripts/record-b2-rows.py - "a writing instrument PRESERVES the file's encoding", and
+    scripts/emit-coverage-matrix.py - another indent "would rewrite all 7 400 lines" of a file the
+    run never touched. INVARIANT: the BOM stays when the file had one, the indent stays 1, and the
+    line endings follow `.gitattributes` (`*.json text eol=crlf`).
+    History: docs/decisions/api-audit.md#matrix-profile-sync
+    """
+    raw = open(path, "rb").read(3) if os.path.exists(path) else b""
+    with open(path, "w", encoding="utf-8-sig" if raw == b"\xef\xbb\xbf" else "utf-8") as handle:
+        json.dump(matrix, handle, ensure_ascii=False, indent=1)
+        handle.write("\n")
+
+
 def main():
     dry = "--dry-run" in sys.argv
     catalog = load(os.path.join(COVERAGE, "catalog.json"))
@@ -262,9 +277,7 @@ def main():
     if dry:
         print("(--dry-run: matrix.json не изменён)")
         return 0
-    with open(matrix_path, "w", encoding="utf-8", newline="\n") as handle:
-        json.dump(matrix, handle, ensure_ascii=False, indent=2)
-        handle.write("\n")
+    write_matrix(matrix_path, matrix)
     print("matrix.json записан")
     return 0
 

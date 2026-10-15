@@ -933,6 +933,30 @@ def wait_pid_gone(pid, timeout):
         time.sleep(0.25)
 
 
+def process_image_path(pid):
+    """Full path of a process image, or None when the OS does not give one.
+
+    DOC: Win32 `QueryFullProcessImageNameW`, opened with `PROCESS_QUERY_LIMITED_INFORMATION` - the
+    same access the snapshot already asks for. INVARIANT: None is a NAMED unknown, never an empty
+    string; the field exists to tell two installations of the same image apart.
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    handle = kernel32.OpenProcess(0x1000, False, int(pid))
+    if not handle:
+        return None
+    try:
+        size = wintypes.DWORD(32768)
+        buffer = ctypes.create_unicode_buffer(size.value)
+        if kernel32.QueryFullProcessImageNameW(handle, 0, buffer, ctypes.byref(size)):
+            return buffer.value or None
+        return None
+    finally:
+        kernel32.CloseHandle(handle)
+
+
 def close_foreign_processes(own_pids, when, log=print, only_pids=None):
     """Завершить посторонние процессы и вернуть запись для `context.preflight_closed`.
 
@@ -958,6 +982,7 @@ def close_foreign_processes(own_pids, when, log=print, only_pids=None):
         entry = {"pid": pid, "image": row.get("image"),
                  "parent_pid": row.get("parent_pid"),
                  "parent_image": (rows.get(row.get("parent_pid")) or {}).get("image"),
+                 "path": process_image_path(pid),
                  "started": row.get("started"), "working_set_kb": row.get("working_set_kb"),
                  "graceful_sent": False, "forced": False, "closed": False, "waited_s": None}
         log(f"  Посторонний процесс: {entry['image']} pid={pid} "
@@ -988,6 +1013,40 @@ def preflight_and_record(rep, own_pids, when):
         print(f"  Посторонних процессов завершено: {result['foreign_closed']} "
               f"из {result['foreign_found']}")
     return result
+
+
+def run_environment(rep):
+    """The run's environment as a FIELD of `run.json`, not as prose in the report.
+
+    DOC: the run record used to name the environment in words, so a stale `KOMPAS.exe` from an
+    interrupted run read as a product defect. INVARIANT: `environment` carries what was found and
+    closed before the run (image, pid, parent, path) and the machine identity the instrument already
+    knows (KOMPAS install root and its source, the Host build stamp). An unread process snapshot is
+    named `unavailable`, never left as an empty list.
+    History: docs/decisions/probes.md#run-environment
+    """
+    records = rep.context.get("preflight_closed") or []
+    snapshot = "unknown"
+    foreign = []
+    for record in records:
+        if snapshot == "unknown" and record.get("snapshot"):
+            snapshot = record["snapshot"]
+        for entry in record.get("closed") or []:
+            foreign.append({
+                "image": entry.get("image"), "pid": entry.get("pid"),
+                "parent_pid": entry.get("parent_pid"), "parent_image": entry.get("parent_image"),
+                "path": entry.get("path"), "closed": entry.get("closed"),
+                "forced": entry.get("forced"), "waited_s": entry.get("waited_s"),
+            })
+    return {
+        "process_snapshot": snapshot,
+        "foreign_before_run": len(foreign),
+        "foreign_closed": sum(1 for entry in foreign if entry.get("closed")),
+        "foreign": foreign,
+        "kompas_install_root": KOMPAS_INSTALL,
+        "kompas_install_source": kompas_install.install_source(),
+        "host_build_stamp": rep.context.get("build_stamp"),
+    }
 
 
 def run_directory_name(started_utc, group, commit, dirty):
@@ -1582,6 +1641,10 @@ def instrument_self_test():
                   and entry.get("parent_pid") == os.getpid()
                   and entry.get("started") and entry.get("working_set_kb") is not None,
                   json.dumps(entry, ensure_ascii=False))
+            check("запись называет путь к образу",
+                  isinstance(entry.get("path"), str)
+                  and entry["path"].lower().endswith("kompasmcp.worker.exe"),
+                  str(entry.get("path")))
             check("посторонний процесс действительно завершён", entry.get("closed") is True
                   and stub.poll() is not None, f"closed={entry.get('closed')} poll={stub.poll()}")
             check("посторонний процесс ждали, а не выдумали ожидание",
@@ -1597,6 +1660,39 @@ def instrument_self_test():
             for proc in (stub, other):
                 if proc.poll() is None:
                     proc.kill()
+
+    # The run environment is a FIELD of run.json, not prose (debt 9). Both halves are checked on a
+    # substituted context: a closed foreign process must appear with its path and counts, and an
+    # unread snapshot must be named `unavailable` instead of reading as "no foreign processes".
+    class _StubReport:
+        pass
+
+    filled = _StubReport()
+    filled.context = {
+        "preflight_closed": [{"snapshot": "ok", "closed": [
+            {"pid": 11, "image": "KOMPAS.exe", "parent_pid": 1, "parent_image": "explorer.exe",
+             "path": "C:/KOMPAS/Bin/KOMPAS.Exe", "closed": True, "forced": False, "waited_s": 0.5},
+            {"pid": 12, "image": "KompasMcp.Host.exe", "parent_pid": 11, "parent_image": "KOMPAS.exe",
+             "path": None, "closed": False, "forced": True, "waited_s": 5.0}]}],
+        "build_stamp": "0.8.0+abc",
+    }
+    environment = run_environment(filled)
+    check("среда прогона называет найденное и завершённое, с путём",
+          environment["foreign_before_run"] == 2 and environment["foreign_closed"] == 1
+          and environment["foreign"][0]["path"] == "C:/KOMPAS/Bin/KOMPAS.Exe",
+          json.dumps(environment, ensure_ascii=False))
+    check("среда прогона называет корень установки и штамп сборки",
+          bool(environment["kompas_install_root"]) and bool(environment["kompas_install_source"])
+          and environment["host_build_stamp"] == "0.8.0+abc",
+          json.dumps(environment, ensure_ascii=False))
+
+    blind = _StubReport()
+    blind.context = {"preflight_closed": [{"snapshot": "unavailable", "closed": []}]}
+    blind_environment = run_environment(blind)
+    check("непрочитанный снимок назван, а не выдан за «процессов нет»",
+          blind_environment["process_snapshot"] == "unavailable"
+          and blind_environment["foreign"] == [] and blind_environment["foreign_before_run"] == 0,
+          json.dumps(blind_environment, ensure_ascii=False))
 
     print(f"\nСамопроверка прибора: {checks} проверок, "
           f"{len(failures)} FAIL" + (f" — {failures}" if failures else ""))
@@ -13453,7 +13549,8 @@ def main():
     # Уборка прежних прогонов идёт ЗДЕСЬ: каталог этого прогона уже создан и потому защищён, а
     # удалённое названо в отчёте так же, как `preflight_closed`.
     prune_and_record(rep, workdir, run_dir)
-    write_run_manifest(run_dir, {"state": "started", "context": rep.context})
+    write_run_manifest(run_dir, {"state": "started", "environment": run_environment(rep),
+                                 "context": rep.context})
     print("Измеряется: " + json.dumps(rep.context, ensure_ascii=False))
 
     client = Client(host, measured_config)
@@ -43334,6 +43431,7 @@ def finish(rep, client):
             "counts": counts,
             "report_path": rep.path,
             "report_copies": rep.mirror_paths,
+            "environment": run_environment(rep),
             "context": rep.context,
         })
     if client.log:

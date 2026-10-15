@@ -42,7 +42,7 @@
    "drawings-minimal-v1": {
     "artifact": "coverage/solid-v24/release-profiles/drawings-minimal-v1.json",
     "title": "Минимальные чертежи v24",
-    "plan": "coverage/solid-v24/implementation-plan.md (редакция 2.0)"
+    "plan": "coverage/solid-v24/implementation-plan.md (редакция 2.0) §3 Шаг C"
    },
    "export-inertia-minimal-v1": {
     "artifact": "coverage/solid-v24/release-profiles/export-inertia-minimal-v1.json",
@@ -53,6 +53,41 @@
     "artifact": "coverage/solid-v24/release-profiles/sketch-constraints-minimal-v1.json",
     "title": "Ограничения эскиза и управляющие размеры v24",
     "plan": "coverage/solid-v24/implementation-plan.md, шаг D, очередь G6"
+   },
+   "assemblies-minimal-v1": {
+    "artifact": "coverage/solid-v24/release-profiles/assemblies-minimal-v1.json",
+    "title": "Минимальные сборки v24",
+    "plan": "coverage/solid-v24/implementation-plan.md (редакция 2.0) §3 Шаг C"
+   },
+   "assembly-interference-minimal-v1": {
+    "artifact": "coverage/solid-v24/release-profiles/assembly-interference-minimal-v1.json",
+    "title": "Пересечения и зазоры между компонентами сборки v24",
+    "plan": "coverage/solid-v24/implementation-plan.md, шаг D, очередь G1"
+   },
+   "material-toward-minimal-v1": {
+    "artifact": "coverage/solid-v24/release-profiles/material-toward-minimal-v1.json",
+    "title": "Сторона материала в координатах детали на входе выдавливания v24",
+    "plan": "coverage/solid-v24/implementation-plan.md, датированная поправка 10.10.2026 (вход стороны материала)"
+   },
+   "mates-minimal-v1": {
+    "artifact": "coverage/solid-v24/release-profiles/mates-minimal-v1.json",
+    "title": "Минимальные сопряжения v24",
+    "plan": null
+   },
+   "sketch-bulk-minimal-v1": {
+    "artifact": "coverage/solid-v24/release-profiles/sketch-bulk-minimal-v1.json",
+    "title": "Массовая геометрия эскиза: пределы, нативная полилиния, сплайн v24",
+    "plan": "coverage/solid-v24/implementation-plan.md, шаг D, очередь G2"
+   },
+   "variables-bind-minimal-v1": {
+    "artifact": "coverage/solid-v24/release-profiles/variables-bind-minimal-v1.json",
+    "title": "Создание переменных детали и привязка параметров операций v24",
+    "plan": "coverage/solid-v24/implementation-plan.md, шаг D, очередь #3 (G3)"
+   },
+   "variables-material-minimal-v1": {
+    "artifact": "coverage/solid-v24/release-profiles/variables-material-minimal-v1.json",
+    "title": "Внешние переменные и материал детали v24",
+    "plan": "VARIABLES_MATERIAL_DEVELOPER_PROMPT.md"
    }
   },
   "change_edge_set_note": "17.09.2026: edit закрыт приёмкой ПРОДУКТА через MCP (scripts/mcp-smoke.py --fillet-only, 46 строк, 0 FAIL). Прежний вердикт blocked_api был поставлен по измерению и верен для того состояния: корень оказался не в маршруте и не в валюте, а в неопубликованном свойстве base_object_refs схемы kompas_update_feature — Host отвергал сокращение валидацией до COM. Граница, которая строкой НЕ закрывается: расширение набора (1→2, 2→3) через контракт не выражено (FL25, Г-образная пластина).",
@@ -767,7 +802,8 @@
    ],
    "depends_on": [
     "dep.sketch.entities",
-    "dep.bodies.multibody"
+    "dep.bodies.multibody",
+    "dep.bodies.remove_selected"
    ]
   },
   {
@@ -5261,7 +5297,8 @@
     "габарит сверх 1600 пикселей по большей стороне и ответ сверх 2 МиБ base64 отвергаются именованно, а не ужимаются: ужатие нашим маршрутом не документировано",
     "форматы, названные справкой и схемой не публикуемые: GIF, TGA, PCX, EMF; WMF справка объявляет неподдерживаемым («файл запишется в EMF») — WMF не публикуется намеренно",
     "приёмка image-блоков КЛИЕНТОМ (propagation коннектором WorkBuddy) — часть клиентской приёмки и этим нарядом не исполняется; штатный фолбэк — save_path и чтение файла средствами клиента"
-   ]
+   ],
+   "depends_on": []
   },
   {
    "operation_id": "ASM-01.document.create_open",
@@ -5865,7 +5902,7 @@
    "priority": "dependency_of",
    "queue": null,
    "context": "assembly",
-   "catalog_ref": null,
+   "catalog_ref": "ASM",
    "catalog_refs": [
     "ASM"
    ],
@@ -5969,7 +6006,7 @@
    "priority": "dependency_of",
    "queue": null,
    "context": "assembly",
-   "catalog_ref": null,
+   "catalog_ref": "ASM",
    "catalog_refs": [
     "ASM"
    ],
@@ -6050,7 +6087,7 @@
    "priority": "dependency_of",
    "queue": null,
    "context": "assembly",
-   "catalog_ref": null,
+   "catalog_ref": "ASM",
    "catalog_refs": [
     "ASM"
    ],
@@ -6164,7 +6201,7 @@
    "priority": "dependency_of",
    "queue": null,
    "context": "assembly",
-   "catalog_ref": null,
+   "catalog_ref": "ASM",
    "catalog_refs": [
     "ASM"
    ],
@@ -6270,7 +6307,7 @@
    "priority": "dependency_of",
    "queue": null,
    "context": "assembly",
-   "catalog_ref": null,
+   "catalog_ref": "ASM",
    "catalog_refs": [
     "ASM"
    ],
@@ -6432,7 +6469,12 @@
       "tool": "kompas_measure"
      }
     ]
-   }
+   },
+   "profile": "mates-minimal-v1",
+   "priority": "practical_required",
+   "queue": "C2",
+   "depends_on": [],
+   "kind": "profile_operation"
   },
   {
    "operation_id": "MATE-02.mate.read",
@@ -6493,7 +6535,12 @@
       "tool": "kompas_list_mates"
      }
     ]
-   }
+   },
+   "profile": "mates-minimal-v1",
+   "priority": "practical_required",
+   "queue": "C2",
+   "depends_on": [],
+   "kind": "profile_operation"
   },
   {
    "operation_id": "MATE-03.mate.param_edit",
@@ -6569,7 +6616,12 @@
       "tool": "kompas_measure"
      }
     ]
-   }
+   },
+   "profile": "mates-minimal-v1",
+   "priority": "practical_required",
+   "queue": "C2",
+   "depends_on": [],
+   "kind": "profile_operation"
   },
   {
    "operation_id": "MATE-04.mate.fixed",
@@ -6636,7 +6688,12 @@
       "tool": "kompas_set_mate_fixed"
      }
     ]
-   }
+   },
+   "profile": "mates-minimal-v1",
+   "priority": "practical_required",
+   "queue": "C2",
+   "depends_on": [],
+   "kind": "profile_operation"
   },
   {
    "operation_id": "MATE-05.mate.delete",
@@ -6704,7 +6761,12 @@
       "tool": "kompas_delete_mate"
      }
     ]
-   }
+   },
+   "profile": "mates-minimal-v1",
+   "priority": "practical_required",
+   "queue": "C2",
+   "depends_on": [],
+   "kind": "profile_operation"
   },
   {
    "operation_id": "MATE-06.mate.placement_effect",
@@ -6782,7 +6844,12 @@
       "tool": "kompas_measure"
      }
     ]
-   }
+   },
+   "profile": "mates-minimal-v1",
+   "priority": "practical_required",
+   "queue": "C2",
+   "depends_on": [],
+   "kind": "profile_operation"
   },
   {
    "operation_id": "dep.mate.object_address",
@@ -6855,7 +6922,9 @@
      }
     ]
    },
-   "negative_tests_row": "MATE.01.face_range"
+   "negative_tests_row": "MATE.01.face_range",
+   "acceptance": [],
+   "required_of": []
   },
   {
    "operation_id": "dep.mate.component_insert",
@@ -6937,7 +7006,9 @@
       "tool": "kompas_measure"
      }
     ]
-   }
+   },
+   "acceptance": [],
+   "required_of": []
   },
   {
    "operation_id": "dep.mate.revisions",
@@ -7009,7 +7080,9 @@
       "tool": "kompas_set_mate_parameter"
      }
     ]
-   }
+   },
+   "acceptance": [],
+   "required_of": []
   },
   {
    "operation_id": "dep.mate.idempotency",
@@ -7081,7 +7154,9 @@
       "tool": "kompas_list_mates"
      }
     ]
-   }
+   },
+   "acceptance": [],
+   "required_of": []
   },
   {
    "operation_id": "dep.mate.save_reopen",
@@ -7144,7 +7219,9 @@
       "tool": "kompas_list_mates"
      }
     ]
-   }
+   },
+   "acceptance": [],
+   "required_of": []
   },
   {
    "operation_id": "DRW-01.views.create_standard",
@@ -7607,7 +7684,7 @@
    ],
    "acceptance": [
     "жизненный цикл переиспользуется как есть: домен чертежей не заводит второго владельца сеанса и второго жизненного цикла",
-    "чертёж (.cdw) создаётся документированным маршрутом lt_DocSheetStandart и регистрируется с читаемой ревизией; reopen возвращает тот же документ",
+    "чертёж (.cdw) создаётся через документированный маршрут lt_DocSheetStandart и регистрируется с читаемой ревизией; reopen возвращает тот же документ",
     "мутация на НЕ-чертеже отвергается DOCUMENT_KIND_MISMATCH, а не исключением COM"
    ],
    "required_of": [
@@ -7617,7 +7694,9 @@
     "DRW-04.title_block.set",
     "DRW-05.export",
     "DRW-06.technical_demand"
-   ]
+   ],
+   "catalog_ref": "DRW",
+   "title": "Общий жизненный цикл документа для чертежа (создать/открыть/сохранить/закрыть)"
   },
   {
    "operation_id": "dep.drawing.source_file",
@@ -7697,7 +7776,9 @@
      }
     ],
     "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд ACCEPTANCE_GAPS_B §2)"
-   }
+   },
+   "catalog_ref": "DRW",
+   "title": "Выбор файла-источника модели внутри writable_roots"
   },
   {
    "operation_id": "dep.drawing.view_address",
@@ -7766,7 +7847,9 @@
      }
     ],
     "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд ACCEPTANCE_GAPS_B §2)"
-   }
+   },
+   "catalog_ref": "DRW",
+   "title": "Устойчивая адресация вида чертежа"
   },
   {
    "operation_id": "dep.drawing.revisions",
@@ -7837,7 +7920,9 @@
      }
     ],
     "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд ACCEPTANCE_GAPS_B §2)"
-   }
+   },
+   "catalog_ref": "DRW",
+   "title": "Ревизии и конкурентность чертежа"
   },
   {
    "operation_id": "dep.drawing.idempotency",
@@ -7910,7 +7995,9 @@
      }
     ],
     "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
-   }
+   },
+   "catalog_ref": "DRW",
+   "title": "Идемпотентность мутаций чертежа по operation_id"
   },
   {
    "operation_id": "dep.drawing.export_file",
@@ -7992,7 +8079,9 @@
      }
     ],
     "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд ACCEPTANCE_GAPS_B §2)"
-   }
+   },
+   "catalog_ref": "DRW",
+   "title": "Подтверждение файла экспорта (путь, перезапись, сигнатура)"
   },
   {
    "operation_id": "DRW-06.technical_demand",
@@ -8355,7 +8444,10 @@
    ],
    "depends_on": [
     "dep.vm.part_addressing",
-    "dep.vm.revisions"
+    "dep.vm.revisions",
+    "dep.vm.idempotency",
+    "dep.vm.save_reopen",
+    "dep.vm.units"
    ],
    "not_applicable_reasons": {
     "create": "чтение ничего не создаёт в модели",
@@ -8434,8 +8526,8 @@
     "dep.vm.part_addressing",
     "dep.vm.revisions",
     "dep.vm.idempotency",
-    "dep.vm.units",
-    "dep.vm.save_reopen"
+    "dep.vm.save_reopen",
+    "dep.vm.units"
    ],
    "not_applicable_reasons": {
     "suppress_restore": "подавление и восстановление переменных не входит в объём блока",
@@ -8546,8 +8638,8 @@
     "dep.vm.part_addressing",
     "dep.vm.revisions",
     "dep.vm.idempotency",
-    "dep.vm.units",
-    "dep.vm.save_reopen"
+    "dep.vm.save_reopen",
+    "dep.vm.units"
    ],
    "not_applicable_reasons": {
     "suppress_restore": "подавление и восстановление переменных не входит в объём блока",
@@ -8654,6 +8746,8 @@
    "depends_on": [
     "dep.vm.part_addressing",
     "dep.vm.revisions",
+    "dep.vm.idempotency",
+    "dep.vm.save_reopen",
     "dep.vm.units"
    ],
    "not_applicable_reasons": {
@@ -8731,8 +8825,8 @@
     "dep.vm.part_addressing",
     "dep.vm.revisions",
     "dep.vm.idempotency",
-    "dep.vm.units",
-    "dep.vm.save_reopen"
+    "dep.vm.save_reopen",
+    "dep.vm.units"
    ],
    "not_applicable_reasons": {
     "discover": "запись адресуется ТОЧНЫМ именем, а не обнаружением: обнаружение — VM-04.material.read",
@@ -8925,7 +9019,8 @@
     "VM-03.variable.set_expression",
     "VM-04.material.read",
     "VM-05.material.write"
-   ]
+   ],
+   "title": "Адресация верхнего компонента детали (kind=part)"
   },
   {
    "operation_id": "dep.vm.revisions",
@@ -8999,7 +9094,8 @@
      }
     ],
     "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
-   }
+   },
+   "title": "Ревизии документа при чтении и правке переменных"
   },
   {
    "operation_id": "dep.vm.idempotency",
@@ -9070,7 +9166,8 @@
      }
     ],
     "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд ACCEPTANCE_GAPS_B §2)"
-   }
+   },
+   "title": "Повтор команды правки по operation_id"
   },
   {
    "operation_id": "dep.vm.save_reopen",
@@ -9131,7 +9228,8 @@
     "VM-03.variable.set_expression",
     "VM-04.material.read",
     "VM-05.material.write"
-   ]
+   ],
+   "title": "Переменные, выражение, материал и плотность переживают save → close → reopen"
   },
   {
    "operation_id": "dep.vm.units",
@@ -9197,7 +9295,8 @@
     "VM-04.material.read",
     "VM-05.material.write"
    ],
-   "adapter_route": "Единицы плотности: запись — документированные г/куб.см (ksPart.SetMaterial), перевод кг/м³ → г/см³ делает DensityUnits; чтение — документированный маршрут МЦХ API5, где единицу возвращаемых данных задаёт АРГУМЕНТ (bitVector): при ST_MIX_M|ST_MIX_KG плотность r публикуется в кг/м³ без пересчёта."
+   "adapter_route": "Единицы плотности: запись — документированные г/куб.см (ksPart.SetMaterial), перевод кг/м³ → г/см³ делает DensityUnits; чтение — документированный маршрут МЦХ API5, где единицу возвращаемых данных задаёт АРГУМЕНТ (bitVector): при ST_MIX_M|ST_MIX_KG плотность r публикуется в кг/м³ без пересчёта.",
+   "title": "Документированные единицы плотности на входе и на выходе"
   },
   {
    "operation_id": "dep.sketches.enumeration",
@@ -9533,7 +9632,7 @@
    "priority": "dependency_of",
    "queue": null,
    "context": "assembly",
-   "catalog_ref": null,
+   "catalog_ref": "G1",
    "catalog_refs": [
     "G1"
    ],
@@ -9606,7 +9705,7 @@
    "priority": "dependency_of",
    "queue": null,
    "context": "assembly",
-   "catalog_ref": null,
+   "catalog_ref": "G1",
    "catalog_refs": [
     "G1"
    ],
@@ -9667,7 +9766,7 @@
    "priority": "dependency_of",
    "queue": null,
    "context": "assembly",
-   "catalog_ref": null,
+   "catalog_ref": "G1",
    "catalog_refs": [
     "G1"
    ],
@@ -9717,7 +9816,7 @@
    "acceptance": [
     "измеритель берётся у IPart7 верхней детали сборки, второго сеанса и второго адаптера не заводится",
     "недоступность измерителя называется CAPABILITY_UNAVAILABLE с причиной, а не нулевым расстоянием",
-    "раскладка двойника — IID, порядок слотов до последнего объявленного члена и сигнатуры используемых членов — совпадает с УСТАНОВЛЕННОЙ библиотекой типов; расхождение называется номером первого несовпавшего слота (строка INT.13.twin_layout)",
+    "раскладка двойника — IID, порядок слотов и сигнатуры используемых членов — совпадает с установленной библиотекой типов, а расхождение называется номером первого несовпавшего слота",
     "ниже порога версии и при непрочитанной версии измеритель НЕ вызывается: CAPABILITY_UNAVAILABLE с названной версией и порогом"
    ],
    "required_of": [
@@ -9731,7 +9830,7 @@
    "priority": "dependency_of",
    "queue": null,
    "context": "assembly",
-   "catalog_ref": null,
+   "catalog_ref": "G1",
    "catalog_refs": [
     "G1"
    ],
@@ -9807,7 +9906,7 @@
    "priority": "dependency_of",
    "queue": null,
    "context": "assembly",
-   "catalog_ref": null,
+   "catalog_ref": "G1",
    "catalog_refs": [
     "G1"
    ],
@@ -9922,6 +10021,9 @@
     "схема и описание называют одно и то же число, и оно взято из одного места",
     "предел принимается одним вызовом со статусом succeeded внутри половины бюджета синхронизации",
     "предел + 1 отвергается INVALID_ARGUMENT до COM; ревизия и эскиз не меняются"
+   ],
+   "depends_on": [
+    "dep.sketch_bulk.limits_source"
    ]
   },
   {
@@ -9973,6 +10075,11 @@
     "один вызов даёт ОДИН объект: строка вида ksDrPolyline с points_count и closed, collection_counts.poly_lines = 1, а не N отрезков",
     "замкнутый контур выдавливается с объёмом 0,5·N·R²·sin(2π/N)·h в допуске профиля",
     "площадь профиля и ожидаемый объём считаются прежней формулой по вершинам и для того же контура не меняются"
+   ],
+   "depends_on": [
+    "dep.sketch_bulk.limits_source",
+    "dep.sketch_bulk.entity_read_back",
+    "dep.sketch_bulk.profile_area_rule"
    ]
   },
   {
@@ -10023,6 +10130,11 @@
     "один вызов даёт один объект: строка вида ksDrBezier с entity_kind=spline, points_count и closed",
     "замкнутый сплайн выдавливается с объёмом в пределах 0,5 % от π·R²·h и габаритом ±R",
     "площадь профиля null с причиной, пометка в unverified_aspects, а не passed=false"
+   ],
+   "depends_on": [
+    "dep.sketch_bulk.limits_source",
+    "dep.sketch_bulk.entity_read_back",
+    "dep.sketch_bulk.profile_area_rule"
    ]
   },
   {
@@ -10032,7 +10144,7 @@
    "priority": "dependency_of",
    "queue": null,
    "context": "part.sketch",
-   "catalog_ref": null,
+   "catalog_ref": "G2",
    "catalog_refs": [
     "G2"
    ],
@@ -10106,7 +10218,7 @@
    "priority": "dependency_of",
    "queue": null,
    "context": "part.sketch",
-   "catalog_ref": null,
+   "catalog_ref": "G2",
    "catalog_refs": [
     "G2"
    ],
@@ -10171,7 +10283,7 @@
    "priority": "dependency_of",
    "queue": null,
    "context": "part.sketch",
-   "catalog_ref": null,
+   "catalog_ref": "G2",
    "catalog_refs": [
     "G2"
    ],
@@ -10645,15 +10757,17 @@
     "negative_tests"
    ],
    "acceptance": [
-    "параметр адресуется полем name; ноль или несколько совпадений — INVALID_ARGUMENT с перечнем имён и БЕЗ записи",
-    "две переменные с равным значением не путаются: привязка идёт к названному параметру"
+    "параметр адресуется полем name из kompas_list_feature_parameters; ноль или несколько совпадений — INVALID_ARGUMENT с перечнем имён и БЕЗ записи",
+    "две переменные с равным значением не путаются: привязка идёт к названному параметру, а не к первому с тем же числом"
    ],
    "adapter_route": "Адрес параметра — поле name из kompas_list_feature_parameters; совпадение ищется ПОСИМВОЛЬНО по коллекции признака, и ноль или несколько совпадений — INVALID_ARGUMENT с перечнем имён до записи. Значение и позиция адресом не являются.",
    "required_of": [
     "VB-02.feature_parameters.list",
     "VB-03.parameter.bind",
     "VB-04.parameter.unbind"
-   ]
+   ],
+   "catalog_ref": "G3",
+   "title": "Адрес параметра по ТОЧНОМУ имени, а не по значению и не по позиции"
   },
   {
    "operation_id": "dep.vb.units",
@@ -10707,14 +10821,16 @@
     "negative_tests"
    ],
    "acceptance": [
-    "прочитанное value совпадает с выражением-константой численно в допуске",
-    "числовое снятие привязки даёт ожидаемый объём: 100*80*10 = 80000"
+    "значение параметра читается и пишется как число в собственной размерности, без пересчёта сервером",
+    "выражение-константа задаётся строкой, и прочитанное значение совпадает с ней численно в допуске"
    ],
    "adapter_route": "Значение параметра читается и пишется как число в собственной размерности; сервер его не переводит. Выражение-константа задаётся строкой, и прочитанное значение сверяется с ней численно в допуске профиля.",
    "required_of": [
     "VB-03.parameter.bind",
     "VB-04.parameter.unbind"
-   ]
+   ],
+   "catalog_ref": "G3",
+   "title": "Значение параметра — в собственной размерности; сервер его не переводит"
   },
   {
    "operation_id": "dep.vb.rebuild_document",
@@ -10769,14 +10885,16 @@
    ],
    "acceptance": [
     "после записи выражения вызывается ksDocument3D.RebuildDocument, а не ksPart.RebuildModel",
-    "геометрия следует за переменной: смена depth меняет объём тел 100*80*20 + 400*40 = 176000 в допуске профиля"
+    "геометрия следует за переменной: изменение управляющей переменной меняет объём в допуске профиля"
    ],
    "adapter_route": "После записи выражения вызывается ksDocument3D.RebuildDocument (НЕ ksPart.RebuildModel, который на установленной сборке геометрию не двигает — ИЗМЕРЕНО, docs/04_KOMPAS_API_NOTES.md §4.42). Геометрия сверяется независимым измерением объёма.",
    "required_of": [
     "VB-01.variable.create",
     "VB-03.parameter.bind",
     "VB-04.parameter.unbind"
-   ]
+   ],
+   "catalog_ref": "G3",
+   "title": "Применение изменения — перестроением ДОКУМЕНТА (ksDocument3D.RebuildDocument)"
   },
   {
    "operation_id": "dep.vb.read_only_list",
@@ -10830,13 +10948,15 @@
     "negative_tests"
    ],
    "acceptance": [
-    "ревизия, число признаков и признак изменения те же после каждого вызова kompas_list_feature_parameters",
+    "kompas_list_feature_parameters не требует operation_id и expected_revision и не меняет ревизию, число признаков и признак изменения",
     "непрочитанное поле остаётся null с причиной, а не нулём или пустой строкой"
    ],
    "adapter_route": "kompas_list_feature_parameters не требует operation_id и expected_revision и не меняет ревизию, число признаков и признак изменения. Непрочитанное поле остаётся null с причиной.",
    "required_of": [
     "VB-02.feature_parameters.list"
-   ]
+   ],
+   "catalog_ref": "G3",
+   "title": "Чтение списка параметров модель не меняет"
   },
   {
    "operation_id": "dep.vb.idempotency",
@@ -10888,9 +11008,9 @@
     "negative_tests"
    ],
    "acceptance": [
-    "повтор operation_id не создаёт переменную и не привязывает параметр дважды",
-    "другие аргументы при том же operation_id — OPERATION_ID_CONFLICT",
-    "устаревшая ревизия — REVISION_CONFLICT без частичных эффектов"
+    "повтор с тем же operation_id и теми же аргументами не выполняет создание/привязку дважды",
+    "тот же operation_id с другими аргументами даёт OPERATION_ID_CONFLICT",
+    "устаревшая ревизия даёт REVISION_CONFLICT без частичных эффектов"
    ],
    "adapter_route": "Оба мутирующих инструмента (kompas_create_variable, kompas_bind_parameter) идут через общий механизм журнала operation_id, дедупликации и ревизий. Повтор с тем же operation_id и теми же аргументами не выполняет изменение дважды; другие аргументы — OPERATION_ID_CONFLICT; устаревшая ревизия — REVISION_CONFLICT.",
    "required_of": [
@@ -10908,7 +11028,9 @@
      }
     ],
     "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
-   }
+   },
+   "catalog_ref": "G3",
+   "title": "Идемпотентность и ревизии у двух мутирующих инструментов"
   },
   {
    "operation_id": "EI-01.stl.export",
@@ -11367,14 +11489,16 @@
     "negative_tests"
    ],
    "acceptance": [
-    "путь вне разрешённых корней даёт PATH_NOT_ALLOWED без обращения к КОМПАС",
-    "неверные max_edge_length_mm и normal_angle_deg отвергаются до COM"
+    "путь вне разрешённых корней даёт PATH_NOT_ALLOWED без обращения к КОМПАС (отказ на уровне Host по имени поля target_path)",
+    "формат STL вне D3FormatConvType и неверные length/angle отвергаются до COM"
    ],
    "adapter_route": "Поле target_path входит в список полей пути Host'а (ToolInvoker.PathFields), поэтому политика корней судит его до диспетчеризации; неверные length/angle отвергаются в адаптере до COM.",
    "required_of": [
     "EI-01.stl.export",
     "EI-02.stl.tessellation"
-   ]
+   ],
+   "catalog_ref": "G5",
+   "title": "Путь проверяется политикой корней ДО обращения к КОМПАС"
   },
   {
    "operation_id": "dep.ei.triangle_count_from_file",
@@ -11432,14 +11556,16 @@
     "negative_tests"
    ],
    "acceptance": [
-    "для двоичного STL число треугольников читается из заголовка, для текстового — по строкам facet normal",
-    "способ чтения назван полем triangle_count_source"
+    "для двоичного STL число треугольников читается из заголовка (размер минус 84, делённый на 50), для текстового — подсчётом строк facet normal",
+    "способ чтения назван в ответе полем triangle_count_source; число не выдаётся за значение, полученное от ядра"
    ],
    "adapter_route": "StlFileInspector: двоичный — (размер − 84) / 50 с чтением вершин для габарита; текстовый — подсчёт строк facet normal и разбор строк vertex.",
    "required_of": [
     "EI-01.stl.export",
     "EI-02.stl.tessellation"
-   ]
+   ],
+   "catalog_ref": "G5",
+   "title": "Число треугольников читается ИЗ ФАЙЛА, а не берётся из ответа ядра"
   },
   {
    "operation_id": "dep.ei.units_system",
@@ -11497,8 +11623,8 @@
     "negative_tests"
    ],
    "acceptance": [
-    "units принимает mm|kg и m|kg и следует за аргументом вызова",
-    "смена единицы длины мм→м делит момент на 1e6"
+    "units принимает значения mm|kg и m|kg и следует за аргументом вызова; system называет центральную систему, principal — главную центральную",
+    "смена единицы длины мм→м делит момент на 1e6 (квадрат отношения длин), и это измерено, а не предположено"
    ],
    "adapter_route": "bitVector собирается из аргумента inertia_units (ST_MIX_MM|ST_MIX_KG или ST_MIX_M|ST_MIX_KG); блок inertia публикует units и system.",
    "required_of": [
@@ -11517,7 +11643,9 @@
      }
     ],
     "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
-   }
+   },
+   "catalog_ref": "G7",
+   "title": "Единицы и система моментов названы и совпадают с аргументом вызова"
   },
   {
    "operation_id": "dep.ei.read_only_measure",
@@ -11574,15 +11702,17 @@
     "negative_tests"
    ],
    "acceptance": [
-    "kompas_measure не требует operation_id и expected_revision и не меняет ревизию, число признаков и объём",
-    "непрочитанное свойство остаётся null с причиной, а не нулём"
+    "kompas_measure не требует operation_id и expected_revision и не меняет ревизию, число признаков и объём тела",
+    "непрочитанное свойство остаётся null с причиной в inertia.notes, а не нулём"
    ],
    "adapter_route": "kompas_measure зарегистрирован как ReadOnly (requiresOperationId: false); диспетчер идёт через Tagged, ревизия не двигается.",
    "required_of": [
     "EI-03.inertia.central",
     "EI-04.inertia.principal",
     "EI-05.inertia.units"
-   ]
+   ],
+   "catalog_ref": "G7",
+   "title": "kompas_measure с inertia — только чтение: модель не меняется"
   },
   {
    "operation_id": "dep.ei.idempotency",
@@ -11638,7 +11768,7 @@
     "negative_tests"
    ],
    "acceptance": [
-    "повтор с тем же operation_id и теми же аргументами не создаёт файл дважды",
+    "повтор с тем же operation_id и теми же аргументами не создаёт файл дважды и возвращает записанный исход",
     "тот же operation_id с другими аргументами даёт OPERATION_ID_CONFLICT",
     "устаревшая ревизия даёт REVISION_CONFLICT без частичных эффектов"
    ],
@@ -11657,7 +11787,9 @@
      }
     ],
     "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд API_AUDIT_FOLLOWUP §1, класс А)"
-   }
+   },
+   "catalog_ref": "G5",
+   "title": "Идемпотентность и ревизии у экспорта STL"
   },
   {
    "operation_id": "SKC-01.geometric_types",
@@ -11715,6 +11847,11 @@
     "список прочитан из модели отдельным вызовом, тип читается обратно тем же именем",
     "ограничение и геометрия переживают save → close → reopen",
     "измеренная дельта координат публикуется, а не скрывается"
+   ],
+   "depends_on": [
+    "dep.sketch_constraints.object_address",
+    "dep.sketch_constraints.interop_presence",
+    "dep.sketch_constraints.type_vocabulary"
    ]
   },
   {
@@ -11781,6 +11918,11 @@
     "размер создан как ОБЪЕКТ эскиза и подтверждён перечитанным списком его ограничений",
     "размер управляет геометрией: смена значения и смена переменной двигают геометрию",
     "размер и его ограничения переживают save → close → reopen"
+   ],
+   "depends_on": [
+    "dep.sketch_constraints.object_address",
+    "dep.sketch_constraints.type_vocabulary",
+    "dep.sketch_constraints.no_silent_rewrite"
    ]
   },
   {
@@ -11836,6 +11978,10 @@
     "список прочитан из модели, а не из ответа создания",
     "чужой адрес отвергнут DOCUMENT_NOT_FOUND, неоднозначный — AMBIGUOUS_SELECTION",
     "чтение не поднимает ревизию и не меняет объём"
+   ],
+   "depends_on": [
+    "dep.sketch_constraints.object_address",
+    "dep.sketch_constraints.state_agreement"
    ]
   },
   {
@@ -11918,7 +12064,11 @@
      }
     ],
     "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд ACCEPTANCE_GAPS_B §2)"
-   }
+   },
+   "depends_on": [
+    "dep.sketch_constraints.object_address",
+    "dep.sketch_constraints.state_agreement"
+   ]
   },
   {
    "operation_id": "SKC-05.state_read",
@@ -11979,7 +12129,14 @@
      }
     ],
     "note": "объявленный маршрут строки: действие выполняется этим инструментом, и он назван в окне самой строки (наряд ACCEPTANCE_GAPS_B §2)"
-   }
+   },
+   "depends_on": [
+    "dep.sketch_constraints.object_address",
+    "dep.sketch_constraints.interop_presence",
+    "dep.sketch_constraints.type_vocabulary",
+    "dep.sketch_constraints.state_agreement",
+    "dep.sketch_constraints.no_silent_rewrite"
+   ]
   },
   {
    "operation_id": "SKC-06.association_bisector",
@@ -12016,6 +12173,10 @@
    ],
    "acceptance": [
     "тип ksCAssociation принимает партнёра массивом SAFEARRAY, ksCBisector — ось и вариант биссектрисы"
+   ],
+   "depends_on": [
+    "dep.sketch_constraints.object_address",
+    "dep.sketch_constraints.type_vocabulary"
    ]
   },
   {
@@ -12072,7 +12233,9 @@
     "Адрес выдаёт перечисление и принимается обратно сопоставлением с тем же перечислением; индекс коллекции адресом НЕ объявляется, потому что перестроение его сдвигает."
    ],
    "acceptance": [
-    "зависимость закрыта своими доказательствами, а не «попутно»"
+    "объект ограничения получается документированным путём, и его адрес выдаёт перечисление kompas_list_sketch_entities",
+    "чужой адрес отвергается DOCUMENT_NOT_FOUND, неоднозначный — AMBIGUOUS_SELECTION, похожим он не подменяется",
+    "индекс коллекции адресом НЕ объявляется: перестроение его сдвигает"
    ],
    "read_route": {
     "mode": "any",
@@ -12158,7 +12321,8 @@
     "Отсутствие члена называется, а не обходится подстановкой соседнего: измерено сканером, что IParametrizationParam7, ParametrizeObjects, ParametricMode и SnapSettings в поставленной обёртке отсутствуют."
    ],
    "acceptance": [
-    "зависимость закрыта своими доказательствами, а не «попутно»"
+    "IDrawingObject1, IParametriticConstraint и все используемые члены читаются сканером в поставленной Interop.KompasAPI7.dll",
+    "отсутствие члена называется, а не обходится подстановкой соседнего: измерено, что 4 члена автоматической ветки (IParametrizationParam7, ParametrizeObjects, ParametricMode, ISnapSettings) отсутствуют"
    ],
    "read_route": {
     "mode": "any",
@@ -12231,7 +12395,9 @@
     "Имена объявлены в одном месте (KompasMcp.Contracts.SketchConstraintTypes), числа разрешает адаптер из ksConstraintTypeEnum поставленной сборки констант; расхождение наборов называется поимённо в обе стороны."
    ],
    "acceptance": [
-    "зависимость закрыта своими доказательствами, а не «попутно»"
+    "имена объявлены в одном месте (KompasMcp.Contracts.SketchConstraintTypes), числа разрешает адаптер из ksConstraintTypeEnum поставленной сборки констант",
+    "расхождение двух наборов называется поимённо в обе стороны, а не сглаживается",
+    "тип вне объявленного набора отвергается до COM"
    ],
    "read_route": {
     "mode": "any",
@@ -12273,7 +12439,7 @@
    "catalog_refs": [
     "G6"
    ],
-   "title": "Состояние объекта и агрегатное состояние эскиза не подменяют друг друга",
+   "title": "Состояние объекта и агрегатное состояние эскиза читаются об одном и том же и не подменяют друг друга",
    "parameters_schema": null,
    "adapter_route": "Состояние объекта и агрегатное состояние эскиза не подменяют друг друга",
    "actions": {
@@ -12315,7 +12481,9 @@
     "Число 2 у ksObjectConstraintsStateEnum означает «переопределён», а у ksConstraintsStateEnum — «недоопределён»: одно не выдаётся за другое."
    ],
    "acceptance": [
-    "зависимость закрыта своими доказательствами, а не «попутно»"
+    "IDrawingObject1.ConstraintsState читается как ksObjectConstraintsStateEnum, ISketch.ConstraintsState — как ksConstraintsStateEnum, и оба публикуются под своими именами",
+    "число 2 у двух словарей означает РАЗНОЕ (переопределён против недоопределён), и одно не выдаётся за другое",
+    "непрочитанное состояние остаётся null с причиной, а не нулём"
    ],
    "read_route": {
     "mode": "any",
@@ -12390,7 +12558,9 @@
     "Измеренная дельта координат и угла публикуется в notes; сервер движение не отменяет, потому что отмена была бы второй, не запрошенной правкой."
    ],
    "acceptance": [
-    "зависимость закрыта своими доказательствами, а не «попутно»"
+    "измеренная дельта координат и угла публикуется в notes после наложения ограничения",
+    "различающий контроль отделяет «ограничение наложено» от «геометрия молча перезаписана»",
+    "«плюс» не достигается перемещением объектов ради состояния"
    ],
    "read_route": {
     "mode": "any",

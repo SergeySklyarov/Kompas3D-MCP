@@ -3,7 +3,7 @@
   "artifact": "coverage/solid-v24/release-profiles/drawings-minimal-v1.json",
   "profile_id": "drawings-minimal-v1",
   "title": "Минимальные чертежи v24",
-  "revision": "1.4",
+  "revision": "1.5",
   "created_utc": "2026-10-05",
   "decision": "Наряд DRAWINGS_DEVELOPER_PROMPT.md: первый блок работы с чертежами после сборок и сопряжений",
   "plan": "coverage/solid-v24/implementation-plan.md (редакция 2.0) §3 Шаг C",
@@ -61,6 +61,11 @@
     "revision": "1.4",
     "date": "13.10.2026",
     "change": "Наряд API_AUDIT_FOLLOWUP §2: состав потребителей зависимостей приведён к собственному решению профиля. Режим DRW-06.technical_demand был добавлен в обязательный состав ревизией 1.1, и его собственное поле depends_on называет три зависимости, но их required_of не был обновлён и DRW-06 в них не значился. Записи matrix.json не тронуты: они называли DRW-06 верно. Знаменатель профиля (6 режимов, 6 зависимостей) НЕ менялся."
+   },
+   {
+    "revision": "1.5",
+    "date": "15.10.2026",
+    "change": "Наряд DEBT_INSTRUMENTS_FIX §1.2: сценарий SCN-DRW-MINIMAL перечисляет ПОДРЕЖИМЫ размера (DRW-03.dimension.add.linear/radial/diametral), которые он и так проверяет сквозно (проверка сценария называет три типа размера). Прежде covers называл только операцию DRW-03.dimension.add, поэтому три строки матрицы, несущие доказательства подрежимов, читались прибором sync-matrix-rows.py как «строка профиля больше не упоминается, но в ней есть доказательство», и он отказывал записывать матрицу целиком. Строки НЕ сняты: подрежимы принадлежат требуемой операции, их доказательства сохранены. Знаменатель профиля (6 режимов, 6 зависимостей) и обязательность режимов НЕ менялись."
    }
   ]
  },
@@ -330,6 +335,9 @@
     "DRW-01.views.create_standard",
     "DRW-02.views.list",
     "DRW-03.dimension.add",
+    "DRW-03.dimension.add.linear",
+    "DRW-03.dimension.add.radial",
+    "DRW-03.dimension.add.diametral",
     "DRW-04.title_block.set",
     "DRW-05.export",
     "DRW-06.technical_demand"

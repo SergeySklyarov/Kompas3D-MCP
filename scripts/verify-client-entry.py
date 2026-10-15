@@ -17,6 +17,7 @@ Usage:
   python scripts/verify-client-entry.py [--config <mcp.json>] [--name kompas]
       [--passport docs/acceptance/<поставка>/delivery-passport.json]
       [--out docs/acceptance/<поставка>/client-entry-check.json]
+  python scripts/verify-client-entry.py --self-test
 
 Без `--passport` паспорт берётся по поставке, НА КОТОРУЮ УКАЗЫВАЕТ ЗАПИСЬ, а без `--out` отчёт
 ложится рядом с ним. Прежняя редакция держала оба пути константами поставки B2: к 19.09.2026 запись
@@ -43,6 +44,7 @@ import importlib.util
 import json
 import os
 import sys
+import time
 import uuid
 
 from localconfig import isolate_config as shared_isolate_config
@@ -193,7 +195,93 @@ def delivery_identity(command, passport_arg):
             measure_path, None)
 
 
+# DOC: the Host answers `running` with the warning "повторите тот же вызов с тем же operation_id"
+#   (src/KompasMcp.Host/ToolInvoker.cs); docs/operator-guide/mcp-config.md calls that repeat "опрос";
+#   docs/02_TOOL_CONTRACTS.md §SESSION_RELEASE_BUSY says a mutation over `sync_budget_ms` keeps
+#   running inside COM.
+# INVARIANT: `running` is a documented continuation, NOT a refusal: E10 repeats the SAME call with the
+#   SAME operation_id until the status leaves `running`, bounded by the budget below. Only the
+#   operation's outcome decides PASS/FAIL; exhausting the budget is a FAIL naming how long it waited.
+# History: docs/decisions/releases.md#client-entry-running
+CONNECT_RUNNING_BUDGET_S = 240.0
+CONNECT_RUNNING_POLL_S = 5.0
+
+
+def await_connect(call, arguments, budget_s=CONNECT_RUNNING_BUDGET_S, poll_s=CONNECT_RUNNING_POLL_S,
+                  sleep=time.sleep):
+    """Poll `kompas_connect` while it answers `running`; return `(envelope, waits, waited_s)`.
+
+    The SAME `arguments` mapping is passed on every repeat, so the `operation_id` is the same one -
+    that is what makes a repeat a poll of one operation rather than a second launch. `sleep` is
+    injectable so the self-test exercises both halves (waited-out and budget-exhausted) without
+    waiting in real time.
+    """
+    envelope = call("kompas_connect", arguments)
+    waits, waited = 0, 0.0
+    while envelope.get("status") == "running" and waited < budget_s:
+        sleep(poll_s)
+        waited += poll_s
+        waits += 1
+        envelope = call("kompas_connect", arguments)
+    return envelope, waits, waited
+
+
+def self_test():
+    """The `running` branch, on a substituted answer and without a live KOMPAS.
+
+    Both halves of one rule: a `running` answer that turns `succeeded` must be waited out with the
+    same `operation_id`, and a `running` answer that never leaves `running` must stop at the budget
+    and stay `running` - the row then reports a named refusal rather than a bare FAIL.
+    """
+    failures = []
+    checks = 0
+
+    def check(name, condition, detail=""):
+        nonlocal checks
+        checks += 1
+        print(f"  [{'PASS' if condition else 'FAIL'}] {name}" + (f" - {detail}" if detail else ""))
+        if not condition:
+            failures.append(name)
+
+    seen = []
+
+    def answered(script):
+        answers = list(script)
+
+        def call(tool, arguments):
+            seen.append((tool, arguments.get("operation_id")))
+            return answers.pop(0) if answers else {"status": "running"}
+
+        return call
+
+    arguments = {"mode": "launch", "operation_id": "op-1"}
+    envelope, waits, waited = await_connect(
+        answered([{"status": "running"}, {"status": "running"}, {"status": "succeeded"}]),
+        arguments, budget_s=60.0, poll_s=5.0, sleep=lambda _seconds: None)
+    check("running ожидается, а не считается отказом", envelope.get("status") == "succeeded")
+    check("ожиданий ровно два", waits == 2, f"waits={waits}")
+    check("ждали два опроса по 5 с", waited == 10.0, f"waited={waited}")
+    check("повтор идёт с ТЕМ ЖЕ operation_id",
+          {op for _tool, op in seen} == {"op-1"} and len(seen) == 3, str(seen))
+    check("повтор идёт тем же инструментом",
+          {tool for tool, _op in seen} == {"kompas_connect"}, str(seen))
+
+    seen.clear()
+    envelope, waits, waited = await_connect(answered([{"status": "running"}] * 100), arguments,
+                                            budget_s=20.0, poll_s=5.0, sleep=lambda _seconds: None)
+    check("незавершающийся running останавливается по сроку",
+          envelope.get("status") == "running" and waits == 4 and waited == 20.0,
+          f"status={envelope.get('status')} waits={waits} waited={waited}")
+    check("первый вызов и четыре повтора посчитаны", len(seen) == 5, f"вызовов={len(seen)}")
+
+    print(f"\nСамопроверка прибора: {checks} проверок, "
+          f"{len(failures)} FAIL" + (f" - {failures}" if failures else ""))
+    return 1 if failures else 0
+
+
 def main():
+    if "--self-test" in sys.argv:
+        return self_test()
     config_path = os.path.abspath(argument("--config") or os.path.join(os.path.expanduser("~"), ".workbuddy-ai", "mcp.json"))
     wanted = argument("--name")
     passport_arg = argument("--passport")
@@ -391,13 +479,26 @@ def main():
             f"process={caps_result.get('process_bitness')} local_server={caps_result.get('local_server')} "
             f"running_instances={caps_result.get('running_instances')}")
 
-        connect = call("kompas_connect", {"mode": "launch", "make_visible": False,
-                                         "operation_id": str(uuid.uuid4())}, timeout=300)
+        # A cold KOMPAS start can outlast `sync_budget_ms`, so the first answer is often `running`.
+        # That answer is polled, not refused: see `await_connect` and the DOC/INVARIANT block above.
+        connect_op = str(uuid.uuid4())
+        connect_args = {"mode": "launch", "make_visible": False, "operation_id": connect_op}
+        connect, waits, waited = await_connect(lambda tool, args: call(tool, args, timeout=300),
+                                               connect_args)
         connect_result = connect.get("result") or {}
         app_id = connect.get("application_id") or connect_result.get("application_id")
-        row("E10", "kompas_connect(launch) поднимает сеанс КОМПАС",
-            (connect.get("status") == "succeeded") and bool(app_id),
-            f"app_id={app_id} ownership={connect_result.get('ownership')} pid={connect_result.get('process_id')}")
+        report["connect_wait"] = {"operation_id": connect_op, "waits": waits,
+                                  "waited_s": round(waited, 1), "last_status": connect.get("status")}
+        evidence = (f"app_id={app_id} ownership={connect_result.get('ownership')} "
+                    f"pid={connect_result.get('process_id')}; ответов running={waits}, "
+                    f"ждали={waited:.0f} с, последний статус={connect.get('status')}")
+        if connect.get("status") == "running":
+            row("E10", "kompas_connect(launch) поднимает сеанс КОМПАС", False,
+                f"общий срок ожидания исчерпан: ждали {waited:.0f} с, последний статус running; "
+                f"operation_id={connect_op}")
+        else:
+            row("E10", "kompas_connect(launch) поднимает сеанс КОМПАС",
+                (connect.get("status") == "succeeded") and bool(app_id), evidence)
 
         if app_id:
             created = call("kompas_create_document", {"application_id": app_id, "kind": "part",

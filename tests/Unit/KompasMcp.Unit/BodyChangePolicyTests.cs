@@ -80,13 +80,11 @@ public class BodyChangePolicyTests
     }
 
     /// <summary>A fillet and a chamfer are decided by the VOLUME, not by the face count: applying one
-    /// always moves material, so an unchanged volume means the feature never reached the body — and a
+    /// always moves material, so an unchanged volume means the feature never reached the body, and a
     /// moved face count is the mark the kernel leaves, not the feature.</summary>
-    /// <remarks>WHY. The no-op refusal of the two tools used the general "any observable" rule, which a
-    /// moved face count rescues. Measured live on the Г-plate's reflex corner: the chamfer feature stayed
-    /// in the tree, the volume came back to the plate's 68000 mm³, and the refusal named the surface as
-    /// transferred to another edge — a surface the body does not hold. The two tools therefore ask this
-    /// narrower question, and the order (no-op before placement) is what makes the name precise.
+    /// <remarks>INVARIANT: the two tools ask this narrower question rather than the general
+    /// "any observable" rule, which a moved face count would rescue; the order (no-op before
+    /// placement) is what makes the refusal name precise.
     /// History: docs/decisions/adapter-features.md#chamfer-not-applied</remarks>
     [Fact]
     public void MaterialUnchanged_DecidesAFilletOrChamferByTheVolumeAlone()

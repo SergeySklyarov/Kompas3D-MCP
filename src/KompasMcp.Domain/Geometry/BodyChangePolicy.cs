@@ -30,17 +30,13 @@ public static class BodyChangePolicy
         VolumeMoved(volumeDelta, volume) || boxChanged || topologyChanged;
 
     /// <summary>Whether a COMPLETED volume comparison found the body's MATERIAL unchanged — the decisive
-    /// observable for a fillet and a chamfer.</summary>
-    /// <param name="volumeDelta">The measured change; <c>null</c> when a side was not read, which is NOT
-    /// agreement.</param>
-    /// <remarks>INVARIANT: applying a fillet or a chamfer ALWAYS moves material — it removes it on a
-    /// convex edge and adds it on a reflex one — so an unchanged volume means the feature never reached
-    /// the body, whatever the face count did. A topology-only change is not a fillet: it is the mark the
-    /// kernel leaves in the tree when it creates the feature and does not apply it, and calling it a
-    /// transfer to another edge names a surface that the body does not hold. The general
-    /// <see cref="Changed"/> rule is NOT used here: it lets a moved face count rescue the feature, and for
-    /// these two tools that is exactly the wrong answer.
-    /// History: docs/decisions/adapter-features.md#chamfer-not-applied</remarks>
+    /// observable for a fillet and a chamfer. <paramref name="volumeDelta"/> is <c>null</c> when a side was
+    /// not read, which is NOT agreement.</summary>
+    /// <remarks>INVARIANT: applying a fillet or a chamfer ALWAYS moves material — it removes it on a convex
+    /// edge and adds it on a reflex one — so an unchanged volume means the feature never reached the body,
+    /// whatever the face count did; a moved face count is the mark the kernel leaves when it creates the
+    /// feature without applying it. <see cref="Changed"/> is NOT used here: it would let that mark rescue
+    /// the feature. History: docs/decisions/adapter-features.md#chamfer-not-applied</remarks>
     public static bool MaterialUnchanged(double? volumeDelta, double? volume) =>
         volumeDelta is double delta && !VolumeMoved(delta, volume);
 }

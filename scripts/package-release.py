@@ -97,8 +97,7 @@ def profiles_phrase(count):
 
 # INVARIANT (release wording): each «not included» line lives in data next to the profiles and names
 # the tools whose presence in the delivery would make it false. The manifest must not describe the
-# memory of whoever assembles the release: the 0.7.0 line about the variable editor was false while
-# kompas_create_variable was in that release. An empty tool list needs `why_no_tool`.
+# memory of whoever assembles the release. An empty tool list needs `why_no_tool`.
 # History: docs/decisions/releases.md#not-included
 NOT_INCLUDED_REL = "coverage/solid-v24/release-not-included.json"
 

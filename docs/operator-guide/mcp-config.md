@@ -14,7 +14,7 @@
 | `worker_path` | явный путь к `KompasMcp.Worker.exe` | рядом с Host |
 | `log_path`, `worker_log_path`, `journal_path` | JSONL-файлы наблюдений | в системном temp |
 | `queue_capacity` | глубина очереди CAD-команд | 64 |
-| `sync_budget_ms` | сколько ждать синхронно, дальше - polling | 10000 |
+| `sync_budget_ms` | сколько ждать синхронно, дальше - polling | 40000 |
 | `operation_budget_ms` | бюджет одной операции на Worker | 120000 |
 
 Переменные окружения перекрывают файл: `KOMPAS_MCP_CONFIG`,

@@ -51,7 +51,7 @@ _spec.loader.exec_module(smoke)
 
 # INVARIANT: both builds must run with the SAME synchronous budget, or their wall times are not
 # comparable: the budget is the point at which a call stops being synchronous.
-SYNC_BUDGET_MS = 15000
+SYNC_BUDGET_MS = 40000
 
 
 def argument(name, default=None):

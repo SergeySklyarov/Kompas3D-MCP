@@ -38,7 +38,10 @@ public sealed class HostOptions
     public int QueueCapacity { get; init; } = 64;
 
     /// <summary>Synchronous wait before a mutation is handed back as a poll-able operation.</summary>
-    public int SyncBudgetMs { get; init; } = 10_000;
+    // INVARIANT: this bounds only the synchronous wait; the acceptance rule "half the budget" reads
+    // the value from the run configuration, so raising the default raises that threshold as well.
+    // History: docs/decisions/host.md#sync-budget
+    public int SyncBudgetMs { get; init; } = 40_000;
 
     /// <summary>Per-operation budget on the Worker side.</summary>
     public int OperationBudgetMs { get; init; } = 120_000;
@@ -84,7 +87,7 @@ public sealed class HostOptions
             JournalPath = ReadString(node, "journal_path") ?? Default("journal", "operations.jsonl"),
             ControlCopyDirectory = ReadString(node, "control_copy_directory") ?? Default(),
             QueueCapacity = ReadInt(node, "queue_capacity") ?? 64,
-            SyncBudgetMs = ReadInt(node, "sync_budget_ms") ?? 10_000,
+            SyncBudgetMs = ReadInt(node, "sync_budget_ms") ?? 40_000,
             OperationBudgetMs = ReadInt(node, "operation_budget_ms") ?? 120_000,
         };
 

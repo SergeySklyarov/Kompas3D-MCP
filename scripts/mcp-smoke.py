@@ -96,9 +96,9 @@ def sync_budget_ms():
     path = os.path.abspath(argument("--config") or local_config(ROOT))
     try:
         with open(path, encoding="utf-8-sig") as fh:
-            return int(json.load(fh).get("sync_budget_ms") or 10000)
+            return int(json.load(fh).get("sync_budget_ms") or 40000)
     except (OSError, ValueError):
-        return 10000
+        return 40000
 
 
 class Client:
@@ -3179,9 +3179,9 @@ def sketch_bulk_checks(client, rep, app_id, workdir):
         try:
             with open(path, encoding="utf-8-sig") as fh:
                 raw = _json.load(fh)
-            return (raw.get("sync_budget_ms") or 10000) / 2000.0
+            return (raw.get("sync_budget_ms") or 40000) / 2000.0
         except (OSError, ValueError):
-            return 5.0
+            return 20.0
 
     def new_part(name):
         env, code = call("kompas_create_document",

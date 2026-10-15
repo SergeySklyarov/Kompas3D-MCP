@@ -29,7 +29,7 @@
   "log_path": "C:\\kompas-mcp\\logs\\host.jsonl",
   "journal_path": "C:\\kompas-mcp\\journal\\operations.jsonl",
   "queue_capacity": 64,
-  "sync_budget_ms": 10000,
+  "sync_budget_ms": 40000,
   "operation_budget_ms": 120000,
   "control_copy_directory": "C:\\kompas-mcp"
 }

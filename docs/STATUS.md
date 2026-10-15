@@ -31,6 +31,26 @@
   прежняя очередь: `SKETCH_COPY_PROJECT_RESEARCH`, G4, SM-12, резьба. Код продукта, приборы и тесты
   не менялись.
 
+- **Контракт приведён к поведению (`DEBT_CONTRACT_FIX`, 15.10.2026).** Первый наряд этапа 1
+  устранения долга. Закрыты три расхождения: (1) долг 16 — `confirm_dependents` у
+  `kompas_delete_feature` объявлен НЕОБЯЗАТЕЛЬНЫМ (`["boolean","null"]`, `default: false`) в
+  источнике (`ToolCatalog.cs`), а не правкой порождённого `schemas/`; вызов без поля равносилен
+  `false`, смысл отказа `DEPENDENT_FEATURES` не изменён; (2) долг 11 — из ОТВЕТА
+  `kompas_set_component_placement` убран элемент `checks` `set_placement_returned`: измерено, что и
+  `SetPlacement`, и `UpdatePlacement` отвечают `false` на уже вставленном компоненте при применённом
+  и перечитанном размещении, поэтому успех называет только перечитывание
+  (`placement_read_back_matches_request=true`); (3) кандидат — `kind=fragment` убран из перечисления
+  схемы и описаний `kompas_create_document` (адаптер отвечал на него `CAPABILITY_UNAVAILABLE`).
+  Реализация создания фрагмента НЕ делалась; документированный маршрут (`doctype.html`,
+  `lt_DocFragment = 3`, тот же 2D-маршрут, что у чертежа) назван кандидатом в план.
+  Контракт: `--emit-schemas` переписал ровно две схемы, `contract-diff.py` показал ровно два
+  изменения входных схем; третье (ответ размещения) во входных схемах не видно и подтверждено
+  строкой `ASM.04.edit_flag`. Приёмка: `mcp-smoke.py --all` на Release-сборке коммита `3c4a47a`
+  (дерево чистое) — **1615 PASS / 5 NAMED / 0 FAIL**, run `20261015-050405-all-3c4a47a`; модульные
+  тесты 1135/1135 (+2 новых). Записи — `docs/decisions/contracts.md#delete-feature-confirm-dependents`,
+  `#create-document-kind`, `docs/decisions/adapter-core.md#set-placement-flag`; отчёт
+  `DEBT_CONTRACT_FIX_REPORT_20261015.md`. Открытых пунктов долга стало **21** (было 23).
+
 - **Записи цикла выпуска 0.8.0 (10.10.2026-15.10.2026) перенесены в журнал.** Итоги нарядов
   этого цикла, поставка 0.7.0, публикации 0.6.0 и 0.7.0 - `docs/status/journal-2026-10.md`. Ниже -
   только действующее состояние и открытые пункты.
